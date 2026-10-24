@@ -8,7 +8,7 @@
 
 ## 2. 定位：用户主动用的遍，不是默认优化
 
-- 增量计算是一个**遍** `std::incremental`：用户需要时放进流水线（`camel report.cml std::incremental std::fvm`）；能从源码调用遍之后，也可以只对一个函数用（`costs_updates->map<incremental(c => report(sales, c))>`）——吃进一个函数，交回一个记住上次结果的函数。
+- 增量计算是一个**遍** `std::incremental`：用户需要时放进流水线（`camel report.cml std::incremental std::fvm`）；能从源码调用遍之后，也可以只对一个函数用（`costs_updates->map<incremental((c) => report(sales, c))>`）——吃进一个函数，交回一个记住上次结果的函数。
 - 不默认开启：它多占内存（每处记住一份上次的结果）、多做判断（每次比较输入），只在输入一版一版地来、相邻版本大部分相同时才划算。
 - **语法不变，语义不变**：用与不用结果完全相同，程序代码不改。输入随时间变化用流 `T..` 表达（设计原则 5.4）。剖析报告哪些地方复用、哪些重算。
 

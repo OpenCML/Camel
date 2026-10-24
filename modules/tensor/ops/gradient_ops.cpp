@@ -44,12 +44,12 @@ slot_t onesLikeKernel(ArgsView &, ArgsView &norm, context::Context &) {
 }
 
 slot_t numelKernel(ArgsView &, ArgsView &norm, context::Context &) {
-    return camel::core::rtdata::toSlot(static_cast<int64_t>(tensorArg(norm, 0)->numel()));
+    return camel::core::rtdata::toSlot(static_cast<int64_t>(tensorArg(norm, 0, true)->numel()));
 }
 
 slot_t dimKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("dim", [&] {
-        const Array *t = tensorArg(norm, 0);
+        const Array *t = tensorArg(norm, 0, true);
         const auto rank       = static_cast<int64_t>(t->rank());
         int64_t axis          = intArg(norm, 1);
         axis                  = axis < 0 ? axis + rank : axis;
@@ -374,7 +374,7 @@ std::vector<OpDef> gradientOps() {
     defs.push_back(OpDef{
         .name          = "numel",
         .exports       = {"numel"},
-        .params        = {{"t", ParamKind::Tensor}},
+        .params        = {{"t", ParamKind::TensorLike}},
         .resultDoc     = "int",
         .infer         = intScalar,
         .kernel        = &numelKernel,
@@ -396,7 +396,7 @@ std::vector<OpDef> gradientOps() {
     defs.push_back(OpDef{
         .name          = "dim",
         .exports       = {"dim"},
-        .params        = {{"t", ParamKind::Tensor}, {"axis", ParamKind::Int}},
+        .params        = {{"t", ParamKind::TensorLike}, {"axis", ParamKind::Int}},
         .resultDoc     = "int",
         .infer         = intScalar,
         .kernel        = &dimKernel,

@@ -131,7 +131,9 @@ data_ptr_t dataOfStaticValue(Type *type, slot_t value) {
 
 } // namespace
 
-/// The constant a static data node (or a COPY of one) was made from, or null.
+/// The constant a static data node (or a COPY of one) was made from, or null. A CAST that only
+/// retypes a constant -- `null` into a `T?` -- is the constant of the type it retypes it to, and
+/// carries it too.
 data_ptr_t Builder::constantOfNode(node_handle_t node) const {
     if (node == nullptr) {
         return nullptr;
@@ -1030,6 +1032,31 @@ compile_graph_ptr_t Builder::instantiateForCall(
     // payload and a variable that a later named argument determines are bound the same way
     // whichever of the two comes first in the signature.
     type_bindings_t bindings;
+    // Whether the argument at `i` is a literal written there — a number, a composite literal, or
+    // an expression of literals only that folds to one. A literal's own type is the default its
+    // kind has (design principles 5.1): the type of the position it is passed to is what it
+    // takes, so the position has its say before the literal is bound. A name is a value of its
+    // type, even when a `let` bound it to a constant, and keeps it: a value is not converted.
+    const auto literalArgument = [&](size_t i) {
+        const GCT::node_ptr_t &expr = inputAt(i).expr;
+        if (expr == nullptr) {
+            return false;
+        }
+        if (literalValueOfExpr(expr).has_value()) {
+            return true;
+        }
+        if (expr->type() != GCT::NodeKind::DATA || expr->data() == nullptr ||
+            expr->data()->type() == nullptr) {
+            return false;
+        }
+        // A composite literal takes the type of its position, and so does a text or a boolean
+        // literal: their type is the type the position asks for as much as a number's default is
+        // (a text literal enters a text position, and nowhere else). The two data a literal
+        // argument is not written as are the hole (`ref`), which stands for a value, and `null`
+        // (`void`), which states nothing about a variable.
+        const TypeCode code = expr->data()->type()->code();
+        return code != TypeCode::Ref && code != TypeCode::Void;
+    };
     const std::function<bool(Type *, Type *)> bindEntering = [&](Type *pattern, Type *actual) {
         type_bindings_t attempt = bindings;
         if (bindTypeVars(pattern, actual, attempt)) {
@@ -1045,9 +1072,13 @@ compile_graph_ptr_t Builder::instantiateForCall(
         }
         return bindEntering(tagged->payloadType(), actual);
     };
+    // 1. The arguments that have a type of their own bind the variables they mention first, as
+    // they always have: what a value says about a variable stands, and the position a call stands
+    // in never converts it (design principles 5.1). A literal argument is left to the position.
     for (int pass = 0; pass < 2; ++pass) {
         for (size_t i = 0; i < withCount + normCount; ++i) {
-            if (waiting[i] || isUnnamedStructArgument(actualAt(i)) != (pass == 1)) {
+            if (waiting[i] || literalArgument(i) ||
+                isUnnamedStructArgument(actualAt(i)) != (pass == 1)) {
                 continue;
             }
             if (!bindEntering(patternAt(i), actualAt(i))) {
@@ -1056,18 +1087,40 @@ compile_graph_ptr_t Builder::instantiateForCall(
         }
     }
     // 2. A variable that its first binding position left open (the argument there is `null`, or a
-    // generic function that is still waiting) takes the type found at any other occurrence:
+    // generic function that is still waiting) takes the type found at any other value occurrence:
     // the constraints of all arguments are collected before any is held to its parameter.
     for (size_t i = 0; i < withCount + normCount; ++i) {
-        if (!waiting[i]) {
+        if (!waiting[i] && !literalArgument(i)) {
             unifyTypeVars(patternAt(i), actualAt(i), bindings);
         }
     }
-    if (expectedResult && signature->hasExitType()) {
+    // 3. The callee's result type aligned with the type of the position the call stands in solves
+    // every variable it mentions (design principles 5.1, 5.5; the ruling of 2026-10-23 on
+    // `expected-type-through-literals-and-calls`): not only a variable that appears in the result
+    // alone, and not only one no value argument mentions. It stands before the literals, which
+    // take the type it gives them: `keep([1.0, 2.0], 2)` in an `f32[]` position is `T = f32` and
+    // the array is an `f32[]`, each element converted once from the value written, and a value
+    // that already has a type is the type error it was (an `f64` value in an `f32` position).
+    //
+    // A `void` position is the absence of a requirement, not one: a value written where nothing is
+    // wanted is discarded (`let x = <call>`), and it solves no variable — otherwise a
+    // result-only variable would be solved to `void` and the call would be an instance of `void`.
+    if (expectedResult != nullptr && expectedResult->code() != TypeCode::Void &&
+        signature->hasExitType()) {
         unifyTypeVars(
             substituteExtentValues(signature->exitType(), extents), expectedResult, bindings);
     }
-    // 3. The waiting arguments, as long as one of them can be given its types: the parameter
+    // 4. The literals: what they are written as fills a variable nothing else fixed and does not
+    // override the type the position gave it.
+    for (size_t i = 0; i < withCount + normCount; ++i) {
+        if (waiting[i] || !literalArgument(i)) {
+            continue;
+        }
+        if (!bindEntering(patternAt(i), actualAt(i))) {
+            reject(describe(i) + " needs a type of that form to bind its type variables");
+        }
+    }
+    // 5. The waiting arguments, as long as one of them can be given its types: the parameter
     // it is passed to, with what is known so far, is the function it has to be; its instance
     // then says what is still open in that parameter (its return type).
     std::vector<std::string> reasons(waiting.size());
@@ -1146,13 +1199,20 @@ compile_graph_ptr_t Builder::instantiateForCall(
         if (entersImplicitly(wanted, actualAt(i))) {
             continue;
         }
-        // A composite literal enters the parameter's type as any literal does (design
-        // principles 5.1): with `T` fixed to `f32` by another argument, `[1.0]` in the `T[]`
-        // parameter is an `f32[]`, its elements converted once from the values written. The
-        // conversion is the one an ordinary call makes (enterParameters); a literal that does
-        // not fit is refused at its element, and one that does not fit at all is described
-        // below.
-        if (compositeLiteralEntersIn(inputAt(i).node, wanted, inputAt(i).expr)) {
+        // A literal enters the parameter's type as every literal does (design principles
+        // 5.1): with `T` fixed to `f32` by the position or by another argument, `[1.0]` in the
+        // `T[]` parameter is an `f32[]` and `1.0` in the `T` parameter is an `f32`, converted
+        // once from the value written. The conversion is the one an ordinary call makes
+        // (enterParameters); a literal that does not fit is refused at its element or at the
+        // value itself, and one that does not fit at all is described below. A value that
+        // already has a type is not converted: `coerceTo` refuses it, as `enterParameters`
+        // does, so it is the type error it was (`let v: float = 1.0; keep(v, 1)` with an `f32`
+        // position).
+        const std::optional<literal::Value> written = literalValueOfExpr(inputAt(i).expr);
+        const bool literalEnters =
+            (written.has_value() && wanted->isPrimitive() && literal::kindEnters(*written, wanted)) ||
+            compositeLiteralEntersIn(inputAt(i).node, wanted, inputAt(i).expr);
+        if (literalEnters) {
             if (node_handle_t entered = checkValue(inputAt(i).node, wanted, inputAt(i).expr)) {
                 inputAt(i).node = entered;
                 typeAt(i)       = wanted;
