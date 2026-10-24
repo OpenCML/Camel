@@ -3751,20 +3751,6 @@ void Builder::markLoopStateInPlaceOne(
     nodeGraphOf(next)->retargetOperNode(next, *owned);
 }
 
-namespace {
-// An assignment (`:op/assn_i`, `:op/assn_l`, `:op/assn_add_l`, the in-place `:op/assn_owned`): a
-// write, whose product is this version's cell.
-bool isAssignmentOper(const runtime::GraphDraft &draft, runtime::gc_node_ref_t id) {
-    const auto *header = draft.header(id);
-    if (header == nullptr || header->kind != runtime::GCNodeKind::Oper) {
-        return false;
-    }
-    return reinterpret_cast<const runtime::GCOperBody *>(draft.payloadOf(id).data())
-        ->uri()
-        .starts_with(":op/assn");
-}
-} // namespace
-
 void Builder::setBodyResult(const compile_graph_ptr_t &graph, node_handle_t result) {
     if (graph->draft().exitNode() != runtime::kInvalidNodeRef) {
         return;
@@ -3777,30 +3763,8 @@ void Builder::setBodyResult(const compile_graph_ptr_t &graph, node_handle_t resu
     // A sync block that ends in a value hands it back behind a GATE (see visitExecNode): the
     // GATE is the output anchor, the value it forwards is what the graph returns.
     node_handle_t value = result;
-    bool anchorIsValue  = true;
     if (nodeIsKind(result, runtime::GCNodeKind::Gate) && !normInputsOf(result).empty()) {
-        value        = nodeDraftOf(result)->ref(normInputsOf(result).front());
-        anchorIsValue = false;
-    }
-    // The value of a body is a value use, and what an assignment gives as a value is the value
-    // written, not the cell (questions-2026-10-24-evening.md, var-version-node: the version is a
-    // write's second output). A write's first operand is the cell it wrote, so the read goes
-    // through that variable and stays one story with the reads the builder recorded for it.
-    if (Type *type = nodeTypeOf(value);
-        type != nullptr && type->code() == TypeCode::Tuple &&
-        static_cast<const TupleType *>(type)->isCell()) {
-        node_handle_t cell = value;
-        if (isAssignmentOper(graph->draft(), nodeIdOf(value))) {
-            const auto written = normInputsOf(value);
-            if (!written.empty()) {
-                cell = nodeDraftOf(value)->ref(written.front());
-            }
-        }
-        value = readVariable(cell);
-        if (anchorIsValue) {
-            // The body's value is the read, not the cell it reads: the graph's exit is that value.
-            result = value;
-        }
+        value = nodeDraftOf(result)->ref(normInputsOf(result).front());
     }
     checkDeclaredReturn(graph, nodeTypeOf(value), 0);
     setGraphReturnFromResult(graph, nodeIdOf(result), nodeIdOf(value), nodeTypeOf(value));
