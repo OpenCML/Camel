@@ -89,6 +89,9 @@ void registerTensorOps() {
         OpRegistry::instance().add("tensor", std::move(defs));
         declareResourcesAndDefinitions();
         registerTensorTangentSpace();
+        // The subscript a numeric array's `t[idx]` reaches is the core's operator, so its rule
+        // is published here, where this module's own operators are registered.
+        registerSubscriptTakeRule();
         // The core's shape facts (core.shape, camel/runtime/core_facts.h) read a tensor's
         // element type and extents from its type, which this module defines.
         camel::runtime::fact::registerShapeReader(
