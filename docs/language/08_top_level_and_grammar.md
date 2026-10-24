@@ -240,7 +240,7 @@ enumType           : 'enum' '{' (enumVariant (',' enumVariant)*)? ','? '}'
 enumVariant        : identDef ('(' typeList? ','? ')' | '{' (enumField (',' enumField)*)? ','? '}')?
 enumField          : identDef ':' typeExpr
 ruleDecl           : frontMatter? 'export'? IDENTIFIER identDef typeParams? ruleContext? parentParams
-                     '{' ruleBody '}' (IDENTIFIER dataExpr)?
+                     whenClause? '{' ruleBody '}'
 ruleContext        : '<' identDef (',' identDef)* ','? '>'
 ruleBody           : dataExpr ('=>' | '<=>') dataExpr
 analysisDecl       : frontMatter? 'export'? IDENTIFIER identDef parentParams? ':' typeExpr

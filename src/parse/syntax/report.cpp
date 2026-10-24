@@ -359,7 +359,18 @@ void reportSyntaxErrors(const Tree &tree, Diagnostics &diagnostics) {
             continue;
         }
 
-        // 6. A keyword where only a name can stand.
+        // 6. `rule f(x) { … } when c`: the condition of a declaration belongs before its body,
+        //    so the trailing `when` is named rather than left as a token that did not fit.
+        if (error.kind == SyntaxError::Kind::WhenAfterBody) {
+            if (once(SyntaxDiag::WhenAfterBody, offending)) {
+                diagnostics.of(SyntaxDiag::WhenAfterBody)
+                    .at(at(offending))
+                    .commit(describeToken(buffer, offending));
+            }
+            continue;
+        }
+
+        // 7. A keyword where only a name can stand.
         if (error.kind == SyntaxError::Kind::KeywordAsName) {
             if (once(SyntaxDiag::KeywordAsIdentifier, offending)) {
                 diagnostics.of(SyntaxDiag::KeywordAsIdentifier).at(at(offending)).commit(off);
@@ -367,7 +378,7 @@ void reportSyntaxErrors(const Tree &tree, Diagnostics &diagnostics) {
             continue;
         }
 
-        // 7. A '(' or '[' still open where a statement starts, a block ends or the file ends;
+        // 8. A '(' or '[' still open where a statement starts, a block ends or the file ends;
         //    or the end of the file with a block open.
         if (!open.empty()) {
             static const std::set<std::string> kStatementStart = {
@@ -379,7 +390,7 @@ void reportSyntaxErrors(const Tree &tree, Diagnostics &diagnostics) {
             }
         }
 
-        // 8. Two items of a list without a ',' between them.
+        // 9. Two items of a list without a ',' between them.
         if (!atEof && !isCloser(offToken.kind) && !error.expected.empty() &&
             std::find(error.expected.begin(), error.expected.end(),
                       static_cast<uint8_t>(TokenKind::Comma)) != error.expected.end() &&
@@ -396,7 +407,7 @@ void reportSyntaxErrors(const Tree &tree, Diagnostics &diagnostics) {
             continue;
         }
 
-        // 9. `let x` without a value: reported at the name.
+        // 10. `let x` without a value: reported at the name.
         if (error.kind == SyntaxError::Kind::MissingInitializer) {
             if (once(SyntaxDiag::MissingInitializer, offending)) {
                 diagnostics.of(SyntaxDiag::MissingInitializer).at(at(offending)).commit(off);
@@ -404,7 +415,7 @@ void reportSyntaxErrors(const Tree &tree, Diagnostics &diagnostics) {
             continue;
         }
 
-        // 10. Anything else: the token that does not fit and what would have.
+        // 11. Anything else: the token that does not fit and what would have.
         const std::string wanted = describeExpected(error.expected);
         const std::string clause = wanted.empty() ? std::string() : "; expected " + wanted;
         if (atEof) {

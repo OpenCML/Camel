@@ -179,7 +179,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "format.when_clause_snapshot"
-desc = "A declaration's applicability condition follows the result type: `when is_ordered::<T>()` is one space after it, whatever spacing the source used, and it is not dropped."
+desc = "A declaration's applicability condition follows the result type: `when is_ordered::<T>()` is one space after it, whatever spacing the source used, and it is not dropped. A condition written on its own line (a signature that does not fit) is joined to the signature, and a rule's condition is written between its parameters and its body, never after the body (design principles 4.4; the ruling of 2026-10-24)."
 kind = "snapshot"
 tool = "camel-format"
 case = "../../../cases/format/when_clause.cml"

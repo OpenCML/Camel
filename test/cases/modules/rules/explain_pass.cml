@@ -21,7 +21,7 @@ rule zero_to_two(x: int) { x + 0 => x + 2 }
 rule bump_one(x: int) { x + 1 => x + 2 }
 rule add_zero(x: int) { x + 0 => x }
 rule mul_zero(x: int) { x * 0 => 0 }
-rule add_zero_when(x: int) { x + 0 => x } when never(x)
+rule add_zero_when(x: int) when never(x) { x + 0 => x }
 
 /// A condition that is false at every match: the left side matches, the condition refuses.
 func never(n: Node): bool { return false }

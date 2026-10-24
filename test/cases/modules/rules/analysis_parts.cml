@@ -33,7 +33,7 @@ analysis mul_by_one(a: Node, b: Node): bool {
     on (x * y) => sign(y) == 1
 }
 
-rule mul_one_by_parts(x: int, const c: int) { x * c => x } when mul_by_one(x, node_of(c))
+rule mul_one_by_parts(x: int, const c: int) when mul_by_one(x, node_of(c)) { x * c => x }
 
 func opText(n: Node): string {
     return match op(n) {

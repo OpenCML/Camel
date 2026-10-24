@@ -20,7 +20,7 @@ func positive(c: float): bool {
     return c > 0.0 && c - c == 0.0
 }
 
-rule keep_positive(x: float, const c: float) { x * c => x } when positive(c)
+rule keep_positive(x: float, const c: float) when positive(c) { x * c => x }
 
 export func apply(p: Program): Program! {
     return rewrite(p, [keep_positive])

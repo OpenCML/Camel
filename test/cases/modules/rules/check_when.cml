@@ -22,11 +22,11 @@ func isFloatNode(n: Node): bool {
     }
 }
 
-rule double_int(x: int) { x + x => x * 2 } when isIntNode(x)
-rule double_float(x: float) { x + x => x * 2.0 } when isFloatNode(x)
+rule double_int(x: int) when isIntNode(x) { x + x => x * 2 }
+rule double_float(x: float) when isFloatNode(x) { x + x => x * 2.0 }
 
 /// The condition holds, but the two sides do not agree: the check must still say so.
-rule wrong_guard(x: int) { x + x => x } when isIntNode(x)
+rule wrong_guard(x: int) when isIntNode(x) { x + x => x }
 
 func main(): int sync {
     println(check([double_int, double_float], 100, 1))

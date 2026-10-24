@@ -60,31 +60,31 @@ import { is_float, is_integer } from types
 // `int_add_comm`, `int_mul_comm`, `int_add_assoc`, `int_mul_assoc`; rewrite design 2 (second
 // version) 6).
 
-export rule int_add_zero::<T>(x: T) { x + 0 => x } when is_integer::<T>()
-export rule int_sub_zero::<T>(x: T) { x - 0 => x } when is_integer::<T>()
-export rule int_mul_one::<T>(x: T) { x * 1 => x } when is_integer::<T>()
-export rule int_mul_zero::<T>(x: T) { x * 0 => 0 as T } when is_integer::<T>()
-export rule int_div_one::<T>(x: T) { x / 1 => x } when is_integer::<T>()
-export rule int_neg_neg::<T>(x: T) { -(-x) => x } when is_integer::<T>()
-export rule int_sub_self::<T>(x: T) { x - x => 0 as T } when is_integer::<T>()
-export rule int_add_self::<T>(x: T) { x + x => x * 2 } when is_integer::<T>()
-export rule int_combine::<T>(x: T, const c1: T, const c2: T) {
+export rule int_add_zero::<T>(x: T) when is_integer::<T>() { x + 0 => x }
+export rule int_sub_zero::<T>(x: T) when is_integer::<T>() { x - 0 => x }
+export rule int_mul_one::<T>(x: T) when is_integer::<T>() { x * 1 => x }
+export rule int_mul_zero::<T>(x: T) when is_integer::<T>() { x * 0 => 0 as T }
+export rule int_div_one::<T>(x: T) when is_integer::<T>() { x / 1 => x }
+export rule int_neg_neg::<T>(x: T) when is_integer::<T>() { -(-x) => x }
+export rule int_sub_self::<T>(x: T) when is_integer::<T>() { x - x => 0 as T }
+export rule int_add_self::<T>(x: T) when is_integer::<T>() { x + x => x * 2 }
+export rule int_combine::<T>(x: T, const c1: T, const c2: T) when is_integer::<T>() {
     x * c1 + x * c2 => x * (c1 + c2)
-} when is_integer::<T>()
-export rule int_fold::<T>(x: T, const c1: T, const c2: T) {
+}
+export rule int_fold::<T>(x: T, const c1: T, const c2: T) when is_integer::<T>() {
     (x * c1) * c2 => x * (c1 * c2)
-} when is_integer::<T>()
-export rule int_fold_add::<T>(x: T, const c1: T, const c2: T) {
+}
+export rule int_fold_add::<T>(x: T, const c1: T, const c2: T) when is_integer::<T>() {
     (x + c1) + c2 => x + (c1 + c2)
-} when is_integer::<T>()
+}
 
 /// The bare operand: `x*c + x` is `x*c + x*1`. No rule can write `1*x` (a rule matches the graph
 /// it is given, it cannot add a multiplication to read a coefficient), so the coefficient 1 is
 /// implicit here. The law wraps exactly like `int_combine`, so it needs no permission and the
 /// guard set is the same one (none): the rule only adds the `1` that the pass would read.
-export rule int_combine_one::<T>(x: T, const c: T) { x * c + x => x * (c + 1) } when is_integer::<T>()
+export rule int_combine_one::<T>(x: T, const c: T) when is_integer::<T>() { x * c + x => x * (c + 1) }
 
-export rule int_distribute::<T>(a: T, b: T, c: T) { a * (b + c) <=> a * b + a * c } when is_integer::<T>()
+export rule int_distribute::<T>(a: T, b: T, c: T) when is_integer::<T>() { a * (b + c) <=> a * b + a * c }
 
 // ---- Floats: only what rounding does not touch ----
 //
@@ -103,16 +103,16 @@ export rule int_distribute::<T>(a: T, b: T, c: T) { a * (b + c) <=> a * b + a * 
 // simply has no instance: the attempt is quiet and costs nothing (the ruling of 2026-10-23 on
 // `generic-rule-instantiation-set-and-predicate`, §3).
 
-export rule float_mul_one::<T>(x: T) { x * 1.0 => x } when is_float::<T>()
-export rule float_add_minus_zero::<T>(x: T) { x + -0.0 => x } when is_float::<T>()
-export rule float_sub_zero::<T>(x: T) { x - 0.0 => x } when is_float::<T>()
-export rule float_div_one::<T>(x: T) { x / 1.0 => x } when is_float::<T>()
-export rule float_neg_neg::<T>(x: T) { -(-x) => x } when is_float::<T>()
+export rule float_mul_one::<T>(x: T) when is_float::<T>() { x * 1.0 => x }
+export rule float_add_minus_zero::<T>(x: T) when is_float::<T>() { x + -0.0 => x }
+export rule float_sub_zero::<T>(x: T) when is_float::<T>() { x - 0.0 => x }
+export rule float_div_one::<T>(x: T) when is_float::<T>() { x / 1.0 => x }
+export rule float_neg_neg::<T>(x: T) when is_float::<T>() { -(-x) => x }
 
 /// `x + x => x * 2.0`: doubling is exact in IEEE arithmetic for every value, including the
 /// infinities, the NaNs and the subnormals (the exponent grows by one, the significand is
 /// unchanged), so the law needs no permission.
-export rule float_add_self::<T>(x: T) { x + x => x * 2.0 } when is_float::<T>()
+export rule float_add_self::<T>(x: T) when is_float::<T>() { x + x => x * 2.0 }
 
 // ---- Floats: the laws a numeric permission allows (design principles 7.2-7.4) ----
 //
@@ -187,36 +187,36 @@ func combineOneMixedSign::<T>(c: T): bool {
 }
 
 #requires<reassociate>
-export rule float_combine::<T>(x: T, const c1: T, const c2: T) {
+export rule float_combine::<T>(x: T, const c1: T, const c2: T) when is_float::<T>() && combineSameSign(c1, c2) {
     x * c1 + x * c2 => x * (c1 + c2)
-} when is_float::<T>() && combineSameSign(c1, c2)
+}
 
 #requires<reassociate, no_infs, no_signed_zeros>
-export rule float_combine_mixed::<T>(x: T, const c1: T, const c2: T) {
+export rule float_combine_mixed::<T>(x: T, const c1: T, const c2: T) when is_float::<T>() && combineMixedSign(c1, c2) {
     x * c1 + x * c2 => x * (c1 + c2)
-} when is_float::<T>() && combineMixedSign(c1, c2)
+}
 
 #requires<reassociate, no_infs>
-export rule float_fold::<T>(x: T, const c1: T, const c2: T) {
+export rule float_fold::<T>(x: T, const c1: T, const c2: T) when is_float::<T>() && foldCoefficients(c1, c2) {
     (x * c1) * c2 => x * (c1 * c2)
-} when is_float::<T>() && foldCoefficients(c1, c2)
+}
 
-export rule float_double(x: float, const c: float) {
+export rule float_double(x: float, const c: float) when exactDoubling(c) {
     x * c + x * c => x * (c + c)
-} when exactDoubling(c)
+}
 
 /// The bare operand: `x*c + x` is `x*c + x*1.0`, the same law and the same permission as
 /// `float_combine` with the coefficient 1 implicit. One rule reads both orders of the sum: the
 /// matcher exchanges the operands of a commutative operator.
 #requires<reassociate>
-export rule float_combine_one::<T>(x: T, const c: T) {
+export rule float_combine_one::<T>(x: T, const c: T) when is_float::<T>() && combineOneSameSign(c) {
     x * c + x => x * (c + 1.0)
-} when is_float::<T>() && combineOneSameSign(c)
+}
 
 #requires<reassociate, no_infs, no_signed_zeros>
-export rule float_combine_one_mixed::<T>(x: T, const c: T) {
+export rule float_combine_one_mixed::<T>(x: T, const c: T) when is_float::<T>() && combineOneMixedSign(c) {
     x * c + x => x * (c + 1.0)
-} when is_float::<T>() && combineOneMixedSign(c)
+}
 
 /// `x*c + x*c => x*(2c)` is exact when `c` is a finite integer with `1 <= |c| <= 2^23`: doubling
 /// a rounded product commutes with rounding there, and `2c` is exactly representable. Its f64
@@ -226,9 +226,9 @@ func exactDoubling32(c: f32): bool {
     return finiteValue(c) && abs(c) >= 1.0 && trunc(c) == c && abs(c) <= 8388608.0
 }
 
-export rule float32_double(x: f32, const c: f32) {
+export rule float32_double(x: f32, const c: f32) when exactDoubling32(c) {
     x * c + x * c => x * (c + c)
-} when exactDoubling32(c)
+}
 
 // ---- Tensors: the elementwise laws of the f32 element type ----
 //
@@ -274,36 +274,36 @@ export rule tensor_f32_neg_neg(x: Tensor<f32>) { -(-x) => x }
 export rule tensor_f32_add_self(x: Tensor<f32>) { x + x => x * 2.0 }
 
 #requires<reassociate>
-export rule tensor_f32_combine(x: Tensor<f32>, const c1: f32, const c2: f32) {
+export rule tensor_f32_combine(x: Tensor<f32>, const c1: f32, const c2: f32) when combineSameSign::<f32>(c1, c2) {
     x * c1 + x * c2 => x * (c1 + c2)
-} when combineSameSign::<f32>(c1, c2)
+}
 
 #requires<reassociate, no_infs, no_signed_zeros>
-export rule tensor_f32_combine_mixed(x: Tensor<f32>, const c1: f32, const c2: f32) {
+export rule tensor_f32_combine_mixed(x: Tensor<f32>, const c1: f32, const c2: f32) when combineMixedSign::<f32>(c1, c2) {
     x * c1 + x * c2 => x * (c1 + c2)
-} when combineMixedSign::<f32>(c1, c2)
+}
 
 #requires<reassociate, no_infs>
-export rule tensor_f32_fold(x: Tensor<f32>, const c1: f32, const c2: f32) {
+export rule tensor_f32_fold(x: Tensor<f32>, const c1: f32, const c2: f32) when foldCoefficients::<f32>(c1, c2) {
     (x * c1) * c2 => x * (c1 * c2)
-} when foldCoefficients::<f32>(c1, c2)
+}
 
-export rule tensor_f32_double(x: Tensor<f32>, const c: f32) {
+export rule tensor_f32_double(x: Tensor<f32>, const c: f32) when exactDoubling32(c) {
     x * c + x * c => x * (c + c)
-} when exactDoubling32(c)
+}
 
 /// The bare operand: `t*c + t` is `t*c + t*1.0`, the same law and the same permission as
 /// `tensor_f32_combine`, with the coefficient 1 implicit (the element families' `*_combine_one`).
 /// One rule reads both orders of the sum.
 #requires<reassociate>
-export rule tensor_f32_combine_one(x: Tensor<f32>, const c: f32) {
+export rule tensor_f32_combine_one(x: Tensor<f32>, const c: f32) when combineOneSameSign::<f32>(c) {
     x * c + x => x * (c + 1.0)
-} when combineOneSameSign::<f32>(c)
+}
 
 #requires<reassociate, no_infs, no_signed_zeros>
-export rule tensor_f32_combine_one_mixed(x: Tensor<f32>, const c: f32) {
+export rule tensor_f32_combine_one_mixed(x: Tensor<f32>, const c: f32) when combineOneMixedSign::<f32>(c) {
     x * c + x => x * (c + 1.0)
-} when combineOneMixedSign::<f32>(c)
+}
 
 /// `a*(b+c) <=> a*b + a*c`, elementwise and with the same broadcasting on both sides. It grows
 /// a writing (an add becomes two products), so it belongs to the saturation, not to `simplify`.
@@ -598,9 +598,9 @@ export rule tensor_log_softmax_of_softmax(x: Tensor<f32>, const axis: int) {
 /// relative error is 100%; `log1p` computes log(1 + x) without forming 1 + x, and its error does
 /// not grow as x -> 0.
 #requires<refine_accuracy>
-export rule float_log1p::<T>(x: T) {
+export rule float_log1p::<T>(x: T) when is_float::<T>() {
     math_log(1.0 + x) => log1p(x)
-} when is_float::<T>()
+}
 
 /// The design's second scalar example, `exp(x) - 1 => expm1(x)`, once for the floating family, as
 /// `float_log1p` is.
@@ -608,9 +608,9 @@ export rule float_log1p::<T>(x: T) {
 /// For |x| below the spacing of 1 the naive `exp(x)` rounds to exactly 1 and the subtraction gives
 /// 0; `expm1` evaluates exp(x) - 1 directly, without that cancellation.
 #requires<refine_accuracy>
-export rule float_expm1::<T>(x: T) {
+export rule float_expm1::<T>(x: T) when is_float::<T>() {
     math_exp(x) - 1.0 => expm1(x)
-} when is_float::<T>()
+}
 
 /// The design's third scalar example, `sqrt(x*x + y*y) => hypot(x, y)`, is deliberately absent:
 /// `hypot` returns +inf when one operand is +inf and the other NaN, where squaring first returns
