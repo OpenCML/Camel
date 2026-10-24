@@ -1,0 +1,115 @@
+{
+  "schema": 1,
+  "purpose": "H254 AI learnability evaluation: can a model that has never seen Camel write correct Camel from docs/reference/camel-for-ai.md alone? Every task's acceptance is a reading the compiler produces, never an opinion. camel_revision is the compiler every task is measured against.",
+  "camel_revision": "2e6438492",
+  "camel_binary": "~/camel-work/h425-ai-reference/out/latest/bin/camel",
+  "camel_env": "LD_LIBRARY_PATH=~/camel-eval/conda/envs/clang/lib CAMEL_HOME=~/camel-work/h425-ai-reference/out/latest",
+  "solver_prompt_header": "You have never used Camel before. The ONLY description of the Camel language available to you is the attached file camel-for-ai.md. There is no other documentation, no source code, no examples and nobody to ask. Write ONE Camel source file that satisfies the task below. Reply with the content of that file inside a single ```camel fenced block and nothing else: no commentary, no explanation, no alternatives.",
+  "tasks": [
+    {
+      "id": "L01",
+      "area": "values and types",
+      "file": "prog.cml",
+      "prompt": "Define a generic function named `first` that returns the first element of an array of any element type, as a value that may be absent (the absent value when the array is empty). Then write a program that prints, on one line and separated by single spaces: the first element of the array [7, 8] with 0 substituted when there is none, and the first element of an empty array of strings with 'none' substituted when there is none. Running the program must print exactly: 7 none",
+      "acceptance": { "kind": "run", "exit": 0, "stdout": "7 none" }
+    },
+    {
+      "id": "L02",
+      "area": "values and types",
+      "file": "prog.cml",
+      "prompt": "Declare an enum type with exactly three variants: a circle that carries a radius, a rectangle that carries a width and a height, and a shape that carries nothing. Write a function that computes the area of such a value: 3.14159 * radius * radius for the circle, width * height for the rectangle and 0.0 for the empty shape. Write a program that prints the area of a rectangle of width 2.0 and height 3.0. Running it must print exactly: 6.0",
+      "acceptance": { "kind": "run", "exit": 0, "stdout": "6.0" }
+    },
+    {
+      "id": "L03",
+      "area": "values and types",
+      "file": "prog.cml",
+      "prompt": "Write a function `add` that takes a 32-bit integer parameter `a` and a 64-bit integer parameter `b` (write the parameters' types exactly as `a: i32` and `b: int`) and returns their sum as a 64-bit integer. Write a program that prints `add(i32(1), 2)` on one line. Running it must print exactly: 3",
+      "acceptance": { "kind": "run", "exit": 0, "stdout": "3" }
+    },
+    {
+      "id": "L04",
+      "area": "values and types",
+      "file": "prog.cml",
+      "prompt": "Write a function `positive` with the declared result type `int?` that returns its integer argument when the argument is greater than zero and nothing (the absent value) otherwise. Write a program that prints the result of `positive(4)`, with 0 substituted when there is nothing, plus 1. Running it must print exactly: 5",
+      "acceptance": { "kind": "run", "exit": 0, "stdout": "5" }
+    },
+    {
+      "id": "L05",
+      "area": "values and types",
+      "file": "prog.cml",
+      "prompt": "Write a generic function named `double` that returns twice its single argument, and that is applicable only when the argument's type is a number. It must be usable at both an integer type and a floating-point type without the caller saying which. Write a program that prints `double(3)` and `double(1.5)` on one line, separated by a single space. Running it must print exactly: 6 3.0",
+      "acceptance": { "kind": "run", "exit": 0, "stdout": "6 3.0" }
+    },
+    {
+      "id": "L06",
+      "area": "effects and sync",
+      "file": "prog.cml",
+      "prompt": "Write a file with a function named `banner` that takes no parameters, returns nothing, and prints the text `a` on one line and then the text `b` on the next line, in that order. Write a program whose entry point calls `banner` exactly once. Running the program must print exactly two lines, `a` and then `b`, and nothing else.",
+      "acceptance": { "kind": "run", "exit": 0, "stdout": "a\nb" }
+    },
+    {
+      "id": "L07",
+      "area": "effects and sync",
+      "file": "prog.cml",
+      "prompt": "Write a function that increases a caller-owned integer variable by one through a parameter that the callee is allowed to write back into the caller's variable. Write a program that makes a variable hold 3, calls that function on it, and prints, on one line separated by a single space, the value the function returned and the value the variable holds afterwards. Running it must print exactly: 4 4",
+      "acceptance": { "kind": "run", "exit": 0, "stdout": "4 4" }
+    },
+    {
+      "id": "L08",
+      "area": "streams",
+      "file": "prog.cml",
+      "prompt": "Write a file with a function that takes an array of 64-bit integers and gives back an array in which every element is doubled. Write a program that prints the result for the array [1, 2, 3]. If the language has a form that produces and consumes the elements lazily, use it; otherwise write the form that works today. Running the program must print exactly: [2, 4, 6]",
+      "acceptance": { "kind": "run", "exit": 0, "stdout": "[2, 4, 6]" }
+    },
+    {
+      "id": "L09",
+      "area": "rules",
+      "file": "prog.cml",
+      "prompt": "Declare a rewrite rule named `add_zero` that rewrites a value plus zero into that same value, and that applies only where the zero is the integer zero (write that restriction as the rule's own applicability condition). Write a program that prints the value of 1 + 0. The rule must be accepted with its condition where the compiler reads conditions, and `camel check prog.cml` must report no error. Running the program must print exactly: 1",
+      "acceptance": { "kind": "check-and-run", "exit": 0, "stdout": "1" }
+    },
+    {
+      "id": "L10",
+      "area": "rules",
+      "file": "prog.cml",
+      "prompt": "Declare a record type with exactly two 64-bit integer fields, `x` and `y`. Give that type its own `+` operator so that adding two values of the type adds them field by field. Write a program that adds the value whose x is 1 and y is 2 to the value whose x is 3 and y is 4, and prints the two fields of the result on one line separated by a single space. Running it must print exactly: 4 6",
+      "acceptance": { "kind": "run", "exit": 0, "stdout": "4 6" }
+    },
+    {
+      "id": "L11",
+      "area": "effects and sync",
+      "file": "prog.cml",
+      "prompt": "Write a function that turns a piece of text into a 64-bit integer and reports, as a value the caller handles rather than as a crash, the case where the text is not a number. Write a program that prints, on one line separated by a single space, the reading of '7' and the reading of 'seven' with -1 substituted when the text is not a number. Running it must print exactly: 7 -1",
+      "acceptance": { "kind": "run", "exit": 0, "stdout": "7 -1" }
+    },
+    {
+      "id": "L12",
+      "area": "training",
+      "file": "prog.cml",
+      "prompt": "Write a program that builds a rank-1 tensor from [1.0, 2.0, 3.0] and a rank-2 tensor from [[1.0, 2.0], [3.0, 4.0]], then prints on the first line, separated by single spaces, the sum of the elements of the rank-1 tensor, the shape of the rank-1 tensor, and the number of elements of the rank-2 tensor, and on the second line the mean of the rank-1 tensor with every element multiplied by 2. Running it must print exactly these two lines: 6.0 [3] 4 and then 4.0",
+      "acceptance": { "kind": "run", "exit": 0, "stdout": "6.0 [3] 4\n4.0" }
+    },
+    {
+      "id": "L13",
+      "area": "training",
+      "file": "prog.cml",
+      "prompt": "Write a function whose value the language's differentiation works on: it has exactly one configuration input `x` of type float and exactly one data parameter `y` of type float, and it returns x * x * y + y. Write a program that prints, on two lines, the value of that function at x = 3.0 and y = 2.0, and then the derivative of that function with respect to x at the same point. Running it must print exactly these two lines: 20.0 and then 12.0",
+      "acceptance": { "kind": "run", "exit": 0, "stdout": "20.0\n12.0" }
+    },
+    {
+      "id": "L14",
+      "area": "values and types",
+      "file": "prog.cml",
+      "prompt": "Write a program that adds up the integers 0, 1, 2, 3 and 4 and prints the total, using the language's own loop construct rather than the array operators. Running it must print exactly: 10",
+      "acceptance": { "kind": "run", "exit": 0, "stdout": "10" }
+    },
+    {
+      "id": "L15",
+      "area": "values and types",
+      "file": "prog.cml",
+      "prompt": "Write a function that classifies an integer as 'pos' when it is greater than zero and 'non' otherwise, using a match expression whose first case matches a value only when it is positive and whose remaining case accepts everything else. Write a program that prints the classification of 3. Running it must print exactly: pos",
+      "acceptance": { "kind": "run", "exit": 0, "stdout": "pos" }
+    }
+  ]
+}
