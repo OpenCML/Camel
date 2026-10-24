@@ -456,8 +456,8 @@ func main(): int sync {
   parentheses: `static loop acc = 0 for i in 0..3 do acc + t.[i]`. What stands after `in` is one
   criterion, not a list of spellings: what compile-time constants build through freely schedulable
   operations is unrolled — a constant interval `a..b`, constant-argument `range(a, b, step)`, an
-  array literal or constant array, `indices ts`, `fields T`, or a compile-time tuple (each round's
-  `i` is that position's type). Otherwise `SemanticDiag::StaticLoopSequenceNotKnown`.
+  array literal or constant array, `indices ts`, `fields T`, or a compile-time tuple (each round
+  binds the element there). Otherwise `SemanticDiag::StaticLoopSequenceNotKnown`.
 - **`rule`** declares a rewrite an optimizer pass may apply:
   `rule name(<patterns>) when <condition> { <pattern> => <replacement> }` (`<=>` for a rewrite that
   reads both ways). The condition goes between the parameters and the body, the one position a `when`
@@ -1396,7 +1396,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `LambdaParametersNeedParentheses` | E | A lambda's parameters need their parentheses: write '(x) => e', not 'x => e'. |
 | `ComparisonAcrossLines` | W | This '>' is read as a comparison with the next line, which starts with {0}: two statements may have been joined into one. |
 
-**Semantic** (`SemanticDiag`) — 202 (190 errors, 12 warnings)
+**Semantic** (`SemanticDiag`) — 203 (191 errors, 12 warnings)
 
 | `Redeclaration` | E | Redeclaration of reference: '{0}'. |
 | `ModuleNotFound` | E | Module '{0}' not found. {1} |
@@ -1512,6 +1512,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `StaticComprehensionVoidElement` | E | The block for the field '{0}' of '{1}' gives no value, so the comprehension has no element for it. |
 | `StaticIndicesNotTuple` | E | 'indices' walks the positions of a tuple, but '{0}' has type '{1}'. |
 | `StaticLoopSequenceNotKnown` | E | The sequence of a 'static loop' must be known when the function is compiled: '{0}' is not. |
+| `StaticHeadNameCount` | E | The head of this loop names {0} things; '{1}' gives {2} for each round. |
 | `RestParameterNotLast` | E | The rest parameter '..{0}' must be the last parameter. |
 | `RestParameterTypeNotSupported` | E | The rest parameter '..{0}' cannot write a type. |
 | `RestArgumentNotLast` | E | The rest argument '..{0}' must be the last positional argument. |
@@ -1634,7 +1635,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `ConstantExpressionFaults` | W | This constant expression faults whenever it is evaluated ({0}); it is not folded. |
 | `TranslationLinksRuntime` | W | std::cpp has no standalone translation of {0}: the program it writes calls the Camel runtime there and is built with libcamel. |
 
-**Semantic** (`SemanticDiag`) — 202 (190 errors, 12 warnings)
+**Semantic** (`SemanticDiag`) — 203 (191 errors, 12 warnings)
 
 | `ReducedPrecisionUnsupported` | E | The call of '{0}' cannot take a value of the reduced-precision element type '{1}'. |
 | `ImplOnBodylessDeclaration` | E | The body-less declaration '{0}' cannot carry '#impl<{1}>': it has no Camel body. |
