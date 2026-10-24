@@ -66,7 +66,7 @@ body. Both `EXEC`s carry the numeric permissions in force where the loop is writ
    results of the parts (the body's, then the condition's) and a Port node of type `int64`, the
    slot the back ends count the rounds in.
 5. Like a branch, the loop uses every variable its parts used and writes those they wrote
-   (`mergeArmVariables`: ordering, `wait`, `IgnoredSideEffect`); in a sync block it joins the
+   (`mergeArmVariables`: ordering, `IgnoredSideEffect`); in a sync block it joins the
    chain. A loop whose value nothing uses outside a sync block does not run; when its parts have
    effects that is reported as `EffectNotExecuted` ("The loop").
 

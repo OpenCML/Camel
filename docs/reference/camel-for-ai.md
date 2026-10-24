@@ -453,10 +453,11 @@ func main(): int sync {
   `for i in 0..5 { ... }`, which is `SyntaxDiag::UnexpectedToken`: a `for` on its own is not a
   statement.
 - **`static loop`** folds a compile-time sequence, and its head is written like `loop`'s, without
-  parentheses: `static loop acc = 0 for i in 0..3 do acc + t.[i]`. After `in` comes `indices ts`,
-  `fields T`, or a constant interval `a..b`, half-open as `..` is elsewhere; `i` is a compile-time
-  value and a `t.[i]` key at once. A sequence it cannot work out is
-  `SemanticDiag::StaticLoopSequenceNotKnown`.
+  parentheses: `static loop acc = 0 for i in 0..3 do acc + t.[i]`. What stands after `in` is one
+  criterion, not a list of spellings: what compile-time constants build through freely schedulable
+  operations is unrolled — a constant interval `a..b`, constant-argument `range(a, b, step)`, an
+  array literal or constant array, `indices ts`, `fields T`, or a compile-time tuple (each round's
+  `i` is that position's type). Otherwise `SemanticDiag::StaticLoopSequenceNotKnown`.
 - **`rule`** declares a rewrite an optimizer pass may apply:
   `rule name(<patterns>) when <condition> { <pattern> => <replacement> }` (`<=>` for a rewrite that
   reads both ways). The condition goes between the parameters and the body, the one position a `when`
