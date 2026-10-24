@@ -611,7 +611,7 @@ assert(edge(a, modify, 'CTRL'), 'missing control edge `before` -> `modify`: a sy
 const adds = [...text.matchAll(/(N[0-9A-F]+) \[label=":op\/add[^"]*", type="OPER"/g)].map(m => m[1])
 assert(adds.some(n => edge(n, a, 'NORM')), 'no `+` feeding `before`')
 // The read written after modify follows it.
-const reads = [...text.matchAll(/(N[0-9A-F]+) \[label=":var\/get", type="OPER"/g)].map(m => m[1])
+const reads = [...text.matchAll(/(N[0-9A-F]+) \[label=":var\/(?:get|peek)", type="OPER"/g)].map(m => m[1])
 assert(reads.some(r => edge(modify, r, 'CTRL')), 'missing control edge modify -> later read of i')
 }
 """
