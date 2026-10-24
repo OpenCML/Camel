@@ -456,15 +456,23 @@ Builder::visitEnumMatch(const GCT::node_ptr_t &gct, node_handle_t scrutinee, Enu
                 arm.bindings.emplace_back(f, *pattern.bindings[f]);
             }
         }
-        if (covered[*tag]) {
-            diags_->of(SemanticDiag::EnumVariantCaseRepeated)
-                .atOrigin(caseNode->origin())
-                .commit(variantName);
+        // A case with a guard covers nothing on its own: the value its guard refuses falls to
+        // the cases written after it, so it makes the match exhaustive for no variant and is
+        // no repetition of one named before it (review 「when-placement-and-match-guards」).
+        const bool guardedCase = tree_->caseGuardOf(caseNode) != nullptr;
+        if (!guardedCase) {
+            if (covered[*tag]) {
+                diags_->of(SemanticDiag::EnumVariantCaseRepeated)
+                    .atOrigin(caseNode->origin())
+                    .commit(variantName);
+            }
+            covered[*tag] = true;
         }
-        covered[*tag] = true;
         arms.push_back(std::move(arm));
     }
-    if (wildcard == nullptr) {
+    const bool wildcardGuarded =
+        wildcard != nullptr && tree_->caseGuardOf(wildcard) != nullptr;
+    if (wildcard == nullptr || wildcardGuarded) {
         std::string missing;
         for (size_t tag = 0; tag < type->variantCount(); ++tag) {
             if (!covered[tag]) {
@@ -480,7 +488,8 @@ Builder::visitEnumMatch(const GCT::node_ptr_t &gct, node_handle_t scrutinee, Enu
                 .commit(type->toString(), missing);
             throw BuildAbortException();
         }
-    } else {
+    }
+    if (wildcard != nullptr) {
         // Naming every variant already covers every value: the wildcard is a case that can
         // never be taken. It stays in the graph (the request asked for it), but say so.
         bool everyVariantCovered = true;
@@ -530,6 +539,36 @@ Builder::visitEnumMatch(const GCT::node_ptr_t &gct, node_handle_t scrutinee, Enu
             return visitBodyNode(last.caseNode);
         });
     };
+
+    // A case with a guard is taken only where its guard holds, and a value the guard refuses
+    // falls to the cases written after it (review 「when-placement-and-match-guards」). The chain
+    // of tag tests cannot say that: its false arm is the tag test of the next case, and a guard
+    // fails inside the arm the tag test entered. So the cases become one decision list, whose
+    // steps test the tag and, where it holds, the guard of the case, and the names the pattern
+    // binds are taken out where the tag test holds (the variant is known there).
+    if (hasGuardedCase(gct, 1) || wildcardGuarded) {
+        std::vector<CaseStep> steps;
+        for (const Arm &arm : arms) {
+            CaseStep caseStep;
+            caseStep.condition = applyInternalOperator(
+                "__eq__", nullptr, {tree_->makeDRef(tagName), indexData(arm.tag)}, arm.caseNode);
+            caseStep.exec  = arm.caseNode;
+            caseStep.guard = tree_->caseGuardOf(arm.caseNode);
+            caseStep.bind  = [&bindFields, arm] { bindFields(arm); };
+            steps.push_back(std::move(caseStep));
+        }
+        if (wildcard != nullptr) {
+            // `case _`, guarded or not: it tests no tag. A guarded one leaves the value to the
+            // cases written after it when its guard does not hold, and it ends the list only
+            // when it has no guard.
+            CaseStep caseStep;
+            caseStep.exec  = wildcard->at(0);
+            caseStep.guard = tree_->caseGuardOf(wildcard);
+            caseStep.bind  = [] {};
+            steps.push_back(std::move(caseStep));
+        }
+        return buildCaseChain(steps, gct);
+    }
 
     // Every case of the value is one test of the tag: `tag == k`, an ordinary comparison,
     // whose true arm is the body of that case and whose false arm is the test of the next.

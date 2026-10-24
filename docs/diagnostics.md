@@ -818,13 +818,13 @@ func main(): int sync {
 **Message**
 
 ```text
-A declaration's condition comes before the body it guards, so {0} cannot follow the body.
+A 'when' condition comes before what it guards, so {0} cannot follow it.
 ```
 
 **Help**
 
 ```text
-Write it between the parameters and the body: rule add_zero::<T>(x: T) when is_integer::<T>() { x + 0 => x }. The trailing form is not read as a condition.
+Write it between the parameters and the body: rule add_zero::<T>(x: T) when is_integer::<T>() { x + 0 => x }, or between the patterns of a match case and its arm: case n when n > 0 => n. The trailing form is not read as a condition.
 ```
 
 **Example** (`test/cases/parse/rules/when_after_body.cml`, run as `camel -E short test/cases/parse/rules/when_after_body.cml`)
@@ -2344,20 +2344,20 @@ This 'match' on a value of type '{0}' is not well formed: {1}.
 A 'match' on a 'T?' has exactly the cases 'case null' and one other ('case v' binds the value, 'case _' ignores it). A 'match' on a 'T!' has exactly 'case error e' and one other.
 ```
 
-**Example** (`test/cases/compile/tagged/err_two_layer_null.cml`, run as `camel test/cases/compile/tagged/err_two_layer_null.cml`)
+**Example** (`test/cases/compile/match_guard/tagged_missing_null.cml`, run as `camel test/cases/compile/match_guard/tagged_missing_null.cml`)
 
 ```camel
-module err_two_layer_null
+module match_guard_tagged_missing_null
+
+func f(x: int?): int {
+    return match x {
+        case null when false => 1
+        case v => v
+    }
+}
 
 func main(): int sync {
-    println('never printed')
-    let r: int?! = 5
-    let s = match r {
-        case null => 0
-        case v => v ?? 1
-    }
-    println(s)
-    return 0
+    return f(null)
 }
 ```
 
@@ -2467,21 +2467,19 @@ This 'match' on a value of type '{0}' has no 'case _'.
 A 'match' must have a default case: add 'case _ => ...' for the values the cases do not list. A 'match' on a bool that has both 'case true' and 'case false' is complete, and so is one over 'T?' or 'T!' with its two fixed patterns.
 ```
 
-**Example** (`test/cases/consistency/match/no_case_matches_string.cml`, run as `camel `)
+**Example** (`test/cases/compile/match_guard/not_exhaustive.cml`, run as `camel test/cases/compile/match_guard/not_exhaustive.cml`)
 
 ```camel
-module no_case_matches_string
+module match_guard_not_exhaustive
 
-func f(s: string): int {
-    return match s {
-        case 'a' => 1
-        case 'b' => 2
+func a(n: int): int {
+    return match n {
+        case 1 when n > 0 => 10
     }
 }
 
 func main(): int sync {
-    println(f('a'), f('b'))
-    return 0
+    return a(1)
 }
 ```
 
@@ -2790,28 +2788,20 @@ This case of a 'match' on a value of type '{0}' is a value of type '{1}'.
 A case is compared with the value matched, so the type of that value must accept it. Write the case as a value of that type, or convert the value matched first.
 ```
 
-**Example** (`test/cases/compile/any_typing/match_subject.cml`, run as `camel test/cases/compile/any_typing/match_subject.cml`)
+**Example** (`test/cases/compile/match_guard/case_type_mismatch.cml`, run as `camel test/cases/compile/match_guard/case_type_mismatch.cml`)
 
 ```camel
-module match_subject
+module match_guard_case_type_mismatch
 
-import { Json, decode } from json
-
-// A decoded value as the subject of a `match` on literals: as an `any` it was compared bit for
-// bit, a string by address, so `'ab'` fell to `case _`. It
-// is a `Json` now, and a case has the type of the value matched.
-func check(v: Json): int sync {
-    let r = match v {
-        case 1 => 'one'
-        case 'ab' => 'ab'
-        case _ => 'other'
+func f(s: string): int {
+    return match s {
+        case 1 when true => 1
+        case _ => 0
     }
-    println(r)
-    return 0
 }
 
 func main(): int sync {
-    return decode('"ab"') ?-> check !! 1
+    return f('a')
 }
 ```
 
@@ -7180,17 +7170,21 @@ Index {0} is out of range for {1} of length {2}.
 Ensure the index is within the valid range of the collection.
 ```
 
-**Example** (`test/cases/consistency/faults/element_assigned_out_of_range.cml`, run as `camel `)
+**Example** (`test/cases/compile/match_guard/faulting_guard.cml`, run as `camel test/cases/compile/match_guard/faulting_guard.cml std::nvm`)
 
 ```camel
-module element_assigned_out_of_range
+module match_guard_faulting_guard
+
+func f(n: int): int {
+    let xs = [1, 2, 3]
+    return match n {
+        case 1 when xs[5] > 0 => 1
+        case _ => 0
+    }
+}
 
 func main(): int sync {
-    var xs = [1, 2, 3]
-    println('before')
-    xs[5] = 1
-    println('not reached')
-    return 0
+    return f(1)
 }
 ```
 

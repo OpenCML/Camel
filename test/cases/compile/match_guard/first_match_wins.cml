@@ -1,0 +1,100 @@
+/**
+ * The guard of a `match` case: `case p when c => ...` is taken only when the pattern matches
+ * *and* `c` holds, and a guard that does not hold leaves the value to the cases written after
+ * it (review 「when-placement-and-match-guards」).
+ *
+ * Before this change `when` was not part of a match case at all: the parser read it as the
+ * second word of the pattern (`case v when ...` was one identifier pattern, then `=>` was
+ * expected where `when` stood), so every program here failed with a syntax error. Each answer
+ * below is what the review fixes for that value.
+ */
+module match_guard
+
+type Shape = enum {
+    Circle(float),
+    Rect { w: float, h: float },
+    Empty,
+}
+
+// The guard is read in the arm's scope, so it sees the names the pattern binds: `h` and `r`.
+func area(s: Shape): float {
+    return match s {
+        case Shape::Rect { w, h } when h == 0.0 => 0.0 - 1.0
+        case Shape::Rect { w, h } => w * h
+        case Shape::Circle(r) when r > 100.0 => 0.0 - 2.0
+        case Shape::Circle(r) => r
+        case _ => 0.0
+    }
+}
+
+// A guard that is false does not take the case: the value goes on to the next case, and the
+// first case whose pattern matches *and* whose guard holds wins.
+func verdict(n: int): string {
+    return match n {
+        case 20 when n > 10 => 'big'
+        case 5 => 'five'
+        case 0 | 1 when n < 2 => 'tiny'
+        case _ => 'small'
+    }
+}
+
+// `case true when ...` over a bool: both values are listed, so no `case _` is needed.
+func guarded_bool(flag: bool): int {
+    return match flag {
+        case true when false => 1
+        case true => 2
+        case false => 3
+    }
+}
+
+// A `case null` may carry a guard, and it is one case among the others: when its guard does not
+// hold, a later `case null` is what takes the value.
+func nullable(x: int?): int {
+    return match x {
+        case null when false => 100
+        case null => 101
+        case v when v > 10 => 1
+        case v => 0
+    }
+}
+
+// The same shape over a `T!`.
+func fallible(x: int!): int {
+    return match x {
+        case error e when false => 200
+        case error e => 201
+        case v when v > 10 => 1
+        case v => 0
+    }
+}
+
+// A guarded `case _` is not a default: it tests its guard, and a false guard leaves the value
+// to the case written after it.
+func last_resort(n: int): int {
+    return match n {
+        case _ when n > 100 => 1
+        case _ => 2
+    }
+}
+
+func main(): int sync {
+    println(area(Shape::Rect { w: 3.0, h: 4.0 }))
+    println(area(Shape::Rect { w: 3.0, h: 0.0 }))
+    println(area(Shape::Circle(2.0)))
+    println(area(Shape::Circle(200.0)))
+    println(area(Shape::Empty))
+    println(verdict(20))
+    println(verdict(5))
+    println(verdict(1))
+    println(verdict(7))
+    println(guarded_bool(true))
+    println(guarded_bool(false))
+    println(nullable(null))
+    println(nullable(20))
+    println(nullable(3))
+    println(fallible(20))
+    println(fallible(3))
+    println(last_resort(200))
+    println(last_resort(7))
+    return 0
+}

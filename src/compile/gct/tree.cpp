@@ -170,6 +170,20 @@ const Tree::WhenClause *Tree::whenOf(const Node *func) const {
     return it == whenClauses_.end() ? nullptr : &it->second;
 }
 
+void Tree::setCaseGuard(const Node *caseNode, node_ptr_t guard) {
+    if (caseNode != nullptr && guard != nullptr) {
+        caseGuards_[caseNode] = std::move(guard);
+    }
+}
+
+node_ptr_t Tree::caseGuardOf(const Node *caseNode) const {
+    if (caseNode == nullptr) {
+        return nullptr;
+    }
+    const auto it = caseGuards_.find(caseNode);
+    return it == caseGuards_.end() ? nullptr : it->second;
+}
+
 void Tree::setHeadTypeParams(const Node *func, std::vector<std::string> names) {
     if (func != nullptr && !names.empty()) {
         headTypeParams_[func] = std::move(names);

@@ -312,6 +312,15 @@ class StaticAccessLoad : public DataLoad {
     const std::string geneCode() const override { return ".[]"; }
 };
 
+/// One arm of a `match`: `case pattern ('|' pattern)* when guard? => arm`.
+///
+/// A case with `|` becomes one arm per pattern (the graph builder's branch has one value per
+/// arm), and the arms share the arm and the guard. Children, always in this order:
+///   [0] Data     PATTERN: one per arm, the pattern that arm names;
+///   [1] StmtBlock ARM: the body, shared by the arms of the case;
+///   [2] Data     GUARD: the condition of `when`, present only when the case has one. It is
+///                evaluated in the arm's scope, so it reads the names the pattern binds, and a
+///                false guard sends the value on to the cases written after this one.
 class MatchCaseLoad : public DataLoad {
   public:
     MatchCaseLoad() : DataLoad(DataType::MatchCase) {}

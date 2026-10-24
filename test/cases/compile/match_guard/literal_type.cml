@@ -1,0 +1,23 @@
+/**
+ * A pattern literal takes the type of the value it is matched against, the guard or no guard
+ * (design principles 5.1): `case 3` against an `f32` compares it with 3.0, so the case is taken
+ * for 3.0 and not for 3 of some other type. The comparison a guarded case makes is the `==` of
+ * the value's own type, as it is in the branch that dispatches by case value.
+ */
+module match_guard_literal_type
+
+func kind(x: f32): string {
+    return match x {
+        case 3 when true => 'three'
+        case 4 | 5 when x > 4.5 => 'five-ish'
+        case _ => 'other'
+    }
+}
+
+func main(): int sync {
+    println(kind(3.0))
+    println(kind(4.0))
+    println(kind(5.0))
+    println(kind(1.5))
+    return 0
+}
