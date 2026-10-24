@@ -68,3 +68,12 @@ onnx.export_model: tensor:matmul_grad_rhs: the rank of an operand is not known s
   以及 `export_*` 这一族不必再各自长运行时兜底。
 
 现状：本 lane 只落了运行时 `sum_to`，两例保持红，等这一条裁决；不自行选择语义。
+## 附记（协调者 2026-10-24：同一根因的第二处症状）
+
+这条问题不是导出器的小节：`var Tensor` 一族 **38 个用例**（41 条 entry）从另一条路径撞上同一个根因。`test/cases/modules/autodiff/var_tensor_read.cml` 报
+
+`passes a var f32[?, ?] as ordinary argument 0 of 'step', which takes a var Tensor`
+
+数组的 `assignableFrom` 接受这一对（`numericUnknown()` 接受任何数值元素），但**实参是一个 cell**，而 cell 的规则要求内容类型**相等**（"cell 会被每一处引用写穿"，`src/core/type/composite/tuple.cpp`）——这条不变式是对的，不该放宽。develop 上 `reshape` 与形参回答的是同一个 `TensorType`，所以 38 个用例全绿；翻转把"一个形状未知的张量"拼成了两种写法（`f32[?, ?]` 与 `Tensor`）。
+
+因此 (b) 的答案同时决定两族：若答案是"裸 `Tensor` 形参按调用点实例化"，调用侧的同一条规则（调用点的 cell 取声明的形参类型）就能让两族一起落地；若答案相反，这里需要一条只做**加宽**、不放宽 cell 不变式的兼容路径。
