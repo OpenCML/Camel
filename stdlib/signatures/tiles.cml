@@ -20,11 +20,15 @@
  *
  * For reference only: these declarations are not compiled. They are checked against the operators
  * the module registers, and docs/stdlib-reference.md is generated from them.
+ *
+ * A scalar leaf takes the element type it is written with (design principles 7.3): an f32 scalar is
+ * a four-byte value with an empty shape, so its device leaf is `Device<f32>`, while an f64 scalar's
+ * is `Device<float>`. The instances below write the f32 ones.
  */
 
-/// Uploads every leaf of the value — a float or an f32 tensor, alone or inside a tuple or a
-/// struct — and returns the same tree with each leaf wrapped in `Device<...>`. A leaf of any other
-/// type is refused when the call is compiled.
+/// Uploads every leaf of the value — a tensor, or a scalar of the element type it is written with,
+/// alone or inside a tuple or a struct — and returns the same tree with each leaf wrapped in
+/// `Device<...>`. A leaf of any other type is refused when the call is compiled.
 /// @effect transfers to the device
 /// @example upload(host)    // a Device<Tensor<f32>>
 export func upload(value: Tensor<f32>): Device<Tensor<f32>>
@@ -40,33 +44,33 @@ export func download(value: Device<Tensor<f32>>): Tensor<f32>
 /// This is the operator `tiles::compile` inserts for an outlined region; a `#gpu` scope asks for
 /// the device explicitly, and an operator the device cannot run is a compile error there.
 /// @effect transfers to the device and runs device code
-/// @example run_preferred_resident<(a: float, b: float): float => a + b>((2.0, 3.0))    // a Device<float>
-with <fn: (a: float, b: float) => float>
-export func run_preferred_resident(inputs: (float, float)): Device<float>
+/// @example run_preferred_resident<(a: f32, b: f32): f32 => a + b>((f32(2.0), f32(3.0)))    // a Device<f32>
+with <fn: (a: f32, b: f32) => f32>
+export func run_preferred_resident(inputs: (f32, f32)): Device<f32>
 
 /// The CUDA source the function compiles to, without running it.
 /// @effect compiles device code
-/// @example println(source<(a: float, b: float): float => a + b>((2.0, 3.0)))
-with <fn: (a: float, b: float) => float>
-export func source(inputs: (float, float)): string
+/// @example println(source<(a: f32, b: f32): f32 => a + b>((f32(2.0), f32(3.0))))
+with <fn: (a: f32, b: f32) => f32>
+export func source(inputs: (f32, f32)): string
 
 /// A report on the function's device plan, without running it: the kernel, its launch shape and
 /// the values it would keep on the device.
 /// @effect compiles device code
-/// @example println(inspect<(a: float, b: float): float => a + b>((2.0, 3.0)))
-with <fn: (a: float, b: float) => float>
-export func inspect(inputs: (float, float)): string
+/// @example println(inspect<(a: f32, b: f32): f32 => a + b>((f32(2.0), f32(3.0))))
+with <fn: (a: f32, b: f32) => f32>
+export func inspect(inputs: (f32, f32)): string
 
 /// Times the function on the device, and on the host for comparison, and returns the report as
 /// JSON text.
 /// @effect transfers both ways and runs device code
-/// @example println(benchmark<(a: float, b: float): float => a + b>((2.0, 3.0)))
-with <fn: (a: float, b: float) => float>
-export func benchmark(inputs: (float, float)): string
+/// @example println(benchmark<(a: f32, b: f32): f32 => a + b>((f32(2.0), f32(3.0))))
+with <fn: (a: f32, b: f32) => f32>
+export func benchmark(inputs: (f32, f32)): string
 
 /// The regions the compiler would take for the whole program, as text: which nodes would run on
 /// the device and why the others would not.
 /// @effect compiles device code
-/// @example println(regions<(a: float, b: float): float => a + b>())
-with <fn: (a: float, b: float) => float>
+/// @example println(regions<(a: f32, b: f32): f32 => a + b>())
+with <fn: (a: f32, b: f32) => f32>
 export func regions(): string

@@ -20,7 +20,9 @@ namespace camel::tiles {
 using namespace core::type;
 namespace {
 Type *buildResidentType(Type *type) {
-    if (tensor::isTensorType(type) || type->code() == TypeCode::Float64)
+    // A scalar leaf rises with the element type it was written with (design principles 7.3), so
+    // both of the device's element types are resident, not only the f64 one.
+    if (tensor::isTensorType(type) || deviceScalarDType(type))
         return DeviceType::get(type);
     if (type->code() == TypeCode::Tuple) {
         auto *tuple = static_cast<TupleType *>(type);
