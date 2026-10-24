@@ -1,0 +1,35 @@
+/**
+ * The program a generic law rewrites: `+ 0` twice on `int`, once on `i32`, and `+ -0.0` on
+ * `float`. Two integer sites of one type are what shows an instance is made per type tuple and
+ * not per match; the float signed-zero law is float's own, so it is a second law, not a case of
+ * the integer one.
+ */
+module generic_target
+
+func i64_zero(x: int): int {
+    return x + 0
+}
+
+func i64_also_zero(x: int): int {
+    return x + 0
+}
+
+func i32_zero(x: i32): i32 {
+    return x + 0
+}
+
+func f64_minus_zero(x: float): float {
+    return x + -0.0
+}
+
+/// A value no law touches: the string laws are not the ones under test, and a value of a type
+/// `add_minus_zero` cannot be written for is what `why_not` reports the failed attempt of.
+func greet(): string {
+    return 'generic law'
+}
+
+func main(): int sync {
+    println(greet())
+    println(i64_zero(7), i64_also_zero(8), i32_zero(9), f64_minus_zero(1.5))
+    return 0
+}

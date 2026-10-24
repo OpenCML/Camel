@@ -2215,6 +2215,13 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 LEAVE("LINK");
                 return expanded;
             }
+            if (ops->name() == "__rule_generic") {
+                // The maker of a rule whose head declares type parameters: its sides are generic
+                // functions, which have no value, so it takes their templates and is called with
+                // the id they are registered under (design principles 5.5; the ruling of
+                // 2026-10-23 on generic-rule-instantiation).
+                settleGenericRuleMaker(normInputs, normInputTypes, gct);
+            }
             settleGenericOperatorArguments(
                 ops,
                 withInputs,

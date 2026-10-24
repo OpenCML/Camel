@@ -21,6 +21,7 @@
 
 #include "camel/compile/gct.h"
 #include "camel/compile/gir/draft_graph_builder.h"
+#include "camel/compile/gir/rule_templates.h"
 #include "camel/compile/gir/value_entity.h"
 #include "camel/compile/semantic_recorder.h"
 #include "camel/core/error/diagnostics.h"
@@ -287,6 +288,28 @@ class Builder {
         const camel::core::module::module_ptr_t &module, const std::string &entryFunction);
 
     compile_graph_ptr_t rootGraph() const { return rootGraph_; }
+
+    /// The instance of one registered generic rule at `types`: its two sides and its condition,
+    /// built here, in the builder the rule's templates belong to (where it was declared). Answers
+    /// false with `why` when no instance can be made, and reports nothing on the way: a failed
+    /// instantiation is quiet (the ruling of 2026-10-23 on
+    /// `generic-rule-instantiation-set-and-predicate`), and only `why_not` repeats `why`.
+    ///
+    /// Public because the context's table of generic rules calls it where a rule is applied
+    /// (rule_templates.cpp): the library was built long before, and an instance belongs to the
+    /// builder that declared the rule.
+    bool instantiateRuleTemplates(
+        const GenericRuleEntry &entry, const std::vector<Type *> &types, compile_graph_ptr_t &lhs,
+        compile_graph_ptr_t &rhs, compile_graph_ptr_t &when, std::string &why);
+
+    /// Runs `body` with the state of `module`'s unit in force: the same state a top-level
+    /// declaration of that module is built in (its diagnostics, its construction tree, its module
+    /// and its scopes, `UnitContext`). An instance of a generic rule of that module is built this
+    /// way, long after the module was built, because a body build resolves names as the module
+    /// does. Answers false when this builder declared no such module; the state is restored
+    /// whatever `body` does, exception or not.
+    bool inModule(
+        const camel::core::module::module_ptr_t &module, const std::function<void()> &body);
 
   private:
     // ---- The modules of the program ----
@@ -1205,6 +1228,18 @@ class Builder {
     compile_graph_ptr_t instantiateGenericAs(
         const generic_template_ptr_t &tmpl, FunctionType *expected, const GCT::node_ptr_t &origin,
         std::string &why);
+    // ---- A generic rule where a rule is expected (rewrite design 2 (second version) 8.5) ----
+    /// `__rule_generic('name', two_way, needs, consts, <the sides>)`, the maker of a rule whose
+    /// head declares type parameters: its sides are generic functions, and a generic function has
+    /// no value to give. The maker takes their *templates* instead, which are registered under an
+    /// id the rule value keeps (camel/compile/gir/rule_templates.h); the call becomes
+    /// `__rule_generic('name', two_way, needs, consts, id)` and resolves as the `Rule` it is. Does
+    /// nothing when the call is not that shape, and the maker's own resolution reports it.
+    void settleGenericRuleMaker(
+        std::vector<Argument> &normInputs, camel::core::type::type_vec_t &normTypes,
+        const GCT::node_ptr_t &call);
+    /// The instance of one registered generic rule at `types`: declared public (above), since the
+    /// context's table of generic rules calls it.
     /// A body build inside a speculative scope: while this lives, what the body reports goes to the
     /// scope's sink. The body of a candidate is the only thing a search may hold back, and this is
     /// the only door into that sink.

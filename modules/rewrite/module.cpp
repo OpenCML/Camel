@@ -11,10 +11,9 @@
  * the rules as an array.
  *
  * The callable operators are declared in `stdlib/rewrite.cml` (handover H183; `run`, H226); this
- * file keeps their kernels, the executor and their purity. The three reserved groups the
- * language's
- * `rule` and `analysis` declarations compile to (`__rule`, `__rule_when`, `__analysis`) have no
- * callable Camel name, so they stay exported from here.
+ * file keeps their kernels, the executor and their purity. The reserved groups the language's
+ * `rule` and `analysis` declarations compile to (`__rule`, `__rule_when`, `__rule_generic`,
+ * `__analysis`) have no callable Camel name, so they stay exported from here.
  */
 
 #include "proof.h"
@@ -24,6 +23,7 @@
 
 #include "../graph/handle.h"
 
+#include "camel/compile/gir/rule_templates.h"
 #include "camel/core/context/context.h"
 #include "camel/core/mm.h"
 #include "camel/core/mm/root_handle.h"
@@ -71,6 +71,8 @@ using namespace camel::core::module;
 using namespace camel::core::rtdata;
 using namespace camel::core::type;
 using namespace camel::core::rtdata;
+using camel::compile::gir::GenericRuleEntry;
+using camel::compile::gir::GenericRuleInstance;
 using camel::graphmod::Handle;
 using camel::graphmod::HandleKind;
 using camel::graphmod::HandleType;
@@ -114,6 +116,26 @@ slot_t ruleWhenKernel(ArgsView &, ArgsView &norm, Context &) {
     return toSlot(object);
 }
 
+/// `__rule_generic('name', two_way, needs, consts, id)`: the maker of a rule whose head declares
+/// type parameters. What it is given is the id the rule's templates were registered under (the
+/// front end registers them while it builds this call): a generic rule has no function values to
+/// hold, so it keeps the id, and the engine makes its sides where it matches, one instance per
+/// type tuple (the ruling of 2026-10-23 on generic-rule-instantiation).
+slot_t genericRuleKernel(ArgsView &, ArgsView &norm, Context &) {
+    const auto name = camel::core::internSymbol(norm.get<String *>(0)->view());
+    auto *object    = RuleObject::create(
+        name,
+        norm.get<rtdata::Bool>(1),
+        static_cast<camel::core::sem::PermissionMask>(norm.get<rtdata::Int64>(2)),
+        static_cast<uint64_t>(norm.get<rtdata::Int64>(3)),
+        nullptr,
+        nullptr,
+        nullptr,
+        mm::autoSpace(),
+        static_cast<uint64_t>(norm.get<rtdata::Int64>(4)));
+    return toSlot(object);
+}
+
 slot_t nameKernel(ArgsView &, ArgsView &norm, Context &) {
     return toSlot(String::from(std::string(norm.get<RuleObject *>(0)->name()), mm::autoSpace()));
 }
@@ -132,10 +154,21 @@ slot_t constsKernel(ArgsView &, ArgsView &norm, Context &) {
 
 /// The state a condition closure needs: the rule object, rooted so that the closure can read the
 /// condition function from it after every safepoint, and the node VM the conditions of one engine
-/// call share.
+/// call share. An instance of a generic rule has no rule object of its own to read: its parts are
+/// the graphs the context published for it, which do not move, and the fields after `vm` carry
+/// them (camel/compile/gir/rule_templates.h).
 struct WhenCall {
     std::shared_ptr<mm::RootHandle> rule;
     std::shared_ptr<NodeVMSchedPass> vm;
+    /// The instance, when the condition belongs to one: its program and its condition graph.
+    const camel::runtime::Program *program = nullptr;
+    const camel::runtime::GCGraph *graph   = nullptr;
+    /// The rule's own parameters, the condition's, and which of the rule's are `const`.
+    size_t own            = 0;
+    size_t arity          = 0;
+    uint64_t constParams  = 0;
+    /// The name the messages use.
+    std::string name;
 };
 
 /// Whether a rule's condition holds at this match (rewrite design 2 (second version) 1). A `const`
@@ -149,11 +182,24 @@ bool callWhen(const WhenCall &call, const camel::runtime::Match &match) {
     // The rule is read from the rooted handle, and the errors below read it again from there: a
     // condition is Camel code, so making the argument handles below collects, and a RuleObject the
     // engine held by address across one of those safepoints would be stale. The closure that calls
-    // this holds only the WhenCall, whose RootHandle the collector keeps up to date.
-    const RuleObject *rule = call.rule->getAs<RuleObject>();
-    const size_t arity = static_cast<size_t>(rule->when()->graph()->funcType()->normTypesCount());
-    const size_t own   = static_cast<size_t>(rule->lhs()->graph()->normPorts().size());
-    const uint64_t constParams = rule->constParams();
+    // this holds only the WhenCall, whose RootHandle the collector keeps up to date. An instance
+    // of a generic rule has no object at all: its parts are the context's and stay where they are,
+    // and they are read from the call description instead.
+    const RuleObject *rule = call.rule != nullptr ? call.rule->getAs<RuleObject>() : nullptr;
+    const size_t arity =
+        rule != nullptr
+            ? static_cast<size_t>(rule->when()->graph()->funcType()->normTypesCount())
+            : call.arity;
+    const size_t own = rule != nullptr
+                           ? static_cast<size_t>(rule->lhs()->graph()->normPorts().size())
+                           : call.own;
+    const uint64_t constParams = rule != nullptr ? rule->constParams() : call.constParams;
+    // The rule's name, read where it is needed: an ordinary rule's object moves under the
+    // collector, an instance's name is part of the call description.
+    const auto ruleName = [&]() -> std::string_view {
+        const RuleObject *current = call.rule != nullptr ? call.rule->getAs<RuleObject>() : nullptr;
+        return current != nullptr ? current->name() : std::string_view(call.name);
+    };
     camel::runtime::GraphDraft &draft = match.writings.draft();
     // One slot per parameter: a rooted Node handle for a node parameter, a rooted object for a
     // constant the collector can move, and nothing for a constant whose bits are copied below.
@@ -190,7 +236,7 @@ bool callWhen(const WhenCall &call, const camel::runtime::Match &match) {
                     throw std::runtime_error(std::format(
                         "Rule '{}': parameter {} of its condition is `const`, and the left side "
                         "bound no constant there.",
-                        call.rule->getAs<RuleObject>()->name(),
+                        ruleName(),
                         i + 1));
                 }
                 roots.push_back(
@@ -222,7 +268,7 @@ bool callWhen(const WhenCall &call, const camel::runtime::Match &match) {
             throw camel::runtime::RuleCompileError(std::format(
                 "Rule '{}': parameter {} of its condition is the node of a `const` parameter "
                 "(`node_of`), but the left side binds no node for it.",
-                call.rule->getAs<RuleObject>()->name(),
+                ruleName(),
                 i + 1));
         }
         const camel::runtime::gc_node_ref_t bound = match.vars[constParam];
@@ -230,7 +276,7 @@ bool callWhen(const WhenCall &call, const camel::runtime::Match &match) {
             throw camel::runtime::RuleCompileError(std::format(
                 "Rule '{}': parameter {} of its condition is the node of a `const` parameter "
                 "(`node_of`), and the left side bound no node there.",
-                call.rule->getAs<RuleObject>()->name(),
+                ruleName(),
                 i + 1));
         }
         Handle *handle = Handle::createInDraft(draft, bound, mm::autoSpace());
@@ -252,11 +298,21 @@ bool callWhen(const WhenCall &call, const camel::runtime::Match &match) {
         args.push_back(toSlot(roots[i]->getAs<Handle>()));
     }
     // A call can move the objects: the condition is read from the rooted rule after the last
-    // allocation and immediately before the call.
-    ::Function *when    = call.rule->getAs<RuleObject>()->when();
+    // allocation and immediately before the call. An instance's condition is the graph the context
+    // published for it, which no safepoint moves.
+    ::Function *when = rule != nullptr ? rule->when() : nullptr;
+    const camel::runtime::Program *whenProgram = when != nullptr ? when->program() : call.program;
+    const camel::runtime::GCGraph *whenGraph   = when != nullptr ? when->graph() : call.graph;
+    ASSERT(
+        whenProgram != nullptr && whenGraph != nullptr,
+        "A condition is a function of a rule value or the graph of an instance.");
     const slot_t result = [&]() -> slot_t {
         try {
-            return call.vm->callGraph(when->program(), when->graph(), args);
+            // The graphs of a program are read and written by the node VM (its value slots), so it
+            // takes them without `const`; an instance's condition graph is the context's, and no
+            // other reader holds it.
+            return call.vm->callGraph(
+                whenProgram, const_cast<camel::runtime::GCGraph *>(whenGraph), args);
         } catch (const camel::core::error::FactQueryNoValue &) {
             // A fact query inside the condition named parts that are no value's operands: the
             // condition is false -- this rule does not apply here -- and not a failure of the pass
@@ -301,17 +357,156 @@ sourceOf(const RuleObject &rule, uint16_t id, const std::shared_ptr<WhenCall> &c
     return source;
 }
 
+/// Whether a graph is one side of a rule: those are the patterns, not part of the program the
+/// rules are applied to.
+bool isRuleSide(const camel::runtime::GCGraph &graph) {
+    const std::string &name = graph.name();
+    return name.ends_with("__lhs") || name.ends_with("__rhs") || name.ends_with("__when");
+}
+
+/// The compiled rules of the instances of one generic rule, one entry per instance that was made:
+/// an instance's place in its rule's list is the index here (the entry's list grows as the types
+/// of the programs it is applied to are seen, so nothing keeps a reference into it).
+struct CompiledInstances {
+    std::vector<std::vector<camel::runtime::Rule>> perInstance;
+    std::vector<bool> made;
+};
+
+/// What one instance of a generic rule says, as the compiler of rules takes it: the graphs the
+/// context published for the type tuple, under the name the reports use (`add_zero<i32>`, so
+/// `explain` names the instance a step came from). There is no rule object behind an instance: the
+/// closure keeps the call description, whose parts do not move.
+camel::runtime::RuleSource instanceOf(
+    const RuleObject &rule, uint16_t id, const GenericRuleInstance &instance,
+    const std::shared_ptr<WhenCall> &call) {
+    camel::runtime::RuleSource source;
+    source.name          = std::format("{}<{}>", rule.name(), instance.typeText);
+    source.id            = id;
+    source.needs         = rule.needs();
+    source.bidirectional = rule.twoWay();
+    source.program       = instance.program;
+    source.lhs           = instance.lhs->id();
+    source.rhs           = instance.rhs->id();
+    for (int bit = 0; bit < 64; ++bit) {
+        source.constParams.push_back((rule.constParams() >> bit) & 1);
+    }
+    if (instance.when != nullptr) {
+        source.whenArity = instance.whenArity;
+        // The parameters of the condition that are the rule's own are its first ones, as for an
+        // ordinary rule: the condition takes them in the order the rule writes them.
+        source.whenNodesStart = static_cast<uint32_t>(instance.lhs->normPorts().size());
+        source.when = [call](const camel::runtime::Match &match) { return callWhen(*call, match); };
+    }
+    return source;
+}
+
+/// The type tuples a generic rule is instantiated at: the type of every value the program being
+/// rewritten has, each once, in the order the graphs write them. The ruling of 2026-10-23 on
+/// generic-rule-instantiation binds the rule's type variables from the nodes it matches, so the
+/// types are the program's own (not the registered meta-types `check` adds). A tuple that cannot
+/// be written for is remembered as one that did not come about, and the engine skips it.
+std::vector<std::vector<Type *>> tuplesOf(const camel::runtime::Program &program) {
+    std::vector<std::vector<Type *>> tuples;
+    for (const camel::runtime::GCGraph *graph : program.graphs()) {
+        if (isRuleSide(*graph)) {
+            continue;
+        }
+        for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
+            Type *type = graph->node(it.ref())->dataType();
+            if (type == nullptr || type->code() == TypeCode::Void) {
+                continue;
+            }
+            const bool known = std::any_of(
+                tuples.begin(), tuples.end(), [&](const std::vector<Type *> &tuple) {
+                    return tuple[0] == type || tuple[0]->equals(type);
+                });
+            if (!known) {
+                tuples.push_back({type});
+            }
+        }
+    }
+    return tuples;
+}
+
+/// The compiled rules of one instance of a generic rule, made now if this is the first read and
+/// kept in the entry: the instance is compiled once, so a second application of the same rule at
+/// the same types pays nothing (the ruling of 2026-10-23 on generic-rule-instantiation: the type
+/// part is folded once per tuple and cached).
+const std::vector<camel::runtime::Rule> &instanceRules(
+    Context &ctx, const RuleObject &rule, GenericRuleEntry &entry, size_t index) {
+    static const std::vector<camel::runtime::Rule> none;
+    if (entry.compiled == nullptr) {
+        entry.compiled = std::make_shared<CompiledInstances>();
+    }
+    auto *compiled = static_cast<CompiledInstances *>(entry.compiled.get());
+    compiled->perInstance.resize(entry.instances.size());
+    compiled->made.resize(entry.instances.size(), false);
+    if (index >= entry.instances.size()) {
+        return none;
+    }
+    if (!compiled->made[index]) {
+        const GenericRuleInstance &instance = entry.instances[index];
+        std::shared_ptr<WhenCall> call;
+        if (instance.when != nullptr) {
+            call              = std::make_shared<WhenCall>();
+            call->vm          = std::make_shared<NodeVMSchedPass>(ctx.shared_from_this());
+            call->program     = instance.program;
+            call->graph       = instance.when;
+            call->own         = instance.lhs->normPorts().size();
+            call->arity       = instance.whenArity;
+            call->constParams = rule.constParams();
+            call->name        = std::format("{}<{}>", rule.name(), instance.typeText);
+        }
+        // The instance's own place in its rule is its id, so that the id a step records is the
+        // same in every application. Ids are numbered within each rule, not across the rules of a
+        // run: the engine records this id and reads nothing by it (an ordinary rule's ids are
+        // numbered per run, which is the same thing when a run holds one rule).
+        const camel::runtime::RuleSource source =
+            instanceOf(rule, static_cast<uint16_t>(index + 1), instance, call);
+        compiled->perInstance[index] = camel::runtime::compileRule(ctx, source);
+        compiled->made[index]        = true;
+    }
+    return compiled->perInstance[index];
+}
+
 /// The engine's rules for the rule values of an array.
 ///
 /// Compiling a rule makes constants and can collect: the array is read again from the argument,
-/// which the collector keeps up to date, each time.
-std::vector<camel::runtime::Rule> engineRules(Context &ctx, ArgsView &norm, size_t argument) {
+/// which the collector keeps up to date, each time. A generic rule has no sides of its own: it
+/// contributes one instance per type tuple of the program it is applied to, made once and kept.
+std::vector<camel::runtime::Rule> engineRules(
+    Context &ctx, ArgsView &norm, size_t argument, const camel::runtime::Program *base) {
     std::vector<camel::runtime::Rule> out;
     auto vm            = std::make_shared<NodeVMSchedPass>(ctx.shared_from_this());
     uint16_t next      = 1;
     const size_t count = norm.get<Array *>(argument)->size();
     for (size_t i = 0; i < count; ++i) {
         RuleObject *rule = norm.get<Array *>(argument)->get<RuleObject *>(i);
+        if (rule->ruleId() != 0) {
+            const uint64_t ruleId = rule->ruleId();
+            if (base == nullptr) {
+                continue;
+            }
+            for (const std::vector<Type *> &types : tuplesOf(*base)) {
+                const size_t index = camel::compile::gir::genericRuleInstance(ctx, ruleId, types);
+                // Making an instance builds a body and encodes graphs: the value is read again
+                // from the array, and the entry again from the context, after it.
+                GenericRuleEntry *entry = camel::compile::gir::genericRuleEntry(ctx, ruleId);
+                if (entry == nullptr || index >= entry->instances.size() ||
+                    !entry->instances[index].made) {
+                    // A type tuple the rule cannot be written for says nothing: the ruling of
+                    // 2026-10-23 keeps a failed instantiation quiet, and `why_not` is where the
+                    // reason is read.
+                    continue;
+                }
+                RuleObject *current = norm.get<Array *>(argument)->get<RuleObject *>(i);
+                for (const camel::runtime::Rule &compiled :
+                     instanceRules(ctx, *current, *entry, index)) {
+                    out.push_back(compiled);
+                }
+            }
+            continue;
+        }
         std::shared_ptr<WhenCall> call;
         if (rule->when() != nullptr) {
             call       = std::make_shared<WhenCall>();
@@ -328,13 +523,6 @@ std::vector<camel::runtime::Rule> engineRules(Context &ctx, ArgsView &norm, size
         }
     }
     return out;
-}
-
-/// Whether a graph is one side of a rule: those are the patterns, not part of the program the
-/// rules are applied to.
-bool isRuleSide(const camel::runtime::GCGraph &graph) {
-    const std::string &name = graph.name();
-    return name.ends_with("__lhs") || name.ends_with("__rhs") || name.ends_with("__when");
 }
 
 // ---------------------------------------------------------------------- the proof
@@ -460,7 +648,7 @@ slot_t rewriteKernel(ArgsView &, ArgsView &norm, Context &ctx) {
     const auto *base            = norm.get<const camel::runtime::Program *>(0);
     const bool strict           = norm.size() > 2 && norm.get<Bool>(2);
     try {
-        const auto compiled = engineRules(ctx, norm, 1);
+        const auto compiled = engineRules(ctx, norm, 1, base);
         const Application application = applyRewrite(
             ctx, base, compiled,
             strict ? camel::core::sem::NumericPolicy::strict()
@@ -510,7 +698,7 @@ slot_t runKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     const TupleType *resultType = TupleType::fallible(runType);
     try {
         const auto start    = std::chrono::steady_clock::now();
-        const auto compiled = engineRules(ctx, with, 0);
+        const auto compiled = engineRules(ctx, with, 0, base);
         RewriteRecord record;
         record.strict = strict;
         record.input  = base;
@@ -836,6 +1024,14 @@ slot_t whyNotKernel(ArgsView &, ArgsView &norm, Context &ctx) {
                     "the rule fired here in round {} of graph {}: {} was made from {}",
                     step.round, step.graph, step.producedText, before));
             }
+            if (step.rule.starts_with(std::string(rule->name()) + "<")) {
+                // The step came from an instance of this generic rule: the answer names it, since
+                // which types an instance was made for is the one thing a generic rule's report
+                // has to say (the ruling of 2026-10-23 on generic-rule-instantiation).
+                return answer(std::format(
+                    "the rule fired here in round {} of graph {} as `{}`: {} was made from {}",
+                    step.round, step.graph, step.rule, step.producedText, before));
+            }
             return answer(std::format(
                 "another rule fired here in round {} of graph {}: {} was made from {} by `{}`",
                 step.round, step.graph, step.producedText, before, step.rule));
@@ -847,6 +1043,59 @@ slot_t whyNotKernel(ArgsView &, ArgsView &norm, Context &ctx) {
             camel::runtime::toText(graphId)));
     }
     try {
+        if (rule->ruleId() != 0) {
+            // A generic rule has no sides of its own: what the value's type has is an instance,
+            // and the question is about it (the ruling of 2026-10-23 on
+            // generic-rule-instantiation). Which types the rule was instantiated at, and what came
+            // of each, is what a reader of a generic rule needs to know.
+            const camel::runtime::GCGraph *graph = program->graph(graphId);
+            const Type *type =
+                graph != nullptr ? graph->node(value->index())->dataType() : nullptr;
+            if (type == nullptr) {
+                return answer(std::format(
+                    "`{}` is a generic rule, and the type of this value is not known here",
+                    rule->name()));
+            }
+            const uint64_t ruleId = rule->ruleId();
+            const std::vector<Type *> types{const_cast<Type *>(type)};
+            const size_t index = camel::compile::gir::genericRuleInstance(ctx, ruleId, types);
+            // Making the instance can collect: it is read from the context again.
+            GenericRuleEntry *entry = camel::compile::gir::genericRuleEntry(ctx, ruleId);
+            if (entry == nullptr || index >= entry->instances.size()) {
+                return answer(std::format(
+                    "`{}` is a generic rule, and no instance of it could be made for '{}'",
+                    rule->name(), type->toString()));
+            }
+            const GenericRuleInstance &instance = entry->instances[index];
+            if (!instance.made) {
+                // Tried, and the pattern could not be written for that type. Nothing of what the
+                // compiler said about it was reported where it happened (the ruling of 2026-10-23
+                // on generic-rule-instantiation-set-and-predicate, §3), so this is where it is
+                // read.
+                return answer(std::format(
+                    "`{}` is a generic rule, and no instance of it could be made for '{}': {}",
+                    rule->name(), type->toString(), instance.why));
+            }
+            const std::vector<camel::runtime::Rule> &compiled =
+                instanceRules(ctx, *rule, *entry, index);
+            if (compiled.empty()) {
+                return answer(std::format("`{}<{}>` compiles to no rule", rule->name(),
+                                          instance.typeText));
+            }
+            camel::runtime::RuntimeGraphDraftSession session(ctx.shared_from_this(), program);
+            camel::runtime::GraphDraft &draft =
+                session.edit(const_cast<camel::runtime::GCGraph *>(program->graph(graphId)));
+            camel::runtime::DraftWritings writings(
+                draft, record.strict ? camel::core::sem::NumericPolicy::strict()
+                                     : camel::core::sem::NumericPolicy::relaxed());
+            const camel::runtime::RuleMiss miss = writings.whyNot(compiled.front(), *draftNode);
+            return answer(std::format(
+                "`{}<{}>` did not fire at {}: {}",
+                rule->name(),
+                instance.typeText,
+                writings.textOf(*draftNode),
+                miss.detail));
+        }
         std::shared_ptr<WhenCall> call;
         if (rule->when() != nullptr) {
             call       = std::make_shared<WhenCall>();
@@ -890,7 +1139,7 @@ slot_t saturateKernel(ArgsView &, ArgsView &norm, Context &ctx) {
     const int64_t rounds        = norm.get<Int64>(2);
     const bool strict           = norm.size() > 3 && norm.get<Bool>(3);
     try {
-        const auto compiled = engineRules(ctx, norm, 1);
+        const auto compiled = engineRules(ctx, norm, 1, base);
         camel::runtime::RuntimeGraphDraftSession session(ctx.shared_from_this(), base);
         session.setGraphState(camel::runtime::GraphState::Tabled);
         // A condition is Camel code, and so is a safepoint: every draft this session has opened
@@ -2114,6 +2363,16 @@ slot_t checkKernel(ArgsView &, ArgsView &norm, Context &ctx) {
     for (size_t index = 0; index < count; ++index) {
         // The array moves when a function runs: it is read again each time.
         RuleObject *made = norm.get<Array *>(0)->get<RuleObject *>(index);
+        if (made->ruleId() != 0) {
+            // A generic rule has no two sides of its own to sample: it is checked at the types it
+            // is instantiated for, and that walk -- the types `check` registers, plus the types of
+            // the program (the ruling of 2026-10-23 on generic-rule-instantiation, §2) -- is the
+            // next step of the bridge. Said plainly here rather than checked by halves.
+            const std::string_view name = made->name();
+            report += std::format(
+                "unchecked {}: a generic rule, whose instances are not checked here\n", name);
+            continue;
+        }
         // A condition is read again from the rule object after every call, so the object is
         // rooted while the check runs.
         std::shared_ptr<mm::RootHandle> ruleRoot;
@@ -2437,6 +2696,7 @@ class RewriteExecutor final : public Executor {
         return {
             {"rule", ruleKernel},
             {"rule_when", ruleWhenKernel},
+            {"rule_generic", genericRuleKernel},
             {"name", nameKernel},
             {"two_way", twoWayKernel},
             {"needs", needsKernel},
@@ -2501,6 +2761,28 @@ class RewriteModule final : public BuiltinModule {
                           const auto *when = static_cast<const FunctionType *>(norm[6]);
                           if (when->exitType() == nullptr ||
                               when->exitType()->code() != TypeCode::Bool)
+                              return std::nullopt;
+                          return RuleType::get();
+                      })}}));
+        // `__rule_generic`: the maker of a rule whose head declares type parameters. The front end
+        // writes it instead of `__rule` / `__rule_when` when the declaration has a `::<T>` head: the
+        // sides are generic functions, which have no value, so the maker is given the id of their
+        // templates after `consts` (the ruling of 2026-10-23 on generic-rule-instantiation).
+        exportEntity(
+            "__rule_generic",
+            OperatorGroup::create(
+                "__rule_generic",
+                {{"rewrite:rule_generic",
+                  DynamicFuncTypeResolver::create(
+                      {{0, {}}, {5, {false, false, false, false, false}}},
+                      "(name: string, two_way: bool, needs: int, consts: int, id: int) => Rule",
+                      [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
+                          -> std::optional<Type *> {
+                          if (norm[0]->code() != TypeCode::String ||
+                              norm[1]->code() != TypeCode::Bool ||
+                              norm[2]->code() != TypeCode::Int64 ||
+                              norm[3]->code() != TypeCode::Int64 ||
+                              norm[4]->code() != TypeCode::Int64)
                               return std::nullopt;
                           return RuleType::get();
                       })}}));
@@ -2570,6 +2852,7 @@ class RewriteModule final : public BuiltinModule {
             "rewrite",
             {{"rule", false},
              {"rule_when", false},
+             {"rule_generic", false},
              {"name", true},
              {"two_way", true},
              {"needs", true},

@@ -1172,3 +1172,48 @@ expect_exit = 0
 expect_stdout_contains = ["plain 1 0", "licensed 1 0", "guarded 1 0", "plain 1 0", "licensed 0 1", "guarded 1 0", "0.0 1e-30 0.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+
+[[tests]]
+name = "rules.generic_law_is_instantiated_per_type_tuple"
+desc = "A rule whose head declares a type parameter carries its templates, and the engine makes one instance per type tuple where it is applied (the ruling of 2026-10-23 on `generic-rule-instantiation`): `add_zero` is written once for every integer type, and applied to `generic_target.cml` it rewrites both `int` additions and the `i32` one, each step of the proof naming the instance it came from (`add_zero<int>` for the two `int` sites, `add_zero<i32>` for the small one). `add_minus_zero` is the float law and fires on `x + -0.0` alone, which shows the two laws are separate and each has its own instance."
+kind = "behavior"
+case = "../../../cases/modules/rules/generic_target.cml"
+args = ["${case}", "generic_law::counted", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["rewrites 4 rule add_zero", "4 rewrites in 2 rounds", "by add_zero<int>", "by add_zero<i32>", "by add_minus_zero<float>", "generic law", "7 8 9 1.5"]
+expect_output_not_contains = ["no operator", "GenericFunctionAsValue"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.generic_law_instance_is_read_out_by_why_not"
+desc = "The type-level conclusion of a generic rule is readable: `why_not` at a value names the instance its type has. At the `i32` addition it answers that the rule fired there as `add_zero<i32>`, and at the float `+ -0.0` -- which the integer law must not touch -- it answers that another instance, `add_minus_zero<float>`, fired. Which types a generic rule was instantiated at is thus said out loud, not inferred from the run (the ruling of 2026-10-23 on `generic-rule-instantiation-set-and-predicate`)."
+kind = "behavior"
+case = "../../../cases/modules/rules/generic_target.cml"
+args = ["${case}", "generic_law::why_i32", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["fired here in round 1 of graph i32_zero as `add_zero<i32>`"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.generic_law_instance_is_read_out_for_another_law"
+desc = "The same read-out from the other side: at the float value the float law rewrote, `why_not` for the integer law names the instance that did fire there, `add_minus_zero<float>`. The two laws are separate rules with separate instances, and the answer to a question about one of them names the other rather than staying silent."
+kind = "behavior"
+case = "../../../cases/modules/rules/generic_target.cml"
+args = ["${case}", "generic_law::why_float", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["another rule fired here", "by `add_minus_zero<float>`"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.generic_law_no_instance_is_said_by_why_not"
+desc = "A type the law cannot be written for costs nothing but a remembered attempt: the string value of `generic_target.cml`'s `greet` is not an operator the integer pattern has, the failed instantiation reports nothing where it happens (the run ends at exit 0 with its program intact), and `why_not` repeats the reason -- the pattern has no operator for that type (the ruling of 2026-10-23 on `generic-rule-instantiation-set-and-predicate`, §3)."
+kind = "behavior"
+case = "../../../cases/modules/rules/generic_target.cml"
+args = ["${case}", "generic_law::why_no_instance", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["`add_minus_zero` is a generic rule, and no instance of it could be made for 'string': the pattern has no operator for this type"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000

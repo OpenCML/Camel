@@ -404,6 +404,110 @@ compile_graph_ptr_t Builder::instantiateGenericAs(
     return graph;
 }
 
+// ---- A generic rule where a rule is expected (rewrite design 2 (second version) 8.5) ----
+
+void Builder::settleGenericRuleMaker(
+    std::vector<Argument> &normInputs, type_vec_t &normTypes, const GCT::node_ptr_t &call) {
+    // `__rule_generic(name, two_way, needs, consts, <the sides>)`, what the front end writes for a
+    // rule whose head declares type parameters. The sides are the rule's own generic functions
+    // (`name__lhs`, `name__rhs`, and `name__when` when it has a condition).
+    constexpr size_t kFixed = 4;
+    if (normInputs.size() <= kFixed) {
+        return;
+    }
+    std::vector<generic_template_ptr_t> sides;
+    for (size_t i = kFixed; i < normInputs.size(); ++i) {
+        const auto found = genericDrefs_.find(normInputs[i].node);
+        if (found == genericDrefs_.end()) {
+            // A side that is not a generic function is not what this maker is for: the maker's own
+            // resolution reports the call, as it would for any other argument it cannot take.
+            return;
+        }
+        sides.push_back(found->second.one());
+    }
+    if (sides.size() < 2 || sides.size() > 3) {
+        return;
+    }
+    // The rule's name as a reader writes it: the sides are the qualified names of its functions.
+    std::string name = sides.front()->name;
+    if (const size_t scope = name.rfind("::"); scope != std::string::npos) {
+        name = name.substr(scope + 2);
+    }
+    if (const size_t side = name.rfind("__"); side != std::string::npos) {
+        name.resize(side);
+    }
+    const uint64_t ruleId = registerGenericRule(
+        *context_, static_cast<void *>(this), std::move(name), sides[0], sides[1],
+        sides.size() == 3 ? sides[2] : nullptr);
+    const data_ptr_t idValue =
+        tt::as_shared<Data>(std::make_shared<PrimaryData<int64_t>>(static_cast<int64_t>(ruleId)));
+    const node_handle_t idNode = currGraph_->addStaticDataNode(idValue);
+    rememberConstant(idNode, idValue);
+    registerNodeOrigin(context_, idNode, call, "gir.rule.generic");
+    // The rule value keeps the id of its templates, and the maker is called with it: what a generic
+    // rule holds is not a function of the program being built, so nothing of the declaration enters
+    // this graph but the id (design principles 5.5; the ruling of 2026-10-23 on
+    // generic-rule-instantiation).
+    normInputs.resize(kFixed + 1);
+    normInputs[kFixed] = Argument{idNode, call, std::nullopt};
+    normTypes.resize(kFixed + 1);
+    normTypes[kFixed] = Type::Int64();
+}
+
+bool Builder::instantiateRuleTemplates(
+    const GenericRuleEntry &entry, const std::vector<Type *> &types, compile_graph_ptr_t &lhs,
+    compile_graph_ptr_t &rhs, compile_graph_ptr_t &when, std::string &why) {
+    const auto lhsTemplate  = std::static_pointer_cast<GenericTemplate>(entry.lhs);
+    const auto rhsTemplate  = std::static_pointer_cast<GenericTemplate>(entry.rhs);
+    const auto whenTemplate = std::static_pointer_cast<GenericTemplate>(entry.when);
+    ASSERT(lhsTemplate != nullptr && rhsTemplate != nullptr, "A rule has two sides.");
+    const std::vector<std::string> names = typeParameterNames(lhsTemplate);
+    if (names.size() != types.size()) {
+        why = std::format(
+            "it takes {} type parameter(s), and it was asked for {}",
+            names.size(),
+            types.size());
+        return false;
+    }
+    type_bindings_t bindings;
+    for (size_t i = 0; i < names.size(); ++i) {
+        bindings.push_back({names[i], types[i]});
+    }
+    // The instance is built where the rule was declared: the templates are the ones the declaring
+    // builder holds, and its own scopes and module answer for the body. That builder's build
+    // finished long ago -- the rule is instantiated where the rule is applied, which is a pass
+    // running later -- so the state a body build needs is entered again for the module the rule
+    // belongs to (the same state a top-level declaration of it is built in). What a body says when
+    // it does not compile for these types stays out of the program (the ruling of 2026-10-23 on
+    // generic-rule-instantiation-set-and-predicate), and `why` is all that is kept of the attempt.
+    const GCT::node_ptr_t origin = lhsTemplate->func;
+    const bool inModule          = this->inModule(lhsTemplate->module, [&] {
+        SpeculativeInstantiation quiet(*this);
+        lhs = instantiateGeneric(lhsTemplate, bindings, {}, {}, origin);
+        rhs = lhs != nullptr ? instantiateGeneric(rhsTemplate, bindings, {}, {}, origin) : nullptr;
+        when = lhs != nullptr && rhs != nullptr && whenTemplate != nullptr
+                   ? instantiateGeneric(whenTemplate, bindings, {}, {}, origin)
+                   : nullptr;
+        quiet.close();
+    });
+    if (!inModule) {
+        lhs = rhs = when = nullptr;
+        why = "the module that declared it is not in this builder any more";
+        return false;
+    }
+    if (lhs == nullptr || rhs == nullptr) {
+        lhs = rhs = when = nullptr;
+        why = "the pattern has no operator for this type";
+        return false;
+    }
+    if (whenTemplate != nullptr && when == nullptr) {
+        lhs = rhs = when = nullptr;
+        why = "the condition has no operator for this type";
+        return false;
+    }
+    return true;
+}
+
 node_handle_t
 Builder::genericValueFor(node_handle_t node, Type *expected, const GCT::node_ptr_t &origin) {
     const auto generic = genericDrefs_.find(node);
