@@ -287,7 +287,9 @@ const std::vector<oper_group_ptr_t> &getCollectionOperatorGroups() {
               typed(
                   0,
                   1,
-                  "(c: Map<K, V> | Set<T>) => int",
+                  // `x`, the name the string and array rules give their one parameter as well:
+                  // one position, one name (stdlib-conventions, the reference page of `len`).
+                  "(x: Map<K, V> | Set<T>) => int",
                   [](const type_vec_t &, const type_vec_t &norm) -> optional<Type *> {
                       return asCollectionType(norm[0]) ? optional<Type *>(Type::Int64())
                                                        : nullopt;
@@ -385,7 +387,9 @@ const std::vector<oper_group_ptr_t> &getCollectionOperatorGroups() {
               typed(
                   0,
                   1,
-                  "(s: Set<T>) => T[]",
+                  // `m`, the name the map rule above gives its one parameter: both take the
+                  // collection to turn into an array.
+                  "(m: Set<T>) => T[]",
                   [](const type_vec_t &, const type_vec_t &norm) -> optional<Type *> {
                       const SetType *set = asSetType(norm[0]);
                       return set ? optional<Type *>(set->keyArrayType()) : nullopt;
