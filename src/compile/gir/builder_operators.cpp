@@ -1315,6 +1315,25 @@ node_handle_t Builder::buildComposition(const GCT::node_ptr_t &gct) {
     // any argument position.
     node_handle_t lhs = argumentNodeOf(visit(gct->at(1)), gct->at(1));
     node_handle_t rhs = argumentNodeOf(visit(gct->at(2)), gct->at(2));
+    return buildCompositionWith(gct, lhs, rhs);
+}
+
+bool Builder::isIntervalExpr(const GCT::node_ptr_t &expr) {
+    return expr != nullptr && expr->size() == 3 && expr->at(0)->type() == GCT::NodeKind::DREF &&
+           expr->at(0)->name() == camel::core::kCompositionCall;
+}
+
+bool Builder::intervalBounds(node_handle_t from, node_handle_t to) const {
+    // An interval is two integers and nothing else (design principles 4.2): `int` is the
+    // language's integer type, as it is in `intervalValue`.
+    Type *fromType = nodeTypeOf(from);
+    Type *toType   = nodeTypeOf(to);
+    return fromType != nullptr && toType != nullptr && fromType->code() == TypeCode::Int64 &&
+           toType->code() == TypeCode::Int64;
+}
+
+node_handle_t
+Builder::buildCompositionWith(const GCT::node_ptr_t &gct, node_handle_t lhs, node_handle_t rhs) {
     Type *lhsType     = nodeTypeOf(lhs);
     Type *rhsType     = nodeTypeOf(rhs);
     const bool bothFunctions = lhsType != nullptr && rhsType != nullptr &&
@@ -2725,6 +2744,22 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 throw BuildAbortException();
             }
             targetOperator = *res;
+            // The interval of two integers is written `a..b` and nothing else: the two-parameter
+            // `range(a, b)` is deleted, one thing one spelling (design principles 4.2; the
+            // author's ruling of 2026-10-24 on `h248-generator-and-composition`). The call the
+            // program writes is refused here, where it stands, with the spelling to write
+            // instead. The operation stays: it is what `a..b` becomes on the graph
+            // (`intervalValue`), and the compiler writes that call with the built-in callee name
+            // (`$builtin::range`), which no program writes and which this does not touch.
+            if (targetOperator->uri() == ":struct/range" && normInputs.size() == 2 &&
+                withInputs.empty() && gct->size() >= 1 &&
+                gct->at(0)->type() == GCT::NodeKind::DREF && gct->at(0)->name() == "range") {
+                // The caret is under the name the program wrote, so the refused spelling is what
+                // the reader sees marked.
+                const auto where = gct->at(0)->origin() != 0 ? gct->at(0)->origin() : gct->origin();
+                diags_->of(SemanticDiag::RangeTwoArgumentsRemoved).atOrigin(where).commit();
+                throw BuildAbortException();
+            }
             if (inPlaceCalls_.contains(gct)) {
                 // Written by inPlaceRebindingOf, which checked that this overload has an
                 // in-place form: the call works on the array :var/take hands it.

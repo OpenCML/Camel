@@ -7,7 +7,10 @@ printed source must compile to a graph isomorphic to the original. This case pin
   * round trip through the canonical version 2 document (`test/tools/cml_roundtrip.py`) for the
     straight-line corpus (the module-value capture in `linear.cml`, a small call program, and
     `hello`), for branches (`if`, `match`, nested branches, a `return` in an arm), for loops
-    (`for`, `while`, `for ... while`, two states, a struct state, a body with effects), for
+    (`for`, `while`, `for ... while`, two states, a struct state, a body with effects), for the
+    interval `a..b` in the sequence of a `for` and in a value position (`interval.cml`: the loop is
+    fused by the compiler and its graph holds the two bounds, so the printed source has to spell
+    the interval again), for
     closures (a lambda as a value, a block body, captured source names, a returned lambda, a
     closure over a cell), for `with` parameters (including one that also reads a module value),
     and for a `var` parameter;
@@ -47,6 +50,7 @@ CORPUS = [
     CML / "linear.cml",
     CML / "branch.cml",
     CML / "loop.cml",
+    CML / "interval.cml",
     CML / "closure.cml",
     CML / "with_param.cml",
     CML / "var_param.cml",
@@ -66,6 +70,7 @@ SOURCE_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 MARKERS = {
     "branch": ["if ", "else ", "match ", "case "],
     "loop": ["loop ", "for ", "while ", "sync {"],
+    "interval": ["..", "for ", "while ", "let "],
     "closure": ["=>", "sync", "offset", "base"],
     "with_param": ["with <", "scale", "clamp"],
     "var_param": ["var "],

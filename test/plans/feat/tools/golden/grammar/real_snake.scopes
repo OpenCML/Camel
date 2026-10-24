@@ -71,15 +71,12 @@
 #                         ^ meta.block.camel meta.parens.camel punctuation.section.parens.end.camel
 #                            ^^ meta.block.camel comment.line.double-slash.camel punctuation.definition.comment.camel
 #                              ^^^^^^^^^^^^^ meta.block.camel comment.line.double-slash.camel
->    let rows = range(0, HEIGHT)
+>    let rows = 0..HEIGHT
 #    ^^^ meta.block.camel meta.declaration.let.camel storage.type.let.camel
 #        ^^^^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
 #             ^ meta.block.camel keyword.operator.assignment.camel
-#               ^^^^^ meta.block.camel entity.name.function.call.camel
-#                    ^ meta.block.camel meta.parens.camel punctuation.section.parens.begin.camel
-#                     ^ meta.block.camel meta.parens.camel constant.numeric.integer.decimal.camel
-#                      ^ meta.block.camel meta.parens.camel punctuation.separator.comma.camel
-#                              ^ meta.block.camel meta.parens.camel punctuation.section.parens.end.camel
+#               ^ meta.block.camel constant.numeric.integer.decimal.camel
+#                ^^ meta.block.camel keyword.operator.compose.camel
 >
 >    rows->foreach<(y: int) => sync {
 #        ^^ meta.block.camel keyword.operator.pipe.camel
@@ -93,15 +90,12 @@
 #                           ^^ meta.block.camel meta.angle-arguments.camel keyword.operator.arrow.camel
 #                              ^^^^ meta.block.camel meta.angle-arguments.camel storage.modifier.sync.camel
 #                                   ^ meta.block.camel meta.angle-arguments.camel meta.block.camel punctuation.section.block.begin.camel
->        let cols = range(0, WIDTH)
+>        let cols = 0..WIDTH
 #        ^^^ meta.block.camel meta.angle-arguments.camel meta.block.camel meta.declaration.let.camel storage.type.let.camel
 #            ^^^^ meta.block.camel meta.angle-arguments.camel meta.block.camel meta.declaration.let.camel variable.other.constant.camel
 #                 ^ meta.block.camel meta.angle-arguments.camel meta.block.camel keyword.operator.assignment.camel
-#                   ^^^^^ meta.block.camel meta.angle-arguments.camel meta.block.camel entity.name.function.call.camel
-#                        ^ meta.block.camel meta.angle-arguments.camel meta.block.camel meta.parens.camel punctuation.section.parens.begin.camel
-#                         ^ meta.block.camel meta.angle-arguments.camel meta.block.camel meta.parens.camel constant.numeric.integer.decimal.camel
-#                          ^ meta.block.camel meta.angle-arguments.camel meta.block.camel meta.parens.camel punctuation.separator.comma.camel
-#                                 ^ meta.block.camel meta.angle-arguments.camel meta.block.camel meta.parens.camel punctuation.section.parens.end.camel
+#                   ^ meta.block.camel meta.angle-arguments.camel meta.block.camel constant.numeric.integer.decimal.camel
+#                    ^^ meta.block.camel meta.angle-arguments.camel meta.block.camel keyword.operator.compose.camel
 >        cols->map<(x: int): string => {
 #            ^^ meta.block.camel meta.angle-arguments.camel meta.block.camel keyword.operator.pipe.camel
 #              ^^^ meta.block.camel meta.angle-arguments.camel meta.block.camel entity.name.function.call.camel

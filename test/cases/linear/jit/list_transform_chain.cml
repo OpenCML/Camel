@@ -4,7 +4,7 @@
 module jit_list_transform
 
 func main(): int sync {
-    let xs = range(0, 8)
+    let xs = 0..8
     let ys = xs->map<(x: int): int => {
         return x * x
     }>

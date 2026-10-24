@@ -16,7 +16,7 @@ func main(): int sync {
 
     seed(s)
     'Generating {} source values...'->format<source_size>->println
-    let source = range(0, source_size)->shuffle
+    let source = 0..source_size->shuffle
 
     println('Preparing bootstrap samples sequentially...')
     let prep_start = now()

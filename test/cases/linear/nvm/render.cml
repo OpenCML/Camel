@@ -7,10 +7,10 @@ let WIDTH = 10
 let HEIGHT = 10
 
 func render(snake: Point[]): void sync {
-    let rows = range(0, HEIGHT)
+    let rows = 0..HEIGHT
 
     rows->foreach<(y: int) => sync {
-        let cols = range(0, WIDTH)
+        let cols = 0..WIDTH
         cols->map<(x: int): string => {
             let p = {x: x, y: y}
             return if snake->contains<p> then "O" else "."

@@ -1,6 +1,6 @@
 // `a..b` is the interval [a, b) (design principles 4.2, the ruling of 2026-10-24): integers
-// only, left-closed and right-open like the slice `t[a:b]`, and the `int[]` the two-parameter
-// `range(a, b)` gives.
+// only, left-closed and right-open like the slice `t[a:b]`, and the `int[]` of the integers
+// from `a` to `b - 1`. It is the one spelling: the two-parameter `range(a, b)` is gone.
 module h405_interval
 
 func main(): int sync {

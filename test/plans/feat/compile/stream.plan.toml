@@ -2,7 +2,7 @@ id = "compile.stream"
 order = 336
 tier = "fast"
 tags = ["feat", "compile", "stream"]
-desc = "The stream surface of H248: `f..g` and the interval `a..b` (H248 group 1, slice A: the ruled readings of `..`, and the removal of `?..`)."
+desc = "The stream surface of H248: `f..g` and the interval `a..b` (H248 group 1, slice A: the ruled readings of `..`, and the removal of `?..`); and the interval line of H426: the two-parameter `range(a, b)` is deleted, and `for i in 0..n` is fused by the compiler rather than materialised."
 
 [[tests]]
 name = "stream.composition"
@@ -70,4 +70,91 @@ expect_diagnostic_column = 13
 expect_output_contains = ["'..' composes a unary function on the left; '(a: int, b: int) => int' takes 2 parameters."]
 expect_output_not_contains = ["UnknownInternalError", "Warning"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "stream.interval_loop"
+desc = "`for i in 0..n` is fused by the compiler (the ruling of 2026-10-24 on `h248-generator-and-composition`): the loop walks the two bounds, so the rounds are `a .. b - 1`, an interval that ends where it starts and one whose end is below its start run no round, the bounds are read once, and the end takes no round."
+kind = "behavior"
+case = "../../../cases/compile/stream/interval_loop.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_starts_with = "1234\n0\n0\n10\n2\n0\n"
+expect_output_not_contains = ["UnknownInternalError", "[Error]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "stream.interval_loop_fused"
+desc = "The graph of `for i in 0..n` holds no array and no `:struct/range`: the loop's sequence is the pair of bounds (`\"iterable\": \"interval\"`), where the same interval bound to a name lowers to the `:struct/range` call that builds the `int[]`."
+kind = "behavior"
+case = "../../../cases/compile/stream/interval_loop.cml"
+args = ["${case}", "std::jgir", "canonical=true"]
+expect_exit = 0
+expect_output_contains = ["\"iterable\": \"interval\""]
+expect_output_not_contains = ["struct/range", "UnknownInternalError", "[Error]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "stream.interval_loop_not_materialised"
+desc = "Two million rounds under an 8 MB heap cap: the fused loop runs, where an `int[]` of the same interval (16 MB) is refused with RuntimeDiag::MemoryExhausted. This is the observable half of `for i in 0..n` builds no array."
+kind = "behavior"
+case = "../../../cases/compile/stream/interval_loop_not_materialised.cml"
+args = ["${case}", "std::nvm"]
+envs = ["CAMEL_GC_HEAP_LIMIT_MB=8"]
+expect_exit = 0
+expect_stdout_starts_with = "2000000\n"
+expect_output_not_contains = ["MemoryExhausted", "UnknownInternalError", "[Error]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "stream.interval_own_range"
+desc = "The deletion is the built-in, not the identifier: a module's own `range(a, b)` keeps its name and is called as it declares (the tensor module's `range` is the standard case), so the diagnostic cannot misfire on one."
+kind = "behavior"
+case = "../../../cases/compile/stream/interval_own_range.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_starts_with = "[3, 0]\n"
+expect_output_not_contains = ["RangeTwoArgumentsRemoved", "UnknownInternalError", "[Error]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "stream.range_two_arguments"
+desc = "The two-parameter `range(a, b)` is deleted: `a..b` is the one spelling, so the call is refused where it stands, under the name the program wrote, with the interval to write instead."
+kind = "negative"
+case = "../../../cases/compile/stream/range_two_arguments.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::RangeTwoArgumentsRemoved"
+expect_diagnostic_code = "0x030001E3"
+expect_diagnostic_line = 7
+expect_diagnostic_column = 14
+expect_output_contains = ["The two-parameter 'range(a, b)' is gone; write the interval 'a..b'."]
+expect_output_not_contains = ["UnknownInternalError", "Warning"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "stream.interval_cml"
+desc = "`std::cml` prints the interval as `a..b` again: the operator a value-position interval lowers to is the interval's own spelling, and the printed program compiles back to the same graph (the round trip itself is pinned by feat.trans.cml, over test/cases/trans/cml/interval.cml)."
+kind = "behavior"
+case = "../../../cases/compile/stream/interval.cml"
+args = ["${case}", "std::cml"]
+expect_exit = 0
+expect_stdout_contains = ["let xs: int[] = 1..5", "println(0..n)"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "stream.interval_loop_cml"
+desc = "`std::cml` prints the sequence of a fused loop as the interval: the graph holds the two bounds (`LoopIterableForm::Interval`), and the source form is `for i in a..b`, with a bound parenthesised when it has to be (`(-2)..3`, `0..(n + 1)`)."
+kind = "behavior"
+case = "../../../cases/compile/stream/interval_loop.cml"
+args = ["${case}", "std::cml"]
+expect_exit = 0
+expect_stdout_contains = ["for i in 0..5", "for i in 3..3", "for i in 5..1", "for i in 0..(n + 1)", "for i in (-2)..3", "for i in 1..4"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000

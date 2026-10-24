@@ -30,7 +30,7 @@ func main(): int sync {
     println('index_of gives:', xs->index_of<54> ?? -1, xs->index_of<20> ?? -1)
 
     // One million even numbers: at most twenty steps.
-    let evens = range(0, 1000000)->map<(i: int): int => i * 2>
+    let evens = 0..1000000->map<(i: int): int => i * 2>
     println(search(evens, 1337330, 0, len(evens)) ?? -1, search(evens, 1337331, 0, len(evens)) ?? -1)
     return 0
 }

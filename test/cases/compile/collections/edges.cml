@@ -5,11 +5,11 @@ module main
 // entry wins), key order for every key type.
 
 func repeated(n: int): (string, int)[] {
-    return range(0, n)->map<(i: int): (string, int) => ('k' + string(i % 3), i)>
+    return 0..n->map<(i: int): (string, int) => ('k' + string(i % 3), i)>
 }
 
 func shuffled(n: int): int[] {
-    return range(0, n)->map<(i: int): int => (i * 7) % n>
+    return 0..n->map<(i: int): int => (i * 7) % n>
 }
 
 func main(): int sync {

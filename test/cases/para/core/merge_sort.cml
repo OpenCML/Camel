@@ -33,7 +33,7 @@ func main(): int sync {
     seed(s)
 
     'Generating {} values (seed={})...'->format<n, s>->println
-    let arr = range(0, n)->shuffle
+    let arr = 0..n->shuffle
 
     'First {} values (unsorted):'->format<m>->println
     arr->slice<0, m>->println

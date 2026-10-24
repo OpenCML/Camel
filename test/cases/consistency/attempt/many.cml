@@ -29,7 +29,7 @@ func rounds(i: int, n: int, acc: int): int {
 }
 
 func map_round(i: int): int {
-    let ys = attempt(() => range(0, 4)->map<inv>) !! [i]
+    let ys = attempt(() => 0..4->map<inv>) !! [i]
     return ys[0]
 }
 

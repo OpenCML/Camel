@@ -2240,6 +2240,30 @@ void Builder::mergeArmVariables(
     }
 }
 
+node_handle_t Builder::intervalSequenceValue(
+    node_handle_t from, node_handle_t to, const GCT::node_ptr_t &expr) {
+    // The interval in the sequence position of a loop is the pair of its two bounds, not the
+    // array of its elements (design principles 4.2; the ruling of 2026-10-24 on
+    // `h248-generator-and-composition`): the pair stands where any other sequence stands — Norm
+    // input 0 of the LOOP node, one value — and a back end takes the element of the round from
+    // the bounds and the round number, so nothing of the interval's size is ever made. The
+    // interval is the `int[]` of `intervalValue` in every other position.
+    std::vector<Type *> bounds{Type::Int64(), Type::Int64()};
+    TupleType *boundsType       = TupleType::create(bounds);
+    const std::vector<size_t> slots{0, 1};
+    runtime::GraphDraft &draft = currGraph_->draft();
+    node_handle_t result        = currGraph_->addFillNode(
+        boundsType, runtime::makeFillPayload(runtime::GCFillKind::Tuple, slots));
+    const slot_t empty =
+        camel::core::rtdata::toSlot(::Tuple::create(2, camel::core::mm::autoSpace()));
+    node_handle_t source = draft.ref(draft.materializeStaticValue(empty, boundsType));
+    linkNodes(LinkType::Norm, source, result);
+    linkNodes(LinkType::With, from, result);
+    linkNodes(LinkType::With, to, result);
+    registerNodeOrigin(context_, result, expr, "gir.loop.interval");
+    return result;
+}
+
 node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
     ENTER("LOOP");
     using camel::core::LoopKind;
@@ -2366,16 +2390,16 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
     }
     node_handle_t sequence = nullptr;
     Type *elementType      = nullptr;
-    if (hasIterable) {
-        const auto &expr = gct->loopSequence();
-        sequence         = valueOf(functionValueOf(valueNodeOf(visit(expr)), expr));
-        Type *type       = valueTypeOf(nodeTypeOf(sequence));
-        // A `for` takes the elements of an array. A string, a map and a tensor give theirs
-        // through the `__iter__` operator their type declares (design principles 3.10, 11.1,
-        // 11.3): the code points of a string as one-character strings, the (key, value) pairs
-        // of a map in key order, and the sub-tensors of a tensor along its first dimension.
-        // The operator is resolved like any other, by the type of the sequence; the loop then
-        // iterates the array it gives, on every back end, with one driver.
+    bool intervalIterates  = false;
+    // The element type of a sequence a loop iterates: an array gives its own element type, and a
+    // string, a map and a tensor give theirs through the `__iter__` operator their type declares
+    // (design principles 3.10, 11.1, 11.3): the code points of a string as one-character
+    // strings, the (key, value) pairs of a map in key order, and the sub-tensors of a tensor
+    // along its first dimension. The operator is resolved like any other, by the type of the
+    // sequence; the loop then iterates the array it gives, on every back end, with one driver.
+    const auto iterableElementType =
+        [&](node_handle_t &iterable, const GCT::node_ptr_t &expr) -> Type * {
+        Type *type = valueTypeOf(nodeTypeOf(iterable));
         if (type != nullptr && type->code() != TypeCode::Array) {
             const std::vector<StaticArg> statics(1);
             std::optional<oper_idx_ptr_t> elements;
@@ -2395,9 +2419,9 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
             node_handle_t array = currGraph_->addOperNode(*elements, 0);
             stampPermissions(array);
             registerNodeOrigin(context_, array, expr, "gir.loop.iter");
-            linkNodes(LinkType::Norm, sequence, array);
-            sequence = array;
-            type     = valueTypeOf(nodeTypeOf(sequence));
+            linkNodes(LinkType::Norm, iterable, array);
+            iterable = array;
+            type     = valueTypeOf(nodeTypeOf(iterable));
             ASSERT(
                 type != nullptr && type->code() == TypeCode::Array,
                 "The elements of an iterable must be an array.");
@@ -2408,7 +2432,34 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
                 .commit(sourceTextOf(expr), std::string("void"));
             throw BuildAbortException();
         }
-        elementType = tt::as_ptr<ArrayType>(type)->elemType();
+        return tt::as_ptr<ArrayType>(type)->elemType();
+    };
+    // `for i in a..b` (design principles 4.2; the author's ruling of 2026-10-24 on
+    // `h248-generator-and-composition`: "`for i in 0..n` is fused by the compiler, without
+    // materialising an array"). The interval in the sequence position of a loop is the loop's own
+    // form: its two bounds are the loop's iterable, and a round takes `from + round`
+    // (camel::core::LoopIterableForm::Interval). In every other position `a..b` is still the
+    // `int[]` the ruling gives it, and the loop iterates that value like any other sequence.
+    if (hasIterable && isIntervalExpr(gct->loopSequence())) {
+        const auto &interval = gct->loopSequence();
+        node_handle_t from   = argumentNodeOf(visit(interval->at(1)), interval->at(1));
+        node_handle_t to     = argumentNodeOf(visit(interval->at(2)), interval->at(2));
+        if (intervalBounds(from, to)) {
+            sequence         = intervalSequenceValue(from, to, interval);
+            elementType      = Type::Int64();
+            intervalIterates = true;
+        } else {
+            // Two functions, or two operands `..` has no reading for: the composition (or the
+            // refusal it gives everywhere else), built from the operands already in hand so that
+            // neither of them is built twice.
+            sequence = valueOf(
+                functionValueOf(valueNodeOf(buildCompositionWith(interval, from, to)), interval));
+            elementType = iterableElementType(sequence, interval);
+        }
+    } else if (hasIterable) {
+        const auto &expr = gct->loopSequence();
+        sequence         = valueOf(functionValueOf(valueNodeOf(visit(expr)), expr));
+        elementType      = iterableElementType(sequence, expr);
     }
     Type *stateType =
         k == 1 ? stateTypes.front() : static_cast<Type *>(TupleType::create(stateTypes));
@@ -2842,6 +2893,12 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
     }
 
     node_handle_t loopNode = currGraph_->addRegionLoopNode(kind, loopValueType);
+    if (intervalIterates) {
+        // The sequence the loop iterates is the pair of the interval's bounds, not an array
+        // (camel::core::LoopIterableForm::Interval): a back end takes the element of a round from
+        // the bounds and the round number, so nothing the size of the interval is ever made.
+        currGraph_->draft().setLoopIterableInterval(nodeIdOf(loopNode));
+    }
     if (!collected.empty()) {
         currGraph_->draft().setLoopCollectionCount(
             nodeIdOf(loopNode),

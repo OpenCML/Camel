@@ -488,10 +488,14 @@ The number of bytes of a string, or of the first dimension of an array of any ra
 range: (start: int, end: int) => int[]
 ```
 
-The integers from start up to, not including, end; empty when end is not above start.
+The integers from start up to, not including, end; empty when end is not above start. This is
+what the interval `a..b` becomes on the graph (design principles 4.2); it is not a name a
+program writes: the interval of two integers is written `a..b`, and the two-parameter
+`range(a, b)` it used to be written as is gone (SemanticDiag::RangeTwoArgumentsRemoved).
 
 - Pure.
-- Example: `range(0, 3)` gives `[0, 1, 2]`
+- Example (a fragment, not compiled): `0..3` gives `[0, 1, 2]`
+- Why it is not compiled: the interval is written `a..b`; `range(a, b)` is refused, and this built-in is what the interval lowers to
 
 #### `head`
 
@@ -1370,9 +1374,14 @@ range: (start: int, stop?: int, step?: int) => Tensor<int64>
 The integer sequence start, start + step, ... below stop, as a rank-1 `int64` tensor: one
 argument is stop with start 0, step is 1 by default, and a step of 0 is a fault.
 
+The interval of the language's own integers is written `a..b` (design principles 4.2), so a
+two-argument `range(a, b)` written without a module qualifier is the language's built-in
+interval and is refused: the two-parameter `range` is gone. This function is reached for one
+argument, for three, or by the qualified name `tensor::range(...)`.
+
 - Pure.
 - Failure: fault `RuntimeError` when stop and start leave a step of 0.
-- Example: `range(0, 5)` gives `[0, 1, 2, 3, 4]`
+- Example: `range(0, 10, 2)` gives `[0, 2, 4, 6, 8]`
 
 ### Random
 

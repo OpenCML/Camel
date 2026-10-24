@@ -24,6 +24,19 @@ gc_data_idx_t dataIndexOf(const GCGraph &graph, gc_node_ref_t ref) {
     return node->dataIndex;
 }
 
+/// The two slots of the pair of integers that is the sequence of a loop that iterates an
+/// interval (`camel::core::LoopIterableForm::Interval`): the tuple FILL the front end built for
+/// the two bounds of `for i in a..b` (GCGraph::intervalBoundsOf, which orders the two bounds by
+/// the FILL's payload). Nothing when `ref` is not such a pair.
+std::optional<std::pair<gc_data_idx_t, gc_data_idx_t>> boundSlotsOf(
+    const GCGraph &graph, gc_node_ref_t ref) {
+    const auto bounds = graph.intervalBoundsOf(ref);
+    if (!bounds.has_value()) {
+        return std::nullopt;
+    }
+    return std::pair{dataIndexOf(graph, bounds->first), dataIndexOf(graph, bounds->second)};
+}
+
 } // namespace
 
 const std::vector<ExecNode> &ExecPlan::buildNodes() const {
@@ -230,7 +243,20 @@ void buildLoopTables(const GCGraph &graph, ExecPlan &plan) {
         loop.origin     = graph.nodeOrigin(ref);
         const auto norm = graph.normInputsOf(ref);
         if (loop.iterates) {
-            loop.iterableSlot = dataIndexOf(graph, norm.front());
+            loop.iterableSlot =
+                dataIndexOf(graph, valueBehindGates(graph, norm.front()));
+            if (graph.loopIterableFormOf(ref) == camel::core::LoopIterableForm::Interval) {
+                // The sequence is the pair of the interval's two bounds: the loop computes the
+                // element of a round from them and the round number, and no array of the interval
+                // is ever built (`for i in a..b`, design principles 4.2).
+                loop.intervalIterates = true;
+                const auto bounds     = boundSlotsOf(graph, norm.front());
+                ASSERT(
+                    bounds.has_value(),
+                    "An interval a loop iterates is the pair of its two bounds.");
+                loop.intervalFromSlot = bounds->first;
+                loop.intervalToSlot   = bounds->second;
+            }
         }
         const auto results = graph.withInputsOf(ref);
         ASSERT(

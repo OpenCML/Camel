@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-260 diagnostics: 241 errors, 19 warnings.
+261 diagnostics: 242 errors, 19 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -227,6 +227,7 @@ prints one entry.
 | `0x030001E0` | [SemanticDiag::WhenDeclarationOverlap](#whendeclarationoverlap) | Error |
 | `0x030001E1` | [SemanticDiag::CompOperandMismatch](#compoperandmismatch) | Error |
 | `0x030001E2` | [SemanticDiag::CompOperandNotUnary](#compoperandnotunary) | Error |
+| `0x030001E3` | [SemanticDiag::RangeTwoArgumentsRemoved](#rangetwoargumentsremoved) | Error |
 | `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
@@ -3060,7 +3061,7 @@ func main(): int { return 0 }
 **Help**
 
 ```text
-A loop's 'for x in xs' visits the elements of xs in order (design principles 3.10): the elements of an array; the code points of a string, each a one-character string; the (key, value) pairs of a map, in key order (11.3); and the sub-tensors of a tensor along its first dimension. 'range(a, b)' is the array of the integers from a to b.
+A loop's 'for x in xs' visits the elements of xs in order (design principles 3.10): the elements of an array; the code points of a string, each a one-character string; the (key, value) pairs of a map, in key order (11.3); and the sub-tensors of a tensor along its first dimension. 'a..b' is the array of the integers from 'a' to 'b - 1', left closed and right open, and a 'for' over it takes them in order without building the array (4.2).
 ```
 
 **Example** (`test/cases/loops/err_not_iterable.cml`, run as `camel -E short test/cases/loops/err_not_iterable.cml`)
@@ -6609,6 +6610,37 @@ func main(): int sync {
 }
 ```
 
+### RangeTwoArgumentsRemoved
+
+`0x030001E3` · Error · `SemanticDiag::RangeTwoArgumentsRemoved`
+
+**Message**
+
+```text
+The two-parameter 'range(a, b)' is gone; write the interval 'a..b'.
+```
+
+**Help**
+
+```text
+The language has one spelling for the integers from 'a' to 'b - 1' (design principles 4.2; the author's ruling of 2026-10-24 on `h248-generator-and-composition`): the interval 'a..b', left closed and right open, as the slice 't[a:b]' is, and the array of them. 'range(0, 10)' becomes '0..10'. A 'for' over an interval is fused by the compiler, so 'for i in 0..n' builds no array. The two-parameter 'range' is the only spelling deleted: a module's own interval-like function (a tensor's, say) is that module's own, reached by its qualified name or at another arity, while an unqualified two-argument 'range(a, b)' is this built-in.
+```
+
+**Example** (`test/cases/compile/stream/range_two_arguments.cml`, run as `camel test/cases/compile/stream/range_two_arguments.cml`)
+
+```camel
+// The two-parameter `range(a, b)` is deleted: the interval `a..b` is the one spelling (design
+// principles 4.2, the ruling of 2026-10-24). The call is refused where it stands, with the
+// spelling to write instead.
+module h426_range_two_arguments
+
+func main(): int sync {
+    let xs = range(0, 3)
+    println(xs)
+    return 0
+}
+```
+
 ### VarParamInAsyncFunction
 
 `0x03100001` · Warn · `SemanticDiag::VarParamInAsyncFunction`
@@ -7499,13 +7531,17 @@ Out of memory{0}: {1}.
 The graph, permanent and meta spaces hold the compiled program (its runtime graphs, its types, the constants of the graphs being compiled) and grow with it; each has a total limit that only guards against a compiler that does not stop allocating. If the program is this large, raise the limit with the environment variable the message names. If a pass is named, the growth may be its doing (an inlining or unrolling that does not end): run the pipeline without it. The auto space holds run-time values: it is bounded by the memory of the host, or by CAMEL_GC_HEAP_LIMIT_MB when that is set, in which case the values the program keeps alive do not fit the limit.
 ```
 
-**Example** (`test/cases/loops/collection_oom.cml`, run as `CAMEL_GC_HEAP_LIMIT_MB=16 camel test/cases/loops/collection_oom.cml test::loop_collect_summary ${backend}`)
+**Example** (`test/cases/compile/stream/interval_loop_not_materialised.cml`, run as `CAMEL_GC_HEAP_LIMIT_MB=8 camel test/cases/compile/stream/interval_loop_not_materialised.cml std::nvm`)
 
 ```camel
-// A collecting loop whose tapes outgrow the heap limit (CAMEL_GC_HEAP_LIMIT_MB): the failure is
-// a memory exhaustion, attributed to the loop whose tape could not grow.
+// `for i in 0..n` builds no array (design principles 4.2, the ruling of 2026-10-24): the rounds
+// are the two bounds walked, so two million rounds run where an `int[]` of the same interval does
+// not fit the heap cap the plan sets (`int64` x 2,000,000 is 16 MB, the cap is 8).
+module h426_interval_loop_not_materialised
+
 func main(): int sync {
-    println(loop i = 0 while i < 2000000 do i + 1)
+    let n = 2000000
+    println(loop acc = 0 for i in 0..n do acc + 1)
     return 0
 }
 ```

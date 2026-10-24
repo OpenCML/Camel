@@ -1,0 +1,24 @@
+// `for i in 0..n` is fused by the compiler (design principles 4.2, the ruling of 2026-10-24): the
+// loop takes the two bounds and walks the integers between them, so the array of the interval is
+// never built. Which rounds happen, when there is none, and what the end means are what the array
+// of the interval gave.
+module h426_interval_loop
+
+func main(): int sync {
+    // The rounds are a, a + 1, ..., b - 1.
+    println(loop acc = 0 for i in 0..5 do acc * 10 + i)
+
+    // An interval that ends where it starts runs no round, and so does one whose end is below its
+    // start: b <= a is the empty interval, as `range(a, b)` was.
+    println(loop n = 0 for i in 3..3 do n + 1)
+    println(loop n = 0 for i in 5..1 do n + 1)
+
+    // The bounds are the operands `..` takes, so an expression is parenthesised.
+    let n = 4
+    println(loop acc = 0 for i in 0..(n + 1) do acc + i)
+    println(loop last = -1 for i in (-2)..3 do i)
+
+    // Half-open: the end takes no round.
+    println(loop hits = 0 for i in 1..4 do if i == 4 then hits + 1 else hits)
+    return 0
+}

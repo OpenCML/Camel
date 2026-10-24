@@ -11,8 +11,8 @@ import { rendezvous, unordered_foreach, unordered_reduce } from para
 func main(): int sync {
     let met: int = rendezvous(1, 0)
     println(met)
-    println(unordered_reduce<(acc: int, item: int): int => acc + item, 0>(range(1, 5)))
-    unordered_foreach<(item: int) => item>(range(0, 3))
+    println(unordered_reduce<(acc: int, item: int): int => acc + item, 0>(1..5))
+    unordered_foreach<(item: int) => item>(0..3)
     println('done')
     return 0
 }

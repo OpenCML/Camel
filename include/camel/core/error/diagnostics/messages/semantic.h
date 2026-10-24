@@ -351,7 +351,10 @@ enum class SemanticDiag : uint32_t {
     /// Neither reading of `..` takes these operands: they are not two functions and not two integers.
     CompOperandMismatch = 0x0001E1,
     /// The left operand of `..` is a function that takes more or fewer than one parameter.
-    CompOperandNotUnary         = 0x0001E2,
+    CompOperandNotUnary = 0x0001E2,
+    /// The interval of two integers is written `a..b` and nothing else: the two-parameter `range(a, b)`
+    /// the language used to have is gone (design principles 4.2; the author's ruling of 2026-10-24).
+    RangeTwoArgumentsRemoved    = 0x0001E3,
     ReducedPrecisionUnsupported = 0x0001D7,
     // #impl<f> (design principles 10.4): the Camel body of the function is its semantics and the
     // body-less declaration f of the same module is the operator that runs it. The graph builder

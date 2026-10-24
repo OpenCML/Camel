@@ -15,7 +15,7 @@ func row_sum(): float {
 }
 
 func main(): int sync {
-    let t = reshape(range(0, 12), [4, 3])
+    let t = reshape(0..12, [4, 3])
     let rows = take(t, [2, 0, 2])
     'take rows={} shape={} sum={}'->format<rows, shape(rows), sum(cast(rows, 'float32'))>->println
 
@@ -41,7 +41,7 @@ func main(): int sync {
     let labels_grad = softmax_cross_entropy_grad(logits, labels, 1.0)
     'sce onehot={} labels={} diff={} grad_diff={}'->format<onehot_loss, labels_loss, onehot_loss - labels_loss, sum(abs(onehot_grad - labels_grad))>->println
 
-    let weights = cast(reshape(range(0, 6), [2, 3]), 'float32')
+    let weights = cast(reshape(0..6, [2, 3]), 'float32')
     let repeated = grad(row_sum)<weights>()
     'take grad={}'->format<repeated>->println
     return 0

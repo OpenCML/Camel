@@ -858,6 +858,7 @@ void emitDraftPayload(
                 header,
                 GCLoopRef{
                     .kind            = body.kind,
+                    .iterableForm    = body.iterableForm,
                     .condRef         = indexOf(body.condGraph),
                     .bodyRef         = indexOf(body.bodyGraph),
                     .collectionCount = body.collectionCount,

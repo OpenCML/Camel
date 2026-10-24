@@ -110,7 +110,7 @@ H17b 用上表的 `map_chain` 数字（14.8 ms nvm）与它自己的构建比较
 |---|---|
 | arith | `g(x) * k + c` |
 | branch | `if x > k then g(x - k) else x + c`（两个分支臂） |
-| loop | `loop acc = x for j in range(0, 3) do acc + g(j)`（一个 LOOP 节点：条件图与循环体图） |
+| loop | `loop acc = x for j in 0..3 do acc + g(j)`（一个 LOOP 节点：条件图与循环体图） |
 | generic | `pick(g(x), x + c, x > k)` 与 `len(pick('s<i>', 'abc', x > k)) + g(x)`：一个泛型函数 `pick` 的 int 与 string 两个实例 |
 
 每个函数恰有一处对前一个函数的调用，所以内联一条链的代价线性于程序大小，运行代价是每个单元几次调用。`main` 通过每个含 40 次调用的辅助函数求和并打印，便于在改动编译器前后比较输出。
