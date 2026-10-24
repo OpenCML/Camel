@@ -1,0 +1,29 @@
+/**
+ * The expected type of a call reaches the call through its type variables (design principles
+ * 5.1, 5.5; the ruling of 2026-10-23 on `expected-type-through-literals-and-calls`). The
+ * callee's result type is aligned with the type of the position the call stands in before the
+ * arguments are bound, so every type variable the result mentions is solved there — not only
+ * the ones that appear in the result alone — and a literal argument whose parameter mentions a
+ * solved variable takes the solved type. The value written just above the f32 midpoint prints
+ * 1.00000012, so an element is converted once from the value written.
+ */
+module expected_type_through_calls
+
+func keep::<T>(xs: T[], n: int): T[] { return xs }
+func pair::<A, B>(a: A, b: B): (A, B) { return (a, b) }
+func make::<T>(): T[] { let xs: T[] = []; return xs }
+
+func main(): int sync {
+    // One variable, written in the result and in the parameter: the position solves it and the
+    // array literal takes it.
+    let xs: f32[] = keep([1.0000000596046447753906251, 2.0], 2)
+    println('{:.9g}'->format<xs[0]>, '{:.9g}'->format<xs[1]>)
+    // Two variables, each solved from its own element of the result, each reaching its own
+    // argument.
+    let p: (f32, i32) = pair(1.0000000596046447753906251, 2)
+    println('{:.9g}'->format<p.0>, p.1)
+    // A variable the result alone determines: this was the only shape that worked before.
+    let ys: f32[] = make()
+    println(len(ys))
+    return 0
+}

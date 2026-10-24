@@ -1,0 +1,106 @@
+id = "compile.expected_type_through_calls"
+order = 345
+tier = "feat"
+tags = ["feat", "compile", "literals", "generics"]
+desc = "The expected type of a call reaches the call through its type variables (design principles 5.1, 5.5): a literal argument's own type is only the default of its kind, so the callee's result type aligned with the type of the position the call stands in solves the variables before the literals bind them, and a literal argument whose parameter mentions a solved variable takes that type; a value argument keeps the type it has and is not converted. The same rule gives a composite literal argument with a computed element the parameter's type, and makes every composite literal round once into the type of its position."
+
+# The rule: the position solves the variables, the variables reach the literal arguments (the
+# ruling of 2026-10-23 on `expected-type-through-literals-and-calls`, item 1).
+
+[[tests]]
+name = "expected.through_the_result_variable"
+desc = "The result type aligned with the position solves every type variable it mentions — not only the ones that appear in the result alone, and not only the ones no value argument mentions — and a literal argument whose parameter mentions one takes the solved type: `keep([1.0, 2.0], 2)` in an `f32[]` position is `T = f32` and the array is an `f32[]`, its element converted once from the value written (1.00000012, not 1.0 through a double); a tuple result solves one variable per element. Before this a literal argument bound its variable to its own default type first (`float[]`), and only a variable that appeared in the result alone was solved there (`let ys: f32[] = make()`)."
+kind = "behavior"
+case = "../../../cases/compile/literals/expected_type_through_calls.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_output_not_contains = ["Error", "Warn"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "1.00000012 2",
+  "1.00000012 2",
+  "0",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+# The parameter and the return are positions with an expected type (item 3, first half): a
+# composite literal whose sibling element is computed still takes the type of its position.
+
+[[tests]]
+name = "expected.parameter_holes"
+desc = "A composite literal with a computed element (field) takes the type of its position, exactly as the same literal without one does: a struct literal with a computed sibling field, a tuple literal with a computed element and an array literal with a computed element are converted once from the value written, in a parameter position and in a return position alike, and the value just above the f32 midpoint prints 1.00000012 six times over — never 1.0 through the double the element was lowered to."
+kind = "behavior"
+case = "../../../cases/compile/literals/expected_type_parameter_holes.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_output_not_contains = ["Error", "Warn"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = Array(6).fill("1.00000012").join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+# A literal is rounded once into the type of its position (item 3, second half): the same value
+# in a declaration, a return, a struct field and an array, tuple included.
+
+[[tests]]
+name = "expected.same_value_in_every_position"
+desc = "The same literal written in a declaration, a `return`, a struct field, an array and a declared array gives the same value: 1.00000012 for the value just above the f32 midpoint, six times. A tuple literal in a declaration position rounded through the double it was lowered to and printed 1.0 before this."
+kind = "behavior"
+case = "../../../cases/compile/literals/expected_type_declared_tuple.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_output_not_contains = ["Error", "Warn"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = Array(6).fill("1.00000012").join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+# What the rule must not do: convert a value that already has a type.
+
+[[tests]]
+name = "expected.typed_value_not_converted"
+desc = "The expected type moves a literal, never a value: a `float[]` variable passed to the `T[]` parameter of `keep` keeps its own type, so the call is a `float[]` and the `f32[]` declaration it stands in refuses it, naming both types. Nothing is converted on the way (design principles 5.1)."
+kind = "negative"
+case = "../../../cases/compile/literals/expected_type_typed_value_not_converted.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::DeclaredTypeMismatch"
+expect_output_contains = ["f32[]", "float[]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+# ...and it does not close a variable nothing determines.
+
+[[tests]]
+name = "expected.unresolved_variable"
+desc = "A call of `make::<T>()` with no expected type and no argument that mentions `T` is refused as it was: aligning the result with the position adds a source of types, it does not make an open one closed."
+kind = "negative"
+case = "../../../cases/compile/literals/expected_type_unresolved.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::GenericArgumentsMismatch"
+expect_output_contains = ["the type variable(s) T cannot be determined from the arguments"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
