@@ -45,6 +45,17 @@ struct StaticArg {
 /// Compile-time knowledge of a call's norm arguments, aligned with their types.
 using static_args_t = std::span<const StaticArg>;
 
+/// The names a signature gives its parameters, the `with` ones first and the ordinary ones after;
+/// false when it records no name for some position (see FuncTypeResolver::parameterNames).
+bool namesOfSignature(
+    const FunctionType *funcType, std::vector<std::string> &with, std::vector<std::string> &norm);
+
+/// The names the parameters of a written signature spell (`"<key: K> (m: Map<K, V>) => V?"`), the
+/// `with` list first and the ordinary one after; false when the text is not a signature with a
+/// name on every parameter. The text is the rule's own spelling, the one `inspect --ops` prints.
+bool namesOfSignatureText(
+    const std::string &text, std::vector<std::string> &with, std::vector<std::string> &norm);
+
 class FuncTypeResolver {
   public:
     virtual ~FuncTypeResolver() = default;
@@ -71,6 +82,25 @@ class FuncTypeResolver {
      * and nothing else (design principles 4.3, log 2.17).
      */
     virtual FunctionType *fixedSignature() const { return nullptr; }
+
+    /**
+     * The names this rule gives its parameters, the `with` ones first and the ordinary ones
+     * after: what a named argument binds to (`len(x: xs)`). A rule whose signature is fixed
+     * answers from it; a rule whose result follows its arguments has no signature object to
+     * answer from, and reads the parameters its written signature spells -- the very text
+     * `inspect --ops` prints and `--verify-ops` checks against the declaration file, so the name
+     * a call binds to and the name the reference documents are one. False when the rule gives
+     * some parameter no name, leaves a count unconstrained (a variadic list is not a position),
+     * or has a `rest`/`constas` parameter (those are written at their own position, never by
+     * name): such a rule is one a call's name cannot reach, and the call is refused rather than
+     * bound to a position the rule does not name.
+     */
+    virtual bool parameterNames(std::vector<std::string> &with, std::vector<std::string> &norm)
+        const {
+        (void)with;
+        (void)norm;
+        return false;
+    }
 
     /**
      * Resolution that may also use the values of constant arguments, for operators whose result
@@ -147,6 +177,14 @@ class StaticFuncTypeResolver : public FuncTypeResolver {
 
     std::string signature() const override { return funcType_->toString(); }
 
+    bool parameterNames(std::vector<std::string> &with, std::vector<std::string> &norm)
+        const override {
+        if (funcType_->hasRest() || funcType_->hasConstas()) {
+            return false;
+        }
+        return namesOfSignature(funcType_, with, norm);
+    }
+
     bool varParameters(std::vector<bool> &with, std::vector<bool> &norm) const override {
         for (size_t i = 0; i < funcType_->withTypesCount(); ++i) {
             with.push_back(funcType_->withIsVarAt(i));
@@ -215,6 +253,36 @@ class DynamicFuncTypeResolver : public FuncTypeResolver {
     }
     FunctionType *fixedSignature() const override { return fixed_; }
 
+    /// A rule that fixes its signature answers from it, as any fixed rule does. A rule whose
+    /// result follows its arguments answers from the signature it writes, and only when that
+    /// signature places every parameter: a count left unconstrained (a variadic list) or a
+    /// `rest` parameter is not a position a name can mark.
+    bool parameterNames(std::vector<std::string> &with, std::vector<std::string> &norm)
+        const override {
+        if (fixed_ != nullptr) {
+            if (fixed_->hasRest() || fixed_->hasConstas()) {
+                return false;
+            }
+            return namesOfSignature(fixed_, with, norm);
+        }
+        if (withVars_.first < 0 || normVars_.first < 0) {
+            return false;
+        }
+        std::vector<std::string> writtenWith, writtenNorm;
+        if (!namesOfSignatureText(signature_, writtenWith, writtenNorm)) {
+            return false;
+        }
+        if (writtenWith.size() != static_cast<size_t>(withVars_.first) ||
+            writtenNorm.size() != static_cast<size_t>(normVars_.first)) {
+            // The rule spells parameters its declared counts do not agree with: the spelling is
+            // not the rule's parameter list, and a name read from it would mark nothing.
+            return false;
+        }
+        with = std::move(writtenWith);
+        norm = std::move(writtenNorm);
+        return true;
+    }
+
     /// The declared number of with- and ordinary parameters; -1 for any number.
     int withCount() const { return withVars_.first; }
     int normCount() const { return normVars_.first; }
@@ -269,6 +337,16 @@ class DeclaredFuncTypeResolver : public FuncTypeResolver {
     /// The signature as declared, closed (an operator's type is not a function still being
     /// built); null when the declaration has type variables, whose instances are not this rule.
     FunctionType *fixedSignature() const override { return generic_ ? nullptr : funcType_; }
+
+    /// A declaration names every parameter it writes, whatever its signature resolves to: the
+    /// names are the declaration's own, and a named call reads them from here.
+    bool parameterNames(std::vector<std::string> &with, std::vector<std::string> &norm)
+        const override {
+        if (funcType_->hasRest() || funcType_->hasConstas()) {
+            return false;
+        }
+        return namesOfSignature(funcType_, with, norm);
+    }
 
     /// The declared signature, with its parameter names.
     FunctionType *funcType() const { return funcType_; }

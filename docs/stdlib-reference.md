@@ -29,16 +29,16 @@ How to read an entry:
   `T!` and the program handles it with `!!`, `?->` or `match`. A result that may not exist is
   `T?`, handled with `??`. An entry without a failure line does not fail.
 - **Named arguments**: a call may give a parameter by name (`f(x: 1)`, `len(x: xs)`) when
-  the name gives that position the same name in every form it has; the type of the argument
-  then decides which form runs (`len`'s one parameter is `x` for a string, an array, a map
-  and a set, so one name reaches all four). Where the signature of a name cannot be settled
-  from a call written by name, no named argument binds yet: `items` and the `json` accessors
-  (`get`, `as_int`) report that the signature is not known where the call is written, and
-  whether such a name should take one is a question before the language author. `contains`
-  and `py_call` take none for a reason of their own: `contains` names its collection `xs` in
-  one form and `s` in the others, and its with-parameter means the value in two forms and the
-  substring in the third; the two forms of `py_call` differ in arity (a rest list against two
-  optional collections).
+  the name gives that position the same name in every form the callee has, whether the callee is
+  a Camel declaration or a group of built-in rules; the type of the argument then decides which
+  form runs (`len`'s one parameter is `x` for a string, an array, a map and a set, so one name
+  reaches all four). The name is written in the list that holds the parameter: an ordinary one
+  in the parentheses (`len(x: xs)`), a `with` one in the angle brackets (`j->get<key: 'port'>`).
+  A form that gives a position no name, or leaves its count to the arguments (a rest list --
+  `py_call`'s two forms differ in arity as well), is one no named argument reaches: the call
+  reports that the signature is not known where the call is written. `contains` refuses a named
+  argument for a reason of its own: its position 0 means an element in two forms and the
+  substring in the third, so the name would mean another thing in one of them.
 - Write one call that has with-arguments per statement when several appear in one argument
   list: `f<a>(x), g<b>(y)` is read as comparisons.
 

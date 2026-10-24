@@ -6044,21 +6044,16 @@ The argument '{0}' is given by name, and the signature of '{1}' is not known whe
 Name one function, or give the arguments positionally.
 ```
 
-**Example** (`test/cases/compile/param_defaults/overload_default_hole.cml`, run as `camel test/cases/compile/param_defaults/overload_default_hole.cml`)
+**Example** (`test/cases/compile/param_defaults/stdlib_no_place_for_name.cml`, run as `camel test/cases/compile/param_defaults/stdlib_no_place_for_name.cml`)
 
 ```camel
-module param_overload_default_hole
+module param_stdlib_no_place_for_name
 
-func f(a: int, b: int = 0): int {
-    return a * 10 + b
-}
-
-func f(a: int, b: int, c: int = 0): int {
-    return a * 100 + b * 10 + c
-}
+import python
 
 func main(): int sync {
-    return f(a: 1, c: 3)
+    println(python::py_call(fn: 'printf'))
+    return 0
 }
 ```
 
@@ -6453,21 +6448,14 @@ The argument '{0}' is given by name, and the overloads of '{1}' do not name the 
 Give every overload the same parameter names at the same positions, or give the arguments positionally.
 ```
 
-**Example** (`test/cases/compile/param_defaults/overload_names.cml`, run as `camel test/cases/compile/param_defaults/overload_names.cml`)
+**Example** (`test/cases/compile/param_defaults/stdlib_group_names_differ.cml`, run as `camel test/cases/compile/param_defaults/stdlib_group_names_differ.cml`)
 
 ```camel
-module param_overload_names
-
-func f(a: int, b: int): int {
-    return a * 10 + b
-}
-
-func f(a: int, c: string): int {
-    return a * 10
-}
+module param_stdlib_group_names_differ
 
 func main(): int sync {
-    return f(a: 1, b: 2)
+    println([1, 2, 3]->contains<value: 2>)
+    return 0
 }
 ```
 
