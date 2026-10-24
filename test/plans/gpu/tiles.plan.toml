@@ -1608,6 +1608,7 @@ kind = "behavior"
 tool = "python"
 case = "../../cases/modules/tiles/resident_loop.py"
 args = ["${case}"]
+tier = "fast"
 expect_exit = 0
 expect_stdout_contains = ["Resident loop: PASS"]
 timeout_ms = 60000
