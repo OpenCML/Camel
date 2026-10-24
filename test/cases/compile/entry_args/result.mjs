@@ -113,9 +113,11 @@ for (const pass of [null, 'std::fvm', 'std::nvm', 'std::jit', 'std::tf']) {
         { env, encoding: 'utf8' },
     )
     const out = proc.stdout
-    const tensors = out.split('tensor(').length - 1
+    // The ruled printed form is the array's (questions-2026-10-24-evening.md): `tensor(..., dtype=...)`
+    // is gone with `Tensor`, so each member is counted by its own nested brackets.
+    const arrays = out.split('[[').length - 1
     check(
-        proc.status === 0 && tensors === 2 && out.includes('0.6878') && out.includes('1.376') && out.endsWith('\n'),
+        proc.status === 0 && arrays === 2 && out.includes('0.68779016') && out.includes('1.3755803') && out.endsWith('\n'),
         'tuple result on stdout: two tensors printed',
         `tuple result on stdout: exit ${proc.status}: ${out} ${proc.stderr}`,
     )
