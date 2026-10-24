@@ -333,8 +333,17 @@ void declareBuiltinOperatorResources(std::span<const std::string_view> names) {
     table.declareResources(
         ":var/take",
         ResourceSpec{.accesses = {cell(AccessMode::ReadModifyWrite)}, .result = alias(0)});
-    // The assignments: `=` stores its second operand (and returns it); a compound assignment
-    // reads the cell, combines and stores (and returns the new value, a number or a string).
+    // The assignments: `=` stores its second operand into the cell, and a compound assignment
+    // reads the cell, combines and stores. What either gives is the version of the variable --
+    // the cell itself (the ruling on the var version node: a write produces this version's cell,
+    // and the value it wrote is its second operand, where a position that wants the value takes
+    // it) -- so the result names operand 0, the cell, and never the value written or an object
+    // that value holds. The cell is the resource: two writes of one variable are one resource
+    // and two variables are two (design principles 3.3 and 10.5), which is what lets a read of
+    // one variable be told from a read of another.
+    const auto cellResult = [] {
+        return ResultAlias{.kind = ResultAlias::Kind::Same, .operand = 0};
+    };
     for (std::string_view name : names) {
         if (!storesIntoCell(name)) {
             continue;
@@ -343,9 +352,10 @@ void declareBuiltinOperatorResources(std::span<const std::string_view> names) {
         const std::string_view rest = name.substr(std::string_view("op/assn").size());
         ResourceSpec spec;
         if (rest.empty() || rest == "_owned" || (rest.size() == 2 && rest[0] == '_')) {
-            spec = ResourceSpec{.accesses = {cell(AccessMode::Write)}, .result = alias(1)};
+            spec = ResourceSpec{.accesses = {cell(AccessMode::Write)}, .result = cellResult()};
         } else {
-            spec = ResourceSpec{.accesses = {cell(AccessMode::ReadModifyWrite)}};
+            spec =
+                ResourceSpec{.accesses = {cell(AccessMode::ReadModifyWrite)}, .result = cellResult()};
         }
         table.declareResources(uri, std::move(spec));
     }
