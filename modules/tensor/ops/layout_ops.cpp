@@ -634,25 +634,13 @@ void transposeVjp(VjpBuilder &b, const VjpCall &call) {
 }
 
 /// reshape, flatten, unsqueeze: the gradient takes the input's shape back. `reshape` also
-/// accepts a numeric array, and a float array is a continuous value with a tangent (design
-/// principles 9.9): its adjoint would be the elements of dy in order, which no operator of this
-/// module produces, so a gradient into an array that depends on a differentiated input is
-/// refused by name instead of being dropped (a constant array has no gradient and is skipped).
+/// accepts a numeric array, and a numeric array is a tensor here (a tensor is a numeric array:
+/// `isTensorType` is `isNumericArrayType`), so one rule answers for both spellings -- the array's
+/// adjoint is the input's shape and the tensor module has every operator for it (`tensor:shape`
+/// of the input, `tensor:reshape` of dy). The refusal this rule used to make ("no operator that
+/// carries a tensor's gradient back into an array") had no input left to fire on once the two
+/// spellings became one type, and the array's gradient was dropped instead of refused.
 void reshapeLikeVjp(VjpBuilder &b, const VjpCall &call) {
-    if (!isTensorNode(b, call.inputs[0])) {
-        if (b.isActive(call.inputs[0])) {
-            refuseVjp(
-                call,
-                std::format(
-                    "its input is a numeric array of type '{}', not a tensor, and this module "
-                    "has no operator that carries a tensor's gradient back into an array; the "
-                    "array's gradient would be dropped silently. Build the tensor directly "
-                    "(a tensor parameter, a slice of one, or `new` of an array that does not "
-                    "depend on a differentiated value) instead of reshaping an array",
-                    b.nodeType(call.inputs[0])->toString()));
-        }
-        return;
-    }
     if (auto dy = b.gradientOf(call.output)) {
         const vjp_node_t shape = b.addOper(
             ArrayType::create(Type::Int64()),
@@ -671,12 +659,14 @@ void permuteVjp(VjpBuilder &b, const VjpCall &call) {
     }
 }
 
-// concat(a, b, axis): each part receives its slice of dy. A part may be a numeric array
-// instead of a tensor; a float array is continuous, and its adjoint (the elements of its slice
-// of dy) has no operator here, so an array part that depends on a differentiated input is
-// refused rather than dropped. A constant array part takes no gradient of its own and is
-// skipped — only that part: its length still places the tensor part's slice, and the tensor
-// part is accumulated whether or not the other part is an array.
+// concat(a, b, axis): each part receives its slice of dy. A part may be a numeric array instead
+// of a tensor, and a numeric array is a tensor here (a tensor is a numeric array: `isTensorType`
+// is `isNumericArrayType`), so one rule answers for both spellings and every part's adjoint is
+// the slice of dy its length selects. The refusal this rule used to make ("no operator that
+// carries a tensor's gradient back into an array") had no part left to fire on once the two
+// spellings became one type, and the array part's gradient was dropped instead of refused. A
+// part that carries no gradient of its own (a constant array) is skipped by the accumulator, and
+// its length still places the other part's slice.
 void concatVjp(VjpBuilder &b, const VjpCall &call) {
     requireVjpInputs(call, 3, 3);
     auto dy = b.gradientOf(call.output);
@@ -684,40 +674,14 @@ void concatVjp(VjpBuilder &b, const VjpCall &call) {
         return;
     }
     const vjp_node_t lhs = call.inputs[0], rhs = call.inputs[1], axis = call.inputs[2];
-    for (const vjp_node_t part : {lhs, rhs}) {
-        if (!isTensorNode(b, part) && b.isActive(part)) {
-            refuseVjp(
-                call,
-                std::format(
-                    "a part of it is a numeric array of type '{}', not a tensor, and this "
-                    "module has no operator that carries a tensor's gradient back into an "
-                    "array; that part's gradient would be dropped silently. Concatenate "
-                    "tensors that come from a differentiable value instead",
-                    b.nodeType(part)->toString()));
-        }
-    }
-    const bool lhsTensor = isTensorNode(b, lhs), rhsTensor = isTensorNode(b, rhs);
-    if (!lhsTensor && !rhsTensor) {
-        return; // every part is a constant numeric array: no part carries a gradient
-    }
-    // Where the second part starts along the axis: the first part's own length when it is a
-    // tensor, and the array's length (an int the array value answers with) when it is one.
-    const std::array<vjp_node_t, 1> arrayOnly{lhs};
     const std::array<vjp_node_t, 2> lhsAxis{lhs, axis};
-    const vjp_node_t split = lhsTensor
-                                 ? b.addOper(Type::Int64(), "tensor:dim", lhsAxis)
-                                 : b.addOper(Type::Int64(), ":struct/len_arr", arrayOnly);
-    if (lhsTensor) {
-        b.accumulateGradient(
-            lhs,
-            addTensorOper(b, "tensor:slice", {*dy, axis, staticInt(b, 0), split}));
-    }
-    if (rhsTensor) {
-        const std::array<vjp_node_t, 2> dyAxis{*dy, axis};
-        const vjp_node_t total = b.addOper(Type::Int64(), "tensor:dim", dyAxis);
-        b.accumulateGradient(
-            rhs, addTensorOper(b, "tensor:slice", {*dy, axis, split, total}));
-    }
+    const vjp_node_t split   = b.addOper(Type::Int64(), "tensor:dim", lhsAxis);
+    const std::array<vjp_node_t, 2> dyAxis{*dy, axis};
+    const vjp_node_t total   = b.addOper(Type::Int64(), "tensor:dim", dyAxis);
+    b.accumulateGradient(
+        lhs, addTensorOper(b, "tensor:slice", {*dy, axis, staticInt(b, 0), split}));
+    b.accumulateGradient(
+        rhs, addTensorOper(b, "tensor:slice", {*dy, axis, split, total}));
 }
 
 // slice(t, axis, start, end, step?)
