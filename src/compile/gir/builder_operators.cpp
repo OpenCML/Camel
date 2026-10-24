@@ -1311,7 +1311,7 @@ constexpr std::string_view kRangeCall = "$builtin::range";
 } // namespace
 
 node_handle_t Builder::buildComposition(const GCT::node_ptr_t &gct, Type *expected) {
-    // The composition is the lambda `x => g(f(x))` and nothing else (design principles 4.2), so
+    // The composition is the lambda `(x) => g(f(x))` and nothing else (design principles 4.2), so
     // it is typed exactly as that lambda is typed: the function type the position expects gives
     // the composed function its input - the parameter of `f` - and its output - the result of
     // `g` - and it instantiates the operands where they stand, as the lambda's two calls are
@@ -1455,7 +1455,7 @@ Builder::buildCompositionWith(const GCT::node_ptr_t &gct, node_handle_t lhs, nod
 node_handle_t Builder::composeFunctionValue(
     node_handle_t lhs, node_handle_t rhs, FunctionType *lhsType, FunctionType *rhsType,
     const GCT::node_ptr_t &gct) {
-    // The composition is the lambda `x => g(f(x))` and nothing else (design principles 4.2; the
+    // The composition is the lambda `(x) => g(f(x))` and nothing else (design principles 4.2; the
     // author's ruling of 2026-10-24 on `h248-generator-and-composition`): it has the parameter
     // of `f`, the result of `g`, and the two functions as its captures. Its type, its generic
     // instantiation and its overloads are the ones that lambda has, because it is built as one.

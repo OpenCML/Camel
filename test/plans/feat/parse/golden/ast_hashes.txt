@@ -6,6 +6,7 @@ d3a33132872dd146 ok test/cases/parse/constructs/comprehensions.cml
 ce74d4080198588d ok test/cases/parse/constructs/enum.cml
 a0ff4481152866ba ok test/cases/parse/constructs/fstring.cml
 3bb4efc9848f9c19 ok test/cases/parse/constructs/literals.cml
+693e6b2825fd7360 ok test/cases/parse/constructs/match_guard.cml
 326168a4d17c030c ok test/cases/parse/constructs/operator_name.cml
 78c6cd93e2a03373 ok test/cases/parse/constructs/rest_signature.cml
 4d1c1a7eb137fed7 ok test/cases/parse/constructs/static_loop.cml
@@ -28,6 +29,7 @@ c005562ecb6383e6 ok test/cases/parse/rulings/doc_comment.cml
 5afe30e238d501a3 ok test/cases/parse/rulings/import_rename.cml
 604431bb4d48e0a6 ok test/cases/parse/rulings/import_rename_hides.cml
 422337aa320412a2 ok test/cases/parse/rulings/imports_with_comments.cml
+60ca4d3f84b797ce no test/cases/parse/rulings/lambda_without_parentheses.cml
 9407f3356546e6a0 ok test/cases/parse/rulings/loop_forms.cml
 5b42c3659c414888 no test/cases/parse/rulings/loop_is_keyword.cml
 f636d80a542fb085 no test/cases/parse/rulings/loop_needs_clause.cml

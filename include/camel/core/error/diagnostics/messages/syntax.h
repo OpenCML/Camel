@@ -37,6 +37,11 @@ enum class SyntaxDiag : uint32_t {
     // did not fit.
     AsRightSideIsType = 0x000011,
     WhenAfterBody     = 0x000010,
+    // A lambda's parameters are written in parentheses (design principles 5.9): the author's ruling of
+    // 2026-10-24 on `composition-expected-type-edges`, item 4. An unparenthesised `x => e` is not a
+    // lambda at all -- inside a rule body the `=>` is the rule's own arrow -- so naming the
+    // parentheses is what keeps the program from being told only that a token did not fit.
+    LambdaParametersNeedParentheses = 0x000012,
 
     // Warnings (severity bits = Warn).
     ComparisonAcrossLines = 0x100001,
