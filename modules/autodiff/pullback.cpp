@@ -1824,7 +1824,8 @@ void buildReverseBody(
         const TangentSpace *const space =
             DerivativeRegistry::instance().findTangentSpace(loop.iterableType);
         const std::string_view scatterUri =
-            (isNumericArrayType(loop.iterableType) && space != nullptr &&
+            (isNumericArrayType(loop.iterableType) &&
+             tangentTypeOf(loop.iterableType) != nullptr && space != nullptr &&
              !space->scatterUri.empty())
                 ? std::string_view(space->scatterUri)
                 : std::string_view(":tangent/scatter_add_arr");

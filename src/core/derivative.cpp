@@ -164,8 +164,11 @@ Type *computeTangentType(Type *primal) {
         // (test/cases/modules/autodiff/loop_grad_refuse_slice_iterable.cml, `shape(d)` was `[2]`
         // while the value is `[2, 3]`). The construction still answers for an array whose elements
         // are arrays *as values* -- a nested array, whose elements' tangents are arrays of their
-        // elements' tangents -- and such an array is not a numeric array.
-        if (isNumericArrayType(primal)) {
+        // elements' tangents -- and such an array is not a numeric array. Whether the elements have
+        // a tangent at all is still the element's answer: an array of integers has none, and it
+        // must not be handed one just because its element type is numeric (a discrete loop's state).
+        if (isNumericArrayType(primal) && array->elemType() != nullptr &&
+            tangentTypeOf(array->elemType()) != nullptr) {
             return primal;
         }
         Type *elem    = array->elemType();
