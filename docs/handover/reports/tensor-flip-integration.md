@@ -1,20 +1,24 @@
-# The tensor flip after integrating develop: 332 red, nine SIGSEGVs fixed, rank 0 done, the `var` cell widened
+# The tensor flip after integrating develop: 292 red, nine SIGSEGVs fixed, rank 0 done, the `var` cell widened, the element type stated at two entries
 
 `origin/develop` (`ea624c980`) is merged into the flip's frozen tip (`c8e5e561d`) as
 `5dad9d646`, a real merge commit. The flip's diff is untouched: no rebase, no rewrite.
 
-**Read this note for the current state**: the ledger below has five measurement points — the
+**Read this note for the current state**: the ledger below has six measurement points — the
 integration (`5dad9d646`, 494 red, nine SIGSEGVs), the crash round (`9670cd287`, 454 red, zero
 signals), the first rank-0 slice (`1fc410091`, 372 red), the second (`4f9345c29`, 372 red, no test
-moved) and the `var`-cell widening (`332` red, the only slice that adds a case) — and the ranking
-at the end is written from the last one. Every number says which target produced it:
+moved), the `var`-cell widening (`332` red, the only slice that adds a case) and the unstated
+element type (`292` red) — and the ranking at the end is written from the last one. Every number
+says which target produced it:
 `smoke,feat --tier fast --jobs 8` is what the integration round ran (through the remote helper's
 `-Tier fast`); **`node scripts/test.js test/plans --tier fast --jobs 8` is this lane's gate from
 now on**, whole tree, because five crash sites live in the `gpu.profile` plan, which smoke+feat
 never selects. Rank 0 was this lane's largest lever and it is now spent: its remaining two shapes
 are 2 tests and 1 test (the second is core's). The `var Tensor` edge invariant's 41 reds are spent
-too — 40 green, and the one left is the `Tensor<void>` VJP typing item, not this root. The next
-slice is the print-form class (92), after the 22 declarations the holes section lists.
+too — 40 green, and the one left is the `Tensor<void>` VJP typing item, not this root. The unstated
+element type's two entries are spent as well: the class the next section defines is 66 reds by the
+first diagnostic and 7 of them are left, 38 green. The next slice is the `(none)` family (191, of
+which the print-form expectations are a part), after the 22 declarations the holes section lists
+and the loop-pullback item the `Expected Tensor argument` section now narrows to 5.
 
 ## What the merge brought, and how the two collisions were resolved
 
@@ -48,6 +52,7 @@ author's rulings.
 | + rank-0 shape 1 `1fc410091` | same | 5972 | **372** | 11 | 291.8 s |
 | + rank-0 shape 2 (a) `4f9345c29` | same | 5972 | **372** | 11 | 215.5 s |
 | + `var`-cell widening (h395) | `node scripts/test.js test/plans --tier fast --jobs 8` | 5973 | **332** | 11 | 300.8 s |
+| + unstated element type (h406) | `node scripts/test.js test/plans --tier fast --jobs 8` | 5973 | **292** | 11 | 363.1 s |
 
 The last column is this slice: the same command, the same host, the same window as the row above
 it. `5973` is `5972 + 1`: the slice adds one case, `shape_inference/var_argument_non_numeric.cml`,
@@ -57,6 +62,12 @@ so the rows still compare test for test on the 5972). **40 reds green, 0 new red
 `notes/h395-full-final.log`). The baseline row was re-measured on this same host in this same
 window (`h388-flip-staging`, `5972 / 372 / 11`, 248.6 s) rather than carried over, so the two
 columns are one measurement pair.
+
+The h406 row is the same pair again, one slice later and with no new case (`5973` on both sides):
+**40 reds green, 0 new red, 0 signals**, by set difference over `notes/h406-base-reds.txt` and
+`notes/h406-after-reds.txt` (the runner's own logs: `notes/h406-base-layer.log`,
+`notes/h406-after-layer.log`). Its two commits are `743bde936` and `106dc54f2`; the section below
+says which of the two each green came from.
 
 ## The `var`-cell widening (h395): which fix, and why this one
 
@@ -110,6 +121,10 @@ folds `sum(acc)` against the widened cell's unstated element type and reports
 expression faults whenever it is evaluated (RuntimeError); it is not folded". That is the
 `Tensor<void>` VJP typing item already on the list below, reached by a new route — the cell now
 says what the parameter says, and what the parameter says has no element type yet.
+**Taken, and the route corrected, by the h406 slice** (its own section above): the expression is
+`sum(vg.1.p0)` at `29:79`, the gradient of the `with` parameter, and what refused was the *clone of
+the folded constant*, not the cell; the test is green there, and the item on the list below is 5
+reds of the loop pullback, not this one.
 
 Wall time moves with the host's load (another lane ran `test/plans/perf` in the same window);
 the fail set is what is compared, never the clock.
@@ -132,22 +147,148 @@ develop's**. The three CUDA-device tests (`device_startup.available`, `device_st
 `gpu_preference.named_device`) were *skipped* at the flip's baseline and *pass* on both trees
 now: the cards were available, and there is no device red to explain away.
 
+## The unstated element type (h406): 66 reds in class → 7, and `var_tensor_read.macro_simplify_jit` green
+
+**The class, defined before the fix.** The first diagnostic in the failing block names the unstated
+or unsupported element type that tensor machinery read: `Unsupported Tensor dtype`, `Unsupported
+Tensor element type`, `Expected Tensor argument`, `Tensor argument cannot be null`. Classified by
+`diagnostics[0].name` **and** the first `[Error]` line of the captured stdout, the same classifier
+on both sides of the slice: **66 of the 332** (`notes/h406-base-first-diag.txt`, membership list
+`notes/h406-base-voidtensor-class.txt`). It is the entry at both places this slice was pointed at —
+constant folding and VJP typing — and the turn asked for, `var_tensor_read.macro_simplify_jit`, is
+in it.
+
+**Red before, verbatim.** `camel test/cases/modules/autodiff/var_tensor_read.cml std::macro std::opt
+std::jit`:
+
+```
+(var_tensor_read)…/test/cases/modules/autodiff/var_tensor_read.cml:29:79: [Error]: An error has occurred: sum: Unsupported Tensor dtype. …
+(var_tensor_read)…/test/cases/modules/autodiff/var_tensor_read.cml:29:79: [Warn]: This constant expression faults whenever it is evaluated (RuntimeError); it is not folded.
+```
+
+`29:79` is `sum(vg.1.p0)` — **the gradient of the `with` parameter, not `sum(acc)`**, which is what
+the h395 section above says. The correction matters: the fault is in the VJP-typed constant that
+`std::opt` tries to fold, not in the read of the `var` cell, and the cell's widening is why the
+optimizer reaches it at all.
+
+**Two entries, two commits.**
+
+- `743bde936` — *a cloned static value keeps the element type its value has*
+  (`src/runtime/draft_session.cpp`, `cloneStaticSlot`). A static value crossing into a session was
+  cloned under the type its slot is declared with, and `Tensor` — the alias's transitional spelling
+  — states no element type: its element is `Void`, the "numeric, not fixed yet" marker. The clone
+  was therefore an array of slots with no element type, `Array::create` giving it eight bytes an
+  element, and the bytes of a compact f32 value read back one element at a time through
+  `get<slot_t>`. A kernel reading it by its dtype refused (`sum:`, then `matmul:`, `subtract:`,
+  `pow:`), and a reader asking for the width of an element got one the value has not (`to_bytes`
+  printed 8 bytes an f32 element). A compact array is pure data, so its clone now takes the element
+  type and the extents the value has, through `Array::clone`, which reads both from the value; a
+  slot array — a container of references — is still rebuilt element by element with the type each
+  element states. This is the constant-folding entry: it is what a folded constant or a
+  macro-expanded constant *is* once it lands in a session. Its greens are
+  `var_tensor_read.macro_simplify_jit` and the three `tensor_grad_check` (`simplify.jit`,
+  `simplify.fvm`, `simplified.nvm`); the clone alone — the probe build used to bisect the two
+  causes — is also what let `grad_function_values_arms.macro.simplify` run to its end, where its
+  numbers are right and it is still red on the print-form golden (`[0.7692267, …]` where the test
+  wants `tensor([ 0.7692, …], dtype=float32)`): one of the 28 that walked out of the class.
+- `106dc54f2` — *a tensor is one trainable leaf, not an array of its elements*
+  (`modules/nn/optim.cpp`, `walk`). `walk` decided by the type's code alone whether a trainable leaf
+  is an array to walk element by element, and after the flip a `Tensor` field carries the code of a
+  native array too: a model's `Tensor` was taken for an array of tensors and the *elements of the
+  leaf* were walked as if each were one. `walkArray` then built the result with
+  `Array::create(mm::autoSpace(), length)` — the slot-array convenience, which states no element
+  type — so `sgd`/`adam` returned a model whose next `matmul` refused with `Unsupported Tensor
+  dtype` and whose `to_bytes` read 8 bytes an element. Probed directly: `model_loss<model>(x,
+  target)` alone printed `0.6931…`, and the next line, `sgd(model, vg.1, 0.5)` followed by printing
+  `stepped.head.weight`, printed `[null, null]`. The tensor test now comes first, the same question
+  `saveLeaves` in that file already asks in that order, so a numeric array in either spelling
+  (`Tensor`, `Tensor<f32, [4, 4]>`, `f32[m, n]`, `f32[]`) is one trainable leaf and only an array of
+  non-numeric elements is walked element by element. This is the VJP/trainer entry: the value whose
+  type states no element type is read by the trainer, and it left the trainer without one. Measured
+  with the clone already in — the `optim` plan on its own and the nn+autodiff+examples plans, both
+  of which kept every one of these red — this commit greened the `optim.*` native-leaf family (16),
+  the `residual_mlp` family (6) and the `.opt`/`.devirtualize_inline` variants of `autoencoder`,
+  `siamese_shared_encoder` and `tiny_rnn`. The rest of the `matmul` family (`gru_lite*`,
+  `matrix_factorization`, `train_linear*`, `softmax_classifier*`, `autograd_linear_demo`,
+  `graph_autograd_multi_param_demo`, `with_context_step_demo`) left the class the same way but not
+  the red set: they run now and fail on a later expectation, which is the 28 in the arithmetic
+  below.
+
+**Green after.** `[SUMMARY] total: 5973, pass: 5670, fail: 292, skip: 11`,
+`[SPLIT] build 23.9 s, test 339.2 s, total 363.1 s`, `RUN_EXIT=1`
+(`notes/h406-after-layer.log`). **332 → 292: 40 greens, 0 new red, 0 signals**, by set difference
+over `notes/h406-base-reds.txt` and `notes/h406-after-reds.txt`. The in-class greens (38) are the
+whole `optim.*` native-leaf family (16, `trajectory_matches_native`, `training_loop_matches_native`,
+`native_tensor_leaf_keeps_its_element_type`, `unstated_tensor_leaf_follows_its_value`, four backends
+each), the `residual_mlp` family (6) and the `.opt`/`.devirtualize_inline` variants of `autoencoder`,
+`siamese_shared_encoder` and `tiny_rnn` (9), `poison:modules.optim:optim.trajectory_matches_native.nvm`,
+`06_loop_carried_state`, `export_train_step_adam`, `tensor_grad_check` (3) and
+`var_tensor_read.macro_simplify_jit`. Two greens were outside the class:
+`ort_gated_gru_step` and `ort_train_step_dynamic`, which had the same wall behind another first
+diagnostic.
+
+**The class arithmetic, exactly.** 66 → 7. Of the 66: **38 green**, **28 still red but out of the
+class** — and 21 of those 28 now report **no diagnostic at all** in their first block, because the
+wall is gone and what is left is a stdout or exit expectation. That is the `(none)` family growing
+169 → 191 under the same first-diagnostic classifier (`RuntimeDiag::RuntimeError` falls 101 → 40).
+`softmax_classifier` is the clean example: its four behavioural asserts (`before > 0`, `step ==
+before` within 1e-9, `after < before`, `trained < after`) now hold, and it fails on
+`match(/softmax_classifier weight=tensor/)` alone — the print form, which is the class the next
+slice is pointed at, not this one.
+
+**The 7 left, and what they are not.** Five are `Expected Tensor argument`
+(`loop_grad_iterable_tensors.{nvm,fvm}`, `train_step.loss.{nvm,fvm,jit}`) and two are `Tensor
+argument cannot be null` (`loops.fault_tensor_rank0.{nvm,fvm}`, a fault test red for its own
+expectation). The five are **not** the element type, and this slice's evidence says so: both cases
+fail on the same construct, `loop h = x for b in m.blocks` inside a differentiated function, and in
+the loop case's `std::macro std::gir` the refusing operand is fully stated —
+`tensor:zeros_like` takes a closure capture port of type `Block[]` and its result type is
+`{ w: f32[], b: f32[] }[]`, so `tensorArg` refuses an array of records (not a tensor, and not a
+scalar) rather than one whose element type is unstated. The item is the loop pullback's zero
+tangent for an array of records. `train_step.loss`'s pullback is not in its graph at `std::macro`,
+so that mechanism is verified for the loop case and only shared by construct and message for
+`train_step`. The `Tensor<void>` section below reads these five as one element-type gap; the GIR
+says otherwise, and the next lane should start from the loop, not from the spelling.
+
+**Not done.** The ONNX shape-2 pair (`export_grad_matmul_vector`,
+`pass_export_grad_matmul_vector`) — the "instantiate at the call site" item — is untouched: both
+still fail, `onnx.export_model: tensor:matmul_grad_rhs: the rank of an op …` and its
+`TranslationRefused` twin, the same first diagnostic as before. It is a type-system change whose
+acceptance is a whole-feature criterion (the export back to develop's behaviour, the 38 `var
+Tensor` cases green, no `f32[..]` site left in the export), not a patch this slice could land
+alongside its own two, so it is left for its own lane. Also untouched: the 22 declarations the
+holes section lists, and the print-form class the `(none)` family now hides.
+
+**One ledger correction.** This section's predecessor says the optimizer "folds `sum(acc)` against
+the widened cell's unstated element type": the expression is `sum(vg.1.p0)`, at `29:79`, and it is
+the gradient of the `with` parameter, as the verbatim block above shows.
+
 ## Every red, by class, before → after
 
 Bucketing is the attribution report's, applied by one classifier to both logs: the first
 diagnostic in the block, with the diagnostic classes taking precedence over the runner's text.
 
-| class | flip tip | integrated | + crash round | delta, integrated → now | h395, `var` cell widened | delta, now → h395 |
-|---|---|---|---|---|---|---|
-| kernel element-type refusal | 162 | 3 | 0 | 0 | 0 | 0 |
-| `NoMatchingFunction` hole | 49 | 49 | 7 | 7 | 7 | 0 |
-| internal error | 43 | 43 | 40 | 38 | 38 | 0 |
-| exit-code catch-all | 88 | 243 | 250 | 119 | 119 | 0 |
-| print form | 59 | 63 | 75 | 92 | 92 | 0 |
-| runtime error | 22 | 26 | 15 | 32 | 32 | 0 |
-| other text | 66 | 67 | 67 | 84 | 84 | 0 |
-| **total** | **489** | **494** | **454** | **372** | **332** | **−40** |
-| of which `expected exit N, got null` (a signal) | — | **9** | **0** | **0** | **0** | **0** |
+| class | flip tip | integrated | + crash round | delta, integrated → now | h395, `var` cell widened | delta, now → h395 | h406, unstated element type | delta, h395 → h406 |
+|---|---|---|---|---|---|---|---|---|
+| kernel element-type refusal | 162 | 3 | 0 | 0 | 0 | 0 | — | — |
+| `NoMatchingFunction` hole | 49 | 49 | 7 | 7 | 7 | 0 | — | — |
+| internal error | 43 | 43 | 40 | 38 | 38 | 0 | — | — |
+| exit-code catch-all | 88 | 243 | 250 | 119 | 119 | 0 | — | — |
+| print form | 59 | 63 | 75 | 92 | 92 | 0 | — | — |
+| runtime error | 22 | 26 | 15 | 32 | 32 | 0 | — | — |
+| other text | 66 | 67 | 67 | 84 | 84 | 0 | — | — |
+| **total** | **489** | **494** | **454** | **372** | **332** | **−40** | **292** | **−40** |
+| of which `expected exit N, got null` (a signal) | — | **9** | **0** | **0** | **0** | **0** | **0** | **0** |
+
+**The h406 column's class rows are left as `—` on purpose.** The bucketing is the attribution
+report's classifier applied to a log; the h395 column carries the previous slice's figures because
+its note says so, and this slice measured its own class with a different classifier (the first
+diagnostic naming the unstated or unsupported element type the tensor machinery read: 66 reds → 7,
+in the section above). Putting that classifier's numbers into these rows would misreport the
+method, and carrying the previous column's figures here would report a measurement nobody made, so
+the rows are `—`. The two numbers in the column that *are* this slice's own measurement are the
+total and the delta beside it. What moved is exact and is in the section above — **40 greens, 0 new
+red, 0 signals**, by set difference over the two logs.
 
 **The h395 column is the measured total; its class buckets are deliberately not filled in.** The
 bucketing is the attribution report's classifier applied to a log, and putting a second
@@ -510,14 +651,27 @@ own sentence: **rank 0 is the element type itself**.
   content is the unstated tensor and `assignableFrom` accepts the argument's value), never in
   `TupleType::assignableFrom` and never by rejecting the call. **Measured: 40 green, 0 new, 0
   signals**, whole tree, same window; the one red left of the family
-  (`var_tensor_read.macro_simplify_jit`) is the `Tensor<void>` VJP typing item below, not this root.
+  (`var_tensor_read.macro_simplify_jit`) was the entry the h406 slice took, and it is **green**
+  there — the fold was refused by the *cloned constant's* missing element type, not by this root.
   The refusal that is genuinely right — a non-numeric cell against `var Tensor` — is pinned by
   `shape_inference/var_argument_non_numeric.cml`.
+- **The unstated element type — the two entries taken, the class measured** (`h406`, 292 red): a
+  static value cloned under a declared `Tensor` lost its element type on the way into a session
+  (`743bde936`), and the trainer walked a `Tensor` leaf as an array of its elements (`106dc54f2`).
+  **Measured: 40 green, 0 new, 0 signals**, and the class the first diagnostic defines — the
+  unstated or unsupported element type read by tensor machinery — goes **66 → 7**, 38 of it green
+  and 21 more reporting a later expectation. It was the last wall in front of the whole `optim.*`
+  native-leaf family, the `residual_mlp` family and the `.opt` variants of `autoencoder`,
+  `siamese_shared_encoder` and `tiny_rnn`. The 7 left are the loop-pullback item below.
 - **Then the 22 declarations** (`tensor:gt`, `:add`, `:sum`, `:numel`, `:show` written over
   `Tensor<T>` in the module): 47 failing entries name a `NoMatchingFunction` at case level, the
   22 among them, and the count has not moved across either slice.
-- **Then the `Tensor<void>` VJP typing**: 5 reds, the `train_step.loss.*` family reached further,
-  whose element type is undetermined where the ruling says it is always determined.
+- **Then the `Tensor<void>` VJP typing**: 5 reds, the `train_step.loss.*` family and
+  `loop_grad_iterable_tensors.*`. The h406 slice's GIR narrows the item: the refusing operand is
+  **not** an undetermined element type but a fully stated array of records — `tensor:zeros_like`
+  over a `Block[]` capture port, in the loop pullback — so the item is the zero tangent of an array
+  of records, and the element-type spelling of the message is a coincidence of `tensorArg`'s two
+  refusals. Start from the loop, not from the spelling.
 - **Then the 92 print-form goldens** and the 5 new pins, as expectation updates that follow from
   the ruling that the printer prints by the type the value holds. This is the class that grew
   most as the walls came down (63 at the integration, 92 now), so it is the *last* item only
@@ -532,6 +686,6 @@ is the array printer's, and `var Tensor` parameters no longer produce a hard "de
 compiler" message (40 reds green, 0 new, 0 signals). Recommendation: **do not land yet**; the
 integration has settled the element-type question on the kernel side (`sum_to_f64` is now a real
 arm), the crash round has taken the signals to zero, the first rank-0 shape has taken 82 reds off
-the wall and the `var`-cell widening 40 more, so what is left is rank 0's other two shapes and the
-items ranked above them, and one run per slice measures the
-reds it moves.
+the wall, the `var`-cell widening 40 more and the unstated element type 40 more again (its class
+66 → 7), so what is left is rank 0's other two shapes, the loop pullback's 5 and the items ranked
+above them, and one run per slice measures the reds it moves.
