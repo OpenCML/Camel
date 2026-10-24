@@ -1236,22 +1236,32 @@ staticForExpr
     : STATIC staticForHeader '=>' blockExpr
     ;
 staticForHeader
-    : FOR '(' identDef (',' identDef)? ')' IN ('fields' typeExpr | 'indices' dataExpr)
+    : FOR '(' (identDef | '_') (',' (identDef | '_'))* ')' IN
+      ('fields' typeExpr | 'indices' dataExpr)
     ;
+The head writes as many names as the element it walks has parts (H475): `fields` gives the
+triple (name, type, tags), `indices` gives one thing.
 */
 any Formatter::visitStaticForExpr(cst::StaticForExpr context) {
-    const auto valueName = context->get<cst::IdentDef>(0);
-    const auto mode      = context->tok(TK::Identifier);
+    const auto mode = context->tok(TK::Identifier);
     if (mode && mode.text() == "indices") {
-        return "static for (" + any_cast<string>(visitIdentDef(valueName)) + ") in indices " +
+        return "static for (" + formatStaticHeadNames(context) + ") in indices " +
                any_cast<string>(visit(context->expr())) + " => " +
                any_cast<string>(visitBlockExpr(context->lastChild().node()));
     }
-    const auto typeName = context->get<cst::IdentDef>(1);
-    return "static for (" + any_cast<string>(visitIdentDef(valueName)) + ", " +
-           any_cast<string>(visitIdentDef(typeName)) + ") in fields " +
+    return "static for (" + formatStaticHeadNames(context) + ") in fields " +
            formatTypeInTypePosition(context->type()) + " => " +
            any_cast<string>(visitBlockExpr(context->lastChild().node()));
+}
+
+string Formatter::formatStaticHeadNames(syn::Node head) {
+    string names;
+    bool first = true;
+    for (const auto name : head.all<cst::IdentDef>()) {
+        names += (first ? "" : ", ") + any_cast<string>(visitIdentDef(name));
+        first = false;
+    }
+    return names;
 }
 
 /// A `(` at the head of a type after `fields` / `match type` opens a tuple or a parenthesised
@@ -1271,11 +1281,13 @@ staticLoopExpr
     : STATIC LOOP loopState (',' loopState)* staticLoopHeader DO blockExpr
     ;
 staticLoopHeader
-    : FOR (identDef | '_') (',' (identDef | '_'))? IN
+    : FOR (identDef | '_') (',' (identDef | '_'))* IN
       ('fields' typeExpr | 'indices' dataExpr | dataExpr)
     ;
 The head is written without the parentheses `static for` still has (H462, the ruling of
-2026-10-24): `for j in indices ts`, `for i in 0..5`, or `for n, F in fields T`.
+2026-10-24): `for j in indices ts`, `for i in 0..5`, `for n in fields T`, or
+`for n, F, tags in fields T` (H475: the names follow the element, so a head may write one, two or
+three of them).
 */
 any Formatter::visitStaticLoopExpr(cst::StaticLoopExpr context) {
     string text = "static loop ";
@@ -1286,20 +1298,19 @@ any Formatter::visitStaticLoopExpr(cst::StaticLoopExpr context) {
                 any_cast<string>(visit(state.expr()));
         first = false;
     }
-    const auto valueName = context->get<cst::IdentDef>(0);
-    const auto mode      = context->tok(TK::Identifier);
-    const string body    = any_cast<string>(visitBlockExpr(context->lastChild().node()));
+    const auto mode   = context->tok(TK::Identifier);
+    const string body = any_cast<string>(visitBlockExpr(context->lastChild().node()));
+    const string names = formatStaticHeadNames(context);
     if (mode && mode.text() == "indices") {
-        return text + " for " + any_cast<string>(visitIdentDef(valueName)) + " in indices " +
+        return text + " for " + names + " in indices " +
                any_cast<string>(visit(context->expr())) + " do " + body;
     }
     if (mode && mode.text() == "fields") {
-        return text + " for " + any_cast<string>(visitIdentDef(valueName)) + ", " +
-               any_cast<string>(visitIdentDef(context->get<cst::IdentDef>(1))) + " in fields " +
+        return text + " for " + names + " in fields " +
                any_cast<string>(visitType(context->type())) + " do " + body;
     }
-    return text + " for " + any_cast<string>(visitIdentDef(valueName)) + " in " +
-           any_cast<string>(visit(context->expr())) + " do " + body;
+    return text + " for " + names + " in " + any_cast<string>(visit(context->expr())) + " do " +
+           body;
 }
 
 /*
