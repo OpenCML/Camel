@@ -221,6 +221,17 @@ inline TupleType *asFallible(Type *type) {
 /// unnamed struct with its fields, by name (in another order the entrance copies field by
 /// field). Never the other way: a `T?` is not a `T`, a named type is not an unnamed one.
 bool entersImplicitly(Type *target, Type *source);
+/// The type a position of type `target` determines for the value that stands in it, when the
+/// position is one a value enters by being put into its form (design principles 3.8, 5.2):
+/// the payload of a `T?` / `T!`. Such a position takes the value itself and the payload put
+/// into the form (`entersImplicitly`), so it does not determine which of the two the value is;
+/// what it determines is the payload. A position that is not a tagged type determines itself.
+inline Type *determinedByPosition(Type *target) {
+    if (TupleType *tagged = asTagged(target)) {
+        return tagged->payloadType();
+    }
+    return target;
+}
 /// The type two branch arms (or two elements of an array literal) have in common: the type
 /// they unify to, or the tagged form one of them enters (`int` and `null` give `int?`, `int`
 /// and `int!` give `int!`). nullptr when there is none.
