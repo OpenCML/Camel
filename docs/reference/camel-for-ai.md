@@ -54,7 +54,7 @@ last column below, which is read out of this table and measured against the chap
 | 12. Common errors | the error, the diagnostic, the fix | 11,600 |
 | 13. Accepted and then rejected | reserved spellings and their diagnostics | 2,600 |
 | 14. Not implemented yet (`target`) | what to avoid until its design lands | 1,700 |
-| Appendix A. Diagnostics | name, severity, message — generated | 27,000 |
+| Appendix A. Diagnostics | name, severity, message — generated | 28,000 |
 | Appendix B. Standard library signatures | every exported name — generated | 27,000 |
 | Appendix C. Sources | which normative page each rule comes from | 1,800 |
 | — | generated, all four regions | 61,000 |
