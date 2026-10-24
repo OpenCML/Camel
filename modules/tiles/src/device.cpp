@@ -18,12 +18,24 @@ TypeCode DeviceType::typeCode() {
     static auto code = registerOtherType("tiles.Device", TypeFlag::GC_Traced);
     return code;
 }
+std::optional<DType> deviceScalarDType(const core::type::Type *leaf) {
+    if (!leaf)
+        return std::nullopt;
+    switch (leaf->code()) {
+    case TypeCode::Float32:
+        return DType::F32;
+    case TypeCode::Float64:
+        return DType::F64;
+    default:
+        return std::nullopt;
+    }
+}
 DeviceType::DeviceType(Type *host)
     : OtherType(typeCode(), 1, copyParams(std::span<Type *const>(&host, 1))) {}
 DeviceType *DeviceType::get(Type *host) {
-    if (!tensor::isTensorType(host) && host->code() != TypeCode::Float64 &&
+    if (!tensor::isTensorType(host) && !deviceScalarDType(host) &&
         host->code() != TypeCode::TypeVar)
-        throw std::runtime_error("Device requires a tensor or float type");
+        throw std::runtime_error("Device requires a tensor or a scalar type");
     static std::mutex mutex;
     static std::unordered_map<Type *, DeviceType *> types;
     std::lock_guard lock(mutex);
@@ -70,11 +82,12 @@ Type *distributeDevice(Type *host, const std::string &path, std::string &error) 
     return core::type::tree::mapLeaves(
         host,
         [&](const std::string &leafPath, Type *leaf) -> Type * {
-            if (tensor::isTensorType(leaf) || leaf->code() == TypeCode::Float64 ||
+            if (tensor::isTensorType(leaf) || deviceScalarDType(leaf) ||
                 leaf->code() == TypeCode::TypeVar)
                 return DeviceType::get(leaf);
             error = "Device leaf '" + core::type::tree::displayPath(leafPath) +
-                    "' has unsupported type " + leaf->toString() + "; expected a tensor or float";
+                    "' has unsupported type " + leaf->toString() +
+                    "; expected a tensor or a scalar of its element type";
             return nullptr;
         },
         path);

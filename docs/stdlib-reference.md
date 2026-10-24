@@ -4865,9 +4865,9 @@ The device holds a foreign resource (`tiles:device`) and the driver is ambient s
 upload: (value: Tensor<f32>) => Device<Tensor<f32>>
 ```
 
-Uploads every leaf of the value — a float or an f32 tensor, alone or inside a tuple or a
-struct — and returns the same tree with each leaf wrapped in `Device<...>`. A leaf of any other
-type is refused when the call is compiled.
+Uploads every leaf of the value — a tensor, or a scalar of the element type it is written with,
+alone or inside a tuple or a struct — and returns the same tree with each leaf wrapped in
+`Device<...>`. A leaf of any other type is refused when the call is compiled.
 
 - With effects: transfers to the device.
 - Example: `upload(host)` gives `a Device<Tensor<f32>>`
@@ -4887,7 +4887,7 @@ leaf that is not a device value is refused when the call is compiled.
 #### `run_preferred_resident`
 
 ```camel
-run_preferred_resident: <fn: (a: float, b: float) => float> (inputs: (float, float)) => Device<float>
+run_preferred_resident: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => Device<f32>
 ```
 
 Runs the function through the device path the pipeline prepared for it — the device when a
@@ -4896,54 +4896,54 @@ This is the operator `tiles::compile` inserts for an outlined region; a `#gpu` s
 the device explicitly, and an operator the device cannot run is a compile error there.
 
 - With effects: transfers to the device and runs device code.
-- Example: `run_preferred_resident<(a: float, b: float): float => a + b>((2.0, 3.0))` gives `a Device<float>`
+- Example: `run_preferred_resident<(a: f32, b: f32): f32 => a + b>((f32(2.0), f32(3.0)))` gives `a Device<f32>`
 
 #### `source`
 
 ```camel
-source: <fn: (a: float, b: float) => float> (inputs: (float, float)) => string
+source: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => string
 ```
 
 The CUDA source the function compiles to, without running it.
 
 - With effects: compiles device code.
-- Example: `println(source<(a: float, b: float): float => a + b>((2.0, 3.0)))`
+- Example: `println(source<(a: f32, b: f32): f32 => a + b>((f32(2.0), f32(3.0))))`
 
 #### `inspect`
 
 ```camel
-inspect: <fn: (a: float, b: float) => float> (inputs: (float, float)) => string
+inspect: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => string
 ```
 
 A report on the function's device plan, without running it: the kernel, its launch shape and
 the values it would keep on the device.
 
 - With effects: compiles device code.
-- Example: `println(inspect<(a: float, b: float): float => a + b>((2.0, 3.0)))`
+- Example: `println(inspect<(a: f32, b: f32): f32 => a + b>((f32(2.0), f32(3.0))))`
 
 #### `benchmark`
 
 ```camel
-benchmark: <fn: (a: float, b: float) => float> (inputs: (float, float)) => string
+benchmark: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => string
 ```
 
 Times the function on the device, and on the host for comparison, and returns the report as
 JSON text.
 
 - With effects: transfers both ways and runs device code.
-- Example: `println(benchmark<(a: float, b: float): float => a + b>((2.0, 3.0)))`
+- Example: `println(benchmark<(a: f32, b: f32): f32 => a + b>((f32(2.0), f32(3.0))))`
 
 #### `regions`
 
 ```camel
-regions: <fn: (a: float, b: float) => float> () => string
+regions: <fn: (a: f32, b: f32) => f32> () => string
 ```
 
 The regions the compiler would take for the whole program, as text: which nodes would run on
 the device and why the others would not.
 
 - With effects: compiles device code.
-- Example: `println(regions<(a: float, b: float): float => a + b>())`
+- Example: `println(regions<(a: f32, b: f32): f32 => a + b>())`
 
 #### `available`
 

@@ -178,9 +178,17 @@ class Compiler {
             Node node{.op = "input", .shape = resident->shape};
             node.dtype      = resident->dtype;
             node.resident   = std::move(resident);
-            ty::Type *exact = node.dtype == DType::F64
-                                  ? ty::Type::Float64()
-                                  : tensor::TensorType::get(ty::TypeCode::Float32, node.shape);
+            // A rank-0 f32 resident value is the f32 scalar of design principles 7.3 — the bytes
+            // the tensor path already carries — so the host type is the scalar one, unless the
+            // program asked for a rank-0 tensor at this boundary and keeps that type.
+            const auto *declared = asDeviceType(type);
+            ty::Type *rank0      = tensor::isTensorType(declared->hostType())
+                                       ? declared->hostType()
+                                       : ty::Type::Float32();
+            ty::Type *exact = node.dtype == DType::F64 ? ty::Type::Float64()
+                              : node.shape.empty()     ? rank0
+                                                       : tensor::TensorType::get(
+                                                             ty::TypeCode::Float32, node.shape);
             return {.type = exact, .tensor = append(std::move(node))};
         }
         if (type->code() == ty::TypeCode::Tuple || type->code() == ty::TypeCode::Struct) {
@@ -224,6 +232,14 @@ class Compiler {
             Node node{.op = "input", .shape = {}};
             node.dtype      = DType::F64;
             node.scalarBits = std::bit_cast<uint64_t>(std::get<double>(*constant));
+            return {.type = type, .tensor = append(std::move(node))};
+        }
+        if (runtimeInput && type->code() == ty::TypeCode::Float32) {
+            // A captured f32 scalar is the rank-0 f32 value the tensor path already carries, so it
+            // needs no scalar kind of its own: one float in the input's payload (7.3). The stored
+            // constant is exact in f64 and narrows once here, which is the value the program has.
+            Node node{.op = "input", .shape = {}};
+            node.data = {static_cast<float>(std::get<double>(*constant))};
             return {.type = type, .tensor = append(std::move(node))};
         }
         return {.type = type, .constant = std::move(constant), .staticSlot = slot};
@@ -323,14 +339,23 @@ class Compiler {
         if (value.tensor != SIZE_MAX)
             return value.tensor;
         if (value.constant && std::holds_alternative<double>(*value.constant))
-            return append(
-                Node{
-                    .op         = "constant64",
-                    .attributes = {std::bit_cast<int64_t>(std::get<double>(*value.constant))},
-                    .dtype      = DType::F64});
+            return append(constantNode(value));
         throw UnsupportedComputation(
-            std::string(what) + " must be a tensor or f64 value (" +
+            std::string(what) + " must be a tensor or scalar value (" +
             (value.type != nullptr ? value.type->toString() : std::string("unknown")) + ")");
+    }
+    /// A constant answer stands for a value of the element type it was written with (7.3): an f32
+    /// scalar is the rank-0 f32 input the tensor path carries, an f64 one the scalar domain's
+    /// `constant64`, whose attributes hold the exact bit pattern.
+    Node constantNode(const Value &value) const {
+        const double number = std::get<double>(*value.constant);
+        if (value.type && value.type->code() == ty::TypeCode::Float32)
+            return Node{.op = "input", .shape = {}, .data = {static_cast<float>(number)}};
+        return Node{
+            .op         = "constant64",
+            .shape      = {},
+            .attributes = {std::bit_cast<int64_t>(number)},
+            .dtype      = DType::F64};
     }
     Value loop(Frame &frame, rt::gc_node_ref_t id) {
         const rt::LoopView view(*runtimeProgram, *frame.graph, id);
@@ -819,6 +844,11 @@ class Compiler {
         // core shape fact; only invocation specialization needs to infer again.
         auto inferred = knownResult ? std::optional<ty::Type *>(knownResult)
                                     : def->infer(tensor::ops::InferContext(types, constants));
+        // A whole-tensor reduction answers f64 today (the accumulator's type): `tensor:sum`
+        // declares `float` for every tensor dtype. Taking the element type here is the second half
+        // of the ruling in `9acbac6f7`;
+        // `docs/handover/questions/tensor-reduction-element-type-slice.md` records what it needs
+        // (the run-time answer cannot disagree with the inferred type) and what it still costs.
         if (inferred && (*inferred)->code() == ty::TypeCode::Float64 &&
             (def->name == "sum" || def->name == "mean")) {
             size_t input = tensorValue(args.at(0));
@@ -1055,12 +1085,7 @@ static Program compileInputs(
         if (value.tensor != SIZE_MAX) {
             c.program.outputs.push_back(value.tensor);
         } else if (value.constant && std::holds_alternative<double>(*value.constant)) {
-            c.program.outputs.push_back(c.append(
-                Node{
-                    .op         = "constant64",
-                    .shape      = {},
-                    .attributes = {std::bit_cast<int64_t>(std::get<double>(*value.constant))},
-                    .dtype      = DType::F64}));
+            c.program.outputs.push_back(c.append(c.constantNode(value)));
         } else if (
             value.type &&
             (value.type->code() == ty::TypeCode::Tuple ||
@@ -1070,7 +1095,7 @@ static Program compileInputs(
                 self(self, field);
         } else {
             throw std::runtime_error(
-                "tiles result must contain tensors or f64 scalars in nonempty aggregates");
+                "tiles result must contain tensors or scalars in nonempty aggregates");
         }
     };
     collect(collect, out);
@@ -1096,7 +1121,7 @@ void bindRegionArguments(
         const auto &argument = arguments[i];
         const auto value     = bindings.host(argument.value, argument.type, true);
         if (value.tensor == SIZE_MAX)
-            throw std::runtime_error("compiled region requires tensor or f64 input");
+            throw std::runtime_error("compiled region requires tensor or scalar input");
         auto input   = std::move(bindings.program.nodes.at(value.tensor));
         auto &target = program.nodes.at(program.parameterInputs[i]);
         if (input.shape != target.shape || input.dtype != target.dtype)

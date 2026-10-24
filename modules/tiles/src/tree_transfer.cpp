@@ -25,7 +25,7 @@ Type *transferTreeType(Type *type, bool upload) {
             const auto *device = asDeviceType(leaf);
             return device ? device->hostType() : nullptr;
         }
-        if (leaf->code() == TypeCode::Float64)
+        if (deviceScalarDType(leaf))
             return DeviceType::get(leaf);
         const tensor::TensorFacts facts = tensor::tensorFactsOf(leaf);
         return tensor::isTensorType(leaf) && (!facts.dtype || *facts.dtype == TypeCode::Float32)
@@ -88,11 +88,18 @@ slot_t transferTree(ArgsView &norm, bool upload) {
                 out.device    = *wrapper->resourceAs<std::shared_ptr<DeviceValue>>();
                 out.shape     = out.device->shape;
                 out.dtype     = out.device->dtype;
-            } else if (type->code() == TypeCode::Float64) {
-                out.dtype = DType::F64;
-                out.bytes.resize(sizeof(double));
-                const double scalar = td::fromSlot<double>(value);
-                std::memcpy(out.bytes.data(), &scalar, sizeof(scalar));
+            } else if (const auto scalar = deviceScalarDType(type)) {
+                // A scalar leaf uploads as the rank-0 value of its element type: 4 bytes for f32,
+                // 8 for float (design principles 7.3, the same value the tensor path carries).
+                out.dtype = *scalar;
+                out.bytes.resize(*scalar == DType::F32 ? sizeof(float) : sizeof(double));
+                if (*scalar == DType::F32) {
+                    const float value32 = td::fromSlot<float>(value);
+                    std::memcpy(out.bytes.data(), &value32, sizeof(value32));
+                } else {
+                    const double value64 = td::fromSlot<double>(value);
+                    std::memcpy(out.bytes.data(), &value64, sizeof(value64));
+                }
             } else {
                 auto *tensor = td::fromSlot<tensor::Array *>(value);
                 if (tensor->dtype() != TypeCode::Float32)
@@ -151,12 +158,21 @@ slot_t transferTree(ArgsView &norm, bool upload) {
             owner.release();
             return td::toSlot(wrapper);
         }
-        if (type->code() == TypeCode::Float64) {
-            if (leaf.dtype != DType::F64 || leaf.bytes.size() != sizeof(double))
+        if (const auto scalar = deviceScalarDType(type)) {
+            if (leaf.dtype != *scalar)
                 throw std::runtime_error("download scalar type mismatch");
-            double value;
-            std::memcpy(&value, leaf.bytes.data(), sizeof(value));
-            return td::toSlot(value);
+            if (*scalar == DType::F32) {
+                if (leaf.bytes.size() != sizeof(float))
+                    throw std::runtime_error("download scalar type mismatch");
+                float value32;
+                std::memcpy(&value32, leaf.bytes.data(), sizeof(value32));
+                return td::toSlot(value32);
+            }
+            if (leaf.bytes.size() != sizeof(double))
+                throw std::runtime_error("download scalar type mismatch");
+            double value64;
+            std::memcpy(&value64, leaf.bytes.data(), sizeof(value64));
+            return td::toSlot(value64);
         }
         if (leaf.dtype != DType::F32 || leaf.bytes.size() != elements(leaf.shape) * sizeof(float))
             throw std::runtime_error("download tensor type mismatch");
