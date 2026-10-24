@@ -535,8 +535,9 @@ CastSafety ArrayType::castSafetyFrom(Type *sourceType) const {
 }
 
 // The runtime half of the checked conversion: the shape (and, for the numeric-unknown array,
-// the element type) is checked against the type the program declared. The diagnostic format is
-// the one the tensor module used for the same check, so moving it here changes no message.
+// the element type) is checked against the type the program declared. After the tensor alias the
+// array is where a numeric array states its shape, and these diagnostics are its own: they say
+// `the array has shape [2, 3]`, which is what the value is.
 slot_t ArrayType::castSlotFrom(slot_t value, Type *sourceType) const {
     const CastSafety safety = castSafetyFrom(sourceType);
     ASSERT(safety != CastSafety::Forbidden, "castSlotFrom only allowed when the cast is not forbidden");

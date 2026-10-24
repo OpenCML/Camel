@@ -1,9 +1,9 @@
 /**
  * Refused: a tail recursion whose depth depends on the model input and whose carried state is a
- * struct with an `int[]` field. The ruling of 2026-10-23 keeps this refusal —
- * 「(b) ONNX 导出对带数组字段的携带状态保持拒绝，等原生多维数组（H17 第 2、4 项）把形状的说法定下来
- * 再处理定长数组。」 — so the diagnostic names the array field and says what is missing, and no
- * model file is written.
+ * struct with an `int[]` field the body appends to. A Loop's state input has one shape for all its
+ * rounds, and the ruling of 2026-10-24-evening (growable-array-vs-tensor-in-the-onnx-exporter) makes
+ * that the criterion: the body appends to this value, so its length is not the same on every round.
+ * The diagnostic names the array field and says so; no model file is written.
  */
 module export_loop_carried_array_field
 import { Tensor, reshape, sum } from tensor

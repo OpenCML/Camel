@@ -1558,21 +1558,24 @@ Return type '{0}' does not match the function's declared return type '{1}'.
 Ensure that the value returned from the function matches the type specified in the function signature: {2}. No implicit conversion is applied: convert explicitly, for example float(x) for a number or 'x as T' for a module type.
 ```
 
-**Example** (`test/cases/compile/array_shape/err_return_shape.cml`, run as `camel test/cases/compile/array_shape/err_return_shape.cml std::nvm`)
+**Example** (`test/cases/compile/literals/context_composite_holes_mismatch.cml`, run as `camel -E short test/cases/compile/literals/context_composite_holes_mismatch.cml`)
 
 ```camel
-// A return type that states a shape promises it: the body must give a value of that shape. The
-// body here returns its parameter, whose extent is the name `n` and not the constant 2 the return
-// type declares, so the two shapes do not agree.
-module array_shape_err_return_shape
+module literal_context_composite_holes_mismatch
 
-func firstTwo(x: f32[n]): f32[2] {
-    return x
-}
+type MA = { n: int, t: (f32, f32) }
+type MB = { n: int, v: f32[2] }
 
-func main(): int sync {
-    let v: f32[3] = [1.0, 2.0, 3.0]
-    println(len(firstTwo(v)))
+// `n` is a float and the field is an int: the literal does not take MA, and the tuple of
+// literals beside it stays a `(float, float)` rather than becoming an `(f32, f32)`.
+func wrongSibling(n: float): MA { return { n: n, t: (1.0, 2.0) } }
+
+// `v` is a computed `f64[]` where the field is an `f32[2]`: no element is narrowed into it.
+func computedArray(v: f64[]): MB { return { n: 1, v: v } }
+
+func main(): int {
+    println(wrongSibling(1.0).n)
+    println(computedArray([1.0]).n)
     return 0
 }
 ```
@@ -2104,17 +2107,21 @@ The returned value needs an explicit conversion to the function's declared retur
 A type that leaves open what the declared return type fixes is never accepted implicitly, and nothing is checked on its behalf (function signature: {3}). Where the value is known to fit, write the conversion: {2}. A conversion written with 'as' is checked when it runs; a value that does not fit stops the program at that position.
 ```
 
-**Example** (`test/cases/modules/tensor/shape_inference/recursion_leaf.cml`, run as `camel test/cases/modules/tensor/shape_inference/recursion_leaf.cml`)
+**Example** (`test/cases/compile/array_shape/err_return_shape.cml`, run as `camel test/cases/compile/array_shape/err_return_shape.cml std::nvm`)
 
 ```camel
-module shape_inference_recursion_leaf
-import { Tensor, slice, reshape, sum } from tensor
-// That the vector has one element where the recursion ends is known when the program runs.
-func tree(x: Tensor<f32, [?]>, n: int): Tensor<f32, [1]> {
-    return if n <= 1 then x else tree(slice(x, 0, 0, n / 2), n / 2) + tree(slice(x, 0, n / 2, n), n - n / 2)
+// A return type that states a shape promises it: the body must give a value of that shape. The
+// body here returns its parameter, whose extent is the name `n` and not the constant 2 the return
+// type declares, so the two shapes do not agree.
+module array_shape_err_return_shape
+
+func firstTwo(x: f32[n]): f32[2] {
+    return x
 }
+
 func main(): int sync {
-    println(sum(tree(reshape([1.0, 2.0, 3.0, 4.0, 5.0], [5]), 5)))
+    let v: f32[3] = [1.0, 2.0, 3.0]
+    println(len(firstTwo(v)))
     return 0
 }
 ```
@@ -2285,7 +2292,7 @@ A type variable takes the type of the argument found at its first binding positi
 module constas_argument_shape
 import { Tensor, ones, sum } from tensor
 
-func total(constas n: int, x: Tensor<f32, [n]>): float {
+func total(constas n: int, x: f32[n]): float {
     return sum(x)
 }
 
