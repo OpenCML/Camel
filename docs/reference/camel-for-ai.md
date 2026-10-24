@@ -258,7 +258,7 @@ equal contents are equal. Numeric types never convert implicitly: `i32` with `in
 (`let x: f32 = 1`); variables do not. Convert with `float(n)`, `int(x)`, `string(v)`.
 
 `a..b` is the integer interval [a, b) — left-closed, right-open, an `int[]`, integers only; with two
-functions `f..g` is the composition `x => g(f(x))`, which can be called, passed on, or used directly
+functions `f..g` is the composition `(x) => g(f(x))`, which can be called, passed on, or used directly
 in a higher-order call; `..` binds tighter than `->`, so `x->f..g` is `x->(f..g)`.
 
 ```camel
@@ -1301,7 +1301,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `UnterminatedComment` | E | Unterminated comment: {0}. |
 | `InvalidEscapeSequence` | W | Invalid escape sequence in string: {0}. |
 
-**Syntax** (`SyntaxDiag`) — 18 (17 errors, 1 warning)
+**Syntax** (`SyntaxDiag`) — 19 (18 errors, 1 warning)
 
 | `MissingClosingDelimiter` | E | Expected '{0}' before {2}, to close the '{1}'. |
 | `UnmatchedClosingDelimiter` | E | Unexpected '{0}': no '{1}' is open here. |
@@ -1320,6 +1320,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `EmptyInterpolation` | E | An interpolation has no expression to format. |
 | `AsRightSideIsType` | E | The right side of '{0}' is a type; write the interval as '(a..b)'. |
 | `WhenAfterBody` | E | A 'when' condition comes before what it guards, so {0} cannot follow it. |
+| `LambdaParametersNeedParentheses` | E | A lambda's parameters need their parentheses: write '(x) => e', not 'x => e'. |
 | `ComparisonAcrossLines` | W | This '>' is read as a comparison with the next line, which starts with {0}: two statements may have been joined into one. |
 
 **Semantic** (`SemanticDiag`) — 202 (188 errors, 14 warnings)

@@ -2946,7 +2946,7 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
         const auto &rhsASTNode = ast->atAs<AST::DataLoad>(1);
         // `a..b` has two readings, and the types of its two operands tell them apart (design
         // principles 4.2; the author's ruling of 2026-10-24 on `h248-generator-and-composition`):
-        // between two functions it is the composition `f..g`, the lambda `x => g(f(x))`, and
+        // between two functions it is the composition `f..g`, the lambda `(x) => g(f(x))`, and
         // between two integers it is the interval `[a, b)`. GCT has no types, so the construct
         // is handed on as one call of the compiler's own name for it, which the GIR builder
         // resolves (Builder::buildComposition).

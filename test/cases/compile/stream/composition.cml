@@ -1,4 +1,4 @@
-// `f..g` is the composition `x => g(f(x))` (design principles 4.2, the ruling of 2026-10-24):
+// `f..g` is the composition `(x) => g(f(x))` (design principles 4.2, the ruling of 2026-10-24):
 // `(f..g)(x)` is `g(f(x))`, so this prints `dbl(inc(3))` = 8, not `inc(dbl(3))` = 7.
 module h405_composition
 
