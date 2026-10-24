@@ -517,6 +517,11 @@ void registerTensorTangentSpace() {
     space.tangentType  = &tensorTangentType;
     space.addUri       = "tensor:add";
     space.zerosLikeUri = "tensor:zeros_like";
+    // One row's gradient goes back to its row: a round of a loop over a tensor takes the row an
+    // index names, so the scatter has to write a row of the tensor's own dtype and width.
+    // `tensor:row_add_at(acc, index, row)` is that scatter, the single-index counterpart of
+    // `tensor:take_grad`.
+    space.scatterUri = "tensor:row_add_at";
     camel::core::DerivativeRegistry::instance().setTangentSpace(
         camel::core::type::TypeCode::Array, std::move(space));
     camel::core::DerivativeRegistry::instance().setTangentType(

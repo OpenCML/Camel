@@ -417,7 +417,11 @@ void registerBuiltinDerivatives() {
     // Arrays have no entry of their own either: their tangent is the array of their elements'
     // tangents, and adding two of them is elementwise (design principles 9.9).
     TangentSpace arraySpace;
-    arraySpace.addUri      = ":tangent/add_arr";
+    arraySpace.addUri       = ":tangent/add_arr";
     arraySpace.zerosLikeUri = ":tangent/zeros_arr";
+    // One element's gradient goes back to its place by slot: the core's arrays hold their elements
+    // one slot each (`:tangent/scatter_add_arr(base, i, delta)`), which is also the scatter the
+    // reverse loop uses for the element a round took.
+    arraySpace.scatterUri = ":tangent/scatter_add_arr";
     registry.setTangentSpace(TypeCode::Array, std::move(arraySpace));
 }

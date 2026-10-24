@@ -1672,28 +1672,48 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
+name = "loop_grad_tensor_iterable.runtime.nvm"
+desc = "The adjoint of a loop over a tensor's first axis, where the refusal stood: `for row in w` takes the row an index names (`w` is `f32[2, 3]`, so the rows are rank-1 slices), and the reverse pass scatters each round's row gradient back with the tensor's own scatter, `tensor:row_add_at` (`TangentSpace::scatterUri`) -- a row of the tensor's dtype at its own width, not the core's slot-array `:tangent/scatter_add_arr`. `d` is the six ones in `w`'s own shape, and the same derivative is read again as a finite difference along `v` = [1..6] with `eps` = 1e-3: `fd` (the two-sided difference of the forward) and `dot` (`sum(d * v)`) agree, and the case exits 1 if their distance passes 1e-3. Before the scatter was there the program printed two uninitialized floats and `shape(d)` was `[2]`. (grad built at run time)"
+kind = "behavior"
+case = "../../../cases/modules/autodiff/loop_grad_tensor_iterable.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_exact = "loop_grad_tensor_iterable f=21.0 d=[[1.0, 1.0, 1.0], [1.0, 1.0, 1.0]] fd=21.000000 dot=21.000000 gap=0.000000 ok=true\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "loop_grad_tensor_iterable.macro.fvm"
+desc = "The same adjoint and the same finite difference when std::macro builds the gradient ahead of time and the FastVM runs it: the row scatter is placed in the compiled gradient graph, not only in a graph built at run time, and both readings agree there too."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/loop_grad_tensor_iterable.cml"
+args = ["${case}", "std::macro", "${run_fvm}"]
+expect_exit = 0
+expect_stdout_exact = "loop_grad_tensor_iterable f=21.0 d=[[1.0, 1.0, 1.0], [1.0, 1.0, 1.0]] fd=21.000000 dot=21.000000 gap=0.000000 ok=true\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "loop_grad_tensor_iterable.macro.jit"
+desc = "The same adjoint and the same finite difference on the third backend: the JIT-enabled bytecode VM runs the compiled gradient graph and gives the identical reading, so the row scatter is in the graph and not in one backend's interpreter."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/loop_grad_tensor_iterable.cml"
+args = ["${case}", "std::macro", "${run_jit}"]
+expect_exit = 0
+expect_stdout_exact = "loop_grad_tensor_iterable f=21.0 d=[[1.0, 1.0, 1.0], [1.0, 1.0, 1.0]] fd=21.000000 dot=21.000000 gap=0.000000 ok=true\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
 name = "loop_grad_refuse_slice_iterable.runtime.nvm"
-desc = "A loop over a rank-2 tensor is refused at the loop: its rounds are the array's slices, and the reverse pass cannot scatter a slice's gradient back into the array's gradient yet (an array's tangent is the array of its elements' tangents, one rank short of the value, and the scatter is the core's slot-array `:tangent/scatter_add_arr`). The diagnostic is located at the loop (line 28) and names the `for`'s sequence by type and by where it is written. Before this refusal the same program ran and printed two uninitialized floats. (grad built at run time)"
+desc = "A loop whose rounds are arrays *as values* is still refused at the loop: `rows` is an array of rank-1 tensors, so `for row in rows` takes a tensor each round and that round's gradient is a tensor, which the reverse pass has no scatter for (an array's tangent is the array of its elements' tangents, and the element's place in it is not a slot of the value's own dtype). The diagnostic is located at the loop (line 24) and names the `for`'s sequence by type and by where it is written. The shape that used to be refused here -- a rank-2 tensor, whose rounds are rows of its own dtype -- now differentiates (`loop_grad_tensor_iterable`). (grad built at run time)"
 kind = "negative"
 case = "../../../cases/modules/autodiff/loop_grad_refuse_slice_iterable.cml"
 args = ["${case}", "${run_nvm}"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::RuntimeError"
-expect_diagnostic_line = 28
-expect_output_contains = ["a 'loop' iterates over an array of type 'f32[2, 3]' whose rounds are its slices", "a round of that array is itself an array", "cannot scatter the gradient of a slice back into it yet"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 8000
-
-[[tests]]
-name = "loop_grad_refuse_slice_iterable.macro.fvm"
-desc = "The same refusal when std::macro evaluates `grad` ahead of time and the FastVM would run it: the fault surfaces as a failed macro evaluation naming the macro call, and the loop's own position is the diagnostic's location (line 28)."
-kind = "negative"
-case = "../../../cases/modules/autodiff/loop_grad_refuse_slice_iterable.cml"
-args = ["${case}", "std::macro", "${run_fvm}"]
-expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::MacroEvaluationFailed"
-expect_diagnostic_line = 28
-expect_output_contains = ["'autodiff:grad' could not be evaluated by std::macro", "whose rounds are its slices", "cannot scatter the gradient of a slice back into it yet"]
+expect_diagnostic_line = 24
+expect_output_contains = ["a 'loop' iterates over an array of type '", "whose rounds are its slices", "a round of that array is itself an array", "cannot scatter the gradient of a slice back into it yet"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 

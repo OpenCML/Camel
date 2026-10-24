@@ -1811,10 +1811,27 @@ void buildReverseBody(
             *loop.elementTangent);
         const std::array<gc_node_ref_t, 3> scatter{
             ports[loop.arraySlot], ports.front(), element};
+        // Which scatter takes that element's gradient back is the iterated value's own kind's
+        // answer, not one hard-wired operator: the registry states it beside the kind's add and
+        // zero (`TangentSpace::scatterUri`). An array whose elements the core holds one slot each
+        // scatters a slot (`:tangent/scatter_add_arr`), a tensor scatters a row of its own dtype
+        // (`tensor:row_add_at`), and the two are not interchangeable -- a row's gradient written
+        // as one slot is the garbage the rank-2 loop printed
+        // (test/cases/modules/autodiff/loop_grad_refuse_slice_iterable.cml). The registry is keyed
+        // by the type code, and a tensor and an array of records share the array code until the
+        // ownership predicate tells the two apart, so the numeric-array test is that question asked
+        // here, where the iterated value's own type is in hand.
+        const TangentSpace *const space =
+            DerivativeRegistry::instance().findTangentSpace(loop.iterableType);
+        const std::string_view scatterUri =
+            (isNumericArrayType(loop.iterableType) && space != nullptr &&
+             !space->scatterUri.empty())
+                ? std::string_view(space->scatterUri)
+                : std::string_view(":tangent/scatter_add_arr");
         next.push_back(addOper(
             draft,
             loop.tangentsType->typeAt(*loop.arrayTangent),
-            ":tangent/scatter_add_arr",
+            scatterUri,
             scatter));
     }
     draft.setRegionResult(region, packState(draft, stateTypes, next));
@@ -3118,10 +3135,17 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
                 else if (iterableType->code() == TypeCode::Array) {
                     // What a round gives is the array's element along its first dimension
                     // (design principles 5.4): a slice one dimension shorter, not `elemType`,
-                    // which is the scalar of a flat rank-2 array.
+                    // which is the scalar of a flat rank-2 array. A numeric array's slice is a row
+                    // of the tensor, and the tensor's own scatter takes it back
+                    // (`tensor:row_add_at`, `TangentSpace::scatterUri`). An array whose rounds are
+                    // arrays *as values* -- a nested array, whose elements are not numbers but
+                    // arrays -- has no such scatter yet, and its rounds would be written into a
+                    // gradient nothing has the shape of, so the loop is refused by name instead.
                     Type *const roundType =
                         tt::as_ptr<type::ArrayType>(iterableType)->firstDimensionElement();
-                    if (roundType != nullptr && roundType->code() == TypeCode::Array) {
+                    const bool slicedValues =
+                        roundType != nullptr && roundType->code() == TypeCode::Array;
+                    if (slicedValues && !isNumericArrayType(iterableType)) {
                         failAt(
                             forward_.nodeOrigin(node),
                             std::format(

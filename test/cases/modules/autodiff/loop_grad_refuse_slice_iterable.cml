@@ -1,36 +1,32 @@
 /**
- * Verifies the refusal of a loop that iterates over an array whose rounds are its slices: a rank-2
- * or higher numeric array, `f32[2, 3]` here. `for row in w` hands each round one row (design
- * principles 5.4, and the author's ruling of 2026-10-24 that a `for` over any array takes its first
- * dimension in the core), and the reverse pass must scatter that round's row gradient back into the
- * array's gradient at the round's index. It cannot yet: an array's tangent is the array of its
- * *elements'* tangents (src/core/derivative.cpp, computeTangentType's Array case), one rank
- * short of the value, and the scatter the reverse loop uses is the core's slot-array
- * `:tangent/scatter_add_arr`, not a tensor's row scatter -- `std::macro std::jgir` prints
- * `tensor:zeros_like` and `:tangent/scatter_add_arr` both of type `f32[]` while the array is
- * `f32[2, 3]`. Landing the rounds there left the gradient as uninitialized memory: this program
- * printed `d=[2.0769207e+34, 2.0768573e+34]`, a different pair of garbage floats on every run
- * (`shape(d)` was `[2]`), where the hand adjoint of `sum(w)` is six ones in `w`'s own shape. The
- * author's ruling of 2026-10-25 (docs/handover/reviews/questions-2026-10-24-evening.md, section
- * tensor-iter-path-left-on-develop) is that a differentiated value either gets the right derivative
- * or is refused by name -- a program that runs and gives a wrong value is not allowed -- so the
- * loop is refused, naming the `for`'s sequence, until the slices' scatter lands. This case replaces
- * `loop_grad_tensor_iterable`, which asserted the adjoint the reverse pass must build; it becomes
- * that case again once the scatter is there.
+ * Verifies the refusal of a loop whose rounds are arrays *as values*: `rows` is an array of rank-1
+ * tensors, so `for row in rows` takes one of those tensors each round (design principles 5.4), and
+ * that round's gradient is itself a tensor. The reverse pass has no scatter for that: the array's
+ * tangent is the array of its elements' tangents, and the element's tangent is a tensor whose place
+ * in it is not a slot of the value's own dtype. The author's ruling of 2026-10-25 refuses a
+ * differentiated value that cannot get the right derivative -- a program that runs and gives a
+ * wrong
+ * value is not allowed -- so the loop is refused, naming the `for`'s sequence by type and by where
+ * it is written, and it stays refused until an array of arrays has a scatter of its own.
+ *
+ * This is the leftover of the refusal that stood in for the missing row scatter of a rank-2 tensor
+ * (`tensor:row_add_at`, `TangentSpace::scatterUri`): that shape now differentiates, and
+ * `loop_grad_tensor_iterable` asserts its adjoint against finite differences. What is left is the
+ * shape whose rounds are not numbers, and it is refused rather than run.
  */
 module loop_grad_refuse_slice_iterable
 
-import { Tensor, reshape, sum } from tensor
+import { Tensor, sum } from tensor
 import { grad } from autodiff
 
-with <w: Tensor<f32, [2, 3]>>
+with <rows: f32[][]>
 func total(): float {
-    return loop acc = 0.0 for row in w do acc + sum(row)
+    return loop acc = 0.0 for row in rows do acc + sum(row)
 }
 
 func main(): int sync {
-    let w = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[], [2, 3])
-    let d = grad(total)<w>()
+    let rows = [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]] as f32[][]
+    let d = grad(total)<rows>()
     'loop_grad_refuse_slice_iterable d={}'->format<d>->println
     return 0
 }
