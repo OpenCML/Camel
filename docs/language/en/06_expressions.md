@@ -107,7 +107,7 @@ func main(): int sync {
 
 ```cml
 func main(): int sync {
-    let total = range(1, 6)
+    let total = 1..6
         ->map<(x: int): int => x * x>
         ->filter<(x: int): bool => x % 2 == 1>
         ->reduce<(acc: int, x: int): int => acc + x, 0>
@@ -534,7 +534,7 @@ let found    = loop hit = -1 for x in xs while hit < 0 do if x > 9 then x else h
 
 - **State.** With one name the body's value and the loop's value are that value; with several names (separated by commas) the body gives the tuple of them in the order of the head, and the loop's value is that tuple, taken apart with `let (a, b) = loop ...` or `.0`, `.1`. The state has the type of its first value; the body's value must have that type (or enter it, as an `int` enters an `int?`), otherwise `SemanticDiag::LoopBodyTypeMismatch`. `null` and the empty array `[]` have no type of their own as first values: write `null as T?`, or bind the empty array with its type first (`let none: int[] = []`) and start from that name (`SemanticDiag::LoopStateWithoutType`).
 - **`for x in xs`** takes one element of the sequence `xs` per round, in order; `xs` is an array, a string, a map or a tensor, and any other type is `SemanticDiag::LoopSequenceNotIterable`.
-  - **Array**: the element itself; `range(a, b)` is one.
+  - **Array**: the element itself; `a..b` is one.
   - **String**: by code point, each element the one-character string of that code point, as `s[i]` gives it (11.1): the two rounds of `for c in '中文'` are `'中'` and `'文'`, and a multi-byte character counts once.
   - **Map**: the `(key, value)` pairs in key order (the traversal order of 11.3, as `items(m)` gives them), not insertion order: in `for kv in m` the keys are strictly ascending, and `kv.0` and `kv.1` take the pair apart.
   - **Tensor**: along the first dimension, each element the sub-tensor with the first dimension dropped (sharing that slice of the data, not copied): a rank-2 `Tensor<f32, [2, 3]>` gives two `Tensor<f32, [3]>`, and a rank-1 tensor gives rank-0 sub-tensors (`sum(x)` is its number). The element type of a `Tensor` whose shape is unknown is `Tensor`. A rank-0 tensor has no first dimension and is not a sequence.
@@ -643,7 +643,7 @@ func main(): int sync {
 
 ```cml
 func main(): int sync {
-    let xs = range(1, 6)
+    let xs = 1..6
     println(xs->map<(x: int): int => x * x>)
     println(xs->filter<(x: int): bool => x % 2 == 0>)
     println(xs->reduce<(acc: int, x: int): int => acc + x, 0>)

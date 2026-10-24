@@ -75,7 +75,7 @@ See [`editors/vscode/README.md`](../editors/vscode/README.md) for details.
 | Capability | LSP method | Status |
 |------------|------------|--------|
 | Diagnostics (push) | `textDocument/publishDiagnostics` | Implemented. Published when a document is opened or changed, for clients that do not announce pull diagnostics (pushing to a client that pulls would show every problem twice); `initializationOptions.diagnostics` = `"push"`, `"pull"` or `"both"` overrides. |
-| Diagnostics (pull) | `textDocument/diagnostic` | Implemented. Code, catalog name, suggestion and notes in `data`, secondary locations as `relatedInformation`. |
+| Diagnostics (pull) | `textDocument/diagnostic` | Implemented. Code, catalog name, suggestion, notes and the compiler's own fixes (`data.fixes`: a title, and edits as `{range, newText}`) in `data`, secondary locations as `relatedInformation`. |
 | Incremental sync | `textDocument/didChange` (incremental) | Implemented (range edits, UTF-16 positions). |
 | Hover | `textDocument/hover` | Implemented: declaration as written, types in source spelling, comment lines above a declaration, instances of a generic function and the instance or overload a call resolved to, fields, literals, library signatures, the `--explain` entry of a diagnostic under the cursor. A member of a namespace is shown by its full name, `func Tools::inc(x: int): int` (design principles 10.2); so are the outline and completion. |
 | Go to definition | `textDocument/definition` | Implemented: locals, parameters, functions (the overload a call chose), type aliases, type variables, imported names across files. Not for library functions implemented in C++. |
@@ -89,7 +89,7 @@ See [`editors/vscode/README.md`](../editors/vscode/README.md) for details.
 | Semantic tokens | `textDocument/semanticTokens/full` | Implemented (`full`). |
 | Formatting | `textDocument/formatting` | Implemented (whole document; a document with a syntax error is not formatted). |
 | Range formatting | `textDocument/rangeFormatting` | Not implemented: the formatter (`tools/format`) formats whole files only. |
-| Code actions | `textDocument/codeAction` | Not implemented: diagnostics carry their suggestion as prose (`data.suggestion`), not as an edit, so there is nothing to apply mechanically. |
+| Code actions | `textDocument/codeAction` | Implemented. Every fix the compiler attached to a diagnostic that the requested range touches is offered as a quick fix whose workspace edit applies it, and the action quotes the diagnostic it repairs; a name that resolves to nothing is repaired by the candidate search among the names in scope (design principles 4.1), marked preferred. Diagnostics that carry no fix offer nothing: their `suggestion` is prose, and a guess an editor applies is worse than a sentence. |
 | Graph of a function | `camel/graph` (custom) | Implemented: the `std::rgir` text of the function at the cursor, optionally after a pass sequence, for the unsaved text. |
 
 ### 2.1 Semantic tokens

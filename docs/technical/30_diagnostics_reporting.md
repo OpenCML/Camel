@@ -79,6 +79,27 @@ this would drift one new diagnostic at a time; with the column, a code that offe
 the build. `docs/diagnostics.md` prints the declaration for every code, and
 `docs/cli.md` ("Diagnostics") describes the JSON both ways.
 
+A fix is not a JSON-only artifact. The `text` format prints it the way rustc prints a suggestion:
+a `help:` line carrying the fix's title, and under it the source line the fix leaves behind, `+`
+under the text it writes; a fix that only cuts text writes nothing to show, so the line as it
+stood is printed with `-` under what it cuts (the rich text renderer in
+`src/core/error/diagnostics/render.cpp`). A reader and
+an AI reading the text therefore see what to write and not only that there is something to write,
+and the `short` format - one line, which the test runner parses - is the only one left unchanged.
+The same `DiagFix` travels to the editor: `DiagnosticInfo` in the semantic model carries it, the
+language server puts it in `data.fixes` of `textDocument/diagnostic` (and of
+`textDocument/publishDiagnostics`) with the protocol's spelling `{range, newText}`, and
+`textDocument/codeAction` hands each fix out as a quick fix whose workspace edit is exactly those
+edits. So a diagnostic the compiler can repair is repaired by one keystroke in the editor, from
+the same text the JSON carries, without a second implementation of "what to write".
+
+What a snapshot may record of a diagnostic is its code and its place, never its wording.
+`Diagnostics::dumpIdentity` writes one line per diagnostic - the code, the primary range and each
+secondary range - and `camel-parsecheck hashes` hashes that instead of the JSON:
+`test/plans/feat/parse/golden/ast_hashes.txt` is a snapshot of what the front end makes of a file,
+so editing a message, a help text or a note must not move it. Before this, one reworded sentence
+moved the golden line of every rejected case that reported it.
+
 The two module fields describe the diagnostic's own file, never a module its message happens to
 name. `ModuleNotFound` at an import is located at the import: `data` names the importing module
 and its file, and the module that was not found is `{0}` of the message. A run-time fault of

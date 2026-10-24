@@ -1,0 +1,20 @@
+/**
+ * A lambda's parameters are written in parentheses (the author's ruling of 2026-10-24, on
+ * `composition-expected-type-edges` item 4): `(x) => e` is the spelling and `x => e` is not one,
+ * because a rule body's `x => x` already spends that arrow. The composition `f..g` is the lambda
+ * `(x) => g(f(x))` and is accepted beside it; the unparenthesised `x => e` is reported by name -
+ * SyntaxDiag::LambdaParametersNeedParentheses, at the `=>` - saying which parentheses to write.
+ * It used to be `Unexpected '=>'; expected '}'.` at the `=>`.
+ */
+module lambda_without_parentheses
+
+func ident(x: int): int {
+    return x
+}
+
+func main(): int sync {
+    let composed: (x: int) => int = ident..ident
+    let written: (x: int) => int = x => ident(ident(x))
+    println(composed(3))
+    return written(3)
+}

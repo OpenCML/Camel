@@ -83,6 +83,10 @@ class Server {
     json readingSupport(const std::string &method, const json &params);
     void publish(Document &doc);
     json diagnosticsOf(Document &doc);
+    /// One diagnostic as the protocol carries it, `data.fixes` included: what
+    /// `textDocument/diagnostic` returns, what `textDocument/publishDiagnostics` pushes, and what
+    /// a code action quotes as the diagnostic it repairs.
+    json diagnosticItem(Document &doc, const semantic::DiagnosticInfo &d);
 
     json position(const semantic::FileModel &file, uint32_t offset) const;
     json range(const semantic::FileModel &file, semantic::Range r) const;
