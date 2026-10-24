@@ -15,7 +15,7 @@
  * body-less declaration is checked for overlap but is not what a call is resolved by: the operator
  * group takes the first rule whose parameter types accept the arguments, `when` or not
  * (src/core/operator_group: resolveForCall; probe in
- * docs/handover/questions/sorts-per-element-type.md).
+ * docs/handover/reviews/questions-2026-10-23.md §sorts-per-element-type).
  */
 module array_sort_kernel_overlap
 

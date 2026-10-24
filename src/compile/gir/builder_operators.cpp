@@ -818,6 +818,15 @@ node_handle_t Builder::overloadValueFor(
                 !(*type)->exitType()->equals(expected->exitType())) {
                 continue;
             }
+            // The rule is one of the call's overloads only where its own `when` says so
+            // (design principles 4.4): a rule whose condition is false for these arguments
+            // cannot be the one the value means, so it is not a second candidate and the
+            // writing order of two declarations never decides (the same question
+            // resolveGroupedCall answers for a call).
+            if (ruleVerdictForCall(resolver, ops->name(), withTypes, normTypes) !=
+                RuleVerdict::Applies) {
+                continue;
+            }
             if (chosen) {
                 return nullptr;
             }
@@ -831,6 +840,38 @@ node_handle_t Builder::overloadValueFor(
         }
     }
     return nullptr;
+}
+
+std::optional<oper_idx_ptr_t> Builder::resolveGroupedCall(
+    const oper_group_ptr_t &ops, const type_vec_t &explicitTypes, Type *expectedResult,
+    const type_vec_t &withTypes, const type_vec_t &normTypes, static_args_t normStatics,
+    std::vector<std::pair<std::string, std::string>> &unmet) {
+    for (const auto &[uri, resolver] : ops->resolvers()) {
+        auto result = resolver->resolveForCall(
+            explicitTypes, expectedResult, withTypes, normTypes, normStatics, Modifier::None);
+        if (!result) {
+            // The rule's parameters do not take these arguments: it was never a candidate for
+            // this call, and its condition is not asked about a call it does not fit.
+            continue;
+        }
+        // A body-less declaration is one of this call's overloads where its own `when` says so
+        // (design principles 4.4): a rule whose condition is false for the arguments is not one,
+        // so the order in which two declarations of the name are written cannot choose between
+        // them. The condition is recorded, and the call reported as one whose conditions are
+        // unmet, only when no rule at all takes it.
+        std::string condition;
+        const RuleVerdict verdict =
+            ruleVerdictForCall(resolver, ops->name(), withTypes, normTypes, &condition);
+        if (verdict == RuleVerdict::ConditionUnmet) {
+            unmet.emplace_back(resolver->signature(), std::move(condition));
+            continue;
+        }
+        if (verdict == RuleVerdict::NotThisRule) {
+            continue;
+        }
+        return std::make_shared<OperatorIndex>(ops->name(), *result, uri);
+    }
+    return std::nullopt;
 }
 
 node_handle_t Builder::compoundAssignmentByRebinding(
@@ -2271,13 +2312,18 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 explicitTypes = std::move(typed->second);
                 explicitOperatorTypes_.erase(typed);
             }
-            auto res = ops->resolveForCall(
+            // Candidates that took the arguments but whose own `when` condition is false: if no
+            // other candidate applies, the call is reported as one whose conditions are unmet
+            // (design principles 4.4), not as an ordinary mismatch and never by writing order.
+            std::vector<std::pair<std::string, std::string>> unmetConditions;
+            auto res = resolveGroupedCall(
+                ops,
                 explicitTypes,
                 expectedResult,
                 withInputTypes,
                 normInputTypes,
                 normStatics,
-                Modifier::None);
+                unmetConditions);
             if (!res.has_value()) {
                 // A literal operand takes the other operand's type in a named operator call too:
                 // `add(x, 2.0)` with an f32 tensor is the f32 sum, as `x * 2.0` already is
@@ -2294,13 +2340,18 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                     for (const Argument &input : retriedInputs) {
                         retriedStatics.push_back(staticArgOf(input.node));
                     }
-                    auto retried = ops->resolveForCall(
+                    // The adapted call is tried with its own candidates and its own conditions;
+                    // its answer is dropped when it fails, because the report the call gets is
+                    // about the arguments the program wrote (the conditions below stand too).
+                    std::vector<std::pair<std::string, std::string>> retriedUnmet;
+                    auto retried = resolveGroupedCall(
+                        ops,
                         explicitTypes,
                         expectedResult,
                         withInputTypes,
                         retriedTypes,
                         retriedStatics,
-                        Modifier::None);
+                        retriedUnmet);
                     if (retried.has_value()) {
                         normInputs     = std::move(retriedInputs);
                         normInputTypes = std::move(retriedTypes);
@@ -2328,6 +2379,37 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 }
             }
             if (!res.has_value()) {
+                if (!unmetConditions.empty()) {
+                    // Every candidate whose parameters took the arguments was made inapplicable
+                    // by its own `when` (design principles 4.4: a rule that does not apply is
+                    // not the call's overload, and the call goes on to the other candidates).
+                    // The report names each declaration and the condition it wrote, so that a
+                    // call that reaches no rule at all says which conditions it failed rather
+                    // than which declaration happened to be written first. A declaration is
+                    // named by its signature and its condition together: the two arms of one
+                    // name share the signature and are told apart by the condition alone, the
+                    // way WhenDeclarationOverlap names them.
+                    std::vector<std::pair<std::string, std::string>> listed;
+                    std::string conditions;
+                    for (const auto &[signature, text] : unmetConditions) {
+                        if (std::ranges::find(listed, std::pair{signature, text}) != listed.end()) {
+                            continue;
+                        }
+                        listed.emplace_back(signature, text);
+                        conditions +=
+                            (conditions.empty() ? "" : "; ") + signature + " — when " + text;
+                    }
+                    const std::string argTypes = std::format(
+                        "<{}> ({})",
+                        strutil::join(
+                            withInputTypes, ", ", [](Type *t) { return t->toString(); }),
+                        strutil::join(
+                            normInputTypes, ", ", [](Type *t) { return t->toString(); }));
+                    diags_->of(SemanticDiag::WhenConditionUnmet)
+                        .atOrigin(gct->origin())
+                        .commit(ops->name(), argTypes, conditions);
+                    throw BuildAbortException();
+                }
                 // A bf16 or f16 operand (or an array of one) that no overload can take: the
                 // operation is one the element type does not have (`%` is an integer operation,
                 // and a function with a fixed set of parameter types has no overload for it).

@@ -1,0 +1,47 @@
+/**
+ * Which operator a call of a body-less declaration reaches is decided by the call's argument
+ * types and the declaration's `when`, never by the order the declarations are written in
+ * (design principles 4.4: "条件在实例化时求值；不成立时**这个重载不适用**，重载选择去试同名的
+ * 其他候选；没有一个适用时在调用处报错，列出每个候选没满足的条件"; the language author's ruling
+ * of 2026-10-24 on `impl-declaration-arms`: "`when` 是规则、函数重载与 `match` 守卫唯一的适用
+ * 条件", `docs/handover/reviews/questions-2026-10-23.md`).
+ *
+ * Two declarations of one name, one generic signature, conditions that exclude each other: the
+ * `i32` rule is the subtraction and the `int` rule is the addition, so the two results say which
+ * operator each call reached. This file writes the `i32` rule first, its twin
+ * `when_order_at_call_int_first.cml` writes the other one first; the two files hold the same
+ * program and must print the same two lines.
+ */
+module when_order_at_call_i32_first
+
+/// The element type of the first arm: `i32` alone.
+func is_arm_i32::<T>(): bool {
+    return match type T {
+        case i32 => true
+        case _ => false
+    }
+}
+
+/// The element type of the second arm: `int` alone.
+func is_arm_int::<T>(): bool {
+    return match type T {
+        case int => true
+        case _ => false
+    }
+}
+
+#op<':op/sub_i'>
+func arms_kernel::<T>(a: T, b: T): T when is_arm_i32::<T>()
+
+#op<':op/add_l'>
+func arms_kernel::<T>(a: T, b: T): T when is_arm_int::<T>()
+
+func main(): int sync {
+    let x: i32 = 19
+    let y: i32 = 23
+    // `i32`: only the first rule's condition holds, so the call is the subtraction (19 - 23).
+    'i32={}'->format<arms_kernel(x, y)>->println
+    // `int`: only the second rule's condition holds, so the call is the addition (19 + 23).
+    'int={}'->format<arms_kernel(19, 23)>->println
+    return 0
+}

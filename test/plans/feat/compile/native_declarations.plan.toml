@@ -488,6 +488,60 @@ expect_diagnostic_code = "0x030001E0"
 expect_output_contains = ["when_shape_overlap.cml:33", "Two declarations of 'arms_kernel' both apply to the type '(x: int) => int'", "(a: T, b: T) => T — when always::<T>()", "(a: T, b: T) => T — when is_callable::<T>()"]
 
 
+# ---- A call reaches the rule its own `when` admits, not the one written first ----
+#
+# Design principles 4.4: "条件在实例化时求值；不成立时**这个重载不适用**，重载选择去试同名的其他
+# 候选". A body-less declaration's `when` is therefore read where the call is resolved, exactly as a
+# function's is; before these two cases the operator group answered with the first rule its
+# signature accepted, so two same-named declarations with mutually exclusive conditions were
+# decided by the order they were written in and a call could reach an operator of another element
+# type (`:op/sub_i` on an `int` pair, which the gir draws as `value_type="int"` under an i32
+# operator, and which runs the i32 arithmetic on it). The two files hold the same program with the
+# two declarations written in the two possible orders: both must print the same two lines, and the
+# graph entry pins the operator each call reaches by name.
+
+[[tests]]
+name = "native.when_order_at_call.i32_first"
+desc = "Two declarations of `arms_kernel` with mutually exclusive conditions, the `i32` rule (the subtraction) written first: the `i32` call reaches `:op/sub_i` and the `int` call reaches `:op/add_l`, so the two lines are -4 and 42. A compiler that settled the pair by writing order routes the `int` call into the i32 operator and prints a wrapped number instead."
+kind = "behavior"
+case = "../../../cases/compile/native/when_order_at_call_i32_first.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "i32=-4\nint=42\n"
+
+[[tests]]
+name = "native.when_order_at_call.int_first"
+desc = "The same program with the two declarations in the other order prints the same two lines: which rule a call reaches is decided by its argument types and the rule's own `when`, never by the order the declarations are written in (design principles 4.4; the author's ruling of 2026-10-24 on `impl-declaration-arms`)."
+kind = "behavior"
+case = "../../../cases/compile/native/when_order_at_call_int_first.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "i32=-4\nint=42\n"
+
+[[tests]]
+name = "native.when_order_at_call.on_the_graph"
+desc = "The operator each call reaches, on the graph: the `i32` call is an OPER of `:op/sub_i` with `value_type=\"i32\"` and the `int` call an OPER of `:op/add_l` with `value_type=\"int\"`, in the file whose `int` declaration is written first. No node pairs `:op/sub_i` with an `int` value or `:op/add_l` with an `i32` value -- the type-and-operator mismatch that writing order used to produce."
+kind = "behavior"
+case = "../../../cases/compile/native/when_order_at_call_int_first.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+  const lines = input.normalized.stdout.split('\n')
+  const opers = (uri) => lines.filter((l) => l.includes(`label="${uri}"`) && l.includes('type="OPER"'))
+  const pairs = opers(':op/sub_i').concat(opers(':op/add_l'))
+  assert(pairs.some((l) => l.includes('label=":op/sub_i"') && l.includes('value_type="i32"')),
+    `no i32 subtraction: ${pairs.join(' | ')}`)
+  assert(pairs.some((l) => l.includes('label=":op/add_l"') && l.includes('value_type="int"')),
+    `no int addition: ${pairs.join(' | ')}`)
+  const mismatched = pairs.filter((l) =>
+    (l.includes('label=":op/sub_i"') && l.includes('value_type="int"')) ||
+    (l.includes('label=":op/add_l"') && l.includes('value_type="i32"')))
+  assert(mismatched.length === 0, `an operator of another element type was reached: ${mismatched.join(' | ')}`)
+}
+"""
+
+
 # ---- A declaration cannot be parametric ----
 
 # `from_bytes::<T>` and a per-leaf `ckpt_get::<L>` ask for one name whose result type the call

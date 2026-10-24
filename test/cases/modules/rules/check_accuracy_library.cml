@@ -17,7 +17,7 @@
  * is sample-dependent: `check` seeds each entry with `seed * 1000003 + index`, and draws with large
  * magnitudes make the rule fail (measured 2026-10-24: FAIL at seeds 3, 7 and 17 over 100 samples,
  * and at 1000 samples with seed 11, on samples such as `{inf, 2.955, -2, 906.555, -0, -1}` and
- * `{3.4e+38, 2, 377.894}`). Recorded in `docs/handover/questions/accuracy-check-sampling.md`: the
+ * `{3.4e+38, 2, 377.894}`). Recorded in `docs/handover/reviews/questions-2026-10-23.md` §accuracy-check-sampling`: the
  * rule is not this lane's, and neither is the measure.
  */
 module check_accuracy_library
