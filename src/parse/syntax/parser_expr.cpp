@@ -922,7 +922,23 @@ void ParserImpl::parseTypeArguments() {
         if (cur_ == TK::Identifier && peek(1) == TK::Assign) {
             while (!panic_) {
                 const size_t named = mark();
-                eat(TK::Identifier);
+                // The name is not optional: `namedTypeArgument` is `IDENTIFIER '=' typeExpr`, and
+                // the AST builder reads the name to reach the type parameter it fills
+                // (builder.cpp, visitAnnoExpr). `f::<A = int, = string>` wrote a second argument
+                // without one; `eat` said nothing and consumed nothing, the node was closed
+                // around `= string` alone, and the read of the name it does not have followed a
+                // null tree. The name is asked for where it should stand, as everywhere else a
+                // name is required (expectName), and the list stops there: what is left of the
+                // line belongs to the statement the list stands in and is recovered with it.
+                if (cur_ != TK::Identifier) {
+                    if (isKeyword(cur_)) {
+                        error(SyntaxError::Kind::KeywordAsName, {e(TK::Identifier)}, pos_);
+                    } else {
+                        unexpected({e(TK::Identifier)});
+                    }
+                    break;
+                }
+                bump();
                 eat(TK::Assign);
                 parseType();
                 close(named, NK::NamedTypeArgument);

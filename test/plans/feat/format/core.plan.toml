@@ -217,3 +217,17 @@ snapshot_compare = "text_exact"
 golden = "./golden/indices.cml"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
+
+[[tests]]
+name = "format.imports_first_declaration_snapshot"
+desc = "Formats a file whose first declaration is an import, written in an order other than the one camel-format prints (module `x` before module `y`). The gap in front of the first declaration is empty, and the backward comment lookup counted down from 0 in a `size_t` and read in front of the token stream: camel-format died here on every run, and `camel-parsecheck fuzz` ended with a signal (seeds 67 and 111)."
+kind = "snapshot"
+tool = "camel-format"
+case = "../../../cases/format/imports_first_declaration.cml"
+args = ["${case}"]
+expect_exit = 0
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "./golden/imports_first_declaration.cml"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
