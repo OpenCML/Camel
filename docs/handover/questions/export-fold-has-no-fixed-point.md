@@ -50,3 +50,22 @@
    - (a) 第 2 条的放宽规则覆盖这条路径（守卫留作安全网）；
    - (b) 这条递归确实没有不动点，导出侧应在花掉 257 s 之前用它自己的诊断拒绝（今天只有守卫在
      4096 个实例之后事后报错）。
+
+## 附：本页的"键按 `Type*` 比较"属于同一族（集成 lane 补，只记事实）
+
+本页第 1 条问的是"键为什么每次都不同"，h478 的读数把它落到**类型身份**上：`specializations.h`
+把键存成 `Type*` 并按指针比较/哈希/排序，而 `instanceParameterType` 对 `h: Tensor` 每次新建
+`ArrayType::openRank` ⇒ 1200 条键里 `f32[..]` 有 1200 个不同地址。同一棵树上的另外两条读数把这一族
+从两侧钉住了（细节各见其页）：
+
+- **产出侧**：`modules/tensor/ops/support.cpp` 的 `tensorOf` 每次调用 `Type::create(*facts.dtype)`
+  新建基本类型对象。h487 实测把这一处改成取 core 那一个对象后：`gpu/tiles` 仍 101/101，但同一轮全量闸门
+  **15 → 16 红**（新增 `specialize_growing_shape.fold_specialize.bounded`、`profile.alloc_step`、
+  `fusion_group.profile.none`），**同时 `export_fold` 与 `rules.tensor_saturation_keeps_values` 转绿**
+  ——它按"宁可少做"没落这一半（`docs/handover/questions/same-array-type-two-objects.md`）。
+- **消费侧**：`modules/tiles/src/compiler.cpp` 原来用 `dataType() == args[i].type` 比类型（按指针），
+  改成结构相等（`Type::equals`）后 `graph_facts.{nvm,fvm,jit}` 三条转绿、反向断言一格未动。
+- **规则侧**：`rules.tensor_saturation_keeps_values` 的 `RewriteInvalid` 也是同一族的
+  `sameTypePtr=false`（`docs/handover/questions/rewrite-invalid-is-a-type-address-comparison.md`）。
+
+一次"类型身份靠对象还是靠结构"的裁定同时决定这三处；三页各留自己的读数，谁也不先动语义。

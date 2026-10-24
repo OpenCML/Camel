@@ -104,3 +104,28 @@ what is meant.**
 
 Left `rules.tensor_saturation_keeps_values` red, changed no semantics, and left the plan's expectation
 (`[8.0, 16.0, 24.0]`, the values of the program as written) exactly as it was.
+
+## 6. The same family, with two more measured readings (integrated by the flip line, facts only)
+
+The root cause asked about here -- whether a type's identity is the object or the structure -- has been
+measured from two more sides on the same tree, and all three readings are the same family. The flip
+line records them together so the author can rule on the family at once:
+
+- **producer side** (`docs/handover/questions/same-array-type-two-objects.md`): `tensorOf` in
+  `modules/tensor/ops/support.cpp` builds a fresh base type object per call
+  (`Type::create(*facts.dtype)`). The tiles lane measured what changing that does: `gpu/tiles` stays
+  101/101, but the same full gate goes from 15 reds to 16 -- `specialize_growing_shape.fold_specialize.bounded`
+  (`stats.graphs` is 5, so the plan's `> 5` fails), `profile.alloc_step`, and
+  `fusion_group.profile.none` (which pins a report byte for byte) -- while `export_fold` and
+  `rules.tensor_saturation_keeps_values` turn green in the same run. It did not land that half.
+- **consumer side** (`modules/tiles/src/compiler.cpp`): the tiles reader compared types with
+  `dataType() == args[i].type`, i.e. by pointer; the lane changed it to structural equality
+  (`Type::equals`) and the three `graph_facts.*` reds went green with every reverse assertion
+  untouched (`f32[..]` vs `f32[2, 3]` still yields no facts, `specializations` still 2).
+- **specialization keys** (`docs/handover/questions/export-fold-has-no-fixed-point.md`): `export_fold`
+  never reaches a fixed point because the specialization table stores `Type*` and compares, hashes and
+  sorts by pointer, while `instanceParameterType` builds a new `ArrayType::openRank` per instance (1200
+  distinct `f32[..]` addresses in the first 1200 keys, one struct type).
+
+One ruling on "identity by object or by structure" therefore decides all three; each page keeps its own
+readings and none of the three changes semantics in the meantime.

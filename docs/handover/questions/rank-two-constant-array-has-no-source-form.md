@@ -48,3 +48,26 @@
 它的 5 条用例与 6 个 plan 段**钉的是"按声明成形"这个行为**，与本文件的实测读数方向相反：若维持今天的
 读数，那些用例与 plan 段**不要**补进树（补进来会让 `array_shape` 计划红）；若裁定按声明成形，则可以把
 `20e7a7713` 整条复活，不必重做。本文只记这个事实，不定语义。
+
+### 复活可行性的实测（h490，事实，仍不写裁定）
+
+1. 把 `20e7a7713` cherry-pick 到翻转线：21 个文件里 20 个自动合并，**唯一冲突**是
+   `src/runtime/draft_session.cpp` 的 `cloneStaticSlot`——而翻转线上已有同一缺陷的**更大**修法
+   （compact 分支 + `Array::create(..., array->shapeSpan())` + `numel()` 走元素），h469 那 12 行被完全
+   包含 ⇒ 取 HEAD。复活后整体 diff `+633/−32`。
+2. 三棵树同口径的红集合**两两逐字相同**：基线 `6770eda25` / 只复活代码 `daa56b6a7` / 代码加用例
+   `451e830fd`，都是本 lane 当时的那 10 条，**新增红 0**；`array_shape` 计划多 **7** 段 `[[tests]]`
+   （更正先前说的 6 段）且全 PASS。
+3. **今天没有任何用例钉住"平铺/嵌套字面量写进秩 ≥2 声明位"这个读数**——全文检索只有 h469 自己那 3 个
+   文件这么写。复活后 `err_literal_rank` 的 PASS 意味着 `let b: f32[2, 2] = [1.0, 2.0, 3.0, 4.0]` 从
+   "能编译、读作 4 个元素"变成**编译拒绝**（`DimensionMismatch`），`reshape_constant` 的 PASS 意味着
+   常量 `reshape` 折出的值是 `[2, 2]`/numel 4：这两件事今天**既不是红也不是绿**，是在空地上把读数落定。
+4. `statedExtents()` 的射程：唯一调用点在 `src/core/rtdata/conv.cpp` 第 141 行（定义在 :28），**按类型
+   判定**（任何"完整常量声明形状且乘积 == 元素数"的 `ArrayData` 都按该形状物化，`f32[4]` 也返回 `{4}`），
+   字面量只是来源之一；`f32[]`/`f32[n]`/`f32[2, ?]` 仍走旧路。字面量**位置**那一半在
+   `src/compile/gct/builder.cpp`（`statesARank`/`isConstantLiteral`/两个调用点/`isArrayLiteralData`/
+   `literalShapeOf`/`visitRankedInto`）与 `src/compile/gir/builder_control.cpp`（`arrayLiteralFitsShape`
+   换掉 3 处 `holdsStatedLength`）。
+5. 它给的代价结论（供作者判）：整体复活＝解一处冲突、fast 层红集合一字不动、它自己 7 条全绿，是**最低
+   代价选项**；但整体复活等于在**没有用例钉着的空地上**把该读数落定为"拒绝"。若作者认为该走"按声明
+   成形"，应只复活 `statedExtents()` 而重写 GCT/GIR 那三处拒绝与那 7 条用例。
