@@ -54,6 +54,7 @@ author's rulings.
 | + `var`-cell widening (h395) | `node scripts/test.js test/plans --tier fast --jobs 8` | 5973 | **332** | 11 | 300.8 s |
 | + unstated element type (h406) | `node scripts/test.js test/plans --tier fast --jobs 8` | 5973 | **292** | 11 | 363.1 s |
 | + rank-0 tensor facts (h410) | `smoke,test/plans -Tier fast -Jobs 8` (remote helper, same form) | 5973 | **290** | 11 | 262.4 s |
+| + integer-list arguments read the value's dtype (h419) | `smoke,test/plans -Tier fast -Jobs 8` (remote helper, same form) | 5973 | **285** | 11 | 215.7 s |
 
 The h410 row is the same pair again, one slice later and with no new case (`5973` on both sides):
 **2 reds green, 0 new red, 0 signals**, by set difference over `notes/h410-base-reds.txt` and
@@ -63,6 +64,108 @@ rather than carried over (`292` on both bases, so the pair is one measurement, a
 the same number the h406 row reports). Class bucket: **`—`** — this lane did not run the h406
 classifier over its own two reds, so it has no number of that kind to put in that column, and one
 written from a different classifier would not be comparable.
+
+## The integer-list arguments (h419): the value's own dtype, 5 greens
+
+**The slice, and why this one.** An `int[n]`-or-rank-1-integer-tensor argument (`take`, `take_grad`,
+`one_hot`) was refused when the argument's *declared* type stated no element type — a bare `Tensor`,
+which is exactly what `discrete_zero.cml` and `gather_discrete_index_zero.cml` pass, with a comment
+in the case saying so on purpose ("labels' gradient is exactly 0.0", "statically a Tensor; an
+integer tensor at run time"). The refusal contradicted the reading the same file already takes one
+function up: `isIntegerCode` (line 342) answers **yes** for an unstated dtype and leaves the refusal
+to the kernel, while `intListArg` (line 359) and `parseIntArray` (`interop.cpp:171`) answered **no**
+by reading only `elemTypeCode()`. One root cause, two readers of it, 5 reds in one family — the
+narrowest slice with a single cause that was still open, and it needs no new semantics: parse the
+list from the value's dtype when the type does not fix one, and keep refusing a type that does
+(`f32[3]` labels are still an error, which is why the negative half stays red as it should).
+
+**Red before, verbatim** (`ssh` host, same tree, `camel <case> std::nvm`):
+
+```
+error[RuntimeDiag::TensorDimensionMismatch]: Tensor shape mismatch in 'one_hot': expects an integer array.
+   --> test/cases/modules/autodiff/discrete_zero.cml:39:14
+error[RuntimeDiag::TensorDimensionMismatch]: Tensor shape mismatch in 'take': expects an integer array.
+   --> test/cases/modules/autodiff/gather_discrete_index_zero.cml:26:25
+```
+
+with `expected exit 0, got 1` and `expect_stdout_exact differs: first difference at offset 0` under
+it in `meta.json` for all five.
+
+**Green after**, and the printed values are the ones the case's own header promises:
+`discrete_zero one_hot=(-2.0,0.0,2.0) argmax=(3.0,0.0) mask=(4.0,0.0) where=(11.0,4.0)
+gather=(1.0,6.0,0.0) zero=1.0` and `gather_discrete_index_zero value=1.0 weights_grad=6.0
+index_grad=0.0`.
+
+**The layer.** Same command, same host, same window, over `notes/h419-base-reds.txt` and
+`notes/h419-after-reds.txt` (runner logs `notes/h419-base-layer.log`, `notes/h419-after-layer.log`):
+**290 → 285, 5 reds green, 0 new red, 0 signals**. Both sides are `5973` tests with `11` skips —
+the slice adds no case. The greens, by name:
+
+```
+modules.autodiff/discrete_zero.nvm
+modules.autodiff/discrete_zero.fvm
+modules.autodiff/discrete_zero.macro.nvm
+modules.autodiff/gather_discrete_index_zero.runtime.nvm
+modules.autodiff/gather_discrete_index_zero.macro.fvm
+```
+
+The base of the pair was **re-measured in this same window** from a worktree at the previous tip
+(`h419-baseline-verify` at `6c7ef440a`, `5973 / 5672 / 290 / 11`, 238.8 s): its 290 reds are
+**identical name for name** to `notes/h419-base-reds.txt` (0 either way), so the two columns are one
+measurement pair and the `290` is the same number the h410 row reports.
+
+**One new red appeared and was explained, not waved away.** The first after-run read `286` with one
+new red, `consistency.runner/runner.backend_matrix` (exit 1, stdout without `runner self-test ok`).
+It was **not** this change: that test's case is `test/tools/selftest/run.mjs`, which audits the tree
+against `test/plan-selection.json`, and five untracked probe cases this lane had left in
+`test/cases/` (`h419_probe_*.cml`) were reported as
+`plan-selection: 5 tracked file(s) match no rule and are not an allowed rule-less class:
+test/*.cml (test/cases/h419_probe_dbg.cml and 4 more)`, which is what turned `run.mjs` red. With the
+probes deleted the same test is green and the count is `285`; the whole-layer baseline worktree
+(`6c7ef440a`) has no probes and did not red on it either. The drafts are removed and no case is
+added, so `5973` holds on both sides.
+
+**Class bucket: `—`.** This lane ran the h406 classifier only over the whole base set for its own
+bucketing (`notes/h419-base-collect.py`), not over the two sides of this pair; a number from that
+or from another lane's classifier would not be comparable, so the column stays empty rather than
+borrowed. The classifier's shape on this lane's own pair, for whoever wants it next
+(`notes/h419-base-collect.py` and `notes/h419-after-collect.py`, both over their own snapshot):
+every bucket is unchanged except the one this slice emptied —
+`NONE 152 → 152`, `RuntimeError 39 → 39`, `ReturnTypeMismatch 14 → 14`,
+`VarParamInAsyncFunction 7 → 7`, `IndexOutOfRange 7 → 7`, `TranslationRefused 6 → 6`,
+`IgnoredSideEffect 6 → 6`, and `(void, float)` still 14 — so the five greens came out of the
+classifier's `NONE` bucket, which is what a fix that only widens an accepted argument kind looks
+like.
+
+**What this lane did not do.** It did not implement call-site instantiation (the question in
+`docs/handover/questions/bare-tensor-parameter-instantiation-measured.md` is untouched); it did not
+change the `f32[..]` semantics (in the case `bare-tensor-parameter-instantiation-measured.md`
+measured, the GIR still reads `f32[..]` 36 times, base and after); it did not touch a print-form
+golden; and it did not decide the two semantics below. It also did not add a case, so the layer's
+test count is unchanged.
+
+**The other face of the same unstated element type, measured but not taken.** The bare `Tensor` also
+reaches two places this slice left alone, because each needs a ruling rather than a reader:
+
+- `t[0]` on a bare `Tensor` infers `void` (`modules/tensor/ops/layout_ops.cpp`, `takeInfer` →
+  `tensorOf(input.dtype, …)` with no dtype), so `x[0] + 2.6` finds no `add` overload and
+  `t[0] > 0.5` finds no `gt`: `opt.generic/arms_laid_out_whole_tensor.cml:23`,
+  `trans/annotated/boundaries.cml:13` and the exemplars that copy them. 14 reds carry
+  `No matching function found for argument types: <> (void, float)`. The open question is what a
+  scalar taken out of a tensor whose element type the declaration does not fix *is* — see
+  `docs/handover/questions/unstated-element-type-scalar-and-print.md`.
+- The array printer's second path (`src/core/rtdata/print.cpp`, `printValueImpl`) prints every slot
+  of a declared-`Tensor` array as `null`: `arm_tail_gate` prints `[null, null]` where its golden
+  wants `tensor([      8.,       8.], dtype=float32)`, and `reshape_view_gc` prints 40 `null`s where
+  its golden wants `[      2.,       4.,       6.,       8.,      10.,      12.]` beside
+  `total 16380`. 85 reds carry `null` in their captured output, 79 of them with no diagnostic in
+  the first block. The value itself is intact — `to_bytes` of such a tensor is the 8 bytes of f32
+  zero and `shape` is `[2]` — so this is the print path losing the type, not the data. The rule is
+  already written down one file over (`src/core/rtdata/array.cpp:1244-1251`: "when the declaration
+  does not fix the element type, an element prints by the element type it holds itself"), so the
+  reader is missing rather than the ruling; but the goldens those reds sit behind are the tensor
+  print form and the wide-aligned array form, so no slice can score them green until the print-form
+  ruling lands — which is why this lane measured them and left them alone.
 
 The last column is this slice: the same command, the same host, the same window as the row above
 it. `5973` is `5972 + 1`: the slice adds one case, `shape_inference/var_argument_non_numeric.cml`,

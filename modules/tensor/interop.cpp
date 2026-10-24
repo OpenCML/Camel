@@ -172,19 +172,27 @@ std::vector<int64_t> parseIntArray(const Array *array, const type::Type *arrayTy
     if (!array || !arrayType || arrayType->code() != TypeCode::Array) {
         throw std::invalid_argument("Expected an integer array");
     }
-    auto *typed = static_cast<const type::ArrayType *>(arrayType);
-    if (typed->elemTypeCode() == TypeCode::Void && array->size() == 0) {
-        return {}; // `[]`
+    auto *typed       = static_cast<const type::ArrayType *>(arrayType);
+    TypeCode elemCode = typed->elemTypeCode();
+    if (elemCode == TypeCode::Void) {
+        if (array->size() == 0) {
+            return {}; // `[]`: no element to take a type from
+        }
+        // The type states no element type (`Tensor`, the numeric-unknown array: void means "a
+        // numeric scalar, which one is not fixed yet", design principles 5.4), so the type
+        // cannot say whether this is an integer list. The value can: read its own element type
+        // and refuse here when it is not integer, instead of refusing the unstated spelling.
+        elemCode = array->dtype();
     }
-    if (typed->elemTypeCode() != TypeCode::Int32 && typed->elemTypeCode() != TypeCode::Int64) {
+    if (elemCode != TypeCode::Int32 && elemCode != TypeCode::Int64) {
         throw std::invalid_argument("Expected an integer array");
     }
     std::vector<int64_t> values;
     values.reserve(array->size());
     for (size_t i = 0; i < array->size(); ++i) {
         values.push_back(
-            typed->elemTypeCode() == TypeCode::Int32 ? static_cast<int64_t>(array->get<Int32>(i))
-                                                     : array->get<Int64>(i));
+            elemCode == TypeCode::Int32 ? static_cast<int64_t>(array->get<Int32>(i))
+                                        : array->get<Int64>(i));
     }
     return values;
 }
