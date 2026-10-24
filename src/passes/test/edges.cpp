@@ -384,3 +384,63 @@ CommitConflictTestPass::apply(const camel::runtime::Program *program, std::ostre
     }
     return next;
 }
+
+const camel::runtime::Program *
+EdgesSyncGateTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
+    using namespace camel::runtime;
+    if (program == nullptr || program->root() == nullptr) {
+        return program;
+    }
+    const GraphId rootId = program->root()->id();
+    RuntimeGraphDraftSession session(context_, program);
+    GraphDraft &draft = session.edit(program->root());
+    // The chain's tail: a statement a `sync` block wrote. A pass stands in for the builder here, so
+    // it records the same fact the builder records (kGCNodeFlagSyncStatement): the seal check reads
+    // it back, and a sync edge may only join statements of the block.
+    const gc_node_ref_t tail = draft.addSyncNode();
+    draft.setNodeRuntimeFlags(tail, static_cast<uint8_t>(kGCNodeFlagSyncStatement));
+    // The value the GATE lets out, and the GATE itself. The GATE is the block's value, which the
+    // same flag covers: the chain's tail reaches the value through the GATE (5.3).
+    const gc_node_ref_t value = draft.materializeStaticValue(
+        camel::core::rtdata::toSlot<float>(2.0f),
+        camel::core::type::Type::Float32());
+    const gc_node_ref_t gate = draft.addGateNode(camel::core::type::Type::Float32());
+    draft.setNormInputs(gate, std::span<const gc_node_ref_t>(&value, 1));
+    draft.setNodeRuntimeFlags(gate, static_cast<uint8_t>(kGCNodeFlagSyncStatement));
+    // The wait is the chain's tail, written as a sync edge (docs/design/effects/edges.cn.md 5.3: a
+    // GATE has one data port and one sync predecessor, and no control input at all).
+    const bool wrote = draft.setSyncPredecessor(gate, tail);
+    os << "SYNCGATE wrote=" << (wrote ? 1 : 0) << " ctrl=" << draft.ctrlInputsOf(gate).size()
+       << "\n";
+    if (!wrote) {
+        return program;
+    }
+    try {
+        const Program *next = session.commit();
+        const GCGraph *root = next->graph(rootId);
+        os << "EDGES accepted\n";
+        // What the graph the commit made holds, counted over every node: the node refs a draft
+        // hands out are the graph's own only until it is encoded.
+        size_t syncEdges   = 0;
+        size_t gates       = 0;
+        size_t gatesWaited = 0;
+        size_t gatesCtrl   = 0;
+        for (auto it = root->nodes().begin(); it != root->nodes().end(); ++it) {
+            const auto preds = root->syncPredsOf(it.ref());
+            syncEdges += preds.size();
+            if (root->node(it.ref())->kind != GCNodeKind::Gate) {
+                continue;
+            }
+            ++gates;
+            gatesWaited += preds.empty() ? 0 : 1;
+            gatesCtrl += root->ctrlInputsOf(it.ref()).empty() ? 0 : 1;
+        }
+        os << "SYNCGATE frozen_sync_edges=" << syncEdges << " gates=" << gates
+           << " gates_waiting_on_the_chain=" << gatesWaited << " gates_with_ctrl=" << gatesCtrl
+           << "\n";
+        return next;
+    } catch (const std::exception &error) {
+        os << "EDGES refused: " << error.what() << "\n";
+        return program;
+    }
+}

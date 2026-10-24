@@ -94,6 +94,13 @@ verify_script = '''
 '''
 
 [[tests]]
+name = "gate_waits_on_the_sync_chain"
+desc = "docs/design/effects/edges.cn.md 5.3: a GATE is one data port reading a value and one sync predecessor, which is the chain's tail, and it has no control input at all. The commit accepts that shape and keeps the GATE instead of dissolving it into its input, because 5.3 lets a GATE be replaced by its input only once its sync predecessor is gone."
+case = "../../../cases/opt/generic/generic_passes.cml"
+args = ["${case}", "test::edges_sync_gate"]
+expect_stdout_contains = ["SYNCGATE wrote=1 ctrl=0", "EDGES accepted", "SYNCGATE frozen_sync_edges=1 gates=1 gates_waiting_on_the_chain=1 gates_with_ctrl=0"]
+
+[[tests]]
 name = "commit_conflict_is_detected"
 desc = "Three sessions on one program (design 4.3.1): after the first commits, the one that wrote the same graph conflicts and its checked commit is refused; the one that wrote another graph does not conflict."
 case = "../../../cases/opt/inline/consecutive_sync_calls.cml"
