@@ -873,6 +873,14 @@ bool Builder::valueNameExists(const std::string &written, const GCT::node_ptr_t 
         graphsAt(name).has_value() || decoratedGraphAt(name).has_value()) {
         return true;
     }
+    if (const ModuleUnit *unit = currentModuleUnit();
+        unit != nullptr && unit->values.contains(name)) {
+        // A value of the module's top level that has not been built yet: the name is the
+        // module's own and `buildTopLevelValueNamed` builds it on demand, wherever it is
+        // written (program.cpp, "the top level of a module does not depend on the order it is
+        // written"). A body read ahead of that build must see it.
+        return true;
+    }
     if (written.find("::") != std::string::npos) {
         // A qualified name: a variant of an enum or a name of an imported module. Their
         // resolution needs the type or the module, which the build of the selected case

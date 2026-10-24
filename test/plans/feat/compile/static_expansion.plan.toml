@@ -89,6 +89,22 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
+name = "match_type_unselected_case_locals"
+desc = "The names a `case` that is not selected binds are the arm's own: a `var`, a loop's state name, and a nested block all bind where the selected case would bind them, so walking the arm for names finds them (the arm's own body is not type-checked, only its names are resolved)."
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/match_type_case_locals.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === '3', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
 name = "fields_and_access"
 desc = "`static for (n, F) in fields T` expands a struct and an ordinary tuple in declaration order, `F` is usable as a type, an empty struct/tuple (including `fields ()`) expands zero times, nesting works, and `t.[\"0\"]` is `t.[0]`."
 kind = "behavior"

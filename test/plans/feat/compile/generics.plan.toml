@@ -377,7 +377,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "unused_body_unchecked"
-desc = "The body of a generic function is checked when it is instantiated: one that is never called is never checked."
+desc = "The body of a generic function is type-checked when it is instantiated: one that is never called is never instantiated, so a check that needs the type a type parameter stands for is not made for it."
 kind = "behavior"
 case = "../../../cases/compile/generics/unused_body.cml"
 args = ["${case}"]
@@ -388,6 +388,46 @@ verify_script = """
 const out = input.normalized.stdout.trim()
 const want = [
   "ok",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "decl_name_error"
+desc = "A name a generic function's body writes is resolved where the declaration is written: a misspelling is reported on the declaration's line and the module does not load, even though no instance is ever made (the function is called nowhere)."
+kind = "negative"
+case = "../../../cases/compile/generics/err_decl_name.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::UnresolvedReference"
+expect_diagnostic_line = 10
+expect_diagnostic_column = 16
+expect_output_contains = ["Unresolved reference: 'no_such_name'"]
+expect_output_not_contains = ["in the instance", "ok"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "dependent_names"
+desc = "A generic body whose names only the instantiation can resolve loads and runs: an operator on a type parameter, a field of a struct-typed parameter, a generic function calling one declared after it, a `with` parameter, an imported predicate in a generic `when`, a parameter destructured as a tuple, a loop's state name and its element, a generic function inside a generic function, and a name a later top-level `let` gives."
+kind = "behavior"
+case = "../../../cases/compile/generics/dependent_names.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "n",
+  "44",
+  "5",
+  "7",
+  "true",
+  "7",
+  "101",
 ].join('\n')
 assert(out === want, `unexpected output: ${out}`)
 }
