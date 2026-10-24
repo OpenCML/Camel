@@ -1,0 +1,31 @@
+/**
+ * A named argument binds to the position its name marks in a rule the C++ modules register, as it
+ * does with a declaration: `len`'s one parameter is `x` in the string, array, map and set rules
+ * alike, so `len(x: ...)` reaches every one of them and the argument's type decides which runs
+ * (stdlib-conventions, "the same meaning at a position shares its name"; the ruling is
+ * docs/handover/reviews/questions-2026-10-23.md, stdlib-overload-parameter-names, 选 1: "含义相同
+ * 的三处统一名字（`json.get` 的 `index` → `key`、`len` 的 `c` → `x`、`items` 的 `s` → `m`），具名
+ * 调用随之可用").
+ *
+ * Every named call is written beside the same call positionally: the two are one call and print
+ * the same numbers, so the name is a spelling of the position and nothing else.
+ *
+ * The names of a rule are the names the reference page declares for it, which is what
+ * `registry.overload_position_names_agree` reads back from `inspect --ops`.
+ */
+module param_stdlib_named_args
+
+import { trim } from str
+
+func main(): int sync {
+    let m = [("a", 1), ("b", 2)] as Map<string, int>
+    let s = [3, 1, 2] as Set<int>
+    // The name reaches the position in each rule, and the type of the argument picks the rule.
+    println(len(x: "abc"), len(x: [1, 2, 3]))
+    println(len(x: m), len(x: s))
+    // The same four calls, positionally.
+    println(len("abc"), len([1, 2, 3]), len(m), len(s))
+    // A single rule of a declaration module: its one parameter is `s`.
+    println("[" + trim(s: "  x  ") + "]", "[" + trim("  x  ") + "]")
+    return 0
+}

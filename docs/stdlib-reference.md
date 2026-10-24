@@ -28,6 +28,17 @@ How to read an entry:
   argument outside what the operator defines). An *error* is a value: the function returns
   `T!` and the program handles it with `!!`, `?->` or `match`. A result that may not exist is
   `T?`, handled with `??`. An entry without a failure line does not fail.
+- **Named arguments**: a call may give a parameter by name (`f(x: 1)`, `len(x: xs)`) when
+  the name gives that position the same name in every form it has; the type of the argument
+  then decides which form runs (`len`'s one parameter is `x` for a string, an array, a map
+  and a set, so one name reaches all four). Where the signature of a name cannot be settled
+  from a call written by name, no named argument binds yet: `items` and the `json` accessors
+  (`get`, `as_int`) report that the signature is not known where the call is written, and
+  whether such a name should take one is a question before the language author. `contains`
+  and `py_call` take none for a reason of their own: `contains` names its collection `xs` in
+  one form and `s` in the others, and its with-parameter means the value in two forms and the
+  substring in the third; the two forms of `py_call` differ in arity (a rest list against two
+  optional collections).
 - Write one call that has with-arguments per statement when several appear in one argument
   list: `f<a>(x), g<b>(y)` is read as comparisons.
 
@@ -693,11 +704,13 @@ isolated.
 #### `len`
 
 ```camel
-len: (c: Map<K, V>) => int
-len: (c: Set<T>) => int
+len: (x: Map<K, V>) => int
+len: (x: Set<T>) => int
 ```
 
-The number of entries of a map or of elements of a set.
+The number of entries of a map or of elements of a set. The collection is `x`, the name the
+string and array declarations above give their one parameter: the position means the value
+whose length is asked for, whatever its type.
 
 - Pure.
 - Example: `len([('a', 1), ('b', 2)] as Map<string, int>)` gives `2`
@@ -795,10 +808,12 @@ The entries of a map as (key, value) tuples, in ascending order of the keys.
 #### `items`
 
 ```camel
-items: (s: Set<T>) => T[]
+items: (m: Set<T>) => T[]
 ```
 
-The elements of a set as an array, in ascending order.
+The elements of a set as an array, in ascending order. The collection is `m`, the name the
+map declaration above gives its one parameter: the position means the collection whose items
+are listed.
 
 - Pure.
 - Example: `items([3, 1, 2] as Set<int>)` gives `[1, 2, 3]`
@@ -3917,14 +3932,18 @@ the nullable layer, and the error of a document that had failed is passed on unc
 #### `get`
 
 ```camel
-get: <index: int> (j: Json) => Json?
-get: <index: int> (j: Json?) => Json?
-get: <index: int> (j: Json!) => Json!?
-get: <index: int> (j: Json!?) => Json!?
+get: <key: int> (j: Json) => Json?
+get: <key: int> (j: Json?) => Json?
+get: <key: int> (j: Json!) => Json!?
+get: <key: int> (j: Json!?) => Json!?
 ```
 
 The element index of an array; null when j is not an array, the index is out of range, or j
-is null itself. A `Json!` gives a `Json!?`, as get<key> does.
+is null itself. The with-parameter is `key`, the name the member-key declarations above use:
+the position means which member of the Json to take, and the argument's type says whether it
+is written as a string or as an integer, so `get<key: 'a'>` and `get<key: 0>` name the same
+position of every declaration of `get`. A `Json!` gives a `Json!?`, as the member-key form
+does.
 
 - Pure.
 - Example: `j->get<1>->as_int ?? 0` gives `6, for j of '[5, 6]'`
