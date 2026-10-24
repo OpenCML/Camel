@@ -67,7 +67,8 @@ void pushText(std::vector<PrintItem> &stack, std::string_view text) {
 /// Pushes the parts of one dimension of an array value: one bracket level per dimension, and the
 /// elements of the last dimension as slots that print by `elemType`. `base` is the flat index the
 /// dimension starts at. The items go on the stack in reverse, because the work list pops from the
-/// back (the opening bracket is written by the caller before the list is walked).
+/// back: the closing bracket first, the elements (themselves in reverse), and the opening bracket
+/// last, so every level -- the outermost one included -- writes its own `[` before its elements.
 void pushArray(
     const Array *array, const Type *elemType, size_t dim, uint64_t base,
     std::vector<PrintItem> &stack) {
@@ -91,6 +92,7 @@ void pushArray(
             pushText(stack, ", ");
         }
     }
+    pushText(stack, "[");
 }
 
 /// Whether the text of a value of `type` is made of other values. These are the types whose
@@ -252,9 +254,9 @@ void printValueImpl(std::ostream &os, slot_t data, Type *type, size_t arrayLimit
                 continue;
             }
             // One bracket level per dimension of the value, the elements pushed with the element
-            // type and the opening bracket written last, because the work list pops in reverse.
+            // type and every level's opening bracket pushed last, because the work list pops in
+            // reverse.
             pushArray(array, elemType, 0, 0, stack);
-            os << "[";
             continue;
         }
         case TypeCode::Tuple: {
