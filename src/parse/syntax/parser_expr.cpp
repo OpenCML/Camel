@@ -1350,7 +1350,13 @@ void ParserImpl::parseTypeCasePattern() {
     close(m, NK::TypeCasePattern);
 }
 
-/// matchCase : 'case' pattern ('|' pattern)* '=>' blockExpr
+/// matchCase : 'case' pattern ('|' pattern)* whenClause? '=>' blockExpr
+/// The optional `when` is the guard of the case (language reference 6.8.2, review
+/// `docs/handover/reviews/questions-2026-10-23.md` 「when-placement-and-match-guards」): the case
+/// is taken when its pattern matches *and* the condition holds. The condition is written in the
+/// one position a condition is written in (`when` before the body it guards, the same clause a
+/// declaration carries), so a `when` after the body is named rather than left as a token that
+/// did not fit (`SyntaxDiag::WhenAfterBody`).
 void ParserImpl::parseMatchCase() {
     const size_t m = mark();
     bump();
@@ -1359,8 +1365,19 @@ void ParserImpl::parseMatchCase() {
         bump();
         parsePattern();
     }
+    if (!panic_ && atWord(0, "when")) {
+        parseWhenClause();
+    }
     if (!panic_ && expect(TK::FatArrow)) {
         parseBlockExpr();
+    }
+    // `case p => e when c`: the guard of a case belongs before the body, like a declaration's
+    // condition. The trailing form is not read as a guard and is not reported as a token that
+    // did not fit: the program is told where the guard belongs.
+    if (!panic_ && cur_ == TK::Identifier && tree_.tokens_.text(pos_) == "when") {
+        error(SyntaxError::Kind::WhenAfterBody, {}, pos_);
+        bump(); // `when`: consumed, so the parse goes on after the guard
+        parseExpr();
     }
     close(m, NK::MatchCase);
 }
@@ -1379,7 +1396,11 @@ void ParserImpl::parsePattern() {
             parseEnumTuplePattern();
         } else if (cur_ == TK::LBrace) {
             parseEnumStructPattern();
-        } else if (cur_ == TK::Identifier) {
+        } else if (cur_ == TK::Identifier && !atWord(0, "when")) {
+            // The only two-word pattern is `error e`. `when` is not a keyword of the lexer but
+            // the guard of a `match` case (and the condition of a declaration), and it is
+            // written after the pattern: reading it as the second word here would swallow the
+            // guard, so `case error e when c` keeps its condition.
             parseIdentDef();
         }
         break;

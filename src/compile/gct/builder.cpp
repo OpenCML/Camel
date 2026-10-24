@@ -3387,6 +3387,19 @@ node_ptr_t Builder::visitMatchExpr(const AST::node_ptr_t &ast) {
             aCaseNode->load()->origin(),
             camel::source::OriginKind::GctNode,
             "gct.match.case");
+
+        // The guard of the case, when it has one. `case p when c => ...` is taken only when the
+        // pattern matches *and* `c` holds, so the graph builder evaluates the guard in the arm
+        // this case becomes and sends the value on to the cases written after it when it does
+        // not hold (review 「when-placement-and-match-guards」). The guard is kept beside the
+        // CASE rather than among its children: the arm's body is the last child every reader of
+        // that node takes, and the guard is read in the arm's scope, where the names the
+        // pattern binds are in force.
+        if (aCaseNode->size() > 2) {
+            enterArmOf(ast, valueUnused);
+            tree_->setCaseGuard(gCaseNode, visitData(aCaseNode->at(2)));
+            gCaseNode->setGuardedCase();
+        }
         mergedInputs.push_back(nodeOrigin(gCaseNode));
         parts.push_back(semanticPart(
             camel::source::SemanticRole::BranchTarget,

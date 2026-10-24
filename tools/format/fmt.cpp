@@ -1185,8 +1185,15 @@ matchCase
     ;
 */
 any Formatter::visitMatchCase(cst::MatchCase context) {
-    return "case " + formatList(vec(context->all<cst::Pattern>()), context, " | ", " |") + " => " +
-           any_cast<string>(visitBlockExpr(context->lastChild().node()));
+    // `case p when c => body`: the guard stands between the patterns and the arm, as it does
+    // in the source the parser reads (node_kinds.def). Leaving it out changes the AST the text
+    // parses to, so it is written where it stood.
+    string result =
+        "case " + formatList(vec(context->all<cst::Pattern>()), context, " | ", " |");
+    if (const auto guard = context->get<cst::WhenClause>()) {
+        result += " " + any_cast<string>(visitWhenClause(guard));
+    }
+    return result + " => " + any_cast<string>(visitBlockExpr(context->lastChild().node()));
 }
 
 /*

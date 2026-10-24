@@ -243,6 +243,13 @@ class Tree {
     void setWhen(const Node *func, WhenClause clause);
     const WhenClause *whenOf(const Node *func) const;
 
+    /// The guard of a `match` case (`case p when c => ...`), for the case that has one. The
+    /// guard is not a child of the CASE: the graph builder evaluates it in the arm the case
+    /// becomes, after the names the pattern binds are taken out, and it decides whether that arm
+    /// is taken at all (review 「when-placement-and-match-guards」). Null when the case has none.
+    void setCaseGuard(const Node *caseNode, node_ptr_t guard);
+    node_ptr_t caseGuardOf(const Node *caseNode) const;
+
     /// The type parameters a declaration put at its head (`func f::<T, U>`), in order. They
     /// make the declaration generic even when its signature writes none of them: a predicate
     /// such as `func is_plain::<T>(): bool { match type T { ... } }` is instantiated by its
@@ -340,6 +347,7 @@ class Tree {
     std::unordered_map<const Node *, std::vector<UnwrittenParam>> unwrittenParams_;
     std::unordered_map<const Node *, std::vector<TupleParamBinding>> tupleParams_;
     std::unordered_map<const Node *, WhenClause> whenClauses_;
+    std::unordered_map<const Node *, node_ptr_t> caseGuards_;
     std::unordered_map<const Node *, std::vector<std::string>> headTypeParams_;
     std::unordered_map<const Node *, ParameterDefaults> parameterDefaults_;
     std::unordered_map<const Node *, std::vector<std::optional<std::string>>> argumentNames_;

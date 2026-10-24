@@ -1,0 +1,25 @@
+/**
+ * A guarded case names no variant as covered: the guard may refuse the value, and the cases
+ * written after it are then what take it. An enum match that names every variant but puts a
+ * guard on one of them is therefore still missing that variant, and the report lists it.
+ *
+ * Before the guard was part of a case this file was a syntax error, so the report is new; the
+ * point it pins is that the variant guarded is the variant reported.
+ */
+module match_guard_enum_not_exhaustive
+
+type E = enum {
+    A,
+    B,
+}
+
+func f(e: E): int {
+    return match e {
+        case E::A when false => 1
+        case E::B => 2
+    }
+}
+
+func main(): int sync {
+    return f(E::A)
+}

@@ -11,6 +11,7 @@
 
 #include "camel/compile/gir/static_function.h"
 #include "camel/core/data/composite/tuple.h"
+#include "camel/core/data/primary.h"
 #include "camel/core/data/ref.h"
 #include "camel/core/numeric_convert.h"
 #include "camel/core/operator_names.h"
@@ -1367,7 +1368,10 @@ Builder::visitTaggedMatch(const GCT::node_ptr_t &gct, node_handle_t scrutinee, T
         throw BuildAbortException();
     };
     // DESIGN-QUESTION(nullable-error) Q4: exactly the tagged case and one other.
-    GCT::node_ptr_t taggedCase = nullptr, restCase = nullptr;
+    // A case with a guard is taken only where its guard holds, so it is not the case that
+    // opens the value: each side needs one case without a guard, and the cases written before
+    // it may carry guards (review 「when-placement-and-match-guards」).
+    std::vector<GCT::node_ptr_t> taggedSide, restSide;
     for (size_t i = 1; i < gct->size(); ++i) {
         const auto &caseNode = gct->at(i);
         const auto caseType  = caseNode->caseType();
@@ -1380,21 +1384,42 @@ Builder::visitTaggedMatch(const GCT::node_ptr_t &gct, node_handle_t scrutinee, T
                     isNull ? "'case null' needs a value that may be null"
                            : "'case error' needs a value that may have failed");
             }
-            if (taggedCase != nullptr) {
-                malformed(
-                    std::string("it has more than one '") + (isNull ? "case null" : "case error") +
-                    "'");
-            }
-            taggedCase = caseNode;
+            taggedSide.push_back(caseNode);
         } else if (caseType == CaseType::Bind || caseType == CaseType::Else) {
-            if (restCase != nullptr) {
-                malformed("it has more than one case for the value");
-            }
-            restCase = caseNode;
+            restSide.push_back(caseNode);
         } else {
             malformed("a literal case cannot be compared with a value that is not opened yet");
         }
     }
+    const bool anyGuard = hasGuardedCase(gct, 1);
+    if (!anyGuard) {
+        // Without a guard the cases of a side are one and the same case: what the old form
+        // says, and what its reports name.
+        if (taggedSide.size() > 1) {
+            malformed(std::string("it has more than one '") +
+                      (type->isNullable() ? "case null" : "case error") + "'");
+        }
+        if (restSide.size() > 1) {
+            malformed("it has more than one case for the value");
+        }
+    }
+    const auto openingCase = [&](const std::vector<GCT::node_ptr_t> &side) -> GCT::node_ptr_t {
+        // The case that opens the value of its side: the one without a guard. Every case
+        // written after it for the same side can never be taken.
+        GCT::node_ptr_t opening = nullptr;
+        for (const GCT::node_ptr_t &caseNode : side) {
+            const bool guarded = tree_->caseGuardOf(caseNode) != nullptr;
+            if (opening != nullptr && !guarded) {
+                malformed("a case of one side follows the case that takes that side");
+            }
+            if (!guarded && opening == nullptr) {
+                opening = caseNode;
+            }
+        }
+        return opening;
+    };
+    const GCT::node_ptr_t taggedCase = openingCase(taggedSide);
+    const GCT::node_ptr_t restCase   = openingCase(restSide);
     if (taggedCase == nullptr) {
         malformed(type->isNullable() ? "'case null' is missing" : "'case error e' is missing");
     }
@@ -1403,10 +1428,60 @@ Builder::visitTaggedMatch(const GCT::node_ptr_t &gct, node_handle_t scrutinee, T
     }
 
     const std::string name = bindTemporary(scrutinee);
-    node_handle_t tagNode  = applyTagOperator(
-        type->isNullable() ? camel::core::oper::TagIsNull : camel::core::oper::TagIsError,
-        name,
-        gct);
+    const auto tagOf       = [&](const GCT::node_ptr_t &origin) {
+        return applyTagOperator(
+            type->isNullable() ? camel::core::oper::TagIsNull : camel::core::oper::TagIsError,
+            name,
+            origin);
+    };
+    if (anyGuard) {
+        // The cases in written order, as one decision list: each tests the side it takes, and
+        // the cases written after it are the `else` of its step, so a guard that does not hold
+        // leaves the value to them.
+        std::vector<CaseStep> steps;
+        for (size_t i = 1; i < gct->size(); ++i) {
+            const GCT::node_ptr_t &caseNode = gct->at(i);
+            const auto caseType             = caseNode->caseType();
+            const bool isNull               = caseType == CaseType::Value &&
+                               caseNode->at(0)->type() == GCT::NodeKind::DATA &&
+                               caseNode->at(0)->data()->type()->code() == TypeCode::Void;
+            const bool onTagged = isNull || caseType == CaseType::Error;
+            CaseStep caseStep;
+            caseStep.guard = tree_->caseGuardOf(caseNode);
+            caseStep.exec  = caseNode->at(caseNode->size() - 1);
+            if (caseStep.guard != nullptr || i + 1 < gct->size()) {
+                // The last case is the one the list ends at, and it needs no test: nothing
+                // written after it can meet the value. Every other case says which side it
+                // takes, so that the value a guard of a case before it refused reaches it.
+                node_handle_t tag   = tagOf(caseNode);
+                caseStep.condition = onTagged
+                                          ? tag
+                                          : negateCondition(tag, caseNode);
+            }
+            caseStep.bind = [&, caseNode, onTagged, isNull, caseType] {
+                if (onTagged) {
+                    if (type->isFallible()) {
+                        insertNode(
+                            caseNode->binding(),
+                            applyTagOperator(
+                                camel::core::oper::TagErrorInfo, name, caseNode));
+                    }
+                } else if (caseType == CaseType::Bind) {
+                    insertNode(
+                        caseNode->binding(),
+                        applyTagOperator(
+                            type->isNullable() ? camel::core::oper::TagNullValue
+                                               : camel::core::oper::TagErrorValue,
+                            name,
+                            caseNode));
+                }
+            };
+            steps.push_back(std::move(caseStep));
+        }
+        return buildCaseChain(steps, gct);
+    }
+
+    node_handle_t tagNode = tagOf(gct);
     const GCT::node_ptr_t taggedExec = taggedCase->at(taggedCase->size() - 1);
     const GCT::node_ptr_t restExec   = restCase->at(0);
     std::vector<arm_ptr_t> arms(2);
@@ -1856,17 +1931,29 @@ node_handle_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
 
 void Builder::requireMatchDefault(const GCT::node_ptr_t &gct, node_handle_t scrutinee) {
     using CaseType    = GCT::CaseType;
-    bool hasValueCase = false, hasTrue = false, hasFalse = false;
+    bool hasTrue = false, hasFalse = false, anyCase = false;
     for (size_t i = 1; i < gct->size(); ++i) {
         const auto &caseNode = gct->at(i);
         const auto caseType  = caseNode->caseType();
         if (caseType == CaseType::Else) {
-            return;
+            if (!caseNode->guardedCase()) {
+                return; // an unguarded `case _` is the default of the match
+            }
+            // `case _ when c`: the branch is entered only when `c` holds, so it is not a
+            // default. The cases written after it are still reached (the guarded wildcard does
+            // not end the match), and the match still needs one.
+            continue;
         }
         if (caseType != CaseType::Value) {
             continue;
         }
-        hasValueCase = true;
+        anyCase = true;
+        if (caseNode->guardedCase()) {
+            // A guarded case covers nothing on its own (review 「when-placement-and-match-
+            // guards」, and Rust the same): the value a false guard refuses is matched by the
+            // cases written after it, so it counts for neither `case _` nor a bool's values.
+            continue;
+        }
         if (caseNode->at(0)->type() == GCT::NodeKind::DATA) {
             const auto literal = std::dynamic_pointer_cast<BoolData>(caseNode->at(0)->data());
             if (literal) {
@@ -1874,7 +1961,7 @@ void Builder::requireMatchDefault(const GCT::node_ptr_t &gct, node_handle_t scru
             }
         }
     }
-    if (!hasValueCase) {
+    if (!anyCase) {
         return; // an `if`
     }
     Type *type = valueTypeOf(nodeTypeOf(scrutinee));
@@ -1888,9 +1975,170 @@ void Builder::requireMatchDefault(const GCT::node_ptr_t &gct, node_handle_t scru
     throw BuildAbortException();
 }
 
+bool Builder::hasGuardedCase(const GCT::node_ptr_t &gct, size_t first) {
+    for (size_t i = first; i < gct->size(); ++i) {
+        if (tree_->caseGuardOf(gct->at(i)) != nullptr) {
+            return true;
+        }
+    }
+    return false;
+}
+
+node_handle_t Builder::negateCondition(node_handle_t value, const GCT::node_ptr_t &origin) {
+    // `!b` is the branch `if b then false else true`: `not` over a bool, with no new node kind.
+    const auto constant = [&](bool each) {
+        node_handle_t node = currGraph_->addStaticDataNode(
+            tt::as_shared<Data>(std::make_shared<PrimaryData<bool>>(each)));
+        registerNodeOrigin(context_, node, origin, "gir.data");
+        return node;
+    };
+    std::vector<arm_ptr_t> two(2);
+    two[0] = buildArm(origin, [&] { return constant(false); });
+    two[1] = buildArm(origin, [&] { return constant(true); });
+    return buildBranch(origin, value, &two);
+}
+
+node_handle_t
+Builder::buildCaseChain(std::vector<CaseStep> &steps, const GCT::node_ptr_t &origin) {
+    node_handle_t always = currGraph_->addStaticDataNode(
+        tt::as_shared<Data>(std::make_shared<PrimaryData<bool>>(true)));
+    registerNodeOrigin(context_, always, origin, "gir.data");
+    const auto boolConstant = [&](bool value) {
+        node_handle_t node = currGraph_->addStaticDataNode(
+            tt::as_shared<Data>(std::make_shared<PrimaryData<bool>>(value)));
+        registerNodeOrigin(context_, node, origin, "gir.data");
+        return node;
+    };
+    // The condition of a case: the test of its pattern and, when it has a guard, that guard as
+    // well. The guard is read in the arm the pattern's test enters, so it sees the names the
+    // pattern binds and is not evaluated at all for a value the pattern does not match
+    // (design principles 4.2: `a && b` is `if a then b else false`).
+    const auto conditionOf = [&](CaseStep &step) {
+        const auto guardValue = [&] {
+            node_handle_t guard = valueNodeOf(visitInPosition(step.guard, Type::Bool()));
+            Type *guardType     = valueTypeOf(nodeTypeOf(guard));
+            if (guardType == nullptr || guardType->code() != TypeCode::Bool) {
+                diags_->of(SemanticDiag::ConditionNotBool)
+                    .atOrigin(step.guard->origin())
+                    .commit(guardType == nullptr ? "?" : guardType->toString());
+                throw BuildAbortException();
+            }
+            return guard;
+        };
+        if (step.condition == nullptr) {
+            // `case _ when c`: the case tests nothing itself, so the guard is its whole
+            // condition. The names the pattern binds are taken out all the same.
+            std::vector<arm_ptr_t> one(1);
+            one[0] = buildArm(step.exec, [&] { step.bind(); return guardValue(); });
+            return buildBranch(origin, always, &one);
+        }
+        std::vector<arm_ptr_t> held(2);
+        held[0] = buildArm(step.exec, [&] { step.bind(); return guardValue(); });
+        held[1] = buildArm(step.exec, [&] { return boolConstant(false); });
+        return buildBranch(origin, step.condition, &held);
+    };
+
+    // `step(i)` is the value of the list from case i on. The cases after a case are the `else`
+    // of its own step, and are built there: a guard that does not hold hands the value to them,
+    // and they are reached no other way.
+    std::function<node_handle_t(size_t)> step = [&](size_t i) -> node_handle_t {
+        CaseStep &caseStep        = steps[i];
+        node_handle_t condition   = caseStep.condition;
+        if (caseStep.guard != nullptr) {
+            condition = conditionOf(caseStep);
+        }
+        if (condition == nullptr) {
+            // The case that ends the list: an unguarded `case _` (the checks of the form
+            // refused a `match` that can reach a value none of its cases takes). Its arm is the
+            // only one, and the runtime takes it: the branch has no case value.
+            std::vector<arm_ptr_t> one(1);
+            one[0] =
+                buildArm(caseStep.exec, [&] { caseStep.bind(); return visitBodyNode(caseStep.exec); });
+            return buildBranch(origin, always, &one);
+        }
+        std::vector<arm_ptr_t> two(2);
+        two[0] = buildArm(caseStep.exec, [&] {
+            caseStep.bind();
+            return visitBodyNode(caseStep.exec);
+        });
+        two[1] = buildArm(caseStep.exec, [&] {
+            if (i + 1 < steps.size()) {
+                return step(i + 1);
+            }
+            // Nothing is written after this case: no value reaches here (the checks of the form
+            // refused a `match` that can fall off its end), but the arm the test does not take
+            // is still needed -- the branch offers the join one value of the arms' type. It is
+            // the body of this case's own arm, as the arm an exhaustive `match` over an enum
+            // adds for the value it cannot meet.
+            caseStep.bind();
+            return visitBodyNode(caseStep.exec);
+        });
+        return buildBranch(origin, condition, &two);
+    };
+    return step(0);
+}
+
+node_handle_t Builder::buildGuardedMatch(const GCT::node_ptr_t &gct, node_handle_t condNode) {
+    // The value is read once, into a name every case is compared with: a case value is a
+    // literal, and the comparison is the one `==` of that type makes, so `case 3` against an
+    // `f32` compares it with 3.0 (design principles 5.1) exactly as the branch that dispatches
+    // by case value does, and a case value of another type is the same report that branch gives.
+    const std::string name = bindTemporary(condNode);
+    Type *subjectType = valueTypeOf(nodeTypeOf(condNode));
+    std::vector<CaseStep> steps;
+    for (size_t i = 1; i < gct->size(); ++i) {
+        const GCT::node_ptr_t &caseNode = gct->at(i);
+        CaseStep caseStep;
+        caseStep.guard = tree_->caseGuardOf(caseNode);
+        caseStep.bind  = [] {};
+        switch (caseNode->caseType()) {
+        case GCT::CaseType::Value: {
+            // The case value as its own node: the CASE keeps the one it was built with, and a
+            // node has one parent.
+            node_handle_t valueNode  = valueNodeOf(visit(caseNode->at(0)));
+            Type *caseType           = valueTypeOf(nodeTypeOf(valueNode));
+            GCT::node_ptr_t operand  = caseNode->at(0);
+            bool converted           = false;
+            if (const std::optional<literal::Value> pattern = literalValueOfExpr(caseNode->at(0));
+                pattern.has_value() && subjectType != nullptr && subjectType->isPrimitive() &&
+                !subjectType->assignableFrom(caseType) && literal::kindEnters(*pattern, subjectType)) {
+                if (const auto data = pattern->toData(subjectType); data.has_value()) {
+                    operand   = tree_->makeData(*data);
+                    converted = true;
+                }
+            }
+            if (!converted &&
+                (subjectType == nullptr || !subjectType->assignableFrom(caseType))) {
+                diags_->of(SemanticDiag::MatchCaseTypeMismatch)
+                    .atOrigin(caseNode->at(0)->origin())
+                    .commit(subjectType == nullptr ? std::string("?") : subjectType->toString(),
+                            caseType->toString());
+                throw BuildAbortException();
+            }
+            caseStep.condition =
+                applyInternalOperator("__eq__", nullptr, {tree_->makeDRef(name), operand}, caseNode);
+            caseStep.exec = caseNode->at(1);
+            break;
+        }
+        case GCT::CaseType::Else:
+            // `case _`, guarded or not: it tests nothing itself. A guarded one leaves the value
+            // to the cases written after it when its guard does not hold.
+            caseStep.exec = caseNode->at(0);
+            break;
+        default:
+            ASSERT(false, "A guarded match case is a value or `_`.");
+        }
+        steps.push_back(std::move(caseStep));
+    }
+    return buildCaseChain(steps, gct);
+}
+
 node_handle_t Builder::buildBranch(
     const GCT::node_ptr_t &gct, node_handle_t condNode, const std::vector<arm_ptr_t> *arms,
     bool valueless) {
+    if (arms == nullptr && hasGuardedCase(gct, 1)) {
+        return buildGuardedMatch(gct, condNode);
+    }
     node_handle_t joinNode = currGraph_->addJoinNode(nullptr, nullptr, 0);
     node_handle_t brchNode = currGraph_->addBrchNode(Type::Int64(), joinNode, 0);
     registerNodeOrigin(context_, brchNode, gct, "gir.brch");

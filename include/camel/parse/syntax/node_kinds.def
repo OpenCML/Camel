@@ -75,7 +75,7 @@ CAMEL_NODE(NamedTypeArgument, Other)   // IDENTIFIER '=' typeExpr
 CAMEL_NODE(Pattern, Other)             // identRef (identDef | enumTuplePattern | enumStructPattern)? | literal | '(' (dataList | identList)? ','? ')' | '{' (pairedValues | identList)? ','? '}' | '_'
 CAMEL_NODE(EnumTuplePattern, Other)    // '(' (pattern (',' pattern)*)? ','? ')', after a variant path
 CAMEL_NODE(EnumStructPattern, Other)   // '{' (IDENTIFIER (':' pattern)? (',' ...)*)? ','? '}', after a variant path
-CAMEL_NODE(MatchCase, Other)           // 'case' pattern ('|' pattern)* '=>' blockExpr
+CAMEL_NODE(MatchCase, Other)           // 'case' pattern ('|' pattern)* whenClause? '=>' blockExpr
 CAMEL_NODE(TypeCasePattern, Other)     // 'struct' | 'tuple' | '#' 'leaf' | '_'
 CAMEL_NODE(TypeCase, Other)            // 'case' typeCasePattern ('|' typeCasePattern)* '=>' blockExpr
 CAMEL_NODE(CatchClause, Other)         // 'catch' identDef ':' typeExpr stmtBlock

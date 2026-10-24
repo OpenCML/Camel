@@ -287,3 +287,17 @@ snapshot_compare = "text_exact"
 golden = "./golden/line_comment_after_let.cml"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
+
+[[tests]]
+name = "format.match_guard_snapshot"
+desc = "Formats the guard of a match case (`case p when c => body`): the guard stands between the patterns and the arm, and it is kept where it was written rather than being read as a second pattern."
+kind = "snapshot"
+tool = "camel-format"
+case = "../../../cases/format/match_guard_messy.cml"
+args = ["${case}"]
+expect_exit = 0
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "./golden/match_guard.cml"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000

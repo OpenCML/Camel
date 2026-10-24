@@ -1,0 +1,19 @@
+/**
+ * A guard is part of the case it is written on (design principles 3.4): the index it reads is
+ * checked like any other read, and a guard that faults reports where the guard is written, not
+ * at the arm it belongs to. The match itself is well formed -- the second case is the default
+ * -- so what is reported is the fault and nothing about the match.
+ */
+module match_guard_faulting_guard
+
+func f(n: int): int {
+    let xs = [1, 2, 3]
+    return match n {
+        case 1 when xs[5] > 0 => 1
+        case _ => 0
+    }
+}
+
+func main(): int sync {
+    return f(1)
+}

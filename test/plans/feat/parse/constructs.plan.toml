@@ -120,3 +120,12 @@ case = "../../../cases/parse/constructs/fstring.cml"
 args = ["${case}"]
 expect_exit = 0
 expect_stdout_contains = ["hello, Camel!", "pi = 3.50", "nested: <inner 42>", "braces { } are literal"]
+
+[[tests]]
+name = "constructs.match_guard"
+desc = "The guard of a match case (`case p when c => body`) in every pattern form: a literal and several alternatives, the wildcard, an enum's tuple and struct variants (the guard reads the names they bind), and the `T?` / `T!` patterns. The guard is a child of the case, after the arm, and the value a guard refuses goes to the cases written after it."
+kind = "behavior"
+case = "../../../cases/parse/constructs/match_guard.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["30", "20", "6.0", "0.0", "4.0", "-0.5", "-1.0", "2", "3", "4", "7"]

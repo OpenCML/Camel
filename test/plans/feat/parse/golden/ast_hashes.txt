@@ -20,7 +20,7 @@ af9cae3548b41112 no test/cases/parse/rules/declared.cml
 ae1fab0de676960a ok test/cases/parse/rules/names.cml
 770d5aeb12567b23 no test/cases/parse/rules/no_arrow.cml
 011999f58a202f78 ok test/cases/parse/rules/values.cml
-b79b84bb67e8350a no test/cases/parse/rules/when_after_body.cml
+8d167033fd666437 no test/cases/parse/rules/when_after_body.cml
 c005562ecb6383e6 ok test/cases/parse/rulings/doc_comment.cml
 668696be7a97daf5 ok test/cases/parse/rulings/eager_logic.cml
 0da538f5e8f17348 ok test/cases/parse/rulings/exponent.cml

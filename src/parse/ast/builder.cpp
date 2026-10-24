@@ -2526,7 +2526,7 @@ Value Builder::visitPattern(cst::Pattern context) {
 
 /*
 matchCase
-    : CASE pattern ('|' pattern)* '=>' blockExpr
+    : CASE pattern ('|' pattern)* whenClause? '=>' blockExpr
     ;
 */
 Value Builder::visitMatchCase(cst::MatchCase context) {
@@ -2544,12 +2544,22 @@ Value Builder::visitMatchCase(cst::MatchCase context) {
         }
         patterns.push_back(pattern);
     }
+    // The guard of the case, read once and shared by its arms as the body is: each arm builds
+    // its own copy of it, in the scope of that arm's pattern, so the names the pattern binds
+    // are the ones it reads (and one arm's guard never sees another arm's bindings).
+    node_ptr_t guardNode = nullptr;
+    if (const auto whenClause = context->get<cst::WhenClause>()) {
+        guardNode = any2node(visitExpr(whenClause->expr()));
+    }
     std::vector<node_ptr_t> caseNodes;
     for (const node_ptr_t &pattern : patterns) {
         node_ptr_t caseNode = createNodeAs<MatchCaseLoad>();
         setNodeTokenRangeByContext(caseNode, context);
         node_ptr_t exprNode = any2node(visitBlockExpr(context->lastChild().node()));
         *caseNode << pattern << exprNode;
+        if (guardNode) {
+            *caseNode << guardNode;
+        }
         registerAstSemanticBundle(
             caseNode,
             {
@@ -2879,11 +2889,16 @@ Value Builder::visitCtrlExpr(syn::Node context) {
                  value_cast<std::vector<node_ptr_t>>(visitMatchCase(matchCase))) {
                 *casesNode << caseNode;
             }
-            // The first case that matches is taken, so nothing after the wildcard can be.
-            if (casesNode->size() > 0 &&
-                casesNode->at(casesNode->size() - 1)->front()->type() == LoadType::Null) {
-                wildcardCase = matchCase;
-                wildcardSeen = true;
+            // The first case that matches is taken, so nothing after the wildcard can be. A
+            // guarded wildcard is not a wildcard: `case _ when c` is not taken when `c` is
+            // false, so the cases written after it are still reached (and the guarded case
+            // does not cover the match by itself, review `when-placement-and-match-guards`).
+            if (casesNode->size() > 0) {
+                const node_ptr_t &lastCase = casesNode->at(casesNode->size() - 1);
+                if (lastCase->front()->type() == LoadType::Null && lastCase->size() <= 2) {
+                    wildcardCase = matchCase;
+                    wildcardSeen = true;
+                }
             }
         }
         if (wildcardCase && casesNode->size() == 1 &&

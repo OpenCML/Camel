@@ -2016,9 +2016,36 @@ class Builder {
     /// No arm is added to those the program wrote (design principles 3.7).
     /// `valueless` (with `arms`): the branch is an `if` without `else`, whose join takes no
     /// value from its arms.
+    /// `firstCase`: the first CASE child the arms come from. The cases before it were already
+    /// dispatched, so a guard that did not hold sends the value on to a branch over the cases
+    /// from `firstCase` on, built exactly like this one.
     node_handle_t buildBranch(
         const GCT::node_ptr_t &gct, node_handle_t condNode,
         const std::vector<arm_ptr_t> *arms = nullptr, bool valueless = false);
+    /// One case of a `match` whose cases carry guards: the form `buildCaseChain` lowers them
+    /// in.
+    struct CaseStep {
+        GCT::node_ptr_t exec;            // the arm of the case: its region, and its body
+        node_handle_t condition{};       // the test of its pattern, none for the case that ends
+        GCT::node_ptr_t guard = nullptr; // its guard, when it has one
+        std::function<void()> bind{};    // takes out the names its pattern binds, in the arm
+    };
+    /// Whether a CASE child of `gct`, from `first` on, carries a guard.
+    bool hasGuardedCase(const GCT::node_ptr_t &gct, size_t first);
+    /// The steps `steps` as one decision list, and the value of the `match`. A case is entered
+    /// where the test of its pattern holds and, when it has one, its guard holds as well; the
+    /// guard of a case whose pattern matched decides whether that case is taken at all, and the
+    /// cases written after it are the `else` of its step, so a guard that does not hold leaves
+    /// the value to them (review 「when-placement-and-match-guards」). The last step is the case
+    /// that ends the list: it has no test of its own.
+    node_handle_t buildCaseChain(std::vector<CaseStep> &steps, const GCT::node_ptr_t &origin);
+    /// The general `match` `gct`, when its cases carry guards. It cannot be dispatched by case
+    /// value alone -- the runtime branch takes the first arm whose case value matches and cannot
+    /// be told to try the next when a guard refuses -- so it is one decision list over the cases
+    /// in written order.
+    node_handle_t buildGuardedMatch(const GCT::node_ptr_t &gct, node_handle_t condNode);
+    /// `!value`: a branch that gives true where the value is false, and false where it is true.
+    node_handle_t negateCondition(node_handle_t value, const GCT::node_ptr_t &origin);
     /// Refuses the `match` `gct` when it can meet a value none of its cases matches: it has
     /// no `case _` and does not list both values of a bool (MatchWithoutDefault, an error).
     void requireMatchDefault(const GCT::node_ptr_t &gct, node_handle_t scrutinee);

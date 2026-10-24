@@ -144,8 +144,8 @@ const std::unordered_map<SyntaxDiag, DiagInfo> &getSyntaxDiagInfoMap() {
             SyntaxDiag::WhenAfterBody,
             {
                 "WhenAfterBody",
-                "A declaration's condition comes before the body it guards, so {0} cannot follow the body.",
-                "Write it between the parameters and the body: rule add_zero::<T>(x: T) when is_integer::<T>() {{ x + 0 => x }}. The trailing form is not read as a condition.",
+                "A 'when' condition comes before what it guards, so {0} cannot follow it.",
+                "Write it between the parameters and the body: rule add_zero::<T>(x: T) when is_integer::<T>() {{ x + 0 => x }}, or between the patterns of a match case and its arm: case n when n > 0 => n. The trailing form is not read as a condition.",
             },
         },
         {

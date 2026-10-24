@@ -1,0 +1,20 @@
+/**
+ * A guarded case does not count towards the exhaustiveness of a `match`: `case 1 when c` is
+ * taken only where `c` holds, so the values it does not take have no case at all (review
+ * 「when-placement-and-match-guards」, and Rust the same).
+ *
+ * The match below has one case and it carries a guard: the report is the one a match with no
+ * `case _` gets, rather than the syntax error the case was before the guard was part of a
+ * case (`case 1 when n > 0` read `when` as the second word of the pattern).
+ */
+module match_guard_not_exhaustive
+
+func a(n: int): int {
+    return match n {
+        case 1 when n > 0 => 10
+    }
+}
+
+func main(): int sync {
+    return a(1)
+}
