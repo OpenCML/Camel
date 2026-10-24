@@ -75,6 +75,12 @@ enum class BinaryOp {
     Pow,
     Max,
     Min,
+    /// The remainder `%`. The language's `%` is the truncated remainder
+    /// (`camel::utils::remainder`, int_div.h), so on a floating element type it is `fmod`: its
+    /// result takes the sign of the left operand, with no flooring, the same definition the
+    /// integer element types already have. Appended last: the operator name table in
+    /// elementwise_ops.cpp is indexed by this enumerator.
+    Mod,
 };
 
 enum class CompareOp {

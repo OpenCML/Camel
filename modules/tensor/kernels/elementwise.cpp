@@ -300,6 +300,18 @@ template <typename T> T applyBinary(BinaryOp op, T a, T b) {
         return maximum(a, b); // IEEE 754-2019 maximum (minmax.h)
     case BinaryOp::Min:
         return minimum(a, b);
+    case BinaryOp::Mod:
+        if constexpr (camel::core::rtdata::is_reduced_float_v<T>) {
+            // A reduced element type computes in f32 and rounds once when it is stored, the one
+            // arithmetic path of a bf16 or f16 value (dtype.h), like + - * / and pow.
+            return static_cast<T>(std::fmod(static_cast<float>(a), static_cast<float>(b)));
+        } else if constexpr (std::is_floating_point_v<T>) {
+            // The language's `%` is the truncated remainder (camel::utils::remainder, int_div.h):
+            // on a floating element type that is fmod, the same definition, not a floor.
+            return static_cast<T>(std::fmod(a, b));
+        } else {
+            return static_cast<T>(a % b);
+        }
     }
     return T{};
 }
@@ -403,6 +415,9 @@ void binaryTyped(BinaryOp op, const BroadcastPlan &plan, const T *a, const T *b,
         break;
     case BinaryOp::Min:
         run([](T x, T y) { return applyBinary(BinaryOp::Min, x, y); });
+        break;
+    case BinaryOp::Mod:
+        run([](T x, T y) { return applyBinary(BinaryOp::Mod, x, y); });
         break;
     default:
         // A new operator adds its loop above rather than falling back to the runtime switch.

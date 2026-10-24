@@ -25,7 +25,7 @@ namespace {
 
 constexpr std::string_view binaryName(k::BinaryOp op) {
     constexpr std::string_view names[] =
-        {"add", "subtract", "multiply", "divide", "pow", "maximum", "minimum"};
+        {"add", "subtract", "multiply", "divide", "pow", "maximum", "minimum", "mod"};
     return names[static_cast<size_t>(op)];
 }
 
@@ -526,6 +526,11 @@ std::vector<OpDef> elementwiseOps() {
     defs.push_back(binaryDef<k::BinaryOp::Pow>("pow", {"__pow__", "pow"}));
     defs.push_back(binaryDef<k::BinaryOp::Max>("maximum", {"maximum"}));
     defs.push_back(binaryDef<k::BinaryOp::Min>("minimum", {"minimum"}));
+    // `%` over numeric arrays. It is the element type's own operator, applied elementwise: a
+    // bf16 or f16 array computes in f32 and rounds once, the same path as + - * / and pow, so
+    // reduced precision is not a reason to refuse it (design principles 7.3). Two scalars never
+    // reach this definition (binaryInfer), so the scalar `%` is unchanged.
+    defs.push_back(binaryDef<k::BinaryOp::Mod>("mod", {"__mod__", "mod"}));
 
     defs.push_back(compareDef<k::CompareOp::Less>("lt", {"__lt__"}));
     defs.push_back(compareDef<k::CompareOp::LessEqual>("le", {"__le__"}));
