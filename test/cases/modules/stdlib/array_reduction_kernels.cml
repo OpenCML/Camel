@@ -26,8 +26,9 @@
  *   - `min` and `max` over f32: NaN on either side gives NaN (IEEE 754-2019 minimum and maximum,
  *     stated once in modules/math/minmax.h), and -0 is below +0, which the bytes of the result
  *     show.
- *   - `min` and `max` over a `string[]` and a `bool[]`: their arms go through the same executor
- *     (the values are checked against `sort` and against each other, `false` below `true`).
+ *   - `min` and `max` over a `string[]` and a `bool[]`: each of the two element types has an
+ *     executor of its own (the values are checked against `sort` and against each other, `false`
+ *     below `true`).
  *   - the empty array: `sum` is +0, `min` and `max` are null.
  *
  * The body is the semantics, so it is the reference for the element types both paths can be asked

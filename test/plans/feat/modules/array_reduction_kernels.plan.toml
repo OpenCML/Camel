@@ -2,10 +2,11 @@ id = "modules.array_reduction_kernels"
 order = 378
 tier = "fast"
 tags = ["feat", "modules", "stdlib", "precision", "profile"]
-desc = "`array::sum`, `min` and `max` have native kernels of the `array` executor (design principles 10.4; the ruling docs/handover/reviews/questions-2026-10-23.md, section \"array-kernel-executors\": 「`array:sum`/`min`/`max` 是数组归约的实现原子」). Each kernel answers what the Camel body beside it says, and a floating-point reduction still accumulates in f64 and rounds once into the element type (7.3). The kernel is one executor per reduction, choosing its arm on the element type of the array the `#impl` instance was made with, and every element type the functions are declared for has an arm (numeric for `sum`; numeric, `string` and `bool` for `min`/`max`)."
+desc = "`array::sum`, `min` and `max` have native kernels of the `array` executor (design principles 10.4; the ruling docs/handover/reviews/questions-2026-10-23.md, section \"array-kernel-executors\": 「`array:sum`/`min`/`max` 是数组归约的实现原子」). Each kernel answers what the Camel body beside it says, and a floating-point reduction still accumulates in f64 and rounds once into the element type (7.3). The kernel is one body-less declaration per element type, each naming its own element type's operator (`array:sum_i` for `i32`, `array:sum_d` for `float`, ...) and admitting exactly that element type with its own `when`, so the element type is known where the executor is chosen and no run-time switch on it is left; an element type no declaration admits (a complex one) keeps the body."
 
 # The values, on vectors whose per-step f32 fold, f64 accumulation and one rounding are told apart,
-# over every element type the kernel has an arm for, with the two non-numeric ordered types too.
+# over every element type the kernels have an executor for, with the two non-numeric ordered types
+# too.
 
 [[tests]]
 name = "array_reduction_kernels"
@@ -22,7 +23,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "array_reduction_kernels.paths"
-desc = "In that run `std::profile` counts the three kernels and the Camel body's own reduce apart: `array:sum` 14 times, `array:min` 11 and `array:max` 10, while `:mark/reduce_arr` counts 18 — the folds the case writes out, the per-step f32 and f64 accumulations, the widening maps and the `#impl` bodies that no call reached. A compiler that ran the body for the direct calls as well would count the fallbacks' reduce calls; one whose kernel did not run would not show the `array:` rows at all."
+desc = "In that run `std::profile` counts each element type's own kernel apart, and the Camel body's own reduce as well: the integer and floating-point reductions take different declarations, and `:mark/reduce_arr` counts the folds the case writes out, the per-step f32 and f64 accumulations, the widening maps and the `#impl` bodies that no call reached. A compiler that ran the body for the direct calls as well would count the fallbacks' reduce calls; one whose kernels did not run would not show the `array:` rows at all; and a compiler that gave the instances one executor to switch on the element type inside could not show one row per element type."
 kind = "behavior"
 case = "../../../cases/modules/stdlib/array_reduction_kernels.cml"
 args = ["${case}", "std::profile top=0 json=\"${test_tmp}/profile.json\"", "std::nvm"]
@@ -32,11 +33,100 @@ async ({ input, assert }) => {
     const fs = await import('node:fs')
     const report = JSON.parse(fs.readFileSync(input.test_tmp + '/profile.json', 'utf8'))
     const calls = Object.fromEntries(report.operator_rows.map(row => [row.uri, row.calls]))
-    assert(calls['array:sum'] === 14, `array:sum ran ${calls['array:sum']} times, not 14`)
-    assert(calls['array:min'] === 17, `array:min ran ${calls['array:min']} times, not 17`)
-    assert(calls['array:max'] === 16, `array:max ran ${calls['array:max']} times, not 16`)
-    assert(calls[':mark/reduce_arr'] === 22, `the body's reduce ran ${calls[':mark/reduce_arr']} times, not 22`)
+    const shown = JSON.stringify(calls)
+    // One row per element type, and no row for a reduction as a whole: this is what says the
+    // element type was known where the executor was chosen rather than switched on inside it.
+    const expected = {
+        'array:sum_i': 1, 'array:sum_l': 2, 'array:sum_f': 3, 'array:sum_d': 1,
+        'array:sum_bf': 5, 'array:sum_f6': 2,
+        'array:min_l': 1, 'array:min_f': 4, 'array:min_bf': 3, 'array:min_f6': 4,
+        'array:min_b': 2, 'array:min_s': 3,
+        'array:max_l': 1, 'array:max_f': 4, 'array:max_bf': 3, 'array:max_f6': 3,
+        'array:max_b': 2, 'array:max_s': 3,
+    }
+    for (const [uri, count] of Object.entries(expected)) {
+        assert(calls[uri] === count, `${uri} ran ${calls[uri]} times, not ${count}: ${shown}`)
+    }
+    const reductionRows = Object.keys(calls).filter((uri) => /^array:(sum|min|max)(_|$)/.test(uri)).sort()
+    const expectedRows = Object.keys(expected).sort()
+    assert(JSON.stringify(reductionRows) === JSON.stringify(expectedRows),
+        `the reduction rows are ${JSON.stringify(reductionRows)}, expected ${JSON.stringify(expectedRows)}: ${shown}`)
+    assert(calls[':mark/reduce_arr'] === 22, `the body's reduce ran ${calls[':mark/reduce_arr']} times, not 22: ${shown}`)
     assert(input.normalized.stdout.includes('sum {} 16778240.0'), 'the program changed')
 }
 """
 timeout_ms = 60000
+
+# ---- the three values can only come from the three paths ----
+
+[[tests]]
+name = "array_reduction_arms"
+desc = "The ruling's own case, over the module: `sum` over an `i32[]` is answered by the declaration for `is_elem_i32` (`array:sum_i`, 6), `sum` over a `float[]` by the declaration for `is_elem_f64` (`array:sum_d`, 4.0), and `sum` over a `c64[]` — which no declaration admits — by the body, whose complex arm gives (1 + 2i) + (3 + 4i) = 4 + 6i. A compiler that gave the complex instance an executor prints a number instead, and one that answered `i32` and `float` from a single declaration cannot produce both."
+kind = "behavior"
+case = "../../../cases/modules/stdlib/array_reduction_arms.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+known_fail = ["fvm", "jit"]
+known_fail_note = "the complex call reaches :mark/reduce_arr with a c64 accumulator, which kills the two bytecode VMs (no output after the float line, no diagnostic). The same reduce crashes on their own, without any of the array module in the program: array_reduction_complex_reduce.cml, below. A defect of src/runtime (handover/h373-chain-splice's files), not of this plan's subject; the value itself is 4+6i on nvm and prl, which agree."
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "i32 {} 6\nfloat {} 4.0\ncomplex {} 4+6i\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "array_reduction_complex_reduce"
+desc = "The body's complex arm, written out with no array-module reduction in the program: `:mark/reduce_arr` with a `c64` accumulator over a `c64[]` gives `4+6i`. This is the record of the defect the acceptance case above runs into — the two bytecode VMs are killed by a signal at that reduce, while nvm and prl answer — and it keeps the reduce itself measured, so a fix in the VMs and a change that hides the path are told apart. A compiler that gave the complex instance a kernel does not reach this reduce at all."
+kind = "behavior"
+case = "../../../cases/modules/stdlib/array_reduction_complex_reduce.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+known_fail = ["fvm", "jit"]
+known_fail_note = "a defect of src/runtime: the fvm and jit bytecode VMs die by signal at :mark/reduce_arr with a c64 accumulator (stdout stops after `before`, no diagnostic). Not this lane's file; recorded here so it is measured rather than hidden. The nvm and prl values must be 4+6i."
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "before\nreduce {} 4+6i\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "array_reduction_arms.paths"
+desc = "The same run under `std::profile`: each element type is answered by its own declaration and by no other. The integer call runs `array:sum_i` once and the float call `array:sum_d` once, while the complex call has no kernel row at all and reaches the body's `reduce`. A compiler with one executor per reduction switching on the element type inside shows one row for all three calls; one that gave the complex instance an executor counts an `array:sum_*` row three times."
+kind = "behavior"
+case = "../../../cases/modules/stdlib/array_reduction_arms.cml"
+args = ["${case}", "std::profile top=0 json=\"${test_tmp}/profile.json\"", "std::nvm"]
+expect_exit = 0
+verify_script = """
+async ({ input, assert }) => {
+    const fs = await import('node:fs')
+    const out = input.normalized.stdout
+    const lines = out.split('\n')
+    assert(lines[0] === 'i32 {} 6' && lines[1] === 'float {} 4.0' && lines[2] === 'complex {} 4+6i', `the values changed:\n${out}`)
+    const report = JSON.parse(fs.readFileSync(input.test_tmp + '/profile.json', 'utf8'))
+    const calls = Object.fromEntries(report.operator_rows.map(row => [row.uri, row.calls]))
+    const shown = JSON.stringify(calls)
+    assert(calls['array:sum_i'] === 1, `the integer kernel ran ${calls['array:sum_i']} times, not once: ${shown}`)
+    assert(calls['array:sum_d'] === 1, `the float kernel ran ${calls['array:sum_d']} times, not once: ${shown}`)
+    const sumRows = Object.keys(calls).filter((uri) => uri.startsWith('array:sum')).sort()
+    assert(JSON.stringify(sumRows) === JSON.stringify(['array:sum_d', 'array:sum_i']),
+        `the sum rows are ${JSON.stringify(sumRows)}, expected exactly the two kernels: ${shown}`)
+    // The complex call has no kernel: it runs the body, whose reduce is the only `sum` path left
+    // for an element type no declaration admits.
+    assert(calls[':mark/reduce_arr'] === 1, `the body's reduce ran ${calls[':mark/reduce_arr']} times, not once: ${shown}`)
+}
+"""
+timeout_ms = 60000
+
+# ---- the spelling that would need the run-time switch is refused ----
+
+[[tests]]
+name = "array_sum_kernel_overlap"
+desc = "Two same-named body-less declarations of a reduction whose conditions are not mutually exclusive are refused where the second is written, and the report names the type both hold for and both declarations. `is_integer::<T>()` covers `i32` and `int` and `is_numeric::<T>()` covers those and the floating-point and complex types, so `i32` satisfies both and no order of the declarations could decide a call with an `i32[]`. This is the spelling the array module does not use: it names one element type per declaration (`is_elem_i32::<T>()`), which is what its one executor per element type takes."
+kind = "negative"
+case = "../../../cases/compile/native/array_sum_kernel_overlap.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::WhenDeclarationOverlap"
+expect_diagnostic_code = "0x030001E0"
+expect_output_contains = ["array_sum_kernel_overlap.cml:22", "Two declarations of 'sum_kernel' both apply to the type 'int'", "(xs: T[]) => T — when is_integer::<T>()", "(xs: T[]) => T — when is_numeric::<T>()"]
+timeout_ms = 20000

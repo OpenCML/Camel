@@ -1,0 +1,41 @@
+/**
+ * The ruling's three cases for the array reductions' kernels, over the module itself (design
+ * principles 10.4; the language author's ruling of 2026-10-24 on the declaration arms,
+ * `docs/handover/reviews/questions-2026-10-23.md`): one body-less declaration per element type,
+ * each naming its own element type's operator, and the element-type switch in the executor gone
+ * with them.
+ *
+ *   - `sum` over an `i32[]` is answered by the declaration whose `when` is `is_elem_i32::<T>()`
+ *     and whose `#op` is `array:sum_i`: 1 + 2 + 3 = 6.
+ *   - `sum` over a `float[]` is answered by the declaration for `is_elem_f64` and
+ *     `array:sum_d`: 1.5 + 2.5 = 4.0.
+ *   - `sum` over a `c64[]` satisfies no declaration's condition, so that instance has no executor
+ *     and runs the Camel body, whose complex arm is the only place that says what summing complex
+ *     numbers means: (1 + 2i) + (3 + 4i) = 4 + 6i. A run-time switch that guessed an arm from the
+ *     element type could produce no such value, and a compiler that gave the complex instance an
+ *     executor would print a number instead of `4+6i`.
+ *
+ * The three values can only come from the three paths, and the profile test beside this case shows
+ * each of the two kernels used exactly once, with the complex call taking the body's `reduce`.
+ */
+module array_reduction_arms
+
+import { sum } from array
+
+func main(): int sync {
+    // The integer declaration's executor: `array:sum_i`.
+    let small: i32[] = [1, 2, 3]
+    println("i32 {}", sum(small))
+
+    // The float declaration's executor: `array:sum_d`.
+    let reals: float[] = [1.5, 2.5]
+    println("float {}", sum(reals))
+
+    // Neither condition holds for `c64`: no executor, so the body answers, and its complex arm is
+    // what makes the sum of two complex numbers.
+    let z0: c64 = 1 + 2i
+    let z1: c64 = 3 + 4i
+    let complex: c64[] = [z0, z1]
+    println("complex {}", sum(complex))
+    return 0
+}

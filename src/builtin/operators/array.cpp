@@ -423,13 +423,34 @@ std::unordered_map<std::string, operator_t> getArrayOpsMap() {
         {"unique", __array_unique__},
         {"argsort", __array_argsort__},
         // The reductions' kernels (builtin/operators/array_reduce.cpp): one executor per element
-        // type the rule of the kernel declarations in stdlib/array.cml admits, named after the
-        // rule's operator and the element type it takes. The declaration's `when` is what decides
-        // which calls reach them (`Builder::declaredRuleApplies`), so a type it refuses has no
-        // executor and runs the Camel body (H228: one operator, per-type executors).
-        {"sum", __array_sum__},
-        {"min", __array_min__},
-        {"max", __array_max__},
+        // type, named after the element type it takes. Each body-less declaration in
+        // stdlib/array.cml names one of them with its `#op` tag and admits exactly that element
+        // type with its own `when` (`Builder::declaredRuleApplies`), so the element type is known
+        // where the executor is chosen and no executor asks an array what it holds. An element
+        // type no declaration admits has no executor and runs the Camel body (H228: one operator,
+        // per-type executors).
+        {"sum_i", __array_sum_i__},
+        {"sum_l", __array_sum_l__},
+        {"sum_f", __array_sum_f__},
+        {"sum_d", __array_sum_d__},
+        {"sum_bf", __array_sum_bf__},
+        {"sum_f6", __array_sum_f6__},
+        {"min_i", __array_min_i__},
+        {"min_l", __array_min_l__},
+        {"min_f", __array_min_f__},
+        {"min_d", __array_min_d__},
+        {"min_bf", __array_min_bf__},
+        {"min_f6", __array_min_f6__},
+        {"min_b", __array_min_b__},
+        {"min_s", __array_min_s__},
+        {"max_i", __array_max_i__},
+        {"max_l", __array_max_l__},
+        {"max_f", __array_max_f__},
+        {"max_d", __array_max_d__},
+        {"max_bf", __array_max_bf__},
+        {"max_f6", __array_max_f6__},
+        {"max_b", __array_max_b__},
+        {"max_s", __array_max_s__},
     };
 }
 
@@ -450,10 +471,30 @@ void declareArrayOperatorFacts() {
             {"argsort", true},
             // The reductions' kernels are pure as the functions they execute are: the fold reads
             // the array it is given and touches nothing else. The declarations in the map above
-            // name them; this is what tells the compiler what a call of one may touch.
-            {"sum", true},
-            {"min", true},
-            {"max", true},
+            // name them; this is what tells the compiler what a call of one may touch. One entry
+            // per element type, because one executor takes one element type.
+            {"sum_i", true},
+            {"sum_l", true},
+            {"sum_f", true},
+            {"sum_d", true},
+            {"sum_bf", true},
+            {"sum_f6", true},
+            {"min_i", true},
+            {"min_l", true},
+            {"min_f", true},
+            {"min_d", true},
+            {"min_bf", true},
+            {"min_f6", true},
+            {"min_b", true},
+            {"min_s", true},
+            {"max_i", true},
+            {"max_l", true},
+            {"max_f", true},
+            {"max_d", true},
+            {"max_bf", true},
+            {"max_f6", true},
+            {"max_b", true},
+            {"max_s", true},
         });
     // The in-place forms of the sorting operators (design principles 11.3): `xs = xs->sort`
     // sorts the variable's own array when nothing else refers to it (Builder::

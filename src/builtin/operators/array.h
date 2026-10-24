@@ -20,12 +20,39 @@ std::unordered_map<std::string, operator_t> getArrayOpsMap();
 /// principles 11.3), and the sorts may fault on an element type that is not a number.
 void declareArrayOperatorFacts();
 
-// The reductions' kernels, in builtin/operators/array_reduce.cpp: one executor per element type
-// the rule of the kernel declaration in stdlib/array.cml admits. The declaration's own `when` is
-// what decides which calls its executor runs (`Builder::declaredRuleApplies`), so an element type
-// the condition refuses has no executor and runs the Camel body, and the executor of an admitted
-// type runs every call of that type (design principles 5.5, 10.4; H228: one operator, per-type
-// executors).
-slot_t __array_sum__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
-slot_t __array_min__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
-slot_t __array_max__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+// The reductions' kernels, in builtin/operators/array_reduce.cpp: one executor per element type,
+// named after the element type it takes, as `math:min_i` names its own (`_i` i32, `_l` int, `_f`
+// f32, `_d` float, `_bf` bf16, `_f6` f16, `_b` bool, `_s` string). Each body-less declaration in
+// stdlib/array.cml names one of them with its `#op` tag and admits exactly that element type with
+// its own `when` (`Builder::declaredRuleApplies`), so the element type is known where the executor
+// is chosen: an element type no declaration admits has no executor and runs the Camel body, and the
+// executor of an admitted type runs every call of that type (design principles 5.5, 10.4; H228: one
+// operator, per-type executors).
+
+// `sum`, one per element type of `is_numeric` that has an executor:
+slot_t __array_sum_i__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __array_sum_l__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __array_sum_f__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __array_sum_d__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __array_sum_bf__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __array_sum_f6__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+
+// `min`, one per element type of `is_ordered` that has an executor:
+slot_t __array_min_i__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __array_min_l__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __array_min_f__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __array_min_d__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __array_min_bf__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __array_min_f6__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __array_min_b__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __array_min_s__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+
+// `max`, the same element types:
+slot_t __array_max_i__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __array_max_l__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __array_max_f__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __array_max_d__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __array_max_bf__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __array_max_f6__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __array_max_b__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __array_max_s__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
