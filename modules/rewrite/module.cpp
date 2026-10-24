@@ -402,13 +402,23 @@ camel::runtime::RuleSource instanceOf(
     return source;
 }
 
-/// The type tuples a generic rule is instantiated at: the type of every value the program being
-/// rewritten has, each once, in the order the graphs write them. The ruling of 2026-10-23 on
-/// generic-rule-instantiation binds the rule's type variables from the nodes it matches, so the
-/// types are the program's own (not the registered meta-types `check` adds). A tuple that cannot
-/// be written for is remembered as one that did not come about, and the engine skips it.
-std::vector<std::vector<Type *>> tuplesOf(const camel::runtime::Program &program) {
-    std::vector<std::vector<Type *>> tuples;
+/// How many type tuples of one generic rule are enumerated at most, wherever a set of tuples is
+/// built (the engine's own tuple list, `why_not`'s candidates, and `check`'s instance walk). A law
+/// of one type parameter over the registered types is far below it; the product for a law of two is
+/// not, and it is capped rather than instantiated body by body (the ruling of 2026-10-24 on
+/// `generic-rule-check-surface-and-multi-parameter-instances`).
+constexpr size_t kCheckTupleCap = 64;
+
+/// The type tuples a generic rule is instantiated at, one per type parameter: for a rule of one
+/// parameter the types themselves, and for a rule of more the product of the types over its
+/// parameters, capped at `kCheckTupleCap` tuples in a fixed order. The types are those of every
+/// value the program being rewritten has, each once, in the order the graphs write them. The ruling
+/// of 2026-10-23 on generic-rule-instantiation binds the rule's type variables from the nodes it
+/// matches, so the types are the program's own (not the registered meta-types `check` adds). A
+/// tuple that cannot be written for is remembered as one that did not come about, and the engine
+/// skips it.
+std::vector<std::vector<Type *>> tuplesOf(const camel::runtime::Program &program, size_t arity) {
+    std::vector<Type *> types;
     for (const camel::runtime::GCGraph *graph : program.graphs()) {
         if (isRuleSide(*graph)) {
             continue;
@@ -424,12 +434,80 @@ std::vector<std::vector<Type *>> tuplesOf(const camel::runtime::Program &program
                 continue;
             }
             const bool known = std::any_of(
-                tuples.begin(), tuples.end(), [&](const std::vector<Type *> &tuple) {
-                    return tuple[0] == type || tuple[0]->equals(type);
-                });
+                types.begin(), types.end(),
+                [&](const Type *seen) { return seen == type || seen->equals(type); });
             if (!known) {
-                tuples.push_back({type});
+                types.push_back(type);
             }
+        }
+    }
+    std::vector<std::vector<Type *>> tuples;
+    if (types.empty()) {
+        return tuples;
+    }
+    const size_t count = std::max<size_t>(1, arity);
+    std::vector<size_t> at(count, 0);
+    for (;;) {
+        std::vector<Type *> tuple(count);
+        for (size_t i = 0; i < count; ++i) {
+            tuple[i] = types[at[i]];
+        }
+        tuples.push_back(std::move(tuple));
+        if (tuples.size() >= kCheckTupleCap) {
+            break;
+        }
+        size_t i = 0;
+        for (; i < count; ++i) {
+            if (++at[i] < types.size()) {
+                break;
+            }
+            at[i] = 0;
+        }
+        if (i == count) {
+            break;
+        }
+    }
+    return tuples;
+}
+
+/// The type tuples of the registered types a value of `type` could stand at, for a rule of `arity`
+/// type parameters: every tuple with `type` at one of its positions, in the order the types were
+/// registered, at most `kCheckTupleCap` of them. A rule of one parameter is named by the value's
+/// type alone; a rule of two is not, and this is what a question about one value can still ask
+/// (`why_not`).
+std::vector<std::vector<Type *>> tuplesHolding(const Type *type, size_t arity) {
+    std::vector<std::vector<Type *>> tuples;
+    if (arity <= 1) {
+        tuples.push_back({const_cast<Type *>(type)});
+        return tuples;
+    }
+    const std::vector<Type *> universe = camel::compile::gir::ruleInstanceTypes();
+    if (universe.empty()) {
+        return tuples;
+    }
+    std::vector<size_t> at(arity, 0);
+    for (;;) {
+        std::vector<Type *> tuple(arity);
+        bool holds = false;
+        for (size_t i = 0; i < arity; ++i) {
+            tuple[i] = universe[at[i]];
+            holds    = holds || tuple[i] == type || tuple[i]->equals(const_cast<Type *>(type));
+        }
+        if (holds) {
+            tuples.push_back(std::move(tuple));
+            if (tuples.size() >= kCheckTupleCap) {
+                break;
+            }
+        }
+        size_t i = 0;
+        for (; i < arity; ++i) {
+            if (++at[i] < universe.size()) {
+                break;
+            }
+            at[i] = 0;
+        }
+        if (i == arity) {
+            break;
         }
     }
     return tuples;
@@ -494,11 +572,17 @@ std::vector<camel::runtime::Rule> engineRules(
             if (base == nullptr) {
                 continue;
             }
-            for (const std::vector<Type *> &types : tuplesOf(*base)) {
+            // The rule's own number of type parameters decides how many types a tuple has: a law of
+            // two is instantiated at a pair of the program's types, not at one of them (the ruling
+            // of 2026-10-23 on generic-rule-instantiation assumes one type per value, and asking a
+            // two-parameter rule for one type is what left such a law with no instance at all).
+            GenericRuleEntry *entry = camel::compile::gir::genericRuleEntry(ctx, ruleId);
+            const size_t arity      = entry != nullptr ? entry->typeParams.size() : 1;
+            for (const std::vector<Type *> &types : tuplesOf(*base, arity)) {
                 const size_t index = camel::compile::gir::genericRuleInstance(ctx, ruleId, types);
                 // Making an instance builds a body and encodes graphs: the value is read again
                 // from the array, and the entry again from the context, after it.
-                GenericRuleEntry *entry = camel::compile::gir::genericRuleEntry(ctx, ruleId);
+                entry = camel::compile::gir::genericRuleEntry(ctx, ruleId);
                 if (entry == nullptr || index >= entry->instances.size() ||
                     !entry->instances[index].made) {
                     // A type tuple the rule cannot be written for says nothing: the ruling of
@@ -1064,44 +1148,82 @@ slot_t whyNotKernel(ArgsView &, ArgsView &norm, Context &ctx) {
                     rule->name()));
             }
             const uint64_t ruleId = rule->ruleId();
-            const std::vector<Type *> types{const_cast<Type *>(type)};
-            const size_t index = camel::compile::gir::genericRuleInstance(ctx, ruleId, types);
-            // Making the instance can collect: it is read from the context again.
+            // A rule of one type parameter is named by this value's type; a rule of more is not,
+            // and the tuple that could hold this value is looked for among the registered types
+            // (one candidate per position the value's type can stand at). The reason a candidate
+            // could not be made is then the body's own reason -- `genericRuleInstance` asked for
+            // one type where the rule writes two says only that the numbers differ, which is not
+            // what a reader of a failed law needs to hear (the ruling of 2026-10-23 on
+            // generic-rule-instantiation-set-and-predicate, §3: `why_not` is where the reason is
+            // read).
             GenericRuleEntry *entry = camel::compile::gir::genericRuleEntry(ctx, ruleId);
-            if (entry == nullptr || index >= entry->instances.size()) {
+            const size_t arity = entry != nullptr && !entry->typeParams.empty()
+                                     ? entry->typeParams.size()
+                                     : 1;
+            std::string firstTuple;
+            std::string firstWhy;
+            size_t tried = 0;
+            const std::vector<std::vector<Type *>> candidates =
+                tuplesHolding(type, arity);
+            for (const std::vector<Type *> &tuple : candidates) {
+                ++tried;
+                const size_t index = camel::compile::gir::genericRuleInstance(ctx, ruleId, tuple);
+                // Making an instance can collect: the rule value, the entry and the types are read
+                // from where they live, again.
+                entry = camel::compile::gir::genericRuleEntry(ctx, ruleId);
+                if (entry == nullptr || index >= entry->instances.size()) {
+                    continue;
+                }
+                const GenericRuleInstance &instance = entry->instances[index];
+                if (!instance.made) {
+                    if (firstWhy.empty()) {
+                        firstTuple = instance.typeText;
+                        firstWhy   = instance.why;
+                    }
+                    continue;
+                }
+                // The first tuple that was made is the instance the question is about: the answer
+                // names it and says why it did not fire at this value.
+                const std::string instanceText = instance.typeText;
+                const std::vector<camel::runtime::Rule> &compiled =
+                    instanceRules(ctx, *norm.get<RuleObject *>(1), *entry, index);
+                if (compiled.empty()) {
+                    return answer(std::format(
+                        "`{}<{}>` compiles to no rule", rule->name(), instanceText));
+                }
+                camel::runtime::RuntimeGraphDraftSession session(ctx.shared_from_this(), program);
+                camel::runtime::GraphDraft &draft =
+                    session.edit(const_cast<camel::runtime::GCGraph *>(program->graph(graphId)));
+                camel::runtime::DraftWritings writings(
+                    draft, record.strict ? camel::core::sem::NumericPolicy::strict()
+                                         : camel::core::sem::NumericPolicy::relaxed());
+                const camel::runtime::RuleMiss miss = writings.whyNot(compiled.front(), *draftNode);
+                return answer(std::format(
+                    "`{}<{}>` did not fire at {}: {}",
+                    rule->name(),
+                    instanceText,
+                    writings.textOf(*draftNode),
+                    miss.detail));
+            }
+            if (firstWhy.empty()) {
                 return answer(std::format(
                     "`{}` is a generic rule, and no instance of it could be made for '{}'",
                     rule->name(), type->toString()));
             }
-            const GenericRuleInstance &instance = entry->instances[index];
-            if (!instance.made) {
-                // Tried, and the pattern could not be written for that type. Nothing of what the
-                // compiler said about it was reported where it happened (the ruling of 2026-10-23
-                // on generic-rule-instantiation-set-and-predicate, §3), so this is where it is
-                // read.
+            if (arity <= 1) {
+                // One type parameter: the tuple the value's type makes is the tuple, and the reason
+                // is the whole answer.
                 return answer(std::format(
                     "`{}` is a generic rule, and no instance of it could be made for '{}': {}",
-                    rule->name(), type->toString(), instance.why));
+                    rule->name(), type->toString(), firstWhy));
             }
-            const std::vector<camel::runtime::Rule> &compiled =
-                instanceRules(ctx, *rule, *entry, index);
-            if (compiled.empty()) {
-                return answer(std::format("`{}<{}>` compiles to no rule", rule->name(),
-                                          instance.typeText));
-            }
-            camel::runtime::RuntimeGraphDraftSession session(ctx.shared_from_this(), program);
-            camel::runtime::GraphDraft &draft =
-                session.edit(const_cast<camel::runtime::GCGraph *>(program->graph(graphId)));
-            camel::runtime::DraftWritings writings(
-                draft, record.strict ? camel::core::sem::NumericPolicy::strict()
-                                     : camel::core::sem::NumericPolicy::relaxed());
-            const camel::runtime::RuleMiss miss = writings.whyNot(compiled.front(), *draftNode);
+            // Two or more: the question gave one value, and which tuple of the registered types
+            // that value stood at is what the reader has to be told to judge the reason.
             return answer(std::format(
-                "`{}<{}>` did not fire at {}: {}",
-                rule->name(),
-                instance.typeText,
-                writings.textOf(*draftNode),
-                miss.detail));
+                "`{}` is a generic rule, and no instance of it could be made for '{}': "
+                "`{}<{}>` is the first of the {} type tuple(s) that could hold it, and it did not "
+                "come about: {}",
+                rule->name(), type->toString(), rule->name(), firstTuple, tried, firstWhy));
         }
         std::shared_ptr<WhenCall> call;
         if (rule->when() != nullptr) {
@@ -2704,13 +2826,6 @@ std::string checkOneRule(
     }
     return report;
 }
-
-/// How many type tuples of one generic rule the check takes at most. The product of the types the
-/// operator groups registered over the rule's type parameters can be large for a rule that declares
-/// two (`<T, U>`): up to the cap every tuple the condition admits is checked, past it the tuples
-/// are sampled by the seed and the report says which were taken and how many there are (the ruling
-/// of 2026-10-24 on `generic-rule-check-surface-and-multi-parameter-instances`).
-constexpr size_t kCheckTupleCap = 64;
 
 /// The instances of one generic rule, checked one by one (the ruling of 2026-10-24 on
 /// `generic-rule-check-surface-and-multi-parameter-instances`).

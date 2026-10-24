@@ -7,6 +7,7 @@
 
 #include "camel/core/operator_table.h"
 #include "camel/core/node_attrs.h"
+#include "camel/core/type/typevar.h"
 
 #include "camel/utils/assert.h"
 
@@ -274,6 +275,12 @@ std::vector<type::Type *> OperatorTable::registeredTypes(std::string_view group)
     std::vector<type::Type *> types;
     const auto add = [&types](type::Type *type) {
         if (type == nullptr) {
+            return;
+        }
+        // A signature that still writes a type variable belongs to a *generic* resolver (a group
+        // declares `map::<T, U>` as well as `map` on one type): it names no concrete type, and a
+        // rule cannot be instantiated at it. The types a group registered are the concrete ones.
+        if (type::containsTypeVar(type)) {
             return;
         }
         for (type::Type *known : types) {

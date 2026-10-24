@@ -412,7 +412,9 @@ class OperatorTable {
     /// The types one group registered: every type the fixed signature of one of its overloads
     /// mentions (its `with` parameters, its ordinary parameters and its result), each once, in
     /// the order they were registered. An overload whose resolver declares no fixed signature
-    /// (a dynamic one: `__rule`, the tensor shape rules) contributes nothing.
+    /// (a dynamic one: `__rule`, the tensor shape rules) contributes nothing, and neither does a
+    /// signature that still writes a type variable: a generic overload (`map::<T, U>`) names no
+    /// concrete type, and a rule cannot be instantiated at one.
     std::vector<type::Type *> registeredTypes(std::string_view group) const;
 
     /// Every type any declared group registered, each once, in group and overload order. This is

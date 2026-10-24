@@ -1,0 +1,81 @@
+/**
+ * A generic law of two type parameters, `pair_sum_self::<T, U>`: `(a + b) - b => a`, which is an
+ * integer law (it holds exactly in wrap-around arithmetic and only approximately for floats) and
+ * needs both parameters to be integers.
+ *
+ * A rule of two type parameters is a pair of types, not a type: the engine makes an instance per
+ * tuple of the program's own types (the ruling of 2026-10-23 on generic-rule-instantiation assumes
+ * one type per value, which left such a law with no instance at all), and `check` enumerates the
+ * product of the types the operator groups registered over both parameters, filtered by the
+ * condition at the type level (the ruling of 2026-10-24 on
+ * `generic-rule-check-surface-and-multi-parameter-instances`). The pairs whose condition is false
+ * -- `(float, float)` and the rest -- are not instances of this law and are not reported; the pairs
+ * whose body cannot be written -- a `string` operand has no `-` -- are not instances either, and
+ * `why_not` is where their reason is read, named as the body's own reason rather than as the number
+ * of type parameters the question happened to give.
+ *
+ * The `when` is written after the rule's body because the parser of this branch requires that
+ * position. The ruling of 2026-10-24 moved it before the body (`rule f::<T>(x: T) when cond { ... }`)
+ * and `stdlib/rules.cml` is rewritten with it; this case must be rewritten in the same move.
+ */
+module generic_pair_law
+
+import { Graph, Node, NodeKind, Program, graphs, kind, name, nodes } from graph
+import { Run, check, explain_all, rule_name, run, why_not } from rewrite
+import { is_integer } from types
+
+/// The law: `(a + b) - b` is `a`, for two integer types. Written once, instantiated at every pair
+/// of the program's types whose condition holds.
+rule pair_sum_self::<T, U>(a: T, b: U) { (a + b) - b => a } when is_integer::<T>() && is_integer::<U>()
+
+/// The nodes of one function of the program, by the name of its graph.
+func nodesOf(p: Program, function: string): Node[] {
+    let found = graphs(p)->filter<(g: Graph): bool => name(g) == function>
+    return nodes(found[0])
+}
+
+/// A value of a function that no law touched: what `why_not` answers about a type a law cannot be
+/// written for is asked at one of these.
+func valueOf(p: Program, function: string): Node {
+    let values = nodesOf(p, function)->filter<(n: Node): bool => kind(n) == NodeKind::Data>
+    return values[0]
+}
+
+/// The two laws applied once: what the application cost, the name the rule value carries, and the
+/// proof, whose steps name the instance each rewrite came from.
+export func counted(p: Program): Program! sync {
+    return match p->run<[pair_sum_self], explain: true> {
+        case error e => { throw e }
+        case r => sync {
+            println('rewrites', r.rewrites, 'rule', rule_name(pair_sum_self))
+            return match explain_all(r) {
+                case error e => { throw e }
+                case proof => sync {
+                    println(proof)
+                    return r.result
+                }
+            }
+        }
+    }
+}
+
+/// What `check` says about the law: one line per instance, each named with its pair of types.
+export func checked(p: Program): Program! sync {
+    println(check([pair_sum_self], 200, 7))
+    return p
+}
+
+/// Why the law did not fire at the string value: no tuple that could hold a `string` was ever
+/// written, and the answer is the reason the body gave -- not how many type parameters the question
+/// gave (the ruling of 2026-10-23 on `generic-rule-instantiation-set-and-predicate`, §3).
+export func why_no_instance(p: Program): Program! sync {
+    return match p->run<[pair_sum_self], explain: true> {
+        case error e => { throw e }
+        case r => sync {
+            return match why_not(r, pair_sum_self, valueOf(r.result, 'greet')) {
+                case error e => sync { println(e); return r.result }
+                case reason => sync { println(reason); return r.result }
+            }
+        }
+    }
+}

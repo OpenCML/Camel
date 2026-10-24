@@ -113,6 +113,41 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 60000
 
 [[tests]]
+name = "rules.pair_law_is_instantiated_per_type_pair"
+desc = "A law written over two type parameters is a pair of types, not one: `pair_sum_self::<T, U>` (`(a + b) - b => a`) is one rule, and the engine instantiates it at the *pairs* of the program's own types, so the `int` site of `pair_target.cml` is rewritten by `pair_sum_self<int, int>` and the small one by `pair_sum_self<i32, i32>` (the ruling of 2026-10-23 on generic-rule-instantiation assumes one type per value, which left such a law with no instance at all: both rewrites were zero and the proof named nothing). The condition needs both parameters to be integers, so no pair of a floating or string type is an instance of this law at all."
+kind = "behavior"
+case = "../../../cases/modules/rules/pair_target.cml"
+args = ["${case}", "generic_pair_law::counted", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["rewrites 2 rule pair_sum_self", "by pair_sum_self<int, int>", "by pair_sum_self<i32, i32>", "pair law\n3 5\n"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.pair_law_instances_are_checked"
+desc = "`check` enumerates the instances of a law of two type parameters over the product of the types the operator groups registered, filtered by the condition at the type level (the ruling of 2026-10-24 on `generic-rule-check-surface-and-multi-parameter-instances`): `pair_sum_self` has exactly the two instances of the integer pairs, each named with its tuple, and the pairs the condition rejects -- `float`, `bf16`, `string`, everything -- are not instances of this law and are not reported. The old blanket `unchecked pair_sum_self: a generic rule, whose instances are not checked here` is gone, and so is the arity complaint the maker used to answer with."
+kind = "behavior"
+case = "../../../cases/modules/rules/pair_target.cml"
+args = ["${case}", "generic_pair_law::checked", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["ok pair_sum_self<int, int>: the condition selects the instances, fired 64 of 64", "ok pair_sum_self<i32, i32>: the condition selects the instances, fired 64 of 64"]
+expect_output_not_contains = ["FAIL", "a generic rule, whose instances are not checked here", "it takes 2 type parameter", "unchecked pair_sum_self"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.pair_law_no_instance_says_the_body_reason"
+desc = "`why_not` asked about a value of a type no instance of a two-parameter law can hold answers with the reason the *body* gave -- here the string value of `pair_target.cml`'s `greet`, whose `-` takes no string -- and not with how many type parameters the rule takes (the ruling of 2026-10-23 on `generic-rule-instantiation-set-and-predicate`, §3: a failed instantiation is quiet, and `why_not` is where the reason is read). The question gives one value, so the type tuples that could hold it are the pairs of the registered types with a `string` at either position, and the answer names the first of them that did not come about. Before this, the maker answered `it takes 2 type parameter(s), and it was asked for 1`, which says nothing about the law."
+kind = "behavior"
+case = "../../../cases/modules/rules/pair_target.cml"
+args = ["${case}", "generic_pair_law::why_no_instance", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["pair_sum_self<string, string>` is the first", "operator '-' is not defined for these operand types"]
+expect_output_not_contains = ["it takes 2 type parameter(s)"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
 name = "rules.check_bound_follows_the_permission"
 desc = "The check takes the error bound of the permission a rule needs, not one uniform bound (design principles 7.2-7.4): the same wrong equation (x*2.0 => x*2.000000001, about 5e-10 relative) is rejected under reassociate, whose bound is a few ulps, and accepted under change_precision, whose bound is bf16's 2^-8 per step. A looser uniform bound would hide the first rule."
 kind = "behavior"
