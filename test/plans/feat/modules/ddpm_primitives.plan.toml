@@ -13,13 +13,13 @@ timeout_ms = 15000
 name = "math.sqrt.runtime"
 case = "../../../cases/modules/autodiff/math_sqrt.cml"
 args = ["${case}", "${backend}"]
-expect_stdout_contains = ["sqrt64=(2.0, 0.25)", "sqrt32=(2.0, 0.25)", "repeated=1.0", "integer=2.0", "weighted=(22.0, tensor([      6.,       8.], dtype=float32))"]
+expect_stdout_contains = ["sqrt64=(2.0, 0.25)", "sqrt32=(2.0, 0.25)", "repeated=1.0", "integer=2.0", "weighted=(22.0, [6.0, 8.0])"]
 
 [[tests]]
 name = "math.sqrt.macro"
 case = "../../../cases/modules/autodiff/math_sqrt.cml"
 args = ["${case}", "std::macro", "${backend}"]
-expect_stdout_contains = ["sqrt64=(2.0, 0.25)", "sqrt32=(2.0, 0.25)", "repeated=1.0", "integer=2.0", "weighted=(22.0, tensor([      6.,       8.], dtype=float32))"]
+expect_stdout_contains = ["sqrt64=(2.0, 0.25)", "sqrt32=(2.0, 0.25)", "repeated=1.0", "integer=2.0", "weighted=(22.0, [6.0, 8.0])"]
 
 [[tests]]
 name = "fs.binary_roundtrip"

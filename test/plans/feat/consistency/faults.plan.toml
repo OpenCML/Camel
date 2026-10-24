@@ -350,12 +350,12 @@ expect_stdout_starts_with = "42\n"
 
 [[tests]]
 name = "fault.as_shape"
-desc = "`as` into a tensor type whose shape the value does not have: a fault at the conversion."
+desc = "`as` into a tensor type whose shape the value does not have: a fault at the conversion, reported with the array's own type text and wording."
 case = "../../../cases/consistency/faults/as_shape_fault.cml"
 expect_diagnostic_line = 16
 expect_diagnostic_column = 13
 expect_stdout_starts_with = "before\n"
-expect_output_contains = ["the array has shape [3, 2]"]
+expect_output_contains = ["conversion to 'f32[2, 3]' failed: the array has shape [3, 2]"]
 
 # --- faults that do not happen ---------------------------------------------------------------
 

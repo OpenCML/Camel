@@ -391,7 +391,7 @@ kind = "behavior"
 case = "../../../cases/modules/autodiff/second_order.cml"
 args = ["${case}", "${run_nvm}"]
 expect_exit = 0
-expect_stdout_contains = ["scalar d2=12", "tensor([      6.,     -12.,       3.], dtype=float32)"]
+expect_stdout_contains = ["scalar d2=12", "[6.0, -12.0, 3.0]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 6000
 
@@ -402,7 +402,7 @@ kind = "behavior"
 case = "../../../cases/modules/autodiff/second_order.cml"
 args = ["${case}", "std::macro", "std::stats", "std::opt", "std::stats", "${run_nvm}"]
 expect_exit = 0
-expect_stdout_contains = ["scalar d2=12", "tensor([      6.,     -12.,       3.], dtype=float32)"]
+expect_stdout_contains = ["scalar d2=12", "[6.0, -12.0, 3.0]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
@@ -552,7 +552,7 @@ kind = "behavior"
 case = "../../../cases/modules/autodiff/second_order.cml"
 args = ["${case}", "${run_fvm}"]
 expect_exit = 0
-expect_stdout_contains = ["scalar d2=12", "tensor([      6.,     -12.,       3.], dtype=float32)"]
+expect_stdout_contains = ["scalar d2=12", "[6.0, -12.0, 3.0]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 6000
 
@@ -713,7 +713,7 @@ kind = "behavior"
 case = "../../../cases/modules/autodiff/second_order.cml"
 args = ["${case}", "std::macro", "std::opt", "${run_fvm}"]
 expect_exit = 0
-expect_stdout_contains = ["scalar d2=12", "tensor([      6.,     -12.,       3.], dtype=float32)"]
+expect_stdout_contains = ["scalar d2=12", "[6.0, -12.0, 3.0]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 6000
 
@@ -724,7 +724,7 @@ kind = "behavior"
 case = "../../../cases/modules/autodiff/second_order.cml"
 args = ["${case}", "std::macro", "std::opt", "${run_jit}"]
 expect_exit = 0
-expect_stdout_contains = ["scalar d2=12", "tensor([      6.,     -12.,       3.], dtype=float32)"]
+expect_stdout_contains = ["scalar d2=12", "[6.0, -12.0, 3.0]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 6000
 
@@ -835,7 +835,7 @@ kind = "behavior"
 case = "../../../cases/modules/autodiff/second_order.cml"
 args = ["${case}", "${run_jit}"]
 expect_exit = 0
-expect_stdout_contains = ["scalar d2=12", "tensor([      6.,     -12.,       3.], dtype=float32)"]
+expect_stdout_contains = ["scalar d2=12", "[6.0, -12.0, 3.0]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 6000
 
@@ -1349,7 +1349,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === 'tensor([ 0.7692,  0.7808,  0.7771], dtype=float32) | tensor([  2.782,    1.71, -0.8943], dtype=float32) | tensor([   2.89,   2.242,   2.462], dtype=float32) | tensor([ 0.2471,  0.2094,  0.1147], dtype=float32) | tensor([ 0.8553,  0.4799, -0.6468], dtype=float32)', `unexpected output: ${out}`)
+assert(out === '[0.7692267, 0.780836, 0.77707076]\n[2.7822266, 1.7102305, -0.8943019]\n[2.8903537, 2.2424502, 2.4619071]\n[0.24714532, 0.20941702, 0.11465217]\n[0.855341, 0.47992235, -0.6467736]', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 8000
@@ -1365,7 +1365,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === 'tensor([ 0.7692,  0.7808,  0.7771], dtype=float32) | tensor([  2.782,    1.71, -0.8943], dtype=float32) | tensor([   2.89,   2.242,   2.462], dtype=float32) | tensor([ 0.2471,  0.2094,  0.1147], dtype=float32) | tensor([ 0.8553,  0.4799, -0.6468], dtype=float32)', `unexpected output: ${out}`)
+assert(out === '[0.7692267, 0.780836, 0.77707076]\n[2.7822266, 1.7102305, -0.8943019]\n[2.8903537, 2.2424502, 2.4619071]\n[0.24714532, 0.20941702, 0.11465217]\n[0.855341, 0.47992235, -0.6467736]', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 8000
@@ -1381,7 +1381,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === 'tensor([ 0.7692,  0.7808,  0.7771], dtype=float32) | tensor([  2.782,    1.71, -0.8943], dtype=float32) | tensor([   2.89,   2.242,   2.462], dtype=float32) | tensor([ 0.2471,  0.2094,  0.1147], dtype=float32) | tensor([ 0.8553,  0.4799, -0.6468], dtype=float32)', `unexpected output: ${out}`)
+assert(out === '[0.7692267, 0.780836, 0.77707076]\n[2.7822266, 1.7102305, -0.8943019]\n[2.8903537, 2.2424502, 2.4619071]\n[0.24714532, 0.20941702, 0.11465217]\n[0.855341, 0.47992235, -0.6467736]', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 8000
@@ -1397,7 +1397,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === 'tensor([ 0.7692,  0.7808,  0.7771], dtype=float32) | tensor([  2.782,    1.71, -0.8943], dtype=float32) | tensor([   2.89,   2.242,   2.462], dtype=float32) | tensor([ 0.2471,  0.2094,  0.1147], dtype=float32) | tensor([ 0.8553,  0.4799, -0.6468], dtype=float32)', `unexpected output: ${out}`)
+assert(out === '[0.7692267, 0.780836, 0.77707076]\n[2.7822266, 1.7102305, -0.8943019]\n[2.8903537, 2.2424502, 2.4619071]\n[0.24714532, 0.20941702, 0.11465217]\n[0.855341, 0.47992235, -0.6467736]', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 8000
@@ -1731,7 +1731,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === 'loss | helper | helper: done | loss: helper returned | 0.557950884103775 | loss | helper | helper: done | loss: helper returned | tensor([  1.769,   1.781,   1.777], dtype=float32) | loss | helper | helper: done | loss: helper returned | (0.557950884103775, tensor([  1.769,   1.781,   1.777], dtype=float32))', `unexpected output: ${out}`)
+assert(out === 'loss\nhelper\nhelper: done\nloss: helper returned\n0.557950884103775\nloss\nhelper\nhelper: done\nloss: helper returned\n[1.7692266, 1.7808359, 1.7770708]\nloss\nhelper\nhelper: done\nloss: helper returned\n(0.557950884103775, [1.7692266, 1.7808359, 1.7770708])', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 12000
@@ -1747,7 +1747,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === 'loss | helper | helper: done | loss: helper returned | 0.557950884103775 | loss | helper | helper: done | loss: helper returned | tensor([  1.769,   1.781,   1.777], dtype=float32) | loss | helper | helper: done | loss: helper returned | (0.557950884103775, tensor([  1.769,   1.781,   1.777], dtype=float32))', `unexpected output: ${out}`)
+assert(out === 'loss\nhelper\nhelper: done\nloss: helper returned\n0.557950884103775\nloss\nhelper\nhelper: done\nloss: helper returned\n[1.7692266, 1.7808359, 1.7770708]\nloss\nhelper\nhelper: done\nloss: helper returned\n(0.557950884103775, [1.7692266, 1.7808359, 1.7770708])', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 12000
@@ -1763,7 +1763,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === 'loss | helper | helper: done | loss: helper returned | 0.557950884103775 | loss | helper | helper: done | loss: helper returned | tensor([  1.769,   1.781,   1.777], dtype=float32) | loss | helper | helper: done | loss: helper returned | (0.557950884103775, tensor([  1.769,   1.781,   1.777], dtype=float32))', `unexpected output: ${out}`)
+assert(out === 'loss\nhelper\nhelper: done\nloss: helper returned\n0.557950884103775\nloss\nhelper\nhelper: done\nloss: helper returned\n[1.7692266, 1.7808359, 1.7770708]\nloss\nhelper\nhelper: done\nloss: helper returned\n(0.557950884103775, [1.7692266, 1.7808359, 1.7770708])', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 12000
@@ -1779,7 +1779,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === 'loss | helper | helper: done | loss: helper returned | 0.557950884103775 | loss | helper | helper: done | loss: helper returned | tensor([  1.769,   1.781,   1.777], dtype=float32) | loss | helper | helper: done | loss: helper returned | (0.557950884103775, tensor([  1.769,   1.781,   1.777], dtype=float32))', `unexpected output: ${out}`)
+assert(out === 'loss\nhelper\nhelper: done\nloss: helper returned\n0.557950884103775\nloss\nhelper\nhelper: done\nloss: helper returned\n[1.7692266, 1.7808359, 1.7770708]\nloss\nhelper\nhelper: done\nloss: helper returned\n(0.557950884103775, [1.7692266, 1.7808359, 1.7770708])', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 12000
@@ -1795,7 +1795,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === 'tensor([  1.935,   1.959,   1.951], dtype=float32) | tensor([  3.581,    2.37, -0.5429], dtype=float32) | tensor([ 0.2471,  0.2094,  0.1147], dtype=float32) | tensor([   2.89,   2.242,   2.462], dtype=float32) | tensor([  1.165,   1.178,   1.174], dtype=float32) | tensor([   1.25,   0.625,  -0.875], dtype=float32) | tensor([ 0.6224,  0.4746,   0.115], dtype=float32) | tensor([  1.165,   1.178,   1.174], dtype=float32) | tensor([ 0.4628,  0.4682,  0.4664], dtype=float32) | tensor([ 0.2382,  0.2388,  0.2386], dtype=float32)', `unexpected output: ${out}`)
+assert(out === '[1.9345258, 1.9592321, 1.9512241]\n[3.5810165, 2.369704, -0.5429288]\n[0.24714532, 0.20941702, 0.11465217]\n[2.8903537, 2.2424502, 2.4619071]\n[1.1652992, 1.1783961, 1.1741533]\n[1.25, 0.625, -0.875]\n[0.6224288, 0.47459483, 0.115042746]\n[1.1652992, 1.1783961, 1.1741533]\n[0.46280712, 0.46815383, 0.46641457]\n[0.23816949, 0.23876452, 0.23857346]', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 12000
@@ -1811,7 +1811,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === 'tensor([  1.935,   1.959,   1.951], dtype=float32) | tensor([  3.581,    2.37, -0.5429], dtype=float32) | tensor([ 0.2471,  0.2094,  0.1147], dtype=float32) | tensor([   2.89,   2.242,   2.462], dtype=float32) | tensor([  1.165,   1.178,   1.174], dtype=float32) | tensor([   1.25,   0.625,  -0.875], dtype=float32) | tensor([ 0.6224,  0.4746,   0.115], dtype=float32) | tensor([  1.165,   1.178,   1.174], dtype=float32) | tensor([ 0.4628,  0.4682,  0.4664], dtype=float32) | tensor([ 0.2382,  0.2388,  0.2386], dtype=float32)', `unexpected output: ${out}`)
+assert(out === '[1.9345258, 1.9592321, 1.9512241]\n[3.5810165, 2.369704, -0.5429288]\n[0.24714532, 0.20941702, 0.11465217]\n[2.8903537, 2.2424502, 2.4619071]\n[1.1652992, 1.1783961, 1.1741533]\n[1.25, 0.625, -0.875]\n[0.6224288, 0.47459483, 0.115042746]\n[1.1652992, 1.1783961, 1.1741533]\n[0.46280712, 0.46815383, 0.46641457]\n[0.23816949, 0.23876452, 0.23857346]', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 12000
@@ -1827,7 +1827,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === 'tensor([  1.935,   1.959,   1.951], dtype=float32) | tensor([  3.581,    2.37, -0.5429], dtype=float32) | tensor([ 0.2471,  0.2094,  0.1147], dtype=float32) | tensor([   2.89,   2.242,   2.462], dtype=float32) | tensor([  1.165,   1.178,   1.174], dtype=float32) | tensor([   1.25,   0.625,  -0.875], dtype=float32) | tensor([ 0.6224,  0.4746,   0.115], dtype=float32) | tensor([  1.165,   1.178,   1.174], dtype=float32) | tensor([ 0.4628,  0.4682,  0.4664], dtype=float32) | tensor([ 0.2382,  0.2388,  0.2386], dtype=float32)', `unexpected output: ${out}`)
+assert(out === '[1.9345258, 1.9592321, 1.9512241]\n[3.5810165, 2.369704, -0.5429288]\n[0.24714532, 0.20941702, 0.11465217]\n[2.8903537, 2.2424502, 2.4619071]\n[1.1652992, 1.1783961, 1.1741533]\n[1.25, 0.625, -0.875]\n[0.6224288, 0.47459483, 0.115042746]\n[1.1652992, 1.1783961, 1.1741533]\n[0.46280712, 0.46815383, 0.46641457]\n[0.23816949, 0.23876452, 0.23857346]', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 12000
@@ -1843,7 +1843,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === 'tensor([  1.935,   1.959,   1.951], dtype=float32) | tensor([  3.581,    2.37, -0.5429], dtype=float32) | tensor([ 0.2471,  0.2094,  0.1147], dtype=float32) | tensor([   2.89,   2.242,   2.462], dtype=float32) | tensor([  1.165,   1.178,   1.174], dtype=float32) | tensor([   1.25,   0.625,  -0.875], dtype=float32) | tensor([ 0.6224,  0.4746,   0.115], dtype=float32) | tensor([  1.165,   1.178,   1.174], dtype=float32) | tensor([ 0.4628,  0.4682,  0.4664], dtype=float32) | tensor([ 0.2382,  0.2388,  0.2386], dtype=float32)', `unexpected output: ${out}`)
+assert(out === '[1.9345258, 1.9592321, 1.9512241]\n[3.5810165, 2.369704, -0.5429288]\n[0.24714532, 0.20941702, 0.11465217]\n[2.8903537, 2.2424502, 2.4619071]\n[1.1652992, 1.1783961, 1.1741533]\n[1.25, 0.625, -0.875]\n[0.6224288, 0.47459483, 0.115042746]\n[1.1652992, 1.1783961, 1.1741533]\n[0.46280712, 0.46815383, 0.46641457]\n[0.23816949, 0.23876452, 0.23857346]', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 12000
@@ -1859,7 +1859,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === 'loss1 | apply | apply: first call done | loss1: applied | tensor([  1.165,   1.178,   1.174], dtype=float32) | loss2 | make | loss2: made | tensor([ 0.2471,  0.2094,  0.1147], dtype=float32) | loss3 | loss3: built | tensor([  1.935,   1.959,   1.951], dtype=float32)', `unexpected output: ${out}`)
+assert(out === 'loss1\napply\napply: first call done\nloss1: applied\n[1.1652992, 1.1783961, 1.1741533]\nloss2\nmake\nloss2: made\n[0.24714532, 0.20941702, 0.11465217]\nloss3\nloss3: built\n[1.9345258, 1.9592321, 1.9512241]', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 12000
@@ -1875,7 +1875,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === 'loss1 | apply | apply: first call done | loss1: applied | tensor([  1.165,   1.178,   1.174], dtype=float32) | loss2 | make | loss2: made | tensor([ 0.2471,  0.2094,  0.1147], dtype=float32) | loss3 | loss3: built | tensor([  1.935,   1.959,   1.951], dtype=float32)', `unexpected output: ${out}`)
+assert(out === 'loss1\napply\napply: first call done\nloss1: applied\n[1.1652992, 1.1783961, 1.1741533]\nloss2\nmake\nloss2: made\n[0.24714532, 0.20941702, 0.11465217]\nloss3\nloss3: built\n[1.9345258, 1.9592321, 1.9512241]', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 12000
@@ -1891,7 +1891,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === 'loss1 | apply | apply: first call done | loss1: applied | tensor([  1.165,   1.178,   1.174], dtype=float32) | loss2 | make | loss2: made | tensor([ 0.2471,  0.2094,  0.1147], dtype=float32) | loss3 | loss3: built | tensor([  1.935,   1.959,   1.951], dtype=float32)', `unexpected output: ${out}`)
+assert(out === 'loss1\napply\napply: first call done\nloss1: applied\n[1.1652992, 1.1783961, 1.1741533]\nloss2\nmake\nloss2: made\n[0.24714532, 0.20941702, 0.11465217]\nloss3\nloss3: built\n[1.9345258, 1.9592321, 1.9512241]', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 12000
@@ -1907,7 +1907,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === 'loss1 | apply | apply: first call done | loss1: applied | tensor([  1.165,   1.178,   1.174], dtype=float32) | loss2 | make | loss2: made | tensor([ 0.2471,  0.2094,  0.1147], dtype=float32) | loss3 | loss3: built | tensor([  1.935,   1.959,   1.951], dtype=float32)', `unexpected output: ${out}`)
+assert(out === 'loss1\napply\napply: first call done\nloss1: applied\n[1.1652992, 1.1783961, 1.1741533]\nloss2\nmake\nloss2: made\n[0.24714532, 0.20941702, 0.11465217]\nloss3\nloss3: built\n[1.9345258, 1.9592321, 1.9512241]', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 12000
@@ -2087,7 +2087,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === 'tensor([ 0.7692,  0.7808,  0.7771], dtype=float32) | tensor([ 0.6864,  0.7286,  0.7144], dtype=float32)', `unexpected output: ${out}`)
+assert(out === '[0.7692267, 0.780836, 0.77707076]\n[0.6864027, 0.7285644, 0.7143563]', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 12000
@@ -2103,7 +2103,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === 'tensor([ 0.7692,  0.7808,  0.7771], dtype=float32) | tensor([ 0.6864,  0.7286,  0.7144], dtype=float32)', `unexpected output: ${out}`)
+assert(out === '[0.7692267, 0.780836, 0.77707076]\n[0.6864027, 0.7285644, 0.7143563]', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 12000
@@ -2119,7 +2119,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === 'tensor([ 0.7692,  0.7808,  0.7771], dtype=float32) | tensor([ 0.6864,  0.7286,  0.7144], dtype=float32)', `unexpected output: ${out}`)
+assert(out === '[0.7692267, 0.780836, 0.77707076]\n[0.6864027, 0.7285644, 0.7143563]', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 12000
@@ -2135,7 +2135,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === 'tensor([ 0.7692,  0.7808,  0.7771], dtype=float32) | tensor([ 0.6864,  0.7286,  0.7144], dtype=float32)', `unexpected output: ${out}`)
+assert(out === '[0.7692267, 0.780836, 0.77707076]\n[0.6864027, 0.7285644, 0.7143563]', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 12000

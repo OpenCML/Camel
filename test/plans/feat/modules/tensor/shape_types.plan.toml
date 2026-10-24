@@ -6,7 +6,7 @@ tags = ["feat", "modules", "tensor", "types"]
 
 [[tests]]
 name = "body_mismatch"
-desc = "A shape written on a tensor parameter is part of its type (it used to be dropped): adding a [4] tensor to a parameter declared `Tensor<const [3]>` is a compile-time error at the operator, and the program does not run."
+desc = "A shape written on a tensor parameter is part of its type (it used to be dropped): adding a [4] tensor to a parameter declared `Tensor<[3]>` is a compile-time error at the operator, and the program does not run."
 kind = "negative"
 case = "../../../../cases/modules/tensor/shape_types/body_mismatch.cml"
 args = ["${case}"]
@@ -18,23 +18,23 @@ timeout_ms = 10000
 
 [[tests]]
 name = "call_mismatch"
-desc = "Passing a [4] tensor to a parameter declared `Tensor<const [3]>` is a compile-time error at the call."
+desc = "Passing a [4] tensor to a parameter declared `Tensor<[3]>` is a compile-time error at the call."
 kind = "negative"
 case = "../../../../cases/modules/tensor/shape_types/call_mismatch.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["Tensor<float32, [4]>", "SemanticDiag::NoMatchingFunction"]
+expect_output_contains = ["f32[4]", "SemanticDiag::NoMatchingFunction"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
 [[tests]]
 name = "rank_mismatch"
-desc = "Passing a [3, 1] tensor to a parameter declared `Tensor<const [3]>` is a compile-time error at the call."
+desc = "Passing a [3, 1] tensor to a parameter declared `Tensor<[3]>` is a compile-time error at the call."
 kind = "negative"
 case = "../../../../cases/modules/tensor/shape_types/rank_mismatch.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["Tensor<float32, [3, 1]>", "SemanticDiag::NoMatchingFunction"]
+expect_output_contains = ["f32[3, 1]", "SemanticDiag::NoMatchingFunction"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
@@ -57,20 +57,20 @@ kind = "negative"
 case = "../../../../cases/modules/tensor/shape_types/propagated_mismatch.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["Tensor<?, [2, 5]>", "SemanticDiag::NoMatchingFunction"]
+expect_output_contains = ["Tensor<[2, 5]>", "SemanticDiag::NoMatchingFunction"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
 [[tests]]
 name = "unshaped_argument"
-desc = "A tensor of unknown shape (loaded at run time) does not fit a parameter with a declared shape; the diagnostic names the argument, both types and the conversion to write (`t as Tensor<const [3]>`, see as_checked; `reshape` with a constant shape is the other checked way in, see reshape_gives_shape)."
+desc = "A tensor of unknown shape (loaded at run time) does not fit a parameter with a declared shape; the diagnostic names the argument, both types and the conversion to write (`t as Tensor<[3]>`, see as_checked; `reshape` with a constant shape is the other checked way in, see reshape_gives_shape)."
 kind = "negative"
 case = "../../../../cases/modules/tensor/shape_types/unshaped_argument.cml"
 args = ["${case}"]
 envs = ["X=test/cases/modules/tensor/shape_types/x3.npy"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ArgumentNeedsConversion"
-expect_output_contains = ["argument 1 ('t', for parameter 'b') has type 'Tensor', which is less exact than 'Tensor<?, [3]>'", "'t as Tensor<const [3]>'"]
+expect_output_contains = ["argument 1 ('t', for parameter 'b') has type 'Tensor', which is less exact than 'Tensor<[3]>'", "'t as Tensor<[3]>'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
@@ -100,7 +100,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "ok"
-desc = "A parameter declared `Tensor<const [3]>` accepts a [3] tensor."
+desc = "A parameter declared `Tensor<[3]>` accepts a [3] tensor."
 kind = "behavior"
 case = "../../../../cases/modules/tensor/shape_types/ok.cml"
 args = ["${case}"]
@@ -111,18 +111,18 @@ timeout_ms = 10000
 
 [[tests]]
 name = "unknown_extent"
-desc = "An extent written -1 is unknown: `Tensor<const [-1, 3]>` accepts batches of 5 and of 1, and the declared result shape `[-1, 2]` holds."
+desc = "An extent written -1 is unknown: `Tensor<[?, 3]>` accepts batches of 5 and of 1, and the declared result shape `[-1, 2]` holds."
 kind = "behavior"
 case = "../../../../cases/modules/tensor/shape_types/unknown_extent.cml"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_contains = ["dtype=float32"]
+expect_stdout_contains = ["[[0.9950548, 0.9950548], [0.9950548, 0.9950548], [0.9950548, 0.9950548], [0.9950548, 0.9950548], [0.9950548, 0.9950548]]", "[[0.9950548, 0.9950548]]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
 
 [[tests]]
 name = "dtype_and_shape"
-desc = "Element type and shape together: `Tensor<f32, const [3]>`."
+desc = "Element type and shape together: `f32[3]`."
 kind = "behavior"
 case = "../../../../cases/modules/tensor/shape_types/dtype_and_shape.cml"
 args = ["${case}"]
@@ -133,7 +133,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "reshape_gives_shape"
-desc = "A tensor loaded at run time gets a static shape from `reshape(t, [3])` and then fits a parameter declared `Tensor<const [3]>`."
+desc = "A tensor loaded at run time gets a static shape from `reshape(t, [3])` and then fits a parameter declared `Tensor<[3]>`."
 kind = "behavior"
 case = "../../../../cases/modules/tensor/shape_types/reshape_gives_shape.cml"
 args = ["${case}"]
@@ -145,7 +145,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "as_checked"
-desc = "A tensor of unknown shape enters a shaped position through an explicit conversion: `t as Tensor<const [3]>`; the shape is checked when the conversion runs."
+desc = "A tensor of unknown shape enters a shaped position through an explicit conversion: `t as Tensor<[3]>`; the shape is checked when the conversion runs."
 kind = "behavior"
 case = "../../../../cases/modules/tensor/shape_types/as_checked.cml"
 args = ["${case}"]
@@ -156,23 +156,23 @@ timeout_ms = 10000
 
 [[tests]]
 name = "as_runtime_mismatch"
-desc = "`t as Tensor<const [4]>` on a tensor that turns out to have shape [3] is a run-time error at the conversion, naming both shapes."
+desc = "`t as Tensor<[4]>` on a tensor that turns out to have shape [3] is a run-time error at the conversion, naming both shapes."
 kind = "behavior"
 case = "../../../../cases/modules/tensor/shape_types/as_runtime_mismatch.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["ran", "conversion to 'Tensor<?, [4]>' failed: the tensor has shape [3]", "as_runtime_mismatch.cml:9:15"]
+expect_output_contains = ["ran", "conversion to 'Tensor<[4]>' failed: the array has shape [3]", "as_runtime_mismatch.cml:9:15"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
 
 [[tests]]
 name = "as_static_mismatch"
-desc = "A conversion the static types already contradict (`ones([3]) as Tensor<const [4]>`) is a compile-time error."
+desc = "A conversion the static types already contradict (`ones([3]) as Tensor<[4]>`) is a compile-time error."
 kind = "negative"
 case = "../../../../cases/modules/tensor/shape_types/as_static_mismatch.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::DynamicCastForbidden"
-expect_output_contains = ["Tensor<float32, [3]>", "Tensor<?, [4]>"]
+expect_output_contains = ["f32[3]", "Tensor<[4]>"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000

@@ -812,7 +812,7 @@ args = ["${case}", "rules::simplify", "${backend}"]
 backends = ["nvm", "fvm", "prl"]
 backends_agree = ["stdout_normalized"]
 expect_exit = 0
-expect_stdout_contains = ["tensor([      8.,      16.,      24.], dtype=float32)", "tensor([      6.,      12.,      18.], dtype=float32) tensor([     15.,      30.,      45.], dtype=float32)", "tensor([      3.,       6.,       9.], dtype=float32)", "tensor([      1.,       2.,       3.], dtype=float32)", "tensor([    0.3,     0.6,     0.9], dtype=float32)"]
+expect_stdout_contains = ["[8.0, 16.0, 24.0]", "[6.0, 12.0, 18.0] [15.0, 30.0, 45.0]", "[3.0, 6.0, 9.0]", "[1.0, 2.0, 3.0]", "[0.3, 0.6, 0.90000004]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -823,7 +823,7 @@ kind = "behavior"
 case = "../../../cases/modules/rules/tensor_boundary.cml"
 args = ["${case}", "rules::simplify", "std::nvm"]
 expect_exit = 0
-expect_stdout_contains = ["tensor([      0.,       0.,       0.], dtype=float32) 0.0", "tensor([  1e-30,       0.,       0.], dtype=float32) 1e-30", "tensor([      0.,       0.,       0.], dtype=float32) 0.0"]
+expect_stdout_contains = ["[0.0, 0.0, 0.0] 0.0", "[1e-30, 0.0, 0.0] 1e-30", "[0.0, 0.0, 0.0] 0.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
 
@@ -834,7 +834,7 @@ kind = "behavior"
 case = "../../../cases/modules/rules/tensor_boundary.cml"
 args = ["${case}", "tensor_boundary::apply", "std::nvm"]
 expect_exit = 0
-expect_stdout_contains = ["tensor([   -nan,    -nan,    -nan], dtype=float32) 0.0", "tensor([      0.,       0.,       0.], dtype=float32) 1e-30", "tensor([     -0.,       0.,      -0.], dtype=float32) 0.0"]
+expect_stdout_contains = ["[nan, nan, nan] 0.0", "[0.0, 0.0, 0.0] 1e-30", "[-0.0, 0.0, -0.0] 0.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
 
@@ -845,7 +845,7 @@ kind = "behavior"
 case = "../../../cases/modules/rules/tensor_target.cml"
 args = ["${case}", "rules::saturate_all", "std::nvm"]
 expect_exit = 0
-expect_stdout_contains = ["tensor([      8.,      16.,      24.], dtype=float32)"]
+expect_stdout_contains = ["[8.0, 16.0, 24.0]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
 
