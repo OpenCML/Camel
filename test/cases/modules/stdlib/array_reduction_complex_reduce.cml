@@ -1,0 +1,30 @@
+/**
+ * The element type no declaration admits, reduced by the body's own `reduce` — the smallest
+ * program that shows both the path and a defect of the bytecode VMs found here.
+ *
+ * `sum` over a complex array is the one instance with no kernel declaration to answer it (see
+ * array_reduction_arms.cml), so it runs the Camel body, whose complex arm is
+ * `xs->reduce<(a, b) => a + b, c64(0)>` (stdlib/array.cml). This case writes that very reduce
+ * directly, with no part of the array module in the program, so what it measures is `reduce`
+ * itself: `:mark/reduce_arr` with a `c64` accumulator over a `c64[]`.
+ *
+ *   - `std::nvm` and `std::prl` return 4 + 6i, the sum of the two elements.
+ *   - `std::fvm` and `std::jit` print `before` and are killed by a signal at the reduce, with no
+ *     diagnostic: a defect of the two bytecode VMs on a complex accumulator, in `src/runtime`
+ *     rather than in this lane's files (the plan marks those two back ends `known_fail`).
+ *
+ * A compiler that gave the complex instance a kernel would not reach this reduce at all, and a
+ * compiler that refused complex arrays with `is_numeric` would not reach it either; this case is
+ * the record of what happens when it is reached.
+ */
+module array_reduction_complex_reduce
+
+func main(): int sync {
+    let z0: c64 = 1 + 2i
+    let z1: c64 = 3 + 4i
+    let zs: c64[] = [z0, z1]
+    println("before")
+    let acc: c64 = zs->reduce<(a, b) => a + b, c64(0)>
+    println("reduce {}", acc)
+    return 0
+}

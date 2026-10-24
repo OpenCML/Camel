@@ -83,6 +83,47 @@ expect_stdout_contains = ["the declarations agree with the"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 30000
 
+# A position that means the same thing carries the same name in every rule of a name: that is what
+# a named argument binds to (`len(x: xs)`), and it is why `stdlib/json.cml` and
+# `stdlib/signatures/globals.cml` rename a position. The declaration files and the rules C++
+# registers are two places a rule's names are written; `registry.signatures_match` compares their
+# parameters and this compares the names, so the two cannot drift apart again.
+[[tests]]
+name = "registry.overload_position_names_agree"
+desc = "One position, one name: `json.get`'s with-parameter is `key` in every one of its eight rules (a string argument is a member key, an integer one an element index), `len`'s one parameter is `x` in the string, array, map and set rules, and `items`' is `m` in the map and set rules. These are the names the reference page declares for them. `contains` and `py_call` are not such sets -- their positions differ in meaning, or their arity differs -- so they take no named argument, as the reference page states."
+kind = "behavior"
+case = "../../../cases/modules/stdlib/registry_all.cml"
+args = ["inspect", "--ops", "${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const ops = input.normalized.stdout.split('\n').filter((l) => l.startsWith('OPERATOR ')).map((l) => JSON.parse(l.slice(9)))
+// Every `name:` in a signature is a parameter's name, the with-parameters before the ordinary
+// ones, and the index of the position tells which is which.
+const names = (o) => [...o.signature.matchAll(/([A-Za-z_][A-Za-z0-9_]*)\s*:/g)].map((m) => m[1])
+const oneNamePerSet = (what, rules, position, expected) => {
+  assert(rules.length > 1, `${what}: ${rules.length} rule(s) listed, expected the rules of an overload set`)
+  for (const o of rules) {
+    const at = names(o)
+    assert(at.length > position, `${what} ${o.signature}: no parameter at position ${position}`)
+    assert(at[position] === expected,
+      `${what} ${o.signature}: the parameter at position ${position} is '${at[position]}', and every rule of the set must call it '${expected}'`)
+  }
+}
+oneNamePerSet('json.get', ops.filter((o) => o.uri === 'json:get'), 0, 'key')
+oneNamePerSet('len', ops.filter((o) => o.name === 'len'), 0, 'x')
+oneNamePerSet('items', ops.filter((o) => o.name === 'items'), 0, 'm')
+// `contains` is the set the reference page says takes no named argument: its rules do not agree
+// on a name for their first position (`value` against `sub`), which is the condition a named
+// argument binds under. This is that state, written down.
+const contains = ops.filter((o) => o.name === 'contains').map((o) => names(o)[0])
+assert(contains.length > 1, `contains: only ${contains.length} rule(s) listed`)
+assert(new Set(contains).size > 1, `contains would take a named argument if its rules agreed: ${contains.join(', ')}`)
+}
+"""
+timeout_ms = 20000
+
 [[tests]]
 name = "registry.docs_complete"
 desc = "Every name the reference prints has a description and an @example, every example compiles as a call of its declaration (its arguments bound to the declared parameter types, the types it mentions imported), a fallible result has an @fails line naming the error, and an example the checker cannot compile says why with @example-fragment <reason>."

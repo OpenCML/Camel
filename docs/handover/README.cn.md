@@ -421,7 +421,7 @@ H237 的规模扫描（`examples/models/naive-in-expert-out`）：d=64 时 Camel
 5. **`graph` 模块**：`inputs`/`with_inputs`/`ctrl_inputs` 合为带角色的端口列表加 `sync_preds`/`order_preds`；规则语言与 `fact` 的模式不变（源码写法本身标出角色）。
 6. **其余**：ONNX 导出、Tiles、`std::cpp`、`std::cml`、调试器、转储（`std::gir` 画出三种边的不同样式）。
 6.4 **并入的 H241 实测边界**（答复见 reviews/questions-2026-10-23.md 的 h241-limits）：F1 的臂与循环两半都在**建图时**做（值建在用到它的区域里，端口由建图器建）；`var` 降为"建 cell + 一次普通写"；验收加 `let a = println(1); let b = println(2); return b` 只打印 2。
-6.5 **表示细节**见设计稿第 5 节（结构节点的端口按位置、`BRCH` 与臂只靠区域归属、`GATE`/`SYNC` 删除、`std::opt::ctrl` 改为 `std::opt::order` 只约简顺序边）；规则改写使效应不再被用到（论文侧 F20）未定，不据此定用例期望。
+6.5 **表示细节**见设计稿第 5 节（结构节点的端口按位置、`BRCH` 与臂只靠区域归属、`SYNC` 删除、`GATE` 只在块的值节点不归该块独有时生成（设计稿第 5 节第 3 条，2026-10-24 更正）、`std::opt::ctrl` 改为 `std::opt::order` 只约简顺序边）；规则改写使效应不再被用到（论文侧 F20）未定，不据此定用例期望。
 7. **验收**：H241 第 6 条的用例；同步块之外的纯计算上没有非数据边、任何纯节点上没有顺序边（作为图封存时的结构校验，见设计稿 4.6）；`effects_outside_sync.cml` 的 `returned()` 不执行；`std::opt` 在内联后的乘积上能做代数化简（H110 的情形）；四个后端结果一致。
 
 ### 5.22 H243 两条裁定的落地（决策者 2026-10-23，负责人同意）

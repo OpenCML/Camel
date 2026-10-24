@@ -82,6 +82,18 @@ resolver_ptr_t withFixedSignature(resolver_ptr_t resolver, FunctionType *signatu
     return resolver;
 }
 
+/// A rule of one ordinary parameter whose signature records the parameter's name: the name is
+/// what a named argument binds to (`len(x: xs)`), so a rule and the declaration it is written
+/// beside must give a position the same name (stdlib-conventions, "the same meaning at a position
+/// shares its name"). `StaticFuncTypeResolver::create` takes types only, and a signature built
+/// from types records no names at all, so the name is written here.
+resolver_ptr_t namedStaticSignature(const char *name, Type *param, Type *exit) {
+    FunctionTypeFactory factory;
+    factory.addNormArg(name, param, false);
+    factory.setExitType(exit);
+    return StaticFuncTypeResolver::create(factory.build());
+}
+
 /// The two entries a group adds for the reduced-precision floating types, written where the
 /// group's other entries are (a group is a braced list, and a `std::vector` cannot be one of its
 /// elements, so a function call cannot stand in for the two entries). The URI suffix is `bf` for
@@ -1925,13 +1937,14 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
             {
                 {
                     ":struct/len_str",
-                    StaticFuncTypeResolver::create({}, {{Type::String(), false}}, Type::Int64()),
+                    namedStaticSignature("x", Type::String(), Type::Int64()),
                 },
                 {
                     ":struct/len_arr",
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {1, {false}}},
-                        "<> (arr: T[]) => int",
+                        // One position, one name: the collection rule below is `len(x: …)` too.
+                        "<> (x: T[]) => int",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<Type *> {
                             if (norm[0]->code() != TypeCode::Array)

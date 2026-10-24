@@ -3,17 +3,20 @@
 
 /*
  * The native operators of the `array` module (stdlib/array.cml): the sorting family, the merge
- * of two sorted arrays, and the primitives `flatten`, `unique` and `argsort` that the rest of
- * the module is written on. They answer on the `array` protocol; the built-in module registers
- * the executor factory under that name, so the module written in Camel needs no second module of
- * its own to load them.
+ * of two sorted arrays, the primitives `flatten`, `unique` and `argsort` that the rest of the
+ * module is written on, and the reductions `sum`, `min` and `max` (builtin/operators/
+ * array_reduce.cpp). They answer on the `array` protocol; the built-in module registers the
+ * executor factory under that name, so the module written in Camel needs no second module of its
+ * own to load them.
  *
  * Each is here because composing it from the built-in operators would cost more than its size: a
  * `flatten` folded with `concat` copies the result once per inner array, a `unique` folded with
- * `contains` and `concat` is quadratic and copies as well, and a sort written with recursion
- * would recurse once per element. The sorts are the one family with in-place forms: the compiler
- * rewrites `xs = xs->sort` to the in-place form when nothing else refers to the array (design
- * principles 11.3), so the forms change their operand and their result is that operand.
+ * `contains` and `concat` is quadratic and copies as well, a sort written with recursion would
+ * recurse once per element, and a reduction written with `reduce` calls the combining function
+ * once per element through the interpreter instead of sweeping the array (design principles
+ * 10.4). The sorts are the one family with in-place forms: the compiler rewrites
+ * `xs = xs->sort` to the in-place form when nothing else refers to the array (design principles
+ * 11.3), so the forms change their operand and their result is that operand.
  */
 
 #include "array.h"
@@ -419,6 +422,35 @@ std::unordered_map<std::string, operator_t> getArrayOpsMap() {
         {"flatten", __array_flatten__},
         {"unique", __array_unique__},
         {"argsort", __array_argsort__},
+        // The reductions' kernels (builtin/operators/array_reduce.cpp): one executor per element
+        // type, named after the element type it takes. Each body-less declaration in
+        // stdlib/array.cml names one of them with its `#op` tag and admits exactly that element
+        // type with its own `when` (`Builder::declaredRuleApplies`), so the element type is known
+        // where the executor is chosen and no executor asks an array what it holds. An element
+        // type no declaration admits has no executor and runs the Camel body (H228: one operator,
+        // per-type executors).
+        {"sum_i", __array_sum_i__},
+        {"sum_l", __array_sum_l__},
+        {"sum_f", __array_sum_f__},
+        {"sum_d", __array_sum_d__},
+        {"sum_bf", __array_sum_bf__},
+        {"sum_f6", __array_sum_f6__},
+        {"min_i", __array_min_i__},
+        {"min_l", __array_min_l__},
+        {"min_f", __array_min_f__},
+        {"min_d", __array_min_d__},
+        {"min_bf", __array_min_bf__},
+        {"min_f6", __array_min_f6__},
+        {"min_b", __array_min_b__},
+        {"min_s", __array_min_s__},
+        {"max_i", __array_max_i__},
+        {"max_l", __array_max_l__},
+        {"max_f", __array_max_f__},
+        {"max_d", __array_max_d__},
+        {"max_bf", __array_max_bf__},
+        {"max_f6", __array_max_f6__},
+        {"max_b", __array_max_b__},
+        {"max_s", __array_max_s__},
     };
 }
 
@@ -437,6 +469,32 @@ void declareArrayOperatorFacts() {
             {"flatten", true},
             {"unique", true},
             {"argsort", true},
+            // The reductions' kernels are pure as the functions they execute are: the fold reads
+            // the array it is given and touches nothing else. The declarations in the map above
+            // name them; this is what tells the compiler what a call of one may touch. One entry
+            // per element type, because one executor takes one element type.
+            {"sum_i", true},
+            {"sum_l", true},
+            {"sum_f", true},
+            {"sum_d", true},
+            {"sum_bf", true},
+            {"sum_f6", true},
+            {"min_i", true},
+            {"min_l", true},
+            {"min_f", true},
+            {"min_d", true},
+            {"min_bf", true},
+            {"min_f6", true},
+            {"min_b", true},
+            {"min_s", true},
+            {"max_i", true},
+            {"max_l", true},
+            {"max_f", true},
+            {"max_d", true},
+            {"max_bf", true},
+            {"max_f6", true},
+            {"max_b", true},
+            {"max_s", true},
         });
     // The in-place forms of the sorting operators (design principles 11.3): `xs = xs->sort`
     // sorts the variable's own array when nothing else refers to it (Builder::

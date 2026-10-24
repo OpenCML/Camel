@@ -17,12 +17,12 @@ timeout_ms = 10000
 
 [[tests]]
 name = "rules.generic_head"
-desc = "A rule declares its type parameters after its name, like a function: `rule keep::<T>(x: T, y: T)` parses into the same pair of functions. The type parameters are visible at the head; instantiating a generic rule as a value is not supported yet (the rule constructor takes no type arguments), so this locks the syntax."
+desc = "A rule declares its type parameters after its name, like a function: `rule keep::<T>(x: T, y: T)` parses into the same pair of functions, `keep__lhs` and `keep__rhs`. The type parameters are visible at the head, and the head changes the maker: the pair is not passed as two function values -- a generic function has no value (design principles 5.5) -- but named to `__rule_generic`, which registers their templates and gives the rule value the id it keeps. The `Rule` a generic head makes is a value the rewrite engine instantiates where it matches (the ruling of 2026-10-23 on `generic-rule-instantiation`)."
 kind = "behavior"
 case = "../../../cases/parse/rules/generic_head.cml"
 args = ["${inspect_ast}", "${case}"]
 expect_exit = 0
-expect_stdout_contains = ["FuncDecl: keep__lhs", "FuncDecl: keep__rhs", "FuncDecl: keep"]
+expect_stdout_contains = ["FuncDecl: keep__lhs", "FuncDecl: keep__rhs", "DataDecl: keep", "RefData: __rule_generic", "RefData: keep__lhs", "RefData: keep__rhs"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
 
