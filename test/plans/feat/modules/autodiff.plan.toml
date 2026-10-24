@@ -2740,29 +2740,47 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
 [[tests]]
-name = "slice_grad_refuse_reshape_array"
-desc = "A float array is continuous (design principles 9.9). Reshaping one into a tensor has a known adjoint, but no operator here carries a tensor's gradient back into an array, so reshape refuses at the operator and names it instead of dropping the array's gradient; the refusal is located at the reshape call (line 22)."
-kind = "negative"
-case = "../../../cases/modules/autodiff/refuse_reshape_array.cml"
+name = "adjoint_reshape_array.runtime.nvm"
+desc = "A float array is continuous (design principles 9.9) and a reshape moves no element, so the adjoint of `reshape(a, shape)` is the upstream gradient read back in the element order of `a` -- the tensor rule, since a numeric array is a tensor. The case asserts the gradient itself: `g.w` is 5.0 against the hand adjoint of the trap, `gw` is printed element by element against [2.0, 3.0, 5.0, 7.0], the weights that reach each element of w (a different number for each, so a misplaced or reordered gradient fails), `gw_d` is the squared distance to it (0.0), and `trap` is 12.0 * g.w = 60.0, which is 0.0 for a gradient that left the array out of the reshape. This case replaced `slice_grad_refuse_reshape_array`, which expected the refusal. (grad built at run time)"
+kind = "behavior"
+case = "../../../cases/modules/autodiff/adjoint_reshape_array.cml"
 args = ["${case}", "${run_nvm}"]
-expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::RuntimeError"
-expect_diagnostic_line = 22
-expect_output_contains = ["cannot differentiate operator 'tensor:reshape'", "no operator that carries a tensor's gradient back into an array"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+expect_exit = 0
+expect_stdout_exact = "adjoint_reshape_array grad=5.0 trap=60.0 gw=[2.0, 3.0, 5.0, 7.0] gw_d=0.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
 [[tests]]
-name = "slice_grad_refuse_concat_array"
-desc = "concat's array part is continuous too: an array part that depends on the differentiated parameter is refused at the concat call (line 23), naming the operator, rather than being left out of the gradient. A constant array part is still skipped, not refused."
-kind = "negative"
-case = "../../../cases/modules/autodiff/refuse_concat_array.cml"
+name = "adjoint_reshape_array.macro.fvm"
+desc = "The same reshape adjoint when std::macro builds the gradient ahead of time and the FastVM runs it: the reshape of the upstream gradient is placed in the compiled gradient graph, not only in a graph built at run time."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/adjoint_reshape_array.cml"
+args = ["${case}", "std::macro", "${run_fvm}"]
+expect_exit = 0
+expect_stdout_exact = "adjoint_reshape_array grad=5.0 trap=60.0 gw=[2.0, 3.0, 5.0, 7.0] gw_d=0.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "adjoint_concat_array.runtime.nvm"
+desc = "concat's array part is continuous too (design principles 9.9): the adjoint of an array part is the slice of the upstream gradient that covers it, which is what the tensor rule builds. The case asserts the gradient itself: `g.w` is 2.0 against the hand adjoint of the trap, `gw` is printed element by element against [3.0, 4.0] for an array part that sits after a constant part, `gw_d` is the squared distance to it (0.0), and `trap` is 12.0 * g.w = 24.0, which is 0.0 for a gradient that left the array out of the concat. This case replaced `slice_grad_refuse_concat_array`, which expected the refusal. (grad built at run time)"
+kind = "behavior"
+case = "../../../cases/modules/autodiff/adjoint_concat_array.cml"
 args = ["${case}", "${run_nvm}"]
-expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::RuntimeError"
-expect_diagnostic_line = 23
-expect_output_contains = ["cannot differentiate operator 'tensor:concat'", "carries a tensor's gradient back into an array"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+expect_exit = 0
+expect_stdout_exact = "adjoint_concat_array grad=2.0 trap=24.0 gw=[3.0, 4.0] gw_d=0.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "adjoint_concat_array.macro.fvm"
+desc = "The same concat adjoint when std::macro builds the gradient ahead of time and the FastVM runs it: the slice of the upstream gradient is placed in the compiled gradient graph, not only in a graph built at run time."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/adjoint_concat_array.cml"
+args = ["${case}", "std::macro", "${run_fvm}"]
+expect_exit = 0
+expect_stdout_exact = "adjoint_concat_array grad=2.0 trap=24.0 gw=[3.0, 4.0] gw_d=0.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
 [[tests]]
@@ -2788,29 +2806,47 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
 [[tests]]
-name = "refuse_new_array"
-desc = "`new` has an adjoint: a tensor argument passes its gradient through. An array argument's adjoint would put the tensor's gradient back in an array of the same shape, and no operator here carries a gradient from a tensor into an array, so an array that depends on the differentiated parameter is refused at the new call (line 17), naming the operator and the array's type, instead of dropping the array's gradient. A constant array is not refused: it starts no gradient flow, so the call is never visited."
-kind = "negative"
-case = "../../../cases/modules/autodiff/refuse_new_array.cml"
+name = "adjoint_new_array.runtime.nvm"
+desc = "`new(xs)` converts a numeric array into a tensor, and an array's tangent is the array of its elements' tangents (design principles 9.9), so the adjoint is the tensor's gradient read back in the array's order -- the identity, since `new` moves no element. The case asserts the gradient itself: `g` is printed element by element against [1.0, 1.0] for a sum, and `gw` against [2.0, 3.0, 4.0] for a weighted read of the tensor's elements. This case replaced `refuse_new_array`, which expected the refusal and the silent zero behind it. (grad built at run time)"
+kind = "behavior"
+case = "../../../cases/modules/autodiff/adjoint_new_array.cml"
 args = ["${case}", "${run_nvm}"]
-expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::RuntimeError"
-expect_diagnostic_line = 17
-expect_output_contains = ["cannot differentiate operator 'tensor:new'", "no operator that carries a tensor's gradient back into an array"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+expect_exit = 0
+expect_stdout_exact = "adjoint_new_array g=[1.0, 1.0] gw=[2.0, 3.0, 4.0]\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
 [[tests]]
-name = "refuse_cast_array"
-desc = "`cast` takes a numeric array as well as a tensor, and an array's tangent is the array of its elements' tangents (design principles 9.9): the gradient of the tensor it returns would have to go back into an array, which no operator here builds from a tensor's gradient. The rule used to drop it and the pass materialized the array's zero -- [0.0, 0.0, 0.0] for a loss whose gradient is [1, 1, 1], the silent zero this class of defect is about. It is refused by name at the cast call (line 18), like new, reshape and concat, naming the operator and the array's type. A constant array is not refused: it starts no gradient flow."
-kind = "negative"
-case = "../../../cases/modules/autodiff/refuse_cast_array.cml"
+name = "adjoint_new_array.macro.fvm"
+desc = "The same new adjoint when std::macro builds the gradient ahead of time and the FastVM runs it: the tensor's gradient is read back into the array in the compiled gradient graph, not only in a graph built at run time."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/adjoint_new_array.cml"
+args = ["${case}", "std::macro", "${run_fvm}"]
+expect_exit = 0
+expect_stdout_exact = "adjoint_new_array g=[1.0, 1.0] gw=[2.0, 3.0, 4.0]\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "adjoint_cast_array.runtime.nvm"
+desc = "`cast` accepts a numeric array as well as a tensor, and an array's tangent is the array of its elements' tangents (design principles 9.9), so the adjoint of `cast(xs, 'float32')` is the tensor's gradient cast back to the array's element type. The case asserts the gradient itself: `g` is printed element by element against [1.0, 1.0, 1.0] -- the array the rule used to drop and materialize as zeros -- and `gw` against [2.0, 3.0, 4.0]. This case replaced `refuse_cast_array`, which expected the refusal. (grad built at run time)"
+kind = "behavior"
+case = "../../../cases/modules/autodiff/adjoint_cast_array.cml"
 args = ["${case}", "${run_nvm}"]
-expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::RuntimeError"
-expect_diagnostic_line = 18
-expect_output_contains = ["cannot differentiate operator 'tensor:cast'", "numeric array of type 'float[]'", "would be dropped silently"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+expect_exit = 0
+expect_stdout_exact = "adjoint_cast_array g=[1.0, 1.0, 1.0] gw=[2.0, 3.0, 4.0]\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "adjoint_cast_array.macro.fvm"
+desc = "The same cast adjoint when std::macro builds the gradient ahead of time and the FastVM runs it: the cast back into the array's element type is placed in the compiled gradient graph, not only in a graph built at run time."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/adjoint_cast_array.cml"
+args = ["${case}", "std::macro", "${run_fvm}"]
+expect_exit = 0
+expect_stdout_exact = "adjoint_cast_array g=[1.0, 1.0, 1.0] gw=[2.0, 3.0, 4.0]\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
 [[tests]]
@@ -2836,17 +2872,53 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
 [[tests]]
-name = "concat_array_part.skipped_and_refused"
-desc = "`concat`'s array part, both halves in one program so the pair is visible. A constant array part is skipped: for concat([2.0, 3.0], w, 0) weighted by [1, 0, 2, 3] the gradient of w is [2, 3], printed as sum=5.0 sq=13.0 - the hand adjoint's own numbers, which the zero tensor would print as 0.0 twice and a shifted gradient would change. An array part that depends on the differentiated parameter is refused at the concat call (line 28), naming the operator, after the first gradient has been printed."
+name = "refuse_container_reshape"
+desc = "A container that is not a numeric array has no adjoint. `reshape(xs, [4])` with `xs: float[][]` is flattened by the forward rule, which is why the call itself runs; the backward rule is not: `tensor:reshape` of the upstream gradient answers with a tensor, which is a flat numeric array, while the value the gradient has to return to holds its elements in another shape (`f32[][]` holds arrays). Nothing here carries a tensor's gradient back into such a container, so a container that depends on a differentiated parameter is refused by name, with its type, at the reshape call (line 26) instead of being dropped. A numeric array is a tensor and is not refused: `adjoint_reshape_array` asserts the adjoint this same rule builds for one. The refusal is also what keeps the container out of the kernels, which read it as a tensor: without it this program was killed by a signal (no output, no diagnostic) rather than faulting. (grad built at run time)"
 kind = "negative"
-case = "../../../cases/modules/autodiff/concat_array_part.cml"
+case = "../../../cases/modules/autodiff/refuse_container_reshape.cml"
 args = ["${case}", "${run_nvm}"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::RuntimeError"
-expect_diagnostic_line = 28
-expect_stdout_contains = ["concat_array_part sum=5.0 sq=13.0"]
-expect_output_contains = ["cannot differentiate operator 'tensor:concat'", "carries a tensor's gradient back into an array"]
+expect_diagnostic_line = 26
+expect_output_contains = ["cannot differentiate operator 'tensor:reshape'", "no operator carries a tensor's gradient back into one", "type 'float[][]'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "refuse_container_new"
+desc = "`new(xs)` with `xs: float[][]` converts the container to a tensor by flattening it, and the container has no adjoint: the gradient would have to return as an array of arrays, which no operator of this module builds from a tensor's gradient. The call is refused by name, with the container's type, at the new call (line 21); `refuse_container_reshape` is the same refusal for `reshape`. A numeric array is a tensor and is not refused (`adjoint_new_array` asserts its adjoint), and a constant container is converted by the forward rule and never visited here. Without the refusal this program faulted in the kernels, which read the container as a tensor: \"Expected Tensor argument\", with no place in the source to point at. (grad built at run time)"
+kind = "negative"
+case = "../../../cases/modules/autodiff/refuse_container_new.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::RuntimeError"
+expect_diagnostic_line = 21
+expect_output_contains = ["cannot differentiate operator 'tensor:new'", "no operator carries a tensor's gradient back into one", "type 'float[][]'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "refuse_container_concat"
+desc = "`concat` accepts a container that is not a numeric array where it accepts a tensor, and the part has no adjoint: its gradient is a slice of the output gradient, a tensor, while the value the gradient has to return to holds its elements in another shape. Both parts here have rank 2 (`xs: float[][]` and the tensor `[1, 2]`, which is what concat requires of them), so the forward call runs and only the backward rule has no operator for the container: it is refused by name, with the container's type, at the concat call (line 27). A numeric array part is not refused (`adjoint_concat_array` and `concat_array_part` assert its adjoint), and a constant container part is skipped while its length still places the other part's slice. Without the refusal this program was killed by a signal -- no output, no diagnostic -- because the rule asked `tensor:dim` for an extent of a value that holds arrays. (grad built at run time)"
+kind = "negative"
+case = "../../../cases/modules/autodiff/refuse_container_concat.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::RuntimeError"
+expect_diagnostic_line = 27
+expect_output_contains = ["cannot differentiate operator 'tensor:concat'", "no operator carries a tensor's gradient back into one", "type 'float[][]'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "concat_array_part.skipped_and_active"
+desc = "`concat`'s array part, both halves in one program so the pair is visible. A constant array part is skipped: for concat([2.0, 3.0], w, 0) weighted by [1, 0, 2, 3] the gradient of w is [2, 3], printed as sum=5.0 sq=13.0 -- the hand adjoint's own numbers, which the zero tensor would print as 0.0 twice and a shifted gradient would change. An array part that depends on the differentiated parameter takes the gradient of the slice of the output it covers: for concat(xs, [10.0, 20.0], 0) summed, xs's adjoint is [1.0, 1.0], printed element by element, with grad_d its squared distance to that adjoint (0.0) and value the forward sum (33.0). The second half used to be refused at the concat call; it is asserted here since the refusal went."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/concat_array_part.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_exact = "concat_array_part sum=5.0 sq=13.0\nconcat_array_part array_grad=[1.0,1.0] grad_d=0.0 value=33.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
 [[tests]]

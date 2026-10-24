@@ -8360,14 +8360,29 @@ Tensor shape mismatch in '{0}': {1}.
 Check the shapes of all operands involved in the operation and ensure they are compatible for broadcasting or direct computation.
 ```
 
-**Example** (`test/cases/modules/tensor/binary_length_error.cml`, run as `camel test/cases/modules/tensor/binary_length_error.cml std::fvm`)
+**Example** (`test/cases/loops/fault_tensor_rank0.cml`, run as `camel -E short test/cases/loops/fault_tensor_rank0.cml ${backend}`)
 
 ```camel
-module binary_length_error
-import { from_bytes, sum } from tensor
-import { from_array } from bytes
+// Reshaping a tensor to no dimension makes it the one element it holds — the rank-zero ruling,
+// docs/handover/reviews/questions-2026-10-23.md section rank-zero-tensor — so another element count
+// has no value to become, and the count is checked when the shape runs (the shape arrives through a
+// parameter). The loop below is never reached: `for` over a value with no dimension is refused
+// where it is written (loops.err_tensor_rank0), and the transition period's bare `Tensor` is a gap
+// no mechanism is built for (the author's ruling of 2026-10-25 on
+// no-dimension-value-in-an-array-typed-slot).
+module tensor_rank0_runtime
+
+import { Tensor, zeros, reshape } from tensor
+
+func toShape(t: Tensor, s: int[]): Tensor {
+    return reshape(t, s)
+}
+
 func main(): int sync {
-    println(sum(from_bytes::<f32>(from_array([0, 0, 0]), [1])))
+    let no: int[] = []
+    let s  = toShape(zeros([2]), no)
+    let n  = loop c = 0 for x in s do c + 1
+    println(n)
     return 0
 }
 ```

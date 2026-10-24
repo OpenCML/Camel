@@ -68,6 +68,24 @@ bool isTensorNode(const VjpBuilder &builder, vjp_node_t node) {
     return isTensorType(builder.nodeType(node));
 }
 
+bool hasTensorAdjoint(
+    const VjpBuilder &builder, const VjpCall &call, vjp_node_t input, std::string_view what) {
+    const type::Type *type = builder.nodeType(input);
+    if (type == nullptr || isTensorType(type)) {
+        return true;
+    }
+    if (builder.isActive(input)) {
+        refuseVjp(
+            call,
+            std::string(what) + " is a value of type '" + type->toString() +
+                "', and a tensor here is a numeric array: this module converts such a container by "
+                "flattening it, but no operator carries a tensor's gradient back into one, so that "
+                "value's gradient would be dropped silently. Convert a numeric array, a tensor "
+                "parameter or a slice of one instead");
+    }
+    return false;
+}
+
 bool isFloatNode(const VjpBuilder &builder, vjp_node_t node) {
     const type::Type *t = builder.nodeType(node);
     return t && (t->code() == type::TypeCode::Float64 || t->code() == type::TypeCode::Float32);

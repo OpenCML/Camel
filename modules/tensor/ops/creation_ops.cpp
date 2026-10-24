@@ -145,14 +145,16 @@ const std::vector<ParamSpec> kShapeParam = {{"shape", ParamKind::IntArray}};
 // numeric array or a tensor, and a numeric array is a tensor here (a tensor is a numeric array:
 // `isTensorType` is `isNumericArrayType`), so the gradient is the same value at the argument's
 // own type: `new` does not change the element type or the shape's meaning, so nothing is
-// converted and the gradient passes through, declared with the argument's type. The refusal this
-// rule used to make ("no operator that carries a tensor's gradient back into an array") had no
-// argument left to fire on once the two spellings became one type, and the array's gradient was
-// dropped instead of refused. A constant array starts no gradient flow, so the call that
-// converts one is never visited.
+// converted and the gradient passes through, declared with the argument's type. A container the
+// module converts but cannot carry a gradient back into (an array of arrays, an array of records)
+// is refused by name while it depends on a differentiated parameter, and a constant one starts no
+// gradient flow, so the call that converts it is never visited (`hasTensorAdjoint`).
 void newVjp(VjpBuilder &b, const VjpCall &call) {
     requireVjpInputs(call, 1, 1);
     if (auto dy = b.gradientOf(call.output)) {
+        if (!hasTensorAdjoint(b, call, call.inputs[0], "its input")) {
+            return;
+        }
         b.accumulateGradient(call.inputs[0], tensorCastTo(b, call.inputs[0], *dy));
     }
 }

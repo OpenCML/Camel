@@ -1,0 +1,55 @@
+/**
+ * The adjoint of `concat` on a numeric array (design principles 9.9). `concat` accepts a numeric
+ * array where it accepts a tensor: an array part's adjoint is the part of the upstream gradient
+ * that covers its slice of the output, which is what the tensor rule builds (`slice` of the
+ * gradient), so nothing array-specific had to be built. Until the flip this program was refused
+ * by name at the concat call; the commit that removed the refusal rewrote its case, which now
+ * asserts the gradient the rule builds. A constant array part still takes no gradient.
+ *
+ * Hand adjoints, written out from the forward expressions:
+ *   a = [m.w * 2.0], y = concat(a, [1.0, 2.0], 0), loss = sum(y):
+ *       d loss / d m.w = 2.0
+ *   tail(w) = concat([1.0, 2.0], w, 0), loss = sum(y * [0, 0, 3, 4]) with w = [5.0, 6.0]:
+ *       d loss / d w = [3.0, 4.0]   (the weight on each element the array part covers; the two
+ *                                    weights of the constant part are zero, so a gradient that
+ *                                    covered all four positions would not be this one)
+ * `gw` is printed with `{}` and compared with that adjoint element by element; `gw_d` is the
+ * squared distance to it as a number. `trap` is 12.0 * g.w: 24.0 for the adjoint above and 0.0
+ * for a gradient that left the array out of the concat, which is the defect this case is about.
+ */
+module adjoint_concat_array
+
+import { concat, reshape, sum } from tensor
+import { grad } from autodiff
+
+type Model = { w: float }
+
+with <m: Model>
+func loss(): float {
+    let a = [m.w * 2.0]
+    let b = reshape([1.0, 2.0] as f64[], [2])
+    return sum(concat(a, b, 0))
+}
+
+with <w: float[]>
+func weighted_concat(): float {
+    let c = reshape([1.0, 2.0] as f64[], [2])
+    let d = reshape([0.0, 0.0, 3.0, 4.0] as f64[], [4])
+    let y = concat(c, w, 0)
+    return sum(y * d)
+}
+
+func main(): int sync {
+    let model = { w: 2.0 }
+    let g     = grad(loss)<model>()
+    let w     = [5.0, 6.0]
+    let gw    = grad(weighted_concat)<w>()
+    let d0    = gw[0] - 3.0
+    let d1    = gw[1] - 4.0
+    'adjoint_concat_array grad={:.1f} trap={:.1f} gw={} gw_d={:.1f}'->format<
+        g.w,
+        12.0 * g.w,
+        gw,
+        d0 * d0 + d1 * d1>->println
+    return 0
+}
