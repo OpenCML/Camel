@@ -67,7 +67,10 @@ void pushText(std::vector<PrintItem> &stack, std::string_view text) {
 /// Pushes the parts of one dimension of an array value: one bracket level per dimension, and the
 /// elements of the last dimension as slots that print by `elemType`. `base` is the flat index the
 /// dimension starts at. The items go on the stack in reverse, because the work list pops from the
-/// back (the opening bracket is written by the caller before the list is walked).
+/// back: the dimension pushes its closing bracket first and its opening bracket last, so the
+/// opening one is written first. Every dimension has its own pair -- a rank-2 value is
+/// `[[1.0, 2.0], [3.0, 4.0]]` -- because a value of rank r is r nested bracket levels, whatever
+/// the spelling that produced it (`f32[2, 2]`, `Tensor<f32, [2, 2]>`).
 void pushArray(
     const Array *array, const Type *elemType, size_t dim, uint64_t base,
     std::vector<PrintItem> &stack) {
@@ -91,6 +94,7 @@ void pushArray(
             pushText(stack, ", ");
         }
     }
+    pushText(stack, "[");
 }
 
 /// Whether the text of a value of `type` is made of other values. These are the types whose
@@ -252,9 +256,8 @@ void printValueImpl(std::ostream &os, slot_t data, Type *type, size_t arrayLimit
                 continue;
             }
             // One bracket level per dimension of the value, the elements pushed with the element
-            // type and the opening bracket written last, because the work list pops in reverse.
+            // type; each level carries its own opening and closing bracket (pushArray).
             pushArray(array, elemType, 0, 0, stack);
-            os << "[";
             continue;
         }
         case TypeCode::Tuple: {
