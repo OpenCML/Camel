@@ -1,6 +1,13 @@
 /**
- * Refined tensor types: var bindings widen, branch joins unify, and seeded
- * random generation is reproducible.
+ * Refined tensor types: var bindings widen at the same rank, branch joins unify,
+ * and seeded random generation is reproducible.
+ *
+ * The third assignment of the original case (`w = ones([5])` after `w` had widened to the rank-2
+ * `f32[?, ?]`) asked a `var` cell to change rank. Q5 of docs/design/arrays-memory/plan.cn.md keeps
+ * the rank when a cell widens, so that assignment is a diagnostic now
+ * (test/cases/compile/array_alias/err_var_rank.cml). Following that file's rewrite list
+ * (plan.cn.md:323, "rewritten as two `var`s or an explicit `as`"), the rank-1 tensor lands in a
+ * binding of its own and the rank-2 cell still widens in place.
  */
 module static_types
 
@@ -18,12 +25,14 @@ func pick(flag: bool): Tensor {
 
 func main(): int sync {
     var w = zeros([2, 1])
+    // The cell widens to f32[?, ?]: same rank, extents forgotten (Q5).
     w = grow(w)
-    w = ones([5])
+    // A rank-1 binding of its own, not a rank change of `w` (plan.cn.md:323).
+    var v = ones([5])
     seed(7)
     let r1 = random([4], 0.0, 1.0)
     seed(7)
     let r2 = random([4], 0.0, 1.0)
-    'static_types w_sum={} pick={} same_seed={}'->format<sum(w), shape(pick(false)), sum(r1) == sum(r2)>->println
+    'static_types w_sum={} pick={} same_seed={}'->format<sum(v), shape(pick(false)), sum(r1) == sum(r2)>->println
     return 0
 }
