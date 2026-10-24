@@ -466,13 +466,15 @@ export func attempt(f: (...args: A) => T, ...args: A): T!
 // value. One calling form: the collection is the ordinary argument, the rest are
 // with-arguments, put<k, v>(m) or m->put<k, v>; put(m, k, v) is refused with a hint.
 
-/// The number of entries of a map or of elements of a set.
+/// The number of entries of a map or of elements of a set. The collection is `x`, the name the
+/// string and array declarations above give their one parameter: the position means the value
+/// whose length is asked for, whatever its type.
 /// @pure
 /// @example len([('a', 1), ('b', 2)] as Map<string, int>)    // 2
 #op<':coll/len'>
-export func len(c: Map<K, V>): int
+export func len(x: Map<K, V>): int
 #op<':coll/len'>
-export func len(c: Set<T>): int
+export func len(x: Set<T>): int
 
 /// The value stored under key, or null when the map has no such key. `m[key]` is the same lookup.
 /// @pure
@@ -531,11 +533,13 @@ export func values(m: Map<K, V>): V[]
 #op<':coll/map_items'>
 export func items(m: Map<K, V>): (K, V)[]
 
-/// The elements of a set as an array, in ascending order.
+/// The elements of a set as an array, in ascending order. The collection is `m`, the name the
+/// map declaration above gives its one parameter: the position means the collection whose items
+/// are listed.
 /// @pure
 /// @example items([3, 1, 2] as Set<int>)    // [1, 2, 3]
 #op<':coll/set_items'>
-export func items(s: Set<T>): T[]
+export func items(m: Set<T>): T[]
 
 /// A map with the entries of both maps; for a key in both, the entry of other is taken. Neither argument is changed.
 /// @pure

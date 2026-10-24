@@ -126,6 +126,25 @@ expect_stdout_exact = "param named_across_overloads two=12 reordered=12 three=12
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
 
+# The names of the rules a C++ module registers are the names the reference page declares for
+# them, so a named argument binds there as well: the name marks the position and the type of the
+# argument picks the rule, exactly as at a call of several declarations. `len` gives its one
+# parameter the same name in all four of its rules, which is why one name reaches all of them.
+# A name whose rules cannot be settled from a call written by name takes no named argument yet and
+# the reference page says which those are (handover: named arguments at operator groups).
+[[tests]]
+name = "param_defaults.stdlib_named_args"
+desc = "A named argument binds to the position its name marks in the rules a C++ module registers: `len`'s one parameter is `x` in the string, array, map and set rules, so `len(x: ...)` reaches each of them and the argument's type decides which one runs -- the four named calls print what the same four calls written positionally print. `trim`, a rule of one declaration, names its parameter `s`."
+kind = "behavior"
+case = "../../../cases/compile/param_defaults/stdlib_named_args.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "3 3\n2 3\n3 3 2 3\n[x] [x]\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
 [[tests]]
 name = "param_defaults.overload_names_differ"
 desc = "The overloads of one name have to name the parameter at a position the same way: the second parameter of `f` is `b` in one declaration and `c` in the other, so the call's `b` names no one parameter of `f` and is OverloadParameterNames, at that argument."
