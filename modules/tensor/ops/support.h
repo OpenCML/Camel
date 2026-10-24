@@ -36,7 +36,15 @@ Shape shapeArg(ArgsView &args, size_t index);
 /// True when optional argument `index` was supplied.
 inline bool hasArg(ArgsView &args, size_t index) { return index < args.size(); }
 
-slot_t wrap(Array *tensor);
+/// Hands a kernel's result on in the representation its declared type asks for. `declared` is the
+/// result type the caller reads the value by (the operator's own `infer`, the node's type in the
+/// VM): a rank-0 result becomes the element slot only when that type says the element; under an
+/// array type — including one whose rank the compiler could not fix, `Tensor` and `f32[..]` — the
+/// rank-0 array stays an array, so the value never contradicts the type (the rank-zero ruling,
+/// docs/handover/reviews/questions-2026-10-23.md section rank-zero-tensor). A caller that declares
+/// no result type reads the array: it cannot tell the element of a rank-0 tensor from a rank-0
+/// array, so the array is what it gets.
+slot_t wrap(type::Type *declared, Array *tensor);
 
 /// The allocator every tensor operator allocates results from.
 mm::IAllocator &resultAllocator();

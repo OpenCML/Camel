@@ -93,7 +93,7 @@ slot_t reshapeKernel(ArgsView &, ArgsView &norm, context::Context &) {
             (void)k::resolveReshape(t->shapeSpan(), target);
             return t->getSlot(0);
         }
-        return wrap(k::reshape(t, target, resultAllocator()));
+        return wrap(norm.resultType(), k::reshape(t, target, resultAllocator()));
     });
 }
 
@@ -151,7 +151,9 @@ slot_t flattenKernel(ArgsView &, ArgsView &norm, context::Context &) {
         if (axis < -static_cast<int64_t>(t->rank()) || axis > static_cast<int64_t>(t->rank())) {
             throw std::invalid_argument("flatten axis out of range");
         }
-        return wrap(k::reshape(t, flattenShape(t->shapeSpan(), axis), resultAllocator()));
+        return wrap(
+            norm.resultType(),
+            k::reshape(t, flattenShape(t->shapeSpan(), axis), resultAllocator()));
     });
 }
 
@@ -171,7 +173,7 @@ slot_t unsqueezeKernel(ArgsView &, ArgsView &norm, context::Context &) {
         Shape shape     = t->shapeVector();
         const int64_t a = normalizeAxisOrThrow(intArg(norm, 1), shape.size() + 1);
         shape.insert(shape.begin() + a, 1);
-        return wrap(k::reshape(t, shape, resultAllocator()));
+        return wrap(norm.resultType(), k::reshape(t, shape, resultAllocator()));
     });
 }
 
@@ -192,7 +194,7 @@ std::optional<Type *> unsqueezeInfer(const InferContext &ctx) {
 // transpose(t): swap the last two axes
 slot_t transposeKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("transpose", [&] {
-        return wrap(k::transposeLast2(tensorArg(norm, 0), resultAllocator()));
+        return wrap(norm.resultType(), k::transposeLast2(tensorArg(norm, 0), resultAllocator()));
     });
 }
 
@@ -213,7 +215,7 @@ std::optional<Type *> transposeInfer(const InferContext &ctx) {
 slot_t permuteKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("permute", [&] {
         const std::vector<int64_t> perm = parseIntArray(norm.get<::Array *>(1), norm.type(1));
-        return wrap(k::permute(tensorArg(norm, 0), perm, resultAllocator()));
+        return wrap(norm.resultType(), k::permute(tensorArg(norm, 0), perm, resultAllocator()));
     });
 }
 
@@ -232,7 +234,7 @@ std::optional<Type *> permuteInfer(const InferContext &ctx) {
 slot_t concatKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("concat", [&] {
         const Array *parts[] = {tensorArg(norm, 0, true), tensorArg(norm, 1, true)};
-        return wrap(k::concat(parts, intArg(norm, 2), resultAllocator()));
+        return wrap(norm.resultType(), k::concat(parts, intArg(norm, 2), resultAllocator()));
     });
 }
 
@@ -294,7 +296,9 @@ slot_t sliceKernel(ArgsView &, ArgsView &norm, context::Context &) {
     }
     return runKernel("slice", [&] {
         const int64_t step = hasArg(norm, 4) ? intArg(norm, 4) : 1;
-        return wrap(k::slice(input, axisArg, start, end, step, resultAllocator()));
+        return wrap(
+            norm.resultType(),
+            k::slice(input, axisArg, start, end, step, resultAllocator()));
     });
 }
 
@@ -412,7 +416,7 @@ slot_t sliceSubKernel(ArgsView &, ArgsView &norm, context::Context &) {
     }
     const int64_t count = end > start ? end - start : 0;
     return runKernel("slice_sub", [&] {
-        return wrap(viewTensor(
+        return wrap(norm.resultType(), viewTensor(
             input, std::span<const int64_t>(&count, 1), resultAllocator(), start));
     });
 }
@@ -479,7 +483,7 @@ slot_t takeKernel(ArgsView &, ArgsView &norm, context::Context &) {
         }
     }
     return runKernel("take", [&] {
-        return wrap(k::take(input, indices, resultAllocator()));
+        return wrap(norm.resultType(), k::take(input, indices, resultAllocator()));
     });
 }
 
@@ -556,7 +560,7 @@ slot_t takeGradKernel(ArgsView &, ArgsView &norm, context::Context &) {
     }
     const Array *dy = tensorArg(norm, 2);
     return runKernel("take_grad", [&] {
-        return wrap(k::takeGrad(input, indices, dy, resultAllocator()));
+        return wrap(norm.resultType(), k::takeGrad(input, indices, dy, resultAllocator()));
     });
 }
 
@@ -582,7 +586,7 @@ slot_t oneHotKernel(ArgsView &, ArgsView &norm, context::Context &) {
         }
     }
     return runKernel("one_hot", [&] {
-        return wrap(k::oneHot(labels, classes, resultAllocator()));
+        return wrap(norm.resultType(), k::oneHot(labels, classes, resultAllocator()));
     });
 }
 

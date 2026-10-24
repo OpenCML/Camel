@@ -93,7 +93,7 @@ std::vector<int64_t> labelArg(ArgsView &args, size_t index, std::string_view op)
 
 slot_t conv2dKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("conv2d", [&] {
-        return wrap(
+        return wrap(norm.resultType(),
             k::conv2d(
                 tensorArg(norm, 0),
                 tensorArg(norm, 1),
@@ -125,7 +125,7 @@ std::optional<Type *> conv2dInfer(const InferContext &ctx) {
 
 slot_t conv2dInputGradKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("conv2d_input_grad", [&] {
-        return wrap(
+        return wrap(norm.resultType(),
             k::conv2dInputGrad(
                 tensorArg(norm, 0),
                 tensorArg(norm, 1),
@@ -138,7 +138,7 @@ slot_t conv2dInputGradKernel(ArgsView &, ArgsView &norm, context::Context &) {
 
 slot_t conv2dKernelGradKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("conv2d_kernel_grad", [&] {
-        return wrap(
+        return wrap(norm.resultType(),
             k::conv2dKernelGrad(
                 tensorArg(norm, 0),
                 tensorArg(norm, 1),
@@ -151,7 +151,7 @@ slot_t conv2dKernelGradKernel(ArgsView &, ArgsView &norm, context::Context &) {
 
 slot_t conv2dBiasGradKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("conv2d_bias_grad", [&] {
-        return wrap(k::conv2dBiasGrad(tensorArg(norm, 1), resultAllocator()));
+        return wrap(norm.resultType(), k::conv2dBiasGrad(tensorArg(norm, 1), resultAllocator()));
     });
 }
 
@@ -173,13 +173,15 @@ k::Window2d windowArg(ArgsView &norm, size_t first) {
 
 template <k::PoolKind Kind> slot_t poolKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel(Kind == k::PoolKind::Max ? "max_pool2d" : "avg_pool2d", [&] {
-        return wrap(k::pool2d(Kind, tensorArg(norm, 0), windowArg(norm, 1), resultAllocator()));
+        return wrap(
+            norm.resultType(),
+            k::pool2d(Kind, tensorArg(norm, 0), windowArg(norm, 1), resultAllocator()));
     });
 }
 
 template <k::PoolKind Kind> slot_t poolGradKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel(Kind == k::PoolKind::Max ? "max_pool2d_grad" : "avg_pool2d_grad", [&] {
-        return wrap(
+        return wrap(norm.resultType(),
             k::pool2dGrad(
                 Kind,
                 tensorArg(norm, 0),
@@ -328,7 +330,7 @@ camel::core::sem::OperatorSemantics poolSemantics(bool max) {
 slot_t batchNormKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("batch_norm", [&] {
         const double eps = hasArg(norm, 5) ? numberArg(norm, 5) : 1e-5;
-        return wrap(
+        return wrap(norm.resultType(),
             k::batchNorm(
                 tensorArg(norm, 0),
                 tensorArg(norm, 1),
@@ -419,7 +421,9 @@ std::optional<Type *> batchNormTrainGradInfer(const InferContext &ctx) {
 
 slot_t embeddingKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("embedding", [&] {
-        return wrap(embedding(tensorArg(norm, 0), tensorArg(norm, 1), resultAllocator()));
+        return wrap(
+            norm.resultType(),
+            embedding(tensorArg(norm, 0), tensorArg(norm, 1), resultAllocator()));
     });
 }
 
@@ -437,7 +441,7 @@ std::optional<Type *> embeddingInfer(const InferContext &ctx) {
 
 slot_t embeddingTableGradKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("embedding_table_grad", [&] {
-        return wrap(embeddingTableGrad(
+        return wrap(norm.resultType(), embeddingTableGrad(
             tensorArg(norm, 0),
             tensorArg(norm, 1),
             tensorArg(norm, 2),
@@ -454,7 +458,7 @@ slot_t softmaxCrossEntropyKernel(ArgsView &, ArgsView &norm, context::Context &)
 
 slot_t softmaxCrossEntropyGradKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("softmax_cross_entropy_grad", [&] {
-        return wrap(softmaxCrossEntropyGradLogits(
+        return wrap(norm.resultType(), softmaxCrossEntropyGradLogits(
             tensorArg(norm, 0),
             tensorArg(norm, 1),
             numberArg(norm, 2),
@@ -500,7 +504,7 @@ slot_t softmaxCrossEntropyLabelsGradKernel(ArgsView &, ArgsView &norm, context::
     const std::vector<int64_t> labels = labelArg(norm, 1, "softmax_cross_entropy_grad");
     checkClassLabels(logits, labels, "softmax_cross_entropy_grad");
     return runKernel("softmax_cross_entropy_labels_grad", [&] {
-        return wrap(softmaxCrossEntropyLabelsGradLogits(
+        return wrap(norm.resultType(), softmaxCrossEntropyLabelsGradLogits(
             logits, labels, numberArg(norm, 2), resultAllocator()));
     });
 }

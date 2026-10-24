@@ -351,7 +351,9 @@ struct Arg {
     slot_t slot() const {
         switch (kind) {
         case Kind::Tensor:
-            return ops::wrap(tensorOf(data));
+            // The value is read by the type this same entry reports in `type()`: a rank-0 tensor
+            // argument is the element, and the kernel boxes it back (support.cpp's tensorArg).
+            return ops::wrap(type(), tensorOf(data));
         case Kind::Number:
             return camel::core::rtdata::toSlot(number);
         case Kind::Int:

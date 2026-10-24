@@ -41,8 +41,9 @@ Array *tensorArg(ArgsView &args, size_t index, bool allowArray) {
     // docs/handover/reviews/questions-2026-10-23.md): the value of a rank-0 tensor is a scalar
     // slot, and the type says so — `Tensor<f32, []>` is `f32`, not an array. A kernel that reads
     // the tensor reads an array of no dimension, so the scalar is boxed here; wrap() takes the
-    // same value back out of a kernel's result. Without this a gradient handed to `tensor:sum_to`
-    // or a broadcast reached the kernel as the scalar it is and was refused as "not a Tensor".
+    // same value back out of a kernel's result, where the declared result type says the element.
+    // Without this a gradient handed to `tensor:sum_to` or a broadcast reached the kernel as the
+    // scalar it is and was refused as "not a Tensor".
     if (isSupportedTensorScalar(argType->code())) {
         Array *box = createTensor(argType->code(), std::span<const int64_t>{}, resultAllocator());
         box->setSlot(
@@ -83,12 +84,16 @@ Shape shapeArg(ArgsView &args, size_t index) {
     return parseShapeArray(args.get<::Array *>(index), args.type(index));
 }
 
-slot_t wrap(Array *tensor) {
-    // A result with no dimension is the element itself (the rank-zero ruling): the type of a
-    // rank-0 tensor is its element type, so what the kernel hands on is the element slot and not
-    // an array of no dimension, which is the representation the type would contradict. tensorArg
-    // boxes it again for the next kernel that reads the tensor.
-    if (tensor != nullptr && tensor->rank() == 0 && tensor->numel() == 1) {
+slot_t wrap(type::Type *declared, Array *tensor) {
+    // A result with no dimension is the element itself (the rank-zero ruling) — where the type
+    // the result is read by says the element. When that type is an array, declared or with a rank
+    // the compiler could not fix (`Tensor`, `f32[..]`), an array is what its readers take the
+    // slot for, so a rank-0 array stays one: a consumer reading an array (tensorArg, a reducer,
+    // the printer driven by the declared type) then finds the array its type promised, and only a
+    // consumer reading the element finds the element.
+    const bool element =
+        declared != nullptr && declared->code() != camel::core::type::TypeCode::Array;
+    if (element && tensor != nullptr && tensor->rank() == 0 && tensor->numel() == 1) {
         return tensor->getSlot(0);
     }
     return camel::core::rtdata::toSlot(static_cast<camel::core::rtdata::Object *>(tensor));

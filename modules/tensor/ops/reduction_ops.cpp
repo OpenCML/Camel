@@ -49,7 +49,7 @@ bool keepDimsArg(ArgsView &norm, size_t index) {
 
 template <k::ReduceOp Op> slot_t reduceAxisKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("reduce", [&] {
-        return wrap(k::reduceAxis(
+        return wrap(norm.resultType(), k::reduceAxis(
             Op,
             tensorArg(norm, 0),
             intArg(norm, 1),
@@ -127,19 +127,23 @@ int64_t axisOrLast(ArgsView &norm, size_t index) {
 
 slot_t softmaxKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("softmax", [&] {
-        return wrap(k::softmax(tensorArg(norm, 0), axisOrLast(norm, 1), resultAllocator()));
+        return wrap(
+            norm.resultType(),
+            k::softmax(tensorArg(norm, 0), axisOrLast(norm, 1), resultAllocator()));
     });
 }
 
 slot_t logSoftmaxKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("log_softmax", [&] {
-        return wrap(k::logSoftmax(tensorArg(norm, 0), axisOrLast(norm, 1), resultAllocator()));
+        return wrap(
+            norm.resultType(),
+            k::logSoftmax(tensorArg(norm, 0), axisOrLast(norm, 1), resultAllocator()));
     });
 }
 
 slot_t softmaxGradKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("softmax_grad", [&] {
-        return wrap(k::softmaxGrad(
+        return wrap(norm.resultType(), k::softmaxGrad(
             tensorArg(norm, 0),
             tensorArg(norm, 1),
             axisOrLast(norm, 2),
@@ -205,7 +209,7 @@ std::optional<Type *> layerNormInfer(const InferContext &ctx) {
 slot_t layerNormKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("layer_norm", [&] {
         const double eps = hasArg(norm, 3) ? numberArg(norm, 3) : 1e-5;
-        return wrap(k::layerNorm(
+        return wrap(norm.resultType(), k::layerNorm(
             tensorArg(norm, 0),
             tensorArg(norm, 1),
             tensorArg(norm, 2),
