@@ -1165,6 +1165,19 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 60000
 
 [[tests]]
+name = "rules.every_exported_rule_enters_the_check"
+desc = "The check's input is the library's own list of exported rules, and a verify script asserts it name by name (the ruling of 2026-10-24 on `verification-verdict-surface`, §4: the hand-written list is what drifts, and the library's header rule -- no rule enters `stdlib/rules.cml` without passing the check -- has to be catchable by a test). The script reads `stdlib/rules.cml` (43 exported rules), the case's own source with its comments stripped, and this run's report, and fails unless the three name the same set: a rule added to the library and not to the case, a name the case invents, a rule the case hands over that reaches no line of the report, and any `FAIL` in it. The gap this closes is measured: `tensor_sigmoid_chain` was exported, used by the fusion pass, and reached no `check` call of any case (the check cases handed over 42 of the library's 43 exported rules, and the folding lane counted the same gap as 68 of 69 rules). The rules are handed over in the arrangements the two cases beside this one measured -- the accuracy laws in a call of their own, since the seed an entry is sampled with follows its place in the array (the ruling of 2026-10-24 on `accuracy-check-sampling` is the other lane's change) -- so this case's report is the one a check on coverage reads."
+kind = "behavior"
+case = "../../../cases/modules/rules/check_every_rule.cml"
+args = ["${case}", "std::nvm"]
+verify_script_path = "./verify/check_covers_every_rule.mjs"
+expect_exit = 0
+expect_stdout_contains = ["ok tensor_sigmoid_chain: 200 samples agree, fired 8 of 8", "ok int_add_zero<int>: the condition selects the instances", "ok float_log1p<f32>: 100 samples, worst error ratio", "ok tensor_log_softmax_of_softmax: 100 samples, worst error ratio 1, fired 8 of 8"]
+expect_output_not_contains = ["FAIL", "a generic rule, whose instances are not checked here"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+[[tests]]
 name = "rules.const_parameter_is_a_value_in_when"
 desc = "A `const` parameter is the constant's value inside `when` (rewrite design 2 (second version) 1; reviews/stdlib-rules.md item 5: the guard is written on the value, typed by the parameter's declaration, with no `constant(node, sample)` lookup and no `match … case null`). The law of the case drops the product when the coefficient is positive: `positive_case` (x * 3.0) prints 5.0 and `negative_case` (x * -3.0) keeps its product and prints -15.0."
 kind = "behavior"
