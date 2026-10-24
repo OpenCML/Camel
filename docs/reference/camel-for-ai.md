@@ -1320,7 +1320,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `WhenAfterBody` | E | A 'when' condition comes before what it guards, so {0} cannot follow it. |
 | `ComparisonAcrossLines` | W | This '>' is read as a comparison with the next line, which starts with {0}: two statements may have been joined into one. |
 
-**Semantic** (`SemanticDiag`) — 201 (187 errors, 14 warnings)
+**Semantic** (`SemanticDiag`) — 202 (188 errors, 14 warnings)
 
 | `Redeclaration` | E | Redeclaration of reference: '{0}'. |
 | `ModuleNotFound` | E | Module '{0}' not found. {1} |
@@ -1392,11 +1392,11 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `DeclaredTypeMismatch` | E | This value has type '{0}', which is not the declared type '{1}'. |
 | `ModuleTypeCycle` | E | The type '{0}' is part of a cycle of types: {1}. |
 | `InvalidAnnotation` | E | The annotation '@{0}' is not accepted: {1}. |
-| `LoopSequenceNotIterable` | E | 'for' takes the elements of an array, a string, a map or a tensor; '{0}' has type '{1}'. |
 | `LoopBodyTypeMismatch` | E | The body of this loop gives a value of type '{0}'; the state of the loop has type '{1}'. |
 | `LoopStateWithoutType` | E | The first value of the loop state '{0}' does not give it a type ('{1}'). |
 | `LoopConditionNotBool` | E | The condition after 'while' has type '{0}'; a condition is a 'bool'. |
 | `LoopNameRepeated` | E | The name '{0}' is declared twice in this loop head. |
+| `LoopSequenceNotIterable` | E | 'for' takes the elements of an array, a string, a map or a tensor; '{0}' has type '{1}'. |
 | `DuplicateEnumVariant` | E | The variant '{0}' is declared twice in enum '{1}'. |
 | `DuplicateEnumField` | E | The field '{0}' is declared twice in variant '{1}' of enum '{2}'. |
 | `EnumVariantFieldCount` | E | The variant '{0}' of enum '{1}' takes {2} field(s), but {3} were given. |
@@ -1501,6 +1501,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `CompOperandMismatch` | E | '..' takes two functions or two integers; the left operand is '{0}' and the right one '{1}'. |
 | `CompOperandNotUnary` | E | '..' composes a unary function on the left; '{0}' takes {1} parameters. |
 | `CompOperandGenericWithoutType` | E | '..' composes two functions, and its {0} operand, the generic function '{1}', has no instance here: write its type arguments ('{1}::<int>'), or give the whole expression an expected function type. |
+| `RangeTwoArgumentsRemoved` | E | The two-parameter 'range(a, b)' is gone; write the interval 'a..b'. |
 | `VarParamInAsyncFunction` | W | Variable parameters are only allowed in sync functions. |
 | `IgnoredSideEffect` | W | {0} is neither waited nor in a sync block, and {1}. |
 | `CapturedWriteInAsyncFunction` | W | {0} writes the captured variable{1} {2} but is not declared with the 'sync' modifier. |
@@ -1557,7 +1558,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `ConstantExpressionFaults` | W | This constant expression faults whenever it is evaluated ({0}); it is not folded. |
 | `TranslationLinksRuntime` | W | std::cpp has no standalone translation of {0}: the program it writes calls the Camel runtime there and is built with libcamel. |
 
-**Semantic** (`SemanticDiag`) — 201 (187 errors, 14 warnings)
+**Semantic** (`SemanticDiag`) — 202 (188 errors, 14 warnings)
 
 | `ReducedPrecisionUnsupported` | E | The call of '{0}' cannot take a value of the reduced-precision element type '{1}'. |
 | `ImplOnBodylessDeclaration` | E | The body-less declaration '{0}' cannot carry '#impl<{1}>': it has no Camel body. |
