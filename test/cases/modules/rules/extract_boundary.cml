@@ -27,7 +27,7 @@ func isY(n: Node): bool {
     }
 }
 
-rule tag_y(a: string, b: string) { a + b => a + 'y' } when isY(b)
+rule tag_y(a: string, b: string) when isY(b) { a + b => a + 'y' }
 
 func tag(s: string): string {
     return s + 'y'

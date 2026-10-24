@@ -122,11 +122,11 @@ enum class SemanticDiag : uint32_t {
     ModuleTypeCycle      = 0x000111,
     InvalidAnnotation    = 0x000112,
     // The structured loop (design principles 3.10): 0x120 and up.
-    LoopSequenceNotIterable = 0x000120,
     LoopBodyTypeMismatch    = 0x000121,
     LoopStateWithoutType    = 0x000122,
     LoopConditionNotBool    = 0x000123,
     LoopNameRepeated        = 0x000124,
+    LoopSequenceNotIterable = 0x000120,
     // Rulings of 2026-10-19 (design principles log 2.13): the nominal enum, 0x130 and up.
     DuplicateEnumVariant   = 0x000130,
     DuplicateEnumField     = 0x000131,
@@ -344,7 +344,19 @@ enum class SemanticDiag : uint32_t {
     /// An ordinary parameter without a default follows one that has a default.
     ParamAfterDefault = 0x0001D4,
     /// An argument at a call has a type the parameter it fills does not take.
-    ParamArgumentWrongType      = 0x0001D6,
+    ParamArgumentWrongType = 0x0001D6,
+
+    // Composition and the interval (`..`, design principles 4.2; the author's ruling of 2026-10-24
+    // on `h248-generator-and-composition`). 0x1D7 and up.
+    /// Neither reading of `..` takes these operands: they are not two functions and not two integers.
+    CompOperandMismatch = 0x0001E1,
+    /// The left operand of `..` is a function that takes more or fewer than one parameter.
+    CompOperandNotUnary = 0x0001E2,
+    /// An operand of `..` is the name of a generic function, and nothing at this position says which instance it stands for. The refusal names the operand and both ways to settle it (the author's ruling of 2026-10-24, section generic-operands-of-composition of docs/handover/reviews/questions-2026-10-23.md).
+    CompOperandGenericWithoutType = 0x0001E4,
+    /// The interval of two integers is written `a..b` and nothing else: the two-parameter `range(a, b)`
+    /// the language used to have is gone (design principles 4.2; the author's ruling of 2026-10-24).
+    RangeTwoArgumentsRemoved    = 0x0001E5,
     ReducedPrecisionUnsupported = 0x0001D7,
     // #impl<f> (design principles 10.4): the Camel body of the function is its semantics and the
     // body-less declaration f of the same module is the operator that runs it. The graph builder
@@ -358,6 +370,12 @@ enum class SemanticDiag : uint32_t {
     // 1; the ruling of 2026-10-23 on `rule_when_const_node`): the surface name is `node_of(c)`,
     // it takes the name of one of the rule's own `const` parameters, and it is written in the
     // condition. Nothing else reaches a node there.
+    // A stream is linear (design principles 5.4): it is read one element at a time and is finished
+    // when it ends, so a container whose elements can be read more than once cannot hold one. The
+    // author's ruling of 2026-10-24 (h248-stream-type-surface) names arrays, maps and sets; a tuple
+    // is not a container in that sense - its items are taken apart once - and a function signature
+    // may take and give a stream.
+    StreamInContainer   = 0x0001E3,
     NodeOfNotAParameter = 0x0001DE,
 
     // Warnings

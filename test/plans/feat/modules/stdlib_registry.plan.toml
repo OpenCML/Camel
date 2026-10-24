@@ -38,10 +38,16 @@ for (const uri of notPure) {
 }
 const pure = ['str:split', 'str:codepoints', 'math:sin_d', 'math:shl', 'statistics:median',
   're:test', 'json:encode', 'json:decode', 'hash:sha256_str', 'hash:sha256_bytes', 'this:zen', ':op/add_l', ':op/idx_str', ':struct/slice_arr', ':str/format',
-  // They return a new array and leave their argument unchanged (design principles 11.3).
-  ':struct/append_arr', ':struct/extend_arr', 'array:sort', 'array:quick_sort', 'array:insert_sort', 'array:merge_sort',
+  // They return a new array and leave their argument unchanged (design principles 11.3), one
+  // operator per element type (H393): the name carries the element type it takes.
+  ':struct/append_arr', ':struct/extend_arr', 'array:sort_i', 'array:sort_l', 'array:sort_f', 'array:sort_d',
+  'array:quick_sort_i', 'array:quick_sort_l', 'array:quick_sort_f', 'array:quick_sort_d',
+  'array:insert_sort_i', 'array:insert_sort_l', 'array:insert_sort_f', 'array:insert_sort_d',
+  'array:merge_sort_i', 'array:merge_sort_l', 'array:merge_sort_f', 'array:merge_sort_d',
   // The native primitives of `array`: pure too, and every one of them returns a new array.
-  'array:merge_sorted_arrays', 'array:argsort', 'array:flatten', 'array:unique']
+  'array:merge_sorted_arrays_i', 'array:merge_sorted_arrays_l', 'array:merge_sorted_arrays_f',
+  'array:merge_sorted_arrays_d', 'array:argsort_i', 'array:argsort_l', 'array:argsort_f',
+  'array:argsort_d', 'array:argsort_b', 'array:argsort_s', 'array:flatten', 'array:unique']
 for (const uri of pure) {
   assert(purity[uri] === 'pure', `${uri} is declared ${purity[uri]}, expected pure`)
 }
@@ -82,6 +88,66 @@ expect_exit = 0
 expect_stdout_contains = ["the declarations agree with the"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 30000
+
+# A position that means the same thing carries the same name in every rule of a name: that is what
+# a named argument binds to (`len(x: xs)`), and it is why `stdlib/json.cml` and
+# `stdlib/signatures/globals.cml` rename a position. The declaration files and the rules C++
+# registers are two places a rule's names are written; `registry.signatures_match` compares their
+# parameters and names position by position, and this compares the names within one name's rules,
+# so the two cannot drift apart again. Two sets are the counter-examples the reference page states:
+# `contains`, whose first position means an element in one form and a substring in another, and
+# `py_call`, whose parameter count follows the arguments.
+[[tests]]
+name = "registry.overload_position_names_agree"
+desc = "One position, one name: `json.get`'s with-parameter is `key` in every one of its eight declarations and in `:coll/map_get` (a string argument is a member key, an integer one an element index), `len`'s one parameter is `x` in the string, array, map and set rules, `items`' is `m` in the map and set rules, and `json.as_int`'s ordinary parameter is `j` in all four. These are the names the reference page declares for them, and every rule of each such set names the position -- a rule that gives no name would take no named argument silently. `contains` and `py_call` are not such sets: `contains` names its first position `value` in the collection forms and `sub` in the string form, and `py_call`'s parameter count follows its arguments (two forms that differ in arity), so neither takes a named argument, as the reference page states."
+kind = "behavior"
+case = "../../../cases/modules/stdlib/registry_all.cml"
+args = ["inspect", "--ops", "${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const ops = input.normalized.stdout.split('\n').filter((l) => l.startsWith('OPERATOR ')).map((l) => JSON.parse(l.slice(9)))
+// Every `name:` in a signature is a parameter's name, the with-parameters before the ordinary
+// ones, and the index of the position tells which is which.
+const names = (o) => [...o.signature.matchAll(/([A-Za-z_][A-Za-z0-9_]*)\s*:/g)].map((m) => m[1])
+const oneNamePerSet = (what, rules, position, expected) => {
+  assert(rules.length > 1, `${what}: ${rules.length} rule(s) listed, expected the rules of an overload set`)
+  for (const o of rules) {
+    const at = names(o)
+    assert(at.length > position, `${what} ${o.signature}: no parameter at position ${position}`)
+    assert(at[position] === expected,
+      `${what} ${o.signature}: the parameter at position ${position} is '${at[position]}', and every rule of the set must call it '${expected}'`)
+  }
+}
+oneNamePerSet('json.get', ops.filter((o) => o.uri === 'json:get'), 0, 'key')
+oneNamePerSet('get', ops.filter((o) => o.name === 'get'), 0, 'key')
+oneNamePerSet('json.as_int', ops.filter((o) => o.uri === 'json:as_int'), 0, 'j')
+oneNamePerSet('len', ops.filter((o) => o.name === 'len'), 0, 'x')
+oneNamePerSet('items', ops.filter((o) => o.name === 'items'), 0, 'm')
+// `contains` is the set the reference page says takes no named argument: every rule names its
+// first position, but they do not agree on the name -- an element (`value`) in the two collection
+// forms, the substring (`sub`) in the string form. A rule that gave the position no name at all is
+// the other state this rules out: it would bind no name while looking like it agreed.
+const contains = ops.filter((o) => o.name === 'contains').map((o) => names(o)[0])
+assert(contains.length > 1, `contains: only ${contains.length} rule(s) listed`)
+assert(contains.every((n) => n !== undefined),
+  `every rule of contains must name its first position: ${contains.join(', ')}`)
+assert(contains.includes('value') && contains.includes('sub'),
+  `contains names its first position 'value' in the collection forms and 'sub' in the string form: ${contains.join(', ')}`)
+assert(new Set(contains).size > 1, `contains would take a named argument if its rules agreed: ${contains.join(', ')}`)
+// `py_call` is the other set the page says takes no named argument, for the other reason: its
+// parameter count follows the arguments (a rest list), so no position is a parameter a name could
+// mark, and the two forms of the name differ in arity.
+const pyCall = ops.filter((o) => o.name === 'py_call')
+assert(pyCall.length === 2, `py_call: ${pyCall.length} rule(s) listed`)
+assert(pyCall.every((o) => o.norm === -1),
+  `py_call's parameters follow its arguments: ${pyCall.map((o) => o.norm).join(', ')}`)
+assert(pyCall[0].signature !== pyCall[1].signature,
+  `the two forms of py_call differ in arity: ${pyCall.map((o) => o.signature).join(' | ')}`)
+}
+"""
+timeout_ms = 20000
 
 [[tests]]
 name = "registry.docs_complete"

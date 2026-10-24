@@ -281,6 +281,16 @@ export function outArtifactInclude(tag) {
 }
 
 /**
+ * The CPython extension module of the Python binding (H253): `out/<tag>/python/`. It is beside
+ * `libs/` so the runpath `$ORIGIN/../libs` the build wrote finds libcamel here and in the wheel,
+ * where the whole install lives under `camel/.cmlenv/`.
+ * @param {string} tag
+ */
+export function outArtifactPython(tag) {
+    return path.join(outArtifactRoot(tag), 'python')
+}
+
+/**
  * 当前 commit 若有 git tag 则返回其中一个，否则 "latest"。
  * 注意：collect-out 主写入固定为 out/latest/；本函数仍可用于其它需「取一个代表 tag」的场景。
  */

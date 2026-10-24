@@ -29,3 +29,15 @@ module autodiff
 /// @pure
 /// @example stop_gradient(3.0)    // 3.0
 export func stop_gradient::<T>(x: T): T
+
+// -----------------------------------------------------------------------------
+// Passes: functions the pipeline applies to the program
+// -----------------------------------------------------------------------------
+
+/// Builds the derived graph of a `grad`/`with_grad` call site while the program is compiled, when
+/// the function it differentiates is known then, and refuses such a call site inside a `#gpu`
+/// scope when only the run knows it (docs/design/gpu/plan.cn.md 2.6). A scope's expansion is
+/// triggered by `tiles::compile`, which applies this pass to the scope's graphs first, so a
+/// pipeline that runs Tiles never names it; it stays an ordinary pass for one that wants the
+/// derived graph built early on its own.
+export func expand::<F>(f: F): F! when is_function::<F>()

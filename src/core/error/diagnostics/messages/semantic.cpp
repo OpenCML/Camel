@@ -573,14 +573,6 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
-            SemanticDiag::LoopSequenceNotIterable,
-            {
-                "LoopSequenceNotIterable",
-                "'for' takes the elements of an array, a string, a map or a tensor; '{0}' has type '{1}'.",
-                "A loop's 'for x in xs' visits the elements of xs in order (design principles 3.10): the elements of an array; the code points of a string, each a one-character string; the (key, value) pairs of a map, in key order (11.3); and the sub-tensors of a tensor along its first dimension. 'range(a, b)' is the array of the integers from a to b.",
-            },
-        },
-        {
             SemanticDiag::LoopBodyTypeMismatch,
             {
                 "LoopBodyTypeMismatch",
@@ -610,6 +602,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "LoopNameRepeated",
                 "The name '{0}' is declared twice in this loop head.",
                 "The names of a loop's state and the name 'for' binds to the element are declared together, for the condition and the body; each is given once.",
+            },
+        },
+        {
+            SemanticDiag::LoopSequenceNotIterable,
+            {
+                "LoopSequenceNotIterable",
+                "'for' takes the elements of an array, a string, a map or a tensor; '{0}' has type '{1}'.",
+                "A loop's 'for x in xs' visits the elements of xs in order (design principles 3.10): the elements of an array; the code points of a string, each a one-character string; the (key, value) pairs of a map, in key order (11.3); and the sub-tensors of a tensor along its first dimension. 'a..b' is the array of the integers from 'a' to 'b - 1', left closed and right open, and a 'for' over it takes them in order without building the array (4.2).",
             },
         },
         {
@@ -1421,6 +1421,38 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::CompOperandMismatch,
+            {
+                "CompOperandMismatch",
+                "'..' takes two functions or two integers; the left operand is '{0}' and the right one '{1}'.",
+                "'..' has two readings (design principles 4.2). Between two functions it is the composition `f..g`, the lambda `(x) => g(f(x))`: 'f' is unary and 'g' takes what 'f' returns, so a call of `f..g` is a call of that lambda and nothing more. Between two integers it is the interval `a..b`: the integers from 'a' to 'b - 1' as the array 'int[]', left closed and right open, as the slice 't[a:b]' is. Nothing else is composed.",
+            },
+        },
+        {
+            SemanticDiag::CompOperandNotUnary,
+            {
+                "CompOperandNotUnary",
+                "'..' composes a unary function on the left; '{0}' takes {1} parameters.",
+                "The composition `f..g` is the lambda `(x) => g(f(x))` (design principles 4.2): 'f' takes the one argument the composed function takes, and 'g' takes the result of 'f'. Write the lambda with the parameters you mean.",
+            },
+        },
+        {
+            SemanticDiag::CompOperandGenericWithoutType,
+            {
+                "CompOperandGenericWithoutType",
+                "'..' composes two functions, and its {0} operand, the generic function '{1}', has no instance here: write its type arguments ('{1}::<int>'), or give the whole expression an expected function type.",
+                "The name of a generic function stands for no one function until a position fixes its types (design principles 5.5). The composition `f..g` is the lambda `(x) => g(f(x))` (design principles 4.2), and the type the whole expression is expected to have is what gives that lambda its parameter type and instantiates what it calls: `let h: (x: int) => int = ident..ident` composes `ident::<int>`, as `(x) => ident(ident(x))` does under the same type. With no expected function type, write the instance each operand is: `ident::<int>..ident::<int>`. Only a name that is generic is refused here; an operand of a type `..` cannot take stays CompOperandMismatch.",
+            },
+        },
+        {
+            SemanticDiag::RangeTwoArgumentsRemoved,
+            {
+                "RangeTwoArgumentsRemoved",
+                "The two-parameter 'range(a, b)' is gone; write the interval 'a..b'.",
+                "The language has one spelling for the integers from 'a' to 'b - 1' (design principles 4.2; the author's ruling of 2026-10-24 on `h248-generator-and-composition`): the interval 'a..b', left closed and right open, as the slice 't[a:b]' is, and the array of them. 'range(0, 10)' becomes '0..10'. A 'for' over an interval is fused by the compiler, so 'for i in 0..n' builds no array. The two-parameter 'range' is the only spelling deleted: a module's own interval-like function (a tensor's, say) is that module's own, reached by its qualified name or at another arity, while an unqualified two-argument 'range(a, b)' is this built-in.",
+            },
+        },
+        {
             SemanticDiag::ReducedPrecisionUnsupported,
             {
                 "ReducedPrecisionUnsupported",
@@ -1466,6 +1498,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "ImplKernelNotBodyless",
                 "The '#impl' tag of '{0}' names '{1}', which has a body.",
                 "The kernel is the body-less declaration of the C++ operator that runs the function's semantics. A function that already has a body is the semantics itself, so there is nothing for the tag to do: name a body-less declaration, or remove the tag.",
+            },
+        },
+        {
+            SemanticDiag::StreamInContainer,
+            {
+                "StreamInContainer",
+                "'{0}' cannot be the element of {1}: a stream is consumed once, while the elements of a container are read more than once.",
+                "A stream is read one element at a time and is done when it ends. Write the stream where it is consumed once: a parameter or the result of a function, an item of a tuple, or the subject of an operator that reads it to its end. What needs the elements of a container to be readable again takes an array filled from the stream.",
             },
         },
         {

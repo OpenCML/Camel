@@ -267,6 +267,25 @@ std::string Diagnostic::toJson() const {
         << "\"modulePath\":\"" << escapeJson(path) << "\"";
     if (!suggestion.empty())
         oss << ",\"suggestion\":\"" << escapeJson(suggestion) << "\"";
+    // The changes a tool can apply, in the shape a code action carries: a title, and the edits
+    // that carry it out. Only the reports that know the text to write carry any, so a reader that
+    // sees `fixes` may apply them; a reader that does not must fall back to `suggestion`.
+    if (!fixes.empty()) {
+        oss << ",\"fixes\":[";
+        for (size_t i = 0; i < fixes.size(); ++i) {
+            oss << (i ? "," : "") << "{\"title\":\"" << escapeJson(fixes[i].title) << "\",\"edits\":[";
+            for (size_t j = 0; j < fixes[i].edits.size(); ++j) {
+                const DiagEdit &edit = fixes[i].edits[j];
+                oss << (j ? "," : "") << "{\"range\":"
+                    << rangeJson(
+                           resolveSourceRange(edit.range, sourceContext)
+                               .value_or(CharRange{{0, 0}, {0, 0}}))
+                    << ",\"replacement\":\"" << escapeJson(edit.replacement) << "\"}";
+            }
+            oss << "]}";
+        }
+        oss << "]";
+    }
     if (!notes.empty()) {
         oss << ",\"notes\":[";
         for (size_t i = 0; i < notes.size(); ++i) {

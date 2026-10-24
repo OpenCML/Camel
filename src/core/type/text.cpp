@@ -17,6 +17,7 @@
 #include "camel/core/type/composite/array.h"
 #include "camel/core/type/composite/func.h"
 #include "camel/core/type/composite/struct.h"
+#include "camel/core/type/composite/stream.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/core/type/enum.h"
 
@@ -39,6 +40,7 @@ bool isStructured(const Type *type) {
     case TypeCode::Tuple:
     case TypeCode::Struct:
     case TypeCode::Function:
+    case TypeCode::Stream:
         return true;
     default:
         break;
@@ -431,6 +433,20 @@ std::vector<TextItem> typeParts(const Type *type, bool mangle) {
     }
     case TypeCode::Tuple:
         return tupleParts(static_cast<const TupleType *>(type), mangle);
+    case TypeCode::Stream: {
+        const auto *stream = static_cast<const StreamType *>(type);
+        if (mangle) {
+            return {literal("Stream_"), typeItem(stream->elemType())};
+        }
+        // One spelling, `T..`, wherever the type is printed. The element of a stream can also
+        // be a function type, and `(x: int) => int..` would read as an interval inside the
+        // result: the element that reaches past the suffix is parenthesized, as the payload of
+        // a tagged tuple is.
+        if (stream->elemType() != nullptr && stream->elemType()->code() == TypeCode::Function) {
+            return {literal("("), typeItem(stream->elemType()), literal(")..")};
+        }
+        return {typeItem(stream->elemType()), literal("..")};
+    }
     case TypeCode::Struct:
         return structParts(static_cast<const StructType *>(type), mangle);
     case TypeCode::Function:
@@ -550,6 +566,15 @@ bool sameType(const Type *a, const Type *b) {
             for (size_t i = 0; i < lhs->size(); ++i) {
                 pending.emplace_back(lhs->typeAt(i), rhs->typeAt(i));
             }
+            break;
+        }
+        case TypeCode::Stream: {
+            // `T..` is one type per element type: the element decides, and nothing else is
+            // part of it (the author's ruling of 2026-10-24: `T..` and `T[..]` are different
+            // types, and the suffix is read left to right).
+            const auto *lhs = static_cast<const StreamType *>(left);
+            const auto *rhs = static_cast<const StreamType *>(right);
+            pending.emplace_back(lhs->elemType(), rhs->elemType());
             break;
         }
         case TypeCode::Struct: {

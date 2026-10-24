@@ -39,7 +39,7 @@ func main(): int sync {
     println('same as array.sort_by:', same(result, data->sort_by<(x: int) => x>))
 
     // 2000 values in descending order.
-    let big = range(0, 2000)->map<(i: int): int => 2000 - i>
+    let big = 0..2000->map<(i: int): int => 2000 - i>
     let big_sorted = sort(big)
     println('first:', big_sorted[0], 'last:', big_sorted[1999], 'same as array.sort:', same(big_sorted, sort(big)))
     return 0

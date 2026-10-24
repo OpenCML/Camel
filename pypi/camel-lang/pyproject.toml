@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "camel-lang"
-version = "0.2.28"
+version = "0.2.30"
 description = "Camel: A Next-Generation Language for AI and High-Performance Computing"
 license = "MIT"
 license-files = ["LICENSE"]
@@ -40,4 +40,6 @@ include-package-data = true
 script-files = []
 
 [tool.setuptools.package-data]
-camel = [".cmlenv/*"]
+# .cmlenv mirrors out/<tag>/: bin/, libs/, stdlib/, include/ and -- since H253 -- python/, which
+# holds the CPython extension module. One level for the first four, two for python/.
+camel = [".cmlenv/*", ".cmlenv/*/*"]

@@ -459,6 +459,12 @@ Block FunctionEmitter::lowerSequenceBody(
             }
         }
         ownedByLoops.insert(frame.graph->withInputsOf(loop).back());
+        if (frame.graph->loopIterableFormOf(loop) == camel::core::LoopIterableForm::Interval) {
+            // The pair of the interval's two bounds is the loop's sequence (design principles
+            // 4.2, LoopIterableForm::Interval): it is written out with the loop, as the array of
+            // the interval, not where it stands.
+            ownedByLoops.insert(frame.graph->normInputsOf(loop).front());
+        }
     }
     for (size_t i = 0; i < order.size(); ++i) {
         const gc_node_ref_t ref = order[i];
@@ -1000,13 +1006,39 @@ void FunctionEmitter::lowerLoop(
         const gc_node_ref_t iterable = norm.front();
         array = locals_.unique(std::format("v{}_items", nextValue_++));
         index = locals_.unique(std::format("v{}_round", nextValue_++));
-        out.push_back(
-            Stmt::line(
-                std::format(
-                    "const {} {} = {};",
-                    cppType(g, iterable, g->node(iterable)->dataType()),
-                    array,
-                    withoutParentheses(valueOf(frame, iterable).text))));
+        if (g->loopIterableFormOf(loop) == camel::core::LoopIterableForm::Interval) {
+            // `for i in a..b`: the graph's sequence is the pair of the interval's two bounds
+            // (design principles 4.2, LoopIterableForm::Interval). The C++ this exporter writes
+            // has no loop driver of its own — it writes the loop out — so the interval becomes
+            // the array of its integers here, with the operation the interval is
+            // (`:struct/range`, rt::range). What the program computes is the same.
+            const auto bounds = g->withInputsOf(iterable);
+            if (bounds.size() != 2) {
+                refuse(
+                    g,
+                    loop,
+                    std::format("{} has an interval without its two bounds", describeFunction(g)));
+            }
+            const std::vector<std::string> marks{
+                SiteTable::valueMark(0), SiteTable::valueMark(1)};
+            out.push_back(
+                Stmt::line(
+                    std::format(
+                        "const {} {} = rt::range({}, {}, 1, {});",
+                        cppType(g, iterable, g->node(iterable)->dataType()),
+                        array,
+                        withoutParentheses(valueOf(frame, bounds[0]).text),
+                        withoutParentheses(valueOf(frame, bounds[1]).text),
+                        program_.sites.siteFor(g, iterable, RuntimeDiag::InvalidArgument, marks))));
+        } else {
+            out.push_back(
+                Stmt::line(
+                    std::format(
+                        "const {} {} = {};",
+                        cppType(g, iterable, g->node(iterable)->dataType()),
+                        array,
+                        withoutParentheses(valueOf(frame, iterable).text))));
+        }
         out.push_back(Stmt::line(std::format("std::size_t {} = 0;", index)));
     }
 

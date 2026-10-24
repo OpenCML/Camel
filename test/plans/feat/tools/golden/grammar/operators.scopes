@@ -320,11 +320,6 @@
 #        ^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
 #          ^ meta.block.camel keyword.operator.assignment.camel
 #                  ^^ meta.block.camel keyword.operator.compose.camel
->    let k = double?..double
-#    ^^^ meta.block.camel meta.declaration.let.camel storage.type.let.camel
-#        ^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
-#          ^ meta.block.camel keyword.operator.assignment.camel
-#                  ^^^ meta.block.camel keyword.operator.compose.camel
 >    let part = xs[1:3]
 #    ^^^ meta.block.camel meta.declaration.let.camel storage.type.let.camel
 #        ^^^^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel

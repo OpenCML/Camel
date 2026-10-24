@@ -1382,6 +1382,18 @@ void Builder::SpeculativeInstantiation::close() {
     }
 }
 
+std::string Builder::SpeculativeInstantiation::reason() const {
+    // The bodies hold their errors in the order they made them, and the first one is the verdict
+    // the attempt died of: a body that does not compile stops there, so nothing after it is about
+    // this attempt. A body that said nothing leaves the caller its own reason.
+    for (const Diagnostic *error : inner_->errors()) {
+        if (error != nullptr && !error->message.empty()) {
+            return error->message;
+        }
+    }
+    return {};
+}
+
 void Builder::SpeculativeInstantiation::attach() {
     if (settled_) {
         return;

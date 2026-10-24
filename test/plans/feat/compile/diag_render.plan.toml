@@ -213,7 +213,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "render.sem_generic_instance"
-desc = "An error in the body of a generic function is reported once per instance in which it differs, each with the call that asked for the instance as a secondary location; an error that does not depend on the type is reported once."
+desc = "An error in the body of a generic function that depends on the type is reported once per instance in which it differs, each with the call that asked for the instance as a secondary location. (An error that does not depend on the type -- a name that is not one -- is reported once, where the declaration is written; render.sem_generic_decl_name.)"
 kind = "snapshot"
 case = "../../../cases/compile/diag_render/sem_generic_instance.cml"
 args = ["--error-format", "text", "${case}"]
@@ -221,6 +221,19 @@ expect_exit = 1
 snapshot_stream = "stdout"
 snapshot_compare = "text_exact"
 golden = "golden/diag_render/sem_generic_instance.txt"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "render.sem_generic_decl_name"
+desc = "A name in the body of a generic function that does not depend on the type is resolved where the declaration is written: reported once, on the declaration's line, with no instance and no call -- the function is never called. The module does not load."
+kind = "snapshot"
+case = "../../../cases/compile/diag_render/sem_generic_decl_name.cml"
+args = ["--error-format", "text", "${case}"]
+expect_exit = 1
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "golden/diag_render/sem_generic_decl_name.txt"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 

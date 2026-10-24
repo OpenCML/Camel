@@ -172,7 +172,7 @@ unaryExpr          : linkExpr (('as' | 'is') typeExpr)?
 linkExpr           : negExpr (('->' | '?->') compExpr)*
 negExpr            : ('-' | '!' | '~') negPower | compExpr
 negPower           : ('-' | '!' | '~') negPower | compExpr ('^' negPower)?
-compExpr           : annoExpr (('..' | '?..') annoExpr)*
+compExpr           : annoExpr ('..' annoExpr)*
 annoExpr           : accessExpr (indices | parentArgues | structData | angledValues | typeArguments | '!'
 memberAccess       : '.' (IDENTIFIER | INTEGER | REAL | '[' dataExpr ']')
 accessExpr         : primaryData ('.' (IDENTIFIER | INTEGER | REAL | '[' dataExpr ']'))*
@@ -207,7 +207,7 @@ staticForHeader    : 'for' '(' (identDef | '_') (',' (identDef | '_'))? ')' 'in'
                      ('fields' typeExpr | 'indices' dataExpr)
 staticLoopExpr     : 'static' 'loop' loopState (',' loopState)* staticForHeader 'do' blockExpr
 typeCasePattern    : 'struct' | 'tuple' | 'func' | '#' 'leaf' | '_' | typeExpr
-matchCase          : 'case' pattern ('|' pattern)* '=>' blockExpr
+matchCase          : 'case' pattern ('|' pattern)* whenClause? '=>' blockExpr
 pattern            : identRef (identDef | enumTuplePattern | enumStructPattern)? | literal
                      | '(' (dataList | identList)? ','? ')' | '{' (pairedValues | identList)? ','? '}' | '_'
 enumTuplePattern   : '(' (pattern (',' pattern)*)? ','? ')'
@@ -217,7 +217,7 @@ loopState          : identDef '=' logicalOrExpr
 loopFor            : 'for' identDef 'in' logicalOrExpr
 loopWhile          : 'while' logicalOrExpr
 catchClause        : 'catch' identDef ':' typeExpr stmtBlock
-typeExpr           : interType ('?' | '!')*
+typeExpr           : interType ('?' | '!' | '..')*
 interType          : diffType ('&' diffType)*
 diffType           : keyUnionDiffType ('\\' keyUnionDiffType)*
 keyUnionDiffType   : keyInterType (('+' | '-') keyInterType)*
@@ -240,7 +240,7 @@ enumType           : 'enum' '{' (enumVariant (',' enumVariant)*)? ','? '}'
 enumVariant        : identDef ('(' typeList? ','? ')' | '{' (enumField (',' enumField)*)? ','? '}')?
 enumField          : identDef ':' typeExpr
 ruleDecl           : frontMatter? 'export'? IDENTIFIER identDef typeParams? ruleContext? parentParams
-                     '{' ruleBody '}' (IDENTIFIER dataExpr)?
+                     whenClause? '{' ruleBody '}'
 ruleContext        : '<' identDef (',' identDef)* ','? '>'
 ruleBody           : dataExpr ('=>' | '<=>') dataExpr
 analysisDecl       : frontMatter? 'export'? IDENTIFIER identDef parentParams? ':' typeExpr

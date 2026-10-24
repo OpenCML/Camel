@@ -1,0 +1,19 @@
+/**
+ * A `T?` match needs one case that opens the null side without a guard and one that opens the
+ * value side without a guard: a guarded `case null` may refuse the value, and what takes it
+ * then is a later case for the same side (review 「when-placement-and-match-guards」). Here the
+ * null side has only the guarded case, so the value a false guard refuses reaches no case, and
+ * the report is the one a `T?` match that does not list `case null` gets.
+ */
+module match_guard_tagged_missing_null
+
+func f(x: int?): int {
+    return match x {
+        case null when false => 1
+        case v => v
+    }
+}
+
+func main(): int sync {
+    return f(null)
+}

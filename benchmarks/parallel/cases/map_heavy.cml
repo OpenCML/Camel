@@ -7,7 +7,7 @@ func fib(n: int): int {
 }
 
 func main(): int sync {
-    let results = range(0, 64)->map<(i: int): int => fib(21 + i % 4)>
+    let results = 0..64->map<(i: int): int => fib(21 + i % 4)>
     println(results->reduce<(acc: int, cur: int): int => acc + cur, 0>)
     return 0
 }

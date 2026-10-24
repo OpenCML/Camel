@@ -1,0 +1,63 @@
+/**
+ * `case p when c => body`: the guard of a match case, in every pattern form the grammar has
+ * (a literal, several alternatives, the wildcard, an enum's tuple and struct variants, and the
+ * two tagged patterns). The AST keeps the guard as a child of the case, after the arm.
+ */
+module match_guard_construct
+
+type Shape = enum {
+    Circle(float),
+    Rect { w: float, h: float },
+    Empty,
+}
+
+func literal(n: int): int {
+    return match n {
+        case 1 | 2 when n > 1 => 10
+        case _ when n > 100 => 20
+        case _ => 30
+    }
+}
+
+func variant(s: Shape): float {
+    return match s {
+        case Shape::Rect { w, h } when h == 0.0 => 0.0
+        case Shape::Rect { w, h } => w * h
+        case Shape::Circle(r) when r > 1.0 => r
+        case Shape::Circle(r) => 0.0 - r
+        case Shape::Empty => 0.0 - 1.0
+    }
+}
+
+func nullable(x: int?): int {
+    return match x {
+        case null when false => 1
+        case null => 2
+        case v when v > 10 => 3
+        case v => 4
+    }
+}
+
+func fallible(x: int!): int {
+    return match x {
+        case error e when false => 5
+        case error e => 6
+        case v => 7
+    }
+}
+
+func main(): int sync {
+    println(literal(1))
+    println(literal(200))
+    println(literal(7))
+    println(variant(Shape::Rect { w: 2.0, h: 3.0 }))
+    println(variant(Shape::Rect { w: 2.0, h: 0.0 }))
+    println(variant(Shape::Circle(4.0)))
+    println(variant(Shape::Circle(0.5)))
+    println(variant(Shape::Empty))
+    println(nullable(null))
+    println(nullable(20))
+    println(nullable(1))
+    println(fallible(9))
+    return 0
+}

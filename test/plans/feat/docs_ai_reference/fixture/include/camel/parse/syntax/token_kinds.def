@@ -1,0 +1,12 @@
+// A reduced copy of the token table, for the proof case: the shape of the file is what the
+// generator reads, so the case is pinned without depending on the order of the real table.
+
+CAMEL_TOKEN(Identifier, "a name")
+CAMEL_KEYWORD(KwLet, "let", Declaration)
+CAMEL_KEYWORD(KwFunc, "func", Declaration)
+CAMEL_KEYWORD(KwIf, "if", Control)
+CAMEL_KEYWORD(KwNull, "null", Literal)
+
+CAMEL_PUNCT(Assign, "=")
+CAMEL_PUNCT(Arrow, "->")
+CAMEL_PUNCT(DotDot, "..")

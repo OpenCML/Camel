@@ -62,6 +62,9 @@ C++ 模块不再重复写签名：没有函数体的声明就是签名本身，�
 - 尖括号里的参数不参与重载选择，调用点必须写常量；需要按值分派的参数放普通位置。
 - 参数分类：标量值（二元算子）、数组（第一个维度）、轴（张量）。同名的三种运算是不同算子，放在不同模块，由导入决定用哪一个。
 - 例外只有 `format<args>`：格式串是接收者，参数在尖括号里（4.4 已经写下）。
+- **同一个名字的多条重载里，含义相同的位置用同一个名字**：`json` 的 `get` 的 `key`（取成员名还是元素下标由实参类型分派）、`len` 的 `x`、`items` 的 `m`，具名实参正是靠它定位到位置。含义不同的位置不强行同名：`contains` 的第 0 个位置在集合的两种形式里是元素（`value`），在字符串那条里是子串（`sub`）；`py_call` 的两种元数（rest 与两个可选形参）也是不同的意思。这两组重载因此不接受具名实参，理由写在参考页。
+- 名字写在两处：模块 `.cml` 的声明一处，C++ 注册的规则签名一处（`len` 的三条规则都是 `x`，`items` 的两条都是 `m`）。`--verify-ops` 逐项比较两处的参数名：位置对位置，`with` 表与普通表各比一次，同名才算过；`registry.overload_position_names_agree` 用 `inspect --ops` 钉住"一个位置一个名字"。类型不作逐项比较：同一条规则与某个声明本来就允许类型不同（`len` 的 `Map<K, V> | Set<T>` 对四条声明），两边对同一类型的写法也不同（`i32`/`int`、`NumericAggregate`/`(float, float)`），理由与量到的数字在 `docs/technical/09_operator_registration.md` 第 8 节。
+- 一个位置一个名字之后，具名实参在声明与 C++ 算子组上一样能用：`len` 的三条规则都是 `x`，`len(x: …)` 按实参类型选到其中一条；`items(m: …)`、`get<key: …>(j)`（`json` 的八条声明与 `:coll/map_get` 都叫 `key`）、`as_int(j: …)` 同样。名字写在**持有那个参数的表里**：普通参数写在圆括号（`len(x: xs)`），`with` 参数写在尖括号（`j->get<key: 'port'>`）；把 `with` 名字写在圆括号里不是具名实参，和有函数体的函数一样报 `ParamArgumentUnknown`（`scale(4, k: 3)` 与 `scale<k: 3>(4)` 的差别，见 `docs/handover/questions/`）。规则给不出位置的名字（没有名字、参数个数随实参走的 rest 表：`py_call`）仍然报 "the signature of … is not known where the call is written"，与具名无关。
 
 ## 5. 错误
 

@@ -59,6 +59,20 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
+name = "when.generic_declaration_site"
+desc = "A generic declaration's `when` is answered where the declaration is written for the half that does not depend on the type parameter: a name the declaration does not make visible is reported there (WhenConditionNotConstant), and the declaration is called nowhere, so no instantiation had to happen for it. Whether a well-formed condition holds, and a query on an open type parameter, stay with the instance (when.open_type)."
+kind = "negative"
+case = "../../../cases/compile/when/generic_decl_site.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::WhenConditionNotConstant"
+expect_diagnostic_line = 13
+expect_output_contains = ["no compile-time function of that name is visible here"]
+expect_output_not_contains = ["in the instance"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
 name = "when.non_bool"
 desc = "A `when` whose value is not a bool is a declaration-site error (WhenConditionNotBool). It is never treated as true, and the report is at the condition, not at a call."
 kind = "negative"

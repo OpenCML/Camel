@@ -1,0 +1,24 @@
+type Shape = enum { Circle(float), Rect { w: float, h: float }, Empty }
+
+func area(s: Shape): float {
+    return match s {
+        case Shape::Rect { w, h } when h==0.0=>0.0-1.0
+        case Shape::Rect { w, h } => w*h
+        case Shape::Circle(r) when r>100.0 => 0.0-2.0
+        case Shape::Circle(r) => r
+        case _ => 0.0
+    }
+}
+
+func small(n:int):int{
+return match n{
+case 1|2 when n>0=>10
+case _=>0
+}
+}
+
+func main(): int sync {
+    println(area(Shape::Empty))
+    println(small(1))
+    return 0
+}

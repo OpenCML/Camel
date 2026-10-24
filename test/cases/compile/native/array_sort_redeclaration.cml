@@ -1,0 +1,22 @@
+/**
+ * Two declarations of one sort name for the same element type are refused where the second is
+ * written. The per-element spelling cannot drift into this by accident — one element type has one
+ * declaration — but it is the collision that *is* possible in it, and it is refused by name
+ * (`SemanticDiag::Redeclaration`) rather than left to the first declaration that happens to be
+ * read. A `when` is not what decides such a pair either: the two signatures are the same, so the
+ * conditions could not tell them apart even if a call consulted them (see
+ * `array_sort_kernel_overlap.cml`).
+ */
+module array_sort_redeclaration
+
+#op<':op/add_i'>
+func dup_sort(xs: i32[]): i32[]
+
+#op<':op/add_l'>
+func dup_sort(xs: i32[]): i32[]
+
+func main(): int sync {
+    let xs: i32[] = [1, 2]
+    println(dup_sort(xs))
+    return 0
+}

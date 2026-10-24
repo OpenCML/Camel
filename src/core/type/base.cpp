@@ -104,6 +104,8 @@ string typeCodeToString(TypeCode code) {
         return "struct";
     case TypeCode::Function:
         return "function";
+    case TypeCode::Stream:
+        return "stream";
     case TypeCode::Ref:
         return "ref";
     case TypeCode::TypeVar:

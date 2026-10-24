@@ -79,7 +79,7 @@ func evaluate(m: Mlp, x: Tensor, labels: Tensor): (float, float) {
 // The loop collects the loss of every step; the curve is printed afterwards, outside the
 // timed region, in the order the steps produced it.
 sync func report(losses: float[], steps: int, log_every: int) {
-    range(0, steps)->filter<(i: int): bool => i % log_every == 0>->foreach<sync (i: int) => sync {
+    0..steps->filter<(i: int): bool => i % log_every == 0>->foreach<sync (i: int) => sync {
         `c2 step=${i} loss=${losses[i]:.9f}`->println
         return null
     }>

@@ -23,11 +23,25 @@
 module array
 
 import math
-import { is_numeric, is_ordered } from types
+import { is_bool, is_numeric, is_ordered, is_string } from types
 
 // The native primitives are declared here, as body-less declarations of this module: each stands
-// for the operator of its own name (`array:argsort`, `array:sort`, ...), implemented in C++ and
-// answered on this module's protocol. They are pure and return a new array.
+// for the operator its `#op` tag names (`array:argsort_i`, `array:sort_d`, ...), implemented in
+// C++ and answered on this module's protocol. They are pure and return a new array.
+//
+// One declaration per element type, and each declaration names the operator of its own element
+// type. The executor a declaration names takes exactly the element type its signature names
+// (builtin/operators/array.cpp), so the element type is known where the executor is chosen and no
+// run-time switch on the element type is left anywhere in the module. This is the shape the
+// reductions' kernels got (H228: one operator, per-type executors; design principles 10.4), and
+// the shape `abs`, `min` and `max` in `stdlib/math.cml` already had: the element type is named by
+// the signature, which is what the operator path resolves a call by, so `sort(xs)` is written as
+// it always was and no kernel's name is ever written.
+//
+// The sorts order the four numeric element types the C++ sorts hold an order on. An element type
+// no declaration names (bf16, f16, bool, string) has no sort at all: the call is refused where it
+// is written, listing the declarations, rather than at run time by the executor.
+// `argsort` takes the keys it can order, which is those four and `bool` and `string`.
 
 // ---- sorting ----
 
@@ -36,47 +50,79 @@ import { is_numeric, is_ordered } from types
 /// primitive behind `sort_by`.
 /// @pure
 /// @example argsort([30, 10, 20])    // [1, 2, 0]
+#op<'array:argsort_i'>
 export func argsort(keys: i32[]): int[]
+#op<'array:argsort_l'>
 export func argsort(keys: int[]): int[]
+#op<'array:argsort_f'>
 export func argsort(keys: f32[]): int[]
+#op<'array:argsort_d'>
 export func argsort(keys: float[]): int[]
+#op<'array:argsort_b'>
 export func argsort(keys: bool[]): int[]
+#op<'array:argsort_s'>
 export func argsort(keys: string[]): int[]
-
-// The sorts are generic over the element type, as the kernel is: it reads the element type code
-// and faults with `OperandTypeUnsupported` for a type it does not order (i32, i64, f32, f64).
-// bf16 and f16 are numbers that kernel does not read, so their arrays are refused by name at run
-// time; narrowing to the four would move that refusal to compile time, a behaviour change.
 
 /// A sorted copy of xs (quicksort).
 /// @pure
-/// @fails fault `OperandTypeUnsupported` when the element type is not i32, i64, f32 or f64
 /// @example sort([3, 1, 2])    // [1, 2, 3]
-export func sort::<T>(xs: T[]): T[]
+#op<'array:sort_i'>
+export func sort(xs: i32[]): i32[]
+#op<'array:sort_l'>
+export func sort(xs: int[]): int[]
+#op<'array:sort_f'>
+export func sort(xs: f32[]): f32[]
+#op<'array:sort_d'>
+export func sort(xs: float[]): float[]
 
 /// A sorted copy of xs, by insertion sort.
 /// @pure
-/// @fails fault `OperandTypeUnsupported` when the element type is not i32, i64, f32 or f64
 /// @example insert_sort([3, 1, 2])    // [1, 2, 3]
-export func insert_sort::<T>(xs: T[]): T[]
+#op<'array:insert_sort_i'>
+export func insert_sort(xs: i32[]): i32[]
+#op<'array:insert_sort_l'>
+export func insert_sort(xs: int[]): int[]
+#op<'array:insert_sort_f'>
+export func insert_sort(xs: f32[]): f32[]
+#op<'array:insert_sort_d'>
+export func insert_sort(xs: float[]): float[]
 
 /// A sorted copy of xs, by quicksort.
 /// @pure
-/// @fails fault `OperandTypeUnsupported` when the element type is not i32, i64, f32 or f64
 /// @example quick_sort([3, 1, 2])    // [1, 2, 3]
-export func quick_sort::<T>(xs: T[]): T[]
+#op<'array:quick_sort_i'>
+export func quick_sort(xs: i32[]): i32[]
+#op<'array:quick_sort_l'>
+export func quick_sort(xs: int[]): int[]
+#op<'array:quick_sort_f'>
+export func quick_sort(xs: f32[]): f32[]
+#op<'array:quick_sort_d'>
+export func quick_sort(xs: float[]): float[]
 
 /// A sorted copy of xs, by merge sort.
 /// @pure
-/// @fails fault `OperandTypeUnsupported` when the element type is not i32, i64, f32 or f64
 /// @example merge_sort([3, 1, 2])    // [1, 2, 3]
-export func merge_sort::<T>(xs: T[]): T[]
+#op<'array:merge_sort_i'>
+export func merge_sort(xs: i32[]): i32[]
+#op<'array:merge_sort_l'>
+export func merge_sort(xs: int[]): int[]
+#op<'array:merge_sort_f'>
+export func merge_sort(xs: f32[]): f32[]
+#op<'array:merge_sort_d'>
+export func merge_sort(xs: float[]): float[]
 
-/// The sorted array made of the elements of two sorted arrays of numbers.
+/// The sorted array made of the elements of two sorted arrays of numbers. The two must hold the
+/// same element type: `T` is one of the four the sorts order, not one per argument.
 /// @pure
-/// @fails fault `OperandTypeUnsupported` when the elements are not i32, i64, f32 or f64
 /// @example merge_sorted_arrays([1, 4], [2, 3])    // [1, 2, 3, 4]
-export func merge_sorted_arrays::<T>(left: T[], right: T[]): T[]
+#op<'array:merge_sorted_arrays_i'>
+export func merge_sorted_arrays(left: i32[], right: i32[]): i32[]
+#op<'array:merge_sorted_arrays_l'>
+export func merge_sorted_arrays(left: int[], right: int[]): int[]
+#op<'array:merge_sorted_arrays_f'>
+export func merge_sorted_arrays(left: f32[], right: f32[]): f32[]
+#op<'array:merge_sorted_arrays_d'>
+export func merge_sorted_arrays(left: float[], right: float[]): float[]
 
 // ---- rearranging ----
 
@@ -103,7 +149,7 @@ export func drop::<T>(xs: T[]): T[] {
 /// Each element with its index.
 /// @example enumerate(['a', 'b'])    // [(0, 'a'), (1, 'b')]
 export func enumerate::<T>(xs: T[]): (int, T)[] {
-    return zip(range(0, len(xs)), xs)
+    return zip(0..len(xs), xs)
 }
 
 /// The elements of the inner arrays, in order. The primitive behind `flat_map`.
@@ -161,14 +207,13 @@ export func count::<T>(xs: T[]): int {
 // A reduction of floating-point elements follows a rule of the language, not a choice of this
 // module: it returns the element type and accumulates in f64, rounding once at the end (design
 // principles 7.3: "浮点数组的归约在 f64 中累加、舍入一次，返回元素类型（与张量归约一致）"),
-// and the rule is the same for an f32 array. Writing the f64 accumulator and the single
-// conversion back into the element type is
-// what makes it a definition rather than a precision the compiler chose: the additions the
-// source asks for are f64 additions, so nothing here is an f32 accumulation that the compiler
-// raised, and `change_precision` (7.2, which governs what the compiler changes) is neither
-// needed nor consumed by this module. The addition order is unchanged too: ascending from +0,
-// as it was.
-
+// and the rule is the same for an f32 array. Writing the f64 accumulator and the single conversion
+// back into the element type is what makes it a definition rather than a precision the compiler
+// chose: the additions the source asks for are f64 additions, so nothing here is an f32
+// accumulation that the compiler raised, and `change_precision` (7.2, which governs what the
+// compiler changes) is neither needed nor consumed by this module. The addition order is
+// unchanged too: ascending from +0, as it was.
+#impl<sum_kernel>
 /// The sum of the elements, 0 for an empty array.
 ///
 /// A floating-point element type accumulates in f64 and rounds once into the element type at the
@@ -182,10 +227,11 @@ export func count::<T>(xs: T[]): int {
 /// @example sum([1, 2, 3])    // 6
 export func sum::<T>(xs: T[]): T when is_numeric::<T>() {
     return match type T {
-        // The accumulator of the integer and complex arms is T itself: integers wrap around in T
-        // exactly as `+` does, and a complex value is not a floating-point element type, so the
-        // f64 rule is not the one for it. Only the selected arm of the `match type` is built.
-        case int | i32 | c64 | c128 => xs->reduce<(a, b) => a + b, 0>
+        // The accumulator of the integer arms is T itself; a complex value accumulates in
+        // itself too, and its zero is the complex zero (a c64/c128 accumulator does not take 0).
+        case int | i32 => xs->reduce<(a, b) => a + b, 0>
+        case c64 => xs->reduce<(a, b) => a + b, c64(0)>
+        case c128 => xs->reduce<(a, b) => a + b, c128(0)>
         // A floating-point T accumulates in f64 (`sumF64`, from +0 in order) and converts once
         // into the element type, and that conversion is the only rounding of the whole reduction.
         // bf16 and f16 are floating-point element types of the same kind (design principles 7.3),
@@ -204,7 +250,7 @@ export func sum::<T>(xs: T[]): T when is_numeric::<T>() {
 func sumF64::<T>(xs: T[]): float {
     return xs->reduce<(acc: float, x: T): float => acc + float(x), 0.0 as float>
 }
-
+#impl<min_kernel>
 /// The smallest number (IEEE 754 minimum: a NaN anywhere makes the result NaN, and -0 is below
 /// +0), or null for an empty array.
 ///
@@ -216,7 +262,7 @@ func sumF64::<T>(xs: T[]): float {
 export func min::<T>(xs: T[]): T? when is_ordered::<T>() {
     return if len(xs) == 0 then null else xs->reduce<math::min, xs[0]>
 }
-
+#impl<max_kernel>
 /// The largest number (IEEE 754 maximum: a NaN anywhere makes the result NaN, and +0 is above
 /// -0), or null for an empty array.
 ///
@@ -253,3 +299,197 @@ with <f: (a: T, b: U) => V>
 export func zip_with::<T, U, V>(xs: T[], ys: U[]): V[] {
     return zip(xs, ys)->map<((a, b)) => f(a, b)>
 }
+
+// ---- the kernels of the reductions ----
+
+// A reduction's kernel is the body-less declaration below: the function above is the semantics and
+// what a call of the name takes when no kernel applies, and the declaration is what a call may take
+// instead (design principles 10.4, "常用而热的定义带原生内核"). The declaration's own `when` is what
+// says which element type has an executor: `Builder::declaredRuleApplies` binds the declaration's
+// type parameter from the instance's element type and evaluates the condition, an element type it
+// refuses has no executor and keeps the body, which is the semantics (H228: one operator, per-type
+// executors).
+//
+// One declaration per element type, and each declaration names the operator of its own element type
+// (`#op<'array:sum_i'>` for `i32`, `#op<'array:sum_d'>` for `float`, and so on). That is the shape
+// the executors ask for: the executor a declaration names takes exactly the element type its
+// condition admits (builtin/operators/array_reduce.cpp), so the element type is known where the
+// executor is chosen and no run-time switch on the element type is left anywhere. The conditions are
+// exact element types (`is_elem_i32` and its siblings below), so no two of them hold for one type;
+// two same-named declarations whose conditions overlap are refused where the second is written, as
+// `SemanticDiag::WhenDeclarationOverlap` naming the type both hold for and both declarations — the
+// compiler asks both conditions about every registered type (`signaturesCanAgree`), and two
+// declarations whose conditions are mutually exclusive both stand.
+//
+// A call is written `sum(xs)`, `min(xs)`, `max(xs)`, never a kernel's name: the kernel is chosen at
+// instantiation (`Builder::adoptImplKernel`), which is the only `when`-aware selection there is.
+//
+// Nothing here states how to compare or how to add. That is written once, in modules/math/minmax.h,
+// which these kernels and the tensor kernels both call (the tensor header forwards to it rather than
+// holding a second copy). The executors differ in the type they accumulate or carry, not in the
+// comparison. The kernel and the body are pinned against each other by
+// test/cases/modules/stdlib/array_reduction_kernels.cml, element type by element type, including the
+// two reduced-precision ones and the sign of a zero.
+//
+// These declarations stand at the end of the module: one of them above the fault line would move it,
+// and the line `zip`'s fault is on is how the fault is located (stdlib.fault.zip_with,
+// attempt.library's golden output).
+
+// ---- the element types of the reductions, one predicate each ----
+
+// The reductions are declared for a family of element types (`is_numeric` for `sum`, `is_ordered`
+// for `min` and `max`), and the executors are one per element type. A declaration's `when` therefore
+// has to name one element type, not a family: these predicates are what it names, and each holds for
+// exactly one type, so the declarations are mutually exclusive by construction. `is_integer` and
+// `is_float` (types.cml) are the families themselves; a declaration conditioned on one of those
+// covers several executors at once, which is what the run-time switch used to answer.
+
+/// The element type `i32` alone, for the kernel declaration of `sum`/`min`/`max` over an `i32[]`.
+func is_elem_i32::<T>(): bool {
+    return match type T {
+        case i32 => true
+        case _ => false
+    }
+}
+
+/// The element type `int` alone, for the kernel declaration over an `int[]`.
+func is_elem_int::<T>(): bool {
+    return match type T {
+        case int => true
+        case _ => false
+    }
+}
+
+/// The element type `f32` alone, for the kernel declaration over an `f32[]`.
+func is_elem_f32::<T>(): bool {
+    return match type T {
+        case f32 => true
+        case _ => false
+    }
+}
+
+/// The element type `float` (f64) alone, for the kernel declaration over a `float[]`.
+func is_elem_f64::<T>(): bool {
+    return match type T {
+        case float => true
+        case _ => false
+    }
+}
+
+/// The element type `bf16` alone, for the kernel declaration over a `bf16[]`.
+func is_elem_bf16::<T>(): bool {
+    return match type T {
+        case bf16 => true
+        case _ => false
+    }
+}
+
+/// The element type `f16` alone, for the kernel declaration over an `f16[]`.
+func is_elem_f16::<T>(): bool {
+    return match type T {
+        case f16 => true
+        case _ => false
+    }
+}
+
+// ---- the kernels of `sum`, one per element type ----
+
+// An integer element type accumulates in itself and wraps on overflow, as `+` does on it; a
+// floating-point element type accumulates in f64 and is rounded once into the element type at the
+// end. A complex element type is numeric and `sum` accepts it, but no declaration below names one,
+// so `sum` over a complex array has no executor and runs its body — the complex arm of the body is
+// the only place that says what summing complex numbers means.
+
+/// The kernel of `sum` for an `i32[]`: the accumulator is `i32`, wrapping on overflow.
+#op<'array:sum_i'>
+func sum_kernel::<T>(xs: T[]): T when is_elem_i32::<T>()
+
+/// The kernel of `sum` for an `int[]`: the accumulator is `int`, wrapping on overflow.
+#op<'array:sum_l'>
+func sum_kernel::<T>(xs: T[]): T when is_elem_int::<T>()
+
+/// The kernel of `sum` for an `f32[]`: an f64 accumulator, rounded once into `f32`.
+#op<'array:sum_f'>
+func sum_kernel::<T>(xs: T[]): T when is_elem_f32::<T>()
+
+/// The kernel of `sum` for a `float[]`: an f64 accumulator, rounded once into `float`.
+#op<'array:sum_d'>
+func sum_kernel::<T>(xs: T[]): T when is_elem_f64::<T>()
+
+/// The kernel of `sum` for a `bf16[]`: an f64 accumulator, rounded once into `bf16`.
+#op<'array:sum_bf'>
+func sum_kernel::<T>(xs: T[]): T when is_elem_bf16::<T>()
+
+/// The kernel of `sum` for an `f16[]`: an f64 accumulator, rounded once into `f16`.
+#op<'array:sum_f6'>
+func sum_kernel::<T>(xs: T[]): T when is_elem_f16::<T>()
+
+// ---- the kernels of `min` and `max`, one per element type ----
+
+// The fold carries an element of T and combines it with `math::min`/`math::max` (IEEE 754 minimum
+// and maximum), so the result is one of the elements and nothing rounds; an empty array answers
+// null. The two reduced-precision element types carry the winning element's own 16-bit pattern.
+
+/// The kernel of `min` for an `i32[]`.
+#op<'array:min_i'>
+func min_kernel::<T>(xs: T[]): T? when is_elem_i32::<T>()
+
+/// The kernel of `min` for an `int[]`.
+#op<'array:min_l'>
+func min_kernel::<T>(xs: T[]): T? when is_elem_int::<T>()
+
+/// The kernel of `min` for an `f32[]`.
+#op<'array:min_f'>
+func min_kernel::<T>(xs: T[]): T? when is_elem_f32::<T>()
+
+/// The kernel of `min` for a `float[]`.
+#op<'array:min_d'>
+func min_kernel::<T>(xs: T[]): T? when is_elem_f64::<T>()
+
+/// The kernel of `min` for a `bf16[]`.
+#op<'array:min_bf'>
+func min_kernel::<T>(xs: T[]): T? when is_elem_bf16::<T>()
+
+/// The kernel of `min` for an `f16[]`.
+#op<'array:min_f6'>
+func min_kernel::<T>(xs: T[]): T? when is_elem_f16::<T>()
+
+/// The kernel of `min` for a `bool[]`: `false` is below `true`.
+#op<'array:min_b'>
+func min_kernel::<T>(xs: T[]): T? when is_bool::<T>()
+
+/// The kernel of `min` for a `string[]`: the comparison is on the bytes of the two values.
+#op<'array:min_s'>
+func min_kernel::<T>(xs: T[]): T? when is_string::<T>()
+
+/// The kernel of `max` for an `i32[]`.
+#op<'array:max_i'>
+func max_kernel::<T>(xs: T[]): T? when is_elem_i32::<T>()
+
+/// The kernel of `max` for an `int[]`.
+#op<'array:max_l'>
+func max_kernel::<T>(xs: T[]): T? when is_elem_int::<T>()
+
+/// The kernel of `max` for an `f32[]`.
+#op<'array:max_f'>
+func max_kernel::<T>(xs: T[]): T? when is_elem_f32::<T>()
+
+/// The kernel of `max` for a `float[]`.
+#op<'array:max_d'>
+func max_kernel::<T>(xs: T[]): T? when is_elem_f64::<T>()
+
+/// The kernel of `max` for a `bf16[]`.
+#op<'array:max_bf'>
+func max_kernel::<T>(xs: T[]): T? when is_elem_bf16::<T>()
+
+/// The kernel of `max` for an `f16[]`.
+#op<'array:max_f6'>
+func max_kernel::<T>(xs: T[]): T? when is_elem_f16::<T>()
+
+/// The kernel of `max` for a `bool[]`: `false` is below `true`.
+#op<'array:max_b'>
+func max_kernel::<T>(xs: T[]): T? when is_bool::<T>()
+
+/// The kernel of `max` for a `string[]`: the comparison is on the bytes of the two values.
+#op<'array:max_s'>
+func max_kernel::<T>(xs: T[]): T? when is_string::<T>()

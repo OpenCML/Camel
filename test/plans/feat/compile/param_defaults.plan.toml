@@ -126,6 +126,65 @@ expect_stdout_exact = "param named_across_overloads two=12 reordered=12 three=12
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
 
+# The names of the rules a C++ module registers are the names the reference page declares for
+# them, so a named argument binds there as well: the name marks the position and the type of the
+# argument picks the rule, exactly as at a call of several declarations. `len` gives its one
+# parameter the same name in all three of its rules, `items` its one in both, and `json.get` its
+# with-parameter `key` in all eight of its declarations (handover: named arguments at operator
+# groups). The name is written in the list that holds the parameter: a `with` name in the angle
+# brackets, not in the parentheses, and the two cases below pin what that leaves refused.
+[[tests]]
+name = "param_defaults.stdlib_named_args"
+desc = "A named argument binds to the position its name marks in the rules a C++ module registers: `len`'s one parameter is `x` in the string, array, map and set rules, `items`' is `m` in the map and set rules, and `json`'s `get` gives its with-parameter the name `key` in all eight of its declarations, so `len(x: ...)`, `items(m: ...)`, `j->get<key: 'a'>` and `as_int(j: ...)` each reach the parameter their name marks and the argument's type decides which rule runs -- every named call prints what the same call written positionally prints. `trim`, a rule of one declaration, names its parameter `s`."
+kind = "behavior"
+case = "../../../cases/compile/param_defaults/stdlib_named_args.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "3 3\n2 3\n[(a, 1), (b, 2)] [1, 2, 3]\n3 3 2 3\n[(a, 1), (b, 2)] [1, 2, 3]\n[x] [x]\n7 7\n8 8\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
+name = "param_defaults.stdlib_group_names_differ"
+desc = "A name has to mark one position in every rule of the group it reaches: `contains`' position 0 holds an element in the two collection forms (`value`) and the substring in the string form (`sub`), so `contains<value: 2>` names a position that means two things and is OverloadParameterNames, at the argument -- the report a set of Camel declarations gives for the same defect. This is the refusal the reference page states for `contains`."
+kind = "negative"
+case = "../../../cases/compile/param_defaults/stdlib_group_names_differ.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::OverloadParameterNames"
+expect_diagnostic_line = 11
+expect_output_contains = ["The argument 'value' is given by name, and the overloads of 'contains' do not name the parameter at that position the same way."]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "param_defaults.stdlib_with_name_in_parens"
+desc = "A `with` parameter is named in the angle brackets, where the declaration holds it: `get(j, key: 'a')` writes `key` in the parentheses, where `get`'s ordinary parameter is the document (`j`), so the name is ParamArgumentUnknown at the argument -- the same report a function with a body gives for `scale(4, k: 3)` when `k` is one of its `with` parameters (design principles 4.4). The callee is still read as the declarations of its name (eight of them for `json.get`), which is why the report is about the name and not about an unsettled signature."
+kind = "negative"
+case = "../../../cases/compile/param_defaults/stdlib_with_name_in_parens.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ParamArgumentUnknown"
+expect_diagnostic_line = 17
+expect_output_contains = ["'key' is not a parameter of 'get'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "param_defaults.stdlib_no_place_for_name"
+desc = "A rule whose parameter count follows its arguments gives no position a name could mark: `py_call` takes a rest list, and its two forms differ in arity as well, so `py_call(fn: ...)` is ParamArgumentCallee -- the signature is not known where the call is written -- rather than bound to a guessed position. This is the refusal the reference page states for `py_call`."
+kind = "negative"
+case = "../../../cases/compile/param_defaults/stdlib_no_place_for_name.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ParamArgumentCallee"
+expect_diagnostic_line = 14
+expect_output_contains = ["The argument 'fn' is given by name, and the signature of 'py_call' is not known where the call is written."]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
 [[tests]]
 name = "param_defaults.overload_names_differ"
 desc = "The overloads of one name have to name the parameter at a position the same way: the second parameter of `f` is `b` in one declaration and `c` in the other, so the call's `b` names no one parameter of `f` and is OverloadParameterNames, at that argument."

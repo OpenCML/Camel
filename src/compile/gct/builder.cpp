@@ -13,6 +13,7 @@
 #include "camel/core/tags.h"
 #include "camel/core/type/bytes.h"
 #include "camel/core/type/collection.h"
+#include "camel/core/type/composite/stream.h"
 #include "camel/core/type/enum.h"
 #include "camel/core/type/other.h"
 #include "camel/core/type/text.h"
@@ -2943,12 +2944,20 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
 
     case AST::ReservedDataOp::Comp: {
         const auto &rhsASTNode = ast->atAs<AST::DataLoad>(1);
-        // `cmp` is the compiler's own macro operator (oper::MacroCmp): it is referred to by the
-        // id the table fixed at start-up, not by the name of the built-in module's entity.
-        const oper_group_ptr_t cmpGroup =
-            context_->importModule("")->nativeOperatorGroup(camel::core::oper::MacroCmp);
-        ASSERT(cmpGroup != nullptr, "The built-in __cmp__ is missing.");
-        node_ptr_t opNode  = tree_->makeDRef(camel::core::oper::MacroCmp, cmpGroup->name());
+        // `a..b` has two readings, and the types of its two operands tell them apart (design
+        // principles 4.2; the author's ruling of 2026-10-24 on `h248-generator-and-composition`):
+        // between two functions it is the composition `f..g`, the lambda `x => g(f(x))`, and
+        // between two integers it is the interval `[a, b)`. GCT has no types, so the construct
+        // is handed on as one call of the compiler's own name for it, which the GIR builder
+        // resolves (Builder::buildComposition).
+        //
+        // It used to be handed to the built-in macro operator `oper::MacroCmp` (`:macro/cmp`,
+        // src/builtin/operators/macro.cpp), whose resolver took two functions and answered with
+        // the exit type of the right one. That path could not build a composition at all — a
+        // value of a function type is a graph, and no built-in executor has one — and it had no
+        // reading for two integers. The operator and its executor stay registered; the compiler
+        // no longer has a user for them.
+        node_ptr_t opNode  = tree_->makeDRef(std::string(camel::core::kCompositionCall));
         res                = tree_->makeLink(2);
         auto compAstBundle = astSemantic(context_, ast);
         setOriginFromOrigin(
@@ -3378,6 +3387,19 @@ node_ptr_t Builder::visitMatchExpr(const AST::node_ptr_t &ast) {
             aCaseNode->load()->origin(),
             camel::source::OriginKind::GctNode,
             "gct.match.case");
+
+        // The guard of the case, when it has one. `case p when c => ...` is taken only when the
+        // pattern matches *and* `c` holds, so the graph builder evaluates the guard in the arm
+        // this case becomes and sends the value on to the cases written after it when it does
+        // not hold (review 「when-placement-and-match-guards」). The guard is kept beside the
+        // CASE rather than among its children: the arm's body is the last child every reader of
+        // that node takes, and the guard is read in the arm's scope, where the names the
+        // pattern binds are in force.
+        if (aCaseNode->size() > 2) {
+            enterArmOf(ast, valueUnused);
+            tree_->setCaseGuard(gCaseNode, visitData(aCaseNode->at(2)));
+            gCaseNode->setGuardedCase();
+        }
         mergedInputs.push_back(nodeOrigin(gCaseNode));
         parts.push_back(semanticPart(
             camel::source::SemanticRole::BranchTarget,
@@ -4885,7 +4907,7 @@ node_ptr_t Builder::visitRefData(const AST::node_ptr_t &ast) {
 
 /*
 Type(TypeType type) :=
-    NullableType | TypeExpr | ArrayType | StructType | TupleType
+    StreamType | NullableType | TypeExpr | ArrayType | StructType | TupleType
     | FuncType | SpecType | UnitType | InferType | DataType | RefType ;
 */
 Type *Builder::visitType(const AST::node_ptr_t &ast) {
@@ -4903,6 +4925,9 @@ Type *Builder::visitType(const AST::node_ptr_t &ast) {
     switch (type->typeType()) {
     case AST::TypeType::Null:
         res = visitNullableType(ast);
+        break;
+    case AST::TypeType::Stream:
+        res = visitStreamType(ast);
         break;
     case AST::TypeType::Expr:
         res = visitTypeExpr(ast);
@@ -4983,6 +5008,17 @@ Type *Builder::visitType(const AST::node_ptr_t &ast) {
     }
     LEAVE("Type");
     return res;
+}
+
+/*
+StreamType : Type type ;
+*/
+Type *Builder::visitStreamType(const AST::node_ptr_t &ast) {
+    ENTER("StreamType");
+    ASSERT(ast->type() == AST::LoadType::Type, "Expected TypeLoad type for StreamType");
+    Type *elemType = visitType(ast->atAs<AST::TypeLoad>(0));
+    LEAVE("StreamType");
+    return StreamType::create(elemType);
 }
 
 /*
@@ -5105,6 +5141,16 @@ Type *Builder::visitArrayType(const AST::node_ptr_t &ast) {
             // A pack is the trailing dimensions the type does not name; it can only be last,
             // and only once (design principles 5.4).
             diags_->of(SemanticDiag::DimensionAfterAnyRank).at(ast->load()->tokenRange()).commit();
+            throw BuildAbortException();
+        }
+        // A stream is consumed once and the elements of an array are read more than once, so
+        // `T..[3]` has no meaning (design principles 5.4; the author's ruling of 2026-10-24).
+        // The dimension is read against the stream here, so the element of the array the
+        // dimension would make is refused before the array is built.
+        if (type != nullptr && type->code() == TypeCode::Stream) {
+            diags_->of(SemanticDiag::StreamInContainer)
+                .at(ast->load()->tokenRange())
+                .commit(type->toString(), "an array");
             throw BuildAbortException();
         }
         const auto extents = visitExtents(group, ast);
@@ -5692,8 +5738,17 @@ Type *Builder::visitSpecType(const AST::node_ptr_t &ast) {
     }
     if (const CollectionType *coll = asCollectionTypeOrPrototype(base);
         coll != nullptr && !arguments.empty() && arguments.front().type != nullptr) {
+        Type *keyType = arguments.front().type;
+        // A stream is consumed once and the element of a set, like the key of a map, is read
+        // more than once: the linearity refusal says so before the key rules look at what the
+        // type is otherwise (design principles 5.4; the author's ruling of 2026-10-24).
+        if (keyType->code() == TypeCode::Stream) {
+            diags_->of(SemanticDiag::StreamInContainer)
+                .at(ast->load()->tokenRange())
+                .commit(keyType->toString(), coll->isMap() ? "a map" : "a set");
+            throw BuildAbortException();
+        }
         // The key of a map, the element of a set (DESIGN-QUESTION(map-key-types)).
-        Type *keyType                          = arguments.front().type;
         camel::source::origin_id_t fieldOrigin = camel::source::kInvalidOriginId;
         std::string fieldLabel;
         if (std::string problem = collectionKeyProblem(keyType, &fieldOrigin, &fieldLabel);
@@ -5734,6 +5789,18 @@ Type *Builder::visitSpecType(const AST::node_ptr_t &ast) {
             .at(ast->load()->tokenRange())
             .commit(base->toString(), error.empty() ? std::string("no reason given") : error);
         throw BuildAbortException();
+    }
+    // A stream is consumed once, and the elements of a map or a set are read more than once
+    // (design principles 5.4; the author's ruling of 2026-10-24). The element of a set and the
+    // key of a map are refused by the key rules already ('values of this type have no order');
+    // this is the value of a map, which no key rule looks at.
+    if (const CollectionType *coll = asCollectionTypeOrPrototype(res); coll != nullptr) {
+        if (Type *value = coll->valueType(); value != nullptr && value->code() == TypeCode::Stream) {
+            diags_->of(SemanticDiag::StreamInContainer)
+                .at(ast->load()->tokenRange())
+                .commit(value->toString(), "a map");
+            throw BuildAbortException();
+        }
     }
     LEAVE("SpecType");
     return const_cast<Type *>(res);

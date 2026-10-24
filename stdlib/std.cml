@@ -203,7 +203,12 @@ with <
     bytecode: bool = true,
     /// 1: print the task graphs and collections of the run when it ends; 2: also one per
     /// collection.
-    gc_stats: int = 0
+    gc_stats: int = 0,
+    /// This run's work is the collection stress: serve every collection it asks for one for
+    /// one, instead of the gate's pacing (the next collection otherwise starts no sooner than
+    /// twice the time the last one took, which holds the collector at a third of a production
+    /// run). The stress itself is asked for with the collector's `CAMEL_GC_STRESS_*` settings.
+    gc_stress: bool = false
 >
 export func taskflow::<F>(f: F): F! when is_function::<F>()
 

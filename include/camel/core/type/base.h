@@ -96,6 +96,12 @@ enum class TypeCode : uint32_t {
     // table by `code & 0xF` must handle them first (castSafetyFrom does).
     BFloat16 = makeTypeCode(TypeFlag::Primitive, 0x014),
     Float16  = makeTypeCode(TypeFlag::Primitive, 0x015),
+    // The stream `T..` (design principles 5.4): the elements of `T` that arrive one after
+    // another, produced on demand. A type of its own, not the open-rank array `T[..]`: the
+    // author's ruling of 2026-10-24 (h248-stream-type-surface) makes the stream a core type and
+    // keeps the two suffix readings apart. GC-traced, like an array: a stream value holds the
+    // producer of its elements.
+    Stream   = makeTypeCode(TypeFlag::Composite | TypeFlag::GC_Traced, 0x016),
     Other    = makeTypeCode(TypeFlag::OtherType, 0x000),
 };
 

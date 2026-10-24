@@ -161,6 +161,9 @@ void Builder::registerGenericTemplates(const GCT::node_ptr_t &exec) {
             plainNames.insert(name);
         }
     }
+    // The templates this block declares, in the order they are written: registered first, so
+    // that two of them may call one another, then resolved by name (the second loop below).
+    std::vector<generic_template_ptr_t> declared;
     for (size_t i = 0; i < exec->size(); ++i) {
         const auto &child = exec->at(i);
         if (child->type() != GCT::NodeKind::FUNC) {
@@ -233,6 +236,16 @@ void Builder::registerGenericTemplates(const GCT::node_ptr_t &exec) {
                 templateScope_->insert(name, generic_ref_t(fresh));
             }
         }
+        declared.push_back(tmpl);
+    }
+    // Every declaration of this block is known now, so the names that do not depend on a type
+    // parameter are resolved here, on the declaration's line, rather than waiting for an
+    // instantiation that may never come (the ruling of 2026-10-24 on
+    // `generic-rule-condition-unresolved-name`: a misspelled predicate is an unresolved name like
+    // any other, and the module does not load). No type is read: what only the instantiation can
+    // answer -- an operator overload, a field, the argument a call fits -- is not asked here.
+    for (const generic_template_ptr_t &tmpl : declared) {
+        resolveGenericTemplateNames(tmpl);
     }
 }
 
@@ -402,6 +415,188 @@ compile_graph_ptr_t Builder::instantiateGenericAs(
         return nullptr;
     }
     return graph;
+}
+
+// ---- A generic rule where a rule is expected (rewrite design 2 (second version) 8.5) ----
+
+void Builder::settleGenericRuleMaker(
+    std::vector<Argument> &normInputs, type_vec_t &normTypes, const GCT::node_ptr_t &call) {
+    // `__rule_generic(name, two_way, needs, consts, <the sides>)`, what the front end writes for a
+    // rule whose head declares type parameters. The sides are the rule's own generic functions
+    // (`name__lhs`, `name__rhs`, and `name__when` when it has a condition).
+    constexpr size_t kFixed = 4;
+    if (normInputs.size() <= kFixed) {
+        return;
+    }
+    std::vector<generic_template_ptr_t> sides;
+    for (size_t i = kFixed; i < normInputs.size(); ++i) {
+        const auto found = genericDrefs_.find(normInputs[i].node);
+        if (found == genericDrefs_.end()) {
+            // A side that is not a generic function is not what this maker is for: the maker's own
+            // resolution reports the call, as it would for any other argument it cannot take.
+            return;
+        }
+        sides.push_back(found->second.one());
+    }
+    if (sides.size() < 2 || sides.size() > 3) {
+        return;
+    }
+    // The rule's name as a reader writes it: the sides are the qualified names of its functions.
+    std::string name = sides.front()->name;
+    if (const size_t scope = name.rfind("::"); scope != std::string::npos) {
+        name = name.substr(scope + 2);
+    }
+    if (const size_t side = name.rfind("__"); side != std::string::npos) {
+        name.resize(side);
+    }
+    const uint64_t ruleId = registerGenericRule(
+        *context_, static_cast<void *>(this), std::move(name), typeParameterNames(sides[0]),
+        sides[0], sides[1], sides.size() == 3 ? sides[2] : nullptr);
+    const data_ptr_t idValue =
+        tt::as_shared<Data>(std::make_shared<PrimaryData<int64_t>>(static_cast<int64_t>(ruleId)));
+    const node_handle_t idNode = currGraph_->addStaticDataNode(idValue);
+    rememberConstant(idNode, idValue);
+    registerNodeOrigin(context_, idNode, call, "gir.rule.generic");
+    // The rule value keeps the id of its templates, and the maker is called with it: what a generic
+    // rule holds is not a function of the program being built, so nothing of the declaration enters
+    // this graph but the id (design principles 5.5; the ruling of 2026-10-23 on
+    // generic-rule-instantiation).
+    normInputs.resize(kFixed + 1);
+    normInputs[kFixed] = Argument{idNode, call, std::nullopt};
+    normTypes.resize(kFixed + 1);
+    normTypes[kFixed] = Type::Int64();
+}
+
+bool Builder::instantiateRuleTemplates(
+    const GenericRuleEntry &entry, const std::vector<Type *> &types, compile_graph_ptr_t &lhs,
+    compile_graph_ptr_t &rhs, compile_graph_ptr_t &when, std::string &why) {
+    const auto lhsTemplate  = std::static_pointer_cast<GenericTemplate>(entry.lhs);
+    const auto rhsTemplate  = std::static_pointer_cast<GenericTemplate>(entry.rhs);
+    const auto whenTemplate = std::static_pointer_cast<GenericTemplate>(entry.when);
+    ASSERT(lhsTemplate != nullptr && rhsTemplate != nullptr, "A rule has two sides.");
+    const std::vector<std::string> names = typeParameterNames(lhsTemplate);
+    if (names.size() != types.size()) {
+        why = std::format(
+            "it takes {} type parameter(s), and it was asked for {}",
+            names.size(),
+            types.size());
+        return false;
+    }
+    type_bindings_t bindings;
+    for (size_t i = 0; i < names.size(); ++i) {
+        bindings.push_back({names[i], types[i]});
+    }
+    // The instance is built where the rule was declared: the templates are the ones the declaring
+    // builder holds, and its own scopes and module answer for the body. That builder's build
+    // finished long ago -- the rule is instantiated where the rule is applied, which is a pass
+    // running later -- so the state a body build needs is entered again for the module the rule
+    // belongs to (the same state a top-level declaration of it is built in). What a body says when
+    // it does not compile for these types stays out of the program (the ruling of 2026-10-23 on
+    // generic-rule-instantiation-set-and-predicate), and `why` is all that is kept of the attempt.
+    std::string said;
+    const GCT::node_ptr_t origin = lhsTemplate->func;
+    const bool inModule          = this->inModule(lhsTemplate->module, [&] {
+        SpeculativeInstantiation quiet(*this);
+        lhs = instantiateGeneric(lhsTemplate, bindings, {}, {}, origin);
+        rhs = lhs != nullptr ? instantiateGeneric(rhsTemplate, bindings, {}, {}, origin) : nullptr;
+        when = lhs != nullptr && rhs != nullptr && whenTemplate != nullptr
+                   ? instantiateGeneric(whenTemplate, bindings, {}, {}, origin)
+                   : nullptr;
+        // What the bodies said, read while the scope still holds it: it is the reason the attempt
+        // is remembered by, and nobody hears it where it was said.
+        said = quiet.reason();
+        quiet.close();
+    });
+    if (!inModule) {
+        lhs = rhs = when = nullptr;
+        why = "the module that declared it is not in this builder any more";
+        return false;
+    }
+    if (lhs == nullptr || rhs == nullptr) {
+        lhs = rhs = when = nullptr;
+        // Why the instance cannot be made is what the body said, and the maker's own phrase only
+        // stands when it said nothing: `i32` has `+` and `-`, and a rule whose literal does not
+        // fit the type is not one whose pattern has no operator there (the ruling of 2026-10-23
+        // on `literal-inside-a-generic-body`, and on
+        // `generic-rule-instantiation-set-and-predicate`, §3).
+        why = said.empty() ? "the pattern has no operator for this type" : said;
+        return false;
+    }
+    if (whenTemplate != nullptr && when == nullptr) {
+        lhs = rhs = when = nullptr;
+        why = said.empty() ? "the condition has no operator for this type" : said;
+        return false;
+    }
+    return true;
+}
+
+RuleConditionAt Builder::ruleConditionVerdict(
+    const GenericRuleEntry &entry, const std::vector<Type *> &types, std::string &why) {
+    const auto whenTemplate = std::static_pointer_cast<GenericTemplate>(entry.when);
+    if (whenTemplate == nullptr) {
+        // No condition: the law is written for every type the pattern can be built for.
+        return RuleConditionAt::Holds;
+    }
+    // The type parameters of the head, as the rule declares them: the names the condition's type
+    // arguments are bound to. They are read from the entry, so the verdict is asked for exactly the
+    // tuples the enumeration produces (`<T, U>` binds both).
+    if (entry.typeParams.size() != types.size()) {
+        why = std::format(
+            "it takes {} type parameter(s), and it was asked about {}",
+            entry.typeParams.size(),
+            types.size());
+        return RuleConditionAt::Unknown;
+    }
+    type_bindings_t bindings;
+    bindings.reserve(types.size());
+    for (size_t i = 0; i < types.size(); ++i) {
+        bindings.push_back({entry.typeParams[i], types[i]});
+    }
+    if (whenTemplate->func == nullptr || whenTemplate->func->size() < 2) {
+        why = "the condition template has no body to read";
+        return RuleConditionAt::Unknown;
+    }
+    // The condition is asked where the rule was declared, as its instance would be: its predicate
+    // calls resolve in that module's names, and instantiating one builds a body there. That is the
+    // same state `instantiateRuleTemplates` enters, and for the same reason -- this runs while a
+    // pass is applying the rule, long after the module was built. A predicate body that does not
+    // compile for these types is held in a speculative scope, so the attempt is quiet and its
+    // reason is what the caller keeps (the ruling of 2026-10-23 on
+    // `generic-rule-instantiation-set-and-predicate`).
+    WhenResult verdict;
+    std::string said;
+    const bool inModule = this->inModule(whenTemplate->module, [&] {
+        SpeculativeInstantiation quiet(*this);
+        try {
+            verdict = evaluateWhenCondition(
+                whenTemplate->func->at(1), whenTemplate->funcType, bindings, {}, whenTemplate);
+        } catch (const BuildAbortException &) {
+            // The compiler made a verdict this question cannot carry (a call the condition's
+            // predicate makes that is not a compile-time one, an incomplete return type): the
+            // condition is not one the check can ask, and `said` carries what was said.
+            verdict         = WhenResult{};
+            verdict.outcome = WhenOutcome::NotEvaluable;
+        }
+        said = quiet.reason();
+        quiet.close();
+    });
+    if (!inModule) {
+        why = "the module that declared it is not in this builder any more";
+        return RuleConditionAt::Unknown;
+    }
+    if (verdict.fails()) {
+        return RuleConditionAt::Fails;
+    }
+    if (verdict.holds()) {
+        return RuleConditionAt::Holds;
+    }
+    // Everything else -- a condition whose rest reads the values it matches, and a condition the
+    // compiler cannot answer at all -- keeps the tuple: a condition the check cannot ask must not
+    // take an instance away (`why` carries what the compiler said), and a value-dependent one is an
+    // instance whose firing is measured sample by sample, as it is for an ordinary conditional rule.
+    why = !verdict.detail.empty() ? verdict.detail
+                                  : (!said.empty() ? said : "the condition is not a compile-time one");
+    return RuleConditionAt::ValueDependent;
 }
 
 node_handle_t

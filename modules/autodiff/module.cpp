@@ -7,6 +7,7 @@
 
 #include "module.h"
 
+#include "expand.h"
 #include "operators.h"
 
 #include "camel/core/context/context.h"
@@ -65,6 +66,9 @@ bool AutodiffModule::load() {
     context_->registerExecutorFactory("autodiff", [ctx = context_]() -> executor_ptr_t {
         return std::make_shared<AutodiffExecutor>(ctx);
     });
+    // The pass that builds a gradient at compile time (docs/design/gpu/plan.cn.md 2.6); a module
+    // registers its passes when it is loaded, before any pass runs.
+    camel::autodiff::registerExpandPass();
     loaded_ = true;
     return true;
 }

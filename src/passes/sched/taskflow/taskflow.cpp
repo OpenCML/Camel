@@ -322,9 +322,17 @@ void TaskflowGcGate::collect(ThreadState &ts, std::string_view reason) {
     static std::atomic<int64_t> backoffNs{kFirstBackoffNs};
 
     stats_.pendingPolls.fetch_add(1, std::memory_order_relaxed);
-    const auto tooSoon = [this]() {
+    // The pacing below is for a production run: it keeps the collector at a third of the run
+    // however often the workers poll. A run whose work *is* the collections -- an arm under
+    // collection stress, where the stress asked for a collection at every safepoint -- asks for
+    // them unpaced (`std::prl gc_stress=true`), because pacing them skipped 3,525 of the 3,532
+    // polls of the `_prl` arms of test/plans/feat/mm/gc_collections.plan.toml and left them with
+    // 12 collections against the 3,538 the same case made on std::fvm. The give-up backoff below
+    // applies either way: it is what keeps a blocked operator from deadlocking the collector.
+    const bool paced   = collectionsPaced();
+    const auto tooSoon = [this, paced]() {
         const int64_t now = steadyNowNs();
-        if (now < capUntilNs_.load(std::memory_order_relaxed)) {
+        if (paced && now < capUntilNs_.load(std::memory_order_relaxed)) {
             stats_.cappedPolls.fetch_add(1, std::memory_order_relaxed);
             return true;
         }
@@ -404,10 +412,15 @@ void TaskflowGcGate::collect(ThreadState &ts, std::string_view reason) {
             }
             // The next collection starts no sooner than twice the time this one took, so the
             // collector takes at most a third of the run however often the workers poll
-            // (every graph boundary of every worker: with a collection forced at every
-            // safepoint, as the GC stress modes do, that was thousands of full collections
-            // for a small program). A poll that found nothing to do costs nothing here.
-            capUntilNs_.store(end + 2 * (end - begin), std::memory_order_relaxed);
+            // (every graph boundary of every worker; the pacing was introduced because a
+            // collection forced at every safepoint, as the GC stress modes do, was thousands of
+            // full collections for a small program). A poll that found nothing to do costs
+            // nothing here. A run that asked for its collections unpaced (`gc_stress=true`)
+            // states no cap at all: under collection stress the collections are the run, and
+            // pacing them left the `_prl` arms of gc_collections.plan.toml with 12 of them.
+            if (paced) {
+                capUntilNs_.store(end + 2 * (end - begin), std::memory_order_relaxed);
+            }
             backoffNs.store(kFirstBackoffNs, std::memory_order_relaxed);
         } else {
             stats_.gaveUp.fetch_add(1, std::memory_order_relaxed);
@@ -1033,6 +1046,9 @@ TaskflowExecSchedPass::apply(const camel::runtime::Program *program, std::ostrea
     forceLinear_ = options_.linear;
     fanOutAll_   = options_.fanOutAll;
     gcTraceFlag().store(options_.gcStats >= 2, std::memory_order_relaxed);
+    // A run whose work is the collection stress asks for its collections one for one
+    // (`gc_stress=true`); every other run keeps the gate's pacing.
+    TaskflowGcGate::instance().setCollectionsPaced(!options_.gcStress);
     taskGraphsRun_.store(0, std::memory_order_relaxed);
     {
         std::lock_guard lock(heavyMutex_);

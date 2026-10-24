@@ -469,11 +469,18 @@ void validateRuntimeGraphPayloadImpl(const GCGraph *graph) {
             }
         }
         if (node->kind == GCNodeKind::Gate) {
-            const auto ctrlInputs = graph->ctrlInputsOf(ref);
-            if (ctrlInputs.empty()) {
+            // A GATE is "let a value through once the sync chain has", and it waits through a
+            // **sync predecessor** (docs/design/effects/edges.cn.md 5.3 -- it has no control input
+            // there at all: it is a pure value-forwarding node with one data port and one sync
+            // predecessor). The control input is what that wait used to be written as; the paths
+            // this lane has not moved onto the sync edge yet still carry one, and the ones that
+            // have carry the sync edge instead. A GATE with neither waits on nothing, which is
+            // what this refuses.
+            if (graph->syncPredsOf(ref).empty() && graph->ctrlInputsOf(ref).empty()) {
                 throw std::runtime_error(
                     std::format(
-                        "Runtime graph '{}' has GATE node {} without control input.",
+                        "Runtime graph '{}' has GATE node {} without a wait: no sync predecessor "
+                        "and no control input.",
                         graph->name(),
                         ref));
             }
@@ -858,6 +865,7 @@ void emitDraftPayload(
                 header,
                 GCLoopRef{
                     .kind            = body.kind,
+                    .iterableForm    = body.iterableForm,
                     .condRef         = indexOf(body.condGraph),
                     .bodyRef         = indexOf(body.bodyGraph),
                     .collectionCount = body.collectionCount,

@@ -27,7 +27,7 @@ func mergesort(arr: int[]): (int[], int) {
 
 func main(): int sync {
     seed(1)
-    let arr = range(0, 64)->shuffle
+    let arr = 0..64->shuffle
     let (res, met) = mergesort(arr)
     res->println
     println('leaf sorts that met a peer: {} of 8'->format<met>)

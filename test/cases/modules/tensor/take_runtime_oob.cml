@@ -11,7 +11,7 @@ func pick(t: Tensor, i: int): Tensor {
 }
 
 func main(): int sync {
-    let t = reshape(range(0, 12), [4, 3])
+    let t = reshape(0..12, [4, 3])
     let ok = pick(t, 1)
     'take runtime ok={}'->format<ok>->println
     let bad = pick(t, -1)

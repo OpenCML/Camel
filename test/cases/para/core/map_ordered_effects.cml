@@ -17,8 +17,8 @@ func even(i: int): bool sync {
 }
 
 func main(): int sync {
-    let doubled = range(0, 24)->map<show>
-    let kept = range(0, 24)->filter<even>
+    let doubled = 0..24->map<show>
+    let kept = 0..24->filter<even>
     println(len(doubled) + len(kept))
     return 0
 }

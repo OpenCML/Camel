@@ -60,11 +60,97 @@ export func saturate(p: Program, rules: Rule[], rounds: int, strict: bool): Prog
 /// @example extract(p, 'size')    // the extracted program
 export func extract(p: Program, cost: string): Program!
 
-/// Checks `rules` on `samples` random programs drawn with `seed`, and reports the first rule
-/// that fails, or that all of them hold.
-/// @effect runs the rules' functions and draws random programs
+/// Checks `rules` on `samples` random instances drawn with `seed`, and answers the verdict table
+/// (H247, slice S0). Each row of the table carries the rule, the instance (a generic law's type
+/// tuple), the verdict, what the verdict is about and the evidence or the reason for it; the
+/// verdicts are `proved`, `refuted` and `sampled`, and every line of the report wears one of them
+/// as its first word (the ruling of 2026-10-24 on `verification-verdict-surface`, 2). The sample
+/// stream of a rule follows the rule's identity -- its name and its instance's type tuple -- and
+/// not its place in `rules`, so a rule draws the same samples in any call (the ruling of 2026-10-24
+/// on `accuracy-check-sampling`, 1). A build without a solver can answer `sampled` and `refuted`
+/// and never `proved`: `proved` is a licence's proposition being established, which is not what
+/// comparing samples does.
+/// @effect runs the rules' functions and draws random values
 /// @example check(rules, 1000, 7)    // the report
-export func check(rules: Rule[], samples: int, seed: int): string
+export func check(rules: Rule[], samples: int, seed: int): CheckReport
+
+/// The report's fixed rendering, as a string: the same text `print` writes, for a caller that
+/// wants it as a value.
+/// @pure
+/// @example check_text(r)    // 'sampled add_zero: proposition equality, evidence samples 100, ...'
+export func check_text(r: CheckReport): string
+
+/// How many rows the table has: one per rule, or one per instance of a generic law.
+/// @pure
+/// @example check_row_count(r)    // 2
+export func check_row_count(r: CheckReport): int
+
+/// The rule of one row: the law's name, without the type tuple an instance adds.
+/// @pure
+/// @fails error value `IndexError` when the report has no such row
+/// @example check_rule(r, 0)    // 'add_zero'
+export func check_rule(r: CheckReport, row: int): string!
+
+/// The type tuple of one row's instance, as written (`int`, `int, int`). Empty for a rule that is
+/// not a generic law.
+/// @pure
+/// @fails error value `IndexError` when the report has no such row
+/// @example check_instance(r, 0)    // 'i32'
+export func check_instance(r: CheckReport, row: int): string!
+
+/// One row's verdict: `proved`, `refuted` or `sampled`. The words are closed: a rule nothing could
+/// be examined on is `sampled` with its reason, never a fourth word.
+/// @pure
+/// @fails error value `IndexError` when the report has no such row
+/// @example check_verdict(r, 0)    // 'sampled'
+export func check_verdict(r: CheckReport, row: int): string!
+
+/// What one row's verdict is about (the ruling of 2026-10-24 on
+/// `verification-licence-to-precondition`): `equality` for a rule that needs no permission,
+/// `real equality + IEEE on special values` for the rules that ask for `reassociate` or `contract`,
+/// and `error bound` for the ones that ask for `refine_accuracy` or `change_precision`.
+/// @pure
+/// @fails error value `IndexError` when the report has no such row
+/// @example check_proposition(r, 0)    // 'equality'
+export func check_proposition(r: CheckReport, row: int): string!
+
+/// What one row's verdict rests on: `solver` when a solver established it, `samples <n>` when `n`
+/// samples were drawn, `counterexample` when a value is the witness, and `none` when nothing could
+/// be examined.
+/// @pure
+/// @fails error value `IndexError` when the report has no such row
+/// @example check_evidence(r, 0)    // 'samples 100'
+export func check_evidence(r: CheckReport, row: int): string!
+
+/// Why a row says what it says when the answer is not a counterexample: the reason nothing was
+/// examined (`no numeric bound`), or the reason a rule the engine never fired on its own left side
+/// is `refuted`. Written in its own column and never left implicit, so a `sampled` that sampled is
+/// never read as one that did not.
+/// @pure
+/// @fails error value `IndexError` when the report has no such row
+/// @example check_reason(r, 0)    // ''
+export func check_reason(r: CheckReport, row: int): string!
+
+/// What the translation layer made of one row's rule (H247, slice S1): the proposition it read out
+/// of the rule's two sides -- `integer scalar int: (x + 0) = x`, with `, no premise yet` when the
+/// declaration carries a condition -- or `beyond translation coverage` followed by the reason it
+/// refused. The layer never guesses: a rule it cannot translate says which width, operator or node
+/// kind stopped it, and that rule is `sampled`, never `proved`. A later slice adds the floating
+/// widths and the conditions as premises; `check_coverage_table` is the boundary as a value.
+/// @pure
+/// @fails error value `IndexError` when the report has no such row
+/// @example check_coverage(r, 0)    // 'integer scalar int: (x + 0) = x'
+export func check_coverage(r: CheckReport, row: int): string!
+
+/// The declared coverage of the translation layer: the widths it translates (`int`, `i32`), the
+/// widths the design lists beside them and it does not translate yet (`float`, `f32`, `bf16`,
+/// `f16`), the operators it translates, what happens to integer division and remainder, what is
+/// beyond translation coverage, and that a rule's condition is not a premise yet (rewrite design
+/// 8.1). The boundary is a value a reader can read and a test can pin, not a paragraph in a design
+/// document that drifts from the code.
+/// @pure
+/// @example check_coverage_table()    // 'the coverage of the integer scalar translation\n...'
+export func check_coverage_table(): string
 
 /// What one application of a rule set produced and cost: the program it produced, the rewrites it
 /// applied, the rounds it made (the last one applied nothing at a fixpoint), the nodes the matcher

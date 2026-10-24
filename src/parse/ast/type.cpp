@@ -38,6 +38,8 @@ std::string to_string(TypeType type) {
     switch (type) {
     case TypeType::Null:
         return "Null";
+    case TypeType::Stream:
+        return "Stream";
     case TypeType::Expr:
         return "Expr";
     case TypeType::Array:
@@ -122,6 +124,8 @@ const std::string FuncTypeLoad::toString() const {
 }
 
 const std::string NullableTypeLoad::geneCode() const { return fallible_ ? "!" : "?"; }
+
+const std::string StreamTypeLoad::geneCode() const { return ".."; }
 
 const std::string TypeExprLoad::geneCode() const { return to_string(op_); }
 

@@ -1,0 +1,61 @@
+/**
+ * What `println` writes for an array value: the value's own extents, and the element type the
+ * declaration fixes or the type the value holds.
+ *
+ * `probe` takes a `Tensor`: the declaration fixes no element type (the numeric-unknown array), so
+ * the elements print by the type the value carries and the shape prints as the value's own. A
+ * rank-2 value prints nested and complete, one bracket level per dimension; a rank-2 value whose
+ * declaration names the element type does not collapse to its first extent either.
+ */
+module tensor_print_value
+
+import { Tensor, ones, zeros, shape, numel, reshape, argmin, tanh, new, sum } from tensor
+
+func forward(x: Tensor): Tensor {
+    let s = shape(x)
+    return zeros([s[0]]) + 1.0
+}
+
+// The three helpers return the same string the value itself prints as, so the assertion side can
+// compare two spellings of one value without pinning the text of `println`.
+func probe(label: string, v: Tensor): string sync {
+    return `${label} shape=${shape(v)} numel=${numel(v)} name=${v}`
+}
+
+func by_value(label: string, xs: float[][]): string sync {
+    return `${label} ${xs}`
+}
+
+func by_declaration(label: string, xs: f32[][]): string sync {
+    return `${label} ${xs}`
+}
+
+func main(): int sync {
+    // A value the declaration does not type: a `Tensor` parameter.
+    let rows = reshape([2.0, 0.0, 0.0, 2.0, 0.0, 0.0], [2, 3])
+    let a = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [2, 3])
+    let b = reshape([1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0], [3, 4])
+    println(probe("A", argmin(rows, 0, true)))
+    println(probe("B", tanh(a @ b)))
+    println(probe("C", reshape([3.0, 3.0], [2, 1])))
+    println(`D sum=${sum(forward(ones([2, 3])))}`)
+
+    // Controls: a declaration that names the element type, and the rank-1 and rank-0 forms.
+    let flat: float[] = [1.0, 2.0]
+    println(`E flat ${flat}`)
+    let one: float[] = [1.0]
+    println(`E2 one ${one}`)
+    let empty: float[] = []
+    println(`E3 empty ${empty}`)
+
+    // A rank-2 array: nested, and complete, whichever way the declaration is written.
+    let value: float[][] = [[1.0, 2.0], [3.0, 4.0]]
+    println(by_value("F", value))
+    let rows3: float[][] = [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]]
+    println(by_value("F2", rows3))
+    let f32rows: f32[][] = [[1.0, 2.0], [3.0, 4.0]]
+    println(by_declaration("F3", f32rows))
+    let deep: float[][][] = [[[1.0, 2.0], [3.0, 4.0]], [[5.0, 6.0], [7.0, 8.0]]]
+    println(`F4 deep ${deep}`)
+    return 0
+}

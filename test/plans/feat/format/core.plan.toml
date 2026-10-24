@@ -179,7 +179,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "format.when_clause_snapshot"
-desc = "A declaration's applicability condition follows the result type: `when is_ordered::<T>()` is one space after it, whatever spacing the source used, and it is not dropped."
+desc = "A declaration's applicability condition follows the result type: `when is_ordered::<T>()` is one space after it, whatever spacing the source used, and it is not dropped. A condition written on its own line (a signature that does not fit) is joined to the signature, and a rule's condition is written between its parameters and its body, never after the body (design principles 4.4; the ruling of 2026-10-24)."
 kind = "snapshot"
 tool = "camel-format"
 case = "../../../cases/format/when_clause.cml"
@@ -215,5 +215,89 @@ expect_exit = 0
 snapshot_stream = "stdout"
 snapshot_compare = "text_exact"
 golden = "./golden/indices.cml"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "format.imports_first_declaration_snapshot"
+desc = "Formats a file whose first declaration is an import, written in an order other than the one camel-format prints (module `x` before module `y`). The gap in front of the first declaration is empty, and the backward comment lookup counted down from 0 in a `size_t` and read in front of the token stream: camel-format died here on every run, and `camel-parsecheck fuzz` ended with a signal (seeds 67 and 111)."
+kind = "snapshot"
+tool = "camel-format"
+case = "../../../cases/format/imports_first_declaration.cml"
+args = ["${case}"]
+expect_exit = 0
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "./golden/imports_first_declaration.cml"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "format.line_comment_before_then_snapshot"
+desc = "A `//` comment between the condition of an `if` and `then`. The comment ends its line, so `then` is written on the next one: written after the comment on the same line, the keyword was read as part of the comment and the formatted text no longer parsed (`SyntaxDiag::MissingThen`)."
+kind = "snapshot"
+tool = "camel-format"
+case = "../../../cases/format/line_comment_before_then.cml"
+args = ["${case}"]
+expect_exit = 0
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "./golden/line_comment_before_then.cml"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "format.line_comment_in_returned_if_snapshot"
+desc = "The same gap where the conditional is the value of a `return` (`return if len(hits) == 0 // ... then ...`): `then` is written on the line after the comment, where the parser finds it."
+kind = "snapshot"
+tool = "camel-format"
+case = "../../../cases/format/line_comment_in_returned_if.cml"
+args = ["${case}"]
+expect_exit = 0
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "./golden/line_comment_in_returned_if.cml"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "format.line_comment_in_arguments_snapshot"
+desc = "A `//` comment after an argument of a call keeps the line it was written on, and the argument that follows it stays on the next one."
+kind = "snapshot"
+tool = "camel-format"
+case = "../../../cases/format/line_comment_in_arguments.cml"
+args = ["${case}"]
+expect_exit = 0
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "./golden/line_comment_in_arguments.cml"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "format.line_comment_after_let_snapshot"
+desc = "A `//` comment at the end of a `let` ends that line, and the declaration that follows it stays on its own."
+kind = "snapshot"
+tool = "camel-format"
+case = "../../../cases/format/line_comment_after_let.cml"
+args = ["${case}"]
+expect_exit = 0
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "./golden/line_comment_after_let.cml"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "format.match_guard_snapshot"
+desc = "Formats the guard of a match case (`case p when c => body`): the guard stands between the patterns and the arm, and it is kept where it was written rather than being read as a second pattern."
+kind = "snapshot"
+tool = "camel-format"
+case = "../../../cases/format/match_guard_messy.cml"
+args = ["${case}"]
+expect_exit = 0
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "./golden/match_guard.cml"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000

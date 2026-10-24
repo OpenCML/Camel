@@ -36,7 +36,7 @@ analysis sign: int {
     on (const c: int) => c
 }
 
-rule mul_one(y: int, x: int) { x * y => x } when sign(y) == 1
+rule mul_one(y: int, x: int) when sign(y) == 1 { x * y => x }
 
 func opText(n: Node): string {
     return match op(n) {

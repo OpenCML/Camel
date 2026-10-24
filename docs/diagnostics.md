@@ -15,267 +15,274 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-257 diagnostics: 238 errors, 19 warnings.
+264 diagnostics: 245 errors, 19 warnings. 14 carry a machine-applicable edit, 250 say why they carry none.
 
-| Code | Name | Severity |
-|------|------|----------|
-| `0x00000000` | [InternalDiag::UnknownInternalError](#unknowninternalerror) | Error |
-| `0x01000000` | [LexicalDiag::IllegalCharacter](#illegalcharacter) | Error |
-| `0x01000001` | [LexicalDiag::InvalidNumberFormat](#invalidnumberformat) | Error |
-| `0x01000002` | [LexicalDiag::UnclosedStringLiteral](#unclosedstringliteral) | Error |
-| `0x01000003` | [LexicalDiag::UnterminatedComment](#unterminatedcomment) | Error |
-| `0x01100000` | [LexicalDiag::InvalidEscapeSequence](#invalidescapesequence) | Warn |
-| `0x02000001` | [SyntaxDiag::MissingClosingDelimiter](#missingclosingdelimiter) | Error |
-| `0x02000002` | [SyntaxDiag::UnmatchedClosingDelimiter](#unmatchedclosingdelimiter) | Error |
-| `0x02000003` | [SyntaxDiag::MissingThen](#missingthen) | Error |
-| `0x02000004` | [SyntaxDiag::ExtraSemicolon](#extrasemicolon) | Error |
-| `0x02000005` | [SyntaxDiag::AssignmentInCondition](#assignmentincondition) | Error |
-| `0x02000006` | [SyntaxDiag::KeywordAsIdentifier](#keywordasidentifier) | Error |
-| `0x02000007` | [SyntaxDiag::MissingComma](#missingcomma) | Error |
-| `0x02000008` | [SyntaxDiag::MissingInitializer](#missinginitializer) | Error |
-| `0x02000009` | [SyntaxDiag::MissingToken](#missingtoken) | Error |
-| `0x0200000A` | [SyntaxDiag::UnexpectedToken](#unexpectedtoken) | Error |
-| `0x0200000B` | [SyntaxDiag::UnexpectedEndOfFile](#unexpectedendoffile) | Error |
-| `0x0200000C` | [SyntaxDiag::ComparisonNeedsSpace](#comparisonneedsspace) | Error |
-| `0x0200000D` | [SyntaxDiag::AngleCloseAfterSpace](#anglecloseafterspace) | Error |
-| `0x0200000E` | [SyntaxDiag::LineStartsWithOperator](#linestartswithoperator) | Error |
-| `0x0200000F` | [SyntaxDiag::EmptyInterpolation](#emptyinterpolation) | Error |
-| `0x02100001` | [SyntaxDiag::ComparisonAcrossLines](#comparisonacrosslines) | Warn |
-| `0x03000001` | [SemanticDiag::Redeclaration](#redeclaration) | Error |
-| `0x03000002` | [SemanticDiag::ModuleNotFound](#modulenotfound) | Error |
-| `0x03000003` | [SemanticDiag::ReservedIdentifier](#reservedidentifier) | Error |
-| `0x03000004` | [SemanticDiag::TupleUnpackingCountMismatch](#tupleunpackingcountmismatch) | Error |
-| `0x03000005` | [SemanticDiag::InvalidLiteral](#invalidliteral) | Error |
-| `0x03000006` | [SemanticDiag::DuplicateDictKey](#duplicatedictkey) | Error |
-| `0x03000009` | [SemanticDiag::DuplicateParameter](#duplicateparameter) | Error |
-| `0x0300000A` | [SemanticDiag::UnresolvedTypeReference](#unresolvedtypereference) | Error |
-| `0x0300000B` | [SemanticDiag::UnresolvedReference](#unresolvedreference) | Error |
-| `0x0300000C` | [SemanticDiag::BranchReturnTypeMismatch](#branchreturntypemismatch) | Error |
-| `0x0300000D` | [SemanticDiag::InvalidAccessIndex](#invalidaccessindex) | Error |
-| `0x0300000E` | [SemanticDiag::TypeNotIndexable](#typenotindexable) | Error |
-| `0x0300000F` | [SemanticDiag::NoMatchingFunction](#nomatchingfunction) | Error |
-| `0x03000010` | [SemanticDiag::ArgumentsMismatch](#argumentsmismatch) | Error |
-| `0x03000011` | [SemanticDiag::ReturnTypeMismatch](#returntypemismatch) | Error |
-| `0x03000012` | [SemanticDiag::ElementTypeMismatch](#elementtypemismatch) | Error |
-| `0x03000013` | [SemanticDiag::CallingIncompleteFunction](#callingincompletefunction) | Error |
-| `0x03000015` | [SemanticDiag::ImportNameNotExported](#importnamenotexported) | Error |
-| `0x03000016` | [SemanticDiag::LiteralNotRepresentable](#literalnotrepresentable) | Error |
-| `0x03000017` | [SemanticDiag::DynamicCastForbidden](#dynamiccastforbidden) | Error |
-| `0x03000018` | [SemanticDiag::ModuleParseFailed](#moduleparsefailed) | Error |
-| `0x03000019` | [SemanticDiag::InvalidOperatorURI](#invalidoperatoruri) | Error |
-| `0x0300001B` | [SemanticDiag::EntryModuleMissingMain](#entrymodulemissingmain) | Error |
-| `0x0300001C` | [SemanticDiag::ArgumentsRejected](#argumentsrejected) | Error |
-| `0x0300001D` | [SemanticDiag::ImmutablePassedToVarParam](#immutablepassedtovarparam) | Error |
-| `0x0300001E` | [SemanticDiag::AssignmentTargetNotVariable](#assignmenttargetnotvariable) | Error |
-| `0x0300001F` | [SemanticDiag::ConstructNotSupported](#constructnotsupported) | Error |
-| `0x03000020` | [SemanticDiag::InvalidTypeArgument](#invalidtypeargument) | Error |
-| `0x03000021` | [SemanticDiag::ArgumentNeedsConversion](#argumentneedsconversion) | Error |
-| `0x03000022` | [SemanticDiag::ReturnNeedsConversion](#returnneedsconversion) | Error |
-| `0x03000027` | [SemanticDiag::ImportNameConflict](#importnameconflict) | Error |
-| `0x03000040` | [SemanticDiag::FeatureNotSupported](#featurenotsupported) | Error |
-| `0x03000051` | [SemanticDiag::TypeVariableRedeclared](#typevariableredeclared) | Error |
-| `0x03000052` | [SemanticDiag::TypeVariableNotBindable](#typevariablenotbindable) | Error |
-| `0x03000053` | [SemanticDiag::GenericArgumentsMismatch](#genericargumentsmismatch) | Error |
-| `0x03000054` | [SemanticDiag::GenericFunctionAsValue](#genericfunctionasvalue) | Error |
-| `0x03000055` | [SemanticDiag::GenericInstantiationTooDeep](#genericinstantiationtoodeep) | Error |
-| `0x03000056` | [SemanticDiag::TypeFunctionArguments](#typefunctionarguments) | Error |
-| `0x03000057` | [SemanticDiag::GenericFunctionUnsupported](#genericfunctionunsupported) | Error |
-| `0x03000060` | [SemanticDiag::FunctionNameAsValue](#functionnameasvalue) | Error |
-| `0x03000070` | [SemanticDiag::ThrowOutsideFallible](#throwoutsidefallible) | Error |
-| `0x03000071` | [SemanticDiag::ThrowNotAnError](#thrownotanerror) | Error |
-| `0x03000072` | [SemanticDiag::TaggedTypeNesting](#taggedtypenesting) | Error |
-| `0x03000073` | [SemanticDiag::TaggedValueNotOpened](#taggedvaluenotopened) | Error |
-| `0x03000074` | [SemanticDiag::TryCatchNotInLanguage](#trycatchnotinlanguage) | Error |
-| `0x03000075` | [SemanticDiag::TaggedOperandMismatch](#taggedoperandmismatch) | Error |
-| `0x03000076` | [SemanticDiag::TaggedMatchCases](#taggedmatchcases) | Error |
-| `0x03000080` | [SemanticDiag::ImportedModuleHasErrors](#importedmodulehaserrors) | Error |
-| `0x030000A0` | [SemanticDiag::CollectionKeyNotAllowed](#collectionkeynotallowed) | Error |
-| `0x030000A1` | [SemanticDiag::DuplicateCollectionKey](#duplicatecollectionkey) | Error |
-| `0x030000B0` | [SemanticDiag::MatchWithoutDefault](#matchwithoutdefault) | Error |
-| `0x030000B1` | [SemanticDiag::IfWithoutElseAsValue](#ifwithoutelseasvalue) | Error |
-| `0x030000B2` | [SemanticDiag::EmptyArrayWithoutType](#emptyarraywithouttype) | Error |
-| `0x030000B3` | [SemanticDiag::PartialApplicationRefused](#partialapplicationrefused) | Error |
-| `0x030000B4` | [SemanticDiag::ComprehensionSourceRefused](#comprehensionsourcerefused) | Error |
-| `0x030000C0` | [SemanticDiag::LogicalOperandNotBool](#logicaloperandnotbool) | Error |
-| `0x030000D0` | [SemanticDiag::ExportedVariable](#exportedvariable) | Error |
-| `0x030000D1` | [SemanticDiag::ModuleValueCycle](#modulevaluecycle) | Error |
-| `0x030000D2` | [SemanticDiag::CaptureAfterRecursiveCall](#captureafterrecursivecall) | Error |
-| `0x030000D3` | [SemanticDiag::AmbiguousName](#ambiguousname) | Error |
-| `0x030000E3` | [SemanticDiag::ConditionNotBool](#conditionnotbool) | Error |
-| `0x030000E4` | [SemanticDiag::MatchCaseTypeMismatch](#matchcasetypemismatch) | Error |
-| `0x030000F0` | [SemanticDiag::UnusedPureResult](#unusedpureresult) | Error |
-| `0x030000F1` | [SemanticDiag::OperatorNotOverloadable](#operatornotoverloadable) | Error |
-| `0x030000F2` | [SemanticDiag::OperatorOverloadInvalid](#operatoroverloadinvalid) | Error |
-| `0x030000F3` | [SemanticDiag::OperatorOverloadConflict](#operatoroverloadconflict) | Error |
-| `0x030000F4` | [SemanticDiag::AmbiguousCall](#ambiguouscall) | Error |
-| `0x03000110` | [SemanticDiag::DeclaredTypeMismatch](#declaredtypemismatch) | Error |
-| `0x03000111` | [SemanticDiag::ModuleTypeCycle](#moduletypecycle) | Error |
-| `0x03000112` | [SemanticDiag::InvalidAnnotation](#invalidannotation) | Error |
-| `0x03000120` | [SemanticDiag::LoopSequenceNotIterable](#loopsequencenotiterable) | Error |
-| `0x03000121` | [SemanticDiag::LoopBodyTypeMismatch](#loopbodytypemismatch) | Error |
-| `0x03000122` | [SemanticDiag::LoopStateWithoutType](#loopstatewithouttype) | Error |
-| `0x03000123` | [SemanticDiag::LoopConditionNotBool](#loopconditionnotbool) | Error |
-| `0x03000124` | [SemanticDiag::LoopNameRepeated](#loopnamerepeated) | Error |
-| `0x03000130` | [SemanticDiag::DuplicateEnumVariant](#duplicateenumvariant) | Error |
-| `0x03000131` | [SemanticDiag::DuplicateEnumField](#duplicateenumfield) | Error |
-| `0x03000133` | [SemanticDiag::EnumVariantFieldCount](#enumvariantfieldcount) | Error |
-| `0x03000134` | [SemanticDiag::EnumPatternMismatch](#enumpatternmismatch) | Error |
-| `0x03000135` | [SemanticDiag::EnumMatchNotExhaustive](#enummatchnotexhaustive) | Error |
-| `0x03000136` | [SemanticDiag::EnumFieldAccess](#enumfieldaccess) | Error |
-| `0x03000139` | [SemanticDiag::EnumTypeArgumentNotInferred](#enumtypeargumentnotinferred) | Error |
-| `0x0300013A` | [SemanticDiag::EnumFieldTypeMismatch](#enumfieldtypemismatch) | Error |
-| `0x0300013B` | [SemanticDiag::EnumConstructionMismatch](#enumconstructionmismatch) | Error |
-| `0x03000140` | [SemanticDiag::ConstasNotAllowed](#constasnotallowed) | Error |
-| `0x03000141` | [SemanticDiag::DimensionNameNotBound](#dimensionnamenotbound) | Error |
-| `0x03000142` | [SemanticDiag::DimensionNameAlreadyBound](#dimensionnamealreadybound) | Error |
-| `0x03000143` | [SemanticDiag::DimensionMismatch](#dimensionmismatch) | Error |
-| `0x03000144` | [SemanticDiag::InvalidExtentExpression](#invalidextentexpression) | Error |
-| `0x03000150` | [SemanticDiag::NotDifferentiable](#notdifferentiable) | Error |
-| `0x03000161` | [SemanticDiag::TagNotAtPosition](#tagnotatposition) | Error |
-| `0x03000162` | [SemanticDiag::TagUndeclared](#tagundeclared) | Error |
-| `0x03000163` | [SemanticDiag::TagArgumentCount](#tagargumentcount) | Error |
-| `0x03000164` | [SemanticDiag::TagArgumentNotConstant](#tagargumentnotconstant) | Error |
-| `0x03000167` | [SemanticDiag::TagOnUnnamedField](#tagonunnamedfield) | Error |
-| `0x03000168` | [SemanticDiag::TagArgumentNamed](#tagargumentnamed) | Error |
-| `0x0300016A` | [SemanticDiag::TagArgumentType](#tagargumenttype) | Error |
-| `0x0300016B` | [SemanticDiag::TagNotAPermission](#tagnotapermission) | Error |
-| `0x0300016C` | [SemanticDiag::RuleTagNotRequires](#ruletagnotrequires) | Error |
-| `0x0300016D` | [SemanticDiag::TagParameterType](#tagparametertype) | Error |
-| `0x0300016E` | [SemanticDiag::TagShadowsPermission](#tagshadowspermission) | Error |
-| `0x03000170` | [SemanticDiag::StaticMatchNotExhaustive](#staticmatchnotexhaustive) | Error |
-| `0x03000171` | [SemanticDiag::StaticMatchUnreachableCase](#staticmatchunreachablecase) | Error |
-| `0x03000172` | [SemanticDiag::StaticTypeNotConcrete](#statictypenotconcrete) | Error |
-| `0x03000173` | [SemanticDiag::StaticMatchTooDeep](#staticmatchtoodeep) | Error |
-| `0x03000174` | [SemanticDiag::GenericInstantiationCycle](#genericinstantiationcycle) | Error |
-| `0x03000175` | [SemanticDiag::StaticForNotComposite](#staticfornotcomposite) | Error |
-| `0x03000176` | [SemanticDiag::StaticAccessNotInternal](#staticaccessnotinternal) | Error |
-| `0x03000177` | [SemanticDiag::StaticAccessUnknownField](#staticaccessunknownfield) | Error |
-| `0x03000178` | [SemanticDiag::StaticAccessIndexOutOfRange](#staticaccessindexoutofrange) | Error |
-| `0x03000179` | [SemanticDiag::StaticAccessNotConstant](#staticaccessnotconstant) | Error |
-| `0x0300017A` | [SemanticDiag::StaticComprehensionVoidElement](#staticcomprehensionvoidelement) | Error |
-| `0x0300017B` | [SemanticDiag::NativeDeclarationIncomplete](#nativedeclarationincomplete) | Error |
-| `0x0300017C` | [SemanticDiag::NativeDeclarationNotLoaded](#nativedeclarationnotloaded) | Error |
-| `0x0300017E` | [SemanticDiag::LambdaParameterWithoutType](#lambdaparameterwithouttype) | Error |
-| `0x03000180` | [SemanticDiag::NativeDeclarationOverlap](#nativedeclarationoverlap) | Error |
-| `0x03000181` | [SemanticDiag::NativeDeclarationForeignOperator](#nativedeclarationforeignoperator) | Error |
-| `0x03000182` | [SemanticDiag::StaticIndicesNotTuple](#staticindicesnottuple) | Error |
-| `0x0300018A` | [SemanticDiag::RestParameterNotLast](#restparameternotlast) | Error |
-| `0x0300018B` | [SemanticDiag::RestParameterTypeNotSupported](#restparametertypenotsupported) | Error |
-| `0x0300018D` | [SemanticDiag::RestArgumentNotLast](#restargumentnotlast) | Error |
-| `0x0300018E` | [SemanticDiag::RestArgumentNotTuple](#restargumentnottuple) | Error |
-| `0x0300018F` | [SemanticDiag::RestFunctionNeedsExpansion](#restfunctionneedsexpansion) | Error |
-| `0x03000190` | [SemanticDiag::RestArgumentsMismatch](#restargumentsmismatch) | Error |
-| `0x03000193` | [SemanticDiag::ConstasTypeRequired](#constastyperequired) | Error |
-| `0x03000195` | [SemanticDiag::ConstasValueNotConstant](#constasvaluenotconstant) | Error |
-| `0x03000199` | [SemanticDiag::ConstasFunctionNeedsCall](#constasfunctionneedscall) | Error |
-| `0x0300019A` | [SemanticDiag::ConstasInNativeDeclaration](#constasinnativedeclaration) | Error |
-| `0x0300019B` | [SemanticDiag::ConstasArgumentMissing](#constasargumentmissing) | Error |
-| `0x0300019C` | [SemanticDiag::StaticTupleEscapes](#statictupleescapes) | Error |
-| `0x0300019D` | [SemanticDiag::TagValueConflict](#tagvalueconflict) | Error |
-| `0x0300019E` | [SemanticDiag::DimensionAfterAnyRank](#dimensionafteranyrank) | Error |
-| `0x030001A0` | [SemanticDiag::UnknownResource](#unknownresource) | Error |
-| `0x030001A1` | [SemanticDiag::PureAndUses](#pureanduses) | Error |
-| `0x030001A2` | [SemanticDiag::ResourceGroupCycle](#resourcegroupcycle) | Error |
-| `0x030001A3` | [SemanticDiag::HandleTypeNotNominal](#handletypenotnominal) | Error |
-| `0x030001A4` | [SemanticDiag::NativeResourceMismatch](#nativeresourcemismatch) | Error |
-| `0x030001A5` | [SemanticDiag::CmlUnsupportedConstruct](#cmlunsupportedconstruct) | Error |
-| `0x030001A6` | [SemanticDiag::CmlBigConstant](#cmlbigconstant) | Error |
-| `0x030001A8` | [SemanticDiag::WhenConditionNotBool](#whenconditionnotbool) | Error |
-| `0x030001A9` | [SemanticDiag::WhenConditionNotConstant](#whenconditionnotconstant) | Error |
-| `0x030001AA` | [SemanticDiag::WhenUnknownName](#whenunknownname) | Error |
-| `0x030001AB` | [SemanticDiag::WhenTypeQueryNotConcrete](#whentypequerynotconcrete) | Error |
-| `0x030001AC` | [SemanticDiag::WhenConditionUnmet](#whenconditionunmet) | Error |
-| `0x030001B3` | [SemanticDiag::TypeOfNotAValue](#typeofnotavalue) | Error |
-| `0x030001B4` | [SemanticDiag::TypeOfNotWholeType](#typeofnotwholetype) | Error |
-| `0x030001B5` | [SemanticDiag::SameShapeComprehensionNotComposite](#sameshapecomprehensionnotcomposite) | Error |
-| `0x030001B6` | [SemanticDiag::SameShapeComprehensionMismatch](#sameshapecomprehensionmismatch) | Error |
-| `0x030001B7` | [SemanticDiag::WithArgumentUnknown](#withargumentunknown) | Error |
-| `0x030001B8` | [SemanticDiag::WithArgumentDuplicate](#withargumentduplicate) | Error |
-| `0x030001B9` | [SemanticDiag::WithArgumentMissing](#withargumentmissing) | Error |
-| `0x030001BA` | [SemanticDiag::WithDefaultNotConstant](#withdefaultnotconstant) | Error |
-| `0x030001BB` | [SemanticDiag::WithDefaultWrongType](#withdefaultwrongtype) | Error |
-| `0x030001BC` | [SemanticDiag::WithParameterAfterDefault](#withparameterafterdefault) | Error |
-| `0x030001BD` | [SemanticDiag::WithArgumentCallee](#withargumentcallee) | Error |
-| `0x030001BE` | [SemanticDiag::WithArgumentInValue](#withargumentinvalue) | Error |
-| `0x030001BF` | [SemanticDiag::WhenPredicateNotImported](#whenpredicatenotimported) | Error |
-| `0x030001C0` | [SemanticDiag::WhenPredicateNotCompileTime](#whenpredicatenotcompiletime) | Error |
-| `0x030001C1` | [SemanticDiag::WhenPredicateAmbiguous](#whenpredicateambiguous) | Error |
-| `0x030001C2` | [SemanticDiag::StaticMatchPatternCannotMatch](#staticmatchpatterncannotmatch) | Error |
-| `0x030001C5` | [SemanticDiag::FoldCallArgumentNotConstant](#foldcallargumentnotconstant) | Error |
-| `0x030001C6` | [SemanticDiag::FoldCallHasEffects](#foldcallhaseffects) | Error |
-| `0x030001C7` | [SemanticDiag::FoldCallTooDeep](#foldcalltoodeep) | Error |
-| `0x030001C8` | [SemanticDiag::FoldCallResultNotConstant](#foldcallresultnotconstant) | Error |
-| `0x030001C9` | [SemanticDiag::FoldCallNotEvaluable](#foldcallnotevaluable) | Error |
-| `0x030001CD` | [SemanticDiag::ParamArgumentUnknown](#paramargumentunknown) | Error |
-| `0x030001CE` | [SemanticDiag::ParamArgumentDuplicate](#paramargumentduplicate) | Error |
-| `0x030001CF` | [SemanticDiag::ParamArgumentMissing](#paramargumentmissing) | Error |
-| `0x030001D0` | [SemanticDiag::ParamArgumentCallee](#paramargumentcallee) | Error |
-| `0x030001D1` | [SemanticDiag::ParamArgumentPositionalAfterNamed](#paramargumentpositionalafternamed) | Error |
-| `0x030001D2` | [SemanticDiag::ParamDefaultNotConstant](#paramdefaultnotconstant) | Error |
-| `0x030001D3` | [SemanticDiag::ParamDefaultWrongType](#paramdefaultwrongtype) | Error |
-| `0x030001D4` | [SemanticDiag::ParamAfterDefault](#paramafterdefault) | Error |
-| `0x030001D6` | [SemanticDiag::ParamArgumentWrongType](#paramargumentwrongtype) | Error |
-| `0x030001D7` | [SemanticDiag::ReducedPrecisionUnsupported](#reducedprecisionunsupported) | Error |
-| `0x030001D8` | [SemanticDiag::ImplOnBodylessDeclaration](#implonbodylessdeclaration) | Error |
-| `0x030001D9` | [SemanticDiag::ImplKernelUnknown](#implkernelunknown) | Error |
-| `0x030001DA` | [SemanticDiag::ImplKernelForeign](#implkernelforeign) | Error |
-| `0x030001DB` | [SemanticDiag::ImplSignatureMismatch](#implsignaturemismatch) | Error |
-| `0x030001DC` | [SemanticDiag::ImplKernelNotBodyless](#implkernelnotbodyless) | Error |
-| `0x030001DE` | [SemanticDiag::NodeOfNotAParameter](#nodeofnotaparameter) | Error |
-| `0x030001DF` | [SemanticDiag::OverloadParameterNames](#overloadparameternames) | Error |
-| `0x030001E0` | [SemanticDiag::WhenDeclarationOverlap](#whendeclarationoverlap) | Error |
-| `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn |
-| `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn |
-| `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
-| `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn |
-| `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn |
-| `0x031000C0` | [SemanticDiag::UnusedFallibleValue](#unusedfalliblevalue) | Warn |
-| `0x03100110` | [SemanticDiag::NullTestNeverNull](#nulltestnevernull) | Warn |
-| `0x03100111` | [SemanticDiag::KnownNotNull](#knownnotnull) | Warn |
-| `0x03100130` | [SemanticDiag::EnumVariantCaseRepeated](#enumvariantcaserepeated) | Warn |
-| `0x03100131` | [SemanticDiag::MatchCaseAfterWildcard](#matchcaseafterwildcard) | Warn |
-| `0x03100132` | [SemanticDiag::MatchWildcardRedundant](#matchwildcardredundant) | Warn |
-| `0x03100160` | [SemanticDiag::TagHasNoReader](#taghasnoreader) | Warn |
-| `0x03100161` | [SemanticDiag::DimensionNameUsedOnce](#dimensionnameusedonce) | Warn |
-| `0x031001A5` | [SemanticDiag::TypeVariableUnused](#typevariableunused) | Warn |
-| `0x04000000` | [RuntimeDiag::RuntimeError](#runtimeerror) | Error |
-| `0x04000001` | [RuntimeDiag::DivisionByZero](#divisionbyzero) | Error |
-| `0x04000002` | [RuntimeDiag::IndexOutOfRange](#indexoutofrange) | Error |
-| `0x04000004` | [RuntimeDiag::MaxRecursionDepthExceeded](#maxrecursiondepthexceeded) | Error |
-| `0x04000009` | [RuntimeDiag::TensorDimensionMismatch](#tensordimensionmismatch) | Error |
-| `0x0400000A` | [RuntimeDiag::UnrecognizedGraphPass](#unrecognizedgraphpass) | Error |
-| `0x0400000B` | [RuntimeDiag::TranslationRefused](#translationrefused) | Error |
-| `0x0400000C` | [RuntimeDiag::PassInternalError](#passinternalerror) | Error |
-| `0x0400000E` | [RuntimeDiag::MacroEvaluationFailed](#macroevaluationfailed) | Error |
-| `0x04000010` | [RuntimeDiag::EntryArgumentMissing](#entryargumentmissing) | Error |
-| `0x04000011` | [RuntimeDiag::EntryArgumentInvalid](#entryargumentinvalid) | Error |
-| `0x04000012` | [RuntimeDiag::EntryResultNotWritten](#entryresultnotwritten) | Error |
-| `0x04000014` | [RuntimeDiag::MemoryExhausted](#memoryexhausted) | Error |
-| `0x04000030` | [RuntimeDiag::InvalidNumberText](#invalidnumbertext) | Error |
-| `0x04000031` | [RuntimeDiag::FormatFailed](#formatfailed) | Error |
-| `0x04000032` | [RuntimeDiag::OperandTypeUnsupported](#operandtypeunsupported) | Error |
-| `0x04000033` | [RuntimeDiag::FieldNotFound](#fieldnotfound) | Error |
-| `0x04000034` | [RuntimeDiag::InvalidArgument](#invalidargument) | Error |
-| `0x04000035` | [RuntimeDiag::FileOpenFailed](#fileopenfailed) | Error |
-| `0x04000036` | [RuntimeDiag::FileSystemError](#filesystemerror) | Error |
-| `0x04000039` | [RuntimeDiag::RegexInvalid](#regexinvalid) | Error |
-| `0x0400003A` | [RuntimeDiag::TimeFormatFailed](#timeformatfailed) | Error |
-| `0x0400003C` | [RuntimeDiag::GradientElementTypeMismatch](#gradientelementtypemismatch) | Error |
-| `0x04000050` | [RuntimeDiag::ConversionOutOfRange](#conversionoutofrange) | Error |
-| `0x04000051` | [RuntimeDiag::UnhandledError](#unhandlederror) | Error |
-| `0x04000052` | [RuntimeDiag::SliceOutOfRange](#sliceoutofrange) | Error |
-| `0x04000060` | [RuntimeDiag::InvalidPassParameter](#invalidpassparameter) | Error |
-| `0x04000061` | [RuntimeDiag::GraphPassFailed](#graphpassfailed) | Error |
-| `0x04000062` | [RuntimeDiag::PassNeedsExtraction](#passneedsextraction) | Error |
-| `0x04000070` | [RuntimeDiag::DeviceUnavailable](#deviceunavailable) | Error |
-| `0x04000071` | [RuntimeDiag::GpuScopeUnsupported](#gpuscopeunsupported) | Error |
-| `0x04000186` | [RuntimeDiag::PassNotProvidedByModule](#passnotprovidedbymodule) | Error |
-| `0x04000187` | [RuntimeDiag::PassNotExportedByModule](#passnotexportedbymodule) | Error |
-| `0x040001A7` | [RuntimeDiag::GpuScopeNoDeviceProgram](#gpuscopenodeviceprogram) | Error |
-| `0x040001A8` | [RuntimeDiag::ValueWithNoDerivativeRule](#valuewithnoderivativerule) | Error |
-| `0x0410000F` | [RuntimeDiag::PassesNeverRun](#passesneverrun) | Warn |
-| `0x04100015` | [RuntimeDiag::ConstantExpressionFaults](#constantexpressionfaults) | Warn |
-| `0x04100016` | [RuntimeDiag::TranslationLinksRuntime](#translationlinksruntime) | Warn |
+| Code | Name | Severity | Edit |
+|------|------|----------|------|
+| `0x00000000` | [InternalDiag::UnknownInternalError](#unknowninternalerror) | Error | no |
+| `0x01000000` | [LexicalDiag::IllegalCharacter](#illegalcharacter) | Error | yes |
+| `0x01000001` | [LexicalDiag::InvalidNumberFormat](#invalidnumberformat) | Error | yes |
+| `0x01000002` | [LexicalDiag::UnclosedStringLiteral](#unclosedstringliteral) | Error | yes |
+| `0x01000003` | [LexicalDiag::UnterminatedComment](#unterminatedcomment) | Error | yes |
+| `0x01100000` | [LexicalDiag::InvalidEscapeSequence](#invalidescapesequence) | Warn | no |
+| `0x02000001` | [SyntaxDiag::MissingClosingDelimiter](#missingclosingdelimiter) | Error | yes |
+| `0x02000002` | [SyntaxDiag::UnmatchedClosingDelimiter](#unmatchedclosingdelimiter) | Error | yes |
+| `0x02000003` | [SyntaxDiag::MissingThen](#missingthen) | Error | yes |
+| `0x02000004` | [SyntaxDiag::ExtraSemicolon](#extrasemicolon) | Error | yes |
+| `0x02000005` | [SyntaxDiag::AssignmentInCondition](#assignmentincondition) | Error | no |
+| `0x02000006` | [SyntaxDiag::KeywordAsIdentifier](#keywordasidentifier) | Error | no |
+| `0x02000007` | [SyntaxDiag::MissingComma](#missingcomma) | Error | yes |
+| `0x02000008` | [SyntaxDiag::MissingInitializer](#missinginitializer) | Error | no |
+| `0x02000009` | [SyntaxDiag::MissingToken](#missingtoken) | Error | yes |
+| `0x0200000A` | [SyntaxDiag::UnexpectedToken](#unexpectedtoken) | Error | no |
+| `0x0200000B` | [SyntaxDiag::UnexpectedEndOfFile](#unexpectedendoffile) | Error | no |
+| `0x0200000C` | [SyntaxDiag::ComparisonNeedsSpace](#comparisonneedsspace) | Error | yes |
+| `0x0200000D` | [SyntaxDiag::AngleCloseAfterSpace](#anglecloseafterspace) | Error | yes |
+| `0x0200000E` | [SyntaxDiag::LineStartsWithOperator](#linestartswithoperator) | Error | yes |
+| `0x0200000F` | [SyntaxDiag::EmptyInterpolation](#emptyinterpolation) | Error | no |
+| `0x02000010` | [SyntaxDiag::WhenAfterBody](#whenafterbody) | Error | yes |
+| `0x02000011` | [SyntaxDiag::AsRightSideIsType](#asrightsideistype) | Error | no |
+| `0x02100001` | [SyntaxDiag::ComparisonAcrossLines](#comparisonacrosslines) | Warn | no |
+| `0x03000001` | [SemanticDiag::Redeclaration](#redeclaration) | Error | no |
+| `0x03000002` | [SemanticDiag::ModuleNotFound](#modulenotfound) | Error | no |
+| `0x03000003` | [SemanticDiag::ReservedIdentifier](#reservedidentifier) | Error | no |
+| `0x03000004` | [SemanticDiag::TupleUnpackingCountMismatch](#tupleunpackingcountmismatch) | Error | no |
+| `0x03000005` | [SemanticDiag::InvalidLiteral](#invalidliteral) | Error | no |
+| `0x03000006` | [SemanticDiag::DuplicateDictKey](#duplicatedictkey) | Error | no |
+| `0x03000009` | [SemanticDiag::DuplicateParameter](#duplicateparameter) | Error | no |
+| `0x0300000A` | [SemanticDiag::UnresolvedTypeReference](#unresolvedtypereference) | Error | no |
+| `0x0300000B` | [SemanticDiag::UnresolvedReference](#unresolvedreference) | Error | no |
+| `0x0300000C` | [SemanticDiag::BranchReturnTypeMismatch](#branchreturntypemismatch) | Error | no |
+| `0x0300000D` | [SemanticDiag::InvalidAccessIndex](#invalidaccessindex) | Error | no |
+| `0x0300000E` | [SemanticDiag::TypeNotIndexable](#typenotindexable) | Error | no |
+| `0x0300000F` | [SemanticDiag::NoMatchingFunction](#nomatchingfunction) | Error | no |
+| `0x03000010` | [SemanticDiag::ArgumentsMismatch](#argumentsmismatch) | Error | no |
+| `0x03000011` | [SemanticDiag::ReturnTypeMismatch](#returntypemismatch) | Error | no |
+| `0x03000012` | [SemanticDiag::ElementTypeMismatch](#elementtypemismatch) | Error | no |
+| `0x03000013` | [SemanticDiag::CallingIncompleteFunction](#callingincompletefunction) | Error | no |
+| `0x03000015` | [SemanticDiag::ImportNameNotExported](#importnamenotexported) | Error | no |
+| `0x03000016` | [SemanticDiag::LiteralNotRepresentable](#literalnotrepresentable) | Error | no |
+| `0x03000017` | [SemanticDiag::DynamicCastForbidden](#dynamiccastforbidden) | Error | no |
+| `0x03000018` | [SemanticDiag::ModuleParseFailed](#moduleparsefailed) | Error | no |
+| `0x03000019` | [SemanticDiag::InvalidOperatorURI](#invalidoperatoruri) | Error | no |
+| `0x0300001B` | [SemanticDiag::EntryModuleMissingMain](#entrymodulemissingmain) | Error | no |
+| `0x0300001C` | [SemanticDiag::ArgumentsRejected](#argumentsrejected) | Error | no |
+| `0x0300001D` | [SemanticDiag::ImmutablePassedToVarParam](#immutablepassedtovarparam) | Error | no |
+| `0x0300001E` | [SemanticDiag::AssignmentTargetNotVariable](#assignmenttargetnotvariable) | Error | no |
+| `0x0300001F` | [SemanticDiag::ConstructNotSupported](#constructnotsupported) | Error | no |
+| `0x03000020` | [SemanticDiag::InvalidTypeArgument](#invalidtypeargument) | Error | no |
+| `0x03000021` | [SemanticDiag::ArgumentNeedsConversion](#argumentneedsconversion) | Error | no |
+| `0x03000022` | [SemanticDiag::ReturnNeedsConversion](#returnneedsconversion) | Error | no |
+| `0x03000027` | [SemanticDiag::ImportNameConflict](#importnameconflict) | Error | no |
+| `0x03000040` | [SemanticDiag::FeatureNotSupported](#featurenotsupported) | Error | no |
+| `0x03000051` | [SemanticDiag::TypeVariableRedeclared](#typevariableredeclared) | Error | no |
+| `0x03000052` | [SemanticDiag::TypeVariableNotBindable](#typevariablenotbindable) | Error | no |
+| `0x03000053` | [SemanticDiag::GenericArgumentsMismatch](#genericargumentsmismatch) | Error | no |
+| `0x03000054` | [SemanticDiag::GenericFunctionAsValue](#genericfunctionasvalue) | Error | no |
+| `0x03000055` | [SemanticDiag::GenericInstantiationTooDeep](#genericinstantiationtoodeep) | Error | no |
+| `0x03000056` | [SemanticDiag::TypeFunctionArguments](#typefunctionarguments) | Error | no |
+| `0x03000057` | [SemanticDiag::GenericFunctionUnsupported](#genericfunctionunsupported) | Error | no |
+| `0x03000060` | [SemanticDiag::FunctionNameAsValue](#functionnameasvalue) | Error | no |
+| `0x03000070` | [SemanticDiag::ThrowOutsideFallible](#throwoutsidefallible) | Error | no |
+| `0x03000071` | [SemanticDiag::ThrowNotAnError](#thrownotanerror) | Error | no |
+| `0x03000072` | [SemanticDiag::TaggedTypeNesting](#taggedtypenesting) | Error | no |
+| `0x03000073` | [SemanticDiag::TaggedValueNotOpened](#taggedvaluenotopened) | Error | no |
+| `0x03000074` | [SemanticDiag::TryCatchNotInLanguage](#trycatchnotinlanguage) | Error | no |
+| `0x03000075` | [SemanticDiag::TaggedOperandMismatch](#taggedoperandmismatch) | Error | no |
+| `0x03000076` | [SemanticDiag::TaggedMatchCases](#taggedmatchcases) | Error | no |
+| `0x03000080` | [SemanticDiag::ImportedModuleHasErrors](#importedmodulehaserrors) | Error | no |
+| `0x030000A0` | [SemanticDiag::CollectionKeyNotAllowed](#collectionkeynotallowed) | Error | no |
+| `0x030000A1` | [SemanticDiag::DuplicateCollectionKey](#duplicatecollectionkey) | Error | no |
+| `0x030000B0` | [SemanticDiag::MatchWithoutDefault](#matchwithoutdefault) | Error | no |
+| `0x030000B1` | [SemanticDiag::IfWithoutElseAsValue](#ifwithoutelseasvalue) | Error | no |
+| `0x030000B2` | [SemanticDiag::EmptyArrayWithoutType](#emptyarraywithouttype) | Error | no |
+| `0x030000B3` | [SemanticDiag::PartialApplicationRefused](#partialapplicationrefused) | Error | no |
+| `0x030000B4` | [SemanticDiag::ComprehensionSourceRefused](#comprehensionsourcerefused) | Error | no |
+| `0x030000C0` | [SemanticDiag::LogicalOperandNotBool](#logicaloperandnotbool) | Error | no |
+| `0x030000D0` | [SemanticDiag::ExportedVariable](#exportedvariable) | Error | no |
+| `0x030000D1` | [SemanticDiag::ModuleValueCycle](#modulevaluecycle) | Error | no |
+| `0x030000D2` | [SemanticDiag::CaptureAfterRecursiveCall](#captureafterrecursivecall) | Error | no |
+| `0x030000D3` | [SemanticDiag::AmbiguousName](#ambiguousname) | Error | no |
+| `0x030000E3` | [SemanticDiag::ConditionNotBool](#conditionnotbool) | Error | no |
+| `0x030000E4` | [SemanticDiag::MatchCaseTypeMismatch](#matchcasetypemismatch) | Error | no |
+| `0x030000F0` | [SemanticDiag::UnusedPureResult](#unusedpureresult) | Error | no |
+| `0x030000F1` | [SemanticDiag::OperatorNotOverloadable](#operatornotoverloadable) | Error | no |
+| `0x030000F2` | [SemanticDiag::OperatorOverloadInvalid](#operatoroverloadinvalid) | Error | no |
+| `0x030000F3` | [SemanticDiag::OperatorOverloadConflict](#operatoroverloadconflict) | Error | no |
+| `0x030000F4` | [SemanticDiag::AmbiguousCall](#ambiguouscall) | Error | no |
+| `0x03000110` | [SemanticDiag::DeclaredTypeMismatch](#declaredtypemismatch) | Error | no |
+| `0x03000111` | [SemanticDiag::ModuleTypeCycle](#moduletypecycle) | Error | no |
+| `0x03000112` | [SemanticDiag::InvalidAnnotation](#invalidannotation) | Error | no |
+| `0x03000120` | [SemanticDiag::LoopSequenceNotIterable](#loopsequencenotiterable) | Error | no |
+| `0x03000121` | [SemanticDiag::LoopBodyTypeMismatch](#loopbodytypemismatch) | Error | no |
+| `0x03000122` | [SemanticDiag::LoopStateWithoutType](#loopstatewithouttype) | Error | no |
+| `0x03000123` | [SemanticDiag::LoopConditionNotBool](#loopconditionnotbool) | Error | no |
+| `0x03000124` | [SemanticDiag::LoopNameRepeated](#loopnamerepeated) | Error | no |
+| `0x03000130` | [SemanticDiag::DuplicateEnumVariant](#duplicateenumvariant) | Error | no |
+| `0x03000131` | [SemanticDiag::DuplicateEnumField](#duplicateenumfield) | Error | no |
+| `0x03000133` | [SemanticDiag::EnumVariantFieldCount](#enumvariantfieldcount) | Error | no |
+| `0x03000134` | [SemanticDiag::EnumPatternMismatch](#enumpatternmismatch) | Error | no |
+| `0x03000135` | [SemanticDiag::EnumMatchNotExhaustive](#enummatchnotexhaustive) | Error | no |
+| `0x03000136` | [SemanticDiag::EnumFieldAccess](#enumfieldaccess) | Error | no |
+| `0x03000139` | [SemanticDiag::EnumTypeArgumentNotInferred](#enumtypeargumentnotinferred) | Error | no |
+| `0x0300013A` | [SemanticDiag::EnumFieldTypeMismatch](#enumfieldtypemismatch) | Error | no |
+| `0x0300013B` | [SemanticDiag::EnumConstructionMismatch](#enumconstructionmismatch) | Error | no |
+| `0x03000140` | [SemanticDiag::ConstasNotAllowed](#constasnotallowed) | Error | no |
+| `0x03000141` | [SemanticDiag::DimensionNameNotBound](#dimensionnamenotbound) | Error | no |
+| `0x03000142` | [SemanticDiag::DimensionNameAlreadyBound](#dimensionnamealreadybound) | Error | no |
+| `0x03000143` | [SemanticDiag::DimensionMismatch](#dimensionmismatch) | Error | no |
+| `0x03000144` | [SemanticDiag::InvalidExtentExpression](#invalidextentexpression) | Error | no |
+| `0x03000150` | [SemanticDiag::NotDifferentiable](#notdifferentiable) | Error | no |
+| `0x03000161` | [SemanticDiag::TagNotAtPosition](#tagnotatposition) | Error | no |
+| `0x03000162` | [SemanticDiag::TagUndeclared](#tagundeclared) | Error | no |
+| `0x03000163` | [SemanticDiag::TagArgumentCount](#tagargumentcount) | Error | no |
+| `0x03000164` | [SemanticDiag::TagArgumentNotConstant](#tagargumentnotconstant) | Error | no |
+| `0x03000167` | [SemanticDiag::TagOnUnnamedField](#tagonunnamedfield) | Error | no |
+| `0x03000168` | [SemanticDiag::TagArgumentNamed](#tagargumentnamed) | Error | no |
+| `0x0300016A` | [SemanticDiag::TagArgumentType](#tagargumenttype) | Error | no |
+| `0x0300016B` | [SemanticDiag::TagNotAPermission](#tagnotapermission) | Error | no |
+| `0x0300016C` | [SemanticDiag::RuleTagNotRequires](#ruletagnotrequires) | Error | no |
+| `0x0300016D` | [SemanticDiag::TagParameterType](#tagparametertype) | Error | no |
+| `0x0300016E` | [SemanticDiag::TagShadowsPermission](#tagshadowspermission) | Error | no |
+| `0x03000170` | [SemanticDiag::StaticMatchNotExhaustive](#staticmatchnotexhaustive) | Error | no |
+| `0x03000171` | [SemanticDiag::StaticMatchUnreachableCase](#staticmatchunreachablecase) | Error | no |
+| `0x03000172` | [SemanticDiag::StaticTypeNotConcrete](#statictypenotconcrete) | Error | no |
+| `0x03000173` | [SemanticDiag::StaticMatchTooDeep](#staticmatchtoodeep) | Error | no |
+| `0x03000174` | [SemanticDiag::GenericInstantiationCycle](#genericinstantiationcycle) | Error | no |
+| `0x03000175` | [SemanticDiag::StaticForNotComposite](#staticfornotcomposite) | Error | no |
+| `0x03000176` | [SemanticDiag::StaticAccessNotInternal](#staticaccessnotinternal) | Error | no |
+| `0x03000177` | [SemanticDiag::StaticAccessUnknownField](#staticaccessunknownfield) | Error | no |
+| `0x03000178` | [SemanticDiag::StaticAccessIndexOutOfRange](#staticaccessindexoutofrange) | Error | no |
+| `0x03000179` | [SemanticDiag::StaticAccessNotConstant](#staticaccessnotconstant) | Error | no |
+| `0x0300017A` | [SemanticDiag::StaticComprehensionVoidElement](#staticcomprehensionvoidelement) | Error | no |
+| `0x0300017B` | [SemanticDiag::NativeDeclarationIncomplete](#nativedeclarationincomplete) | Error | no |
+| `0x0300017C` | [SemanticDiag::NativeDeclarationNotLoaded](#nativedeclarationnotloaded) | Error | no |
+| `0x0300017E` | [SemanticDiag::LambdaParameterWithoutType](#lambdaparameterwithouttype) | Error | no |
+| `0x03000180` | [SemanticDiag::NativeDeclarationOverlap](#nativedeclarationoverlap) | Error | no |
+| `0x03000181` | [SemanticDiag::NativeDeclarationForeignOperator](#nativedeclarationforeignoperator) | Error | no |
+| `0x03000182` | [SemanticDiag::StaticIndicesNotTuple](#staticindicesnottuple) | Error | no |
+| `0x0300018A` | [SemanticDiag::RestParameterNotLast](#restparameternotlast) | Error | no |
+| `0x0300018B` | [SemanticDiag::RestParameterTypeNotSupported](#restparametertypenotsupported) | Error | no |
+| `0x0300018D` | [SemanticDiag::RestArgumentNotLast](#restargumentnotlast) | Error | no |
+| `0x0300018E` | [SemanticDiag::RestArgumentNotTuple](#restargumentnottuple) | Error | no |
+| `0x0300018F` | [SemanticDiag::RestFunctionNeedsExpansion](#restfunctionneedsexpansion) | Error | no |
+| `0x03000190` | [SemanticDiag::RestArgumentsMismatch](#restargumentsmismatch) | Error | no |
+| `0x03000193` | [SemanticDiag::ConstasTypeRequired](#constastyperequired) | Error | no |
+| `0x03000195` | [SemanticDiag::ConstasValueNotConstant](#constasvaluenotconstant) | Error | no |
+| `0x03000199` | [SemanticDiag::ConstasFunctionNeedsCall](#constasfunctionneedscall) | Error | no |
+| `0x0300019A` | [SemanticDiag::ConstasInNativeDeclaration](#constasinnativedeclaration) | Error | no |
+| `0x0300019B` | [SemanticDiag::ConstasArgumentMissing](#constasargumentmissing) | Error | no |
+| `0x0300019C` | [SemanticDiag::StaticTupleEscapes](#statictupleescapes) | Error | no |
+| `0x0300019D` | [SemanticDiag::TagValueConflict](#tagvalueconflict) | Error | no |
+| `0x0300019E` | [SemanticDiag::DimensionAfterAnyRank](#dimensionafteranyrank) | Error | no |
+| `0x030001A0` | [SemanticDiag::UnknownResource](#unknownresource) | Error | no |
+| `0x030001A1` | [SemanticDiag::PureAndUses](#pureanduses) | Error | no |
+| `0x030001A2` | [SemanticDiag::ResourceGroupCycle](#resourcegroupcycle) | Error | no |
+| `0x030001A3` | [SemanticDiag::HandleTypeNotNominal](#handletypenotnominal) | Error | no |
+| `0x030001A4` | [SemanticDiag::NativeResourceMismatch](#nativeresourcemismatch) | Error | no |
+| `0x030001A5` | [SemanticDiag::CmlUnsupportedConstruct](#cmlunsupportedconstruct) | Error | no |
+| `0x030001A6` | [SemanticDiag::CmlBigConstant](#cmlbigconstant) | Error | no |
+| `0x030001A8` | [SemanticDiag::WhenConditionNotBool](#whenconditionnotbool) | Error | no |
+| `0x030001A9` | [SemanticDiag::WhenConditionNotConstant](#whenconditionnotconstant) | Error | no |
+| `0x030001AA` | [SemanticDiag::WhenUnknownName](#whenunknownname) | Error | no |
+| `0x030001AB` | [SemanticDiag::WhenTypeQueryNotConcrete](#whentypequerynotconcrete) | Error | no |
+| `0x030001AC` | [SemanticDiag::WhenConditionUnmet](#whenconditionunmet) | Error | no |
+| `0x030001B3` | [SemanticDiag::TypeOfNotAValue](#typeofnotavalue) | Error | no |
+| `0x030001B4` | [SemanticDiag::TypeOfNotWholeType](#typeofnotwholetype) | Error | no |
+| `0x030001B5` | [SemanticDiag::SameShapeComprehensionNotComposite](#sameshapecomprehensionnotcomposite) | Error | no |
+| `0x030001B6` | [SemanticDiag::SameShapeComprehensionMismatch](#sameshapecomprehensionmismatch) | Error | no |
+| `0x030001B7` | [SemanticDiag::WithArgumentUnknown](#withargumentunknown) | Error | no |
+| `0x030001B8` | [SemanticDiag::WithArgumentDuplicate](#withargumentduplicate) | Error | no |
+| `0x030001B9` | [SemanticDiag::WithArgumentMissing](#withargumentmissing) | Error | no |
+| `0x030001BA` | [SemanticDiag::WithDefaultNotConstant](#withdefaultnotconstant) | Error | no |
+| `0x030001BB` | [SemanticDiag::WithDefaultWrongType](#withdefaultwrongtype) | Error | no |
+| `0x030001BC` | [SemanticDiag::WithParameterAfterDefault](#withparameterafterdefault) | Error | no |
+| `0x030001BD` | [SemanticDiag::WithArgumentCallee](#withargumentcallee) | Error | no |
+| `0x030001BE` | [SemanticDiag::WithArgumentInValue](#withargumentinvalue) | Error | no |
+| `0x030001BF` | [SemanticDiag::WhenPredicateNotImported](#whenpredicatenotimported) | Error | no |
+| `0x030001C0` | [SemanticDiag::WhenPredicateNotCompileTime](#whenpredicatenotcompiletime) | Error | no |
+| `0x030001C1` | [SemanticDiag::WhenPredicateAmbiguous](#whenpredicateambiguous) | Error | no |
+| `0x030001C2` | [SemanticDiag::StaticMatchPatternCannotMatch](#staticmatchpatterncannotmatch) | Error | no |
+| `0x030001C5` | [SemanticDiag::FoldCallArgumentNotConstant](#foldcallargumentnotconstant) | Error | no |
+| `0x030001C6` | [SemanticDiag::FoldCallHasEffects](#foldcallhaseffects) | Error | no |
+| `0x030001C7` | [SemanticDiag::FoldCallTooDeep](#foldcalltoodeep) | Error | no |
+| `0x030001C8` | [SemanticDiag::FoldCallResultNotConstant](#foldcallresultnotconstant) | Error | no |
+| `0x030001C9` | [SemanticDiag::FoldCallNotEvaluable](#foldcallnotevaluable) | Error | no |
+| `0x030001CD` | [SemanticDiag::ParamArgumentUnknown](#paramargumentunknown) | Error | no |
+| `0x030001CE` | [SemanticDiag::ParamArgumentDuplicate](#paramargumentduplicate) | Error | no |
+| `0x030001CF` | [SemanticDiag::ParamArgumentMissing](#paramargumentmissing) | Error | no |
+| `0x030001D0` | [SemanticDiag::ParamArgumentCallee](#paramargumentcallee) | Error | no |
+| `0x030001D1` | [SemanticDiag::ParamArgumentPositionalAfterNamed](#paramargumentpositionalafternamed) | Error | no |
+| `0x030001D2` | [SemanticDiag::ParamDefaultNotConstant](#paramdefaultnotconstant) | Error | no |
+| `0x030001D3` | [SemanticDiag::ParamDefaultWrongType](#paramdefaultwrongtype) | Error | no |
+| `0x030001D4` | [SemanticDiag::ParamAfterDefault](#paramafterdefault) | Error | no |
+| `0x030001D6` | [SemanticDiag::ParamArgumentWrongType](#paramargumentwrongtype) | Error | no |
+| `0x030001D7` | [SemanticDiag::ReducedPrecisionUnsupported](#reducedprecisionunsupported) | Error | no |
+| `0x030001D8` | [SemanticDiag::ImplOnBodylessDeclaration](#implonbodylessdeclaration) | Error | no |
+| `0x030001D9` | [SemanticDiag::ImplKernelUnknown](#implkernelunknown) | Error | no |
+| `0x030001DA` | [SemanticDiag::ImplKernelForeign](#implkernelforeign) | Error | no |
+| `0x030001DB` | [SemanticDiag::ImplSignatureMismatch](#implsignaturemismatch) | Error | no |
+| `0x030001DC` | [SemanticDiag::ImplKernelNotBodyless](#implkernelnotbodyless) | Error | no |
+| `0x030001DE` | [SemanticDiag::NodeOfNotAParameter](#nodeofnotaparameter) | Error | no |
+| `0x030001DF` | [SemanticDiag::OverloadParameterNames](#overloadparameternames) | Error | no |
+| `0x030001E0` | [SemanticDiag::WhenDeclarationOverlap](#whendeclarationoverlap) | Error | no |
+| `0x030001E1` | [SemanticDiag::CompOperandMismatch](#compoperandmismatch) | Error | no |
+| `0x030001E2` | [SemanticDiag::CompOperandNotUnary](#compoperandnotunary) | Error | no |
+| `0x030001E3` | [SemanticDiag::StreamInContainer](#streamincontainer) | Error | no |
+| `0x030001E4` | [SemanticDiag::CompOperandGenericWithoutType](#compoperandgenericwithouttype) | Error | no |
+| `0x030001E5` | [SemanticDiag::RangeTwoArgumentsRemoved](#rangetwoargumentsremoved) | Error | no |
+| `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn | no |
+| `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
+| `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn | no |
+| `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn | no |
+| `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn | no |
+| `0x031000C0` | [SemanticDiag::UnusedFallibleValue](#unusedfalliblevalue) | Warn | no |
+| `0x03100110` | [SemanticDiag::NullTestNeverNull](#nulltestnevernull) | Warn | no |
+| `0x03100111` | [SemanticDiag::KnownNotNull](#knownnotnull) | Warn | no |
+| `0x03100130` | [SemanticDiag::EnumVariantCaseRepeated](#enumvariantcaserepeated) | Warn | no |
+| `0x03100131` | [SemanticDiag::MatchCaseAfterWildcard](#matchcaseafterwildcard) | Warn | no |
+| `0x03100132` | [SemanticDiag::MatchWildcardRedundant](#matchwildcardredundant) | Warn | no |
+| `0x03100160` | [SemanticDiag::TagHasNoReader](#taghasnoreader) | Warn | no |
+| `0x03100161` | [SemanticDiag::DimensionNameUsedOnce](#dimensionnameusedonce) | Warn | no |
+| `0x031001A5` | [SemanticDiag::TypeVariableUnused](#typevariableunused) | Warn | no |
+| `0x04000000` | [RuntimeDiag::RuntimeError](#runtimeerror) | Error | no |
+| `0x04000001` | [RuntimeDiag::DivisionByZero](#divisionbyzero) | Error | no |
+| `0x04000002` | [RuntimeDiag::IndexOutOfRange](#indexoutofrange) | Error | no |
+| `0x04000004` | [RuntimeDiag::MaxRecursionDepthExceeded](#maxrecursiondepthexceeded) | Error | no |
+| `0x04000009` | [RuntimeDiag::TensorDimensionMismatch](#tensordimensionmismatch) | Error | no |
+| `0x0400000A` | [RuntimeDiag::UnrecognizedGraphPass](#unrecognizedgraphpass) | Error | no |
+| `0x0400000B` | [RuntimeDiag::TranslationRefused](#translationrefused) | Error | no |
+| `0x0400000C` | [RuntimeDiag::PassInternalError](#passinternalerror) | Error | no |
+| `0x0400000E` | [RuntimeDiag::MacroEvaluationFailed](#macroevaluationfailed) | Error | no |
+| `0x04000010` | [RuntimeDiag::EntryArgumentMissing](#entryargumentmissing) | Error | no |
+| `0x04000011` | [RuntimeDiag::EntryArgumentInvalid](#entryargumentinvalid) | Error | no |
+| `0x04000012` | [RuntimeDiag::EntryResultNotWritten](#entryresultnotwritten) | Error | no |
+| `0x04000014` | [RuntimeDiag::MemoryExhausted](#memoryexhausted) | Error | no |
+| `0x04000030` | [RuntimeDiag::InvalidNumberText](#invalidnumbertext) | Error | no |
+| `0x04000031` | [RuntimeDiag::FormatFailed](#formatfailed) | Error | no |
+| `0x04000032` | [RuntimeDiag::OperandTypeUnsupported](#operandtypeunsupported) | Error | no |
+| `0x04000033` | [RuntimeDiag::FieldNotFound](#fieldnotfound) | Error | no |
+| `0x04000034` | [RuntimeDiag::InvalidArgument](#invalidargument) | Error | no |
+| `0x04000035` | [RuntimeDiag::FileOpenFailed](#fileopenfailed) | Error | no |
+| `0x04000036` | [RuntimeDiag::FileSystemError](#filesystemerror) | Error | no |
+| `0x04000039` | [RuntimeDiag::RegexInvalid](#regexinvalid) | Error | no |
+| `0x0400003A` | [RuntimeDiag::TimeFormatFailed](#timeformatfailed) | Error | no |
+| `0x0400003C` | [RuntimeDiag::GradientElementTypeMismatch](#gradientelementtypemismatch) | Error | no |
+| `0x04000050` | [RuntimeDiag::ConversionOutOfRange](#conversionoutofrange) | Error | no |
+| `0x04000051` | [RuntimeDiag::UnhandledError](#unhandlederror) | Error | no |
+| `0x04000052` | [RuntimeDiag::SliceOutOfRange](#sliceoutofrange) | Error | no |
+| `0x04000060` | [RuntimeDiag::InvalidPassParameter](#invalidpassparameter) | Error | no |
+| `0x04000061` | [RuntimeDiag::GraphPassFailed](#graphpassfailed) | Error | no |
+| `0x04000062` | [RuntimeDiag::PassNeedsExtraction](#passneedsextraction) | Error | no |
+| `0x04000070` | [RuntimeDiag::DeviceUnavailable](#deviceunavailable) | Error | no |
+| `0x04000071` | [RuntimeDiag::GpuScopeUnsupported](#gpuscopeunsupported) | Error | no |
+| `0x04000186` | [RuntimeDiag::PassNotProvidedByModule](#passnotprovidedbymodule) | Error | no |
+| `0x04000187` | [RuntimeDiag::PassNotExportedByModule](#passnotexportedbymodule) | Error | no |
+| `0x040001A7` | [RuntimeDiag::GpuScopeNoDeviceProgram](#gpuscopenodeviceprogram) | Error | no |
+| `0x040001A8` | [RuntimeDiag::ValueWithNoDerivativeRule](#valuewithnoderivativerule) | Error | no |
+| `0x0410000F` | [RuntimeDiag::PassesNeverRun](#passesneverrun) | Warn | no |
+| `0x04100015` | [RuntimeDiag::ConstantExpressionFaults](#constantexpressionfaults) | Warn | no |
+| `0x04100016` | [RuntimeDiag::TranslationLinksRuntime](#translationlinksruntime) | Warn | no |
 
 ## Internal (`InternalDiag`)
 
@@ -283,10 +290,20 @@ prints one entry.
 
 `0x00000000` · Error · `InternalDiag::UnknownInternalError`
 
+**Fix**
+
+None: internal: the report is about the compiler's own state, and there is nothing in the program to change
+
 **Message**
 
 ```text
 An error has occurred: {0}.
+```
+
+**Help**
+
+```text
+The compiler reached a state it has no code for, so nothing in the program is known to be wrong. Report it together with the program that reached it.
 ```
 
 **Example** (`test/cases/compile/collections/err_key_float.cml`, run as `camel test/cases/compile/collections/err_key_float.cml`)
@@ -308,6 +325,10 @@ func main(): int sync {
 ### IllegalCharacter
 
 `0x01000000` · Error · `LexicalDiag::IllegalCharacter`
+
+**Fix**
+
+A machine-applicable edit is attached where the report knows the text to write: `data.fixes` of `--error-format json` carries the range and the replacement.
 
 **Message**
 
@@ -333,6 +354,10 @@ func main(): int sync {
 ### InvalidNumberFormat
 
 `0x01000001` · Error · `LexicalDiag::InvalidNumberFormat`
+
+**Fix**
+
+A machine-applicable edit is attached where the report knows the text to write: `data.fixes` of `--error-format json` carries the range and the replacement.
 
 **Message**
 
@@ -361,6 +386,10 @@ func main(): int sync {
 
 `0x01000002` · Error · `LexicalDiag::UnclosedStringLiteral`
 
+**Fix**
+
+A machine-applicable edit is attached where the report knows the text to write: `data.fixes` of `--error-format json` carries the range and the replacement.
+
 **Message**
 
 ```text
@@ -378,6 +407,10 @@ A string ends with the quote character it starts with ({0}). Add the closing quo
 ### UnterminatedComment
 
 `0x01000003` · Error · `LexicalDiag::UnterminatedComment`
+
+**Fix**
+
+A machine-applicable edit is attached where the report knows the text to write: `data.fixes` of `--error-format json` carries the range and the replacement.
 
 **Message**
 
@@ -407,6 +440,10 @@ func main(): int {
 ### InvalidEscapeSequence
 
 `0x01100000` · Warn · `LexicalDiag::InvalidEscapeSequence`
+
+**Fix**
+
+None: choice: the text to write instead is the writer's
 
 **Message**
 
@@ -446,6 +483,10 @@ func main(): int sync {
 
 `0x02000001` · Error · `SyntaxDiag::MissingClosingDelimiter`
 
+**Fix**
+
+A machine-applicable edit is attached where the report knows the text to write: `data.fixes` of `--error-format json` carries the range and the replacement.
+
 **Message**
 
 ```text
@@ -458,20 +499,28 @@ Expected '{0}' before {2}, to close the '{1}'.
 Every '{1}' needs its '{0}'. The note shows the '{1}' that is still open here.
 ```
 
-**Example** (`test/cases/compile/diag_render/syntax_missing_paren.cml`, run as `camel --error-format text test/cases/compile/diag_render/syntax_missing_paren.cml`)
+**Example** (`test/cases/parse/syntax/ident_list_open.cml`, run as `camel test/cases/parse/syntax/ident_list_open.cml`)
 
 ```camel
-module syntax_missing_paren
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
-func main(): int sync {
-    println((1 + 2)
-    return 0
-}
+/// A list whose text ends where a name was required. The name is asked for through `identDef` and
+/// reported where it should stand; the list closes without one. Reading the token that stands
+/// there instead - the terminal token - put that token in the tree twice and made
+/// `camel-parsecheck fuzz` report "the leaves of the tree are not the tokens of the text" (H417).
+module syntax_ident_list_open
+
+resource a = [b,
 ```
 
 ### UnmatchedClosingDelimiter
 
 `0x02000002` · Error · `SyntaxDiag::UnmatchedClosingDelimiter`
+
+**Fix**
+
+A machine-applicable edit is attached where the report knows the text to write: `data.fixes` of `--error-format json` carries the range and the replacement.
 
 **Message**
 
@@ -490,6 +539,10 @@ Remove the '{0}', or add the '{1}' it was meant to close.
 ### MissingThen
 
 `0x02000003` · Error · `SyntaxDiag::MissingThen`
+
+**Fix**
+
+A machine-applicable edit is attached where the report knows the text to write: `data.fixes` of `--error-format json` carries the range and the replacement.
 
 **Message**
 
@@ -522,6 +575,10 @@ func main(): int sync {
 
 `0x02000004` · Error · `SyntaxDiag::ExtraSemicolon`
 
+**Fix**
+
+A machine-applicable edit is attached where the report knows the text to write: `data.fixes` of `--error-format json` carries the range and the replacement.
+
 **Message**
 
 ```text
@@ -540,6 +597,10 @@ Statements are separated by a line break or by one ';'. Remove the extra ';'.
 
 `0x02000005` · Error · `SyntaxDiag::AssignmentInCondition`
 
+**Fix**
+
+None: choice: the condition was meant as a comparison or as an assignment, and the two are written differently
+
 **Message**
 
 ```text
@@ -557,6 +618,10 @@ To compare, write '==': if x == 1 then ...
 ### KeywordAsIdentifier
 
 `0x02000006` · Error · `SyntaxDiag::KeywordAsIdentifier`
+
+**Fix**
+
+None: choice: a reserved word is not a name, and the name to use instead is the writer's
 
 **Message**
 
@@ -581,6 +646,10 @@ func loop(i: int): int {
 ### MissingComma
 
 `0x02000007` · Error · `SyntaxDiag::MissingComma`
+
+**Fix**
+
+A machine-applicable edit is attached where the report knows the text to write: `data.fixes` of `--error-format json` carries the range and the replacement.
 
 **Message**
 
@@ -610,6 +679,10 @@ func main(): int sync {
 
 `0x02000008` · Error · `SyntaxDiag::MissingInitializer`
 
+**Fix**
+
+None: choice: the value a binding takes is the writer's to write
+
 **Message**
 
 ```text
@@ -628,10 +701,20 @@ A declaration binds a name to a value: let {0} = <value>, or with a type: let {0
 
 `0x02000009` · Error · `SyntaxDiag::MissingToken`
 
+**Fix**
+
+A machine-applicable edit is attached where the report knows the text to write: `data.fixes` of `--error-format json` carries the range and the replacement.
+
 **Message**
 
 ```text
 Expected {0} before {1}.
+```
+
+**Help**
+
+```text
+One token is missing at the caret and the message names it; nothing else in the file has to change.
 ```
 
 **Example** (`test/cases/compile/fstring/lambda_spec.cml`, run as `camel test/cases/compile/fstring/lambda_spec.cml`)
@@ -648,10 +731,20 @@ func main(): int sync {
 
 `0x0200000A` · Error · `SyntaxDiag::UnexpectedToken`
 
+**Fix**
+
+None: choice: what belongs where the parser stopped depends on what the writer meant; the help names what would have fitted
+
 **Message**
 
 ```text
 Unexpected {0}{1}.
+```
+
+**Help**
+
+```text
+The token fits nothing that can stand where it is. What the parser expected instead follows the semicolon above: a list whose items have no ',' between them, a bracket that is not closed and a reserved word where a name belongs are the usual causes.
 ```
 
 **Example** (`test/cases/compile/check/syntax_error.cml`, run as `camel check --syntax-only -O short test/cases/compile/check/syntax_error.cml`)
@@ -668,6 +761,10 @@ func main(): int sync {
 ### UnexpectedEndOfFile
 
 `0x0200000B` · Error · `SyntaxDiag::UnexpectedEndOfFile`
+
+**Fix**
+
+None: context: the file stops before the construct is complete, and neither the tokens read nor the parser name the text that belongs there
 
 **Message**
 
@@ -694,6 +791,10 @@ func main(): int sync {
 ### ComparisonNeedsSpace
 
 `0x0200000C` · Error · `SyntaxDiag::ComparisonNeedsSpace`
+
+**Fix**
+
+A machine-applicable edit is attached where the report knows the text to write: `data.fixes` of `--error-format json` carries the range and the replacement.
 
 **Message**
 
@@ -724,6 +825,10 @@ func main(): int {
 ### AngleCloseAfterSpace
 
 `0x0200000D` · Error · `SyntaxDiag::AngleCloseAfterSpace`
+
+**Fix**
+
+A machine-applicable edit is attached where the report knows the text to write: `data.fixes` of `--error-format json` carries the range and the replacement.
 
 **Message**
 
@@ -757,6 +862,10 @@ func main(): int {
 
 `0x0200000E` · Error · `SyntaxDiag::LineStartsWithOperator`
 
+**Fix**
+
+A machine-applicable edit is attached where the report knows the text to write: `data.fixes` of `--error-format json` carries the range and the replacement.
+
 **Message**
 
 ```text
@@ -786,6 +895,10 @@ func main(): int {
 
 `0x0200000F` · Error · `SyntaxDiag::EmptyInterpolation`
 
+**Fix**
+
+None: choice: the text to write instead is the writer's
+
 **Message**
 
 ```text
@@ -808,9 +921,78 @@ func main(): int sync {
 }
 ```
 
+### WhenAfterBody
+
+`0x02000010` · Error · `SyntaxDiag::WhenAfterBody`
+
+**Fix**
+
+A machine-applicable edit is attached where the report knows the text to write: `data.fixes` of `--error-format json` carries the range and the replacement.
+
+**Message**
+
+```text
+A 'when' condition comes before what it guards, so {0} cannot follow it.
+```
+
+**Help**
+
+```text
+Write it between the parameters and the body: rule add_zero::<T>(x: T) when is_integer::<T>() { x + 0 => x }, or between the patterns of a match case and its arm: case n when n > 0 => n. The trailing form is not read as a condition.
+```
+
+**Example** (`test/cases/parse/rules/when_after_body.cml`, run as `camel -E short test/cases/parse/rules/when_after_body.cml`)
+
+```camel
+module when_after_body
+
+rule guarded(x: int) { x + 0 => x } when true
+
+func main(): int sync {
+    return 0
+}
+```
+
+### AsRightSideIsType
+
+`0x02000011` · Error · `SyntaxDiag::AsRightSideIsType`
+
+**Fix**
+
+None: choice: the right side of an 'as' is a type, and whether an interval belongs in parentheses here is the writer's to write
+
+**Message**
+
+```text
+The right side of '{0}' is a type; write the interval as '(a..b)'.
+```
+
+**Help**
+
+```text
+'T..' is the stream type (design principles 5.4): the elements of 'T' that arrive one after another. An interval is an expression, and it is written in parentheses: (1..5).
+```
+
+**Example** (`test/cases/parse/rulings/stream_type_as_interval.cml`, run as `camel test/cases/parse/rulings/stream_type_as_interval.cml`)
+
+```camel
+module stream_type_as_interval
+
+func main(): int sync {
+    let n = 3
+    let r = n as int..5
+    println(r)
+    return 0
+}
+```
+
 ### ComparisonAcrossLines
 
 `0x02100001` · Warn · `SyntaxDiag::ComparisonAcrossLines`
+
+**Fix**
+
+None: choice: the text to write instead is the writer's
 
 **Message**
 
@@ -839,6 +1021,10 @@ func main(): int sync {
 ### Redeclaration
 
 `0x03000001` · Error · `SemanticDiag::Redeclaration`
+
+**Fix**
+
+None: choice: the second declaration or the first has to be renamed or removed
 
 **Message**
 
@@ -875,6 +1061,10 @@ func main(): int sync {
 
 `0x03000002` · Error · `SemanticDiag::ModuleNotFound`
 
+**Fix**
+
+None: choice: the module path and the search roots are the writer's
+
 **Message**
 
 ```text
@@ -906,6 +1096,10 @@ func main(): int sync {
 
 `0x03000003` · Error · `SemanticDiag::ReservedIdentifier`
 
+**Fix**
+
+None: choice: the reserved word cannot be used as a name, and the name to use instead is the writer's
+
 **Message**
 
 ```text
@@ -931,6 +1125,10 @@ func main(): int sync {
 ### TupleUnpackingCountMismatch
 
 `0x03000004` · Error · `SemanticDiag::TupleUnpackingCountMismatch`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
 
 **Message**
 
@@ -965,6 +1163,10 @@ func main(): int sync {
 
 `0x03000005` · Error · `SemanticDiag::InvalidLiteral`
 
+**Fix**
+
+None: choice: the literal is not of the type the context needs, and what to write instead is the writer's
+
 **Message**
 
 ```text
@@ -989,6 +1191,10 @@ func main(): int sync {
 ### DuplicateDictKey
 
 `0x03000006` · Error · `SemanticDiag::DuplicateDictKey`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
 
 **Message**
 
@@ -1019,6 +1225,10 @@ func main(): int sync {
 
 `0x03000009` · Error · `SemanticDiag::DuplicateParameter`
 
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
 **Message**
 
 ```text
@@ -1046,6 +1256,10 @@ func main(): int sync {
 ### UnresolvedTypeReference
 
 `0x0300000A` · Error · `SemanticDiag::UnresolvedTypeReference`
+
+**Fix**
+
+None: choice: which type was meant is not known here; the declaration or import that would bring it is the writer's
 
 **Message**
 
@@ -1078,6 +1292,10 @@ func main(): int sync {
 
 `0x0300000B` · Error · `SemanticDiag::UnresolvedReference`
 
+**Fix**
+
+None: choice: which name was meant is not known here; a candidate search over the names in scope is the repair this one waits for
+
 **Message**
 
 ```text
@@ -1102,6 +1320,10 @@ func main(): int sync {
 ### BranchReturnTypeMismatch
 
 `0x0300000C` · Error · `SemanticDiag::BranchReturnTypeMismatch`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
 
 **Message**
 
@@ -1134,6 +1356,10 @@ func main(): int sync {
 
 `0x0300000D` · Error · `SemanticDiag::InvalidAccessIndex`
 
+**Fix**
+
+None: choice: the access has to be written with the member or index that exists
+
 **Message**
 
 ```text
@@ -1163,6 +1389,10 @@ func main(): int sync {
 
 `0x0300000E` · Error · `SemanticDiag::TypeNotIndexable`
 
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
 **Message**
 
 ```text
@@ -1191,6 +1421,10 @@ func main(): int sync {
 ### NoMatchingFunction
 
 `0x0300000F` · Error · `SemanticDiag::NoMatchingFunction`
+
+**Fix**
+
+None: choice: the call has to be written as one of the overloads, and which one depends on the intent
 
 **Message**
 
@@ -1237,6 +1471,10 @@ func main(): int sync {
 
 `0x03000010` · Error · `SemanticDiag::ArgumentsMismatch`
 
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
 **Message**
 
 ```text
@@ -1273,6 +1511,10 @@ func main(): int sync {
 
 `0x03000011` · Error · `SemanticDiag::ReturnTypeMismatch`
 
+**Fix**
+
+None: choice: the returned value or the declared return type has to change
+
 **Message**
 
 ```text
@@ -1308,6 +1550,10 @@ func main(): int sync {
 
 `0x03000012` · Error · `SemanticDiag::ElementTypeMismatch`
 
+**Fix**
+
+None: choice: one element of the collection is of another type, and which side has to change is the intent
+
 **Message**
 
 ```text
@@ -1333,6 +1579,10 @@ func main(): int sync {
 ### CallingIncompleteFunction
 
 `0x03000013` · Error · `SemanticDiag::CallingIncompleteFunction`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
 
 **Message**
 
@@ -1378,6 +1628,10 @@ let later = 100
 
 `0x03000015` · Error · `SemanticDiag::ImportNameNotExported`
 
+**Fix**
+
+None: choice: the imported module does not export the name; either the name or the export is the writer's
+
 **Message**
 
 ```text
@@ -1404,6 +1658,10 @@ func main(): int sync {
 ### LiteralNotRepresentable
 
 `0x03000016` · Error · `SemanticDiag::LiteralNotRepresentable`
+
+**Fix**
+
+None: choice: the literal has to be narrowed or the type widened, and which of the two is the writer's
 
 **Message**
 
@@ -1438,6 +1696,10 @@ func main(): int sync {
 
 `0x03000017` · Error · `SemanticDiag::DynamicCastForbidden`
 
+**Fix**
+
+None: choice: the cast has to be written as a static one, which needs the type the writer meant
+
 **Message**
 
 ```text
@@ -1467,6 +1729,10 @@ func main(): int sync {
 ### ModuleParseFailed
 
 `0x03000018` · Error · `SemanticDiag::ModuleParseFailed`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
 
 **Message**
 
@@ -1498,6 +1764,10 @@ func main(): int sync {
 
 `0x03000019` · Error · `SemanticDiag::InvalidOperatorURI`
 
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
 **Message**
 
 ```text
@@ -1527,6 +1797,10 @@ func main(): int sync {
 ### EntryModuleMissingMain
 
 `0x0300001B` · Error · `SemanticDiag::EntryModuleMissingMain`
+
+**Fix**
+
+None: choice: the program needs a 'main', and where it is declared and what it returns are the writer's
 
 **Message**
 
@@ -1563,6 +1837,10 @@ export func classify(x: int): int {
 
 `0x0300001C` · Error · `SemanticDiag::ArgumentsRejected`
 
+**Fix**
+
+None: choice: the arguments have to be written to match a signature, and which signature is the intent
+
 **Message**
 
 ```text
@@ -1588,6 +1866,10 @@ func main(): int sync {
 ### ImmutablePassedToVarParam
 
 `0x0300001D` · Error · `SemanticDiag::ImmutablePassedToVarParam`
+
+**Fix**
+
+None: choice: the argument has to be made mutable at its binding or the parameter declared read-only
 
 **Message**
 
@@ -1622,6 +1904,10 @@ func main(): int sync {
 
 `0x0300001E` · Error · `SemanticDiag::AssignmentTargetNotVariable`
 
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
 **Message**
 
 ```text
@@ -1654,6 +1940,10 @@ func main(): int sync {
 ### ConstructNotSupported
 
 `0x0300001F` · Error · `SemanticDiag::ConstructNotSupported`
+
+**Fix**
+
+None: context: the construct is not built here, so the program has to be restructured and there is no one text to write
 
 **Message**
 
@@ -1691,6 +1981,10 @@ func main(): void sync {
 
 `0x03000020` · Error · `SemanticDiag::InvalidTypeArgument`
 
+**Fix**
+
+None: choice: the argument has to be a type of the shape the parameter declares, and which type is the writer's
+
 **Message**
 
 ```text
@@ -1723,6 +2017,10 @@ func main(): int sync {
 ### ArgumentNeedsConversion
 
 `0x03000021` · Error · `SemanticDiag::ArgumentNeedsConversion`
+
+**Fix**
+
+None: choice: the conversion has to be written, and which one is the intent
 
 **Message**
 
@@ -1758,6 +2056,10 @@ func main(): int sync {
 
 `0x03000022` · Error · `SemanticDiag::ReturnNeedsConversion`
 
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
 **Message**
 
 ```text
@@ -1789,6 +2091,10 @@ func main(): int sync {
 
 `0x03000027` · Error · `SemanticDiag::ImportNameConflict`
 
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
 **Message**
 
 ```text
@@ -1816,6 +2122,10 @@ func main(): int sync {
 ### FeatureNotSupported
 
 `0x03000040` · Error · `SemanticDiag::FeatureNotSupported`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
 
 **Message**
 
@@ -1850,6 +2160,10 @@ func main(): int sync {
 
 `0x03000051` · Error · `SemanticDiag::TypeVariableRedeclared`
 
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
 **Message**
 
 ```text
@@ -1880,6 +2194,10 @@ func main(): int sync {
 ### TypeVariableNotBindable
 
 `0x03000052` · Error · `SemanticDiag::TypeVariableNotBindable`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
 
 **Message**
 
@@ -1912,6 +2230,10 @@ func main(): int sync {
 ### GenericArgumentsMismatch
 
 `0x03000053` · Error · `SemanticDiag::GenericArgumentsMismatch`
+
+**Fix**
+
+None: choice: the type arguments have to match the parameters, and which ones were meant is the intent
 
 **Message**
 
@@ -1946,6 +2268,10 @@ func main(): int sync {
 
 `0x03000054` · Error · `SemanticDiag::GenericFunctionAsValue`
 
+**Fix**
+
+None: choice: a generic function has to be instantiated before it is a value, and the arguments are the intent
+
 **Message**
 
 ```text
@@ -1978,6 +2304,10 @@ func main(): int sync {
 
 `0x03000055` · Error · `SemanticDiag::GenericInstantiationTooDeep`
 
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
 **Message**
 
 ```text
@@ -2008,6 +2338,10 @@ func main(): int sync {
 ### TypeFunctionArguments
 
 `0x03000056` · Error · `SemanticDiag::TypeFunctionArguments`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
 
 **Message**
 
@@ -2040,6 +2374,10 @@ func main(): int sync {
 ### GenericFunctionUnsupported
 
 `0x03000057` · Error · `SemanticDiag::GenericFunctionUnsupported`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
 
 **Message**
 
@@ -2077,6 +2415,10 @@ func main(): int sync {
 
 `0x03000060` · Error · `SemanticDiag::FunctionNameAsValue`
 
+**Fix**
+
+None: choice: a function name is not a value; the call has to be written as a lambda or a graph and which one is the intent
+
 **Message**
 
 ```text
@@ -2111,6 +2453,10 @@ func main(): int sync {
 ### ThrowOutsideFallible
 
 `0x03000070` · Error · `SemanticDiag::ThrowOutsideFallible`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
 
 **Message**
 
@@ -2147,6 +2493,10 @@ func main(): int sync {
 
 `0x03000071` · Error · `SemanticDiag::ThrowNotAnError`
 
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
 **Message**
 
 ```text
@@ -2181,6 +2531,10 @@ func main(): int sync {
 
 `0x03000072` · Error · `SemanticDiag::TaggedTypeNesting`
 
+**Fix**
+
+None: context: the tagged type is nested where it may not be; the repair restructures the type
+
 **Message**
 
 ```text
@@ -2207,6 +2561,10 @@ func main(): int sync {
 ### TaggedValueNotOpened
 
 `0x03000073` · Error · `SemanticDiag::TaggedValueNotOpened`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
 
 **Message**
 
@@ -2236,6 +2594,10 @@ func main(): int sync {
 ### TryCatchNotInLanguage
 
 `0x03000074` · Error · `SemanticDiag::TryCatchNotInLanguage`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
 
 **Message**
 
@@ -2271,6 +2633,10 @@ func main(): int sync {
 
 `0x03000075` · Error · `SemanticDiag::TaggedOperandMismatch`
 
+**Fix**
+
+None: choice: the operands carry tags that do not meet; the repair is in what is tagged, not in one text
+
 **Message**
 
 ```text
@@ -2301,6 +2667,10 @@ func main(): int sync {
 
 `0x03000076` · Error · `SemanticDiag::TaggedMatchCases`
 
+**Fix**
+
+None: context: the cases of the match do not cover what the operand carries; the missing case is the design
+
 **Message**
 
 ```text
@@ -2313,26 +2683,30 @@ This 'match' on a value of type '{0}' is not well formed: {1}.
 A 'match' on a 'T?' has exactly the cases 'case null' and one other ('case v' binds the value, 'case _' ignores it). A 'match' on a 'T!' has exactly 'case error e' and one other.
 ```
 
-**Example** (`test/cases/compile/tagged/err_two_layer_null.cml`, run as `camel test/cases/compile/tagged/err_two_layer_null.cml`)
+**Example** (`test/cases/compile/match_guard/tagged_missing_null.cml`, run as `camel test/cases/compile/match_guard/tagged_missing_null.cml`)
 
 ```camel
-module err_two_layer_null
+module match_guard_tagged_missing_null
+
+func f(x: int?): int {
+    return match x {
+        case null when false => 1
+        case v => v
+    }
+}
 
 func main(): int sync {
-    println('never printed')
-    let r: int?! = 5
-    let s = match r {
-        case null => 0
-        case v => v ?? 1
-    }
-    println(s)
-    return 0
+    return f(null)
 }
 ```
 
 ### ImportedModuleHasErrors
 
 `0x03000080` · Error · `SemanticDiag::ImportedModuleHasErrors`
+
+**Fix**
+
+None: context: the errors are in the imported module, and the report here only says that the import cannot be used
 
 **Message**
 
@@ -2364,6 +2738,10 @@ func main(): int sync {
 
 `0x030000A0` · Error · `SemanticDiag::CollectionKeyNotAllowed`
 
+**Fix**
+
+None: choice: the element cannot be a key of this collection, and what to use instead is the design
+
 **Message**
 
 ```text
@@ -2393,6 +2771,10 @@ func main(): int sync {
 ### DuplicateCollectionKey
 
 `0x030000A1` · Error · `SemanticDiag::DuplicateCollectionKey`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
 
 **Message**
 
@@ -2424,6 +2806,10 @@ func main(): int sync {
 
 `0x030000B0` · Error · `SemanticDiag::MatchWithoutDefault`
 
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
 **Message**
 
 ```text
@@ -2436,27 +2822,29 @@ This 'match' on a value of type '{0}' has no 'case _'.
 A 'match' must have a default case: add 'case _ => ...' for the values the cases do not list. A 'match' on a bool that has both 'case true' and 'case false' is complete, and so is one over 'T?' or 'T!' with its two fixed patterns.
 ```
 
-**Example** (`test/cases/consistency/match/no_case_matches_string.cml`, run as `camel `)
+**Example** (`test/cases/compile/match_guard/not_exhaustive.cml`, run as `camel test/cases/compile/match_guard/not_exhaustive.cml`)
 
 ```camel
-module no_case_matches_string
+module match_guard_not_exhaustive
 
-func f(s: string): int {
-    return match s {
-        case 'a' => 1
-        case 'b' => 2
+func a(n: int): int {
+    return match n {
+        case 1 when n > 0 => 10
     }
 }
 
 func main(): int sync {
-    println(f('a'), f('b'))
-    return 0
+    return a(1)
 }
 ```
 
 ### IfWithoutElseAsValue
 
 `0x030000B1` · Error · `SemanticDiag::IfWithoutElseAsValue`
+
+**Fix**
+
+None: choice: the conditional is used as a value, so an 'else' has to be written, and what it yields is the intent
 
 **Message**
 
@@ -2485,6 +2873,10 @@ func main(): int sync {
 
 `0x030000B2` · Error · `SemanticDiag::EmptyArrayWithoutType`
 
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
 **Message**
 
 ```text
@@ -2511,6 +2903,10 @@ func main(): int sync {
 
 `0x030000B3` · Error · `SemanticDiag::PartialApplicationRefused`
 
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
 **Message**
 
 ```text
@@ -2536,6 +2932,10 @@ func main(): int sync {
 
 `0x030000B4` · Error · `SemanticDiag::ComprehensionSourceRefused`
 
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
 **Message**
 
 ```text
@@ -2560,6 +2960,10 @@ func main(): int sync {
 ### LogicalOperandNotBool
 
 `0x030000C0` · Error · `SemanticDiag::LogicalOperandNotBool`
+
+**Fix**
+
+None: choice: the operand has to be a condition; the comparison that was meant is the writer's
 
 **Message**
 
@@ -2590,6 +2994,10 @@ func main(): int sync {
 
 `0x030000D0` · Error · `SemanticDiag::ExportedVariable`
 
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
 **Message**
 
 ```text
@@ -2616,6 +3024,10 @@ func main(): int sync {
 ### ModuleValueCycle
 
 `0x030000D1` · Error · `SemanticDiag::ModuleValueCycle`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
 
 **Message**
 
@@ -2646,6 +3058,10 @@ func main(): int sync {
 ### CaptureAfterRecursiveCall
 
 `0x030000D2` · Error · `SemanticDiag::CaptureAfterRecursiveCall`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
 
 **Message**
 
@@ -2682,6 +3098,10 @@ func main(): int sync {
 
 `0x030000D3` · Error · `SemanticDiag::AmbiguousName`
 
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
 **Message**
 
 ```text
@@ -2711,6 +3131,10 @@ func main(): int sync {
 ### ConditionNotBool
 
 `0x030000E3` · Error · `SemanticDiag::ConditionNotBool`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
 
 **Message**
 
@@ -2747,6 +3171,10 @@ func main(): int sync {
 
 `0x030000E4` · Error · `SemanticDiag::MatchCaseTypeMismatch`
 
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
 **Message**
 
 ```text
@@ -2759,34 +3187,30 @@ This case of a 'match' on a value of type '{0}' is a value of type '{1}'.
 A case is compared with the value matched, so the type of that value must accept it. Write the case as a value of that type, or convert the value matched first.
 ```
 
-**Example** (`test/cases/compile/any_typing/match_subject.cml`, run as `camel test/cases/compile/any_typing/match_subject.cml`)
+**Example** (`test/cases/compile/match_guard/case_type_mismatch.cml`, run as `camel test/cases/compile/match_guard/case_type_mismatch.cml`)
 
 ```camel
-module match_subject
+module match_guard_case_type_mismatch
 
-import { Json, decode } from json
-
-// A decoded value as the subject of a `match` on literals: as an `any` it was compared bit for
-// bit, a string by address, so `'ab'` fell to `case _`. It
-// is a `Json` now, and a case has the type of the value matched.
-func check(v: Json): int sync {
-    let r = match v {
-        case 1 => 'one'
-        case 'ab' => 'ab'
-        case _ => 'other'
+func f(s: string): int {
+    return match s {
+        case 1 when true => 1
+        case _ => 0
     }
-    println(r)
-    return 0
 }
 
 func main(): int sync {
-    return decode('"ab"') ?-> check !! 1
+    return f('a')
 }
 ```
 
 ### UnusedPureResult
 
 `0x030000F0` · Error · `SemanticDiag::UnusedPureResult`
+
+**Fix**
+
+None: choice: a value that is computed and dropped can be removed or used, and which one is the intent
 
 **Message**
 
@@ -2817,6 +3241,10 @@ func main(): int sync {
 
 `0x030000F1` · Error · `SemanticDiag::OperatorNotOverloadable`
 
+**Fix**
+
+None: context: the operator cannot be overloaded at all, so the expression has to be written another way
+
 **Message**
 
 ```text
@@ -2844,6 +3272,10 @@ func main(): int { return 0 }
 ### OperatorOverloadInvalid
 
 `0x030000F2` · Error · `SemanticDiag::OperatorOverloadInvalid`
+
+**Fix**
+
+None: choice: the overload has to be written with the arity and types the operator allows
 
 **Message**
 
@@ -2873,6 +3305,10 @@ func main(): int { return 0 }
 
 `0x030000F3` · Error · `SemanticDiag::OperatorOverloadConflict`
 
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
 **Message**
 
 ```text
@@ -2900,6 +3336,10 @@ func main(): int { return 0 }
 ### AmbiguousCall
 
 `0x030000F4` · Error · `SemanticDiag::AmbiguousCall`
+
+**Fix**
+
+None: choice: the call has to name the overload it means, and which one is the intent
 
 **Message**
 
@@ -2937,6 +3377,10 @@ func main(): int sync {
 
 `0x03000110` · Error · `SemanticDiag::DeclaredTypeMismatch`
 
+**Fix**
+
+None: choice: either the declared type or the value has to change, and which one is the intent
+
 **Message**
 
 ```text
@@ -2964,6 +3408,10 @@ func main(): int sync {
 ### ModuleTypeCycle
 
 `0x03000111` · Error · `SemanticDiag::ModuleTypeCycle`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
 
 **Message**
 
@@ -2993,6 +3441,10 @@ func main(): int {
 
 `0x03000112` · Error · `SemanticDiag::InvalidAnnotation`
 
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
 **Message**
 
 ```text
@@ -3020,6 +3472,10 @@ func main(): int { return 0 }
 
 `0x03000120` · Error · `SemanticDiag::LoopSequenceNotIterable`
 
+**Fix**
+
+None: choice: what to iterate instead is the writer's to write
+
 **Message**
 
 ```text
@@ -3029,7 +3485,7 @@ func main(): int { return 0 }
 **Help**
 
 ```text
-A loop's 'for x in xs' visits the elements of xs in order (design principles 3.10): the elements of an array; the code points of a string, each a one-character string; the (key, value) pairs of a map, in key order (11.3); and the sub-tensors of a tensor along its first dimension. 'range(a, b)' is the array of the integers from a to b.
+A loop's 'for x in xs' visits the elements of xs in order (design principles 3.10): the elements of an array; the code points of a string, each a one-character string; the (key, value) pairs of a map, in key order (11.3); and the sub-tensors of a tensor along its first dimension. 'a..b' is the array of the integers from 'a' to 'b - 1', left closed and right open, and a 'for' over it takes them in order without building the array (4.2).
 ```
 
 **Example** (`test/cases/loops/err_not_iterable.cml`, run as `camel -E short test/cases/loops/err_not_iterable.cml`)
@@ -3046,6 +3502,10 @@ func main(): int sync {
 ### LoopBodyTypeMismatch
 
 `0x03000121` · Error · `SemanticDiag::LoopBodyTypeMismatch`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
 
 **Message**
 
@@ -3077,6 +3537,10 @@ func main(): int {
 
 `0x03000122` · Error · `SemanticDiag::LoopStateWithoutType`
 
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
 **Message**
 
 ```text
@@ -3103,6 +3567,10 @@ func main(): int sync {
 
 `0x03000123` · Error · `SemanticDiag::LoopConditionNotBool`
 
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
 **Message**
 
 ```text
@@ -3128,6 +3596,10 @@ func main(): int sync {
 ### LoopNameRepeated
 
 `0x03000124` · Error · `SemanticDiag::LoopNameRepeated`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
 
 **Message**
 
@@ -3159,6 +3631,10 @@ func main(): int {
 
 `0x03000130` · Error · `SemanticDiag::DuplicateEnumVariant`
 
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
 **Message**
 
 ```text
@@ -3189,6 +3665,10 @@ func main(): void sync {
 
 `0x03000131` · Error · `SemanticDiag::DuplicateEnumField`
 
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
 **Message**
 
 ```text
@@ -3217,6 +3697,10 @@ func main(): void sync {
 ### EnumVariantFieldCount
 
 `0x03000133` · Error · `SemanticDiag::EnumVariantFieldCount`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
 
 **Message**
 
@@ -3248,6 +3732,10 @@ func main(): void sync {
 
 `0x03000134` · Error · `SemanticDiag::EnumPatternMismatch`
 
+**Fix**
+
+None: choice: the pattern has to name the variants the enum has
+
 **Message**
 
 ```text
@@ -3277,6 +3765,10 @@ func main(): void sync {
 ### EnumMatchNotExhaustive
 
 `0x03000135` · Error · `SemanticDiag::EnumMatchNotExhaustive`
+
+**Fix**
+
+None: context: the match is missing a case, and writing it means deciding what it yields
 
 **Message**
 
@@ -3315,6 +3807,10 @@ func main(): void sync {
 
 `0x03000136` · Error · `SemanticDiag::EnumFieldAccess`
 
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
 **Message**
 
 ```text
@@ -3346,6 +3842,10 @@ func main(): void sync {
 
 `0x03000139` · Error · `SemanticDiag::EnumTypeArgumentNotInferred`
 
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
 **Message**
 
 ```text
@@ -3375,6 +3875,10 @@ func main(): int sync {
 ### EnumFieldTypeMismatch
 
 `0x0300013A` · Error · `SemanticDiag::EnumFieldTypeMismatch`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
 
 **Message**
 
@@ -3406,6 +3910,10 @@ func main(): void sync {
 
 `0x0300013B` · Error · `SemanticDiag::EnumConstructionMismatch`
 
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
 **Message**
 
 ```text
@@ -3435,6 +3943,10 @@ func main(): void sync {
 ### ConstasNotAllowed
 
 `0x03000140` · Error · `SemanticDiag::ConstasNotAllowed`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
 
 **Message**
 
@@ -3469,6 +3981,10 @@ func main(): int {
 
 `0x03000141` · Error · `SemanticDiag::DimensionNameNotBound`
 
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
 **Message**
 
 ```text
@@ -3501,6 +4017,10 @@ func main(): int sync {
 
 `0x03000142` · Error · `SemanticDiag::DimensionNameAlreadyBound`
 
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
 **Message**
 
 ```text
@@ -3532,6 +4052,10 @@ func main(): int sync {
 ### DimensionMismatch
 
 `0x03000143` · Error · `SemanticDiag::DimensionMismatch`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
 
 **Message**
 
@@ -3571,6 +4095,10 @@ func main(): int sync {
 
 `0x03000144` · Error · `SemanticDiag::InvalidExtentExpression`
 
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
 **Message**
 
 ```text
@@ -3601,6 +4129,10 @@ func main(): int sync {
 ### NotDifferentiable
 
 `0x03000150` · Error · `SemanticDiag::NotDifferentiable`
+
+**Fix**
+
+None: context: the expression has no derivative; the program has to be written differently and how is the design
 
 **Message**
 
@@ -3634,6 +4166,10 @@ func main(): int sync {
 
 `0x03000161` · Error · `SemanticDiag::TagNotAtPosition`
 
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
 **Message**
 
 ```text
@@ -3662,6 +4198,10 @@ func main(): int { return 0 }
 
 `0x03000162` · Error · `SemanticDiag::TagUndeclared`
 
+**Fix**
+
+None: choice: the tag has to be declared, and its readers and positions are the design
+
 **Message**
 
 ```text
@@ -3687,6 +4227,10 @@ func main(): int { return 0 }
 ### TagArgumentCount
 
 `0x03000163` · Error · `SemanticDiag::TagArgumentCount`
+
+**Fix**
+
+None: choice: the tag is used with the wrong number of arguments; which ones were meant is the intent
 
 **Message**
 
@@ -3718,6 +4262,10 @@ func add_with_kernel(a: int, b: int): int {
 ### TagArgumentNotConstant
 
 `0x03000164` · Error · `SemanticDiag::TagArgumentNotConstant`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
 
 **Message**
 
@@ -3752,6 +4300,10 @@ func main(): int { return f(1) }
 
 `0x03000167` · Error · `SemanticDiag::TagOnUnnamedField`
 
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
 **Message**
 
 ```text
@@ -3784,6 +4336,10 @@ func main(): int {
 ### TagArgumentNamed
 
 `0x03000168` · Error · `SemanticDiag::TagArgumentNamed`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
 
 **Message**
 
@@ -3819,6 +4375,10 @@ func main(): int {
 
 `0x0300016A` · Error · `SemanticDiag::TagArgumentType`
 
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
 **Message**
 
 ```text
@@ -3848,6 +4408,10 @@ func main(): int { return 0 }
 ### TagNotAPermission
 
 `0x0300016B` · Error · `SemanticDiag::TagNotAPermission`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
 
 **Message**
 
@@ -3881,6 +4445,10 @@ export func apply(p: Program): Program! {
 
 `0x0300016C` · Error · `SemanticDiag::RuleTagNotRequires`
 
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
 **Message**
 
 ```text
@@ -3910,6 +4478,10 @@ func main(): int { return 0 }
 ### TagParameterType
 
 `0x0300016D` · Error · `SemanticDiag::TagParameterType`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
 
 **Message**
 
@@ -3941,6 +4513,10 @@ func main(): int { return 0 }
 
 `0x0300016E` · Error · `SemanticDiag::TagShadowsPermission`
 
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
 **Message**
 
 ```text
@@ -3968,6 +4544,10 @@ func main(): int {
 ### StaticMatchNotExhaustive
 
 `0x03000170` · Error · `SemanticDiag::StaticMatchNotExhaustive`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
 
 **Message**
 
@@ -4003,6 +4583,10 @@ func main(): int sync {
 
 `0x03000171` · Error · `SemanticDiag::StaticMatchUnreachableCase`
 
+**Fix**
+
+None: context: a case of the static match can never hold, so it has to be removed and what remains re-decided
+
 **Message**
 
 ```text
@@ -4037,6 +4621,10 @@ func main(): int sync {
 
 `0x03000172` · Error · `SemanticDiag::StaticTypeNotConcrete`
 
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
 **Message**
 
 ```text
@@ -4070,6 +4658,10 @@ func main(): int sync {
 
 `0x03000173` · Error · `SemanticDiag::StaticMatchTooDeep`
 
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
 **Message**
 
 ```text
@@ -4087,6 +4679,10 @@ A 'match type' inside the selected body of another one is expanded at compile ti
 ### GenericInstantiationCycle
 
 `0x03000174` · Error · `SemanticDiag::GenericInstantiationCycle`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
 
 **Message**
 
@@ -4118,6 +4714,10 @@ func main(): int sync {
 ### StaticForNotComposite
 
 `0x03000175` · Error · `SemanticDiag::StaticForNotComposite`
+
+**Fix**
+
+None: choice: the static loop needs a composite type, and which one is the design
 
 **Message**
 
@@ -4152,6 +4752,10 @@ func main(): int {
 
 `0x03000176` · Error · `SemanticDiag::StaticAccessNotInternal`
 
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
 **Message**
 
 ```text
@@ -4178,6 +4782,10 @@ func main(): int sync {
 ### StaticAccessUnknownField
 
 `0x03000177` · Error · `SemanticDiag::StaticAccessUnknownField`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
 
 **Message**
 
@@ -4209,6 +4817,10 @@ func main(): int {
 
 `0x03000178` · Error · `SemanticDiag::StaticAccessIndexOutOfRange`
 
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
 **Message**
 
 ```text
@@ -4239,6 +4851,10 @@ func main(): int {
 
 `0x03000179` · Error · `SemanticDiag::StaticAccessNotConstant`
 
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
 **Message**
 
 ```text
@@ -4268,6 +4884,10 @@ func main(): int {
 ### StaticComprehensionVoidElement
 
 `0x0300017A` · Error · `SemanticDiag::StaticComprehensionVoidElement`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
 
 **Message**
 
@@ -4300,6 +4920,10 @@ func main(): int sync {
 
 `0x0300017B` · Error · `SemanticDiag::NativeDeclarationIncomplete`
 
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
 **Message**
 
 ```text
@@ -4329,6 +4953,10 @@ func main(): int {
 
 `0x0300017C` · Error · `SemanticDiag::NativeDeclarationNotLoaded`
 
+**Fix**
+
+None: context: the native module that declares it was not loaded; the repair is in how the module is reached, not in this text
+
 **Message**
 
 ```text
@@ -4354,6 +4982,10 @@ func main(): int {
 ### LambdaParameterWithoutType
 
 `0x0300017E` · Error · `SemanticDiag::LambdaParameterWithoutType`
+
+**Fix**
+
+None: choice: the parameter needs a declared type, and which one is the intent
 
 **Message**
 
@@ -4382,6 +5014,10 @@ func main(): int sync {
 ### NativeDeclarationOverlap
 
 `0x03000180` · Error · `SemanticDiag::NativeDeclarationOverlap`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
 
 **Message**
 
@@ -4418,6 +5054,10 @@ func main(): int sync {
 
 `0x03000181` · Error · `SemanticDiag::NativeDeclarationForeignOperator`
 
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
 **Message**
 
 ```text
@@ -4446,6 +5086,10 @@ func main(): int sync {
 ### StaticIndicesNotTuple
 
 `0x03000182` · Error · `SemanticDiag::StaticIndicesNotTuple`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
 
 **Message**
 
@@ -4477,6 +5121,10 @@ func main(): int {
 
 `0x0300018A` · Error · `SemanticDiag::RestParameterNotLast`
 
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
 **Message**
 
 ```text
@@ -4506,6 +5154,10 @@ func main(): int sync {
 ### RestParameterTypeNotSupported
 
 `0x0300018B` · Error · `SemanticDiag::RestParameterTypeNotSupported`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
 
 **Message**
 
@@ -4537,6 +5189,10 @@ func main(): int sync {
 
 `0x0300018D` · Error · `SemanticDiag::RestArgumentNotLast`
 
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
 **Message**
 
 ```text
@@ -4567,6 +5223,10 @@ func main(): int sync {
 
 `0x0300018E` · Error · `SemanticDiag::RestArgumentNotTuple`
 
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
 **Message**
 
 ```text
@@ -4596,6 +5256,10 @@ func main(): int sync {
 ### RestFunctionNeedsExpansion
 
 `0x0300018F` · Error · `SemanticDiag::RestFunctionNeedsExpansion`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
 
 **Message**
 
@@ -4628,6 +5292,10 @@ func main(): int sync {
 
 `0x03000190` · Error · `SemanticDiag::RestArgumentsMismatch`
 
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
 **Message**
 
 ```text
@@ -4657,6 +5325,10 @@ func main(): int sync {
 ### ConstasTypeRequired
 
 `0x03000193` · Error · `SemanticDiag::ConstasTypeRequired`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
 
 **Message**
 
@@ -4689,6 +5361,10 @@ func main(): int sync {
 ### ConstasValueNotConstant
 
 `0x03000195` · Error · `SemanticDiag::ConstasValueNotConstant`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
 
 **Message**
 
@@ -4725,6 +5401,10 @@ func main(): int sync {
 ### ConstasFunctionNeedsCall
 
 `0x03000199` · Error · `SemanticDiag::ConstasFunctionNeedsCall`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
 
 **Message**
 
@@ -4763,6 +5443,10 @@ func main(): int sync {
 
 `0x0300019A` · Error · `SemanticDiag::ConstasInNativeDeclaration`
 
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
 **Message**
 
 ```text
@@ -4794,6 +5478,10 @@ func main(): int sync {
 ### ConstasArgumentMissing
 
 `0x0300019B` · Error · `SemanticDiag::ConstasArgumentMissing`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
 
 **Message**
 
@@ -4827,6 +5515,10 @@ func main(): int sync {
 
 `0x0300019C` · Error · `SemanticDiag::StaticTupleEscapes`
 
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
 **Message**
 
 ```text
@@ -4856,6 +5548,10 @@ func main(): int sync {
 ### TagValueConflict
 
 `0x0300019D` · Error · `SemanticDiag::TagValueConflict`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
 
 **Message**
 
@@ -4890,6 +5586,10 @@ func main(): int {
 
 `0x0300019E` · Error · `SemanticDiag::DimensionAfterAnyRank`
 
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
 **Message**
 
 ```text
@@ -4921,6 +5621,10 @@ func main(): int sync {
 
 `0x030001A0` · Error · `SemanticDiag::UnknownResource`
 
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
 **Message**
 
 ```text
@@ -4950,6 +5654,10 @@ func main(): int {
 ### PureAndUses
 
 `0x030001A1` · Error · `SemanticDiag::PureAndUses`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
 
 **Message**
 
@@ -4981,6 +5689,10 @@ func main(): int {
 
 `0x030001A2` · Error · `SemanticDiag::ResourceGroupCycle`
 
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
 **Message**
 
 ```text
@@ -5010,6 +5722,10 @@ func main(): int {
 
 `0x030001A3` · Error · `SemanticDiag::HandleTypeNotNominal`
 
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
 **Message**
 
 ```text
@@ -5037,6 +5753,10 @@ func main(): int {
 ### NativeResourceMismatch
 
 `0x030001A4` · Error · `SemanticDiag::NativeResourceMismatch`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
 
 **Message**
 
@@ -5069,6 +5789,10 @@ func main(): int sync {
 
 `0x030001A5` · Error · `SemanticDiag::CmlUnsupportedConstruct`
 
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
 **Message**
 
 ```text
@@ -5087,6 +5811,10 @@ This version prints expressions, `let` and `var`, branches, loops, closures, `wi
 
 `0x030001A6` · Error · `SemanticDiag::CmlBigConstant`
 
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
 **Message**
 
 ```text
@@ -5104,6 +5832,10 @@ Raise the limit with `std::cml max_literal_bytes=...`, or keep the value in a mo
 ### WhenConditionNotBool
 
 `0x030001A8` · Error · `SemanticDiag::WhenConditionNotBool`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
 
 **Message**
 
@@ -5135,6 +5867,10 @@ func main(): int sync {
 
 `0x030001A9` · Error · `SemanticDiag::WhenConditionNotConstant`
 
+**Fix**
+
+None: choice: the condition of a declaration has to be constant; what to write instead is the design
+
 **Message**
 
 ```text
@@ -5147,27 +5883,30 @@ The 'when' condition of '{0}' cannot be evaluated when the declaration is instan
 The condition is checked at instantiation, before the body is built, so it can only read what is known there: the types bound to the declaration's type parameters, and the 'with' arguments the call writes as compile-time constants. Move a runtime test into the body, or make the value a constant.
 ```
 
-**Example** (`test/cases/compile/when/not_constant.cml`, run as `camel test/cases/compile/when/not_constant.cml`)
+**Example** (`test/cases/compile/when/generic_decl_site.cml`, run as `camel test/cases/compile/when/generic_decl_site.cml`)
 
 ```camel
-module when_not_constant
+module when_generic_decl_site
 
-func is_positive(x: int): bool {
-    return x > 0
-}
+import { is_integer } from types
 
-func bad(x: int): int when is_positive(1) {
+func only_int::<T>(x: T): T when is_integerr::<T>() {
     return x
 }
 
 func main(): int sync {
-    return bad(1)
+    println(1)
+    return 0
 }
 ```
 
 ### WhenUnknownName
 
 `0x030001AA` · Error · `SemanticDiag::WhenUnknownName`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
 
 **Message**
 
@@ -5198,6 +5937,10 @@ func main(): int sync {
 ### WhenTypeQueryNotConcrete
 
 `0x030001AB` · Error · `SemanticDiag::WhenTypeQueryNotConcrete`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
 
 **Message**
 
@@ -5235,6 +5978,10 @@ func main(): int sync {
 ### WhenConditionUnmet
 
 `0x030001AC` · Error · `SemanticDiag::WhenConditionUnmet`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
 
 **Message**
 
@@ -5274,6 +6021,10 @@ func main(): int sync {
 
 `0x030001B3` · Error · `SemanticDiag::TypeOfNotAValue`
 
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
 **Message**
 
 ```text
@@ -5304,6 +6055,10 @@ func main(): int sync {
 
 `0x030001B4` · Error · `SemanticDiag::TypeOfNotWholeType`
 
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
 **Message**
 
 ```text
@@ -5330,6 +6085,10 @@ func main(): int sync {
 ### SameShapeComprehensionNotComposite
 
 `0x030001B5` · Error · `SemanticDiag::SameShapeComprehensionNotComposite`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
 
 **Message**
 
@@ -5363,6 +6122,10 @@ func main(): int sync {
 ### SameShapeComprehensionMismatch
 
 `0x030001B6` · Error · `SemanticDiag::SameShapeComprehensionMismatch`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
 
 **Message**
 
@@ -5398,6 +6161,10 @@ func main(): int sync {
 
 `0x030001B7` · Error · `SemanticDiag::WithArgumentUnknown`
 
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
 **Message**
 
 ```text
@@ -5428,6 +6195,10 @@ func main(): int sync {
 ### WithArgumentDuplicate
 
 `0x030001B8` · Error · `SemanticDiag::WithArgumentDuplicate`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
 
 **Message**
 
@@ -5460,6 +6231,10 @@ func main(): int sync {
 
 `0x030001B9` · Error · `SemanticDiag::WithArgumentMissing`
 
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
 **Message**
 
 ```text
@@ -5490,6 +6265,10 @@ func main(): int sync {
 ### WithDefaultNotConstant
 
 `0x030001BA` · Error · `SemanticDiag::WithDefaultNotConstant`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
 
 **Message**
 
@@ -5522,6 +6301,10 @@ func main(): int sync {
 
 `0x030001BB` · Error · `SemanticDiag::WithDefaultWrongType`
 
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
 **Message**
 
 ```text
@@ -5553,6 +6336,10 @@ func main(): int sync {
 
 `0x030001BC` · Error · `SemanticDiag::WithParameterAfterDefault`
 
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
 **Message**
 
 ```text
@@ -5583,6 +6370,10 @@ func main(): int sync {
 ### WithArgumentCallee
 
 `0x030001BD` · Error · `SemanticDiag::WithArgumentCallee`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
 
 **Message**
 
@@ -5620,6 +6411,10 @@ func main(): int sync {
 
 `0x030001BE` · Error · `SemanticDiag::WithArgumentInValue`
 
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
 **Message**
 
 ```text
@@ -5652,6 +6447,10 @@ func main(): int sync {
 
 `0x030001BF` · Error · `SemanticDiag::WhenPredicateNotImported`
 
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
 **Message**
 
 ```text
@@ -5681,6 +6480,10 @@ func main(): int sync {
 ### WhenPredicateNotCompileTime
 
 `0x030001C0` · Error · `SemanticDiag::WhenPredicateNotCompileTime`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
 
 **Message**
 
@@ -5713,6 +6516,10 @@ func main(): int sync {
 ### WhenPredicateAmbiguous
 
 `0x030001C1` · Error · `SemanticDiag::WhenPredicateAmbiguous`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
 
 **Message**
 
@@ -5748,6 +6555,10 @@ func main(): int sync {
 
 `0x030001C2` · Error · `SemanticDiag::StaticMatchPatternCannotMatch`
 
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
 **Message**
 
 ```text
@@ -5781,6 +6592,10 @@ func main(): int sync {
 ### FoldCallArgumentNotConstant
 
 `0x030001C5` · Error · `SemanticDiag::FoldCallArgumentNotConstant`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
 
 **Message**
 
@@ -5816,6 +6631,10 @@ func main(): int {
 
 `0x030001C6` · Error · `SemanticDiag::FoldCallHasEffects`
 
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
 **Message**
 
 ```text
@@ -5848,6 +6667,10 @@ func main(): int {
 
 `0x030001C7` · Error · `SemanticDiag::FoldCallTooDeep`
 
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
 **Message**
 
 ```text
@@ -5879,6 +6702,10 @@ func main(): int {
 
 `0x030001C8` · Error · `SemanticDiag::FoldCallResultNotConstant`
 
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
 **Message**
 
 ```text
@@ -5909,6 +6736,10 @@ func main(): int {
 ### FoldCallNotEvaluable
 
 `0x030001C9` · Error · `SemanticDiag::FoldCallNotEvaluable`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
 
 **Message**
 
@@ -5942,6 +6773,10 @@ func main(): int {
 
 `0x030001CD` · Error · `SemanticDiag::ParamArgumentUnknown`
 
+**Fix**
+
+None: choice: an argument names a parameter the pass does not declare; the name is the writer's
+
 **Message**
 
 ```text
@@ -5971,6 +6806,10 @@ func main(): int sync {
 ### ParamArgumentDuplicate
 
 `0x030001CE` · Error · `SemanticDiag::ParamArgumentDuplicate`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
 
 **Message**
 
@@ -6002,6 +6841,10 @@ func main(): int sync {
 
 `0x030001CF` · Error · `SemanticDiag::ParamArgumentMissing`
 
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
 **Message**
 
 ```text
@@ -6032,6 +6875,10 @@ func main(): int sync {
 
 `0x030001D0` · Error · `SemanticDiag::ParamArgumentCallee`
 
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
 **Message**
 
 ```text
@@ -6044,27 +6891,26 @@ The argument '{0}' is given by name, and the signature of '{1}' is not known whe
 Name one function, or give the arguments positionally.
 ```
 
-**Example** (`test/cases/compile/param_defaults/overload_default_hole.cml`, run as `camel test/cases/compile/param_defaults/overload_default_hole.cml`)
+**Example** (`test/cases/compile/param_defaults/stdlib_no_place_for_name.cml`, run as `camel test/cases/compile/param_defaults/stdlib_no_place_for_name.cml`)
 
 ```camel
-module param_overload_default_hole
+module param_stdlib_no_place_for_name
 
-func f(a: int, b: int = 0): int {
-    return a * 10 + b
-}
-
-func f(a: int, b: int, c: int = 0): int {
-    return a * 100 + b * 10 + c
-}
+import python
 
 func main(): int sync {
-    return f(a: 1, c: 3)
+    println(python::py_call(fn: 'printf'))
+    return 0
 }
 ```
 
 ### ParamArgumentPositionalAfterNamed
 
 `0x030001D1` · Error · `SemanticDiag::ParamArgumentPositionalAfterNamed`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
 
 **Message**
 
@@ -6096,6 +6942,10 @@ func main(): int sync {
 
 `0x030001D2` · Error · `SemanticDiag::ParamDefaultNotConstant`
 
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
 **Message**
 
 ```text
@@ -6125,6 +6975,10 @@ func main(): int sync {
 ### ParamDefaultWrongType
 
 `0x030001D3` · Error · `SemanticDiag::ParamDefaultWrongType`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
 
 **Message**
 
@@ -6156,6 +7010,10 @@ func main(): int sync {
 
 `0x030001D4` · Error · `SemanticDiag::ParamAfterDefault`
 
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
 **Message**
 
 ```text
@@ -6186,6 +7044,10 @@ func main(): int sync {
 
 `0x030001D6` · Error · `SemanticDiag::ParamArgumentWrongType`
 
+**Fix**
+
+None: choice: the argument has to be written as the type the parameter declares
+
 **Message**
 
 ```text
@@ -6212,6 +7074,10 @@ func main(): int sync {
 
 `0x030001D7` · Error · `SemanticDiag::ReducedPrecisionUnsupported`
 
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
 **Message**
 
 ```text
@@ -6224,14 +7090,16 @@ The call of '{0}' cannot take a value of the reduced-precision element type '{1}
 bf16 and f16 are floating types of the language: a literal has one, bf16(x) and f16(x) are written conversions, and the scalar arithmetic and comparison compute in f32 and round once into the element type (design principles 7.3, H238). This call asks for an operation one of them has no overload for - an operation the same type refuses on f32, such as %, or a function that takes a fixed set of types. Write the operation on a type that has it, or read the value as f32 (or f64) first, which is exact: f32(x).
 ```
 
-**Example** (`test/cases/modules/stdlib/reduced_arithmetic_refused.cml`, run as `camel test/cases/modules/stdlib/reduced_arithmetic_refused.cml`)
+**Example** (`test/cases/modules/stdlib/reduced_sort_refused.cml`, run as `camel test/cases/modules/stdlib/reduced_sort_refused.cml`)
 
 ```camel
-module stdlib_reduced_arithmetic_refused
+module stdlib_reduced_sort_refused
+
+import { sort } from array
 
 func main(): int sync {
-    let xs: bf16[] = []
-    println(xs[0] % xs[0])
+    let xs: f16[] = []
+    println(sort(xs))
     return 0
 }
 ```
@@ -6239,6 +7107,10 @@ func main(): int sync {
 ### ImplOnBodylessDeclaration
 
 `0x030001D8` · Error · `SemanticDiag::ImplOnBodylessDeclaration`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
 
 **Message**
 
@@ -6270,6 +7142,10 @@ func main(): int sync {
 
 `0x030001D9` · Error · `SemanticDiag::ImplKernelUnknown`
 
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
 **Message**
 
 ```text
@@ -6300,6 +7176,10 @@ func main(): int sync {
 ### ImplKernelForeign
 
 `0x030001DA` · Error · `SemanticDiag::ImplKernelForeign`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
 
 **Message**
 
@@ -6334,6 +7214,10 @@ func main(): int sync {
 
 `0x030001DB` · Error · `SemanticDiag::ImplSignatureMismatch`
 
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
 **Message**
 
 ```text
@@ -6367,6 +7251,10 @@ func main(): int sync {
 ### ImplKernelNotBodyless
 
 `0x030001DC` · Error · `SemanticDiag::ImplKernelNotBodyless`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
 
 **Message**
 
@@ -6403,6 +7291,10 @@ func main(): int sync {
 
 `0x030001DE` · Error · `SemanticDiag::NodeOfNotAParameter`
 
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
 **Message**
 
 ```text
@@ -6423,7 +7315,7 @@ module node_of_misuse
 import { Program, Node } from graph
 import { rewrite } from rewrite
 
-rule drop_by_node(x: int, const c: int) { x * c => x } when node_of(x) == node_of(c)
+rule drop_by_node(x: int, const c: int) when node_of(x) == node_of(c) { x * c => x }
 
 export func apply(p: Program): Program! {
     return rewrite(p, [drop_by_node])
@@ -6441,6 +7333,10 @@ func main(): int sync {
 
 `0x030001DF` · Error · `SemanticDiag::OverloadParameterNames`
 
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
 **Message**
 
 ```text
@@ -6453,27 +7349,24 @@ The argument '{0}' is given by name, and the overloads of '{1}' do not name the 
 Give every overload the same parameter names at the same positions, or give the arguments positionally.
 ```
 
-**Example** (`test/cases/compile/param_defaults/overload_names.cml`, run as `camel test/cases/compile/param_defaults/overload_names.cml`)
+**Example** (`test/cases/compile/param_defaults/stdlib_group_names_differ.cml`, run as `camel test/cases/compile/param_defaults/stdlib_group_names_differ.cml`)
 
 ```camel
-module param_overload_names
-
-func f(a: int, b: int): int {
-    return a * 10 + b
-}
-
-func f(a: int, c: string): int {
-    return a * 10
-}
+module param_stdlib_group_names_differ
 
 func main(): int sync {
-    return f(a: 1, b: 2)
+    println([1, 2, 3]->contains<value: 2>)
+    return 0
 }
 ```
 
 ### WhenDeclarationOverlap
 
 `0x030001E0` · Error · `SemanticDiag::WhenDeclarationOverlap`
+
+**Fix**
+
+None: context: two declarations of a generic accept the same program; narrowing a condition is the design
 
 **Message**
 
@@ -6525,9 +7418,193 @@ func main(): int sync {
 }
 ```
 
+### CompOperandMismatch
+
+`0x030001E1` · Error · `SemanticDiag::CompOperandMismatch`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
+**Message**
+
+```text
+'..' takes two functions or two integers; the left operand is '{0}' and the right one '{1}'.
+```
+
+**Help**
+
+```text
+'..' has two readings (design principles 4.2). Between two functions it is the composition `f..g`, the lambda `(x) => g(f(x))`: 'f' is unary and 'g' takes what 'f' returns, so a call of `f..g` is a call of that lambda and nothing more. Between two integers it is the interval `a..b`: the integers from 'a' to 'b - 1' as the array 'int[]', left closed and right open, as the slice 't[a:b]' is. Nothing else is composed.
+```
+
+**Example** (`test/cases/compile/stream/comp_operand_mismatch.cml`, run as `camel test/cases/compile/stream/comp_operand_mismatch.cml`)
+
+```camel
+// A text is neither a function nor an integer: `..` has no reading for it (design principles
+// 4.2), so the compiler refuses the construct and names what it does take.
+module h405_comp_not_a_function
+
+func main(): int sync {
+    let xs = 'a'..'b'
+    println(xs)
+    return 0
+}
+```
+
+### CompOperandNotUnary
+
+`0x030001E2` · Error · `SemanticDiag::CompOperandNotUnary`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
+**Message**
+
+```text
+'..' composes a unary function on the left; '{0}' takes {1} parameters.
+```
+
+**Help**
+
+```text
+The composition `f..g` is the lambda `(x) => g(f(x))` (design principles 4.2): 'f' takes the one argument the composed function takes, and 'g' takes the result of 'f'. Write the lambda with the parameters you mean.
+```
+
+**Example** (`test/cases/compile/stream/comp_operand_not_unary.cml`, run as `camel test/cases/compile/stream/comp_operand_not_unary.cml`)
+
+```camel
+// The left operand of `..` is unary, because the composition is the lambda `x => g(f(x))`
+// (design principles 4.2): `add2` takes two parameters, so the construct has no reading.
+module h405_comp_not_unary
+
+func add2(a: int, b: int): int { return a + b }
+func inc(x: int): int { return x + 1 }
+
+func main(): int sync {
+    let g = add2..inc
+    println(g(3))
+    return 0
+}
+```
+
+### StreamInContainer
+
+`0x030001E3` · Error · `SemanticDiag::StreamInContainer`
+
+**Fix**
+
+None: choice: a stream is consumed once, so where it is read and what the container holds instead are the writer's to write
+
+**Message**
+
+```text
+'{0}' cannot be the element of {1}: a stream is consumed once, while the elements of a container are read more than once.
+```
+
+**Help**
+
+```text
+A stream is read one element at a time and is done when it ends. Write the stream where it is consumed once: a parameter or the result of a function, an item of a tuple, or the subject of an operator that reads it to its end. What needs the elements of a container to be readable again takes an array filled from the stream.
+```
+
+**Example** (`test/cases/compile/stream/type_in_container.cml`, run as `camel test/cases/compile/stream/type_in_container.cml`)
+
+```camel
+module stream_type_in_container
+
+func main(): int sync {
+    let s: int..[3] = [1, 2, 3]
+    println(0)
+    return 0
+}
+```
+
+### CompOperandGenericWithoutType
+
+`0x030001E4` · Error · `SemanticDiag::CompOperandGenericWithoutType`
+
+**Fix**
+
+None: choice: which instance the operand stands for is the writer's to say, and the help names both ways to settle it
+
+**Message**
+
+```text
+'..' composes two functions, and its {0} operand, the generic function '{1}', has no instance here: write its type arguments ('{1}::<int>'), or give the whole expression an expected function type.
+```
+
+**Help**
+
+```text
+The name of a generic function stands for no one function until a position fixes its types (design principles 5.5). The composition `f..g` is the lambda `(x) => g(f(x))` (design principles 4.2), and the type the whole expression is expected to have is what gives that lambda its parameter type and instantiates what it calls: `let h: (x: int) => int = ident..ident` composes `ident::<int>`, as `(x) => ident(ident(x))` does under the same type. With no expected function type, write the instance each operand is: `ident::<int>..ident::<int>`. Only a name that is generic is refused here; an operand of a type `..` cannot take stays CompOperandMismatch.
+```
+
+**Example** (`test/cases/compile/stream/comp_operand_generic.cml`, run as `camel test/cases/compile/stream/comp_operand_generic.cml`)
+
+```camel
+// A name of a generic function says no instance of it until a position fixes its types (design
+// principles 5.5), and nothing here does: the composition stands in a `let` with no declared
+// type, so neither the operand nor the whole expression has a function type to take the instance
+// from. The refusal is the composition's own, and it says what the operand is and both ways to
+// settle it (the ruling is docs/handover/reviews/questions-2026-10-23.md, section
+// generic-operands-of-composition).
+module h428_comp_operand_generic
+
+func ident::<T>(x: T): T {
+    return x
+}
+
+func main(): int sync {
+    let composed = ident..ident
+    println(composed(4))
+    return 0
+}
+```
+
+### RangeTwoArgumentsRemoved
+
+`0x030001E5` · Error · `SemanticDiag::RangeTwoArgumentsRemoved`
+
+**Fix**
+
+None: internal: the interval this refusal asks for is a text the compiler could write itself, and it does not offer that edit yet
+
+**Message**
+
+```text
+The two-parameter 'range(a, b)' is gone; write the interval 'a..b'.
+```
+
+**Help**
+
+```text
+The language has one spelling for the integers from 'a' to 'b - 1' (design principles 4.2; the author's ruling of 2026-10-24 on `h248-generator-and-composition`): the interval 'a..b', left closed and right open, as the slice 't[a:b]' is, and the array of them. 'range(0, 10)' becomes '0..10'. A 'for' over an interval is fused by the compiler, so 'for i in 0..n' builds no array. The two-parameter 'range' is the only spelling deleted: a module's own interval-like function (a tensor's, say) is that module's own, reached by its qualified name or at another arity, while an unqualified two-argument 'range(a, b)' is this built-in.
+```
+
+**Example** (`test/cases/compile/stream/range_two_arguments.cml`, run as `camel test/cases/compile/stream/range_two_arguments.cml`)
+
+```camel
+// The two-parameter `range(a, b)` is deleted: the interval `a..b` is the one spelling (design
+// principles 4.2, the ruling of 2026-10-24). The call is refused where it stands, with the
+// spelling to write instead.
+module h426_range_two_arguments
+
+func main(): int sync {
+    let xs = range(0, 3)
+    println(xs)
+    return 0
+}
+```
+
 ### VarParamInAsyncFunction
 
 `0x03100001` · Warn · `SemanticDiag::VarParamInAsyncFunction`
+
+**Fix**
+
+None: context: the declaration has to be restructured - a 'var' parameter is not allowed in an async function
 
 **Message**
 
@@ -6567,6 +7644,10 @@ func main(): int {
 
 `0x03100002` · Warn · `SemanticDiag::IgnoredSideEffect`
 
+**Fix**
+
+None: choice: a value that has to be taken has no single spelling - bind it, return it or pass it on
+
 **Message**
 
 ```text
@@ -6605,6 +7686,10 @@ func main(): int {
 
 `0x03100003` · Warn · `SemanticDiag::CapturedWriteInAsyncFunction`
 
+**Fix**
+
+None: context: what the body writes has to be passed in or returned instead of captured
+
 **Message**
 
 ```text
@@ -6622,6 +7707,10 @@ Write 'sync' before the function ('sync func f(...)', 'sync (...) => ...'): the 
 ### EffectNotExecuted
 
 `0x03100004` · Warn · `SemanticDiag::EffectNotExecuted`
+
+**Fix**
+
+None: context: an effect reachable only from a branch that never runs; the repair moves or removes the call, and where belongs to the design
 
 **Message**
 
@@ -6666,6 +7755,10 @@ func main(): int sync {
 
 `0x03100090` · Warn · `SemanticDiag::ExitInUnusedBranch`
 
+**Fix**
+
+None: context: the branch that leaves the program is not reachable; the repair moves or removes it and where belongs to the design
+
 **Message**
 
 ```text
@@ -6702,6 +7795,10 @@ func main(): int sync {
 
 `0x031000C0` · Warn · `SemanticDiag::UnusedFallibleValue`
 
+**Fix**
+
+None: choice: the error value has to be handled, returned or dropped explicitly, and which one is the intent
+
 **Message**
 
 ```text
@@ -6727,6 +7824,10 @@ func main() sync {
 ### NullTestNeverNull
 
 `0x03100110` · Warn · `SemanticDiag::NullTestNeverNull`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
 
 **Message**
 
@@ -6757,6 +7858,10 @@ func main(): int sync {
 ### KnownNotNull
 
 `0x03100111` · Warn · `SemanticDiag::KnownNotNull`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
 
 **Message**
 
@@ -6796,6 +7901,10 @@ func main(): int sync {
 
 `0x03100130` · Warn · `SemanticDiag::EnumVariantCaseRepeated`
 
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
 **Message**
 
 ```text
@@ -6832,6 +7941,10 @@ func main(): void sync {
 ### MatchCaseAfterWildcard
 
 `0x03100131` · Warn · `SemanticDiag::MatchCaseAfterWildcard`
+
+**Fix**
+
+None: choice: the case after the wildcard is unreachable; which of the two was meant is the intent
 
 **Message**
 
@@ -6870,6 +7983,10 @@ func main(): void sync {
 
 `0x03100132` · Warn · `SemanticDiag::MatchWildcardRedundant`
 
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
 **Message**
 
 ```text
@@ -6907,6 +8024,10 @@ func main(): void sync {
 
 `0x03100160` · Warn · `SemanticDiag::TagHasNoReader`
 
+**Fix**
+
+None: context: the tag has no reader, so either the tag or the reader has to be declared, and that is a design decision
+
 **Message**
 
 ```text
@@ -6940,6 +8061,10 @@ func main(): int {
 
 `0x03100161` · Warn · `SemanticDiag::DimensionNameUsedOnce`
 
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
 **Message**
 
 ```text
@@ -6971,6 +8096,10 @@ func main(): int sync {
 ### TypeVariableUnused
 
 `0x031001A5` · Warn · `SemanticDiag::TypeVariableUnused`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
 
 **Message**
 
@@ -7004,6 +8133,10 @@ func main(): int sync {
 ### RuntimeError
 
 `0x04000000` · Error · `RuntimeDiag::RuntimeError`
+
+**Fix**
+
+None: runtime: the catch-all fault; which code it should have is not known here
 
 **Message**
 
@@ -7052,6 +8185,10 @@ func main(): int sync {
 
 `0x04000001` · Error · `RuntimeDiag::DivisionByZero`
 
+**Fix**
+
+None: runtime: the divisor is zero at run time, and where to guard it is the program's logic
+
 **Message**
 
 ```text
@@ -7084,6 +8221,10 @@ func main(): int sync {
 
 `0x04000002` · Error · `RuntimeDiag::IndexOutOfRange`
 
+**Fix**
+
+None: runtime: the index is computed at run time, and the repair is in the program's logic
+
 **Message**
 
 ```text
@@ -7096,23 +8237,31 @@ Index {0} is out of range for {1} of length {2}.
 Ensure the index is within the valid range of the collection.
 ```
 
-**Example** (`test/cases/consistency/faults/element_assigned_out_of_range.cml`, run as `camel `)
+**Example** (`test/cases/compile/match_guard/faulting_guard.cml`, run as `camel test/cases/compile/match_guard/faulting_guard.cml std::nvm`)
 
 ```camel
-module element_assigned_out_of_range
+module match_guard_faulting_guard
+
+func f(n: int): int {
+    let xs = [1, 2, 3]
+    return match n {
+        case 1 when xs[5] > 0 => 1
+        case _ => 0
+    }
+}
 
 func main(): int sync {
-    var xs = [1, 2, 3]
-    println('before')
-    xs[5] = 1
-    println('not reached')
-    return 0
+    return f(1)
 }
 ```
 
 ### MaxRecursionDepthExceeded
 
 `0x04000004` · Error · `RuntimeDiag::MaxRecursionDepthExceeded`
+
+**Fix**
+
+None: runtime: the recursion is deeper than the limit at run time, and the repair is in the program's logic
 
 **Message**
 
@@ -7152,6 +8301,10 @@ func main(): int sync {
 
 `0x04000009` · Error · `RuntimeDiag::TensorDimensionMismatch`
 
+**Fix**
+
+None: runtime: the shapes meet only at run time, and the repair is in the program's logic
+
 **Message**
 
 ```text
@@ -7179,6 +8332,10 @@ func main(): int sync {
 ### UnrecognizedGraphPass
 
 `0x0400000A` · Error · `RuntimeDiag::UnrecognizedGraphPass`
+
+**Fix**
+
+None: runtime: the fault is raised while the program runs, and the repair is in the program's logic
 
 **Message**
 
@@ -7211,6 +8368,10 @@ func main(): int sync {
 
 `0x0400000B` · Error · `RuntimeDiag::TranslationRefused`
 
+**Fix**
+
+None: runtime: a translation pass refused the graph, and what to change is the program's structure
+
 **Message**
 
 ```text
@@ -7240,6 +8401,10 @@ func main(): int {
 ### PassInternalError
 
 `0x0400000C` · Error · `RuntimeDiag::PassInternalError`
+
+**Fix**
+
+None: runtime: the fault is raised while the program runs, and the repair is in the program's logic
 
 **Message**
 
@@ -7275,6 +8440,10 @@ func main(): int sync {
 ### MacroEvaluationFailed
 
 `0x0400000E` · Error · `RuntimeDiag::MacroEvaluationFailed`
+
+**Fix**
+
+None: runtime: the macro fails on the values it is given, and the repair is in the program's logic
 
 **Message**
 
@@ -7323,6 +8492,10 @@ func main(): int sync {
 
 `0x04000010` · Error · `RuntimeDiag::EntryArgumentMissing`
 
+**Fix**
+
+None: runtime: the command line is what is missing, not the program
+
 **Message**
 
 ```text
@@ -7349,6 +8522,10 @@ func main(n: int, rate: float, name: string, loud: bool): int sync {
 ### EntryArgumentInvalid
 
 `0x04000011` · Error · `RuntimeDiag::EntryArgumentInvalid`
+
+**Fix**
+
+None: runtime: the command line is what is wrong, not the program
 
 **Message**
 
@@ -7377,6 +8554,10 @@ func main(n: int, rate: float, name: string, loud: bool): int sync {
 
 `0x04000012` · Error · `RuntimeDiag::EntryResultNotWritten`
 
+**Fix**
+
+None: runtime: the fault is raised while the program runs, and the repair is in the program's logic
+
 **Message**
 
 ```text
@@ -7403,6 +8584,10 @@ func main() sync {
 
 `0x04000014` · Error · `RuntimeDiag::MemoryExhausted`
 
+**Fix**
+
+None: runtime: the fault is raised while the program runs, and the repair is in the program's logic
+
 **Message**
 
 ```text
@@ -7415,13 +8600,17 @@ Out of memory{0}: {1}.
 The graph, permanent and meta spaces hold the compiled program (its runtime graphs, its types, the constants of the graphs being compiled) and grow with it; each has a total limit that only guards against a compiler that does not stop allocating. If the program is this large, raise the limit with the environment variable the message names. If a pass is named, the growth may be its doing (an inlining or unrolling that does not end): run the pipeline without it. The auto space holds run-time values: it is bounded by the memory of the host, or by CAMEL_GC_HEAP_LIMIT_MB when that is set, in which case the values the program keeps alive do not fit the limit.
 ```
 
-**Example** (`test/cases/loops/collection_oom.cml`, run as `CAMEL_GC_HEAP_LIMIT_MB=16 camel test/cases/loops/collection_oom.cml test::loop_collect_summary ${backend}`)
+**Example** (`test/cases/compile/stream/interval_loop_not_materialised.cml`, run as `CAMEL_GC_HEAP_LIMIT_MB=8 camel test/cases/compile/stream/interval_loop_not_materialised.cml std::nvm`)
 
 ```camel
-// A collecting loop whose tapes outgrow the heap limit (CAMEL_GC_HEAP_LIMIT_MB): the failure is
-// a memory exhaustion, attributed to the loop whose tape could not grow.
+// `for i in 0..n` builds no array (design principles 4.2, the ruling of 2026-10-24): the rounds
+// are the two bounds walked, so two million rounds run where an `int[]` of the same interval does
+// not fit the heap cap the plan sets (`int64` x 2,000,000 is 16 MB, the cap is 8).
+module h426_interval_loop_not_materialised
+
 func main(): int sync {
-    println(loop i = 0 while i < 2000000 do i + 1)
+    let n = 2000000
+    println(loop acc = 0 for i in 0..n do acc + 1)
     return 0
 }
 ```
@@ -7429,6 +8618,10 @@ func main(): int sync {
 ### InvalidNumberText
 
 `0x04000030` · Error · `RuntimeDiag::InvalidNumberText`
+
+**Fix**
+
+None: runtime: the text is read while the program runs; which text reaches it is the program's logic
 
 **Message**
 
@@ -7461,6 +8654,10 @@ func main(): int sync {
 
 `0x04000031` · Error · `RuntimeDiag::FormatFailed`
 
+**Fix**
+
+None: runtime: the fault is raised while the program runs, and the repair is in the program's logic
+
 **Message**
 
 ```text
@@ -7479,6 +8676,10 @@ A replacement field is a pair of braces, optionally holding a format specificati
 
 `0x04000032` · Error · `RuntimeDiag::OperandTypeUnsupported`
 
+**Fix**
+
+None: runtime: the fault is raised while the program runs, and the repair is in the program's logic
+
 **Message**
 
 ```text
@@ -7491,16 +8692,24 @@ A replacement field is a pair of braces, optionally holding a format specificati
 Convert the value to a supported type before the call.
 ```
 
-**Example** (`test/cases/modules/stdlib/reduced_sort_refused.cml`, run as `camel test/cases/modules/stdlib/reduced_sort_refused.cml`)
+**Example** (`test/cases/modules/tensor/dtype/f32_only.cml`, run as `camel test/cases/modules/tensor/dtype/f32_only.cml`)
 
 ```camel
-module stdlib_reduced_sort_refused
+// `conv2d` computes in f32 only, and says so: an f64 tensor is refused at the call with a
+// diagnostic naming the operator, the argument's element type and the set the kernel takes.
+// It is never narrowed to f32 (design principles 5.1, 13.1).
+module tensor_dtype_f32_only
 
-import { sort } from array
+import { new, reshape, ones, sum } from tensor
+import { conv2d } from nn
 
 func main(): int sync {
-    let xs: f16[] = []
-    println(sort(xs))
+    let values: f64[] = [1.0, 2.0, 3.0, 4.0]
+    let x = reshape(new(values), [1, 1, 2, 2])
+    let kernel = ones([1, 1, 1, 1])
+    let bias = ones([1])
+    let y = conv2d(x, kernel, bias, 1, 0)
+    println(sum(y))
     return 0
 }
 ```
@@ -7508,6 +8717,10 @@ func main(): int sync {
 ### FieldNotFound
 
 `0x04000033` · Error · `RuntimeDiag::FieldNotFound`
+
+**Fix**
+
+None: runtime: the fault is raised while the program runs, and the repair is in the program's logic
 
 **Message**
 
@@ -7546,10 +8759,20 @@ func main(): int sync {
 
 `0x04000034` · Error · `RuntimeDiag::InvalidArgument`
 
+**Fix**
+
+None: runtime: the fault is raised while the program runs, and the repair is in the program's logic
+
 **Message**
 
 ```text
 Invalid argument of '{0}': {1}.
+```
+
+**Help**
+
+```text
+The operator was given an argument it cannot take; the message names the argument and why. The value comes from the program, so what to change is where it was made.
 ```
 
 **Example** (`test/cases/compile/collections/fault_untyped_array.cml`, run as `camel test/cases/compile/collections/fault_untyped_array.cml ${backend}`)
@@ -7573,6 +8796,10 @@ func main(): int sync {
 
 `0x04000035` · Error · `RuntimeDiag::FileOpenFailed`
 
+**Fix**
+
+None: runtime: the fault is raised while the program runs, and the repair is in the program's logic
+
 **Message**
 
 ```text
@@ -7590,6 +8817,10 @@ Check that the path exists and that the program may access it; a relative path i
 ### FileSystemError
 
 `0x04000036` · Error · `RuntimeDiag::FileSystemError`
+
+**Fix**
+
+None: runtime: the fault is raised while the program runs, and the repair is in the program's logic
 
 **Message**
 
@@ -7609,6 +8840,10 @@ Check the path and the permissions of the directories on it.
 
 `0x04000039` · Error · `RuntimeDiag::RegexInvalid`
 
+**Fix**
+
+None: runtime: the fault is raised while the program runs, and the repair is in the program's logic
+
 **Message**
 
 ```text
@@ -7627,6 +8862,10 @@ Patterns use the ECMAScript syntax. A character with a special meaning is matche
 
 `0x0400003A` · Error · `RuntimeDiag::TimeFormatFailed`
 
+**Fix**
+
+None: runtime: the fault is raised while the program runs, and the repair is in the program's logic
+
 **Message**
 
 ```text
@@ -7644,6 +8883,10 @@ Check the format string against the strftime conversion specifiers (%Y, %m, %d, 
 ### GradientElementTypeMismatch
 
 `0x0400003C` · Error · `RuntimeDiag::GradientElementTypeMismatch`
+
+**Fix**
+
+None: runtime: the fault is raised while the program runs, and the repair is in the program's logic
 
 **Message**
 
@@ -7689,6 +8932,10 @@ func main(): int sync {
 
 `0x04000050` · Error · `RuntimeDiag::ConversionOutOfRange`
 
+**Fix**
+
+None: runtime: the value does not fit the conversion at run time, and the repair is in the program's logic
+
 **Message**
 
 ```text
@@ -7726,6 +8973,10 @@ func main(): int sync {
 
 `0x04000051` · Error · `RuntimeDiag::UnhandledError`
 
+**Fix**
+
+None: runtime: an error value was never handled; where to handle it is the program's logic
+
 **Message**
 
 ```text
@@ -7761,6 +9012,10 @@ func main(): int! sync {
 
 `0x04000052` · Error · `RuntimeDiag::SliceOutOfRange`
 
+**Fix**
+
+None: runtime: the bounds are computed at run time, and the repair is in the program's logic
+
 **Message**
 
 ```text
@@ -7793,6 +9048,10 @@ func main(): int sync {
 
 `0x04000060` · Error · `RuntimeDiag::InvalidPassParameter`
 
+**Fix**
+
+None: runtime: the fault is raised while the program runs, and the repair is in the program's logic
+
 **Message**
 
 ```text
@@ -7819,6 +9078,10 @@ func main(): int sync {
 
 `0x04000061` · Error · `RuntimeDiag::GraphPassFailed`
 
+**Fix**
+
+None: runtime: the fault is raised while the program runs, and the repair is in the program's logic
+
 **Message**
 
 ```text
@@ -7844,6 +9107,10 @@ func main(): int sync {
 ### PassNeedsExtraction
 
 `0x04000062` · Error · `RuntimeDiag::PassNeedsExtraction`
+
+**Fix**
+
+None: runtime: the fault is raised while the program runs, and the repair is in the program's logic
 
 **Message**
 
@@ -7878,6 +9145,10 @@ func main(): int sync {
 ### DeviceUnavailable
 
 `0x04000070` · Error · `RuntimeDiag::DeviceUnavailable`
+
+**Fix**
+
+None: runtime: the machine has no such device; nothing in the program is wrong
 
 **Message**
 
@@ -7923,6 +9194,10 @@ func main(): int sync {
 
 `0x04000071` · Error · `RuntimeDiag::GpuScopeUnsupported`
 
+**Fix**
+
+None: runtime: the fault is raised while the program runs, and the repair is in the program's logic
+
 **Message**
 
 ```text
@@ -7957,6 +9232,10 @@ func main(): int sync {
 
 `0x04000186` · Error · `RuntimeDiag::PassNotProvidedByModule`
 
+**Fix**
+
+None: runtime: the fault is raised while the program runs, and the repair is in the program's logic
+
 **Message**
 
 ```text
@@ -7982,6 +9261,10 @@ func main(): int sync {
 ### PassNotExportedByModule
 
 `0x04000187` · Error · `RuntimeDiag::PassNotExportedByModule`
+
+**Fix**
+
+None: runtime: the fault is raised while the program runs, and the repair is in the program's logic
 
 **Message**
 
@@ -8011,6 +9294,10 @@ func main(): int sync {
 ### GpuScopeNoDeviceProgram
 
 `0x040001A7` · Error · `RuntimeDiag::GpuScopeNoDeviceProgram`
+
+**Fix**
+
+None: runtime: the fault is raised while the program runs, and the repair is in the program's logic
 
 **Message**
 
@@ -8054,6 +9341,10 @@ func main() {
 
 `0x040001A8` · Error · `RuntimeDiag::ValueWithNoDerivativeRule`
 
+**Fix**
+
+None: runtime: the fault is raised while the program runs, and the repair is in the program's logic
+
 **Message**
 
 ```text
@@ -8088,6 +9379,10 @@ func main(): int sync {
 ### PassesNeverRun
 
 `0x0410000F` · Warn · `RuntimeDiag::PassesNeverRun`
+
+**Fix**
+
+None: runtime: the fault is raised while the program runs, and the repair is in the program's logic
 
 **Message**
 
@@ -8133,6 +9428,10 @@ func main(): int sync {
 
 `0x04100015` · Warn · `RuntimeDiag::ConstantExpressionFaults`
 
+**Fix**
+
+None: runtime: the fault is raised while the program runs, and the repair is in the program's logic
+
 **Message**
 
 ```text
@@ -8163,6 +9462,10 @@ func main(): int sync {
 ### TranslationLinksRuntime
 
 `0x04100016` · Warn · `RuntimeDiag::TranslationLinksRuntime`
+
+**Fix**
+
+None: runtime: the fault is raised while the program runs, and the repair is in the program's logic
 
 **Message**
 

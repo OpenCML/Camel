@@ -8,16 +8,20 @@ with <k: float>
 func shifted(x: float): float { return x + k }
 func main(): int sync {
     let x = reshape([1.0, 2.0, 3.0] as f32[], [3])
+    // A boundary scalar takes the element type of the tensor beside it (design principles 7.3),
+    // so an argument written where `scale` declares `k: f32` says f32: a literal is a `float`, and
+    // the call states the conversion the signature asks for.
+    let k = f32(0.5)
     println(source<arithmetic>((1.0, 2.0)) == source<arithmetic>((16777217.0, 3.0)))
-    println(source<scale>((x, 0.5)) == source<scale>((x, 1.25)))
+    println(source<scale>((x, k)) == source<scale>((x, f32(1.25))))
     println(source<shifted<1.0>>(2.0) == source<shifted<3.0>>(4.0))
     println(download(run_preferred_resident<arithmetic>((16777217.0, 3.0))) - arithmetic(16777217.0, 3.0))
     println(download(run_preferred_resident<arithmetic>((2.0, 7.0))) - arithmetic(2.0, 7.0))
     println(download(run_preferred_resident<identity>(1.0000000000000002)) - 1.0000000000000002)
     println(download(run_preferred_resident<identity>(1.0000000000000002)) - 1.0000000000000002)
     println(download(run_preferred_resident<shifted<3.0>>(4.0)) - 7.0)
-    println(sum(abs(download(run_preferred_resident<scale>((x, 1.25))) - x * 1.25)))
-    println(inspect<scale>((x, 1.25)))
+    println(sum(abs(download(run_preferred_resident<scale>((x, f32(1.25)))) - x * 1.25)))
+    println(inspect<scale>((x, f32(1.25))))
     println(benchmark<arithmetic>((5.0, 3.0)))
     println(benchmark<arithmetic>((11.0, 7.0)))
     return 0

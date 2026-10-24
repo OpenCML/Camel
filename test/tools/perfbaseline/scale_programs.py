@@ -15,7 +15,7 @@ first of a chain calls nothing), and each chain unit is one of four shapes in tu
 
   arith     `g(x) * k + c`
   branch    `if x > k then g(x - k) else x + c`        (two branch arms)
-  loop      `loop acc = x for j in range(0, 3) do acc + g(j)`   (a LOOP node: cond and body graphs)
+  loop      `loop acc = x for j in 0..3 do acc + g(j)`   (a LOOP node: cond and body graphs)
   generic   `pick(g(x), x + c, x > k)` and `len(pick('s<i>', 'abc', x > k)) + g(x)`: instances of
             one generic function for int and for string
 
@@ -52,7 +52,7 @@ def unit(i):
         body = f"if x > {k} then {arm} else x + {c}"
     elif shape == 2:
         step = "j" if first else f"f{i - 1}(j)"
-        body = f"loop acc = x for j in range(0, 3) do acc + {step}"
+        body = f"loop acc = x for j in 0..3 do acc + {step}"
     elif i % 8 == 3:
         body = f"pick({prev}, x + {c}, x > {k})"
     else:

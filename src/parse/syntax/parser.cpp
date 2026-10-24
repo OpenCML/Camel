@@ -204,6 +204,17 @@ void ParserImpl::error(
     tree_.errors_.push_back(std::move(err));
 }
 
+void ParserImpl::error(
+    SyntaxError::Kind kind, std::initializer_list<uint8_t> expected, uint32_t at, uint32_t aux) {
+    const size_t before = tree_.errors_.size();
+    error(kind, expected, at);
+    // The kind a classifier rewrote (`i<n`, `f<a >`) keeps its own second token; only the error
+    // this call pushed is given `aux`.
+    if (tree_.errors_.size() > before) {
+        tree_.errors_.back().aux = aux;
+    }
+}
+
 bool ParserImpl::expect(TK kind) {
     if (cur_ == kind) {
         bump();
@@ -218,6 +229,10 @@ bool ParserImpl::expectListEnd(TK closer) {
         bump();
         return true;
     }
+    // A list whose text ends before its closer is reported and the list closes without one. The
+    // terminal token is not taken: it belongs to the node that closes the Program, and taking it
+    // here would leave it out of the tree or, when a caller took it for the closer, in it twice
+    // (H417).
     unexpected({e(TK::Comma), e(closer)});
     return false;
 }
@@ -809,6 +824,8 @@ void ParserImpl::parseTagDecl() {
     bump(); // `tag`
     expectName(NK::IdentDef);
     if (eat(TK::Assign)) {
+        // Same as parseResourceDecl: `tag finite =` with the text ending there must leave the
+        // terminal token to the Program node, not read it as the `[` of the group (H417).
         parseBracketedIdents(TK::RBracket, NK::BracketIdents);
         close(m, NK::TagDecl);
         return;
@@ -1000,6 +1017,7 @@ void ParserImpl::parseTypeParams() {
     bump(); // `<`
     {
         Scope scope(*this, false);
+        // `::<` at the end of the text: the name is reported, not read (H417).
         parseIdentDef();
         while (!panic_ && eat(TK::Comma) && cur_ == TK::Identifier) {
             parseIdentDef();
@@ -1156,6 +1174,9 @@ void ParserImpl::parseResourceDecl() {
     bump(); // `resource`
     expectName(NK::IdentDef);
     if (eat(TK::Assign)) {
+        // The group of a resource is written in brackets, and the text may end right after the
+        // `=`: `parseBracketedIdents` asks for the bracket and reports it when it is not there,
+        // rather than taking whatever token stands there (H417).
         parseBracketedIdents(TK::RBracket, NK::BracketIdents);
     } else if (atWord(0, "unordered")) {
         bump();
@@ -1186,6 +1207,13 @@ void ParserImpl::parseModifiers() {
 }
 
 /// identDef : IDENTIFIER
+///
+/// The callers that know a name is there read it with `bump()` and wrap it themselves; the callers
+/// that only expect one use `expectName`, which reports the token that stands where the name was.
+/// Asking through `identDef` is what the parser does where a name is required but the text may end
+/// where the name should be. There, taking the token that stands at the end would fold the terminal
+/// token into the tree, and `parseProgram` closes the Program node with that same token, so the tree
+/// would hold one token twice and stop being lossless (H417).
 void ParserImpl::parseIdentDef() { expectName(NK::IdentDef); }
 
 /// identRef : (IDENTIFIER '::')* IDENTIFIER
@@ -1218,10 +1246,11 @@ void ParserImpl::parseIdentRef(NK kind) {
 
 /// identList : identDef (',' identDef)*
 /// Unbracketed (`let a, b = ...`): every comma is followed by a name.
+/// A name that is not there (the text ends in the list) is reported, not read.
 void ParserImpl::parseIdentList() {
     const size_t m = mark();
     parseIdentDef();
-    while (cur_ == TK::Comma) {
+    while (cur_ == TK::Comma && !panic_) {
         bump();
         parseIdentDef();
     }
@@ -1231,15 +1260,26 @@ void ParserImpl::parseIdentList() {
 /// parentIdents : '(' identList? ','? ')'
 /// bracedIdents : '{' identList? ','? '}'
 /// bracketIdents : '[' identList? ','? ']'
+/// The opening token of the list that `closer` closes.
+static TK openOf(TK closer) {
+    return closer == TK::RParen ? TK::LParen : closer == TK::RBracket ? TK::LBracket : TK::LBrace;
+}
+
+/// The caller passes the opening token it decided on; the function asks for it, so a text that ends
+/// where the list opens is reported rather than read: taking the terminal token as the opener would
+/// fold it into the tree and leave the Program node without it (or with it twice), which is not
+/// lossless (H417). A name that is not there is reported by `parseIdentDef` in the same way.
 void ParserImpl::parseBracketedIdents(TK closer, NK kind) {
     const size_t m = mark();
-    bump();
+    if (!expect(openOf(closer))) {
+        return close(m, kind);
+    }
     {
         Scope scope(*this, false);
         if (cur_ != closer && cur_ != TK::Comma) {
             const size_t lm = mark();
             parseIdentDef();
-            while (cur_ == TK::Comma && peek(1) != closer) {
+            while (cur_ == TK::Comma && peek(1) != closer && !panic_) {
                 bump();
                 parseIdentDef();
             }

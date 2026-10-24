@@ -582,7 +582,22 @@ class GraphDraft {
     /// its replacer). `newId` is marked as a statement of that block. A rewrite that puts a node it
     /// built where a statement stood calls this before erasing the statement; a node already
     /// written somewhere in a chain keeps that place.
+    ///
+    /// The same clause covers the order edges that met at `oldId`: they meet at `newId` instead,
+    /// in both directions (replaceOrderEdgesAt). A node that stood in no chain still hands its
+    /// order edges over -- the clause is about replacing a node, not about sync blocks.
     void takeStatementPlace(gc_node_ref_t oldId, gc_node_ref_t newId);
+    /// The order edges that met at `oldId` meet at `newId`: what ordered `oldId` orders `newId`,
+    /// and what `oldId` ordered is ordered by `newId` (docs/design/effects/edges.cn.md 4). An edge
+    /// whose other end lies outside `newId`'s region is dropped rather than moved: an ordering
+    /// never leaves the region that holds it. Called by takeStatementPlace; a rewrite that
+    /// replaces a node without giving it the replaced node's place calls it itself.
+    void replaceOrderEdgesAt(gc_node_ref_t oldId, gc_node_ref_t newId);
+    /// The order edges that passed through `id` survive it: a node ordered after `id` is ordered
+    /// after what `id` was ordered after (A -> B -> C becomes A -> C; docs/design/effects/
+    /// edges.cn.md 4). eraseNode calls this itself, before the node's own runs go, so no erasure
+    /// leaves the ordering around the node expressed by nothing.
+    void spliceOrderEdgesOver(gc_node_ref_t id);
     void setNormInputs(gc_node_ref_t id, std::span<const gc_node_ref_t> inputs);
     void setWithInputs(gc_node_ref_t id, std::span<const gc_node_ref_t> inputs);
     void setCtrlInputs(gc_node_ref_t id, std::span<const gc_node_ref_t> inputs);
@@ -638,6 +653,13 @@ class GraphDraft {
     /// state and one array per slot. A graph producer that builds such a node calls this; the
     /// source syntax never does. Asserts that `id` is a LOOP node.
     void setLoopCollectionCount(gc_node_ref_t id, uint32_t count);
+    /// Makes LOOP node `id` take its elements from the interval `(from, to)` rather than from an
+    /// array (camel::core::LoopIterableForm): its first Norm input is then the pair of the two
+    /// bounds, and a round takes `from + round` while `round < to - from`. The front end calls
+    /// this for `for i in a..b` (design principles 4.2: the compiler fuses the interval, without
+    /// materialising an array); no graph producer of a library does. Asserts that `id` is a LOOP
+    /// node.
+    void setLoopIterableInterval(gc_node_ref_t id);
     /// Regions (GCRegion). A draft has region 0, the body, once it has any other. Ids are not
     /// reused.
     size_t regionCount() const { return regions_.size(); }

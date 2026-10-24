@@ -10,7 +10,7 @@ module gc_live_table
 type Row = int[]
 
 func table(n: int, k: int): Row[] {
-    return range(0, n)->map<(i: int): int[] => range(0, 16)->map<(j: int): int => i + j + k>>
+    return 0..n->map<(i: int): int[] => 0..16->map<(j: int): int => i + j + k>>
 }
 
 func churn(keep: Row[], n: int, left: int, total: int): int {

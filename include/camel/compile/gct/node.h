@@ -264,11 +264,21 @@ class Node {
         check(NodeKind::BRCH);
         return static_cast<BranchKind>(tag_);
     }
-
     /// CASE: the pattern, and the name it binds (Bind and Error; empty otherwise).
     CaseType caseType() const {
         check(NodeKind::CASE);
         return static_cast<CaseType>(tag_);
+    }
+    /// CASE: the case carries a guard (`case p when c => ...`). A guarded case is taken only
+    /// when its pattern matches *and* the guard holds, so it covers nothing on its own: the
+    /// exhaustiveness checks (design principles 3.7, language reference 6.8.2) pass it by.
+    bool guardedCase() const {
+        check(NodeKind::CASE);
+        return (flags_ & kFlagB) != 0;
+    }
+    void setGuardedCase() {
+        check(NodeKind::CASE);
+        flags_ |= kFlagB;
     }
     const std::string &binding() const {
         check(NodeKind::CASE);

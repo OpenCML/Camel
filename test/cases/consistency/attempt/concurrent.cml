@@ -11,13 +11,13 @@ func inv(x: int): int { return 60 / (x - 3) }
 func row(i: int): int {
     // Rows with an even i map over a range that contains 3: their map faults.
     let lo = if i % 2 == 0 then 0 else 4
-    let ys = attempt(() => range(lo, lo + 8)->map<inv>) !! [0 - i]
+    let ys = attempt(() => lo..(lo + 8)->map<inv>) !! [0 - i]
     return ys->reduce<(a: int, x: int): int => a + x, 0>
 }
 
 func main(): int sync {
-    println(range(0, 40)->map<row>)
-    println(range(0, 40)->map<row>->reduce<(a: int, x: int): int => a + x, 0>)
+    println(0..40->map<row>)
+    println(0..40->map<row>->reduce<(a: int, x: int): int => a + x, 0>)
     println('end')
     return 0
 }

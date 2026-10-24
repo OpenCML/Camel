@@ -459,7 +459,7 @@ expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::DeviceUnavailable"
 expect_diagnostic_code = "0x04000070"
 expect_output_contains = ["CUDA device 0 was named by --devices but is not available"]
-expect_stdout_not_contains = ["ran"]
+expect_stdout_not_contains = ["ran\n"]
 timeout_ms = 30000
 
 [[tests]]
@@ -473,7 +473,7 @@ expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::DeviceUnavailable"
 expect_diagnostic_code = "0x04000070"
 expect_output_contains = ["CUDA device 7 was named by --devices but is not available"]
-expect_stdout_not_contains = ["ran"]
+expect_stdout_not_contains = ["ran\n"]
 timeout_ms = 30000
 
 [[tests]]
@@ -488,7 +488,7 @@ expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::DeviceUnavailable"
 expect_diagnostic_code = "0x04000070"
 expect_output_contains = ["CUDA device 0 was named by --devices but is not available", "missing: 0, 1"]
-expect_stdout_not_contains = ["ran"]
+expect_stdout_not_contains = ["ran\n"]
 timeout_ms = 30000
 
 [[tests]]
@@ -504,7 +504,7 @@ expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::DeviceUnavailable"
 expect_diagnostic_code = "0x04000070"
 expect_output_contains = ["CUDA device 1 was named by --devices but is not available", "this machine has 1 CUDA device (ordinal 0)"]
-expect_stdout_not_contains = ["ran"]
+expect_stdout_not_contains = ["ran\n"]
 timeout_ms = 30000
 
 [[tests]]
@@ -538,8 +538,14 @@ case = "../../../cases/modules/tiles/gpu_fallback.cml"
 # cached miss instead of constructing the back end again. Before H117 this run asked the driver
 # seven times (one per preferred call). The count is asserted on the module's info log, the only
 # line the probe writes; `--devices cpu` never reaches it (see host_only_is_silent).
+#
+# The count is one only where a back end can be constructed at all: a build made without the CUDA
+# Toolkit headers (`tiles: source inspection only`) probes nothing, so the line is absent there
+# rather than doubled. That is a capability of the build and not of the machine, so the
+# precondition asks the build itself, and the assertion still stands whole wherever it runs (H407).
 args = ["-vv", "${case}", "std::nvm"]
 envs = ["CUDA_VISIBLE_DEVICES=-1"]
+skip_unless = ["node", "test/tools/have-cuda-build.mjs"]
 expect_exit = 0
 expect_stdout_exact = "false\n5.0\ncpu effect\n8.0\n10.0\n5.0 6.0\n"
 normalizers = ["strip_ansi", "normalize_newlines"]

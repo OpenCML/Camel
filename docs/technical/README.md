@@ -31,7 +31,7 @@
 | [27_entry_parameters_and_pure_export.md](27_entry_parameters_and_pure_export.md) | 带参数的 `main`：入口图的参数、从外部绑定实参、未导入模块的遍，以及对纯程序执行 `onnx::export` |
 | [28_generic_functions_and_type_functions.md](28_generic_functions_and_type_functions.md) | Generic functions (`::<T>`) as subgraph templates instantiated per set of argument types; type declarations with parameters as type functions |
 | [29_nullable_and_fallible_values.md](29_nullable_and_fallible_values.md) | `T?` and `T!`: where the one-bit tag lives, `??` / `!!` / `?->` / `match` patterns as branches, `throw` as an exit, and the questions left to the language author |
-| [30_diagnostics_reporting.md](30_diagnostics_reporting.md) | 诊断报告：诊断携带的字段、文本形式、一次编译报告多个错误、运行期故障、警告、诊断目录，以及留给语言作者的问题 |
+| [30_diagnostics_reporting.md](30_diagnostics_reporting.md) | 诊断报告：诊断携带的字段、可机器应用的改法（`data.fixes`）与哪些码带改法、文本形式、一次编译报告多个错误、运行期故障、警告、诊断目录、选第一批码的审计，以及留给语言作者的问题 |
 | [31_map_and_set.md](31_map_and_set.md) | The built-in `Map<K, V>` and `Set<T>`: the two implementation routes and the one taken, key types, key order, the run-time table and how the collector traces it, the operators, typed JSON decoding, measurements, and the questions left to the language author |
 | [32_semantic_query_layer.md](32_semantic_query_layer.md) | How a tool asks the compiler about a source text by position: the syntactic index, the facts the builders report to a recorder, the join, generic instances and overloads, what is available in text with errors, rename, and the measured cost |
 | [33_fault_isolation.md](33_fault_isolation.md) | The fault-isolation operator `attempt`: its type and graph form, which faults it isolates, how each back end returns to the boundary and what is restored, parallel siblings, release of external resources when a run ends, and the questions left to the language author |
@@ -51,6 +51,7 @@
 | [54_profiler_allocations.md](54_profiler_allocations.md) | `std::profile` 的分配列：三个值分配器的计时点、按线程归属到算子调用、报告里的总行/步行/算子列与 JSON、开启与关闭的代价、看不到的 `new`/BLAS 打包/`memcpy`/首次触页、d=256 与 d=1024 的测量（分配占一步 0.40% / 0.02%，因此 34% 的差距是内核时间），以及它替换掉的旧说明 |
 | [55_fusion_groups_in_tools.md](55_fusion_groups_in_tools.md) | 融合组在两个工具里的呈现：`std::profile` 为什么给组一行而成员一行都不给、`executions = calls + runs×members` 这条不重复计数的恒等式、JSON 键与输出只在组真的跑过时才出现（关闭时与基线逐字节相同）、调试器为什么停在尾部而不是被跳过的成员、以及它仍然看不到的组内部与内核内断点 |
 | [56_cpu_baselines_and_cuda_visible_devices.md](56_cpu_baselines_and_cuda_visible_devices.md) | CPU 基线里的 CUDA 上下文：`torch.optim.Adam(...).step()` 的健康检查会为从不用 GPU 的对照程序建上下文，卡被别的租户占着时以 `CUDA_ERROR_UNKNOWN` 死在第一个数字之前，而 `SGD.step()` 不会；最小复现、与 `--data` 路径无关的 2×2、以及为什么基线要钉 `CUDA_VISIBLE_DEVICES=""` |
+| [57_python_bindings.md](57_python_bindings.md) | Python 绑定（H253）：从 Python 调用 Camel 模块的导出函数，数组经 DLPack 零拷贝进出（地址、时间、内存三处实测），诊断与故障按位置映射成 Python 异常，以及 `pip install` 装出来的 wheel 与一个示例 |
 | [ddpm-primitives.md](ddpm-primitives.md) | DDPM 实验暴露的运行时与 GPU 原语：`math:sqrt` 的 VJP、`fs.write_text` 的字节长度、Tiles 的 `numel` / `shape` / `permute_inverse` / 矩阵乘 lowering、BF16 cuBLAS 的选择，以及检查它们的计划 |
 | [gir-interchange.md](gir-interchange.md) | GIR 导出：`std::gir` / `rgir` / `jgir` / `agir` / `argir` 的格式与分工，以及供编辑器消费的 JSON 版本 1 |
 | [nn-autograd.md](nn-autograd.md) | `nn` 没有自己的自动求导：求导是 `modules/autodiff` 的图重写（`grad` / `with_grad`），见 26 与设计原则 9.9 |

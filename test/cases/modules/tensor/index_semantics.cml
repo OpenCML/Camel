@@ -56,6 +56,6 @@ func main(): int sync {
     println(unknown(x, x))
     println(regrouped(ones([4, 5]) as Tensor<f32, [4, 5]>))
     println(pooled(ones([1, 1, 4, 4]) as Tensor<f32, [1, 1, 4, 4]>))
-    println(unordered_reduce<(acc: int, item: int): int => acc + item, 0>(range(1, 11)))
+    println(unordered_reduce<(acc: int, item: int): int => acc + item, 0>(1..11))
     return 0
 }

@@ -13,11 +13,11 @@ func add(a: int, b: int): int {
 }
 
 func sums(n: int, k: int): int[] {
-    return range(0, n)->map<(i: int): int => range(0, n)->map<(j: int): int => i + j + k>->reduce<(acc: int, x: int): int => add(acc, x), 0>>
+    return 0..n->map<(i: int): int => 0..n->map<(j: int): int => i + j + k>->reduce<(acc: int, x: int): int => add(acc, x), 0>>
 }
 
 func shifted(n: int, k: int): int[] {
-    return range(0, n)->reduce<(acc: int[], i: int): int[] => acc->map<(x: int): int => add(x, i + k)>, range(0, n)>
+    return 0..n->reduce<(acc: int[], i: int): int[] => acc->map<(x: int): int => add(x, i + k)>, 0..n>
 }
 
 func total_of(xs: int[]): int {

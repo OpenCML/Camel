@@ -39,11 +39,10 @@ func positive(c: float): bool {
 
 /// The parts are the factor's node and the coefficient's node, and a subtraction is not a product:
 /// no value has them as its operands, so the query answers false and the rule does not apply.
-rule drop_by_one(x: int, const c: int) { x * c => x }
-    when sub(x, node_of(c)) == 1
+rule drop_by_one(x: int, const c: int) when sub(x, node_of(c)) == 1 { x * c => x }
 
 /// A guard on the value, which the value channel answers without any node.
-rule drop_positive(x: float, const c: float) { x * c => x } when positive(c)
+rule drop_positive(x: float, const c: float) when positive(c) { x * c => x }
 
 export func apply(p: Program): Program! {
     return rewrite(p, [drop_by_one, drop_positive])

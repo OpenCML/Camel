@@ -9,7 +9,7 @@ import { grad } from autodiff
 
 with <w: float>
 func sum_losses(n: int): float {
-    let losses = loop acc = [] for i in range(0, n) do acc->append<(i as float) * w>
+    let losses = loop acc = [] for i in 0..n do acc->append<(i as float) * w>
     return losses[0] + losses[n - 1]
 }
 

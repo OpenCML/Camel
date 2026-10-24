@@ -22,7 +22,7 @@
  *   linkExpr        ->  ?->                                     left
  *   negExpr         prefix -         tighter than `->`, looser than `^`:
  *                                    `-x->f` is `(-x)->f`, `-x ^ 2` is `-(x ^ 2)`
- *   compExpr        ..  ?..                                     left
+ *   compExpr        ..                                          left
  *   annoExpr        [index]  (arguments)  <arguments>  !  .member   postfix, touching
  *   accessExpr      .member
  *   primaryData     name, literal, [array], {struct}, (tuple), lambda
@@ -307,12 +307,33 @@ void ParserImpl::parseNullable() {
 
 /// unaryExpr : linkExpr (('as' | 'is') typeExpr)?
 /// (The prefix operators `-`, `!` and `~` are taken by negExpr, under `->`.)
+/// The right side is always a type (the author's ruling of 2026-10-24), and the type reads its
+/// own marks: `x as int..` is a conversion to the stream type. A number or a name written
+/// directly after the `..` is not a type, though — `x as int..5` is the interval reading of `..`
+/// written where a type stands — and it is reported as such rather than as a stray token.
 void ParserImpl::parseUnary() {
     const size_t m = mark();
     parseLink();
     if ((cur_ == TK::KwAs || cur_ == TK::KwIs) && !panic_) {
         bump();
+        const uint32_t opToken = prev_;
         parseType();
+        if (prev_ != opToken && toks_[prev_].kind == TK::DotDot && adjacent() && !panic_) {
+            // What follows the `..` is an expression's far end written without a space, which
+            // is the interval reading and nothing else. A `(`, a `[` or an operator after the
+            // `..` is not this: `x as f32[3]..[4]` reads its dimension in parseType, and
+            // `x as int.. + 1` is the cast plus one.
+            switch (cur_) {
+            case TK::Integer:
+            case TK::Real:
+            case TK::Identifier:
+            case TK::String:
+                error(SyntaxError::Kind::AsRightSideIsType, {}, prev_, opToken);
+                break;
+            default:
+                break;
+            }
+        }
         close(m, NK::CastExpr);
     }
 }
@@ -357,12 +378,12 @@ void ParserImpl::parseNeg(bool underMinus) {
     }
 }
 
-/// compExpr : annoExpr (('..' | '?..') annoExpr)*
+/// compExpr : annoExpr ('..' annoExpr)*
 void ParserImpl::parseComp() {
     const size_t m = mark();
     parseAnno();
     bool any = false;
-    while ((cur_ == TK::DotDot || cur_ == TK::QuestionDotDot) && !panic_) {
+    while (cur_ == TK::DotDot && !panic_) {
         bump();
         parseAnno();
         any = true;
@@ -922,7 +943,23 @@ void ParserImpl::parseTypeArguments() {
         if (cur_ == TK::Identifier && peek(1) == TK::Assign) {
             while (!panic_) {
                 const size_t named = mark();
-                eat(TK::Identifier);
+                // The name is not optional: `namedTypeArgument` is `IDENTIFIER '=' typeExpr`, and
+                // the AST builder reads the name to reach the type parameter it fills
+                // (builder.cpp, visitAnnoExpr). `f::<A = int, = string>` wrote a second argument
+                // without one; `eat` said nothing and consumed nothing, the node was closed
+                // around `= string` alone, and the read of the name it does not have followed a
+                // null tree. The name is asked for where it should stand, as everywhere else a
+                // name is required (expectName), and the list stops there: what is left of the
+                // line belongs to the statement the list stands in and is recovered with it.
+                if (cur_ != TK::Identifier) {
+                    if (isKeyword(cur_)) {
+                        error(SyntaxError::Kind::KeywordAsName, {e(TK::Identifier)}, pos_);
+                    } else {
+                        unexpected({e(TK::Identifier)});
+                    }
+                    break;
+                }
+                bump();
                 eat(TK::Assign);
                 parseType();
                 close(named, NK::NamedTypeArgument);
@@ -1313,7 +1350,13 @@ void ParserImpl::parseTypeCasePattern() {
     close(m, NK::TypeCasePattern);
 }
 
-/// matchCase : 'case' pattern ('|' pattern)* '=>' blockExpr
+/// matchCase : 'case' pattern ('|' pattern)* whenClause? '=>' blockExpr
+/// The optional `when` is the guard of the case (language reference 6.8.2, review
+/// `docs/handover/reviews/questions-2026-10-23.md` 「when-placement-and-match-guards」): the case
+/// is taken when its pattern matches *and* the condition holds. The condition is written in the
+/// one position a condition is written in (`when` before the body it guards, the same clause a
+/// declaration carries), so a `when` after the body is named rather than left as a token that
+/// did not fit (`SyntaxDiag::WhenAfterBody`).
 void ParserImpl::parseMatchCase() {
     const size_t m = mark();
     bump();
@@ -1322,8 +1365,19 @@ void ParserImpl::parseMatchCase() {
         bump();
         parsePattern();
     }
+    if (!panic_ && atWord(0, "when")) {
+        parseWhenClause();
+    }
     if (!panic_ && expect(TK::FatArrow)) {
         parseBlockExpr();
+    }
+    // `case p => e when c`: the guard of a case belongs before the body, like a declaration's
+    // condition. The trailing form is not read as a guard and is not reported as a token that
+    // did not fit: the program is told where the guard belongs.
+    if (!panic_ && cur_ == TK::Identifier && tree_.tokens_.text(pos_) == "when") {
+        error(SyntaxError::Kind::WhenAfterBody, {}, pos_);
+        bump(); // `when`: consumed, so the parse goes on after the guard
+        parseExpr();
     }
     close(m, NK::MatchCase);
 }
@@ -1342,7 +1396,11 @@ void ParserImpl::parsePattern() {
             parseEnumTuplePattern();
         } else if (cur_ == TK::LBrace) {
             parseEnumStructPattern();
-        } else if (cur_ == TK::Identifier) {
+        } else if (cur_ == TK::Identifier && !atWord(0, "when")) {
+            // The only two-word pattern is `error e`. `when` is not a keyword of the lexer but
+            // the guard of a `match` case (and the condition of a declaration), and it is
+            // written after the pattern: reading it as the second word here would swallow the
+            // guard, so `case error e when c` keeps its condition.
             parseIdentDef();
         }
         break;

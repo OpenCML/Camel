@@ -195,12 +195,20 @@ class OperatorGroup {
         }
     }
 
-    /// Makes each overload's resolver findable by its URI (see OperatorTable::setResolver).
+    /// Makes each overload's resolver findable by its URI (see OperatorTable::setResolver), and
+    /// tells the table which overloads this group has, so that the types it was registered for can
+    /// be listed (OperatorTable::registeredTypes; handover H401).
     void publishResolvers() const {
+        std::vector<std::string> uris;
+        uris.reserve(resolvers_.size());
         for (const auto &[uri, resolver] : resolvers_) {
             if (!uri.empty() && resolver) {
                 camel::core::OperatorTable::instance().setResolver(uri, resolver);
+                uris.push_back(uri);
             }
+        }
+        if (!uris.empty()) {
+            camel::core::OperatorTable::instance().declareGroup(name_, uris);
         }
     }
 };

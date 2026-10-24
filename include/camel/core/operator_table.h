@@ -395,6 +395,33 @@ class OperatorTable {
     type::resolver_ptr_t resolver(OperId id) const;
     type::resolver_ptr_t resolver(std::string_view uri) const;
 
+    // ---- Groups, and the types a group registered (handover H401) ---------------------------
+
+    /// Declares the overloads of one operator group, at module load time: its name and the URI of
+    /// each of its overloads. `OperatorGroup` declares itself here when it is created, so the
+    /// table can answer which types a group was registered for -- what `check` takes the
+    /// instances of a generic rule from (the ruling of 2026-10-24 on
+    /// `generic-rule-check-surface-and-multi-parameter-instances`), and what a future `vmap` or
+    /// a target's element-type extraction reads. Declaring the same group twice adds to it: the
+    /// groups of one name a program sees are merged (OperatorGroup::merged).
+    void declareGroup(std::string_view group, const std::vector<std::string> &uris);
+
+    /// The names of the declared groups, in the order they were first declared.
+    std::vector<std::string> groups() const;
+
+    /// The types one group registered: every type the fixed signature of one of its overloads
+    /// mentions (its `with` parameters, its ordinary parameters and its result), each once, in
+    /// the order they were registered. An overload whose resolver declares no fixed signature
+    /// (a dynamic one: `__rule`, the tensor shape rules) contributes nothing, and neither does a
+    /// signature that still writes a type variable: a generic overload (`map::<T, U>`) names no
+    /// concrete type, and a rule cannot be instantiated at one.
+    std::vector<type::Type *> registeredTypes(std::string_view group) const;
+
+    /// Every type any declared group registered, each once, in group and overload order. This is
+    /// the candidate set `check` enumerates the instances of a generic rule over when it is given
+    /// no program.
+    std::vector<type::Type *> allRegisteredTypes() const;
+
     /// Registers (or replaces) the type folder of an operator.
     void setTypeFolder(std::string_view uri, TypeFolder folder);
 
@@ -547,6 +574,10 @@ class OperatorTable {
     /// Every facts record ever published, replaced ones included (a reader may still hold one).
     /// Guarded by mutex_.
     std::vector<std::unique_ptr<const sem::OperatorSemantics>> declarations_;
+    /// The overloads of every declared group (declareGroup), in declaration order. Guarded by
+    /// mutex_. The types are read out of the overloads' resolvers when they are asked for, so a
+    /// resolver replaced at load time is not read twice.
+    std::vector<std::pair<std::string, std::vector<std::string>>> groups_;
     std::atomic<uint64_t> epoch_{0};
 };
 

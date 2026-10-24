@@ -1,0 +1,29 @@
+/**
+ * Reading a column of a row the report does not have is a fault of the reader, and the report says
+ * so (H247, slice S0; the ruling of 2026-10-24 on `verification-verdict-surface`, 2).
+ *
+ * A reader that asked for a row the table does not have used to have no way to be told: `check`
+ * answered one string, and the columns were punctuation inside it. With the table a value, each
+ * column reader answers an error value naming the count -- an empty string would read like a row
+ * whose reason is empty, which is a row that exists.
+ */
+module verify_report_row
+
+import { check, check_row_count, check_verdict } from rewrite
+
+rule holds(x: float) { x * 1.0 => x }
+
+func main(): int sync {
+    let r = check([holds], 10, 3)
+    println("rows ", check_row_count(r))
+    match check_verdict(r, 1) {
+        case error e => sync {
+            println(e)
+            return 0
+        }
+        case v => sync {
+            println("no error, and it answered", v)
+            return 0
+        }
+    }
+}

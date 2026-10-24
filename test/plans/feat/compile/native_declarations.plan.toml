@@ -290,7 +290,7 @@ expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F",
 
 [[tests]]
 name = "native.array_declaration_import"
-desc = "`array`'s declarations are the module's signature: `argsort` has its six declared key element types and gives `int[]`; each sort name and `merge_sorted_arrays` is generic over its element type, as its kernel is; `flatten` and `unique` are generic declarations; every call reaches the built-in operator."
+desc = "`array`'s declarations are the module's signature: `argsort` has its six declared key element types and gives `int[]`; each sort name and `merge_sorted_arrays` has one declaration per element type, each taking its own element type and naming its own operator (`array:sort_i` for `i32`, `array:sort_d` for `float`, ...); `flatten` and `unique` are generic declarations; every call reaches the built-in operator."
 kind = "behavior"
 case = "../../../cases/compile/native/array_declaration_import.cml"
 args = ["${case}"]
@@ -304,7 +304,7 @@ kind = "negative"
 case = "../../../cases/compile/native/array_arity.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "array_arity.cml:11:20", "(int[], int)", "<array:argsort>: (keys: i32[]) => int[]"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "array_arity.cml:11:20", "(int[], int)", "<array:argsort_i>: (keys: i32[]) => int[]"]
 
 [[tests]]
 name = "native.array_wrong_type"
@@ -313,25 +313,25 @@ kind = "negative"
 case = "../../../cases/compile/native/array_type.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "array_type.cml:12:20", "argument types: <> (int)", "<array:argsort>: (keys: i32[]) => int[]"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "array_type.cml:12:20", "argument types: <> (int)", "<array:argsort_i>: (keys: i32[]) => int[]"]
 
 [[tests]]
 name = "native.array_sort_wrong_arity"
-desc = "`array:sort` is declared with one array argument: a second one is refused at the call, and the overloads the message lists are the declarations', parameter name included."
+desc = "`array:sort` is declared with one array argument: a second one is refused at the call, and the overloads the message lists are the declarations', parameter name included — one per element type, each naming its own operator (`array:sort_i` for `i32`)."
 kind = "negative"
 case = "../../../cases/compile/native/array_sort_arity.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "array_sort_arity.cml:10:17", "argument types: <> (int[], int)", "<array:sort>: (xs: T[]) => T[]"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "array_sort_arity.cml:10:17", "argument types: <> (int[], int)", "<array:sort_i>: (xs: i32[]) => i32[]"]
 
 [[tests]]
 name = "native.array_sort_wrong_type"
-desc = "A number where the declarations of `array:sort` take an array: refused at the declarations' type, and the signature in the message has their own parameter name (`xs`) and type variable — `stdlib/array.cml`, not the C++, is the source."
+desc = "A number where the declarations of `array:sort` take an array: refused at the declarations' type, and the signatures in the message have their own parameter name (`xs`) and the element type of their own declaration — `stdlib/array.cml`, not the C++, is the source."
 kind = "negative"
 case = "../../../cases/compile/native/array_sort_type.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "array_sort_type.cml:11:17", "argument types: <> (int)", "<array:sort>: (xs: T[]) => T[]"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "array_sort_type.cml:11:17", "argument types: <> (int)", "<array:sort_i>: (xs: i32[]) => i32[]"]
 
 # ---- The declarations of `statistics`: four element types per name (handover H135) ----
 
@@ -486,6 +486,112 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::WhenDeclarationOverlap"
 expect_diagnostic_code = "0x030001E0"
 expect_output_contains = ["when_shape_overlap.cml:33", "Two declarations of 'arms_kernel' both apply to the type '(x: int) => int'", "(a: T, b: T) => T — when always::<T>()", "(a: T, b: T) => T — when is_callable::<T>()"]
+
+
+# ---- A call reaches the rule its own `when` admits, not the one written first ----
+#
+# Design principles 4.4: "条件在实例化时求值；不成立时**这个重载不适用**，重载选择去试同名的其他
+# 候选". A body-less declaration's `when` is therefore read where the call is resolved, exactly as a
+# function's is; before these two cases the operator group answered with the first rule its
+# signature accepted, so two same-named declarations with mutually exclusive conditions were
+# decided by the order they were written in and a call could reach an operator of another element
+# type (`:op/sub_i` on an `int` pair, which the gir draws as `value_type="int"` under an i32
+# operator, and which runs the i32 arithmetic on it). The two files hold the same program with the
+# two declarations written in the two possible orders: both must print the same two lines, and the
+# graph entry pins the operator each call reaches by name.
+
+[[tests]]
+name = "native.when_order_at_call.i32_first"
+desc = "Two declarations of `arms_kernel` with mutually exclusive conditions, the `i32` rule (the subtraction) written first: the `i32` call reaches `:op/sub_i` and the `int` call reaches `:op/add_l`, so the two lines are -4 and 42. A compiler that settled the pair by writing order routes the `int` call into the i32 operator and prints a wrapped number instead."
+kind = "behavior"
+case = "../../../cases/compile/native/when_order_at_call_i32_first.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "i32=-4\nint=42\n"
+
+[[tests]]
+name = "native.when_order_at_call.int_first"
+desc = "The same program with the two declarations in the other order prints the same two lines: which rule a call reaches is decided by its argument types and the rule's own `when`, never by the order the declarations are written in (design principles 4.4; the author's ruling of 2026-10-24 on `impl-declaration-arms`)."
+kind = "behavior"
+case = "../../../cases/compile/native/when_order_at_call_int_first.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "i32=-4\nint=42\n"
+
+[[tests]]
+name = "native.when_order_at_call.on_the_graph"
+desc = "The operator each call reaches, on the graph: the `i32` call is an OPER of `:op/sub_i` with `value_type=\"i32\"` and the `int` call an OPER of `:op/add_l` with `value_type=\"int\"`, in the file whose `int` declaration is written first. No node pairs `:op/sub_i` with an `int` value or `:op/add_l` with an `i32` value -- the type-and-operator mismatch that writing order used to produce."
+kind = "behavior"
+case = "../../../cases/compile/native/when_order_at_call_int_first.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+  const lines = input.normalized.stdout.split('\n')
+  const opers = (uri) => lines.filter((l) => l.includes(`label="${uri}"`) && l.includes('type="OPER"'))
+  const pairs = opers(':op/sub_i').concat(opers(':op/add_l'))
+  assert(pairs.some((l) => l.includes('label=":op/sub_i"') && l.includes('value_type="i32"')),
+    `no i32 subtraction: ${pairs.join(' | ')}`)
+  assert(pairs.some((l) => l.includes('label=":op/add_l"') && l.includes('value_type="int"')),
+    `no int addition: ${pairs.join(' | ')}`)
+  const mismatched = pairs.filter((l) =>
+    (l.includes('label=":op/sub_i"') && l.includes('value_type="int"')) ||
+    (l.includes('label=":op/add_l"') && l.includes('value_type="i32"')))
+  assert(mismatched.length === 0, `an operator of another element type was reached: ${mismatched.join(' | ')}`)
+}
+"""
+
+
+# ---- Two candidates whose own `when` both hold are an ambiguity, not a choice ----
+#
+# The language author's ruling of 2026-10-23 on `two-when-conditions-hold`
+# (`docs/handover/reviews/questions-2026-10-23.md`): "带 `when` 的候选都适用时，调用处报歧义，列出两
+# 条候选与各自成立的条件". "先写的赢" no longer exists for a candidate that writes `when`, because the
+# declaration-time check samples the registered types one at a time and the call site is what
+# decides, so the fallback has to be a report and not an order.
+#
+# The pair below is exactly what that sampling cannot see: the first arm's condition is about `T`
+# alone and the second's about `U` alone, so every registered type satisfies at most one of them
+# (the pair is admitted) while a call writes two different types and satisfies both. The two files
+# hold one program with the two declarations in the two orders; both must report one and the same
+# diagnostic, word for word, with the candidates listed each with the condition it wrote.
+#
+# The diagnostic's name and code are asserted through the rendered text (`expect_output_contains`)
+# rather than through `expect_diagnostic_name` / `expect_diagnostic_code` on purpose: the
+# diagnostics reference (`docs/diagnostics.md`, generated by scripts/diagnostics-catalog.mjs) prints
+# as each code's example the first small test that names it exactly (`exampleFor`), and this file
+# sorts before `overloads.plan.toml`, so the two entries would displace the literal-ambiguity
+# example that `AmbiguousCall`'s help text ("annotate the literal with its type ... or convert an
+# argument with 'as'") is written for. The name and the code are pinned here all the same, and the
+# line and column pin the report to the call.
+
+[[tests]]
+name = "native.when_both_hold.i32_first"
+desc = "Two declarations of `dual_kernel` whose conditions hold together for `dual_kernel(x, y)` with `x: i32` and `y: int`: the call reports an ambiguity at the call site, naming both candidates with the condition each wrote, sorted. The declaration-time check admits the pair (its conditions are about `T` and about `U`, and it binds one type variable at a time), so nothing but the call can see that both hold. The `i32` rule is written first here; before this change the call silently reached it, so the program printed the subtraction's answer."
+kind = "negative"
+case = "../../../cases/compile/native/when_both_hold_i32_first.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_line = 46
+expect_diagnostic_column = 31
+expect_output_contains = ["The call to 'dual_kernel' with (i32, int) fits more than one overload. More than one function takes these arguments; make the choice explicit: annotate the literal with its type (for example '2 as f32') or convert an argument with 'as'. The overloads that take them: (a: T, b: U) => T — when is_first_i32::<T>(); (a: T, b: U) => T — when is_second_int::<U>()", "(name=SemanticDiag::AmbiguousCall, code=0x030000F4)"]
+expect_output_not_contains = ["never printed", "UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "native.when_both_hold.int_first"
+desc = "The same program with the two declarations of `dual_kernel` written in the other order reports the same diagnostic: same name, same code, same message text and the same candidate list, the two orders differing only in where the two files put the call. A compiler that settled the pair by writing order would print the addition's answer instead of reporting anything."
+kind = "negative"
+case = "../../../cases/compile/native/when_both_hold_int_first.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_line = 37
+expect_diagnostic_column = 31
+expect_output_contains = ["The call to 'dual_kernel' with (i32, int) fits more than one overload. More than one function takes these arguments; make the choice explicit: annotate the literal with its type (for example '2 as f32') or convert an argument with 'as'. The overloads that take them: (a: T, b: U) => T — when is_first_i32::<T>(); (a: T, b: U) => T — when is_second_int::<U>()", "(name=SemanticDiag::AmbiguousCall, code=0x030000F4)"]
+expect_output_not_contains = ["never printed", "UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
 
 
 # ---- A declaration cannot be parametric ----

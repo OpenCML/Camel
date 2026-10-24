@@ -54,6 +54,9 @@ struct Diagnostic {
     std::vector<DiagLabel> related;
     /// More secondary locations existed than were kept (see Diagnostics::addRelatedToErrorsFrom).
     bool relatedElided = false;
+    /// The changes the report asks for that a tool can apply without asking (see DiagFix). Empty
+    /// where the compiler does not know the text to write; `suggestion` then carries the advice.
+    std::vector<DiagFix> fixes;
     /// Additional remarks, shown as `note:` lines after the excerpt.
     std::vector<std::string> notes;
     camel::source::source_context_ptr_t
@@ -293,6 +296,7 @@ template <typename... Args> Diagnostic DiagnosticBuilder::commit(Args &&...args)
     d.stage    = stageForDiagnostic(type_);
     d.related  = std::move(related_);
     d.notes    = std::move(notes_);
+    d.fixes    = std::move(fixes_);
     DiagnosticArguments arguments;
     (arguments.add(std::forward<Args>(args)), ...);
     d.message    = formatDiagnosticMessage(rawMessage_, arguments);

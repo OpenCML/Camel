@@ -10,6 +10,16 @@
  * For reference only: these declarations are not compiled. They are checked against the
  * operators the module registers, and docs/stdlib-reference.md is generated from them
  * (scripts/stdlib-reference.mjs).
+ *
+ * The parameter names written here are the names a call binds to by name (`len(x: xs)`), and they
+ * are the ones the reference page prints: `--verify-ops` compares them with the names of the
+ * registered rules, position by position, in both the `with` list and the ordinary one. Until a
+ * built-in's signature has one source -- the declaration, with C++ registering the implementation
+ * (the language author's ruling, 2026-10-24: "a built-in's signature has one source", to be done
+ * before the public repository is reorganised) -- the two spellings have to stay equal, and a
+ * difference is a test failure rather than a silent drift. The names here are the ones to keep:
+ * the reference page is generated from them, and a position a call names is the position this file
+ * names (stdlib-conventions.cn.md, section 4).
  */
 
 // ---- memory ----
@@ -317,9 +327,13 @@ export func len(x: T[..]): int
 
 // ---- arrays ----
 
-/// The integers from start up to, not including, end; empty when end is not above start.
+/// The integers from start up to, not including, end; empty when end is not above start. This is
+/// what the interval `a..b` becomes on the graph (design principles 4.2); it is not a name a
+/// program writes: the interval of two integers is written `a..b`, and the two-parameter
+/// `range(a, b)` it used to be written as is gone (SemanticDiag::RangeTwoArgumentsRemoved).
 /// @pure
-/// @example range(0, 3)    // [0, 1, 2]
+/// @example 0..3    // [0, 1, 2]
+/// @example-fragment the interval is written `a..b`; `range(a, b)` is refused, and this built-in is what the interval lowers to
 #op<':struct/range'>
 export func range(start: int, end: int): int[]
 
@@ -466,13 +480,15 @@ export func attempt(f: (...args: A) => T, ...args: A): T!
 // value. One calling form: the collection is the ordinary argument, the rest are
 // with-arguments, put<k, v>(m) or m->put<k, v>; put(m, k, v) is refused with a hint.
 
-/// The number of entries of a map or of elements of a set.
+/// The number of entries of a map or of elements of a set. The collection is `x`, the name the
+/// string and array declarations above give their one parameter: the position means the value
+/// whose length is asked for, whatever its type.
 /// @pure
 /// @example len([('a', 1), ('b', 2)] as Map<string, int>)    // 2
 #op<':coll/len'>
-export func len(c: Map<K, V>): int
+export func len(x: Map<K, V>): int
 #op<':coll/len'>
-export func len(c: Set<T>): int
+export func len(x: Set<T>): int
 
 /// The value stored under key, or null when the map has no such key. `m[key]` is the same lookup.
 /// @pure
@@ -531,11 +547,13 @@ export func values(m: Map<K, V>): V[]
 #op<':coll/map_items'>
 export func items(m: Map<K, V>): (K, V)[]
 
-/// The elements of a set as an array, in ascending order.
+/// The elements of a set as an array, in ascending order. The collection is `m`, the name the
+/// map declaration above gives its one parameter: the position means the collection whose items
+/// are listed.
 /// @pure
 /// @example items([3, 1, 2] as Set<int>)    // [1, 2, 3]
 #op<':coll/set_items'>
-export func items(s: Set<T>): T[]
+export func items(m: Set<T>): T[]
 
 /// A map with the entries of both maps; for a key in both, the entry of other is taken. Neither argument is changed.
 /// @pure
