@@ -205,6 +205,64 @@ New codes: take a number that `--check` accepts, add the table entry, run `--wri
 use: syntax `0x01`-`0x0B`; run time `0x30`-`0x3B` for operator and module faults; semantic
 `0x80` and up for multi-error reporting.
 
+### Which codes carry a fix, and how the first set was chosen
+
+The registry's seventh column says, for every declaration, `edit` when the report attaches a
+machine-applicable change, or `none: <cause>` when it does not. Building that column for all 260
+codes is the catalog's work; deciding which codes can honestly carry an `edit` is not, so it was
+measured. This is the survey of 2026-10-24 on `769b358a9`, and it is the reason the first set is
+the one it is.
+
+What the tree said before anything was added: **260 codes, 256 with help, 4 without** (`UnknownInternalError`,
+`MissingToken`, `UnexpectedToken`, `InvalidArgument`), and **not one with a machine-applicable
+change** - the mechanism did not exist, and `suggestion` was the only advice a code could give.
+
+How often a code fires was measured twice, because the two answers differ in kind.
+
+- **Committed programs.** All 2662 `.cml` files under version control, each compiled on its own
+  with `camel <file> --error-format json --max-errors 50`: 2568 diagnostics, 237 distinct codes,
+  39 runs that failed for a reason of their own. The top is module and name resolution, because
+  most of those files are library fragments that were never entry points:
+  `NativeDeclarationNotLoaded` 357, `UnresolvedTypeReference` 228, `NoMatchingFunction` 201,
+  `EntryModuleMissingMain` 177, `UnresolvedReference` 155, `RuntimeError` 143,
+  `IgnoredSideEffect` 84, `EntryArgumentMissing` 79, `EffectNotExecuted` 53,
+  `UnusedFallibleValue` 51, `ModuleNotFound` 50, `ArgumentsRejected` 43, `DivisionByZero` 42,
+  `LiteralNotRepresentable` 34, `TagHasNoReader` 34, `CapturedWriteInAsyncFunction` 33,
+  `ExitInUnusedBranch` 31, `MissingToken` 29, `ConstructNotSupported` 27,
+  `InvalidEscapeSequence` 27, `UnexpectedToken` 25.
+- **Mutated programs**, which is what a person typing actually produces. 3000 mutants of 98
+  files (`test/cases/parse/*`, `examples/*`, `test/cases/format/*`), seeded so the run repeats:
+  one to three mutations each of "delete a line", "insert a junk character", "delete a span" and
+  "truncate the file": 3476 diagnostics, 52 distinct codes. The top is entirely the syntax and
+  lexical layer: `UnexpectedToken` 844, `MissingClosingDelimiter` 637,
+  `EntryModuleMissingMain` 512, `UnresolvedReference` 242, `UnmatchedClosingDelimiter` 225,
+  `UnclosedStringLiteral` 195, `MissingComma` 116, `MissingToken` 113, `UnterminatedComment` 77,
+  `InvalidNumberFormat` 64, `KeywordAsIdentifier` 47, `ComparisonNeedsSpace` 47,
+  `IllegalCharacter` 36, `ModuleNotFound` 35, `ReturnTypeMismatch` 24, `MissingInitializer` 22,
+  `MissingThen` 21, `WhenAfterBody` 18, `AngleCloseAfterSpace` 14, `LineStartsWithOperator` 5.
+- **What the tests expect** was counted as well - 788 `expect_diagnostic_name` and 208
+  `expect_diagnostic_code` - and it is the wrong ranking to use here: a code a test names often
+  is a code the tests were written around, not one a writer meets. (9 codes are named by no test
+  at all; that is `--coverage`'s business, not this column's.)
+
+The set to add fixes to first is therefore the head of the mutation ranking, filtered by whether
+the repair is determinate: the parser named the single missing token, or the text to remove or
+replace is the text the message is about. Fourteen codes qualified - `IllegalCharacter`,
+`InvalidNumberFormat`, `UnclosedStringLiteral`, `UnterminatedComment`, `MissingClosingDelimiter`,
+`UnmatchedClosingDelimiter`, `MissingThen`, `ExtraSemicolon`, `MissingComma`, `MissingToken`,
+`WhenAfterBody`, `ComparisonNeedsSpace`, `AngleCloseAfterSpace`, `LineStartsWithOperator` - and
+they are 3237 of the 3476 mutants' diagnostics, 93%.
+
+The codes those rankings put higher were left without a fix on purpose, and the column says why:
+`UnresolvedReference`, `UnresolvedTypeReference`, `NoMatchingFunction` and the rest of the
+resolution family are `choice` - the compiler does not know which name or type was meant, and a
+fix that picks one is a wrong change a tool would apply without asking, which is worse than a
+sentence. `EntryModuleMissingMain`, `ModuleNotFound` and `NativeDeclarationNotLoaded` are `context`
+- the repair is a second file or a second place, not a range in this one. `RuntimeError` and the
+run-time faults are `runtime`. Measured with `notes/sweep.mjs` and `notes/audit.mjs`, both outside
+the repository: the first compiles a file list and mutates one, the second merges the counts with
+the registry.
+
 ## 7. Questions for the language author
 
 - **Q1. Syntax errors after the first.** Settled by the hand-written parser: every
