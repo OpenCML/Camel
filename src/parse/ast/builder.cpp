@@ -3611,7 +3611,7 @@ Value Builder::visitLinkExpr(cst::LinkExpr context) {
 
 /*
 compExpr
-    : annoExpr (('..' | '?..') annoExpr)*
+    : annoExpr ('..' annoExpr)*
     ;
 */
 Value Builder::visitCompExpr(cst::CompExpr context) {
@@ -3622,27 +3622,6 @@ Value Builder::visitCompExpr(cst::CompExpr context) {
         node_ptr_t dataNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::Comp);
         setNodeTokenRangeByContext(dataNode, context);
         node_ptr_t rhsNode = any2node(visitExpr(context->expr(i)));
-        if (strOp == "..") {
-            // `f..g` is in the grammar, but what it builds is not a function: its result
-            // could not be called and printed as 0. Its meaning is not specified (the order
-            // of the two functions, functions of several parameters).
-            diags_->of(SemanticDiag::ConstructNotSupported)
-                .at(rangeOf(tokenOf(context->child(i * 2 - 1))))
-                .commit(
-                    strOp,
-                    "function composition is not implemented; write a lambda, e.g. "
-                    "'(x: int): int => g(f(x))'");
-        }
-        if (strOp == "?..") {
-            // Used to be accepted with a warning and compiled as `..`.
-            diags_->of(SemanticDiag::ConstructNotSupported)
-                .at(rangeOf(tokenOf(context->child(i * 2 - 1))))
-                .commit(strOp, "the operator is not implemented");
-            node_ptr_t notNullNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::NotNullThen);
-            setNodeTokenRangeByContext(notNullNode, context->expr(i));
-            *notNullNode << lhsNode;
-            lhsNode = notNullNode;
-        }
         *dataNode << lhsNode << rhsNode;
         registerAstSemanticBundle(
             dataNode,

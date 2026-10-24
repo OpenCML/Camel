@@ -49,7 +49,7 @@ STATEMENTS = [
     "let v = a & b | c & d", "let v = a == b & c == d || e | f && g", "let v = a | b ?? c",
     # operators
     "let v = a ?? b ?? c", "let v = a !! b + c", "let v = a * b ?? c + d", "let v = a ?? b = c",
-    "let v = a -> f -> g", "let v = a ?-> f", "let v = f .. g", "let v = f ?.. g",
+    "let v = a -> f -> g", "let v = a ?-> f", "let v = f .. g", "let v = f .. g .. h",
     "let v = a + b * c ^ d @ e % f / g", "let v = a || b && c == d != e === f !== g",
     "let v = a < b <= c >= d", "a = b", "a += b", "a @= b", "a |= b", "a &= b",
     "let v = wait f(a)", "let v = a ?? if c then 1 else 2", "let v = a ?? wait b",

@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-257 diagnostics: 238 errors, 19 warnings.
+259 diagnostics: 240 errors, 19 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -224,6 +224,8 @@ prints one entry.
 | `0x030001DE` | [SemanticDiag::NodeOfNotAParameter](#nodeofnotaparameter) | Error |
 | `0x030001DF` | [SemanticDiag::OverloadParameterNames](#overloadparameternames) | Error |
 | `0x030001E0` | [SemanticDiag::WhenDeclarationOverlap](#whendeclarationoverlap) | Error |
+| `0x030001E1` | [SemanticDiag::CompOperandMismatch](#compoperandmismatch) | Error |
+| `0x030001E2` | [SemanticDiag::CompOperandNotUnary](#compoperandnotunary) | Error |
 | `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
@@ -6511,6 +6513,69 @@ func main(): int sync {
     let x: i32 = 19
     let y: i32 = 23
     println(combine(x, y))
+    return 0
+}
+```
+
+### CompOperandMismatch
+
+`0x030001E1` · Error · `SemanticDiag::CompOperandMismatch`
+
+**Message**
+
+```text
+'..' takes two functions or two integers; the left operand is '{0}' and the right one '{1}'.
+```
+
+**Help**
+
+```text
+'..' has two readings (design principles 4.2). Between two functions it is the composition `f..g`, the lambda `(x) => g(f(x))`: 'f' is unary and 'g' takes what 'f' returns, so a call of `f..g` is a call of that lambda and nothing more. Between two integers it is the interval `a..b`: the integers from 'a' to 'b - 1' as the array 'int[]', left closed and right open, as the slice 't[a:b]' is. Nothing else is composed.
+```
+
+**Example** (`test/cases/compile/stream/comp_operand_mismatch.cml`, run as `camel test/cases/compile/stream/comp_operand_mismatch.cml`)
+
+```camel
+// A text is neither a function nor an integer: `..` has no reading for it (design principles
+// 4.2), so the compiler refuses the construct and names what it does take.
+module h405_comp_not_a_function
+
+func main(): int sync {
+    let xs = 'a'..'b'
+    println(xs)
+    return 0
+}
+```
+
+### CompOperandNotUnary
+
+`0x030001E2` · Error · `SemanticDiag::CompOperandNotUnary`
+
+**Message**
+
+```text
+'..' composes a unary function on the left; '{0}' takes {1} parameters.
+```
+
+**Help**
+
+```text
+The composition `f..g` is the lambda `(x) => g(f(x))` (design principles 4.2): 'f' takes the one argument the composed function takes, and 'g' takes the result of 'f'. Write the lambda with the parameters you mean.
+```
+
+**Example** (`test/cases/compile/stream/comp_operand_not_unary.cml`, run as `camel test/cases/compile/stream/comp_operand_not_unary.cml`)
+
+```camel
+// The left operand of `..` is unary, because the composition is the lambda `x => g(f(x))`
+// (design principles 4.2): `add2` takes two parameters, so the construct has no reading.
+module h405_comp_not_unary
+
+func add2(a: int, b: int): int { return a + b }
+func inc(x: int): int { return x + 1 }
+
+func main(): int sync {
+    let g = add2..inc
+    println(g(3))
     return 0
 }
 ```

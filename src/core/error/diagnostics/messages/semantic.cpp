@@ -1421,6 +1421,22 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::CompOperandMismatch,
+            {
+                "CompOperandMismatch",
+                "'..' takes two functions or two integers; the left operand is '{0}' and the right one '{1}'.",
+                "'..' has two readings (design principles 4.2). Between two functions it is the composition `f..g`, the lambda `(x) => g(f(x))`: 'f' is unary and 'g' takes what 'f' returns, so a call of `f..g` is a call of that lambda and nothing more. Between two integers it is the interval `a..b`: the integers from 'a' to 'b - 1' as the array 'int[]', left closed and right open, as the slice 't[a:b]' is. Nothing else is composed.",
+            },
+        },
+        {
+            SemanticDiag::CompOperandNotUnary,
+            {
+                "CompOperandNotUnary",
+                "'..' composes a unary function on the left; '{0}' takes {1} parameters.",
+                "The composition `f..g` is the lambda `(x) => g(f(x))` (design principles 4.2): 'f' takes the one argument the composed function takes, and 'g' takes the result of 'f'. Write the lambda with the parameters you mean.",
+            },
+        },
+        {
             SemanticDiag::ReducedPrecisionUnsupported,
             {
                 "ReducedPrecisionUnsupported",

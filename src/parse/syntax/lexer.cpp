@@ -924,8 +924,6 @@ TokenBuffer Lexer::tokenizeImpl(std::string source, size_t from, size_t to) {
             case '?':
                 if (c1 == '-' && c2 == '>') {
                     three(TokenKind::QuestionArrow);
-                } else if (c1 == '.' && c2 == '.') {
-                    three(TokenKind::QuestionDotDot);
                 } else {
                     c1 == '?' ? two(TokenKind::QuestionQuestion) : one(TokenKind::Question);
                 }

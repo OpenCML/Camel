@@ -64,22 +64,6 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 10000
 
 [[tests]]
-name = "not_supported.optional_comp"
-desc = "`?..` is rejected at the operator; it used to be a warning and compiled as `..`."
-kind = "negative"
-case = "../../../cases/compile/not_supported/optional_comp.cml"
-args = ["${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ConstructNotSupported"
-expect_diagnostic_code = "0x0300001F"
-expect_diagnostic_line = 11
-expect_diagnostic_column = 16
-expect_output_contains = ["'?..' is not supported: the operator is not implemented."]
-expect_output_not_contains = ["never printed", "UnknownInternalError", "Warning"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 10000
-
-[[tests]]
 name = "not_supported.is_operator"
 desc = "`is` is rejected at the operator; it used to be a warning and `x is T` compiled as `x`."
 kind = "negative"

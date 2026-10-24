@@ -33,6 +33,7 @@ c005562ecb6383e6 ok test/cases/parse/rulings/doc_comment.cml
 7a42a52d60985621 ok test/cases/parse/rulings/minus.cml
 3cff0bc658e60ddf ok test/cases/parse/rulings/not_by_precedence.cml
 2208963e01d4a29e ok test/cases/parse/rulings/null_compare.cml
+7a180de2e356ec0b no test/cases/parse/rulings/optional_comp_removed.cml
 4f723341823c8fe9 ok test/cases/parse/rulings/power.cml
 cc32392fed36cd2f ok test/cases/parse/rulings/reserved_and.cml
 7eaaa656fecc2292 no test/cases/parse/syntax/angle_close_after_space.cml
@@ -191,8 +192,8 @@ a3010feee0759da6 ok probes/probe_s106.cml
 877560b3e6fafe83 ok probes/probe_s111.cml
 38ae4e9c4501fd47 ok probes/probe_s112.cml
 fcdffcabe820add1 ok probes/probe_s113.cml
-75a65d7bf90c8b74 no probes/probe_s114.cml
-6009cc408336cdaa no probes/probe_s115.cml
+c021d22372811429 ok probes/probe_s114.cml
+81f1c6ee6cbbc6ef ok probes/probe_s115.cml
 428f00b895a849a8 ok probes/probe_s116.cml
 3baca5a0a5b83a9a ok probes/probe_s117.cml
 693d9f47e364150a ok probes/probe_s118.cml

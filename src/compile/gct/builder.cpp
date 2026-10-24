@@ -2943,12 +2943,20 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
 
     case AST::ReservedDataOp::Comp: {
         const auto &rhsASTNode = ast->atAs<AST::DataLoad>(1);
-        // `cmp` is the compiler's own macro operator (oper::MacroCmp): it is referred to by the
-        // id the table fixed at start-up, not by the name of the built-in module's entity.
-        const oper_group_ptr_t cmpGroup =
-            context_->importModule("")->nativeOperatorGroup(camel::core::oper::MacroCmp);
-        ASSERT(cmpGroup != nullptr, "The built-in __cmp__ is missing.");
-        node_ptr_t opNode  = tree_->makeDRef(camel::core::oper::MacroCmp, cmpGroup->name());
+        // `a..b` has two readings, and the types of its two operands tell them apart (design
+        // principles 4.2; the author's ruling of 2026-10-24 on `h248-generator-and-composition`):
+        // between two functions it is the composition `f..g`, the lambda `x => g(f(x))`, and
+        // between two integers it is the interval `[a, b)`. GCT has no types, so the construct
+        // is handed on as one call of the compiler's own name for it, which the GIR builder
+        // resolves (Builder::buildComposition).
+        //
+        // It used to be handed to the built-in macro operator `oper::MacroCmp` (`:macro/cmp`,
+        // src/builtin/operators/macro.cpp), whose resolver took two functions and answered with
+        // the exit type of the right one. That path could not build a composition at all — a
+        // value of a function type is a graph, and no built-in executor has one — and it had no
+        // reading for two integers. The operator and its executor stay registered; the compiler
+        // no longer has a user for them.
+        node_ptr_t opNode  = tree_->makeDRef(std::string(camel::core::kCompositionCall));
         res                = tree_->makeLink(2);
         auto compAstBundle = astSemantic(context_, ast);
         setOriginFromOrigin(

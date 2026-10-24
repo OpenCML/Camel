@@ -194,15 +194,37 @@ timeout_ms = 120000
 
 [[tests]]
 name = "gc_pacing.churn_prl"
-# The high-water mark is the window the collector lets through plus one block, but a collection
-# is asked for at a safepoint and runs later while the machine is busy: next to seven other test
-# processes the same case measured 9.6 MB (H101) and 12 MB (H80's gate), against 7.2 MB alone.
-# The numbers this case checks are the serial run's, so it runs alone.
+# Why this arm asks for its collections unpaced (`std::prl gc_stress=true`, stdlib/std.cml: the run
+# serves every collection it asks for one for one, instead of the gate's pacing --
+# src/passes/sched/taskflow/taskflow.cpp#TaskflowGcGate::collect
+# caps a paced run so that `the next collection starts no sooner than twice the time this one took`,
+# which holds the collector at a third of the run).
+#
+# Paced, the byte high-water mark this arm used to bound is a schedule and not the pacing: how much
+# is allocated between asking for a collection at a safepoint and a thread reaching the next one is
+# what the machine decided. Measured on the Linux host (2026-10-24, 32 threads, 1-minute load
+# 110-127) with eight copies of this case at once, which is the condition H101 named:
+#
+#   paced:        peak 7200000 B, minor 300   (six of the eight copies)
+#                 peak 9600000 B, minor 299   (one: one asked-for collection had not run yet)
+#                 peak 12000000 B, minor 298  (one: two had not)
+#   unpaced:      peak 7200000 B, minor 300 = requested, released 597, moved 624, low 2400000
+#                 -- the same line in all eleven readings (three alone and the eight above), and
+#                 the same numbers std::fvm reads for the same case
+#
+# Every other figure was the same paced too (base 0, low 2400000, total 180000000, major 0,
+# promoted 6). So the arm runs unpaced and asserts the program's own allocation pattern, plus the
+# counts the ruling of 2026-10-23 asks for ("assert the collection count and the released amount"):
+# every collection the program asked for was served (minor = requested), no major collection ran,
+# 597 blocks were released and the peak is one window plus one block -- the serial arm's numbers,
+# which is what this arm's description claims. `parallel = false` stays for the layer's throughput,
+# not because the numbers need the host to itself: the readings above are from seven copies of it
+# running beside it.
 parallel = false
-desc = "The churn case under the parallel scheduler: the program has no two unordered heavy items, so it allocates in the same order and the numbers are those of std::fvm, without the exact-count flakiness the old plan had (bounds, not equalities). Pipeline: std::prl."
+desc = "The churn case under the parallel scheduler, with the gate's pacing off (`std::prl gc_stress=true`) so that what is measured is the program's allocation pattern and not how soon a thread reached a safepoint: the same high-water mark, released blocks and collection count as std::fvm (7.2 MB, 597 blocks, 300 collections, every asked-for collection served), without the exact-count flakiness the old plan had (bounds for the program's numbers, equality only between the two counters)."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_block_churn.cml"
-args = ["${case}", "std::profile gc_stats=1 report=false hints=false", "--arg", "steps=600", "--arg", "temp=300000", "std::prl"]
+args = ["${case}", "std::profile gc_stats=1 report=false hints=false", "--arg", "steps=600", "--arg", "temp=300000", "std::prl", "gc_stress=true"]
 
 expect_exit = 0
 expect_stdout_contains = ["gc_block_churn base=0"]
@@ -213,8 +235,23 @@ const m = /gc_block_churn base=([0-9]+) peak=([0-9]+) low=([0-9]+) dropped=([0-9
 assert(m !== null, `no result line: ${input.normalized.stdout}`)
 const [base, peak, low, dropped, released, total] = m.slice(1).map(Number)
 assert(base === 0 && total === 180000000, `base ${base}, total ${total}, expected 0 and 180000000`)
-assert(peak >= 4800000 && peak <= 8000000, `peak ${peak}, expected a window plus one block`)
+assert(peak >= 4800000 && peak <= 8000000, `peak ${peak}, expected a window plus one block (4.8 to 8.0 MB): unpaced, this is the program's own pattern, and std::fvm reads 7200000 for it`)
+assert(low >= 2400000 && low <= 4800000, `low ${low}, expected one block (2.4 MB) and at most a block more`)
+assert(dropped >= 250, `${dropped} samples saw the live bytes fall, expected most of them`)
 assert(released >= 590, `${released} blocks released, expected all but the window`)
+const line = /.camel. gc: major=.*/.exec(input.normalized.stderr)
+assert(line !== null, `no statistics line: ${input.normalized.stderr}`)
+const field = (name) => {
+  const f = new RegExp(name + '=([0-9.]+)').exec(line[0])
+  assert(f !== null, `no ${name} in: ${line[0]}`)
+  return Number(f[1])
+}
+const major = field('major')
+assert(major === 0, `${major} major collections: the program keeps nothing, so the promoted-block budget is never reached`)
+const minor = field('minor')
+const requested = field('requested')
+assert(minor === requested, `${minor} of the ${requested} collections this run asked for ran: unpaced, every one is served (a paced run of this case ran 300 of 300 too, but two copies of eight read 299 and 298)`)
+assert(minor >= 240 && minor <= 360, `${minor} collections, expected one per 2-block window (240 to 360), as churn_nvm above asserts`)
 }
 """
 timeout_ms = 120000

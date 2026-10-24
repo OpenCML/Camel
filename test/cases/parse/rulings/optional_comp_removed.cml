@@ -1,0 +1,13 @@
+// `?..` is gone: the lexer no longer knows the token, so `inc?..dbl` is a syntax error at the
+// `?`, and nothing compiles it as `..` (the ruling of 2026-10-24 removed the writing).
+module optional_comp_removed
+
+func inc(x: int): int { return x + 1 }
+func dbl(x: int): int { return x * 2 }
+
+func main(): int sync {
+    let g = inc?..dbl
+    println('never printed')
+    println(g(3))
+    return 0
+}
