@@ -442,3 +442,23 @@ export func check(rules: Rule[], samples: int = …, seed: int = …, program: P
 规则在匹配处按值的类型实例化、整数族与浮点族各合为一条泛型律、四个随之暴露的缺陷一并修好——好。一处写法要统一：
 
 - **`when` 的位置**：规则库写成 `rule int_add_zero::<T>(x: T) { x + 0 => x } when is_integer::<T>()`（条件在体之后），而函数写在头部、体之前（`func f::<T>(x: T[]): T when is_numeric::<T>() { … }`）。（更正：规则语言第二版第 2 节的例子本来就写在体之后，规则库是照它写的，不是施工方的偏差。）设计原则 4.4："`when` 是规则、函数重载与 `match` 守卫唯一的适用条件"——同一个东西放在同一个位置（规则统一）：**`rule name::<T>(params) when cond { lhs => rhs }`**。**负责人裁定（2026-10-24，最终）：`when` 一律写在它守护的体之前**（设计原则 4.4）——它是适用条件、属于签名，与体后的定义性子句（`fact` 的 `join`/`meet`/…）性质不同。规则写 `rule add_zero::<T>(x: T) when is_integer::<T>() { x + 0 => x }`；函数签名写不下时 `when` 单独一行、在签名与体之间。解析器只接受这一种位置（规则体后的 `when` 不保留，不计兼容）；`camel-format` 按此排版；规则语言第二版设计稿的例子、`stdlib/rules.cml` 一次机械改写。
+
+## H247 三份：许可到前提、判定落在哪、精度规则的采样
+
+### verification-licence-to-precondition
+
+1. **`reassociate` 的命题：A 起步、C 为终点**——实数模型下证"左 = 右"，终点是 Alive2 式的"|左 − 右| ≤ 由算子声明给出的舍入界"。但实数模型只管**有限值**：设计原则 7.3 写明"算式优化不自动假设没有 NaN、无穷……规则仍须保留这些特殊值的行为，或检查相关显式许可"。所以命题是两半：有限输入上实数相等；非有限输入（NaN、±∞、−0）上按 IEEE 逐位相等——除非规则同时要了 `no_nans`/`no_infs`/`no_signed_zeros`。你们那条不带守卫的 `x * c1 + x * c2 => x * (c1 + c2)` 在 `-inf` 处的 FAIL 因此是**真发现**：它少要了 `no_infs`。标准库那 16 条要按这个命题逐条过；带守卫"只选实例、不比较值"的那条路不能算验证。
+2. **`refine_accuracy`：A**，复用 `proved`，报告里固定一列"命题种类"（`equality` / `real equality + IEEE on special values` / `error bound`）。顺带补了设计原则 7.2 的空缺：`refine_accuracy` 进入许可清单，并写明"不更大"的含义——每个输入上右边误差 ≤ 左边误差 + 规则声明的界（ulp，默认 2），且某处严格更好。
+3. **`nondeterministic`：A**，`sampled` 与"未检验（原因）"分开写，不许混。
+
+### verification-verdict-surface
+
+1. **B**：生成一份报告文件放在规则库旁（每条规则一行：名字、判定、命题种类、证据或反例），`--check` 模式在 CI 里核实"规则一条不少、没有 `refuted`"；`stdlib/rules.cml` 不加标注。
+2. **A**：判定由 `check` 发布，求解器是独立构建单元，`check` 经注册钩子问它；构建选项关掉求解器时如实给 `sampled`（构建选项可以，不用环境变量）。`CheckReport` 每行带 `rule`、`instance`（泛型的类型元组）、`verdict`、`proposition`、`evidence`（求解器 / 采样 / 反例）。文本输出是这张表的固定渲染，验收读它。
+3. **A**：覆盖不到的标 `sampled`，原因列写"超出翻译覆盖"。CI：`refuted` 硬失败；`sampled` 允许存在，报告给出计数，"以 `proved` 为目标"有可追踪的进度。
+4. **第 69 条从未被检验**：根因是测试按名字手列规则（又是会漂移的清单）。改为**从模块枚举全部导出的规则**交给 `check`（导出规则与报告行一一对应），在 H247 里一起做。`rules.cml` 头部与 `46_rules.md` 那句话由此重新成立。
+
+### accuracy-check-sampling
+
+1. **判定不能取决于规则在数组里的位置**：采样种子按规则的身份（名字加实例的类型元组）派生，不按下标；同一条规则在任何调用里抽到同样的样本。
+2. **`tensor_log_softmax_of_softmax` 按 7.2 的新定义判**：它在饱和区严格更好（左边溢出成 −∞/NaN，右边有限），在其余地方的相对误差多出约 1.6 倍、量级 1e-6，应当落在"左边误差 + 2 ulp"以内。按新定义它应当 `proved`（或在超出界的样本上给出反例）。若有样本真的超出界，那就是反例——这条规则要么声明更大的界（写明理由），要么等减去最大值的内核把误差压回来；不按"有时过、有时不过"处理。`accuracy-softmax-trade.md` 的 (a)(b) 两选，按此收口。

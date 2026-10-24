@@ -468,6 +468,7 @@ Keywords are kept only for modifiers that change semantics (such as `sync`, `exp
 - **No permission implies another.** A module can only declare what an operator itself does, and cannot widen the permissions on the caller's behalf.
 - **`unordered_reduce`** grants only "the merge order of this reduction may change", and nothing else.
 - **Exact operators may declare that they are affected by the four assumptions of `finite_math`**; rounding permissions still do not apply to them.
+- **`refine_accuracy`** (rule language v2, 8.10): allows the compiler to replace one writing by another whose error is no larger (`log(1 + x)` → `log1p(x)`, softmax with the maximum subtracted). "No larger" means: on every input, the right side's error does not exceed the left side's error plus the bound the rule declares (in ulps, 2 by default), and it is strictly better somewhere; not allowed by default, granted by a tag.
 
 ### 7.3 Defaults: relaxed by default, tightened by declaration
 
