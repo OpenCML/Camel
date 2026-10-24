@@ -441,4 +441,4 @@ export func check(rules: Rule[], samples: int = …, seed: int = …, program: P
 
 规则在匹配处按值的类型实例化、整数族与浮点族各合为一条泛型律、四个随之暴露的缺陷一并修好——好。一处写法要统一：
 
-- **`when` 的位置**：规则库写成 `rule int_add_zero::<T>(x: T) { x + 0 => x } when is_integer::<T>()`（条件在体之后），而函数写在头部、体之前（`func f::<T>(x: T[]): T when is_numeric::<T>() { … }`），规则语言第二版的例子也是体之前。设计原则 4.4："`when` 是规则、函数重载与 `match` 守卫唯一的适用条件"——同一个东西放在同一个位置（规则统一）：**`rule name::<T>(params) when cond { lhs => rhs }`**。解析器只接受这一种位置，旧位置不保留（不计兼容），`camel-format` 与规则库一次机械改写。
+- **`when` 的位置**：规则库写成 `rule int_add_zero::<T>(x: T) { x + 0 => x } when is_integer::<T>()`（条件在体之后），而函数写在头部、体之前（`func f::<T>(x: T[]): T when is_numeric::<T>() { … }`）。（更正：规则语言第二版第 2 节的例子本来就写在体之后，规则库是照它写的，不是施工方的偏差。）设计原则 4.4："`when` 是规则、函数重载与 `match` 守卫唯一的适用条件"——同一个东西放在同一个位置（规则统一）：**`rule name::<T>(params) when cond { lhs => rhs }`**。**这改的是第二版设计稿已定的写法，待负责人确认后再动**；确认后解析器只接受这一种位置，旧位置不保留（不计兼容），`camel-format`、设计稿与规则库一次机械改写。
