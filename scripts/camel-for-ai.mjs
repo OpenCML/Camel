@@ -49,11 +49,14 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import os from 'node:os'
+import { spawn } from 'node:child_process'
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const DOCUMENT_REL = 'docs/reference/camel-for-ai.md'
 const REGISTRY_REL = 'diagnostics/registry.tsv'
 const SIGNATURES_REL = 'docs/stdlib-reference.md'
+const LEXICAL_DOC_REL = 'docs/language/02_lexical.md'
 const PARSER_REL = 'src/parse/syntax/parser_expr.cpp'
 const TOKENS_REL = 'include/camel/parse/syntax/token_kinds.def'
 
@@ -62,19 +65,92 @@ const TOKENS_REL = 'include/camel/parse/syntax/token_kinds.def'
 //
 // The generated half keeps every entry of its source: 260 diagnostics and 411 library names with
 // all their overloads cost 55,000 characters and are not trimmed, because a name left out is a
-// name the reader has to look up elsewhere. The hand-written half is 39,000. The whole is therefore
-// about 100,000 characters -- some 28,000 tokens of English prose, tables and Camel, against the
+// name the reader has to look up elsewhere. The hand-written half is 47,000. The whole is therefore
+// about 108,000 characters -- some 30,000 tokens of English prose, tables and Camel, against the
 // roughly 700,000 characters of the four normative documents it distills (docs/language/,
 // docs/diagnostics.md, docs/stdlib-reference.md, docs/design-principles.cn.md).
 const BUDGET = {
-    total: 100000,
-    written: 39000,
+    total: 108000,
+    written: 47000,
     regions: {
         lexical: 4000,
         precedence: 3000,
         diagnostics: 27000,
         'stdlib-signatures': 27000,
     },
+}
+
+// Each chapter's own budget, read out of the table the document carries ("What each part costs"):
+// the number in the last cell of a row whose first cell starts with the chapter's number. The table
+// is therefore not a comment on the file, it is the file's promise about itself, and a chapter that
+// grows past its row is a problem. A row for a chapter the document does not have is a problem too.
+const BUDGET_ROW = /^\|\s*(\d{1,2}|Appendix [A-C])\.\s*(.+?)\s*\|[^|]*\|\s*([\d,]+)\s*\|$/
+
+function chapterBudgets(document) {
+    const rows = []
+    for (const line of document.split('\n')) {
+        const match = BUDGET_ROW.exec(line)
+        if (match) rows.push({ key: match[1], title: match[2], budget: Number(match[3].replace(/,/g, '')) })
+    }
+    return rows
+}
+
+function chapterSizes(document) {
+    const lines = document.split('\n')
+    const sizes = new Map()
+    let current = null
+    let chars = 0
+    const close = () => {
+        if (current) sizes.set(current, chars)
+    }
+    for (const line of lines) {
+        const heading = /^##\s+(\d{1,2}|Appendix [A-C])\./.exec(line)
+        if (heading) {
+            close()
+            current = heading[1]
+            chars = 0
+            continue
+        }
+        if (/^##\s/.test(line)) {
+            close()
+            current = null
+            chars = 0
+            continue
+        }
+        chars += line.length + 1
+    }
+    close()
+    return sizes
+}
+
+function budgetProblems(document) {
+    const problems = []
+    const { per, total } = countRegionChars(document)
+    const written = document.trim().length - total
+    for (const name of REGIONS) {
+        const cap = BUDGET.regions[name]
+        if (per[name] > cap) {
+            problems.push(`the '${name}' region is ${per[name]} characters; its budget is ${cap}`)
+        }
+    }
+    if (written > BUDGET.written) {
+        problems.push(`the hand-written part is ${written} characters; its budget is ${BUDGET.written}`)
+    }
+    if (document.trim().length > BUDGET.total) {
+        problems.push(`the document is ${document.trim().length} characters; its budget is ${BUDGET.total}`)
+    }
+    const sizes = chapterSizes(document)
+    const chapters = []
+    for (const row of chapterBudgets(document)) {
+        const size = sizes.get(row.key) ?? 0
+        chapters.push({ ...row, size })
+        if (size > row.budget) {
+            problems.push(
+                `the chapter '${row.key}. ${row.title}' is ${size} characters; the budget it states is ${row.budget}`,
+            )
+        }
+    }
+    return { problems, per, total, written, size: document.trim().length, chapters }
 }
 
 const REGIONS = ['lexical', 'precedence', 'diagnostics', 'stdlib-signatures']
@@ -95,33 +171,90 @@ function read(root, rel) {
 
 // ---- lexical ---------------------------------------------------------------------------------
 
-// The keyword table of token_kinds.def, in the order the file declares it, plus the punctuation.
-// A keyword's third field is the row of the language reference's table (2.4); this page keeps the
-// file's own group name, because the file is what the compiler reads.
+// The keyword table of `docs/language/02_lexical.md` §2.4 -- the page the token table's own comment
+// names as the source of its `Group` field -- plus the operators of `token_kinds.def`.
+//
+// The two files disagree about one word: `enum` is grouped under `Type` by the reference (the
+// language has nominal enums; §6 and §12 use them) and under `Reserved` by the token table, which
+// did not move when the language gained them. The page follows the reference and says so, and the
+// note is generated, so fixing the token table removes the note by itself instead of leaving a
+// stale claim behind.
+const KEYWORD_GROUPS = [
+    ['声明', 'Declaration'],
+    ['控制', 'Control'],
+    ['类型与转换', 'Type and conversion'],
+    ['字面量', 'Literal'],
+    ['保留，尚未实现', 'Reserved (accepted, not implemented — §13)'],
+]
+
 function generateLexical(root) {
-    const text = read(root, TOKENS_REL)
-    if (!text) return { text: null, count: 0, problem: `${TOKENS_REL} does not exist` }
-    const keywords = []
-    const groups = []
-    for (const match of text.matchAll(/^CAMEL_KEYWORD\((\w+), "([^"]+)", (\w+)\)/gm)) {
-        const group = match[3]
-        if (!groups.includes(group)) groups.push(group)
-        keywords.push({ word: match[2], group })
+    const tokens = read(root, TOKENS_REL)
+    if (!tokens) return { text: null, count: 0, problem: `${TOKENS_REL} does not exist` }
+    const reference = read(root, LEXICAL_DOC_REL)
+    if (!reference) return { text: null, count: 0, problem: `${LEXICAL_DOC_REL} does not exist` }
+    const declared = []
+    for (const match of tokens.matchAll(/^CAMEL_KEYWORD\((\w+), "([^"]+)", (\w+)\)/gm)) {
+        declared.push({ word: match[2], group: match[3] })
     }
-    const punctuation = [...text.matchAll(/^CAMEL_PUNCT\((\w+), "([^"]+)"\)/gm)].map((m) => m[2])
-    if (keywords.length === 0 || punctuation.length === 0) {
+    const punctuation = [...tokens.matchAll(/^CAMEL_PUNCT\((\w+), "([^"]+)"\)/gm)].map((m) => m[2])
+    if (declared.length === 0 || punctuation.length === 0) {
         return { text: null, count: 0, problem: `${TOKENS_REL} declares no keyword or no punctuation` }
     }
+
+    // §2.4's table, kept in the reference's order.
+    const from = reference.indexOf('## 2.4')
+    const to = reference.indexOf('## 2.5')
+    const rows = []
+    for (const line of (from < 0 || to < 0 ? '' : reference.slice(from, to)).split('\n')) {
+        if (!line.startsWith('|')) continue
+        const cells = line.split('|').map((cell) => cell.trim())
+        if (cells.length < 4 || cells[1] === '类别') continue
+        const label = KEYWORD_GROUPS.find(([zh]) => zh === cells[1])
+        if (!label) continue
+        const words = [...cells[2].matchAll(/`([a-z_]+)`/g)].map((m) => m[1])
+        rows.push({ label: label[1], words })
+    }
+    if (rows.length !== KEYWORD_GROUPS.length) {
+        return {
+            text: null,
+            count: 0,
+            problem: `${LEXICAL_DOC_REL} §2.4 has ${rows.length} of the ${KEYWORD_GROUPS.length} keyword rows`,
+        }
+    }
+
     const out = []
     out.push('| Group | Words |')
     out.push('|---|---|')
-    for (const group of groups) {
-        const words = keywords.filter((k) => k.group === group).map((k) => `\`${k.word}\``)
-        out.push(`| ${group} | ${words.join(' ')} |`)
+    for (const row of rows) {
+        out.push(`| ${row.label} | ${row.words.map((word) => `\`${word}\``).join(' ')} |`)
     }
     out.push('')
     out.push(`**Operators and separators** (${punctuation.length}): ${punctuation.map((p) => `\`${p}\``).join(' ')}`)
-    return { text: out.join('\n'), count: keywords.length }
+
+    // The disagreement between the two tables, derived rather than asserted: a word whose group in
+    // the token table is not the reference's row is named here, with both readings.
+    const groupOfRow = new Map()
+    for (let i = 0; i < rows.length; i++) {
+        for (const word of rows[i].words) groupOfRow.set(word, { label: rows[i].label, tokenGroup: declared.find((k) => k.word === word)?.group })
+    }
+    const disagreements = declared.filter((keyword) => {
+        const row = groupOfRow.get(keyword.word)
+        if (!row) return false
+        return row.label.split(' ')[0] !== keyword.group
+    })
+    if (disagreements.length > 0) {
+        const written = disagreements
+            .map((keyword) => `\`${keyword.word}\` (token table: \`${keyword.group}\`; reference: ${groupOfRow.get(keyword.word).label})`)
+            .join(', ')
+        out.push('')
+        out.push(`The token table \`${TOKENS_REL}\` groups ${written}. This file follows the reference.`)
+    }
+    const missing = declared.filter((keyword) => !groupOfRow.has(keyword.word)).map((keyword) => keyword.word)
+    if (missing.length > 0) {
+        out.push('')
+        out.push(`The token table declares ${missing.map((word) => `\`${word}\``).join(' ')}, which §2.4 does not list.`)
+    }
+    return { text: out.join('\n'), count: declared.length }
 }
 
 // ---- precedence ------------------------------------------------------------------------------
@@ -397,25 +530,6 @@ function countRegionChars(document) {
     return { per, total }
 }
 
-function budgetProblems(document) {
-    const problems = []
-    const { per, total } = countRegionChars(document)
-    const written = document.trim().length - total
-    for (const name of REGIONS) {
-        const cap = BUDGET.regions[name]
-        if (per[name] > cap) {
-            problems.push(`the '${name}' region is ${per[name]} characters; its budget is ${cap}`)
-        }
-    }
-    if (written > BUDGET.written) {
-        problems.push(`the hand-written part is ${written} characters; its budget is ${BUDGET.written}`)
-    }
-    if (document.trim().length > BUDGET.total) {
-        problems.push(`the document is ${document.trim().length} characters; its budget is ${BUDGET.total}`)
-    }
-    return { problems, per, total, written, size: document.trim().length }
-}
-
 // What the prose promises and the sources decide: a diagnostic named in the document must exist,
 // and a `target` note must say where its subject is designed.
 function promiseProblems(document, diagnostics, documentRel) {
@@ -449,6 +563,113 @@ function promiseProblems(document, diagnostics, documentRel) {
     return { problems, cited: seen.size }
 }
 
+// ---- Counter-examples -------------------------------------------------------------------------
+
+// A `counter-example` fence is not compiled by the documentation check, on purpose: a fence that
+// does not compile cannot be a snippet. That leaves the errors of the reference checked for their
+// diagnostic *name* only, and the pairing "this mistake gets that diagnostic" unchecked, which is
+// the part a reader relies on. `--verify-errors` closes it: each counter-example is compiled and the
+// diagnostic the entry names must be the one the compiler reports.
+function counterExamples(document) {
+    const lines = document.split('\n')
+    const found = []
+    for (let i = 0; i < lines.length; i++) {
+        if (!/<!--\s*camel-snippet:\s*counter-example/.test(lines[i])) continue
+        let j = i - 1
+        const prose = []
+        let claimLine = -1
+        while (j >= 0 && !/^##\s/.test(lines[j]) && i - j <= 14) {
+            const matches = [...lines[j].matchAll(/\b(?:Internal|Lexical|Syntax|Semantic|Runtime)Diag::[A-Za-z_]\w*/g)]
+            if (matches.length > 0 && claimLine < 0) claimLine = j
+            prose.unshift(lines[j])
+            j--
+        }
+        let k = i + 1
+        while (k < lines.length && !/^```(?:camel|cml)\s*$/.test(lines[k])) k++
+        const body = []
+        for (let m = k + 1; m < lines.length && !/^```\s*$/.test(lines[m]); m++) body.push(lines[m])
+        const claim = claimLine < 0 ? null : /\b(?:Internal|Lexical|Syntax|Semantic|Runtime)Diag::[A-Za-z_]\w*/.exec(lines[claimLine])[0]
+        found.push({ line: i + 1, claim, body })
+    }
+    return found
+}
+
+const CAMEL =
+    process.env.CAMEL_EXE ||
+    path.join(
+        process.env.CAMEL_HOME || path.join(REPO_ROOT, 'out', 'latest'),
+        'bin',
+        process.platform === 'win32' ? 'camel.exe' : 'camel',
+    )
+
+function runCamel(args, cwd) {
+    return new Promise((resolve) => {
+        // The plan runner sets the short diagnostic form for its own assertions; the entry names a
+        // diagnostic the way the default text form prints it, so the short form is not read here.
+        const env = { ...process.env }
+        delete env.CAMEL_ERROR_FORMAT
+        env.CAMEL_HOME = process.env.CAMEL_HOME || path.join(REPO_ROOT, 'out', 'latest')
+        const child = spawn(CAMEL, args, { cwd, env, stdio: ['ignore', 'pipe', 'pipe'] })
+        let stdout = ''
+        let stderr = ''
+        const timer = setTimeout(() => child.kill('SIGKILL'), 30000)
+        child.stdout.on('data', (chunk) => (stdout += chunk))
+        child.stderr.on('data', (chunk) => (stderr += chunk))
+        child.on('error', (error) => {
+            clearTimeout(timer)
+            resolve({ code: -1, output: String(error.message) })
+        })
+        child.on('close', (code) => {
+            clearTimeout(timer)
+            resolve({ code, output: `${stdout}\n${stderr}` })
+        })
+    })
+}
+
+async function verifyErrors(document, documentRel) {
+    const examples = counterExamples(document)
+    if (examples.length === 0) {
+        console.log(`${documentRel} carries no counter-example to verify: nothing was checked`)
+        return 2
+    }
+    if (!fs.existsSync(CAMEL)) {
+        console.log(`no compiler at ${CAMEL}: the counter-examples cannot be verified (build first, or set CAMEL_EXE)`)
+        return 2
+    }
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'camel-for-ai-errors-'))
+    const problems = []
+    let verified = 0
+    for (let index = 0; index < examples.length; index++) {
+        const example = examples[index]
+        const file = path.join(dir, `example_${index + 1}.cml`)
+        fs.writeFileSync(file, example.body.join('\n') + '\n')
+        const ran = await runCamel([file, 'std::gir'], dir)
+        const reported = [...ran.output.matchAll(/^(?:error|warning)\[([^\]]+)\]/gm)].map((match) => match[1])
+        if (example.claim === null) {
+            problems.push(`${documentRel}:${example.line}: the counter-example names no diagnostic (the compiler reports ${reported.join(', ') || 'nothing'})`)
+            continue
+        }
+        if (!reported.includes(example.claim)) {
+            problems.push(
+                `${documentRel}:${example.line}: the entry promises ${example.claim}; the compiler reports ` +
+                    `${reported.join(', ') || 'no diagnostic'}`,
+            )
+            continue
+        }
+        verified++
+    }
+    for (const problem of problems) console.log(problem)
+    if (problems.length > 0) {
+        console.log(`${problems.length} counter-example(s) do not report what the entry promises`)
+        return 1
+    }
+    console.log(
+        `${documentRel} promises what the compiler answers: ${verified} counter-example(s) compiled, ` +
+            `each reporting the diagnostic its entry names`,
+    )
+    return 0
+}
+
 // ---- entry ------------------------------------------------------------------------------------
 
 const argv = process.argv.slice(2)
@@ -460,8 +681,10 @@ for (let i = 0; i < argv.length; i++) {
     else if (argv[i] === '--document') documentRel = argv[++i] || DOCUMENT_REL
     else mode = argv[i]
 }
-if (!['--check', '--write', '--report'].includes(mode)) {
-    console.log('usage: node scripts/camel-for-ai.mjs --check | --write | --report [--root DIR] [--document REL]')
+if (!['--check', '--write', '--report', '--verify-errors'].includes(mode)) {
+    console.log(
+        'usage: node scripts/camel-for-ai.mjs --check | --write | --report | --verify-errors [--root DIR] [--document REL]',
+    )
     process.exit(2)
 }
 
@@ -473,8 +696,12 @@ if (!fs.existsSync(documentPath)) {
 const document = read(root, documentRel)
 const generated = generateAll(root)
 
+if (mode === '--verify-errors') {
+    process.exit(await verifyErrors(document, documentRel))
+}
+
 if (mode === '--report') {
-    const { problems, per, total, written, size } = budgetProblems(document)
+    const { problems, per, total, written, size, chapters } = budgetProblems(document)
     console.log(`document       ${String(size).padStart(7)}  budget ${BUDGET.total}`)
     console.log(`hand-written   ${String(written).padStart(7)}  budget ${BUDGET.written}`)
     for (const name of REGIONS) {
@@ -483,6 +710,11 @@ if (mode === '--report') {
     for (const name of REGIONS) {
         const region = generated[name]
         console.log(`${name.padEnd(14)} source entries: ${region.text === null ? 'none (' + region.problem + ')' : region.count}`)
+    }
+    for (const chapter of chapters) {
+        console.log(
+            `section ${String(chapter.key).padStart(2)}      ${String(chapter.size).padStart(7)}  budget ${chapter.budget}`,
+        )
     }
     for (const problem of problems) console.log(`OVER BUDGET: ${problem}`)
     process.exit(problems.length > 0 ? 1 : 0)

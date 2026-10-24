@@ -2,7 +2,7 @@
 
 One file that says everything an AI needs to write Camel that compiles: the rules, the idioms, the
 errors a first draft makes, and the exact name of every diagnostic it will meet. It is written to be
-read whole — the whole file is under 100,000 characters, about 28,000 tokens, and the check below
+read whole — the whole file is under 108,000 characters, about 30,000 tokens, and the check below
 keeps it there.
 
 The language described here is the development version (`develop`), and it is tied to that tree:
@@ -34,60 +34,257 @@ disagree. Read it as the language you are compiling against, not as a snapshot o
 
 ## What each part costs
 
-Budgets, in characters: the file as a whole (100,000), the hand-written half (39,000) and each
+Budgets, in characters: the file as a whole (108,000), the hand-written half (47,000) and each
 generated region (61,000 together). `node scripts/camel-for-ai.mjs --report` prints the current
-numbers, and `--check` fails when one of them is exceeded.
+numbers, and `--check` fails when one of them is exceeded — including the per-chapter budget in the
+last column below, which is read out of this table and measured against the chapter it names.
 
 | Part | Answers | Budget |
 |---|---|---|
-| 2. The shape of a Camel program | what a program is: values, the graph, effects, passes | 2,000 |
-| 3. The smallest program that compiles | entry point, module, output, exit | 1,500 |
-| 4. Lexical: names, comments, literals | what the lexer accepts, keywords, operators | 3,500 |
-| 5. Expressions, operators, precedence | how an expression is read | 3,500 |
-| 6. Statements and declarations | functions, parameters, overloads, generics, `when` | 3,500 |
-| 7. Effects and `sync` | what runs in order, and what the compiler folds | 2,000 |
+| 2. The shape of a Camel program | what a program is: values, the graph, effects, passes | 2,500 |
+| 3. The smallest program that compiles | entry point, module, output, exit | 1,400 |
+| 4. Lexical: names, comments, literals | what the lexer accepts, keywords, operators | 2,700 |
+| 5. Expressions, operators, precedence | how an expression is read | 7,600 |
+| 6. Statements and declarations | functions, parameters, overloads, generics, `when` | 4,500 |
+| 7. Effects and `sync` | what runs in order, and what the compiler folds | 2,200 |
 | 8. Streams (`target`) | `T..`, `yield`, `tee` | 800 |
-| 9. Modules and the standard library | imports, exports, namespaces, where the library is | 2,000 |
-| 10. Passes, the command line, the graph | how to run a program and look at its graph | 1,500 |
+| 9. Modules and the standard library | imports, exports, namespaces, where the library is | 2,700 |
+| 10. Passes, the command line, the graph | how to run a program and look at its graph | 2,600 |
 | 11. Idioms | how Camel code is written when it is written by someone who knows | 3,000 |
-| 12. Common errors | the error, the diagnostic, the fix | 9,000 |
-| 13. Accepted and then rejected | reserved spellings and their diagnostics | 1,500 |
-| 14. Not implemented yet (`target`) | what to avoid until its design lands | 1,200 |
+| 12. Common errors | the error, the diagnostic, the fix | 10,800 |
+| 13. Accepted and then rejected | reserved spellings and their diagnostics | 2,100 |
+| 14. Not implemented yet (`target`) | what to avoid until its design lands | 1,300 |
 | Appendix A. Diagnostics | name, severity, message — generated | 27,000 |
 | Appendix B. Standard library signatures | every exported name — generated | 27,000 |
-| Appendix C. Sources | which normative page each rule comes from | 1,000 |
+| Appendix C. Sources | which normative page each rule comes from | 1,800 |
 | — | generated, all four regions | 61,000 |
-| — | hand-written, this header and sections 2–14 with Appendix C | 39,000 |
+| — | hand-written, this header and sections 2–14 with Appendix C | 47,000 |
 
 ## 2. The shape of a Camel program
 
-*To be written.*
+Camel is not a sequence of statements. A program is a **graph**: an expression is a node, a value
+flows along an edge, and a node runs when its result is needed — that is, when it reaches the return
+of its function along a data or a control edge. Nothing else decides the order: two independent
+expressions have no order between them, and the parallel scheduler runs them side by side (design
+principles §§2–3). Four consequences surprise a first draft:
+
+1. **A function is its own subgraph.** A call is one node in the caller's graph that points at the
+   callee's subgraph. There is no call stack except for recursion depth (§7).
+2. **An effect nothing needs does not run.** `println` is an effect: outside a `sync` block, a call
+   whose result nothing uses is dropped, and the compiler warns `SemanticDiag::EffectNotExecuted`.
+   `sync { ... }` and `func f(): T sync { ... }` put control edges between the statements written
+   *directly* in that block and nothing else. A sync block does not reach into an arm written inside
+   it — write `sync` there too (design principles 3.4).
+3. **Values do not change.** `let` binds a value; `var` allows rebinding; the standard library never
+   mutates its argument, it returns a new value. In-place update is an optimization the compiler
+   applies when a variable is the only holder of the value, and only speed observes it (design
+   principles 11.3).
+4. **Two kinds of parameters.** Ordinary parameters are the data that flows through a function;
+   `with` parameters are what configures it — weights, shapes, flags, the function to map with.
+   They are written in angle brackets after the name: `xs->map<inc>`, `logits<w>(x)`
+   (design principles 4.4).
+
+Errors and faults are different things. A function whose failure the program is expected to handle
+returns `T!`, and the caller opens it with `!!`, `?->` or `match`. A **fault** — an index out of
+range, division by zero, recursion past the limit — is not a value: it stops the program with a
+located diagnostic, and `!!` does not catch it (§7).
+
+What runs the graph is a **pass**: `camel prog.cml` uses the default pipeline, `camel prog.cml
+std::fvm` chooses the bytecode VM, and `std::gir` prints the graph instead of running it (§10).
+
+Sources: `docs/design-principles.cn.md` §§2–4, 11.3; `docs/language/04_execution_model.md`.
 
 ## 3. The smallest program that compiles
 
-*To be written.*
+```camel
+// hello.cml
+// camel hello.cml
+func main(): int sync {
+    println('Hello, Camel')
+    return 0
+}
+```
+
+```text
+Hello, Camel
+```
+
+- The file is a module. It needs no `module` declaration unless it wants to name itself or hold
+  `export`ed names (§9).
+- The entry point is `func main`. Only a `main` with a written return type has its value count as
+  the program's result: `int` and `bool` are the exit code, any other type is printed (or written to
+  the file named by `-o`), and `void` exits with 0. A `main` with no return type still has a body
+  value, but the program ignores it and exits 0.
+- `sync` after the return type makes the body run in the written order. Without it `println`'s
+  result is unused, so that line would not run at all — the most common first surprise.
+- `println(x)` returns `x`, so a function whose body ends with it returns that value, and a value can
+  be piped on: `value->println`.
+- The parameters of `main` are the program's inputs, given as `--arg name=value`. A missing one is
+  the located error `RuntimeDiag::EntryArgumentMissing`, never a default value:
+
+```camel
+// greet.cml
+// camel greet.cml --arg name=Camel --arg times=2
+func main(name: string, times: int): int sync {
+    println(`Hello, ${name}! x${times}`)
+    return 0
+}
+```
+
+```text
+Hello, Camel! x2
+```
 
 ## 4. Lexical: names, comments, literals, keywords
 
-*To be written.*
+- **Comments.** `//` to the end of the line, `/* ... */` across lines, and `#` to the end of the line
+  — which is the command form (`#macro` on a declaration, `#leaf` in a pattern, `#impl` behind a
+  kernel) rather than a comment.
+- **Names.** A name is `[A-Za-z_][A-Za-z_0-9]*`; a qualified name uses `::` (`Shape::Circle`,
+  `str::len`). A name with two leading and two trailing underscores (`__add__`) belongs to the
+  compiler: using one is `SemanticDiag::ReservedIdentifier`.
+- **Numbers.** Decimal `42`, hexadecimal `0xff`, octal `0o17`, binary `0b1010`, reals with a
+  fraction or an exponent (`1.5`, `1e-3`), and imaginary literals with a trailing `i` (`4i`,
+  `0.5-0.25i`), which are complex values. A numeric type is never converted to another implicitly
+  (§5).
+- **Text.** `'...'` and `"..."` are the same string type; `'''...'''` and `"""..."""` span lines. A
+  backtick string interpolates: <code>`Hello, ${name}!`</code> is the formatted string of
+  `'Hello, ${0}!'` and `name`. A string is UTF-8 and immutable, and its length and subscripts count
+  code points.
+- **Keywords are reserved**: using one as a name is `SyntaxDiag::KeywordAsIdentifier`. The table is
+  generated from the token table the lexer reads, grouped as that file groups the words. Its
+  `Reserved` group is the set of words the grammar accepts and the language does not implement yet
+  (§13); whether a word in another group is usable is what the rest of this file says.
 
 ### Keywords and operators (generated)
 
-<!-- camel-for-ai region: lexical (generated from include/camel/parse/syntax/token_kinds.def; node scripts/camel-for-ai.mjs --write) -->
+<!-- camel-for-ai region: lexical (generated from docs/language/02_lexical.md §2.4 and include/camel/parse/syntax/token_kinds.def; node scripts/camel-for-ai.mjs --write) -->
 | Group | Words |
 |---|---|
-| Type | `as` `const` `constas` |
-| Reserved | `is` `enum` `keyof` `typeof` `of` `try` `catch` `finally` |
-| Declaration | `let` `var` `from` `func` `type` `with` `module` `import` `export` `using` `namespace` |
-| Control | `wait` `return` `if` `then` `else` `match` `case` `for` `in` `throw` `loop` `while` `do` `sync` `static` |
+| Declaration | `let` `var` `func` `type` `with` `module` `import` `export` `from` `namespace` `using` |
+| Control | `if` `then` `else` `match` `case` `return` `throw` `wait` `sync` `loop` `while` `do` `for` `in` `static` |
+| Type and conversion | `as` `const` `constas` `enum` |
 | Literal | `null` `true` `false` |
+| Reserved (accepted, not implemented — §13) | `is` `of` `try` `catch` `finally` `typeof` `keyof` |
 
 **Operators and separators** (55): `;` `,` `:` `::` `.` `..` `...` `(` `)` `[` `]` `{` `}` `<` `<` `>` `<=` `<=>` `>=` `==` `!=` `===` `!==` `=` `+=` `-=` `*=` `/=` `%=` `^=` `@=` `&=` `|=` `+` `-` `*` `/` `%` `^` `@` `#` `&` `|` `&&` `||` `!` `!!` `~` `?` `??` `->` `?->` `=>` `\\` `_`
+
+The token table `include/camel/parse/syntax/token_kinds.def` groups `enum` (token table: `Reserved`; reference: Type and conversion). This file follows the reference.
 <!-- camel-for-ai end: lexical -->
 
 ## 5. Expressions, operators, precedence
 
-*To be written.*
+**The pipeline is the idiom.** `x->f` is `f(x)`, `x->f<w>` is `f<w>(x)`, and `->` is left
+associative, so a computation reads top to bottom as a chain. `x->f(a, b)` is `f(x, a, b)`: the
+receiver enters the first call of the name after `->`, so `x->g(1)(2)` is `g(x, 1)(2)`.
+
+```camel
+// pipeline.cml
+// camel pipeline.cml
+func main(): int sync {
+    let total = 1..6
+        ->map<(x: int): int => x * x>
+        ->filter<(x: int): bool => x % 2 == 1>
+        ->reduce<(acc: int, x: int): int => acc + x, 0>
+    println(`total = ${total}`)
+    return 0
+}
+```
+
+```text
+total = 35
+```
+
+- `f<w>` on its own is a partial application, not a call: `let g = f<w>` binds the context and
+  leaves the data parameters open.
+- Type arguments and `with` arguments are different spellings of different things:
+  `f::<T><w>(x)`.
+- **One call that has `with` arguments per statement.** `f<a>(x), g<b>(y)` in one argument list is
+  read as two comparisons, not as two configured calls.
+
+**Access.** `p.x` is a field, `t.0` and `t.1` are tuple elements, `xs[i]` is an element. `xs[idx]`
+with an `int[]` takes several positions (the same as `take`), and `xs[a:b]` is a **slice**: a view
+sharing the data block with `xs`, left-closed and right-open, along the first dimension only —
+`xs[a:b][j]` is `xs[a + j]`. An index outside the array is the fault
+`RuntimeDiag::IndexOutOfRange`, an out-of-range slice end is `RuntimeDiag::SliceOutOfRange`. A
+postfix `.`, `[...]`, `(...)` or `<...>` must touch what it follows.
+
+**Operators.** Arithmetic `+ - * / %`, power `^` (right-associative), matrix product `@`; `&&` and
+`||` are branches — the right side runs only if it decides the result — while `&` and `|` read both
+sides and may be overloaded; `==` and `!=` compare by content, so two arrays or two structs with
+equal contents are equal. Numeric types never convert implicitly: `i32` with `int`, or `int` with
+`float`, is `SemanticDiag::NoMatchingFunction`, and `let y: float = n` (`n` an `int`) is
+`SemanticDiag::DeclaredTypeMismatch`. Only **literals** take the type their context asks for
+(`let x: f32 = 1`); variables do not. Convert with `float(n)`, `int(x)`, `string(v)`.
+
+`a..b` is the integer interval [a, b) — left-closed, right-open, an `int[]`, integers only; with two
+functions `f..g` is the composition `x => g(f(x))`, which can be called, passed on, or used directly
+in a higher-order call; `..` binds tighter than `->`, so `x->f..g` is `x->(f..g)`.
+
+```camel
+// compose.cml
+// camel compose.cml
+func inc(x: int): int {
+    return x + 1
+}
+
+func dbl(x: int): int {
+    return x * 2
+}
+
+func main(): int sync {
+    let g = inc..dbl
+    println(g(3), 3->inc..dbl, [1, 2, 3]->map<inc..dbl>)
+    return 0
+}
+```
+
+```text
+8 8 [4, 6, 8]
+```
+
+The left operand is a function of one parameter, because the composition *is* the one-parameter
+lambda: `add2..inc` for a two-parameter `add2` has no reading (`SemanticDiag::ArgumentsMismatch`).
+
+**Opening a value that may be absent or may fail.** `v ?? d`, `v !! d`, `v?->f`, or `match`. `T?` and
+`T!` are not `T`: arithmetic, comparison and functions that take a `T` all refuse them until they are
+opened, and a `T!` that is evaluated and used by nothing is the warning
+`SemanticDiag::UnusedFallibleValue`. `null` may be compared with a `T?`; `if` and `match` narrow the
+value in the arm that excludes it.
+
+```camel
+func positive(x: int): int? {
+    return if x > 0 then x else null
+}
+
+func describe(v: int?): string {
+    return match v {
+        case null => 'nothing'
+        case n => `value ${n}`
+    }
+}
+
+func main(): int sync {
+    println(positive(4) ?? 0, describe(positive(-4)), describe(positive(7)))
+    return 0
+}
+```
+
+```text
+4 nothing value 7
+```
+
+**`if` and `match` are expressions**, so a branch is a value and needs no temporary: `if c then a
+else b`, and `match x { case p => e ... }`. A `match` over an `enum` is checked for exhaustiveness —
+list every variant and no `case _` is needed; miss one and the compiler answers
+`SemanticDiag::EnumMatchNotExhaustive` with the missing names (§12).
+
+**Lambdas.** `(x: int): int => x + 1`, `() => 0`, `(x: int) => sync { ... }`. A lambda used as a
+`with` argument sits inside the angle brackets with its own parentheses.
+
+**Higher-order operators**: `xs->map<f>` and `xs->filter<p>` (elements unordered, may run in
+parallel, result in position order), `xs->reduce<f, init>` and `xs->foreach<f>` (in element order).
+`attempt(f)` isolates a fault at a subgraph boundary and gives back a `T!`.
 
 ### Precedence (generated)
 
@@ -144,39 +341,810 @@ annoExpr           : accessExpr (indices | parentArgues | structData | angledVal
 
 ## 6. Statements and declarations
 
-*To be written.*
+A declaration is: optional annotations, optional `with <...>`, optional `export`, optional modifiers,
+`func` name `(parameters)`, optional `: result`, optional `sync`, optional `when <condition>`, then
+the body. **`with` goes before `func`; `when` goes between the result and the body** — a `when`
+written after the closing brace is `SyntaxDiag::WhenAfterBody`, the one placement the language
+removed. `sync` after the result makes the body a sync block (§7); `sync` before `func` is a
+modifier and orders nothing.
+
+`with` parameters are the function's configuration; ordinary parameters are its data. Both may have
+defaults and both may be given by name:
+
+```camel
+with <lo: int, hi: int>
+func clamp(x: int): int {
+    return if x < lo then lo else if x > hi then hi else x
+}
+
+func main(): int sync {
+    println(clamp<0, 10>(42))
+    println([-5, 3, 99]->map<(x: int): int => x->clamp<0, 10>>)
+    return 0
+}
+```
+
+```text
+10
+[0, 3, 10]
+```
+
+- A default is a compile-time constant expression evaluated at the declaration, so it cannot read
+  another `with` parameter (`WithDefaultNotConstant`). A parameter after one with a default needs a
+  default too (`WithParameterAfterDefault`), and named arguments come after positional ones
+  (`f<rounds: 16, strict: true>`).
+- A **function value does not carry defaults**: after `let g = repeat`, every `with` parameter of
+  `g` must be given.
+- The result type may be left out and is inferred from the body; only a recursive function must
+  write it. A body with no `return` has the value of its last statement — and `println(x)` has the
+  value `x`, so `func main() sync { println('a') }` returns `'a'` and the run prints it twice: once
+  as the statement, once as the result.
+- **Overloads** are several declarations of one name with different parameter types; each is a
+  subgraph and the one that accepts the arguments runs. Two candidates that both accept is
+  `SemanticDiag::AmbiguousCall`; two identical parameter lists is `SemanticDiag::Redeclaration`
+  unless their `when` conditions cannot both hold.
+- `when <condition>` is a compile-time predicate over the type parameters (`is_numeric::<T>()`,
+  `is_ordered::<T>()`, or a constant such as `is_zero(y)`). A declaration whose condition is false is
+  not a candidate, which is how a generic function gets one body per type.
+- `let` binds once; `var` can be rebound, also through a path: `p.x = 5`, `xs[0] = 5`,
+  `xs[i].f = e`. A path assignment rebinds the whole variable, as if written
+  `xs = set(xs, i, set(xs[i], f, e))`; the target must be a variable, and `f().x = 5` is
+  `SemanticDiag::AssignmentTargetNotVariable`. Passing a value to a `var` parameter of a function is
+  how a callee can write back into the caller's variable (`wait` orders that write, §7).
+- **Generics** are declared after the name: `func first::<T>(xs: T[]): T? { ... }`, called as
+  `first::<int>(xs)` or `first(xs)` when the arguments fix `T`.
+- **Types**: `type Point = { x: int, y: int }`, `type Pair<T> = (T, T)`, and nominal enums
+  `type Shape = enum { Circle(float), Rect { w: float, h: float }, Empty }`. A variant is built with
+  `Shape::Circle(1.0)` / `Shape::Rect { w: 2.0, h: 3.0 }` / `Shape::Empty`, holds its data privately
+  (`s.w` is `EnumFieldAccess`), and is read with `match`. Structural types are written literally in a
+  type position: `{ x: int, y: int }`, `(int, string)`, `int[]`, `int[4]`, `f32[2, 3]`.
+- An `enum` over a type parameter needs an inferred argument: `let x: Option<int> = Option::None`
+  works, `let x = Option::None` does not (`EnumTypeArgumentNotInferred`).
+- Operator overloading is a declaration whose name is an operator: `func operator +(a: V, b: V): V`.
+  Annotations before a declaration are `#` names (`#macro`, `#impl`) or `@` names; a `#macro`
+  function may be evaluated early and its result folded into the graph as a constant.
+
+```camel
+type Shape = enum {
+    Circle(float),
+    Rect { w: float, h: float },
+    Empty,
+}
+
+func area(s: Shape): float {
+    return match s {
+        case Shape::Circle(r) => 3.14159 * r * r
+        case Shape::Rect { w, h } => w * h
+        case Shape::Empty => 0.0
+    }
+}
+
+func first::<T>(xs: T[]): T? {
+    return if len(xs) == 0 then null else xs[0]
+}
+
+func main(): int sync {
+    println(area(Shape::Rect { w: 2.0, h: 3.0 }), first([7, 8]) ?? 0, first::<string>([]) ?? 'none')
+    return 0
+}
+```
 
 ## 7. Effects and `sync`
 
-*To be written.*
+A **sync block** orders the statements written directly in it, and only those: `func f(): T sync
+{ ... }`, `if c then sync { ... }`, `(x: int) => sync { ... }`, or a bare `sync { ... }`. Inside it,
+calls run in the written order whatever they return. Outside it, an effect whose result nothing uses
+is dropped with the warning `SemanticDiag::EffectNotExecuted` — legal, and the reason a program can
+look busy and print nothing. The rule does not propagate inward: an arm or loop body written inside
+a sync block is an ordinary subgraph, and writing `sync` there again is what orders it.
+
+```camel
+func f(c: bool): int sync {
+    if c then { println(1); println(2) }   // the arm is not a sync block: only println(2) runs
+    return 0
+}
+```
+
+- **`var` parameters and `wait`.** A `var` parameter is a mutable reference to the caller's variable,
+  so the callee's write is a write the caller sees. `wait e` orders `e` against the operations that
+  read or write the variables it touches; `wait x` alone waits for the writes to `x` without needing
+  the value (design principles 4.3).
+- **Errors and faults.** A fault (index out of range, division by zero, a value that does not fit a
+  conversion, recursion past the limit) stops the program with a located diagnostic and exit code 1;
+  `!!` and `sync` do not catch it, and a `T!` returned from `main` and never handled is printed to
+  standard error as `RuntimeDiag::UnhandledError`. An error value is caught: `!!` gives the fallback,
+  `?->` passes it on, `match` with `case error e` reads `e.kind`, `e.message` and `e.location`.
+- **Recursion.** A call in tail position does not use a stack frame; other recursion is limited (1000
+  open calls by default, `--max-recursion-depth` or `CAMEL_MAX_RECURSION_DEPTH`), and passing it is
+  the fault `RuntimeDiag::MaxRecursionDepthExceeded`.
+- `exit(n)` ends the program immediately with exit code `n`, after the output written so far.
+
+```camel
+func main(): int sync {
+    let xs = [1, 2, 3]
+    println(xs[5])
+    return 0
+}
+```
+
+```text
+error[RuntimeDiag::IndexOutOfRange]: Index 5 is out of range for an array of length 3.
+```
 
 ## 8. Streams (`target`)
 
-*To be written.*
+`T..` (a stream of `T`), `yield`, and `tee` are decided and **not implemented**: writing them does
+not compile today, and the design is `docs/design/io-concurrency-streams/` (design principles 4.2 names
+the ruling). A stream will be the way a graph consumes data that does not fit in memory, with the
+push/pull boundary written as a function the stream calls; until it lands, express a pipeline with
+`1..n` and the `map`/`filter`/`reduce` operators, and read a file with `fs::read_text` or the
+`io` module. What is **not** `target` and is worth checking before assuming otherwise: `a..b` on
+integers, and `f..g` composition, are implemented today.
+
+Sources: `docs/design-principles.cn.md` §4.2; `docs/design/io-concurrency-streams/`.
 
 ## 9. Modules and the standard library
 
-*To be written.*
+Every source file is a module. `module <name>` at the top names it; without one the name comes from
+the file name. A name is visible only inside its module until it is exported, and `export` goes
+before `func`, `type` or `let`, or is written once as `export { a, b }`.
+
+```camel
+// shapes.cml
+module shapes
+
+import { sqrt } from math
+
+export type Vec = { x: float, y: float }
+
+export func hypot(v: Vec): float {
+    return sqrt(v.x * v.x + v.y * v.y)
+}
+
+export func area(w: float, h: float): float {
+    return w * h
+}
+```
+
+```camel
+// main.cml, in the same directory as shapes.cml
+import { hypot, Vec } from shapes
+import shapes
+
+func main(): int sync {
+    let v: Vec = { x: 3.0, y: 4.0 }
+    println(hypot(v))
+    println(shapes::area(2.0, 5.0))
+    return 0
+}
+```
+
+```text
+5.0
+10.0
+```
+
+- The import forms are `import { a, b as c } from m`, `import a from m`, `import m` (qualified
+  access only) and `import m as n`. A module may import a module that imports it back; only the
+  top-level values must not form a cycle. A module that cannot be found is
+  `SemanticDiag::ModuleNotFound` at that `import`, and importing a module that has errors is
+  `SemanticDiag::ImportedModuleHasErrors`.
+- An import names a **module**, never a path: `import ../lib` is a syntax error. The search order is
+  the module's own directory, then `-I` directories, `CAMEL_PACKAGES`, `CAMEL_MODULE_PATH`, and
+  finally the standard library shipped with Camel.
+- **Namespaces.** `namespace ns { ... }` groups declarations; inside a module a name may also be
+  reached qualified (`math::sqrt`) or pulled in with `using namespace math`. `using` imports names,
+  not modules.
+- **The standard library.** These names need no import: `print`, `println`, `input`, `format`,
+  `join`, `len`, `range`, `zip`, `head`, `tail`, `last`, `slice`, `concat`, `append`, `extend`,
+  `contains`, `map`, `filter`, `reduce`, `foreach`, `exit`, `sleep`, `error`, `parse_int`,
+  `parse_float`, the conversions (`int`, `float`, `string`, ...), and the map and set operations.
+  Everything else is in a module: `str` (bytes and code points, trim, case, split, find), `array`
+  (`sort`, `take`, `drop`, `unique`, `sum`, `min`, `max`, `flat_map`, ...), `math` (`pi`, `e`,
+  `sqrt`, `clamp`, `gcd`, bit operations), `random`, `time`, `fs`, `json`, `process`, `env`, `re`,
+  `hash`, `statistics`, `para`, `tensor`, `nn`, `autodiff`, `onnx`, `python`. Appendix B lists every
+  exported name with its signature; `camel inspect --ops` lists the operators the compiler knows,
+  with their purity.
+
+Sources: `docs/language/05_modules.md`, `docs/stdlib-reference.md`.
 
 ## 10. Passes, the command line, the graph
 
-*To be written.*
+`camel prog.cml` runs the program with the default pipeline. Words after the file name are **passes**,
+run in the order given; a pass parameter is written `key=value` after the pass name
+(`std::jit hot_threshold=0`).
+
+| Pass | What it does |
+|---|---|
+| `std::nvm` | The fallback: interprets the graph on the node VM |
+| `std::fvm` | Bytecode VM |
+| `std::jit` | Bytecode VM with just-in-time compilation, falling back to the interpreter |
+| `std::prl` | Parallel scheduling: independent nodes run concurrently |
+| `std::opt`, `std::opt::inline`, `std::opt::fold`, `std::opt::cse`, `std::opt::dce`, `std::opt::saturate` | Optimizations; they return a graph |
+| `std::macro` | Evaluates `#macro` calls early and materializes them as constants |
+| `std::gir`, `std::rgir`, `std::agir`, `std::jgir` | Print the graph and run nothing |
+| `std::stats` | Print `GRAPH_STATS {json}` and pass the graph on |
+| `onnx::export`, `std::cpp` | Translate instead of run |
+
+- The language does not fix the pass order, and the order can change the result: passes modify the
+  graph. A pass that consumes the graph (the schedulers and the translators) ends the pipeline;
+  passes written after it do not run, with the warning `RuntimeDiag::PassesNeverRun`.
+- The compiler builds the graph from `var`/`let`, `wait` and `sync`; after that those rules no
+  longer constrain the passes.
+- `std::gir` is the form to read a program's order from — the nodes and the edges between them are
+  the program — and `std::rgir` is the same graph for Graphviz.
+
+```camel
+// order.cml
+// camel order.cml std::gir
+func main(): int sync {
+    let a = 1 + 2
+    let b = a * 3
+    println(a, b)
+    return 0
+}
+```
+
+<!-- camel-snippet: graph-dump: std::gir prints a graph, not the program's output -->
+
+- Useful options: `--arg name=value` (an input of `main`), `-o <file>` (write the result), `-I <dir>`
+  (a module search directory), `--max-recursion-depth <n>`, `-Wno-<warning>` and `-Werror`
+  (diagnostics), `--output-format json`, `--explain <diagnostic name or code>` (the compiler
+  explains one diagnostic). `camel check prog.cml` reports code-health problems without running it.
+- Nothing is written to the output because of an unused value: an expression statement whose value
+  no one needs is a **warning**, not a silent no-op, only where the language says so
+  (`SemanticDiag::EffectNotExecuted`, `SemanticDiag::UnusedPureResult`,
+  `SemanticDiag::UnusedFallibleValue`).
+
+Sources: `docs/language/04_execution_model.md` §4.7, `docs/cli.cn.md`.
 
 ## 11. Idioms
 
-*To be written.*
+Written by someone who knows Camel, the same program looks like this.
+
+- **Data flows through a pipeline; context sits in the angle brackets.** `xs->map<f>` and
+  `x->clamp<0, 10>` read as sentences. Write one such call per statement.
+- **A function is worth extracting when it is configuration-shaped**: `with` parameters are what a
+  model's weights, a tensor's shape or a flag becomes, and the result is a function value that can be
+  passed on (`let predict = net<weights>`).
+- **Ranges and composition instead of index loops.** `1..n->map<...>`, `for i in 0..n` for the fused
+  loop, and `f..g` when a pipeline of functions is the value being passed.
+- **`T?` and `T!` are the boundary types.** Let a function that can miss return `T?` and one that can
+  fail return `T!`; open them where the decision is made (`??`, `!!`, `match`), not by inventing
+  sentinel values like `-1` or `''`.
+- **`match` over an `enum`** for values that are one of several things, instead of flags and `if`
+  chains: the compiler then checks that every case is handled.
+- **Prefer higher-order operators to hand-written loops**, and `reduce` for accumulation:
+  `words->reduce<(acc: Map<string, int>, w: string): Map<string, int> => acc->put<w, (acc->get<w> ?? 0) + 1>, [] as Map<string, int>>`.
+- **`let` by default, `var` only for what is reassigned**, and in-place update left to the compiler
+  (`xs = xs->sort`), never simulated with an index.
+- **Effects in `sync` blocks**, one block per thing that must happen in order, because that is the
+  only thing that orders them.
+
+```camel
+// shapes.cml
+module shapes
+
+import { sqrt } from math
+
+export type Shape = enum {
+    Circle(float),
+    Rect { w: float, h: float },
+}
+
+export func area(s: Shape): float {
+    return match s {
+        case Shape::Circle(r) => 3.14159 * r * r
+        case Shape::Rect { w, h } => w * h
+    }
+}
+
+with <shapes: Shape[]>
+func areas(): float[] {
+    return shapes->map<area>
+}
+
+export func total_area(kinds: Shape[], scale: float): float {
+    return kinds
+        ->map<(s: Shape): float => scale * scale * area(s)>
+        ->reduce<(a: float, b: float): float => a + b, 0.0>
+}
+```
+
+Sources: `docs/language/07_statements.md`, `docs/language/06_expressions.md`,
+`docs/design-principles.cn.md` §11.
 
 ## 12. Common errors
 
-*To be written.*
+Each entry is *what a first draft writes* — *what the compiler answers* — *what to write instead*.
+The diagnostic names are the compiler's, and every counter-example below is compiled by
+`node scripts/camel-for-ai.mjs --verify-errors`, which checks that the diagnostic named here is the
+one the compiler reports.
+
+**1. An effect outside a `sync` block.** The program compiles, prints nothing from that line, and the
+compiler answers `SemanticDiag::EffectNotExecuted` (a warning). **Wrong:**
+
+<!-- camel-snippet: counter-example: the effect is dropped because nothing needs its result -->
+
+```camel
+func greet(): int {
+    println('hello')
+    return 1
+}
+```
+
+**Write instead** — order it, either in a sync body or by using the result:
+
+```camel
+func greet(): int sync {
+    println('hello')
+    return 1
+}
+```
+
+**2. A type name that is gone.** `Tensor` was the old spelling of a tensor type and is not a type
+any more; the compiler answers `SemanticDiag::UnresolvedTypeReference`. **Wrong:**
+
+<!-- camel-snippet: counter-example: Tensor is not a type name; shapes are written in the brackets -->
+
+```camel
+func f(x: Tensor): int {
+    return 0
+}
+```
+
+**Write instead** — `T[shape]`, with the shape in the brackets:
+
+```camel
+type Matrix = f32[2, 3]
+
+func rows(m: Matrix): int {
+    return len(m)
+}
+```
+
+**3. `any`, or a value whose type is not known.** There is no `any`; the compiler answers
+`SemanticDiag::UnresolvedTypeReference`. **Wrong:**
+
+<!-- camel-snippet: counter-example: there is no any; a parameter that accepts several types is generic -->
+
+```camel
+func show(x: any): string {
+    return string(x)
+}
+```
+
+**Write instead** — a type parameter, with a `when` condition when the body needs something of it:
+
+```camel
+func show::<T>(x: T): string {
+    return string(x)
+}
+```
+
+**4. Two numeric types in one expression, or a variable assigned to another numeric type.** Numeric
+types do not convert implicitly: `i32` with `int`, or `int` with `float`, is
+`SemanticDiag::NoMatchingFunction` in an expression and `SemanticDiag::DeclaredTypeMismatch` in a
+typed `let`. **Wrong:**
+
+<!-- camel-snippet: counter-example: i32 and int are different types and do not mix -->
+
+```camel
+func add(a: i32, b: int): int {
+    return a + b
+}
+```
+
+**Write instead** — convert explicitly:
+
+```camel
+func add(a: i32, b: int): int {
+    return int(a) + b
+}
+```
+
+**5. Text used as a number.** `'42'` is a string: `let x: int = '42'` is
+`SemanticDiag::DeclaredTypeMismatch`. `'42' as int` is an error too, and it is the other one:
+`as` is no numeric conversion, so the compiler answers `SemanticDiag::DynamicCastForbidden`.
+**Wrong:**
+
+<!-- camel-snippet: counter-example: as does no numeric conversion; text is not a number -->
+
+```camel
+func n(s: string): int {
+    return s as int
+}
+```
+
+**Write instead** — `int(s)` (or `parse_int(s)` when the text may be junk and a `T!` is wanted):
+
+```camel
+func n(s: string): int {
+    return int(s)
+}
+```
+
+**6. An empty array with no type.** `[]` takes its element type from its position, and a `let` with
+no type is not one: `SemanticDiag::EmptyArrayWithoutType`. **Wrong:**
+
+<!-- camel-snippet: counter-example: the element type of an empty literal must come from somewhere -->
+
+```camel
+func main(): int sync {
+    let xs = []
+    return len(xs)
+}
+```
+
+**Write instead:**
+
+```camel
+func main(): int sync {
+    let xs: int[] = []
+    return len(xs)
+}
+```
+
+**7. A `when` after the body.** The condition belongs between the result type and the body, and a
+`when` written after the body is a syntax error: after a function body the compiler answers
+`SyntaxDiag::UnexpectedToken`, because the condition does not fit where it was written. **Wrong:**
+
+<!-- camel-snippet: counter-example: when goes before the body of a function, not after it -->
+
+```camel
+func pick::<T>(x: T): T {
+    return x
+} when is_ordered::<T>()
+```
+
+A trailing `when` on a `rule` is the same mistake, and the compiler has a diagnostic for that
+position: `SyntaxDiag::WhenAfterBody`, whose message says the condition comes before the body it
+guards.
+
+<!-- camel-snippet: counter-example: a rule's condition follows its parameters, not its body -->
+
+```camel
+rule add_zero(x: int) {
+    x + 0 => x
+} when is_zero(0)
+```
+
+**Write instead:**
+
+```camel
+func pick::<T>(x: T): T when is_ordered::<T>() {
+    return x
+}
+```
+
+**8. A keyword as a name.** Keywords are reserved, so `let match = 1` is
+`SyntaxDiag::KeywordAsIdentifier`. **Wrong:**
+
+<!-- camel-snippet: counter-example: match is a keyword -->
+
+```camel
+func main(): int sync {
+    let match = 1
+    return match
+}
+```
+
+**Write instead:**
+
+```camel
+func main(): int sync {
+    let matched = 1
+    return matched
+}
+```
+
+**9. A `match` that misses a variant.** A `match` over an `enum` must list every variant unless a
+`case _` is written; the compiler answers `SemanticDiag::EnumMatchNotExhaustive` and names the
+missing ones. **Wrong:**
+
+<!-- camel-snippet: counter-example: the Empty variant is not handled -->
+
+```camel
+type Shape = enum { Circle(float), Empty }
+
+func area(s: Shape): float {
+    return match s {
+        case Shape::Circle(r) => 3.14159 * r * r
+    }
+}
+```
+
+**Write instead** — add the missing arm (or `case _ => 0.0`).
+
+**10. Reading an `enum`'s data directly.** A variant's data is not a field of the enum value:
+reading it is `SemanticDiag::EnumFieldAccess`. **Wrong:**
+
+<!-- camel-snippet: counter-example: an enum value's data is read with match, not with a member -->
+
+```camel
+type Shape = enum { Circle(float), Empty }
+
+func radius(s: Shape): float {
+    return s.r
+}
+```
+
+A pattern names the variant with its type: a bare `case Empty` is
+`SemanticDiag::EnumPatternMismatch`. **Wrong:**
+
+<!-- camel-snippet: counter-example: a variant pattern is qualified with the type it belongs to -->
+
+```camel
+type Shape = enum { Circle(float), Empty }
+
+func radius(s: Shape): float {
+    return match s {
+        case Circle(r) => r
+        case Empty => 0.0
+    }
+}
+```
+
+**Write instead** — qualify the variants and read the data in the pattern:
+
+```camel
+type Shape = enum { Circle(float), Empty }
+
+func radius(s: Shape): float {
+    return match s {
+        case Shape::Circle(r) => r
+        case Shape::Empty => 0.0
+    }
+}
+```
+
+**11. An enum value whose type arguments cannot be inferred.** `let x = Option::None` has no field to
+infer from: `SemanticDiag::EnumTypeArgumentNotInferred`. **Wrong:**
+
+<!-- camel-snippet: counter-example: None carries no field, so the type argument must be written -->
+
+```camel
+type Option<T> = enum { Some(T), None }
+
+func main(): int sync {
+    let x = Option::None
+    return 0
+}
+```
+
+**Write instead:**
+
+```camel
+type Option<T> = enum { Some(T), None }
+
+func main(): int sync {
+    let x: Option<int> = Option::None
+    return 0
+}
+```
+
+**12. Assigning through a path that is not a variable.** `f().x = 5` has no variable to rebind:
+`SemanticDiag::AssignmentTargetNotVariable`. **Wrong:**
+
+<!-- camel-snippet: counter-example: the left side of an assignment must be a variable or a path into one -->
+
+```camel
+type Point = { x: int, y: int }
+
+func origin(): Point {
+    return { x: 0, y: 0 }
+}
+
+func main(): int sync {
+    origin().x = 5
+    return 0
+}
+```
+
+**Write instead** — bind it, then assign through the variable:
+
+```camel
+type Point = { x: int, y: int }
+
+func origin(): Point {
+    return { x: 0, y: 0 }
+}
+
+func main(): int sync {
+    var p = origin()
+    p.x = 5
+    println(p)
+    return 0
+}
+```
+
+**13. A `var` parameter given a `let`.** A `var` parameter is a mutable reference to a variable,
+so a binding that cannot be written back is refused with
+`SemanticDiag::ImmutablePassedToVarParam`. **Wrong:**
+
+<!-- camel-snippet: counter-example: a var parameter needs a variable that can be written -->
+
+```camel
+sync func bump(var x: int): int sync {
+    wait x += 1
+    return x
+}
+
+func main(): int sync {
+    let n = 3
+    println(bump(n))
+    return 0
+}
+```
+
+A `var` parameter is also only allowed in a `sync` function: declaring one anywhere else is the
+warning `SemanticDiag::VarParamInAsyncFunction`.
+
+**Write instead:**
+
+```camel
+func bump(var x: int): int {
+    x = x + 1
+    return x
+}
+
+func main(): int sync {
+    var n = 1 + 2
+    println(bump(n), n)
+    return 0
+}
+```
+
+**14. Using a `T?` or `T!` as its inner type.** They are different types: a `T!` whose value
+nothing uses is the warning `SemanticDiag::UnusedFallibleValue`, and arithmetic on a `T?` — as
+below — has no reading at all: `SemanticDiag::NoMatchingFunction`. **Wrong:**
+
+<!-- camel-snippet: counter-example: a value that may be absent must be opened before it is used -->
+
+```camel
+func positive(x: int): int? {
+    return if x > 0 then x else null
+}
+
+func main(): int sync {
+    println(positive(4) + 1)
+    return 0
+}
+```
+
+**Write instead** — open it where the decision belongs:
+
+```camel
+func positive(x: int): int? {
+    return if x > 0 then x else null
+}
+
+func main(): int sync {
+    println((positive(4) ?? 0) + 1)
+    return 0
+}
+```
+
+**15. A name nothing declares.** `SemanticDiag::UnresolvedReference` names it and lists the
+candidates that came close. **Wrong:**
+
+<!-- camel-snippet: counter-example: nothing declares total -->
+
+```camel
+func main(): int sync {
+    return total
+}
+```
+
+**Write instead:**
+
+```camel
+func main(): int sync {
+    let total = 0
+    return total
+}
+```
+
+**16. A reserved compiler name.** A name with two leading and two trailing underscores is the
+compiler's; using one is `SemanticDiag::ReservedIdentifier`. **Wrong:**
+
+<!-- camel-snippet: counter-example: __add__ belongs to the compiler -->
+
+```camel
+func main(): int sync {
+    let __add__ = 1
+    return __add__
+}
+```
+
+**Write instead:**
+
+```camel
+func main(): int sync {
+    let added = 1
+    return added
+}
+```
+
+**17. `try`/`catch`.** They are not Camel. The full spelling is accepted by the grammar and
+rejected with `SemanticDiag::TryCatchNotInLanguage`. **Wrong:**
+
+<!-- camel-snippet: counter-example: there is no try, catch or finally in Camel -->
+
+```camel
+func main(): int sync {
+    try {
+        println(1)
+    } catch e: string {
+        println(e)
+    } finally {
+        println(3)
+    }
+    return 0
+}
+```
+
+**Write instead** — a function that can fail returns `T!`, and the caller opens it:
+
+```camel
+func read_number(s: string): int! {
+    return parse_int(s)
+}
+
+func main(): int sync {
+    println(read_number('7') !! -1, read_number('seven') !! -1)
+    return 0
+}
+```
+
+**18. A fault.** A fault is not an error value: it stops the program with a located diagnostic and
+exit code 1, and `!!` does not catch it. `println(xs[5])` on a three-element array answers
+`RuntimeDiag::IndexOutOfRange`. **Write instead** — check the index, or take a slice, which
+tolerates the end (`xs[3:9]`).
 
 ## 13. Accepted and then rejected
 
-*To be written.*
+These spellings parse or are reserved, and the compiler rejects them on purpose. Do not build on
+them: most have no decided meaning yet. The diagnostics are named as the compiler prints them.
+
+| Spelling | The compiler answers | Write instead |
+|---|---|---|
+| Spread: `[...xs, y]`, `{ ...p, x: 1 }`, `f(...args)` | `SemanticDiag::ConstructNotSupported` | `concat(xs, [y])`; write the fields out |
+| `e is T` | `SemanticDiag::ConstructNotSupported` | nothing — there is no type at run time; use a `match` over an `enum` |
+| Non-null assertion `x!` | `SemanticDiag::ConstructNotSupported` | `x ?? fallback`, or `match x` |
+| `f ?.. g` | `SemanticDiag::ConstructNotSupported` | nothing |
+| `wait { ... }`, and `wait` before a name, literal or lambda | `SemanticDiag::ConstructNotSupported` | `sync { ... }` |
+| `try { } catch e: T { } finally { }` | `SemanticDiag::TryCatchNotInLanguage` | return `T!`, open it with `!!`, `?->`, `case error e` |
+| Tuple patterns, struct patterns, identifier patterns for ordinary types | `SemanticDiag::ConstructNotSupported` | `if` chains; read the members first |
+| Destructuring `let { x, y } = p`, `let [a, b] = xs` | `SemanticDiag::FeatureNotSupported` | `p.x`, `xs[0]` (tuple destructuring works) |
+| A slice that cuts a dimension other than the first: `xs[:, 0]`, `xs[a:b, c]` | `SemanticDiag::ConstructNotSupported` | take the rows with `take` first, one dimension at a time |
+| A slice step other than 1: `xs[a:b:s]` | `RuntimeDiag::InvalidArgument` for arrays, `SemanticDiag::ArgumentsRejected` for tensors | `xs->slice<0, a, b, s>` |
+| Type operations `A & B`, `A \ B`, `A + B`, `A - B`, `A ^ B` | `SemanticDiag::FeatureNotSupported` | nothing |
+| `name of T` | `SemanticDiag::FeatureNotSupported` | nothing |
+| `keyof` | a syntax error | nothing |
+| Declaring a function type: `let f: (x: int) => int = g` | `SemanticDiag::FeatureNotSupported` | let the type be inferred: `let f = g` |
+
+Source: `docs/language/08_top_level_and_grammar.md` §8.6.
 
 ## 14. Not implemented yet (`target`)
 
-*To be written.*
+Everything here is decided and absent; code written against it does not compile today. Each entry
+names the design it comes from.
+
+- **Streams**: `T..`, `yield`, `tee`. `docs/design/io-concurrency-streams/`; the ruling is recorded
+  in `docs/design-principles.cn.md` §4.2.
+- **Match guards**: `case p when <condition> => ...`. `docs/design-principles.cn.md` §4.4. A guard
+  written today is a syntax error, not a filter.
+- **Type operations and `of`**: `A & B`, `A | B`, `A \ B`, `A + B`, `A - B`, `A ^ B`, `name of T`.
+  `docs/language/08_top_level_and_grammar.md` §8.6.
+- **Deleting the two-parameter `range(a, b)`**: `a..b` is the interval now, and `range(a, b)` is the
+  same value under a name that is on its way out — `docs/design-principles.cn.md` §4.2. `range` with
+  a step is not affected.
+- **`Tensor` as a type name**: deleted; `T[dims]` is the spelling (`docs/design-principles.cn.md`
+  §5.4).
+- **Automatic differentiation and ONNX export over `enum`**: both refuse with a located rejection
+  rather than mis-compiling (`docs/language/03_data_model.md` §3.5). That is a decision to work with,
+  not a `target` to wait for: an enum at a differentiated boundary needs an explicit reading.
 
 ## Appendix A. Diagnostics (generated)
 
@@ -1275,4 +2243,24 @@ supported_operators: () => string[]
 
 ## Appendix C. Sources
 
-*To be written.*
+| Section | Normative source |
+|---|---|
+| 2. The shape of a program | `docs/design-principles.cn.md` §§2–4, 11.3; `docs/language/04_execution_model.md` |
+| 3. The smallest program | `docs/language/04_execution_model.md` §4.1; `docs/cli.cn.md` |
+| 4. Lexical | `docs/language/02_lexical.md`; `include/camel/parse/syntax/token_kinds.def` |
+| 5. Expressions and precedence | `docs/language/06_expressions.md`; `docs/design-principles.cn.md` §§4.2, 5.1, 5.4 |
+| 6. Statements and declarations | `docs/language/07_statements.md`; `docs/language/03_data_model.md` |
+| 7. Effects and `sync` | `docs/language/04_execution_model.md` §§4.2–4.6; `docs/design-principles.cn.md` §3.4 |
+| 8. Streams (`target`) | `docs/design-principles.cn.md` §4.2; `docs/design/io-concurrency-streams/` |
+| 9. Modules and the standard library | `docs/language/05_modules.md`; `docs/stdlib-reference.md` |
+| 10. Passes and the command line | `docs/language/04_execution_model.md` §4.7; `docs/cli.cn.md` |
+| 11. Idioms | `docs/language/07_statements.md`, `docs/language/06_expressions.md`, `docs/design-principles.cn.md` §11 |
+| 12. Common errors | the registry `diagnostics/registry.tsv`, and the compiler through `node scripts/camel-for-ai.mjs --verify-errors` |
+| 13. Accepted and then rejected | `docs/language/08_top_level_and_grammar.md` §8.6 |
+| 14. Not implemented yet | the designs named in the section |
+| Appendix A | generated from `diagnostics/registry.tsv` |
+| Appendix B | generated from `docs/stdlib-reference.md` |
+
+Generated by `scripts/camel-for-ai.mjs`; the four regions of this file are rewritten with
+`node scripts/camel-for-ai.mjs --write` and checked with `--check`, which is also what the plan
+`test/plans/feat/docs_ai_reference.plan.toml` runs.

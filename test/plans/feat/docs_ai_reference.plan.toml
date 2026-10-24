@@ -27,9 +27,21 @@ tool = "node"
 case = "../../../scripts/camel-for-ai.mjs"
 args = ["${case}", "--check"]
 expect_exit = 0
-expect_stdout_contains = ["docs/reference/camel-for-ai.md is what its sources produce", "generated region(s)", "diagnostic name(s) cited by the prose", "characters (budget 100000)"]
+expect_stdout_contains = ["docs/reference/camel-for-ai.md is what its sources produce", "generated region(s)", "diagnostic name(s) cited by the prose", "characters (budget 108000)"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 60000
+
+[[tests]]
+name = "docs.ai_reference.errors_verified"
+desc = "Every counter-example in the page is compiled, and the diagnostic its entry names is the one the compiler reports: the errors section is checked against the compiler, not only against the registry."
+kind = "behavior"
+tool = "node"
+case = "../../../scripts/camel-for-ai.mjs"
+args = ["${case}", "--verify-errors"]
+expect_exit = 0
+expect_stdout_contains = ["promises what the compiler answers", "counter-example(s) compiled"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 180000
 
 [[tests]]
 name = "docs.ai_reference.fixture_consistent"
@@ -87,6 +99,6 @@ tool = "node"
 case = "../../../scripts/camel-for-ai.mjs"
 args = ["${case}", "--check", "--root", "test/plans/feat/docs_ai_reference/fixture", "--document", "docs/reference/cases/task-number.md"]
 expect_exit = 1
-expect_stdout_contains = ["docs/reference/cases/task-number.md:109", "the document names the task 'H123'"]
+expect_stdout_contains = ["docs/reference/cases/task-number.md:111", "the document names the task 'H123'"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 60000
