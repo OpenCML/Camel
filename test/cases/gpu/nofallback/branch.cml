@@ -1,0 +1,28 @@
+/// (f) The arms of a branch written in a `#gpu` scope are segments of their own (GPU design
+/// 2.5): the scope is not refused for writing a branch, each arm's operator becomes a segment,
+/// and the segment is written inside the arm, so the arm that is not taken is not computed.
+/// `choose_host` is the same program without the tag: the device path must return what the host
+/// returns, bit for bit.
+module gpu_nofallback_branch
+
+import { Tensor, reshape, sum } from tensor
+import { regions } from tiles
+
+#gpu
+func choose(flag: bool, x: Tensor<f32, [3]>): Tensor<f32, [3]> {
+    if flag then x * 2.0 else x + 1.0
+}
+
+func choose_host(flag: bool, x: Tensor<f32, [3]>): Tensor<f32, [3]> {
+    if flag then x * 2.0 else x + 1.0
+}
+
+func main(): int sync {
+    println(regions<choose>())
+    let x = reshape([1.0, 2.0, 3.0] as f32[], [3])
+    println(sum(choose(true, x)))
+    println(sum(choose(false, x)))
+    println(sum(choose_host(true, x)))
+    println(sum(choose_host(false, x)))
+    return 0
+}

@@ -7932,7 +7932,7 @@ func main(): int sync {
 **Help**
 
 ```text
-The `#gpu` tag promises that the device runs everything written in the function or block. Remove the tag, or rewrite the scope so that every operator in it has a device implementation; `--devices cpu` runs the whole program on the host.
+The `#gpu` tag promises that the device runs everything written in the function or block. Remove the tag, write the part the device cannot run under `#cpu`, or rewrite the scope so that every operator in it has a device implementation; `--devices cpu` runs the whole program on the host.
 ```
 
 **Example** (`test/cases/modules/tiles/gpu_scope_refusal.cml`, run as `CUDA_VISIBLE_DEVICES=-1 camel test/cases/modules/tiles/gpu_scope_refusal.cml tiles::compile std::nvm`)
@@ -8015,7 +8015,7 @@ func main(): int sync {
 **Message**
 
 ```text
-`#gpu` scope '{0}': operator '{1}' has no device program ({2}).
+`#gpu` scope '{0}': {1} ({2}).
 ```
 
 **Help**

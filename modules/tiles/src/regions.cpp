@@ -12,15 +12,30 @@
 #include <stdexcept>
 
 namespace camel::tiles {
+namespace {
+/// Both kinds of dependency keep a node live and both order the quotient graph; only `inputs`
+/// carry a value, and a region boundary is about values.
+template <class Visit> void forEachDependency(const RegionNode &node, Visit &&visit) {
+    for (auto id : node.inputs)
+        visit(id);
+    for (auto id : node.order)
+        visit(id);
+}
+} // namespace
+
 std::vector<Region> partitionRegions(const std::vector<RegionNode> &nodes) {
     const auto count = nodes.size();
     std::vector<std::vector<size_t>> users(count);
-    for (size_t id = 0; id < count; ++id)
+    for (size_t id = 0; id < count; ++id) {
         for (auto input : nodes[id].inputs) {
             if (input >= count)
                 throw std::runtime_error("region dependency outside graph");
             users[input].push_back(id);
         }
+        for (auto predecessor : nodes[id].order)
+            if (predecessor >= count)
+                throw std::runtime_error("region dependency outside graph");
+    }
     std::vector<bool> live(count);
     std::vector<size_t> pending;
     for (size_t id = 0; id < count; ++id)
@@ -32,7 +47,7 @@ std::vector<Region> partitionRegions(const std::vector<RegionNode> &nodes) {
         if (live[id])
             continue;
         live[id] = true;
-        pending.insert(pending.end(), nodes[id].inputs.begin(), nodes[id].inputs.end());
+        forEachDependency(nodes[id], [&](size_t input) { pending.push_back(input); });
     }
     std::vector<size_t> group(count);
     std::iota(group.begin(), group.end(), 0);
@@ -49,10 +64,11 @@ std::vector<Region> partitionRegions(const std::vector<RegionNode> &nodes) {
                     present[assignment[id]] = true;
                     ++groups;
                 }
-                for (auto input : nodes[id].inputs)
+                forEachDependency(nodes[id], [&](size_t input) {
                     if (assignment[input] != assignment[id] &&
                         edges[assignment[input]].insert(assignment[id]).second)
                         ++incoming[assignment[id]];
+                });
             }
         std::priority_queue<size_t, std::vector<size_t>, std::greater<size_t>> ready;
         for (size_t id = 0; id < count; ++id)
@@ -74,21 +90,26 @@ std::vector<Region> partitionRegions(const std::vector<RegionNode> &nodes) {
     // Self-edges must not be mistaken for the legitimate internal edges of a group.
     for (size_t id = 0; id < count; ++id)
         if (live[id])
-            if (std::find(nodes[id].inputs.begin(), nodes[id].inputs.end(), id) !=
-                nodes[id].inputs.end())
-                throw std::runtime_error("cyclic region dependency graph");
-    const auto order = topological(group);
-    if (order.empty() && std::find(live.begin(), live.end(), true) != live.end())
+            forEachDependency(nodes[id], [&](size_t input) {
+                if (input == id)
+                    throw std::runtime_error("cyclic region dependency graph");
+            });
+    const auto walk = topological(group);
+    if (walk.empty() && std::find(live.begin(), live.end(), true) != live.end())
         throw std::runtime_error("cyclic region dependency graph");
     // Greedy deterministic maximal contraction. Recheck remaining edges until no
     // legal contraction remains; global cost optimization belongs to scheduling.
     bool changed = true;
     while (changed) {
         changed = false;
-        for (auto id : order)
+        for (auto id : walk)
             if (nodes[id].eligible)
                 for (auto input : nodes[id].inputs) {
                     if (!nodes[input].eligible || group[id] == group[input])
+                        continue;
+                    // A region never spans two control regions: an arm runs only when it is
+                    // taken, so merging it with the code around it would run that code too.
+                    if (nodes[id].control != nodes[input].control)
                         continue;
                     const auto a = std::min(group[id], group[input]),
                                b = std::max(group[id], group[input]);
@@ -106,7 +127,7 @@ std::vector<Region> partitionRegions(const std::vector<RegionNode> &nodes) {
     for (auto root : topological(group)) {
         Region region;
         std::set<size_t> inputs, outputs;
-        for (auto id : order)
+        for (auto id : walk)
             if (group[id] == root && nodes[id].eligible) {
                 region.members.push_back(id);
                 for (auto input : nodes[id].inputs)
@@ -149,7 +170,7 @@ planRegionTransfers(const std::vector<RegionNode> &nodes, const std::vector<Regi
         if (live[id])
             continue;
         live[id] = true;
-        pending.insert(pending.end(), nodes[id].inputs.begin(), nodes[id].inputs.end());
+        forEachDependency(nodes[id], [&](size_t input) { pending.push_back(input); });
     }
     std::set<size_t> uploads, downloads;
     RegionTransfers result;
