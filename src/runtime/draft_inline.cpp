@@ -1180,6 +1180,29 @@ uint32_t controlRegionOf(const GraphDraft &draft, gc_node_ref_t id) {
     return 0;
 }
 
+/// The node that takes the call's place in the chain of its block (docs/design/effects/edges.cn.md
+/// 5.7): the body's result, when the splice made it and nothing has written it into a chain yet. A
+/// node the caller brought in (a forwarded argument, a constant) is not the splice's to make one
+/// statement of the caller's block, and a node the body's own chain already ends in keeps that
+/// place -- an order edge or a sync edge moved onto it would fork the chain. Either way the GATE
+/// over the value carries the place instead, and it is the splice's own node.
+gc_node_ref_t spliceChainAnchor(
+    GraphDraft &draft, size_t slotsBefore, gc_node_ref_t value, uint32_t region) {
+    if (value >= static_cast<gc_node_ref_t>(slotsBefore) && draft.alive(value) &&
+        draft.syncInputsOf(value).empty() && draft.syncUsersOf(value).empty()) {
+        return value;
+    }
+    const DraftNodeHeader *valueHeader = draft.header(value);
+    const DraftNodeInit gateInit{
+        .dataIndex = valueHeader ? valueHeader->dataIndex : static_cast<gc_slot_idx_t>(0),
+        .dataType  = valueHeader ? valueHeader->dataType : nullptr,
+        .kind      = GCNodeKind::Gate,
+        .region    = region,
+        .normInputs = std::span<const gc_node_ref_t>(&value, 1),
+    };
+    return draft.addNode(gateInit);
+}
+
 /// 5.7's extra constraint, written beside the splice: the chain the call stood in runs
 /// `before -> body -> after`, and *beside* that the body's effect and may-fault nodes are ordered
 /// after the statement written before the call and before the one written after it. An order edge
@@ -1657,6 +1680,22 @@ DraftInlineResult inlineCallableInDraft(
     // inlined output/completion anchor instead.
     draft.replaceAllValueUses(funcNodeId, result.valueExit);
     draft.replaceAllCtrlUses(funcNodeId, result.ctrlExit);
+    // 5.7: the body's result replaces the call and keeps the call's own place in the chain of the
+    // block -- its incoming and outgoing sync edges, and the order edges it stood in.
+    // `takeStatementPlace` writes that place (and the control edge naming the same pairs beside it,
+    // for as long as the chain of a block is written as control edges) when the replacer is a
+    // statement of the block the call was written in. It runs here, before `eraseNode` closes the
+    // chain over the call: the call has to be alive for its place to be read. A call with no such
+    // place -- every call of today's corpus, whose block writes its chain as control edges --
+    // has nothing to hand over, and nothing is added to the graph for it.
+    const bool callHasChainPlace = !draft.syncInputsOf(funcNodeId).empty() ||
+                                   !draft.syncUsersOf(funcNodeId).empty() ||
+                                   !draft.orderInputsOf(funcNodeId).empty();
+    if (callHasChainPlace) {
+        const gc_node_ref_t chainAnchor =
+            spliceChainAnchor(draft, slotsBefore, result.valueExit, draft.nodeRegion(funcNodeId));
+        draft.takeStatementPlace(funcNodeId, chainAnchor);
+    }
     // The statements written directly after the call keep their place in the chain of the block
     // they are written in: the call is gone, so they follow what the call followed. They do not
     // follow the body's anchor instead -- that anchor is a node of the region the body was given,
