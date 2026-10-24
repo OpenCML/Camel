@@ -181,7 +181,14 @@ Type *computeTangentType(Type *primal) {
         Type *elem    = array->elemType();
         Type *tangent = elem ? tangentTypeOf(elem) : nullptr;
         if (tangent != nullptr) {
-            return ArrayType::create(tangent);
+            // The tangent of an array is an array of the same shape: a tangent space has the
+            // shape of the space it differentiates, and `gradientOf` compares the gradient of a
+            // parameter with the parameter's own tangent type. An array of a tangent scalar that
+            // forgot the shape (`ArrayType::create(tangent)`, one unknown extent) is the tangent
+            // of nothing but a rank-1 value, and made `nn::sgd` refuse a rank-2 parameter's
+            // gradient as a different type.
+            return tangent == elem ? const_cast<ArrayType *>(array)
+                                   : array->withElementType(tangent);
         }
         // A kind whose values share the array code states its own answer through the registry;
         // without one there is no tangent.
