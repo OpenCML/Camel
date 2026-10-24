@@ -1,0 +1,60 @@
+/**
+ * The verdict table `check` answers (H247, slice S0; the rulings of 2026-10-24 on
+ * `verification-verdict-surface` and on `verification-licence-to-precondition`).
+ *
+ * Three things this case measures, none of which the check could say before:
+ *
+ *   * every line of the report begins with one of the three verdict words -- `proved`, `refuted`,
+ *     `sampled` -- so a reader never has to guess what was established and what was only compared
+ *     (`verification-verdict-surface`, 2);
+ *   * each line names what the verdict is about, in a fixed column: `equality` for a rule that
+ *     needs no permission, `real equality + IEEE on special values` for one that asks for
+ *     `reassociate` or `contract`, `error bound` for `refine_accuracy` and `change_precision`
+ *     (`verification-licence-to-precondition`, licence 2), and each line names what the verdict
+ *     rests on (`solver` / `samples` / `counterexample` / `none`) and, when the answer is not a
+ *     counterexample, why;
+ *   * a rule nothing could be examined on is `sampled` with its reason written in that separate
+ *     column -- never the fourth word the check used to print, and never a bare `sampled` that a
+ *     reader could take for a rule whose samples were compared (licence 3, option A).
+ *
+ * With no solver in the build nothing here is `proved`: comparing samples is not establishing a
+ * proposition, and the only two words a build without a solver may publish are `sampled` and
+ * `refuted`.
+ *
+ * The table is read twice: as its fixed rendering, which is what the acceptance reads, and column
+ * by column through the readers, which is what a tool consumes. Both have to agree, and both are
+ * the same table -- `check_text` is the rendering of the rows `check_verdict` reads a column of.
+ */
+module verify_report
+
+import { check, check_text, check_row_count, check_rule, check_instance, check_verdict, check_proposition, check_evidence, check_reason } from rewrite
+import { log, log1p } from math
+
+rule holds(x: float) { x * 1.0 => x }
+
+rule differ(x: int) { x * 2 => x + 2 }
+
+#requires<nondeterministic>
+rule anywhere(x: float, const c: float) { x * c => c * x }
+
+/// The assumptions the ruling names are written out: with `no_infs`, `no_nans` and
+/// `no_signed_zeros` asked for, the non-finite values whose behaviour the real model does not have
+/// are outside the domain, and the rule's two halves are the finite equality and the IEEE equality
+/// that is left.
+#requires<reassociate, no_infs, no_nans, no_signed_zeros>
+rule fold(x: float, const c1: float, const c2: float) { x * c1 + x * c2 => x * (c1 + c2) }
+
+#requires<refine_accuracy>
+rule near_zero(x: float) { log(1.0 + x) => log1p(x) }
+
+func main(): int sync {
+    let r = check([holds, differ, anywhere, fold, near_zero], 100, 7)
+    print(check_text(r))
+    println("rows", check_row_count(r))
+    println("0", check_verdict(r, 0), check_proposition(r, 0), check_evidence(r, 0), "[", check_reason(r, 0), "]")
+    println("1", check_verdict(r, 1), check_proposition(r, 1), check_evidence(r, 1), "[", check_reason(r, 1), "]")
+    println("2", check_verdict(r, 2), check_proposition(r, 2), check_evidence(r, 2), "[", check_reason(r, 2), "]")
+    println("3", check_verdict(r, 3), check_proposition(r, 3), check_evidence(r, 3), "[", check_rule(r, 3), "]")
+    println("4", check_verdict(r, 4), check_proposition(r, 4), check_evidence(r, 4), "[", check_instance(r, 4), "]")
+    return 0
+}

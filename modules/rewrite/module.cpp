@@ -16,6 +16,7 @@
  * `__analysis`) have no callable Camel name, so they stay exported from here.
  */
 
+#include "checkreport.h"
 #include "proof.h"
 #include "rule.h"
 
@@ -78,6 +79,14 @@ using camel::compile::gir::RuleConditionAt;
 using camel::graphmod::Handle;
 using camel::graphmod::HandleKind;
 using camel::graphmod::HandleType;
+using camel::rewritemod::CheckReportObject;
+using camel::rewritemod::CheckRow;
+using camel::rewritemod::kPropositionEquality;
+using camel::rewritemod::kPropositionErrorBound;
+using camel::rewritemod::kPropositionRealEquality;
+using camel::rewritemod::kVerdictProved;
+using camel::rewritemod::kVerdictRefuted;
+using camel::rewritemod::kVerdictSampled;
 using camel::rewritemod::linkAfter;
 using camel::rewritemod::linkBefore;
 using camel::rewritemod::ProofObject;
@@ -674,6 +683,100 @@ CastSafety ProofType::castSafetyFrom(Type *source) const {
 bool ProofType::assignableFrom(Type *source) const { return is(source); }
 
 OtherType *ProofType::cloneWithParams(std::span<Type *const>) const { return get(); }
+
+/// `CheckReport`, the type of what `check` answers (H247, slice S0). A report is a table of rows
+/// (checkreport.h), not a string: the fixed rendering of the table is its `print`, so a reader
+/// keeps the fields and gets the text, and no caller has to parse the text back into fields. The
+/// type holds text and no reference into any GC space, so it is an ordinary other type.
+class CheckReportType final : public OtherType {
+  public:
+    static CheckReportType *get();
+    static bool is(const Type *type);
+
+    std::string toString() const override { return "CheckReport"; }
+    std::string mangle() const override { return "rewrite.CheckReport"; }
+    Type *clone(bool deep = false) const override;
+    bool equals(Type *other) const override;
+    CastSafety castSafetyFrom(Type *source) const override;
+    bool assignableFrom(Type *source) const override;
+    OtherType *cloneWithParams(std::span<Type *const> params) const override;
+
+  private:
+    explicit CheckReportType(TypeCode code) : OtherType(code) {}
+};
+
+CheckReportType *CheckReportType::get() {
+    static CheckReportType *instance = nullptr;
+    static std::once_flag once;
+    std::call_once(once, [] {
+        const TypeCode code = registerOtherType("rewrite::CheckReport", TypeFlag::GC_Traced);
+        void *mem = mm::permSpace().alloc(sizeof(CheckReportType), alignof(CheckReportType));
+        ASSERT(mem != nullptr, "Failed to allocate CheckReportType from permSpace");
+        instance = new (mem) CheckReportType(code);
+    });
+    return instance;
+}
+
+bool CheckReportType::is(const Type *type) {
+    return type != nullptr && type->code() == get()->code();
+}
+
+Type *CheckReportType::clone(bool) const { return get(); }
+
+bool CheckReportType::equals(Type *other) const { return is(other); }
+
+CastSafety CheckReportType::castSafetyFrom(Type *source) const {
+    return is(source) ? CastSafety::Safe : CastSafety::Forbidden;
+}
+
+bool CheckReportType::assignableFrom(Type *source) const { return is(source); }
+
+OtherType *CheckReportType::cloneWithParams(std::span<Type *const>) const { return get(); }
+
+/// What a verdict is about, read off the permissions the rule asks for (the ruling of 2026-10-24 on
+/// `verification-licence-to-precondition`):
+///
+///   * `reassociate` and `contract` let the rewriting change the rounding, so the proposition is
+///     the two halves the ruling gives it: real equality on the finite inputs and IEEE equality,
+///     bit for bit, on the values a real model does not have (NaN, the infinities, -0) -- unless
+///     the rule asks for `no_nans` / `no_infs` / `no_signed_zeros`, which narrow the domain the
+///     assumptions cover rather than change what is claimed.
+///   * `refine_accuracy` proves an error bound, not an equality (licence 2).
+///   * `change_precision` claims the difference stays inside the error bound of the precision the
+///     rewriting moves to (design principles 7.2), which is an error bound as well.
+///   * everything else claims bit-for-bit equality, which is what a rule that needs no permission
+///     is checked against (`kNoPermissions` compares slots, no tolerance).
+std::string propositionOf(camel::core::sem::PermissionMask needs) {
+    using camel::core::sem::kChangePrecision;
+    using camel::core::sem::kContract;
+    using camel::core::sem::kReassociate;
+    using camel::core::sem::kRefineAccuracy;
+    if ((needs & kRefineAccuracy) != 0) {
+        return kPropositionErrorBound;
+    }
+    if ((needs & (kReassociate | kContract)) != 0) {
+        return kPropositionRealEquality;
+    }
+    if ((needs & kChangePrecision) != 0) {
+        return kPropositionErrorBound;
+    }
+    return kPropositionEquality;
+}
+
+/// The stream one rule's samples are drawn from (the ruling of 2026-10-24 on
+/// `accuracy-check-sampling`, 1): the seed is derived from the rule's identity -- its name together
+/// with the type tuple of the instance, `add_zero<i32>` -- and not from its place in the array the
+/// caller passed, so the same rule draws the same samples in any call, whatever else is checked
+/// beside it. `seed` stays the caller's knob: the identity decides *which* stream, the seed *where*
+/// in it.
+uint64_t sampleStreamOf(uint64_t seed, std::string_view identity) {
+    uint64_t hash = 1469598103934665603ull; // FNV-1a, 64 bit
+    for (const char c : identity) {
+        hash ^= static_cast<uint64_t>(static_cast<uint8_t>(c));
+        hash *= 1099511628211ull;
+    }
+    return seed ^ (hash * 1000003ull);
+}
 
 
 /// One application of rules: the program it produced and what the engine counted while applying
@@ -2545,18 +2648,45 @@ uint64_t constMaskOf(const camel::runtime::RuleSource &source) {
 /// const parameters, random values for the others) must agree, and the engine must fire the rule on
 /// its own left side and agree too. A rule that asks for `refine_accuracy` is compared by its error
 /// against a higher-precision reference instead, sample by sample, and the worst error ratio is
-/// reported. `stream` picks the samples.
-/// Returns the report lines; a line starting with FAIL is a rule that does not hold.
-std::string checkOneRule(
-    Context &ctx, const camel::runtime::RuleSource &source, int64_t samples, uint64_t stream) {
-    const std::string name(source.name);
+/// reported. `stream` picks the samples; the caller derives it from the rule's identity, not from
+/// its place in the array (the ruling of 2026-10-24 on `accuracy-check-sampling`, 1).
+///
+/// The rows this appends are the verdict table `check` answers (H247, slice S0): the verdict, what
+/// it is about, and the evidence or the reason it is what it is. With no solver in the build a rule
+/// whose two sides agree on every sample is `sampled`, never `proved`: the check compared samples,
+/// and `proved` is reserved for a licence's proposition being established (the ruling of
+/// 2026-10-24 on `verification-licence-to-precondition`).
+void checkOneRule(
+    Context &ctx, const camel::runtime::RuleSource &source, int64_t samples, uint64_t stream,
+    std::string_view instance, std::vector<CheckRow> &rows) {
+    // The table has a column for the rule and a column for the instance, so the rule's own name is
+    // the law's name without the type tuple the instance adds: the engine names an instance
+    // `int_add_zero<int>`, and the row says `int_add_zero` and `int` (the rendering puts them back
+    // together, so the name a reader sees is the one the engine, `explain` and the old report use).
+    std::string ruleName = source.name;
+    const std::string instanceSuffix = std::format("<{}>", instance);
+    if (!instance.empty() && ruleName.ends_with(instanceSuffix)) {
+        ruleName.resize(ruleName.size() - instanceSuffix.size());
+    }
+    const std::string proposition              = propositionOf(source.needs);
     const bool conditional                       = source.when != nullptr;
     const camel::core::sem::PermissionMask needs = source.needs;
+    const auto addRow = [&](std::string_view verdict, std::string evidence, std::string reason,
+                            std::string detail) {
+        CheckRow row;
+        row.rule        = ruleName;
+        row.instance    = std::string(instance);
+        row.verdict     = std::string(verdict);
+        row.proposition = proposition;
+        row.evidence    = std::move(evidence);
+        row.reason      = std::move(reason);
+        row.detail      = std::move(detail);
+        rows.push_back(std::move(row));
+    };
     const uint64_t constParams                   = constMaskOf(source);
     const camel::runtime::Program *program       = source.program;
     const camel::runtime::GraphId lhsId          = source.lhs;
     const camel::runtime::GraphId rhsId          = source.rhs;
-    std::string report;
     const camel::runtime::GCGraph *lhsGraph = program->graph(lhsId);
     const auto *lhsType                     = lhsGraph->funcType();
     const size_t params                     = lhsType->normTypesCount();
@@ -2616,16 +2746,23 @@ std::string checkOneRule(
         return drawn;
     };
     NodeVMSchedPass vm(ctx.shared_from_this());
+    // What went wrong, in the shape a row wants it: the `detail` line, the `evidence` the verdict
+    // rests on ("counterexample" when a value is the witness, "none" when nothing could be
+    // compared), and the `reason` the ruling has written apart from the verdict.
     std::string failure;
+    std::string failureEvidence;
+    std::string failureReason;
     double worstRatio = 0.0;
     std::set<std::vector<int64_t>> shapesSeen;
     std::set<int64_t> axesSeen;
     if (!bound.checkable) {
-        // `nondeterministic` has no numeric contract: there is nothing to compare against,
-        // and reporting `ok` would say the rule was checked. It was not.
-        report += std::format(
-            "unchecked {}: the permissions it needs have no numeric bound\n", name);
-        return report;
+        // `nondeterministic` has no numeric contract: there is nothing to compare against, so
+        // nothing was examined. The verdict stays `sampled` -- the three words are closed and the
+        // fourth the check used to write is gone -- but the reason is written in its own column and
+        // is never left out, so a reader cannot take this `sampled` for one that sampled (the
+        // ruling of 2026-10-24 on `verification-licence-to-precondition`, licence 3, option A).
+        addRow(kVerdictSampled, "none", "no numeric bound", "");
+        return;
     }
     // A condition is part of the equation: the two sides need not agree on values the
     // condition rejects, and the tool cannot ask the condition about sampled values. Such a
@@ -2671,20 +2808,25 @@ std::string checkOneRule(
                 for (size_t i = 0; i < values.size(); ++i) {
                     at += (i == 0 ? "" : ", ") + sampleText(values[i]);
                 }
-                failure = checked.referenceAvailable
-                    ? std::format(
-                          "FAIL {}: the right side is worse at ({}): its error {:.6g} exceeds "
-                          "the left side's {:.6g} (ratio {:.6g})",
-                          name,
-                          at,
-                          static_cast<double>(checked.rightError),
-                          static_cast<double>(checked.leftError),
-                          checked.ratio)
-                    : std::format(
-                          "FAIL {}: the check cannot examine this rule at ({}): {}",
-                          name,
-                          at,
-                          checked.reason);
+                if (checked.referenceAvailable) {
+                    // The reference says the right side is worse on this sample: the error bound
+                    // the permission asks for is false here, which is a counterexample, not a
+                    // missing comparison.
+                    failureEvidence = "counterexample";
+                    failure         = std::format(
+                        "the right side is worse at ({}): its error {:.6g} exceeds the left "
+                        "side's {:.6g} (ratio {:.6g})",
+                        at,
+                        static_cast<double>(checked.rightError),
+                        static_cast<double>(checked.leftError),
+                        checked.ratio);
+                } else {
+                    // Nothing could be compared: the rule is outside what the check can examine,
+                    // and the ruling has that said out loud rather than reported as a failure.
+                    failureEvidence = "none";
+                    failureReason   = checked.reason;
+                    failure         = std::format("the check cannot examine this rule at ({})", at);
+                }
             }
         } else if (!agree(
                        left,
@@ -2695,9 +2837,9 @@ std::string checkOneRule(
             for (size_t i = 0; i < values.size(); ++i) {
                 at += (i == 0 ? "" : ", ") + sampleText(values[i]);
             }
-            failure = std::format(
-                "FAIL {}: the two sides differ at ({}): {} and {}",
-                name,
+            failureEvidence = "counterexample";
+            failure         = std::format(
+                "the two sides differ at ({}): {} and {}",
                 at,
                 sampleText(left),
                 sampleText(right));
@@ -2768,20 +2910,21 @@ std::string checkOneRule(
                     for (const Sample &value : values) {
                         at += (at.empty() ? "" : ", ") + sampleText(value);
                     }
-                    failure = checked.referenceAvailable
-                        ? std::format(
-                              "FAIL {}: the rewritten left side is less accurate at ({}): its "
-                              "error {:.6g} exceeds the original's {:.6g} (ratio {:.6g})",
-                              name,
-                              at,
-                              static_cast<double>(checked.rightError),
-                              static_cast<double>(checked.leftError),
-                              checked.ratio)
-                        : std::format(
-                              "FAIL {}: the check cannot examine the rewritten side at ({}): {}",
-                              name,
-                              at,
-                              checked.reason);
+                    if (checked.referenceAvailable) {
+                        failureEvidence = "counterexample";
+                        failure         = std::format(
+                            "the rewritten left side is less accurate at ({}): its error {:.6g} "
+                            "exceeds the original's {:.6g} (ratio {:.6g})",
+                            at,
+                            static_cast<double>(checked.rightError),
+                            static_cast<double>(checked.leftError),
+                            checked.ratio);
+                    } else {
+                        failureEvidence = "none";
+                        failureReason   = checked.reason;
+                        failure =
+                            std::format("the check cannot examine the rewritten side at ({})", at);
+                    }
                 }
             } else if (!agree(
                            before,
@@ -2792,10 +2935,10 @@ std::string checkOneRule(
                 for (const Sample &value : values) {
                     at += (at.empty() ? "" : ", ") + sampleText(value);
                 }
-                failure = std::format(
-                    "FAIL {}: the rewritten left side differs at ({}): {} and {} "
+                failureEvidence = "counterexample";
+                failure         = std::format(
+                    "the rewritten left side differs at ({}): {} and {} "
                     "(bound {} ulps, {} relative, scale {})",
-                    name,
                     at,
                     sampleText(before),
                     sampleText(after),
@@ -2805,14 +2948,18 @@ std::string checkOneRule(
             }
         }
         if (failure.empty() && fired == 0) {
-            failure = std::format(
-                "FAIL {}: the rule never fired on its own left side in {} tries",
-                name,
-                tried);
+            // The engine never applied the rule to its own left side. That is not a counterexample
+            // to the equation -- no values were compared -- so the evidence is `none` and the
+            // reason says what happened; the verdict is still `refuted`, because a rule the engine
+            // cannot fire on its own left side must not pass a check that guards the library.
+            failureEvidence = "none";
+            failureReason   = std::format(
+                "the rule never fired on its own left side in {} tries", tried);
+            failure = "the rule never fired on its own left side";
         }
     }
     if (!failure.empty()) {
-        report += failure + "\n";
+        addRow(kVerdictRefuted, failureEvidence, failureReason, failure);
     } else if (accuracy) {
         std::string shapesText;
         for (const auto &shape : shapesSeen) {
@@ -2830,28 +2977,31 @@ std::string checkOneRule(
         }
         const std::string ratio =
             std::isinf(worstRatio) ? "inf" : std::format("{:.3g}", worstRatio);
-        report += std::format(
-            "ok {}: {} samples, worst error ratio {}, fired {} of {}",
-            name,
-            samples,
-            ratio,
-            fired,
-            tried);
+        std::string detail = std::format(
+            "worst error ratio {}, fired {} of {}", ratio, fired, tried);
         if (!shapesText.empty()) {
-            report += ", shapes " + shapesText;
+            detail += ", shapes " + shapesText;
         }
         if (!axesText.empty()) {
-            report += ", axes " + axesText;
+            detail += ", axes " + axesText;
         }
-        report += "\n";
+        addRow(kVerdictSampled, std::format("samples {}", samples), "", detail);
     } else if (conditional) {
-        report += std::format(
-            "ok {}: the condition selects the instances, fired {} of {}\n", name, fired, tried);
+        // The two sides were never compared: a condition cannot be asked about sampled values, so
+        // the engine path is the whole of what this rule got. It is `sampled`, and the detail says
+        // which path was walked, so a reader does not take it for a value comparison.
+        addRow(
+            kVerdictSampled,
+            std::format("samples {}", samples),
+            "the condition selects the instances, so no sampled value was compared",
+            std::format("the condition selects the instances, fired {} of {}", fired, tried));
     } else {
-        report += std::format(
-            "ok {}: {} samples agree, fired {} of {}\n", name, samples, fired, tried);
+        addRow(
+            kVerdictSampled,
+            std::format("samples {}", samples),
+            "",
+            std::format("fired {} of {}", fired, tried));
     }
-    return report;
 }
 
 /// The instances of one generic rule, checked one by one (the ruling of 2026-10-24 on
@@ -2863,29 +3013,37 @@ std::string checkOneRule(
 /// and says nothing. A tuple the pattern cannot be written for is not an instance either, and is
 /// quiet as well (the ruling of 2026-10-23 on `generic-rule-instantiation-set-and-predicate` §3);
 /// `why_not` is where that reason is read. An instance that was made but whose values the check
-/// cannot draw is reported `unchecked` with that reason: that is the one place where the check
-/// covers less than the law says.
-std::string checkGenericRule(
-    Context &ctx, RuleObject &rule, int64_t samples, uint64_t seed, size_t index) {
+/// cannot draw is `sampled` with that reason: that is the one place where the check covers less
+/// than the law says, and the reason column is where the ruling has it written.
+void checkGenericRule(
+    Context &ctx, RuleObject &rule, int64_t samples, uint64_t seed, std::vector<CheckRow> &rows) {
     const uint64_t ruleId = rule.ruleId();
     const std::string name(rule.name());
+    const auto whole = [&](const std::string &reason) {
+        CheckRow row;
+        row.rule        = name;
+        row.verdict     = kVerdictSampled;
+        row.proposition = propositionOf(rule.needs());
+        row.evidence    = "none";
+        row.reason      = reason;
+        rows.push_back(std::move(row));
+    };
     auto root = std::make_shared<mm::RootHandle>(
         mm::autoSpace(), &rule, RuleType::get(), "rewrite.checkGenericRule");
     GenericRuleEntry *entry = camel::compile::gir::genericRuleEntry(ctx, ruleId);
     if (entry == nullptr) {
-        return std::format("unchecked {}: its templates are not in this context\n", name);
+        whole("its templates are not in this context");
+        return;
     }
     const size_t arity = entry->typeParams.size();
     if (arity == 0) {
-        return std::format(
-            "unchecked {}: its head declares no type parameter, so it has no instance to make\n",
-            name);
+        whole("its head declares no type parameter, so it has no instance to make");
+        return;
     }
-    std::string report;
     const std::vector<Type *> universe = camel::compile::gir::ruleInstanceTypes();
     if (universe.empty()) {
-        return std::format(
-            "unchecked {}: no operator group registered a type to instantiate it at\n", name);
+        whole("no operator group registered a type to instantiate it at");
+        return;
     }
     // Every tuple of the product the condition admits, in the order the types were registered (the
     // first type parameter varies fastest, as a counter does). The condition is asked before
@@ -2912,8 +3070,9 @@ std::string checkGenericRule(
     const size_t total = tuples.size();
     if (total > kCheckTupleCap) {
         // Deterministic: the same seed takes the same tuples, whatever order the groups registered
-        // the types in. The report says which ones were taken and how many there are in all.
-        std::mt19937_64 rng(seed * 1000003u + index);
+        // the types in. The row says which ones were taken and how many there are in all; it is the
+        // law's own row, since no single instance stands for it.
+        std::mt19937_64 rng(sampleStreamOf(seed, name));
         std::vector<size_t> order(total);
         std::iota(order.begin(), order.end(), 0);
         std::shuffle(order.begin(), order.end(), rng);
@@ -2925,15 +3084,23 @@ std::string checkGenericRule(
             taken.push_back(tuples[at]);
         }
         tuples = std::move(taken);
-        report += std::format("sampled {}: {} of {} type tuples:", name, tuples.size(), total);
+        std::string takenText;
         for (const std::vector<Type *> &tuple : tuples) {
-            report += " (";
+            takenText += takenText.empty() ? "(" : " (";
             for (size_t i = 0; i < tuple.size(); ++i) {
-                report += (i == 0 ? "" : ", ") + tuple[i]->toString();
+                takenText += (i == 0 ? "" : ", ") + tuple[i]->toString();
             }
-            report += ")";
+            takenText += ")";
         }
-        report += "\n";
+        CheckRow row;
+        row.rule        = name;
+        row.verdict     = kVerdictSampled;
+        row.proposition = propositionOf(rule.needs());
+        row.evidence    = "none";
+        row.reason = std::format(
+            "more type tuples than the check walks, so {} of {} were taken", tuples.size(), total);
+        row.detail = takenText;
+        rows.push_back(std::move(row));
     }
     for (const std::vector<Type *> &tuple : tuples) {
         const size_t place = camel::compile::gir::genericRuleInstance(ctx, ruleId, tuple);
@@ -2947,7 +3114,10 @@ std::string checkGenericRule(
         const GenericRuleInstance &instance = current->instances[place];
         const std::string instanceName = std::format("{}<{}>", name, instance.typeText);
         const auto *lhsType = instance.lhs->funcType();
-        Sampler probe(seed, rule.needs());
+        // The seed follows the instance's identity, not its place in the array the caller passed
+        // (the ruling of 2026-10-24 on `accuracy-check-sampling`, 1).
+        const uint64_t stream = sampleStreamOf(seed, instanceName);
+        Sampler probe(stream, rule.needs());
         std::string cannot;
         for (size_t i = 0; i < lhsType->normTypesCount(); ++i) {
             const Type *parameter = lhsType->normTypeAt(i);
@@ -2957,10 +3127,14 @@ std::string checkGenericRule(
             }
         }
         if (!cannot.empty()) {
-            report += std::format(
-                "unchecked {}: the check cannot make a value of type '{}'\n",
-                instanceName,
-                cannot);
+            CheckRow row;
+            row.rule        = name;
+            row.instance    = instance.typeText;
+            row.verdict     = kVerdictSampled;
+            row.proposition = propositionOf(rule.needs());
+            row.evidence    = "none";
+            row.reason      = std::format("the check cannot make a value of type '{}'", cannot);
+            rows.push_back(std::move(row));
             continue;
         }
         std::shared_ptr<WhenCall> call;
@@ -2976,9 +3150,8 @@ std::string checkGenericRule(
         }
         const RuleObject &currentRule = *root->getAs<RuleObject>();
         const camel::runtime::RuleSource source = instanceOf(currentRule, 1, instance, call);
-        report += checkOneRule(ctx, source, samples, seed * 1000003u + index);
+        checkOneRule(ctx, source, samples, stream, instance.typeText, rows);
     }
-    return report;
 }
 
 /// `check(rules, samples, seed)`: for every rule, `samples` random instances (random constants
@@ -2988,11 +3161,16 @@ std::string checkGenericRule(
 /// A generic rule is checked once per instance its condition admits over the types the operator
 /// groups registered (the ruling of 2026-10-24 on
 /// `generic-rule-check-surface-and-multi-parameter-instances`).
-/// Returns the report; a line starting with FAIL is a rule that does not hold.
+///
+/// It answers a `CheckReport` (H247, slice S0): the verdict table, one row per rule or per instance
+/// of a generic law, each row carrying the rule, the instance, the verdict, what the verdict is
+/// about and the evidence or the reason (the ruling of 2026-10-24 on
+/// `verification-verdict-surface`, 2: the verdict is published by `check` and the text output is
+/// the fixed rendering of that table, which is what a reader -- and the acceptance -- reads).
 slot_t checkKernel(ArgsView &, ArgsView &norm, Context &ctx) {
     const int64_t samples = std::max<int64_t>(1, norm.get<Int64>(1));
     const uint64_t seed   = static_cast<uint64_t>(norm.get<Int64>(2));
-    std::string report;
+    std::vector<CheckRow> rows;
     const size_t count = norm.get<Array *>(0)->size();
     for (size_t index = 0; index < count; ++index) {
         // The array moves when a function runs: it is read again each time.
@@ -3000,8 +3178,9 @@ slot_t checkKernel(ArgsView &, ArgsView &norm, Context &ctx) {
         if (made->ruleId() != 0) {
             // A generic rule has no two sides of its own: it is checked once per instance its
             // condition admits over the types the operator groups registered (the ruling of
-            // 2026-10-24 on `generic-rule-check-surface-and-multi-parameter-instances`).
-            report += checkGenericRule(ctx, *made, samples, seed, index);
+            // 2026-10-24 on `generic-rule-check-surface-and-multi-parameter-instances`). The index
+            // is not passed: the seed of a rule follows its identity, not its place in this array.
+            checkGenericRule(ctx, *made, samples, seed, rows);
             continue;
         }
         // A condition is read again from the rule object after every call, so the object is
@@ -3021,9 +3200,76 @@ slot_t checkKernel(ArgsView &, ArgsView &norm, Context &ctx) {
         const RuleObject *rule = ruleRoot ? ruleRoot->getAs<RuleObject>() : made;
         // The rule object is read now and not again: a function runs below, and objects move.
         const camel::runtime::RuleSource source = sourceOf(*rule, 1, call);
-        report += checkOneRule(ctx, source, samples, seed * 1000003u + index);
+        // The seed follows the rule's own name (the ruling of 2026-10-24 on
+        // `accuracy-check-sampling`, 1).
+        checkOneRule(
+            ctx, source, samples, sampleStreamOf(seed, std::string_view(source.name)), "", rows);
     }
-    return toSlot(String::from(report, mm::autoSpace()));
+    return toSlot(CheckReportObject::create(std::move(rows), mm::autoSpace()));
+}
+
+/// The report's fixed rendering, as a string. `print(report)` writes the same text through the
+/// value's `print`: this is for a caller that wants the text as a value (to compare it, to store
+/// it, or to hand it to something that reads strings).
+slot_t checkTextKernel(ArgsView &, ArgsView &norm, Context &) {
+    const auto *report = norm.get<const CheckReportObject *>(0);
+    return toSlot(String::from(report->text(), mm::autoSpace()));
+}
+
+/// How many rows the table has.
+slot_t checkRowCountKernel(ArgsView &, ArgsView &norm, Context &) {
+    const auto *report = norm.get<const CheckReportObject *>(0);
+    return toSlot<Int64>(static_cast<int64_t>(report->rows().size()));
+}
+
+/// One column of one row of the table. The row index is checked: a reader that asks for a row the
+/// report does not have is answered with an error value naming the count, rather than with an empty
+/// string that would read like a row whose reason is empty.
+const CheckRow *rowAt(const CheckReportObject *report, int64_t at, const char *who) {
+    if (at < 0 || static_cast<size_t>(at) >= report->rows().size()) {
+        return nullptr;
+    }
+    return &report->rows()[static_cast<size_t>(at)];
+}
+
+slot_t rowColumnKernel(ArgsView &norm, const char *who, std::string CheckRow::*field) {
+    const auto *report  = norm.get<const CheckReportObject *>(0);
+    const int64_t at    = norm.get<Int64>(1);
+    const CheckRow *row = rowAt(report, at, who);
+    if (row == nullptr) {
+        return makeError(
+            "IndexError",
+            std::format(
+                "the report has {} row(s), and row {} was asked for", report->rows().size(), at),
+            who);
+    }
+    return makeOk(
+        toSlot(String::from(row->*field, mm::autoSpace())),
+        TupleType::fallible(Type::String()));
+}
+
+slot_t checkRuleKernel(ArgsView &, ArgsView &norm, Context &) {
+    return rowColumnKernel(norm, "<rewrite::check_rule>", &CheckRow::rule);
+}
+
+slot_t checkInstanceKernel(ArgsView &, ArgsView &norm, Context &) {
+    return rowColumnKernel(norm, "<rewrite::check_instance>", &CheckRow::instance);
+}
+
+slot_t checkVerdictKernel(ArgsView &, ArgsView &norm, Context &) {
+    return rowColumnKernel(norm, "<rewrite::check_verdict>", &CheckRow::verdict);
+}
+
+slot_t checkPropositionKernel(ArgsView &, ArgsView &norm, Context &) {
+    return rowColumnKernel(norm, "<rewrite::check_proposition>", &CheckRow::proposition);
+}
+
+slot_t checkEvidenceKernel(ArgsView &, ArgsView &norm, Context &) {
+    return rowColumnKernel(norm, "<rewrite::check_evidence>", &CheckRow::evidence);
+}
+
+slot_t checkReasonKernel(ArgsView &, ArgsView &norm, Context &) {
+    return rowColumnKernel(norm, "<rewrite::check_reason>", &CheckRow::reason);
 }
 
 class RewriteExecutor final : public Executor {
@@ -3048,6 +3294,14 @@ class RewriteExecutor final : public Executor {
             {"saturate", saturateKernel},
             {"extract", extractKernel},
             {"check", checkKernel},
+            {"check_text", checkTextKernel},
+            {"check_row_count", checkRowCountKernel},
+            {"check_rule", checkRuleKernel},
+            {"check_instance", checkInstanceKernel},
+            {"check_verdict", checkVerdictKernel},
+            {"check_proposition", checkPropositionKernel},
+            {"check_evidence", checkEvidenceKernel},
+            {"check_reason", checkReasonKernel},
             {"analysis", camel::rewritemod::analysisKernel},
         };
     }
@@ -3058,6 +3312,7 @@ class RewriteModule final : public BuiltinModule {
     explicit RewriteModule(context_ptr_t ctx) : BuiltinModule("rewrite", std::move(ctx)) {
         exportType(Reference("Rule"), RuleType::get());
         exportType(Reference("Proof"), ProofType::get());
+        exportType(Reference("CheckReport"), CheckReportType::get());
         exportEntity(
             "__rule",
             OperatorGroup::create(
@@ -3204,6 +3459,14 @@ class RewriteModule final : public BuiltinModule {
              {"saturate", false},
              {"extract", false},
              {"check", false},
+             {"check_text", true},
+             {"check_row_count", true},
+             {"check_rule", true},
+             {"check_instance", true},
+             {"check_verdict", true},
+             {"check_proposition", true},
+             {"check_evidence", true},
+             {"check_reason", true},
              {"analysis", false}});
         loaded_ = true;
         return true;

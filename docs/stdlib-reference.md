@@ -4727,14 +4727,127 @@ Extracts the program `p` in the cost model named `cost` (for example `"size"`).
 #### `check`
 
 ```camel
-check: (rules: Rule[], samples: int, seed: int) => string
+check: (rules: Rule[], samples: int, seed: int) => CheckReport
 ```
 
-Checks `rules` on `samples` random programs drawn with `seed`, and reports the first rule
-that fails, or that all of them hold.
+Checks `rules` on `samples` random instances drawn with `seed`, and answers the verdict table
+(H247, slice S0). Each row of the table carries the rule, the instance (a generic law's type
+tuple), the verdict, what the verdict is about and the evidence or the reason for it; the
+verdicts are `proved`, `refuted` and `sampled`, and every line of the report wears one of them
+as its first word (the ruling of 2026-10-24 on `verification-verdict-surface`, 2). The sample
+stream of a rule follows the rule's identity -- its name and its instance's type tuple -- and
+not its place in `rules`, so a rule draws the same samples in any call (the ruling of 2026-10-24
+on `accuracy-check-sampling`, 1). A build without a solver can answer `sampled` and `refuted`
+and never `proved`: `proved` is a licence's proposition being established, which is not what
+comparing samples does.
 
-- With effects: runs the rules' functions and draws random programs.
+- With effects: runs the rules' functions and draws random values.
 - Example: `check(rules, 1000, 7)` gives `the report`
+
+#### `check_text`
+
+```camel
+check_text: (r: CheckReport) => string
+```
+
+The report's fixed rendering, as a string: the same text `print` writes, for a caller that
+wants it as a value.
+
+- Pure.
+- Example: `check_text(r)` gives `'sampled add_zero: proposition equality, evidence samples 100, ...'`
+
+#### `check_row_count`
+
+```camel
+check_row_count: (r: CheckReport) => int
+```
+
+How many rows the table has: one per rule, or one per instance of a generic law.
+
+- Pure.
+- Example: `check_row_count(r)` gives `2`
+
+#### `check_rule`
+
+```camel
+check_rule: (r: CheckReport, row: int) => string!
+```
+
+The rule of one row: the law's name, without the type tuple an instance adds.
+
+- Pure.
+- Failure: error value `IndexError` when the report has no such row.
+- Example: `check_rule(r, 0)` gives `'add_zero'`
+
+#### `check_instance`
+
+```camel
+check_instance: (r: CheckReport, row: int) => string!
+```
+
+The type tuple of one row's instance, as written (`int`, `int, int`). Empty for a rule that is
+not a generic law.
+
+- Pure.
+- Failure: error value `IndexError` when the report has no such row.
+- Example: `check_instance(r, 0)` gives `'i32'`
+
+#### `check_verdict`
+
+```camel
+check_verdict: (r: CheckReport, row: int) => string!
+```
+
+One row's verdict: `proved`, `refuted` or `sampled`. The words are closed: a rule nothing could
+be examined on is `sampled` with its reason, never a fourth word.
+
+- Pure.
+- Failure: error value `IndexError` when the report has no such row.
+- Example: `check_verdict(r, 0)` gives `'sampled'`
+
+#### `check_proposition`
+
+```camel
+check_proposition: (r: CheckReport, row: int) => string!
+```
+
+What one row's verdict is about (the ruling of 2026-10-24 on
+`verification-licence-to-precondition`): `equality` for a rule that needs no permission,
+`real equality + IEEE on special values` for the rules that ask for `reassociate` or `contract`,
+and `error bound` for the ones that ask for `refine_accuracy` or `change_precision`.
+
+- Pure.
+- Failure: error value `IndexError` when the report has no such row.
+- Example: `check_proposition(r, 0)` gives `'equality'`
+
+#### `check_evidence`
+
+```camel
+check_evidence: (r: CheckReport, row: int) => string!
+```
+
+What one row's verdict rests on: `solver` when a solver established it, `samples <n>` when `n`
+samples were drawn, `counterexample` when a value is the witness, and `none` when nothing could
+be examined.
+
+- Pure.
+- Failure: error value `IndexError` when the report has no such row.
+- Example: `check_evidence(r, 0)` gives `'samples 100'`
+
+#### `check_reason`
+
+```camel
+check_reason: (r: CheckReport, row: int) => string!
+```
+
+Why a row says what it says when the answer is not a counterexample: the reason nothing was
+examined (`no numeric bound`), or the reason a rule the engine never fired on its own left side
+is `refuted`. Written in its own column and never left implicit, so a `sampled` that sampled is
+never read as one that did not.
+
+- Pure.
+- Failure: error value `IndexError` when the report has no such row.
+- Example: `check_reason(r, 0)` gives `''`
 
 #### `run`
 
