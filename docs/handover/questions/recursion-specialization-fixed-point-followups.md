@@ -118,5 +118,37 @@ plan 断言的第二句是 `which is a value of type`（红前红后都在这句
    连元素一起放宽（第 2 条）。
 2. 值绑定在「分支臂 + 调用环」上的擦除保持不变（那是常量展开的停机机制，不是本次的兜底）。
 
+## 6. 计数上限还承重吗：cap 8 → 4096 的对照实测
+
+把 `include/camel/runtime/draft_inline.h` 的上限临时改成 4096（除这一行外代码相同）重跑：
+
+| 用例 | cap=8（读法 C） | cap=4096 | 结论 |
+|---|---|---|---|
+| onnx 计划红集 | 25 条 | 25 条，逐条 `Compare-Object` **完全一致** | 上限对这四条不承重 |
+| `ort_loop_values` / `ort_linear_recursion` / `export_loop_values_array` | 绿 | 绿 | 同上 |
+| `ort_loop_loaded_weights` | 绿 3.34 s | 绿 **1.97 s** | 同上 |
+| `specialize_growing_shape.fold_specialize.bounded` | `GRAPH_STATS {"graphs":5,"nodes":52,"edges":56,"opers":13,"direct_calls":4,"indirect_calls":1,"closures":0,"branches":3,"loops":0,"bytes":1976,"specializations":1}` | **同一个 JSON，逐字相同** | 与上限无关：天然有界在 5 |
+| `export_gated_gru_forward` | `...,If,Slice,Concat,Reshape,...,Identity`（第三种形状） | `Slice,Reshape,Abs,Cast,ReduceMean,Greater,If,MatMul,Add,Mul,Cast,ReduceMean,Identity`，`ifs=7` | **上限仍在承重**：8 是链被截断的产物 |
+| `shape_unroll.simplify.rgir` | `callee run$spec3 not straight-line` | 同一条 | 与上限无关 |
+| `resident_loop_declares_its_blocks` | 红 | 红：`` `#gpu` scope 'step': operator 'tensor:iter' cannot run on the device (no device implementation) `` | 与上限无关：算子放置变了 |
+
+三条要交回的判断：
+
+1. `export_gated_gru_forward` 在 cap=8 下的红是**上限截断**造成的形状；cap=4096 给出的才是 plan
+   `desc` 自己写的「把延续拷进两条臂」那一种（`2^3-1 = 7` 个 If）。按裁定「不靠计数兜底」，
+   这一条应当是在 4096 下重推期望，或者由作者定上限该是多少——我没有替作者改上限。
+2. `specialize_growing_shape.fold_specialize.bounded` 的断言 `stats.graphs > 5 && stats.graphs <= 40`
+   下界在键改完后失效（实得 5，且与上限无关）：它钉的「有界」在新键下天然成立，值从「8 个特化」
+   变成 5 个图，下界按新图重推即可（读数在两个上限下一致）。
+3. `export_gated_gru_step` / `ort_gated_gru_step` **不是形状断言**，是导出被拒：
+   `onnx.export_model: in 'arm2.1.pb': an indirect call remains after simplification`——
+   第二圈放宽之后，把这处间接调用解掉的类型实例不再生成。要在第二圈上再收窄，需要作者定
+   （varA/varB/varC 三种读法的红集对照在第 1、2 节）。
+   `shape_unroll.simplify.rgir` 不是金标文件，是逐图断言「特化后的 forward 及其每个被调用者
+   无分支」；红后 `run$spec3` 的被调用者是 `run$tspec6$spec7`（值特化落在类型实例里）。
+4. `gpu.tiles resident_loop_declares_its_blocks` 的新红与上限、与形状断言都无关：错误从
+   `TILES_RESIDENCY` 的输出差异变成 `` `tensor:iter` cannot run on the device ``，
+   即 tiles 的算子放置随图变了；这一条要么随裁定重推放置，要么说明键改动不该影响它。
+
 `kMaxTypeSpecializationsPerRecursiveFunction` 没有被改动，也没有被当作修复使用；读法 A 下它仍然
 是那四条 ORT 用例唯一的停机点（`count=8`），这正是裁定要说「不靠计数兜底」的地方。
