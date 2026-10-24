@@ -107,3 +107,35 @@ h480 的转绿清单在它自己的树上成立、在审计基线上不成立，
 `loop_grad_tensor_iterable.{runtime.nvm,macro.fvm}`（h446 未合）。第一轮第二节那两条
 「报了绿但审计基线上仍红」的，本轮两棵树上都是 `[PASS]`。本轮快照里 h485 / h487 / h488 /
 h446 四条 lane 还没合进来，它们的转绿清单未复核。
+
+## 六、第三轮复核：h446 的 P4 门已合入，红 10 → 8，无新红
+
+`handover/h446-flip-autodiff`（tip `c37c82876`，合并提交 `b6a586bb5`）+ develop `6edd54e6b`
+= 审计树 `c496c5615`，同一条命令：`total: 6218, pass: 6191, fail 8, skip 11, known failures: 8`
+（+4 条是 h446 的两条新用例与 develop 的两条 `static_loop_head_*`）。红名单与第二节的 10 条
+差集：只离开 `loop_grad_tensor_iterable.runtime.nvm` 与 `.macro.fvm`（**P4 门那两条**），
+**0 条新红**，其余 8 条逐名不变，无改名。
+
+- 两条门现在用 `expect_stdout_exact` 断言整行：旧串
+  `…d=[[1.0, 1.0, 1.0], [1.0, 1.0, 1.0]]\n` 是新串的**严格前缀**（新串续 `fd=21.000000
+  dot=21.000000 gap=0.000000 ok=true`），`.macro.fvm` 同样，另加一条 `.macro.jit`（同串）
+  与一条负例 `loop_grad_refuse_slice_iterable.runtime.nvm`（`rows: f32[][]`，exit 1 + 诊断名
+  + 第 24 行 + 4 段输出）。三条正例与那条负例都 `[PASS]`。
+- 用例内 `eps = 1.0 / 1024.0`（2^-10）、`plus`/`minus` 逐个写成 `w ± eps*v`、
+  `gap < 0.001`，`fd` 是两侧差分、`dot = sum(d * v)`；计划 `desc` 里写的「eps = 1e-3」是
+  把 2^-10 说成了 1e-3，断言本身没有放宽。
+- 两处修改：`modules/autodiff/pullback.cpp` 的 `buildReverseBody` 改读
+  `TangentSpace::scatterUri`（`include/camel/core/derivative.h` 新字段；
+  `modules/tensor/ops/gradient_ops.cpp` 注册 `tensor:row_add_at`，
+  `modules/tensor/kernels/layout.cpp` 的 `rowAddAt` 是它的核），不再硬写
+  `:tangent/scatter_add_arr`；`src/core/derivative.cpp` 的 `computeTangentType` 让
+  「元素类型固定且元素有切类型」的数值数组以自身为切类型（原先少一维）。
+  `c37c82876` 补上的守卫（`tangentTypeOf(elem) != nullptr`）使整型数组仍无切类型，
+  它自报弄红过的 4 条 `loops.discrete_loop_state`、`loops.discrete_loop_iterable`、
+  `var_array_append.macro.{nvm,fvm}` 在本树上都 `[PASS]`。
+- 改名逐步：`5c4ade02c` 把 `loop_grad_refuse_tensor_iterable.cml` 换成
+  `loop_grad_tensor_iterable.cml`（同一条提交里 D+A，主题写明「assert the loop adjoint …
+  where the refusal was」）；`8dae53085` 把正例换成 `loop_grad_refuse_slice_iterable.cml`
+  （D+A，理由是秩二维张量的散回缺失会让程序跑出错误值）；`bf0a54b9b` 又把正例加回来，
+  负例改指向 `rows: f32[][]`。`known_fail` 仍 6 处标记，与 develop 逐行相同；本轮没有
+  「报了绿但实际仍红」，也没有改弱期望或加 `known_fail`，故无新问题文件。
