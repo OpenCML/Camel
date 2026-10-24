@@ -373,7 +373,7 @@ void Builder::enterGraphScope(const compile_graph_ptr_t &graph, const std::strin
 }
 
 void Builder::leaveScope() {
-    // The body of this graph is complete, so its captures and its calls are known: a ar of it
+    // The body of this graph is complete, so its captures and its calls are known: a `var` of it
     // that no closure captured, no call was handed and that is not its own parameter becomes SSA
     // here (collapseNonEscapingVariableReads).
     collapseNonEscapingVariableReads();
