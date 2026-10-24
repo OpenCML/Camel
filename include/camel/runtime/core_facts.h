@@ -26,8 +26,9 @@
  *                                 loops it runs (effectSummaryOf). Encodable.
  *   core.loopDomain   CrossGraph, (ii)  a LOOP node and its body graph (design 11.3): the form,
  *                                 the Sequential dim of For/ForWhile, `t < len(xs)`, with the
- *                                 extent when the array is a constant, and the element port of
- *                                 the body graph that reads xs(t); While has no bound.
+ *                                 extent — `shape[0]`, the rows of a constant array — and the
+ *                                 element port of the body graph that reads xs(t); While has no
+ *                                 bound.
  *   core.permissions  Node, (i)   the numeric permissions the program granted the node: graph
  *                                 content (GCGraph::nodePermissions), read, never stored.
  *                                 Encodable.
@@ -93,7 +94,12 @@ struct LoopDomain {
     camel::core::LoopKind kind = camel::core::LoopKind::While;
     /// For, ForWhile: the node (of the graph with the LOOP) that is the array iterated over.
     std::optional<gc_node_ref_t> iterable;
-    /// For, ForWhile: len(xs) when the array is a constant of the graph.
+    /// For, ForWhile: how many elements the loop takes from that array along its first dimension
+    /// when the array is a constant of the graph — `shape[0]`, the element count of a rank-1
+    /// array and the row count of a higher-rank one (design principles 5.4; the ruling of
+    /// 2026-10-24 on the loop domain: the extent is `shape[0]`, one fact for every reader). The
+    /// iterable of a loop over an array is the array itself (the core takes an array's elements,
+    /// no module's `__iter__`), so a constant array gives its own length.
     std::optional<int64_t> extent;
     /// For, ForWhile: the body graph's port of the element, which reads xs(t).
     std::optional<gc_node_ref_t> elementPort;

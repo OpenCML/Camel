@@ -148,6 +148,17 @@ class ArrayType : public CompositeType {
     /// This type with another element type, shape and flags unchanged.
     ArrayType *withElementType(Type *elemType) const;
 
+    /// The type of the elements this array gives along its first dimension (design principles
+    /// 5.4: `t[i]` takes the i-th along the first dimension, one row when it has more than one).
+    /// One dimension fewer: the element itself for a rank-1 array, `T[d1, ...]` for `T[d0, d1,
+    /// ...]`, the element type for a nested array (`T[]` of `T[][]`), and the same open-rank
+    /// array when the rank is open (`T[..]`, and the bare `Tensor`, own their elements the same
+    /// way). `for x in xs` takes these for every array of every rank, and the core owns the rule
+    /// (the ruling of 2026-10-24, docs/handover/reviews/questions-2026-10-24-evening.md section
+    /// loop-domain-through-the-tensor-iterator): the builder states the element port with it, the
+    /// loop interface checks the port against it, and the executors take one of these a round.
+    Type *firstDimensionElement() const;
+
     /// The bracket text of the shape: `[]`, `[3, 4]`, `[?, 3]`, `[3, ..rest]`, `[..]`.
     std::string shapeText() const;
     /// The same in the tensor module's spelling, where an unknown dimension is written (`[?]`,

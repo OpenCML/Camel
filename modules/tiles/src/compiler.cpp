@@ -109,21 +109,6 @@ void checkAttributeFates(const rt::GCGraph &g, rt::gc_node_ref_t id) {
     }
 }
 
-/// The array a `for` walks, as the graph wrote it. A loop reads a tensor's rows along its first
-/// dimension (design principles 4.2), and a numeric array is the tensor kind under the flip line
-/// (`Tensor<f32>` is an `f32[]`), so the iterable position of a `for` over one holds that kind's
-/// `__iter__` of the sequence; the rounds are the sequence it reads. Tiles takes no other
-/// domain than a rank-1 `int[]` — whose rows are its elements — so the sequence the operator was
-/// given is the one it counts, and an iterable that is not that operator is itself.
-rt::gc_node_ref_t loopSequence(const rt::GCGraph &graph, rt::gc_node_ref_t iterable) {
-    const rt::GCNode *node = graph.node(iterable);
-    if (node == nullptr || node->kind != rt::GCNodeKind::Oper ||
-        graph.nodeBodyAs<rt::GCOperBody>(iterable)->uri() != "tensor:iter")
-        return iterable;
-    const auto sequence = graph.normInputsOf(iterable);
-    return sequence.size() == 1 ? sequence.front() : iterable;
-}
-
 class Compiler {
   public:
     Program program;
@@ -389,20 +374,15 @@ class Compiler {
             {runtimeProgram, body, *view.bodyElementParam()}};
         const auto domain =
             facts.obtain<rt::fact::LoopDomain>(rt::fact::coreKinds().loopDomain, anchors);
-        if (!domain || (domain->extent && *domain->extent < 0) ||
+        if (!domain || !domain->extent || *domain->extent < 0 ||
             body->node(*view.bodyElementParam())->dataType()->code() != ty::TypeCode::Int64)
             throw UnsupportedComputation("tiles loop requires a static int[] domain");
-        // The domain is the constant `int[]` the loop walks, read where it is written: the
-        // element-type check above is what leaves a rank-1 `int[]`, and a `for` over a tensor
-        // reads its rows along the first dimension, so the sequence the kind's `__iter__` was
-        // given is the domain (`core.loopDomain` counts a constant array the loop walks directly
-        // and has no trip count for one it reads through that operator).
-        const auto iterable = eval(frame, loopSequence(*frame.graph, *view.iterable()));
+        const auto iterable = eval(frame, *view.iterable());
         if (!iterable.constant || !std::holds_alternative<std::vector<int64_t>>(*iterable.constant))
             throw UnsupportedComputation("tiles loop requires exact static int[] values");
         auto region    = std::make_shared<LoopRegion>();
         region->domain = std::get<std::vector<int64_t>>(*iterable.constant);
-        if (domain->extent && region->domain.size() != static_cast<size_t>(*domain->extent))
+        if (region->domain.size() != static_cast<size_t>(*domain->extent))
             throw std::runtime_error("core loop domain disagrees with static array");
         Compiler nested(facts, runtimeProgram);
         nested.active = active;
