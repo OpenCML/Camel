@@ -71,6 +71,14 @@ rather than text an earlier edit produced. Where the compiler cannot name the te
 is no fix at all, and `suggestion` is the advice; a guess with a range and a replacement is worse
 than a sentence, because a tool applies it.
 
+Which of the two a code offers is declared in `diagnostics/registry.tsv`, as the column after its
+help: `edit`, or `none: <cause>` with the cause one of `runtime`, `choice`, `context` and
+`internal` (`--check` refuses anything else, and refuses `edit` on a declaration with no help -
+what a tool is handed the reader is told as well). A catalogue whose entries said nothing about
+this would drift one new diagnostic at a time; with the column, a code that offers neither fails
+the build. `docs/diagnostics.md` prints the declaration for every code, and
+`docs/cli.md` ("Diagnostics") describes the JSON both ways.
+
 The two module fields describe the diagnostic's own file, never a module its message happens to
 name. `ModuleNotFound` at an import is located at the import: `data` names the importing module
 and its file, and the module that was not found is `{0}` of the message. A run-time fault of

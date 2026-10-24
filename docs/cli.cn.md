@@ -278,7 +278,7 @@
 
   （源文件第 2 行写 `func add(a: int b: int)`：改法插在第 15 列，也就是 `int` 与 `b` 之间本来就有的那个空格处，于是得到 `a: int, b: int`，而不是 `a: int , b: int`。）
 
-  只有在编译器知道要写什么文本时才给出改法：写不出确定的文本时没有 `fixes`，此时 `suggestion` 就是用文字说的建议。拿到 `fixes` 的一方可以不再询问就应用；拿不到的一方不得自己编一个。`text` 与 `short` 两种文本格式故意不变：改法是给工具的，`help:` 才是给人的。
+  只有在编译器知道要写什么文本时才给出改法：写不出确定的文本时没有 `fixes`，此时 `suggestion` 就是用文字说的建议。拿到 `fixes` 的一方可以不再询问就应用；拿不到的一方不得自己编一个。某个码是否给改法由 `diagnostics/registry.tsv` 的一列声明——`edit`，或者 `none: <cause>` 说明为什么不给——`docs/diagnostics.md` 会为每个码印出它，`node scripts/diagnostics-catalog.mjs --check` 会拒绝两者都没写的声明。`cause` 取 `runtime`（运行时才报，源码里没有可改的文本）、`choice`（改法是作者的取舍）、`context`（改法是已知的，但不是一段文本：要改第二处、另一个文件，或者要重构）、`internal`。`text` 与 `short` 两种文本格式故意不变：改法是给工具的，`help:` 才是给人的。新增诊断必须在这一列里写其中之一，于是“每个码要么带改法、要么写明为什么没有”是被检查的，而不是靠记性。
 
 ### 效应追踪（`std::profile effect_trace="..."`）
 

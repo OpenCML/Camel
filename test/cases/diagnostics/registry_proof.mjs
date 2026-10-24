@@ -9,7 +9,10 @@
  *   - an empty registry fails (a guard that examines nothing is not a pass);
  *   - one appended line takes the next free number at the end of its section, and --write
  *     changes exactly four files: the registry, that section's header and table, and the
- *     reference; no other declaration moves.
+ *     reference; no other declaration moves;
+ *   - a declaration that does not say whether it carries a machine-applicable edit fails, and so
+ *     do one that says something else, one that gives a cause outside the vocabulary, and one
+ *     that promises an edit without the help that tells the reader what it does.
  *
  * Usage: node registry_proof.mjs
  */
@@ -114,7 +117,7 @@ function expectFailure(label, mode, needle) {
 // 2. A number used twice fails, and --write does not quietly move it.
 {
     const { root } = expectFailure('duplicate-number', {
-        line: 'semantic\tDuplicateNumberProbe\t0x000001\terror\tA duplicate.\tRemove it.',
+        line: 'semantic\tDuplicateNumberProbe\t0x000001\terror\tA duplicate.\tRemove it.\tnone: choice: the writer decides',
         mode: '--check',
     }, 'have the same value')
     const before = fs.readFileSync(headerPath(root), 'utf8')
@@ -126,13 +129,13 @@ function expectFailure(label, mode, needle) {
 
 // 3. A number in the wrong range fails.
 expectFailure('out-of-range', {
-    line: 'semantic\tOutOfRangeProbe\t0x100001\terror\tA number from the warning band.\tRemove it.',
+    line: 'semantic\tOutOfRangeProbe\t0x100001\terror\tA number from the warning band.\tRemove it.\tnone: choice: the writer decides',
     mode: '--check',
 }, 'is outside the error range')
 
 // 4. A name that already exists fails.
 expectFailure('duplicate-name', {
-    line: 'semantic\tRedeclaration\t\terror\tA second declaration of one name.\tRemove it.',
+    line: 'semantic\tRedeclaration\t\terror\tA second declaration of one name.\tRemove it.\tnone: choice: the writer decides',
     mode: '--check',
 }, 'is already declared')
 
@@ -163,6 +166,37 @@ expectFailure('duplicate-name', {
     check('empty: says nothing was checked', result.stdout.includes('nothing was checked'), result.stdout)
 }
 
+// 6a. A new diagnostic has to say whether it carries an edit, and why not when it does not: the
+//     column is what makes "every one of them says so" a property of the registry rather than a
+//     habit, so each way of leaving it out is a failure of its own.
+{
+    const root = fresh('fix-column-missing')
+    append(root, 'semantic\tNoFixColumnProbe\t\terror\tOne appended line.\tNothing else.')
+    const result = run(root, '--check')
+    check('fix-column-missing: exits 1', result.status === 1, `exit ${result.status}`)
+    check(
+        'fix-column-missing: names the seven fields',
+        result.stdout.includes('message, help and fix separated by tabs'),
+        result.stdout + result.stderr
+    )
+}
+expectFailure('fix-column-word', {
+    line: 'semantic\tFixWordProbe\t\terror\tOne appended line.\tNothing else.\tmaybe',
+    mode: '--check',
+}, "write 'edit' or 'none: <cause>'")
+
+expectFailure('fix-cause-unknown', {
+    line: 'semantic\tFixCauseProbe\t\terror\tOne appended line.\tNothing else.\tnone: because',
+    mode: '--check',
+}, "is not a reason for having no edit")
+
+//     An edit tells a tool the text to write, and a report that does that without telling the
+//     reader is refused: the two belong to the same declaration.
+expectFailure('fix-edit-without-help', {
+    line: 'semantic\tFixNoHelpProbe\t\terror\tOne appended line.\t\tedit',
+    mode: '--check',
+}, 'declares \'edit\' and has no help')
+
 // 7. One line is all a new diagnostic costs, and it takes the next free number.
 {
     const root = fresh('one-line')
@@ -185,7 +219,7 @@ expectFailure('duplicate-name', {
     }
     for (const [k, v] of hashTree()) beforeHash.set(k, v)
     const expected = Math.max(...[...beforeCodes.values()].filter((code) => code < 0x100000)) + 1
-    append(root, 'semantic\tOneLineProbe\t\terror\tOne appended line.\tNothing else.')
+    append(root, 'semantic\tOneLineProbe\t\terror\tOne appended line.\tNothing else.\tnone: choice: the writer decides')
     const result = run(root, '--write')
     check('one-line: write exits 0', result.status === 0, result.stdout + result.stderr)
 
