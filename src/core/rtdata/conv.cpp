@@ -19,6 +19,35 @@ using namespace camel::core::data;
 using namespace camel::core::type;
 using namespace camel::core::rtdata;
 
+namespace {
+
+/// The shape an array type states as constants, when it states all of it and that shape holds
+/// as many elements as the data has (`f32[2, 2]` for a nested literal of four); empty when the
+/// shape is not stated in full (`f32[]`, `f32[3]`, `f32[2, ?]`), where the length is the one the
+/// elements give the array.
+std::vector<int64_t> statedExtents(const ArrayType *arrayType, size_t elements) {
+    const std::span<const ExtentForm> extents = arrayType->extents();
+    if (extents.empty()) {
+        return {};
+    }
+    std::vector<int64_t> stated;
+    stated.reserve(extents.size());
+    int64_t numel = 1;
+    for (const ExtentForm &extent : extents) {
+        if (!extent.isConstant() || extent.constant() < 0) {
+            return {};
+        }
+        stated.push_back(extent.constant());
+        numel *= extent.constant();
+    }
+    if (static_cast<size_t>(numel) != elements) {
+        return {};
+    }
+    return stated;
+}
+
+} // namespace
+
 slot_t makeSlotFromPrimitiveData(const data_ptr_t &data) {
     ASSERT(data != nullptr, "Data is null.");
 
@@ -105,16 +134,39 @@ Object *makeGCRefFromGCTracedData(const data_ptr_t &data, camel::core::mm::IAllo
     case TypeCode::Array: {
         auto arrayData        = tt::as_shared<camel::core::data::ArrayData>(data);
         const auto *arrayType = tt::as_ptr<camel::core::type::ArrayType>(arrayData->type());
-        Array *gcArray        = Array::create(allocator, arrayType, 0);
-        for (const auto &elem : arrayData->raw()) {
+        // The shape a type states as constants is the value's shape (design principles 5.4): a
+        // rank-2 constant written as a nested literal is one array of that shape, not a flat run
+        // of its elements. A type that states none (`f32[]`, `f32[n]`) keeps the length the
+        // elements give it, which is what the append below grows to.
+        const std::vector<int64_t> stated = statedExtents(arrayType, arrayData->raw().size());
+        if (stated.empty()) {
+            Array *gcArray = Array::create(allocator, arrayType, 0);
+            for (const auto &elem : arrayData->raw()) {
+                if (elem->type()->isGCTraced()) {
+                    Object *elemRef = makeGCRefFromGCTracedData(elem, allocator);
+                    gcArray->append<Object *>(elemRef, arrayType);
+                } else if (camel::core::type::isPrimitive(elem->type()->code())) {
+                    slot_t slot = makeSlotFromPrimitiveData(elem);
+                    gcArray->append<slot_t>(slot, arrayType);
+                } else {
+                    gcArray->append<slot_t>(NullSlot, arrayType);
+                }
+            }
+            return gcArray;
+        }
+        // The elements are written into the shape the type states, by flat index: the shape is
+        // the value's, so it must not be rewritten to the length the elements happen to have.
+        Array *gcArray = Array::create(allocator, arrayType, stated, false);
+        const auto &elems = arrayData->raw();
+        for (size_t i = 0; i < elems.size(); ++i) {
+            const auto &elem = elems[i];
             if (elem->type()->isGCTraced()) {
                 Object *elemRef = makeGCRefFromGCTracedData(elem, allocator);
-                gcArray->append<Object *>(elemRef, arrayType);
+                gcArray->set<Object *>(i, elemRef, arrayType);
             } else if (camel::core::type::isPrimitive(elem->type()->code())) {
-                slot_t slot = makeSlotFromPrimitiveData(elem);
-                gcArray->append<slot_t>(slot, arrayType);
+                gcArray->set<slot_t>(i, makeSlotFromPrimitiveData(elem), arrayType);
             } else {
-                gcArray->append<slot_t>(NullSlot, arrayType);
+                gcArray->set<slot_t>(i, NullSlot, arrayType);
             }
         }
         return gcArray;

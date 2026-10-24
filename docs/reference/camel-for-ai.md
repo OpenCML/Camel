@@ -1483,7 +1483,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `ConstasNotAllowed` | E | The dimension name '{0}' is bound here, but only a parameter type can bind one. |
 | `DimensionNameNotBound` | E | The dimension name '{0}' is not bound by any parameter of this signature. |
 | `DimensionNameAlreadyBound` | E | The dimension name '{0}' is already bound; write '{0}' here. |
-| `DimensionMismatch` | E | Argument {0} has extent {1}, but the dimensions the earlier arguments bound do not allow it. |
+| `DimensionMismatch` | E | {0} has extent {1}, but {2}. |
 | `InvalidExtentExpression` | E | This is not a shape: the extents of a type written with dimension names are integers, bound names, or linear expressions over them ('f32[n, 3]'). |
 | `NotDifferentiable` | E | The function cannot be differentiated: {0}. |
 | `TagNotAtPosition` | E | The tag '{0}' may not be written at a {1}: it is declared for {2}. |

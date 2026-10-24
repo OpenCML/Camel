@@ -4257,6 +4257,52 @@ node_ptr_t Builder::declaredValue(const node_ptr_t &value, Type *type, const AST
     return castNode;
 }
 
+namespace {
+
+/// Whether an array position states a rank of its own: a shape of two or more dimensions, all
+/// written as constants (`f32[2, 2]`). Those are the positions a nested literal is one array of
+/// (design principles 5.1, 5.4); a shape with a dimension left open, or a rank of one, keeps the
+/// ordinary build.
+bool statesARank(const ArrayType *type) {
+    const std::span<const ExtentForm> extents = type->extents();
+    if (extents.size() < 2) {
+        return false;
+    }
+    for (const ExtentForm &extent : extents) {
+        if (!extent.isConstant()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/// Whether `ast` is a literal written as a value with nothing to compute in it (`1.0`,
+/// `(1.0, 2.0)`): a nested array literal whose elements are all of these is a constant array,
+/// which is what a position that states a rank takes. A literal with a name or a call in it is
+/// built when the program runs, and keeps that path.
+bool isConstantLiteral(const AST::node_ptr_t &ast) {
+    if (ast == nullptr || ast->type() != AST::LoadType::Data) {
+        return false;
+    }
+    switch (ast->loadAs<AST::DataLoad>()->dataType()) {
+    case AST::DataType::Literal:
+        return true;
+    case AST::DataType::Array:
+    case AST::DataType::Tuple: {
+        for (const auto &item : *ast->atAs<AST::RepeatedLoad>(0)) {
+            if (!isConstantLiteral(item)) {
+                return false;
+            }
+        }
+        return true;
+    }
+    default:
+        return false;
+    }
+}
+
+} // namespace
+
 node_ptr_t Builder::visitDataInto(const AST::node_ptr_t &ast, Type *type, bool &entered) {
     entered        = false;
     Type *elemType = taggedElementTarget(type);
@@ -4272,6 +4318,17 @@ node_ptr_t Builder::visitDataInto(const AST::node_ptr_t &ast, Type *type, bool &
             const auto &items = *ast->atAs<AST::RepeatedLoad>(0);
             if (type->code() == TypeCode::Array) {
                 if (items.empty()) {
+                    const auto *emptyInto = tt::as_ptr<ArrayType>(type);
+                    if (emptyInto != nullptr && statesARank(emptyInto)) {
+                        // `[]` writes one dimension of no elements: it is not the shape the
+                        // position states, and it is not reshaped into it either.
+                        diags_->of(SemanticDiag::DimensionMismatch)
+                            .at(ast->load()->tokenRange())
+                            .commit(
+                                "The array literal written here", "0",
+                                "the position states the shape '" + type->toString() + "'");
+                        throw BuildAbortException();
+                    }
                     // `[]` in a position of type `T[]` is the empty array of `T` (design
                     // principles 5.1, 5.2): the elements it does not have are the only thing
                     // its type leaves open, so it takes the type of the position
@@ -4280,6 +4337,13 @@ node_ptr_t Builder::visitDataInto(const AST::node_ptr_t &ast, Type *type, bool &
                     return tree_->makeData(
                         tt::as_shared<Data>(
                             ArrayData::create(tt::as_ptr<ArrayType>(type)->elemType())));
+                }
+                const auto *statedType = tt::as_ptr<ArrayType>(type);
+                if (statedType != nullptr && statesARank(statedType)) {
+                    // A position that states a rank of its own (`f32[2, 2]`) takes the nested
+                    // literal as one array of that shape, and refuses a literal that writes
+                    // another shape (design principles 5.1, 5.4).
+                    return visitRankedArrayInto(ast, type, entered);
                 }
                 return visitArrayInto(ast, type, entered);
             }
@@ -4371,6 +4435,170 @@ Builder::literalNodeInType(const node_ptr_t &node, Type *type, const AST::node_p
     }
     reportLiteralCastFailure(diags_, at->load()->tokenRange(), data, type, written);
     throw BuildAbortException();
+}
+
+namespace {
+
+/// Whether `ast` is an array literal written with brackets (`[1.0, 2.0]`): the levels a nested
+/// literal writes are the levels its brackets write, whatever its elements turn out to be.
+bool isArrayLiteralData(const AST::node_ptr_t &ast) {
+    return ast != nullptr && ast->type() == AST::LoadType::Data &&
+           ast->loadAs<AST::DataLoad>()->dataType() == AST::DataType::Array;
+}
+
+/// The shape a nested array literal writes, one length per level (`[[a, b], [c, d]]` is [2, 2]),
+/// as the brackets write it. `at` holds the level's own literal, which is where a level is
+/// reported; `shaped` is false when a level is not one shape — a row beside an element, or two
+/// rows of different lengths — and then no rank-N array has that shape.
+void literalShapeOf(
+    const AST::node_ptr_t &ast, std::vector<int64_t> &lengths, std::vector<AST::node_ptr_t> &at,
+    bool &shaped) {
+    if (!isArrayLiteralData(ast)) {
+        return;
+    }
+    const auto &items = *ast->atAs<AST::RepeatedLoad>(0);
+    lengths.push_back(static_cast<int64_t>(items.size()));
+    at.push_back(ast);
+    if (items.empty()) {
+        // `[]` writes one level of no elements; whether a level inside it is written says
+        // nothing, because there is none.
+        return;
+    }
+    const bool rows = isArrayLiteralData(items.front());
+    std::vector<int64_t> rowShape;
+    for (size_t index = 0; index < items.size(); ++index) {
+        if (isArrayLiteralData(items[index]) != rows) {
+            shaped = false;
+            return;
+        }
+        if (!rows) {
+            break;
+        }
+        std::vector<int64_t> sub;
+        std::vector<AST::node_ptr_t> subAt;
+        literalShapeOf(items[index], sub, subAt, shaped);
+        if (!shaped) {
+            return;
+        }
+        if (index == 0) {
+            rowShape = std::move(sub);
+            at.insert(at.end(), subAt.begin(), subAt.end());
+        } else if (sub != rowShape) {
+            shaped = false;
+            return;
+        }
+    }
+    lengths.insert(lengths.end(), rowShape.begin(), rowShape.end());
+}
+
+} // namespace
+
+node_ptr_t Builder::visitRankedArrayInto(
+    const AST::node_ptr_t &ast, Type *arrayType, bool &entered) {
+    ENTER("ArrayDataRanked");
+    entered = false;
+    const auto *aType   = tt::as_ptr<ArrayType>(arrayType);
+    const auto extents  = aType->extents();
+    Type *elemType      = aType->elemType();
+
+    std::vector<int64_t> lengths;
+    std::vector<AST::node_ptr_t> levelAt;
+    bool shaped = true;
+    literalShapeOf(ast, lengths, levelAt, shaped);
+    const auto report = [&](const AST::node_ptr_t &where,
+                            const std::string &subject,
+                            int64_t written,
+                            const std::string &stated) {
+        diags_->of(SemanticDiag::DimensionMismatch)
+            .at(where->load()->tokenRange())
+            .commit(subject, std::to_string(written), stated);
+    };
+    if (!shaped || lengths.size() != extents.size()) {
+        // The literal writes a shape of its own — a flat `[1.0, 2.0, 3.0, 4.0]` is one
+        // dimension, whatever the position states — and the position takes only the shape it
+        // states (design principles 5.1, 5.4).
+        report(
+            ast,
+            "The array literal written here",
+            lengths.empty() ? 0 : lengths.front(),
+            "the position states the shape '" + arrayType->toString() + "'");
+        throw BuildAbortException();
+    }
+    for (size_t level = 0; level < lengths.size(); ++level) {
+        if (!extents[level].isConstant() || extents[level].constant() == lengths[level]) {
+            continue;
+        }
+        report(
+            level < levelAt.size() ? levelAt[level] : ast,
+            level == 0 ? "The array literal written here" : "This row",
+            lengths[level],
+            "the position states " + std::to_string(extents[level].constant()) +
+                " for this dimension");
+        throw BuildAbortException();
+    }
+
+    // The elements of the literal in the order the flattened value holds them, each built in the
+    // element type the position gives it, as an array literal's elements are (design principles
+    // 5.1). The shape is the one the literal writes, which is the position's by the checks above.
+    std::vector<AST::node_ptr_t> leaves;
+    bool constant = true;
+    const auto collect = [&](const auto &self, const AST::node_ptr_t &node) -> void {
+        const auto &items = *node->atAs<AST::RepeatedLoad>(0);
+        if (!items.empty() && isArrayLiteralData(items.front())) {
+            for (const auto &item : items) {
+                self(self, item);
+            }
+            return;
+        }
+        for (const auto &item : items) {
+            constant &= isConstantLiteral(item);
+        }
+        leaves.insert(leaves.end(), items.begin(), items.end());
+    };
+    collect(collect, ast);
+    if (!constant) {
+        // An element the program computes is not a constant array: the ordinary build keeps the
+        // path it had for it.
+        return visitArrayInto(ast, arrayType, entered);
+    }
+
+    ArrayDataFactory factory;
+    factory.setElemType(elemType);
+    factory.setExtents(lengths);
+    node_ptr_t execNode = makeExec(false, true);
+    std::vector<Tree::LiteralElement> literalElements;
+    bool dangling = false;
+    for (const auto &leaf : leaves) {
+        bool nested         = false;
+        node_ptr_t dataNode = visitDataInto(leaf, elemType, nested);
+        if (!nested) {
+            dataNode = literalNodeInType(dataNode, elemType, leaf);
+        }
+        literalElements.push_back(writtenElement(dataNode));
+        auto [data, _] = extractData(dataNode, execNode, dangling);
+        try {
+            factory.add(data);
+        } catch (Diagnostic &d) {
+            d.range = leaf->load()->tokenRange();
+            diags_->add(std::move(d));
+            throw BuildAbortException();
+        }
+    }
+    const data_ptr_t built = factory.build();
+    tree_->setLiteralElements(built, std::move(literalElements));
+    node_ptr_t res = tree_->makeData(built);
+    // The node is the literal as it was written, not the last element built for it: what the
+    // literal is named by, and where a report about it points, is the literal itself.
+    setOriginFromAst(context_, res, ast, camel::source::OriginKind::GctNode, "gct.data");
+    // The built value is the value of the declared type: its shape is the shape the position
+    // states, so nothing is left to declaredValue (which would drop the shape).
+    entered = true;
+    if (dangling) {
+        *execNode << res;
+        res = execNode;
+    }
+    LEAVE("ArrayDataRanked");
+    return res;
 }
 
 node_ptr_t Builder::visitArrayInto(const AST::node_ptr_t &ast, Type *arrayType, bool &entered) {

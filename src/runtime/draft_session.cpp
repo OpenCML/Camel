@@ -243,11 +243,15 @@ slot_t cloneStaticSlot(
         return toSlot<Object *>(clonedTuple);
     }
     case TypeCode::Array: {
-        auto *array       = fromSlot<::Array *>(slot);
-        auto *arrayType   = static_cast<ArrayType *>(type);
-        auto *clonedArray = ::Array::create(mm::autoSpace(), arrayType, array->size());
+        auto *array     = fromSlot<::Array *>(slot);
+        auto *arrayType = static_cast<ArrayType *>(type);
+        // The shape is part of the value (design principles 5.4): a rank-2 constant is one array
+        // of that shape, not its first row. `size()` is only the first extent, so the copy is
+        // made over the whole value's shape and holds every element.
+        auto *clonedArray =
+            ::Array::create(mm::autoSpace(), arrayType, array->shapeSpan());
         objectCache.emplace(object, clonedArray);
-        for (size_t i = 0; i < array->size(); ++i) {
+        for (size_t i = 0; i < array->numel(); ++i) {
             clonedArray->set<slot_t>(
                 i,
                 shouldTraverseStaticSlotType(arrayType->elemType()) ? cloneStaticSlot(

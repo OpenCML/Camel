@@ -712,8 +712,8 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             SemanticDiag::DimensionMismatch,
             {
                 "DimensionMismatch",
-                "Argument {0} has extent {1}, but the dimensions the earlier arguments bound do not allow it.",
-                "The dimensions a signature names are one value for the whole call: every argument whose type writes the same name must have the extent the name was bound to.",
+                "{0} has extent {1}, but {2}.",
+                "A shape is one value wherever it is stated. The dimensions a signature names are one value for the whole call: every argument whose type writes the same name must have the extent the name was bound to. A literal must write the shape the position it stands in states: a flat '[1.0, 2.0, 3.0, 4.0]' is an 'f32[4]', not an 'f32[2, 2]'. Nothing is reshaped to fit.",
             },
         },
         {

@@ -29,7 +29,6 @@ ArrayInference inferArrayType(slot_t slot, type::Type *valueType) {
     if (valueType->code() == type::TypeCode::Array) {
         auto *arrayType      = static_cast<type::ArrayType *>(valueType);
         auto *array          = rtdata::fromSlot<Array *>(slot);
-        int64_t size         = array ? static_cast<int64_t>(array->size()) : 0;
         type::Type *elemType = arrayType->elemType();
         type::TypeCode inferredDType;
         if (elemType->code() == type::TypeCode::Array) {
@@ -40,8 +39,19 @@ ArrayInference inferArrayType(slot_t slot, type::Type *valueType) {
             inferredDType = arrayType->elemTypeCode();
         }
 
-        ArrayInference inferred{inferredDType, {size}};
-        if (!array || size == 0) {
+        // The shape the value itself has: a rank-2 array (`f32[2, 2]`) is one array of that
+        // shape, and reading its first extent alone would make a tensor of its first row
+        // (design principles 5.4). A rank-1 value gives the one extent it always did, and the
+        // rows of an array of arrays extend the shape below.
+        std::vector<int64_t> ownShape;
+        if (array == nullptr) {
+            ownShape.push_back(0);
+        } else {
+            const std::span<const int64_t> shape = array->shapeSpan();
+            ownShape.assign(shape.begin(), shape.end());
+        }
+        ArrayInference inferred{inferredDType, std::move(ownShape)};
+        if (!array || array->numel() == 0) {
             return inferred;
         }
 
@@ -49,7 +59,7 @@ ArrayInference inferArrayType(slot_t slot, type::Type *valueType) {
             ArrayInference child = inferArrayType(array->getSlot(0), elemType);
             inferred.dtype       = child.dtype;
             inferred.shape.insert(inferred.shape.end(), child.shape.begin(), child.shape.end());
-            for (size_t i = 1; i < array->size(); ++i) {
+            for (size_t i = 1; i < array->numel(); ++i) {
                 ArrayInference another = inferArrayType(array->getSlot(i), elemType);
                 if (another.shape != child.shape || another.dtype != child.dtype) {
                     throw std::invalid_argument("Nested array shape or dtype mismatch");
@@ -70,7 +80,9 @@ ArrayInference inferArrayType(slot_t slot, type::Type *valueType) {
 void flattenArray(const Array *array, type::Type *valueType, Array *tensor, uint64_t &offset) {
     auto *arrayType      = static_cast<type::ArrayType *>(valueType);
     type::Type *elemType = arrayType->elemType();
-    for (size_t i = 0; i < array->size(); ++i) {
+    // Every element of the value, in the order it holds them: a rank-2 array's four elements are
+    // four, not the two its first extent names (design principles 5.4).
+    for (size_t i = 0; i < array->numel(); ++i) {
         slot_t value = array->getSlot(i);
         if (elemType->code() == type::TypeCode::Array) {
             auto *child = rtdata::fromSlot<Array *>(value);
