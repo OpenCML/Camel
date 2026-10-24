@@ -3848,6 +3848,30 @@ void collectNames(
     }
 }
 
+/// Names for the constants of `root`'s own static area. Binding a function into a program clones
+/// the values it captures (and the objects the entry arguments were bound with) into that area
+/// (`RuntimeGraphDraftSession`'s static-slot clone), so the objects the DATA nodes read are these
+/// and not the ones the captures or the entry arguments name: a name read from a source object
+/// stops at the clone. The area's own types carry what the program wrote — a struct's field names,
+/// a tuple's positions — so the names are read from there. A captured `Tensor` is copied because
+/// the declared type it is bound with leaves the element type and the extents open (the alias's
+/// transitional spelling): the value fixes them, the type does not, and the clone takes the
+/// value's. With the old `Tensor` type the capture was stored as it was, which is why the source
+/// object alone no longer identifies a weight.
+void collectStaticNames(const GCGraph *root, std::unordered_map<slot_t, std::string> &names) {
+    if (root == nullptr) {
+        return;
+    }
+    const auto *layout  = root->staticDataType();
+    const ::Tuple *area = root->staticArea();
+    if (layout == nullptr || area == nullptr) {
+        return;
+    }
+    for (size_t i = 0; i < layout->size() && i < area->size(); ++i) {
+        collectNames(area->get<slot_t>(i), layout->typeAt(i), "", names);
+    }
+}
+
 /// Frees the graphs an export produced when it ends, however it ends.
 struct DetachedGraphsGuard {
     core::context::Context &ctx;
@@ -4544,6 +4568,7 @@ Model translatePrepared(
         GraphVizDumpPass(context).apply(program, std::cerr);
     }
 
+    collectStaticNames(root, names);
     Evaluator evaluator(emitter, options, ctx, std::move(names), ctx.sourceContext());
     evaluator.refuseEffects(root);
     emitOutputs(emitter, evaluator.translate(root, inputs), options.outputName);
