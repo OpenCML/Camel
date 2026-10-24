@@ -727,7 +727,18 @@ std::string compare(const Data &kernel, const Data &eval, const sem::OperatorSem
     }
     const bool bounded = s.numeric.cls == sem::NumericClass::Bounded;
     if (!bounded && !eval.values.empty() && kernel.dtype != eval.dtype) {
-        return "dtype differs";
+        // Name both element types: which side reads a scalar operand at which type is the whole
+        // question when this fires, and the line is the only place it is reported.
+        const auto name = [](TypeCode t) {
+            switch (t) {
+            case TypeCode::Float32: return "f32";
+            case TypeCode::Float64: return "f64";
+            case TypeCode::Int64: return "i64";
+            case TypeCode::Bool: return "bool";
+            default: return "other";
+            }
+        };
+        return std::format("dtype differs (kernel {}, declaration {})", name(kernel.dtype), name(eval.dtype));
     }
     for (size_t k = 0; k < kernel.values.size(); ++k) {
         const Num &a = kernel.values[k], &b = eval.values[k];

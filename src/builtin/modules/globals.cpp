@@ -1902,6 +1902,24 @@ std::make_shared<StaticCheckedResolver>(
                             const auto &indices = tt::as_ptr<ArrayType>(norm[1]);
                             if (indices->elemType()->code() != TypeCode::Int64)
                                 return nullopt;
+                            // This operator takes the element at each index, one slot
+                            // each, which is a rank-1 array's take. A numeric array is a
+                            // tensor, and a tensor of another rank -- or of open rank
+                            // (`Tensor<f64>` is `float[..]`, its runtime value deciding the
+                            // rank) -- is taken along its first dimension, rows at a time:
+                            // that is the tensor module's `tensor:idx_take`, which reads
+                            // the result's shape from the indices and carries `take`'s
+                            // adjoint. Declining those keeps the element take for the
+                            // arrays no module operator serves -- `int[]`, `float[]`, an
+                            // array of records -- and stops this operator from treating the
+                            // rows of a rank-2 tensor's first dimension as its slots.
+                            const auto &arr = tt::as_ptr<ArrayType>(norm[0]);
+                            const bool rowTake =
+                                isNumericArrayType(norm[0]) &&
+                                (arr->anyRank() || arr->rank() != 1);
+                            if (rowTake) {
+                                return nullopt;
+                            }
                             return norm[0];
                         }),
                 },
@@ -2137,7 +2155,9 @@ std::make_shared<StaticCheckedResolver>(
         // The elements a `for` takes from a string (design principles 11.1): its code points,
         // each a one-character string. The loop builder converts a string to that array once,
         // before the first round; a program does not write `__iter__` itself. A map adds its
-        // own overload (collection.cpp), and the tensor module adds one for tensors.
+        // own overload (collection.cpp); the tensor module had one too, and it went with the P4
+        // deletion step -- a numeric array is the core's to iterate (`t[i]` along the first
+        // dimension), so no module takes part in a `for` over a tensor.
         OperatorGroup::create(
             "__iter__",
             {

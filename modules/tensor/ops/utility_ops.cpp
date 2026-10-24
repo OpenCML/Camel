@@ -100,97 +100,6 @@ std::optional<Type *> indexInfer(const InferContext &ctx) {
     return Type::Float64();
 }
 
-/// A value with no dimension, asked for the first dimension a loop walks: the element it holds
-/// (the rank-zero ruling, docs/handover/reviews/questions-2026-10-23.md section rank-zero-tensor)
-/// has none to give. One message for both ways a loop meets one — the rank-0 array `wrap` keeps for
-/// a slot whose type promises an array, and the element itself where such a slot holds no pointer
-/// at all (the transition-period bare `Tensor`, the gap the author's ruling of 2026-10-25 on
-/// no-dimension-value-in-an-array-typed-slot builds no mechanism for). It names what the loop
-/// needed; reading the element's bits as a pointer is what used to say an argument "cannot be null".
-constexpr const char *kNoFirstDimensionToIterate =
-    "a value with no dimension has no first dimension to iterate";
-
-/// The sequence `for x in xs` walks. `xs` is read as the array its type promises when it is a
-/// numeric array — a tensor — and through `tensorArg` otherwise, which boxes an element whose type
-/// states one (a rank-0 tensor's value is a scalar slot) so a kernel can read it.
-Array *iterationSequence(ArgsView &norm) {
-    Type *type = norm.type(0);
-    if (type != nullptr && isTensorType(type) && norm.get<Array *>(0) == nullptr) {
-        throw std::invalid_argument(kNoFirstDimensionToIterate);
-    }
-    return tensorArg(norm, 0);
-}
-
-/// `for x in t`: the elements of a tensor along its first dimension, in order. A tensor of
-/// rank n >= 2 gives, for each i, the sub-tensor of shape shape[1:] that starts at row i (a
-/// view of the same block); a rank-1 tensor gives, for each i, the rank-0 sub-tensor at i.
-/// A value with no dimension has no first dimension: it is not iterable. A type never states a
-/// rank-0 shape (`tensorOf` answers an empty shape with the element type, so `reshape(x, [])` is a
-/// scalar and a `for` over it is refused where it is written, with `LoopSequenceNotIterable`); the
-/// guard below stays for a shape a value carries that no type stated.
-std::optional<Type *> iterInfer(const InferContext &ctx) {
-    const TensorFacts in = ctx.facts(0);
-    if (in.shape) {
-        if (in.shape->empty()) {
-            throw std::invalid_argument(kNoFirstDimensionToIterate);
-        }
-        StaticShape row(in.shape->begin() + 1, in.shape->end());
-        return ArrayType::create(tensorOf(in.dtype, row));
-    }
-    return ArrayType::create(tensorOf(in.dtype, std::nullopt));
-}
-
-slot_t iterKernel(ArgsView &, ArgsView &norm, context::Context &) {
-    return runKernel("iter", [&] {
-        Array *t = iterationSequence(norm);
-        if (t->rank() == 0) {
-            throw std::invalid_argument(kNoFirstDimensionToIterate);
-        }
-        const auto shape    = t->shapeSpan();
-        const uint64_t rows = static_cast<uint64_t>(shape[0]);
-        // The round's type is the sequence's element type, as iterInfer declares it: the element
-        // itself when the input's shape is known (the round of a rank-1 tensor is its rank-0
-        // sub-tensor, which is the element — the rank-zero ruling), and a tensor of unknown rank
-        // when the input's is not. Each round is handed on in the representation that type asks
-        // for: a consumer reads the round by its declared type, and a round handed on as the
-        // element under an array type left `tensor:multiply` reading an Array * out of a float
-        // slot (the `gpu.profile/host_loop` crash, reached as soon as a loop iterates a tensor
-        // whose shape is not fixed).
-        Type *roundType = nullptr;
-        if (Type *resultType = norm.resultType();
-            resultType != nullptr && resultType->code() == TypeCode::Array) {
-            roundType = static_cast<ArrayType *>(resultType)->elemType();
-        }
-        if (t->rank() == 1) {
-            // One dimension: its elements are values of the element type (the rank-zero ruling,
-            // docs/handover/reviews/questions-2026-10-23.md section rank-zero-tensor). The round
-            // is the element itself and the sequence is `T[]`, the type iterInfer states.
-            auto *arrayType = ArrayType::create(const_cast<Type *>(t->elemType()));
-            ::Array *result = ::Array::create(mm::autoSpace(), static_cast<size_t>(rows));
-            for (uint64_t i = 0; i < rows; ++i) {
-                const slot_t element = t->getSlot(i);
-                if (roundType == nullptr || roundType->code() != TypeCode::Array) {
-                    result->setSlot(i, element, arrayType);
-                    continue;
-                }
-                Array *round = createTensor(t->dtype(), StaticShape{}, mm::autoSpace());
-                round->setSlot(0, element);
-                result->setSlot(i, wrap(roundType, round), arrayType);
-            }
-            return camel::core::rtdata::toSlot(result);
-        }
-        const StaticShape rowShape(shape.begin() + 1, shape.end());
-        const uint64_t inner = numelOf(rowShape);
-        auto *arrayType      = ArrayType::create(tensorOf(t->dtype(), rowShape));
-        ::Array *result      = ::Array::create(mm::autoSpace(), static_cast<size_t>(rows));
-        for (uint64_t i = 0; i < rows; ++i) {
-            Array *row = viewTensor(t, rowShape, mm::autoSpace(), i * inner);
-            result->set<rtdata::Object *>(i, row, arrayType);
-        }
-        return camel::core::rtdata::toSlot(result);
-    });
-}
-
 std::optional<Type *> voidResult(const InferContext &) { return Type::Void(); }
 
 slot_t showKernel(ArgsView &, ArgsView &norm, context::Context &) {
@@ -387,15 +296,6 @@ std::vector<OpDef> utilityOps() {
             .resultDoc = "float",
             .infer     = indexInfer,
             .kernel    = &idx2dKernel,
-            .traits    = {}});
-    defs.push_back(
-        OpDef{
-            .name      = "iter",
-            .exports   = {"__iter__"},
-            .params    = {{"t", ParamKind::Tensor}},
-            .resultDoc = "Tensor[]",
-            .infer     = iterInfer,
-            .kernel    = &iterKernel,
             .traits    = {}});
     defs.push_back(
         OpDef{

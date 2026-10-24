@@ -1029,8 +1029,7 @@ func main(): int sync {
 
 ```text
 [2, 3] [2, 1]
-tensor([[      3.],
-        [      3.]], dtype=float32)
+[[3.0], [3.0]]
 18.0
 [3, 2]
 ```
@@ -1057,8 +1056,7 @@ camel docs/tutorial/examples/15_model.cml --arg x=docs/tutorial/examples/x.npy
 ```
 
 ```text
-tensor([[      2.],
-        [      0.]], dtype=float32)
+[[2.0], [0.0]]
 ```
 
 **Exporting it**: the same source, with a different set of passes. Nothing in the program was written for the export; not even `import onnx` is needed:

@@ -33,4 +33,8 @@ void attachSemantics(std::vector<OpDef> &defs);
 /// Publishes the tangent space of tensors in the core derivative registry.
 void registerTensorTangentSpace();
 
+/// Publishes `take`'s rule for the core's `:op/idx_take`: the operator a numeric array's
+/// `t[idx]` with an int array reaches when the indices' element type is statically known.
+void registerSubscriptTakeRule();
+
 } // namespace camel::tensor::ops

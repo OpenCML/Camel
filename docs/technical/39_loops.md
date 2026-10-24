@@ -45,9 +45,10 @@ body. Both `EXEC`s carry the numeric permissions in force where the loop is writ
 
 1. The first values and the sequence are built where the loop is; they do not see the names of
    the head. Their types are the state types; `null` and `[]` give none
-   (`LoopStateWithoutType`). A sequence that is not an array (a string, a map, a tensor) is
+   (`LoopStateWithoutType`). A sequence that is not an array (a string, a map) is
    turned into its array of elements by the `__iter__` operator the sequence's type resolves,
-   and any other type is `LoopSequenceNotIterable`; see section 2a.
+   and any other type is `LoopSequenceNotIterable`; see section 2a. A tensor is a numeric array,
+   so it takes the core's own path and no module takes part in it.
 2. The condition and the body are regions of the current graph (`LoopCond`, `LoopBody`), built
    where they are written like the arms of a branch (`Builder::buildArm`). Their ports (the
    state; the body the element first) are Port nodes of the graph that belong to the region and
