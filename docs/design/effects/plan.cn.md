@@ -51,7 +51,7 @@
 | Camel 函数的资源由编译器推出（所调用者之和，递归求不动点），悬停与文档以限定名显示；显式 `uses` 是承诺，超出是编译错误；导出函数推出资源变化给警告 | **部分**。运行期 `footprintOf` 就是那个不动点（含递归、捕获、局部 Fresh 丢弃），但只在需要时算，不存进类型、不在编译期检查、无悬停、无变化警告 | `resources.cpp#footprintOf`（`FootprintWalk`，`recursed_`/`grew_` 的循环在 `resources.cpp#footprintOf`） | `modules/resources` 的 `countdown`（不动点）；承诺与警告**没有测试** |
 | 效应以资源声明为准；签名里的 `var` 由资源声明检查，不一致是声明错误 | **已实现**（C++ 声明层） | `operator_table.cpp#checkVarParameters` 调 `checkVarParameters`（`resource_semantics.h#checkVarParameters`） | `modules/resources` 的 14 条拒绝（`var_param_not_written`、`written_without_var` 等） |
 | `pure` 是承诺，由编译器检查，可写在函数声明与函数类型上；函数类型参数默认对资源泛型；资源少的函数可用在要求资源多的地方 | **缺**（语言层）。C++ 侧有 `OperatorPurity`（`pure`/`effectful`/`state`/`undeclared`）与 `hasExternalEffect`；函数类型没有 `pure`，没有资源子类型 | `operator_table.h#hasExternalEffect`、`operator_table.h#hasExternalEffect`；`func.h` 无资源字段 | `stdlib_registry.purity_declared`（C++ 侧）；`native_declarations`（声明是模块的签名） |
-| 同一资源自动有序：同一函数体内真正执行的、用到同一资源的副作用按书写顺序（编译器生成控制边）；调用是调用处的"一个副作用"；不跨函数重排 | **部分**。`sync` 块内语句串成一条 ctrl 链；**块外**：读总是排在最后写者之后，写只在自己被 `wait` 时排在之前使用者之后；环境资源与环境效应在 `sync` 外没有**为保证副作用顺序而加**的边（只剩数据依赖碰巧给出的顺序） | sync 链与返回 GATE；`builder_expr.cpp#wait`；`resources.cpp#GATE`（只查询，不建边） | `values.sync_order`、`compile/gir` 的 `sync.ctrl_dedup_snapshot`；`modules/resources` 的 `ORDER` 全在一个 `sync` 函数里，**没测过块外按资源排序** |
+| 同一资源自动有序：同一函数体内真正执行的、用到同一资源的副作用按书写顺序（编译器生成控制边）；调用是调用处的"一个副作用"；不跨函数重排 | **部分**。`sync` 块内语句串成一条 ctrl 链；**块外**：读总是排在最后写者之后，写只在自己被 `wait` 时排在之前使用者之后；环境资源与环境效应在 `sync` 外没有**为保证副作用顺序而加**的边（只剩数据依赖碰巧给出的顺序） | sync 链与返回 GATE；`builder_expr.cpp`；`resources.cpp#GATE`（只查询，不建边） | `values.sync_order`、`compile/gir` 的 `sync.ctrl_dedup_snapshot`；`modules/resources` 的 `ORDER` 全在一个 `sync` 函数里，**没测过块外按资源排序** |
 | 算子纯度必须声明；没声明的按有副作用对待（最多少优化）；仓库标准库逐个声明；第三方漏了给提示 | **部分**。没声明→`pure=false`、`hasExternalEffect=true`、保守资源；仓库由 `purity_declared` 与启动日志守住；第三方只有一行日志，不是可过滤的诊断 | `src/core/resource_semantics.cpp#undeclared`；`introspect.cpp#undeclared`；`context.cpp#stdlib_registry` | `stdlib_registry.purity_declared`（`ops.length > 300`，且 `undeclared` 为空） |
 | 可能故障不强制声明；没声明按可能故障 | **已实现** | `effects.cpp` 的 `mayFault` 保守合并；`include/camel/runtime/effects.h` | 无专门用例（随 `EffectSummary`） |
 | 无序资源 `resource net unordered`：其上的副作用不保持书写顺序；要顺序就写 `sync` 块或用句柄 | **缺**。`ResourceSpec` 没有无序标志，语言层没有这个词 | parser；`resource_semantics.h#ResourceSpec` | 无 |
@@ -69,7 +69,7 @@
 
 ### 1.3 与文档/代码不一致处（记为缺陷/待办，不在本计划顺手改）
 
-1. `docs/language/04_execution_model.md:150-194` 仍写 `wait` 与前缀 `sync func`，而 3.3/§14.2 已退役；代码也仍接受（`builder_diagnostics.cpp#wait` 的注释还按旧写法解释）。步骤 9 一并改。
+1. `docs/language/04_execution_model.md:150-194` 仍写 `wait` 与前缀 `sync func`，而 3.3/§14.2 已退役；代码也仍接受（`builder_diagnostics.cpp` 的注释还按旧写法解释）。步骤 9 一并改。
 2. `IgnoredSideEffect`（"既没 wait 也不在 sync 块"）、`VarParamInAsyncFunction`、`CapturedWriteInAsyncFunction` 三条警告的前提是"块外不自动排序"。步骤 6 之后前提消失；步骤 9 删除或重写，不能留一条已经不成立的理由。
 3. `EffectNotExecuted` 的判定是布尔"有没有外部效应"（`builder_diagnostics.cpp#EffectNotExecuted`），不是资源摘要；步骤 6 以后仍用它，但"没被依赖的效应"与"资源冲突"要分清：前者仍警告，后者由控制边解决，不再需要 `wait`。
 4. 运行期 `requiredOrderings` 已经能列出"应该有序但没连边"的对（`src/runtime/resources.cpp#requiredOrderings`），但只有 `test::resources` 用；没有任何门禁。步骤 6 把它变成建图的判据与验收。
