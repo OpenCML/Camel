@@ -2,12 +2,23 @@
  * Every rule of the standard rules passes the check (rewrite design 5.2).
  *
  * The integer and floating laws are one generic law per fact since the fold (`when is_integer::<T>()`,
- * `when is_float::<T>()`), and `check` does not yet walk a generic rule's instances: it says so
- * plainly for each of them ("unchecked ...") instead of checking one type and calling the family
- * done (the ruling of 2026-10-23 on `generic-rule-check-surface-and-multi-parameter-instances`, §1:
- * with no program, `check` is to use "the types the operator group registered" that satisfy the
- * condition). The rules below that are not generic -- the tensor laws, `float_double`,
- * `float32_double` -- are checked as before, and the pending walk is what this list is waiting for.
+ * `when is_float::<T>()`), and `check` walks the instances of each of them (the ruling of 2026-10-24
+ * on `generic-rule-check-surface-and-multi-parameter-instances`, §1: an optional `program` was asked
+ * for, and with no program a generic rule is checked for every instance over "the types the operator
+ * group registered" that satisfies its condition). Each instance is reported under its own name,
+ * `law<type>`, and no rule of the two families is reported as a generic rule that was not checked:
+ * the integer family is instantiable at `int` and `i32` and the floating family at `float`, `f32`,
+ * `bf16` and `f16` (the condition `is_float::<T>()` holds for all four -- design principles 7.3).
+ *
+ * Two of the four floating instances are reported `unchecked` with their reason: `check`'s sampler
+ * draws `int`, `i32`, `float`, `f32`, `bool` and tensors of them, and a `bf16`/`f16` instance needs
+ * an element-epsilon tolerance this lane did not invent
+ * (`docs/handover/questions/check-generic-instance-space.md`). The report is 74 instances of the 26
+ * generic rules in this list (13 integer laws x 2 types, 11 floating laws x 4 types -- the two
+ * accuracy laws are not in this list), 52 checked and 22 reported with a reason.
+ *
+ * The rules below that are not generic -- the tensor laws, `float_double`, `float32_double` -- are
+ * checked as they were.
  */
 module check_library
 import { check } from rewrite

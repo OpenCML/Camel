@@ -58,6 +58,7 @@
 #include <limits>
 #include <memory>
 #include <mutex>
+#include <numeric>
 #include <optional>
 #include <ostream>
 #include <random>
@@ -73,6 +74,7 @@ using namespace camel::core::type;
 using namespace camel::core::rtdata;
 using camel::compile::gir::GenericRuleEntry;
 using camel::compile::gir::GenericRuleInstance;
+using camel::compile::gir::RuleConditionAt;
 using camel::graphmod::Handle;
 using camel::graphmod::HandleKind;
 using camel::graphmod::HandleType;
@@ -1842,6 +1844,27 @@ class Sampler {
   public:
     Sampler(uint64_t seed, camel::core::sem::PermissionMask needs) : rng_(seed), needs_(needs) {}
 
+    /// Whether `value` can make a sample of this type: the scalars it knows (int, i32, float, f32,
+    /// bool) and a tensor whose element type it knows. A rule instance whose parameters are of
+    /// another type cannot be checked, and the report says so instead of failing the whole check
+    /// (an instance of `float_combine` at `bf16` has no value the check can draw).
+    bool canDraw(const Type *type) const {
+        const auto shape = camel::runtime::fact::shapeOfType(type);
+        if (shape) {
+            return tensorElementType(shape->dtype.value_or(TypeCode::Float32)) != nullptr;
+        }
+        switch (type->code()) {
+        case TypeCode::Int64:
+        case TypeCode::Int32:
+        case TypeCode::Float64:
+        case TypeCode::Float32:
+        case TypeCode::Bool:
+            return true;
+        default:
+            return false;
+        }
+    }
+
     /// A scalar or tensor sample of `type`. `rankHint` is used only when the type does not carry
     /// its rank: the caller derives it from the axis operands of the rule, so a reduction over
     /// axis 2 is given a rank-3 tensor instead of the old fixed rank-1 vector.
@@ -2355,10 +2378,474 @@ std::optional<size_t> knownRankOf(const Type *type) {
     return shape->dims->size();
 }
 
+/// The `const` parameters of a rule as the bit mask a rule object keeps them in: a rule source
+/// carries one byte per parameter.
+uint64_t constMaskOf(const camel::runtime::RuleSource &source) {
+    uint64_t mask = 0;
+    for (size_t i = 0; i < source.constParams.size() && i < 64; ++i) {
+        if (source.constParams[i] != 0) {
+            mask |= (uint64_t{1} << i);
+        }
+    }
+    return mask;
+}
+
+/// One rule of the check's list, whatever it came from: an ordinary rule, or one instance of a
+/// generic law (`add_zero<i32>`), whose two sides, condition and permissions are the ones the
+/// instance's graphs carry. `samples` random instances of its two sides (random constants for the
+/// const parameters, random values for the others) must agree, and the engine must fire the rule on
+/// its own left side and agree too. A rule that asks for `refine_accuracy` is compared by its error
+/// against a higher-precision reference instead, sample by sample, and the worst error ratio is
+/// reported. `stream` picks the samples.
+/// Returns the report lines; a line starting with FAIL is a rule that does not hold.
+std::string checkOneRule(
+    Context &ctx, const camel::runtime::RuleSource &source, int64_t samples, uint64_t stream) {
+    const std::string name(source.name);
+    const bool conditional                       = source.when != nullptr;
+    const camel::core::sem::PermissionMask needs = source.needs;
+    const uint64_t constParams                   = constMaskOf(source);
+    const camel::runtime::Program *program       = source.program;
+    const camel::runtime::GraphId lhsId          = source.lhs;
+    const camel::runtime::GraphId rhsId          = source.rhs;
+    std::string report;
+    const camel::runtime::GCGraph *lhsGraph = program->graph(lhsId);
+    const auto *lhsType                     = lhsGraph->funcType();
+    const size_t params                     = lhsType->normTypesCount();
+    const Type *resultType                  = lhsType->exitType();
+    const size_t steps = stepsOf(*lhsGraph) + stepsOf(*program->graph(rhsId));
+    const double declaredUlps =
+        declaredUlpsOf(*lhsGraph) + declaredUlpsOf(*program->graph(rhsId));
+    // The bound is the numeric contract of the permissions the rule needs, read together
+    // with the operators' declarations (not one uniform rounding bound).
+    const camel::core::sem::RewriteErrorBound bound =
+        camel::core::sem::rewriteErrorBound(needs, steps, declaredUlps);
+    const bool accuracy = (needs & camel::core::sem::kRefineAccuracy) != 0;
+    // The rule's own operators say which integer parameters are axes. The rank of an
+    // otherwise unshaped tensor follows the axis it is reduced over, and rotates through 1,
+    // 2 and 3 so that a vector, a matrix and a rank-3 tensor are all sampled.
+    std::vector<uint8_t> axisPorts = axisPortsOf(*lhsGraph);
+    const std::vector<uint8_t> rhsAxisPorts = axisPortsOf(*program->graph(rhsId));
+    for (size_t i = 0; i < axisPorts.size() && i < rhsAxisPorts.size(); ++i) {
+        axisPorts[i] = static_cast<uint8_t>(axisPorts[i] | rhsAxisPorts[i]);
+    }
+    std::optional<size_t> knownRank;
+    for (size_t i = 0; i < params; ++i) {
+        if (const auto rank = knownRankOf(lhsType->normTypeAt(i))) {
+            knownRank = knownRank ? std::min(*knownRank, *rank) : *rank;
+        }
+    }
+    Sampler sampler(stream, needs);
+    const auto drawValues = [&](int64_t sampleIndex) {
+        std::vector<Sample> drawn(params);
+        int64_t maxAxis = -1;
+        for (size_t i = 0; i < params; ++i) {
+            if (i >= axisPorts.size() || axisPorts[i] == 0) {
+                continue;
+            }
+            // The axis is an operand, not a free constant: cycle through the axes the rule's
+            // shapes need (rank 1, a matrix, a rank-3 reduction) and the last axis.
+            static constexpr int64_t kAxisCycle[] = {0, 1, 2, -1};
+            int64_t axis = kAxisCycle[sampleIndex % 4];
+            if (knownRank && *knownRank > 0) {
+                axis = std::min<int64_t>(axis, static_cast<int64_t>(*knownRank) - 1);
+            }
+            drawn[i] = sampler.fixedInt(lhsType->normTypeAt(i), axis);
+            if (axis >= 0) {
+                maxAxis = std::max(maxAxis, axis);
+            }
+        }
+        const size_t rankHint = std::max<size_t>(
+            static_cast<size_t>(1 + (sampleIndex % 3)),
+            maxAxis >= 0 ? static_cast<size_t>(maxAxis + 1) : 0);
+        for (size_t i = 0; i < params; ++i) {
+            if (i < axisPorts.size() && axisPorts[i] != 0) {
+                continue;
+            }
+            const bool isConst = i < 64 && ((constParams >> i) & 1) != 0;
+            drawn[i] = sampler.value(lhsType->normTypeAt(i), isConst, rankHint);
+        }
+        return drawn;
+    };
+    NodeVMSchedPass vm(ctx.shared_from_this());
+    std::string failure;
+    double worstRatio = 0.0;
+    std::set<std::vector<int64_t>> shapesSeen;
+    std::set<int64_t> axesSeen;
+    if (!bound.checkable) {
+        // `nondeterministic` has no numeric contract: there is nothing to compare against,
+        // and reporting `ok` would say the rule was checked. It was not.
+        report += std::format(
+            "unchecked {}: the permissions it needs have no numeric bound\n", name);
+        return report;
+    }
+    // A condition is part of the equation: the two sides need not agree on values the
+    // condition rejects, and the tool cannot ask the condition about sampled values. Such a
+    // rule is checked by the engine path below only.
+    for (int64_t sample = 0; !conditional && sample < samples && failure.empty(); ++sample) {
+        std::vector<Sample> values = drawValues(sample);
+        std::vector<slot_t> args;
+        double scale = 1.0;
+        for (size_t i = 0; i < values.size(); ++i) {
+            scale = std::max(scale, std::abs(values[i].asDouble) + 1.0);
+            if (values[i].tensor != nullptr) {
+                shapesSeen.insert(values[i].tensor->shape);
+            }
+            if (i < axisPorts.size() && axisPorts[i] != 0) {
+                axesSeen.insert(static_cast<int64_t>(values[i].asDouble));
+            }
+        }
+        // A tensor argument is an Array: it is made right before the call that reads it, so no
+        // allocation can move it in between (and the call below is a safepoint).
+        const auto fillArgs = [&] {
+            args.resize(values.size());
+            for (size_t i = 0; i < values.size(); ++i) {
+                args[i] = sampler.materialize(values[i]);
+            }
+        };
+        fillArgs();
+        const Sample left =
+            resultOf(vm.callGraph(program, program->graph(lhsId), args), resultType);
+        fillArgs();
+        const Sample right =
+            resultOf(vm.callGraph(program, program->graph(rhsId), args), resultType);
+        if (accuracy) {
+            const AccuracyResult checked = compareAgainstReference(
+                *lhsGraph,
+                *program->graph(rhsId),
+                values,
+                left,
+                right,
+                elementCodeOf(left));
+            worstRatio = std::max(worstRatio, checked.ratio);
+            if (!checked.ok) {
+                std::string at;
+                for (size_t i = 0; i < values.size(); ++i) {
+                    at += (i == 0 ? "" : ", ") + sampleText(values[i]);
+                }
+                failure = checked.referenceAvailable
+                    ? std::format(
+                          "FAIL {}: the right side is worse at ({}): its error {:.6g} exceeds "
+                          "the left side's {:.6g} (ratio {:.6g})",
+                          name,
+                          at,
+                          static_cast<double>(checked.rightError),
+                          static_cast<double>(checked.leftError),
+                          checked.ratio)
+                    : std::format(
+                          "FAIL {}: the check cannot examine this rule at ({}): {}",
+                          name,
+                          at,
+                          checked.reason);
+            }
+        } else if (!agree(
+                       left,
+                       right,
+                       bound,
+                       std::min(scale * scale, std::numeric_limits<double>::max()))) {
+            std::string at;
+            for (size_t i = 0; i < values.size(); ++i) {
+                at += (i == 0 ? "" : ", ") + sampleText(values[i]);
+            }
+            failure = std::format(
+                "FAIL {}: the two sides differ at ({}): {} and {}",
+                name,
+                at,
+                sampleText(left),
+                sampleText(right));
+        }
+    }
+    // The engine applies the rule to the left side, with random constants for the const
+    // parameters: it must fire, and the function it gives must agree too.
+    size_t fired = 0, tried = 0;
+    if (failure.empty()) {
+        auto compiled            = camel::runtime::compileRule(ctx, source);
+        camel::runtime::Rule one = std::move(compiled.front());
+        one.twoWay               = false;
+        const camel::core::sem::NumericPolicy policy{needs, true};
+        // A condition selects its instances: a rule whose condition accepts few constants
+        // needs more draws before it can be seen firing.
+        const int64_t instances = std::min<int64_t>(samples, conditional ? 64 : 8);
+        for (int64_t instance = 0; instance < instances && failure.empty(); ++instance) {
+            ++tried;
+            std::vector<Sample> consts;
+            // A session over the left side alone: its result is a program of its own, the
+            // program the rule is in is left as it is.
+            camel::runtime::RuntimeGraphDraftSession session(
+                ctx.shared_from_this(),
+                program,
+                const_cast<camel::runtime::GCGraph *>(lhsGraph));
+            camel::runtime::GraphDraft &draft =
+                session.edit(const_cast<camel::runtime::GCGraph *>(lhsGraph));
+            const std::vector<camel::runtime::gc_node_ref_t> ports(
+                draft.normPorts().begin(),
+                draft.normPorts().end());
+            std::vector<slot_t> args;
+            std::vector<Sample> values = drawValues(instance);
+            double scale               = 1.0;
+            for (size_t i = 0; i < params; ++i) {
+                const bool isConst = i < 64 && ((constParams >> i) & 1) != 0;
+                Type *type         = lhsType->normTypeAt(i);
+                scale = std::max(scale, std::abs(values[i].asDouble) + 1.0);
+                if (isConst) {
+                    const auto constant = draft.materializeStaticValue(values[i].slot, type);
+                    draft.replaceAllValueUses(ports[i], constant);
+                }
+            }
+            camel::runtime::DraftWritings writings(draft, policy);
+            const auto stats = writings.rewrite(std::span<const camel::runtime::Rule>(&one, 1));
+            if (stats.applied == 0) {
+                continue;
+            }
+            ++fired;
+            const camel::runtime::Program *rewritten = session.commitChecked();
+            const auto fillArgs = [&] {
+                args.resize(values.size());
+                for (size_t i = 0; i < values.size(); ++i) {
+                    args[i] = sampler.materialize(values[i]);
+                }
+            };
+            fillArgs();
+            const Sample before =
+                resultOf(vm.callGraph(program, program->graph(lhsId), args), resultType);
+            fillArgs();
+            const Sample after =
+                resultOf(vm.callGraph(rewritten, rewritten->graph(lhsId), args), resultType);
+            if (accuracy) {
+                const AccuracyResult checked =
+                    compareBeforeAfter(*lhsGraph, values, before, after, elementCodeOf(before));
+                worstRatio = std::max(worstRatio, checked.ratio);
+                if (!checked.ok) {
+                    std::string at;
+                    for (const Sample &value : values) {
+                        at += (at.empty() ? "" : ", ") + sampleText(value);
+                    }
+                    failure = checked.referenceAvailable
+                        ? std::format(
+                              "FAIL {}: the rewritten left side is less accurate at ({}): its "
+                              "error {:.6g} exceeds the original's {:.6g} (ratio {:.6g})",
+                              name,
+                              at,
+                              static_cast<double>(checked.rightError),
+                              static_cast<double>(checked.leftError),
+                              checked.ratio)
+                        : std::format(
+                              "FAIL {}: the check cannot examine the rewritten side at ({}): {}",
+                              name,
+                              at,
+                              checked.reason);
+                }
+            } else if (!agree(
+                           before,
+                           after,
+                           bound,
+                           std::min(scale * scale, std::numeric_limits<double>::max()))) {
+                std::string at;
+                for (const Sample &value : values) {
+                    at += (at.empty() ? "" : ", ") + sampleText(value);
+                }
+                failure = std::format(
+                    "FAIL {}: the rewritten left side differs at ({}): {} and {} "
+                    "(bound {} ulps, {} relative, scale {})",
+                    name,
+                    at,
+                    sampleText(before),
+                    sampleText(after),
+                    bound.ulps,
+                    bound.relative,
+                    scale * scale);
+            }
+        }
+        if (failure.empty() && fired == 0) {
+            failure = std::format(
+                "FAIL {}: the rule never fired on its own left side in {} tries",
+                name,
+                tried);
+        }
+    }
+    if (!failure.empty()) {
+        report += failure + "\n";
+    } else if (accuracy) {
+        std::string shapesText;
+        for (const auto &shape : shapesSeen) {
+            shapesText += shapesText.empty() ? "" : " ";
+            shapesText += "[";
+            for (size_t i = 0; i < shape.size(); ++i) {
+                shapesText += (i == 0 ? "" : ", ") + std::to_string(shape[i]);
+            }
+            shapesText += "]";
+        }
+        std::string axesText;
+        for (int64_t axis : axesSeen) {
+            axesText += axesText.empty() ? "" : " ";
+            axesText += std::to_string(axis);
+        }
+        const std::string ratio =
+            std::isinf(worstRatio) ? "inf" : std::format("{:.3g}", worstRatio);
+        report += std::format(
+            "ok {}: {} samples, worst error ratio {}, fired {} of {}",
+            name,
+            samples,
+            ratio,
+            fired,
+            tried);
+        if (!shapesText.empty()) {
+            report += ", shapes " + shapesText;
+        }
+        if (!axesText.empty()) {
+            report += ", axes " + axesText;
+        }
+        report += "\n";
+    } else if (conditional) {
+        report += std::format(
+            "ok {}: the condition selects the instances, fired {} of {}\n", name, fired, tried);
+    } else {
+        report += std::format(
+            "ok {}: {} samples agree, fired {} of {}\n", name, samples, fired, tried);
+    }
+    return report;
+}
+
+/// How many type tuples of one generic rule the check takes at most. The product of the types the
+/// operator groups registered over the rule's type parameters can be large for a rule that declares
+/// two (`<T, U>`): up to the cap every tuple the condition admits is checked, past it the tuples
+/// are sampled by the seed and the report says which were taken and how many there are (the ruling
+/// of 2026-10-24 on `generic-rule-check-surface-and-multi-parameter-instances`).
+constexpr size_t kCheckTupleCap = 64;
+
+/// The instances of one generic rule, checked one by one (the ruling of 2026-10-24 on
+/// `generic-rule-check-surface-and-multi-parameter-instances`).
+///
+/// The candidate tuples are the product of the types the operator groups registered
+/// (`compile::gir::ruleInstanceTypes`) over the rule's type parameters, each tuple filtered by the
+/// rule's condition at the type level: a tuple the condition rejects is not an instance of the law
+/// and says nothing. A tuple the pattern cannot be written for is not an instance either, and is
+/// quiet as well (the ruling of 2026-10-23 on `generic-rule-instantiation-set-and-predicate` §3);
+/// `why_not` is where that reason is read. An instance that was made but whose values the check
+/// cannot draw is reported `unchecked` with that reason: that is the one place where the check
+/// covers less than the law says.
+std::string checkGenericRule(
+    Context &ctx, RuleObject &rule, int64_t samples, uint64_t seed, size_t index) {
+    const uint64_t ruleId = rule.ruleId();
+    const std::string name(rule.name());
+    auto root = std::make_shared<mm::RootHandle>(
+        mm::autoSpace(), &rule, RuleType::get(), "rewrite.checkGenericRule");
+    GenericRuleEntry *entry = camel::compile::gir::genericRuleEntry(ctx, ruleId);
+    if (entry == nullptr) {
+        return std::format("unchecked {}: its templates are not in this context\n", name);
+    }
+    const size_t arity = entry->typeParams.size();
+    if (arity == 0) {
+        return std::format(
+            "unchecked {}: its head declares no type parameter, so it has no instance to make\n",
+            name);
+    }
+    std::string report;
+    const std::vector<Type *> universe = camel::compile::gir::ruleInstanceTypes();
+    if (universe.empty()) {
+        return std::format(
+            "unchecked {}: no operator group registered a type to instantiate it at\n", name);
+    }
+    // Every tuple of the product the condition admits, in the order the types were registered (the
+    // first type parameter varies fastest, as a counter does). The condition is asked before
+    // anything is instantiated: a rejected tuple costs one compile-time question.
+    size_t product = 1;
+    for (size_t i = 0; i < arity && product <= kCheckTupleCap * kCheckTupleCap; ++i) {
+        product *= universe.size();
+    }
+    std::vector<std::vector<Type *>> tuples;
+    for (size_t n = 0; n < product; ++n) {
+        std::vector<Type *> tuple(arity);
+        size_t rest = n;
+        for (size_t i = 0; i < arity; ++i) {
+            tuple[i] = universe[rest % universe.size()];
+            rest /= universe.size();
+        }
+        std::string why;
+        if (camel::compile::gir::ruleConditionAt(ctx, ruleId, tuple, why) ==
+            RuleConditionAt::Fails) {
+            continue;
+        }
+        tuples.push_back(std::move(tuple));
+    }
+    const size_t total = tuples.size();
+    if (total > kCheckTupleCap) {
+        // Deterministic: the same seed takes the same tuples, whatever order the groups registered
+        // the types in. The report says which ones were taken and how many there are in all.
+        std::mt19937_64 rng(seed * 1000003u + index);
+        std::vector<size_t> order(total);
+        std::iota(order.begin(), order.end(), 0);
+        std::shuffle(order.begin(), order.end(), rng);
+        order.resize(kCheckTupleCap);
+        std::sort(order.begin(), order.end());
+        std::vector<std::vector<Type *>> taken;
+        taken.reserve(order.size());
+        for (size_t at : order) {
+            taken.push_back(tuples[at]);
+        }
+        tuples = std::move(taken);
+        report += std::format("sampled {}: {} of {} type tuples:", name, tuples.size(), total);
+        for (const std::vector<Type *> &tuple : tuples) {
+            report += " (";
+            for (size_t i = 0; i < tuple.size(); ++i) {
+                report += (i == 0 ? "" : ", ") + tuple[i]->toString();
+            }
+            report += ")";
+        }
+        report += "\n";
+    }
+    for (const std::vector<Type *> &tuple : tuples) {
+        const size_t place = camel::compile::gir::genericRuleInstance(ctx, ruleId, tuple);
+        // Making an instance builds a body and encodes graphs: the entry is read again, and the
+        // rule object again from its root, after it.
+        GenericRuleEntry *current = camel::compile::gir::genericRuleEntry(ctx, ruleId);
+        if (current == nullptr || place >= current->instances.size() ||
+            !current->instances[place].made) {
+            continue;
+        }
+        const GenericRuleInstance &instance = current->instances[place];
+        const std::string instanceName = std::format("{}<{}>", name, instance.typeText);
+        const auto *lhsType = instance.lhs->funcType();
+        Sampler probe(seed, rule.needs());
+        std::string cannot;
+        for (size_t i = 0; i < lhsType->normTypesCount(); ++i) {
+            const Type *parameter = lhsType->normTypeAt(i);
+            if (!probe.canDraw(parameter)) {
+                cannot = parameter->toString();
+                break;
+            }
+        }
+        if (!cannot.empty()) {
+            report += std::format(
+                "unchecked {}: the check cannot make a value of type '{}'\n",
+                instanceName,
+                cannot);
+            continue;
+        }
+        std::shared_ptr<WhenCall> call;
+        if (instance.when != nullptr) {
+            call              = std::make_shared<WhenCall>();
+            call->vm          = std::make_shared<NodeVMSchedPass>(ctx.shared_from_this());
+            call->program     = instance.program;
+            call->graph       = instance.when;
+            call->own         = instance.lhs->normPorts().size();
+            call->arity       = instance.whenArity;
+            call->constParams = rule.constParams();
+            call->name        = instanceName;
+        }
+        const RuleObject &currentRule = *root->getAs<RuleObject>();
+        const camel::runtime::RuleSource source = instanceOf(currentRule, 1, instance, call);
+        report += checkOneRule(ctx, source, samples, seed * 1000003u + index);
+    }
+    return report;
+}
+
 /// `check(rules, samples, seed)`: for every rule, `samples` random instances (random constants
 /// for the const parameters, random values for the others) of its two sides, which must agree.
 /// A rule that asks for `refine_accuracy` is compared by its error against a higher-precision
 /// reference instead, sample by sample, and the worst error ratio is reported.
+/// A generic rule is checked once per instance its condition admits over the types the operator
+/// groups registered (the ruling of 2026-10-24 on
+/// `generic-rule-check-surface-and-multi-parameter-instances`).
 /// Returns the report; a line starting with FAIL is a rule that does not hold.
 slot_t checkKernel(ArgsView &, ArgsView &norm, Context &ctx) {
     const int64_t samples = std::max<int64_t>(1, norm.get<Int64>(1));
@@ -2369,13 +2856,10 @@ slot_t checkKernel(ArgsView &, ArgsView &norm, Context &ctx) {
         // The array moves when a function runs: it is read again each time.
         RuleObject *made = norm.get<Array *>(0)->get<RuleObject *>(index);
         if (made->ruleId() != 0) {
-            // A generic rule has no two sides of its own to sample: it is checked at the types it
-            // is instantiated for, and that walk -- the types `check` registers, plus the types of
-            // the program (the ruling of 2026-10-23 on generic-rule-instantiation, §2) -- is the
-            // next step of the bridge. Said plainly here rather than checked by halves.
-            const std::string_view name = made->name();
-            report += std::format(
-                "unchecked {}: a generic rule, whose instances are not checked here\n", name);
+            // A generic rule has no two sides of its own: it is checked once per instance its
+            // condition admits over the types the operator groups registered (the ruling of
+            // 2026-10-24 on `generic-rule-check-surface-and-multi-parameter-instances`).
+            report += checkGenericRule(ctx, *made, samples, seed, index);
             continue;
         }
         // A condition is read again from the rule object after every call, so the object is
@@ -2393,301 +2877,9 @@ slot_t checkKernel(ArgsView &, ArgsView &norm, Context &ctx) {
             call->vm   = std::make_shared<NodeVMSchedPass>(ctx.shared_from_this());
         }
         const RuleObject *rule = ruleRoot ? ruleRoot->getAs<RuleObject>() : made;
-        const bool conditional = rule->when() != nullptr;
         // The rule object is read now and not again: a function runs below, and objects move.
         const camel::runtime::RuleSource source = sourceOf(*rule, 1, call);
-        const std::string name(rule->name());
-        const camel::core::sem::PermissionMask needs = rule->needs();
-        const uint64_t constParams              = rule->constParams();
-        const camel::runtime::Program *program  = rule->lhs()->program();
-        const camel::runtime::GraphId lhsId     = rule->lhs()->graphId();
-        const camel::runtime::GraphId rhsId     = rule->rhs()->graphId();
-        const camel::runtime::GCGraph *lhsGraph = program->graph(lhsId);
-        const auto *lhsType                     = lhsGraph->funcType();
-        const size_t params                     = lhsType->normTypesCount();
-        const Type *resultType                  = lhsType->exitType();
-        const size_t steps = stepsOf(*lhsGraph) + stepsOf(*program->graph(rhsId));
-        const double declaredUlps =
-            declaredUlpsOf(*lhsGraph) + declaredUlpsOf(*program->graph(rhsId));
-        // The bound is the numeric contract of the permissions the rule needs, read together
-        // with the operators' declarations (not one uniform rounding bound).
-        const camel::core::sem::RewriteErrorBound bound =
-            camel::core::sem::rewriteErrorBound(needs, steps, declaredUlps);
-        const bool accuracy = (needs & camel::core::sem::kRefineAccuracy) != 0;
-        // The rule's own operators say which integer parameters are axes. The rank of an
-        // otherwise unshaped tensor follows the axis it is reduced over, and rotates through 1,
-        // 2 and 3 so that a vector, a matrix and a rank-3 tensor are all sampled.
-        std::vector<uint8_t> axisPorts = axisPortsOf(*lhsGraph);
-        const std::vector<uint8_t> rhsAxisPorts = axisPortsOf(*program->graph(rhsId));
-        for (size_t i = 0; i < axisPorts.size() && i < rhsAxisPorts.size(); ++i) {
-            axisPorts[i] = static_cast<uint8_t>(axisPorts[i] | rhsAxisPorts[i]);
-        }
-        std::optional<size_t> knownRank;
-        for (size_t i = 0; i < params; ++i) {
-            if (const auto rank = knownRankOf(lhsType->normTypeAt(i))) {
-                knownRank = knownRank ? std::min(*knownRank, *rank) : *rank;
-            }
-        }
-        Sampler sampler(seed * 1000003u + index, needs);
-        const auto drawValues = [&](int64_t sampleIndex) {
-            std::vector<Sample> drawn(params);
-            int64_t maxAxis = -1;
-            for (size_t i = 0; i < params; ++i) {
-                if (i >= axisPorts.size() || axisPorts[i] == 0) {
-                    continue;
-                }
-                // The axis is an operand, not a free constant: cycle through the axes the rule's
-                // shapes need (rank 1, a matrix, a rank-3 reduction) and the last axis.
-                static constexpr int64_t kAxisCycle[] = {0, 1, 2, -1};
-                int64_t axis = kAxisCycle[sampleIndex % 4];
-                if (knownRank && *knownRank > 0) {
-                    axis = std::min<int64_t>(axis, static_cast<int64_t>(*knownRank) - 1);
-                }
-                drawn[i] = sampler.fixedInt(lhsType->normTypeAt(i), axis);
-                if (axis >= 0) {
-                    maxAxis = std::max(maxAxis, axis);
-                }
-            }
-            const size_t rankHint = std::max<size_t>(
-                static_cast<size_t>(1 + (sampleIndex % 3)),
-                maxAxis >= 0 ? static_cast<size_t>(maxAxis + 1) : 0);
-            for (size_t i = 0; i < params; ++i) {
-                if (i < axisPorts.size() && axisPorts[i] != 0) {
-                    continue;
-                }
-                const bool isConst = i < 64 && ((constParams >> i) & 1) != 0;
-                drawn[i] = sampler.value(lhsType->normTypeAt(i), isConst, rankHint);
-            }
-            return drawn;
-        };
-        NodeVMSchedPass vm(ctx.shared_from_this());
-        std::string failure;
-        double worstRatio = 0.0;
-        std::set<std::vector<int64_t>> shapesSeen;
-        std::set<int64_t> axesSeen;
-        if (!bound.checkable) {
-            // `nondeterministic` has no numeric contract: there is nothing to compare against,
-            // and reporting `ok` would say the rule was checked. It was not.
-            report += std::format(
-                "unchecked {}: the permissions it needs have no numeric bound\n", name);
-            continue;
-        }
-        // A condition is part of the equation: the two sides need not agree on values the
-        // condition rejects, and the tool cannot ask the condition about sampled values. Such a
-        // rule is checked by the engine path below only.
-        for (int64_t sample = 0; !conditional && sample < samples && failure.empty(); ++sample) {
-            std::vector<Sample> values = drawValues(sample);
-            std::vector<slot_t> args;
-            double scale = 1.0;
-            for (size_t i = 0; i < values.size(); ++i) {
-                scale = std::max(scale, std::abs(values[i].asDouble) + 1.0);
-                if (values[i].tensor != nullptr) {
-                    shapesSeen.insert(values[i].tensor->shape);
-                }
-                if (i < axisPorts.size() && axisPorts[i] != 0) {
-                    axesSeen.insert(static_cast<int64_t>(values[i].asDouble));
-                }
-            }
-            // A tensor argument is an Array: it is made right before the call that reads it, so no
-            // allocation can move it in between (and the call below is a safepoint).
-            const auto fillArgs = [&] {
-                args.resize(values.size());
-                for (size_t i = 0; i < values.size(); ++i) {
-                    args[i] = sampler.materialize(values[i]);
-                }
-            };
-            fillArgs();
-            const Sample left =
-                resultOf(vm.callGraph(program, program->graph(lhsId), args), resultType);
-            fillArgs();
-            const Sample right =
-                resultOf(vm.callGraph(program, program->graph(rhsId), args), resultType);
-            if (accuracy) {
-                const AccuracyResult checked = compareAgainstReference(
-                    *lhsGraph,
-                    *program->graph(rhsId),
-                    values,
-                    left,
-                    right,
-                    elementCodeOf(left));
-                worstRatio = std::max(worstRatio, checked.ratio);
-                if (!checked.ok) {
-                    std::string at;
-                    for (size_t i = 0; i < values.size(); ++i) {
-                        at += (i == 0 ? "" : ", ") + sampleText(values[i]);
-                    }
-                    failure = checked.referenceAvailable
-                        ? std::format(
-                              "FAIL {}: the right side is worse at ({}): its error {:.6g} exceeds "
-                              "the left side's {:.6g} (ratio {:.6g})",
-                              name,
-                              at,
-                              static_cast<double>(checked.rightError),
-                              static_cast<double>(checked.leftError),
-                              checked.ratio)
-                        : std::format(
-                              "FAIL {}: the check cannot examine this rule at ({}): {}",
-                              name,
-                              at,
-                              checked.reason);
-                }
-            } else if (!agree(left, right, bound, std::min(scale * scale, std::numeric_limits<double>::max()))) {
-                std::string at;
-                for (size_t i = 0; i < values.size(); ++i) {
-                    at += (i == 0 ? "" : ", ") + sampleText(values[i]);
-                }
-                failure = std::format(
-                    "FAIL {}: the two sides differ at ({}): {} and {}",
-                    name,
-                    at,
-                    sampleText(left),
-                    sampleText(right));
-            }
-        }
-        // The engine applies the rule to the left side, with random constants for the const
-        // parameters: it must fire, and the function it gives must agree too.
-        size_t fired = 0, tried = 0;
-        if (failure.empty()) {
-            auto compiled            = camel::runtime::compileRule(ctx, source);
-            camel::runtime::Rule one = std::move(compiled.front());
-            one.twoWay               = false;
-            const camel::core::sem::NumericPolicy policy{needs, true};
-            // A condition selects its instances: a rule whose condition accepts few constants
-            // needs more draws before it can be seen firing.
-            const int64_t instances = std::min<int64_t>(samples, conditional ? 64 : 8);
-            for (int64_t instance = 0; instance < instances && failure.empty(); ++instance) {
-                ++tried;
-                std::vector<Sample> consts;
-                // A session over the left side alone: its result is a program of its own, the
-                // program the rule is in is left as it is.
-                camel::runtime::RuntimeGraphDraftSession session(
-                    ctx.shared_from_this(),
-                    program,
-                    const_cast<camel::runtime::GCGraph *>(lhsGraph));
-                camel::runtime::GraphDraft &draft =
-                    session.edit(const_cast<camel::runtime::GCGraph *>(lhsGraph));
-                const std::vector<camel::runtime::gc_node_ref_t> ports(
-                    draft.normPorts().begin(),
-                    draft.normPorts().end());
-                std::vector<slot_t> args;
-                std::vector<Sample> values = drawValues(instance);
-                double scale               = 1.0;
-                for (size_t i = 0; i < params; ++i) {
-                    const bool isConst = i < 64 && ((constParams >> i) & 1) != 0;
-                    Type *type         = lhsType->normTypeAt(i);
-                    scale = std::max(scale, std::abs(values[i].asDouble) + 1.0);
-                    if (isConst) {
-                        const auto constant = draft.materializeStaticValue(values[i].slot, type);
-                        draft.replaceAllValueUses(ports[i], constant);
-                    }
-                }
-                camel::runtime::DraftWritings writings(draft, policy);
-                const auto stats = writings.rewrite(std::span<const camel::runtime::Rule>(&one, 1));
-                if (stats.applied == 0) {
-                    continue;
-                }
-                ++fired;
-                const camel::runtime::Program *rewritten = session.commitChecked();
-                const auto fillArgs = [&] {
-                    args.resize(values.size());
-                    for (size_t i = 0; i < values.size(); ++i) {
-                        args[i] = sampler.materialize(values[i]);
-                    }
-                };
-                fillArgs();
-                const Sample before =
-                    resultOf(vm.callGraph(program, program->graph(lhsId), args), resultType);
-                fillArgs();
-                const Sample after =
-                    resultOf(vm.callGraph(rewritten, rewritten->graph(lhsId), args), resultType);
-                if (accuracy) {
-                    const AccuracyResult checked = compareBeforeAfter(
-                        *lhsGraph, values, before, after, elementCodeOf(before));
-                    worstRatio = std::max(worstRatio, checked.ratio);
-                    if (!checked.ok) {
-                        std::string at;
-                        for (const Sample &value : values) {
-                            at += (at.empty() ? "" : ", ") + sampleText(value);
-                        }
-                        failure = checked.referenceAvailable
-                            ? std::format(
-                                  "FAIL {}: the rewritten left side is less accurate at ({}): its "
-                                  "error {:.6g} exceeds the original's {:.6g} (ratio {:.6g})",
-                                  name,
-                                  at,
-                                  static_cast<double>(checked.rightError),
-                                  static_cast<double>(checked.leftError),
-                                  checked.ratio)
-                            : std::format(
-                                  "FAIL {}: the check cannot examine the rewritten side at ({}): {}",
-                                  name,
-                                  at,
-                                  checked.reason);
-                    }
-                } else if (!agree(before, after, bound, std::min(scale * scale, std::numeric_limits<double>::max()))) {
-                    std::string at;
-                    for (const Sample &value : values) {
-                        at += (at.empty() ? "" : ", ") + sampleText(value);
-                    }
-                    failure = std::format(
-                        "FAIL {}: the rewritten left side differs at ({}): {} and {} "
-                        "(bound {} ulps, {} relative, scale {})",
-                        name,
-                        at,
-                        sampleText(before),
-                        sampleText(after),
-                        bound.ulps,
-                        bound.relative,
-                        scale * scale);
-                }
-            }
-            if (failure.empty() && fired == 0) {
-                failure = std::format(
-                    "FAIL {}: the rule never fired on its own left side in {} tries",
-                    name,
-                    tried);
-            }
-        }
-        if (!failure.empty()) {
-            report += failure + "\n";
-        } else if (accuracy) {
-            std::string shapesText;
-            for (const auto &shape : shapesSeen) {
-                shapesText += shapesText.empty() ? "" : " ";
-                shapesText += "[";
-                for (size_t i = 0; i < shape.size(); ++i) {
-                    shapesText += (i == 0 ? "" : ", ") + std::to_string(shape[i]);
-                }
-                shapesText += "]";
-            }
-            std::string axesText;
-            for (int64_t axis : axesSeen) {
-                axesText += axesText.empty() ? "" : " ";
-                axesText += std::to_string(axis);
-            }
-            const std::string ratio =
-                std::isinf(worstRatio) ? "inf" : std::format("{:.3g}", worstRatio);
-            report += std::format(
-                "ok {}: {} samples, worst error ratio {}, fired {} of {}",
-                name,
-                samples,
-                ratio,
-                fired,
-                tried);
-            if (!shapesText.empty()) {
-                report += ", shapes " + shapesText;
-            }
-            if (!axesText.empty()) {
-                report += ", axes " + axesText;
-            }
-            report += "\n";
-        } else if (conditional) {
-            report += std::format(
-                "ok {}: the condition selects the instances, fired {} of {}\n", name, fired, tried);
-        } else {
-            report += std::format(
-                "ok {}: {} samples agree, fired {} of {}\n", name, samples, fired, tried);
-        }
+        report += checkOneRule(ctx, source, samples, seed * 1000003u + index);
     }
     return toSlot(String::from(report, mm::autoSpace()));
 }

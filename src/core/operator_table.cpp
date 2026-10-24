@@ -235,6 +235,95 @@ type::resolver_ptr_t OperatorTable::resolver(std::string_view uri) const {
     return id ? resolver(*id) : nullptr;
 }
 
+void OperatorTable::declareGroup(std::string_view group, const std::vector<std::string> &uris) {
+    std::unique_lock lock(mutex_);
+    for (auto &[name, declared] : groups_) {
+        if (name != group) {
+            continue;
+        }
+        for (const std::string &uri : uris) {
+            if (std::ranges::find(declared, uri) == declared.end()) {
+                declared.push_back(uri);
+            }
+        }
+        return;
+    }
+    groups_.emplace_back(std::string(group), uris);
+}
+
+std::vector<std::string> OperatorTable::groups() const {
+    std::shared_lock lock(mutex_);
+    std::vector<std::string> names;
+    names.reserve(groups_.size());
+    for (const auto &[name, uris] : groups_) {
+        names.push_back(name);
+    }
+    return names;
+}
+
+std::vector<type::Type *> OperatorTable::registeredTypes(std::string_view group) const {
+    std::vector<std::string> uris;
+    {
+        std::shared_lock lock(mutex_);
+        for (const auto &[name, declared] : groups_) {
+            if (name == group) {
+                uris.insert(uris.end(), declared.begin(), declared.end());
+            }
+        }
+    }
+    std::vector<type::Type *> types;
+    const auto add = [&types](type::Type *type) {
+        if (type == nullptr) {
+            return;
+        }
+        for (type::Type *known : types) {
+            if (known == type || known->equals(type)) {
+                return;
+            }
+        }
+        types.push_back(type);
+    };
+    // The lock is taken once per overload, after the group's list has been read: a group may be
+    // declared again while modules load, and an overload's resolver may be replaced then.
+    for (const std::string &uri : uris) {
+        const type::resolver_ptr_t resolver          = this->resolver(uri);
+        type::FunctionType *const signature =
+            resolver != nullptr ? resolver->fixedSignature() : nullptr;
+        if (signature == nullptr) {
+            continue;
+        }
+        for (size_t i = 0; i < signature->withTypesCount(); ++i) {
+            add(signature->withTypeAt(i));
+        }
+        for (size_t i = 0; i < signature->normTypesCount(); ++i) {
+            add(signature->normTypeAt(i));
+        }
+        if (signature->hasExitType()) {
+            add(signature->exitType());
+        }
+    }
+    return types;
+}
+
+std::vector<type::Type *> OperatorTable::allRegisteredTypes() const {
+    std::vector<type::Type *> types;
+    for (const std::string &group : groups()) {
+        for (type::Type *type : registeredTypes(group)) {
+            bool known = false;
+            for (type::Type *have : types) {
+                if (have == type || have->equals(type)) {
+                    known = true;
+                    break;
+                }
+            }
+            if (!known) {
+                types.push_back(type);
+            }
+        }
+    }
+    return types;
+}
+
 void OperatorTable::setInPlaceForm(std::string_view uri, std::string_view inPlaceUri) {
     std::unique_lock lock(mutex_);
     const OperId form                   = internLocked(inPlaceUri);
