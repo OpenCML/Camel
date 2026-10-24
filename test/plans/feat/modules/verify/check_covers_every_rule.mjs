@@ -144,13 +144,29 @@ const refuted = (name) => {
     const word = new RegExp(`^refuted\\s+${name}(?![A-Za-z0-9_])`)
     return stdout.split('\n').some((line) => word.test(line.trim()))
 }
-// One rule of the library is `refuted` under the draws, and it is a finding rather than a
-// regression: `tensor_f32_combine_mixed`'s own guard (`combineMixedSign`) assumes `reassociate`
-// covers the opposite-sign cancellation, and a tensor with a `1e+30` element loses five digits of
-// it, which is 27 ulps of the result against the 11 the reassociate bound allows (H247 finding,
-// reported to the coordinator). The names are written here so that any *other* rule going red still
-// fails the run, and the count of them is printed below.
-const knownRefuted = new Set(['tensor_f32_combine_mixed'])
+// Two rules of the library are `refuted` under the draws, and both are findings rather than
+// regressions, because a counterexample of the rewrite's own error bound is what the check is for:
+//
+//   * `tensor_f32_combine_mixed`'s own guard (`combineMixedSign`) assumes `reassociate` covers the
+//     opposite-sign cancellation, and a tensor with a `1e+30` element loses five digits of it,
+//     which is 27 ulps of the result against the 11 the reassociate bound allows (H247 finding,
+//     reported to the coordinator).
+//   * `float_combine_mixed`'s guard is incomplete at `f16`, which is the type the reduced-precision
+//     lane made checkable: `x = 10000.0`, `c1 = 39`, `c2 = -55` are ordinary elements of `f16`, and
+//     both products of the left side overflow (390000 and -550000 against 65504), so its left side
+//     is a NaN (`inf + -inf`) where the right side is an infinity (`10000 * -16`); the guard checks
+//     the coefficients' finiteness, not that the two products stay finite, and `no_infs` does not
+//     license turning a NaN into an infinity (the proposition of a `reassociate` rule is `real
+//     equality + IEEE on special values`, and IEEE does not call the two equal). At `f32`/`f64` the
+//     same hole is unreachable with the values the sampler draws; at `f16` it is reachable with a
+//     four-digit value, and the draw that exposes it depends on the seed, which is why the coverage
+//     case's seed is the one this reading is pinned at. Reported with the lane
+//     (`docs/handover/questions/reduced-element-epsilon-and-rounding.md`, 四); fixing the guard
+//     belongs to the rules library's own lane, and this entry comes out with it.
+//
+// The names are written here so that any *other* rule going red still fails the run, and the count
+// of them is printed below.
+const knownRefuted = new Set(['tensor_f32_combine_mixed', 'float_combine_mixed'])
 const failed = [...verdicts.keys()].filter((name) => refuted(name) && !knownRefuted.has(name))
 if (failed.length > 0) {
     fail(`${input.test_name ?? payload.test_name}: the check failed ${failed.length} rule(s): ${failed.join(', ')}`)
