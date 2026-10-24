@@ -68,6 +68,12 @@ bool hasPlacementFact(const runtime::GCGraph &graph);
 /// Whether any graph of `program` carries the placement fact.
 bool hasPlacementFact(const runtime::Program &program);
 
+/// The graph a call node reaches, whether it names it (`Func`) or holds it as a value (`Call`).
+/// Null when the node is not a call, or when the callee is a value only the run knows: that call
+/// reaches no one graph, so no placement answer (and no residency answer) can name its unit.
+const runtime::GCGraph *calleeGraphOf(
+    const runtime::Program &program, const runtime::GCGraph &graph, runtime::gc_node_ref_t id);
+
 /// `TILES_PLACEMENT` lines, one JSON object per graph, for the pass that reads the fact. Empty
 /// when the program has no placement fact at all, so an untagged program's output is unchanged.
 std::string placementReport(const runtime::Program &program);

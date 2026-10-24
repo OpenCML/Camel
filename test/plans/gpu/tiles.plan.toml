@@ -1595,3 +1595,19 @@ expect_exit = 0
 compare_to = "grad_expand.untagged_graph_unchanged"
 compare_fields = ["stdout_normalized"]
 timeout_ms = 30000
+
+# --- Residency is derived from the graph (GPU design 3.2) --------------------------------------
+# `TILES_RESIDENCY` prints the conclusion the transfer-inserting half of M5 reads: a value's block
+# is decided by its producer, a call's parameters follow their arguments' blocks, a loop's state
+# stays where it was made. The test compares the conclusion with the outlines the same run leaves,
+# so the number it pins is the disagreement M5's second half removes, not a number copied here.
+
+[[tests]]
+name = "resident_loop_declares_its_blocks"
+kind = "behavior"
+tool = "python"
+case = "../../cases/modules/tiles/resident_loop.py"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["Resident loop: PASS"]
+timeout_ms = 60000
