@@ -279,6 +279,16 @@ A `sync` written before a block (including the postfix form on a function body, 
 
 ## 5. The type system
 - **A function value has no identity** (the author, 2026-10-24): the value of a function or a region is decided only by what it computes; there is no "which object it is". Two function values cannot be compared for equality and have no address. So function bodies and regions that differ only in parameter names or inputs may be shared by the compiler, and the program cannot observe it.
+- **`when` comes before the body it guards** (the author, 2026-10-24): `when` is a condition of applicability and belongs to the signature, not to the defining clauses after a body (`fact`'s `join`/`meet`/`widen`/`narrow`). Functions and rules write it after the signature and before the body; when the signature does not fit on one line, `when` takes a line of its own (the formatter lays it out so):
+  ```camel
+  func softmax::<T>(x: T[n, m], axis: int = -1): T[n, m]
+      when is_float::<T>()
+  {
+      ...
+  }
+  rule add_zero::<T>(x: T) when is_integer::<T>() { x + 0 => x }
+  ```
+  A `match` guard likewise comes before `=>` (`case p when c => …`).
 
 ### 5.1 Basic types and numeric types
 
