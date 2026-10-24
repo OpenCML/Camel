@@ -22,96 +22,97 @@ import { Program } from graph
 import { abs, exp as math_exp, expm1, log as math_log, log1p, trunc } from math
 import { Proof, Rule, Run, rewrite, saturate, extract, run } from rewrite
 import { Tensor, exp, log, log_softmax, sigmoid, softmax, sum } from tensor
+import { is_float, is_integer } from types
 
 // ---- Integers: wrapping arithmetic, every law is exact ----
 //
-// One law per fact, written once (rewrite design 6). The order and the bracketing the program
-// wrote an expression in are the matcher's business, not the law's: an operator's declaration says
-// whether exchanging its operands and regrouping its chain gives the same value, the matcher reads
-// a chain of one operator as the multiset of its terms, and the store's canonical form is that
-// multiset. So `x + 0` reads `0 + x` and every bracketing of the sum, and there is no rule per
-// operand order and no `<=>` rule for commutation or association (the deleted `int_zero_add`,
-// `int_one_mul`, `int_zero_mul`, `int_one_combine`, `int_add_comm`, `int_mul_comm`,
-// `int_add_assoc`, `int_mul_assoc`; rewrite design 2 (second version) 6).
+// One law per fact, written once (rewrite design 6), and one law for the whole integer family: the
+// head declares the type parameter (`rule int_add_zero::<T>`) and the condition names the family
+// (`when is_integer::<T>()`), so the maker makes one instance per integer element type --
+// `int_add_zero<int>` and `int_add_zero<i32>` -- and the engine fires the instance whose type the
+// matched node has (design principles 5.5; the ruling of 2026-10-23 on `generic-rule-instantiation`,
+// whose acceptance of 2026-10-24 reads: one instance per type tuple, visible in `explain`). Before
+// the fold the two families were two blocks of thirteen rules, `int_*` and `int32_*`, and the second
+// block said the same facts again; the facts are the same because two's-complement wraparound is a
+// ring, so the neutral elements, the inverse laws, association, commutation and distribution hold at
+// both widths, and the coefficients wrap exactly as the program does because `c1 + c2` in an
+// instance at `i32` *is* an i32 addition.
+//
+// A rule reads a coefficient only where the pattern's operators accept its type, and the instance is
+// what makes that type concrete: `const c1: T` at `T = i32` matches an i32 constant and nothing
+// else, so a malformed graph (an `add_i` with an `int` constant, the case algebra.cpp's typed scalar
+// lookup also refuses) matches nothing here (rewrite design 2 (second version) 1;
+// reviews/stdlib-rules.md item 2: the `isI32` helpers a rule used to guard itself with are deleted).
+//
+// The zero of `int_mul_zero` and `int_sub_self` is written `0 as T`. A literal inside a generic body
+// takes the type of the instance (`literal-inside-a-generic-body`), and a literal beside an operator
+// takes it from that operator -- `x * 2` makes the `2` an `i32` in the `i32` instance -- but the
+// right side of a rule stands on its own, where a bare `0` is an `int` and would put an `int`
+// constant where the `i32` instance needs an `i32` one (the reason the old `int32_mul_zero` wrote
+// `i32(0)`). The written conversion says the type once, and each instance resolves it.
+//
+// The order and the bracketing the program wrote an expression in are the matcher's business, not
+// the law's: an operator's declaration says whether exchanging its operands and regrouping its
+// chain gives the same value, the matcher reads a chain of one operator as the multiset of its
+// terms, and the store's canonical form is that multiset. So `x + 0` reads `0 + x` and every
+// bracketing of the sum, and there is no rule per operand order and no `<=>` rule for commutation
+// or association (the deleted `int_zero_add`, `int_one_mul`, `int_zero_mul`, `int_one_combine`,
+// `int_add_comm`, `int_mul_comm`, `int_add_assoc`, `int_mul_assoc`; rewrite design 2 (second
+// version) 6).
 
-export rule int_add_zero(x: int) { x + 0 => x }
-export rule int_sub_zero(x: int) { x - 0 => x }
-export rule int_mul_one(x: int) { x * 1 => x }
-export rule int_mul_zero(x: int) { x * 0 => 0 }
-export rule int_div_one(x: int) { x / 1 => x }
-export rule int_neg_neg(x: int) { -(-x) => x }
-export rule int_sub_self(x: int) { x - x => 0 }
-export rule int_add_self(x: int) { x + x => x * 2 }
-export rule int_combine(x: int, const c1: int, const c2: int) { x * c1 + x * c2 => x * (c1 + c2) }
-export rule int_fold(x: int, const c1: int, const c2: int) { (x * c1) * c2 => x * (c1 * c2) }
-export rule int_fold_add(x: int, const c1: int, const c2: int) { (x + c1) + c2 => x + (c1 + c2) }
+export rule int_add_zero::<T>(x: T) { x + 0 => x } when is_integer::<T>()
+export rule int_sub_zero::<T>(x: T) { x - 0 => x } when is_integer::<T>()
+export rule int_mul_one::<T>(x: T) { x * 1 => x } when is_integer::<T>()
+export rule int_mul_zero::<T>(x: T) { x * 0 => 0 as T } when is_integer::<T>()
+export rule int_div_one::<T>(x: T) { x / 1 => x } when is_integer::<T>()
+export rule int_neg_neg::<T>(x: T) { -(-x) => x } when is_integer::<T>()
+export rule int_sub_self::<T>(x: T) { x - x => 0 as T } when is_integer::<T>()
+export rule int_add_self::<T>(x: T) { x + x => x * 2 } when is_integer::<T>()
+export rule int_combine::<T>(x: T, const c1: T, const c2: T) {
+    x * c1 + x * c2 => x * (c1 + c2)
+} when is_integer::<T>()
+export rule int_fold::<T>(x: T, const c1: T, const c2: T) {
+    (x * c1) * c2 => x * (c1 * c2)
+} when is_integer::<T>()
+export rule int_fold_add::<T>(x: T, const c1: T, const c2: T) {
+    (x + c1) + c2 => x + (c1 + c2)
+} when is_integer::<T>()
 
 /// The bare operand: `x*c + x` is `x*c + x*1`. No rule can write `1*x` (a rule matches the graph
 /// it is given, it cannot add a multiplication to read a coefficient), so the coefficient 1 is
 /// implicit here. The law wraps exactly like `int_combine`, so it needs no permission and the
 /// guard set is the same one (none): the rule only adds the `1` that the pass would read.
-export rule int_combine_one(x: int, const c: int) { x * c + x => x * (c + 1) }
+export rule int_combine_one::<T>(x: T, const c: T) { x * c + x => x * (c + 1) } when is_integer::<T>()
 
-export rule int_distribute(a: int, b: int, c: int) { a * (b + c) <=> a * b + a * c }
-
-// ---- Int32: the same wrapping laws at 32 bits ----
-//
-// The language has two integer element types, and a rule is written for one of them: the pattern
-// operators are the typed ones (`add_i`, `mul_i`, ...), so these rules never match an `int`
-// expression and the `int` rules above never match an `i32` one. The laws are the same because
-// two's-complement wraparound is a ring: the neutral elements, the inverse laws, association,
-// commutation and distribution are all exact. Only the constant-folded coefficients differ: the
-// rule's `c1 + c2` (or `c1 * c2`) is an i32 operation and wraps exactly as the program does. The
-// order the program wrote and the way it bracketed are read by the matcher, as for `int`, so the
-// laws appear once each here too.
-//
-// A coefficient the rule reads must be an i32 too, and the matcher is what says so: `const c: i32`
-// matches only a constant whose type the i32 pattern accepts, so a malformed graph (an `add_i`
-// with an `int` constant, the case algebra.cpp's typed scalar lookup also refuses) matches
-// nothing here (rewrite design 2 (second version) 1; reviews/stdlib-rules.md item 2: the `isI32`
-// helpers a rule used to guard itself with are deleted).
-
-export rule int32_add_zero(x: i32) { x + 0 => x }
-export rule int32_sub_zero(x: i32) { x - 0 => x }
-export rule int32_mul_one(x: i32) { x * 1 => x }
-export rule int32_mul_zero(x: i32) { x * 0 => i32(0) }
-export rule int32_div_one(x: i32) { x / 1 => x }
-export rule int32_neg_neg(x: i32) { -(-x) => x }
-export rule int32_sub_self(x: i32) { x - x => i32(0) }
-export rule int32_add_self(x: i32) { x + x => x * 2 }
-export rule int32_combine(x: i32, const c1: i32, const c2: i32) {
-    x * c1 + x * c2 => x * (c1 + c2)
-}
-export rule int32_fold(x: i32, const c1: i32, const c2: i32) {
-    (x * c1) * c2 => x * (c1 * c2)
-}
-export rule int32_fold_add(x: i32, const c1: i32, const c2: i32) {
-    (x + c1) + c2 => x + (c1 + c2)
-}
-
-/// The bare operand laws, as `int_combine_one` explains. The coefficient is read as an i32 (the
-/// pattern is typed by the i32 operators), and `c + 1` wraps in i32 exactly as the program would.
-export rule int32_combine_one(x: i32, const c: i32) { x * c + x => x * (c + 1) }
-
-export rule int32_distribute(a: i32, b: i32, c: i32) { a * (b + c) <=> a * b + a * c }
+export rule int_distribute::<T>(a: T, b: T, c: T) { a * (b + c) <=> a * b + a * c } when is_integer::<T>()
 
 // ---- Floats: only what rounding does not touch ----
 //
-// The exact laws, one per fact. `x * 1.0` also reads `1.0 * x` and `x + -0.0` also reads the sum
-// the program bracketed the other way, because a float multiplication and addition are declared
-// commutative; regrouping a float sum is *not* read that way, since a float sum is not exactly
-// associative (rewrite design 6), so the laws that need a regrouping carry `reassociate` below.
+// The exact laws, one per fact, and one law for the whole floating family, as for the integers:
+// `when is_float::<T>()` names the family and the maker makes one instance per floating element
+// type (`float_mul_one<float>`, `float_mul_one<f32>`). `x * 1.0` also reads `1.0 * x` and
+// `x + -0.0` also reads the sum the program bracketed the other way, because a float
+// multiplication and addition are declared commutative; regrouping a float sum is *not* read that
+// way, since a float sum is not exactly associative (rewrite design 6), so the laws that need a
+// regrouping carry `reassociate` below.
+//
+// `is_float` is the library's own name for the family, so it covers the reduced-precision types
+// `bf16` and `f16` as well (stdlib/types.cml; design principles 7.3 gives them `f32`'s scalar
+// arithmetic, and every law here is an exact fact about that arithmetic too). An element type the
+// family names but whose instance cannot be built -- a pattern operator that type does not have --
+// simply has no instance: the attempt is quiet and costs nothing (the ruling of 2026-10-23 on
+// `generic-rule-instantiation-set-and-predicate`, §3).
 
-export rule float_mul_one(x: float) { x * 1.0 => x }
-export rule float_add_minus_zero(x: float) { x + -0.0 => x }
-export rule float_sub_zero(x: float) { x - 0.0 => x }
-export rule float_div_one(x: float) { x / 1.0 => x }
-export rule float_neg_neg(x: float) { -(-x) => x }
+export rule float_mul_one::<T>(x: T) { x * 1.0 => x } when is_float::<T>()
+export rule float_add_minus_zero::<T>(x: T) { x + -0.0 => x } when is_float::<T>()
+export rule float_sub_zero::<T>(x: T) { x - 0.0 => x } when is_float::<T>()
+export rule float_div_one::<T>(x: T) { x / 1.0 => x } when is_float::<T>()
+export rule float_neg_neg::<T>(x: T) { -(-x) => x } when is_float::<T>()
 
 /// `x + x => x * 2.0`: doubling is exact in IEEE arithmetic for every value, including the
 /// infinities, the NaNs and the subnormals (the exponent grows by one, the significand is
 /// unchanged), so the law needs no permission.
-export rule float_add_self(x: float) { x + x => x * 2.0 }
+export rule float_add_self::<T>(x: T) { x + x => x * 2.0 } when is_float::<T>()
 
 // ---- Floats: the laws a numeric permission allows (design principles 7.2-7.4) ----
 //
@@ -121,16 +122,23 @@ export rule float_add_self(x: float) { x + x => x * 2.0 }
 // parameter of a rule is the constant itself, of its declared type (rewrite design 2 (second
 // version) 1; reviews/stdlib-rules.md item 5), so a guard is arithmetic on that value and needs
 // neither `constant(node, sample)` nor a `match … case null` around every read.
+//
+// The guards are generic for the same reason the laws are. A guard is arithmetic on the matched
+// constants, and it must be the *instance's* arithmetic: at `T = f32` the rule's kernel rounds in
+// f32, so `c1 + c2` in the guard must round in f32 too. One `combineSameSign::<T>` gives both
+// instances that, and the second copy of every guard the f32 block used to carry -- `finite32`,
+// `combineSameSign32`, `combineMixedSign32`, `foldCoefficients32`, `combineOneSameSign32` and
+// `combineOneMixedSign32` -- is gone.
 
 /// Whether a value is finite: NaN and the infinities are the only values that are not equal to
-/// themselves after a subtraction.
-func finiteValue(x: float): bool {
+/// themselves after a subtraction. The subtraction is the instance's own width.
+func finiteValue::<T>(x: T): bool {
     return x - x == 0.0
 }
 
 /// `x*c1 + x*c2 => x*(c1+c2)` with two finite, nonzero coefficients of the same sign: the
 /// reassociation changes rounding only, so the default `reassociate` grant suffices.
-func combineSameSign(c1: float, c2: float): bool {
+func combineSameSign::<T>(c1: T, c2: T): bool {
     return finiteValue(c1) && finiteValue(c2) && c1 != 0.0 && c2 != 0.0 &&
            (c1 > 0.0) == (c2 > 0.0) && finiteValue(c1 + c2)
 }
@@ -138,7 +146,7 @@ func combineSameSign(c1: float, c2: float): bool {
 /// The opposite-sign case: cancellation can turn an infinity into a finite value or lose the
 /// sign of a zero, so the rule also needs the assumptions that rule those out. A sum of zero
 /// (the coefficients cancel) is left alone: the rewrite would only change the sign of the zero.
-func combineMixedSign(c1: float, c2: float): bool {
+func combineMixedSign::<T>(c1: T, c2: T): bool {
     return finiteValue(c1) && finiteValue(c2) && c1 != 0.0 && c2 != 0.0 &&
            (c1 > 0.0) != (c2 > 0.0) && c1 + c2 != 0.0
 }
@@ -147,7 +155,7 @@ func combineMixedSign(c1: float, c2: float): bool {
 /// nonzero. The product is the new coefficient: an overflowing product would become an infinity
 /// (the rewrite then computes `x*inf`), and one that underflows to zero would erase the term.
 /// Removing the intermediate product may remove an overflow, which `no_infs` allows.
-func foldCoefficients(c1: float, c2: float): bool {
+func foldCoefficients::<T>(c1: T, c2: T): bool {
     return finiteValue(c1) && finiteValue(c2) && c1 != 0.0 && c2 != 0.0 &&
            finiteValue(c1 * c2) && c1 * c2 != 0.0
 }
@@ -155,6 +163,12 @@ func foldCoefficients(c1: float, c2: float): bool {
 /// `x*c + x*c => x*(2c)` is exact when `c` is a finite integer with `1 <= |c| <= 2^52`: doubling
 /// a rounded product commutes with rounding there, and `2c` is exactly representable. The rule
 /// therefore needs no permission at all; the condition is what makes that true.
+///
+/// This law stays two rules, one per float width: the bound is what the *type* decides (`2^52` at
+/// f64, `2^23` at f32), and a condition that differs by type is the case the ruling of 2026-10-23
+/// leaves alone ("except where conditions or permissions differ"). Everything else in the pair
+/// collapses, and the guard itself is the same function at each width -- `finiteValue(c)` is
+/// instantiated at the width the rule is written for.
 func exactDoubling(c: float): bool {
     return finiteValue(c) && abs(c) >= 1.0 && trunc(c) == c && abs(c) <= 4503599627370496.0
 }
@@ -164,28 +178,28 @@ func exactDoubling(c: float): bool {
 /// opposite sign means `c < 0`, and `c == -1` (the coefficients cancel) stays as it is. The
 /// doubled rounding of the sum and of `c + 1` is the same reassociation the two-product law
 /// makes, so the permission set does not change.
-func combineOneSameSign(c: float): bool {
+func combineOneSameSign::<T>(c: T): bool {
     return finiteValue(c) && c != 0.0 && c > 0.0 && finiteValue(c + 1.0)
 }
 
-func combineOneMixedSign(c: float): bool {
+func combineOneMixedSign::<T>(c: T): bool {
     return finiteValue(c) && c != 0.0 && c < 0.0 && c + 1.0 != 0.0
 }
 
 #requires<reassociate>
-export rule float_combine(x: float, const c1: float, const c2: float) {
+export rule float_combine::<T>(x: T, const c1: T, const c2: T) {
     x * c1 + x * c2 => x * (c1 + c2)
-} when combineSameSign(c1, c2)
+} when is_float::<T>() && combineSameSign(c1, c2)
 
 #requires<reassociate, no_infs, no_signed_zeros>
-export rule float_combine_mixed(x: float, const c1: float, const c2: float) {
+export rule float_combine_mixed::<T>(x: T, const c1: T, const c2: T) {
     x * c1 + x * c2 => x * (c1 + c2)
-} when combineMixedSign(c1, c2)
+} when is_float::<T>() && combineMixedSign(c1, c2)
 
 #requires<reassociate, no_infs>
-export rule float_fold(x: float, const c1: float, const c2: float) {
+export rule float_fold::<T>(x: T, const c1: T, const c2: T) {
     (x * c1) * c2 => x * (c1 * c2)
-} when foldCoefficients(c1, c2)
+} when is_float::<T>() && foldCoefficients(c1, c2)
 
 export rule float_double(x: float, const c: float) {
     x * c + x * c => x * (c + c)
@@ -195,98 +209,26 @@ export rule float_double(x: float, const c: float) {
 /// `float_combine` with the coefficient 1 implicit. One rule reads both orders of the sum: the
 /// matcher exchanges the operands of a commutative operator.
 #requires<reassociate>
-export rule float_combine_one(x: float, const c: float) {
+export rule float_combine_one::<T>(x: T, const c: T) {
     x * c + x => x * (c + 1.0)
-} when combineOneSameSign(c)
+} when is_float::<T>() && combineOneSameSign(c)
 
 #requires<reassociate, no_infs, no_signed_zeros>
-export rule float_combine_one_mixed(x: float, const c: float) {
+export rule float_combine_one_mixed::<T>(x: T, const c: T) {
     x * c + x => x * (c + 1.0)
-} when combineOneMixedSign(c)
-
-// ---- Float32: the float laws at 32 bits ----
-//
-// The same laws as the float ones, and the same distinction: the exact ones need no permission,
-// the ones that change rounding need the numeric permission that allows it. The guards are
-// separate functions because the arithmetic in them is f32 arithmetic: their coefficient
-// parameters are declared `f32`, and the matcher checks the constant's type against that, so
-// `c1 + c2` here rounds the way the rule's f32 kernel will.
-
-func finite32(x: f32): bool {
-    return x - x == 0.0
-}
-
-func combineSameSign32(c1: f32, c2: f32): bool {
-    return finite32(c1) && finite32(c2) && c1 != 0.0 && c2 != 0.0 &&
-           (c1 > 0.0) == (c2 > 0.0) && finite32(c1 + c2)
-}
-
-func combineMixedSign32(c1: f32, c2: f32): bool {
-    return finite32(c1) && finite32(c2) && c1 != 0.0 && c2 != 0.0 &&
-           (c1 > 0.0) != (c2 > 0.0) && c1 + c2 != 0.0
-}
-
-func foldCoefficients32(c1: f32, c2: f32): bool {
-    return finite32(c1) && finite32(c2) && c1 != 0.0 && c2 != 0.0 &&
-           finite32(c1 * c2) && c1 * c2 != 0.0
-}
+} when is_float::<T>() && combineOneMixedSign(c)
 
 /// `x*c + x*c => x*(2c)` is exact when `c` is a finite integer with `1 <= |c| <= 2^23`: doubling
-/// a rounded product commutes with rounding there, and `2c` is exactly representable.
+/// a rounded product commutes with rounding there, and `2c` is exactly representable. Its f64
+/// twin is `exactDoubling` above; the bound is the one thing a type decides here, so the two
+/// rules it guards (`float32_double` and `tensor_f32_double`) stay two rules.
 func exactDoubling32(c: f32): bool {
-    return finite32(c) && abs(c) >= 1.0 && trunc(c) == c && abs(c) <= 8388608.0
+    return finiteValue(c) && abs(c) >= 1.0 && trunc(c) == c && abs(c) <= 8388608.0
 }
-
-/// The bare term at 32 bits, as `combineOneSameSign` explains. The sum `c + 1` rounds in f32,
-/// which is what `finite32` reads; no exactness beyond `finite32` is needed, exactly as in
-/// `float32_combine`.
-func combineOneSameSign32(c: f32): bool {
-    return finite32(c) && c != 0.0 && c > 0.0 && finite32(c + 1.0)
-}
-
-func combineOneMixedSign32(c: f32): bool {
-    return finite32(c) && c != 0.0 && c < 0.0 && c + 1.0 != 0.0
-}
-
-export rule float32_mul_one(x: f32) { x * 1.0 => x }
-export rule float32_add_minus_zero(x: f32) { x + -0.0 => x }
-export rule float32_sub_zero(x: f32) { x - 0.0 => x }
-export rule float32_div_one(x: f32) { x / 1.0 => x }
-export rule float32_neg_neg(x: f32) { -(-x) => x }
-
-/// The f32 `x + x => x * 2.0`, exact for the same reason.
-export rule float32_add_self(x: f32) { x + x => x * 2.0 }
-
-#requires<reassociate>
-export rule float32_combine(x: f32, const c1: f32, const c2: f32) {
-    x * c1 + x * c2 => x * (c1 + c2)
-} when combineSameSign32(c1, c2)
-
-#requires<reassociate, no_infs, no_signed_zeros>
-export rule float32_combine_mixed(x: f32, const c1: f32, const c2: f32) {
-    x * c1 + x * c2 => x * (c1 + c2)
-} when combineMixedSign32(c1, c2)
-
-#requires<reassociate, no_infs>
-export rule float32_fold(x: f32, const c1: f32, const c2: f32) {
-    (x * c1) * c2 => x * (c1 * c2)
-} when foldCoefficients32(c1, c2)
 
 export rule float32_double(x: f32, const c: f32) {
     x * c + x * c => x * (c + c)
 } when exactDoubling32(c)
-
-/// The bare operand at 32 bits; the permission set is `combine`'s, and one rule reads both orders
-/// of the sum (the matcher exchanges the operands of a commutative operator).
-#requires<reassociate>
-export rule float32_combine_one(x: f32, const c: f32) {
-    x * c + x => x * (c + 1.0)
-} when combineOneSameSign32(c)
-
-#requires<reassociate, no_infs, no_signed_zeros>
-export rule float32_combine_one_mixed(x: f32, const c: f32) {
-    x * c + x => x * (c + 1.0)
-} when combineOneMixedSign32(c)
 
 // ---- Tensors: the elementwise laws of the f32 element type ----
 //
@@ -305,8 +247,13 @@ export rule float32_combine_one_mixed(x: f32, const c: f32) {
 //    the literal rule: a literal there takes the tensor's element type (design principles 5.1),
 //    so `x * 3.0` has an f32 constant, and a scalar whose type is its own is refused rather than
 //    narrowed. A tensor rule's coefficient parameter is therefore declared `f32` - the type the
-//    matcher checks the constant against - and the guards are the f32 element guards above, whose
-//    arithmetic is the arithmetic the rule's kernel performs.
+//    matcher checks the constant against - and the guards are the element guards above at their
+//    `f32` instance (`combineSameSign::<f32>`), whose arithmetic is the arithmetic the rule's
+//    kernel performs. The tensor family itself cannot collapse over the element type today: the
+//    maker binds a type parameter to the type of a whole matched node, and `Tensor<T>` is refused
+//    as a module type with a type-variable argument (measured 2026-10-24; the ruling's §6 asks for
+//    the extent to be measured rather than assumed). So these twelve rules stay written per
+//    element type, and the element type they name is the one whose element laws the scalars got.
 //
 // The permission sets are the element families' (reassociate for a regrouping, plus the
 // assumptions a cancellation needs). The `x*0`/`x-x` family is where the float laws part company with the integer
@@ -329,17 +276,17 @@ export rule tensor_f32_add_self(x: Tensor<f32>) { x + x => x * 2.0 }
 #requires<reassociate>
 export rule tensor_f32_combine(x: Tensor<f32>, const c1: f32, const c2: f32) {
     x * c1 + x * c2 => x * (c1 + c2)
-} when combineSameSign32(c1, c2)
+} when combineSameSign::<f32>(c1, c2)
 
 #requires<reassociate, no_infs, no_signed_zeros>
 export rule tensor_f32_combine_mixed(x: Tensor<f32>, const c1: f32, const c2: f32) {
     x * c1 + x * c2 => x * (c1 + c2)
-} when combineMixedSign32(c1, c2)
+} when combineMixedSign::<f32>(c1, c2)
 
 #requires<reassociate, no_infs>
 export rule tensor_f32_fold(x: Tensor<f32>, const c1: f32, const c2: f32) {
     (x * c1) * c2 => x * (c1 * c2)
-} when foldCoefficients32(c1, c2)
+} when foldCoefficients::<f32>(c1, c2)
 
 export rule tensor_f32_double(x: Tensor<f32>, const c: f32) {
     x * c + x * c => x * (c + c)
@@ -351,12 +298,12 @@ export rule tensor_f32_double(x: Tensor<f32>, const c: f32) {
 #requires<reassociate>
 export rule tensor_f32_combine_one(x: Tensor<f32>, const c: f32) {
     x * c + x => x * (c + 1.0)
-} when combineOneSameSign32(c)
+} when combineOneSameSign::<f32>(c)
 
 #requires<reassociate, no_infs, no_signed_zeros>
 export rule tensor_f32_combine_one_mixed(x: Tensor<f32>, const c: f32) {
     x * c + x => x * (c + 1.0)
-} when combineOneMixedSign32(c)
+} when combineOneMixedSign::<f32>(c)
 
 /// `a*(b+c) <=> a*b + a*c`, elementwise and with the same broadcasting on both sides. It grows
 /// a writing (an add becomes two products), so it belongs to the saturation, not to `simplify`.
@@ -374,25 +321,30 @@ export rule tensor_i64_distribute(a: Tensor<int>, b: Tensor<int>, c: Tensor<int>
 /// policy of the pass. `tensor_i64_distribute` is not here: it grows a writing, and `simplify`
 /// only takes steps that make one smaller. Commutation and association are not rules: the matcher
 /// reads them from the operator's declaration (design 6).
+///
+/// The names are the folded ones, and each names a whole family: `rewrite` takes a generic rule and
+/// uses its instance for the matched node's type (`int_mul_one<int>` here, `int_mul_one<i32>` in an
+/// i32 graph), so one name in this list is the law for every integer type, and one is the law for
+/// every float type. `float_double` and `float32_double` are still two entries because the bound
+/// its condition reads is the one thing the type decides (see `exactDoubling`).
+///
+/// The order of the list is the order the engine reads the rules in, and a law that fires first
+/// decides the shape: the two doubling entries stand before `float_add_self`, whose `x + x => x*2.0`
+/// would otherwise take `x*c + x*c` first and leave `(x*c)*2.0` where the doubling law writes
+/// `x*(c+c)` (the shape `strict32` of `cases/opt/generic/algebra.cml` pins).
 func simplifyWith(p: Program, strict: bool): Program! {
     return rewrite(p, [
         int_add_zero, int_sub_zero, int_mul_one, int_mul_zero, int_div_one, int_neg_neg,
         int_sub_self, int_combine, int_fold, int_fold_add, int_add_self, int_combine_one,
-        int32_add_zero, int32_sub_zero, int32_mul_one, int32_mul_zero, int32_div_one,
-        int32_neg_neg, int32_sub_self, int32_combine, int32_fold, int32_fold_add,
-        int32_add_self, int32_combine_one,
         float_mul_one, float_add_minus_zero, float_sub_zero, float_div_one, float_neg_neg,
-        float_combine, float_combine_mixed, float_fold, float_double, float_add_self,
-        float_combine_one, float_combine_one_mixed,
-        float32_mul_one, float32_add_minus_zero, float32_sub_zero, float32_div_one,
-        float32_neg_neg, float32_combine, float32_combine_mixed, float32_fold, float32_double,
-        float32_add_self, float32_combine_one, float32_combine_one_mixed,
+        float_combine, float_combine_mixed, float_fold, float_double, float32_double,
+        float_add_self, float_combine_one, float_combine_one_mixed,
         tensor_f32_mul_one, tensor_f32_add_minus_zero, tensor_f32_sub_zero, tensor_f32_div_one,
         tensor_f32_neg_neg, tensor_f32_add_self, tensor_f32_combine, tensor_f32_combine_mixed,
         tensor_f32_fold, tensor_f32_double, tensor_f32_combine_one,
         tensor_f32_combine_one_mixed,
         // Accuracy rules (8.10): their `#requires<refine_accuracy>` decides whether they fire.
-        tensor_log_softmax_of_softmax, float_log1p, f32_log1p, float_expm1, f32_expm1,
+        tensor_log_softmax_of_softmax, float_log1p, float_expm1,
     ], strict)
 }
 
@@ -442,15 +394,9 @@ func saturateList(p: Program, rounds: int, strict: bool): Program! {
         int_add_zero, int_sub_zero, int_mul_one, int_mul_zero, int_div_one, int_neg_neg,
         int_sub_self, int_combine, int_fold, int_fold_add, int_add_self, int_combine_one,
         int_distribute,
-        int32_add_zero, int32_sub_zero, int32_mul_one, int32_mul_zero, int32_div_one,
-        int32_neg_neg, int32_sub_self, int32_combine, int32_fold, int32_fold_add,
-        int32_add_self, int32_combine_one, int32_distribute,
         float_mul_one, float_add_minus_zero, float_sub_zero, float_div_one, float_neg_neg,
         float_combine, float_combine_mixed, float_fold, float_double, float_add_self,
-        float_combine_one, float_combine_one_mixed,
-        float32_mul_one, float32_add_minus_zero, float32_sub_zero, float32_div_one,
-        float32_neg_neg, float32_combine, float32_combine_mixed, float32_fold, float32_double,
-        float32_add_self, float32_combine_one, float32_combine_one_mixed,
+        float_combine_one, float_combine_one_mixed, float32_double,
         tensor_f32_mul_one, tensor_f32_add_minus_zero, tensor_f32_sub_zero, tensor_f32_div_one,
         tensor_f32_neg_neg, tensor_f32_add_self, tensor_f32_combine, tensor_f32_combine_mixed,
         tensor_f32_fold, tensor_f32_double, tensor_f32_combine_one,
@@ -644,34 +590,27 @@ export rule tensor_log_softmax_of_softmax(x: Tensor<f32>, const axis: int) {
     log(softmax(x, axis)) => log_softmax(x, axis)
 }
 
-/// The design's own scalar example, `log(1 + x) => log1p(x)`, in f64 and in f32.
+/// The design's own scalar example, `log(1 + x) => log1p(x)`, once for the floating family: the
+/// pattern and the replacement are the same fact at every floating width, and the `log1p` the
+/// instance calls is the one for its type.
 ///
 /// `1 + x` rounds before the log: for |x| below the spacing of 1 the naive log is 0 and its
 /// relative error is 100%; `log1p` computes log(1 + x) without forming 1 + x, and its error does
 /// not grow as x -> 0.
 #requires<refine_accuracy>
-export rule float_log1p(x: float) {
+export rule float_log1p::<T>(x: T) {
     math_log(1.0 + x) => log1p(x)
-}
+} when is_float::<T>()
 
-#requires<refine_accuracy>
-export rule f32_log1p(x: f32) {
-    math_log(1.0 + x) => log1p(x)
-}
-
-/// The design's second scalar example, `exp(x) - 1 => expm1(x)`, in f64 and in f32.
+/// The design's second scalar example, `exp(x) - 1 => expm1(x)`, once for the floating family, as
+/// `float_log1p` is.
 ///
 /// For |x| below the spacing of 1 the naive `exp(x)` rounds to exactly 1 and the subtraction gives
 /// 0; `expm1` evaluates exp(x) - 1 directly, without that cancellation.
 #requires<refine_accuracy>
-export rule float_expm1(x: float) {
+export rule float_expm1::<T>(x: T) {
     math_exp(x) - 1.0 => expm1(x)
-}
-
-#requires<refine_accuracy>
-export rule f32_expm1(x: f32) {
-    math_exp(x) - 1.0 => expm1(x)
-}
+} when is_float::<T>()
 
 /// The design's third scalar example, `sqrt(x*x + y*y) => hypot(x, y)`, is deliberately absent:
 /// `hypot` returns +inf when one operand is +inf and the other NaN, where squaring first returns
@@ -683,7 +622,7 @@ export rule f32_expm1(x: f32) {
 /// sample above, and the second shares its subtraction.
 export func accuracy(p: Program): Program! {
     return rewrite(p, [
-        tensor_log_softmax_of_softmax, float_log1p, f32_log1p, float_expm1, f32_expm1,
+        tensor_log_softmax_of_softmax, float_log1p, float_expm1,
     ])
 }
 

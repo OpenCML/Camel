@@ -102,12 +102,12 @@ timeout_ms = 20000
 
 [[tests]]
 name = "rules.library_passes_the_check"
-desc = "Every rule of the standard rules (stdlib/rules.cml: the integer and float laws that hold bit for bit, the i32 and f32 forms of the same laws, the float laws a permission allows, and distribution both ways) passes the check: 200 random instances agree and the engine fires the rule on its own left side. Commutation and association are not rules to check any more: they are properties of the operator's declaration, read by the matcher (rewrite design 2 (second version) 6)."
+desc = "The rules of the standard library that are not generic pass the check: 200 random instances agree and the engine fires the rule on its own left side, and a conditional rule reports the instances its condition selects. The integer and floating laws are one generic law per fact since the fold, and `check` does not walk a generic rule's instances yet, so each of them is reported as unchecked rather than checked at one type and called a family (the ruling of 2026-10-23 on `generic-rule-check-surface-and-multi-parameter-instances`, §1); the check itself is what `rules.generic_law_*` covers for generic rules. Commutation and association are not rules to check any more: they are properties of the operator's declaration, read by the matcher (rewrite design 2 (second version) 6)."
 kind = "behavior"
 case = "../../../cases/modules/rules/check_library.cml"
 args = ["${case}", "std::nvm"]
 expect_exit = 0
-expect_stdout_contains = ["ok int_add_zero: 200 samples agree, fired 8 of 8", "ok int32_add_zero: 200 samples agree, fired 8 of 8", "ok int32_combine: 200 samples agree, fired 8 of 8", "ok int_distribute: 200 samples agree, fired 8 of 8", "ok float_add_minus_zero: 200 samples agree, fired 8 of 8", "ok float32_mul_one: 200 samples agree, fired 8 of 8", "ok float32_combine: the condition selects the instances", "ok float32_double: the condition selects the instances", "ok float_combine: the condition selects the instances", "ok float_fold: the condition selects the instances", "ok float_double: the condition selects the instances"]
+expect_stdout_contains = ["ok float_double: the condition selects the instances", "ok float32_double: the condition selects the instances", "ok tensor_f32_mul_one: 200 samples agree", "ok tensor_f32_combine: the condition selects the instances", "ok tensor_i64_distribute: 200 samples agree", "unchecked int_add_zero: a generic rule, whose instances are not checked here", "unchecked int_distribute: a generic rule, whose instances are not checked here", "unchecked float_add_minus_zero: a generic rule, whose instances are not checked here", "unchecked float_combine: a generic rule, whose instances are not checked here", "unchecked float_fold: a generic rule, whose instances are not checked here"]
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 60000
@@ -506,23 +506,23 @@ timeout_ms = 20000
 
 [[tests]]
 name = "rules.typed_element_laws_prefer_their_type"
-desc = "The same combine law on four element types, selected by the type of the operator: the i32 rules rewrite only `i32_c`, and the other types keep both operators. A rule that fired on the wrong element type would change one of the other lines."
+desc = "A family law covers its family and stops there: the integer family's laws (`typed_pass::apply_i32`, one law per fact for every integer type since the fold) rewrite both integer combines of `typed_cross.cml` -- `i32_c` and the `int` one, `i64_c` -- and leave the float ones at both widths. A law that leaked into another element type would change one of the other lines, and a law that covered only one width would leave one of the two integer lines alone."
 kind = "behavior"
 case = "../../../cases/modules/rules/typed_cross.cml"
 args = ["${case}", "typed_cross_counts::report", "typed_pass::apply_i32", "typed_cross_counts::report", "std::nvm"]
 expect_exit = 0
-expect_stdout_contains = ["i32_c 0 1\ni64_c 1 2\nf32_c 1 2\nf64_c 1 2\n16 16 16.0 16.0\n"]
+expect_stdout_contains = ["i32_c 0 1\ni64_c 0 1\nf32_c 1 2\nf64_c 1 2\n16 16 16.0 16.0\n"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
 
 [[tests]]
 name = "rules.typed_element_laws_prefer_their_type_f32"
-desc = "The f32 half of the type selection: the f32 rules rewrite only `f32_c`, and the i32, i64 and f64 combines keep both operators."
+desc = "The floating half of the same boundary: the floating family's laws (`typed_pass::apply_f32`) rewrite both float combines -- `f32_c` and `f64_c` -- and leave the integer ones alone at both widths. `float32_double` is its own rule because the bound its condition reads is what the type decides, and it is named in the pass on its own."
 kind = "behavior"
 case = "../../../cases/modules/rules/typed_cross.cml"
 args = ["${case}", "typed_cross_counts::report", "typed_pass::apply_f32", "typed_cross_counts::report", "std::nvm"]
 expect_exit = 0
-expect_stdout_contains = ["i32_c 1 2\ni64_c 1 2\nf32_c 0 1\nf64_c 1 2\n16 16 16.0 16.0\n"]
+expect_stdout_contains = ["i32_c 1 2\ni64_c 1 2\nf32_c 0 1\nf64_c 0 1\n16 16 16.0 16.0\n"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
 
@@ -1119,12 +1119,12 @@ timeout_ms = 60000
 
 [[tests]]
 name = "rules.accuracy_library_passes_the_check"
-desc = "Every rule of `rules::accuracy` passes the error check: the scalar log1p and expm1 laws in f64 and f32, and the log-of-softmax rule over vectors, matrices and rank-3 tensors (overflow, underflow, denormals and the near-zero log). The report carries the worst-case error ratio."
+desc = "The rules of `rules::accuracy`, checked in two calls: the log-of-softmax rule passes the error check over vectors, matrices and rank-3 tensors (overflow, underflow, denormals and the near-zero log), and the folded scalar laws are reported by `check` as unchecked, because a generic rule has no two sides of its own to sample (the ruling of 2026-10-23 on `generic-rule-check-surface-and-multi-parameter-instances`, §1 -- and `rules.accuracy_licence_gates_simplify` is what shows the folded scalar laws firing at both widths). The report carries the worst-case error ratio. The rule's verdict is sample-dependent: it fails on draws with `inf` and `3.4e+38` in them (recorded in `docs/handover/questions/accuracy-check-sampling.md`), which is why it is measured in a call of its own, over the seed this case has always used."
 kind = "behavior"
 case = "../../../cases/modules/rules/check_accuracy_library.cml"
 args = ["${case}", "std::nvm"]
 expect_exit = 0
-expect_stdout_contains = ["ok float_log1p: 100 samples, worst error ratio", "ok f32_log1p: 100 samples, worst error ratio", "ok float_expm1: 100 samples, worst error ratio", "ok f32_expm1: 100 samples, worst error ratio", "ok tensor_log_softmax_of_softmax: 100 samples, worst error ratio"]
+expect_stdout_contains = ["unchecked float_log1p: a generic rule, whose instances are not checked here", "unchecked float_expm1: a generic rule, whose instances are not checked here", "ok tensor_log_softmax_of_softmax: 100 samples, worst error ratio 1, fired 8 of 8"]
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 60000
@@ -1239,5 +1239,27 @@ args = ["${case}", "generic_literal_witness::why_narrow", "std::nvm"]
 expect_exit = 0
 expect_stdout_contains = ["no instance of it could be made for 'i32': The literal '3000000000' cannot be represented as type 'i32'", "generic law", "7 8 9 1.5"]
 expect_stdout_not_contains = ["the pattern has no operator for this type"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.generic_condition_that_a_type_has_no_instance_of"
+desc = "A rule's condition is Camel code of its own declaration, and a type the program uses may be a type the condition cannot be written for. `combine_nonzero`'s guard is `nonzero::<T>`, whose body is `c != 0.0`: the maker tries `int`, the call has no instance there, and the attempt has to end as 'no instance' -- the `int` site of the target is left as written, the `float` site is rewritten by `combine_nonzero<float>`, and the run ends at exit 0 with its program intact. An instance that cannot be made for a type is asked for from inside the attempt itself, so this is also where a failed instantiation must not become a failure of the build."
+kind = "behavior"
+case = "../../../cases/modules/rules/generic_guard_target.cml"
+args = ["${case}", "generic_guard_law::counted", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["rewrites 1 rule combine_nonzero", "by combine_nonzero<float>", "7.5 16"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.generic_condition_refusal_is_what_why_not_repeats"
+desc = "The same attempt from the reader's side: at the `int` site `why_not` answers that the rule is generic and no instance could be made for `int`, with the verdict the guard's own body gave -- the missing `!=` -- as the reason. So a type a condition cannot be written for costs nothing where it was tried and is still explained where the user asks."
+kind = "behavior"
+case = "../../../cases/modules/rules/generic_guard_target.cml"
+args = ["${case}", "generic_guard_law::why_int", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["no instance of it could be made for 'int': No matching function found for argument types: <> (int, float)", "7.5 16"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000

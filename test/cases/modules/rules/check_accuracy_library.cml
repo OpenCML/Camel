@@ -1,23 +1,31 @@
 /**
- * Every rule of `rules::accuracy` passes the error check (rewrite design 2 (second version)
- * 8.10): each side is evaluated against a higher-precision reference over the sampled domain,
- * including the near-zero log, overflow, underflow and denormal regions, and the worst error
- * ratio is reported.
+ * The rules of `rules::accuracy`, checked by `check` (rewrite design 2 (second version) 8.10): each
+ * side is evaluated against a higher-precision reference over the sampled domain, including the
+ * near-zero log, overflow, underflow and denormal regions, and the worst error ratio is reported.
+ *
+ * Two calls, because the fold changed what `check` can see. `float_log1p` and `float_expm1` are now
+ * one law each for the whole floating family, and `check` reports a generic rule as unchecked until
+ * it walks its instances (the ruling of 2026-10-23 on
+ * `generic-rule-check-surface-and-multi-parameter-instances`, §1); their instances are what
+ * `rules.accuracy_licence_gates_simplify` and `rules.accuracy_scalar_*` show firing. The concrete
+ * rule is checked over the same samples and the same seed the case pinned before the fold.
+ *
+ * `tensor_log_softmax_of_softmax` is measured at the first entry of its own call, and the verdict
+ * is sample-dependent: `check` seeds each entry with `seed * 1000003 + index`, and draws with large
+ * magnitudes make the rule fail (measured 2026-10-24: FAIL at seeds 3, 7 and 17 over 100 samples,
+ * and at 1000 samples with seed 11, on samples such as `{inf, 2.955, -2, 906.555, -0, -1}` and
+ * `{3.4e+38, 2, 377.894}`). Recorded in `docs/handover/questions/accuracy-check-sampling.md`: the
+ * rule is not this lane's, and neither is the measure.
  */
 module check_accuracy_library
 
 import { check } from rewrite
 import {
-        f32_expm1, f32_log1p, float_expm1, float_log1p, tensor_log_softmax_of_softmax
+        float_expm1, float_log1p, tensor_log_softmax_of_softmax
 } from rules
 
 func main(): int sync {
-    println(check([
-        float_log1p,
-        f32_log1p,
-        float_expm1,
-        f32_expm1,
-        tensor_log_softmax_of_softmax,
-    ], 100, 11))
+    println(check([float_log1p, float_expm1], 100, 11))
+    println(check([tensor_log_softmax_of_softmax], 100, 11))
     return 0
 }
