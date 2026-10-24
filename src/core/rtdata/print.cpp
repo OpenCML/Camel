@@ -251,6 +251,18 @@ void printValueImpl(std::ostream &os, slot_t data, Type *type, size_t arrayLimit
                    << std::dec << ", " << array->numel() << " elements>";
                 continue;
             }
+            if (array->rank() == 0) {
+                // A value with no dimension is the element it holds (the rank-zero ruling,
+                // docs/handover/reviews/questions-2026-10-23.md section rank-zero-tensor): it
+                // prints as that value, not as a bracketed list of none, which is the text
+                // `Array::print` writes for `show`. `pushArray` cannot take this value: it reads
+                // dimension 0, which a rank-0 array has not, and its descent `dim + 1 == rank`
+                // never holds there, so it pushed work without end instead of finishing (the
+                // `Tensor`-is-an-array path reaches this with a rank-0 reduction's result, which
+                // `wrap` keeps an array because the declared type is one).
+                pushSlot(stack, array->getSlot(0), elemType);
+                continue;
+            }
             // One bracket level per dimension of the value, the elements pushed with the element
             // type and the opening bracket written last, because the work list pops in reverse.
             pushArray(array, elemType, 0, 0, stack);
