@@ -57,27 +57,52 @@
 裁定——**删掉这些恒不触发的拒绝的车道，在同一个提交里把这五条用例改写成梯度值与手写伴随的逐位比较**。
 本车道不重复该轨，也不改这五条：它们断言的正是那批拒绝的存在。
 
-## 3. bf16/f16 的 `%`（协调者 2026-10-25 转来的裁定）
+## 3. bf16/f16 的 `%`（协调者 2026-10-25 转来的裁定）——**已做**
 
 裁定原文（转述）：「别名之后没有『张量参数』与『数组参数』之分，只有数值数组；不要找判据去区分它们……
 bf16/f16 是与 f32 同等的浮点类型（7.3），数值数组上的 `%` 对它们应当支持（逐元素，在 f32 中算、舍入一次）
 ——今天的 `ReducedPrecisionUnsupported` 是如实标出的实现缺口，补上内核后消失。」
 
-实测（未做）：
+落点与读数（逐字，同一份用例 `test/cases/modules/tensor/dtype/bf16_modulo.cml`）：
 
-* `src/builtin/modules/globals.cpp:1596-1613`：`__mod__` 只有 `:op/mod_i`(i32)、`:op/mod_l`(i64)
-  两个候选，**没有任何浮点 `%`**（f32/f64 也没有）。
-* 张量模块没有 `%`：`modules/tensor/ops/elementwise_ops.cpp:522-528` 的二元算子只有
-  add/subtract/multiply/divide/pow/maximum/minimum；
-  `modules/tensor/kernels/elementwise.h:70` 的 `enum class BinaryOp` 里没有 `Mod`。
-* 需要做的是：`BinaryOp` 加 `Mod` 一节 + 逐元素内核（bf16/f16 在 f32 中算、存回时舍入一次，
-  与 `unaryInfer` 对 bf16/f16 的处理同一条）+ 在张量模块注册
-  `binaryDef<k::BinaryOp::Mod>("mod", {"__mod__", "mod"})`。
-  标量 `%`（`test/plans/feat/modules/stdlib_reduced.plan.toml:87-97`，`reduced_arithmetic_refused`）
-  问的是两个 bf16 **标量**，裁定的「数值数组」不覆盖它，该条保持。
+* **红前**（注册前重建后跑同一个用例）：
+  `bf16_modulo.cml:35:33: [Error]: The call of 'operator %' cannot take a value of the reduced-precision element type 'bf16'. ...`
+  `bf16_modulo.cml:41:37: [Error]: The call of 'operator %' cannot take a value of the reduced-precision element type 'f16'. ...`
+  `bf16_modulo.cml:47:49: [Error]: No matching function found for argument types: <> (float[], float[]); operator '%' is not defined for these operand types. ...`
+  `bf16_modulo.cml:51:48: [Error]: ... (i32[], i32[]) ...`（候选只有 `:op/mod_i`、`:op/mod_l`）
+* **红后**（`bf16_modulo.nvm/.fvm/.jit/.prl` 四条全 PASS）：
+  `bf16 values: 1.5 -1.5 1.5 1.0` / `bf16 bytes: 8 [192, 63, 192, 191, 192, 63, 128, 63]`
+  `f16 values: 1.5 -1.5 1.5 1.0` / `f16 bytes: 8 [0, 62, 0, 190, 0, 62, 0, 60]`
+  `f64 value: -1.5` / `i32 value: -1` / `mixed scalar: -1.5 15.0`
 
-结论：**本车道已定位到判定点与内核清单，未实现**（本车道预算内没做），交接给补内核的人；
-这不是需要再裁定的项，是待做的实现项。
+补的东西（`41fc9549e`）：`BinaryOp` **末位**加 `Mod`（`elementwise_ops.cpp` 的算子名表按枚举下标索引，
+只能追加）、逐元素内核（bf16/f16 在 f32 中算、存回舍入一次；float 走 `std::fmod`；整数走语言自己的
+截断余数 `camel::utils::remainder`，即 `%` 不取整）、注册
+`binaryDef<Mod>("mod", {"__mod__","mod"})`。标量 `%` 不在范围内、也未受影响：`binaryInfer` 要求至少
+一个张量操作数，两个 bf16 标量仍然无人可匹配，`stdlib_reduced.plan.toml:87-97` 那条原样通过。
+
+**注册一个新算子必须同时声明它**：加完注册，整层立刻多了两条红（`registry.signatures_match`、
+`registry.migrations_stay_migrated`，逐字 `stdlib/tensor.cml: 'mod' (tensor:mod) is registered but not
+declared` / `1 difference(s) between the declarations and the registered operators`），检查器是
+`scripts/stdlib-reference.mjs:1583`。按 `divide`/`pow` 同一格式在 `stdlib/signatures/tensor.cml` 补上
+`export func mod(lhs: Tensor | number, rhs: Tensor | number): Tensor`（含 `@pure`、`@example`）即消失；
+`stdlib/tensor.cml` 那页不用动（它只声明 shape/bytes/模块状态那些，不声明逐元素算子）。
+
+### 3.1 顺带发现并修的：约简精度标量操作数被当成 bool 读（**跨车道，可按需丢弃**）
+
+`modules/tensor/kernels/elementwise.cpp` 的 `ScalarOperand::fromSlot` 只处理 f32/f64/i32/i64，
+bf16/f16 落到 `default:` 走 `scalarToBool`，于是「约简元素类型数组 与 字面量」的**每个**二元算子
+都用 0/1 参与运算（不是 `%` 独有）：
+
+```
+(new(bf16[7.5, -7.5, ...]) % 2.0)[1]   ->  -0.0      应为 -1.5（实为 fmod(-7.5, bf16(0x0001))）
+(new(bf16[7.5, -7.5, ...]) * 2.0)[0]   ->   7.3e-40  应为 15.0（实为 7.5 * bf16(0x0001)）
+修后：mixed scalar: -1.5 15.0
+```
+
+修法：`ScalarOperand` 的 union 加 `uint16_t u16`，bf16/f16 槽照写保存两字节（`half.h` 就是把它存在
+槽的低半）。单独一个提交（`16e3a2d25`）；若约简精度/张量内核那条车道已在改同一个函数，可直接丢掉这
+一个提交，同时回退 `41fc9549e` 中用例的 `mixed scalar` 一行。
 
 ## 4. `resident_loop_declares_its_blocks`（整层 `Compare-Object` 里唯一新增的红）
 
