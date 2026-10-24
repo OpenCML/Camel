@@ -111,7 +111,7 @@ func decayed(w: Tensor): Tensor {
 func difference::<A, B>(a: A, b: B): (float, int) {
     return match type A {
         case struct | tuple =>
-            static loop t = (0.0, 0) for (n, _) in fields A do plus(t, difference(a.[n], b.[n]))
+            static loop t = (0.0, 0) for n, _ in fields A do plus(t, difference(a.[n], b.[n]))
         case float => (math::abs(a - b), 1)
         case f32 => (float(math::abs(a - b)), 1)
         case _ => (float(sum(abs(a - b))), 1)

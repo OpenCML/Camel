@@ -10,7 +10,7 @@ import { Tensor, reshape, tanh } from tensor
 import { export_model } from onnx
 import { get_env } from env
 
-sync func step(x: Tensor, var acc: Tensor): Tensor sync {
+func step(x: Tensor, var acc: Tensor): Tensor sync {
     let y = tanh(x)
     acc = acc + y
     return y * 2.0
@@ -21,7 +21,7 @@ func main(): int sync {
     let es = reshape([0.0, 0.0, 0.0] as f32[], [3])
     let f = (x: Tensor, s: Tensor): (Tensor, Tensor) => sync {
         var acc = s
-        let o = wait step(x, acc)
+        let o = step(x, acc)
         return (o, acc)
     }
     export_model(f, (ex, es), get_env('EXPORT_VAR_PARAMETER_OUT'))

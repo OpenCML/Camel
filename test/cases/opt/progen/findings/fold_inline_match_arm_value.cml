@@ -6,7 +6,7 @@
  * Expected output: L4 0 3 a
  * Actual: L4 0 0 a
  * Reduced by test/tools/progen from seed 2632 (generator version 1, features without capture,
- *   effects, var, varparam, wait).
+ *   effects, var, varparam).
  */
 module fold_inline_match_arm_value
 

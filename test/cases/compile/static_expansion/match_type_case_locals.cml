@@ -1,0 +1,27 @@
+/**
+ * A `case` that is not selected is walked for its names with the same bindings the selected case
+ * would have: `var total = ...` binds `total` in the arm, and the loop's state name `i` binds in
+ * the loop, so neither is reported as an unresolved reference. (A `var` node carries no name of
+ * its own: the names it binds are the `NREF`s that are its children, program.cpp
+ * collectBoundNames.) The `tuple` arm is not selected when the function is instantiated with an
+ * `int`, so this pins the walk of a body no instance builds.
+ */
+module match_type_case_locals
+
+func shape::<T>(t: T): int {
+    return match type T {
+        case struct => 1
+        case tuple => {
+            var total = 0
+            let n = loop i = 0 while i < 3 do i + 1
+            total = n
+            total
+        }
+        case #leaf => 3
+    }
+}
+
+func main(): int sync {
+    println(shape(1))
+    return 0
+}

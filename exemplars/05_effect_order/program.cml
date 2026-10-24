@@ -6,7 +6,7 @@
  */
 module effect_order
 
-sync func visit(items: int[], i: int, cb: (x: int) => int): int {
+func visit(items: int[], i: int, cb: (x: int) => int): int {
     return if i >= len(items) then 0 else sync {
         let r = cb(items[i])
         return visit(items, i + 1, cb) + r

@@ -10,7 +10,7 @@ func show(x: int): void sync {
 
 func main(): int sync {
     println('before')
-    range(0, 6)->foreach<show>
+    0..6->foreach<show>
     println('not reached')
     return 0
 }

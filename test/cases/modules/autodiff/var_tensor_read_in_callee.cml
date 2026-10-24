@@ -8,12 +8,12 @@ import { with_grad } from autodiff
 
 type P = { p0: Tensor }
 
-sync func peek(var acc: Tensor): Tensor {
+func peek(var acc: Tensor): Tensor {
     return acc * 1.0
 }
 
 with <m: P>
-sync func loss(x: Tensor, var acc: Tensor): float sync {
+func loss(x: Tensor, var acc: Tensor): float sync {
     let b = peek(acc)
     return sum(m.p0 * x) + sum(b)
 }
@@ -22,7 +22,7 @@ func main(): int sync {
     let x = reshape([1.0, 2.0], [2])
     let m = { p0: reshape([0.5, 0.25], [2]) }
     var acc = reshape([0.0, 0.0], [2])
-    let vg = wait with_grad(loss)<m>(x, acc)
+    let vg = with_grad(loss)<m>(x, acc)
     println("value {} grad {}"->format<vg.0, sum(vg.1.p0)>)
     return 0
 }

@@ -1,0 +1,35 @@
+/// The residency conclusion (docs/design/gpu/plan.cn.md 3.2) on a program that calls a device
+/// helper from a device scope and loops on the device: a value's block is decided by the node
+/// that produces it, a call's parameters follow their arguments' blocks (the same block, no
+/// copy), and a loop's state stays where it was made. `step_host` is the same program without
+/// the tags, so the numbers are the host path's.
+module tiles_resident_loop
+
+import { Tensor, reshape, sum } from tensor
+
+#gpu
+func twice(a: Tensor<f32, [2]>): Tensor<f32, [2]> sync {
+    return a * 2.0
+}
+
+#gpu
+func step(x: Tensor<f32, [2]>): Tensor<f32, [2]> sync {
+    let y = loop a = x for k in [1, 2] do a + a
+    return twice(y) + y
+}
+
+func twice_host(a: Tensor<f32, [2]>): Tensor<f32, [2]> sync {
+    return a * 2.0
+}
+
+func step_host(x: Tensor<f32, [2]>): Tensor<f32, [2]> sync {
+    let y = loop a = x for k in [1, 2] do a + a
+    return twice_host(y) + y
+}
+
+func main(): int sync {
+    let x = reshape([1.0, 2.0] as f32[], [2])
+    println(sum(step(x)))
+    println(sum(step_host(x)))
+    return 0
+}

@@ -21,6 +21,7 @@
 
 #include "camel/compile/gct.h"
 #include "camel/compile/gir/draft_graph_builder.h"
+#include "camel/compile/gir/rule_templates.h"
 #include "camel/compile/gir/value_entity.h"
 #include "camel/compile/semantic_recorder.h"
 #include "camel/core/error/diagnostics.h"
@@ -288,13 +289,46 @@ class Builder {
 
     compile_graph_ptr_t rootGraph() const { return rootGraph_; }
 
+    /// The instance of one registered generic rule at `types`: its two sides and its condition,
+    /// built here, in the builder the rule's templates belong to (where it was declared). Answers
+    /// false with `why` when no instance can be made, and reports nothing on the way: a failed
+    /// instantiation is quiet (the ruling of 2026-10-23 on
+    /// `generic-rule-instantiation-set-and-predicate`), and only `why_not` repeats `why`.
+    ///
+    /// Public because the context's table of generic rules calls it where a rule is applied
+    /// (rule_templates.cpp): the library was built long before, and an instance belongs to the
+    /// builder that declared the rule.
+    bool instantiateRuleTemplates(
+        const GenericRuleEntry &entry, const std::vector<Type *> &types, compile_graph_ptr_t &lhs,
+        compile_graph_ptr_t &rhs, compile_graph_ptr_t &when, std::string &why);
+
+    /// What the condition of a generic rule says about one type tuple, at compile time (the ruling
+    /// of 2026-10-24 on `generic-rule-check-surface-and-multi-parameter-instances`: `check`
+    /// enumerates the instances of a generic rule over the registered types that its condition
+    /// admits). The condition's type-level part alone is asked -- the type arguments of its
+    /// predicate calls are bound to the tuple -- so nothing is instantiated and nothing is
+    /// sampled: a conjunction answers as soon as one side settles it, and a condition that reads
+    /// the values it matches is `ValueDependent`. Public for the same reason
+    /// `instantiateRuleTemplates` is (rule_templates.cpp calls it where a rule is checked).
+    RuleConditionAt
+    ruleConditionVerdict(const GenericRuleEntry &entry, const std::vector<Type *> &types,
+                         std::string &why);
+
+    /// Runs `body` with the state of `module`'s unit in force: the same state a top-level
+    /// declaration of that module is built in (its diagnostics, its construction tree, its module
+    /// and its scopes, `UnitContext`). An instance of a generic rule of that module is built this
+    /// way, long after the module was built, because a body build resolves names as the module
+    /// does. Answers false when this builder declared no such module; the state is restored
+    /// whatever `body` does, exception or not.
+    bool inModule(
+        const camel::core::module::module_ptr_t &module, const std::function<void()> &body);
+
   private:
     // ---- The modules of the program ----
     // What the builder keeps of one module: its tree, its diagnostics and the scopes of its
     // top level (the names it declares; its functions are graphs whose scopes are entered
     // from these). A function body of the module is built with these in force, whichever
     // module asks for it.
-    struct BuiltFunction;
     struct PendingIgnoredWrite;
     struct ModuleUnit;
     // A top-level declaration of a module that is built when first needed (step two): a value
@@ -353,9 +387,14 @@ class Builder {
         // built for it.
         std::set<std::string> passDeclarations;
         // What the link step reports per module, collected while its bodies are built.
-        std::vector<BuiltFunction> builtFunctions;
         std::vector<compile_graph_ptr_t> builtBodies;
         std::vector<PendingIgnoredWrite> pendingIgnoredWrites;
+        // The names the module's source declares anywhere: a function or a type declared, and the
+        // NREF that binds a name in any body (`let`, `var`, a parameter). Read once, on the first
+        // name the declaration-site check cannot resolve (resolveGenericTemplateNames); the module
+        // is one scope, so a name a later declaration gives is not a misspelling.
+        std::unordered_set<std::string> sourceNames;
+        bool sourceNamesRead = false;
     };
     std::unordered_map<const camel::core::module::Module *, std::unique_ptr<ModuleUnit>> units_;
     // The module being built.
@@ -626,7 +665,7 @@ class Builder {
     std::unordered_set<const GCT::Node *> droppedBodies_;
     std::unordered_set<const DraftGraphBuilder *> droppedGraphs_; // their graphs
     // The graphs of decorated blocks: written as blocks, they are not functions a program
-    // declares, and get no declaration check (reportUndeclaredCapturedWrites).
+    // declares, and get no ignored-write check of their own.
     std::unordered_set<const DraftGraphBuilder *> blockGraphs_;
     // Inside a `var` declaration: the names it binds are variables.
     bool declaresVariable_ = false;
@@ -796,15 +835,24 @@ class Builder {
     /// of a generic declaration. Null for a function value, an operator, or an overload set.
     const std::vector<std::optional<ParameterDefaultValue>> *defaultsOfCallee(
         node_handle_t callee, bool isWith) const;
-    /// One declaration a name stands for: its signature, and the owner its parameter defaults are
-    /// kept under (a graph or a generic template).
+    /// One declaration a name stands for: the names of its parameters -- `with` ones first, then
+    /// the ordinary ones -- and the owner its parameter defaults are kept under (a graph, a
+    /// generic template, or the URI of a native rule).
     struct CalleeDeclaration {
-        FunctionType *signature = nullptr;
-        const void *owner      = nullptr;
+        const void *owner = nullptr;
+        /// A native rule's URI: a default of a body-less declaration is kept under it
+        /// (`nativeDefaults_`), the one name the call and the declaration share.
+        std::string uri;
+        std::vector<std::string> withNames;
+        std::vector<std::string> normNames;
+        /// Whether the declaration gives every parameter a name: one that does not is one a named
+        /// argument cannot reach, and the call is refused rather than bound to a guess.
+        bool readable = false;
     };
     /// The declarations a callee stands for and the name they are written under: a generic
-    /// function's templates, or the graphs of a name with several functions. Null for a value, a
-    /// native operator group, and a name with one declaration (whose call reads its signature).
+    /// function's templates, the graphs of a name with several functions, or the rules of an
+    /// operator group. Null for a value and for a name with one Camel declaration (whose call
+    /// reads its signature).
     struct CalleeSet {
         std::string label;
         std::vector<CalleeDeclaration> declarations;
@@ -846,6 +894,23 @@ class Builder {
     // and stored by the assignment operators. Every other named node is an immutable value
     // (`let`, a parameter without `var`).
     std::unordered_set<node_handle_t> variables_;
+
+    /// A ar that does not escape becomes SSA (docs/handover/reviews/questions-2026-10-24-evening.md,
+    /// "var-version-node"): every read takes the value of the write that made it, and no read node is
+    /// left reading the cell. A ar that escapes -- captured by a closure, handed out as a ar
+    /// argument, or a ar parameter of this graph -- is a resource and keeps its cell.
+    /// ariableReadSource_ records, per read node, the writer it reads from (the cell itself when
+    /// nothing has written yet) and the cell it belongs to; knownCellUsers_ holds the users of a
+    /// cell this builder recorded (its reads and its stores), so a cell with any other user
+    /// (:var/take, a call, a capture port) is left as a cell.
+    struct VariableRead {
+        node_handle_t source = nullptr;
+        node_handle_t cell   = nullptr;
+    };
+    std::unordered_map<node_handle_t, VariableRead> variableReadSource_;
+    std::unordered_set<node_handle_t> knownCellUsers_;
+    std::unordered_set<node_handle_t> escapingVariables_;
+    void collapseNonEscapingVariableReads();
     // What the compiler knows about a node's value beyond static data, for operators whose
     // result type follows constant arguments (StaticArg). `typeFoldedValues_`: the value of an
     // operator result that its argument types fix (its type folder), e.g. the shape
@@ -976,8 +1041,20 @@ class Builder {
             constantNodes_[node] = data;
         }
     }
-    /// The constant a static data node (or a COPY of one) was made from, or null.
+    /// The constant a static data node (or a COPY of one) was made from, or null. A CAST that
+    /// only retypes a constant -- `null` into a `T?` -- is the constant of the type it retypes it
+    /// to, and carries it too.
     data_ptr_t constantOfNode(node_handle_t node) const;
+    /// The elements of the sequence a `static loop` walks when the head is written `for i in
+    /// <序列>` (H462, the ruling of 2026-10-24), or nothing when the compiler cannot work the
+    /// sequence out. Today the one sequence it knows is the constant interval `a..b`: the `int`
+    /// values `a`, `a + 1`, ... below `b`, which is the half-open reading `..` has everywhere
+    /// else (`loop ... for i in 0..5` iterates 0 ... 4). The two bounds are read as the compiler
+    /// knows them (a literal, an expression of literals, or a name bound to a constant), without
+    /// building the operand: an interval of no known size is reported by the caller, and its
+    /// refusal is `SemanticDiag::StaticLoopSequenceNotKnown`.
+    std::optional<std::vector<int64_t>>
+    staticLoopSequenceOf(const GCT::node_ptr_t &subject);
     std::optional<std::string> staticValueNamed(const std::string &name) const {
         for (auto scope = staticValueScopes_.rbegin(); scope != staticValueScopes_.rend();
              ++scope) {
@@ -1054,14 +1131,7 @@ class Builder {
         std::string subject;
         std::string verb;
     };
-    // (ModuleUnit::pendingIgnoredWrites.) The functions and lambdas of the module, in source
-    // order, for the check that a function with side effects declares them (the `sync`
-    // function modifier): ModuleUnit::builtFunctions.
-    struct BuiltFunction {
-        DraftGraphBuilder *graph;
-        camel::source::origin_id_t origin;
-        std::string name;
-    };
+    // (ModuleUnit::pendingIgnoredWrites.)
     // Dropped effects (design principles 3.1): outside a sync block an effectful expression
     // whose result nothing uses is not connected to the graph's exit and does not run. That
     // is legal; the builder warns about it. Graphs whose exit depends on an effect, and the
@@ -1205,6 +1275,18 @@ class Builder {
     compile_graph_ptr_t instantiateGenericAs(
         const generic_template_ptr_t &tmpl, FunctionType *expected, const GCT::node_ptr_t &origin,
         std::string &why);
+    // ---- A generic rule where a rule is expected (rewrite design 2 (second version) 8.5) ----
+    /// `__rule_generic('name', two_way, needs, consts, <the sides>)`, the maker of a rule whose
+    /// head declares type parameters: its sides are generic functions, and a generic function has
+    /// no value to give. The maker takes their *templates* instead, which are registered under an
+    /// id the rule value keeps (camel/compile/gir/rule_templates.h); the call becomes
+    /// `__rule_generic('name', two_way, needs, consts, id)` and resolves as the `Rule` it is. Does
+    /// nothing when the call is not that shape, and the maker's own resolution reports it.
+    void settleGenericRuleMaker(
+        std::vector<Argument> &normInputs, camel::core::type::type_vec_t &normTypes,
+        const GCT::node_ptr_t &call);
+    /// The instance of one registered generic rule at `types`: declared public (above), since the
+    /// context's table of generic rules calls it.
     /// A body build inside a speculative scope: while this lives, what the body reports goes to the
     /// scope's sink. The body of a candidate is the only thing a search may hold back, and this is
     /// the only door into that sink.
@@ -1252,6 +1334,12 @@ class Builder {
         /// that knows a candidate nobody chose is not the program's business (a rule's search for an
         /// instance for one type: the reason is remembered and reported only when the user asks).
         void close();
+        /// What the bodies held back said, as one line: the first error's message, or empty when
+        /// they said nothing (a search the caller skipped for its own reason, not the body's).
+        /// Read before the scope ends, which is when the sink is dropped; a caller that remembers
+        /// the attempt as one that did not come about keeps this as its reason, and `why_not` is
+        /// where a reader gets it (nothing is reported where the body said it).
+        std::string reason() const;
 
       private:
         Builder &self_;
@@ -1413,6 +1501,51 @@ class Builder {
         const camel::core::type::resolver_ptr_t &rule, const std::string &name,
         const camel::core::type::type_vec_t &withTypes,
         const camel::core::type::type_vec_t &normTypes);
+    /// What a body-less declaration's `when` says about a call whose arguments have these types
+    /// (design principles 4.4). `declaredRuleApplies` answers the same question about an `#impl`
+    /// instance, where only "this rule is the executor" and "it is not" exist; selecting among a
+    /// call's candidates needs the third answer, because a rule whose condition is false is not
+    /// one of the call's overloads at all (the call goes on to the other candidates, and a call
+    /// no candidate takes reports the conditions as unmet). A rule with no condition always
+    /// applies, and `conditionText`, when asked for, receives the condition as it was written.
+    enum class RuleVerdict {
+        Applies,        // no condition, or the condition holds for these arguments
+        ConditionUnmet, // the signature takes the arguments, the condition does not
+        NotThisRule,    // the declaration's own type parameters do not bind to these arguments
+    };
+    RuleVerdict ruleVerdictForCall(
+        const camel::core::type::resolver_ptr_t &rule, const std::string &name,
+        const camel::core::type::type_vec_t &withTypes,
+        const camel::core::type::type_vec_t &normTypes, std::string *conditionText = nullptr);
+    /// The rule of the operator group `ops` a call means: a rule whose signature takes the
+    /// arguments and whose own `when` holds for them (design principles 4.4). A rule that takes
+    /// the arguments while its condition is false is not a candidate; it is recorded in `unmet`
+    /// with the condition it wrote, so that a call no rule accepts reports those conditions
+    /// (WhenConditionUnmet) rather than settling on one of them. `normStatics` are the
+    /// compile-time values of constant arguments, as for `OperatorGroup::resolveForCall`.
+    ///
+    /// Two candidates that both write `when` and both hold for the arguments are an ambiguity,
+    /// not a choice: the order two declarations of one name are written in decides nothing (the
+    /// language author's ruling of 2026-10-23 on `two-when-conditions-hold`,
+    /// docs/handover/reviews/questions-2026-10-23.md), and the declaration-time check asks about
+    /// one type at a time, so the call site is the first place that can see the pair. Every such
+    /// candidate is recorded in `ambiguous` as `signature — when condition`, sorted and without
+    /// repeats, so that the report is the same whichever order the declarations are written in;
+    /// the caller reports it (AmbiguousCall, which names the call and lists them). A candidate
+    /// that writes no condition is not part of that list: which overload without `when` the group
+    /// answers with today is a separate question, left as it is.
+    ///
+    /// The returned index is the first candidate in the group's own order — the fixed signatures
+    /// first, then the order the rules were written in. It is what a call with fewer than two
+    /// candidates that write `when` means; a call with more is reported through `ambiguous` and
+    /// the index is not used.
+    std::optional<oper_idx_ptr_t> resolveGroupedCall(
+        const oper_group_ptr_t &ops, const camel::core::type::type_vec_t &explicitTypes,
+        Type *expectedResult, const camel::core::type::type_vec_t &withTypes,
+        const camel::core::type::type_vec_t &normTypes,
+        camel::core::type::static_args_t normStatics,
+        std::vector<std::pair<std::string, std::string>> &unmet,
+        std::vector<std::string> *ambiguous = nullptr);
     /// The kernel of `graphs` when they are exactly the one `#impl` body: what a call of the
     /// function is, instead of a call of the body (design principles 10.4).
     std::optional<ImplKernel> implKernelOf(const graph_set_ptr_t &graphs) const;
@@ -1653,14 +1786,24 @@ class Builder {
     node_handle_t partialApplicationOf(
         node_handle_t target, const GCT::node_ptr_t &origin,
         camel::core::type::FunctionType *expected = nullptr);
-    /// `t += u` for a `t` of a module type without a compound-assignment operator of its
-    /// own (a tensor): the new value is computed and the variable bound to it, `t = t + u`
-    /// (design principles 4.2). `group` is the operator group of the compound assignment
-    /// and `operands` its two operands, already built. Returns nullptr when the form does
-    /// not apply.
+    /// `a op= b` is `a = a op b` (design principles 4.2): the new value is computed and the
+    /// variable bound to it. One rule for every type, whoever declared it: `a op b` must be
+    /// defined for these operands and must give `a`'s own type, and the rebinding applies only
+    /// then. `group` is the operator group of the compound assignment and `operands` its two
+    /// operands, already built; `normTypes` their types, the ones the plain operator is
+    /// resolved with. Returns nullptr when the form does not apply, so that the call reports
+    /// the compound assignment it wrote.
     node_handle_t compoundAssignmentByRebinding(
         const std::string &group, const GCT::node_ptr_t &gct,
-        const std::vector<Argument> &operands);
+        const std::vector<Argument> &operands, const camel::core::type::type_vec_t &normTypes);
+    /// Whether the plain operator `group` has an overload for the types of `operands` (design
+    /// principles 4.3, 5.7): a built-in or a module's own rule is asked by type, one written in
+    /// the program is matched where the operator is resolved. Asked before an operator DREF
+    /// exists, for `+=`, which follows the plain operator
+    /// (`compoundAssignmentByRebinding`).
+    bool plainOperatorAvailableFor(
+        const std::string &group, const std::vector<Argument> &operands,
+        const camel::core::type::type_vec_t &normTypes);
     /// An error at `call` when the conversion `group` (`int`, `i32`, `float`, ...) is given
     /// a literal that does not fit the type (LiteralNotRepresentable).
     void rejectLiteralConversion(
@@ -1722,8 +1865,6 @@ class Builder {
     std::vector<CapturedUse> capturedUsesOf(const compile_graph_ptr_t &callee);
     // Reports the unwaited writes of captured variables that turned out to be real.
     void reportIgnoredCapturedWrites();
-    // Reports the functions that write a captured variable without the `sync` modifier.
-    void reportUndeclaredCapturedWrites();
     // Whether running `node` of `graph` is an effect: an operator that is neither pure nor
     // state-only, a call of a function that declares effects (`sync` modifier, `var`
     // parameter) or whose exit depends on one, a branch with such an arm.
@@ -1803,6 +1944,37 @@ class Builder {
     node_handle_t visitVariNode(const GCT::node_ptr_t &gct);
     node_handle_t visitWaitNode(const GCT::node_ptr_t &gct);
     node_handle_t visitLinkNode(const GCT::node_ptr_t &gct);
+    /// `a..b` (the GCT link of `kCompositionCall`): the composition of two functions, or the
+    /// interval of two integers, told apart by the types of the two operands (design principles
+    /// 4.2; the author's ruling of 2026-10-24 on `h248-generator-and-composition`). `expected`
+    /// is the type of the position the whole expression stands in: a function type there is the
+    /// type the lambda `(x) => g(f(x))` would have and instantiates the operands (the ruling,
+    /// section generic-operands-of-composition).
+    node_handle_t buildComposition(const GCT::node_ptr_t &gct, Type *expected);
+    /// The same, from two operands already built: the sequence position of a loop builds them
+    /// itself, to know whether the interval is the loop's form before the rest of `..` is built.
+    node_handle_t
+    buildCompositionWith(const GCT::node_ptr_t &gct, node_handle_t lhs, node_handle_t rhs);
+    /// Whether `expr` is written `a..b`: the GCT link of `kCompositionCall`.
+    static bool isIntervalExpr(const GCT::node_ptr_t &expr);
+    /// Whether the two operands of `..` are the interval's: two integers, and nothing else
+    /// (design principles 4.2).
+    bool intervalBounds(node_handle_t from, node_handle_t to) const;
+    /// The two bounds of an interval a loop iterates, as the one value its sequence is: a tuple
+    /// of the two integers (camel::core::LoopIterableForm::Interval). The interval is the
+    /// `int[]` of `intervalValue` in every other position.
+    node_handle_t
+    intervalSequenceValue(node_handle_t from, node_handle_t to, const GCT::node_ptr_t &expr);
+    /// The composition `f..g` as the lambda `(x) => g(f(x))`: a graph of one parameter whose body
+    /// calls `f` and then `g`, both of them captures of it.
+    node_handle_t composeFunctionValue(
+        node_handle_t lhs, node_handle_t rhs, FunctionType *lhsType, FunctionType *rhsType,
+        const GCT::node_ptr_t &gct);
+    /// The interval `a..b` of two integers as the array `int[]`. The form it is written in is
+    /// `a..b` and nothing else: the two-parameter `range(a, b)` it used to be the same operation
+    /// as is gone (design principles 4.2, the ruling of 2026-10-24).
+    node_handle_t intervalValue(
+        node_handle_t lhs, node_handle_t rhs, const GCT::node_ptr_t &gct);
     node_handle_t visitWithNode(const GCT::node_ptr_t &gct);
     node_handle_t visitTypeApplication(const GCT::node_ptr_t &gct);
     FunctionType *signatureForArgumentContext(node_handle_t target) const;
@@ -1811,7 +1983,7 @@ class Builder {
     /// `match type`: selects a case from the shape of the subject type and builds only that
     /// case's body, in the current graph (no branch node).
     node_handle_t visitTypeMatchNode(const GCT::node_ptr_t &gct);
-    /// `static for (n, F) in fields T`: the body is built once per field, in the current graph.
+    /// `static for n, F in fields T`: the body is built once per field, in the current graph.
     /// With `values`, each round's value is collected instead of dropped (a comprehension); with
     /// `shape`, the type the fields were taken from is handed back for the caller to pack.
     node_handle_t visitStaticForNode(
@@ -1821,7 +1993,7 @@ class Builder {
     /// tuple of the same fields with one FILL; the comprehension leaves no node of its own.
     /// The packed struct, or the build-time tuple of a tuple comprehension (no node).
     std::any visitStaticComprehensionNode(const GCT::node_ptr_t &gct);
-    /// `static loop s1 = a1, ..., sk = ak for (n, F) in fields T do body`: the body is built
+    /// `static loop s1 = a1, ..., sk = ak for n, F in fields T do body`: the body is built
     /// once per field, in the current graph, with the state names bound to the previous round's
     /// values; the value is the last state (a tuple FILL when there are several).
     node_handle_t visitStaticLoopNode(const GCT::node_ptr_t &gct);
@@ -1847,8 +2019,26 @@ class Builder {
     /// Resolve the names of a case body that is not selected: its own `let`/`var` names bind,
     /// and every other name must exist. No graph node is made and no type is checked.
     void resolveStaticBodyNames(const GCT::node_ptr_t &body);
+    /// Resolve the names of a generic declaration where it is declared (the ruling of 2026-10-24
+    /// on `generic-rule-condition-unresolved-name`, docs/handover/reviews/questions-2026-10-23.md):
+    /// the parameters bind, every other name its body writes must exist, and the declaration-site
+    /// half of its `when` clause is answered. No graph node is made and no type is read, so what
+    /// the check needs from the type parameters -- an operator overload, a field, the argument of
+    /// a call -- stays with the instantiation. A name that is not one at all is reported here, on
+    /// the declaration's line, and the module does not load.
+    void resolveGenericTemplateNames(const generic_template_ptr_t &tmpl);
+    /// The names a function's own parameters bind, for a body read where it is written: every
+    /// parameter's name, and the names a parameter destructured as a tuple binds
+    /// (`((a, b)) => ...`, builder.cpp declares them the same way).
+    void insertParameterNames(
+        const GCT::node_ptr_t &func, const FunctionType *signature,
+        std::unordered_set<std::string> &into);
+    /// Whether the module's source declares `written` anywhere: the fallback of the
+    /// declaration-site check for a name a later declaration gives.
+    bool moduleSourceDeclares(const std::string &written);
     void walkStaticBodyNames(
-        const GCT::node_ptr_t &node, std::vector<std::unordered_set<std::string>> &locals);
+        const GCT::node_ptr_t &node, std::vector<std::unordered_set<std::string>> &locals,
+        bool intoFunctions = false);
     static constexpr size_t kMaxStaticMatchDepth = 256;
     /// A loop (design principles 3.10; camel/runtime/loop.h): the first values and the array
     /// where the loop is, its condition and its body as regions of the current graph (built where
@@ -1894,9 +2084,36 @@ class Builder {
     /// No arm is added to those the program wrote (design principles 3.7).
     /// `valueless` (with `arms`): the branch is an `if` without `else`, whose join takes no
     /// value from its arms.
+    /// `firstCase`: the first CASE child the arms come from. The cases before it were already
+    /// dispatched, so a guard that did not hold sends the value on to a branch over the cases
+    /// from `firstCase` on, built exactly like this one.
     node_handle_t buildBranch(
         const GCT::node_ptr_t &gct, node_handle_t condNode,
         const std::vector<arm_ptr_t> *arms = nullptr, bool valueless = false);
+    /// One case of a `match` whose cases carry guards: the form `buildCaseChain` lowers them
+    /// in.
+    struct CaseStep {
+        GCT::node_ptr_t exec;            // the arm of the case: its region, and its body
+        node_handle_t condition{};       // the test of its pattern, none for the case that ends
+        GCT::node_ptr_t guard = nullptr; // its guard, when it has one
+        std::function<void()> bind{};    // takes out the names its pattern binds, in the arm
+    };
+    /// Whether a CASE child of `gct`, from `first` on, carries a guard.
+    bool hasGuardedCase(const GCT::node_ptr_t &gct, size_t first);
+    /// The steps `steps` as one decision list, and the value of the `match`. A case is entered
+    /// where the test of its pattern holds and, when it has one, its guard holds as well; the
+    /// guard of a case whose pattern matched decides whether that case is taken at all, and the
+    /// cases written after it are the `else` of its step, so a guard that does not hold leaves
+    /// the value to them (review 「when-placement-and-match-guards」). The last step is the case
+    /// that ends the list: it has no test of its own.
+    node_handle_t buildCaseChain(std::vector<CaseStep> &steps, const GCT::node_ptr_t &origin);
+    /// The general `match` `gct`, when its cases carry guards. It cannot be dispatched by case
+    /// value alone -- the runtime branch takes the first arm whose case value matches and cannot
+    /// be told to try the next when a guard refuses -- so it is one decision list over the cases
+    /// in written order.
+    node_handle_t buildGuardedMatch(const GCT::node_ptr_t &gct, node_handle_t condNode);
+    /// `!value`: a branch that gives true where the value is false, and false where it is true.
+    node_handle_t negateCondition(node_handle_t value, const GCT::node_ptr_t &origin);
     /// Refuses the `match` `gct` when it can meet a value none of its cases matches: it has
     /// no `case _` and does not list both values of a bool (MatchWithoutDefault, an error).
     void requireMatchDefault(const GCT::node_ptr_t &gct, node_handle_t scrutinee);
@@ -2102,7 +2319,8 @@ class Builder {
         const camel::core::type::type_vec_t &normTypes);
     /// Whether a module that declares one of the operand types exports an overload of `group`
     /// (design principles 5.7). Asked before an operator DREF exists, for `+=`, which follows the
-    /// plain operator (`compoundAssignmentByRebinding`).
+    /// plain operator (`compoundAssignmentByRebinding`) — together with the group's own rules
+    /// and the program's, `plainOperatorAvailableFor`.
     bool hasDeclaringModuleOperator(
         const std::string &group, const camel::core::type::type_vec_t &withTypes,
         const camel::core::type::type_vec_t &normTypes);
@@ -2289,6 +2507,26 @@ class Builder {
     camel::core::data::data_ptr_t compositeDataInType(
         const camel::core::data::data_ptr_t &data, camel::core::type::Type *type,
         const GCT::node_ptr_t &origin);
+    /// The same walk as compositeDataInType for a literal that is not one constant: some of its
+    /// elements are computed (`refNames` / `refTypes` are the names the GCT gave them and the
+    /// types of the nodes they stand for, in the literal's reference order), and the elements it
+    /// did write take the types `position` states for them — a tuple, array or struct field the
+    /// position does not reach otherwise (design principles 5.1). nullptr when the position does
+    /// not fit the literal: another kind or shape, or a computed element that is not of the type
+    /// the position gives that element — the literal then keeps the type its own elements give
+    /// it, and the place it was written in reports the mismatch. The converted literal is a
+    /// value of `position` itself, a named struct type included (design principles 5.2).
+    /// `refHoles` is where the computed elements sit in the literal's own type, parallel to
+    /// `refNames`; on success `holeSlots` holds where they sit in `position`, which is what the
+    /// fill of the value reads. An array and a tuple are positional, so the indexes are the same;
+    /// the fields of a struct are the same by name but a named type states its own order (design
+    /// principles 5.2), so the slot of a computed field is the field of that name in `position`,
+    /// not the index it had in the literal's type.
+    camel::core::data::data_ptr_t compositeWithHolesInType(
+        const camel::core::data::data_ptr_t &data, camel::core::type::Type *position,
+        const GCT::node_ptr_t &origin, const std::vector<std::string> &refNames,
+        const camel::core::type::type_vec_t &refTypes, const std::vector<size_t> &refHoles,
+        std::vector<size_t> &holeSlots);
     /// One element (field) of a composite literal as a value of `type`: the value itself when
     /// the type accepts it, the exact conversion when it is a literal (`written` is the
     /// element as it was written, when the GCT kept it: its value and its position), nullptr

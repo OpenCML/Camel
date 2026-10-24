@@ -1,0 +1,23 @@
+# Camel
+
+> Camel is a graph-first programming language: a program is a data-flow graph whose order comes from
+> the dependencies of its values, and effects and synchronization are written explicitly rather than
+> implied by statement order.
+
+- [Camel for AI](docs/reference/camel-for-ai.md): the whole language in one file — the rules, the
+  idioms, the errors a first draft makes with the diagnostic each one reports, and the generated
+  catalogue of every diagnostic and every standard-library signature.
+
+## More
+
+- [Language reference](docs/language/README.md): the language by topic, in depth, with examples and
+  their output (Chinese; English under `docs/language/en/`).
+- [Design principles](docs/design-principles.cn.md): what the language is for and the trade-offs
+  behind it. Normative: where it disagrees with any other document or with the implementation, it
+  wins (Chinese).
+- [Standard library reference](docs/stdlib-reference.md): generated from the declarations, every
+  exported name with its signature, purity, failures and examples.
+- [Diagnostics reference](docs/diagnostics.md): generated from the registry, every diagnostic with
+  its code, message, help and a program that raises it.
+- [Command line](docs/cli.cn.md): how to run a program, choose passes and read the graph.
+- [Tutorial](docs/tutorial/tutorial.cn.md): from the first program onwards.

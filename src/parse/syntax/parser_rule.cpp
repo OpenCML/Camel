@@ -4,8 +4,8 @@
 /*
  * The productions of rule declarations (rewrite design 2): a rule is a pattern, what it becomes
  * and, optionally, a condition. `rule` and `when` are names that mean something only here
- * (`rule` at the start of a declaration, `when` after the closing brace), so a program may still
- * have a variable called `rule`.
+ * (`rule` at the start of a declaration, `when` between the parameters and the body), so a
+ * program may still have a variable called `rule`.
  */
 
 #include "parser_impl.h"
@@ -36,11 +36,16 @@ bool ParserImpl::atRuleDecl(uint32_t n) const {
 }
 
 /// ruleDecl : frontMatter? 'export'? IDENTIFIER identDef typeParams? ruleContext? parentParams
-///            '{' ruleBody '}' (IDENTIFIER dataExpr)?
-/// The first IDENTIFIER is the name `rule`, the second the name `when`: the condition, checked
-/// after the pattern matched. The parameters are the pattern variables; `const x: T` only
-/// matches a constant. The tags before it are the rule's requirements (`#requires<reassociate>`,
+///            whenClause? '{' ruleBody '}'
+/// The first IDENTIFIER is the name `rule`; the condition, when there is one, is the `whenClause`
+/// between the parameters and the body. The parameters are the pattern variables; `const x: T`
+/// only matches a constant. The tags before it are the rule's requirements (`#requires<reassociate>`,
 /// design principles 7.2); the AST reads them from the tree.
+/// The condition is part of the signature, so it is written between the parameters and the body,
+/// in the one position the parser reads it in (design principles 4.4; the ruling of 2026-10-24,
+/// `docs/handover/reviews/questions-2026-10-23.md`, 「复核：泛型规则族落地」): a `when` after
+/// the closing brace is not kept as a second spelling of the same thing, and is reported by name
+/// (`SyntaxDiag::WhenAfterBody`) rather than as a token that did not fit.
 void ParserImpl::parseRuleDecl() {
     const size_t m = mark();
     parseFrontMatter();
@@ -58,6 +63,11 @@ void ParserImpl::parseRuleDeclRest(size_t m) {
         parseRuleContext();
     }
     parseParentParams();
+    // The applicability condition, between the parameters and the body: it is part of the
+    // signature (design principles 4.4), written in the same position a function writes it in.
+    if (atWord(0, "when")) {
+        parseWhenClause();
+    }
     if (!panic_ && expect(TK::LBrace)) {
         {
             Scope scope(*this, false);
@@ -65,8 +75,12 @@ void ParserImpl::parseRuleDeclRest(size_t m) {
         }
         expect(TK::RBrace);
     }
+    // A `when` after the closing brace is the position the ruling of 2026-10-24 removed. It is
+    // not read as a condition any more, and it is not reported as a token that did not fit: the
+    // program is told where the condition belongs.
     if (!panic_ && cur_ == TK::Identifier && tree_.tokens_.text(pos_) == "when") {
-        bump();
+        error(SyntaxError::Kind::WhenAfterBody, {}, pos_);
+        bump(); // `when`: consumed, so the parse goes on after the condition
         parseExpr();
     }
     close(m, NK::RuleDecl);

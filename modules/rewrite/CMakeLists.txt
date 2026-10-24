@@ -3,9 +3,13 @@ add_camel_module(
   NAME rewrite
   SOURCES
     analysis.cpp
+    checkreport.cpp
     module.cpp
     proof.cpp
     rule.cpp
+    ${CAMEL_VERIFY_SOURCES}
   EXTRA_LIBS
     graph_cmo
+  EXTRA_INCLUDES
+    ${CMAKE_SOURCE_DIR}/modules
 )

@@ -84,7 +84,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 [[tests]]
 name = "rules.accuracy_scalar_log1p_rule"
-desc = "The design's `log(1 + x) => log1p(x)`, in f64 and f32: each naive function goes from two operators (log, add) to one `log1p`; the guarded `log(2 + x)` keeps both its operators."
+desc = "The design's `log(1 + x) => log1p(x)`, one law for the whole floating family since the fold (`when is_float::<T>()`, so the f64 and the f32 site are its two instances): each naive function goes from two operators (log, add) to one `log1p`; the guarded `log(2 + x)` keeps both its operators."
 kind = "behavior"
 case = "../../../cases/modules/rules/accuracy_scalar_target.cml"
 args = ["${case}", "scalar_counts::report", "accuracy_schedule::only_log1p", "scalar_counts::report", "std::nvm"]
@@ -95,7 +95,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "rules.accuracy_scalar_expm1_rule"
-desc = "The design's `exp(x) - 1 => expm1(x)`, in f64 and f32: each naive function goes from two operators (exp, subtract) to one `expm1`; the guarded `exp(2 + x)` keeps both."
+desc = "The design's `exp(x) - 1 => expm1(x)`, one law for the whole floating family as `only_log1p` is: each naive function goes from two operators (exp, subtract) to one `expm1`; the guarded `exp(2 + x)` keeps both."
 kind = "behavior"
 case = "../../../cases/modules/rules/accuracy_scalar_target.cml"
 args = ["${case}", "scalar_counts::report", "accuracy_schedule::only_expm1", "scalar_counts::report", "std::nvm"]
@@ -130,7 +130,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "rules.accuracy_scalar_guards"
-desc = "The scalar rules do not match `log(2 + x)` or `exp(x) - 2`: four rewrites (the two f64 and the two f32 forms), the two guarded functions keep their two operators and their values."
+desc = "The scalar rules do not match `log(2 + x)` or `exp(x) - 2`: four rewrites (each family law's f64 and f32 instance), the two guarded functions keep their two operators and their values."
 kind = "behavior"
 case = "../../../cases/modules/rules/accuracy_scalar_target.cml"
 args = ["${case}", "scalar_counts::report", "accuracy_schedule::all_scalar", "scalar_counts::report", "std::nvm"]

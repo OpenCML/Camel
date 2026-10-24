@@ -16,8 +16,8 @@ func add(a: int, b: int): int {
 
 func collect(n: int, k: int): Row[] sync {
     var out: Row[] = []
-    range(0, n)->foreach<sync (i: int) => sync {
-        out = out->append<range(0, n)->map<(j: int): int => add(i + j, k)>>
+    0..n->foreach<sync (i: int) => sync {
+        out = out->append<0..n->map<(j: int): int => add(i + j, k)>>
         return null
     }>
     return out
@@ -25,7 +25,7 @@ func collect(n: int, k: int): Row[] sync {
 
 func ends_of(n: int, i: int, k: int): int sync {
     var row: int[] = []
-    range(0, n)->foreach<sync (j: int) => sync {
+    0..n->foreach<sync (j: int) => sync {
         row = row->append<add(i + j, k)>
         return null
     }>
@@ -33,11 +33,11 @@ func ends_of(n: int, i: int, k: int): int sync {
 }
 
 func lasts(n: int, k: int): int[] sync {
-    return range(0, n)->map<sync (i: int): int => ends_of(n, i, k)>
+    return 0..n->map<sync (i: int): int => ends_of(n, i, k)>
 }
 
 func probe(t: Row[], n: int): int {
-    return range(0, n)
+    return 0..n
         ->map<(i: int): int => t[i][0] + t[i][i] + t[i][n - 1]>
         ->reduce<(acc: int, x: int): int => acc + x, 0>
 }

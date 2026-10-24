@@ -4,5 +4,9 @@ error[SyntaxDiag::MissingComma]: Expected ',' or ')' before 'b'.
  3 | func add(a: int b: int): int { return a + b }
    |                 ^
 help: The items of a list (parameters, arguments, elements) are separated by ','.
+help: insert ','
+   |
+ 3 | func add(a: int, b: int): int { return a + b }
+   |                +
 
 camel: 1 error

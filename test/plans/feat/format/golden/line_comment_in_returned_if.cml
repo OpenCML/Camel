@@ -1,0 +1,9 @@
+func erase_all(p: int, hits: int[]): int {
+    return p
+}
+
+func main(): int {
+    let hits = [1, 2]
+    return if len(hits) == 0 // nothing to erase
+    then 1 else erase_all(0, hits)
+}

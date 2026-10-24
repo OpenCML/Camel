@@ -1,0 +1,10 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+/// A list whose text ends where a name was required. The name is asked for through `identDef` and
+/// reported where it should stand; the list closes without one. Reading the token that stands
+/// there instead - the terminal token - put that token in the tree twice and made
+/// `camel-parsecheck fuzz` report "the leaves of the tree are not the tokens of the text" (H417).
+module syntax_ident_list_open
+
+resource a = [b,

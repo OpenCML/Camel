@@ -253,7 +253,7 @@ const std::vector<oper_group_ptr_t> &getCollectionOperatorGroups() {
             {{":coll/map_get_or",
               keyed(
                   2,
-                  "<key: K, default: V> (m: Map<K, V>) => V",
+                  "<key: K, fallback: V> (m: Map<K, V>) => V",
                   [=](Type *coll, const type_vec_t &config) -> optional<Type *> {
                       const MapType *map = mapWithKey(coll, config[0]);
                       if (map == nullptr || !map->valueType()->equals(config[1])) {
@@ -287,7 +287,9 @@ const std::vector<oper_group_ptr_t> &getCollectionOperatorGroups() {
               typed(
                   0,
                   1,
-                  "(c: Map<K, V> | Set<T>) => int",
+                  // `x`, the name the string and array rules give their one parameter as well:
+                  // one position, one name (stdlib-conventions, the reference page of `len`).
+                  "(x: Map<K, V> | Set<T>) => int",
                   [](const type_vec_t &, const type_vec_t &norm) -> optional<Type *> {
                       return asCollectionType(norm[0]) ? optional<Type *>(Type::Int64())
                                                        : nullopt;
@@ -331,27 +333,27 @@ const std::vector<oper_group_ptr_t> &getCollectionOperatorGroups() {
               typed(
                   0,
                   2,
-                  "(a: Map<K, V>, b: Map<K, V>) => Map<K, V>",
+                  "(m: Map<K, V>, other: Map<K, V>) => Map<K, V>",
                   [=](const type_vec_t &, const type_vec_t &norm) -> optional<Type *> {
                       const CollectionType *coll = sameCollections(norm);
                       return itself(coll != nullptr && coll->isMap() ? coll : nullptr);
                   })}}),
         OperatorGroup::create(
             "union",
-            {{":coll/set_union", setOperation("(a: Set<T>, b: Set<T>) => Set<T>")}}),
+            {{":coll/set_union", setOperation("(s: Set<T>, other: Set<T>) => Set<T>")}}),
         OperatorGroup::create(
             "intersect",
-            {{":coll/set_intersect", setOperation("(a: Set<T>, b: Set<T>) => Set<T>")}}),
+            {{":coll/set_intersect", setOperation("(s: Set<T>, other: Set<T>) => Set<T>")}}),
         OperatorGroup::create(
             "difference",
-            {{":coll/set_difference", setOperation("(a: Set<T>, b: Set<T>) => Set<T>")}}),
+            {{":coll/set_difference", setOperation("(s: Set<T>, other: Set<T>) => Set<T>")}}),
         OperatorGroup::create(
             "is_subset",
             {{":coll/set_is_subset",
               typed(
                   0,
                   2,
-                  "(a: Set<T>, b: Set<T>) => bool",
+                  "(s: Set<T>, other: Set<T>) => bool",
                   [=](const type_vec_t &, const type_vec_t &norm) -> optional<Type *> {
                       return boolIf(sameSets(norm) != nullptr);
                   })}}),
@@ -385,7 +387,9 @@ const std::vector<oper_group_ptr_t> &getCollectionOperatorGroups() {
               typed(
                   0,
                   1,
-                  "(s: Set<T>) => T[]",
+                  // `m`, the name the map rule above gives its one parameter: both take the
+                  // collection to turn into an array.
+                  "(m: Set<T>) => T[]",
                   [](const type_vec_t &, const type_vec_t &norm) -> optional<Type *> {
                       const SetType *set = asSetType(norm[0]);
                       return set ? optional<Type *>(set->keyArrayType()) : nullopt;

@@ -14,7 +14,7 @@ Contents:
 [3 Functions](#3-functions) ·
 [4 Branches and match](#4-branches-and-match) ·
 [5 Arrays and higher-order operators](#5-arrays-and-higher-order-operators) ·
-[6 Evaluation by dependency, sync and wait](#6-evaluation-by-dependency-sync-and-wait) ·
+[6 Evaluation by dependency, sync and the function body](#6-evaluation-by-dependency-sync-and-the-function-body) ·
 [7 Closures and function values](#7-closures-and-function-values) ·
 [8 Generics](#8-generics) ·
 [9 Error handling](#9-error-handling) ·
@@ -258,7 +258,7 @@ There is no "early return" in Camel. Make the branch the last expression of the 
 module arrays
 
 func main(): int sync {
-    let xs = range(1, 11)                                     // [1, ..., 10]
+    let xs = 1..11    // [1, ..., 10]
     let squares = xs->map<(x: int): int => x * x>
     let evens = squares->filter<(x: int): bool => x % 2 == 0>
     let total = evens->reduce<(acc: int, x: int): int => acc + x, 0>
@@ -305,12 +305,12 @@ import { seed, randint } from random
 func main(): int sync {
     seed(42)
     // Wrong tool: randint advances a hidden state, so each element depends on which ran first.
-    let drawn = range(0, 8)->map<(i: int): int => randint(0, 99)>
+    let drawn = 0..8->map<(i: int): int => randint(0, 99)>
     println(drawn)
 
     seed(42)
     // reduce runs in element order on every back end.
-    let ordered = range(0, 8)->reduce<(acc: int[], i: int): int[] => concat(acc, [randint(0, 99)]), [0]->slice<0, 0>>
+    let ordered = 0..8->reduce<(acc: int[], i: int): int[] => concat(acc, [randint(0, 99)]), [0]->slice<0, 0>>
     println(ordered)
     return 0
 }
@@ -332,7 +332,7 @@ Switch to parallel scheduling, `camel docs/tutorial/examples/05_map_order.cml st
 
 This is behaviour laid down by the language (design principles, 3.6), not a defect: it is precisely because there is no order between the elements that `map` can run in parallel. The `reduce` used for the second line runs in element order, and its result is the same on all back ends. The rule is simple: **keep the functions passed to `map` and `filter` pure; do what must be done in order with `foreach`, `reduce` or tail recursion.**
 
-## 6. Evaluation by dependency, sync and wait
+## 6. Evaluation by dependency, sync and the function body
 
 This is where Camel differs most from other languages, and it is worth reading slowly.
 
@@ -432,19 +432,19 @@ func main(): int sync {
 
 The two calls of `log` did run in order (`b` is 3), but `println(x)` belongs to the body of `log` itself, and that is not a sync block (the compiler gives the `EffectNotExecuted` warning all the same). To print, declare `log` as `func log(x: int): int sync { ... }`.
 
-### 6.4 `sync func` is a different thing
+### 6.4 `sync` and the function body
 
-`sync` can also be written **before** `func`. That is a function modifier: it declares that this function has side effects and needs to be synchronised. It does **not** make the function body a sync block. [`examples/06_sync_func.cml`](examples/06_sync_func.cml):
+When `sync` is written in the **function body** position (`func g(): int sync { ... }`), it modifies the block that is the function body: the statements of the block execute in the order they are written. A function body without `sync` is not a sync block, and effects such as `println` in it do not run (evaluation by dependency). [`examples/06_sync_body.cml`](examples/06_sync_body.cml):
 
 ```cml
-module sync_func
+module sync_body
 
-sync func f(): int {
-    println('f')        // still not executed
+func f(): int {
+    println('f')        // not executed: the body is not a sync block
     return 1
 }
 
-sync func g(): int sync {
+func g(): int sync {
     println('g')        // executed: the body is a sync block
     return 2
 }
@@ -460,9 +460,9 @@ g
 3
 ```
 
-The prefix `sync` modifies the function, and the suffix `sync` modifies the block that is the function body; the two mean different things and can be used together.
+A `sync` written before a lambda (`sync (x: int) => ...`) is a different use: it modifies the function type, and is unchanged.
 
-### 6.5 `var`, references and `wait`
+### 6.5 `var`, references and order
 
 In Camel every value is passed by reference. Writing `var` before a parameter means that the function will modify it; the modification is a write to the caller's variable. Passing a `let` to a `var` parameter is a compile-time error ([`examples/06_let_to_var.cml`](examples/06_let_to_var.cml)):
 
@@ -476,20 +476,20 @@ help: Only a variable declared with 'var' (or a var parameter) can be modified. 
       'var', or bind the new value to a new name.
 ```
 
-Once there are mutable variables, there is a question of order: which write must a read come after? A sync block is one answer. Another, more local answer is **`wait`**: it applies to the **one** expression that follows it, and makes the operations before and after it that use the value of this expression, or that use a variable it modifies, ordered with respect to it. [`examples/06_wait.cml`](examples/06_wait.cml):
+Once there are mutable variables, there is a question of order: which write must a read come after? The answer is the sync block: the statements written in one sync block execute in the order they are written, so two writes and a later read have a determined order. [`examples/06_var_order.cml`](examples/06_var_order.cml):
 
 ```cml
-module wait_demo
+module var_order
 
-sync func bump(var counter: int) {
-    wait counter += 1
+func bump(var counter: int): int sync {
+    counter += 1
+    return counter
 }
 
-// Not a sync block: the order comes from `wait` and from the data dependencies.
-func twice(): int {
+func twice(): int sync {
     var c = 0
-    wait bump(c)
-    wait bump(c)
+    bump(c)
+    bump(c)
     return c
 }
 
@@ -503,13 +503,12 @@ func main(): int sync {
 2
 ```
 
-The body of `twice` is not a sync block, but both calls of `bump` ran, and they ran before `return c` reads `c`: `wait` made the compiler insert control edges according to the uses of the variable `c`. A few more points:
+The body of `twice` is a sync block, so the two calls of `bump` and `return c` execute in the order they are written. A few more points:
 
-- `wait` orders things by the uses of a `var`. When the awaited expression does not involve any `var` (for example, it only prints), `wait` has nothing to go by; write that kind of call in a sync block.
-- In a sync block it makes no difference whether you write `wait` or not.
-- If nobody reads `i` any more after `wait modify(i)`, that modification does not run — this is still evaluation by dependency.
+- A write that is not in a sync block has no order relative to earlier reads; the compiler gives the warning `SemanticDiag::IgnoredSideEffect`.
+- If nobody reads the variable any more after the write, that modification does not run — this is still evaluation by dependency.
 
-The everyday advice is simple: write computation as `let`s and pure functions; put input and output in sync blocks; keep `var` and `wait` for the few places that really need in-place updates.
+The everyday advice is simple: write computation as `let`s and pure functions; put input and output in sync blocks; keep `var` for the few places that really need in-place updates.
 
 ## 7. Closures and function values
 

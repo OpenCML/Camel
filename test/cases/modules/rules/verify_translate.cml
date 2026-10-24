@@ -1,0 +1,74 @@
+/**
+ * What the translation layer makes of a rule (H247, slice S1; rewrite design 8.1, and the ruling of
+ * 2026-10-24 on `verification-verdict-surface`, 3, in
+ * `docs/handover/reviews/questions-2026-10-23.md`).
+ *
+ * The two sides of a rule are two graphs. The layer reads them into logic terms -- the integer
+ * scalar fragment: the widths `int` and `i32`, the operators `+ - * / %` and unary `-`, integer
+ * constants and the rule's own parameters -- and every row of the verdict table says what it made
+ * of that rule in its `coverage` column:
+ *
+ *   * a rule of the fragment is `integer scalar <width>: <lhs> = <rhs>`, the proposition a decision
+ *     procedure would be handed. With no solver in this build the row is still `sampled`: comparing
+ *     samples is not establishing a proposition, and the layer does not publish `proved`;
+ *   * a rule outside the fragment is `beyond translation coverage: <reason>`, and the reason names
+ *     the class that stopped it -- a whole-tensor property, an element type the layer does not
+ *     translate yet, an operator outside the fragment, a node kind it does not read. The layer
+ *     refuses rather than guesses (design 8.1: 覆盖之外一律拒绝翻译，并给出原因), and a rule it
+ *     refused is `sampled`, never `proved`;
+ *   * a generic law's row is one per instance, and a law whose declaration carries a `when` is
+ *     translated with `, no premise yet` written after the proposition: the condition is what makes
+ *     the proposition conditional, and turning it into a premise is S4's work, not something this
+ *     slice may assume away.
+ *
+ * `check_coverage_table` is the boundary itself as a value: which widths and operators the layer
+ * covers, what it refuses, and that a condition is not a premise yet. A design section drifts from
+ * the code; this table is what the code says, and the plan asserts it line by line.
+ */
+module verify_translate
+
+import { check, check_text, check_row_count, check_coverage, check_coverage_table } from rewrite
+import { int_add_zero, float_add_minus_zero, tensor_f32_mul_one } from rules
+
+/// A rule of the fragment: both sides are integer scalar terms.
+rule twice(x: int) { x + x => x * 2 }
+
+/// The same in the other width the fragment covers.
+rule plus_zero(x: i32) { x + 0 => x }
+
+/// Two sides the fragment would read if `^` were in it: `x ^ 2` and `x * x` are one integer
+/// equality, and the layer still refuses the rule by the operator it does not translate.
+rule squared(x: int) { x ^ 2 => x * x }
+
+/// A floating width: declared in the coverage table, not translated yet (S3).
+rule scaled(x: float) { x * 1.0 => x }
+
+func main(): int sync {
+    print(check_coverage_table())
+    let mine = check([twice, plus_zero, squared, scaled], 10, 7)
+    println("rows", check_row_count(mine))
+    print(check_text(mine))
+    println("0", check_coverage(mine, 0))
+    println("1", check_coverage(mine, 1))
+    println("2", check_coverage(mine, 2))
+    println("3", check_coverage(mine, 3))
+    // The library's own: a generic law whose declaration carries `when is_integer::<T>()`, so it has
+    // one row per integer width and no premise yet, and a tensor law, whose property is over the
+    // whole tensor at once.
+    let library = check([int_add_zero, tensor_f32_mul_one], 10, 7)
+    println("rows", check_row_count(library))
+    print(check_text(library))
+    println("0", check_coverage(library, 0))
+    println("1", check_coverage(library, 1))
+    println("2", check_coverage(library, 2))
+    // The floating family: the four widths the design lists beside the integer ones. Every one of
+    // them is refused by its element type -- including the two the check cannot even make a value
+    // for, whose coverage column is still read off the rule's own two sides.
+    let floats = check([float_add_minus_zero], 10, 7)
+    println("rows", check_row_count(floats))
+    println("0", check_coverage(floats, 0))
+    println("1", check_coverage(floats, 1))
+    println("2", check_coverage(floats, 2))
+    println("3", check_coverage(floats, 3))
+    return 0
+}

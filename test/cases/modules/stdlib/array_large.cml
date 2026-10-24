@@ -20,7 +20,7 @@ func add(a: int, b: int): int {
 }
 
 func main(): int sync {
-    let xs = range(1, 2001)
+    let xs = 1..2001
     let lengths = xs->map<steps>
     println(len(lengths), sum(lengths), max(lengths) ?? -1, min(lengths) ?? -1)
     println(xs->count<(n: int) => steps(n) > 100>, xs->any<(n: int) => steps(n) > 200>, xs->all<(n: int) => steps(n) < 300>)

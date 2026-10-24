@@ -21,6 +21,9 @@ Camel 的同步执行语义要求：
 
 ## 2. 语法语义层：`sync` 与 `wait`
 
+> **注意（H461）**：函数前缀 `sync func` 与关键字 `wait` 已退役，解析器不再认识它们。2.2、2.3 与第 3 节
+> 描述的是退役前的模型，作为实现记录保留；现行写法见 `docs/language/04_execution_model.md`。
+
 本节描述“语言层”定义；后续章节给出对应实现路径。
 
 ### 2.1 语法入口（关键产生式）
@@ -94,21 +97,19 @@ sync func g(): int sync {
   见 2.2），这也包括：以一个值结尾的同步块（值在块内最后一个表达式之后交出）、
   写在同步块里的 `sync { }` 块（它自己是外层链上的一个语句，块内按它自己的写法）、
   `let (p, q) = f()` 这样一次绑定多个名字的声明。
-- 同步块内调用什么都无所谓，写不写 `wait` 也无所谓：块内已经有顺序。副作用只在默认的无序执行下才需要
+- 同步块内的调用按书写顺序执行：块的相邻语句之间就是控制边。副作用只在默认的无序执行下才需要
   考虑，因为它限制了重排。
-- 副作用的管理与追踪仍是研究中的部分：按引用捕获、`wait` 跟踪与各个遍相互作用不好的情形，作为研究发现
+- 副作用的管理与追踪仍是研究中的部分：按引用捕获、写入的追踪与各个遍相互作用不好的情形，作为研究发现
   连同复现程序记录，不做临时性的修补。
 
 ### 2.4 静态约束
 
-- `var` 形参只允许出现在带函数修饰符 `sync` 的函数中（前缀 `sync func`）；否则 `VarParamInAsyncFunction`
-  告警。
-- 写入被捕获变量（包括模块顶层变量）的函数或 lambda——自己写，或经由它直接调用的函数写——同样有副作用，
-  没有函数修饰符 `sync` 时给出 `CapturedWriteInAsyncFunction` 告警（定位在函数定义处，列出变量名）。
-- **函数修饰符 `sync` 目前只是声明。** 编译器只做上面两项声明检查，不依据它在调用处产生任何顺序、
-  也不要求调用处写 `wait`；调用处应当如何对待这个修饰符，有待语言作者决定。
+- 函数修饰符 `sync`（前缀 `sync func`）与关键字 `wait` 已退役（H461）：`var` 形参是资源参数，
+  不再有任何声明要求，也不再因此告警（原 `VarParamInAsyncFunction`/`CapturedWriteInAsyncFunction`
+  随前缀一起删除）。
+- 写在函数体位置的 `sync`（函数体是同步块）与 lambda 的 `sync` 前缀保留。
 - 调用带 `var` 形参的函数或算子、直接调用写入被捕获变量的函数、或进入有分支臂写入被捕获变量的分支，
-  而既不在同步块内也不加 `wait`：`IgnoredSideEffect` 告警。
+  而不在同步块内：`IgnoredSideEffect` 告警。
 - 把 `let` 对象传给 `var` 形参：编译期错误（见 2.3）。
 
 ### 2.5 实现现状（与上述规则的差距）
@@ -151,13 +152,13 @@ sync func g(): int sync {
 
 ## 3. 编译实现层：从 AST/GCT 到 GIR 的落地
 
-## 附：代码示例（sync 与 wait）
+## 附：代码示例（sync 与函数体）
 
 ```camel
-module sync_wait_demo
+module sync_body_demo
 
-// 有副作用：修改 var 形参。带 var 形参的函数用函数修饰符 sync 声明。
-sync func bump(var x: int): void {
+// 修改 var 形参。函数体是同步块：修改与读取按书写顺序执行。
+func bump(var x: int): void sync {
     x += 1
 }
 
@@ -169,11 +170,9 @@ func log_value(x: int): void sync {
 func main(): int sync {
     var c = 0          // var：可变对象，可以传给 var 形参
 
-    // 同步块内按书写顺序执行，修改和读取顺序稳定；块内写不写 wait 都一样。
-    // log_value 不涉及 var，对它写 wait 没有意义，这里不写。
-    wait bump(c)
+    bump(c)
     log_value(c)       // x = 1
-    wait bump(c)
+    bump(c)
     log_value(c)       // x = 2
 
     return c
@@ -181,21 +180,20 @@ func main(): int sync {
 ```
 
 ```camel
-module wait_boundary_demo
+module order_demo
 
-sync func bump(var x: int): void {
+func bump(var x: int): void sync {
     x += 1
 }
 
-func main(): int {
+func main(): int sync {
     var c = 0
 
-    // 非同步块：对带可变输入的调用使用 wait，编译器跟踪其副作用并插入控制边，
-    // 读取 c 的后续代码在写入完成之后执行
-    wait bump(c)
+    // 不在同步块里的写入只与读取它的操作按依赖排序：这里的 let 各自读到前一次写入之后的 c
+    bump(c)
     let after1 = c
 
-    wait bump(c)
+    bump(c)
     let after2 = c
 
     // 注意：这里若再写一条结果未被使用的 println(...)，它不在同步块内，不会执行（见 2.2）
@@ -258,9 +256,9 @@ func main(): int {
 
 ### 3.5 控制边约简现在在哪（H95 结论）
 
-控制边的传递约简只有一个入口：`std::opt::ctrl`（`ControlReductionPass::apply`，预算 `250000`）。建图器不做传递约简：`shouldAddSyncCtrlLink` 只在“同一前驱已经是直接值输入”时跳过一次控制边（`hasDirectDataDependency`），这是精确、局部的去重，不查路径。编码前的 `reduceControlDependencies(*prepared.draft, 8192)` 已删除。`include/camel/runtime/control.h` 的规则不变：删除 Port/Data 控制输入和值已蕴含的边，保留 BRCH/JOIN 边界与 GATE 的第一条 CTRL。
+控制边的传递约简只有一个入口：`std::opt::order`（`OrderReductionPass::apply`，预算 `250000`）。建图器不做传递约简：`shouldAddSyncCtrlLink` 只在“同一前驱已经是直接值输入”时跳过一次控制边（`hasDirectDataDependency`），这是精确、局部的去重，不查路径。编码前的 `reduceControlDependencies(*prepared.draft, 8192)` 已删除。`include/camel/runtime/control.h` 的规则不变：删除 Port/Data 控制输入和值已蕴含的边，保留 BRCH/JOIN 边界与 GATE 的第一条 CTRL。
 
-H95 复测 H85 对比过的 6 个程序：带不带 `std::opt::ctrl` 都与改动前逐字节相同，唯一例外是 `test/cases/linear/byref/element_assigned.cml` 在不带 `std::opt::ctrl` 时多一条 `:var/take -> :op/assn_owned` 的 CTRL 边。那是 `:var/take` 与随后 `:op/assn_owned` 之间真实的顺序要求（`assn_owned` 要排在取出之后），`std::opt::ctrl` 的传递约简会把它删掉；它不是使用关系，见下。
+H95 复测 H85 对比过的 6 个程序：带不带 `std::opt::order` 都与改动前逐字节相同，唯一例外是 `test/cases/linear/byref/element_assigned.cml` 在不带 `std::opt::order` 时多一条 `:var/take -> :op/assn_owned` 的 CTRL 边。那是 `:var/take` 与随后 `:op/assn_owned` 之间真实的顺序要求（`assn_owned` 要排在取出之后），`std::opt::order` 的传递约简会把它删掉；它不是使用关系，见下。
 
 H85 把 `path_assigned_allocs.cml` 的 `2 0 0` 读成“多出的控制边让 `:var/take` 的结果多了一个使用者，原地改写因此又复制了一次”。H95 用分配计数和运行轨迹复核，结论不同：
 
@@ -268,7 +266,7 @@ H85 把 `path_assigned_allocs.cml` 的 `2 0 0` 读成“多出的控制边让 `:
 2. 第一个测量窗口里多出的 320 字节块是**数组字面量自己的构造**：GIR 是 `字面量(Data) -> COPY -> :var/new`，`COPY` 在无约简的图里被排在第一个 `std::mem::blocks()` 之后，在基线的图里排在它之前。
 3. 原因不在共享判定，而在顺序没有被写进图：`:op/mem::blocks()` 这个语句节点没有任何输入（jgir 里是根），`var v = [...]` 的声明也不进入同步链（`lastSyncedNode_` 只由读、调用、分支、循环更新），所以“先构造还是先测量”不受边约束；`computeExecutionOrder` 是从出口出发的 DFS 后序，边集一变，两个互不约束的节点就换了位置。字面量的构造除了这一次分配没有可观察效应，因此图没有违反 3.3/3.4，是测量窗口写得过宽。
 
-H95 把该用例改成用调用构造数组（`make_array()`）：调用是同步链上的语句，构造稳定地落在第一个窗口之前。四个后端在有/无 `std::opt::ctrl` 时都是 `1 0 0`。
+H95 把该用例改成用调用构造数组（`make_array()`）：调用是同步链上的语句，构造稳定地落在第一个窗口之前。四个后端在有/无 `std::opt::order` 时都是 `1 0 0`。
 
 原地改写的共享判定不数使用者：`:var/take` 只在变量单元格没有“独占数组”标记时复制，`:op/assn_owned` 置位，`:var/get`、`:op/assn` 清除，`:var/peek` 保留。控制边只表达顺序、不读值（3.3、3.4），所以加一条控制边不会让这条语句复制。
 
@@ -383,4 +381,4 @@ H95 把该用例改成用调用构造数组（`make_array()`）：调用是同�
 
 ## 10. 一句话总结
 
-`JOIN` 负责“把分支值变成一个值”，`GATE` 负责“把这个值和同步控制完成点绑定为函数出口”。控制边的传递约简只在 `std::opt::ctrl`；建图器只跳过“前驱已经是直接值输入”的边，控制边只表达顺序，不参与共享判定（3.5）。
+`JOIN` 负责“把分支值变成一个值”，`GATE` 负责“把这个值和同步控制完成点绑定为函数出口”。控制边的传递约简只在 `std::opt::order`；建图器只跳过“前驱已经是直接值输入”的边，控制边只表达顺序，不参与共享判定（3.5）。

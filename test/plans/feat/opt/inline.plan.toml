@@ -3,6 +3,80 @@ order = 320
 tier = "fast"
 tags = ["feat", "opt", "inline"]
 
+# ---- 5.7: the body of an inlined `sync` function keeps the chain it brings ----
+
+[[tests]]
+name = "body_chain_verbatim.reference"
+desc = "The corpus without a pass: the caller prints 1, the body prints 101 and 102, then the caller prints the result 4 and 2."
+kind = "behavior"
+case = "../../../cases/opt/inline/body_chain_verbatim.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "1\n101\n102\n4\n2\n"
+timeout_ms = 10000
+
+[[tests]]
+name = "body_chain_verbatim.inline.runs"
+desc = "Each back end runs the inlined body's own chain in its written order between the caller's statements (5.7: the spliced block is a block of its own)."
+kind = "behavior"
+case = "../../../cases/opt/inline/body_chain_verbatim.cml"
+args = ["${case}", "std::opt::inline", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_stdout_exact = "1\n101\n102\n4\n2\n"
+timeout_ms = 10000
+
+[[tests]]
+name = "body_chain_verbatim.inline.order_edges"
+desc = "5.7's extra constraint: after the splice every effect node of the body is ordered after the statement written before the call, beside the chain the body brought."
+kind = "behavior"
+case = "../../../cases/opt/inline/body_chain_verbatim.cml"
+args = ["${case}", "std::opt::inline", "std::jgir"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+    const graph = JSON.parse(input.normalized.stdout).graphs.find(g => g.name === 'main')
+    assert(graph, 'main graph missing')
+    const label = id => graph.nodes.find(n => n.id === id)?.label
+    const valueOf = id => {
+        const edge = graph.edges.find(e => e.target === id && e.kind === 'normal')
+        return edge ? label(edge.source) : undefined
+    }
+    const prints = graph.nodes.filter(n => n.label === ':io/println')
+    const printOf = value => prints.find(n => valueOf(n.id) === String(value))
+    const before = printOf(1)
+    const body = [printOf(101), printOf(102)]
+    assert(before, 'the statement written before the call must survive')
+    assert(body[0] && body[1], 'both statements of the body must survive the splice')
+    assert(!graph.nodes.some(n => n.kind === 'CALL' || n.kind === 'FUNC'), 'the call must be inlined away')
+    for (const node of body) {
+        assert(
+            graph.edges.some(e => e.kind === 'order' && e.source === before.id && e.target === node.id),
+            `the body's print of ${valueOf(node.id)} is not ordered after the statement before the call`)
+    }
+    // Beside the order edges the body keeps the chain it brought: its own statements are joined to
+    // each other in their written order, and the first of them to what the call was written after.
+    // The kind of those edges is not named: 5.7 asks for the order, not for ctrl or sync.
+    const joins = (source, target) => graph.edges.some(
+        e => e.source === source && e.target === target && (e.kind === 'control' || e.kind === 'sync'))
+    assert(joins(before.id, body[0].id), 'the body is not joined to the statement before the call')
+    assert(joins(body[0].id, body[1].id), 'the body statements are not joined in their written order')
+    // The spliced body keeps its source: its statements lie in a region of its own that records the
+    // function they are a copy of (5.7), so a reader can still tell them from the caller's.
+    const regionOf = node => (graph.regions || []).find(r => r.id === node.region)
+    for (const node of body) {
+        const region = regionOf(node)
+        assert(region && region.kind === 'inline' && region.inlined === 'inner',
+            `the body statement ${valueOf(node.id)} does not record its source function`)
+    }
+    const callerRegion = regionOf(before)
+    assert(!callerRegion || callerRegion.kind !== 'inline',
+        'the statement before the call must stay the own statement of the caller')
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
 [[tests]]
 name = "consecutive_sync_calls.opt.gates"
 desc = "The integrated optimizer reduces unused inlined return gates to the one gate that orders the program result after all four prints."
@@ -265,6 +339,52 @@ verify_script = """
     const found = match(/inline_strategy_hybrid_mix a=([0-9]+) b=([0-9]+)/, input.normalized.stdout)
     assert(Number(found[1]) === 41, `expected a=41, got ${found[1]}`)
     assert(Number(found[2]) === 7, `expected b=7, got ${found[2]}`)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "compute_node_size.at_limit.inlined"
+desc = "How small a function is counts its own compute nodes (its OPERs, the calls it makes and its structural nodes), not its constants, its parameters, its GATEs or what an inline splice adds (review 2026-10-24). `main` reaches a loop through `spin` and its own computation is exactly the limit, eight compute nodes: it is still copied into the entry graph, which the entry graph shows as the inline region it gained, and the count of its own region is eight."
+kind = "behavior"
+case = "../../../cases/opt/inline/compute_node_size_at_limit.cml"
+args = ["${case}", "std::macro", "std::opt::devirtualize", "std::opt::inline", "std::jgir"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+    const doc = JSON.parse(input.normalized.stdout)
+    const root = doc.graphs.find(g => g.name === '__root__')
+    assert(root, '__root__ graph missing')
+    const inlined = (root.regions || []).map(r => r.inlined).filter(Boolean)
+    assert(inlined.includes('main'), `main is at the limit (8 compute nodes) and must be inlined into the entry graph; regions: ${JSON.stringify(root.regions || [])}`)
+    const main = doc.graphs.find(g => g.name === 'main')
+    assert(main, 'main graph missing')
+    const compute = main.nodes.filter(n => !['DATA', 'PORT', 'GATE', 'SYNC', 'DEAD'].includes(n.kind) && !n.region)
+    assert(compute.length === 8, `expected 8 compute nodes of main, got ${compute.length}: ${JSON.stringify(compute.map(n => n.label))}`)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "compute_node_size.over_limit.left_a_call"
+desc = "One `println` more, nine compute nodes, is one over the limit: the inliner leaves the call of `main` in the entry graph (no inline region), and the function's own computation is nine compute nodes. The pair with the case above is the boundary of the limit."
+kind = "behavior"
+case = "../../../cases/opt/inline/compute_node_size_over_limit.cml"
+args = ["${case}", "std::macro", "std::opt::devirtualize", "std::opt::inline", "std::jgir"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+    const doc = JSON.parse(input.normalized.stdout)
+    const root = doc.graphs.find(g => g.name === '__root__')
+    assert(root, '__root__ graph missing')
+    const inlined = (root.regions || []).map(r => r.inlined).filter(Boolean)
+    assert(!inlined.includes('main'), `main has nine compute nodes and must stay a call; regions: ${JSON.stringify(root.regions || [])}`)
+    const main = doc.graphs.find(g => g.name === 'main')
+    assert(main, 'main graph missing')
+    const compute = main.nodes.filter(n => !['DATA', 'PORT', 'GATE', 'SYNC', 'DEAD'].includes(n.kind) && !n.region)
+    assert(compute.length === 9, `expected 9 compute nodes of main, got ${compute.length}: ${JSON.stringify(compute.map(n => n.label))}`)
 }
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]

@@ -81,7 +81,7 @@ const std::unordered_map<SyntaxDiag, DiagInfo> &getSyntaxDiagInfoMap() {
             {
                 "MissingToken",
                 "Expected {0} before {1}.",
-                "",
+                "One token is missing at the caret and the message names it; nothing else in the file has to change.",
             },
         },
         {
@@ -89,7 +89,7 @@ const std::unordered_map<SyntaxDiag, DiagInfo> &getSyntaxDiagInfoMap() {
             {
                 "UnexpectedToken",
                 "Unexpected {0}{1}.",
-                "",
+                "The token fits nothing that can stand where it is. What the parser expected instead follows the semicolon above: a list whose items have no ',' between them, a bracket that is not closed and a reserved word where a name belongs are the usual causes.",
             },
         },
         {
@@ -130,6 +130,30 @@ const std::unordered_map<SyntaxDiag, DiagInfo> &getSyntaxDiagInfoMap() {
                 "EmptyInterpolation",
                 "An interpolation has no expression to format.",
                 "Write an expression between '${{' and '}}': ${{value}}. For a literal '${{' write '\\${{'.",
+            },
+        },
+        {
+            SyntaxDiag::AsRightSideIsType,
+            {
+                "AsRightSideIsType",
+                "The right side of '{0}' is a type; write the interval as '(a..b)'.",
+                "'T..' is the stream type (design principles 5.4): the elements of 'T' that arrive one after another. An interval is an expression, and it is written in parentheses: (1..5).",
+            },
+        },
+        {
+            SyntaxDiag::WhenAfterBody,
+            {
+                "WhenAfterBody",
+                "A 'when' condition comes before what it guards, so {0} cannot follow it.",
+                "Write it between the parameters and the body: rule add_zero::<T>(x: T) when is_integer::<T>() {{ x + 0 => x }}, or between the patterns of a match case and its arm: case n when n > 0 => n. The trailing form is not read as a condition.",
+            },
+        },
+        {
+            SyntaxDiag::LambdaParametersNeedParentheses,
+            {
+                "LambdaParametersNeedParentheses",
+                "A lambda's parameters need their parentheses: write '(x) => e', not 'x => e'.",
+                "A lambda's parameters are written in parentheses, and a parameter list destructured as a tuple is written '((a, b)) => e' (design principles 5.9). An unparenthesised 'x => e' is not a lambda: inside a rule body the '=>' is the rule's own arrow (rule r(x: int) {{ x => x }}), so the two readings would collide and no unparenthesised spelling is added (the author's ruling of 2026-10-24). What is written here is an expression followed by an arrow that fits nothing; if a rewrite was meant, it is declared with 'rule'.",
             },
         },
         {

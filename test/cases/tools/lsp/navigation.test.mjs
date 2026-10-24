@@ -79,7 +79,7 @@ await withServer(async (ls) => {
     h = await hover('double(sum)')
     check(h.includes('let double: (v: int) => int'), 'a function value shows its type', h)
     h = await hover('func bump', 1, 5)
-    check(h.includes('sync func bump(var counter: int, by: int)'), 'modifiers are shown', h)
+    check(h.includes('func bump(var counter: int, by: int)'), 'the signature is shown', h)
     check(h.includes('=> int'), 'an inferred return type is shown', h)
     h = await hover('Pair = (1', 1, 0)
     check(h.includes('type Pair = (int, string)'), 'a type alias shows its definition', h)
@@ -131,7 +131,7 @@ await withServer(async (ls) => {
     checkEq(await refs('norm2(p)'),
         ['2:9-2:14', '28:12-28:17', 'shapes.cml 6:12-6:17'],
         'references of an imported function: the import, the call, the declaration')
-    checkEq(await refs('counter += by'), ['21:19-21:26', '22:4-22:11', '23:11-23:18'],
+    checkEq(await refs('counter += by'), ['21:14-21:21', '22:4-22:11', '23:11-23:18'],
         'a var parameter: the assignment is a reference')
     checkEq(await refs('add(1, 2)'), ['13:5-13:8', '34:14-34:17'],
         'references of one overload do not include calls of the other')

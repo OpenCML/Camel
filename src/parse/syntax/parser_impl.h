@@ -160,6 +160,10 @@ class ParserImpl {
 
     // ---- Errors ----
     void error(SyntaxError::Kind kind, std::initializer_list<uint8_t> expected, uint32_t at);
+    /// The same, with the second token the kind refers to (`aux`): `x as int..5` reports at the
+    /// `..` and names the `as` that put a type there.
+    void
+    error(SyntaxError::Kind kind, std::initializer_list<uint8_t> expected, uint32_t at, uint32_t aux);
     void unexpected(std::initializer_list<uint8_t> expected) {
         error(SyntaxError::Kind::Unexpected, expected, pos_);
     }
@@ -339,6 +343,7 @@ class ParserImpl {
     void parseStaticForHeader();
     void parseStaticForName();
     void parseStaticLoop();
+    void parseStaticLoopHeader();
     void parseMatchCase();
     void parseTypeCase();
     void parseTypeCasePattern();

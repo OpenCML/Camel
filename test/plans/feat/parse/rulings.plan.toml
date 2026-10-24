@@ -2,7 +2,7 @@ id = "parse.rulings"
 order = 306
 tier = "fast"
 tags = ["feat", "parse", "syntax"]
-desc = "The syntax rulings of design principles 4.2: the precedence of `^`, literals with an exponent, renamed imports, documentation comments, an `if` statement without a block."
+desc = "The syntax rulings of design principles 4.2: the precedence of `^`, literals with an exponent, renamed imports, documentation comments, an `if` statement without a block, and the postfix marks of a type (`?`, `!` and the stream's `..`, read left to right). Two rulings of 2026-10-24 are read here: the right side of `as` is a type, and a lambda's parameters are written in parentheses (5.9)."
 
 [[tests]]
 name = "rulings.power"
@@ -217,4 +217,64 @@ backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
 expect_stdout_contains = ["no no false\n-2 -4 -9 3\ntrue true true"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rulings.optional_comp_removed"
+desc = "`?..` is not in the language (the ruling of 2026-10-24): the lexer no longer knows the token, so `inc?..dbl` is a syntax error at the `?` rather than a construct the compiler refuses."
+kind = "negative"
+case = "../../../cases/parse/rulings/optional_comp_removed.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SyntaxDiag::UnexpectedToken"
+expect_diagnostic_code = "0x0200000A"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 16
+expect_output_contains = ["Unexpected '?'"]
+expect_output_not_contains = ["never printed", "UnknownInternalError", "ConstructNotSupported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rulings.stream_type_marks"
+desc = "`..` is a postfix mark of a type beside `?` and `!`, and the marks are read left to right with no special case (the author's ruling of 2026-10-24): `T..` is the stream of T, `T?..` the stream of a nullable T, `T!..` the stream of a fallible T, `T..?` the possibly absent stream, `T[3]..` the stream of three-element arrays, `T[..]..` the stream of open-rank arrays, and an item of a tuple takes one. `T[..]` keeps its own reading: an array whose extents are a prefix, which is not a stream. The tree is locked by feat/parse/frontend's snapshot; this test runs the program."
+kind = "behavior"
+case = "../../../cases/parse/rulings/stream_type_marks.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_starts_with = "4\n"
+expect_output_not_contains = ["UnknownInternalError", "[Error]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rulings.stream_type_as_interval"
+desc = "The right side of `as` is a type (the author's ruling of 2026-10-24): `..` after a type there is the stream suffix. A number written directly after the `..` is the interval reading in a place where a type stands, and the refusal is named and says how to write it - the message the ruling asked for, at the `..`, with the operator of the `as` quoted. It used to be `Unexpected '..'; expected '}'.` at the `..`."
+kind = "negative"
+case = "../../../cases/parse/rulings/stream_type_as_interval.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SyntaxDiag::AsRightSideIsType"
+expect_diagnostic_code = "0x02000011"
+expect_diagnostic_line = 11
+expect_diagnostic_column = 21
+expect_output_contains = ["The right side of 'as' is a type; write the interval as '(a..b)'."]
+expect_output_not_contains = ["UnknownInternalError", "Unexpected"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rulings.lambda_needs_parentheses"
+desc = "A lambda's parameters are written in parentheses (the author's ruling of 2026-10-24, on `composition-expected-type-edges` item 4): `x => e` is not a lambda, because a rule body's `x => x` already spends that arrow, so the unparenthesised spelling is named - SyntaxDiag::LambdaParametersNeedParentheses, at the `=>`, saying which parentheses to write. The composition `f..g`, which is the lambda `(x) => g(f(x))`, is accepted in the line above it, so the two spellings are told apart in one program. It used to be `Unexpected '=>'; expected '}'.` at the `=>`."
+kind = "negative"
+case = "../../../cases/parse/rulings/lambda_without_parentheses.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SyntaxDiag::LambdaParametersNeedParentheses"
+expect_diagnostic_code = "0x02000012"
+expect_diagnostic_line = 17
+expect_diagnostic_column = 38
+expect_output_contains = ["A lambda's parameters need their parentheses: write '(x) => e', not 'x => e'."]
+expect_output_not_contains = ["UnknownInternalError", "Unexpected"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000

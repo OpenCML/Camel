@@ -1,0 +1,10 @@
+// The two-parameter `range(a, b)` is deleted: the interval `a..b` is the one spelling (design
+// principles 4.2, the ruling of 2026-10-24). The call is refused where it stands, with the
+// spelling to write instead.
+module h426_range_two_arguments
+
+func main(): int sync {
+    let xs = range(0, 3)
+    println(xs)
+    return 0
+}

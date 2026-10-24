@@ -8,9 +8,138 @@
 #include "camel/core/type/typevar.h"
 #include "camel/utils/assert.h"
 
+#include <cctype>
+
 using namespace camel::core::type;
 
 namespace {
+
+/// The text without the blanks at either end.
+std::string trimmed(const std::string &text) {
+    const size_t first = text.find_first_not_of(" \t\r\n");
+    if (first == std::string::npos) {
+        return {};
+    }
+    return text.substr(first, text.find_last_not_of(" \t\r\n") - first + 1);
+}
+
+/// The index of the bracket that closes the one at `open`, or npos. The three bracket kinds nest
+/// inside one another and each list is balanced, so counting the opening bracket's own character
+/// finds its partner (`<m: Map<K, V>>` closes at the last `>`).
+size_t closingBracketOf(const std::string &text, size_t open) {
+    const char close = text[open] == '(' ? ')' : text[open] == '[' ? ']' : text[open] == '{' ? '}' : '>';
+    int depth        = 0;
+    for (size_t i = open; i < text.size(); ++i) {
+        if (text[i] == '=' && i + 1 < text.size() && text[i + 1] == '>') {
+            ++i; // the `>` of `=>` closes nothing
+            continue;
+        }
+        if (text[i] == text[open]) {
+            ++depth;
+        } else if (text[i] == close && --depth == 0) {
+            return i;
+        }
+    }
+    return std::string::npos;
+}
+
+/// The index of the `=>` that separates a signature's parameters from its result: the last one
+/// outside every bracket group. The `=>` of a function type written as a parameter
+/// (`<f: (acc: U, item: T) => U>`) is inside a group and is not the one.
+size_t resultArrowOf(const std::string &text) {
+    int depth       = 0;
+    size_t arrow    = std::string::npos;
+    for (size_t i = 0; i < text.size(); ++i) {
+        const char c = text[i];
+        if (c == '=' && i + 1 < text.size() && text[i + 1] == '>') {
+            if (depth == 0) {
+                arrow = i;
+            }
+            ++i;
+            continue;
+        }
+        if (c == '(' || c == '[' || c == '{' || c == '<') {
+            ++depth;
+        } else if (c == ')' || c == ']' || c == '}' || c == '>') {
+            --depth;
+        }
+    }
+    return arrow;
+}
+
+/// The name the parameter `text` writes at its head: `key: K`, `...rest: U...`, `args?: (...)`,
+/// `var n: int`. Empty when it writes none, or writes a parameter that is never given by name
+/// (a rest parameter collects the arguments left over at the call).
+std::string parameterNameOf(const std::string &text) {
+    const std::string part = trimmed(text);
+    if (part.empty() || part.starts_with("...")) {
+        return {};
+    }
+    size_t at = part.starts_with("var ") ? 4 : 0;
+    while (at < part.size() && std::isspace(static_cast<unsigned char>(part[at]))) {
+        ++at;
+    }
+    const size_t start = at;
+    if (at >= part.size() || !(std::isalpha(static_cast<unsigned char>(part[at])) || part[at] == '_')) {
+        return {};
+    }
+    while (at < part.size() &&
+           (std::isalnum(static_cast<unsigned char>(part[at])) || part[at] == '_')) {
+        ++at;
+    }
+    const std::string name = part.substr(start, at - start);
+    while (at < part.size() && std::isspace(static_cast<unsigned char>(part[at]))) {
+        ++at;
+    }
+    if (at < part.size() && part[at] == '?') {
+        ++at;
+        while (at < part.size() && std::isspace(static_cast<unsigned char>(part[at]))) {
+            ++at;
+        }
+    }
+    return at < part.size() && part[at] == ':' ? name : std::string();
+}
+
+/// The names of the parameters written between brackets, split at the commas that are not nested:
+/// false when one of them writes no name.
+bool namesOfList(const std::string &text, std::vector<std::string> &names) {
+    size_t at = 0;
+    for (;;) {
+        int depth         = 0;
+        size_t comma      = std::string::npos;
+        for (size_t i = at; i < text.size(); ++i) {
+            const char c = text[i];
+            if (c == '=' && i + 1 < text.size() && text[i + 1] == '>') {
+                ++i;
+                continue;
+            }
+            if (c == '(' || c == '[' || c == '{' || c == '<') {
+                ++depth;
+            } else if (c == ')' || c == ']' || c == '}' || c == '>') {
+                --depth;
+            } else if (c == ',' && depth == 0) {
+                comma = i;
+                break;
+            }
+        }
+        const std::string part = trimmed(text.substr(at, comma == std::string::npos ? comma : comma - at));
+        if (part.empty()) {
+            if (comma == std::string::npos) {
+                return true; // an empty list
+            }
+            return false; // a parameter left out
+        }
+        const std::string name = parameterNameOf(part);
+        if (name.empty()) {
+            return false;
+        }
+        names.push_back(name);
+        if (comma == std::string::npos) {
+            return true;
+        }
+        at = comma + 1;
+    }
+}
 
 /// The declared signature as an operator's type: closed, with its parameter names, var marks
 /// and modifiers kept.
@@ -34,6 +163,62 @@ FunctionType *closedSignature(FunctionType *declared) {
 }
 
 } // namespace
+
+bool camel::core::type::namesOfSignature(
+    const FunctionType *funcType, std::vector<std::string> &with, std::vector<std::string> &norm) {
+    if (funcType == nullptr || !funcType->hasArgNames()) {
+        return false;
+    }
+    std::vector<std::string> withNames, normNames;
+    for (size_t i = 0; i < funcType->withTypesCount(); ++i) {
+        const std::string name(funcType->argNameAt(i));
+        if (name.empty()) {
+            return false;
+        }
+        withNames.push_back(name);
+    }
+    for (size_t i = 0; i < funcType->normTypesCount(); ++i) {
+        const std::string name(funcType->argNameAt(funcType->withTypesCount() + i));
+        if (name.empty()) {
+            return false;
+        }
+        normNames.push_back(name);
+    }
+    with = std::move(withNames);
+    norm = std::move(normNames);
+    return true;
+}
+
+bool camel::core::type::namesOfSignatureText(
+    const std::string &text, std::vector<std::string> &with, std::vector<std::string> &norm) {
+    const size_t arrow = resultArrowOf(text);
+    if (arrow == std::string::npos) {
+        return false; // not a signature: nothing says which parameters it has
+    }
+    const std::string head = text.substr(0, arrow);
+    size_t at              = 0;
+    std::vector<std::string> withNames, normNames;
+    if (at < head.size() && head[at] == '<') {
+        const size_t close = closingBracketOf(head, at);
+        if (close == std::string::npos || !namesOfList(head.substr(at + 1, close - at - 1), withNames)) {
+            return false;
+        }
+        at = close + 1;
+    }
+    while (at < head.size() && std::isspace(static_cast<unsigned char>(head[at]))) {
+        ++at;
+    }
+    if (at >= head.size() || head[at] != '(') {
+        return false;
+    }
+    const size_t close = closingBracketOf(head, at);
+    if (close == std::string::npos || !namesOfList(head.substr(at + 1, close - at - 1), normNames)) {
+        return false;
+    }
+    with = std::move(withNames);
+    norm = std::move(normNames);
+    return true;
+}
 
 DeclaredFuncTypeResolver::DeclaredFuncTypeResolver(FunctionType *declared)
     : funcType_(closedSignature(declared)) {

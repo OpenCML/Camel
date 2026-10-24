@@ -159,7 +159,7 @@ ATOMS = {"lit", "ref", "call", "conv", "arr", "tup", "rec", "idx", "fld", "range
 
 
 # Forms the grammar does not accept bare as the test of an `if` or the right side of an assignment.
-LOW = {"if", "match", "lam", "wait", "assign", "loop"}
+LOW = {"if", "match", "lam", "assign", "loop"}
 
 
 def ex(n: N, ind: int, top: bool = False) -> str:
@@ -268,12 +268,16 @@ def ex(n: N, ind: int, top: bool = False) -> str:
         return wrap(f"{post(n.c[0])}->append<{arg(n.c[1])}>")
     if k == "join":
         return wrap(f"{post(n.c[0])}->join<{str_lit(n.a['sep'])}>")
-    if k in ("zip", "range", "concat"):
+    if k == "range":
+        # The interval of the integers `a` to `b - 1` is written `a..b` and nothing else (design
+        # principles 4.2): the two-parameter `range(a, b)` is gone. `..` binds tighter than every
+        # binary operator and looser than the postfix forms, so a bound is written as the receiver
+        # of a postfix form is.
+        return f"{post(n.c[0])}..{post(n.c[1])}"
+    if k in ("zip", "concat"):
         return f"{k}({arg(n.c[0])}, {arg(n.c[1])})"
     if k == "println":
         return f"println({arg(n.c[0])})"
-    if k == "wait":
-        return wrap("wait " + ex(n.c[0], ind, True))
     if k == "assign":
         rhs = sub(n.c[0]) if n.c[0].k in LOW else arg(n.c[0])
         return wrap(f"{n.a['name']} {n.a['op']} {rhs}")
@@ -858,9 +862,6 @@ class Evaluator:
             raise Reject("too many lines")
         return None
 
-    def e_wait(self, n, env):
-        return self.ev(n.c[0], env)
-
     def e_assign(self, n, env):
         cell = env.get(n.a["name"])
         if not isinstance(cell, Cell):
@@ -953,7 +954,7 @@ def evaluate(prog: N) -> list:
 # The determined subset
 # ----------------------------------------------------------------------------------------------
 
-EFFECT_KINDS = {"println", "assign", "foreach", "wait"}
+EFFECT_KINDS = {"println", "assign", "foreach"}
 
 
 def is_effect(n: N) -> bool:
@@ -963,8 +964,8 @@ def is_effect(n: N) -> bool:
 def effect_violations(prog: N) -> list:
     """Effects that are not in an effect position. An effect position is the expression of a
     statement (or the result) of a `sync` block whose enclosing blocks, up to the body of its
-    function or lambda, are all `sync` blocks; `wait`, and `if` / `match` whose arms are `sync`
-    blocks, pass the position on. Everywhere else an effect would run on demand (design
+    function or lambda, are all `sync` blocks; `if` / `match` whose arms are `sync` blocks pass
+    the position on. Everywhere else an effect would run on demand (design
     principles 3.1), which the eager reference does not model, so the generator never writes one
     there and the reducer must not create one. Calls are judged by the `eff` mark the generator
     put on them."""
@@ -1009,9 +1010,7 @@ def effect_violations(prog: N) -> list:
         if is_effect(e) and not pos:
             bad.append(e.k)
         k = e.k
-        if k == "wait":
-            expr(e.c[0], pos)
-        elif k == "if":
+        if k == "if":
             expr(e.c[0], False)
             arm(e.c[1], pos)
             arm(e.c[2], pos)

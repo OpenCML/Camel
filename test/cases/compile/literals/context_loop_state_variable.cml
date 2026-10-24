@@ -1,0 +1,17 @@
+/**
+ * The rule moves a literal, never a variable (design principles 5.1): the position of a loop's
+ * value types the literal written as the state's first value, and nothing else. A state whose
+ * first value is a name keeps that name's type — the loop's value is the state's type — so a
+ * `float` value where an `f32` is declared is refused at the declaration, as `let n: f32 = f` is.
+ */
+module literal_context_loop_state_variable
+
+func floatValue(): float {
+    2.5
+}
+
+func main(): int sync {
+    let n: f32 = loop s = floatValue() while s < 3.0 do s + 1.0
+    println(n)
+    return 0
+}

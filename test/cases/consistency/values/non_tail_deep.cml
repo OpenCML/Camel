@@ -17,6 +17,6 @@ func step(n: int, d: int): int { return via(step, n, d) }
 func main(): int sync {
     println(depth(200))
     println(step(100, 5))
-    println(range(0, 4)->map<(x: int): int => depth(x * 50)>)
+    println(0..4->map<(x: int): int => depth(x * 50)>)
     return 0
 }

@@ -31,7 +31,7 @@ let mul_one = __rule('mul_one', false, 0, 0, mul_one__lhs, mul_one__rhs)
 A condition adds a third function and a different maker:
 
 ```camel
-rule add_zero(x: int, y: int) { x + y => x } when isZero(y)
+rule add_zero(x: int, y: int) when isZero(y) { x + y => x }
 
 func add_zero__lhs(x: int, y: int) => x + y
 func add_zero__rhs(x: int, y: int) => x
@@ -41,7 +41,7 @@ let add_zero = __rule_when('add_zero', false, 0, 0, add_zero__lhs, add_zero__rhs
 
 A `const` parameter is the exception: it is the constant's *value* inside the condition, of the
 type it was declared with (`func keep_positive__when(x: Node, c: float) => positive(c)` for
-`rule keep_positive(x: float, const c: float) { x * c => x } when positive(c)`), so the guard is
+`rule keep_positive(x: float, const c: float) when positive(c) { x * c => x }`), so the guard is
 arithmetic on the value and needs neither `constant(node, sample)` nor the `match … case null`
 layers around a read. The engine passes that value where it passed a node, and the parameter bit
 the rule carries is what tells it which parameters are which.
@@ -52,7 +52,7 @@ Reaching the *node* of a `const` parameter is `node_of(c)` (the ruling of 2026-1
 the rule's own, in the same order:
 
 ```camel
-rule mul_one(x: int, const c: int) { x * c => x } when sign(node_of(c)) == 1
+rule mul_one(x: int, const c: int) when sign(node_of(c)) == 1 { x * c => x }
 
 // func mul_one__when(x: Node, c: int, c__node: Node) => sign(c__node) == 1
 ```
@@ -304,7 +304,7 @@ The rule declaration, the engines and the check are the first step; `when` is im
 item 1), the rest is planned in the H38 report (`handover note ⟨50954d0⟩ (H38)`, section 1). In
 short:
 
-**`when` (implemented).** `rule … { lhs => rhs } when expr` compiles to a third function
+**`when` (implemented).** `rule … when expr { lhs => rhs }` compiles to a third function
 `name__when(params) => expr`, and to the value `let name = __rule_when(name, twoWay, needs,
 consts, lhs, rhs, when)`; the 6-argument `__rule` stays for rules without a condition. A parameter of the
 condition that is not `const` is a `graph::Node` naming the node the engine bound to that parameter

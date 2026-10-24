@@ -19,6 +19,7 @@
 
 #include "camel/core/context/frame.h"
 #include "camel/core/mm.h"
+#include "camel/core/operator_table.h"
 #include "camel/core/rtdata/array.h"
 #include "camel/core/rtdata/collection.h"
 #include "camel/core/rtdata/func.h"
@@ -38,6 +39,39 @@
 #include <stdexcept>
 
 namespace camel::runtime {
+
+bool nodeIsPure(GCNodeKind kind, camel::core::OperId oper) {
+    switch (kind) {
+    case GCNodeKind::Data:
+    case GCNodeKind::Port:
+    case GCNodeKind::Cast:
+    case GCNodeKind::Copy:
+    case GCNodeKind::Fill:
+    case GCNodeKind::Accs:
+    case GCNodeKind::Brch:
+    case GCNodeKind::Join:
+        return true;
+    case GCNodeKind::Oper:
+        return camel::core::OperatorTable::instance().isPure(oper);
+    default:
+        // A call, a function, a gate, a loop: an anchor that may be an effect, and nothing
+        // refuses an order on it (docs/design/effects/edges.cn.md 4.6).
+        return false;
+    }
+}
+
+bool nodeIsFreelySchedulable(GCNodeKind kind, camel::core::OperId oper) {
+    if (!nodeIsPure(kind, oper)) {
+        return false;
+    }
+    if (kind != GCNodeKind::Oper) {
+        // The kinds above own no resource and raise nothing.
+        return true;
+    }
+    const std::optional<camel::core::OperatorTraits> traits =
+        camel::core::OperatorTable::instance().find(oper);
+    return traits.has_value() && !traits->mayFault;
+}
 
 using camel::core::rtdata::fromSlot;
 using camel::core::rtdata::Object;
@@ -469,11 +503,18 @@ void validateRuntimeGraphPayloadImpl(const GCGraph *graph) {
             }
         }
         if (node->kind == GCNodeKind::Gate) {
-            const auto ctrlInputs = graph->ctrlInputsOf(ref);
-            if (ctrlInputs.empty()) {
+            // A GATE is "let a value through once the sync chain has", and it waits through a
+            // **sync predecessor** (docs/design/effects/edges.cn.md 5.3 -- it has no control input
+            // there at all: it is a pure value-forwarding node with one data port and one sync
+            // predecessor). The control input is what that wait used to be written as; the paths
+            // this lane has not moved onto the sync edge yet still carry one, and the ones that
+            // have carry the sync edge instead. A GATE with neither waits on nothing, which is
+            // what this refuses.
+            if (graph->syncPredsOf(ref).empty() && graph->ctrlInputsOf(ref).empty()) {
                 throw std::runtime_error(
                     std::format(
-                        "Runtime graph '{}' has GATE node {} without control input.",
+                        "Runtime graph '{}' has GATE node {} without a wait: no sync predecessor "
+                        "and no control input.",
                         graph->name(),
                         ref));
             }
@@ -858,6 +899,7 @@ void emitDraftPayload(
                 header,
                 GCLoopRef{
                     .kind            = body.kind,
+                    .iterableForm    = body.iterableForm,
                     .condRef         = indexOf(body.condGraph),
                     .bodyRef         = indexOf(body.bodyGraph),
                     .collectionCount = body.collectionCount,

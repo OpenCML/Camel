@@ -42,6 +42,28 @@ struct DiagLabel {
     std::string path;
 };
 
+/// One text edit of a fix: replace the text of `range` with `replacement`. The empty range
+/// (start == end) inserts, and the empty `replacement` deletes. The ranges of one fix are ranges
+/// of the file the diagnostic is located in, and they do not overlap.
+struct DiagEdit {
+    SourceRange range{};
+    std::string replacement;
+};
+
+/// A change a report asks for that a tool can apply without asking the reader, in the shape a
+/// code action carries: a title that says what the change does, and the edits that carry it out.
+/// Every edit is applied to the text as written, never to the text an earlier edit of the same
+/// fix produced.
+///
+/// A fix is offered only where the compiler knows the text to write. `help` says what to do in
+/// words and is written for a person; a fix is that same advice where it has exactly one
+/// machine-applicable spelling. A report that cannot name the text to write carries none, and
+/// says why in `diagnostics/registry.tsv` (see docs/cli.md, "Diagnostics").
+struct DiagFix {
+    std::string title;
+    std::vector<DiagEdit> edits;
+};
+
 /// Where the tokens of a file are: what turns a TokenRange into lines and columns. The parser
 /// that produced the tokens provides it (camel/parse/parse.h).
 class TokenPositions {

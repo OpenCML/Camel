@@ -1,0 +1,20 @@
+/**
+ * The same linearity rule where the container is a map or a set: the value of a map and the
+ * element of a set are read more than once, so a stream cannot be one of them
+ * (SemanticDiag::StreamInContainer). A tuple is not a container in this sense, and a signature
+ * takes a stream: the restriction is linearity, not the type.
+ */
+module stream_type_in_collection
+
+func drain(m: Map<string, int..>): int {
+    return 0
+}
+
+func collect(s: Set<int..>): int {
+    return 0
+}
+
+func main(): int sync {
+    println(0)
+    return 0
+}

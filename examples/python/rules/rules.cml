@@ -1,0 +1,43 @@
+/**
+ * The rules of a small basket-pricing engine, as a Camel module (H253).
+ *
+ * A Python project that has one part made of rules -- pricing tiers, eligibility, scoring,
+ * anything that is a table of small decisions -- can keep that part here: the rules are checked
+ * when the module loads rather than when a branch happens to run, a mistake is reported with a
+ * file, a line and a column (`python_broken.cml` in the test suite shows the shape of that
+ * report), and the Python side calls them without knowing how they are written.
+ *
+ * The array entry point is what makes the crossing cheap: `net_totals` takes an `f32[]` that a
+ * Python caller hands over as a DLPack capsule, so a NumPy array of a million baskets is passed
+ * without being copied (docs/technical/57_python_bindings.md).
+ *
+ * Run it:  python examples/python/rules/basket.py
+ */
+module rules
+
+/// The discount a basket earns, one threshold per tier.
+export func discount(total: float): float {
+    return if total >= 2000.0 then 0.20
+           else if total >= 1000.0 then 0.15
+           else if total >= 500.0 then 0.10
+           else if total >= 100.0 then 0.05
+           else 0.0
+}
+
+/// Shipping is free above the threshold and a flat rate below it.
+export func shipping(total: float): float {
+    return if total >= 300.0 then 0.0 else 9.90
+}
+
+/// What the customer pays before tax: the discount, then shipping.
+export func net_total(total: float): float {
+    return total * (1.0 - discount(total)) + shipping(total)
+}
+
+/// The same rules over a whole array of baskets, in one call: the array that crosses by DLPack.
+///
+/// Each element is read as f32, the rules themselves work in f64, and the answer is rounded once
+/// back into the element type, so the array answer is the same one the scalar entry point gives.
+export func net_totals(totals: f32[]): f32[] {
+    return totals->map<(total: f32): f32 => f32(net_total(float(total)))>
+}

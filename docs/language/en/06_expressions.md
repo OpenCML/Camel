@@ -107,7 +107,7 @@ func main(): int sync {
 
 ```cml
 func main(): int sync {
-    let total = range(1, 6)
+    let total = 1..6
         ->map<(x: int): int => x * x>
         ->filter<(x: int): bool => x % 2 == 1>
         ->reduce<(acc: int, x: int): int => acc + x, 0>
@@ -534,7 +534,7 @@ let found    = loop hit = -1 for x in xs while hit < 0 do if x > 9 then x else h
 
 - **State.** With one name the body's value and the loop's value are that value; with several names (separated by commas) the body gives the tuple of them in the order of the head, and the loop's value is that tuple, taken apart with `let (a, b) = loop ...` or `.0`, `.1`. The state has the type of its first value; the body's value must have that type (or enter it, as an `int` enters an `int?`), otherwise `SemanticDiag::LoopBodyTypeMismatch`. `null` and the empty array `[]` have no type of their own as first values: write `null as T?`, or bind the empty array with its type first (`let none: int[] = []`) and start from that name (`SemanticDiag::LoopStateWithoutType`).
 - **`for x in xs`** takes one element of the sequence `xs` per round, in order; `xs` is an array, a string, a map or a tensor, and any other type is `SemanticDiag::LoopSequenceNotIterable`.
-  - **Array**: the element itself; `range(a, b)` is one.
+  - **Array**: the element itself; `a..b` is one.
   - **String**: by code point, each element the one-character string of that code point, as `s[i]` gives it (11.1): the two rounds of `for c in '中文'` are `'中'` and `'文'`, and a multi-byte character counts once.
   - **Map**: the `(key, value)` pairs in key order (the traversal order of 11.3, as `items(m)` gives them), not insertion order: in `for kv in m` the keys are strictly ascending, and `kv.0` and `kv.1` take the pair apart.
   - **Tensor**: along the first dimension, each element the sub-tensor with the first dimension dropped (sharing that slice of the data, not copied): a rank-2 `Tensor<f32, [2, 3]>` gives two `Tensor<f32, [3]>`, and a rank-1 tensor gives rank-0 sub-tensors (`sum(x)` is its number). The element type of a `Tensor` whose shape is unknown is `Tensor`. A rank-0 tensor has no first dimension and is not a sequence.
@@ -643,7 +643,7 @@ func main(): int sync {
 
 ```cml
 func main(): int sync {
-    let xs = range(1, 6)
+    let xs = 1..6
     println(xs->map<(x: int): int => x * x>)
     println(xs->filter<(x: int): bool => x % 2 == 0>)
     println(xs->reduce<(acc: int, x: int): int => acc + x, 0>)
@@ -662,7 +662,7 @@ item 5
 
 If the element function of `foreach` is to produce side effects, its body must be a sync block (`=> sync { ... }`); for the reason see [4.3.2](04_execution_model.md#432-a-functions-behaviour-is-decided-by-the-function-itself). A function with `var` parameters cannot be handed to these operators.
 
-## 6.11 Assignment and `wait`
+## 6.11 Assignment
 
 - `x = e`, `x += e` and so on are expressions; their value is described below. The target is a `var` variable or a `var` parameter itself, or a **path** that starts at one: fields, indices, any combination ([3.7](03_data_model.md#37-let-var-and-references)). `p.x = e`, `xs[0] = e` and `m[i].f = e` all rebind the whole of `p`, `xs`, `m`: `xs[i].f = e` is `xs = set(xs, i, set(xs[i], f, e))`, where `set` is a pure operator that returns the value with one place changed. A path assignment may therefore appear in any expression position; when the root of the target is not a variable (`f().x = e`, `{ x: 1 }.x = e`) the diagnostic is `AssignmentTargetNotVariable`, and an index out of range is the fault `IndexOutOfRange`.
 - The value of a path assignment is the **whole value rebound**: `xs = xs->append<…>` gives the new array, and `xs[0] = 5` gives that `xs` as it is now, not `5`. Only when the target is the variable itself is the value the value assigned.
@@ -679,15 +679,12 @@ If the element function of `foreach` is to produce side effects, its body must b
 
 - **A compound assignment computes the new value first, then rebinds.** `x op= e` computes the new value and binds `x` to it, so numerically it is `x = x op e`. A compound assignment on a path (`xs[0] += 1`, `p.n += 1`) writes the new value back to that place, and the write back follows the in-place rule above: after `let a = xs`, `xs[0] += 1` copies and `a` is unchanged. A type defined by a module (a tensor), and a type for which the program overloads an operator ([7.4.5](07_statements.md#745-operator-overloading)), has no compound-assignment operators of its own, so for it `t += u` is `t = t + u` (likewise `-=`, `*=`, `/=`, `%=`, `@=`, `^=`, `&=`, `|=`, wherever the binary operator is defined for the types).
 
-- For `wait e` see [4.4](04_execution_model.md#44-var-references-and-wait).
-
 ## 6.12 Operator precedence
 
 From lowest to highest:
 
 | Level | Operators | Notes |
 |---|---|---|
-| 1 | `wait` | Prefix; applies to the whole assignment expression |
 | 2 | `=` `+=` `-=` `*=` `/=` `%=` `^=` `@=` `&=` `\|=` | Cannot be chained |
 | 3 | `\|\|` | Left-associative; a branch, the right side evaluated only when needed |
 | 4 | `&&` | Left-associative; a branch, the right side evaluated only when needed |
@@ -702,7 +699,7 @@ From lowest to highest:
 | 10 | `as` | |
 | 10a | Unary `-` `!` `~` | Looser than `->` and `^`: `!xs->is_empty()` is `!(xs->is_empty())`, `-a->f` is `-(a->f)`, `-a ^ 2` is `-(a ^ 2)`; a literal and a name read alike (`-1->abs` is `-(1->abs)`; to negate first write `(-1)->abs`) |
 | 11 | `->` `?->` | Left-associative |
-| 12 | `..` `?..` | |
+| 12 | `..` | Range (between numbers) and function composition (between functions) |
 | 13 | Postfix: `.field`, `[subscript]`, `(arguments)`, `<with arguments>` | Must directly follow |
 
 `if` and `match` can appear wherever an expression is required; their arms extend to the end of the expression, so add parentheses when they are embedded in a larger expression.

@@ -22,7 +22,7 @@ func loss_array(x: Tensor<f32, [4, 4]>): float {
 with <blocks: (Block, Block)>
 func loss_tuple(x: Tensor<f32, [4, 4]>): float {
     let h = static loop h = x
-        for (i, B) in fields (Block, Block) do h @ blocks.[i].w + blocks.[i].b
+        for i, B in fields (Block, Block) do h @ blocks.[i].w + blocks.[i].b
     return sum(h)
 }
 

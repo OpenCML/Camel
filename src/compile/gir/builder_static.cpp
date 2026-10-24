@@ -66,29 +66,155 @@ void Builder::resolveStaticBodyNames(const GCT::node_ptr_t &body) {
     walkStaticBodyNames(body, locals);
 }
 
+void Builder::insertParameterNames(
+    const GCT::node_ptr_t &func, const FunctionType *signature,
+    std::unordered_set<std::string> &into) {
+    if (signature != nullptr) {
+        for (size_t i = 0; i < signature->argNamesCount(); ++i) {
+            const std::string_view arg = signature->argNameAt(i);
+            if (!arg.empty() && arg != GCT::kDiscardName) {
+                into.insert(std::string(arg));
+            }
+        }
+    }
+    if (func == nullptr) {
+        return;
+    }
+    // A parameter written as a tuple pattern is one value whose elements the body reads by name.
+    if (const auto *tuples = GCT::Tree::of(func)->tupleParamsOf(func)) {
+        for (const GCT::Tree::TupleParamBinding &tupleParam : *tuples) {
+            for (const std::string &name : tupleParam.names) {
+                if (!name.empty() && name != GCT::kDiscardName) {
+                    into.insert(name);
+                }
+            }
+        }
+    }
+}
+
+void Builder::resolveGenericTemplateNames(const generic_template_ptr_t &tmpl) {
+    if (tmpl == nullptr || tmpl->func == nullptr || tmpl->func->size() < 2) {
+        return;
+    }
+    std::vector<std::unordered_set<std::string>> locals;
+    // Every parameter of the declaration is a name its body may read: the `with` parameters and
+    // the `constas` values among them, and the rest parameter's name. What their types are is not
+    // read here; only the names are.
+    locals.emplace_back();
+    insertParameterNames(tmpl->func, tmpl->funcType, locals.back());
+    walkStaticBodyNames(tmpl->func->at(1), locals, true);
+    // A `when` clause is not a body: it belongs to the condition evaluator, which already answers
+    // the declaration-site half of it for a function that is not generic, where it is written
+    // (visitFuncNode). The same half is answered here, so that it does not wait for an
+    // instantiation either: a name the declaration does not make visible, a predicate of a module
+    // that is not imported (and the module that declares it is named), two imports of one name, a
+    // name that is not a compile-time predicate, a condition that is not a bool, a condition that
+    // is not a compile-time expression.
+    //
+    // Whether the condition *holds* stays the instantiation's question, and so does a query on a
+    // type parameter: at the declaration the parameter is open, and only the instance knows what
+    // it stands for (`WhenTypeQueryNotConcrete`, cases/compile/when/open_type.cml).
+    if (const auto *when = GCT::Tree::of(tmpl->func)->whenOf(tmpl->func)) {
+        const WhenResult early =
+            evaluateWhenCondition(when->condition, tmpl->funcType, {}, {}, tmpl);
+        switch (early.outcome) {
+        case WhenOutcome::UnknownName:
+        case WhenOutcome::NotImported:
+        case WhenOutcome::NotCompileTime:
+        case WhenOutcome::PredicateAmbiguous:
+        case WhenOutcome::NotBool:
+        case WhenOutcome::NotEvaluable:
+            reportWhenProblem(early, tmpl->func->name(), when->condition);
+            break;
+        default:
+            break;
+        }
+    }
+}
+
+bool Builder::moduleSourceDeclares(const std::string &written) {
+    ModuleUnit *unit = currentModuleUnit();
+    if (unit == nullptr || unit->tree == nullptr) {
+        return false;
+    }
+    if (!unit->sourceNamesRead) {
+        // Read once: every name any node of the module's source carries.
+        unit->sourceNamesRead = true;
+        const GCT::node_ptr_t root = unit->tree->root();
+        std::vector<GCT::node_ptr_t> pending{root};
+        while (!pending.empty()) {
+            const GCT::node_ptr_t node = pending.back();
+            pending.pop_back();
+            if (node == nullptr) {
+                continue;
+            }
+            switch (node->type()) {
+            // Only the kinds whose `name()` is a name (gct/node.h): a VARI binds the NREFs that
+            // are its children, and those are collected on their own.
+            case GCT::NodeKind::FUNC:
+            case GCT::NodeKind::DECL:
+            case GCT::NodeKind::NREF:
+                if (!node->name().empty()) {
+                    unit->sourceNames.insert(node->name());
+                }
+                break;
+            default:
+                break;
+            }
+            for (size_t i = 0; i < node->size(); ++i) {
+                pending.push_back(node->at(i));
+            }
+        }
+    }
+    return unit->sourceNames.contains(written) ||
+           unit->sourceNames.contains(moduleLevelName(written));
+}
+
 void Builder::walkStaticBodyNames(
-    const GCT::node_ptr_t &node, std::vector<std::unordered_set<std::string>> &locals) {
+    const GCT::node_ptr_t &node, std::vector<std::unordered_set<std::string>> &locals,
+    bool intoFunctions) {
     if (!node) {
         return;
     }
     switch (node->type()) {
-    case GCT::NodeKind::FUNC:
+    case GCT::NodeKind::FUNC: {
+        if (!intoFunctions) {
+            // A function written in a case that is not selected is read when it is built. Its
+            // parameters and body are a scope of their own; names here would not resolve against
+            // the scopes around it.
+            return;
+        }
+        // The declaration-site check of a generic template reads into the functions written in
+        // its body (a lambda, a function of the body): their own parameters bind and the names
+        // around them stay visible, exactly as they are when the body is built.
+        locals.emplace_back();
+        if (node->size() > 0 &&
+            node->at(0)->type() == GCT::NodeKind::TYPE && node->at(0)->dataType() != nullptr &&
+            node->at(0)->dataType()->code() == TypeCode::Function) {
+            insertParameterNames(
+                node, tt::as_ptr<FunctionType>(node->at(0)->dataType()), locals.back());
+        }
+        if (node->size() > 1) {
+            walkStaticBodyNames(node->at(1), locals, true);
+        }
+        locals.pop_back();
+        return;
+    }
     case GCT::NodeKind::DECL:
-        // A function written in a case that is not selected is read when it is built. Its
-        // parameters and body are a scope of their own; names here would not resolve against
-        // the scopes around it.
+        // A declaration read ahead of its use: the body is elsewhere, and the signature's types
+        // are read where the declaration is.
         return;
     case GCT::NodeKind::EXEC: {
         locals.emplace_back();
         for (size_t i = 0; i < node->size(); ++i) {
-            walkStaticBodyNames(node->at(i), locals);
+            walkStaticBodyNames(node->at(i), locals, intoFunctions);
         }
         locals.pop_back();
         return;
     }
     case GCT::NodeKind::NREF:
         for (size_t i = 0; i < node->size(); ++i) {
-            walkStaticBodyNames(node->at(i), locals);
+            walkStaticBodyNames(node->at(i), locals, intoFunctions);
         }
         if (!locals.empty() && !node->name().empty() &&
             node->name() != GCT::kDiscardName) {
@@ -96,11 +222,11 @@ void Builder::walkStaticBodyNames(
         }
         return;
     case GCT::NodeKind::VARI:
+        // A VARI node carries no name of its own: the names it binds are the NREFs that are its
+        // children (`var x = 1`, program.cpp collectBoundNames), and the NREF case above binds
+        // each of them. `name()` is not a VARI's to read (gct/node.h).
         for (size_t i = 0; i < node->size(); ++i) {
-            walkStaticBodyNames(node->at(i), locals);
-        }
-        if (!locals.empty() && !node->name().empty()) {
-            locals.back().insert(node->name());
+            walkStaticBodyNames(node->at(i), locals, intoFunctions);
         }
         return;
     case GCT::NodeKind::DREF: {
@@ -116,6 +242,14 @@ void Builder::walkStaticBodyNames(
             found = true;
         }
         if (!found && staticValueNamed(node->name()).has_value()) {
+            found = true;
+        }
+        // The declaration-site check of a generic template is the one caller that reads a body
+        // no instance has built, so a name a declaration of the module gives later in the source
+        // is not a misspelling there: the module is one scope and the top level is built by
+        // dependency, not in written order. Every other caller (an unselected case of
+        // `match type`) keeps the stricter reading it was written with.
+        if (!found && intoFunctions && moduleSourceDeclares(node->name())) {
             found = true;
         }
         if (!found && !valueNameExists(node->name(), node)) {
@@ -135,7 +269,7 @@ void Builder::walkStaticBodyNames(
         if (!valueName.empty() && valueName != "_") {
             locals.back().insert(valueName);
         }
-        walkStaticBodyNames(node->staticForBody(), locals);
+        walkStaticBodyNames(node->staticForBody(), locals, intoFunctions);
         locals.pop_back();
         return;
     }
@@ -143,7 +277,7 @@ void Builder::walkStaticBodyNames(
         // The first values are outside the names of the head; `n` and the state names are
         // bound in the body only (as for a run-time loop).
         for (size_t j = 0; j < node->staticLoopStateCount(); ++j) {
-            walkStaticBodyNames(node->staticLoopInitial(j), locals);
+            walkStaticBodyNames(node->staticLoopInitial(j), locals, intoFunctions);
         }
         locals.emplace_back();
         const std::string &valueName = node->staticLoopValueName();
@@ -153,13 +287,75 @@ void Builder::walkStaticBodyNames(
         for (size_t j = 0; j < node->staticLoopStateCount(); ++j) {
             locals.back().insert(node->staticLoopStateName(j));
         }
-        walkStaticBodyNames(node->staticLoopBody(), locals);
+        walkStaticBodyNames(node->staticLoopBody(), locals, intoFunctions);
+        locals.pop_back();
+        return;
+    }
+    case GCT::NodeKind::CASE: {
+        // The pattern binds its names in the arm's body only: `case v`, `case error e`,
+        // `case Shape::Rect { w, h }` (design principles 5.3). A `case` written as a value
+        // (`case 1`) binds nothing, and the value it compares is read outside the bindings.
+        const GCT::CaseType pattern = node->caseType();
+        const size_t bodyAt =
+            pattern == GCT::CaseType::Value && node->size() > 1 ? size_t(1) : size_t(0);
+        for (size_t i = 0; i < bodyAt; ++i) {
+            walkStaticBodyNames(node->at(i), locals, intoFunctions);
+        }
+        locals.emplace_back();
+        if (pattern == GCT::CaseType::Bind || pattern == GCT::CaseType::Error) {
+            const std::string &bound = node->binding();
+            if (!bound.empty() && bound != GCT::kDiscardName) {
+                locals.back().insert(bound);
+            }
+        } else if (pattern == GCT::CaseType::Enum) {
+            const GCT::Node::EnumCase &variant = node->enumCase();
+            for (size_t i = 0; i < variant.count; ++i) {
+                const std::string *bound = variant.bindings[i];
+                if (bound != nullptr && !bound->empty() && *bound != GCT::kDiscardName) {
+                    locals.back().insert(*bound);
+                }
+            }
+        }
+        for (size_t i = bodyAt; i < node->size(); ++i) {
+            walkStaticBodyNames(node->at(i), locals, intoFunctions);
+        }
+        locals.pop_back();
+        return;
+    }
+    case GCT::NodeKind::LOOP: {
+        // `loop s1 = a1, ... (for x in xs)? (while c)? do b`: the first values and the sequence
+        // are read where the loop is, the condition sees the state's names, and the body sees
+        // the state's names and the element (design principles 3.10).
+        const size_t states = node->loopStateCount();
+        for (size_t j = 0; j < states; ++j) {
+            walkStaticBodyNames(node->loopInitial(j), locals, intoFunctions);
+        }
+        if (const GCT::node_ptr_t sequence = node->loopSequence()) {
+            walkStaticBodyNames(sequence, locals, intoFunctions);
+        }
+        locals.emplace_back();
+        for (size_t j = 0; j < states; ++j) {
+            const std::string &state = node->loopStateName(j);
+            if (!state.empty() && state != GCT::kDiscardName) {
+                locals.back().insert(state);
+            }
+        }
+        if (camel::core::loopHasIterable(node->loopKind())) {
+            const std::string &element = node->loopElementName();
+            if (!element.empty() && element != GCT::kDiscardName) {
+                locals.back().insert(element);
+            }
+        }
+        if (const GCT::node_ptr_t condition = node->loopCondition()) {
+            walkStaticBodyNames(condition, locals, intoFunctions);
+        }
+        walkStaticBodyNames(node->loopBody(), locals, intoFunctions);
         locals.pop_back();
         return;
     }
     default:
         for (size_t i = 0; i < node->size(); ++i) {
-            walkStaticBodyNames(node->at(i), locals);
+            walkStaticBodyNames(node->at(i), locals, intoFunctions);
         }
         return;
     }
@@ -504,17 +700,91 @@ node_handle_t Builder::visitStaticForNode(
     return lastEffect;
 }
 
+std::optional<std::vector<int64_t>>
+Builder::staticLoopSequenceOf(const GCT::node_ptr_t &subject) {
+    // `for i in <序列>` (H462): the one sequence the compiler works out today is the constant
+    // interval `a..b`. It is read exactly as the `..` operator reads it everywhere else — the
+    // half-open `[a, b)`, so `0..5` gives 0, 1, 2, 3, 4 — and it is the pair of the two bounds
+    // only in the sequence position of a loop (`isIntervalExpr`); in any other position `a..b`
+    // is the `int[]` of `intervalValue`.
+    if (!isIntervalExpr(subject)) {
+        return std::nullopt;
+    }
+    // One bound: its value as the compiler knows it, without building anything of a run-time
+    // expression. A literal (or an expression of literals only, `0..(2 + 3)`) is read from the
+    // tree; a name is read from what it is bound to, and only a binding that is not a `var`
+    // (which may be assigned before the loop) counts.
+    const auto boundOf = [&](const GCT::node_ptr_t &expr) -> std::optional<int64_t> {
+        const std::optional<literal::Value> written = literalValueOfExpr(expr);
+        if (written.has_value()) {
+            return written->asInt64();
+        }
+        if (expr->type() != GCT::NodeKind::DREF) {
+            return std::nullopt;
+        }
+        data_ptr_t data = nullptr;
+        const auto bound = nodeAt(expr->name());
+        if (bound.has_value()) {
+            if (isVariable(*bound)) {
+                return std::nullopt;
+            }
+            data = constantOfNode(*bound);
+        } else {
+            data = constantOfNode(staticValueNodeNamed(expr->name()));
+        }
+        if (data == nullptr) {
+            return std::nullopt;
+        }
+        if (auto number = std::dynamic_pointer_cast<PrimaryData<int64_t>>(data)) {
+            return number->data();
+        }
+        if (auto number = std::dynamic_pointer_cast<PrimaryData<int32_t>>(data)) {
+            return static_cast<int64_t>(number->data());
+        }
+        return std::nullopt;
+    };
+    const std::optional<int64_t> from = boundOf(subject->at(1));
+    const std::optional<int64_t> to   = boundOf(subject->at(2));
+    if (!from.has_value() || !to.has_value()) {
+        return std::nullopt;
+    }
+    std::vector<int64_t> elements;
+    for (int64_t value = *from; value < *to; ++value) {
+        elements.push_back(value);
+    }
+    return elements;
+}
+
 node_handle_t Builder::visitStaticLoopNode(const GCT::node_ptr_t &gct) {
     ENTER("SLOOP");
-    // `static loop s1 = a1, ..., sk = ak for (n, F) in fields T do body`: the fold the fields
-    // of `T` unroll into (or the positions of a tuple value, `in indices ts`). The body is built
-    // once per round in the current graph; its value is the next state. No LOOP node, no
-    // region, and nothing of the state or the generator left in the graph: the first values are
-    // ordinary values and each round reads the previous round's node directly (a DREF to a
-    // state name resolves to that node).
-    const bool byIndices = gct->staticLoopIndices();
-    Type *subject        = nullptr;
-    if (byIndices) {
+    // `static loop s1 = a1, ..., sk = ak for i in <序列> do body`: the fold the fields of `T`
+    // unroll into (`in fields T`), the positions of a tuple value (`in indices ts`), or the
+    // elements of a sequence the compiler works out (`in 0..5`; H462, the ruling of
+    // 2026-10-24, which dropped the head's parentheses). The body is built once per round in the
+    // current graph; its value is the next state. No LOOP node, no region, and nothing of the
+    // state or the generator left in the graph: the first values are ordinary values and each
+    // round reads the previous round's node directly (a DREF to a state name resolves to it).
+    const bool byIndices  = gct->staticLoopIndices();
+    const bool bySequence = gct->staticLoopSequence();
+    const bool byFields   = !byIndices && !bySequence;
+    Type *subject         = nullptr;
+    // The elements of each round when the head is written as a sequence: each one is a
+    // compile-time constant, exactly as the `j` of `indices` is the round's position.
+    std::vector<int64_t> elements;
+    if (bySequence) {
+        // The sequence must be known when the function is compiled (the ruling of 2026-10-24:
+        // "`static loop` 的序列必须在编译期已知"): a sequence the compiler cannot work out is
+        // refused here, before anything of the body is built.
+        std::optional<std::vector<int64_t>> known = staticLoopSequenceOf(gct->staticLoopOperand());
+        if (!known.has_value()) {
+            const std::string written = sourceTextOf(gct->staticLoopOperand());
+            diags_->of(SemanticDiag::StaticLoopSequenceNotKnown)
+                .atOrigin(gct->origin())
+                .commit(written.empty() ? std::string("?") : written);
+            throw BuildAbortException();
+        }
+        elements = std::move(*known);
+    } else if (byIndices) {
         // As in visitStaticForNode: the operand only gives the tuple's type.
         const std::any operandRes = visit(gct->staticLoopOperand());
         if (operandRes.type() == typeid(StaticTuple)) {
@@ -597,18 +867,30 @@ node_handle_t Builder::visitStaticLoopNode(const GCT::node_ptr_t &gct) {
     }
     Type *stateType = k == 1 ? stateTypes.front() : TupleType::create(stateTypes);
 
-    const size_t count = tree::arity(subject);
+    const size_t count = bySequence ? elements.size() : tree::arity(subject);
     for (size_t i = 0; i < count; ++i) {
-        const std::string entryName = tree::childName(subject, i);
+        // The name of the walked entry: for `fields` the field's name and for `indices` the
+        // position, both as the text the compile-time value bindings carry; for a sequence the
+        // element itself, which is what `t.[i]` reads back as the key.
+        std::string entryName;
         node_handle_t indexNode{};
-        if (!byIndices) {
-            typeBindings_.insert(typeBindings_.begin(), {typeName, tree::childType(subject, i)});
-        } else {
+        if (bySequence) {
+            entryName = std::to_string(elements[i]);
+            const data_ptr_t elementValue = tt::as_shared<Data>(
+                std::make_shared<PrimaryData<int64_t>>(elements[i]));
+            indexNode = currGraph_->addStaticDataNode(elementValue);
+            rememberConstant(indexNode, elementValue);
+            registerNodeOrigin(context_, indexNode, body, "gir.static.index");
+        } else if (byIndices) {
+            entryName = tree::childName(subject, i);
             const data_ptr_t indexValue = tt::as_shared<Data>(
                 std::make_shared<PrimaryData<int64_t>>(static_cast<int64_t>(i)));
             indexNode = currGraph_->addStaticDataNode(indexValue);
             rememberConstant(indexNode, indexValue);
             registerNodeOrigin(context_, indexNode, body, "gir.static.index");
+        } else {
+            entryName = tree::childName(subject, i);
+            typeBindings_.insert(typeBindings_.begin(), {typeName, tree::childType(subject, i)});
         }
         staticValueScopes_.emplace_back();
         if (valueName != "_") {
@@ -633,7 +915,7 @@ node_handle_t Builder::visitStaticLoopNode(const GCT::node_ptr_t &gct) {
                 unusedStatement_     = outerUnused;
                 leaveBlockScope();
                 staticValueScopes_.pop_back();
-                if (!byIndices) {
+                if (byFields) {
                     typeBindings_.erase(typeBindings_.begin());
                 }
                 throw;
@@ -658,7 +940,7 @@ node_handle_t Builder::visitStaticLoopNode(const GCT::node_ptr_t &gct) {
                             stateType->toString());
                     leaveBlockScope();
                     staticValueScopes_.pop_back();
-                    if (!byIndices) {
+                    if (byFields) {
                         typeBindings_.erase(typeBindings_.begin());
                     }
                     throw BuildAbortException();
@@ -686,7 +968,7 @@ node_handle_t Builder::visitStaticLoopNode(const GCT::node_ptr_t &gct) {
                         stateType->toString());
                 leaveBlockScope();
                 staticValueScopes_.pop_back();
-                if (!byIndices) {
+                if (byFields) {
                     typeBindings_.erase(typeBindings_.begin());
                 }
                 throw BuildAbortException();
@@ -708,7 +990,7 @@ node_handle_t Builder::visitStaticLoopNode(const GCT::node_ptr_t &gct) {
         }
         leaveBlockScope();
         staticValueScopes_.pop_back();
-        if (!byIndices) {
+        if (byFields) {
             typeBindings_.erase(typeBindings_.begin());
         }
     }

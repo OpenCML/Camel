@@ -1,0 +1,16 @@
+id = "compile.diag_fixes"
+order = 320
+tier = "fast"
+tags = ["feat", "compile", "diagnostics"]
+
+[[tests]]
+name = "fixes_apply"
+desc = "A diagnostic that carries a machine-applicable edit carries a correct one: the fix is the expected title, range and replacement, applying it removes the diagnostic, and where the compiler knew the whole answer the program compiles. A report with nothing certain to write (a name to choose, a value to write, a leading zero that reads two ways, a token the parser cannot name) carries no fix at all rather than a guess a tool would apply."
+kind = "behavior"
+tool = "node"
+case = "../../../cases/compile/diag_fixes/proof.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["diagnostic fixes proof: checks passed"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 30000

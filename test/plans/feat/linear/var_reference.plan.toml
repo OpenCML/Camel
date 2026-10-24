@@ -12,7 +12,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ImmutablePassedToVarParam"
 expect_diagnostic_line = 14
-expect_diagnostic_column = 15
+expect_diagnostic_column = 10
 expect_output_contains = ["'k' is immutable"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
@@ -26,7 +26,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ImmutablePassedToVarParam"
 expect_diagnostic_line = 10
-expect_diagnostic_column = 10
+expect_diagnostic_column = 5
 expect_output_contains = ["'k' is immutable"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
@@ -40,7 +40,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ImmutablePassedToVarParam"
 expect_diagnostic_line = 15
-expect_diagnostic_column = 12
+expect_diagnostic_column = 7
 expect_output_contains = ["'k' is immutable"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
@@ -54,7 +54,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ImmutablePassedToVarParam"
 expect_diagnostic_line = 14
-expect_diagnostic_column = 15
+expect_diagnostic_column = 10
 expect_output_contains = ["'s' is immutable"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
@@ -68,7 +68,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ImmutablePassedToVarParam"
 expect_diagnostic_line = 13
-expect_diagnostic_column = 15
+expect_diagnostic_column = 10
 expect_output_contains = ["'x' is immutable"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
@@ -82,7 +82,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ImmutablePassedToVarParam"
 expect_diagnostic_line = 15
-expect_diagnostic_column = 19
+expect_diagnostic_column = 14
 expect_output_contains = ["'k' is immutable"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
@@ -645,7 +645,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "wait_before_after.default"
-desc = "A(i); wait modify(i); B(i) outside a sync block: A observes the old value and completes first, B observes the new value. Pipeline: default (no pass)."
+desc = "A(i); modify(i); B(i) in a sync body: A observes the old value and completes first, B observes the new value. Pipeline: default (no pass)."
 kind = "behavior"
 case = "../../../cases/linear/byref/wait_before_after.cml"
 args = ["${case}"]
@@ -661,7 +661,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "wait_before_after.fvm"
-desc = "A(i); wait modify(i); B(i) outside a sync block: A observes the old value and completes first, B observes the new value. Pipeline: std::fvm."
+desc = "A(i); modify(i); B(i) in a sync body: A observes the old value and completes first, B observes the new value. Pipeline: std::fvm."
 kind = "behavior"
 case = "../../../cases/linear/byref/wait_before_after.cml"
 args = ["${case}", "std::fvm"]
@@ -677,7 +677,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "wait_before_after.jit"
-desc = "A(i); wait modify(i); B(i) outside a sync block: A observes the old value and completes first, B observes the new value. Pipeline: std::jit."
+desc = "A(i); modify(i); B(i) in a sync body: A observes the old value and completes first, B observes the new value. Pipeline: std::jit."
 kind = "behavior"
 case = "../../../cases/linear/byref/wait_before_after.cml"
 args = ["${case}", "std::jit"]
@@ -693,7 +693,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "wait_before_after.tf"
-desc = "A(i); wait modify(i); B(i) outside a sync block: A observes the old value and completes first, B observes the new value. Pipeline: std::tf."
+desc = "A(i); modify(i); B(i) in a sync body: A observes the old value and completes first, B observes the new value. Pipeline: std::tf."
 kind = "behavior"
 case = "../../../cases/linear/byref/wait_before_after.cml"
 args = ["${case}", "std::tf"]
@@ -709,7 +709,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "wait_before_after.inline"
-desc = "A(i); wait modify(i); B(i) outside a sync block: A observes the old value and completes first, B observes the new value. Pipeline: std::opt::inline."
+desc = "A(i); modify(i); B(i) in a sync body: A observes the old value and completes first, B observes the new value. Pipeline: std::opt::inline."
 kind = "behavior"
 case = "../../../cases/linear/byref/wait_before_after.cml"
 args = ["${case}", "std::opt::inline"]
@@ -725,7 +725,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "wait_before_after.specialize"
-desc = "A(i); wait modify(i); B(i) outside a sync block: A observes the old value and completes first, B observes the new value. Pipeline: std::opt::specialize."
+desc = "A(i); modify(i); B(i) in a sync body: A observes the old value and completes first, B observes the new value. Pipeline: std::opt::specialize."
 kind = "behavior"
 case = "../../../cases/linear/byref/wait_before_after.cml"
 args = ["${case}", "std::opt::specialize"]
@@ -741,7 +741,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "wait_before_after.devirtualize"
-desc = "A(i); wait modify(i); B(i) outside a sync block: A observes the old value and completes first, B observes the new value. Pipeline: std::opt::devirtualize."
+desc = "A(i); modify(i); B(i) in a sync body: A observes the old value and completes first, B observes the new value. Pipeline: std::opt::devirtualize."
 kind = "behavior"
 case = "../../../cases/linear/byref/wait_before_after.cml"
 args = ["${case}", "std::opt::devirtualize"]
@@ -757,7 +757,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "wait_before_after.fold"
-desc = "A(i); wait modify(i); B(i) outside a sync block: A observes the old value and completes first, B observes the new value. Pipeline: std::opt::fold."
+desc = "A(i); modify(i); B(i) in a sync body: A observes the old value and completes first, B observes the new value. Pipeline: std::opt::fold."
 kind = "behavior"
 case = "../../../cases/linear/byref/wait_before_after.cml"
 args = ["${case}", "std::opt::fold"]
@@ -773,7 +773,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "wait_before_after.cse"
-desc = "A(i); wait modify(i); B(i) outside a sync block: A observes the old value and completes first, B observes the new value. Pipeline: std::opt::cse."
+desc = "A(i); modify(i); B(i) in a sync body: A observes the old value and completes first, B observes the new value. Pipeline: std::opt::cse."
 kind = "behavior"
 case = "../../../cases/linear/byref/wait_before_after.cml"
 args = ["${case}", "std::opt::cse"]
@@ -789,7 +789,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "wait_before_after.dce"
-desc = "A(i); wait modify(i); B(i) outside a sync block: A observes the old value and completes first, B observes the new value. Pipeline: std::opt::dce."
+desc = "A(i); modify(i); B(i) in a sync body: A observes the old value and completes first, B observes the new value. Pipeline: std::opt::dce."
 kind = "behavior"
 case = "../../../cases/linear/byref/wait_before_after.cml"
 args = ["${case}", "std::opt::dce"]
@@ -805,7 +805,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "wait_before_after.opt"
-desc = "A(i); wait modify(i); B(i) outside a sync block: A observes the old value and completes first, B observes the new value. Pipeline: std::opt."
+desc = "A(i); modify(i); B(i) in a sync body: A observes the old value and completes first, B observes the new value. Pipeline: std::opt."
 kind = "behavior"
 case = "../../../cases/linear/byref/wait_before_after.cml"
 args = ["${case}", "std::opt"]
@@ -821,7 +821,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "wait_before_after.simplify"
-desc = "A(i); wait modify(i); B(i) outside a sync block: A observes the old value and completes first, B observes the new value. Pipeline: std::opt."
+desc = "A(i); modify(i); B(i) in a sync body: A observes the old value and completes first, B observes the new value. Pipeline: std::opt."
 kind = "behavior"
 case = "../../../cases/linear/byref/wait_before_after.cml"
 args = ["${case}", "std::opt"]
@@ -837,7 +837,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "wait_before_after.macro"
-desc = "A(i); wait modify(i); B(i) outside a sync block: A observes the old value and completes first, B observes the new value. Pipeline: std::macro."
+desc = "A(i); modify(i); B(i) in a sync body: A observes the old value and completes first, B observes the new value. Pipeline: std::macro."
 kind = "behavior"
 case = "../../../cases/linear/byref/wait_before_after.cml"
 args = ["${case}", "std::macro"]
@@ -853,7 +853,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "wait_before_after.macro_inline"
-desc = "A(i); wait modify(i); B(i) outside a sync block: A observes the old value and completes first, B observes the new value. Pipeline: std::macro std::opt::inline."
+desc = "A(i); modify(i); B(i) in a sync body: A observes the old value and completes first, B observes the new value. Pipeline: std::macro std::opt::inline."
 kind = "behavior"
 case = "../../../cases/linear/byref/wait_before_after.cml"
 args = ["${case}", "std::macro", "std::opt::inline"]
@@ -869,7 +869,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "wait_before_after.macro_specialize"
-desc = "A(i); wait modify(i); B(i) outside a sync block: A observes the old value and completes first, B observes the new value. Pipeline: std::macro std::opt::specialize."
+desc = "A(i); modify(i); B(i) in a sync body: A observes the old value and completes first, B observes the new value. Pipeline: std::macro std::opt::specialize."
 kind = "behavior"
 case = "../../../cases/linear/byref/wait_before_after.cml"
 args = ["${case}", "std::macro", "std::opt::specialize"]
@@ -885,7 +885,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "wait_before_after.macro_devirtualize"
-desc = "A(i); wait modify(i); B(i) outside a sync block: A observes the old value and completes first, B observes the new value. Pipeline: std::macro std::opt::devirtualize."
+desc = "A(i); modify(i); B(i) in a sync body: A observes the old value and completes first, B observes the new value. Pipeline: std::macro std::opt::devirtualize."
 kind = "behavior"
 case = "../../../cases/linear/byref/wait_before_after.cml"
 args = ["${case}", "std::macro", "std::opt::devirtualize"]
@@ -901,7 +901,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "wait_before_after.macro_fold"
-desc = "A(i); wait modify(i); B(i) outside a sync block: A observes the old value and completes first, B observes the new value. Pipeline: std::macro std::opt::fold."
+desc = "A(i); modify(i); B(i) in a sync body: A observes the old value and completes first, B observes the new value. Pipeline: std::macro std::opt::fold."
 kind = "behavior"
 case = "../../../cases/linear/byref/wait_before_after.cml"
 args = ["${case}", "std::macro", "std::opt::fold"]
@@ -917,7 +917,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "wait_before_after.macro_cse"
-desc = "A(i); wait modify(i); B(i) outside a sync block: A observes the old value and completes first, B observes the new value. Pipeline: std::macro std::opt::cse."
+desc = "A(i); modify(i); B(i) in a sync body: A observes the old value and completes first, B observes the new value. Pipeline: std::macro std::opt::cse."
 kind = "behavior"
 case = "../../../cases/linear/byref/wait_before_after.cml"
 args = ["${case}", "std::macro", "std::opt::cse"]
@@ -933,7 +933,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "wait_before_after.macro_dce"
-desc = "A(i); wait modify(i); B(i) outside a sync block: A observes the old value and completes first, B observes the new value. Pipeline: std::macro std::opt::dce."
+desc = "A(i); modify(i); B(i) in a sync body: A observes the old value and completes first, B observes the new value. Pipeline: std::macro std::opt::dce."
 kind = "behavior"
 case = "../../../cases/linear/byref/wait_before_after.cml"
 args = ["${case}", "std::macro", "std::opt::dce"]
@@ -949,7 +949,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "wait_before_after.macro_opt"
-desc = "A(i); wait modify(i); B(i) outside a sync block: A observes the old value and completes first, B observes the new value. Pipeline: std::macro std::opt."
+desc = "A(i); modify(i); B(i) in a sync body: A observes the old value and completes first, B observes the new value. Pipeline: std::macro std::opt."
 kind = "behavior"
 case = "../../../cases/linear/byref/wait_before_after.cml"
 args = ["${case}", "std::macro", "std::opt"]
@@ -965,7 +965,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "wait_before_after.macro_simplify"
-desc = "A(i); wait modify(i); B(i) outside a sync block: A observes the old value and completes first, B observes the new value. Pipeline: std::macro std::opt."
+desc = "A(i); modify(i); B(i) in a sync body: A observes the old value and completes first, B observes the new value. Pipeline: std::macro std::opt."
 kind = "behavior"
 case = "../../../cases/linear/byref/wait_before_after.cml"
 args = ["${case}", "std::macro", "std::opt"]
@@ -981,7 +981,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "wait_before_after.all_6"
-desc = "A(i); wait modify(i); B(i) outside a sync block: A observes the old value and completes first, B observes the new value. Pipeline: std::opt::inline std::opt::specialize std::opt::devirtualize std::opt::fold std::opt::cse std::opt::dce."
+desc = "A(i); modify(i); B(i) in a sync body: A observes the old value and completes first, B observes the new value. Pipeline: std::opt::inline std::opt::specialize std::opt::devirtualize std::opt::fold std::opt::cse std::opt::dce."
 kind = "behavior"
 case = "../../../cases/linear/byref/wait_before_after.cml"
 args = ["${case}", "std::opt::inline", "std::opt::specialize", "std::opt::devirtualize", "std::opt::fold", "std::opt::cse", "std::opt::dce"]
@@ -997,7 +997,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "wait_before_after.all_macro_9"
-desc = "A(i); wait modify(i); B(i) outside a sync block: A observes the old value and completes first, B observes the new value. Pipeline: std::macro std::opt::inline std::opt::specialize std::opt::devirtualize std::opt::fold std::opt::cse std::opt::dce std::opt std::opt."
+desc = "A(i); modify(i); B(i) in a sync body: A observes the old value and completes first, B observes the new value. Pipeline: std::macro std::opt::inline std::opt::specialize std::opt::devirtualize std::opt::fold std::opt::cse std::opt::dce std::opt std::opt."
 kind = "behavior"
 case = "../../../cases/linear/byref/wait_before_after.cml"
 args = ["${case}", "std::macro", "std::opt::inline", "std::opt::specialize", "std::opt::devirtualize", "std::opt::fold", "std::opt::cse", "std::opt::dce", "std::opt", "std::opt"]
@@ -1013,7 +1013,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "wait_before_after.opt_fvm"
-desc = "A(i); wait modify(i); B(i) outside a sync block: A observes the old value and completes first, B observes the new value. Pipeline: std::opt std::fvm."
+desc = "A(i); modify(i); B(i) in a sync body: A observes the old value and completes first, B observes the new value. Pipeline: std::opt std::fvm."
 kind = "behavior"
 case = "../../../cases/linear/byref/wait_before_after.cml"
 args = ["${case}", "std::opt", "std::fvm"]
@@ -1029,7 +1029,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "wait_before_after.opt_jit"
-desc = "A(i); wait modify(i); B(i) outside a sync block: A observes the old value and completes first, B observes the new value. Pipeline: std::opt std::jit."
+desc = "A(i); modify(i); B(i) in a sync body: A observes the old value and completes first, B observes the new value. Pipeline: std::opt std::jit."
 kind = "behavior"
 case = "../../../cases/linear/byref/wait_before_after.cml"
 args = ["${case}", "std::opt", "std::jit"]
@@ -1045,7 +1045,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "wait_before_after.opt_tf"
-desc = "A(i); wait modify(i); B(i) outside a sync block: A observes the old value and completes first, B observes the new value. Pipeline: std::opt std::tf."
+desc = "A(i); modify(i); B(i) in a sync body: A observes the old value and completes first, B observes the new value. Pipeline: std::opt std::tf."
 kind = "behavior"
 case = "../../../cases/linear/byref/wait_before_after.cml"
 args = ["${case}", "std::opt", "std::tf"]
@@ -1061,7 +1061,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "wait_before_after.inline_fvm"
-desc = "A(i); wait modify(i); B(i) outside a sync block: A observes the old value and completes first, B observes the new value. Pipeline: std::opt::inline std::fvm."
+desc = "A(i); modify(i); B(i) in a sync body: A observes the old value and completes first, B observes the new value. Pipeline: std::opt::inline std::fvm."
 kind = "behavior"
 case = "../../../cases/linear/byref/wait_before_after.cml"
 args = ["${case}", "std::opt::inline", "std::fvm"]
@@ -1077,7 +1077,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "wait_before_after.inline_jit"
-desc = "A(i); wait modify(i); B(i) outside a sync block: A observes the old value and completes first, B observes the new value. Pipeline: std::opt::inline std::jit."
+desc = "A(i); modify(i); B(i) in a sync body: A observes the old value and completes first, B observes the new value. Pipeline: std::opt::inline std::jit."
 kind = "behavior"
 case = "../../../cases/linear/byref/wait_before_after.cml"
 args = ["${case}", "std::opt::inline", "std::jit"]
@@ -1093,7 +1093,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "wait_before_after.inline_tf"
-desc = "A(i); wait modify(i); B(i) outside a sync block: A observes the old value and completes first, B observes the new value. Pipeline: std::opt::inline std::tf."
+desc = "A(i); modify(i); B(i) in a sync body: A observes the old value and completes first, B observes the new value. Pipeline: std::opt::inline std::tf."
 kind = "behavior"
 case = "../../../cases/linear/byref/wait_before_after.cml"
 args = ["${case}", "std::opt::inline", "std::tf"]
@@ -1109,7 +1109,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "wait_before_after.specialize_jit"
-desc = "A(i); wait modify(i); B(i) outside a sync block: A observes the old value and completes first, B observes the new value. Pipeline: std::opt::specialize std::jit."
+desc = "A(i); modify(i); B(i) in a sync body: A observes the old value and completes first, B observes the new value. Pipeline: std::opt::specialize std::jit."
 kind = "behavior"
 case = "../../../cases/linear/byref/wait_before_after.cml"
 args = ["${case}", "std::opt::specialize", "std::jit"]
@@ -1125,7 +1125,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "wait_before_after.simplify_jit"
-desc = "A(i); wait modify(i); B(i) outside a sync block: A observes the old value and completes first, B observes the new value. Pipeline: std::opt std::jit."
+desc = "A(i); modify(i); B(i) in a sync body: A observes the old value and completes first, B observes the new value. Pipeline: std::opt std::jit."
 kind = "behavior"
 case = "../../../cases/linear/byref/wait_before_after.cml"
 args = ["${case}", "std::opt", "std::jit"]
@@ -1141,7 +1141,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "wait_before_after.macro_opt_jit"
-desc = "A(i); wait modify(i); B(i) outside a sync block: A observes the old value and completes first, B observes the new value. Pipeline: std::macro std::opt std::jit."
+desc = "A(i); modify(i); B(i) in a sync body: A observes the old value and completes first, B observes the new value. Pipeline: std::macro std::opt std::jit."
 kind = "behavior"
 case = "../../../cases/linear/byref/wait_before_after.cml"
 args = ["${case}", "std::macro", "std::opt", "std::jit"]
@@ -1157,7 +1157,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "wait_before_after.macro_opt_tf"
-desc = "A(i); wait modify(i); B(i) outside a sync block: A observes the old value and completes first, B observes the new value. Pipeline: std::macro std::opt std::tf."
+desc = "A(i); modify(i); B(i) in a sync body: A observes the old value and completes first, B observes the new value. Pipeline: std::macro std::opt std::tf."
 kind = "behavior"
 case = "../../../cases/linear/byref/wait_before_after.cml"
 args = ["${case}", "std::macro", "std::opt", "std::tf"]
@@ -1208,7 +1208,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ImmutablePassedToVarParam"
 expect_diagnostic_line = 9
-expect_diagnostic_column = 10
+expect_diagnostic_column = 5
 expect_output_contains = ["'x' is immutable"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
@@ -1222,7 +1222,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ImmutablePassedToVarParam"
 expect_diagnostic_line = 10
-expect_diagnostic_column = 10
+expect_diagnostic_column = 5
 expect_output_contains = ["'k' is immutable"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
@@ -1264,7 +1264,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ImmutablePassedToVarParam"
 expect_diagnostic_line = 15
-expect_diagnostic_column = 15
+expect_diagnostic_column = 10
 expect_output_contains = ["'a' is immutable"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
@@ -3047,6 +3047,70 @@ assert(out === 'plain call: value 1.0 sum(acc) 3.0 | with_grad: value 4.0 sum(ac
 timeout_ms = 20000
 
 [[tests]]
+name = "grad_tuple_read.default"
+desc = "Element reads of a with_grad result: the tuple's elements read as values, through a second name, and a field of the gradient; a tuple a function returns is read the same way."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/grad_tuple_read.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'with_grad: value 1.0 grad 3.0 by name 1.0 grad by name 3.0 | pair: 3.0 2.0', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "grad_tuple_read.macro_fvm"
+desc = "Element reads of a with_grad result: the tuple's elements read as values, through a second name, and a field of the gradient; a tuple a function returns is read the same way."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/grad_tuple_read.cml"
+args = ["${case}", "std::macro", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'with_grad: value 1.0 grad 3.0 by name 1.0 grad by name 3.0 | pair: 3.0 2.0', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "grad_tuple_read.macro_simplify_jit"
+desc = "Element reads of a with_grad result: the tuple's elements read as values, through a second name, and a field of the gradient; a tuple a function returns is read the same way."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/grad_tuple_read.cml"
+args = ["${case}", "std::macro", "std::opt", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'with_grad: value 1.0 grad 3.0 by name 1.0 grad by name 3.0 | pair: 3.0 2.0', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "grad_tuple_read.opt_macro_nvm"
+desc = "Element reads of a with_grad result: the tuple's elements read as values, through a second name, and a field of the gradient; a tuple a function returns is read the same way."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/grad_tuple_read.cml"
+args = ["${case}", "std::opt", "std::macro", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'with_grad: value 1.0 grad 3.0 by name 1.0 grad by name 3.0 | pair: 3.0 2.0', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
 name = "var_tensor_read_after_write.run"
 desc = "Refused with a clear diagnostic instead of a silently wrong gradient: the variable is read after the function assigned it a value that depends on a differentiated parameter (run-time error at the gradient call)."
 kind = "behavior"
@@ -3713,3 +3777,22 @@ expect_exit = 0
 expect_stdout = "plain call: value 3.0\nwith_grad: value 3.0 grad 3.0\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+
+[[tests]]
+name = "var_param_reference.an_escaping_var_keeps_its_cell"
+desc = "A `var` handed to a function as a `var` argument escapes: it is a resource shared with the callee (docs/handover/reviews/questions-2026-10-24-evening.md, the var-version-node ruling), so it keeps its cell and its reads stay cell reads -- the graph has :var/get and :var/new nodes. A `var` that only its own graph reads and writes becomes SSA instead: its reads take the value of the write that made them and no :var/get is left (test/cases/opt/generic/specialization_survives_the_round.cml, where the graph has none)."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_param_reference.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const reads = (out.match(/:var\/get/g) || []).length
+assert(reads > 0, `a var handed out as a var argument keeps its cell and its reads, found ${reads} :var/get nodes`)
+const cells = (out.match(/:var\/new/g) || []).length
+assert(cells > 0, `an escaping var keeps its cell, found ${cells} :var/new nodes`)
+}
+"""
+timeout_ms = 8000

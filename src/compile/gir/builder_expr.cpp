@@ -70,6 +70,25 @@ node_handle_t Builder::literalDataInType(const GCT::node_ptr_t &gct, Type *expec
     if (expected->assignableFrom(data->type())) {
         return nullptr;
     }
+    // `null` is the compile-time constant of the nullable type it stands in (design principles
+    // 4.4, 5.1): it is made in the position's type while it is made, so a position that requires a
+    // constant -- a parameter default is the one that needs it today -- gets a value of the type,
+    // not a cast of one (coerceTo registers the same constant for the positions that already hold
+    // the literal's own node). Only a `T?` has a `null`: where no nullable type is expected the
+    // literal keeps the type it has on its own, and the place it stands in reports the mismatch.
+    if (data->isNull() && data->type()->code() == TypeCode::Void) {
+        TupleType *tagged = asTagged(expected);
+        if (tagged == nullptr || !tagged->isNullable()) {
+            return nullptr;
+        }
+        const data_ptr_t value = Data::null(tagged);
+        node_handle_t result   = currGraph_->addStaticDataNode(value);
+        rememberConstant(result, value);
+        // No private copy for a varied graph: a null is never written through, so the one
+        // constant node serves every round.
+        registerNodeOrigin(context_, result, gct, "gir.data.null");
+        return result;
+    }
     if (isComposite(data->type()->code())) {
         if (!tt::as_shared<CompositeData>(data)->resolved()) {
             return nullptr;
@@ -111,15 +130,34 @@ node_handle_t Builder::visitDataNode(const GCT::node_ptr_t &gct) {
             auto holes           = composedData->holes();
             type_vec_t refTypes;
             std::vector<node_handle_t> refNodes;
+            std::vector<std::string> refNames;
             for (const auto &ref : composedData->refs()) {
                 const auto &refNode = elementNodeOf(std::string(ref), gct);
+                refNames.push_back(std::string(ref));
                 refTypes.push_back(nodeTypeOf(refNode));
                 refNodes.push_back(refNode);
             }
             ASSERT(
                 holes.size() == refNodes.size(),
                 "Composite holes must match unresolved reference count.");
-            if (dataType->code() == TypeCode::Array && !refTypes.empty()) {
+            // The position this literal stands in gives it its type while it is made, element by
+            // element, even when one of its elements is computed: it is a FILL then, not one
+            // constant, and the elements it wrote kept their default types before this
+            // (`{ n: x, t: (1.0, 2.0) }` was a `(float, float)` field where the declaration says
+            // `(f32, f32)`; design principles 5.1). A position the literal does not fit leaves it
+            // the type its own elements give it, and the place it was written in reports the
+            // mismatch, as it did.
+            Type *position        = expectedValueType_;
+            data_ptr_t positioned = nullptr;
+            // Where the computed elements sit in the value the fill reads: the literal's own type
+            // states them, and the position may state the same fields in another order.
+            std::vector<size_t> holeSlots = holes;
+            if (position != nullptr && !containsTypeVar(position)) {
+                positioned = compositeWithHolesInType(
+                    data, position, gct, refNames, refTypes, holes, holeSlots);
+            }
+            if (positioned == nullptr && dataType->code() == TypeCode::Array &&
+                !refTypes.empty()) {
                 // The element type of the literal: what its literal elements fixed (`[x, 5]` is
                 // an `int[]`), else what the computed elements join to (`[x, null]`, `[a, b]` with
                 // an `int` and an `int?`; design principles 3.8, 5.1). An element that is not of
@@ -159,26 +197,30 @@ node_handle_t Builder::visitDataNode(const GCT::node_ptr_t &gct) {
                     throw BuildAbortException();
                 }
             }
-            auto filledType = dataType->resolved()
-                                  ? dataType
-                                  : tt::as_ptr<CompositeType>(dataType->clone())->resolve(refTypes);
+            auto filledType = positioned != nullptr
+                                  ? position
+                                  : (dataType->resolved()
+                                         ? dataType
+                                         : tt::as_ptr<CompositeType>(dataType->clone())
+                                               ->resolve(refTypes));
             // The literal part of the array takes the element type the computed part gave the
             // array: a constant element written as an unnamed struct in another order is copied
             // into the named type it enters (design principles 5.2), so every slot is of the
             // array's element type.
-            data_ptr_t literalData = data;
-            if (filledType->code() == TypeCode::Array && !filledType->equals(data->type())) {
+            data_ptr_t literalData = positioned != nullptr ? positioned : data;
+            if (positioned == nullptr && filledType->code() == TypeCode::Array &&
+                !filledType->equals(data->type())) {
                 if (data_ptr_t converted = data->convertTo(filledType)) {
                     literalData = converted;
                 }
             }
-            auto payload    = runtime::makeFillPayload(fillKindForType(filledType), holes);
+            auto payload    = runtime::makeFillPayload(fillKindForType(filledType), holeSlots);
             node_handle_t srcNode = currGraph_->addStaticDataNode(literalData, filledType);
             node                  = currGraph_->addFillNode(filledType, payload);
             linkNodes(LinkType::Norm, srcNode, node);
             // An array written in place with some elements computed: the constant elements
             // stay known to the operators the array is passed to (StaticArg::elements).
-            if (auto array = std::dynamic_pointer_cast<ArrayData>(data);
+            if (auto array = std::dynamic_pointer_cast<ArrayData>(literalData);
                 array && filledType->code() == TypeCode::Array) {
                 Type *elemType = tt::as_ptr<ArrayType>(filledType)->elemType();
                 std::vector<std::optional<slot_t>> elements(array->raw().size());
@@ -415,6 +457,9 @@ void Builder::recordWrite(
     if (waited_ || synced_) {
         uses.clear();
     }
+    // A store is one of the cell's known users (collapseNonEscapingVariableReads): a user the builder
+    // did not record -- a :var/take, a call handed the ar -- makes the cell escape.
+    knownCellUsers_.insert(exit);
     setModifier(variable, exit);
     if (!throughCallee) {
         if (ArmBuild *arm = activeArm()) {
@@ -694,21 +739,24 @@ std::any Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
     // A layer has the name when it brings something of it: an import by name of a name the
     // module does not export leaves the name to the next layers (and is reported only when
     // none has it).
+    //
+    // A name brought by name is the name the program means, whatever it is: the reference
+    // written here with an import of it in force has that import's entity and no other layer's
+    // (`import { range } from tensor` is tensor's `range`; the built-in of the same spelling is
+    // the prelude, layer 5, and a name of layer 3 keeps the first layer having it -- design
+    // principles 6.x, "local > this module > imported by name > using > built-in").
     std::optional<camel::core::module::entity> named;
-    if (!isOperatorName(written) && module_->hasImportedRef(written, ImportLayer::Named)) {
-        importedName = true;
-        named        = importedEntity(written, ImportLayer::Named);
+    if (module_->hasImportedRef(written, ImportLayer::Named)) {
+        named = importedEntity(written, ImportLayer::Named);
     }
-    if (isOperatorName(written) || (named.has_value() && named->isOperGroup())) {
-        // Operator groups (`+`, and the operators a module of operators brings) take their
-        // overloads from every layer (design principles 10.2; the graph model, N3).
-        importedName = importedName || module_->hasImportedRef(written);
-        if (importedName) {
-            opt = importedEntity(written);
-        }
-    } else if (named.has_value()) {
-        opt = named;
+    if (named.has_value()) {
+        importedName = true;
+        opt          = named;
     } else if (auto match = throughUsing(written, gct)) {
+        // A `using namespace` is layer 4: it is above the prelude (layer 5) and below a name
+        // imported by name (layer 3), so it is reached before the merged layer that the name's
+        // built-in takes part in. Without this order a name the prelude has -- every built-in --
+        // would answer through the merge and a `using namespace` could never supply it.
         if (!match->ownName.empty()) {
             // A name of this module, opened by a `using namespace` of one of its namespaces.
             GCT::node_ptr_t resolved = tree_->makeDRef(match->ownName);
@@ -718,6 +766,13 @@ std::any Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
         }
         importedName = true;
         opt          = match->entity;
+    } else if (isOperatorName(written) || module_->hasImportedRef(written)) {
+        // Operator groups for a spelling an import did not bring by name (`+`, and the operators
+        // a module of operators brings) take their overloads from every layer (design
+        // principles 10.2; the graph model, N3); a name the prelude has and no layer above it
+        // does is the built-in itself.
+        importedName = true;
+        opt          = importedEntity(written);
     } else if (module_->hasImportedRef(written, ImportLayer::Ambient)) {
         importedName = true;
         opt          = importedEntity(written, ImportLayer::Ambient);
@@ -848,6 +903,14 @@ bool Builder::valueNameExists(const std::string &written, const GCT::node_ptr_t 
     const std::string name = moduleLevelName(written);
     if (nodeAt(name).has_value() || templateScope_->get(name).has_value() ||
         graphsAt(name).has_value() || decoratedGraphAt(name).has_value()) {
+        return true;
+    }
+    if (const ModuleUnit *unit = currentModuleUnit();
+        unit != nullptr && unit->values.contains(name)) {
+        // A value of the module's top level that has not been built yet: the name is the
+        // module's own and `buildTopLevelValueNamed` builds it on demand, wherever it is
+        // written (program.cpp, "the top level of a module does not depend on the order it is
+        // written"). A body read ahead of that build must see it.
         return true;
     }
     if (written.find("::") != std::string::npos) {
@@ -1135,6 +1198,18 @@ node_handle_t Builder::readVariableThrough(
             linkNodes(LinkType::Ctrl, *modifier, value);
         }
     }
+    // SSA (collapseNonEscapingVariableReads): this read may later take its value from the write that
+    // made it instead of from the cell, so the writer it belongs to is recorded here, while the
+    // builder still knows it. The read node counts as one of the cell's known users.
+    if (sameGraph(variable, currGraph_)) {
+        node_handle_t source = variable;
+        if (auto modifier = modifierOf(variable);
+            modifier.has_value() && sameGraph(*modifier, currGraph_)) {
+            source = *modifier;
+        }
+        variableReadSource_[value] = VariableRead{source, variable};
+        knownCellUsers_.insert(value);
+    }
     // In a sync block a read happens where it is written, like a call.
     if (synced_) {
         if (lastSyncedNode_ != nullptr && shouldAddSyncCtrlLink(lastSyncedNode_, value)) {
@@ -1155,6 +1230,67 @@ node_handle_t Builder::peekVariable(node_handle_t variable) {
     return readVariableThrough(variable, camel::core::oper::VarPeek);
 }
 
+void Builder::collapseNonEscapingVariableReads() {
+    if (variableReadSource_.empty() || currGraph_ == nullptr) {
+        return;
+    }
+    // The reads recorded for this graph, grouped by the cell they read. A cell of an outer graph
+    // belongs to that graph's own turn, so it is skipped here.
+    std::unordered_map<node_handle_t, std::vector<std::pair<node_handle_t, node_handle_t>>> byCell;
+    for (const auto &[read, info] : variableReadSource_) {
+        if (info.cell == nullptr || !sameGraph(info.cell, currGraph_)) {
+            continue;
+        }
+        byCell[info.cell].push_back({read, info.source});
+    }
+    auto &draft = currGraph_->draft();
+    for (auto &[cell, reads] : byCell) {
+        // A `var` parameter of this graph is a resource shared with the caller, and a captured cell
+        // is shared with a closure: both keep their cell.
+        if (nodeKindOf(cell) == camel::runtime::GCNodeKind::Port ||
+            escapingVariables_.contains(cell)) {
+            continue;
+        }
+        const camel::runtime::gc_node_ref_t cellId = nodeIdOf(cell);
+        if (draft.header(cellId) == nullptr) {
+            continue;
+        }
+        // Every user of the cell must be one this builder recorded: one of its reads, or one of its
+        // stores. Any other user -- a `:var/take`, a call the `var` was handed to, a capture port --
+        // is a use this conversion does not model, so the cell keeps its cell.
+        bool known = true;
+        for (auto users : {normUsersOf(cell), withUsersOf(cell), ctrlUsersOf(cell)}) {
+            for (draft_node_ref_t user : users) {
+                if (!knownCellUsers_.contains(nodeDraftOf(cell)->ref(user))) {
+                    known = false;
+                    break;
+                }
+            }
+            if (!known) {
+                break;
+            }
+        }
+        if (!known) {
+            continue;
+        }
+        // The value of a cell nothing has written yet is the one it was made with (:var/new's input).
+        const auto cellInputs = draft.normInputsOf(cellId);
+        for (auto &[read, source] : reads) {
+            const camel::runtime::gc_node_ref_t readId = nodeIdOf(read);
+            if (draft.header(readId) == nullptr) {
+                continue;
+            }
+            const camel::runtime::gc_node_ref_t version =
+                source == cell ? (cellInputs.empty() ? cellId : cellInputs[0]) : nodeIdOf(source);
+            if (version == cellId || draft.header(version) == nullptr) {
+                continue;
+            }
+            // The read's users take the version's value; the read node is not needed any more.
+            draft.replaceAllValueUses(readId, version);
+            draft.eraseNode(readId);
+        }
+    }
+}
 std::optional<std::string> Builder::immutableNameOf(const GCT::node_ptr_t &expr) {
     GCT::node_ptr_t root = expr;
     while (root && root->type() == GCT::NodeKind::ACCS) {

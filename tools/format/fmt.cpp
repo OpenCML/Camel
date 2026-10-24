@@ -342,7 +342,7 @@ any Formatter::visitUsingNamespaceDecl(cst::UsingNamespaceDecl context) {
 }
 
 /*
-blockStmt  : WAIT? stmtBlock | funcAnno+ stmtBlock ;
+blockStmt  : stmtBlock | funcAnno+ stmtBlock ;
 */
 any Formatter::visitBlockStmt(cst::BlockStmt context) {
     string result;
@@ -358,7 +358,6 @@ any Formatter::visitBlockStmt(cst::BlockStmt context) {
         result += any_cast<string>(visitFuncAnno(funcAnno)) +
                   commentsInFrontMatter(funcAnno->lastToken()->index());
     }
-    result += context->tok(TK::KwWait) ? "wait " : "";
     result += any_cast<string>(visitStmtBlock(context->get<cst::StmtBlock>()));
     return result;
 }
@@ -634,8 +633,7 @@ any Formatter::visitWhenClause(cst::WhenClause context) {
 }
 
 /*
-ruleDecl : EXPORT? IDENTIFIER identDef ruleContext? parentParams '{' ruleBody '}'
-           (IDENTIFIER dataExpr)? ;
+ruleDecl : EXPORT? IDENTIFIER identDef ruleContext? parentParams whenClause? '{' ruleBody '}' ;
 */
 any Formatter::visitRuleDecl(cst::RuleDecl context) {
     string result;
@@ -656,10 +654,12 @@ any Formatter::visitRuleDecl(cst::RuleDecl context) {
         result += any_cast<string>(visitRuleContext(ruleContext));
     }
     result += any_cast<string>(visitParentParams(context->get<cst::ParentParams>()));
-    result += " { " + any_cast<string>(visitRuleBody(context->get<cst::RuleBody>())) + " }";
-    if (const auto condition = context->expr()) {
-        result += " when " + any_cast<string>(visitExpr(condition));
+    // The rule's condition is part of its signature, so it is written between the parameters and
+    // the body, as a function writes it (design principles 4.4; the ruling of 2026-10-24).
+    if (const auto whenClause = context->get<cst::WhenClause>()) {
+        result += " " + any_cast<string>(visitWhenClause(whenClause));
     }
+    result += " { " + any_cast<string>(visitRuleBody(context->get<cst::RuleBody>())) + " }";
     return result;
 }
 
@@ -1184,8 +1184,15 @@ matchCase
     ;
 */
 any Formatter::visitMatchCase(cst::MatchCase context) {
-    return "case " + formatList(vec(context->all<cst::Pattern>()), context, " | ", " |") + " => " +
-           any_cast<string>(visitBlockExpr(context->lastChild().node()));
+    // `case p when c => body`: the guard stands between the patterns and the arm, as it does
+    // in the source the parser reads (node_kinds.def). Leaving it out changes the AST the text
+    // parses to, so it is written where it stood.
+    string result =
+        "case " + formatList(vec(context->all<cst::Pattern>()), context, " | ", " |");
+    if (const auto guard = context->get<cst::WhenClause>()) {
+        result += " " + any_cast<string>(visitWhenClause(guard));
+    }
+    return result + " => " + any_cast<string>(visitBlockExpr(context->lastChild().node()));
 }
 
 /*
@@ -1261,8 +1268,14 @@ string Formatter::formatTypeInTypePosition(syn::Node type) {
 
 /*
 staticLoopExpr
-    : STATIC LOOP loopState (',' loopState)* staticForHeader DO blockExpr
+    : STATIC LOOP loopState (',' loopState)* staticLoopHeader DO blockExpr
     ;
+staticLoopHeader
+    : FOR (identDef | '_') (',' (identDef | '_'))? IN
+      ('fields' typeExpr | 'indices' dataExpr | dataExpr)
+    ;
+The head is written without the parentheses `static for` still has (H462, the ruling of
+2026-10-24): `for j in indices ts`, `for i in 0..5`, or `for n, F in fields T`.
 */
 any Formatter::visitStaticLoopExpr(cst::StaticLoopExpr context) {
     string text = "static loop ";
@@ -1273,20 +1286,20 @@ any Formatter::visitStaticLoopExpr(cst::StaticLoopExpr context) {
                 any_cast<string>(visit(state.expr()));
         first = false;
     }
-    const auto mode = context->tok(TK::Identifier);
+    const auto valueName = context->get<cst::IdentDef>(0);
+    const auto mode      = context->tok(TK::Identifier);
+    const string body    = any_cast<string>(visitBlockExpr(context->lastChild().node()));
     if (mode && mode.text() == "indices") {
-        text += " for (" +
-                any_cast<string>(visitIdentDef(context->get<cst::IdentDef>(0))) +
-                ") in indices " + any_cast<string>(visit(context->expr())) + " do " +
-                any_cast<string>(visitBlockExpr(context->lastChild().node()));
-        return text;
+        return text + " for " + any_cast<string>(visitIdentDef(valueName)) + " in indices " +
+               any_cast<string>(visit(context->expr())) + " do " + body;
     }
-    text += " for (" +
-            any_cast<string>(visitIdentDef(context->get<cst::IdentDef>(0))) + ", " +
-            any_cast<string>(visitIdentDef(context->get<cst::IdentDef>(1))) + ") in fields " +
-            any_cast<string>(visitType(context->type())) + " do " +
-            any_cast<string>(visitBlockExpr(context->lastChild().node()));
-    return text;
+    if (mode && mode.text() == "fields") {
+        return text + " for " + any_cast<string>(visitIdentDef(valueName)) + ", " +
+               any_cast<string>(visitIdentDef(context->get<cst::IdentDef>(1))) + " in fields " +
+               any_cast<string>(visitType(context->type())) + " do " + body;
+    }
+    return text + " for " + any_cast<string>(visitIdentDef(valueName)) + " in " +
+           any_cast<string>(visit(context->expr())) + " do " + body;
 }
 
 /*
@@ -1319,14 +1332,19 @@ any Formatter::visitCtrlExpr(syn::Node context) {
         string result    = "if " + condition;
         // A comment between the condition and `then`, or between the branch and `else`, stands in
         // no gap a list looks at: the branch of a block-less `if` is an expression, not a list,
-        // and the keyword after it belongs to this visitor alone.
+        // and the keyword after it belongs to this visitor alone. A `//` comment ends the line it
+        // stands on, so `then` must not follow it on that line: written after the comment, the
+        // keyword is read as part of it and the conditional loses it, which is the formatted text
+        // failing to parse (`SyntaxDiag::MissingThen`). The `else` below already ends the line on
+        // this answer; here it was dropped.
         const auto &thenTok = context->tok(TK::KwThen);
-        writeInlineComments(
+        const bool conditionLineEnds = writeInlineComments(
             result,
             context->expr()->lastToken()->index(),
             thenTok.index(),
             context->expr()->lastToken()->endLine());
-        result += " then " + thenBlock;
+        result += conditionLineEnds ? lineEnd() + "then " : " then ";
+        result += thenBlock;
         if (context->tok(TK::KwElse)) {
             const auto &elseTok       = context->tok(TK::KwElse);
             const size_t branchEnd    = context->child(3).node()->lastToken()->index();
@@ -1373,13 +1391,6 @@ any Formatter::visitCtrlExpr(syn::Node context) {
     default:
         throw runtime_error("Invalid structExpr context");
     }
-}
-
-/*
-waitExpr : WAIT? assignExpr ;
-*/
-any Formatter::visitWaitExpr(cst::WaitExpr context) {
-    return (context->tok(TK::KwWait) ? "wait " : "") + any_cast<string>(visitExpr(context->expr()));
 }
 
 /*
@@ -1498,7 +1509,7 @@ any Formatter::visitLinkExpr(cst::LinkExpr context) { return formatBiOpsList(con
 
 /*
 compExpr
-    : annoExpr (('..' | '?..') annoExpr)*
+    : annoExpr ('..' annoExpr)*
     ;
 */
 any Formatter::visitCompExpr(cst::CompExpr context) { return formatBiOpsList(context, false); }
@@ -2060,7 +2071,6 @@ any Formatter::dispatch(syn::Node context) {
         CAMEL_FORMAT(IdentRef)
         CAMEL_FORMAT(SpreadValue)
         CAMEL_FORMAT(RestValue)
-        CAMEL_FORMAT(WaitExpr)
         CAMEL_FORMAT(AssignExpr)
         CAMEL_FORMAT(LogicalOrExpr)
         CAMEL_FORMAT(LogicalAndExpr)

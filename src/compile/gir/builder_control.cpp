@@ -11,6 +11,8 @@
 
 #include "camel/compile/gir/static_function.h"
 #include "camel/core/data/composite/tuple.h"
+#include "camel/core/data/primary.h"
+#include "camel/core/data/ref.h"
 #include "camel/core/numeric_convert.h"
 #include "camel/core/operator_names.h"
 #include "camel/core/rtdata/string.h"
@@ -576,7 +578,17 @@ node_handle_t Builder::coerceTo(node_handle_t node, Type *target, const GCT::nod
     if (TupleType *tagged = asTagged(target)) {
         // `null` is the null slot of every `T?`; any other value enters the payload first.
         if (tagged->isNullable() && source->code() == TypeCode::Void) {
-            return castNodeTo(node, tagged, origin);
+            node_handle_t cast = castNodeTo(node, tagged, origin);
+            // The cast of `null` into a `T?` moves no bits and computes nothing: what the node
+            // stands for is the null constant of the type it is read as. A position that requires
+            // a compile-time constant -- a parameter default is one -- reads the value here
+            // (design principles 4.4), and a `null` that is not a constant (a value the program
+            // computed as `void`) stays a value with no constant.
+            if (const data_ptr_t written = constantOfNode(node);
+                written != nullptr && written->isNull()) {
+                rememberConstant(cast, Data::null(tagged));
+            }
+            return cast;
         }
         node_handle_t inner = coerceTo(node, tagged->payloadType(), origin);
         return inner != nullptr ? castNodeTo(inner, tagged, origin) : nullptr;
@@ -768,6 +780,175 @@ Builder::compositeDataInType(const data_ptr_t &data, Type *type, const GCT::node
                 origin,
                 literalElementAt(written, index));
             ++index;
+            if (converted == nullptr) {
+                return nullptr;
+            }
+            factory.add(converted);
+        }
+        return factory.build();
+    }
+    return nullptr;
+}
+
+data_ptr_t Builder::compositeWithHolesInType(
+    const data_ptr_t &data, Type *position, const GCT::node_ptr_t &origin,
+    const std::vector<std::string> &refNames, const type_vec_t &refTypes,
+    const std::vector<size_t> &refHoles, std::vector<size_t> &holeSlots) {
+    // Design principles 5.1: a literal in a position takes the position's type element by
+    // element. A literal with a computed element is a FILL, not one constant, so
+    // compositeDataInType cannot walk it — and its written elements used to keep their default
+    // types (`{ n: x, t: (1.0, 2.0), v: [1.0] }` was `(float, float)` and `float[]` where the
+    // declared fields are `(f32, f32)` and `f32[]`). The computed element is a value of its own
+    // type and enters only when the type it has is one the position takes there; when it is
+    // not, the position does not fit and the literal keeps the type its own elements give it.
+    if (data == nullptr || position == nullptr || asTagged(position) != nullptr ||
+        origin == nullptr) {
+        return nullptr;
+    }
+    auto composite = std::dynamic_pointer_cast<CompositeData>(data);
+    if (composite == nullptr || position->code() != data->type()->code()) {
+        return nullptr;
+    }
+    const auto *written = GCT::Tree::of(origin)->literalElementsOf(data);
+    // The type the position gives each of the literal's computed elements, per kind: an array or
+    // a tuple is positional (its holes are element indexes), a struct is by the placeholder the
+    // computed field left behind.
+    const auto holeTypesByIndex = [&]() {
+        std::vector<Type *> types(
+            data->type()->code() == TypeCode::Tuple
+                ? std::dynamic_pointer_cast<TupleData>(data)->raw().size()
+                : std::dynamic_pointer_cast<ArrayData>(data)->raw().size(),
+            nullptr);
+        const std::vector<size_t> holes = composite->holes();
+        for (size_t i = 0; i < holes.size() && i < refTypes.size(); ++i) {
+            if (holes[i] < types.size()) {
+                types[holes[i]] = valueTypeOf(refTypes[i]);
+            }
+        }
+        return types;
+    };
+    const auto holeTypeNamed = [&](const data_ptr_t &value) -> Type * {
+        // The placeholder a computed element left in the literal: its name is the reference the
+        // GCT gave it, and the node it stands for is the one holding that reference's value.
+        if (value == nullptr || value->type()->code() != TypeCode::Ref) {
+            return nullptr;
+        }
+        const std::string &ref = tt::as_shared<RefData>(value)->ref();
+        for (size_t i = 0; i < refNames.size() && i < refTypes.size(); ++i) {
+            if (refNames[i] == ref) {
+                return valueTypeOf(refTypes[i]);
+            }
+        }
+        return nullptr;
+    };
+    if (position->code() == TypeCode::Array) {
+        const auto *arrayType = tt::as_ptr<ArrayType>(position);
+        const auto array      = std::dynamic_pointer_cast<ArrayData>(data);
+        Type *elemType        = arrayType != nullptr ? arrayType->elemType() : nullptr;
+        if (array == nullptr || elemType == nullptr || elemType->code() == TypeCode::Void ||
+            !holdsStatedLength(arrayType, array.get())) {
+            return nullptr;
+        }
+        const std::vector<Type *> holeTypes = holeTypesByIndex();
+        if (holeTypes.size() != array->raw().size()) {
+            return nullptr;
+        }
+        ArrayDataFactory factory;
+        factory.setElemType(elemType);
+        for (size_t i = 0; i < array->raw().size(); ++i) {
+            if (holeTypes[i] != nullptr) {
+                if (!elemType->assignableFrom(holeTypes[i])) {
+                    return nullptr;
+                }
+                factory.add(array->raw()[i]);
+                continue;
+            }
+            data_ptr_t converted = literalElementInType(
+                array->raw()[i], elemType, origin, literalElementAt(written, i));
+            if (converted == nullptr) {
+                return nullptr;
+            }
+            factory.add(converted);
+        }
+        return factory.build();
+    }
+    if (position->code() == TypeCode::Struct) {
+        auto *structType       = tt::as_ptr<StructType>(position);
+        const auto *ownType    = tt::as_ptr<StructType>(data->type());
+        const auto object      = std::dynamic_pointer_cast<StructData>(data);
+        if (structType == nullptr || ownType == nullptr || object == nullptr ||
+            object->raw().size() != structType->size() || refHoles.size() != refNames.size()) {
+            return nullptr;
+        }
+        // Where the computed fields sit in the position: the literal's own type and the position
+        // state the same fields, each in its own order (design principles 5.2).
+        std::vector<size_t> slots;
+        slots.reserve(refHoles.size());
+        for (size_t index : refHoles) {
+            if (index >= ownType->size()) {
+                return nullptr;
+            }
+            const std::optional<size_t> at = structType->findField(ownType->fieldName(index));
+            if (!at.has_value()) {
+                return nullptr;
+            }
+            slots.push_back(*at);
+        }
+        StructDataFactory factory;
+        size_t index = 0;
+        for (const auto &[name, value] : object->raw()) {
+            const std::optional<size_t> fieldIndex = structType->findField(name);
+            if (!fieldIndex.has_value()) {
+                return nullptr;
+            }
+            Type *fieldType = structType->typeAt(*fieldIndex);
+            if (Type *hole = holeTypeNamed(value); hole != nullptr) {
+                if (fieldType == nullptr || !fieldType->assignableFrom(hole)) {
+                    return nullptr;
+                }
+                factory.add(name, value);
+            } else {
+                data_ptr_t converted = literalElementInType(
+                    value, fieldType, origin, literalElementAt(written, index));
+                if (converted == nullptr) {
+                    return nullptr;
+                }
+                factory.add(name, converted);
+            }
+            ++index;
+        }
+        // A value of the position itself: the literal is the named type the position names, and
+        // its fields are in that type's order (design principles 5.2).
+        std::shared_ptr<StructData> built = factory.buildAs(structType);
+        if (built == nullptr) {
+            return nullptr;
+        }
+        holeSlots = std::move(slots);
+        return built;
+    }
+    if (position->code() == TypeCode::Tuple) {
+        const auto *tupleType = tt::as_ptr<TupleType>(position);
+        const auto object     = std::dynamic_pointer_cast<TupleData>(data);
+        if (tupleType == nullptr || object == nullptr ||
+            object->raw().size() != tupleType->size()) {
+            return nullptr;
+        }
+        const std::vector<Type *> holeTypes = holeTypesByIndex();
+        if (holeTypes.size() != object->raw().size()) {
+            return nullptr;
+        }
+        TupleDataFactory factory;
+        for (size_t i = 0; i < object->raw().size(); ++i) {
+            Type *elemType = tupleType->typeAt(i);
+            if (holeTypes[i] != nullptr) {
+                if (elemType == nullptr || !elemType->assignableFrom(holeTypes[i])) {
+                    return nullptr;
+                }
+                factory.add(object->raw()[i]);
+                continue;
+            }
+            data_ptr_t converted = literalElementInType(
+                object->raw()[i], elemType, origin, literalElementAt(written, i));
             if (converted == nullptr) {
                 return nullptr;
             }
@@ -1197,7 +1378,10 @@ Builder::visitTaggedMatch(const GCT::node_ptr_t &gct, node_handle_t scrutinee, T
         throw BuildAbortException();
     };
     // DESIGN-QUESTION(nullable-error) Q4: exactly the tagged case and one other.
-    GCT::node_ptr_t taggedCase = nullptr, restCase = nullptr;
+    // A case with a guard is taken only where its guard holds, so it is not the case that
+    // opens the value: each side needs one case without a guard, and the cases written before
+    // it may carry guards (review 「when-placement-and-match-guards」).
+    std::vector<GCT::node_ptr_t> taggedSide, restSide;
     for (size_t i = 1; i < gct->size(); ++i) {
         const auto &caseNode = gct->at(i);
         const auto caseType  = caseNode->caseType();
@@ -1210,21 +1394,42 @@ Builder::visitTaggedMatch(const GCT::node_ptr_t &gct, node_handle_t scrutinee, T
                     isNull ? "'case null' needs a value that may be null"
                            : "'case error' needs a value that may have failed");
             }
-            if (taggedCase != nullptr) {
-                malformed(
-                    std::string("it has more than one '") + (isNull ? "case null" : "case error") +
-                    "'");
-            }
-            taggedCase = caseNode;
+            taggedSide.push_back(caseNode);
         } else if (caseType == CaseType::Bind || caseType == CaseType::Else) {
-            if (restCase != nullptr) {
-                malformed("it has more than one case for the value");
-            }
-            restCase = caseNode;
+            restSide.push_back(caseNode);
         } else {
             malformed("a literal case cannot be compared with a value that is not opened yet");
         }
     }
+    const bool anyGuard = hasGuardedCase(gct, 1);
+    if (!anyGuard) {
+        // Without a guard the cases of a side are one and the same case: what the old form
+        // says, and what its reports name.
+        if (taggedSide.size() > 1) {
+            malformed(std::string("it has more than one '") +
+                      (type->isNullable() ? "case null" : "case error") + "'");
+        }
+        if (restSide.size() > 1) {
+            malformed("it has more than one case for the value");
+        }
+    }
+    const auto openingCase = [&](const std::vector<GCT::node_ptr_t> &side) -> GCT::node_ptr_t {
+        // The case that opens the value of its side: the one without a guard. Every case
+        // written after it for the same side can never be taken.
+        GCT::node_ptr_t opening = nullptr;
+        for (const GCT::node_ptr_t &caseNode : side) {
+            const bool guarded = tree_->caseGuardOf(caseNode) != nullptr;
+            if (opening != nullptr && !guarded) {
+                malformed("a case of one side follows the case that takes that side");
+            }
+            if (!guarded && opening == nullptr) {
+                opening = caseNode;
+            }
+        }
+        return opening;
+    };
+    const GCT::node_ptr_t taggedCase = openingCase(taggedSide);
+    const GCT::node_ptr_t restCase   = openingCase(restSide);
     if (taggedCase == nullptr) {
         malformed(type->isNullable() ? "'case null' is missing" : "'case error e' is missing");
     }
@@ -1233,10 +1438,60 @@ Builder::visitTaggedMatch(const GCT::node_ptr_t &gct, node_handle_t scrutinee, T
     }
 
     const std::string name = bindTemporary(scrutinee);
-    node_handle_t tagNode  = applyTagOperator(
-        type->isNullable() ? camel::core::oper::TagIsNull : camel::core::oper::TagIsError,
-        name,
-        gct);
+    const auto tagOf       = [&](const GCT::node_ptr_t &origin) {
+        return applyTagOperator(
+            type->isNullable() ? camel::core::oper::TagIsNull : camel::core::oper::TagIsError,
+            name,
+            origin);
+    };
+    if (anyGuard) {
+        // The cases in written order, as one decision list: each tests the side it takes, and
+        // the cases written after it are the `else` of its step, so a guard that does not hold
+        // leaves the value to them.
+        std::vector<CaseStep> steps;
+        for (size_t i = 1; i < gct->size(); ++i) {
+            const GCT::node_ptr_t &caseNode = gct->at(i);
+            const auto caseType             = caseNode->caseType();
+            const bool isNull               = caseType == CaseType::Value &&
+                               caseNode->at(0)->type() == GCT::NodeKind::DATA &&
+                               caseNode->at(0)->data()->type()->code() == TypeCode::Void;
+            const bool onTagged = isNull || caseType == CaseType::Error;
+            CaseStep caseStep;
+            caseStep.guard = tree_->caseGuardOf(caseNode);
+            caseStep.exec  = caseNode->at(caseNode->size() - 1);
+            if (caseStep.guard != nullptr || i + 1 < gct->size()) {
+                // The last case is the one the list ends at, and it needs no test: nothing
+                // written after it can meet the value. Every other case says which side it
+                // takes, so that the value a guard of a case before it refused reaches it.
+                node_handle_t tag   = tagOf(caseNode);
+                caseStep.condition = onTagged
+                                          ? tag
+                                          : negateCondition(tag, caseNode);
+            }
+            caseStep.bind = [&, caseNode, onTagged, isNull, caseType] {
+                if (onTagged) {
+                    if (type->isFallible()) {
+                        insertNode(
+                            caseNode->binding(),
+                            applyTagOperator(
+                                camel::core::oper::TagErrorInfo, name, caseNode));
+                    }
+                } else if (caseType == CaseType::Bind) {
+                    insertNode(
+                        caseNode->binding(),
+                        applyTagOperator(
+                            type->isNullable() ? camel::core::oper::TagNullValue
+                                               : camel::core::oper::TagErrorValue,
+                            name,
+                            caseNode));
+                }
+            };
+            steps.push_back(std::move(caseStep));
+        }
+        return buildCaseChain(steps, gct);
+    }
+
+    node_handle_t tagNode = tagOf(gct);
     const GCT::node_ptr_t taggedExec = taggedCase->at(taggedCase->size() - 1);
     const GCT::node_ptr_t restExec   = restCase->at(0);
     std::vector<arm_ptr_t> arms(2);
@@ -1686,17 +1941,29 @@ node_handle_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
 
 void Builder::requireMatchDefault(const GCT::node_ptr_t &gct, node_handle_t scrutinee) {
     using CaseType    = GCT::CaseType;
-    bool hasValueCase = false, hasTrue = false, hasFalse = false;
+    bool hasTrue = false, hasFalse = false, anyCase = false;
     for (size_t i = 1; i < gct->size(); ++i) {
         const auto &caseNode = gct->at(i);
         const auto caseType  = caseNode->caseType();
         if (caseType == CaseType::Else) {
-            return;
+            if (!caseNode->guardedCase()) {
+                return; // an unguarded `case _` is the default of the match
+            }
+            // `case _ when c`: the branch is entered only when `c` holds, so it is not a
+            // default. The cases written after it are still reached (the guarded wildcard does
+            // not end the match), and the match still needs one.
+            continue;
         }
         if (caseType != CaseType::Value) {
             continue;
         }
-        hasValueCase = true;
+        anyCase = true;
+        if (caseNode->guardedCase()) {
+            // A guarded case covers nothing on its own (review 「when-placement-and-match-
+            // guards」, and Rust the same): the value a false guard refuses is matched by the
+            // cases written after it, so it counts for neither `case _` nor a bool's values.
+            continue;
+        }
         if (caseNode->at(0)->type() == GCT::NodeKind::DATA) {
             const auto literal = std::dynamic_pointer_cast<BoolData>(caseNode->at(0)->data());
             if (literal) {
@@ -1704,7 +1971,7 @@ void Builder::requireMatchDefault(const GCT::node_ptr_t &gct, node_handle_t scru
             }
         }
     }
-    if (!hasValueCase) {
+    if (!anyCase) {
         return; // an `if`
     }
     Type *type = valueTypeOf(nodeTypeOf(scrutinee));
@@ -1718,9 +1985,170 @@ void Builder::requireMatchDefault(const GCT::node_ptr_t &gct, node_handle_t scru
     throw BuildAbortException();
 }
 
+bool Builder::hasGuardedCase(const GCT::node_ptr_t &gct, size_t first) {
+    for (size_t i = first; i < gct->size(); ++i) {
+        if (tree_->caseGuardOf(gct->at(i)) != nullptr) {
+            return true;
+        }
+    }
+    return false;
+}
+
+node_handle_t Builder::negateCondition(node_handle_t value, const GCT::node_ptr_t &origin) {
+    // `!b` is the branch `if b then false else true`: `not` over a bool, with no new node kind.
+    const auto constant = [&](bool each) {
+        node_handle_t node = currGraph_->addStaticDataNode(
+            tt::as_shared<Data>(std::make_shared<PrimaryData<bool>>(each)));
+        registerNodeOrigin(context_, node, origin, "gir.data");
+        return node;
+    };
+    std::vector<arm_ptr_t> two(2);
+    two[0] = buildArm(origin, [&] { return constant(false); });
+    two[1] = buildArm(origin, [&] { return constant(true); });
+    return buildBranch(origin, value, &two);
+}
+
+node_handle_t
+Builder::buildCaseChain(std::vector<CaseStep> &steps, const GCT::node_ptr_t &origin) {
+    node_handle_t always = currGraph_->addStaticDataNode(
+        tt::as_shared<Data>(std::make_shared<PrimaryData<bool>>(true)));
+    registerNodeOrigin(context_, always, origin, "gir.data");
+    const auto boolConstant = [&](bool value) {
+        node_handle_t node = currGraph_->addStaticDataNode(
+            tt::as_shared<Data>(std::make_shared<PrimaryData<bool>>(value)));
+        registerNodeOrigin(context_, node, origin, "gir.data");
+        return node;
+    };
+    // The condition of a case: the test of its pattern and, when it has a guard, that guard as
+    // well. The guard is read in the arm the pattern's test enters, so it sees the names the
+    // pattern binds and is not evaluated at all for a value the pattern does not match
+    // (design principles 4.2: `a && b` is `if a then b else false`).
+    const auto conditionOf = [&](CaseStep &step) {
+        const auto guardValue = [&] {
+            node_handle_t guard = valueNodeOf(visitInPosition(step.guard, Type::Bool()));
+            Type *guardType     = valueTypeOf(nodeTypeOf(guard));
+            if (guardType == nullptr || guardType->code() != TypeCode::Bool) {
+                diags_->of(SemanticDiag::ConditionNotBool)
+                    .atOrigin(step.guard->origin())
+                    .commit(guardType == nullptr ? "?" : guardType->toString());
+                throw BuildAbortException();
+            }
+            return guard;
+        };
+        if (step.condition == nullptr) {
+            // `case _ when c`: the case tests nothing itself, so the guard is its whole
+            // condition. The names the pattern binds are taken out all the same.
+            std::vector<arm_ptr_t> one(1);
+            one[0] = buildArm(step.exec, [&] { step.bind(); return guardValue(); });
+            return buildBranch(origin, always, &one);
+        }
+        std::vector<arm_ptr_t> held(2);
+        held[0] = buildArm(step.exec, [&] { step.bind(); return guardValue(); });
+        held[1] = buildArm(step.exec, [&] { return boolConstant(false); });
+        return buildBranch(origin, step.condition, &held);
+    };
+
+    // `step(i)` is the value of the list from case i on. The cases after a case are the `else`
+    // of its own step, and are built there: a guard that does not hold hands the value to them,
+    // and they are reached no other way.
+    std::function<node_handle_t(size_t)> step = [&](size_t i) -> node_handle_t {
+        CaseStep &caseStep        = steps[i];
+        node_handle_t condition   = caseStep.condition;
+        if (caseStep.guard != nullptr) {
+            condition = conditionOf(caseStep);
+        }
+        if (condition == nullptr) {
+            // The case that ends the list: an unguarded `case _` (the checks of the form
+            // refused a `match` that can reach a value none of its cases takes). Its arm is the
+            // only one, and the runtime takes it: the branch has no case value.
+            std::vector<arm_ptr_t> one(1);
+            one[0] =
+                buildArm(caseStep.exec, [&] { caseStep.bind(); return visitBodyNode(caseStep.exec); });
+            return buildBranch(origin, always, &one);
+        }
+        std::vector<arm_ptr_t> two(2);
+        two[0] = buildArm(caseStep.exec, [&] {
+            caseStep.bind();
+            return visitBodyNode(caseStep.exec);
+        });
+        two[1] = buildArm(caseStep.exec, [&] {
+            if (i + 1 < steps.size()) {
+                return step(i + 1);
+            }
+            // Nothing is written after this case: no value reaches here (the checks of the form
+            // refused a `match` that can fall off its end), but the arm the test does not take
+            // is still needed -- the branch offers the join one value of the arms' type. It is
+            // the body of this case's own arm, as the arm an exhaustive `match` over an enum
+            // adds for the value it cannot meet.
+            caseStep.bind();
+            return visitBodyNode(caseStep.exec);
+        });
+        return buildBranch(origin, condition, &two);
+    };
+    return step(0);
+}
+
+node_handle_t Builder::buildGuardedMatch(const GCT::node_ptr_t &gct, node_handle_t condNode) {
+    // The value is read once, into a name every case is compared with: a case value is a
+    // literal, and the comparison is the one `==` of that type makes, so `case 3` against an
+    // `f32` compares it with 3.0 (design principles 5.1) exactly as the branch that dispatches
+    // by case value does, and a case value of another type is the same report that branch gives.
+    const std::string name = bindTemporary(condNode);
+    Type *subjectType = valueTypeOf(nodeTypeOf(condNode));
+    std::vector<CaseStep> steps;
+    for (size_t i = 1; i < gct->size(); ++i) {
+        const GCT::node_ptr_t &caseNode = gct->at(i);
+        CaseStep caseStep;
+        caseStep.guard = tree_->caseGuardOf(caseNode);
+        caseStep.bind  = [] {};
+        switch (caseNode->caseType()) {
+        case GCT::CaseType::Value: {
+            // The case value as its own node: the CASE keeps the one it was built with, and a
+            // node has one parent.
+            node_handle_t valueNode  = valueNodeOf(visit(caseNode->at(0)));
+            Type *caseType           = valueTypeOf(nodeTypeOf(valueNode));
+            GCT::node_ptr_t operand  = caseNode->at(0);
+            bool converted           = false;
+            if (const std::optional<literal::Value> pattern = literalValueOfExpr(caseNode->at(0));
+                pattern.has_value() && subjectType != nullptr && subjectType->isPrimitive() &&
+                !subjectType->assignableFrom(caseType) && literal::kindEnters(*pattern, subjectType)) {
+                if (const auto data = pattern->toData(subjectType); data.has_value()) {
+                    operand   = tree_->makeData(*data);
+                    converted = true;
+                }
+            }
+            if (!converted &&
+                (subjectType == nullptr || !subjectType->assignableFrom(caseType))) {
+                diags_->of(SemanticDiag::MatchCaseTypeMismatch)
+                    .atOrigin(caseNode->at(0)->origin())
+                    .commit(subjectType == nullptr ? std::string("?") : subjectType->toString(),
+                            caseType->toString());
+                throw BuildAbortException();
+            }
+            caseStep.condition =
+                applyInternalOperator("__eq__", nullptr, {tree_->makeDRef(name), operand}, caseNode);
+            caseStep.exec = caseNode->at(1);
+            break;
+        }
+        case GCT::CaseType::Else:
+            // `case _`, guarded or not: it tests nothing itself. A guarded one leaves the value
+            // to the cases written after it when its guard does not hold.
+            caseStep.exec = caseNode->at(0);
+            break;
+        default:
+            ASSERT(false, "A guarded match case is a value or `_`.");
+        }
+        steps.push_back(std::move(caseStep));
+    }
+    return buildCaseChain(steps, gct);
+}
+
 node_handle_t Builder::buildBranch(
     const GCT::node_ptr_t &gct, node_handle_t condNode, const std::vector<arm_ptr_t> *arms,
     bool valueless) {
+    if (arms == nullptr && hasGuardedCase(gct, 1)) {
+        return buildGuardedMatch(gct, condNode);
+    }
     node_handle_t joinNode = currGraph_->addJoinNode(nullptr, nullptr, 0);
     node_handle_t brchNode = currGraph_->addBrchNode(Type::Int64(), joinNode, 0);
     registerNodeOrigin(context_, brchNode, gct, "gir.brch");
@@ -2070,6 +2498,30 @@ void Builder::mergeArmVariables(
     }
 }
 
+node_handle_t Builder::intervalSequenceValue(
+    node_handle_t from, node_handle_t to, const GCT::node_ptr_t &expr) {
+    // The interval in the sequence position of a loop is the pair of its two bounds, not the
+    // array of its elements (design principles 4.2; the ruling of 2026-10-24 on
+    // `h248-generator-and-composition`): the pair stands where any other sequence stands — Norm
+    // input 0 of the LOOP node, one value — and a back end takes the element of the round from
+    // the bounds and the round number, so nothing of the interval's size is ever made. The
+    // interval is the `int[]` of `intervalValue` in every other position.
+    std::vector<Type *> bounds{Type::Int64(), Type::Int64()};
+    TupleType *boundsType       = TupleType::create(bounds);
+    const std::vector<size_t> slots{0, 1};
+    runtime::GraphDraft &draft = currGraph_->draft();
+    node_handle_t result        = currGraph_->addFillNode(
+        boundsType, runtime::makeFillPayload(runtime::GCFillKind::Tuple, slots));
+    const slot_t empty =
+        camel::core::rtdata::toSlot(::Tuple::create(2, camel::core::mm::autoSpace()));
+    node_handle_t source = draft.ref(draft.materializeStaticValue(empty, boundsType));
+    linkNodes(LinkType::Norm, source, result);
+    linkNodes(LinkType::With, from, result);
+    linkNodes(LinkType::With, to, result);
+    registerNodeOrigin(context_, result, expr, "gir.loop.interval");
+    return result;
+}
+
 node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
     ENTER("LOOP");
     using camel::core::LoopKind;
@@ -2089,16 +2541,60 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
         }
     }
 
+    // Whether the first value written at `expr` is a numeric literal the position `type` holds.
+    // Such a literal takes that type while it is made (visitInPosition, literalDataInType), as it
+    // does in the arm of an `if`. A value that is not a literal is never given this type: the
+    // loop's value is the state's type, and the position's own check reports the mismatch.
+    //
+    // A composite literal is not one of these, and neither is the empty array literal. A
+    // composite has a shape of its own, and the loop's state keeps it: the position then converts
+    // the loop's value (`loop s = {}` under `Nothing` keeps the state `{  }` and a CAST names it;
+    // cases/loops/zero_leaf_state.cml). The empty array literal has no element type at all, and
+    // takes the position's element type below, once the body is built and the elements it appends
+    // are known (inferLoopStateFromAppend).
+    const auto literalEnters = [&](const GCT::node_ptr_t &expr, Type *type) -> bool {
+        if (expr == nullptr || type == nullptr || asTagged(type) != nullptr) {
+            return false;
+        }
+        const std::optional<literal::Value> exact = literalValueOfExpr(expr);
+        return exact.has_value() && literal::kindEnters(*exact, type);
+    };
+
     // The first values and the array: evaluated once, where the loop is (they do not see the
-    // names of the head). A loop of one state has the state's type, so a state written as the
-    // empty literal takes the type of the position the loop's value goes to (`loop losses = []
-    // for ...` where the loop gives a `float[]`; design principles 5.1, 5.2). A loop of several
-    // states gives a tuple, and says nothing about one state.
-    Type *loopExpected = nullptr;
-    if (k == 1 && expectedValueType_ != nullptr) {
-        Type *value = valueTypeOf(expectedValueType_);
-        if (value != nullptr && value->code() == TypeCode::Array) {
-            loopExpected = value;
+    // names of the head). The loop's value is the state's type -- the tuple of the state types
+    // when there are several -- so each first value stands at the loop's own position, and a
+    // numeric literal written there takes the position's type (design principles 5.1): `let n:
+    // f32 = loop s = 0.0 while s < 3.0 do s + 1.0` is a loop of `f32`, and the body's and the
+    // condition's literals follow from the state's type. A state written as the empty literal is
+    // the other way round: it takes the element type of the position the loop's value goes to
+    // (`loop losses = [] for ...` where the loop gives a `float[]`; design principles 5.1, 5.2).
+    // A state whose first value is anything else keeps its own type, whatever the position says.
+    std::vector<Type *> stateExpected(k, nullptr);
+    std::vector<bool> literalAtPosition(k, false);
+    if (expectedValueType_ != nullptr) {
+        Type *position = valueTypeOf(expectedValueType_);
+        for (size_t j = 0; j < k; ++j) {
+            Type *state = position;
+            if (k > 1) {
+                // The loop's value is a tuple of the state types: one state's position is one
+                // element of it, and a position that is not that tuple says nothing per state.
+                if (position == nullptr || position->code() != TypeCode::Tuple ||
+                    tt::as_ptr<TupleType>(position)->size() != k) {
+                    continue;
+                }
+                state = tt::as_ptr<TupleType>(position)->typeAt(j);
+            }
+            if (state == nullptr) {
+                continue;
+            }
+            if (k == 1 && state->code() == TypeCode::Array) {
+                stateExpected[j] = state;
+                continue;
+            }
+            if (literalEnters(gct->loopInitial(j), state)) {
+                stateExpected[j] = state;
+                literalAtPosition[j] = true;
+            }
         }
     }
     std::vector<node_handle_t> initial;
@@ -2106,13 +2602,22 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
     std::vector<bool> emptyInitial(k, false);
     bool deferredEmpty = false;
     for (size_t j = 0; j < k; ++j) {
-        const auto &expr = gct->loopInitial(j);
+        const auto &expr      = gct->loopInitial(j);
+        Type *loopExpected    = stateExpected[j];
         node_handle_t node;
         {
             ExpectedValueScope stateScope(expectedValueType_, loopExpected);
-            node = valueOf(functionValueOf(valueNodeOf(visit(expr)), expr));
+            // A literal in the position is made in the position's type; the empty literal is
+            // left as it is and takes that type below.
+            node_handle_t built{};
+            if (literalAtPosition[j]) {
+                built = visitInPosition(expr, loopExpected);
+            } else {
+                built = valueNodeOf(visit(expr));
+            }
+            node = valueOf(functionValueOf(built, expr));
         }
-        if (loopExpected != nullptr) {
+        if (loopExpected != nullptr && !literalAtPosition[j]) {
             // A value that is not the empty literal is converted only when its position
             // accepts it; one that does not fit stays as it is and is reported below.
             if (node_handle_t typed = checkValue(node, loopExpected, expr); typed != nullptr) {
@@ -2143,16 +2648,16 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
     }
     node_handle_t sequence = nullptr;
     Type *elementType      = nullptr;
-    if (hasIterable) {
-        const auto &expr = gct->loopSequence();
-        sequence         = valueOf(functionValueOf(valueNodeOf(visit(expr)), expr));
-        Type *type       = valueTypeOf(nodeTypeOf(sequence));
-        // A `for` takes the elements of an array. A string, a map and a tensor give theirs
-        // through the `__iter__` operator their type declares (design principles 3.10, 11.1,
-        // 11.3): the code points of a string as one-character strings, the (key, value) pairs
-        // of a map in key order, and the sub-tensors of a tensor along its first dimension.
-        // The operator is resolved like any other, by the type of the sequence; the loop then
-        // iterates the array it gives, on every back end, with one driver.
+    bool intervalIterates  = false;
+    // The element type of a sequence a loop iterates: an array gives its own element type, and a
+    // string, a map and a tensor give theirs through the `__iter__` operator their type declares
+    // (design principles 3.10, 11.1, 11.3): the code points of a string as one-character
+    // strings, the (key, value) pairs of a map in key order, and the sub-tensors of a tensor
+    // along its first dimension. The operator is resolved like any other, by the type of the
+    // sequence; the loop then iterates the array it gives, on every back end, with one driver.
+    const auto iterableElementType =
+        [&](node_handle_t &iterable, const GCT::node_ptr_t &expr) -> Type * {
+        Type *type = valueTypeOf(nodeTypeOf(iterable));
         if (type != nullptr && type->code() != TypeCode::Array) {
             const std::vector<StaticArg> statics(1);
             std::optional<oper_idx_ptr_t> elements;
@@ -2172,9 +2677,9 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
             node_handle_t array = currGraph_->addOperNode(*elements, 0);
             stampPermissions(array);
             registerNodeOrigin(context_, array, expr, "gir.loop.iter");
-            linkNodes(LinkType::Norm, sequence, array);
-            sequence = array;
-            type     = valueTypeOf(nodeTypeOf(sequence));
+            linkNodes(LinkType::Norm, iterable, array);
+            iterable = array;
+            type     = valueTypeOf(nodeTypeOf(iterable));
             ASSERT(
                 type != nullptr && type->code() == TypeCode::Array,
                 "The elements of an iterable must be an array.");
@@ -2185,7 +2690,34 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
                 .commit(sourceTextOf(expr), std::string("void"));
             throw BuildAbortException();
         }
-        elementType = tt::as_ptr<ArrayType>(type)->elemType();
+        return tt::as_ptr<ArrayType>(type)->elemType();
+    };
+    // `for i in a..b` (design principles 4.2; the author's ruling of 2026-10-24 on
+    // `h248-generator-and-composition`: "`for i in 0..n` is fused by the compiler, without
+    // materialising an array"). The interval in the sequence position of a loop is the loop's own
+    // form: its two bounds are the loop's iterable, and a round takes `from + round`
+    // (camel::core::LoopIterableForm::Interval). In every other position `a..b` is still the
+    // `int[]` the ruling gives it, and the loop iterates that value like any other sequence.
+    if (hasIterable && isIntervalExpr(gct->loopSequence())) {
+        const auto &interval = gct->loopSequence();
+        node_handle_t from   = argumentNodeOf(visit(interval->at(1)), interval->at(1));
+        node_handle_t to     = argumentNodeOf(visit(interval->at(2)), interval->at(2));
+        if (intervalBounds(from, to)) {
+            sequence         = intervalSequenceValue(from, to, interval);
+            elementType      = Type::Int64();
+            intervalIterates = true;
+        } else {
+            // Two functions, or two operands `..` has no reading for: the composition (or the
+            // refusal it gives everywhere else), built from the operands already in hand so that
+            // neither of them is built twice.
+            sequence = valueOf(
+                functionValueOf(valueNodeOf(buildCompositionWith(interval, from, to)), interval));
+            elementType = iterableElementType(sequence, interval);
+        }
+    } else if (hasIterable) {
+        const auto &expr = gct->loopSequence();
+        sequence         = valueOf(functionValueOf(valueNodeOf(visit(expr)), expr));
+        elementType      = iterableElementType(sequence, expr);
     }
     Type *stateType =
         k == 1 ? stateTypes.front() : static_cast<Type *>(TupleType::create(stateTypes));
@@ -2619,6 +3151,12 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
     }
 
     node_handle_t loopNode = currGraph_->addRegionLoopNode(kind, loopValueType);
+    if (intervalIterates) {
+        // The sequence the loop iterates is the pair of the interval's bounds, not an array
+        // (camel::core::LoopIterableForm::Interval): a back end takes the element of a round from
+        // the bounds and the round number, so nothing the size of the interval is ever made.
+        currGraph_->draft().setLoopIterableInterval(nodeIdOf(loopNode));
+    }
     if (!collected.empty()) {
         currGraph_->draft().setLoopCollectionCount(
             nodeIdOf(loopNode),

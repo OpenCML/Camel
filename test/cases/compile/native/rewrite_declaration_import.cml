@@ -1,12 +1,13 @@
 /**
  * `rewrite`'s declarations are what an importer sees: the engines take a `Program` and an array
- * of `Rule` values, the two arities of `rewrite` and `saturate` both resolve, and
- * `extract` and `check` answer `Program!` and `string` from `stdlib/rewrite.cml` (handover H183).
+ * of `Rule` values, the two arities of `rewrite` and `saturate` both resolve, `extract` answers
+ * `Program!`, and `check` answers the verdict table `CheckReport` from `stdlib/rewrite.cml`
+ * (handover H183; H247, slice S0, is what moved `check` from `string` to the table).
  * Checked, not run: the engines need a compiled program, and the rules plans run them.
  */
 module rewrite_declaration_import
 
-import { rewrite, saturate, extract, check } from rewrite
+import { rewrite, saturate, extract, check, check_text } from rewrite
 import { Program, current } from graph
 
 export rule int_add_zero(x: int) { x + 0 => x }
@@ -19,6 +20,7 @@ func main(): int sync {
     let c: Program! = saturate(p, rules, 20)
     let d: Program! = saturate(p, rules, 20, true)
     let e: Program! = extract(p, 'size')
-    let report: string = check(rules, 10, 7)
+    let report = check(rules, 10, 7)
+    let written: string = check_text(report)
     return 0
 }

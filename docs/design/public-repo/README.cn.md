@@ -37,22 +37,33 @@ internal/                                          内部协作，公开时删�
 - **`src/` 按层分目录**，每层一个职责、依赖只向下：`parse`（词法、语法、AST）→ `compile`（GCT、GIR 建图）→ `passes`（优化、导出、调度器）→ `runtime`/`execute`（帧、执行计划、执行器）→ `core`（类型、值、内存、图存储）。`service`、`profile`、`utils` 这类不表达层次的目录拆入对应的层；`builtin` 并入 `core` 或对应层。具体映射由施工方在计划里给出。
 - 文件与目录名统一小写下划线；头文件与源文件同层对应。
 
-## 4. 文档
+## 4. 文档（负责人 2026-10-24 补充：对照语言类开源项目重组，不延续编号文档）
 
-公开文档以英文为主，中文为译本（`*.zh-CN.md`），两者同目录：
+**参照**：Rust（The Book、The Reference、rustc-dev-guide）、Zig、Go、Python 的文档分层——给学的人一本书，给查的人一份参考，给改编译器的人一份内部指南，设计取舍单独成篇。公开文档以英文为主，中文为译本（`*.zh-CN.md`，同目录）。
 
 ```
 docs/
-  README.md            文档入口
-  install.md           安装与构建（合并 setup、build-options、npm-scripts、pypi-packaging 中面向用户的部分）
-  book/                教程（由浅入深，原 tutorial）
-  reference/           语言参考（原 language/）、标准库参考（生成）、CLI 参考、诊断目录（生成）
-  internals/           编译器与运行时架构（原 technical/ 中描述现行实现的页）
-  design.md            设计原则的公开版：语言的定位与取舍（不含裁定记录与内部措辞）
+  README.md                  文档入口：四类读者各从哪里开始
+  install.md                 安装与构建（合并 setup、build-options、npm-scripts、pypi-packaging 中面向用户的部分）
+  book/                      教程：由浅入深，按主题成章（getting-started、values-and-types、functions、
+                             effects-and-sync、arrays-and-tensors、streams、rules-and-passes、training、gpu ……）
+  reference/                 语言参考（规范性）：按主题成篇，不编号——lexical、types、expressions、statements、
+                             effects、modules、generics、streams、rules、tags；以及生成的 stdlib 参考、
+                             CLI 参考、诊断目录
+  internals/                 编译器与运行时：每个模块一篇（见下）
+  design.md                  设计取舍：语言的定位与原则（设计原则的公开版，不含裁定记录与内部措辞）
+  reference/camel-for-ai.md  给 AI 的精炼语言参考（一份写全规则、能放进上下文；根目录 `llms.txt` 指向它）
   assets/
 ```
 
-设计原则（`docs/design-principles.*`）仍是规范，留在 `internal/`；公开的设计原则页（`docs/` 下，尚未建，见第 6 节 I5）是它面向读者的精简版，随规范更新。
+**内部指南（`internals/`）每个模块一篇，短而权威**：parse、compile（GCT/GIR 建图）、graph-model（节点、三种边、区域、不变量）、passes（遍即函数、流水线）、rewrite（规则引擎、等价饱和）、runtime（帧、执行计划、调度器）、memory（三层与原地更新）、backends（nvm、fvm、jit、prl、cpp）、gpu（Tiles）、modules（模块 ABI、`#impl` 内核）、diagnostics、debugger。
+
+- **每篇只写不变的东西**：这个模块负责什么、核心数据结构、必须保持的不变量、对外接口、代码在哪个目录。不写实现细节的流水账，不写历史（"原来……后来改为……"），不写任务编号与日期化叙述。篇幅以一屏到几屏为宜。
+- **权威**：它说的就是代码的行为；代码改了而文档没改是缺陷。引用符号（`GraphDraft::setRegionOwner`），不引用行号。
+- **与代码同提交更新**：改变模块行为或不变量的提交，同时改对应的 internals 篇与 reference 篇（`agents/refactor.md` 的标准里写明）。设计原则的改动落地时，reference 相应段落在同一任务里改完。
+- **编号文档全部改写**：今天的 `docs/technical/NN_*.md`（约 50 篇）与 `docs/language/NN_*.md` 不搬家，按上面的主题**合并、改写**进 `internals/` 与 `reference/`；只记录过一次排查或一次度量的篇（如 import 成本审计、某次性能基线）不进公开文档——结论有价值的并进对应模块篇，其余随 `internal/` 留存。
+
+设计原则（`docs/design-principles.*`）仍是规范，留在 `internal/`；公开的设计取舍页（重组后新建为 `docs/design.md`，现在还不存在）是它面向读者的精简版，随规范更新。
 
 ## 4.5 文件头
 

@@ -669,6 +669,36 @@ skip_unless = ["${python}", "-c", "import numpy, onnx, onnxruntime, psutil, torc
 expect_exit = 0
 expect_stdout_contains = ["onnx.checker ok", "onnx training-step check: PASS"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+# The cost bound is this case's own CPU time (user + system) and the timeout is its liveness bound,
+# by the author's ruling of 2026-10-23 (docs/handover/reviews/questions-2026-10-23.md,
+# "declaration-cost-gate" (a)), quoted in full on resnet_gradient_smooth_vs_torch64 in
+# test/plans/feat/modules/autodiff.plan.toml. The case is Python driving 123 ONNX Runtime runs, so
+# the reading sums ~5.8 threads and the test's own CPU exceeds its wall clock -- the shape
+# test/tools/run-tests.mjs names when it says such a test "states its cost as a `cpu_budget_ms` if
+# its total work is what it wants bounded".
+#
+# Measured with that reading, this plan in full at -Jobs 8 (the 1-minute load on this 32-thread host
+# read 120-129 across the window):
+#
+#   111.99 s of CPU                (2026-10-24 02:39, the slow-layer run of the batch point)
+#   121.81 s of CPU / 21.03 s wall  (2026-10-24 05:22, 136 tests, this entry red on the margin only)
+#   117.21 s of CPU / 24.97 s wall  (2026-10-24 05:30, the same plan, 136 tests, green under this
+#                                    budget; the run waited 210 s for a build slot, another lane)
+#
+# An 8.8% spread in the CPU figure against the wall clock, which is the neighbours'. The budget is
+# 199 s: 1.63x the higher of the two readings it was set from (121.81 s), rounded up, the same
+# headroom as the four autodiff budgets taken by this ruling, and 1.63x the busiest reading of the
+# three as well. It still fails a run whose work has grown by two thirds.
+#
+# What failed here was never the work: the 2026-10-24 05:22 run exited 0 with `exported in 2.55 s:
+# 1125 nodes, onnx.checker ok` and all 123 per-output checks `ok` (`onnx training-step check: PASS`,
+# 126 lines of output, nothing on stderr). It was the runner's 4x margin on the timeout -- 300 s / 4
+# = 75 s of work allowed against 121.81 s measured -- which reads a timeout as a cost ceiling.
+# Declaring the cost puts the timeout back to what it is:
+cpu_budget_ms = 199000
+# Fires on a hang, not on a slow run: 5 min is 14x the 21.0 s wall the loaded host gives it, and the
+# case bounds its own work (each camel run it starts is capped at 600 s, benchmarks/train.py:
+# run_camel_full).
 timeout_ms = 300000
 
 [[tests]]
@@ -796,6 +826,24 @@ expect_exit = 0
 expect_stdout_contains = ["export_fold.cml: pass: onnx.checker full_check ok", "export_train_step.cml: pass: onnx.checker full_check ok", "onnx::export equiv: PASS"]
 expect_output_not_contains = ["array_equal False"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+# CPU time, by the same ruling and for the same reason as resnetbn_train_step_export above: this
+# case exports twenty-six programs and runs each on ONNX Runtime, so its CPU figure (user + system,
+# summed over its threads) is the work and the wall clock is the host's. Measured this plan in full
+# at -Jobs 8:
+#
+#   40.77 s of CPU                (2026-10-24 02:39, the slow-layer run of the batch point)
+#   45.60 s of CPU / 25.69 s wall  (2026-10-24 05:22, 136 tests, this entry red on the margin only)
+#   46.09 s of CPU / 30.92 s wall  (2026-10-24 05:30, the same plan, 136 tests, green under this
+#                                   budget)
+#
+# A 13% spread in the CPU figure. The budget is 75 s: 1.63x the higher of the two readings it was set
+# from (45.60 s), rounded up, and 1.63x the busiest reading of the three as well (46.09 s). The work
+# itself was green in the same run: exit 0, 52 `onnx.checker full_check ok` lines and 360 trial
+# outputs each `array_equal True` with no `array_equal False` (439 lines), `onnx::export equiv: PASS`.
+# What failed was the 4x margin on the timeout, 120 s / 4 = 30 s of work allowed against 45.60 s
+# measured.
+cpu_budget_ms = 75000
+# Fires on a hang, not on a slow run: 2 min is 4.7x the 25.7 s wall the loaded host gives it.
 timeout_ms = 120000
 
 [[tests]]
@@ -2381,7 +2429,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "pass_export_refusal_located.main_reaches_loop"
-desc = "The request is in a `main` that also runs a loop of run-time depth and is not small: the inliner leaves the call of `main` for that reason, not for the budget. The refusal, at `main`, says so (the function reaches a recursion and is inlined only while small, with both sizes) and what to change; it does not ask for std::opt, which ran, and does not mention the budget, which was not exhausted."
+desc = "The request is in a `main` that also runs a loop of run-time depth and is not small: the inliner leaves the call of `main` for that reason, not for the budget. The refusal, at `main`, says so (the function reaches a recursion and is inlined only while it is small, with the size of the function being inlined in the compute nodes the review of 2026-10-24 fixed the measure to) and what to change; it does not ask for std::opt, which ran, and does not mention the budget, which was not exhausted. std::opt folds one of the four additions of the body away (`first + second` and `second + first` are the same computation), so the function the inliner measures holds 16 of its 17 written compute nodes."
 kind = "negative"
 case = "../../../cases/modules/onnx/refusals/main_reaches_loop.cml"
 args = ["${case}", "std::macro", "std::opt", "onnx::export"]
@@ -2390,7 +2438,44 @@ expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_diagnostic_code = "0x0400000B"
 expect_diagnostic_line = 23
 expect_diagnostic_column = 1
-expect_output_contains = ["the entry graph still contains a call to 'main' that was not inlined", "the inliner ran before onnx::export and left this call because 'main' calls, directly or through other functions, a recursive function (a loop), and such a function is inlined only while it is small (at most 8 nodes besides constants and parameters; this one has 17)", "keep the function that makes the export_model call small by moving the rest of its work into a function it calls"]
+expect_output_contains = ["the entry graph still contains a call to 'main' that was not inlined", "the inliner ran before onnx::export and left this call because 'main' calls, directly or through other functions, a recursive function (a loop), and such a function is inlined only while it is small: the inlined function has 16 compute nodes (at most 8; a constant, a parameter, a gate and what an inline splice adds are not counted)", "keep the function that makes the export_model call small by moving the rest of its work into a function it calls"]
+expect_output_not_contains = ["onnx::export: wrote", ":?:?:", "run std::opt before onnx::export", "growth budget"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "pass_export_refusal_located.compute_nodes_two_shapes.spliced_after"
+desc = "The size a refusal reports is the function's own compute nodes, so it does not change with the splice. Here std::opt checks the call of `main` before the inliner has spliced its helper `combine` into it. The same program under the pipeline below reports the same number; before the review of 2026-10-24 they reported 11 and 15, because the copy of `combine` (two OPERs in its own inline region) and the three GATEs the splice adds for its arguments were counted."
+kind = "negative"
+case = "../../../cases/modules/onnx/refusals/compute_nodes_two_shapes.cml"
+args = ["${case}", "std::macro", "std::opt", "onnx::export"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
+expect_output_contains = ["the entry graph still contains a call to 'main' that was not inlined", "the inlined function has 9 compute nodes (at most 8; a constant, a parameter, a gate and what an inline splice adds are not counted)"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "pass_export_refusal_located.compute_nodes_two_shapes.spliced_first"
+desc = "The same function and the same program as the test above, under a pipeline that has spliced `combine` into `main` before the call of `main` is checked (std::opt::fold, then devirtualize, then inline): the refusal reports the same number of compute nodes. Only the splice differs; the size of the function being inlined may not follow it."
+kind = "negative"
+case = "../../../cases/modules/onnx/refusals/compute_nodes_two_shapes.cml"
+args = ["${case}", "std::macro", "std::opt::fold", "std::opt::devirtualize", "std::opt::inline", "onnx::export"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
+expect_output_contains = ["the entry graph still contains a call to 'main' that was not inlined", "the inlined function has 9 compute nodes (at most 8; a constant, a parameter, a gate and what an inline splice adds are not counted)"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "pass_export_refusal_located.compute_nodes_over_limit"
+desc = "One `println` more than the function whose call the inliner still copies: nine compute nodes, one over the limit, so the call of `main` is left and the refusal says how many compute nodes the function being inlined has and that a constant, a parameter, a gate and what an inline splice adds are not counted (the pipeline is the one that does not fold the `reshape` of the example away, so the number is the written one)."
+kind = "negative"
+case = "../../../cases/opt/inline/compute_node_size_over_limit.cml"
+args = ["${case}", "std::macro", "std::opt::devirtualize", "std::opt::inline", "onnx::export"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
+expect_output_contains = ["the entry graph still contains a call to 'main' that was not inlined", "the inliner ran before onnx::export and left this call because 'main' calls, directly or through other functions, a recursive function (a loop), and such a function is inlined only while it is small: the inlined function has 9 compute nodes (at most 8; a constant, a parameter, a gate and what an inline splice adds are not counted)", "keep the function that makes the export_model call small by moving the rest of its work into a function it calls"]
 expect_output_not_contains = ["onnx::export: wrote", ":?:?:", "run std::opt before onnx::export", "growth budget"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000

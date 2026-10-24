@@ -55,7 +55,7 @@ func full(board: int[]): bool {
 // The empty places, in ascending order.  Expansion takes them in this order and a tie between
 // two children is broken by it, so the order is part of what the search reports.
 func empty_places(board: int[]): int[] {
-    return range(0, 9)->filter<(place: int): bool => board[place] == 0>
+    return 0..9->filter<(place: int): bool => board[place] == 0>
 }
 
 // The moves a node offers: the empty places, or none when the game is over -- a complete line or
@@ -66,11 +66,11 @@ func moves_of(state: State): int[] {
 }
 
 // The position after `place` is taken by the player to move.  The write is a path assignment on
-// a local `var`, so it is `wait`ed: `next` is a new value, and `state` is unchanged.
-func apply_move(state: State, place: int): State {
+// a local `var`, and the sync body orders its write: `next` is a new value, and `state` is unchanged.
+func apply_move(state: State, place: int): State sync {
     var next = state
-    wait next.board[place] = state.to_move
-    wait next.to_move = 3 - state.to_move
+    next.board[place] = state.to_move
+    next.to_move = 3 - state.to_move
     return next
 }
 
@@ -174,26 +174,26 @@ func open_node(state: State, place: int, key: int): Node {
 
 // The same node with one more playout in its statistics.  Every node on a playout's path gets
 // the same result, because all values are from the same player's point of view.
-func record(node: Node, played: float): Node {
+func record(node: Node, played: float): Node sync {
     var counted = node
-    wait counted.visits = node.visits + 1
-    wait counted.score = node.score + played
+    counted.visits = node.visits + 1
+    counted.score = node.score + played
     return counted
 }
 
 // The same node with one more child.  `concat` makes a new array, so the value the caller held
 // is unchanged; the child is appended, so `children` stays in the order of `moves`.
-func grow(node: Node, child: Node): Node {
+func grow(node: Node, child: Node): Node sync {
     var grown = node
-    wait grown.children = concat(node.children, [child])
+    grown.children = concat(node.children, [child])
     return grown
 }
 
 // The same node with one child replaced: the write-back after a recursion, written as the path
 // assignment an MCTS needs on a value that is otherwise immutable.
-func put_child(node: Node, index: int, child: Node): Node {
+func put_child(node: Node, index: int, child: Node): Node sync {
     var updated = node
-    wait updated.children[index] = child
+    updated.children[index] = child
     return updated
 }
 
@@ -282,7 +282,7 @@ func node_count(node: Node): int {
 // == entry ==
 // A position is written as nine characters: `.` for an empty place, `X` and `O` for the marks.
 func board_of(text: string): int[] {
-    return range(0, 9)->map<(place: int): int => mark_of(text[place])>
+    return 0..9->map<(place: int): int => mark_of(text[place])>
 }
 
 func mark_of(character: string): int {

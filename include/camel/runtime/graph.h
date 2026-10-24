@@ -51,10 +51,12 @@
 #include <cstring>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <span>
 #include <string_view>
 #include <type_traits>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 namespace camel::core::type {
@@ -173,6 +175,19 @@ enum GCNodeFlag : uint8_t {
     /// it; nothing at run time does, and a `sync` block that is inlined into another graph keeps it.
     kGCNodeFlagSyncStatement = 1 << 2,
 };
+
+/// Whether a node of `kind` that carries operator `oper` computes its value from its inputs alone
+/// (design principles 3.3): the kinds that own no resource, and the operators the table declares
+/// `pure`. This is the classification `checkOrderEdges` reads: nothing orders a pure node
+/// (docs/design/effects/edges.cn.md 4.6). `oper` is `kNoOper` for every kind but OPER.
+bool nodeIsPure(GCNodeKind kind, camel::core::OperId oper);
+
+/// Pure *and* unable to fault: the computation the model lets a pass arrange anywhere -- off the
+/// sync chain, out of a loop body or an arm, away when a rewrite drops it (design principles 3.4),
+/// and without an order edge after an inline (docs/design/effects/edges.cn.md 5.7). An operator
+/// that may fault is not free: what it does when it fails is observable, so its place is kept. An
+/// operator nobody declared is not known never to fault, so it is not free either.
+bool nodeIsFreelySchedulable(GCNodeKind kind, camel::core::OperId oper);
 
 /// Properties a graph has besides its nodes (GCGraph::flags).
 enum GCGraphFlag : uint8_t {
@@ -304,15 +319,16 @@ static_assert(std::is_trivially_copyable_v<GCFuncRef>);
 /// Payload of a LOOP node in a frozen graph: its form, the indexes of its condition graph
 /// (kNoLoopGraph for For) and of its body graph in the graph's reference table, where both are
 /// marked callee and nested (the LOOP node calls them each round; they are written inside the
-/// graph), and how many values the loop collects into arrays (its collection slots; 0 for a
-/// loop the source wrote, which has none).
+/// graph), how many values the loop collects into arrays (its collection slots; 0 for a
+/// loop the source wrote, which has none), and where its elements come from
+/// (camel::core::LoopIterableForm: an array, or the pair of the interval's two bounds).
 struct GCLoopRef {
-    camel::core::LoopKind kind = camel::core::LoopKind::While;
-    uint8_t reserved0          = 0;
-    uint16_t reserved1         = 0;
-    uint32_t condRef           = kNoLoopGraph;
-    uint32_t bodyRef           = kNoLoopGraph;
-    uint32_t collectionCount   = 0;
+    camel::core::LoopKind kind                        = camel::core::LoopKind::While;
+    camel::core::LoopIterableForm iterableForm        = camel::core::LoopIterableForm::Array;
+    uint16_t reserved1                                = 0;
+    uint32_t condRef                                  = kNoLoopGraph;
+    uint32_t bodyRef                                  = kNoLoopGraph;
+    uint32_t collectionCount                          = 0;
 };
 static_assert(std::is_trivially_copyable_v<GCLoopRef>);
 static_assert(sizeof(GCLoopRef) == 16, "A LOOP payload is two words.");
@@ -320,12 +336,12 @@ static_assert(sizeof(GCLoopRef) == 16, "A LOOP payload is two words.");
 /// What a LOOP node names, as values: the graphs themselves instead of their reference-table
 /// indexes (GraphDraft::loopGraphsOf, GCGraph's loopBodyOf).
 struct GCLoopBody {
-    GraphId condGraph          = kInvalidGraphId; // invalid for a For loop
-    GraphId bodyGraph          = kInvalidGraphId;
-    camel::core::LoopKind kind = camel::core::LoopKind::While;
-    uint8_t reserved0          = 0;
-    uint16_t reserved1         = 0;
-    uint32_t collectionCount   = 0; // the typed collection slots of the loop (see LoopView)
+    GraphId condGraph                                 = kInvalidGraphId; // invalid for a For loop
+    GraphId bodyGraph                                 = kInvalidGraphId;
+    camel::core::LoopKind kind                        = camel::core::LoopKind::While;
+    camel::core::LoopIterableForm iterableForm        = camel::core::LoopIterableForm::Array;
+    uint16_t reserved1                                = 0;
+    uint32_t collectionCount                          = 0; // the typed collection slots (LoopView)
 };
 static_assert(std::is_trivially_copyable_v<GCLoopBody>);
 
@@ -711,6 +727,41 @@ class GCGraph : public camel::core::rtdata::Object {
     uint32_t loopCollectionCountOf(gc_node_ref_t ref) const {
         return nodeBodyAs<GCLoopRef>(ref)->collectionCount;
     }
+    /// LOOP node `ref`: where its elements come from (camel::core::LoopIterableForm). The node
+    /// must be a LOOP node.
+    camel::core::LoopIterableForm loopIterableFormOf(gc_node_ref_t ref) const {
+        return nodeBodyAs<GCLoopRef>(ref)->iterableForm;
+    }
+    /// The two bounds of the interval a loop iterates (LoopIterableForm::Interval), the first
+    /// bound first: the pair of integers the front end built for `a..b`, whose components 0 and 1
+    /// are the bounds (the FILL's Norm input is the static template of the pair). Nothing when
+    /// `ref` is not such a pair. The interval's value in any other position is an `int[]`
+    /// (design principles 4.2), not this pair.
+    std::optional<std::pair<gc_node_ref_t, gc_node_ref_t>> intervalBoundsOf(
+        gc_node_ref_t ref) const {
+        const GCNode *n = node(ref);
+        if (n == nullptr || n->kind != GCNodeKind::Fill) {
+            return std::nullopt;
+        }
+        const auto *fill = nodeBodyAs<GCFillBody>(ref);
+        if (fill == nullptr || fill->slots().size() != 2) {
+            return std::nullopt;
+        }
+        std::optional<gc_node_ref_t> from, to;
+        size_t seen = 0;
+        for (gc_node_ref_t input : withInputsOf(ref)) {
+            const size_t component = fill->slots()[seen++];
+            if (component == 0) {
+                from = input;
+            } else if (component == 1) {
+                to = input;
+            }
+        }
+        if (!from.has_value() || !to.has_value()) {
+            return std::nullopt;
+        }
+        return std::pair{*from, *to};
+    }
     gc_node_ref_t matchedJoinOutputOf(gc_node_ref_t ref) const;
 
     /// The payload of node `ref` as a `Body` (see the payload structs above). The node must
@@ -942,6 +993,7 @@ inline GCLoopBody loopBodyOf(const GCGraph &graph, gc_node_ref_t ref) {
         .condGraph       = graph.loopCondIdOf(ref),
         .bodyGraph       = graph.loopBodyIdOf(ref),
         .kind            = graph.loopKindOf(ref),
+        .iterableForm    = graph.loopIterableFormOf(ref),
         .collectionCount = graph.loopCollectionCountOf(ref),
     };
 }

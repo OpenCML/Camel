@@ -169,6 +169,13 @@ Diagnostic &Diagnostic::fetchRange(const RangeConverter &conv) {
         modulePath = diagnosticPath(*this);
     }
     resolve(range);
+    // The edits of a fix are ranges like the others, and they are read by tools that have no
+    // token positions of their own: a fix built with a token range has to be placed here too.
+    for (DiagFix &fix : fixes) {
+        for (DiagEdit &edit : fix.edits) {
+            resolve(edit.range);
+        }
+    }
     return *this;
 }
 
@@ -267,6 +274,25 @@ std::string Diagnostic::toJson() const {
         << "\"modulePath\":\"" << escapeJson(path) << "\"";
     if (!suggestion.empty())
         oss << ",\"suggestion\":\"" << escapeJson(suggestion) << "\"";
+    // The changes a tool can apply, in the shape a code action carries: a title, and the edits
+    // that carry it out. Only the reports that know the text to write carry any, so a reader that
+    // sees `fixes` may apply them; a reader that does not must fall back to `suggestion`.
+    if (!fixes.empty()) {
+        oss << ",\"fixes\":[";
+        for (size_t i = 0; i < fixes.size(); ++i) {
+            oss << (i ? "," : "") << "{\"title\":\"" << escapeJson(fixes[i].title) << "\",\"edits\":[";
+            for (size_t j = 0; j < fixes[i].edits.size(); ++j) {
+                const DiagEdit &edit = fixes[i].edits[j];
+                oss << (j ? "," : "") << "{\"range\":"
+                    << rangeJson(
+                           resolveSourceRange(edit.range, sourceContext)
+                               .value_or(CharRange{{0, 0}, {0, 0}}))
+                    << ",\"replacement\":\"" << escapeJson(edit.replacement) << "\"}";
+            }
+            oss << "]}";
+        }
+        oss << "]";
+    }
     if (!notes.empty()) {
         oss << ",\"notes\":[";
         for (size_t i = 0; i < notes.size(); ++i) {
@@ -412,6 +438,33 @@ void Diagnostics::dump(std::ostream &os, bool json, bool wrapInArray) const {
         os << "\n]";
     if (wrapInArray)
         os << "\n" << std::flush;
+}
+
+void Diagnostics::dumpIdentity(std::ostream &os) const {
+    std::lock_guard<std::mutex> lk(mtx_);
+    // One line per diagnostic: the code and the place, and nothing that is prose. A snapshot of
+    // the front end taken over this text compares what the parser made of a file, not how the
+    // report about it is worded, so editing a message, a help text or a note cannot move it.
+    // Ranges have to be resolved already (fetchAll); one that is not is written as `?` rather
+    // than silently standing for line 0.
+    auto place = [&](const SourceRange &range, const camel::source::source_context_ptr_t &ctx) {
+        const auto r = resolveSourceRange(range, ctx);
+        if (!r) {
+            os << "?";
+            return;
+        }
+        os << (r->start.line + 1) << ":" << (r->start.character + 1) << "-" << (r->end.line + 1)
+           << ":" << (r->end.character + 1);
+    };
+    for (const Diagnostic &d : storage_) {
+        os << "D 0x" << Diagnostic::hex8(d.diagCode()) << " ";
+        place(d.range, d.sourceContext);
+        for (const DiagLabel &label : d.related) {
+            os << " r";
+            place(label.range, d.sourceContext);
+        }
+        os << "\n";
+    }
 }
 
 void Diagnostics::clear() {

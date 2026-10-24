@@ -1,0 +1,30 @@
+module effects_model_edges
+
+// The frozen input of test/plans/feat/linear/effects_model_edges.plan.toml, which reads the graph
+// of this program with `std::gir` and asserts the edge model of docs/design/effects/edges.cn.md:
+// a `sync` block's statements are joined by sync edges, ordering that is not the sync chain is an
+// order edge, and a GATE carries no control input (5.3) -- it forwards a value and waits on the
+// chain through a sync edge.
+
+// The chain: two statements written directly in the body of a `sync` function. `println(x)`
+// returns `x`, so the tail's value is what the block returns, and the block's value node is the
+// GATE that forwards it (5.3).
+func block_chain(): int sync {
+    let a = println(1)
+    return println(2)
+}
+
+// Ordering that is not a sync chain: the write of `x` and the read of it are two executions on one
+// resource (the cell), so the edge between them is an order edge -- it only orders, it does not
+// make the write execute (section 1, formal F3).
+func var_order(): int {
+    var x = 1
+    x = println(2)
+    return x
+}
+
+func main(): int sync {
+    println(block_chain())
+    println(var_order())
+    return 0
+}

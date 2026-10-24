@@ -390,7 +390,7 @@
         },
         {
           "name": "keyword.control.flow.camel",
-          "match": "\\b(?:return|throw|wait)\\b"
+          "match": "\\b(?:return|throw)\\b"
         },
         {
           "name": "keyword.control.import.camel",
@@ -557,7 +557,7 @@
       "comment": "The operators and separators of include/camel/parse/syntax/token_kinds.def, longest first (checked by scripts/check-grammar.mjs).",
       "patterns": [
         { "name": "keyword.operator.spread.camel", "match": "\\.\\.\\." },
-        { "name": "keyword.operator.compose.camel", "match": "\\?\\.\\.|\\.\\." },
+        { "name": "keyword.operator.compose.camel", "match": "\\.\\." },
         { "name": "keyword.operator.pipe.camel", "match": "\\?->|->" },
         { "name": "keyword.operator.arrow.camel", "match": "<=>|=>" },
         { "name": "keyword.operator.comparison.camel", "match": "===|!==|==|!=|<=|>=" },

@@ -1,0 +1,45 @@
+/**
+ * A stream type stands where any type stands (design principles 5.4; the author's ruling of
+ * 2026-10-24 on the stream surface): a parameter, a result, a function type and a generic
+ * signature all take one. The suffix is read left to right with no special case:
+ *
+ *   int?..         the stream of a nullable int        `(int?)..`
+ *   int!..         the stream of a fallible int        `(int!)..`
+ *   int..?         the possibly absent stream          `(int..)?`
+ *   int[3]..       the stream of three-element arrays  `(int[3])..`
+ *   int[..]..      the stream of open-rank arrays      `(int[..])..`
+ *
+ * `int..` and `int[..]` are two different types, and both stand in one signature here. The
+ * only restriction on a stream is linearity, and it is a restriction on containers: an item of
+ * a tuple may be a stream (the ruling's `tee` hands out a tuple and destructuring consumes it),
+ * while an array, a map or a set refuses one (test/cases/compile/stream/type_in_container.cml).
+ *
+ * Producing a value of a stream type is another slice: this program states the types only, and
+ * the forms the compiler prints for them are locked by `std::jgir` in the plan.
+ */
+module stream_type_signature
+
+func count(s: int..): int {
+    return 0
+}
+
+func shapes(a: int?.., b: int!.., c: int..?, d: int[3].., e: int[..]..): int {
+    return 0
+}
+
+func teePair(pair: (int.., int)): int {
+    return 0
+}
+
+func first::<T>(s: T..): T? {
+    return null
+}
+
+func openRank(rows: f32[..]): int {
+    return 0
+}
+
+func main(): int sync {
+    println(1)
+    return 0
+}

@@ -82,6 +82,23 @@
 
     编译错误之后有一行总数（`camel: 1 error`、`camel: 3 errors`）；运行期故障之后没有这一行。
 
+    编译器知道怎么改的诊断把改法也印出来，做法照 rustc 印 suggestion：一行 `help:` 给出改法的标题，它下面是被改法改写后的那一行源码，改法写下的文字用 `+` 标出。只删不写的改法没有“改写后的一行”可看，于是印它原来的样子，被删掉的文字用 `-` 标出。工具从 JSON 的 `data.fixes` 应用的改法就是同一处改动，`camel file.cml` 不加任何选项就能同时看到两者：
+
+        error[SyntaxDiag::MissingComma]: Expected ',' or ')' before 'b'.
+          --> prog.cml:3:17
+           |
+         3 | func add(a: int b: int): int { return a + b }
+           |                 ^
+        help: The items of a list (parameters, arguments, elements) are separated by ','.
+        help: insert ','
+           |
+         3 | func add(a: int, b: int): int { return a + b }
+           |                +
+
+        camel: 1 error
+
+    不带改法的诊断只有文字形式的 `help:` 行，也就是在此之前每条诊断的样子。
+
   - `short`：每条诊断一行，`(module)path:line:col: [Error]: message suggestion (name=..., code=0x...)`。这是脚本匹配的形式，测试运行器用的就是它。
   - `json`：对象数组，含 `range`、`severity`、`code`、`message`、`relatedInformation`（次要位置：`location.path`、`location.range`、`message`）和 `data`（`stage`、`name`、`moduleName`、`modulePath`、`suggestion`、`notes`）。
   - 未给出该选项时，由环境变量 `CAMEL_ERROR_FORMAT` 决定格式。
@@ -175,7 +192,7 @@
 - `std::opt`：集成优化总入口；循环执行去虚化、特化、内联、fold、cse、algebra 和 dce，直到稳定或达到共享的增长及轮数预算
 - `std::opt::algebra`：就是规则库的化简遍 `rules::simplify`，定律即 `stdlib/rules.cml` 里的规则，一条定律只写一次；`safe_fp=true` 时运行 `rules::simplify_strict`（设计原则 7.4：严格等价的浮点算式）。默认 `safe_fp=false`，不自动允许降精度、近似函数或任意特殊值假设。它不要求前面先有 `std::opt::fold`；`std::opt` 会先跑 fold，以得到语料对照所用的系数形式。`neutral_only=true` 保留 C++ 对照模式（只做整数单位元）。PowerShell 中带参数的遍须加引号（这是普通的遍参数）；所有参数在运行第一个遍之前校验。
 - `std::opt::fold` / `std::opt::cse` / `std::opt::dce`：分别运行常量折叠、公共子表达式消除、死代码消除
-- `std::opt::ctrl`：在预算内消除被必需的数据/控制路径覆盖的 CTRL 边；`std::opt` 的其他阶段结束后默认执行一次。保留分支及循环边界、臂锚点，不把未选中的分支当作必需依赖
+- `std::opt::order`：顺序边的传递约简——A→B→C 已在时删去 A→C（设计稿 `docs/design/effects/edges.cn.md` 第 5 节第 4 条）；同步边是一条链，没有冗余，不动。CTRL 边还没有从图里删掉，所以在它消失之前这一遍同时继续做控制边的传递约简：删掉被必需的数据/控制路径覆盖的 CTRL 边，保留分支及循环边界、臂锚点，不把未选中的分支当作必需依赖。`std::opt` 的其他阶段结束后默认执行一次
 - `std::inline`（含 `small` / `arm` / `hybrid`）：`std::opt::inline` 及其策略的别名
 
 - `std::fvm`：高性能字节码虚拟机调度器
@@ -240,13 +257,11 @@
 | 名字 | 代码 | 位置 | 含义 |
 |---|---|---|---|
 | `SemanticDiag::EffectNotExecuted` | `0x03100004` | 调用、赋值或分支 | 它有副作用，但没有东西依赖它，它也不在同步块里，所以永远不会运行。这是合法的（求值由依赖驱动）；报告它是为了让人看到被遗忘的 `sync`。每条被丢弃的链一个警告（`println(log(1))` 报告的是 `println`）。在同步块内从不报告 |
-| `SemanticDiag::IgnoredSideEffect` | `0x03100002` | 调用或分支 | 它写一个变量（`var` 实参，或被捕获的变量），既没有被等待，也不在同步块里：它不排在该变量先前的使用之后 |
-| `SemanticDiag::VarParamInAsyncFunction` | `0x03100001` | 参数 | 没有 `sync` 修饰符的函数带有 `var` 参数 |
-| `SemanticDiag::CapturedWriteInAsyncFunction` | `0x03100003` | 函数 | 函数写一个被捕获的变量，却没有 `sync` 修饰符 |
+| `SemanticDiag::IgnoredSideEffect` | `0x03100002` | 调用或分支 | 它写一个变量（`var` 实参，或被捕获的变量），而且不在同步块里：它不排在该变量先前的使用之后 |
 | `RuntimeDiag::PassesNeverRun` | `0x0410000F` | 没有源码位置（属于命令行的问题） | 有遍写在消耗图的遍之后；它们不会运行。与程序的警告一起打印（JSON 模式下是 stderr 数组的最后一个元素） |
 | `RuntimeDiag::ConstantExpressionFaults` | `0x04100015` | 表达式 | `std::opt::fold`（也包括 `std::opt` 内部的）遇到一个操作数全是常量而求值会出故障的表达式（`1 / 0`）。它不被折叠：有没有这个遍，程序的行为相同；运行到达该表达式时，故障连同位置一起报告。在这个遍运行之后打印到 stderr，每个表达式一次，在下一个遍之前 |
 
-对 `EffectNotExecuted` 来说，什么算效应：在算子特性注册表里既不是纯的也不是仅状态的算子（与效应追踪记录的是同一个集合）、对声明为 `sync func` 或带 `var` 参数的函数的调用、对自身结果依赖某个效应的函数的调用，以及有这样的分支臂的分支。通过函数值进行的调用只能凭它的类型识别（`sync` 修饰符、`var` 参数）。
+对 `EffectNotExecuted` 来说，什么算效应：在算子特性注册表里既不是纯的也不是仅状态的算子（与效应追踪记录的是同一个集合）、对带 `var` 参数的函数的调用、对自身结果依赖某个效应的函数的调用，以及有这样的分支臂的分支。通过函数值进行的调用只能凭它的类型识别（`sync` 修饰符、`var` 参数）。
 
 - **编译没有错误的程序** 把它的警告打印到 **stderr**，只打印一次，在编译之后、第一个遍运行之前，使用默认日志级别即可（不需要 `-v`）。默认的 `text` 格式下，警告的写法与错误相同，以 `warning[SemanticDiag::IgnoredSideEffect]: ...` 开头，带源码行和 `help:`；`short` 格式下每个警告一行：`(module)file:line:col: [Warn]: text suggestion (name=SemanticDiag::IgnoredSideEffect, code=0x03100002)`（没有源码位置的警告写作 `():?:?: [Warn]: ...`）。使用 `--output-format json` 时，stderr 上是一个 JSON 数组，其中的对象与下文的错误数组相同（`"severity":"Warn"`）。没有警告时什么都不写（没有空数组）。
 - **两种模式下 stdout 都与没有警告时相同**：程序的输出，以及只在有错误时才出现的诊断数组。解析 stdout 的工具不受影响。
@@ -268,6 +283,17 @@
 - 遍提交的每一张图（以及前端编码的每一张图）都做结构校验，release 构建中也是如此：节点、槽和边的引用在范围内，输入和输出互为镜像，`BRCH`/`JOIN` 的分支臂数目，`GATE` 有一个值输入和一个控制输入，直接调用传入的实参个数与被调用者接受的一致。违反时是 `RuntimeDiag::PassInternalError`，指出提交该图的遍，在任何东西运行之前报告。
 - 从某个遍逃逸出来而又不是诊断的异常（提交重写时的图校验、调度器构建执行顺序时遇到环）报告为 `RuntimeDiag::PassInternalError`（`0x0400000C`），阶段为 `pass:<name>`，消息里是异常的文本，没有源码位置，退出码为 1。它标志的是编译器的缺陷，不是对程序的拒绝。即使那是调度遍，阶段给出的也是遍的名字，所以它不能说明程序是否已经运行了一部分。任何遍之外的异常报告为 `InternalDiag::UnknownInternalError`，阶段为 `internal`。
 - `data.stage` 说明诊断在流水线的哪里产生：`parse`、`typecheck`、`compile`（见“资源上限”）、重写遍或翻译遍的 `pass:<name>`（包括未知的遍名）、调度遍（`std::nvm`、`std::fvm`、`std::jit`、`std::tf`）的 `run`，或 `internal`。
+- `data.fixes` 出现时，就是这条诊断要求的改法，形状取自编辑器的 code action：一个由若干个 fix 组成的数组，每个 fix 可以单独应用；每个 fix 里是一个由若干 edit 组成的数组，这些 edit 必须一起应用。一个 edit 把它的 `range` 覆盖的文本换成 `replacement`，计数方式与本文件其他地方一致（行和列从 0 开始，`end` 不含）。空 range 是插入，空 `replacement` 是删除；一个 fix 里的各个 edit 指向诊断所在文件（`data.modulePath`）中互不重叠的区间，因此它们应用在原文上，而不是应用在前一个 edit 产生的文本上。
+
+  ```json
+  [
+  {"range":{"start":{"line":2,"character":16},"end":{"line":2,"character":17}},"severity":"Error","code":"0x02000007","source":"Camel","message":"Expected ',' or ')' before 'b'.","data":{"stage":"parse","name":"SyntaxDiag::MissingComma","moduleName":"m","modulePath":"m.cml","suggestion":"The items of a list (parameters, arguments, elements) are separated by ','.","fixes":[{"title":"insert ','","edits":[{"range":{"start":{"line":2,"character":15},"end":{"line":2,"character":15}},"replacement":","}]}]}}
+  ]
+  ```
+
+  （源文件第 2 行写 `func add(a: int b: int)`：改法插在第 15 列，也就是 `int` 与 `b` 之间本来就有的那个空格处，于是得到 `a: int, b: int`，而不是 `a: int , b: int`。）
+
+  只有在编译器知道要写什么文本时才给出改法：写不出确定的文本时没有 `fixes`，此时 `suggestion` 就是用文字说的建议。拿到 `fixes` 的一方可以不再询问就应用；拿不到的一方不得自己编一个。某个码是否给改法由 `diagnostics/registry.tsv` 的一列声明——`edit`，或者 `none: <cause>` 说明为什么不给——`docs/diagnostics.md` 会为每个码印出它，`node scripts/diagnostics-catalog.mjs --check` 会拒绝两者都没写的声明。`cause` 取 `runtime`（运行时才报，源码里没有可改的文本）、`choice`（改法是作者的取舍）、`context`（改法是已知的，但不是一段文本：要改第二处、另一个文件，或者要重构）、`internal`。改法不只是给工具的：`text` 格式也把它印出来（见上文“诊断”），所以看不到 JSON 的读者拿到的也是同一处改动；`short` 格式仍然是一行，没有变化。新增诊断必须在这一列里写其中之一，于是“每个码要么带改法、要么写明为什么没有”是被检查的，而不是靠记性。
 
 ### 效应追踪（`std::profile effect_trace="..."`）
 

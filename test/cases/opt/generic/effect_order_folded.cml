@@ -23,9 +23,9 @@ func main(): int sync {
     println('start')
     let labels = [3, 1, 4]
     let n = 3
-    sync func one_hot(i: int, acc: Tensor): Tensor {
+    func one_hot(i: int, acc: Tensor): Tensor {
         return if i >= n then acc else sync {
-            let row = reshape((range(0, 10) == labels[i]) * 1.0, [1, 10])
+            let row = reshape((0..10 == labels[i]) * 1.0, [1, 10])
             let next = if i == 0 then row else concat(acc, row, 0)
             return one_hot(i + 1, next)
         }
@@ -34,13 +34,13 @@ func main(): int sync {
     show(y)
     let items: int[] = [7, 8, 9]
     var seen: int[] = []
-    sync func visit(i: int): void {
+    func visit(i: int): void {
         return if i >= len(items) then null else sync {
             seen = seen->append<items[i]>
             return visit(i + 1)
         }
     }
-    wait visit(0)
+    visit(0)
     println('seen {}'->format<seen>)
     println('count {}'->format<count_down(5000, 0)>)
     return 0

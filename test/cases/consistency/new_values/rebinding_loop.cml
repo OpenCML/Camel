@@ -11,15 +11,15 @@ type Box = { label: string, values: int[] }
 
 func collect(n: int): int[] sync {
     var out: int[] = []
-    range(0, n)->foreach<sync (i: int) => sync {
+    0..n->foreach<sync (i: int) => sync {
         out = out->append<i * i>
         return null
     }>
     return out
 }
 
-sync func push_all(var xs: int[], n: int): int sync {
-    range(0, n)->foreach<sync (i: int) => sync {
+func push_all(var xs: int[], n: int): int sync {
+    0..n->foreach<sync (i: int) => sync {
         xs = xs->append<i>
         return null
     }>
@@ -29,7 +29,7 @@ sync func push_all(var xs: int[], n: int): int sync {
 func snapshots(n: int): int[][] sync {
     var acc: int[] = []
     var seen: int[][] = []
-    range(0, n)->foreach<sync (i: int) => sync {
+    0..n->foreach<sync (i: int) => sync {
         acc = acc->append<i>
         // A read of acc: the array seen holds never changes afterwards.
         seen = (if i % 3 == 0 then seen->append<acc> else seen)
@@ -40,7 +40,7 @@ func snapshots(n: int): int[][] sync {
 
 func boxes(n: int): Box[] sync {
     var out: Box[] = []
-    range(0, n)->foreach<sync (i: int) => sync {
+    0..n->foreach<sync (i: int) => sync {
         out = out->append<{ label: 'b{}'->format<i>, values: [i, i + 1] }>
         return null
     }>

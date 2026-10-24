@@ -7,11 +7,13 @@
 #include "camel/core/operator_table.h"
 #include "camel/core/tags.h"
 #include "camel/core/type/composite/tuple.h"
+#include "camel/runtime/control_regions.h"
 #include "camel/runtime/core_facts.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/loop.h"
 #include "modules/tensor/type.h"
 #include "tiles/internal/kernel_ir.h"
+#include "tiles/internal/placement.h"
 #include "tiles/internal/regions.h"
 #include "tiles/program.h"
 #include <algorithm>
@@ -66,16 +68,20 @@ const std::unordered_map<core::OperId, std::string> &operations() {
 }
 std::string eligibility(
     const rt::Program &graphs, const rt::GCGraph &graph, rt::gc_node_ref_t id,
-    rt::fact::FactStore &facts) {
+    rt::fact::FactStore &facts, bool device) {
     const auto *node = graph.node(id);
+    // Whether the node is a statement of a block, ordered by control edges. Inside a device
+    // scope that ordering is where the node runs, not a reason to leave it on the host: the arm
+    // or the block the node is written in is the segment that holds it (docs/design/gpu/plan.cn.md 2.5).
+    const bool ordered = !graph.ctrlInputsOf(id).empty() || !graph.ctrlOutputsOf(id).empty();
     if (node->kind == rt::GCNodeKind::Loop) {
-        if (!graph.ctrlInputsOf(id).empty() || !graph.ctrlOutputsOf(id).empty())
+        if (ordered && !device)
             return "control_edge";
         return loopEligibility(graphs, graph, id, facts);
     }
     if (node->kind != rt::GCNodeKind::Oper)
         return "node_kind";
-    if (!graph.ctrlInputsOf(id).empty() || !graph.ctrlOutputsOf(id).empty())
+    if (ordered && !device)
         return "control_edge";
     if (!graph.withInputsOf(id).empty())
         return "context_arguments";
@@ -211,10 +217,13 @@ gpuRefusal(const rt::GCGraph &graph, const RegionAnalysis &analysis, rt::gc_node
     // operator's business.
     return "";
 }
-RegionAnalysis
-analyzeRegions(const rt::Program &graphs, const rt::GCGraph &graph, rt::fact::FactStore &facts) {
+RegionAnalysis analyzeRegions(
+    const rt::Program &graphs, const rt::GCGraph &graph, rt::fact::FactStore &facts,
+    const GpuScopes *scopes) {
     std::vector<RegionNode> nodes(graph.nodeCount());
     std::vector<std::string> reasons(nodes.size());
+    // Where each node runs (docs/design/gpu/plan.cn.md 2.5): the body, an arm of a BRCH, or a part of a LOOP.
+    const rt::ControlRegions control(graph);
     // The nodes of the condition and of the body of a loop are the loop's: a region that holds
     // the LOOP node holds them, and what they read from outside is read by the LOOP node.
     std::vector<bool> insideLoop(nodes.size(), false);
@@ -237,22 +246,27 @@ analyzeRegions(const rt::Program &graphs, const rt::GCGraph &graph, rt::fact::Fa
             reasons[id] = "inside_loop";
             continue;
         }
-        reasons[id]        = eligibility(graphs, graph, id, facts);
+        const bool device  = scopes != nullptr && scopes->covers(graph, id);
+        reasons[id]        = eligibility(graphs, graph, id, facts, device);
         nodes[id].eligible = reasons[id].empty();
         nodes[id].embedded =
             graph.node(id)->kind == rt::GCNodeKind::Data && graph.node(id)->dataIndex < 0;
+        nodes[id].control = control.controlOf(id);
         if (graph.node(id)->kind == rt::GCNodeKind::Loop) {
-            for (auto edges : {graph.normInputsOf(id), graph.ctrlInputsOf(id)})
+            for (auto edges : {graph.normInputsOf(id)})
                 nodes[id].inputs.insert(nodes[id].inputs.end(), edges.begin(), edges.end());
             nodes[id].inputs.insert(
                 nodes[id].inputs.end(),
                 loopReads[id].begin(),
                 loopReads[id].end());
         } else {
-            for (auto edges :
-                 {graph.normInputsOf(id), graph.withInputsOf(id), graph.ctrlInputsOf(id)})
+            for (auto edges : {graph.normInputsOf(id), graph.withInputsOf(id)})
                 nodes[id].inputs.insert(nodes[id].inputs.end(), edges.begin(), edges.end());
         }
+        // The control edges order the node in the block it is written in; they are not values,
+        // so a region that holds the node reads nothing through them (docs/design/gpu/plan.cn.md 2.5).
+        for (auto edges : {graph.ctrlInputsOf(id)})
+            nodes[id].order.insert(nodes[id].order.end(), edges.begin(), edges.end());
         nodes[id].output = id == graph.outputNodeRef() || id == graph.exitNodeRef();
     }
     // Fixed tuple projections are structural edges of an eligible aggregate
@@ -288,7 +302,10 @@ analyzeRegions(const rt::Program &graphs, const rt::GCGraph &graph, rt::fact::Fa
 }
 std::string
 inspectRegions(const rt::Program &graphs, const rt::GCGraph &graph, rt::fact::FactStore &facts) {
-    const auto analysis = analyzeRegions(graphs, graph, facts);
+    // The table is the compiler's view of the program, so it says the same thing the pass would:
+    // code written in a `#gpu` scope's arm or loop is a segment of that region (docs/design/gpu/plan.cn.md 2.5).
+    const GpuScopes scopes(graphs);
+    const auto analysis = analyzeRegions(graphs, graph, facts, &scopes);
     const auto &regions = analysis.regions;
     const auto &reasons = analysis.exclusions;
     std::ostringstream out;

@@ -25,25 +25,25 @@ func predict(X: Tensor): Tensor {
 }
 
 with <X: Tensor, y: Tensor, lr: float>
-sync func update(var w: Tensor): Tensor {
+func update(var w: Tensor): Tensor {
     let pred = X @ w
     let errors = pred - y
     var dw = transpose(X) @ errors
     let m = shape(X)[0]
-    wait dw = 2.0 / float(m) * dw
-    wait w = w - lr * dw
+    dw = 2.0 / float(m) * dw
+    w = w - lr * dw
     return w
 }
 
 with <X: Tensor, y: Tensor, lr: float, its: int>
-sync func train(var weights: Tensor): void {
+func train(var weights: Tensor): void {
     let m = shape(X)[0]  // number of samples
     let n = shape(X)[1]  // number of features
     
     let ones_col = ones([m, 1])
     let X_bias = concat(X, ones_col, 1)  // axis=1
 
-    return range(0, its)->foreach<sync (i: int) => sync {
+    return 0..its->foreach<sync (i: int) => sync {
         let nw = update<X_bias, y, lr>(weights)
         if i % 100 == 0 then {
             let pred = X_bias @ nw

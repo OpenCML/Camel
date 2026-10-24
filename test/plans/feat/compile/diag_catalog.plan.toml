@@ -5,19 +5,19 @@ tags = ["feat", "compile", "diagnostics"]
 
 [[tests]]
 name = "catalog.check"
-desc = "diagnostics/registry.tsv is valid and the generated headers and message tables are what it produces: no value twice in a section, no name twice, every number inside its section's range. A collision fails here before it can be published."
+desc = "diagnostics/registry.tsv is valid and the generated headers and message tables are what it produces: no value twice in a section, no name twice, every number inside its section's range, and every declaration says whether it carries a machine-applicable edit or why it carries none. A collision, or a new diagnostic that says neither, fails here before it can be published."
 kind = "behavior"
 tool = "node"
 case = "../../../../scripts/diagnostics-catalog.mjs"
 args = ["${case}", "--check"]
 expect_exit = 0
-expect_stdout_contains = ["every one with a name and a message, no value used twice, and the emitted headers agree"]
+expect_stdout_contains = ["every one with a name, a message and what it says about an edit", "no value used twice, and the emitted headers agree"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 20000
 
 [[tests]]
 name = "catalog.failure_paths"
-desc = "The registry's failure paths on a scratch copy: a duplicate number, a number outside its section's range, a duplicate name, a generated header that disagrees with the registry and an empty registry all exit 1; one appended line takes the next free number and changes only the registry and that section's generated files."
+desc = "The registry's failure paths on a scratch copy: a duplicate number, a number outside its section's range, a duplicate name, a generated header that disagrees with the registry, an empty registry, and a declaration that does not say whether it carries a machine-applicable edit (or says it in a way the vocabulary does not know, or promises an edit without the help that says what it does) all exit 1; one appended line takes the next free number and changes only the registry and that section's generated files."
 kind = "behavior"
 tool = "node"
 case = "../../../../test/cases/diagnostics/registry_proof.mjs"

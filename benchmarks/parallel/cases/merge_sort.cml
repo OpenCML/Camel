@@ -17,7 +17,7 @@ func mergesort(arr: int[]): int[] {
 
 func main(): int sync {
     seed(1)
-    let arr = range(0, 8000000)->shuffle
+    let arr = 0..8000000->shuffle
     let res = mergesort(arr)
     res->slice<0, 16>->println
     res->slice<len(res) - 4, len(res)>->println

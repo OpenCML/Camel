@@ -581,14 +581,11 @@ Value Builder::visitUsingNamespaceDecl(cst::UsingNamespaceDecl context) {
 }
 
 /*
-blockStmt  : WAIT? stmtBlock ;
+blockStmt  : stmtBlock ;
 */
 Value Builder::visitBlockStmt(cst::BlockStmt context) {
     ENTER("BlockStmt");
     node_ptr_t res = any2node(visitStmtBlock(context->get<cst::StmtBlock>()));
-    if (context->tok(TK::KwWait)) {
-        unwrapNodeAs<StmtBlockLoad>(res)->wait();
-    }
     // A decorator before a block decorates the block as a function of no parameters called where
     // it is written (language reference 7.6): the decorators are the block's second child. The
     // removed `@name(args)` spelling is reported here and grants nothing.
@@ -845,7 +842,13 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
     const auto sides  = body->exprs();
     const bool twoWay = body->has(TK::Equiv);
     const auto params = context->get<cst::ParentParams>();
-    const auto when   = context->expr();
+    // The rule's applicability condition is part of its signature, so it is written between the
+    // parameters and the body (`rule add_zero::<T>(x: T) when is_integer::<T>() { … }`, design
+    // principles 4.4; the ruling of 2026-10-24). A trailing `when` is a syntax error and is
+    // reported by name (`SyntaxDiag::WhenAfterBody`); its expression is still read here, so the
+    // refusal that follows is about the placement and not about a missing condition.
+    const auto whenClause = context->get<cst::WhenClause>();
+    const auto when       = whenClause ? whenClause->expr() : context->expr();
     // A rule declares its type parameters the way a function does, after its name
     // (`rule sub_self::<T>(x: T) { ... }`): every function the rule becomes is generic over
     // them, so the sides bind and instantiate like an ordinary generic function.
@@ -954,7 +957,7 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
         }
     }
 
-    if (!ruleImportAdded_) {
+    if (!ruleImportAdded_ && typeParams.empty()) {
         ruleImportAdded_ = true;
         auto import_     = std::make_shared<ImportLoad>();
         import_->setTokenRange(extractTokenRangeFromContext(context));
@@ -1013,7 +1016,7 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
                 nodesUsed = nodesUsed || !constValueParam(pair);
             }
         }
-        if (!whenImportAdded_) {
+        if (!whenImportAdded_ && typeParams.empty()) {
             whenImportAdded_   = true;
             auto rewriteImport = std::make_shared<ImportLoad>();
             rewriteImport->setTokenRange(extractTokenRangeFromContext(context));
@@ -1121,6 +1124,23 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
     if (whenFunc) {
         *args << reference(name + "__when");
         makerName = "__rule_when";
+    }
+    // A rule whose head declares type parameters has no function values to give: its sides are
+    // generic functions, and a generic function is instantiated where it is called. The value
+    // carries its templates instead, and the maker takes them under the id it registers them
+    // (the ruling of 2026-10-23 on generic-rule-instantiation); the maker of such a rule is
+    // `__rule_generic`, whatever the arguments after `consts` are.
+    const bool genericHead = !typeParams.empty();
+    if (genericHead) {
+        makerName = "__rule_generic";
+        if (!genericRuleImportAdded_) {
+            genericRuleImportAdded_  = true;
+            auto rewriteImport = std::make_shared<ImportLoad>();
+            rewriteImport->setTokenRange(extractTokenRangeFromContext(context));
+            rewriteImport->setPath("rewrite");
+            rewriteImport->setRefs({Reference("__rule_generic")});
+            imports_.push_back(rewriteImport);
+        }
     }
     node_ptr_t call = createNodeAs<ReservedExprLoad>(ReservedDataOp::Call);
     setNodeTokenRangeByContext(call, context);
@@ -2503,7 +2523,7 @@ Value Builder::visitPattern(cst::Pattern context) {
 
 /*
 matchCase
-    : CASE pattern ('|' pattern)* '=>' blockExpr
+    : CASE pattern ('|' pattern)* whenClause? '=>' blockExpr
     ;
 */
 Value Builder::visitMatchCase(cst::MatchCase context) {
@@ -2521,12 +2541,22 @@ Value Builder::visitMatchCase(cst::MatchCase context) {
         }
         patterns.push_back(pattern);
     }
+    // The guard of the case, read once and shared by its arms as the body is: each arm builds
+    // its own copy of it, in the scope of that arm's pattern, so the names the pattern binds
+    // are the ones it reads (and one arm's guard never sees another arm's bindings).
+    node_ptr_t guardNode = nullptr;
+    if (const auto whenClause = context->get<cst::WhenClause>()) {
+        guardNode = any2node(visitExpr(whenClause->expr()));
+    }
     std::vector<node_ptr_t> caseNodes;
     for (const node_ptr_t &pattern : patterns) {
         node_ptr_t caseNode = createNodeAs<MatchCaseLoad>();
         setNodeTokenRangeByContext(caseNode, context);
         node_ptr_t exprNode = any2node(visitBlockExpr(context->lastChild().node()));
         *caseNode << pattern << exprNode;
+        if (guardNode) {
+            *caseNode << guardNode;
+        }
         registerAstSemanticBundle(
             caseNode,
             {
@@ -2643,10 +2673,12 @@ Value Builder::visitStaticForExpr(cst::StaticForExpr context) {
 
 /*
 staticLoopExpr
-    : STATIC LOOP loopState (',' loopState)* staticForHeader DO blockExpr
+    : STATIC LOOP loopState (',' loopState)* staticLoopHeader DO blockExpr
     ;
 The children of the node are described at StaticLoopLoad: a Repeated Data of the first values,
-the walked shape (a type for `fields`, a value for `indices`), and the body.
+the walked shape (a type for `fields`, a value for `indices` and for a sequence), and the body.
+The head's own production (H462) is `staticLoopHeader`: `for i in <序列>`, without the
+parentheses `static for` still has.
 */
 Value Builder::visitStaticLoopExpr(cst::StaticLoopExpr context) {
     ENTER("StaticLoopExpr");
@@ -2662,13 +2694,19 @@ Value Builder::visitStaticLoopExpr(cst::StaticLoopExpr context) {
         bindings.size() > 0 ? std::string(bindings[0]->text()) : std::string("_");
     const std::string typeName =
         bindings.size() > 1 ? std::string(bindings[1]->text()) : std::string("_");
-    const auto mode      = context->tok(TK::Identifier);
-    const bool byIndices = mode && mode.text() == "indices";
-    node_ptr_t loopNode  = createNodeAs<StaticLoopLoad>(state, valueName, typeName, byIndices);
+    // The subject word of the head is the only direct identifier token of the node (`acc`,
+    // `i` and the names of the states are inside their own nodes): `fields`, `indices`, or
+    // nothing at all when what follows `in` is a sequence.
+    const auto mode       = context->tok(TK::Identifier);
+    const bool byIndices  = mode && mode.text() == "indices";
+    const bool byFields   = mode && mode.text() == "fields";
+    const bool bySequence = !byIndices && !byFields;
+    node_ptr_t loopNode =
+        createNodeAs<StaticLoopLoad>(state, valueName, typeName, byIndices, bySequence);
     setNodeTokenRangeByContext(loopNode, context);
     *loopNode << inits;
-    node_ptr_t shapeNode = byIndices ? any2node(visitExpr(context->expr()))
-                                     : any2node(visitType(context->type()));
+    node_ptr_t shapeNode = byIndices || bySequence ? any2node(visitExpr(context->expr()))
+                                                   : any2node(visitType(context->type()));
     *loopNode << shapeNode;
     node_ptr_t bodyNode = any2node(visitBlockExpr(context->lastChild().node()));
     *loopNode << bodyNode;
@@ -2689,7 +2727,7 @@ Value Builder::visitStaticLoopExpr(cst::StaticLoopExpr context) {
                 camel::source::SemanticRole::BranchCondition,
                 nodeOrigin(shapeNode),
                 -1,
-                byIndices ? "indices" : "type"),
+                byIndices ? "indices" : (bySequence ? "sequence" : "type")),
         });
     LEAVE("StaticLoopExpr");
     return loopNode;
@@ -2856,11 +2894,16 @@ Value Builder::visitCtrlExpr(syn::Node context) {
                  value_cast<std::vector<node_ptr_t>>(visitMatchCase(matchCase))) {
                 *casesNode << caseNode;
             }
-            // The first case that matches is taken, so nothing after the wildcard can be.
-            if (casesNode->size() > 0 &&
-                casesNode->at(casesNode->size() - 1)->front()->type() == LoadType::Null) {
-                wildcardCase = matchCase;
-                wildcardSeen = true;
+            // The first case that matches is taken, so nothing after the wildcard can be. A
+            // guarded wildcard is not a wildcard: `case _ when c` is not taken when `c` is
+            // false, so the cases written after it are still reached (and the guarded case
+            // does not cover the match by itself, review `when-placement-and-match-guards`).
+            if (casesNode->size() > 0) {
+                const node_ptr_t &lastCase = casesNode->at(casesNode->size() - 1);
+                if (lastCase->front()->type() == LoadType::Null && lastCase->size() <= 2) {
+                    wildcardCase = matchCase;
+                    wildcardSeen = true;
+                }
             }
         }
         if (wildcardCase && casesNode->size() == 1 &&
@@ -2947,19 +2990,6 @@ Value Builder::visitCtrlExpr(syn::Node context) {
     }
     LEAVE("CtrlExpr");
     return ctrlNode;
-}
-
-/*
-waitExpr : WAIT? assignExpr ;
-*/
-Value Builder::visitWaitExpr(cst::WaitExpr context) {
-    ENTER("WaitExpr");
-    node_ptr_t dataNode = any2node(visitExpr(context->expr()));
-    if (context->tok(TK::KwWait)) {
-        unwrapNodeAs<DataLoad>(dataNode)->wait();
-    }
-    LEAVE("WaitExpr");
-    return dataNode;
 }
 
 /*
@@ -3594,7 +3624,7 @@ Value Builder::visitLinkExpr(cst::LinkExpr context) {
 
 /*
 compExpr
-    : annoExpr (('..' | '?..') annoExpr)*
+    : annoExpr ('..' annoExpr)*
     ;
 */
 Value Builder::visitCompExpr(cst::CompExpr context) {
@@ -3605,27 +3635,6 @@ Value Builder::visitCompExpr(cst::CompExpr context) {
         node_ptr_t dataNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::Comp);
         setNodeTokenRangeByContext(dataNode, context);
         node_ptr_t rhsNode = any2node(visitExpr(context->expr(i)));
-        if (strOp == "..") {
-            // `f..g` is in the grammar, but what it builds is not a function: its result
-            // could not be called and printed as 0. Its meaning is not specified (the order
-            // of the two functions, functions of several parameters).
-            diags_->of(SemanticDiag::ConstructNotSupported)
-                .at(rangeOf(tokenOf(context->child(i * 2 - 1))))
-                .commit(
-                    strOp,
-                    "function composition is not implemented; write a lambda, e.g. "
-                    "'(x: int): int => g(f(x))'");
-        }
-        if (strOp == "?..") {
-            // Used to be accepted with a warning and compiled as `..`.
-            diags_->of(SemanticDiag::ConstructNotSupported)
-                .at(rangeOf(tokenOf(context->child(i * 2 - 1))))
-                .commit(strOp, "the operator is not implemented");
-            node_ptr_t notNullNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::NotNullThen);
-            setNodeTokenRangeByContext(notNullNode, context->expr(i));
-            *notNullNode << lhsNode;
-            lhsNode = notNullNode;
-        }
         *dataNode << lhsNode << rhsNode;
         registerAstSemanticBundle(
             dataNode,
@@ -4568,16 +4577,20 @@ Value Builder::visitEnumType(cst::EnumType context) {
 
 /*
 typeExpr
-    : interType ('?' | '!')*
+    : interType ('?' | '!' | '..')*
     ;
 */
 Value Builder::visitTypeExpr(cst::TypeExpr context) {
     ENTER("TypeExpr");
     node_ptr_t lhsNode = any2node(visitType(context->type(0)));
-    // `T?` and `T!`, innermost mark first: `T?!` is a fallible nullable.
+    // The marks, in the order they were read, innermost first: `T?!` is a fallible nullable,
+    // `T?..` is the stream of a nullable `T`, and `T..?` is the possibly absent stream. `..` is
+    // the stream (design principles 5.4), `?`/`!` the nullable and fallible marks.
     for (size_t i = 1; i < context->childCount(); ++i) {
+        const std::string mark = context->child(i)->text();
         node_ptr_t markedTypeNode =
-            createNodeAs<NullableTypeLoad>(context->child(i)->text() == "!");
+            mark == ".." ? createNodeAs<StreamTypeLoad>()
+                         : createNodeAs<NullableTypeLoad>(mark == "!");
         setNodeTokenRangeByContext(markedTypeNode, context);
         *markedTypeNode << lhsNode;
         lhsNode = markedTypeNode;
@@ -5015,8 +5028,6 @@ Value Builder::visitExpr(syn::Node context) {
         return visitSpreadValue(cst::SpreadValue(context));
     case NK::RestValue:
         return visitRestValue(cst::RestValue(context));
-    case NK::WaitExpr:
-        return visitWaitExpr(cst::WaitExpr(context));
     case NK::IfExpr:
     case NK::MatchExpr:
     case NK::MatchTypeExpr:

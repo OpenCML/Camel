@@ -74,7 +74,7 @@ code --install-extension camel-lang-0.1.0.vsix
 | 能力 | LSP 方法 | 状态 |
 |------|----------|------|
 | 诊断（推送） | `textDocument/publishDiagnostics` | 已实现。文档打开或变更后发布；只对没有声明拉取式诊断的客户端推送（否则每个问题会显示两次），可用 `initializationOptions.diagnostics` = `"push"`、`"pull"`、`"both"` 覆盖。 |
-| 诊断（拉取） | `textDocument/diagnostic` | 已实现。`data` 携带目录名、建议与附注，次要位置作为 `relatedInformation`。 |
+| 诊断（拉取） | `textDocument/diagnostic` | 已实现。`data` 携带目录名、建议、附注，以及编译器自己给出的改法（`data.fixes`：一个标题，加若干 `{range, newText}` 编辑），次要位置作为 `relatedInformation`。 |
 | 增量同步 | `textDocument/didChange`（增量） | 已实现（区间编辑，UTF-16 位置）。 |
 | 悬停 | `textDocument/hover` | 已实现：按源码写法显示声明与类型、声明上方的注释、泛型函数的各实例以及调用处选中的实例或重载、字段、字面量、库函数签名、光标处诊断码的 `--explain` 说明。命名空间的成员按完整名字显示，如 `func Tools::inc(x: int): int`（设计原则 10.2）；大纲与补全同样如此。 |
 | 跳转到定义 | `textDocument/definition` | 已实现：局部变量、参数、函数（调用选中的重载）、类型别名、类型变量、跨文件的导入名。用 C++ 实现的库函数没有定义位置。 |
@@ -88,7 +88,7 @@ code --install-extension camel-lang-0.1.0.vsix
 | 语义标记 | `textDocument/semanticTokens/full` | 已实现（`full`）。 |
 | 格式化 | `textDocument/formatting` | 已实现（整份文档；有语法错误的文档不格式化）。 |
 | 范围格式化 | `textDocument/rangeFormatting` | 未实现：格式化器（`tools/format`）只支持整份文件。 |
-| 代码操作 | `textDocument/codeAction` | 未实现：诊断的建议是文字（`data.suggestion`），不是可应用的编辑，没有可机械应用的内容。 |
+| 代码操作 | `textDocument/codeAction` | 已实现。请求范围触及的每条诊断所带的改法都作为 quick fix 给出，其工作区编辑就是那几处编辑，并且该操作会引上它修的那条诊断；解析不到的名字由“作用域内找那个本来想写的名字”的候选搜索来修（设计原则 4.1），并标为 preferred。不带改法的诊断什么都不给：它们的 `suggestion` 是文字，编辑器会直接应用的猜测比一句话更糟。 |
 | 函数的图 | `camel/graph`（自定义） | 已实现：光标所在函数的 `std::rgir` 文本，可先运行指定的遍序列，使用未保存的文本。 |
 
 ### 2.1 语义标记
@@ -101,9 +101,9 @@ code --install-extension camel-lang-0.1.0.vsix
 | `readonly` | 是 | 不可变绑定（`let`）。 |
 | `defaultLibrary` | 是 | 标准库中的名字或内建名字。 |
 | `mutable` | 否 | 用 `var` 声明的变量或参数。 |
-| `sync` | 否 | 声明为 `sync func` 的函数：它有副作用。 |
+| `sync` | 否 | 函数上的 `sync` 修饰符。前缀 `sync func` 已退役（H461），它在函数声明上不会再出现。 |
 
-`mutable` 与 `sync` 是阅读 Camel 代码时最要紧的两个区分：一个名字能否被重新赋值，一次调用是否有副作用。VS Code 扩展声明了这两个修饰符并给出默认样式（`mutable` 加下划线，`sync` 用斜体）。在其他编辑器中，请把它们映射到你选定的高亮；不认识某个修饰符的编辑器会忽略它。
+`mutable` 是阅读 Camel 代码时最要紧的区分：一个名字能否被重新赋值。VS Code 扩展声明了 `mutable` 与 `sync` 两个修饰符并给出默认样式（`mutable` 加下划线，`sync` 用斜体）；`sync` 修饰符随前缀 `sync func` 一起退役（H461），保留它的声明只是为了不改动扩展清单。在其他编辑器中，请把它们映射到你选定的高亮；不认识某个修饰符的编辑器会忽略它。
 
 ### 2.2 `camel/graph` 请求
 

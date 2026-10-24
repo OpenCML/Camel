@@ -152,8 +152,15 @@ slot_t runPrepared(ArgsView &with, std::shared_ptr<const Program> program) {
     core::mm::NoCollectionScope noCollection;
     size_t leaf = 0, offset = 0;
     auto rebuild = [&](auto &&self, Type *type) -> slot_t {
-        if (type->code() == TypeCode::Float64) {
+        if (const auto scalar = deviceScalarDType(type)) {
+            // A scalar leaf comes back as its element type: 4 bytes for f32, 8 for float.
             ++leaf;
+            if (*scalar == DType::F32) {
+                float value;
+                std::memcpy(&value, data.data() + offset, sizeof(value));
+                offset += sizeof(value);
+                return td::toSlot(value);
+            }
             double value;
             std::memcpy(&value, data.data() + offset, sizeof(value));
             offset += sizeof(value);
@@ -273,10 +280,15 @@ slot_t hostResidentValue(Type *hostType, slot_t value, bool retain) {
         return td::toSlot(output);
     }
     if (retain) {
-        if (hostType->code() == TypeCode::Float64) {
-            const double scalar = td::fromSlot<double>(value);
+        if (const auto scalar = deviceScalarDType(hostType)) {
+            if (*scalar == DType::F32) {
+                const float value32 = td::fromSlot<float>(value);
+                return wrapDevice(
+                    retainHostValue({}, DType::F32, std::as_bytes(std::span(&value32, 1))));
+            }
+            const double value64 = td::fromSlot<double>(value);
             return wrapDevice(
-                retainHostValue({}, DType::F64, std::as_bytes(std::span(&scalar, 1))));
+                retainHostValue({}, DType::F64, std::as_bytes(std::span(&value64, 1))));
         }
         auto *tensor = td::fromSlot<tensor::Array *>(value);
         if (tensor->dtype() != TypeCode::Float32)
@@ -290,12 +302,21 @@ slot_t hostResidentValue(Type *hostType, slot_t value, bool retain) {
     auto *wrapper       = td::fromSlot<td::ForeignResourceObject *>(value);
     const auto resident = *wrapper->resourceAs<std::shared_ptr<DeviceValue>>();
     const auto data     = downloadValue(*resident);
-    if (hostType->code() == TypeCode::Float64) {
-        if (resident->dtype != DType::F64 || data.size() != sizeof(double))
+    if (const auto scalar = deviceScalarDType(hostType)) {
+        if (resident->dtype != *scalar)
             throw std::runtime_error("resident scalar type mismatch");
-        double scalar;
-        std::memcpy(&scalar, data.data(), sizeof(scalar));
-        return td::toSlot(scalar);
+        if (*scalar == DType::F32) {
+            if (data.size() != sizeof(float))
+                throw std::runtime_error("resident scalar type mismatch");
+            float value32;
+            std::memcpy(&value32, data.data(), sizeof(value32));
+            return td::toSlot(value32);
+        }
+        if (data.size() != sizeof(double))
+            throw std::runtime_error("resident scalar type mismatch");
+        double value64;
+        std::memcpy(&value64, data.data(), sizeof(value64));
+        return td::toSlot(value64);
     }
     if (resident->dtype != DType::F32)
         throw std::runtime_error("resident tensor type mismatch");
@@ -439,10 +460,13 @@ slot_t runPreferredResidentKernel(ArgsView &with, ArgsView &norm, Context &ctx) 
             // A refusal with no operator names the class the compiler could not build, which is
             // always about the use's shapes or types; one with an operator says which one.
             const bool shape = refusalOper.empty() || refusalShape;
+            const std::string who =
+                refusalOper.empty() ? std::string(fn->graph()->name()) : refusalOper;
             core::error::throwRuntimeFault(
                 core::error::RuntimeDiag::GpuScopeNoDeviceProgram,
                 std::string(fn->graph()->name()),
-                refusalOper.empty() ? std::string(fn->graph()->name()) : refusalOper,
+                // The message takes the whole predicate, as the compile-time report does.
+                "operator '" + who + "' has no device program",
                 shape ? "no device program for this shape" : "no device program for this operator");
         }
         return runHostResidentKernel(with, norm, ctx);
@@ -469,7 +493,7 @@ slot_t deviceKernel(ArgsView &, ArgsView &, Context &) {
 
 bool supportedLeaves(Type *type) {
     return !core::type::tree::firstRejectedLeaf(type, [](Type *leaf) {
-        return leaf->code() == TypeCode::Float64 || tensor::isTensorType(leaf);
+        return deviceScalarDType(leaf) || tensor::isTensorType(leaf);
     });
 }
 // Placement changes storage, not the computation function's tensor signature.

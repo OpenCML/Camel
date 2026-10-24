@@ -8,8 +8,8 @@ func work(n: int): int {
 }
 
 func main(): int sync {
-    let a = wait work(5)
-    let b = wait work(6)
+    let a = work(5)
+    let b = work(6)
     let c = a + b
     'prl_scheduler a={} b={} sum={}'->format<a, b, c>->println
     return 0

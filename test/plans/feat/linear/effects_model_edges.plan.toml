@@ -1,0 +1,195 @@
+id = "linear.effects_model_edges"
+order = 347
+tier = "fast"
+tags = ["feat", "linear", "runtime", "effects", "gir"]
+
+# The edge model of docs/design/effects/edges.cn.md, asserted on the graph of one frozen input
+# (`test/cases/linear/runtime/effects_model_edges.cml`) read with `std::gir`.
+#
+# Each entry below states one clause of the design. They are marked `known_fail` because the code
+# on `origin/develop` does not implement the model yet: it still has a `GCNodeKind::Sync`, its
+# ordering between effect statements is a `CTRL` edge (which carries "used" *and* orders, so no
+# pass can treat it as either), and its `GATE` still takes a control input. The mark is what makes
+# this lane's work measurable: the runner refuses a `known_fail` that passes, so the entry that
+# flips to green fails the run until its mark is removed in the same commit that fixes the clause.
+#
+# What the code does today, verbatim (the values these entries are red against), from
+# `effects_model_edges.cml std::gir`:
+#   N0A -> N0C [label="0|0", type="CTRL"];      # the sync body's statement chain
+#   N0C -> N0D [label="0|0", type="NORM"];      # the GATE reads the block's value
+#   N0C -> N0D [label="0|0", type="CTRL"];      # ... and waits on the chain, through a CTRL edge
+#   N07 -> N08 [label="0|0", type="CTRL"];      # the var write orders the read
+# and no `type="ORDER"` or `type="SYNC"` edge anywhere in the graph.
+
+[[tests]]
+name = "edges.no_ctrl_edge_kind"
+desc = "docs/design/effects/edges.cn.md 1: the kind \"control edge\" no longer exists -- a graph's edges are data, sync and order, and no edge of the graph of the frozen input is a CTRL edge (gir)."
+kind = "behavior"
+case = "../../../cases/linear/runtime/effects_model_edges.cml"
+backends = ["gir"]
+known_fail = ["gir"]
+known_fail_note = "origin/develop still generates CTRL edges; this lane (handover/h418-effects-model) replaces them with sync and order edges."
+args = ["${case}", "${run_gir}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const edges = readEdges(input.normalized.stdout)
+const ctrl = edges.filter((e) => e.type === 'CTRL')
+assert(
+    ctrl.length === 0,
+    `docs/design/effects/edges.cn.md 1: the kind "control edge" no longer exists; the graph has ${ctrl.length} CTRL edge(s): ` +
+    ctrl.slice(0, 6).map((e) => `${e.pred}->${e.user}`).join(', ')
+)
+function readEdges(text) {
+    const out = []
+    for (const line of text.split('\n')) {
+        const m = line.match(/^\s*(\w+)\s*->\s*(\w+)\s*\[label="([^"]*)",\s*type="([^"]*)"/)
+        if (m) out.push({ pred: m[1], user: m[2], label: m[3], type: m[4] })
+    }
+    return out
+}
+}
+"""
+timeout_ms = 10000
+
+[[tests]]
+name = "edges.sync_chain_is_sync"
+desc = "docs/design/effects/edges.cn.md 1 and 5.3: the statements written directly in one sync block are joined by sync edges (each statement is used by the one after it, the tail by the block's value) -- the graph of the frozen input has sync edges and they join the two statements of the block (gir)."
+kind = "behavior"
+case = "../../../cases/linear/runtime/effects_model_edges.cml"
+backends = ["gir"]
+known_fail = ["gir"]
+known_fail_note = "origin/develop writes the sync chain as CTRL edges; the graph has no sync edge at all."
+args = ["${case}", "${run_gir}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const text = input.normalized.stdout
+const edges = readEdges(text)
+const sync = edges.filter((e) => e.type === 'SYNC')
+assert(
+    sync.length >= 1,
+    'docs/design/effects/edges.cn.md 1: a sync block\'s statements are joined by sync edges; the graph has none'
+)
+const printlns = readNodes(text).filter((n) => n.label === ':io/println')
+assert(printlns.length >= 2, `the frozen input must compile to at least two :io/println nodes, got ${printlns.length}`)
+const chain = sync.filter((e) => printlns.some((n) => n.id === e.pred) && printlns.some((n) => n.id === e.user))
+assert(
+    chain.length >= 1,
+    `no sync edge joins two :io/println statements; sync edges are ${sync.map((e) => `${e.pred}->${e.user}`).join(', ') || 'none'}`
+)
+function readEdges(text) {
+    const out = []
+    for (const line of text.split('\n')) {
+        const m = line.match(/^\s*(\w+)\s*->\s*(\w+)\s*\[label="([^"]*)",\s*type="([^"]*)"/)
+        if (m) out.push({ pred: m[1], user: m[2], label: m[3], type: m[4] })
+    }
+    return out
+}
+function readNodes(text) {
+    const out = []
+    for (const line of text.split('\n')) {
+        const m = line.match(/^\s*(\w+)\s*\[label="([^"]*)",\s*type="([^"]*)"/)
+        if (m) out.push({ id: m[1], label: m[2], type: m[3] })
+    }
+    return out
+}
+}
+"""
+timeout_ms = 10000
+
+[[tests]]
+name = "edges.order_not_the_chain"
+desc = "docs/design/effects/edges.cn.md 1 and 5.4: ordering between two executions on one resource (a `var`'s write and the read of it) is an order edge -- it only orders and does not make the write execute -- so the graph of the frozen input has an order edge (gir)."
+kind = "behavior"
+case = "../../../cases/linear/runtime/effects_model_edges.cml"
+backends = ["gir"]
+known_fail = ["gir"]
+known_fail_note = "origin/develop writes the write/read ordering as a CTRL edge; the graph has no order edge at all."
+args = ["${case}", "${run_gir}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const edges = readEdges(input.normalized.stdout)
+const order = edges.filter((e) => e.type === 'ORDER')
+assert(
+    order.length >= 1,
+    'docs/design/effects/edges.cn.md 1: the order between two writes of one var and between two executions on one resource is an order edge; the graph has none'
+)
+assert(
+    order.every((e) => e.pred && e.user),
+    `every order edge must name both ends, got ${order.map((e) => `${e.pred}->${e.user}`).join(', ')}`
+)
+function readEdges(text) {
+    const out = []
+    for (const line of text.split('\n')) {
+        const m = line.match(/^\s*(\w+)\s*->\s*(\w+)\s*\[label="([^"]*)",\s*type="([^"]*)"/)
+        if (m) out.push({ pred: m[1], user: m[2], label: m[3], type: m[4] })
+    }
+    return out
+}
+}
+"""
+timeout_ms = 10000
+
+[[tests]]
+name = "edges.gate_has_no_control_input"
+desc = "docs/design/effects/edges.cn.md 5.3: GATE keeps its meaning as \"let a value through after the sync chain\" but has no control input any more -- it is a pure value-forwarding node with one data port and a sync predecessor, so the GATE the frozen input builds reads its value and takes no CTRL edge (gir)."
+kind = "behavior"
+case = "../../../cases/linear/runtime/effects_model_edges.cml"
+backends = ["gir"]
+known_fail = ["gir"]
+known_fail_note = "origin/develop's inliner and builder still give the GATE the chain's tail as a control input (type=\"CTRL\")."
+args = ["${case}", "${run_gir}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const text = input.normalized.stdout
+const edges = readEdges(text)
+const gates = readNodes(text).filter((n) => n.type === 'GATE')
+assert(gates.length >= 1, 'the frozen input must build at least one GATE: its sync body returns a value node that is not the block\'s own')
+for (const gate of gates) {
+    const incoming = edges.filter((e) => e.user === gate.id)
+    const norm = incoming.filter((e) => e.type === 'NORM')
+    const ctrl = incoming.filter((e) => e.type === 'CTRL')
+    assert(norm.length === 1, `docs/design/effects/edges.cn.md 5.3: a GATE has one data port reading the value; ${gate.id} has ${norm.length}`)
+    assert(
+        ctrl.length === 0,
+        `docs/design/effects/edges.cn.md 5.3: "GATE no longer has a control input"; ${gate.id} has ${ctrl.length} CTRL input(s) from ${ctrl.map((e) => e.pred).join(', ')}`
+    )
+    for (const e of incoming.filter((x) => x.type === 'SYNC' || x.type === 'ORDER')) {
+        assert(
+            e.type === 'SYNC',
+            `docs/design/effects/edges.cn.md 5.3: a GATE waits on the tail of the sync chain, a sync predecessor; ${gate.id} has a ${e.type} predecessor ${e.pred}`
+        )
+    }
+}
+function readEdges(text) {
+    const out = []
+    for (const line of text.split('\n')) {
+        const m = line.match(/^\s*(\w+)\s*->\s*(\w+)\s*\[label="([^"]*)",\s*type="([^"]*)"/)
+        if (m) out.push({ pred: m[1], user: m[2], label: m[3], type: m[4] })
+    }
+    return out
+}
+function readNodes(text) {
+    const out = []
+    for (const line of text.split('\n')) {
+        const m = line.match(/^\s*(\w+)\s*\[label="([^"]*)",\s*type="([^"]*)"/)
+        if (m) out.push({ id: m[1], label: m[2], type: m[3] })
+    }
+    return out
+}
+}
+"""
+timeout_ms = 10000
+
+# 5.3 also deletes the SYNC node. No entry here asserts it: the measurement of this lane found no
+# program in the fast layer whose graph holds one. The only production site left is one branch of
+# the draft inline splice (src/runtime/draft_inline.cpp, a spliced body with more than one
+# executable entry root), and no case in test/ reaches it -- no golden file carries a SYNC node
+# either. The deletion is therefore a deletion of unreachable code plus 30 consumer cases.

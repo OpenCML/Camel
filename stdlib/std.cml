@@ -203,7 +203,12 @@ with <
     bytecode: bool = true,
     /// 1: print the task graphs and collections of the run when it ends; 2: also one per
     /// collection.
-    gc_stats: int = 0
+    gc_stats: int = 0,
+    /// This run's work is the collection stress: serve every collection it asks for one for
+    /// one, instead of the gate's pacing (the next collection otherwise starts no sooner than
+    /// twice the time the last one took, which holds the collector at a third of a production
+    /// run). The stress itself is asked for with the collector's `CAMEL_GC_STRESS_*` settings.
+    gc_stress: bool = false
 >
 export func taskflow::<F>(f: F): F! when is_function::<F>()
 
@@ -301,7 +306,10 @@ with <
 >
 export func dce::<F>(f: F): F! when is_function::<F>()
 
-/// Control-flow reduction.
-export func ctrl::<F>(f: F): F! when is_function::<F>()
+/// The transitive reduction over ordering edges (docs/design/effects/edges.cn.md 5.4): an order
+/// edge A -> C goes away when a path of order edges already orders the two ends. A sync block's
+/// statements are one chain and carry no redundancy. Control edges are still reduced until that
+/// edge kind is gone from the graph.
+export func order::<F>(f: F): F! when is_function::<F>()
 }
 

@@ -215,7 +215,7 @@ class Evaluator {
     /// Refuses `graph` when an impure operator is reachable from its exit through data or
     /// control edges, in `graph` itself or in a function it calls or holds as a constant.
     /// translate() only follows data dependencies, so an operator that runs for its effect
-    /// alone (a `println` statement of a sync function) would otherwise be left out of the
+    /// alone (a `println` statement of a function with a sync body) would otherwise be left out of the
     /// model without a word.
     void refuseEffects(GCGraph *graph);
 
@@ -4168,7 +4168,7 @@ Model finishModel(Emitter &emitter, const ExportOptions &options) {
 OptimizeRewriteConfig exportRewriteConfig() {
     OptimizeRewriteConfig config;
     // Everything that is not recursive is inlined; ONNX has no calls.
-    config.inlineConfig.smallSubgraphMaxNonDataPortNodes = std::numeric_limits<size_t>::max();
+    config.inlineConfig.smallSubgraphMaxComputeNodes = std::numeric_limits<size_t>::max();
     // An export has to reach straight-line code or it is refused, so it is not held to the growth
     // bounds that keep an optimization pass cheap (the growth_budget parameter belongs to the
     // pass on the pipeline, and an export that runs after it may be held to it). A graph too

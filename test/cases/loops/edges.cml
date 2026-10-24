@@ -2,7 +2,7 @@
 // first state; three values of state; a loop at the top level of the module; a loop whose state
 // is an array built round by round; a long loop that keeps the stack constant.
 let none: int[] = []
-let squares = loop acc = none for x in range(1, 6) do acc->append<x * x>
+let squares = loop acc = none for x in 1..6 do acc->append<x * x>
 
 func fib(n: int): int {
     let (a, b, k) = loop a = 0, b = 1, k = 0 while k < n do (b, a + b, k + 1)

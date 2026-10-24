@@ -1326,3 +1326,293 @@ expect_exit = 0
 expect_stdout_contains = ["1.9633"]
 timeout_ms = 30000
 
+[[tests]]
+name = "nofallback.branch_arms_are_segments"
+kind = "behavior"
+case = "../../cases/gpu/nofallback/branch.cml"
+# `regions<choose>()` before the rewrite: what the compiler would take for the whole program. An
+# operator in an arm is not excluded for its control edge (GPU design 2.5) — an arm is where it
+# runs, so each arm is a segment of its own. No pass rewrites the graph here, so the table is the
+# analysis of the program as written.
+args = ["--devices", "cpu", "${case}", "std::nvm"]
+envs = ["CUDA_VISIBLE_DEVICES=-1"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const text = input.normalized.stdout
+const at = text.indexOf('{"schema":1')
+assert(at >= 0, `no region table in: ${text}`)
+let depth = 0, end = -1
+for (let i = at; i < text.length; i++) {
+    if (text[i] === '{') depth++
+    else if (text[i] === '}' && --depth === 0) { end = i + 1; break }
+}
+const report = JSON.parse(text.slice(at, end))
+assert(report.regions.length === 2, JSON.stringify(report))
+const counts = report.regions.map((r) => r.members.length).sort().join(',')
+assert(counts === '1,1', `one operator per arm: ${JSON.stringify(report.regions)}`)
+const reasons = report.excluded.map((e) => e.reason)
+assert(!reasons.includes('control_edge'), JSON.stringify(report.excluded))
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "nofallback.branch_segment_is_written_in_the_arm"
+kind = "behavior"
+case = "../../cases/gpu/nofallback/branch.cml"
+# Where the pass writes the arm's call: inside the arm region. Writing it in the body instead
+# would lift the arm's computation out of the branch and run the arm that is not taken, which is
+# the defect the design's 2.5 names. `std::jgir` reads the graph the pass produced, so this is a
+# structural guard and needs no device.
+args = ["--devices", "cpu", "${case}", "tiles::compile", "std::jgir"]
+envs = ["CUDA_VISIBLE_DEVICES=-1"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const NL = String.fromCharCode(10)
+const text = input.normalized.stdout
+// The pass prints its placement report before the dump, and the dump is the JSON document the
+// graph is read from.
+const at = text.indexOf(NL + '{')
+assert(at >= 0, `no jgir document in: ${text.slice(0, 400)}`)
+const dump = JSON.parse(text.slice(at + 1))
+const names = dump.graphs.map((g) => g.name).join(', ')
+const choose = dump.graphs.find((g) => g.name === 'choose')
+assert(choose, `no graph choose in ${names}`)
+const arms = (choose.regions || []).filter((r) => r.kind === 'arm')
+assert(arms.length === 2, JSON.stringify(choose.regions))
+const ids = new Set(dump.graphs.filter((g) => g.name.startsWith('choose/tiles.region/')).map((g) => g.id))
+assert(ids.size === 2, `expected two extracted regions in ${names}`)
+// A segment is reached through the function constant the pass holds for its region graph: the
+// constant is a value in the body, and the node that reads it is the call, which must not be.
+const constants = new Set(choose.nodes.filter((n) => n.kind === 'DATA' && ids.has(n.callee)).map((n) => n.id))
+assert(constants.size === 2, `expected two function constants, got ${constants.size} in ${names}`)
+const calls = choose.nodes.filter((n) => choose.edges.some((e) => e.kind === 'context' && constants.has(e.source) && e.target === n.id))
+assert(calls.length === 2, `expected two segment calls, got ${calls.length}`)
+for (const call of calls)
+    assert(arms.some((r) => r.id === call.region), `segment ${call.id} runs in ${call.region || 'body'}, not in an arm; arms ${JSON.stringify(arms.map((r) => r.id))}; nodes ${choose.nodes.map((n) => `${n.id}:${n.kind}:${n.region || 'body'}`).join(' ')}`)
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "nofallback.branch_scope_returns_what_the_host_returns"
+kind = "behavior"
+case = "../../cases/gpu/nofallback/branch.cml"
+# The same program with and without the tag, through the pass: the arms compile, and the two
+# programs return the same values bit for bit.
+args = ["--devices", "cpu", "${case}", "tiles::compile", "std::nvm"]
+envs = ["CUDA_VISIBLE_DEVICES=-1"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const sums = input.normalized.stdout.trimEnd().split(String.fromCharCode(10)).slice(-4)
+assert(sums.join(',') === '12.0,9.0,12.0,9.0', JSON.stringify(sums))
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "nofallback.loop_is_a_segment"
+kind = "behavior"
+case = "../../cases/gpu/nofallback/loop.cml"
+# A loop is a statement of the scope's block and carries a control edge; that is where it runs,
+# so the LOOP node is a segment and keeps its condition and its body with it.
+args = ["--devices", "cpu", "${case}", "std::nvm"]
+envs = ["CUDA_VISIBLE_DEVICES=-1"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const NL = String.fromCharCode(10)
+const text = input.normalized.stdout
+const at = text.indexOf('{"schema":1')
+assert(at >= 0, `no region table in: ${text}`)
+let depth = 0, end = -1
+for (let i = at; i < text.length; i++) {
+    if (text[i] === '{') depth++
+    else if (text[i] === '}' && --depth === 0) { end = i + 1; break }
+}
+const report = JSON.parse(text.slice(at, end))
+assert(report.regions.length === 1, JSON.stringify(report))
+assert(report.regions[0].members.length === 1, JSON.stringify(report.regions))
+const reasons = report.excluded.map((e) => e.reason)
+assert(!reasons.includes('control_edge'), JSON.stringify(report.excluded))
+const sums = text.slice(end).trim().split(NL)
+assert(sums.join(',') === '24.0,24.0', JSON.stringify(sums))
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "nofallback.one_diagnostic_lists_every_refused_operator"
+kind = "negative"
+case = "../../cases/gpu/nofallback/two_refusals.cml"
+# Two operators the scope cannot run, for two different reasons: `tanh` has no device
+# implementation in any module, and `a @ b` has one that refuses this rank. One diagnostic names
+# both and says why each one cannot run (GPU design 2.4), instead of stopping at the first.
+args = ["${case}", "tiles::compile", "std::nvm"]
+envs = ["CUDA_VISIBLE_DEVICES=-1"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::GpuScopeNoDeviceProgram"
+expect_output_contains = ["`#gpu` scope 'step'", "'tensor:tanh'", "'tensor:matmul'"]
+verify_script = """
+({ input, assert }) => {
+const NL = String.fromCharCode(10)
+const lines = (input.normalized.stdout + input.normalized.stderr).split(NL).filter(Boolean)
+const both = lines.filter((l) => l.includes('tensor:tanh') && l.includes('tensor:matmul'))
+assert(both.length === 1, `one diagnostic names both: ${JSON.stringify(lines)}`)
+assert(both[0].includes('the module provides none'), both[0])
+assert(both[0].includes('no device program for this shape'), both[0])
+}
+"""
+timeout_ms = 30000
+
+# --- Compile-time derived graphs inside a scope (GPU design 2.6) ---------------------------
+# `grad`/`with_grad` are runtime operators: they build the derived graph while they run, after
+# every pass has finished, so a `#gpu` scope that asks for a gradient would hold an operator no
+# pass sees and the device has no program for. `tiles::compile` applies `autodiff::expand` to the
+# scope graphs first (docs/design/gpu/plan-modules.cn.md 5, decision 2), and the cases below pin the expansion, the
+# placement the derived graph inherits, the value it must not change, and the refusal of a
+# function only the run knows.
+
+[[tests]]
+name = "grad_expand.runtime_operator_values"
+kind = "behavior"
+case = "../../cases/gpu/nofallback/grad_expand.cml"
+# No expansion pass: `with_grad` builds `grad(loss)` at run time, as it always has. The last two
+# lines are the distances of the two paths' gradients from each other and from the hand-written
+# `[5, 7, 9]` (the column sum of `x`); this run is the reference the next entry compares against.
+args = ["--devices", "cpu", "${case}", "std::nvm"]
+envs = ["CUDA_VISIBLE_DEVICES=-1"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const NL = String.fromCharCode(10)
+const tails = input.normalized.stdout.trimEnd().split(NL).slice(-2).join(',')
+assert(tails === 'moved 0.0,wrong 0.0', JSON.stringify(tails))
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "grad_expand.expanded_values_are_identical"
+kind = "differential"
+case = "../../cases/gpu/nofallback/grad_expand.cml"
+# The same program with the expansion in the pipeline: `step`'s gradient is the derived graph the
+# pass built while compiling. The whole normalized stdout — both gradients, both distances and
+# anything else the program printed — must be what the run without the pass printed.
+args = ["--devices", "cpu", "${case}", "autodiff::expand", "std::nvm"]
+envs = ["CUDA_VISIBLE_DEVICES=-1"]
+expect_exit = 0
+compare_to = "grad_expand.runtime_operator_values"
+compare_fields = ["stdout_normalized"]
+timeout_ms = 30000
+
+[[tests]]
+name = "grad_expand.scope_sees_the_derived_graph"
+kind = "negative"
+case = "../../cases/gpu/nofallback/grad_expand.cml"
+# What the expansion moves: the scope no longer holds `autodiff:with_grad`, and it is refused for
+# an operator of the derived graph instead. The refusal can only name `tensor:broadcast_like` if
+# the derived graph was analysed as part of the scope, so it is the proof that the pass published
+# it. The report shows `grad(loss)` as a `#gpu` body: the derived graph inherits the primal's
+# placement, and the primal `loss` carries the tag (plan 2.3).
+args = ["--devices", "cpu", "${case}", "tiles::compile", "std::nvm"]
+envs = ["CUDA_VISIBLE_DEVICES=-1"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::GpuScopeUnsupported"
+verify_script = """
+({ input, assert }) => {
+const NL = String.fromCharCode(10)
+const lines = (input.normalized.stdout + input.normalized.stderr).split(NL).filter(Boolean)
+const row = lines.find((l) => l.startsWith('TILES_PLACEMENT') && l.includes('"graph":"grad(loss)"'))
+assert(row, `no placement row for grad(loss): ${JSON.stringify(lines.filter((l) => l.startsWith('TILES_PLACEMENT')).map((l) => l.slice(0, 80)))}`)
+const report = JSON.parse(row.slice('TILES_PLACEMENT '.length))
+assert(report.body === 'gpu-required' && report.body_fact === 'gpu', row)
+assert(report.gpu_required === report.nodes, row)
+const refusal = lines.find((l) => l.includes("scope 'grad(loss)'"))
+assert(refusal, JSON.stringify(lines.filter((l) => l.includes('scope '))))
+assert(refusal.includes("operator 'tensor:"), refusal)
+assert(refusal.includes('cannot run on the device'), refusal)
+assert(!lines.some((l) => l.includes('autodiff:with_grad')), 'the scope still holds the runtime operator')
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "grad_expand.a_function_the_run_chooses_is_refused"
+kind = "negative"
+case = "../../cases/gpu/nofallback/grad_dynamic.cml"
+# The function is a parameter, so no expansion can build the derived graph while compiling, and
+# the scope cannot run the operator either. The refusal names the operator and the call site: the
+# diagnostic is at the `with_grad(body)` call in the scope (line 32, column 14).
+args = ["--devices", "cpu", "${case}", "tiles::compile", "std::nvm"]
+envs = ["CUDA_VISIBLE_DEVICES=-1"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::GpuScopeUnsupported"
+expect_diagnostic_line = 32
+expect_diagnostic_column = 14
+expect_output_contains = ["`#gpu` scope 'step'", "operator 'autodiff:with_grad'", "needs a function known at compile time"]
+timeout_ms = 30000
+
+[[tests]]
+name = "grad_expand.untagged_graph_unchanged"
+kind = "behavior"
+case = "../../cases/gpu/nofallback/grad_expand_plain.cml"
+# A grad call site no scope covers: the pass must leave the operator alone, and the program is
+# dumped as a whole (`std::jgir`) so that every node, edge, attribute and reference is compared
+# against the next entry's run.
+args = ["--devices", "cpu", "${case}", "std::jgir"]
+envs = ["CUDA_VISIBLE_DEVICES=-1"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const NL = String.fromCharCode(10)
+const text = input.normalized.stdout
+// No pass prints a report before this dump, so the document starts the output.
+const at = text.startsWith('{') ? 0 : text.indexOf(NL + '{') + 1
+assert(at > 0 || text.startsWith('{'), `no jgir document in: ${text.slice(0, 400)}`)
+const dump = JSON.parse(text.slice(at))
+const step = dump.graphs.find((g) => g.name === 'step')
+assert(step, JSON.stringify(dump.graphs.map((g) => g.name)))
+assert(step.nodes.some((n) => n.label === 'autodiff:with_grad'), JSON.stringify(step.nodes))
+assert(!dump.graphs.some((g) => g.name.startsWith('grad(')), 'the operator was expanded outside a scope')
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "grad_expand.untagged_graph_is_byte_identical"
+kind = "differential"
+case = "../../cases/gpu/nofallback/grad_expand_plain.cml"
+# The plan's acceptance for a program without the tag: with `autodiff::expand` in the pipeline the
+# dumped graph is byte-identical to the run without it. The expansion is the only difference
+# between the two pipelines.
+args = ["--devices", "cpu", "${case}", "autodiff::expand", "std::jgir"]
+envs = ["CUDA_VISIBLE_DEVICES=-1"]
+expect_exit = 0
+compare_to = "grad_expand.untagged_graph_unchanged"
+compare_fields = ["stdout_normalized"]
+timeout_ms = 30000
+
+# --- Residency is derived from the graph (GPU design 3.2) --------------------------------------
+# `TILES_RESIDENCY` prints the conclusion the transfer-inserting half of M5 reads: a value's block
+# is decided by its producer, a call's parameters follow their arguments' blocks, a loop's state
+# stays where it was made. The test compares the conclusion with the outlines the same run leaves,
+# so the number it pins is the disagreement M5's second half removes, not a number copied here.
+# The driver is a node script: it starts camel with `--devices cpu`, so it names no card, and a
+# Python test here would join the device layer's pinned census
+# (test/tools/check-cuda-visibility.mjs) for no reading it could not take in node.
+
+[[tests]]
+name = "resident_loop_declares_its_blocks"
+kind = "behavior"
+tool = "node"
+case = "../../cases/modules/tiles/resident_loop.mjs"
+args = ["${case}"]
+envs = ["CUDA_VISIBLE_DEVICES=-1"]
+tier = "fast"
+expect_exit = 0
+expect_stdout_contains = ["Resident loop: PASS"]
+timeout_ms = 60000

@@ -148,11 +148,29 @@ inline bool loopTest(camel::core::context::Frame &frame, const camel::runtime::E
         stop = !fromSlot<bool>(frame.get<slot_t>(loop.condResultSlot));
     }
     if (!stop && loop.iterates) {
-        const ::Array *array = frame.get<::Array *>(loop.iterableSlot);
-        if (static_cast<size_t>(round) >= array->size()) {
-            stop = true;
+        if (loop.intervalIterates) {
+            // The sequence is the interval [from, to) and no array of it exists: the round takes
+            // `from + round` while the round number is below the number of elements
+            // (`for i in a..b`: the compiler fuses the interval, design principles 4.2). The
+            // count is the difference of two 64-bit integers taken unsigned, so an interval of
+            // any two integers has a well-defined number of elements; the element itself cannot
+            // overflow, because it is below `to` when the round is below that count.
+            const int64_t from = fromSlot<int64_t>(frame.get<slot_t>(loop.intervalFromSlot));
+            const int64_t to   = fromSlot<int64_t>(frame.get<slot_t>(loop.intervalToSlot));
+            const uint64_t elements =
+                to > from ? static_cast<uint64_t>(to) - static_cast<uint64_t>(from) : uint64_t{0};
+            if (static_cast<uint64_t>(round) >= elements) {
+                stop = true;
+            } else {
+                element = toSlot(from + static_cast<int64_t>(round));
+            }
         } else {
-            element = array->getSlot(static_cast<size_t>(round));
+            const ::Array *array = frame.get<::Array *>(loop.iterableSlot);
+            if (static_cast<size_t>(round) >= array->size()) {
+                stop = true;
+            } else {
+                element = array->getSlot(static_cast<size_t>(round));
+            }
         }
     }
     if (stop) {

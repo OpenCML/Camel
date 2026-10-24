@@ -128,13 +128,15 @@ class Tree {
     /// (empty for `indices`); both are bound only while the body is built.
     node_ptr_t makeStaticFor(
         const std::string &valueName, const std::string &typeName, bool byIndices = false);
-    /// `static loop s1 = a1, ..., sk = ak for (n, F) in fields T do body` (children: TYPE, the k
-    /// first values, body), or the same over `indices ts` (children: the operand value, the k
-    /// first values, body). `state` are the names of the state; `valueName` is `n` (or `j`) and
-    /// `typeName` is `F` (empty for `indices`), both bound only while the body is built.
+    /// `static loop s1 = a1, ..., sk = ak for i in <序列> do body`: `in fields T` (children:
+    /// TYPE, the k first values, body), `in indices ts` (children: the operand value, the k first
+    /// values, body), or a written sequence (the same children as `indices`; `bySequence`).
+    /// `state` are the names of the state; `valueName` is `n`, `j` or the element's name and
+    /// `typeName` is `F` (empty for `indices` and for a sequence), both bound only while the body
+    /// is built. `byIndices` and `bySequence` are never both true (H462).
     node_ptr_t makeStaticLoop(
         const std::vector<std::string> &state, const std::string &valueName,
-        const std::string &typeName, bool byIndices = false);
+        const std::string &typeName, bool byIndices = false, bool bySequence = false);
     /// `t.[key]` (children: the target, the key expression).
     node_ptr_t makeStaticAccess();
     /// `..e` (child: the operand): the elements of the compile-time tuple are the arguments.
@@ -243,6 +245,13 @@ class Tree {
     void setWhen(const Node *func, WhenClause clause);
     const WhenClause *whenOf(const Node *func) const;
 
+    /// The guard of a `match` case (`case p when c => ...`), for the case that has one. The
+    /// guard is not a child of the CASE: the graph builder evaluates it in the arm the case
+    /// becomes, after the names the pattern binds are taken out, and it decides whether that arm
+    /// is taken at all (review 「when-placement-and-match-guards」). Null when the case has none.
+    void setCaseGuard(const Node *caseNode, node_ptr_t guard);
+    node_ptr_t caseGuardOf(const Node *caseNode) const;
+
     /// The type parameters a declaration put at its head (`func f::<T, U>`), in order. They
     /// make the declaration generic even when its signature writes none of them: a predicate
     /// such as `func is_plain::<T>(): bool { match type T { ... } }` is instantiated by its
@@ -340,6 +349,7 @@ class Tree {
     std::unordered_map<const Node *, std::vector<UnwrittenParam>> unwrittenParams_;
     std::unordered_map<const Node *, std::vector<TupleParamBinding>> tupleParams_;
     std::unordered_map<const Node *, WhenClause> whenClauses_;
+    std::unordered_map<const Node *, node_ptr_t> caseGuards_;
     std::unordered_map<const Node *, std::vector<std::string>> headTypeParams_;
     std::unordered_map<const Node *, ParameterDefaults> parameterDefaults_;
     std::unordered_map<const Node *, std::vector<std::optional<std::string>>> argumentNames_;

@@ -1,0 +1,23 @@
+// The equivalence the ruling rests on, read off one program: the composition and the lambda it
+// stands for are written in the same two positions - a declared value and the argument of a
+// function whose parameter names the function type - and both give the same numbers. A
+// distribution that reached only one of those positions would show here.
+module h428_comp_lambda_equivalence
+
+func ident::<T>(x: T): T {
+    return x
+}
+
+func apply(f: (x: int) => int, n: int): int {
+    return f(n)
+}
+
+func main(): int sync {
+    let composed: (x: int) => int = ident..ident
+    let written: (x: int) => int = (x) => ident(ident(x))
+    println(composed(4))
+    println(written(4))
+    println(apply(ident..ident, 7))
+    println(apply((x) => ident(ident(x)), 7))
+    return 0
+}

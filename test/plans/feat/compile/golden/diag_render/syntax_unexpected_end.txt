@@ -9,5 +9,9 @@ note: the '{' that is not closed is opened
  3 | func main(): int {
    |                  -
 help: Every '{' needs its '}'. The note shows the '{' that is still open here.
+help: insert the '}' that is missing
+   |
+ 4 |     let x = 1}
+   |              +
 
 camel: 1 error

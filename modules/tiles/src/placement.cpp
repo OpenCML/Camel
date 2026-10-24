@@ -6,6 +6,7 @@
 #include "tiles/internal/placement.h"
 
 #include "camel/core/node_attrs.h"
+#include "camel/core/rtdata/func.h"
 #include "camel/runtime/program.h"
 
 #include <nlohmann/json.hpp>
@@ -19,6 +20,23 @@ namespace camel::tiles {
 namespace {
 
 namespace attr = camel::core::attr;
+
+/// The graph of the function constant a node holds, or nullptr when the node is not one or holds
+/// no function: a DATA node whose static slot is a `Function` value (a named function, or the
+/// derived graph `autodiff::expand` leaves at a grad call site).
+const runtime::GCGraph *functionGraphOf(const runtime::GCGraph &graph, runtime::gc_node_ref_t id) {
+    const runtime::GCNode *node = graph.node(id);
+    if (node == nullptr || node->kind != runtime::GCNodeKind::Data || node->dataIndex >= 0) {
+        return nullptr;
+    }
+    const auto slots  = graph.staticSlots();
+    const size_t slot = static_cast<size_t>(-node->dataIndex);
+    if (slot >= slots.size() || slots[slot] == NullSlot) {
+        return nullptr;
+    }
+    auto *fn = camel::core::rtdata::fromSlot<::Function *>(slots[slot]);
+    return fn == nullptr ? nullptr : fn->graph();
+}
 
 attr::AttrSetId bodyAttrs(const runtime::GCGraph &graph) {
     return graph.regionCount() > 0 && graph.region(0) ? graph.region(0)->attrs : attr::kNoAttrs;
@@ -100,6 +118,29 @@ void addCounts(nlohmann::json &entry, const Counts &counts) {
 }
 
 } // namespace
+
+const runtime::GCGraph *calleeGraphOf(
+    const runtime::Program &program, const runtime::GCGraph &graph, runtime::gc_node_ref_t id) {
+    // A caller reaches this for every node of a scope graph, not only for the calls it looks at:
+    // a node that is not one of the two call kinds reaches no graph.
+    if (graph.node(id) == nullptr || (graph.node(id)->kind != runtime::GCNodeKind::Func &&
+                                      graph.node(id)->kind != runtime::GCNodeKind::Call)) {
+        return nullptr;
+    }
+    if (graph.node(id)->kind == runtime::GCNodeKind::Func) {
+        return program.calleeOf(graph, id);
+    }
+    // The call reads its callee as a value: `autodiff::expand` replaces the grad operator at the
+    // call site with the function constant of the derived graph (docs/design/gpu/plan.cn.md 2.6),
+    // and a call through it is a call to that graph, exactly as a written call to a named
+    // function is. A value that is not a constant names no one graph: the run chooses the callee.
+    for (const runtime::gc_node_ref_t operand : graph.withInputsOf(id)) {
+        if (const runtime::GCGraph *callee = functionGraphOf(graph, operand)) {
+            return callee;
+        }
+    }
+    return nullptr;
+}
 
 const char *placementName(Placement placement) {
     switch (placement) {
@@ -265,6 +306,53 @@ std::string placementReport(const runtime::Program &program) {
         out << "TILES_PLACEMENT " << entry.dump() << '\n';
     }
     return out.str();
+}
+
+GpuScopes::GpuScopes(const runtime::Program &program) {
+    // A body tag makes the whole graph a device unit.
+    std::vector<const runtime::GCGraph *> scopes;
+    for (const runtime::GCGraph *graph : program.graphs()) {
+        if (bodyPlacementOf(*graph).placement == Placement::GpuRequired) {
+            scopeOf_.emplace(graph, graph);
+            scopes.push_back(graph);
+        }
+    }
+    // A call written in a device scope (a `#gpu` body or block) makes the callee one too, even
+    // when the code around the block is the host's: that call is still a device call.
+    const auto addCall = [&](const runtime::GCGraph &graph, runtime::gc_node_ref_t id) {
+        if (placementOf(graph, id).fact == "cpu")
+            return;
+        const runtime::GCGraph *callee = calleeGraphOf(program, graph, id);
+        if (callee == nullptr || scopeOf_.contains(callee))
+            return;
+        const auto found = scopeOf_.find(&graph);
+        scopeOf_.emplace(callee, found == scopeOf_.end() ? &graph : found->second);
+        scopes.push_back(callee);
+    };
+    for (const runtime::GCGraph *graph : program.graphs())
+        for (runtime::gc_node_ref_t id = 0; id < graph->nodeCount(); ++id)
+            if (placementOf(*graph, id).onDevice())
+                addCall(*graph, id);
+    // Transitive: a helper of a helper is called by the scope as well.
+    for (size_t next = 0; next < scopes.size(); ++next) {
+        const runtime::GCGraph *graph = scopes[next];
+        for (runtime::gc_node_ref_t id = 0; id < graph->nodeCount(); ++id)
+            addCall(*graph, id);
+    }
+}
+
+bool GpuScopes::covers(const runtime::GCGraph &graph, runtime::gc_node_ref_t node) const {
+    const PlacementDecision decision = placementOf(graph, node);
+    // A fact of the node's own wins, in both directions: `#cpu` is the written way out of a
+    // scope, and a nested `#gpu` block is on the device.
+    if (decision.onDevice())
+        return true;
+    return decision.scope == PlacementScope::Default && scopeOf_.contains(&graph);
+}
+
+const runtime::GCGraph *GpuScopes::scopeOf(const runtime::GCGraph &graph) const {
+    const auto found = scopeOf_.find(&graph);
+    return found == scopeOf_.end() ? nullptr : found->second;
 }
 
 } // namespace camel::tiles

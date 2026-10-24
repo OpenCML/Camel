@@ -94,7 +94,7 @@ func step_ce_adam(m: LoraMlp, st: OptimizerState, x: Tensor, target: Tensor, lr:
     return (vg.0, next.0, next.1)
 }
 
-sync func loop_ce_adam(m: LoraMlp, st: OptimizerState, i: int, steps: int, nb: int, lr: float): (LoraMlp, OptimizerState) {
+func loop_ce_adam(m: LoraMlp, st: OptimizerState, i: int, steps: int, nb: int, lr: float): (LoraMlp, OptimizerState) {
     return if i >= steps then (m, st) else sync {
         let bi = '{}'->format<i % nb>
         let dir = get_env('CAMEL_FT_BATCHES')
@@ -114,7 +114,7 @@ func adam_lr(): float sync {
     return if v == '' then 0.001 else float(v)
 }
 
-sync func loop_ce(m: LoraMlp, i: int, steps: int, nb: int): LoraMlp {
+func loop_ce(m: LoraMlp, i: int, steps: int, nb: int): LoraMlp {
     return if i >= steps then m else sync {
         let bi = '{}'->format<i % nb>
         let dir = get_env('CAMEL_FT_BATCHES')

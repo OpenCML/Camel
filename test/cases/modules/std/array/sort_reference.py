@@ -90,7 +90,7 @@ def main() -> int:
 import {{ sort, merge_sort }} from array
 
 func main(): int sync {{
-    let up = range(0, {n})
+    let up = 0..{n}
     let down = up->map<(i: int): int => {n} - 1 - i>
     let a = sort(up)
     var b = down

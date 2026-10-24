@@ -384,7 +384,15 @@ class Formatter {
                     predCmtEnd = end;
                 }
             } else { // backward lookup
-                for (size_t j = end - 1; j >= start; j--) {
+                // The lookup counts down to `start`, and `end` may be 0: it is the gap before the
+                // file's first declaration, and a file whose first declaration is an import has
+                // none (`declTokenRanges[0]` is `{0, 0}`). `end - 1` in a `size_t` is then
+                // SIZE_MAX, and the read lands in front of the token stream: the debug build's
+                // ASSERT names it, and a release build reads whatever lies there - it survived in
+                // one caller and ended `camel-parsecheck fuzz` with a signal in another (seeds 67
+                // and 111, a file starting `import a from y` above `import b from x`).
+                // `j-- > start` stops at `start` and never steps below it.
+                for (size_t j = end; j-- > start;) {
                     // find the first comment token
                     if (tokens[j].channel > 1) {
                         predCmtEnd = j + 1;
@@ -395,7 +403,7 @@ class Formatter {
                     }
                 }
                 predCmtStart = predCmtEnd;
-                for (size_t j = predCmtEnd - 1; j >= start; j--) {
+                for (size_t j = predCmtEnd; j-- > start;) {
                     // find until the first non-comment token
                     if (tokens[j].channel == 1) {
                         predCmtStart = j + 1;
@@ -729,8 +737,6 @@ class Formatter {
     std::any visitCatchClause(cst::CatchClause context);
 
     std::any visitCtrlExpr(syn::Node context);
-
-    std::any visitWaitExpr(cst::WaitExpr context);
 
     std::any visitAssignExpr(cst::AssignExpr context);
 

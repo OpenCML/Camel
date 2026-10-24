@@ -82,6 +82,8 @@ struct SyntaxError {
         ComparisonNeedsSpace,  // `i<n`: the `<` (aux) opened an argument list that fails here
         AngleCloseAfterSpace,  // `f<a >`: the `>` (token) is separated from the last argument
         LineStartsWithSign,    // a line starting with `+` that cannot start a statement
+        WhenAfterBody,         // `rule f(x) { … } when c`: the condition belongs before the body
+        AsRightSideIsType,     // `x as int..5`: the interval reading of `..` where a type stands
     };
     /// Members of `expected` that are not token kinds.
     enum Pseudo : uint8_t {
@@ -152,7 +154,15 @@ class TokenRef {
     const Token &raw() const { return tree_->tokens()[index_]; }
     TokenKind kind() const { return raw().kind; }
     bool is(TokenKind k) const { return tree_ != nullptr && raw().kind == k; }
-    std::string_view view() const { return tree_->tokens().text(index_); }
+    /// A handle that holds no token (`tok` returns one for a token the node does not have)
+    /// reads as nothing: `view` is empty and so is `text`. Reading one used to follow the null
+    /// tree, and a read that followed it died with a signal where a name was expected - the
+    /// parser no longer makes such a node (parseTypeArguments), and a reader that meets one
+    /// reads no text rather than crashing. What needs the token itself (`raw`, `kind`, `line`,
+    /// `column`) still requires one; `is` is guarded.
+    std::string_view view() const {
+        return tree_ != nullptr ? tree_->tokens().text(index_) : std::string_view();
+    }
     std::string text() const { return std::string(view()); }
     /// Handles are used like pointers: `token->text()`.
     const TokenRef *operator->() const { return this; }

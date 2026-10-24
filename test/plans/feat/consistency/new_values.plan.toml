@@ -293,7 +293,7 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::UnusedPureResult"
 expect_diagnostic_line = 11
 expect_diagnostic_column = 9
-expect_output_contains = ["dropped_foreach_lambda.cml:13:38"]
+expect_output_contains = ["dropped_foreach_lambda.cml:13:31"]
 
 [[tests]]
 name = "new_values.dropped_if_arm"
@@ -338,7 +338,7 @@ kind = "behavior"
 case = "../../../cases/consistency/new_values/sort_rebinding.cml"
 args = ["${case}", "std::rgir"]
 expect_exit = 0
-expect_stdout_contains = [":var/take", "array:sort_in_place", "array:merge_sort_in_place", "array:insert_sort_in_place", ":op/assn_owned"]
+expect_stdout_contains = [":var/take", "array:sort_l_in_place", "array:merge_sort_l_in_place", "array:insert_sort_d_in_place", ":op/assn_owned"]
 
 [[tests]]
 name = "new_values.sort_rebinding.passes"

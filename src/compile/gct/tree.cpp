@@ -170,6 +170,20 @@ const Tree::WhenClause *Tree::whenOf(const Node *func) const {
     return it == whenClauses_.end() ? nullptr : &it->second;
 }
 
+void Tree::setCaseGuard(const Node *caseNode, node_ptr_t guard) {
+    if (caseNode != nullptr && guard != nullptr) {
+        caseGuards_[caseNode] = std::move(guard);
+    }
+}
+
+node_ptr_t Tree::caseGuardOf(const Node *caseNode) const {
+    if (caseNode == nullptr) {
+        return nullptr;
+    }
+    const auto it = caseGuards_.find(caseNode);
+    return it == caseGuards_.end() ? nullptr : it->second;
+}
+
 void Tree::setHeadTypeParams(const Node *func, std::vector<std::string> names) {
     if (func != nullptr && !names.empty()) {
         headTypeParams_[func] = std::move(names);
@@ -421,7 +435,7 @@ node_ptr_t Tree::makeStaticFor(
 
 node_ptr_t Tree::makeStaticLoop(
     const std::vector<std::string> &state, const std::string &valueName,
-    const std::string &typeName, bool byIndices) {
+    const std::string &typeName, bool byIndices, bool bySequence) {
     Node *node = makeNode(NodeKind::SLOOP);
     const size_t count = state.size() + 2;
     auto *list = static_cast<Node::NameList *>(allocate(Node::NameList::bytesFor(count)));
@@ -434,6 +448,9 @@ node_ptr_t Tree::makeStaticLoop(
     node->payload_.names = list;
     if (byIndices) {
         node->flags_ |= Node::kFlagA;
+    }
+    if (bySequence) {
+        node->flags_ |= Node::kFlagB;
     }
     return node;
 }

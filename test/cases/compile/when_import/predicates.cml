@@ -15,7 +15,7 @@ export func is_compound::<T>(): bool {
 
 export func has_field::<T>(name: string): bool {
     return match type T {
-        case struct => static loop found = false for (n, F) in fields T do found || n == name
+        case struct => static loop found = false for n, F in fields T do found || n == name
         case _ => false
     }
 }

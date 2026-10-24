@@ -85,6 +85,21 @@ const SEVERITIES = {
     warn: { id: 'warn', label: 'Warn', min: 0x100000, max: 0x1fffff },
 }
 
+// The seventh column: what the declaration says about a machine-applicable edit. `edit` means the
+// report attaches at least one where the text to write is known (DiagFix, and `data.fixes` of the
+// JSON output); `none: <cause>` means it attaches none, and the cause is why. A new declaration
+// has to say which, so "every diagnostic carries an edit or the reason it has none" is a property
+// of the registry and not a habit.
+//
+// The cause is one word of a closed vocabulary, so `--check` can refuse anything else; a
+// declaration may add a sentence of its own after it.
+const FIX_CAUSES = {
+    runtime: 'the report is raised while the program runs, so there is no source text to rewrite',
+    choice: 'the repair is a decision only the writer can make (which name, which type, which value)',
+    context: 'the repair is known but is not one text: it needs a second place, another file, or a restructuring',
+    internal: 'the report is about the compiler itself, and there is nothing in the program to change',
+}
+
 function hex6(value) {
     return '0x' + value.toString(16).toUpperCase().padStart(6, '0')
 }
@@ -135,14 +150,16 @@ function readRegistry(root) {
             continue
         }
         const fields = raw.split('\t')
-        if (fields.length < 5 || fields.length > 6) {
+        if (fields.length !== 7) {
             problems.push(
-                `${where}: expected section, name, number, severity, message and help separated by tabs`
+                `${where}: expected section, name, number, severity, message, help and fix separated ` +
+                    `by tabs (${fields.length} field(s))`
             )
             continue
         }
         const [sectionId, name, codeText, severityId, message] = fields
-        const suggestion = fields.length === 6 ? fields[5] : ''
+        const suggestion = fields[5]
+        const fix = fields[6]
         const section = SECTION_BY_ID.get(sectionId)
         const severity = SEVERITIES[severityId]
         if (!section) {
@@ -172,6 +189,35 @@ function readRegistry(root) {
             }
         }
         if (!message) problems.push(`${where}: ${sectionId}:${name} has an empty message`)
+        // What the declaration says about an edit. `edit` promises that a report of this code
+        // attaches one where the text is known, and a promise the reader is told in words to
+        // carry out needs the words: an edit without help says nothing to a person.
+        if (fix === 'edit') {
+            if (!suggestion.trim()) {
+                problems.push(
+                    `${where}: ${sectionId}:${name} declares 'edit' and has no help; a report that ` +
+                        `hands a tool the text to write says what it does to the reader too`
+                )
+            }
+        } else if (fix.startsWith('none:')) {
+            const parts = fix
+                .slice('none:'.length)
+                .split(':')
+                .map((part) => part.trim())
+            const cause = parts[0]
+            if (!(cause in FIX_CAUSES)) {
+                problems.push(
+                    `${where}: '${cause}' is not a reason for having no edit ` +
+                        `(${Object.keys(FIX_CAUSES).join(', ')})`
+                )
+            }
+        } else {
+            problems.push(
+                `${where}: ${sectionId}:${name} says '${fix}' about an edit; write 'edit' or ` +
+                    `'none: <cause>' (${Object.keys(FIX_CAUSES).join(', ')}), so that a new ` +
+                    `diagnostic always says whether it carries an edit and why not when it does not`
+            )
+        }
         const key = `${sectionId}:${name}`
         if (namesInSection.has(key)) {
             problems.push(
@@ -211,7 +257,7 @@ function readRegistry(root) {
             }
             warningNames.set(wkey, sectionId)
         }
-        const record = { section, severity, name, code, message, suggestion, line: i + 1, index: i }
+        const record = { section, severity, name, code, message, suggestion, fix, line: i + 1, index: i }
         records.push(record)
         const band = `${section.id}/${severity.id}`
         if (!layout.has(band)) layout.set(band, [])
@@ -465,6 +511,7 @@ function catalogEntries(records) {
             severity: r.severity.label,
             message: r.section.id === 'runtime' ? r.message : r.message.replaceAll('{{', '{').replaceAll('}}', '}'),
             suggestion: r.section.id === 'runtime' ? r.suggestion : r.suggestion.replaceAll('{{', '{').replaceAll('}}', '}'),
+            fix: r.fix,
         }))
         .sort((a, b) => a.code - b.code)
 }
@@ -490,13 +537,18 @@ function emitDoc(entries, tests, root) {
     out.push('')
     out.push(
         `${entries.length} diagnostics: ${entries.filter((e) => e.severity === 'Error').length} errors, ` +
-            `${entries.filter((e) => e.severity === 'Warn').length} warnings.`
+            `${entries.filter((e) => e.severity === 'Warn').length} warnings. ` +
+            `${entries.filter((e) => e.fix === 'edit').length} carry a machine-applicable edit, ` +
+            `${entries.filter((e) => e.fix !== 'edit').length} say why they carry none.`
     )
     out.push('')
-    out.push('| Code | Name | Severity |')
-    out.push('|------|------|----------|')
+    out.push('| Code | Name | Severity | Edit |')
+    out.push('|------|------|----------|------|')
     for (const entry of entries) {
-        out.push(`| \`${hex8(entry.code)}\` | [${entry.fullName}](#${entry.name.toLowerCase()}) | ${entry.severity} |`)
+        out.push(
+            `| \`${hex8(entry.code)}\` | [${entry.fullName}](#${entry.name.toLowerCase()}) | ` +
+                `${entry.severity} | ${entry.fix === 'edit' ? 'yes' : 'no'} |`
+        )
     }
     out.push('')
     let currentType = null
@@ -509,6 +561,15 @@ function emitDoc(entries, tests, root) {
         out.push(`### ${entry.name}`)
         out.push('')
         out.push(`\`${hex8(entry.code)}\` · ${entry.severity} · \`${entry.fullName}\``)
+        out.push('')
+        out.push('**Fix**')
+        out.push('')
+        out.push(
+            entry.fix === 'edit'
+                ? 'A machine-applicable edit is attached where the report knows the text to write: ' +
+                      '`data.fixes` of `--error-format json` carries the range and the replacement.'
+                : `None: ${entry.fix.slice('none:'.length).trim()}`
+        )
         out.push('')
         out.push('**Message**')
         out.push('')
@@ -740,8 +801,10 @@ if (mode === '--check') {
     for (const [rel, text] of emitted) verifyFile(root, rel, text, verifyProblems)
     if (verifyProblems.length) fail(verifyProblems)
     console.log(
-        `diagnostics registry: ${records.length} codes, every one with a name and a message, ` +
-            `no value used twice, and the emitted headers agree`
+        `diagnostics registry: ${records.length} codes, every one with a name, a message and what it ` +
+            `says about an edit (${records.filter((r) => r.fix === 'edit').length} with one, ` +
+            `${records.filter((r) => r.fix !== 'edit').length} with a reason), no value used twice, ` +
+            `and the emitted headers agree`
     )
     process.exit(0)
 }

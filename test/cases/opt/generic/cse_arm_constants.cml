@@ -2,7 +2,7 @@
  * Equal literals in the arms of different branches are not one node for
  * std::opt::cse once the arms are inlined. An inlined arm whose body is a bare
  * constant leaves the DATA node waiting on its BRCH; merging the 7 of one
- * branch with the 7 of the other made a node of the second branch wait on the
+ * branch with the 7 of the other made a node of the second branch on the
  * first BRCH, which the schedulers reject as a cycle.
  *
  * Conditions are float comparisons so that no other 7 exists outside the arms

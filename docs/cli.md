@@ -83,6 +83,23 @@ Both streams carry the same bytes on every platform: a line ends with a line fee
 
         camel: 1 error
 
+    A diagnostic the compiler knows how to repair prints the repair as well, the way rustc prints a suggestion: a `help:` line with the fix's title, and under it the source line the fix leaves behind, with `+` under the text it writes. A fix that only cuts text writes nothing to show, so the line as it stood is printed with `-` under what it cuts. The fix a tool applies from `data.fixes` in JSON is the same change, so `camel file.cml` shows both without any option:
+
+        error[SyntaxDiag::MissingComma]: Expected ',' or ')' before 'b'.
+          --> prog.cml:3:17
+           |
+         3 | func add(a: int b: int): int { return a + b }
+           |                 ^
+        help: The items of a list (parameters, arguments, elements) are separated by ','.
+        help: insert ','
+           |
+         3 | func add(a: int, b: int): int { return a + b }
+           |                +
+
+        camel: 1 error
+
+    A diagnostic that carries no fix has only the `help:` line in words, which is what every diagnostic printed before.
+
     Compile errors are followed by a line with their count (`camel: 1 error`, `camel: 3 errors`); a run-time fault is not.
 
   - `short`: one line per diagnostic, `(module)path:line:col: [Error]: message suggestion (name=..., code=0x...)`. This is the form scripts match; the test runner uses it.
@@ -240,7 +257,7 @@ Settings of a pass are parameters, no longer environment variables:
 | `std::opt`, `std::opt::inline` (and `::small` / `::arm` / `::hybrid`), `std::opt::specialize`, `std::opt::devirtualize` | `growth_budget: int = 4096` (nodes specialization and inlining may copy before the remaining calls are left as calls; 0 stops them; one budget for all rounds of `std::opt`) |
 | `std::fvm`, `std::jit` | `stats: string = ""` (append per-graph bytecode and execution counts of the run to this file) |
 | `std::jit` | `hot_threshold: int = 1` (calls from one call site before a graph is compiled; 0 compiles at the first call). A graph that runs a loop of regions is compiled at its first call under the eager thresholds (0 and 1, the default): what makes it expensive is the rounds, which a call count cannot see; an explicit threshold above 1 keeps the call-count rule (so `hot_threshold=1000000000` still compiles nothing) |
-| `std::tf`, `std::prl` | `linear: bool = false` (evaluate node by node), `fanout_all: bool = false` (fan every unordered higher-order call out), `diag: bool = false` (print the decision for every graph), `bytecode: bool = true` (hand serial graphs to the bytecode interpreter), `gc_stats: int = 0` (1: statistics at the end of the run; 2: also one line per collection) |
+| `std::tf`, `std::prl` | `linear: bool = false` (evaluate node by node), `fanout_all: bool = false` (fan every unordered higher-order call out), `diag: bool = false` (print the decision for every graph), `bytecode: bool = true` (hand serial graphs to the bytecode interpreter), `gc_stats: int = 0` (1: statistics at the end of the run; 2: also one line per collection), `gc_stress: bool = false` (this run's work is the collection stress: serve every collection it asks for one for one, instead of the gate's pacing) |
 | `std::profile` | `top: int = 24` (rows of the operator table; 0 writes every operator that ran), `hints: bool = true` (report the element-wise loops that run on the host, and why they did not go to a device), `json: string = ""` (also write the report as one JSON object to this file), `report: bool = true` (write the text report; false turns on only the diagnostics below), `gc_stats: int = 0` (the allocator's statistics at exit: 1 one line, 2 also one line per collection), `type_stats: bool = false` (the type storage's statistics at exit), `effect_trace: string = ""` (append one JSON line per executed effectful operator to this file; see "Effect trace") |
 | `onnx::export` | `out: string = ""` (the model file; see below) |
 | `std::opt::saturate` | `rounds: int = 6` (rounds of saturation of the standard rules library), `strict: bool = false` (keep the rules that hold bit for bit, as `safe_fp=true` does for `std::opt`) |
@@ -265,7 +282,7 @@ A pass written in Camel (`<module>::<function>`, `src/execute/camel_pass.cpp`) d
 - `std::opt`: integrated optimization entry point; repeats call rewriting (`devirtualize`, `specialize`, `inline`), `fold`, `cse`, `algebra`, and `dce` until stable, within shared growth and round limits
 - `std::opt::algebra`: the rules library's simplification, `rules::simplify`, so its laws are the rules in `stdlib/rules.cml` and a law is written once. Under `safe_fp=true` it runs `rules::simplify_strict` (design principles 7.4: strictly equivalent float algebra); `safe_fp=false` is the default, not permission for lower precision, approximate functions or arbitrary special-value assumptions. It is valid without `std::opt::fold` before it; `std::opt` runs fold first, which exposes the coefficient forms the corpus measurements use. `neutral_only=true` keeps the C++ reference mode (the integer neutral elements alone). Quote parameterized passes in PowerShell; parameters are validated before any pass runs.
 - `std::opt::fold` / `std::opt::cse` / `std::opt::dce`: standalone constant folding, common-subexpression elimination, and dead-code elimination
-- `std::opt::ctrl`: bounded removal of CTRL edges covered by mandatory data/control paths; `std::opt` runs it once after its other stages finish. Branch/loop boundaries and arm anchors are retained; unselected arms are never treated as mandatory dependencies
+- `std::opt::order`: the transitive reduction over ordering edges -- an order edge A -> C goes away when a path of order edges already orders the two ends (docs/design/effects/edges.cn.md 5.4); the statements of a `sync` block are one chain and carry no redundancy, so they are left alone. The control-edge kind is still in the graph, so until it is removed this pass keeps reducing control edges too: the CTRL edges covered by mandatory data/control paths, with branch/loop boundaries and arm anchors retained and unselected arms never treated as mandatory dependencies. `std::opt` runs it once after its other stages finish
 - `std::inline` (including `small` / `arm` / `hybrid`): alias of `std::opt::inline` and its strategies
 
 - `std::fvm`: high-performance bytecode VM scheduler
@@ -421,13 +438,11 @@ A warning (a `[Warn]` diagnostic) does not stop a program. The table lists the c
 | Name | Code | Where | Meaning |
 |---|---|---|---|
 | `SemanticDiag::EffectNotExecuted` | `0x03100004` | the call, assignment or branch | It has side effects but nothing depends on it and it is not in a sync block, so it never runs. Legal (evaluation is driven by dependencies); reported so that a forgotten `sync` is seen. One warning per dropped chain (`println(log(1))` reports the `println`). Never reported inside a sync block |
-| `SemanticDiag::IgnoredSideEffect` | `0x03100002` | the call or branch | It writes a variable (a `var` argument, or a captured variable) and is neither waited nor in a sync block: it is not ordered after earlier uses of the variable |
-| `SemanticDiag::VarParamInAsyncFunction` | `0x03100001` | the parameter | A `var` parameter in a function without the `sync` modifier |
-| `SemanticDiag::CapturedWriteInAsyncFunction` | `0x03100003` | the function | The function writes a captured variable and has no `sync` modifier |
+| `SemanticDiag::IgnoredSideEffect` | `0x03100002` | the call or branch | It writes a variable (a `var` argument, or a captured variable) and is not in a sync block: it is not ordered after earlier uses of the variable |
 | `RuntimeDiag::PassesNeverRun` | `0x0410000F` | no source position (a command-line matter) | Passes are written after a pass that consumes the graph; they will not run. Printed with the program's warnings (the last element of the stderr array in JSON mode) |
 | `RuntimeDiag::ConstantExpressionFaults` | `0x04100015` | the expression | `std::opt::fold` (also inside `std::opt`) met an expression whose operands are all constants and whose evaluation faults (`1 / 0`). It is not folded: the program behaves the same with and without the pass, and the fault is reported with its position if the run reaches the expression. Printed on stderr when the pass has run, once per expression, before the next pass |
 
-What counts as an effect for `EffectNotExecuted`: an operator that is neither pure nor state-only in the operator-traits registry (the same set the effect trace records), a call of a function declared `sync func` or with a `var` parameter, a call of a function whose own result depends on an effect, and a branch with such an arm. A call through a function value is only recognised by its type (`sync` modifier, `var` parameter).
+What counts as an effect for `EffectNotExecuted`: an operator that is neither pure nor state-only in the operator-traits registry (the same set the effect trace records), a call of a function with a `var` parameter, a call of a function whose own result depends on an effect, and a branch with such an arm. A call through a function value is only recognised by its type (`sync` modifier, `var` parameter).
 
 - **A program that compiles without an error** prints its warnings on **stderr**, once, after compilation and before the first pass runs, at the default log level (no `-v` needed). In the default `text` format a warning is written like an error, starting with `warning[SemanticDiag::IgnoredSideEffect]: ...`, with the source line and `help:`; in the `short` format, one line per warning: `(module)file:line:col: [Warn]: text suggestion (name=SemanticDiag::IgnoredSideEffect, code=0x03100002)` (a warning without a source position is written `():?:?: [Warn]: ...`). With `--output-format json`, one JSON array on stderr with the same objects as the error array below (`"severity":"Warn"`). Nothing is written when there is no warning (no empty array).
 - **stdout is the same in both modes as without warnings**: the program's output, and the diagnostics array only when there is an error. Tools that parse stdout are not affected.
@@ -449,6 +464,17 @@ Errors are printed on stdout, after any program output, as a JSON array of objec
 - Every graph a pass commits (and every graph the front end encodes) is validated structurally, in release builds as well: node, slot and edge references in range, inputs and outputs mirroring each other, `BRCH`/`JOIN` arm counts, a `GATE` with a value and a control input, a direct call passing as many arguments as its callee takes. A violation is a `RuntimeDiag::PassInternalError` naming the pass that committed the graph, before anything runs.
 - An exception that escapes a pass without being a diagnostic (graph validation when a rewrite is committed, a cycle met while a scheduler builds its execution order) is reported as `RuntimeDiag::PassInternalError` (`0x0400000C`) with stage `pass:<name>`, the exception text in the message, no source position, and exit code 1. It marks a defect of the compiler, not a refusal of the program. The stage names the pass even when it is a scheduling pass, so it does not tell whether part of the program had already run. An exception outside any pass is reported as `InternalDiag::UnknownInternalError` with stage `internal`.
 - `data.stage` tells where in the pipeline the diagnostic was raised: `parse`, `typecheck`, `compile` (see "Resource limits"), `pass:<name>` for a rewrite or translation pass (including an unknown pass name), `run` for a scheduling pass (`std::nvm`, `std::fvm`, `std::jit`, `std::tf`), or `internal`.
+- `data.fixes`, when it is there, is the change the diagnostic asks for, in the shape of an editor's code action: an array of fixes, each applied on its own, and inside each one an array of edits that are applied together. An edit replaces the text its `range` covers with `replacement`, counted like every other range here (0-based lines and columns, `end` exclusive). The empty range inserts, the empty `replacement` deletes, and the edits of one fix name disjoint ranges of the file the diagnostic is located in (`data.modulePath`): they are applied to the text as written, never to the text an earlier edit produced.
+
+  ```json
+  [
+  {"range":{"start":{"line":2,"character":16},"end":{"line":2,"character":17}},"severity":"Error","code":"0x02000007","source":"Camel","message":"Expected ',' or ')' before 'b'.","data":{"stage":"parse","name":"SyntaxDiag::MissingComma","moduleName":"m","modulePath":"m.cml","suggestion":"The items of a list (parameters, arguments, elements) are separated by ','.","fixes":[{"title":"insert ','","edits":[{"range":{"start":{"line":2,"character":15},"end":{"line":2,"character":15}},"replacement":","}]}]}}
+  ]
+  ```
+
+  (For `func add(a: int b: int)` written on line 2: the fix inserts at column 15, the space that is already between `int` and `b`, so the file gets `a: int, b: int` and not `a: int , b: int`.)
+
+  A fix is offered only where the compiler knows the text to write, so `fixes` is absent where there is nothing certain to write and `suggestion` is then the advice in words. A reader that gets `fixes` may apply them without asking; a reader that does not must not invent one. Whether a code offers fixes at all is a column of `diagnostics/registry.tsv` — `edit`, or `none: <cause>` naming why not — and `docs/diagnostics.md` prints it for every code; `node scripts/diagnostics-catalog.mjs --check` refuses a declaration that says neither. The cause is one of `runtime` (the report is raised while the program runs, so there is no text to rewrite), `choice` (the repair is a decision only the writer can make), `context` (the repair is known but is not one text: it needs a second place, another file, or a restructuring) and `internal`. A fix is not for tools alone: the `text` format prints it too (see "Diagnostics" above), so a reader who never sees the JSON is told the same change, and the `short` format is one line and unchanged. A new diagnostic declares one of the two in that column, so "every code carries a fix or the reason it has none" is checked rather than remembered.
 
 ### Effect trace (`std::profile effect_trace="..."`)
 

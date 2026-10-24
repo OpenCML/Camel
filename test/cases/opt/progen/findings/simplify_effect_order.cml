@@ -8,7 +8,7 @@
  */
 module simplify_effect_order
 
-sync func w14(a15: int, var c16: int, a17: int): int sync {
+func w14(a15: int, var c16: int, a17: int): int sync {
     return if (0 <= 0) then sync {
         println('L1 {} {}'->format<0, a15>);
         return 0;

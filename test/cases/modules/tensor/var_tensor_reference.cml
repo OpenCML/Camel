@@ -9,24 +9,24 @@ module var_tensor_reference
 
 import { Tensor, zeros, sum } from tensor
 
-sync func step(var w: Tensor, d: float) {
-    wait w = w + d
+func step(var w: Tensor, d: float) {
+    w = w + d
 }
 
 func twice(var w: Tensor): float sync {
-    wait step(w, 1.0)
-    wait step(w, 1.0)
+    step(w, 1.0)
+    step(w, 1.0)
     return sum(w)
 }
 
 func main(): int sync {
     var w = zeros([2, 2])
-    wait step(w, 0.5)
+    step(w, 0.5)
     println(sum(w))
     let s = twice(w)
     println('{} {}'->format<s, sum(w)>)
     let f = (): float => sync {
-        wait w = w * 2.0
+        w = w * 2.0
         return sum(w)
     }
     let r = f()

@@ -1,20 +1,20 @@
 /**
  * A branch whose condition is known after folding is replaced by the taken arm. The condition
- * may still wait on an effect: here it is the result of a call that prints. The replaced
+ * may still on an effect: here it is the result of a call that prints. The replaced
  * branch must keep running after that effect; it used to be dropped silently under
  * std::opt (both "side 2" lines were missing, exit 0).
  */
 module pruned_branch_keeps_condition_effect
 
-sync func side(n: int): bool sync {
+func side(n: int): bool sync {
     println('side {}'->format<n>)
     return n > 1
 }
 
 func main(): int sync {
-    let a = wait side(2)
+    let a = side(2)
     let b = if a then 1 else 0
-    let c = wait side(2)
+    let c = side(2)
     let d = if c then 1 else 0
     println('bd {} {}'->format<b, d>)
     return 0

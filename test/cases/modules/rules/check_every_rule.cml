@@ -1,0 +1,52 @@
+/**
+ * Every rule the standard library exports, handed to `check` (rewrite design 5.2; the ruling of
+ * 2026-10-24 on `verification-verdict-surface`, §4: a test that lists rules by name drifts, so the
+ * question "is every rule of the library checked at all?" has to be asked of the library as a whole
+ * and not of a hand-written list).
+ *
+ * `stdlib/rules.cml` exports 43 rules. The other two cases beside this one pin what `check` says
+ * about them and are where a verdict is *read* (`rules.library_passes_the_check`,
+ * `rules.accuracy_library_passes_the_check`); this case hands the same rules over in the
+ * arrangements those cases measured, so its own report is the one a check on coverage reads, and
+ * `verify/check_covers_every_rule.mjs` asserts against this case's source and this case's output
+ * that the library's exports and the check's input are the same set, name by name:
+ *
+ *   * the 39 rules of `check_library.cml` plus `tensor_sigmoid_chain`, which this case adds -- the
+ *     folding lane measured that it was the one exported rule no `check` reached (68 of the
+ *     library's 69 rules before the fold, and no test named it after), in one call of 300 samples;
+ *   * `float_log1p` and `float_expm1` in a call of their own: they ask for `refine_accuracy`, and
+ *     this case keeps the arrangement its verdicts were measured at rather than re-deriving it (the
+ *     seed of a rule now follows the rule's identity, its name and its instance's type tuple, not
+ *     its place in the array -- the ruling of 2026-10-24 on `accuracy-check-sampling`, 1, landed by
+ *     H247's slice S0 and measured in the ruling of 2026-10-24 on `verification-report-surface-s0`,
+ *     in `docs/handover/reviews/questions-2026-10-23.md`);
+ *   * `tensor_log_softmax_of_softmax` in a call of its own, over the 100 samples and the seed its
+ *     verdict was measured at (`worst error ratio 1`, which the new 7.2 definition accepts: the
+ *     right side is never worse and the bound holds -- the ruling of 2026-10-24 on
+ *     `verification-report-surface-s0`).
+ *
+ * A rule that no line of the report mentions is a rule this case did not reach, and the check in
+ * `verify/` fails on it.
+ */
+module check_every_rule
+import { check } from rewrite
+import {
+        int_add_self, int_add_zero, int_combine, int_combine_one, int_distribute, int_div_one, int_fold, int_fold_add, int_mul_one, int_mul_zero, int_neg_neg, int_sub_self, int_sub_zero,
+        float_add_minus_zero, float_add_self, float_combine, float_combine_mixed, float_combine_one, float_combine_one_mixed, float_div_one, float_double, float_expm1, float_fold, float_log1p, float_mul_one, float_neg_neg, float_sub_zero,
+        float32_double,
+        tensor_f32_add_minus_zero, tensor_f32_add_self, tensor_f32_combine, tensor_f32_combine_mixed, tensor_f32_combine_one, tensor_f32_combine_one_mixed, tensor_f32_div_one, tensor_f32_double, tensor_f32_fold, tensor_f32_mul_one, tensor_f32_neg_neg, tensor_f32_sub_zero, tensor_i64_distribute,
+        tensor_log_softmax_of_softmax, tensor_sigmoid_chain
+} from rules
+
+func main(): int sync {
+    print(check([
+        int_add_self, int_add_zero, int_combine, int_combine_one, int_distribute, int_div_one, int_fold, int_fold_add, int_mul_one, int_mul_zero, int_neg_neg, int_sub_self, int_sub_zero,
+        float_add_minus_zero, float_add_self, float_combine, float_combine_mixed, float_combine_one, float_combine_one_mixed, float_div_one, float_double, float_fold, float_mul_one, float_neg_neg, float_sub_zero,
+        float32_double,
+        tensor_f32_add_minus_zero, tensor_f32_add_self, tensor_f32_combine, tensor_f32_combine_mixed, tensor_f32_combine_one, tensor_f32_combine_one_mixed, tensor_f32_div_one, tensor_f32_double, tensor_f32_fold, tensor_f32_mul_one, tensor_f32_neg_neg, tensor_f32_sub_zero, tensor_i64_distribute,
+        tensor_sigmoid_chain
+    ], 200, 7))
+    print(check([float_log1p, float_expm1], 100, 11))
+    print(check([tensor_log_softmax_of_softmax], 100, 11))
+    return 0
+}

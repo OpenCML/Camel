@@ -55,7 +55,7 @@ func step_ce(m: LoraMlp, x: Tensor, target: Tensor, lr: float): (float, LoraMlp)
     return (vg.0, sgd(m, vg.1, lr))
 }
 
-sync func loop_ce(m: LoraMlp, i: int, steps: int, nb: int, lr: float): LoraMlp {
+func loop_ce(m: LoraMlp, i: int, steps: int, nb: int, lr: float): LoraMlp {
     return if i >= steps then m else sync {
         let bi = '{}'->format<i % nb>
         let dir = get_env('CAMEL_FT_BATCHES')

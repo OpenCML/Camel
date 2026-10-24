@@ -465,7 +465,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "ExportedVariable",
                 "The variable '{0}' cannot be exported.",
-                "A 'var' of the top level of a module is read and written only by the module's own functions: export the functions that read and write it ('export sync func bump(): int sync {{ wait cnt += 1; return cnt }}'). A 'let' can be exported.",
+                "A 'var' of the top level of a module is read and written only by the module's own functions: export the functions that read and write it ('export func bump(): int sync {{ cnt += 1; return cnt }}'). A 'let' can be exported.",
             },
         },
         {
@@ -573,14 +573,6 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
-            SemanticDiag::LoopSequenceNotIterable,
-            {
-                "LoopSequenceNotIterable",
-                "'for' takes the elements of an array, a string, a map or a tensor; '{0}' has type '{1}'.",
-                "A loop's 'for x in xs' visits the elements of xs in order (design principles 3.10): the elements of an array; the code points of a string, each a one-character string; the (key, value) pairs of a map, in key order (11.3); and the sub-tensors of a tensor along its first dimension. 'range(a, b)' is the array of the integers from a to b.",
-            },
-        },
-        {
             SemanticDiag::LoopBodyTypeMismatch,
             {
                 "LoopBodyTypeMismatch",
@@ -610,6 +602,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "LoopNameRepeated",
                 "The name '{0}' is declared twice in this loop head.",
                 "The names of a loop's state and the name 'for' binds to the element are declared together, for the condition and the body; each is given once.",
+            },
+        },
+        {
+            SemanticDiag::LoopSequenceNotIterable,
+            {
+                "LoopSequenceNotIterable",
+                "'for' takes the elements of an array, a string, a map or a tensor; '{0}' has type '{1}'.",
+                "A loop's 'for x in xs' visits the elements of xs in order (design principles 3.10): the elements of an array; the code points of a string, each a one-character string; the (key, value) pairs of a map, in key order (11.3); and the sub-tensors of a tensor along its first dimension. 'a..b' is the array of the integers from 'a' to 'b - 1', left closed and right open, and a 'for' over it takes them in order without building the array (4.2).",
             },
         },
         {
@@ -914,6 +914,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "StaticIndicesNotTuple",
                 "'indices' walks the positions of a tuple, but '{0}' has type '{1}'.",
                 "'indices ts' walks the positions of an ordinary tuple: it needs a value of tuple type (a tuple variable or a tuple literal). A struct has named fields; walk it with 'fields T'. A 'T?' or 'T!' and a mutable cell are leaves (design principles 13.5).",
+            },
+        },
+        {
+            SemanticDiag::StaticLoopSequenceNotKnown,
+            {
+                "StaticLoopSequenceNotKnown",
+                "The sequence of a 'static loop' must be known when the function is compiled: '{0}' is not.",
+                "A 'static loop' is unrolled where it stands, so how many rounds it has must be known then: a constant interval 'a..b' (the half-open [a, b) that '..' is everywhere else, so '0..5' is 0, 1, 2, 3, 4), 'indices ts' for the positions of a compile-time tuple, or 'fields T' for the fields of a type. A run-time array or a run-time value leaves the number of rounds open.",
             },
         },
         {
@@ -1421,6 +1429,46 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::CompOperandMismatch,
+            {
+                "CompOperandMismatch",
+                "'..' takes two functions or two integers; the left operand is '{0}' and the right one '{1}'.",
+                "'..' has two readings (design principles 4.2). Between two functions it is the composition `f..g`, the lambda `(x) => g(f(x))`: 'f' is unary and 'g' takes what 'f' returns, so a call of `f..g` is a call of that lambda and nothing more. Between two integers it is the interval `a..b`: the integers from 'a' to 'b - 1' as the array 'int[]', left closed and right open, as the slice 't[a:b]' is. Nothing else is composed.",
+            },
+        },
+        {
+            SemanticDiag::CompOperandNotUnary,
+            {
+                "CompOperandNotUnary",
+                "'..' composes a unary function on the left; '{0}' takes {1} parameters.",
+                "The composition `f..g` is the lambda `(x) => g(f(x))` (design principles 4.2): 'f' takes the one argument the composed function takes, and 'g' takes the result of 'f'. Write the lambda with the parameters you mean.",
+            },
+        },
+        {
+            SemanticDiag::CompOperandGenericWithoutType,
+            {
+                "CompOperandGenericWithoutType",
+                "'..' composes two functions, and its {0} operand, the generic function '{1}', has no instance here: write its type arguments ('{1}::<int>'), or give the whole expression an expected function type.",
+                "The name of a generic function stands for no one function until a position fixes its types (design principles 5.5). The composition `f..g` is the lambda `(x) => g(f(x))` (design principles 4.2), and the type the whole expression is expected to have is what gives that lambda its parameter type and instantiates what it calls: `let h: (x: int) => int = ident..ident` composes `ident::<int>`, as `(x) => ident(ident(x))` does under the same type. With no expected function type, write the instance each operand is: `ident::<int>..ident::<int>`. Only a name that is generic is refused here; an operand of a type `..` cannot take stays CompOperandMismatch.",
+            },
+        },
+        {
+            SemanticDiag::RangeTwoArgumentsRemoved,
+            {
+                "RangeTwoArgumentsRemoved",
+                "The two-parameter 'range(a, b)' is gone; write the interval 'a..b'.",
+                "The language has one spelling for the integers from 'a' to 'b - 1' (design principles 4.2; the author's ruling of 2026-10-24 on `h248-generator-and-composition`): the interval 'a..b', left closed and right open, as the slice 't[a:b]' is, and the array of them. 'range(0, 10)' becomes '0..10'. A 'for' over an interval is fused by the compiler, so 'for i in 0..n' builds no array. The two-parameter 'range' is the only spelling deleted: a module's own interval-like function (a tensor's, say) is that module's own, reached by its qualified name or at another arity, while an unqualified two-argument 'range(a, b)' is this built-in.",
+            },
+        },
+        {
+            SemanticDiag::RangeStepZero,
+            {
+                "RangeStepZero",
+                "The range 'range({0}, {1}, 0)' has a step of 0, so it is no sequence of integers.",
+                "The integers of `range(a, b, step)` are `a`, `a + step`, ... below `b`, so the step decides which integers the range holds: a step that does not move names no one sequence, whatever the bounds are (design principles 4.2; the author's ruling of 2026-10-24 on `h426-interval-step-form`). The step is a constant here, so the call can never be right and the refusal is at the call, where the step is written. Give a non-zero step, or write the interval `a..b` when the step is 1. A step that is not constant is a fault of the run instead (RuntimeDiag::InvalidArgument).",
+            },
+        },
+        {
             SemanticDiag::ReducedPrecisionUnsupported,
             {
                 "ReducedPrecisionUnsupported",
@@ -1469,6 +1517,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::StreamInContainer,
+            {
+                "StreamInContainer",
+                "'{0}' cannot be the element of {1}: a stream is consumed once, while the elements of a container are read more than once.",
+                "A stream is read one element at a time and is done when it ends. Write the stream where it is consumed once: a parameter or the result of a function, an item of a tuple, or the subject of an operator that reads it to its end. What needs the elements of a container to be readable again takes an array filled from the stream.",
+            },
+        },
+        {
             SemanticDiag::NodeOfNotAParameter,
             {
                 "NodeOfNotAParameter",
@@ -1477,27 +1533,11 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
-            SemanticDiag::VarParamInAsyncFunction,
-            {
-                "VarParamInAsyncFunction",
-                "Variable parameters are only allowed in sync functions.",
-                "Remove the variable parameter or make the function synchronous.",
-            },
-        },
-        {
             SemanticDiag::IgnoredSideEffect,
             {
                 "IgnoredSideEffect",
-                "{0} is neither waited nor in a sync block, and {1}.",
-                "Write 'wait' before the expression or put it in a sync block: only then is the write ordered after the earlier uses of the variable. Without either, the write runs only if the variable is read afterwards.",
-            },
-        },
-        {
-            SemanticDiag::CapturedWriteInAsyncFunction,
-            {
-                "CapturedWriteInAsyncFunction",
-                "{0} writes the captured variable{1} {2} but is not declared with the 'sync' modifier.",
-                "Write 'sync' before the function ('sync func f(...)', 'sync (...) => ...'): the modifier declares that the function has side effects, as it does for a function with a var parameter. It does not make the body a sync block.",
+                "{0} is not in a sync block, and {1}.",
+                "Put it in a sync block ('sync {{ ... }}', or a function body 'func f(): T sync {{ ... }}'): only then is the write ordered after the earlier uses of the variable. Without one, the write runs only if the variable is read afterwards.",
             },
         },
         {

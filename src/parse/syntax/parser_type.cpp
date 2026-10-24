@@ -4,7 +4,7 @@
 /*
  * The parser: type expressions.
  *
- *   typeExpr          T?  T!  (marks, any number)
+ *   typeExpr          T?  T!  T..  (marks, any number, read left to right)
  *   interType         &
  *   diffType          \
  *   keyUnionDiffType  +  -
@@ -46,9 +46,16 @@ bool ParserImpl::typeStartsAt(uint32_t n) const {
     }
 }
 
-/// typeExpr : interType ('?' | '!')*
-/// `T?` may be null, `T!` may have failed; the marks combine. A `?` is only the nullable mark:
-/// `T ? U` is no type at all, and what follows the mark is read as the next statement.
+/// typeExpr : interType ('?' | '!' | '..')*
+/// A mark is `?` (may be null), `!` (may have failed) or `..` (the type is a stream). The marks
+/// are read left to right and each one wraps what is written before it, with no special case
+/// (the author's ruling of 2026-10-24): `T?..` is `(T?)..`, the stream of a nullable `T`, and
+/// `T..?` is the possibly absent stream. `T..` and `T[..]` are therefore two types.
+///
+/// A dimension written after a stream mark applies to the stream: `T..[3]` is an array of three
+/// streams (the builder of the array reports that a stream is linear and cannot be an element —
+/// SemanticDiag::StreamInContainer). Written without a stream mark nothing changes: `T?[3]` is
+/// still a syntax error, and only the mark that was just read reopens the bracket.
 void ParserImpl::parseType() {
     Depth depth(*this);
     if (depth.tooDeep()) {
@@ -57,13 +64,43 @@ void ParserImpl::parseType() {
     }
     const size_t m = mark();
     parseInterType();
-    if ((cur_ != TK::Question && cur_ != TK::Bang) || lineBreak() || panic_) {
-        return;
+    bool any    = false;
+    bool stream = false;
+    while (!lineBreak() && !panic_) {
+        if (cur_ == TK::Question || cur_ == TK::Bang) {
+            bump();
+            any = true;
+            continue;
+        }
+        if (cur_ == TK::DotDot) {
+            bump();
+            any    = true;
+            stream = true;
+            continue;
+        }
+        if (stream && cur_ == TK::LBracket) {
+            // The mark read above is a type of its own: close it, and let the dimensions be
+            // read against it as the dimensions of an array type are read against one.
+            if (any) {
+                close(m, NK::TypeExpr);
+                any = false;
+            }
+            bool anyDim = false;
+            while (cur_ == TK::LBracket && !lineBreak() && !panic_) {
+                parseArrayDim();
+                anyDim = true;
+            }
+            if (anyDim) {
+                close(m, NK::ArrayType);
+            }
+            stream = false;
+            continue;
+        }
+        break;
     }
-    while ((cur_ == TK::Question || cur_ == TK::Bang) && !lineBreak()) {
-        bump();
+    if (any) {
+        close(m, NK::TypeExpr);
     }
-    close(m, NK::TypeExpr);
 }
 
 /// interType : diffType ('&' diffType)*
@@ -254,7 +291,7 @@ void ParserImpl::parsePrimaryType() {
         // The operand stops before an assignment: `let v: typeof a = b` declares `v`.
         const size_t m = mark();
         bump();
-        if (cur_ == TK::KwIf || cur_ == TK::KwMatch || cur_ == TK::KwTry || cur_ == TK::KwWait) {
+        if (cur_ == TK::KwIf || cur_ == TK::KwMatch || cur_ == TK::KwTry) {
             parseExpr();
         } else {
             parseLogicalOr();

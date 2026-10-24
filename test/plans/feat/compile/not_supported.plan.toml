@@ -64,22 +64,6 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 10000
 
 [[tests]]
-name = "not_supported.optional_comp"
-desc = "`?..` is rejected at the operator; it used to be a warning and compiled as `..`."
-kind = "negative"
-case = "../../../cases/compile/not_supported/optional_comp.cml"
-args = ["${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ConstructNotSupported"
-expect_diagnostic_code = "0x0300001F"
-expect_diagnostic_line = 11
-expect_diagnostic_column = 16
-expect_output_contains = ["'?..' is not supported: the operator is not implemented."]
-expect_output_not_contains = ["never printed", "UnknownInternalError", "Warning"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 10000
-
-[[tests]]
 name = "not_supported.is_operator"
 desc = "`is` is rejected at the operator; it used to be a warning and `x is T` compiled as `x`."
 kind = "negative"
@@ -205,27 +189,6 @@ expect_diagnostic_column = 13
 expect_output_contains = ["Type 'int[]' does not support index access."]
 expect_output_not_contains = ["never printed", "42949672963"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 8000
-
-[[tests]]
-name = "not_supported.wait_ignored"
-desc = "wait before a block, a name, a literal, a unary operator or a lambda is rejected where it stands; the mark used to be dropped, silently. wait before a call, an assignment and an operator expression is not reported."
-kind = "negative"
-case = "../../../cases/compile/not_supported/wait_ignored.cml"
-args = ["-E", "short", "${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ConstructNotSupported"
-expect_diagnostic_line = 24
-expect_diagnostic_column = 12
-expect_output_contains = ["'wait' is not supported: it is not implemented before a block", "'wait' is not supported: it is implemented before a call, an assignment or a binary operator expression only"]
-expect_output_not_contains = ["never printed"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-verify_script = """
-({ input, assert }) => {
-const at = [...input.stdout.matchAll(/wait_ignored[.]cml:([0-9]+):([0-9]+): .Error/g)].map(m => m[1] + ':' + m[2])
-assert(at.join(' ') === '24:12 30:10 35:10 41:10 46:10', `reported at: ${at.join(' ')}`)
-}
-"""
 timeout_ms = 8000
 
 [[tests]]

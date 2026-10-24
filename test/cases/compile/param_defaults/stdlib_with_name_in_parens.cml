@@ -1,0 +1,23 @@
+/**
+ * A `with` parameter is written in the angle brackets, where the declaration holds it:
+ * `j->get<key: 'a'>`. A name inside the parentheses names an ordinary parameter, and `get`'s
+ * ordinary parameter is the document itself (`j` in the declarations of `json`), so `key` names no
+ * ordinary parameter of `get`: ParamArgumentUnknown, at the argument -- the same report a function
+ * with a body gives for `scale(4, k: 3)` when `k` is one of its `with` parameters (design
+ * principles 4.4: the name is written in the list that holds the parameter).
+ *
+ * The call still reaches the rules: `json.get` declares eight of them, so the callee is a set of
+ * declarations and the name is looked up in them rather than refused for an unsettled signature.
+ */
+module param_stdlib_with_name_in_parens
+
+import { Json, decode, get } from json
+
+func report(j: Json): int sync {
+    println(get(j, key: 'a'))
+    return 0
+}
+
+func main(): int sync {
+    return decode('{"a": 7}') ?-> report !! 1
+}

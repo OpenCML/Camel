@@ -373,6 +373,10 @@ void Builder::enterGraphScope(const compile_graph_ptr_t &graph, const std::strin
 }
 
 void Builder::leaveScope() {
+    // The body of this graph is complete, so its captures and its calls are known: a ar of it
+    // that no closure captured, no call was handed and that is not its own parameter becomes SSA
+    // here (collapseNonEscapingVariableReads).
+    collapseNonEscapingVariableReads();
     nodeScope_      = nodeScope_->leave();
     graphScope_     = graphScope_->leave();
     decoratedScope_ = decoratedScope_->leave();
@@ -1027,7 +1031,6 @@ void Builder::buildFuncBody(
             rejectDiscardedValue(graph.get());
         }
         bodyStates_[graph.get()] = BodyState::Built;
-        unit_->builtFunctions.push_back({graph.get(), gct->origin(), name});
         unit_->builtBodies.push_back(graph);
         if (recorder_) {
             recorder_->functionBuilt(gct->origin(), name, graph->graphId(), funcType);

@@ -1,0 +1,9 @@
+// A text is neither a function nor an integer: `..` has no reading for it (design principles
+// 4.2), so the compiler refuses the construct and names what it does take.
+module h405_comp_not_a_function
+
+func main(): int sync {
+    let xs = 'a'..'b'
+    println(xs)
+    return 0
+}

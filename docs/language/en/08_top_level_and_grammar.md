@@ -41,10 +41,9 @@ blockExpr : stmtBlock | dataExpr            // branch arm, lambda body
 From low precedence to high (see [6.12](06_expressions.md#612-operator-precedence)):
 
 ```
-dataExpr   : waitExpr | ctrlExpr
+dataExpr   : ctrlExpr
 ctrlExpr   : if logicalOr then blockExpr (else blockExpr)?
            | match name '{' (case pattern ('|' pattern)* '=>' blockExpr)+ '}'
-waitExpr   : wait? assignExpr
 assignExpr : logicalOr (('=' | '+=' | '-=' | '*=' | '/=' | '%=' | '^=' | '@=' | '&=' | '|=') logicalOr)?
 logicalOr  : logicalAnd ('||' logicalAnd)*
 logicalAnd : or ('&&' or)*
@@ -100,7 +99,7 @@ decl               : moduleDecl | importDecl | exportDecl | namespaceDecl | usin
                      | tagDecl | resourceDecl | dataDecl | funcDecl | typeDecl | ruleDecl
 stmt               : dataDecl | funcDecl | typeDecl | dataExpr | usingNamespaceDecl | retStmt
                      | blockStmt | staticForExpr
-blockStmt          : 'wait'? stmtBlock | funcAnno+ stmtBlock
+blockStmt          : stmtBlock | funcAnno+ stmtBlock
 stmtList           : stmt (SEP? stmt)* SEP?
 stmtBlock          : 'sync'? '{' stmtList? '}'
 blockExpr          : stmtBlock | dataExpr
@@ -116,7 +115,7 @@ namespaceItem      : namespaceDecl | importDecl | exportDecl | usingNamespaceDec
                      | typeDecl | dataDecl | resourceDecl
 funcAnno           : '@' identRef (angledValues | parentIdents)?
 frontMatter        : (funcAnno | tagUse)*
-funcDecl           : frontMatter ('with' angledParams)? 'export'? modifiers?
+funcDecl           : frontMatter ('with' angledParams)? 'export'?
                      'func' (identRef | operatorName) typeParams? parentParams (':' typeExpr)?
                      resourceClause? whenClause? stmtBlock?
 tagDecl            : 'export'? 'tag' identDef angledParams? 'on' tagPositions ('read_by' tagReaders)?
@@ -150,8 +149,7 @@ keyParamPair       : ('var' | 'const')? identDef (':' typeExpr ('=' dataExpr)?)?
 pairedParams       : keyParamPair (',' keyParamPair)*
 parentParams       : '(' pairedParams? ','? ')'
 angledParams       : '<' pairedParams? ','? '>'
-dataExpr           : waitExpr | ctrlExpr | loopExpr
-waitExpr           : 'wait'? assignExpr
+dataExpr           : ctrlExpr | loopExpr
 ctrlExpr           : 'if' logicalOrExpr 'then' blockExpr ('else' blockExpr)?
                      | 'match' identRef '{' matchCase+ '}'
                      | 'match' 'type' typeExpr '{' typeCase* '}'
@@ -172,7 +170,7 @@ unaryExpr          : linkExpr (('as' | 'is') typeExpr)?
 linkExpr           : negExpr (('->' | '?->') compExpr)*
 negExpr            : ('-' | '!' | '~') negPower | compExpr
 negPower           : ('-' | '!' | '~') negPower | compExpr ('^' negPower)?
-compExpr           : annoExpr (('..' | '?..') annoExpr)*
+compExpr           : annoExpr ('..' annoExpr)*
 annoExpr           : accessExpr (indices | parentArgues | structData | angledValues | typeArguments | '!'
 memberAccess       : '.' (IDENTIFIER | INTEGER | REAL | '[' dataExpr ']')
 accessExpr         : primaryData ('.' (IDENTIFIER | INTEGER | REAL | '[' dataExpr ']'))*
@@ -205,9 +203,11 @@ typeCase           : 'case' typeCasePattern ('|' typeCasePattern)* '=>' blockExp
 staticForExpr      : 'static' staticForHeader '=>' blockExpr
 staticForHeader    : 'for' '(' (identDef | '_') (',' (identDef | '_'))? ')' 'in'
                      ('fields' typeExpr | 'indices' dataExpr)
-staticLoopExpr     : 'static' 'loop' loopState (',' loopState)* staticForHeader 'do' blockExpr
+staticLoopExpr     : 'static' 'loop' loopState (',' loopState)* staticLoopHeader 'do' blockExpr
+staticLoopHeader   : 'for' (identDef | '_') (',' (identDef | '_'))? 'in'
+                     ('fields' typeExpr | 'indices' dataExpr | dataExpr)
 typeCasePattern    : 'struct' | 'tuple' | 'func' | '#' 'leaf' | '_' | typeExpr
-matchCase          : 'case' pattern ('|' pattern)* '=>' blockExpr
+matchCase          : 'case' pattern ('|' pattern)* whenClause? '=>' blockExpr
 pattern            : identRef (identDef | enumTuplePattern | enumStructPattern)? | literal
                      | '(' (dataList | identList)? ','? ')' | '{' (pairedValues | identList)? ','? '}' | '_'
 enumTuplePattern   : '(' (pattern (',' pattern)*)? ','? ')'
@@ -217,7 +217,7 @@ loopState          : identDef '=' logicalOrExpr
 loopFor            : 'for' identDef 'in' logicalOrExpr
 loopWhile          : 'while' logicalOrExpr
 catchClause        : 'catch' identDef ':' typeExpr stmtBlock
-typeExpr           : interType ('?' | '!')*
+typeExpr           : interType ('?' | '!' | '..')*
 interType          : diffType ('&' diffType)*
 diffType           : keyUnionDiffType ('\\' keyUnionDiffType)*
 keyUnionDiffType   : keyInterType (('+' | '-') keyInterType)*
@@ -240,7 +240,7 @@ enumType           : 'enum' '{' (enumVariant (',' enumVariant)*)? ','? '}'
 enumVariant        : identDef ('(' typeList? ','? ')' | '{' (enumField (',' enumField)*)? ','? '}')?
 enumField          : identDef ':' typeExpr
 ruleDecl           : frontMatter? 'export'? IDENTIFIER identDef typeParams? ruleContext? parentParams
-                     '{' ruleBody '}' (IDENTIFIER dataExpr)?
+                     whenClause? '{' ruleBody '}'
 ruleContext        : '<' identDef (',' identDef)* ','? '>'
 ruleBody           : dataExpr ('=>' | '<=>') dataExpr
 analysisDecl       : frontMatter? 'export'? IDENTIFIER identDef parentParams? ':' typeExpr
@@ -289,7 +289,6 @@ The following constructs are accepted by the grammar (or their keywords are rese
 | Non-null assertion `x!` | `ConstructNotSupported` | `x ?? default`, `match` |
 | `f ?.. g` | `ConstructNotSupported` | None |
 | `f..g` | The result of the composition cannot be called (`ArgumentsMismatch`) | `(x: T) => g(f(x))` |
-| `wait { ... }`, and `wait` before a name, a literal or a lambda | `ConstructNotSupported` | `sync { ... }` |
 | `try { } catch e: T { } finally { }` | `SemanticDiag::TryCatchNotInLanguage` (not part of the language) | `T!` with `!!`, `?->`, `case error e` |
 | Tuple patterns, struct patterns; identifier patterns on ordinary types | `ConstructNotSupported` | `if` chain; take the members first |
 | Struct destructuring `let { x, y } = p`, array destructuring `let [a, b] = xs` | `SemanticDiag::FeatureNotSupported` | `p.x`, `xs[0]` (tuple destructuring is available) |

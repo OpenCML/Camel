@@ -28,6 +28,17 @@ How to read an entry:
   argument outside what the operator defines). An *error* is a value: the function returns
   `T!` and the program handles it with `!!`, `?->` or `match`. A result that may not exist is
   `T?`, handled with `??`. An entry without a failure line does not fail.
+- **Named arguments**: a call may give a parameter by name (`f(x: 1)`, `len(x: xs)`) when
+  the name gives that position the same name in every form the callee has, whether the callee is
+  a Camel declaration or a group of built-in rules; the type of the argument then decides which
+  form runs (`len`'s one parameter is `x` for a string, an array, a map and a set, so one name
+  reaches all four). The name is written in the list that holds the parameter: an ordinary one
+  in the parentheses (`len(x: xs)`), a `with` one in the angle brackets (`j->get<key: 'port'>`).
+  A form that gives a position no name, or leaves its count to the arguments (a rest list --
+  `py_call`'s two forms differ in arity as well), is one no named argument reaches: the call
+  reports that the signature is not known where the call is written. `contains` refuses a named
+  argument for a reason of its own: its position 0 means an element in two forms and the
+  substring in the third, so the name would mean another thing in one of them.
 - Write one call that has with-arguments per statement when several appear in one argument
   list: `f<a>(x), g<b>(y)` is read as comparisons.
 
@@ -474,13 +485,21 @@ The number of bytes of a string, or of the first dimension of an array of any ra
 #### `range`
 
 ```camel
-range: (start: int, end: int) => int[]
+range: (start: int, end: int, step?: int) => int[]
 ```
 
-The integers from start up to, not including, end; empty when end is not above start.
+The integers of a step: `start`, `start + step`, ... up to, not including, `end`; with no step
+the step is 1, `range(a, b)` is the same sequence as the interval `a..b` and becomes it on the
+graph (design principles 4.2). `step` must move: a step of 0 is a fault, and a constant call
+with a step of 0 is refused where it is written. The result is empty when the step does not
+carry `start` towards `end`. A `for` over an interval is fused by the compiler and builds no
+array; this call builds one.
 
 - Pure.
-- Example: `range(0, 3)` gives `[0, 1, 2]`
+- Failure: fault `InvalidArgument` when the step is 0.
+- Example (a fragment, not compiled): `range(0, 10, 3)` gives `[0, 3, 6, 9]`
+- Example (a fragment, not compiled): `range(10, 0, -3)` gives `[10, 7, 4, 1]`
+- Why it is not compiled: the interval is written `a..b`; the stepped form is `range(a, b, step)`
 
 #### `head`
 
@@ -693,11 +712,13 @@ isolated.
 #### `len`
 
 ```camel
-len: (c: Map<K, V>) => int
-len: (c: Set<T>) => int
+len: (x: Map<K, V>) => int
+len: (x: Set<T>) => int
 ```
 
-The number of entries of a map or of elements of a set.
+The number of entries of a map or of elements of a set. The collection is `x`, the name the
+string and array declarations above give their one parameter: the position means the value
+whose length is asked for, whatever its type.
 
 - Pure.
 - Example: `len([('a', 1), ('b', 2)] as Map<string, int>)` gives `2`
@@ -795,10 +816,12 @@ The entries of a map as (key, value) tuples, in ascending order of the keys.
 #### `items`
 
 ```camel
-items: (s: Set<T>) => T[]
+items: (m: Set<T>) => T[]
 ```
 
-The elements of a set as an array, in ascending order.
+The elements of a set as an array, in ascending order. The collection is `m`, the name the
+map declaration above gives its one parameter: the position means the collection whose items
+are listed.
 
 - Pure.
 - Example: `items([3, 1, 2] as Set<int>)` gives `[1, 2, 3]`
@@ -1284,8 +1307,9 @@ new: (values: Tensor | number[]) => Tensor
 ```
 
 A tensor made of a nested number array (or of a tensor, copied into contiguous row-major
-storage); the element type follows the values: `f32` for floats, `int64` for integers, `bool`
-for booleans.
+storage); the element type follows the values: `float` for a float (design principles 5.1: a
+float literal's own type is `float`, which is `f64`), `int64` for an integer and `bool` for a
+boolean.
 
 - Pure.
 - Example: `new([[1.0, 2.0], [3.0, 4.0]])`
@@ -1355,9 +1379,14 @@ range: (start: int, stop?: int, step?: int) => Tensor<int64>
 The integer sequence start, start + step, ... below stop, as a rank-1 `int64` tensor: one
 argument is stop with start 0, step is 1 by default, and a step of 0 is a fault.
 
+The interval of the language's own integers is written `a..b` (design principles 4.2), so a
+two-argument `range(a, b)` written without a module qualifier is the language's built-in
+interval and is refused: the two-parameter `range` is gone. This function is reached for one
+argument, for three, or by the qualified name `tensor::range(...)`.
+
 - Pure.
 - Failure: fault `RuntimeError` when stop and start leave a step of 0.
-- Example: `range(0, 5)` gives `[0, 1, 2, 3, 4]`
+- Example: `range(0, 10, 2)` gives `[0, 2, 4, 6, 8]`
 
 ### Random
 
@@ -1710,6 +1739,7 @@ an `int64` tensor of shape [labels, classes].
 #### `shape`
 
 ```camel
+shape: (t: T[..]) => int[] when is_numeric::<T>()
 shape: (t: Tensor) => int[]
 ```
 
@@ -1721,6 +1751,7 @@ The extents of a tensor, in order.
 #### `numel`
 
 ```camel
+numel: (t: T[..]) => int when is_numeric::<T>()
 numel: (t: Tensor) => int
 ```
 
@@ -1732,6 +1763,8 @@ The number of elements in a tensor: the product of its extents.
 #### `dim`
 
 ```camel
+dim: (t: T[..], axis: int) => int when is_numeric::<T>()
+dim: (t: T[..], axis: i32) => int when is_numeric::<T>()
 dim: (t: Tensor, axis: int) => int
 dim: (t: Tensor, axis: i32) => int
 ```
@@ -2001,6 +2034,7 @@ passes the stored values through without rounding, so it needs no numeric permis
 #### `to_bytes`
 
 ```camel
+to_bytes: (t: T[..]) => Bytes when is_numeric::<T>()
 to_bytes: (t: Tensor) => Bytes
 ```
 
@@ -2026,6 +2060,7 @@ the program runs (check them with `as`, or read them with `shape`).
 #### `save_npy`
 
 ```camel
+save_npy: (t: T[..], path: string) => void when is_numeric::<T>()
 save_npy: (t: Tensor, path: string) => void
 ```
 
@@ -2291,61 +2326,72 @@ primitive behind `sort_by`.
 #### `sort`
 
 ```camel
-sort: (xs: T[]) => T[]
+sort: (xs: i32[]) => i32[]
+sort: (xs: int[]) => int[]
+sort: (xs: f32[]) => f32[]
+sort: (xs: float[]) => float[]
 ```
 
 A sorted copy of xs (quicksort).
 
 - A native operator of this module: an opaque node, pure.
-- Failure: fault `OperandTypeUnsupported` when the element type is not i32, i64, f32 or f64.
 - Example: `sort([3, 1, 2])` gives `[1, 2, 3]`
 
 #### `insert_sort`
 
 ```camel
-insert_sort: (xs: T[]) => T[]
+insert_sort: (xs: i32[]) => i32[]
+insert_sort: (xs: int[]) => int[]
+insert_sort: (xs: f32[]) => f32[]
+insert_sort: (xs: float[]) => float[]
 ```
 
 A sorted copy of xs, by insertion sort.
 
 - A native operator of this module: an opaque node, pure.
-- Failure: fault `OperandTypeUnsupported` when the element type is not i32, i64, f32 or f64.
 - Example: `insert_sort([3, 1, 2])` gives `[1, 2, 3]`
 
 #### `quick_sort`
 
 ```camel
-quick_sort: (xs: T[]) => T[]
+quick_sort: (xs: i32[]) => i32[]
+quick_sort: (xs: int[]) => int[]
+quick_sort: (xs: f32[]) => f32[]
+quick_sort: (xs: float[]) => float[]
 ```
 
 A sorted copy of xs, by quicksort.
 
 - A native operator of this module: an opaque node, pure.
-- Failure: fault `OperandTypeUnsupported` when the element type is not i32, i64, f32 or f64.
 - Example: `quick_sort([3, 1, 2])` gives `[1, 2, 3]`
 
 #### `merge_sort`
 
 ```camel
-merge_sort: (xs: T[]) => T[]
+merge_sort: (xs: i32[]) => i32[]
+merge_sort: (xs: int[]) => int[]
+merge_sort: (xs: f32[]) => f32[]
+merge_sort: (xs: float[]) => float[]
 ```
 
 A sorted copy of xs, by merge sort.
 
 - A native operator of this module: an opaque node, pure.
-- Failure: fault `OperandTypeUnsupported` when the element type is not i32, i64, f32 or f64.
 - Example: `merge_sort([3, 1, 2])` gives `[1, 2, 3]`
 
 #### `merge_sorted_arrays`
 
 ```camel
-merge_sorted_arrays: (left: T[], right: T[]) => T[]
+merge_sorted_arrays: (left: i32[], right: i32[]) => i32[]
+merge_sorted_arrays: (left: int[], right: int[]) => int[]
+merge_sorted_arrays: (left: f32[], right: f32[]) => f32[]
+merge_sorted_arrays: (left: float[], right: float[]) => float[]
 ```
 
-The sorted array made of the elements of two sorted arrays of numbers.
+The sorted array made of the elements of two sorted arrays of numbers. The two must hold the
+same element type: `T` is one of the four the sorts order, not one per argument.
 
 - A native operator of this module: an opaque node, pure.
-- Failure: fault `OperandTypeUnsupported` when the elements are not i32, i64, f32 or f64.
 - Example: `merge_sorted_arrays([1, 4], [2, 3])` gives `[1, 2, 3, 4]`
 
 ### Rearranging
@@ -3917,14 +3963,18 @@ the nullable layer, and the error of a document that had failed is passed on unc
 #### `get`
 
 ```camel
-get: <index: int> (j: Json) => Json?
-get: <index: int> (j: Json?) => Json?
-get: <index: int> (j: Json!) => Json!?
-get: <index: int> (j: Json!?) => Json!?
+get: <key: int> (j: Json) => Json?
+get: <key: int> (j: Json?) => Json?
+get: <key: int> (j: Json!) => Json!?
+get: <key: int> (j: Json!?) => Json!?
 ```
 
 The element index of an array; null when j is not an array, the index is out of range, or j
-is null itself. A `Json!` gives a `Json!?`, as get<key> does.
+is null itself. The with-parameter is `key`, the name the member-key declarations above use:
+the position means which member of the Json to take, and the argument's type says whether it
+is written as a string or as an integer, so `get<key: 'a'>` and `get<key: 0>` name the same
+position of every declaration of `get`. A `Json!` gives a `Json!?`, as the member-key form
+does.
 
 - Pure.
 - Example: `j->get<1>->as_int ?? 0` gives `6, for j of '[5, 6]'`
@@ -4697,14 +4747,167 @@ Extracts the program `p` in the cost model named `cost` (for example `"size"`).
 #### `check`
 
 ```camel
-check: (rules: Rule[], samples: int, seed: int) => string
+check: (rules: Rule[], samples: int = 100, seed: int = 0, program: Program? = null) => CheckReport
 ```
 
-Checks `rules` on `samples` random programs drawn with `seed`, and reports the first rule
-that fails, or that all of them hold.
+Checks `rules` on `samples` random instances drawn with `seed`, and answers the verdict table
+(H247, slice S0). Each row of the table carries the rule, the instance (a generic law's type
+tuple), the verdict, what the verdict is about and the evidence or the reason for it; the
+verdicts are `proved`, `refuted` and `sampled`, and every line of the report wears one of them
+as its first word (the ruling of 2026-10-24 on `verification-verdict-surface`, 2). The sample
+stream of a rule follows the rule's identity -- its name and its instance's type tuple -- and
+not its place in `rules`, so a rule draws the same samples in any call (the ruling of 2026-10-24
+on `accuracy-check-sampling`, 1). A build without a solver can answer `sampled` and `refuted`
+and never `proved`: `proved` is a licence's proposition being established, which is not what
+comparing samples does.
 
-- With effects: runs the rules' functions and draws random programs.
+`samples` and `seed` have defaults, and `program` names the program whose own types a generic
+law is also checked at: the candidate set is the types every operator group registered, and
+then the types of the values the program has, each once, in the order its graphs write them
+(the ruling of 2026-10-24 on `generic-rule-check-surface-and-multi-parameter-instances`, 1).
+Left out, the candidate set is the registered types alone, so a call that gives no program
+reads exactly what it read before the parameter existed.
+
+- With effects: runs the rules' functions and draws random values.
 - Example: `check(rules, 1000, 7)` gives `the report`
+
+#### `check_text`
+
+```camel
+check_text: (r: CheckReport) => string
+```
+
+The report's fixed rendering, as a string: the same text `print` writes, for a caller that
+wants it as a value.
+
+- Pure.
+- Example: `check_text(r)` gives `'sampled add_zero: proposition equality, evidence samples 100, ...'`
+
+#### `check_row_count`
+
+```camel
+check_row_count: (r: CheckReport) => int
+```
+
+How many rows the table has: one per rule, or one per instance of a generic law.
+
+- Pure.
+- Example: `check_row_count(r)` gives `2`
+
+#### `check_rule`
+
+```camel
+check_rule: (r: CheckReport, row: int) => string!
+```
+
+The rule of one row: the law's name, without the type tuple an instance adds.
+
+- Pure.
+- Failure: error value `IndexError` when the report has no such row.
+- Example: `check_rule(r, 0)` gives `'add_zero'`
+
+#### `check_instance`
+
+```camel
+check_instance: (r: CheckReport, row: int) => string!
+```
+
+The type tuple of one row's instance, as written (`int`, `int, int`). Empty for a rule that is
+not a generic law.
+
+- Pure.
+- Failure: error value `IndexError` when the report has no such row.
+- Example: `check_instance(r, 0)` gives `'i32'`
+
+#### `check_verdict`
+
+```camel
+check_verdict: (r: CheckReport, row: int) => string!
+```
+
+One row's verdict: `proved`, `refuted` or `sampled`. The words are closed: a rule nothing could
+be examined on is `sampled` with its reason, never a fourth word.
+
+- Pure.
+- Failure: error value `IndexError` when the report has no such row.
+- Example: `check_verdict(r, 0)` gives `'sampled'`
+
+#### `check_proposition`
+
+```camel
+check_proposition: (r: CheckReport, row: int) => string!
+```
+
+What one row's verdict is about (the ruling of 2026-10-24 on
+`verification-licence-to-precondition`): `equality` for a rule that needs no permission,
+`real equality + IEEE on special values` for the rules that ask for `reassociate` or `contract`,
+and `error bound` for the ones that ask for `refine_accuracy` or `change_precision`.
+
+- Pure.
+- Failure: error value `IndexError` when the report has no such row.
+- Example: `check_proposition(r, 0)` gives `'equality'`
+
+#### `check_evidence`
+
+```camel
+check_evidence: (r: CheckReport, row: int) => string!
+```
+
+What one row's verdict rests on: `solver` when a solver established it, `samples <n>` when `n`
+samples were drawn, `counterexample` when a value is the witness, and `none` when nothing could
+be examined.
+
+- Pure.
+- Failure: error value `IndexError` when the report has no such row.
+- Example: `check_evidence(r, 0)` gives `'samples 100'`
+
+#### `check_reason`
+
+```camel
+check_reason: (r: CheckReport, row: int) => string!
+```
+
+Why a row says what it says when the answer is not a counterexample: the reason nothing was
+examined (`no numeric bound`), or the reason a rule the engine never fired on its own left side
+is `refuted`. Written in its own column and never left implicit, so a `sampled` that sampled is
+never read as one that did not.
+
+- Pure.
+- Failure: error value `IndexError` when the report has no such row.
+- Example: `check_reason(r, 0)` gives `''`
+
+#### `check_coverage`
+
+```camel
+check_coverage: (r: CheckReport, row: int) => string!
+```
+
+What the translation layer made of one row's rule (H247, slice S1): the proposition it read out
+of the rule's two sides -- `integer scalar int: (x + 0) = x`, with `, no premise yet` when the
+declaration carries a condition -- or `beyond translation coverage` followed by the reason it
+refused. The layer never guesses: a rule it cannot translate says which width, operator or node
+kind stopped it, and that rule is `sampled`, never `proved`. A later slice adds the floating
+widths and the conditions as premises; `check_coverage_table` is the boundary as a value.
+
+- Pure.
+- Failure: error value `IndexError` when the report has no such row.
+- Example: `check_coverage(r, 0)` gives `'integer scalar int: (x + 0) = x'`
+
+#### `check_coverage_table`
+
+```camel
+check_coverage_table: () => string
+```
+
+The declared coverage of the translation layer: the widths it translates (`int`, `i32`), the
+widths the design lists beside them and it does not translate yet (`float`, `f32`, `bf16`,
+`f16`), the operators it translates, what happens to integer division and remainder, what is
+beyond translation coverage, and that a rule's condition is not a premise yet (rewrite design
+8.1). The boundary is a value a reader can read and a test can pin, not a paragraph in a design
+document that drifts from the code.
+
+- Pure.
+- Example: `check_coverage_table()` gives `'the coverage of the integer scalar translation\n...'`
 
 #### `run`
 
@@ -4835,9 +5038,9 @@ The device holds a foreign resource (`tiles:device`) and the driver is ambient s
 upload: (value: Tensor<f32>) => Device<Tensor<f32>>
 ```
 
-Uploads every leaf of the value — a float or an f32 tensor, alone or inside a tuple or a
-struct — and returns the same tree with each leaf wrapped in `Device<...>`. A leaf of any other
-type is refused when the call is compiled.
+Uploads every leaf of the value — a tensor, or a scalar of the element type it is written with,
+alone or inside a tuple or a struct — and returns the same tree with each leaf wrapped in
+`Device<...>`. A leaf of any other type is refused when the call is compiled.
 
 - With effects: transfers to the device.
 - Example: `upload(host)` gives `a Device<Tensor<f32>>`
@@ -4857,7 +5060,7 @@ leaf that is not a device value is refused when the call is compiled.
 #### `run_preferred_resident`
 
 ```camel
-run_preferred_resident: <fn: (a: float, b: float) => float> (inputs: (float, float)) => Device<float>
+run_preferred_resident: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => Device<f32>
 ```
 
 Runs the function through the device path the pipeline prepared for it — the device when a
@@ -4866,54 +5069,54 @@ This is the operator `tiles::compile` inserts for an outlined region; a `#gpu` s
 the device explicitly, and an operator the device cannot run is a compile error there.
 
 - With effects: transfers to the device and runs device code.
-- Example: `run_preferred_resident<(a: float, b: float): float => a + b>((2.0, 3.0))` gives `a Device<float>`
+- Example: `run_preferred_resident<(a: f32, b: f32): f32 => a + b>((f32(2.0), f32(3.0)))` gives `a Device<f32>`
 
 #### `source`
 
 ```camel
-source: <fn: (a: float, b: float) => float> (inputs: (float, float)) => string
+source: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => string
 ```
 
 The CUDA source the function compiles to, without running it.
 
 - With effects: compiles device code.
-- Example: `println(source<(a: float, b: float): float => a + b>((2.0, 3.0)))`
+- Example: `println(source<(a: f32, b: f32): f32 => a + b>((f32(2.0), f32(3.0))))`
 
 #### `inspect`
 
 ```camel
-inspect: <fn: (a: float, b: float) => float> (inputs: (float, float)) => string
+inspect: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => string
 ```
 
 A report on the function's device plan, without running it: the kernel, its launch shape and
 the values it would keep on the device.
 
 - With effects: compiles device code.
-- Example: `println(inspect<(a: float, b: float): float => a + b>((2.0, 3.0)))`
+- Example: `println(inspect<(a: f32, b: f32): f32 => a + b>((f32(2.0), f32(3.0))))`
 
 #### `benchmark`
 
 ```camel
-benchmark: <fn: (a: float, b: float) => float> (inputs: (float, float)) => string
+benchmark: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => string
 ```
 
 Times the function on the device, and on the host for comparison, and returns the report as
 JSON text.
 
 - With effects: transfers both ways and runs device code.
-- Example: `println(benchmark<(a: float, b: float): float => a + b>((2.0, 3.0)))`
+- Example: `println(benchmark<(a: f32, b: f32): f32 => a + b>((f32(2.0), f32(3.0))))`
 
 #### `regions`
 
 ```camel
-regions: <fn: (a: float, b: float) => float> () => string
+regions: <fn: (a: f32, b: f32) => f32> () => string
 ```
 
 The regions the compiler would take for the whole program, as text: which nodes would run on
 the device and why the others would not.
 
 - With effects: compiles device code.
-- Example: `println(regions<(a: float, b: float): float => a + b>())`
+- Example: `println(regions<(a: f32, b: f32): f32 => a + b>())`
 
 #### `available`
 

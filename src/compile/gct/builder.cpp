@@ -13,6 +13,7 @@
 #include "camel/core/tags.h"
 #include "camel/core/type/bytes.h"
 #include "camel/core/type/collection.h"
+#include "camel/core/type/composite/stream.h"
 #include "camel/core/type/enum.h"
 #include "camel/core/type/other.h"
 #include "camel/core/type/text.h"
@@ -2119,17 +2120,6 @@ node_ptr_t Builder::visitStmtBlock(const AST::node_ptr_t &ast, bool decorators) 
     // Extract the statement block load and create an ExecLoad node
     // The ExecLoad node represents the execution of the statement block
     const auto &stmtBlock = ast->loadAs<AST::StmtBlockLoad>();
-    if (stmtBlock->waited()) {
-        // `wait { ... }`: the grammar takes it and the mark was dropped. `wait` is defined
-        // for one expression (design principles log 2.6); what it means for a block is not.
-        diags_->of(SemanticDiag::ConstructNotSupported)
-            .at(ast->load()->tokenRange())
-            .commit(
-                "wait",
-                "it is not implemented before a block and would be ignored; write 'sync { ... }' "
-                "to run the statements of a block in order");
-        throw BuildAbortException();
-    }
     // Numeric permissions are permission tags, resolved by the graph builder where they are
     // written (design principles 7.2, 7.5): the statement block carries none of its own.
     node_ptr_t execNode = makeExec(stmtBlock->synced());
@@ -2287,20 +2277,6 @@ node_ptr_t Builder::visitData(const AST::node_ptr_t &ast) {
         throw BuildAbortException();
     default:
         throw std::runtime_error("Unknown data type");
-    }
-    if (data->waited() && data->dataType() != AST::DataType::BinaryExpr &&
-        data->dataType() != AST::DataType::ReservedExpr) {
-        // `wait` orders the one expression after it (design principles log 2.6). Only an operator
-        // expression, an assignment, a call, an access or a binding is lowered with the mark;
-        // on anything else (a name, a literal, a unary operator, a lambda) the mark was
-        // dropped without a word. What it should order there has not been decided.
-        diags_->of(SemanticDiag::ConstructNotSupported)
-            .at(ast->load()->tokenRange())
-            .commit(
-                "wait",
-                "it is implemented before a call, an assignment or a binary operator "
-                "expression only, and would be ignored before this expression");
-        throw BuildAbortException();
     }
 
     LEAVE("Data");
@@ -2943,12 +2919,20 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
 
     case AST::ReservedDataOp::Comp: {
         const auto &rhsASTNode = ast->atAs<AST::DataLoad>(1);
-        // `cmp` is the compiler's own macro operator (oper::MacroCmp): it is referred to by the
-        // id the table fixed at start-up, not by the name of the built-in module's entity.
-        const oper_group_ptr_t cmpGroup =
-            context_->importModule("")->nativeOperatorGroup(camel::core::oper::MacroCmp);
-        ASSERT(cmpGroup != nullptr, "The built-in __cmp__ is missing.");
-        node_ptr_t opNode  = tree_->makeDRef(camel::core::oper::MacroCmp, cmpGroup->name());
+        // `a..b` has two readings, and the types of its two operands tell them apart (design
+        // principles 4.2; the author's ruling of 2026-10-24 on `h248-generator-and-composition`):
+        // between two functions it is the composition `f..g`, the lambda `(x) => g(f(x))`, and
+        // between two integers it is the interval `[a, b)`. GCT has no types, so the construct
+        // is handed on as one call of the compiler's own name for it, which the GIR builder
+        // resolves (Builder::buildComposition).
+        //
+        // It used to be handed to the built-in macro operator `oper::MacroCmp` (`:macro/cmp`,
+        // src/builtin/operators/macro.cpp), whose resolver took two functions and answered with
+        // the exit type of the right one. That path could not build a composition at all — a
+        // value of a function type is a graph, and no built-in executor has one — and it had no
+        // reading for two integers. The operator and its executor stay registered; the compiler
+        // no longer has a user for them.
+        node_ptr_t opNode  = tree_->makeDRef(std::string(camel::core::kCompositionCall));
         res                = tree_->makeLink(2);
         auto compAstBundle = astSemantic(context_, ast);
         setOriginFromOrigin(
@@ -3378,6 +3362,19 @@ node_ptr_t Builder::visitMatchExpr(const AST::node_ptr_t &ast) {
             aCaseNode->load()->origin(),
             camel::source::OriginKind::GctNode,
             "gct.match.case");
+
+        // The guard of the case, when it has one. `case p when c => ...` is taken only when the
+        // pattern matches *and* `c` holds, so the graph builder evaluates the guard in the arm
+        // this case becomes and sends the value on to the cases written after it when it does
+        // not hold (review 「when-placement-and-match-guards」). The guard is kept beside the
+        // CASE rather than among its children: the arm's body is the last child every reader of
+        // that node takes, and the guard is read in the arm's scope, where the names the
+        // pattern binds are in force.
+        if (aCaseNode->size() > 2) {
+            enterArmOf(ast, valueUnused);
+            tree_->setCaseGuard(gCaseNode, visitData(aCaseNode->at(2)));
+            gCaseNode->setGuardedCase();
+        }
         mergedInputs.push_back(nodeOrigin(gCaseNode));
         parts.push_back(semanticPart(
             camel::source::SemanticRole::BranchTarget,
@@ -3539,24 +3536,32 @@ node_ptr_t Builder::visitStaticFor(const AST::node_ptr_t &ast) {
 
 /*
 staticLoopExpr
-    : STATIC LOOP loopState (',' loopState)* staticForHeader DO blockExpr
+    : STATIC LOOP loopState (',' loopState)* staticLoopHeader DO blockExpr
+staticLoopHeader
+    : FOR (identDef | '_') (',' (identDef | '_'))? IN
+      ('fields' typeExpr | 'indices' dataExpr | dataExpr)
 The AST node holds the first values of the state (a Repeated Data), the walked shape, and the
 body (StaticLoopLoad). The GCT node holds the shape first, then the first values, then the EXEC
 body. `F` is an ordinary type variable of the enclosing function's instance, bound per field
-by the graph builder; `n` (or `j` for `indices`) and the state names are bound per round.
+by the graph builder; `n` (or `j` for `indices`, or the element's name for a written sequence)
+and the state names are bound per round. The head of `static loop` lost its parentheses in H462
+(the ruling of 2026-10-24): `in <序列>` is what `static for` still writes between parentheses.
 */
 node_ptr_t Builder::visitStaticLoop(const AST::node_ptr_t &ast) {
     ENTER("StaticLoop");
     ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for StaticLoop");
     const auto &load = ast->loadAs<AST::StaticLoopLoad>();
+    // `fields T` is the only head that names a type (`F`): `indices ts` and a written sequence
+    // bind one name, the entry itself.
+    const bool byFields = !load->byIndices() && !load->bySequence();
 
     std::vector<std::string> state;
     state.reserve(load->state().size());
     for (const Reference &name : load->state()) {
         state.push_back(name.toString());
     }
-    node_ptr_t loopNode =
-        tree_->makeStaticLoop(state, load->valueName(), load->typeName(), load->byIndices());
+    node_ptr_t loopNode = tree_->makeStaticLoop(
+        state, load->valueName(), load->typeName(), load->byIndices(), load->bySequence());
     setOriginFromAst(
         context_,
         loopNode,
@@ -3567,9 +3572,7 @@ node_ptr_t Builder::visitStaticLoop(const AST::node_ptr_t &ast) {
     const ValueUseScope valueUseScope(*this);
     valueUse_ = {};
 
-    if (load->byIndices()) {
-        *loopNode << visitData(ast->at(1));
-    } else {
+    if (byFields) {
         const auto &typeAst = ast->atAs<AST::TypeLoad>(1);
         Type *subject       = visitType(typeAst);
         node_ptr_t typeNode = tree_->makeType(subject);
@@ -3580,6 +3583,10 @@ node_ptr_t Builder::visitStaticLoop(const AST::node_ptr_t &ast) {
             camel::source::OriginKind::GctNode,
             "gct.static.loop.type");
         *loopNode << typeNode;
+    } else {
+        // `indices ts` walks a tuple value and a written sequence is an ordinary expression:
+        // both are built as data, and what they hold is read when the expansion happens.
+        *loopNode << visitData(ast->at(1));
     }
 
     // The first values, evaluated once where the loop is, before the names of the head exist.
@@ -3589,7 +3596,7 @@ node_ptr_t Builder::visitStaticLoop(const AST::node_ptr_t &ast) {
 
     // `F` names the type of one field in the body only (as in `static for`).
     pushScope();
-    if (!load->byIndices()) {
+    if (byFields) {
         typeScope_->insert(
             Reference(load->typeName()),
             TypeVarType::create(load->typeName(), false));
@@ -3975,11 +3982,13 @@ node_ptr_t Builder::visitArrayData(const AST::node_ptr_t &ast) {
     }
 
     auto arrayData = factory.build();
-    if (!dangling) {
-        // Every element is a constant: the array is one literal, and the values its elements
-        // were written as are kept for the type it may take later (GIR).
-        tree_->setLiteralElements(arrayData, std::move(literalElements));
-    }
+    // The value each element was written as is kept even when another element is computed: the
+    // position of the whole literal decides the type of the elements it did write, and an element
+    // converted from the double it was lowered to instead of from the value written is rounded
+    // twice (design principles 5.1; the ruling of 2026-10-23 on
+    // `expected-type-through-literals-and-calls`, item 3). A computed element has no value of
+    // its own, but it keeps its position, which is where it is reported.
+    tree_->setLiteralElements(arrayData, std::move(literalElements));
     node_ptr_t res = tree_->makeData(arrayData);
 
     if (dangling) {
@@ -4276,6 +4285,14 @@ node_ptr_t Builder::visitDataInto(const AST::node_ptr_t &ast, Type *type, bool &
             }
         } else if (load->dataType() == AST::DataType::Struct && type->code() == TypeCode::Struct) {
             return visitStructInto(ast, type, entered);
+        } else if (load->dataType() == AST::DataType::Tuple && type->code() == TypeCode::Tuple) {
+            // A tuple literal is positional like an array, and its elements are positions with an
+            // expected type too (`let t: (f32, f32) = (1.0, 2.0)`; design principles 5.1). Built
+            // as the declared type, each element is converted from the value it was written as;
+            // left to declaredValue, the whole tuple was converted from the doubles its elements
+            // had been lowered to, and every element was rounded twice (the ruling of 2026-10-23
+            // on `expected-type-through-literals-and-calls`, item 3).
+            return visitTupleInto(ast, type, entered);
         }
     }
     if (elemType == nullptr || ast->type() != AST::LoadType::Data ||
@@ -4392,9 +4409,13 @@ node_ptr_t Builder::visitArrayInto(const AST::node_ptr_t &ast, Type *arrayType, 
         }
     }
     const data_ptr_t built = factory.build();
-    if (!dangling) {
-        tree_->setLiteralElements(built, std::move(literalElements));
-    }
+    // Each element's value as it was written is kept even when another element of the literal is
+    // computed (design principles 5.1): the position of the whole literal decides the type of
+    // the elements it did write, and an element converted from the double it was lowered to
+    // instead of from the value written is rounded twice (the ruling of 2026-10-23 on
+    // `expected-type-through-literals-and-calls`, item 3). A computed element has no value of
+    // its own, but it keeps its position, which is where it is reported.
+    tree_->setLiteralElements(built, std::move(literalElements));
     node_ptr_t res = tree_->makeData(built);
     // The literal is the value of the type asked for when the two types are the same. When
     // they are not (a named struct type, say), the caller still applies the declared value or
@@ -4405,6 +4426,73 @@ node_ptr_t Builder::visitArrayInto(const AST::node_ptr_t &ast, Type *arrayType, 
         res = execNode;
     }
     LEAVE("ArrayData");
+    return res;
+}
+
+/// The tuple literal `ast` built with every element in the type its position gives it
+/// (`let t: (f32, f32) = (1.0, 2.0)`, `let p: (P, int) = (p0, 1)`): a literal element becomes
+/// the element type exactly, converted from the value it was written as; an element that is
+/// computed has no value of its own and keeps its position as a hole, and an element that is
+/// not a literal keeps its own type, which the GIR builder reports if it does not fit (design
+/// principles 5.1). Only when the literal writes as many elements as the tuple type: any other
+/// shape is left to the ordinary build, which reports it.
+node_ptr_t Builder::visitTupleInto(const AST::node_ptr_t &ast, Type *tupleType, bool &entered) {
+    ENTER("TupleData");
+    entered           = false;
+    auto *tType       = tt::as_ptr<TupleType>(tupleType);
+    const auto &items = *ast->atAs<AST::RepeatedLoad>(0);
+    if (tType == nullptr || items.size() != tType->size()) {
+        LEAVE("TupleData");
+        return visitData(ast);
+    }
+    for (size_t i = 0; i < tType->size(); ++i) {
+        if (tType->typeAt(i) == nullptr || containsTypeVar(tType->typeAt(i))) {
+            LEAVE("TupleData");
+            return visitData(ast);
+        }
+    }
+    // The tuple is the one the position names, as for an array (`visitArrayInto`: the element
+    // type comes from the position, not from the elements): a computed element is a hole with
+    // no type of its own, and the position's type is what the remaining elements are converted
+    // into. Left to the factory, the type would come from the elements — the hole becoming
+    // whatever a hole is — and a literal nested in another literal would then fall back to its
+    // ordinary build and lose the position's element types (design principles 5.1; the ruling
+    // of 2026-10-23 on `expected-type-through-literals-and-calls`, item 3).
+    data_vec_t data;
+    bool dangling       = false;
+    node_ptr_t execNode = makeExec(false, true);
+    std::vector<Tree::LiteralElement> literalElements;
+    for (size_t i = 0; i < items.size(); ++i) {
+        Type *elemType      = tType->typeAt(i);
+        bool nested         = false;
+        node_ptr_t dataNode = visitDataInto(items[i], elemType, nested);
+        if (!nested) {
+            dataNode = literalNodeInType(dataNode, elemType, items[i]);
+        }
+        literalElements.push_back(writtenElement(dataNode));
+        auto [element, elementDangling] = extractData(dataNode, execNode, dangling);
+        if (elementDangling) {
+            dangling = true;
+        }
+        if (!elementDangling && (element == nullptr || element->type() == nullptr ||
+                                 !elemType->assignableFrom(element->type()))) {
+            // An element written as a variable keeps its own type (design principles 5.1): the
+            // tuple is of an unnamed tuple type whose element is of another type, and the
+            // position it is written in reports it, as it would without this build.
+            LEAVE("TupleData");
+            return visitData(ast);
+        }
+        data.push_back(element);
+    }
+    const data_ptr_t built = TupleData::create(tupleType, std::move(data));
+    tree_->setLiteralElements(built, std::move(literalElements));
+    node_ptr_t res = tree_->makeData(built);
+    entered        = true;
+    if (dangling) {
+        *execNode << res;
+        res = execNode;
+    }
+    LEAVE("TupleData");
     return res;
 }
 
@@ -4488,10 +4576,12 @@ node_ptr_t Builder::visitStructInto(const AST::node_ptr_t &ast, Type *structType
         LEAVE("StructData");
         return visitData(ast);
     }
-    if (!dangling) {
+    {
         // A StructData holds its fields in the type's order, so the elements are recorded in
         // that order whatever order they were written in; a diagnostic then points at the
-        // element that failed, not at the literal.
+        // element that failed, not at the literal. This holds when a field is computed too: the
+        // fields the literal did write keep the value they were written as (design principles
+        // 5.1; the ruling of 2026-10-23 on `expected-type-through-literals-and-calls`, item 3).
         const auto object = std::dynamic_pointer_cast<StructData>(built);
         std::vector<Tree::LiteralElement> literalElements;
         if (object != nullptr) {
@@ -4546,7 +4636,11 @@ node_ptr_t Builder::visitStructData(const AST::node_ptr_t &ast) {
     }
 
     auto structData = factory.build();
-    if (!dangling) {
+    {
+        // The value every field was written as is kept even when another field is computed: the
+        // position of the whole literal decides each written field's type, and a field converted
+        // from the double it was lowered to is rounded twice (design principles 5.1; the ruling
+        // of 2026-10-23 on `expected-type-through-literals-and-calls`, item 3).
         const auto object = std::dynamic_pointer_cast<StructData>(structData);
         std::vector<Tree::LiteralElement> literalElements;
         if (object != nullptr) {
@@ -4592,9 +4686,10 @@ node_ptr_t Builder::visitTupleData(const AST::node_ptr_t &ast) {
     }
 
     auto tupleData = factory.build();
-    if (!dangling) {
-        tree_->setLiteralElements(tupleData, std::move(literalElements));
-    }
+    // As for an array or a struct literal: each element's value as written is kept even when
+    // another element is computed (design principles 5.1; the ruling of 2026-10-23 on
+    // `expected-type-through-literals-and-calls`, item 3).
+    tree_->setLiteralElements(tupleData, std::move(literalElements));
     node_ptr_t res = tree_->makeData(tupleData);
 
     // If there are dangling nodes, attach them to the execution node
@@ -4885,7 +4980,7 @@ node_ptr_t Builder::visitRefData(const AST::node_ptr_t &ast) {
 
 /*
 Type(TypeType type) :=
-    NullableType | TypeExpr | ArrayType | StructType | TupleType
+    StreamType | NullableType | TypeExpr | ArrayType | StructType | TupleType
     | FuncType | SpecType | UnitType | InferType | DataType | RefType ;
 */
 Type *Builder::visitType(const AST::node_ptr_t &ast) {
@@ -4903,6 +4998,9 @@ Type *Builder::visitType(const AST::node_ptr_t &ast) {
     switch (type->typeType()) {
     case AST::TypeType::Null:
         res = visitNullableType(ast);
+        break;
+    case AST::TypeType::Stream:
+        res = visitStreamType(ast);
         break;
     case AST::TypeType::Expr:
         res = visitTypeExpr(ast);
@@ -4983,6 +5081,17 @@ Type *Builder::visitType(const AST::node_ptr_t &ast) {
     }
     LEAVE("Type");
     return res;
+}
+
+/*
+StreamType : Type type ;
+*/
+Type *Builder::visitStreamType(const AST::node_ptr_t &ast) {
+    ENTER("StreamType");
+    ASSERT(ast->type() == AST::LoadType::Type, "Expected TypeLoad type for StreamType");
+    Type *elemType = visitType(ast->atAs<AST::TypeLoad>(0));
+    LEAVE("StreamType");
+    return StreamType::create(elemType);
 }
 
 /*
@@ -5105,6 +5214,16 @@ Type *Builder::visitArrayType(const AST::node_ptr_t &ast) {
             // A pack is the trailing dimensions the type does not name; it can only be last,
             // and only once (design principles 5.4).
             diags_->of(SemanticDiag::DimensionAfterAnyRank).at(ast->load()->tokenRange()).commit();
+            throw BuildAbortException();
+        }
+        // A stream is consumed once and the elements of an array are read more than once, so
+        // `T..[3]` has no meaning (design principles 5.4; the author's ruling of 2026-10-24).
+        // The dimension is read against the stream here, so the element of the array the
+        // dimension would make is refused before the array is built.
+        if (type != nullptr && type->code() == TypeCode::Stream) {
+            diags_->of(SemanticDiag::StreamInContainer)
+                .at(ast->load()->tokenRange())
+                .commit(type->toString(), "an array");
             throw BuildAbortException();
         }
         const auto extents = visitExtents(group, ast);
@@ -5314,11 +5433,7 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
     std::string lastDefaultName;
     for (const auto &paramPair : *ast->atAs<AST::RepeatedLoad>(0)) {
         const auto &paramLoad = paramPair->loadAs<AST::NamedPairLoad>();
-        bool isVar            = paramLoad->isVar();
-        if (isVar && !typeLoad->modifiers().sync()) {
-            // Variable parameters are not allowed in asynchronous functions
-            diags_->of(SemanticDiag::VarParamInAsyncFunction).at(paramLoad->tokenRange()).commit();
-        }
+        const bool isVar     = paramLoad->isVar();
         const Reference &paramRef = paramLoad->getRef();
         const string &name        = paramRef.ident();
         Type *type                = nullptr;
@@ -5426,11 +5541,7 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
             factory.addRestArg(name);
             continue;
         }
-        bool isVar = paramLoad->isVar();
-        if (isVar && !typeLoad->modifiers().sync()) {
-            // variable parameters are not allowed in asynchronous functions
-            diags_->of(SemanticDiag::VarParamInAsyncFunction).at(paramLoad->tokenRange()).commit();
-        }
+        const bool isVar = paramLoad->isVar();
         Type *type = nullptr;
         {
             dimBindAllowed_ = signature;
@@ -5692,8 +5803,17 @@ Type *Builder::visitSpecType(const AST::node_ptr_t &ast) {
     }
     if (const CollectionType *coll = asCollectionTypeOrPrototype(base);
         coll != nullptr && !arguments.empty() && arguments.front().type != nullptr) {
+        Type *keyType = arguments.front().type;
+        // A stream is consumed once and the element of a set, like the key of a map, is read
+        // more than once: the linearity refusal says so before the key rules look at what the
+        // type is otherwise (design principles 5.4; the author's ruling of 2026-10-24).
+        if (keyType->code() == TypeCode::Stream) {
+            diags_->of(SemanticDiag::StreamInContainer)
+                .at(ast->load()->tokenRange())
+                .commit(keyType->toString(), coll->isMap() ? "a map" : "a set");
+            throw BuildAbortException();
+        }
         // The key of a map, the element of a set (DESIGN-QUESTION(map-key-types)).
-        Type *keyType                          = arguments.front().type;
         camel::source::origin_id_t fieldOrigin = camel::source::kInvalidOriginId;
         std::string fieldLabel;
         if (std::string problem = collectionKeyProblem(keyType, &fieldOrigin, &fieldLabel);
@@ -5734,6 +5854,18 @@ Type *Builder::visitSpecType(const AST::node_ptr_t &ast) {
             .at(ast->load()->tokenRange())
             .commit(base->toString(), error.empty() ? std::string("no reason given") : error);
         throw BuildAbortException();
+    }
+    // A stream is consumed once, and the elements of a map or a set are read more than once
+    // (design principles 5.4; the author's ruling of 2026-10-24). The element of a set and the
+    // key of a map are refused by the key rules already ('values of this type have no order');
+    // this is the value of a map, which no key rule looks at.
+    if (const CollectionType *coll = asCollectionTypeOrPrototype(res); coll != nullptr) {
+        if (Type *value = coll->valueType(); value != nullptr && value->code() == TypeCode::Stream) {
+            diags_->of(SemanticDiag::StreamInContainer)
+                .at(ast->load()->tokenRange())
+                .commit(value->toString(), "a map");
+            throw BuildAbortException();
+        }
     }
     LEAVE("SpecType");
     return const_cast<Type *>(res);

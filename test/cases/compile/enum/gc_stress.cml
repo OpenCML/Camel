@@ -31,7 +31,7 @@ func build(depth: int): Box {
 func main(): void sync {
     var total = 0
     let _ = loop i = 0 while i < 12 do sync {
-        wait total += weight(build(i))
+        total += weight(build(i))
         i + 1
     }
     println(total)
@@ -39,7 +39,7 @@ func main(): void sync {
     var dropped = 0
     let _ = loop i = 0 while i < 2000 do sync {
         let b = Box::Two { left: Box::One(i), right: Box::Empty }
-        wait dropped += weight(b)
+        dropped += weight(b)
         i + 1
     }
     println(dropped)

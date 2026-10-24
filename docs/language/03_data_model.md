@@ -395,7 +395,7 @@ func main(): int sync {
 ## 3.7 `let`、`var` 与引用
 
 - `let` 引入不可变的名字，`var` 引入可变的变量。同一个作用域里同一个名字不能声明两次（`SemanticDiag::Redeclaration`）。
-- **可以给变量赋值，也可以给从它出发的一条路径赋值。** 路径是变量本身加任意多个字段与下标：`p.x = 5`、`xs[0] = 5`、`m[i].f = 5`、`xs[0].values[1].n = 5` 都合法，复合赋值同样（`xs[0] += 1`）。它们是给整个变量重新绑定：`xs[i].f = e` 就是 `xs = set(xs, i, set(xs[i], f, e))`（[6.11](06_expressions.md#611-赋值与-wait)）。不是变量的根（`f().x = 5`、`{ x: 1 }.x = 5`）才是编译期错误 `SemanticDiag::AssignmentTargetNotVariable`；下标越界是故障 `IndexOutOfRange`。在 `sync` 里，写 `var` 数组的一个元素不复制——除非这个数组被别处读过（`let a = xs`），此时先复制，`a` 不变。
+- **可以给变量赋值，也可以给从它出发的一条路径赋值。** 路径是变量本身加任意多个字段与下标：`p.x = 5`、`xs[0] = 5`、`m[i].f = 5`、`xs[0].values[1].n = 5` 都合法，复合赋值同样（`xs[0] += 1`）。它们是给整个变量重新绑定：`xs[i].f = e` 就是 `xs = set(xs, i, set(xs[i], f, e))`（[6.11](06_expressions.md#611-赋值)）。不是变量的根（`f().x = 5`、`{ x: 1 }.x = 5`）才是编译期错误 `SemanticDiag::AssignmentTargetNotVariable`；下标越界是故障 `IndexOutOfRange`。在 `sync` 里，写 `var` 数组的一个元素不复制——除非这个数组被别处读过（`let a = xs`），此时先复制，`a` 不变。
 - 对 `let` 赋值、或把 `let` 传给 `var` 形参，是编译期错误 `SemanticDiag::ImmutablePassedToVarParam`。这是编译期的检查，不是对内存上锁。
 - **一切值按引用传递。** `var` 形参是引用：函数对它的写入就是对调用方变量的写入。lambda 与分支对变量的捕获也是引用。
 
@@ -428,4 +428,4 @@ Camel 崇尚不可变：`var` 与赋值只是为了方便留的口子，应当�
 - **就地追加只是实现层面的优化，不进入语义。** `acc = acc->append<v>` 写成一条语句、`acc` 是变量、`append` 是内建的那个时，编译器把它写成同一个重新绑定的另一种实现：变量里的数组只被这个变量引用（自上一次就地追加以来没有任何对 `acc` 的读取）时在原处追加，否则先复制（并留出增长的余量）。于是循环里反复追加仍是线性的。中间读一次 `acc` 而读到的值可能被留住（`let snap = acc`、把它传给函数、取出的元素本身是数组），下一次追加就会复制，`snap` 不变；读到的值只交给留不住数组的运算（`len(acc)`、取数值元素 `acc[i]`、比较、`format`），且这些运算在同步块里、排在下一次写之前，这样的读不影响原处追加。
 - **`xs = xs->sort` 同理**（设计原则 11.3）：`sort` 返回新数组，返回新值与就地修改不再用两个名字区分（没有 `sorted`，也没有显式的就地排序算子）。`xs = xs->sort`（或 `xs = sort(xs)`、`merge_sort` 等）写成一条同步块里的语句、`xs` 是变量时，变量是数组唯一的持有者就在原处排序，否则先复制再排序；`let before = xs` 这样留住旧值的仍得到旧值。这只是实现层面的优化，由算子声明“就地形式”（`OperatorTable::setInPlaceForm`）来开启，程序写不出也看不到它。张量另有显式的就地算子（11.3），数组没有。
 
-赋值与 `wait` 的关系见 [4.4](04_execution_model.md#44-var引用与-wait)。
+赋值与顺序的关系见 [4.4](04_execution_model.md#44-var引用与-wait)。

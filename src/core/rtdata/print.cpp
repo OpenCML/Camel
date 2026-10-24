@@ -64,6 +64,35 @@ void pushText(std::vector<PrintItem> &stack, std::string_view text) {
     stack.push_back(PrintItem{PrintItem::Kind::Text, text, NullSlot, nullptr});
 }
 
+/// Pushes the parts of one dimension of an array value: one bracket level per dimension, and the
+/// elements of the last dimension as slots that print by `elemType`. `base` is the flat index the
+/// dimension starts at. The items go on the stack in reverse, because the work list pops from the
+/// back (the opening bracket is written by the caller before the list is walked).
+void pushArray(
+    const Array *array, const Type *elemType, size_t dim, uint64_t base,
+    std::vector<PrintItem> &stack) {
+    const size_t rank    = array->rank();
+    const int64_t extent = array->dim(dim);
+    // The row-major step from one element of this dimension to the next: the extents of the
+    // dimensions under it, multiplied.
+    uint64_t step = 1;
+    for (size_t d = dim + 1; d < rank; ++d) {
+        step *= static_cast<uint64_t>(array->dim(d));
+    }
+    pushText(stack, "]");
+    for (int64_t i = extent; i-- > 0;) {
+        const uint64_t at = base + static_cast<uint64_t>(i) * step;
+        if (dim + 1 == rank) {
+            pushSlot(stack, array->getSlot(at), elemType);
+        } else {
+            pushArray(array, elemType, dim + 1, at, stack);
+        }
+        if (i > 0) {
+            pushText(stack, ", ");
+        }
+    }
+}
+
 /// Whether the text of a value of `type` is made of other values. These are the types whose
 /// depth follows the data; everything else prints in one step.
 bool isPrintedByParts(const Type *type) {
@@ -200,22 +229,31 @@ void printValueImpl(std::ostream &os, slot_t data, Type *type, size_t arrayLimit
 
         switch (t->code()) {
         case TypeCode::Array: {
-            const auto *array    = fromSlot<const Array *>(v);
-            const Type *elemType = static_cast<const ArrayType *>(t)->elemType();
-            if (array->size() > arrayLimit) {
+            const auto *array = fromSlot<const Array *>(v);
+            // What the elements print by, and how many parts the value has, are the value's own:
+            // a declaration that fixes no element type (`Tensor` is the numeric-unknown array,
+            // and a nested one leaves its element open too) says `Void`, and the elements of such
+            // a value print by the element type the value holds; the parts are the extents, not
+            // the extent of dimension 0 (`Array::size()`), which is what `Array::print` does for
+            // `show` (design principles 5.1, 5.2; the rank-2 short print and the `null` element
+            // came from taking both from the declaration).
+            const Type *declared = static_cast<const ArrayType *>(t)->elemType();
+            const Type *elemType = (declared == nullptr || declared->code() == TypeCode::Void)
+                                       ? array->elemType()
+                                       : declared;
+            if (elemType == nullptr) {
+                elemType = declared;
+            }
+            if (array->numel() > arrayLimit) {
                 // Type, address and length: enough to identify the collection without the
                 // element-by-element text a log line must not pay for (H31).
                 os << "<" << t->toString() << " at 0x" << std::hex << static_cast<uint64_t>(v)
-                   << std::dec << ", " << array->size() << " elements>";
+                   << std::dec << ", " << array->numel() << " elements>";
                 continue;
             }
-            pushText(stack, "]");
-            for (size_t i = array->size(); i-- > 0;) {
-                pushSlot(stack, array->getSlot(i), elemType);
-                if (i > 0) {
-                    pushText(stack, ", ");
-                }
-            }
+            // One bracket level per dimension of the value, the elements pushed with the element
+            // type and the opening bracket written last, because the work list pops in reverse.
+            pushArray(array, elemType, 0, 0, stack);
             os << "[";
             continue;
         }

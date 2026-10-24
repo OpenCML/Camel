@@ -352,6 +352,48 @@ Tensor<f32>               // f32[..]
 
 这样"别名名副其实"（批复 Q1/Q3）：`Tensor` 系列的名字只是 `T[dims]` 的另一种拼写，类型系统里没有第二套张量类型。
 
+### 5.1a 过渡状态与删除步（决策者 2026-10-25 照录 tensor-alias-transition 的建议）
+
+`Tensor` 作为 `ArrayType::numericUnknown()` 的导出、以及由此产生的"数值、
+元素类型未定的数组"是**迁移中的过渡**，不是语言保留的类型（设计原则 5.5：图上只有具体类型，运行时
+不需要类型信息；泛型要在头部用 `::<T>` 声明，裸 `Tensor` 形参等于隐式泛型，已否决）。
+
+P4 的终点：
+- 签名里的裸 `Tensor` 是**编译错误**，诊断提示写 `Tensor<T>` 并在头部声明 `T`，或写具体元素类型
+  （`f32` 等）；
+- 标准库的张量运算改为 `func op::<T>(x: Tensor<T>, …) when is_float::<T>()` 一类写法（按
+  `log_softmax` 的裁定）；
+- **值的元素类型总在类型里**；形状可以是 `?`（大小运行时才知道是值的事，不是类型的事）。
+
+删除步（作为 P4 之后的一次独立提交，或 P4 提交内最后一步，由计划的所有者定）：
+1. `ArrayType::numericUnknown*` 与其标记 `numericUnknown_` 删除；`Tensor` 的 `Reference` 改为
+   `Tensor<T>` 形式（元素类型参数必填，`Tensor<..>` 的 `applyArguments` 只接受类型参数 + 形状参数）；
+2. 签名里出现裸 `Tensor` 的诊断（`InvalidTypeArgument` 或新的语法诊断）；
+3. 本页第二节列出的每一处过渡依赖同时删除；
+4. `test/cases/compile/array_alias/bare_tensor.cml` 与
+   `test/plans/feat/compile/array_alias.plan.toml` 的 `alias.bare_tensor` 一条改写成"裸 `Tensor` 形参
+   是编译错误"的负例；`test/cases/loops/iterate_tensor.cml` 的 `countRows(t: Tensor)` 同理改写成
+   `countRows::<T>(t: Tensor<T>)` 或删掉。
+
+#### 依赖过渡类型的位置（删除步一并处理）
+
+| 位置 | 依赖什么 | 删除步怎么做 |
+|---|---|---|
+| `modules/tensor/type.cpp#tensorFactsOf` 的 `isNumericUnknown()` 分支 | 读过渡类型的事实（无元素类型） | 该分支随标记一起删；事实只剩"数值数组"一种 |
+| `modules/tensor/ops/support.cpp#tensorOf(facts)` 的 `!facts.dtype` 两支 | 造过渡类型（`numericUnknown` / `numericUnknownFromForms`） | 元素类型必有时删掉，改成断言 |
+| `modules/tensor/ops/vjp.cpp#vjpTensorType()` | VJP 结果类型是过渡类型（`ArrayType::numericUnknown()`） | 改为由被微分值的切线类型给出具体元素类型 |
+| `src/core/derivative.h/.cpp#setTangentType`/`statedTangentType` | 过渡类型的元素是 `Void`，结构上取不到切线，所以新加一个注册钩子 | 随过渡类型删除；`computeTangentType` 的 `Array` 分支恢复只走元素类型 |
+| `modules/autodiff/pullback.cpp#carriesGradient` 的 `Array` 分支 | 同上（`tangentTypeOf` 判据） | 可恢复为 `carriesGradient(elemType)` |
+| `modules/tensor/module.cpp` 的 `.npy` 加载器/保存器 | 检查值对着 `ArrayType::numericUnknown()` 做形状/元素检查 | 改为对着声明的具体数组类型检查 |
+| `modules/tensor/ops/gradient_ops.cpp#tensorTangentType` | 判断过渡类型有没有切线 | 随钩子删除 |
+| `modules/onnx/emitter.cpp` 的 `Value::constant(..., numericUnknown())` | 数组常量当张量时的声明类型 | 改为值自己的数组类型 |
+| `src/compile/gir/builder_operators.cpp` 的 `var` 实参接管（普通实参与 `with` 实参各一处） | 形参的裸 `Tensor` 与实参值的数组拼法不是同一个类型，cell 的"内容类型必须相等"（`src/core/type/composite/tuple.cpp`）会拒 | 随标记删除：两侧是同一个类型，接管分支删掉（详见下一节） |
+
+**没有让新的消费者依赖它**：所有从 `TensorType` 迁过来的构造点走 `tensor::ops::tensorOf(...)`，元素类型
+来自事实（`facts.dtype`）；过渡类型只在"事实里没有元素类型"时出现，即 `Tensor` 的两种拼写本身。
+
+`var` 形参写裸 `Tensor` 时，调用点的 cell 按声明的形参类型接管（h419 的那一段）是过渡依赖，列在上表；P4 把这类形参改写成显式泛型（`var w: T[..]`）后两侧同型，接管分支删除。cell"内容类型相等"的不变式不放宽。
+
 ### 5.2 元素类型精确
 
 - 删除 `normalizeTensorDType`（P4 已删；`TensorType::get` 只校验元素类型，`modules/tensor/type.cpp#TensorType::get` 起）：`Tensor<float>` 就是 `float[..]`（f64 存储），`Tensor<i32>` 就是 `i32[..]`，`Tensor<f64>` 就是 `f64[..]`。`zeros`/`ones` 等不写 dtype 的构造仍是 f32（与今天一致）。
