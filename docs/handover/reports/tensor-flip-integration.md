@@ -53,6 +53,16 @@ author's rulings.
 | + rank-0 shape 2 (a) `4f9345c29` | same | 5972 | **372** | 11 | 215.5 s |
 | + `var`-cell widening (h395) | `node scripts/test.js test/plans --tier fast --jobs 8` | 5973 | **332** | 11 | 300.8 s |
 | + unstated element type (h406) | `node scripts/test.js test/plans --tier fast --jobs 8` | 5973 | **292** | 11 | 363.1 s |
+| + rank-0 tensor facts (h410) | `smoke,test/plans -Tier fast -Jobs 8` (remote helper, same form) | 5973 | **290** | 11 | 262.4 s |
+
+The h410 row is the same pair again, one slice later and with no new case (`5973` on both sides):
+**2 reds green, 0 new red, 0 signals**, by set difference over `notes/h410-base-reds.txt` and
+`notes/h410-p2-layer-reds.txt` (the runner's own logs: `notes/h410-base-layer.log`,
+`notes/h410-p2-layer.log`). The base row of the pair was re-measured on this host in this window
+rather than carried over (`292` on both bases, so the pair is one measurement, and the `292` here is
+the same number the h406 row reports). Class bucket: **`—`** — this lane did not run the h406
+classifier over its own two reds, so it has no number of that kind to put in that column, and one
+written from a different classifier would not be comparable.
 
 The last column is this slice: the same command, the same host, the same window as the row above
 it. `5973` is `5972 + 1`: the slice adds one case, `shape_inference/var_argument_non_numeric.cml`,
@@ -258,12 +268,58 @@ acceptance is a whole-feature criterion (the export back to develop's behaviour,
 Tensor` cases green, no `f32[..]` site left in the export), not a patch this slice could land
 alongside its own two, so it is left for its own lane. Also untouched: the 22 declarations the
 holes section lists, and the print-form class the `(none)` family now hides.
+**Resolved by the h410 lane** — see "The ONNX shape-2 pair (h410)" below: both entries are green,
+and it was not the instantiation the ranking assumed.
 
 **One ledger correction.** This section's predecessor says the optimizer "folds `sum(acc)` against
 the widened cell's unstated element type": the expression is `sum(vg.1.p0)`, at `29:79`, and it is
 the gradient of the `with` parameter, as the verbatim block above shows.
 
-## Every red, by class, before → after
+## The ONNX shape-2 pair (h410): the rank-0 tensor, not the bare `Tensor`
+
+**Done, and not where the ranking put it.** Both entries are green (`086181606`, `f20039abe`):
+whole tree `5973 / 290 fail / 11 skip`, **2 reds green, 0 new red, 0 signals**, set difference over
+the pair above. The exported model is the one `origin/develop` writes for the same case: 55 nodes,
+`Squeeze` 3 / `Unsqueeze` 8 / `MatMul` 8, the three inputs `[3, 2] [3] [2]` and the three outputs
+`[1] [3, 2] [3]`, and **no unstated shape in it** (0 `value_info` entries; every input and output
+carries a shape field). The case's own verification — `MatMul >= 6`, `Squeeze >= 2 && Unsqueeze >= 4`,
+3 outputs — is the ruling's acceptance and it passes on both paths.
+
+**The measured root is the rank-0 tensor, and the trace says so in one line.** With
+`CAMEL_ONNX_TRACE=1` on `std::macro std::opt` the two trees agree line for line until the rank-0
+chain: `origin/develop` lowers `tensor:matmul(vector, vector)` to `sym tensor[]` and the flip to
+`sym tensor?` — no shape at all — and everything after it (`multiply`, `sum_to`, the second
+`matmul_grad_rhs`) inherits the loss. `tensorFactsOf` states the rank-0 tensor for the element type
+a rank-0 answer has; two readers of an already-built graph asked the *type* instead, and a rank-0
+tensor's type is the element type itself (the rank-zero ruling), so neither could see a tensor:
+`anyTensor` (`modules/tensor/ops/support.cpp`) answered "no tensor" for a `tensor:` node whose
+operands are all numeric scalars, and the ONNX exporter's facts guard took an inferred type only
+when `isTensorType` accepted it. Both now read the rule the kernels already live by — `tensorArg`
+boxes exactly that scalar slot. The fix is in the operator layer first; the ONNX module has one
+line of the same rule at the export side, not a patch.
+
+**The ruling's premise does not hold, measured.** The section above says develop "labels those
+nodes `Tensor<float32>` and the rank is available", which is read as develop's call-site
+instantiation of bare `Tensor` parameters. Develop's own dump says otherwise: on
+`~/camel-work/Camel` (`147e2d2d4`, the same pipeline point as the flip's dump)
+`std::macro std::opt std::agir` prints `N01 [label="x", type="PORT", value_type="Tensor"]` —
+the plain `Tensor`, open rank, exactly as the flip prints it, and `f32[..]` 0 times where the flip
+prints it 36 times in the same 219-node graph. Develop's exporter is not stopped because it
+instantiated anything; it is not stopped because its rank-0 tensor is still a `TensorType`
+(`Tensor<float32, []>`), which `isTensorType` accepts and which keeps the shape `[]`. So
+"develop's behaviour is not lost" is met by keeping a rank-0 tensor's facts, and the whole-feature
+criterion for instantiation narrows to the one clause that is not about these two tests. The
+measurement is in `docs/handover/questions/bare-tensor-parameter-instantiation-measured.md`, with
+the evidence and the two options.
+
+**What this lane did not do.** It did not instantiate bare `Tensor` parameters at their call sites
+(the item's first clause), and it did not make `f32[..]` disappear from the *compiler* graph: the
+36 sites are the backward typing's own (`tensorOf(dtype, nullopt)` for a primal whose rank nobody
+wrote), they are byte-identical to the base's 36, and instantiating `Tensor` parameters alone would
+not remove them — `loss`'s `with <m: P>` parameter flows its `Tensor` fields through the *named*
+type `P`, so `m.w` is `Tensor` whatever `step`'s own parameters are set to. It also did not touch
+`modules/tensor/ops/vjp.cpp`'s typing, the 22 declarations, or any expectation. The `var Tensor`
+family is untouched and green: 46 `var_tensor*` / `var_reference*` entries pass, 0 fail.
 
 Bucketing is the attribution report's, applied by one classifier to both logs: the first
 diagnostic in the block, with the diagnostic classes taking precedence over the runner's text.
