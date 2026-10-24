@@ -895,11 +895,11 @@ class Builder {
     // (`let`, a parameter without `var`).
     std::unordered_set<node_handle_t> variables_;
 
-    /// A ar that does not escape becomes SSA (docs/handover/reviews/questions-2026-10-24-evening.md,
+    /// A `var` that does not escape becomes SSA (docs/handover/reviews/questions-2026-10-24-evening.md,
     /// "var-version-node"): every read takes the value of the write that made it, and no read node is
-    /// left reading the cell. A ar that escapes -- captured by a closure, handed out as a ar
-    /// argument, or a ar parameter of this graph -- is a resource and keeps its cell.
-    /// ariableReadSource_ records, per read node, the writer it reads from (the cell itself when
+    /// left reading the cell. A `var` that escapes -- captured by a closure, handed out as a `var`
+    /// argument, or a `var` parameter of this graph -- is a resource and keeps its cell.
+    /// `variableReadSource_` records, per read node, the writer it reads from (the cell itself when
     /// nothing has written yet) and the cell it belongs to; knownCellUsers_ holds the users of a
     /// cell this builder recorded (its reads and its stores), so a cell with any other user
     /// (:var/take, a call, a capture port) is left as a cell.

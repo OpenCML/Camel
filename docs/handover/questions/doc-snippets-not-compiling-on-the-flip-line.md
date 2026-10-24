@@ -93,3 +93,14 @@ func sum(..ts): int {
   改写，剩下的 `docs/design/public-repo/README.cn.md:66: 'docs/design.md': no such file` 是**翻转前
   就有**、且修在 develop（`docs/design.md` 由 h471 那批在 develop 上创建）的一条，等 develop
   同步过来才会绿。
+
+## 五、随 h474 到位的答复（第三节那 6 条已被判给改语法的车道）
+
+作者的答复随 `handover/h474-in-place-planning` 到位：
+`docs/handover/reviews/questions-2026-10-24-evening.md` §`h462-static-loop-sequence-boundaries` 第 3 条
+——"设计原则与设计稿里的旧写法我已改（`static loop … for n, F in fields T`）；`docs/language/**` 按
+'文档随代码走'由改语法的车道一起改——**这 6 个代码块请本 lane 补上，不必等我**"。
+
+所以第三节的 6 条**不是新问题**：它们归 h462/h475（改语法的车道），不必等作者，也不由集成车道改。
+作者已改的是设计原则与设计稿；本次合并**没有**带来 `docs/design-principles.cn.md:283` 的改动，
+`:283` 的 `...` 占位体（第二节）仍是未决的那一条。

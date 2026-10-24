@@ -127,14 +127,9 @@ func main(): int sync {
 
 (There is also a `SemanticDiag::EffectNotExecuted` warning pointing at `println(x)`.) The body of `main` is a sync block, and the two calls of `log` execute in order; but `println(x)` belongs to `log`'s own function body. To print, write `log` as `func log(x: int): int sync { ... }`.
 
-### 4.3.3 `sync func` (function modifier)
+### 4.3.3 `sync` on a function body (function modifier)
 
-**The `sync` function modifier is retired** (H461): `sync func` is no longer a legal spelling, and the
-parser, the registry and this reference no longer keep it. A `var` parameter is a resource parameter
-(the design principles, 3.3) and needs no declaration. The `sync` prefix of a lambda,
-`sync (x: int) => ...`, is unchanged.
-
-**The `sync` written in the function body position is kept**: it makes the body a sync block.
+`sync` is the only modifier of a function ([7.4.4](07_statements.md#744-modifiers)), written in the **function body position**, and it makes that body a sync block (4.3.1): the statements written directly in it execute in the order written, and they have all finished when the function hands out its result. It does not change the function's value semantics, it only adds ordering constraints; the caller needs no cooperation (a `var` parameter is a resource parameter, design principles 3.3, and needs no declaration).
 
 ```cml
 func f(): int {
@@ -158,15 +153,15 @@ g
 3
 ```
 
-To make a function body execute in order, write the `sync` in the function body position.
+To make a function body execute in order, write the `sync` in the function body position; the `sync` prefix of a lambda (`sync (x: int) => ...`) is the same modifier written on a lambda.
 
-## 4.4 `var`, references and `wait`
+## 4.4 `var` and the order of writes
 
 - All values are passed by reference. A `var` parameter is a reference, and a write to it by the function is a write to the caller's variable; when the same variable is passed to two `var` parameters, the two parameters are aliases of the same object.
 - Assignment is an operation with a side effect. **The declaration of side effects is a closed loop**: to modify a parameter, it must be declared `var`; mutability is declared from the lowest-level operator all the way up, explicitly at every level. A function that has not declared a parameter as `var` cannot possibly modify it.
 - Passing a `let` to a `var` parameter, and assigning to a non-`var` parameter inside a function body, are both compile-time errors (`SemanticDiag::ImmutablePassedToVarParam`).
 
-**The order comes from the sync block that writes.** Several writes to one variable in the same sync block are ordered by the order they are written in; `wait` is retired (H461) and brings no local order. When the function body is not a sync block, a write is ordered against the operations that read it only by dependency:
+**The order comes from the sync block that writes.** Several writes to one variable in the same sync block are ordered by the order they are written in. When the function body is not a sync block, a write is ordered against the operations that read it only by dependency:
 
 ```cml
 func bump(var counter: int): int sync {

@@ -13,7 +13,7 @@ digraph GraphIR {
             N05 [label=":op/add_l", type="OPER", origin=<ORIGIN>, span="13:11-13:12", srcfile="<ROOT>/test/cases/opt/generic/written_variable.cml", value_type="int"];
             N06 [label="(0, 7)", type="DATA", value_type="(int, int)"];
             N07 [label="(int, int)", type="FILL", value_type="(int, int)"];
-            N08 [label=":op/assn", type="OPER", origin=<ORIGIN>, span="13:6-13:7", srcfile="<ROOT>/test/cases/opt/generic/written_variable.cml", value_type="(int, int)"];
+            N08 [label=":op/assn", type="OPER", origin=<ORIGIN>, span="13:6-13:7", srcfile="<ROOT>/test/cases/opt/generic/written_variable.cml", value_type="var (int, int)"];
             N09 [label=":var/get", type="OPER", value_type="(int, int)"];
             N0A [label=".0", type="ACCS", origin=<ORIGIN>, span="14:12-14:15", srcfile="<ROOT>/test/cases/opt/generic/written_variable.cml", value_type="int"];
             N0B [label=":io/println", type="OPER", origin=<ORIGIN>, span="14:4-14:11", srcfile="<ROOT>/test/cases/opt/generic/written_variable.cml", value_type="int"];
@@ -31,7 +31,7 @@ digraph GraphIR {
             N03 -> N08 [label="0|0", type="NORM"];
             N07 -> N08 [label="0|1", type="NORM"];
             N05 -> N08 [label="0|0", type="CTRL"];
-            N03 -> N09 [label="1|0", type="NORM"];
+            N08 -> N09 [label="0|0", type="NORM"];
             N08 -> N09 [label="0|0", type="CTRL"];
             N09 -> N0A [label="0|0", type="NORM"];
             N0A -> N0B [label="0|0", type="NORM"];
@@ -54,7 +54,7 @@ digraph GraphIR {
             N16 [label=":op/add_l", type="OPER", origin=<ORIGIN>, span="24:11-24:12", srcfile="<ROOT>/test/cases/opt/generic/written_variable.cml", value_type="int"];
             N17 [label="(0, 7)", type="DATA", value_type="(int, int)"];
             N18 [label="(int, int)", type="FILL", value_type="(int, int)"];
-            N19 [label=":op/assn", type="OPER", origin=<ORIGIN>, span="24:6-24:7", srcfile="<ROOT>/test/cases/opt/generic/written_variable.cml", value_type="(int, int)"];
+            N19 [label=":op/assn", type="OPER", origin=<ORIGIN>, span="24:6-24:7", srcfile="<ROOT>/test/cases/opt/generic/written_variable.cml", value_type="var (int, int)"];
             N1A [label=":var/get", type="OPER", value_type="(int, int)"];
             N1B [label=".1", type="ACCS", origin=<ORIGIN>, span="25:12-25:15", srcfile="<ROOT>/test/cases/opt/generic/written_variable.cml", value_type="int"];
             N1C [label=":io/println", type="OPER", origin=<ORIGIN>, span="25:4-25:11", srcfile="<ROOT>/test/cases/opt/generic/written_variable.cml", value_type="int"];
@@ -80,12 +80,12 @@ digraph GraphIR {
             N11 -> N19 [label="1|0", type="NORM"];
             N18 -> N19 [label="0|1", type="NORM"];
             N16 -> N19 [label="0|0", type="CTRL"];
-            N11 -> N1A [label="2|0", type="NORM"];
+            N19 -> N1A [label="0|0", type="NORM"];
             N19 -> N1A [label="0|0", type="CTRL"];
             N1A -> N1B [label="0|0", type="NORM"];
             N1B -> N1C [label="0|0", type="NORM"];
             N1A -> N1C [label="0|0", type="CTRL"];
-            N11 -> N1D [label="3|0", type="NORM"];
+            N19 -> N1D [label="1|0", type="NORM"];
             N19 -> N1D [label="1|0", type="CTRL"];
             N1C -> N1D [label="0|1", type="CTRL"];
             N1D -> N1E [label="0|0", type="NORM"];
@@ -105,7 +105,7 @@ digraph GraphIR {
             N26 [label=":var/peek", type="OPER", value_type="int"];
             N27 [label=":io/println", type="OPER", origin=<ORIGIN>, span="34:4-34:11", srcfile="<ROOT>/test/cases/opt/generic/written_variable.cml", value_type="int"];
             N28 [label="5", type="DATA", origin=<ORIGIN>, span="35:9-35:10", srcfile="<ROOT>/test/cases/opt/generic/written_variable.cml", value_type="int"];
-            N29 [label=":op/assn_add_l", type="OPER", origin=<ORIGIN>, span="35:6-35:8", srcfile="<ROOT>/test/cases/opt/generic/written_variable.cml", value_type="int"];
+            N29 [label=":op/assn_add_l", type="OPER", origin=<ORIGIN>, span="35:6-35:8", srcfile="<ROOT>/test/cases/opt/generic/written_variable.cml", value_type="var int"];
             N2A [label=":op/add_l", type="OPER", origin=<ORIGIN>, span="36:14-36:15", srcfile="<ROOT>/test/cases/opt/generic/written_variable.cml", value_type="int"];
             N2B [label=":var/peek", type="OPER", value_type="int"];
             N2C [label=":io/println", type="OPER", origin=<ORIGIN>, span="37:4-37:11", srcfile="<ROOT>/test/cases/opt/generic/written_variable.cml", value_type="int"];
@@ -123,7 +123,7 @@ digraph GraphIR {
             N27 -> N29 [label="0|0", type="CTRL"];
             N2B -> N2A [label="0|0", type="NORM"];
             N24 -> N2A [label="1|1", type="NORM"];
-            N23 -> N2B [label="2|0", type="NORM"];
+            N29 -> N2B [label="0|0", type="NORM"];
             N29 -> N2B [label="0|0", type="CTRL"];
             N2A -> N2C [label="0|0", type="NORM"];
             N2D -> N2E [label="0|0", type="NORM"];

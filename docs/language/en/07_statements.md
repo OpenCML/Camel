@@ -103,7 +103,7 @@ func hello(name: string) sync {      // no return value; a sync function body
 }
 ```
 
-- Each parameter is written `name: type`. A parameter preceded by `var` is a mutable reference ([4.4](04_execution_model.md#44-var-references-and-wait)).
+- Each parameter is written `name: type`. A parameter preceded by `var` is a mutable reference ([4.4](04_execution_model.md#44-var-and-the-order-of-writes)).
 - The return type can be omitted and is inferred from the function body; a recursive function must write out its return type. When the body has no `return`, the value of the function is the value of the last statement of the body: that value when the statement is an expression with one, `void` otherwise. Note that the value of `println(x)` is `x` (so that `x->println->f` can go on), so `func main() sync { println('a') }` returns the string `'a'`, and the default pipeline writes the result of `main` to the output: the line appears twice. Declare the return type `: void`, or end with `return 0`.
 - A `sync` before the function body makes the function body a sync block; a `sync` before `func` is a function modifier. The two have different meanings ([4.3](04_execution_model.md#43-sync)).
 - A function can be declared at the module top level, in a namespace, or in a block (a local function). Functions can be mutually recursive, and need not be declared before use.
@@ -200,7 +200,7 @@ int 1 string a
 
 | Modifier | Meaning |
 |---|---|
-| `sync` | The function has side effects and needs to be synchronised ([4.3.3](04_execution_model.md#433-sync-func-function-modifier)) |
+| `sync` | The function's body is a sync block ([4.3.3](04_execution_model.md#433-sync-on-a-function-body-function-modifier)) |
 
 There are no other modifiers. A function implemented in C++ is a body-less `export func` declaration (design principles 6.4); a helper used only inside its module is a plain `func` without `export`, since `func` is module-private already.
 
@@ -338,7 +338,7 @@ func main(): int sync {
 
 ```cml
 func sum(..ts): int {
-    return static loop acc = 0 for (j) in indices ts do acc + ts.[j]
+    return static loop acc = 0 for j in indices ts do acc + ts.[j]
 }
 
 func main(): int sync {

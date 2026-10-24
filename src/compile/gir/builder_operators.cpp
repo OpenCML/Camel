@@ -953,10 +953,20 @@ node_handle_t Builder::compoundAssignmentByRebinding(
         node->setOrigin(gct->origin());
         return node;
     };
+    // The value keeps the compound operator's own origin: what a fault of the operator is
+    // reported at is the `%=` as written (a `%=` by zero is a DivisionByZero at the `%=`,
+    // test/plans/feat/linear/operators.plan.toml). The write keeps the statement's, so the
+    // statement is still the whole assignment where something asks for it (the LSP's
+    // navigation, test/plans/feat/tools/lsp.plan.toml).
+    const auto makeOperator = [&](GCT::node_ptr_t node) {
+        node->setOrigin(gct->size() > 0 && gct->at(0) != nullptr ? gct->at(0)->origin()
+                                                                : gct->origin());
+        return node;
+    };
     // The right operand is evaluated once: it was built already, and is named here.
     const std::string right = bindTemporary(valueOf(operands[1].node));
-    GCT::node_ptr_t value   = make(tree_->makeLink(2));
-    *value << make(tree_->makeDRef(plainName)) << tree_->clone(operands[0].expr)
+    GCT::node_ptr_t value   = makeOperator(tree_->makeLink(2));
+    *value << makeOperator(tree_->makeDRef(plainName)) << tree_->clone(operands[0].expr)
            << make(tree_->makeDRef(right));
     // The plain operator is resolved as one written by itself would be: this is where its
     // availability is settled for the arguments, and where its result type is known. A result
@@ -3465,6 +3475,29 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         node_handle_t negation = applyTagOperator("__not__", bindTemporary(targetNode), gct);
         LEAVE("LINK");
         return negation;
+    }
+    // What an assignment gives where a value is wanted is the value it wrote: the write's second
+    // operand, one data edge, and no `:var/get` (the ruling on the var version node: the value
+    // and the version are two, and the write itself gives the version -- the cell it writes
+    // into). Written as a statement, or where the position wants no value at all (the last
+    // statement of a `: void` body), the write stands for it: the write is what the statement
+    // does.
+    const bool assignment =
+        gct->size() == 3 && gct->at(0) != nullptr && gct->at(0)->type() == GCT::NodeKind::DREF &&
+        gct->at(0)->name().starts_with("__assn");
+    const bool valueWanted = !unusedStatement && !isVoidGraphExitType(expectedValueType_);
+    if (assignment && valueWanted && normInputs.size() == 2) {
+        // The write is an effect of its own and the value is not it: what the position takes is
+        // the value the write wrote, and the write runs before it is taken. A gate says exactly
+        // that (the node a sync block's last expression takes its value through when the block
+        // ends in a plain value), and without it a write whose result nothing reads is not
+        // driven by anything and does not run.
+        node_handle_t value = valueOf(normInputs[1].node);
+        node_handle_t gate  = currGraph_->addGateNode(nodeTypeOf(value));
+        linkNodes(LinkType::Norm, value, gate);
+        linkNodes(LinkType::Ctrl, targetNode, gate);
+        LEAVE("LINK");
+        return gate;
     }
     LEAVE("LINK");
     return targetNode;

@@ -6,7 +6,7 @@
 
 | 文档 | 说明 |
 |------|------|
-| [00_language_reference.md](00_language_reference.md) | **Camel 语言参考**（类 Python Language Reference：词法、类型、执行模型、表达式、语句、文法概要） |
+| [语言参考](../language/README.md) | **Camel 语言参考**（在 `docs/language/**`：词法、类型、执行模型、表达式、语句、文法概要） |
 | [01_overview.md](01_overview.md) | 项目总览、设计哲学与核心概念 |
 | [03_trees_and_structures.md](03_trees_and_structures.md) | 各种树与中间结构详解（CST、AST、GCT 及 GIR 视图） |
 | [04_compilation_pipeline.md](04_compilation_pipeline.md) | 编译流水线：从源码到图与字节码 |
