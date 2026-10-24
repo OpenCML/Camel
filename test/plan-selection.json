@@ -306,6 +306,11 @@
             "plans": ["feat/examples"]
         },
         {
+            "comment": "The CPython binding of the runtime (H253): the extension module links libcamel and is read by the Python binding plan, which drives it from an interpreter (the test skips where the extension was not built).",
+            "paths": ["bindings/"],
+            "plans": ["feat/bindings"]
+        },
+        {
             "comment": "The exemplars and their checker: feat/exemplars re-runs every exemplar and checks its recorded output.",
             "paths": ["exemplars/"],
             "plans": ["feat/exemplars.plan.toml"]

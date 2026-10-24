@@ -17,7 +17,6 @@ import {
     outArtifactRoot,
     outArtifactBin
 } from './common.js'
-import { ensureDirSync } from 'fs-extra/esm'
 import build, {
     findInterpreterDevelopmentLayout,
     probeCompilePythonInterpreter,
@@ -26,6 +25,12 @@ import build, {
     rollupMmFromVersion
 } from './build.js'
 import { spawnSync } from 'child_process'
+
+/** `fs-extra`'s ensureDirSync is one call to `fs`; keeping it out lets this script run on a
+ *  checkout that has the build but no `node_modules`, which is where a local wheel is checked. */
+function ensureDirSync(dir) {
+    fs.mkdirSync(dir, { recursive: true })
+}
 
 /**
  * PyPI packaging: for each SDK under modules/python/sdks/, calls build({ rollupMm, ... }) so CMake sees
@@ -235,7 +240,38 @@ function pyCmd(exe) {
  */
 function ensurePackagingInstalled(pyExe) {
     const py = pyCmd(pyExe)
-    runCommand(`${py} -m pip install -q packaging`)
+    // Best effort: the CI image gets it from the index, and a host that has no egress and already
+    // has it (setuptools depends on it) is not made to wait for an index it cannot reach. A helper
+    // that genuinely lacks it fails at the tag query below, which names what it needs.
+    spawnSync(`${py} -m pip install -q --disable-pip-version-check packaging`, {
+        stdio: 'ignore',
+        shell: true
+    })
+}
+
+function envFlag(name) {
+    const value = (process.env[name] || '').toLowerCase()
+    return value === '1' || value === 'true' || value === 'yes'
+}
+
+const SKIP_BUILD = envFlag('CAMEL_PYPI_SKIP_BUILD')
+
+/**
+ * The rollup's build step, with an escape for a machine that has already built the tree.
+ *
+ * With CAMEL_PYPI_SKIP_BUILD=1 the install collected in out/<tag>/ is rolled up exactly as it
+ * stands. The content of the wheel does not come from the rebuild -- it is copied out of
+ * out/<tag>/ -- so a local check of a wheel on a machine that cannot reach the package index,
+ * and therefore cannot install the `build` module either, still produces the same artifact from
+ * a tree that `npm run build` already built. CI never sets it, and every other run takes the
+ * path it took before.
+ */
+function runBuild(options) {
+    if (SKIP_BUILD) {
+        logStep('CAMEL_PYPI_SKIP_BUILD=1: rolling up the out/<tag>/ that is already collected')
+        return
+    }
+    build(options)
 }
 
 /**
@@ -291,6 +327,11 @@ function packageWheelBundle({
     }
 
     const WRAPPER_DIR = path.join(PYPI_BASE, 'wrapper-dist')
+    // A run that failed left its `build/` and `dist/` behind, and both are read below: the wheel
+    // is copied out of `dist/`, so a stale one from an earlier run would be published beside the
+    // new one. Start from neither.
+    removeDir(path.join(PYPI_BASE, 'build'))
+    removeDir(path.join(PYPI_BASE, 'dist'))
     fs.mkdirSync(WRAPPER_DIR, { recursive: true })
     if (isWin) {
         writeWindowsWrappers(WRAPPER_DIR, toolBinaries)
@@ -315,8 +356,29 @@ function packageWheelBundle({
     const py = pyCmd(buildPythonExe)
     logStep('Building wheel (stub py3-none-any, then retag)')
     process.chdir(PYPI_BASE)
-    runCommand(`${py} -m pip install -q build wheel packaging`)
-    runCommand(`${py} -m build --wheel`)
+    // The wheel is built with `build` where it is installable, and with the setuptools that pip can
+    // already see where it is not; `wheel` is not needed at all, since scripts/wheel_retag.py does
+    // the retag with the standard library. A host with no egress gets the same artifact.
+    spawnSync(`${py} -m pip install -q --disable-pip-version-check build packaging`, {
+        stdio: 'ignore',
+        shell: true
+    })
+    // `-I` keeps this directory off `sys.path`: a `build/` left by an interrupted run would
+    // otherwise be imported as the `build` module, and `python -m build` would fail on it.
+    const hasBuildModule =
+        spawnSync(`${py} -I -c "import build.__main__"`, {
+            stdio: 'ignore',
+            shell: true
+        }).status === 0
+    if (hasBuildModule) {
+        runCommand(`${py} -I -m build --wheel`)
+    } else {
+        logWarn(
+            'the `build` module is not installed and could not be fetched; ' +
+                'building the wheel with `pip wheel --no-build-isolation` instead'
+        )
+        runCommand(`${py} -m pip wheel --no-build-isolation --no-deps -w dist .`)
+    }
 
     const distDir = path.join(PYPI_BASE, 'dist')
     const anyWheels = fs.readdirSync(distDir).filter((f) => f.endsWith('-any.whl'))
@@ -325,11 +387,14 @@ function packageWheelBundle({
         process.exit(1)
     }
     logStep(`Retagging wheel(s): ${pythonTag}-${abiTag}-${platformTag}`)
+    // The retag is a rename plus the `Tag:` lines in `*.dist-info/WHEEL`, and wheel 0.45 removed
+    // the command line that used to do it, so the repository does it itself with `zipfile`
+    // (scripts/wheel_retag.py). A wheel whose name says `py3-none-any` would be installable on
+    // an interpreter and a machine it cannot run on, which is exactly what this prevents.
+    const retagger = path.join(BASEDIR, 'scripts', 'wheel_retag.py')
     for (const w of anyWheels) {
         const wheelPath = path.join('dist', w).split(path.sep).join('/')
-        runCommand(
-            `${py} -m wheel tags --python-tag ${pythonTag} --abi-tag ${abiTag} --platform-tag ${platformTag} --remove "${wheelPath}"`
-        )
+        runCommand(`${py} "${retagger}" "${wheelPath}" ${pythonTag} ${abiTag} ${platformTag}`)
     }
 
     ensureDirSync(pypiDist)
@@ -379,7 +444,7 @@ function main() {
             }
             ensurePackagingInstalled(pyExe)
             const tags = getWheelTagsFromPythonExe(pyExe)
-            build({
+            runBuild({
                 rollupMm: sdk.mm,
                 pythonRootDir: sdk.root,
                 pythonExecutable: pyExe,
@@ -425,7 +490,7 @@ function main() {
             }
             ensurePackagingInstalled(pyExe)
             tags = getWheelTagsFromPythonExe(pyExe)
-            build({
+            runBuild({
                 rollupMm: sdk.mm,
                 pythonRootDir: sdk.root,
                 pythonExecutable: pyExe,
@@ -454,7 +519,7 @@ function main() {
             }
             ensurePackagingInstalled(pyExe)
             tags = getWheelTagsFromPythonExe(pyExe)
-            build({
+            runBuild({
                 rollupMm,
                 pythonRootDir: layout.root,
                 pythonExecutable: pyExe,
@@ -497,14 +562,14 @@ function main() {
         }
         ensurePackagingInstalled(pyExe)
         tags = getWheelTagsFromPythonExe(pyExe)
-        build({
+            runBuild({
             rollupMm,
             pythonRootDir: layout.root,
             pythonExecutable: pyExe,
             cleanBuildDir: true
         })
     } else {
-        build({ cleanBuildDir: false })
+        runBuild({ cleanBuildDir: false })
     }
     process.chdir(BASEDIR)
     packageWheelBundle({

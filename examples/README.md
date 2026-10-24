@@ -96,6 +96,7 @@ by git.
 
 ## Other directories
 
+- [`python/`](python/): Camel used from Python. `python/rules/` is a Python project whose pricing rules are a Camel module (`pip install camel-lang`, then `python examples/python/rules/basket.py`); see [`python/rules/README.md`](python/rules/README.md) and [technical page 57](../docs/technical/57_python_bindings.md).
 - [`perf/`](perf/): `fibs.cml` times a recursive Fibonacci function with `perf.perfms` (`camel examples/perf/fibs.cml std::fvm`); its output is a measurement and differs from run to run.
 - [`tty/`](tty/): `snake.cml` is an interactive terminal game for manual exploration (`camel examples/tty/snake.cml`); see [`tty/README.md`](tty/README.md).
 

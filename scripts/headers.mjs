@@ -145,6 +145,13 @@ const RULES = [
         kind: 'C/C++',
         reason: 'a C helper of the test tooling (the allocator shim), not a test case',
     },
+    {
+        path: /^bindings\//,
+        ext: CPP_EXT,
+        member: true,
+        kind: 'C/C++',
+        reason: 'a host binding of the runtime (the CPython extension module links libcamel and ships with it), which is product code and not a test',
+    },
 
     // Allow: the standard library's declarations.
     {
