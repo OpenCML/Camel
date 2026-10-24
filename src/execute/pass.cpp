@@ -82,6 +82,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <tuple>
+#include <unordered_map>
 
 using namespace camel::core::error;
 using namespace camel::core::context;
@@ -1445,12 +1446,32 @@ ResolvedPass resolvePassWithModule(const std::string &spec, const context_ptr_t 
 
 namespace {
 
-/// Whether `after` holds graphs of content different from `before`: a graph's revision changes
-/// only when a commit encoded different content for it (graph.h), and a graph one of the two
-/// holds and the other does not counts. The program objects themselves differ after every
-/// commit, so pointer inequality would call every pass a change.
+/// The graph id -> revision of every graph a program holds: what `programContentChanged`
+/// compares. Read out before a pass runs rather than looked at afterwards, because a pass of the
+/// core is another registered pass's caller (`std::opt::algebra` runs the rules library's
+/// `rules::simplify`, `std::opt::saturate` its `rules::saturate_only`), and that inner pass
+/// commits its result and releases the program the outer one was given
+/// (`Context::settleRuntimeGraphs`). The old program is not read after `pass->apply` returns.
+std::unordered_map<uint32_t, uint64_t>
+graphRevisionsOf(const camel::runtime::Program *program) {
+    std::unordered_map<uint32_t, uint64_t> revisions;
+    for (camel::runtime::GCGraph *graph : program->graphs()) {
+        if (graph != nullptr) {
+            revisions.emplace(camel::runtime::toValue(graph->id()), graph->revision());
+        }
+    }
+    return revisions;
+}
+
+/// Whether `after` holds graphs of content different from `before`, whose graph revisions are
+/// `beforeRevisions`: a graph's revision changes only when a commit encoded different content for
+/// it (graph.h), and a graph one of the two holds and the other does not counts. The program
+/// objects themselves differ after every commit, so pointer inequality would call every pass a
+/// change.
 bool programContentChanged(
-    const camel::runtime::Program *before, const camel::runtime::Program *after) {
+    const camel::runtime::Program *before,
+    const std::unordered_map<uint32_t, uint64_t> &beforeRevisions,
+    const camel::runtime::Program *after) {
     if (after == nullptr) {
         return true;
     }
@@ -1461,13 +1482,13 @@ bool programContentChanged(
         if (graph == nullptr) {
             continue;
         }
-        const camel::runtime::GCGraph *old = before->graph(graph->id());
-        if (old == nullptr || old->revision() != graph->revision()) {
+        const auto known = beforeRevisions.find(camel::runtime::toValue(graph->id()));
+        if (known == beforeRevisions.end() || known->second != graph->revision()) {
             return true;
         }
     }
-    for (camel::runtime::GCGraph *graph : before->graphs()) {
-        if (graph != nullptr && after->graph(graph->id()) == nullptr) {
+    for (const auto &entry : beforeRevisions) {
+        if (after->graph(static_cast<camel::runtime::GraphId>(entry.first)) == nullptr) {
             return true;
         }
     }
@@ -1485,13 +1506,14 @@ PassRunResult applyRegisteredPass(
         throwUnresolvedPass(spec, resolved, 0, ctx);
     }
     const bool publishes = ctx && ctx->currentRuntimeProgram() == program;
+    // The old program's content is read here, before the pass runs (graphRevisionsOf).
+    const std::unordered_map<uint32_t, uint64_t> beforeRevisions = graphRevisionsOf(program);
     auto pass            = resolved.factory(ctx);
     const camel::runtime::Program *produced = pass->apply(program, os);
     if (produced == nullptr) {
         return {nullptr, true};
     }
-    // Read the old program's graph versions before settleRuntimeGraphs can release it.
-    const bool changed = programContentChanged(program, produced);
+    const bool changed = programContentChanged(program, beforeRevisions, produced);
     if (ctx) {
         deliverPassWarnings(*ctx, spec);
         // A pass that ran on the installed program publishes a new one; its old program is no
