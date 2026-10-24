@@ -23,6 +23,11 @@ syntax	ComparisonNeedsSpace	0x00000C	error	This '<' touches {0}, so it opens an 
 syntax	AngleCloseAfterSpace	0x00000D	error	This '>' follows a space and is read as the comparison operator, so the angle-bracket list it was meant to close is still open at {0}.	The '>' that closes '<...>' touches the last item or starts its line: f<a, b>. Directly inside '<...>', a '>' after a space is a comparison (xs->filter<(x: int) => x > 1>).
 syntax	LineStartsWithOperator	0x00000E	error	A statement cannot start with '{0}': the line break before it ended the statement of the line above.	A line break ends a statement unless the line is visibly unfinished. To continue an expression on the next line, end the line with the operator ('a +', then 'b'). An operator that can only be binary ('*', '->', '&&', '==', ...) also continues the expression when it starts the next line.
 syntax	EmptyInterpolation	0x00000F	error	An interpolation has no expression to format.	Write an expression between '${{' and '}}': ${{value}}. For a literal '${{' write '\${{'.
+# A declaration's applicability condition belongs before the body it guards (design principles
+# 4.4; the ruling of 2026-10-24). The trailing position a rule used to accept is not read as a
+# condition, and saying so by name is what keeps the program from being told only that a token
+# did not fit.
+syntax	WhenAfterBody	0x000010	error	A declaration's condition comes before the body it guards, so {0} cannot follow the body.	Write it between the parameters and the body: rule add_zero::<T>(x: T) when is_integer::<T>() {{ x + 0 => x }}. The trailing form is not read as a condition.
 #
 # Warnings (severity bits = Warn).
 syntax	ComparisonAcrossLines	0x100001	warn	This '>' is read as a comparison with the next line, which starts with {0}: two statements may have been joined into one.	A '>' after a space, at the end of a line, is the comparison operator, and the expression goes on with the next line. The '>' that closes '<...>' arguments touches the last argument; a chain of comparisons (a < b > c) is never what a program means.

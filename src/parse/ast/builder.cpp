@@ -845,7 +845,13 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
     const auto sides  = body->exprs();
     const bool twoWay = body->has(TK::Equiv);
     const auto params = context->get<cst::ParentParams>();
-    const auto when   = context->expr();
+    // The rule's applicability condition is part of its signature, so it is written between the
+    // parameters and the body (`rule add_zero::<T>(x: T) when is_integer::<T>() { … }`, design
+    // principles 4.4; the ruling of 2026-10-24). A trailing `when` is a syntax error and is
+    // reported by name (`SyntaxDiag::WhenAfterBody`); its expression is still read here, so the
+    // refusal that follows is about the placement and not about a missing condition.
+    const auto whenClause = context->get<cst::WhenClause>();
+    const auto when       = whenClause ? whenClause->expr() : context->expr();
     // A rule declares its type parameters the way a function does, after its name
     // (`rule sub_self::<T>(x: T) { ... }`): every function the rule becomes is generic over
     // them, so the sides bind and instantiate like an ordinary generic function.

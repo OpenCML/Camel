@@ -18,7 +18,7 @@
  *     the seed an entry is sampled with is derived from its place in the array, so a measured
  *     arrangement is kept rather than re-derived (the ruling of 2026-10-24 on
  *     `accuracy-check-sampling` asks for the seed to follow the rule's identity instead; that is
- *     the other lane's change, `docs/handover/questions/accuracy-check-sampling.md`);
+ *     the other lane's change, `docs/handover/reviews/questions-2026-10-23.md（§accuracy-check-sampling）`);
  *   * `tensor_log_softmax_of_softmax` in a call of its own, over the 100 samples and the seed its
  *     verdict was measured at.
  *

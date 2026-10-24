@@ -31,6 +31,11 @@ enum class SyntaxDiag : uint32_t {
     AngleCloseAfterSpace      = 0x00000D,
     LineStartsWithOperator    = 0x00000E,
     EmptyInterpolation        = 0x00000F,
+    // A declaration's applicability condition belongs before the body it guards (design principles
+    // 4.4; the ruling of 2026-10-24). The trailing position a rule used to accept is not read as a
+    // condition, and saying so by name is what keeps the program from being told only that a token
+    // did not fit.
+    WhenAfterBody = 0x000010,
 
     // Warnings (severity bits = Warn).
     ComparisonAcrossLines = 0x100001,

@@ -3,8 +3,7 @@ module declared
 
 export rule mul_one(x: int) { x * 1 => x }
 rule add_swap(a: int, b: int) { a + b <=> b + a }
-rule combine(x: int, const c1: int, const c2: int) { x * c1 + x * c2 => x * (c1 + c2) }
-    when true
+rule combine(x: int, const c1: int, const c2: int) when true { x * c1 + x * c2 => x * (c1 + c2) }
 rule fuse<f, g>(xs: int) { xs->f->g => xs->g }
 
 func main(): int sync {

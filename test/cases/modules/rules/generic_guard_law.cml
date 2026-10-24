@@ -23,7 +23,7 @@ func nonzero::<T>(c: T): bool {
     return c != 0.0
 }
 
-rule combine_nonzero::<T>(x: T, const c: T) { x * c + x => x * (c + 1.0) } when nonzero::<T>(c)
+rule combine_nonzero::<T>(x: T, const c: T) when nonzero::<T>(c) { x * c + x => x * (c + 1.0) }
 
 func nodesOf(p: Program, function: string): Node[] {
     let found = graphs(p)->filter<(g: Graph): bool => name(g) == function>

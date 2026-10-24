@@ -2,7 +2,7 @@ id = "parse.rules"
 order = 303
 tier = "fast"
 tags = ["feat", "parse", "rules"]
-desc = "Rule declarations (rewrite design 2): `rule name(params) { left => right } when condition`, `<=>`, `const` parameters. The grammar reads them and the formatter writes them; the compiler makes the pair of functions and the value of type Rule (module rewrite)."
+desc = "Rule declarations (rewrite design 2): `rule name(params) when condition { left => right }`, `<=>`, `const` parameters. The condition is part of the signature, so it is written before the body it guards (design principles 4.4; the ruling of 2026-10-24). The grammar reads them and the formatter writes them; the compiler makes the pair of functions and the value of type Rule (module rewrite)."
 
 [[tests]]
 name = "rules.ast"
@@ -34,7 +34,7 @@ case = "../../../cases/parse/rules/declared.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ConstructNotSupported"
-expect_diagnostic_line = 8
+expect_diagnostic_line = 7
 expect_diagnostic_column = 10
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
@@ -75,8 +75,21 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 10000
 
 [[tests]]
+name = "rules.when_after_the_body"
+desc = "A `when` written after the body of a rule is refused by name: the condition of a declaration is written before the body it guards (design principles 4.4; the ruling of 2026-10-24 on the `when` placement), and the diagnostic says where it belongs instead of only that a token did not fit."
+kind = "behavior"
+case = "../../../cases/parse/rules/when_after_body.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SyntaxDiag::WhenAfterBody"
+expect_diagnostic_line = 4
+expect_diagnostic_column = 37
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
 name = "rules.format_snapshot"
-desc = "camel-format writes the rule declarations on one line each, the condition after the closing brace."
+desc = "camel-format writes the rule declarations on one line each, the condition between the parameters and the body (design principles 4.4; the ruling of 2026-10-24)."
 kind = "snapshot"
 tool = "camel-format"
 case = "../../../cases/parse/rules/declared.cml"

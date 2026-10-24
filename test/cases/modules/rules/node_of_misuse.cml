@@ -14,7 +14,7 @@ module node_of_misuse
 import { Program, Node } from graph
 import { rewrite } from rewrite
 
-rule drop_by_node(x: int, const c: int) { x * c => x } when node_of(x) == node_of(c)
+rule drop_by_node(x: int, const c: int) when node_of(x) == node_of(c) { x * c => x }
 
 export func apply(p: Program): Program! {
     return rewrite(p, [drop_by_node])

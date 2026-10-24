@@ -15,8 +15,8 @@ import { Graph, Node, NodeKind, Program, graphs, kind, name, nodes } from graph
 import { Run, explain_all, rule_name, run, why_not } from rewrite
 import { is_float, is_integer } from types
 
-rule add_zero::<T>(x: T) { x + 0 => x } when is_integer::<T>()
-rule add_minus_zero::<T>(x: T) { x + -0.0 => x } when is_float::<T>()
+rule add_zero::<T>(x: T) when is_integer::<T>() { x + 0 => x }
+rule add_minus_zero::<T>(x: T) when is_float::<T>() { x + -0.0 => x }
 
 /// The nodes of one function of the program, by the name of its graph.
 func nodesOf(p: Program, function: string): Node[] {

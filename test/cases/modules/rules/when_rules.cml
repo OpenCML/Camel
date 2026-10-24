@@ -35,13 +35,13 @@ func typeText(n: Node): string {
     }
 }
 
-rule add_zero_const(x: int, y: int) { x + y => x } when isZeroConst(y)
+rule add_zero_const(x: int, y: int) when isZeroConst(y) { x + y => x }
 
 /// The shape rule: only a product whose second factor is an addition is replaced.
-rule mul_sum_by_shape(x: int, y: int) { x * y => y } when isAddNode(y)
+rule mul_sum_by_shape(x: int, y: int) when isAddNode(y) { x * y => y }
 
-rule int_double(x: int) { x + x => x * 2 } when typeText(x) == 'int'
-rule float_double(x: float) { x + x => x * 2.0 } when typeText(x) == 'float'
+rule int_double(x: int) when typeText(x) == 'int' { x + x => x * 2 }
+rule float_double(x: float) when typeText(x) == 'float' { x + x => x * 2.0 }
 
 export func apply(p: Program): Program! {
     return rewrite(p, [add_zero_const, mul_sum_by_shape, int_double, float_double])

@@ -10,7 +10,7 @@ export rule mul_one(x: int) { x * 1 => x }
 rule swap(a: int, const c: int) { a * c <=> c * a }
 /// A rule with a condition: the value takes the fourth function, name__when, whose parameters are
 /// nodes of the draft being rewritten (H38).
-rule guarded(x: int) { x + 0 => x } when true
+rule guarded(x: int) when true { x + 0 => x }
 
 func main(): int sync {
     println(rule_name(mul_one), rule_two_way(mul_one), rule_consts(mul_one))

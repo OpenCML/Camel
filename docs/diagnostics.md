@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-259 diagnostics: 240 errors, 19 warnings.
+260 diagnostics: 241 errors, 19 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -40,6 +40,7 @@ prints one entry.
 | `0x0200000D` | [SyntaxDiag::AngleCloseAfterSpace](#anglecloseafterspace) | Error |
 | `0x0200000E` | [SyntaxDiag::LineStartsWithOperator](#linestartswithoperator) | Error |
 | `0x0200000F` | [SyntaxDiag::EmptyInterpolation](#emptyinterpolation) | Error |
+| `0x02000010` | [SyntaxDiag::WhenAfterBody](#whenafterbody) | Error |
 | `0x02100001` | [SyntaxDiag::ComparisonAcrossLines](#comparisonacrosslines) | Warn |
 | `0x03000001` | [SemanticDiag::Redeclaration](#redeclaration) | Error |
 | `0x03000002` | [SemanticDiag::ModuleNotFound](#modulenotfound) | Error |
@@ -806,6 +807,34 @@ Write an expression between '${' and '}': ${value}. For a literal '${' write '\$
 module fstring_empty_interpolation
 func main(): int sync {
     print(`A ${}`)
+    return 0
+}
+```
+
+### WhenAfterBody
+
+`0x02000010` · Error · `SyntaxDiag::WhenAfterBody`
+
+**Message**
+
+```text
+A declaration's condition comes before the body it guards, so {0} cannot follow the body.
+```
+
+**Help**
+
+```text
+Write it between the parameters and the body: rule add_zero::<T>(x: T) when is_integer::<T>() { x + 0 => x }. The trailing form is not read as a condition.
+```
+
+**Example** (`test/cases/parse/rules/when_after_body.cml`, run as `camel -E short test/cases/parse/rules/when_after_body.cml`)
+
+```camel
+module when_after_body
+
+rule guarded(x: int) { x + 0 => x } when true
+
+func main(): int sync {
     return 0
 }
 ```
@@ -6422,7 +6451,7 @@ module node_of_misuse
 import { Program, Node } from graph
 import { rewrite } from rewrite
 
-rule drop_by_node(x: int, const c: int) { x * c => x } when node_of(x) == node_of(c)
+rule drop_by_node(x: int, const c: int) when node_of(x) == node_of(c) { x * c => x }
 
 export func apply(p: Program): Program! {
     return rewrite(p, [drop_by_node])

@@ -26,7 +26,7 @@ import { is_integer } from types
 
 /// The law: `(a + b) - b` is `a`, for two integer types. Written once, instantiated at every pair
 /// of the program's types whose condition holds.
-rule pair_sum_self::<T, U>(a: T, b: U) { (a + b) - b => a } when is_integer::<T>() && is_integer::<U>()
+rule pair_sum_self::<T, U>(a: T, b: U) when is_integer::<T>() && is_integer::<U>() { (a + b) - b => a }
 
 /// The nodes of one function of the program, by the name of its graph.
 func nodesOf(p: Program, function: string): Node[] {
