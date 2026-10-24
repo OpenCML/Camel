@@ -1,4 +1,4 @@
-timeout_ms = 10000"
+id = "modules.onnx"
 order = 363
 tier = "fast"
 tags = ["feat", "modules", "onnx"]
