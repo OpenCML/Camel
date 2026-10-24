@@ -3,6 +3,7 @@ add_camel_module(
   NAME rewrite
   SOURCES
     analysis.cpp
+    checkreport.cpp
     module.cpp
     proof.cpp
     rule.cpp
