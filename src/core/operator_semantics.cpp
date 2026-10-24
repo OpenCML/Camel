@@ -126,6 +126,23 @@ std::string permissionsText(PermissionMask mask) {
 
 // ---- The numeric contract of a rewrite -----------------------------------------------------
 
+double elementEpsilon(type::TypeCode element) {
+    switch (element) {
+    case type::TypeCode::BFloat16:
+        return 0x1p-8; // 2^-8
+    case type::TypeCode::Float16:
+        return 0x1p-10; // 2^-10
+    case type::TypeCode::Float32:
+        return 0x1p-24; // 2^-24
+    case type::TypeCode::Float64:
+        return 0x1p-53; // 2^-53
+    default:
+        // Not a floating element type: no number, and never f32's by default (the table exists
+        // so that a reduced-precision question cannot be answered with f32's precision).
+        return 0.0;
+    }
+}
+
 double stepUlps(const NumericSemantics &numeric) {
     switch (numeric.cls) {
     case NumericClass::Exact:

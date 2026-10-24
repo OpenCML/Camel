@@ -1368,3 +1368,36 @@ expect_diagnostic_column = 13
 expect_output_contains = ["The left side of '||' has type 'bool?', not 'bool'."]
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+
+[[tests]]
+name = "nullable_positions"
+desc = "`null` is a compile-time constant of the nullable type it stands in (design principles 4.4, 5.1, the ruling of 2026-10-24 on `check-program-parameter`): a `let` whose declared type is a `T?` gives the literal that type, a `return` under a declared `T?` does the same, and the default of a `with` parameter of a nullable type takes this constant. The graph of the declaration is what says the value is a constant of the type: the node of the default is a DATA node labelled `null` of type `int?`, not a CAST of a `void` one."
+kind = "behavior"
+case = "../../../cases/compile/tagged/nullable_positions.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "null\nnull\n1\nnull\n4\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 12000
+
+[[tests]]
+name = "nullable_positions.default_is_a_null_constant"
+desc = "The same case under `std::gir`: the default of the `with` parameter `p` is one static DATA node whose label is `null` and whose `value_type` is `int?` (the constant of the position's type), so a position that requires a compile-time constant reads a value of the type rather than a CAST of one."
+kind = "behavior"
+case = "../../../cases/compile/tagged/nullable_positions.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const lines = out.split('\n')
+const nulls = lines.filter((l) => l.includes('label="null"') && l.includes('type="DATA"'))
+const typed = nulls.filter((l) => l.includes('value_type="int?"'))
+assert(typed.length === 1, 'one null constant of the position\'s type, got ' + typed.length + ': ' + nulls.join(' | '))
+assert(typed[0].includes('span="16:16-16:20"'), "the constant stands where the default is written: " + typed[0])
+const id = typed[0].trim().split(' ')[0]
+assert(out.split(id + ' ->').length - 1 === 2, 'both calls that leave the parameter out read that one node')
+}
+"""
+timeout_ms = 12000

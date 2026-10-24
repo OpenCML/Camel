@@ -4175,7 +4175,7 @@ Model finishModel(Emitter &emitter, const ExportOptions &options) {
 OptimizeRewriteConfig exportRewriteConfig() {
     OptimizeRewriteConfig config;
     // Everything that is not recursive is inlined; ONNX has no calls.
-    config.inlineConfig.smallSubgraphMaxNonDataPortNodes = std::numeric_limits<size_t>::max();
+    config.inlineConfig.smallSubgraphMaxComputeNodes = std::numeric_limits<size_t>::max();
     // An export has to reach straight-line code or it is refused, so it is not held to the growth
     // bounds that keep an optimization pass cheap (the growth_budget parameter belongs to the
     // pass on the pipeline, and an export that runs after it may be held to it). A graph too
