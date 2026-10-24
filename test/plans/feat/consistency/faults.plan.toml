@@ -104,7 +104,7 @@ desc = "A fault in a waited call that has already written its var parameter."
 case = "../../../cases/consistency/faults/fault_in_wait.cml"
 expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
 expect_diagnostic_line = 8
-expect_diagnostic_column = 16
+expect_diagnostic_column = 11
 expect_stdout_starts_with = "5\n"
 
 [[tests]]
@@ -153,7 +153,7 @@ desc = "The function of a foreach faults at element 2: foreach runs in element o
 case = "../../../cases/consistency/faults/fault_in_foreach.cml"
 expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
 expect_diagnostic_line = 8
-expect_diagnostic_column = 16
+expect_diagnostic_column = 11
 expect_stdout_starts_with = "before\n-30\n-60\n"
 
 [[tests]]

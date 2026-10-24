@@ -7,7 +7,7 @@ module element_assigned
 
 func main(): int sync {
     var arr = [1, 2, 3]
-    wait arr[0] = 9
+    arr[0] = 9
     println(arr)
     return 0
 }

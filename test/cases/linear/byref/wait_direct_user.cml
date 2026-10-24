@@ -1,13 +1,12 @@
 /**
- * `wait` orders by the use of the variable, not by position (docs/design-principles.cn.md
- * 2.6): in `A(i + 1); wait modify(i)` the node that directly uses the value of `i` is `+`, so
- * `modify` is ordered after `+`. It is not ordered after `A`: A never touches `i`.
+ * A sync body orders its statements: in `before(i + 1); modify(i)` the call of `before` is
+ * ordered before `modify`, even though `before` never touches `i`. (The retired `wait` ordered
+ * the direct user of the variable instead -- `+`, hence no edge from `before`.)
  *
- * run() is not a sync block. The value is the same whichever of `before` and `modify` runs
- * first, because `+` has read `i` before `modify` writes it:
+ * run() is a sync body, and its statements run in writing order. The value is
  *   a = before(1 + 1) = 2, b = i after modify = 11, result 2011
- * The plan checks the two control edges on the graph dump (wait_direct_user.graph): `+ ->
- * modify` is present, `before -> modify` is absent.
+ * The plan checks the control edges on the graph dump (wait_direct_user.graph): `before ->
+ * modify` is present, and so is `modify ->` the read written after it.
  */
 module wait_direct_user
 
@@ -15,15 +14,15 @@ func before(x: int): int {
     return x
 }
 
-sync func modify(var x: int): int sync {
-    wait x += 10
+func modify(var x: int): int sync {
+    x += 10
     return 0
 }
 
-func run(): int {
+func run(): int sync {
     var i = 1
     let a = before(i + 1)
-    wait modify(i)
+    modify(i)
     let b = i
     return a * 1000 + b
 }

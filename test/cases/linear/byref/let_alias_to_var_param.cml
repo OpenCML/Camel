@@ -5,14 +5,14 @@
  */
 module let_alias_to_var_param
 
-sync func bump(var x: int) {
-    wait x += 1
+func bump(var x: int) {
+    x += 1
 }
 
 func main(): int sync {
     var c = 0
     let a = c
-    wait bump(a)
+    bump(a)
     println(c)
     return 0
 }

@@ -1,5 +1,5 @@
 /**
- * Consecutive statement calls of sync functions with constant arguments.
+ * Consecutive statement calls of functions with sync bodies, with constant arguments.
  * std::opt specializes each call (the constant argument is bound, so the call
  * loses a norm input) and inlines it in the same rewrite session. Rewriting
  * the call node used to drop the user reference of its control input, so

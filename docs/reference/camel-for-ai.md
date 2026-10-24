@@ -190,7 +190,7 @@ func greet(): int {
 | Group | Words |
 |---|---|
 | Declaration | `let` `var` `func` `type` `with` `module` `import` `export` `from` `namespace` `using` |
-| Control | `if` `then` `else` `match` `case` `return` `throw` `wait` `sync` `loop` `while` `do` `for` `in` `static` |
+| Control | `if` `then` `else` `match` `case` `return` `throw` `sync` `loop` `while` `do` `for` `in` `static` |
 | Type and conversion | `as` `const` `constas` `enum` |
 | Literal | `null` `true` `false` |
 | Reserved (accepted, not implemented — §13) | `is` `of` `try` `catch` `finally` `typeof` `keyof` |
@@ -331,33 +331,31 @@ parallel, result in position order), `xs->reduce<f, init>` and `xs->foreach<f>` 
 <!-- camel-for-ai region: precedence (generated from src/parse/syntax/parser_expr.cpp; node scripts/camel-for-ai.mjs --write) -->
 ```text
  1  dataExpr            -                                  -
- 2  waitExpr            wait                               prefix, optional
- 3  ctrlExpr            if then else                       construct
- 4  assignExpr          = += -= *= /= %= ^= @= &= |=       one
- 5  logicalOrExpr       ||                                 repeat, left
- 6  logicalAndExpr      &&                                 repeat, left
- 7  orExpr              |                                  repeat, left
- 8  andExpr             &                                  repeat, left
- 9  equalityExpr        === !== == !=                      repeat, left
-10  relationalExpr      < > <= >=                          repeat, left
-11  additiveExpr        + -                                repeat, left
-12  multiplicativeExpr  * / @ %                            repeat, left
-13  powerExpr           ^                                  right, one
-14  nullableExpr        ?? !!                              right (a whole expression on the right)
-15  unaryExpr           as is                              one
-16  linkExpr            -> ?->                             repeat, left
-17  negExpr             - ! ~                              prefix
-18  negPower            - ! ~ ^                            prefix, right
-19  compExpr            ..                                 repeat, left
-20  annoExpr            !                                  repeat, left
+ 2  ctrlExpr            if then else                       construct
+ 3  assignExpr          = += -= *= /= %= ^= @= &= |=       one
+ 4  logicalOrExpr       ||                                 repeat, left
+ 5  logicalAndExpr      &&                                 repeat, left
+ 6  orExpr              |                                  repeat, left
+ 7  andExpr             &                                  repeat, left
+ 8  equalityExpr        === !== == !=                      repeat, left
+ 9  relationalExpr      < > <= >=                          repeat, left
+10  additiveExpr        + -                                repeat, left
+11  multiplicativeExpr  * / @ %                            repeat, left
+12  powerExpr           ^                                  right, one
+13  nullableExpr        ?? !!                              right (a whole expression on the right)
+14  unaryExpr           as is                              one
+15  linkExpr            -> ?->                             repeat, left
+16  negExpr             - ! ~                              prefix
+17  negPower            - ! ~ ^                            prefix, right
+18  compExpr            ..                                 repeat, left
+19  annoExpr            !                                  repeat, left
 ```
 
 The production of each level, as `src/parse/syntax/parser_expr.cpp` writes it above the
 function that parses it:
 
 ```text
-dataExpr           : waitExpr | ctrlExpr | loopExpr
-waitExpr           : 'wait'? assignExpr
+dataExpr           : ctrlExpr | loopExpr
 ctrlExpr           : 'if' logicalOrExpr 'then' blockExpr ('else' blockExpr)?
 assignExpr         : logicalOrExpr (('=' | '+=' | '-=' | '*=' | '/=' | '%=' | '^=' | '@=' | '&=' | '|=') logicalOrExpr)?
 logicalOrExpr      : logicalAndExpr ('||' logicalAndExpr)*
@@ -444,7 +442,7 @@ func main(): int sync {
   `xs[i].f = e`. A path assignment rebinds the whole variable, as if written
   `xs = set(xs, i, set(xs[i], f, e))`; the target must be a variable, and `f().x = 5` is
   `SemanticDiag::AssignmentTargetNotVariable`. Passing a value to a `var` parameter of a function is
-  how a callee can write back into the caller's variable (`wait` orders that write, §7).
+  how a callee can write back into the caller's variable (§7).
 - **Generics** are declared after the name: `func first::<T>(xs: T[]): T? { ... }`, called as
   `first::<int>(xs)` or `first(xs)` when the arguments fix `T`.
 - **`loop`** is the language's own iteration, and it yields its last state:
@@ -528,10 +526,9 @@ func f(c: bool): int sync {
 }
 ```
 
-- **`var` parameters and `wait`.** A `var` parameter is a mutable reference to the caller's variable,
-  so the callee's write is a write the caller sees. `wait e` orders `e` against the operations that
-  read or write the variables it touches; `wait x` alone waits for the writes to `x` without needing
-  the value (design principles 4.3).
+- **`var` parameters.** A `var` parameter is a mutable reference to the caller's variable, so the
+  callee's write is a write the caller sees. A write is ordered against the other statements of the
+  sync body it is written in, by the order they are written in (design principles 4.3).
 - **Errors and faults.** A fault (index out of range, division by zero, a value that does not fit a
   conversion, recursion past the limit) stops the program with a located diagnostic and exit code 1;
   `!!` and `sync` do not catch it, and a `T!` returned from `main` and never handled is printed to
@@ -688,7 +685,7 @@ run in the order given; a pass parameter is written `key=value` after the pass n
 - The language does not fix the pass order, and the order can change the result: passes modify the
   graph. A pass that consumes the graph (the schedulers and the translators) ends the pipeline;
   passes written after it do not run, with the warning `RuntimeDiag::PassesNeverRun`.
-- The compiler builds the graph from `var`/`let`, `wait` and `sync`; after that those rules no
+- The compiler builds the graph from `var`/`let` and `sync`; after that those rules no
   longer constrain the passes.
 - `std::gir` is the form to read a program's order from — the nodes and the edges between them are
   the program — and `std::rgir` is the same graph for Graphviz.
@@ -1141,8 +1138,8 @@ so a binding that cannot be written back is refused with
 <!-- camel-snippet: counter-example: a var parameter needs a variable that can be written -->
 
 ```camel
-sync func bump(var x: int): int sync {
-    wait x += 1
+func bump(var x: int): int {
+    x = x + 1
     return x
 }
 
@@ -1153,15 +1150,14 @@ func main(): int sync {
 }
 ```
 
-The `var` is allowed only where the declaration carries the **`sync` modifier**, the `sync` written
-before `func`. A sync body does not count: `func bump(var x: int): int sync { ... }` still warns
-`SemanticDiag::VarParamInAsyncFunction`.
+A `var` parameter is a resource parameter (design principles 3.3): it needs no declaration of its
+own.
 
 **Write instead:**
 
 ```camel
-sync func bump(var x: int): int sync {
-    wait x += 1
+func bump(var x: int): int {
+    x = x + 1
     return x
 }
 
@@ -1302,7 +1298,6 @@ them: most have no decided meaning yet. The diagnostics are named as the compile
 | `e is T` | `SemanticDiag::ConstructNotSupported` | nothing — there is no type at run time; use a `match` over an `enum` |
 | Non-null assertion `x!` | `SemanticDiag::ConstructNotSupported` | `x ?? fallback`, or `match x` |
 | `f ?.. g` | `SemanticDiag::ConstructNotSupported` | nothing |
-| `wait { ... }`, and `wait` before a name, literal or lambda | `SemanticDiag::ConstructNotSupported` | `sync { ... }` |
 | `try { } catch e: T { } finally { }` | `SemanticDiag::TryCatchNotInLanguage` | return `T!`, open it with `!!`, `?->`, `case error e` |
 | Tuple patterns, struct patterns, identifier patterns for ordinary types | `SemanticDiag::ConstructNotSupported` | `if` chains; read the members first |
 | Destructuring `let { x, y } = p`, `let [a, b] = xs` | `SemanticDiag::FeatureNotSupported` | `p.x`, `xs[0]` (tuple destructuring works) |
@@ -1389,7 +1384,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `LambdaParametersNeedParentheses` | E | A lambda's parameters need their parentheses: write '(x) => e', not 'x => e'. |
 | `ComparisonAcrossLines` | W | This '>' is read as a comparison with the next line, which starts with {0}: two statements may have been joined into one. |
 
-**Semantic** (`SemanticDiag`) — 203 (189 errors, 14 warnings)
+**Semantic** (`SemanticDiag`) — 201 (189 errors, 12 warnings)
 
 | `Redeclaration` | E | Redeclaration of reference: '{0}'. |
 | `ModuleNotFound` | E | Module '{0}' not found. {1} |
@@ -1572,9 +1567,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `CompOperandGenericWithoutType` | E | '..' composes two functions, and its {0} operand, the generic function '{1}', has no instance here: write its type arguments ('{1}::<int>'), or give the whole expression an expected function type. |
 | `RangeTwoArgumentsRemoved` | E | The two-parameter 'range(a, b)' is gone; write the interval 'a..b'. |
 | `RangeStepZero` | E | The range 'range({0}, {1}, 0)' has a step of 0, so it is no sequence of integers. |
-| `VarParamInAsyncFunction` | W | Variable parameters are only allowed in sync functions. |
-| `IgnoredSideEffect` | W | {0} is neither waited nor in a sync block, and {1}. |
-| `CapturedWriteInAsyncFunction` | W | {0} writes the captured variable{1} {2} but is not declared with the 'sync' modifier. |
+| `IgnoredSideEffect` | W | {0} is not in a sync block, and {1}. |
 | `EffectNotExecuted` | W | {0} has side effects but is never executed: nothing depends on it and it is not in a sync block. |
 | `ExitInUnusedBranch` | W | This '{0}' gives the value of the '{1}' it is in, and nothing uses that value: it does not leave the function. |
 | `UnusedFallibleValue` | W | This value has type '{0}' and nothing uses it: an error it holds is lost{1}. |
@@ -1628,7 +1621,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `ConstantExpressionFaults` | W | This constant expression faults whenever it is evaluated ({0}); it is not folded. |
 | `TranslationLinksRuntime` | W | std::cpp has no standalone translation of {0}: the program it writes calls the Camel runtime there and is built with libcamel. |
 
-**Semantic** (`SemanticDiag`) — 203 (189 errors, 14 warnings)
+**Semantic** (`SemanticDiag`) — 201 (189 errors, 12 warnings)
 
 | `ReducedPrecisionUnsupported` | E | The call of '{0}' cannot take a value of the reduced-precision element type '{1}'. |
 | `ImplOnBodylessDeclaration` | E | The body-less declaration '{0}' cannot carry '#impl<{1}>': it has no Camel body. |

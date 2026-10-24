@@ -2,20 +2,21 @@
  * A function, or a branch arm, that writes a captured variable (a module-level one included)
  * is a write of that variable where it is called or entered, exactly like a call with a `var`
  * argument (docs/design-principles.cn.md 3.5): reads written after it see the new value, and
- * with `wait` the earlier direct users of the variable are ordered before it. A call of a
+ * inside a sync body the earlier users of the variable are ordered before it. A call of a
  * function that only reads the captured variable is a use of it.
  *
- * None of the functions `*_then_*` below is a sync block, and every return expression names
- * the read first, so that operand order alone would give the other result. Expected output,
+ * Every function `*_then_*` below writes its statements in a sync body, and every return
+ * expression names the read first, so that operand order alone would give the other result.
+ * Expected output,
  * one line per case:
  *   10      call_then_call        peek() written after bump() sees 1
  *   10      call_then_read        a read written after bump() sees 1
- *   100     use_then_waited_call  peek() written before `wait bump()` sees 0
+ *   100     use_then_call         peek() written before `bump()` sees 0
  *   10      transitive_then_read  via() calls bump()
  *   111     arm_then_read         the read after the branch sees the arm's write
  *   1011    arm_call_then_read    the arm's value is a call with a var argument
- *   12      write_then_arm_read   the arm reads the variable after the waited write
- *   611     arm_read_then_write   the arm reads the variable before the waited write
+ *   12      write_then_arm_read   the arm reads the variable after the write
+ *   611     arm_read_then_write   the arm reads the variable before the write
  *   40      recursion_then_read   down() writes after its recursive call
  *   2508    fib_then_read         25 calls of fib(6) = 8
  *   21      nested_then_read      a nested function writes a local variable of its parent
@@ -27,7 +28,7 @@ var levels = 0
 var calls = 0
 
 func bump(): int sync {
-    wait cnt += 1
+    cnt += 1
     return 0
 }
 
@@ -39,8 +40,8 @@ func via(): int {
     return bump()
 }
 
-sync func add(var x: int, n: int): int sync {
-    wait x += n
+func add(var x: int, n: int): int sync {
+    x += n
     return n
 }
 
@@ -49,84 +50,84 @@ sync func add(var x: int, n: int): int sync {
 func down(n: int): int sync {
     let seen = levels
     let r = if n > 0 then down(n - 1) else 0
-    wait levels += 1
+    levels += 1
     return r + seen * 0
 }
 
 func fib(n: int): int sync {
-    wait calls += 1
+    calls += 1
     return if n < 2 then n else fib(n - 1) + fib(n - 2)
 }
 
-func call_then_call(): int {
-    wait cnt = 0
+func call_then_call(): int sync {
+    cnt = 0
     let a = bump()
     let b = peek()
     return b * 10 + a
 }
 
-func call_then_read(): int {
-    wait cnt = 0
+func call_then_read(): int sync {
+    cnt = 0
     let a = bump()
     return cnt * 10 + a
 }
 
-func use_then_waited_call(): int {
-    wait cnt = 0
+func use_then_call(): int sync {
+    cnt = 0
     let b = peek()
-    let a = wait bump()
+    let a = bump()
     return cnt * 100 + b * 10 + a
 }
 
-func transitive_then_read(): int {
-    wait cnt = 0
+func transitive_then_read(): int sync {
+    cnt = 0
     let a = via()
     return cnt * 10 + a
 }
 
-func arm_then_read(): int {
+func arm_then_read(): int sync {
     var c = 1
     let r = if c > 0 then sync {
-        wait c += 10
+        c += 10
         return 1
     } else 0
     return c + r * 100
 }
 
-func arm_call_then_read(): int {
+func arm_call_then_read(): int sync {
     var c = 1
     let r = if c > 0 then add(c, 10) else 0
     return c + r * 100
 }
 
-func write_then_arm_read(): int {
+func write_then_arm_read(): int sync {
     var x = 1
-    wait x += 1
+    x += 1
     let r = if true then x + 10 else 0
     return r
 }
 
-func arm_read_then_write(): int {
+func arm_read_then_write(): int sync {
     var x = 1
     let r = if true then x + 10 else 0
-    wait x += 5
+    x += 5
     return x * 100 + r
 }
 
-func recursion_then_read(): int {
+func recursion_then_read(): int sync {
     let a = down(3)
     return levels * 10 + a
 }
 
-func fib_then_read(): int {
+func fib_then_read(): int sync {
     let r = fib(6)
     return calls * 100 + r
 }
 
-func nested_then_read(): int {
+func nested_then_read(): int sync {
     var x = 1
     func inc(): int sync {
-        wait x += 1
+        x += 1
         return 1
     }
     let a = inc()
@@ -136,7 +137,7 @@ func nested_then_read(): int {
 func main(): int sync {
     println(call_then_call())
     println(call_then_read())
-    println(use_then_waited_call())
+    println(use_then_call())
     println(transitive_then_read())
     println(arm_then_read())
     println(arm_call_then_read())

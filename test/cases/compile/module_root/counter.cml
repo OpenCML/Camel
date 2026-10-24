@@ -7,8 +7,8 @@ module counter
 var cnt = 0
 let step = 2
 
-export sync func bump(): int sync {
-    wait cnt += step
+export func bump(): int sync {
+    cnt += step
     return cnt
 }
 

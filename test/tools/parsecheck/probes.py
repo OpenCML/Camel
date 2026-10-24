@@ -16,7 +16,7 @@ from pathlib import Path
 STATEMENTS = [
     # `{` as a statement, a branch arm, a lambda body
     "{}", "{ }", "{ a: 1 }", "{ ...p }", "{ a }", "{ a; b }", "{ { a: 1 } }",
-    "wait {}", "wait { a: 1 }", "wait { a }", "wait sync { a }", "sync { a }",
+    "sync { a }",
     "let v = if c then {} else {}", "let v = if c then { a: 1 } else { b }",
     "let f = () => {}", "let f = () => { a: 1 }", "let f = (): int => { a }",
     "let v = match x { case 1 => {} case _ => { a: 1 } }",
@@ -52,8 +52,7 @@ STATEMENTS = [
     "let v = a -> f -> g", "let v = a ?-> f", "let v = f .. g", "let v = f .. g .. h",
     "let v = a + b * c ^ d @ e % f / g", "let v = a || b && c == d != e === f !== g",
     "let v = a < b <= c >= d", "a = b", "a += b", "a @= b", "a |= b", "a &= b",
-    "let v = wait f(a)", "let v = a ?? if c then 1 else 2", "let v = a ?? wait b",
-    "let v = if a then if b then 1 else 2", "let v = if a then 1 else if b then 2 else 3",
+    "let v = a ?? if c then 1 else 2", "let v = if a then if b then 1 else 2", "let v = if a then 1 else if b then 2 else 3",
     # casts and types in expressions
     "let v = a as int", "let v = a is int", "let v = a as int + 1", "let v = a as int + b",
     "let v = a as int - b", "let v = a as int ^ 2", "let v = a as int ^ b",
@@ -90,16 +89,18 @@ STATEMENTS = [
 
 # Not here: `import {} from a` and `export {}`, on which the ANTLR-based builder dereferences a
 # missing identifier list and crashes; the hand-written front end builds an import without names.
+# Nor the prefix `sync func` and the keyword `wait`: both were retired (H7 item 5), the parser
+# refuses them like any other unknown spelling, and there is no decision left to probe.
 DECLARATIONS = [
     "module m", "import a", "import a.b.c", "import .a", "import ..a.b", "import ...a",
     "import x from a.b", "import { x, y } from a", "import { x, } from a",
     "export { a, b }", "export let a = 1", "export type T = int", "export type V = 'u'",
     "export func f() {}", "export func v(): int", "func w(): int",
-    "with <T: type> func f(a: T): T { return a }", "with <k: int = 1> export sync func f() {}",
+    "with <T: type> func f(a: T): T { return a }", "with <k: int = 1> export func f() {}",
     "@a func f() {}", "@a @b<1> func f() {}", "@a::b<k: 1> with <T: type> macro func f() {}",
     "func f(): int? {}", "func f(): int? { return 1 }", "func f(): int sync { return 1 }",
     "func f(): int! sync {}", "func f(): (x: int) => int { return g }",
-    "func f(a: int, var b: T[] = [],): () { }", "sync func f() {}",
+    "func f(a: int, var b: T[] = [],): () { }",
     "namespace a::b { func f() {} type T = int; namespace c { use x } }",
     "namespace a { import b; export { c } using namespace d }",
     "let a = 1; let b = 2", ";let a = 1", "type T = int type U = T",

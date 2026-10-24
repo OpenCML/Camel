@@ -383,10 +383,8 @@ enum class SemanticDiag : uint32_t {
     NodeOfNotAParameter = 0x0001DE,
 
     // Warnings
-    VarParamInAsyncFunction      = 0x100001,
-    IgnoredSideEffect            = 0x100002,
-    CapturedWriteInAsyncFunction = 0x100003,
-    EffectNotExecuted            = 0x100004,
+    IgnoredSideEffect = 0x100002,
+    EffectNotExecuted = 0x100004,
     // 0x90 and up, clear of what other work adds after EffectNotExecuted.
     ExitInUnusedBranch = 0x100090,
     // Rulings of 2026-10-13 (design principles log 2.11): 0xC0 and up.

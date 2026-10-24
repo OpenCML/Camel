@@ -4,7 +4,7 @@
  * One element of a parallel map sits inside a long operator (`sleep`) while the others allocate
  * far more than the birth space holds. A collector that finds a worker inside an operator waits
  * 500 ms, gives up and tries again later, so for as long as the sleeper sleeps nothing can be
- * collected. The allocating workers must neither fail nor wait for it: what does not fit the
+ * collected. The allocating workers must neither fail nor for it: what does not fit the
  * birth space is born in the elder space, which grows, and is reclaimed once the sleeper is
  * back.
  */

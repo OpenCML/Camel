@@ -257,13 +257,11 @@
 | 名字 | 代码 | 位置 | 含义 |
 |---|---|---|---|
 | `SemanticDiag::EffectNotExecuted` | `0x03100004` | 调用、赋值或分支 | 它有副作用，但没有东西依赖它，它也不在同步块里，所以永远不会运行。这是合法的（求值由依赖驱动）；报告它是为了让人看到被遗忘的 `sync`。每条被丢弃的链一个警告（`println(log(1))` 报告的是 `println`）。在同步块内从不报告 |
-| `SemanticDiag::IgnoredSideEffect` | `0x03100002` | 调用或分支 | 它写一个变量（`var` 实参，或被捕获的变量），既没有被等待，也不在同步块里：它不排在该变量先前的使用之后 |
-| `SemanticDiag::VarParamInAsyncFunction` | `0x03100001` | 参数 | 没有 `sync` 修饰符的函数带有 `var` 参数 |
-| `SemanticDiag::CapturedWriteInAsyncFunction` | `0x03100003` | 函数 | 函数写一个被捕获的变量，却没有 `sync` 修饰符 |
+| `SemanticDiag::IgnoredSideEffect` | `0x03100002` | 调用或分支 | 它写一个变量（`var` 实参，或被捕获的变量），而且不在同步块里：它不排在该变量先前的使用之后 |
 | `RuntimeDiag::PassesNeverRun` | `0x0410000F` | 没有源码位置（属于命令行的问题） | 有遍写在消耗图的遍之后；它们不会运行。与程序的警告一起打印（JSON 模式下是 stderr 数组的最后一个元素） |
 | `RuntimeDiag::ConstantExpressionFaults` | `0x04100015` | 表达式 | `std::opt::fold`（也包括 `std::opt` 内部的）遇到一个操作数全是常量而求值会出故障的表达式（`1 / 0`）。它不被折叠：有没有这个遍，程序的行为相同；运行到达该表达式时，故障连同位置一起报告。在这个遍运行之后打印到 stderr，每个表达式一次，在下一个遍之前 |
 
-对 `EffectNotExecuted` 来说，什么算效应：在算子特性注册表里既不是纯的也不是仅状态的算子（与效应追踪记录的是同一个集合）、对声明为 `sync func` 或带 `var` 参数的函数的调用、对自身结果依赖某个效应的函数的调用，以及有这样的分支臂的分支。通过函数值进行的调用只能凭它的类型识别（`sync` 修饰符、`var` 参数）。
+对 `EffectNotExecuted` 来说，什么算效应：在算子特性注册表里既不是纯的也不是仅状态的算子（与效应追踪记录的是同一个集合）、对带 `var` 参数的函数的调用、对自身结果依赖某个效应的函数的调用，以及有这样的分支臂的分支。通过函数值进行的调用只能凭它的类型识别（`sync` 修饰符、`var` 参数）。
 
 - **编译没有错误的程序** 把它的警告打印到 **stderr**，只打印一次，在编译之后、第一个遍运行之前，使用默认日志级别即可（不需要 `-v`）。默认的 `text` 格式下，警告的写法与错误相同，以 `warning[SemanticDiag::IgnoredSideEffect]: ...` 开头，带源码行和 `help:`；`short` 格式下每个警告一行：`(module)file:line:col: [Warn]: text suggestion (name=SemanticDiag::IgnoredSideEffect, code=0x03100002)`（没有源码位置的警告写作 `():?:?: [Warn]: ...`）。使用 `--output-format json` 时，stderr 上是一个 JSON 数组，其中的对象与下文的错误数组相同（`"severity":"Warn"`）。没有警告时什么都不写（没有空数组）。
 - **两种模式下 stdout 都与没有警告时相同**：程序的输出，以及只在有错误时才出现的诊断数组。解析 stdout 的工具不受影响。

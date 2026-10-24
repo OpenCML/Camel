@@ -329,7 +329,6 @@ class Builder {
     // top level (the names it declares; its functions are graphs whose scopes are entered
     // from these). A function body of the module is built with these in force, whichever
     // module asks for it.
-    struct BuiltFunction;
     struct PendingIgnoredWrite;
     struct ModuleUnit;
     // A top-level declaration of a module that is built when first needed (step two): a value
@@ -388,7 +387,6 @@ class Builder {
         // built for it.
         std::set<std::string> passDeclarations;
         // What the link step reports per module, collected while its bodies are built.
-        std::vector<BuiltFunction> builtFunctions;
         std::vector<compile_graph_ptr_t> builtBodies;
         std::vector<PendingIgnoredWrite> pendingIgnoredWrites;
         // The names the module's source declares anywhere: a function or a type declared, and the
@@ -667,7 +665,7 @@ class Builder {
     std::unordered_set<const GCT::Node *> droppedBodies_;
     std::unordered_set<const DraftGraphBuilder *> droppedGraphs_; // their graphs
     // The graphs of decorated blocks: written as blocks, they are not functions a program
-    // declares, and get no declaration check (reportUndeclaredCapturedWrites).
+    // declares, and get no ignored-write check of their own.
     std::unordered_set<const DraftGraphBuilder *> blockGraphs_;
     // Inside a `var` declaration: the names it binds are variables.
     bool declaresVariable_ = false;
@@ -1106,14 +1104,7 @@ class Builder {
         std::string subject;
         std::string verb;
     };
-    // (ModuleUnit::pendingIgnoredWrites.) The functions and lambdas of the module, in source
-    // order, for the check that a function with side effects declares them (the `sync`
-    // function modifier): ModuleUnit::builtFunctions.
-    struct BuiltFunction {
-        DraftGraphBuilder *graph;
-        camel::source::origin_id_t origin;
-        std::string name;
-    };
+    // (ModuleUnit::pendingIgnoredWrites.)
     // Dropped effects (design principles 3.1): outside a sync block an effectful expression
     // whose result nothing uses is not connected to the graph's exit and does not run. That
     // is legal; the builder warns about it. Graphs whose exit depends on an effect, and the
@@ -1847,8 +1838,6 @@ class Builder {
     std::vector<CapturedUse> capturedUsesOf(const compile_graph_ptr_t &callee);
     // Reports the unwaited writes of captured variables that turned out to be real.
     void reportIgnoredCapturedWrites();
-    // Reports the functions that write a captured variable without the `sync` modifier.
-    void reportUndeclaredCapturedWrites();
     // Whether running `node` of `graph` is an effect: an operator that is neither pure nor
     // state-only, a call of a function that declares effects (`sync` modifier, `var`
     // parameter) or whose exit depends on one, a branch with such an arm.

@@ -24,35 +24,35 @@ module var_param_reference
 
 type Point = { x: int, y: int }
 
-sync func bump(var x: int) {
-    wait x += 1
+func bump(var x: int) {
+    x += 1
 }
 
 func count_up(var acc: int, n: int): int sync {
-    wait acc += n
+    acc += n
     let r = if n == 0 then 0 else count_up(acc, n - 1)
     return r
 }
 
 func count(var acc: int, n: int): int sync {
-    wait acc += 1
+    acc += 1
     return if n <= 1 then 0 else count(acc, n - 1)
 }
 
-sync func bump_twice(var y: int) {
-    wait bump(y)
-    wait bump(y)
+func bump_twice(var y: int) {
+    bump(y)
+    bump(y)
 }
 
 func both(var a: int, var b: int): int sync {
-    wait a += 1
-    wait b += 10
+    a += 1
+    b += 10
     println('{} {}'->format<a, b>)
     return 0
 }
 
-sync func move_to(var p: Point, v: int) {
-    wait p = { x: v, y: v + 1 }
+func move_to(var p: Point, v: int) {
+    p = { x: v, y: v + 1 }
 }
 
 func push(var xs: int[], v: int): int sync {
@@ -60,38 +60,38 @@ func push(var xs: int[], v: int): int sync {
     return len(xs)
 }
 
-sync func reset(var xs: int[]) {
-    wait xs = [4]
+func reset(var xs: int[]) {
+    xs = [4]
 }
 
-sync func replace(var t: (int, int), a: int) {
-    wait t = (a, a + 1)
+func replace(var t: (int, int), a: int) {
+    t = (a, a + 1)
 }
 
 with <var acc: int>
 func add(n: int): int sync {
-    wait acc += n
+    acc += n
     return acc
 }
 
 func write_then_read(var w: int, read: () => int): int sync {
-    wait w = 7
+    w = 7
     return read()
 }
 
 func mixed(seen: int, var written: int): int sync {
-    wait written += 1
+    written += 1
     return seen
 }
 
 func main(): int sync {
     var c = 0
-    wait bump(c)
+    bump(c)
     println(c)
 
     let f = bump
     var g = 7
-    wait f(g)
+    f(g)
     println(g)
 
     var total = 0
@@ -103,7 +103,7 @@ func main(): int sync {
     println(deep)
 
     var t = 1
-    wait bump_twice(t)
+    bump_twice(t)
     println(t)
 
     var e = 0
@@ -114,16 +114,16 @@ func main(): int sync {
     // variable must have the parameter's type (design principles 5.2; an unnamed struct value
     // enters a named type by being copied, which a reference cannot be).
     var p: Point = { x: 1, y: 2 }
-    wait move_to(p, 4)
+    move_to(p, 4)
     println(p.x + p.y)
 
     var xs = [1, 2, 3]
     let n = push(xs, 4)
     println('{} {}'->format<xs, n>)
-    wait reset(xs)
+    reset(xs)
 
     var q = (1, 2)
-    wait replace(q, 7)
+    replace(q, 7)
     println(q.0 + q.1)
 
     var s = 0

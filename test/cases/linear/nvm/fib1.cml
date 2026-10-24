@@ -1,5 +1,5 @@
 /**
- * Verifies recursion can mutate shared state with wait semantics so each activation contributes to the global call counter.
+ * Verifies recursion can mutate shared state with semantics so each activation contributes to the global call counter.
  */
 module fib
 
@@ -8,7 +8,7 @@ import { now } from time
 var cnt = 0
 
 func fibonacci(n: int): int sync {
-    wait cnt += 1
+    cnt += 1
     return match n {
         case 0 => 0
         case 1 => 1

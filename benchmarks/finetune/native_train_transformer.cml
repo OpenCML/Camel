@@ -68,7 +68,7 @@ func step(m: Block, x: Tensor): (float, Block) {
     return (vg.0, sgd(m, vg.1, 0.01))
 }
 
-sync func spin(m: Block, i: int, steps: int, nb: int): Block {
+func spin(m: Block, i: int, steps: int, nb: int): Block {
     return if i >= steps then m else sync {
         let si = '{}'->format<i>
         let bi = '{}'->format<i % nb>

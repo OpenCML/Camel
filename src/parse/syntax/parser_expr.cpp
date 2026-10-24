@@ -6,7 +6,7 @@
  *
  * Precedence, loosest first (the levels of the grammar, unchanged):
  *
- *   dataExpr        if / match / try, or `wait`? assignExpr
+ *   dataExpr        if / match / try, or assignExpr
  *   assignExpr      =  +=  -=  *=  /=  %=  ^=  @=  &=  |=      one, not associative
  *   logicalOrExpr   ||                                          left
  *   logicalAndExpr  &&                                          left
@@ -60,7 +60,6 @@ bool ParserImpl::startsExpr(TK kind) const {
     case TK::Plus:
     case TK::Bang:
     case TK::Tilde:
-    case TK::KwWait:
     case TK::KwIf:
     case TK::KwMatch:
     case TK::KwTry:
@@ -72,8 +71,7 @@ bool ParserImpl::startsExpr(TK kind) const {
     }
 }
 
-/// dataExpr : waitExpr | ctrlExpr | loopExpr
-/// waitExpr : 'wait'? assignExpr
+/// dataExpr : ctrlExpr | loopExpr
 /// ctrlExpr : 'if' logicalOrExpr 'then' blockExpr ('else' blockExpr)?
 ///          | 'match' identRef '{' matchCase+ '}'
 ///          | 'match' 'type' typeExpr '{' typeCase* '}'
@@ -100,12 +98,6 @@ void ParserImpl::parseExpr() {
             return parseStaticLoop();
         }
         return parseAssign();
-    case TK::KwWait: {
-        const size_t m = mark();
-        bump();
-        parseAssign();
-        return close(m, NK::WaitExpr);
-    }
     default:
         return parseAssign();
     }

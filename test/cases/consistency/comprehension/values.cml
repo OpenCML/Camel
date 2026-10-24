@@ -23,7 +23,7 @@ func main(): int sync {
     // it is an expression like any other
     println(len([x for x in xs if x > 4]), [x for x in [y * 2 for y in xs] if x > 8])
     // an element expression with an effect, as in the element function of `map`: here the
-    // function it calls is a sync function and its result is the element, so it runs
+    // function it calls has a sync body and its result is the element, so it runs
     println([shout(x) for x in [7]])
     return 0
 }

@@ -16,7 +16,7 @@ type Node = { value: int, children: Node[] }
 func total(node: Node): int sync {
     var acc = node.value
     let _ = loop i = 0 while i < len(node.children) do sync {
-        wait acc += total(node.children[i])
+        acc += total(node.children[i])
         i + 1
     }
     return acc

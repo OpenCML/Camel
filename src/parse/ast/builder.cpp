@@ -581,14 +581,11 @@ Value Builder::visitUsingNamespaceDecl(cst::UsingNamespaceDecl context) {
 }
 
 /*
-blockStmt  : WAIT? stmtBlock ;
+blockStmt  : stmtBlock ;
 */
 Value Builder::visitBlockStmt(cst::BlockStmt context) {
     ENTER("BlockStmt");
     node_ptr_t res = any2node(visitStmtBlock(context->get<cst::StmtBlock>()));
-    if (context->tok(TK::KwWait)) {
-        unwrapNodeAs<StmtBlockLoad>(res)->wait();
-    }
     // A decorator before a block decorates the block as a function of no parameters called where
     // it is written (language reference 7.6): the decorators are the block's second child. The
     // removed `@name(args)` spelling is reported here and grants nothing.
@@ -2988,19 +2985,6 @@ Value Builder::visitCtrlExpr(syn::Node context) {
 }
 
 /*
-waitExpr : WAIT? assignExpr ;
-*/
-Value Builder::visitWaitExpr(cst::WaitExpr context) {
-    ENTER("WaitExpr");
-    node_ptr_t dataNode = any2node(visitExpr(context->expr()));
-    if (context->tok(TK::KwWait)) {
-        unwrapNodeAs<DataLoad>(dataNode)->wait();
-    }
-    LEAVE("WaitExpr");
-    return dataNode;
-}
-
-/*
 assignExpr
     : logicalOrExpr (
         ('=' | '+=' | '-=' | '*=' | '/=' | '%=' | '^=' | '@=' | '&=' | '|=')
@@ -5036,8 +5020,6 @@ Value Builder::visitExpr(syn::Node context) {
         return visitSpreadValue(cst::SpreadValue(context));
     case NK::RestValue:
         return visitRestValue(cst::RestValue(context));
-    case NK::WaitExpr:
-        return visitWaitExpr(cst::WaitExpr(context));
     case NK::IfExpr:
     case NK::MatchExpr:
     case NK::MatchTypeExpr:
