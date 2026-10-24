@@ -124,6 +124,7 @@ func main(): int sync {
 ```
 
 The body of `main` is a synchronous block, so the two calls to `log` execute in order. But `println` belongs to the body of `log` itself, which is not a synchronous block there, so it does not execute. To print, `log` should be declared as `func log(x: int): int sync { ... }`.
+- **Pure computation is deterministic** (the author, 2026-10-24): the same inputs always give the same result. An operation whose result varies with time, scheduling or the outside world is either an effect (such as reading the clock, `now()`) or says it is nondeterministic in its declaration (such as `first_of`, or `merge` in arrival order). Optimisations that reuse results (incremental computation, common-subexpression merging) rely on this.
 
 ### 3.3 Resources, `uses` and `pure`
 
