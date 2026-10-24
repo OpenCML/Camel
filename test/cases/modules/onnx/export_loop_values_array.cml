@@ -1,7 +1,9 @@
 /**
- * Refused: a tail recursion whose depth depends on the model input returns, next to its state,
- * an int array built from the counter. An array whose elements depend on the model input is
- * not a value a Loop can hand out; the diagnostic names the element and what it is.
+ * Exported: a tail recursion whose depth depends on the model input returns, next to its state,
+ * an int array built from the counter. `[k, k + 1]` is two elements on every round, so the shape
+ * of what the Loop hands out does not change from one call to the next — the fact the ruling of
+ * 2026-10-24-evening asks for (growable-array-vs-tensor-in-the-onnx-exporter) — and the model is
+ * written. The last statement reads `ks[1]` out of the returned array, which is 7 at k = 6.
  */
 module export_loop_values_array
 import { Tensor, reshape, sum, tanh } from tensor

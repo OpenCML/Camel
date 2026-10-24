@@ -1,7 +1,10 @@
 /**
- * Refused: a tail recursion whose depth depends on the model input and which carries an int
- * array that changes every call. A loop carries tensors and scalars, and tuples and structs of
- * them (H44's outline); an array has no carried form, so the diagnostic names the argument.
+ * Exported: a tail recursion whose depth depends on the model input carries an int array whose
+ * length is the same on every call — `[k]` is one element each round. Whether a Loop can keep a
+ * value is a fact about the loop body (the shape of the carried state does not change from one
+ * round to the next), not what the type prints, so the Loop carries it and a model is written.
+ * (The spelling of the type used to decide this case; the ruling of 2026-10-24-evening,
+ * growable-array-vs-tensor-in-the-onnx-exporter, replaced that proxy with the fact.)
  */
 module export_loop_carried_array
 import { Tensor, reshape, sum } from tensor

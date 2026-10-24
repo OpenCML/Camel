@@ -1406,18 +1406,25 @@ std::string carriedKind(const Value &v) {
     return at == size_t(-1) ? valueKind(v) : spelledLeaf(leaves[at], place);
 }
 
-/// How a diagnostic names the value of `v` whose length the body grows: its first leaf whose type
-/// states no length (`int[]`), or the value itself when no leaf is such a one. The type says which
-/// leaf to name; the growth itself is the fact about the body (see `growsItsExtent`).
-std::string growingLeafName(const Value &v) {
-    std::vector<Value> leaves;
-    std::vector<std::string> places;
-    flattenValue(v, leaves);
-    leafPaths(v, "", places, ".");
-    for (size_t i = 0; i < leaves.size(); ++i) {
-        const Value &leaf = leaves[i];
-        if (leaf.ty != nullptr && tensor::isTensorType(leaf.ty) && lengthIsOpen(leaf.ty)) {
-            return spelledLeaf(leaf, i < places.size() ? places[i] : std::string());
+/// How a diagnostic names the value of an argument the body grows: the first leaf of the declared
+/// type of the parameter whose length that declaration leaves open (`int[]` — a struct says which
+/// field), or the value as `carriedKind` spells it. The declaration is what names the leaf: by the
+/// time the body is evaluated the value is a placeholder, and a placeholder says nothing about the
+/// shape of what it stands for. The growth itself is the fact about the body (`growsItsExtent`).
+std::string growingLeafName(const type::Type *declared, const Value &v) {
+    if (declared != nullptr) {
+        if (lengthIsOpen(declared)) {
+            return std::format("a value of type '{}'", declared->toString());
+        }
+        if (declared->code() == TypeCode::Struct) {
+            auto *strct = static_cast<type::StructType *>(declared);
+            for (size_t i = 0; i < strct->size(); ++i) {
+                type::Type *field = strct->typeAt(i);
+                if (lengthIsOpen(field)) {
+                    return std::format(
+                        "the leaf '{}', a value of type '{}'", strct->fieldName(i), field->toString());
+                }
+            }
         }
     }
     return carriedKind(v);
@@ -1849,7 +1856,11 @@ Evaluator::evalLoopBody(Activation &act, gc_node_ref_t ref, LoopFrame &loop) {
                                 "round, and a Loop carries a state whose shape is the same on every "
                                 "round",
                                 k + 1,
-                                growingLeafName(loop.inputs[k])));
+                                growingLeafName(
+                                    g->node(loop.ports[k]) == nullptr
+                                        ? nullptr
+                                        : g->node(loop.ports[k])->dataType(),
+                                    loop.inputs[k])));
                     }
                     throw;
                 }
