@@ -81,7 +81,7 @@ const std::unordered_map<SyntaxDiag, DiagInfo> &getSyntaxDiagInfoMap() {
             {
                 "MissingToken",
                 "Expected {0} before {1}.",
-                "",
+                "One token is missing at the caret and the message names it; nothing else in the file has to change.",
             },
         },
         {
@@ -89,7 +89,7 @@ const std::unordered_map<SyntaxDiag, DiagInfo> &getSyntaxDiagInfoMap() {
             {
                 "UnexpectedToken",
                 "Unexpected {0}{1}.",
-                "",
+                "The token fits nothing that can stand where it is. What the parser expected instead follows the semicolon above: a list whose items have no ',' between them, a bracket that is not closed and a reserved word where a name belongs are the usual causes.",
             },
         },
         {
@@ -133,19 +133,19 @@ const std::unordered_map<SyntaxDiag, DiagInfo> &getSyntaxDiagInfoMap() {
             },
         },
         {
-            SyntaxDiag::WhenAfterBody,
-            {
-                "WhenAfterBody",
-                "A declaration's condition comes before the body it guards, so {0} cannot follow the body.",
-                "Write it between the parameters and the body: rule add_zero::<T>(x: T) when is_integer::<T>() {{ x + 0 => x }}. The trailing form is not read as a condition.",
-            },
-        },
-        {
             SyntaxDiag::AsRightSideIsType,
             {
                 "AsRightSideIsType",
                 "The right side of '{0}' is a type; write the interval as '(a..b)'.",
                 "'T..' is the stream type (design principles 5.4): the elements of 'T' that arrive one after another. An interval is an expression, and it is written in parentheses: (1..5).",
+            },
+        },
+        {
+            SyntaxDiag::WhenAfterBody,
+            {
+                "WhenAfterBody",
+                "A declaration's condition comes before the body it guards, so {0} cannot follow the body.",
+                "Write it between the parameters and the body: rule add_zero::<T>(x: T) when is_integer::<T>() {{ x + 0 => x }}. The trailing form is not read as a condition.",
             },
         },
         {

@@ -268,6 +268,17 @@
 - 遍提交的每一张图（以及前端编码的每一张图）都做结构校验，release 构建中也是如此：节点、槽和边的引用在范围内，输入和输出互为镜像，`BRCH`/`JOIN` 的分支臂数目，`GATE` 有一个值输入和一个控制输入，直接调用传入的实参个数与被调用者接受的一致。违反时是 `RuntimeDiag::PassInternalError`，指出提交该图的遍，在任何东西运行之前报告。
 - 从某个遍逃逸出来而又不是诊断的异常（提交重写时的图校验、调度器构建执行顺序时遇到环）报告为 `RuntimeDiag::PassInternalError`（`0x0400000C`），阶段为 `pass:<name>`，消息里是异常的文本，没有源码位置，退出码为 1。它标志的是编译器的缺陷，不是对程序的拒绝。即使那是调度遍，阶段给出的也是遍的名字，所以它不能说明程序是否已经运行了一部分。任何遍之外的异常报告为 `InternalDiag::UnknownInternalError`，阶段为 `internal`。
 - `data.stage` 说明诊断在流水线的哪里产生：`parse`、`typecheck`、`compile`（见“资源上限”）、重写遍或翻译遍的 `pass:<name>`（包括未知的遍名）、调度遍（`std::nvm`、`std::fvm`、`std::jit`、`std::tf`）的 `run`，或 `internal`。
+- `data.fixes` 出现时，就是这条诊断要求的改法，形状取自编辑器的 code action：一个由若干个 fix 组成的数组，每个 fix 可以单独应用；每个 fix 里是一个由若干 edit 组成的数组，这些 edit 必须一起应用。一个 edit 把它的 `range` 覆盖的文本换成 `replacement`，计数方式与本文件其他地方一致（行和列从 0 开始，`end` 不含）。空 range 是插入，空 `replacement` 是删除；一个 fix 里的各个 edit 指向诊断所在文件（`data.modulePath`）中互不重叠的区间，因此它们应用在原文上，而不是应用在前一个 edit 产生的文本上。
+
+  ```json
+  [
+  {"range":{"start":{"line":2,"character":16},"end":{"line":2,"character":17}},"severity":"Error","code":"0x02000007","source":"Camel","message":"Expected ',' or ')' before 'b'.","data":{"stage":"parse","name":"SyntaxDiag::MissingComma","moduleName":"m","modulePath":"m.cml","suggestion":"The items of a list (parameters, arguments, elements) are separated by ','.","fixes":[{"title":"insert ','","edits":[{"range":{"start":{"line":2,"character":15},"end":{"line":2,"character":15}},"replacement":","}]}]}}
+  ]
+  ```
+
+  （源文件第 2 行写 `func add(a: int b: int)`：改法插在第 15 列，也就是 `int` 与 `b` 之间本来就有的那个空格处，于是得到 `a: int, b: int`，而不是 `a: int , b: int`。）
+
+  只有在编译器知道要写什么文本时才给出改法：写不出确定的文本时没有 `fixes`，此时 `suggestion` 就是用文字说的建议。拿到 `fixes` 的一方可以不再询问就应用；拿不到的一方不得自己编一个。某个码是否给改法由 `diagnostics/registry.tsv` 的一列声明——`edit`，或者 `none: <cause>` 说明为什么不给——`docs/diagnostics.md` 会为每个码印出它，`node scripts/diagnostics-catalog.mjs --check` 会拒绝两者都没写的声明。`cause` 取 `runtime`（运行时才报，源码里没有可改的文本）、`choice`（改法是作者的取舍）、`context`（改法是已知的，但不是一段文本：要改第二处、另一个文件，或者要重构）、`internal`。`text` 与 `short` 两种文本格式故意不变：改法是给工具的，`help:` 才是给人的。新增诊断必须在这一列里写其中之一，于是“每个码要么带改法、要么写明为什么没有”是被检查的，而不是靠记性。
 
 ### 效应追踪（`std::profile effect_trace="..."`）
 
