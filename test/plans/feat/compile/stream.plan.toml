@@ -1,0 +1,73 @@
+id = "compile.stream"
+order = 336
+tier = "fast"
+tags = ["feat", "compile", "stream"]
+desc = "The stream surface of H248: `f..g` and the interval `a..b` (H248 group 1, slice A: the ruled readings of `..`, and the removal of `?..`)."
+
+[[tests]]
+name = "stream.composition"
+desc = "`f..g` is the composition `x => g(f(x))`: `(inc..dbl)(3)` is `dbl(inc(3))` = 8, not `inc(dbl(3))` = 7. It used to be ConstructNotSupported at the operator."
+kind = "behavior"
+case = "../../../cases/compile/stream/composition.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_starts_with = "8\n"
+expect_output_not_contains = ["UnknownInternalError", "[Error]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "stream.composition_uses"
+desc = "A composition is a function value like any other: `map<inc..dbl>` and `3->inc..dbl` (where `..` binds more tightly than `->`) give what the two calls written out give."
+kind = "behavior"
+case = "../../../cases/compile/stream/composition_uses.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_starts_with = "[4, 6, 8]\n8\n"
+expect_output_not_contains = ["UnknownInternalError", "[Error]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "stream.interval"
+desc = "`a..b` is the interval [a, b) of integers, an `int[]`, on literals and on names alike. It used to be ConstructNotSupported at the operator, with the composition's text."
+kind = "behavior"
+case = "../../../cases/compile/stream/interval.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_starts_with = "[1, 2, 3, 4]\n[0, 1, 2]\n"
+expect_output_not_contains = ["UnknownInternalError", "[Error]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "stream.comp_operand_mismatch"
+desc = "`..` has two readings and takes nothing else: two texts are neither two functions nor two integers, so the compiler refuses the construct and names both operand types."
+kind = "negative"
+case = "../../../cases/compile/stream/comp_operand_mismatch.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::CompOperandMismatch"
+expect_diagnostic_code = "0x030001E1"
+expect_diagnostic_line = 6
+expect_diagnostic_column = 14
+expect_output_contains = ["'..' takes two functions or two integers; the left operand is 'string' and the right one 'string'."]
+expect_output_not_contains = ["UnknownInternalError", "Warning"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "stream.comp_operand_not_unary"
+desc = "The composition `f..g` is the lambda `x => g(f(x))`, so `f` is unary: a left operand of two parameters has no reading, and the diagnostic says how many it takes."
+kind = "negative"
+case = "../../../cases/compile/stream/comp_operand_not_unary.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::CompOperandNotUnary"
+expect_diagnostic_code = "0x030001E2"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 13
+expect_output_contains = ["'..' composes a unary function on the left; '(a: int, b: int) => int' takes 2 parameters."]
+expect_output_not_contains = ["UnknownInternalError", "Warning"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000

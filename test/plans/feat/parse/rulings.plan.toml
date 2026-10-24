@@ -218,3 +218,19 @@ expect_exit = 0
 expect_stdout_contains = ["no no false\n-2 -4 -9 3\ntrue true true"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
+
+[[tests]]
+name = "rulings.optional_comp_removed"
+desc = "`?..` is not in the language (the ruling of 2026-10-24): the lexer no longer knows the token, so `inc?..dbl` is a syntax error at the `?` rather than a construct the compiler refuses."
+kind = "negative"
+case = "../../../cases/parse/rulings/optional_comp_removed.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SyntaxDiag::UnexpectedToken"
+expect_diagnostic_code = "0x0200000A"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 16
+expect_output_contains = ["Unexpected '?'"]
+expect_output_not_contains = ["never printed", "UnknownInternalError", "ConstructNotSupported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000

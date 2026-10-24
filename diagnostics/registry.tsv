@@ -356,6 +356,13 @@ semantic	ParamAfterDefault	0x0001D4	error	The parameter '{0}' has no default and
 #/ An argument at a call has a type the parameter it fills does not take.
 semantic	ParamArgumentWrongType	0x0001D6	error	The argument '{0}' of '{1}' has type '{2}', not '{3}'.	Write a value of the parameter's type; an integer may be given where a float is declared.
 #
+# Composition and the interval (`..`, design principles 4.2; the author's ruling of 2026-10-24
+# on `h248-generator-and-composition`). 0x1D7 and up.
+#/ Neither reading of `..` takes these operands: they are not two functions and not two integers.
+semantic	CompOperandMismatch	0x0001E1	error	'..' takes two functions or two integers; the left operand is '{0}' and the right one '{1}'.	'..' has two readings (design principles 4.2). Between two functions it is the composition `f..g`, the lambda `(x) => g(f(x))`: 'f' is unary and 'g' takes what 'f' returns, so a call of `f..g` is a call of that lambda and nothing more. Between two integers it is the interval `a..b`: the integers from 'a' to 'b - 1' as the array 'int[]', left closed and right open, as the slice 't[a:b]' is. Nothing else is composed.
+#/ The left operand of `..` is a function that takes more or fewer than one parameter.
+semantic	CompOperandNotUnary	0x0001E2	error	'..' composes a unary function on the left; '{0}' takes {1} parameters.	The composition `f..g` is the lambda `(x) => g(f(x))` (design principles 4.2): 'f' takes the one argument the composed function takes, and 'g' takes the result of 'f'. Write the lambda with the parameters you mean.
+#
 # Warnings
 semantic	VarParamInAsyncFunction	0x100001	warn	Variable parameters are only allowed in sync functions.	Remove the variable parameter or make the function synchronous.
 semantic	IgnoredSideEffect	0x100002	warn	{0} is neither waited nor in a sync block, and {1}.	Write 'wait' before the expression or put it in a sync block: only then is the write ordered after the earlier uses of the variable. Without either, the write runs only if the variable is read afterwards.

@@ -344,7 +344,14 @@ enum class SemanticDiag : uint32_t {
     /// An ordinary parameter without a default follows one that has a default.
     ParamAfterDefault = 0x0001D4,
     /// An argument at a call has a type the parameter it fills does not take.
-    ParamArgumentWrongType      = 0x0001D6,
+    ParamArgumentWrongType = 0x0001D6,
+
+    // Composition and the interval (`..`, design principles 4.2; the author's ruling of 2026-10-24
+    // on `h248-generator-and-composition`). 0x1D7 and up.
+    /// Neither reading of `..` takes these operands: they are not two functions and not two integers.
+    CompOperandMismatch = 0x0001E1,
+    /// The left operand of `..` is a function that takes more or fewer than one parameter.
+    CompOperandNotUnary         = 0x0001E2,
     ReducedPrecisionUnsupported = 0x0001D7,
     // #impl<f> (design principles 10.4): the Camel body of the function is its semantics and the
     // body-less declaration f of the same module is the operator that runs it. The graph builder

@@ -22,7 +22,7 @@
  *   linkExpr        ->  ?->                                     left
  *   negExpr         prefix -         tighter than `->`, looser than `^`:
  *                                    `-x->f` is `(-x)->f`, `-x ^ 2` is `-(x ^ 2)`
- *   compExpr        ..  ?..                                     left
+ *   compExpr        ..                                          left
  *   annoExpr        [index]  (arguments)  <arguments>  !  .member   postfix, touching
  *   accessExpr      .member
  *   primaryData     name, literal, [array], {struct}, (tuple), lambda
@@ -357,12 +357,12 @@ void ParserImpl::parseNeg(bool underMinus) {
     }
 }
 
-/// compExpr : annoExpr (('..' | '?..') annoExpr)*
+/// compExpr : annoExpr ('..' annoExpr)*
 void ParserImpl::parseComp() {
     const size_t m = mark();
     parseAnno();
     bool any = false;
-    while ((cur_ == TK::DotDot || cur_ == TK::QuestionDotDot) && !panic_) {
+    while (cur_ == TK::DotDot && !panic_) {
         bump();
         parseAnno();
         any = true;
