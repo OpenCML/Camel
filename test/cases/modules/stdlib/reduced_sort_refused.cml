@@ -1,9 +1,11 @@
 /**
- * The sorts are generic over the element type but their kernel orders only i32, i64, f32 and f64
- * (src/builtin/operators/array.cpp reads the element type code before it sorts). bf16 and f16 are
- * numbers now (`is_numeric` asks `is_float`), so the old "not a number" wording no longer
- * described the refusal: an array of one is still refused, by name, with the element type and the
- * types the kernel does order. Nothing is sorted as raw two-byte slots.
+ * The sorts are declared once per element type and none of those declarations takes bf16 or f16
+ * (src/builtin/operators/array.cpp has one executor per element type, and `stdlib/array.cml` names
+ * them: `array:sort_i`, `array:sort_l`, `array:sort_f`, `array:sort_d`). bf16 and f16 are numbers
+ * (`is_numeric` asks `is_float`), so the call is refused by name, where it is written, with what to
+ * write instead rather than with a list of overloads that could never match: nothing is sorted as
+ * raw two-byte slots, and the refusal is no longer the kernel's (H393; the ruling's
+ * 「不在运行期拒绝」).
  */
 module stdlib_reduced_sort_refused
 

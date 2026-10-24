@@ -1,9 +1,9 @@
 /**
  * The declarations of `array` are what an importer sees: `argsort` has its six declared key
- * element types and gives `int[]`; each sort name and `merge_sorted_arrays` is generic over
- * its element type, as its kernel is; and `flatten` and `unique` are generic declarations of
- * `stdlib/array.cml`. Every call reaches the built-in operator (handover H19, step 10; H135;
- * H202).
+ * element types and gives `int[]`; each sort name and `merge_sorted_arrays` has one declaration
+ * per element type, each naming its own operator and taking that element type; and `flatten` and
+ * `unique` are generic declarations of `stdlib/array.cml`. Every call reaches the built-in
+ * operator (handover H19, step 10; H135; H202; H393).
  */
 module array_declaration_import
 

@@ -2306,61 +2306,72 @@ primitive behind `sort_by`.
 #### `sort`
 
 ```camel
-sort: (xs: T[]) => T[]
+sort: (xs: i32[]) => i32[]
+sort: (xs: int[]) => int[]
+sort: (xs: f32[]) => f32[]
+sort: (xs: float[]) => float[]
 ```
 
 A sorted copy of xs (quicksort).
 
 - A native operator of this module: an opaque node, pure.
-- Failure: fault `OperandTypeUnsupported` when the element type is not i32, i64, f32 or f64.
 - Example: `sort([3, 1, 2])` gives `[1, 2, 3]`
 
 #### `insert_sort`
 
 ```camel
-insert_sort: (xs: T[]) => T[]
+insert_sort: (xs: i32[]) => i32[]
+insert_sort: (xs: int[]) => int[]
+insert_sort: (xs: f32[]) => f32[]
+insert_sort: (xs: float[]) => float[]
 ```
 
 A sorted copy of xs, by insertion sort.
 
 - A native operator of this module: an opaque node, pure.
-- Failure: fault `OperandTypeUnsupported` when the element type is not i32, i64, f32 or f64.
 - Example: `insert_sort([3, 1, 2])` gives `[1, 2, 3]`
 
 #### `quick_sort`
 
 ```camel
-quick_sort: (xs: T[]) => T[]
+quick_sort: (xs: i32[]) => i32[]
+quick_sort: (xs: int[]) => int[]
+quick_sort: (xs: f32[]) => f32[]
+quick_sort: (xs: float[]) => float[]
 ```
 
 A sorted copy of xs, by quicksort.
 
 - A native operator of this module: an opaque node, pure.
-- Failure: fault `OperandTypeUnsupported` when the element type is not i32, i64, f32 or f64.
 - Example: `quick_sort([3, 1, 2])` gives `[1, 2, 3]`
 
 #### `merge_sort`
 
 ```camel
-merge_sort: (xs: T[]) => T[]
+merge_sort: (xs: i32[]) => i32[]
+merge_sort: (xs: int[]) => int[]
+merge_sort: (xs: f32[]) => f32[]
+merge_sort: (xs: float[]) => float[]
 ```
 
 A sorted copy of xs, by merge sort.
 
 - A native operator of this module: an opaque node, pure.
-- Failure: fault `OperandTypeUnsupported` when the element type is not i32, i64, f32 or f64.
 - Example: `merge_sort([3, 1, 2])` gives `[1, 2, 3]`
 
 #### `merge_sorted_arrays`
 
 ```camel
-merge_sorted_arrays: (left: T[], right: T[]) => T[]
+merge_sorted_arrays: (left: i32[], right: i32[]) => i32[]
+merge_sorted_arrays: (left: int[], right: int[]) => int[]
+merge_sorted_arrays: (left: f32[], right: f32[]) => f32[]
+merge_sorted_arrays: (left: float[], right: float[]) => float[]
 ```
 
-The sorted array made of the elements of two sorted arrays of numbers.
+The sorted array made of the elements of two sorted arrays of numbers. The two must hold the
+same element type: `T` is one of the four the sorts order, not one per argument.
 
 - A native operator of this module: an opaque node, pure.
-- Failure: fault `OperandTypeUnsupported` when the elements are not i32, i64, f32 or f64.
 - Example: `merge_sorted_arrays([1, 4], [2, 3])` gives `[1, 2, 3, 4]`
 
 ### Rearranging
