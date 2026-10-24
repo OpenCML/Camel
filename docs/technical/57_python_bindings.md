@@ -97,3 +97,43 @@ memory:        8 results of a 4 MiB pass-through hold 4.0 MiB, 8 results of a 4 
 
 数组进来的这条路只在分配器是 `mm::autoSpace()` 时零拷贝（`src/core/array/dlpack.cpp` 的
 `fromDLPack`），扩展模块用的就是它；其余分配器会 memcpy，这一点没有改变。
+
+## 57.5 诊断与故障 → Python 异常（逐字映射）
+
+三种异常类型都是 `camel` 模块上的类：`CamelError` 是基类，`DiagnosticError` 是**编译期**
+（加载/查找/转换参数）的问题，`FaultError` 是**运行期**的错误值。
+
+| Camel 侧发生的事 | `type(e).__name__` | `e.name` | `e.code` | `e.file:line:column` | `e.message`（逐字） |
+|---|---|---|---|---|---|
+| 库里有未声明的名字 `missing_name` | `DiagnosticError` | `SemanticDiag::UnresolvedReference` | `0x0300000B` | `<...>/python_broken.cml:9:12` | `Unresolved reference: 'missing_name'.` |
+| 函数参数个数不对 | `DiagnosticError` | `ArgumentCountMismatch` | 空 | 空（`:0:0`） | `scale takes 2 argument(s), 1 given` |
+| 参数不是数组也不是 capsule | `DiagnosticError` | `ArgumentNotConvertible` | 空 | 空（`:0:0`） | `argument 1 of energy: a numeric array must offer __dlpack__ (NumPy, PyTorch, CuPy and JAX do), or be a DLPack capsule` |
+| 模块没有这个导出 | `DiagnosticError` | `NoSuchExport` | 空 | 空（`:0:0`） | `'python_rules' exports no 'not_declared'` |
+| 模块声明了但没 `export` | `DiagnosticError` | `FunctionNotExported` | 空 | 空（`:0:0`） | 运行时给的那句（`libraryFunction` 的 `problem`） |
+| 模块找不到 | `DiagnosticError` | `LibraryUnavailable` | 空 | 空（`:0:0`） | 运行时给的那句 |
+| `.cml` 路径不存在 | `FileNotFoundError` | — | — | — | `no Camel module at <path>` |
+| `throw error('RangeError', '...')` | `FaultError` | `RangeError`（错误值的 `kind`） | 空 | `python_rules.cml:36:15` | `the factor must not be negative` |
+| 运行期故障（`RuntimeFault`） | `FaultError` | 故障的诊断名 | `0x04......` | 有位置时给出 | 故障的诊断消息 |
+
+逐字的运行输出（测试脚本的原文）：
+
+```
+error value:   camel.FaultError name=RangeError at python_rules.cml:36:15
+               message=the factor must not be negative
+diagnostic:    camel.DiagnosticError name=SemanticDiag::UnresolvedReference code=0x0300000B at /home/zjwei/camel-work/h424-python-bindings/test/cases/feat/bindings/python_broken.cml:9:12
+               message=Unresolved reference: 'missing_name'.
+absent name:   camel.DiagnosticError name=NoSuchExport: 'python_rules' exports no 'not_declared'
+```
+
+几点必须说清楚的：
+
+- **位置是编译器给的，不是绑定拼的**。`SemanticDiag::UnresolvedReference` 的 `9:12` 来自
+  `Diagnostic::range` 经 `resolveSourceRange` 解出来的行列，`str(e)` 里就是
+  `<file>:<line>:<column>: error[<name>] (<code>): <message>`。
+- **`e.code` 为空的那些不是 `Diagnostic`**。它们由绑定自己产生（查找失败、参数转换失败），没有
+  诊断目录里的码；空的 `code` 是诚实的，不是丢字段。
+- **`FaultError` 的位置来自错误值本身**：`T!` 的 `location` 字段是 `"file:line:column"`（`throw` 的
+  位置）；如果错误值的 `location` 是一个算子的名字而不是位置，`e.line`/`e.column` 就是 `0`，
+  这时 `str(e)` 里写的是那个名字，不编造位置。
+- **诊断文本原样保留**在 `e.camel_text` 里，就是命令行 `camel` 会打印的那段（含源码上下文），
+  便于 Python 侧直接转述。

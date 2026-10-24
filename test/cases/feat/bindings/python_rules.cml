@@ -28,3 +28,13 @@ export func scale(xs: f32[], k: f32): f32[] {
 export func energy(xs: f32[]): float {
     return loop total = 0.0 for v in xs do total + float(v) * float(v)
 }
+
+/// An error value: a negative factor gives a Python exception whose file, line and column are
+/// the position of the `throw` below (the compiler records it, `error()` does not).
+export func checked_scale(xs: f32[], k: f32): f32[]! {
+    return if k < 0.0 then {
+        throw error('RangeError', 'the factor must not be negative')
+    } else {
+        return xs->map<(v: f32): f32 => v * k>
+    }
+}

@@ -323,6 +323,73 @@ def main():
         )
     del big
 
+    # ---- a Camel failure arrives as a Python exception ----
+
+    capsule4, _ = float32_capsule(flat)
+    try:
+        rules.checked_scale(capsule4, -1.0)
+    except camel.FaultError as failure:
+        check(failure.name == "RangeError", f"the kind is RangeError, not {failure.name}")
+        check("must not be negative" in failure.message, f"the message is {failure.message!r}")
+        check(
+            failure.file == "python_rules.cml",
+            f"the file is python_rules.cml, not {failure.file!r}",
+        )
+        check(failure.line > 0 and failure.column > 0, "the position has a line and a column")
+        where = f"python_rules.cml:{failure.line}:{failure.column}"
+        check(where in str(failure), f"str() names {where}, and is {str(failure)!r}")
+        check(failure.stage == "run", f"the stage is run, not {failure.stage!r}")
+        print(f"error value:   camel.FaultError name={failure.name} at {where}")
+        print(f"               message={failure.message}")
+    else:
+        check(False, "checked_scale with a negative factor must raise camel.FaultError")
+
+    capsule5, _ = float32_capsule(flat)
+    good = raw("checked_scale", capsule5, 3.0)
+    check(values_of(good, 4) == [3.0, 6.0, 9.0, 12.0], "checked_scale with a good factor works")
+
+    # ---- a library that does not compile arrives as a diagnostic with a position ----
+
+    broken = camel.load(str(CASES / "python_broken.cml"))
+    try:
+        broken.doubled(3)
+    except camel.DiagnosticError as diagnostic:
+        check(diagnostic.code.startswith("0x03"), f"a semantic code, not {diagnostic.code}")
+        check(diagnostic.file.endswith("python_broken.cml"), f"the file is {diagnostic.file!r}")
+        check(
+            diagnostic.line == 9 and diagnostic.column == 12,
+            f"missing_name is at 9:12, and the report says {diagnostic.line}:{diagnostic.column}",
+        )
+        check(
+            f"python_broken.cml:{diagnostic.line}:{diagnostic.column}" in str(diagnostic),
+            f"str() names the position, and is {str(diagnostic)!r}",
+        )
+        check(diagnostic.camel_text != "", "the report the command line prints is kept")
+        print(
+            f"diagnostic:    camel.DiagnosticError name={diagnostic.name} "
+            f"code={diagnostic.code} at {diagnostic.file}:{diagnostic.line}:{diagnostic.column}"
+        )
+        print(f"               message={diagnostic.message}")
+    else:
+        check(False, "a library that does not compile must raise camel.DiagnosticError")
+
+    # ---- what is not there is said, not guessed ----
+
+    try:
+        camel.load(str(CASES / "no_such_module.cml"))
+    except FileNotFoundError:
+        pass
+    else:
+        check(False, "a path that is not there must raise FileNotFoundError, not load")
+
+    try:
+        rules.not_declared(1)
+    except camel.DiagnosticError as missing:
+        check(missing.name == "NoSuchExport", f"the name is NoSuchExport, not {missing.name}")
+        print(f"absent name:   camel.DiagnosticError name={missing.name}: {missing.message}")
+    else:
+        check(False, "an undeclared function must raise")
+
     print("python binding: PASS")
     return 0
 
