@@ -55,8 +55,8 @@ overspends, `--keep-sandbox` keeps the temporary sandboxes for inspection.
 
 A run writes, under `--archive`:
 
-- `report.json` / `report.md` — the numbers, per task: pass round, every round's exit code, stdout,
-  stderr, the diagnostics read, and why a round did not pass;
+- `report.json`, and the same numbers rendered as Markdown beside it — per task: pass round, every
+  round's exit code, stdout, stderr, the diagnostics read, and why a round did not pass;
 - `<id>/round<N>.response.txt` — the subject's reply, verbatim, before any parsing;
 - `<id>/round<N>.cml` — the extracted file that was compiled;
 - `rounds/round-N/` — the sources shipped to the compiler, plus `remote.txt`, the compiler's raw

@@ -35,24 +35,28 @@ for f in *.cml; do
     id="${f%.cml}"
     mode=run
     [ -f "$id.mode" ] && mode="$(cat "$id.mode")"
+    # Every value is closed by its own newline before the next marker: a program that prints without a
+# trailing newline (`print('x')`) would otherwise run its stdout into `@@@STDERR` and the reading
+# would be taken from the wrong field. The trailing newline is added to the value, and the
+# comparison trims it, so the compiler's bytes are still what is judged.
     echo "@@@TASK $id"
     "$CAMEL_BIN" "$f" --output-format json > "$id.stdout" 2> "$id.stderr"
     code=$?
     echo "@@@EXIT"
     echo "$code"
     echo "@@@STDOUT"
-    cat "$id.stdout"
+    cat "$id.stdout"; echo
     echo "@@@STDERR"
-    cat "$id.stderr"
+    cat "$id.stderr"; echo
     if [ "$mode" = "check-and-run" ]; then
         "$CAMEL_BIN" check "$f" > "$id.check.stdout" 2> "$id.check.stderr"
         check=$?
         echo "@@@CHECK_EXIT"
         echo "$check"
         echo "@@@CHECK_STDOUT"
-        cat "$id.check.stdout"
+        cat "$id.check.stdout"; echo
         echo "@@@CHECK_STDERR"
-        cat "$id.check.stderr"
+        cat "$id.check.stderr"; echo
     fi
     echo "@@@END"
 done

@@ -34,7 +34,7 @@ disagree. Read it as the language you are compiling against, not as a snapshot o
 
 ## What each part costs
 
-Budgets, in characters: the file as a whole (112,000), the hand-written half (54,000) and each
+Budgets, in characters: the file as a whole (112,000), the hand-written half (55,000) and each
 generated region (61,000 together). `node scripts/camel-for-ai.mjs --report` prints the current
 numbers, and `--check` fails when one of them is exceeded — including the per-chapter budget in the
 last column below, which is read out of this table and measured against the chapter it names.

@@ -67,7 +67,11 @@ function parseArgs(argv) {
         camelBin: '$HOME/camel-work/h425-ai-reference/out/latest/bin/camel',
         remoteRoot: '/tmp/camel-learnability',
         tokenBudget: 1500000,
-        timeoutSeconds: 900,
+        // A task's answer is one short file; 2,048 output tokens is ten times the longest one seen,
+        // and a smaller ceiling keeps a stalled generation from eating the round's wall clock.
+        maxTokens: 2048,
+        timeoutSeconds: 300,
+        reference: null,
         cmdTemplate: null,
         provided: null,
         keepSandbox: false,
@@ -90,7 +94,9 @@ function parseArgs(argv) {
         else if (key === '--cmd-template') opts.cmdTemplate = take()
         else if (key === '--provided') opts.provided = take()
         else if (key === '--token-budget') opts.tokenBudget = Number(take())
+        else if (key === '--reference') opts.reference = take()
         else if (key === '--timeout') opts.timeoutSeconds = Number(take())
+        else if (key === '--max-tokens') opts.maxTokens = Number(take())
         else if (key === '--keep-sandbox') opts.keepSandbox = true
         else usage(`unknown option ${key}`)
     }
@@ -114,14 +120,18 @@ function run(command, args, options = {}) {
 
 // ---------------------------------------------------------------- the round's material
 
-function loadInputs() {
+function loadInputs(opts) {
     const tasksPath = path.join(REPO, TASKS_REL)
-    const referencePath = path.join(REPO, REFERENCE_REL)
+    // A recorded revision is the oracle when `--reference` names one: the same tasks then run
+    // against two versions of the file, and the report carries the sha256 of the one it used, so a
+    // before/after pair cannot be mistaken for two samples of the same text.
+    const referencePath = opts.reference ? path.resolve(opts.reference) : path.join(REPO, REFERENCE_REL)
     const manifest = JSON.parse(fs.readFileSync(tasksPath, 'utf8'))
     const reference = fs.readFileSync(referencePath, 'utf8')
     return {
         manifest,
         reference,
+        referencePath,
         referenceSha256: crypto.createHash('sha256').update(reference).digest('hex'),
         referenceChars: reference.length,
     }
@@ -187,7 +197,7 @@ function callBl(messages, opts, usageSink) {
     fs.writeFileSync(messagesPath, JSON.stringify(messages), 'utf8')
     // `bl` is a Node CLI; on Windows it is reached through its shim, so one of the two spellings
     // is used, never both -- a retry would spend the request twice.
-    const args = ['text', 'chat', '--messages-file', messagesPath, '--model', opts.model, '--output', 'json', '--max-tokens', '8192', '--timeout', String(opts.timeoutSeconds)]
+    const args = ['text', 'chat', '--messages-file', messagesPath, '--model', opts.model, '--output', 'json', '--max-tokens', String(opts.maxTokens), '--timeout', String(opts.timeoutSeconds)]
     const final = process.platform === 'win32'
         ? run('cmd', ['/c', 'bl', ...args], { shell: false })
         : run('bl', args, { shell: false })
@@ -210,7 +220,7 @@ function callBl(messages, opts, usageSink) {
 function callCmd(messages, opts, taskId, round) {
     must(opts.cmdTemplate, '--solver cmd needs --cmd-template')
     const sandbox = sandboxFor(path.join(opts.archive, 'run'), taskId)
-    fs.writeFileSync(path.join(sandbox, 'camel-for-ai.md'), fs.readFileSync(path.join(REPO, REFERENCE_REL), 'utf8'))
+    fs.writeFileSync(path.join(sandbox, 'camel-for-ai.md'), fs.readFileSync(opts.referencePath, 'utf8'))
     const requestPath = path.join(sandbox, 'request.json')
     fs.writeFileSync(requestPath, JSON.stringify(messages), 'utf8')
     const answerPath = path.join(sandbox, 'answer.txt')
@@ -332,7 +342,8 @@ function judge(task, compiled) {
 
 function main() {
     const opts = parseArgs(process.argv.slice(2))
-    const { manifest, reference, referenceSha256, referenceChars } = loadInputs()
+    const { manifest, reference, referencePath, referenceSha256, referenceChars } = loadInputs(opts)
+    opts.referencePath = referencePath
     const wanted = opts.tasks ?? manifest.tasks.map((t) => t.id)
     const tasks = manifest.tasks.filter((t) => wanted.includes(t.id))
     must(tasks.length === wanted.length, `unknown task id in ${wanted.join(',')}`)
@@ -348,8 +359,11 @@ function main() {
         model: opts.solver === 'bl' ? opts.model : null,
         rounds_planned: opts.rounds,
         token_budget: opts.tokenBudget,
+        max_tokens: opts.solver === 'bl' ? opts.maxTokens : null,
+        timeout_seconds: opts.solver === 'bl' ? opts.timeoutSeconds : null,
         camel_revision: manifest.camel_revision,
         camel_bin: opts.camelBin,
+        reference_path: opts.reference || REFERENCE_REL,
         reference_sha256: referenceSha256,
         reference_chars: referenceChars,
         prompt_header: manifest.solver_prompt_header,
@@ -507,7 +521,7 @@ function renderMarkdown(report) {
     lines.push(`# Learnability run: ${report.solver}${report.model ? ` (${report.model})` : ''}`)
     lines.push('')
     lines.push(`- camel revision: \`${report.camel_revision}\``)
-    lines.push(`- reference: \`docs/reference/camel-for-ai.md\`, ${report.reference_chars} characters, sha256 \`${report.reference_sha256}\``)
+    lines.push(`- reference: \`${report.reference_path}\`, ${report.reference_chars} characters, sha256 \`${report.reference_sha256}\``)
     lines.push(`- tasks: ${s.tasks}, first-draft pass ${s.first_draft_passed}/${s.tasks} (${Math.round(s.first_draft_rate * 100)}%), final pass ${s.passed}/${s.tasks} (${Math.round(s.final_rate * 100)}%)`)
     lines.push(`- mean compile-fix rounds to pass: ${s.mean_rounds_to_pass === null ? 'n/a' : s.mean_rounds_to_pass}`)
     if (report.usage) {
