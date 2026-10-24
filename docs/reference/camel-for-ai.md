@@ -1299,7 +1299,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `UnterminatedComment` | E | Unterminated comment: {0}. |
 | `InvalidEscapeSequence` | W | Invalid escape sequence in string: {0}. |
 
-**Syntax** (`SyntaxDiag`) — 17 (16 errors, 1 warning)
+**Syntax** (`SyntaxDiag`) — 18 (17 errors, 1 warning)
 
 | `MissingClosingDelimiter` | E | Expected '{0}' before {2}, to close the '{1}'. |
 | `UnmatchedClosingDelimiter` | E | Unexpected '{0}': no '{1}' is open here. |
@@ -1316,10 +1316,11 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `AngleCloseAfterSpace` | E | This '>' follows a space and is read as the comparison operator, so the angle-bracket list it was meant to close is still open at {0}. |
 | `LineStartsWithOperator` | E | A statement cannot start with '{0}': the line break before it ended the statement of the line above. |
 | `EmptyInterpolation` | E | An interpolation has no expression to format. |
-| `WhenAfterBody` | E | A declaration's condition comes before the body it guards, so {0} cannot follow the body. |
+| `AsRightSideIsType` | E | The right side of '{0}' is a type; write the interval as '(a..b)'. |
+| `WhenAfterBody` | E | A 'when' condition comes before what it guards, so {0} cannot follow it. |
 | `ComparisonAcrossLines` | W | This '>' is read as a comparison with the next line, which starts with {0}: two statements may have been joined into one. |
 
-**Semantic** (`SemanticDiag`) — 199 (185 errors, 14 warnings)
+**Semantic** (`SemanticDiag`) — 201 (187 errors, 14 warnings)
 
 | `Redeclaration` | E | Redeclaration of reference: '{0}'. |
 | `ModuleNotFound` | E | Module '{0}' not found. {1} |
@@ -1499,6 +1500,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `ParamArgumentWrongType` | E | The argument '{0}' of '{1}' has type '{2}', not '{3}'. |
 | `CompOperandMismatch` | E | '..' takes two functions or two integers; the left operand is '{0}' and the right one '{1}'. |
 | `CompOperandNotUnary` | E | '..' composes a unary function on the left; '{0}' takes {1} parameters. |
+| `CompOperandGenericWithoutType` | E | '..' composes two functions, and its {0} operand, the generic function '{1}', has no instance here: write its type arguments ('{1}::<int>'), or give the whole expression an expected function type. |
 | `VarParamInAsyncFunction` | W | Variable parameters are only allowed in sync functions. |
 | `IgnoredSideEffect` | W | {0} is neither waited nor in a sync block, and {1}. |
 | `CapturedWriteInAsyncFunction` | W | {0} writes the captured variable{1} {2} but is not declared with the 'sync' modifier. |
@@ -1555,7 +1557,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `ConstantExpressionFaults` | W | This constant expression faults whenever it is evaluated ({0}); it is not folded. |
 | `TranslationLinksRuntime` | W | std::cpp has no standalone translation of {0}: the program it writes calls the Camel runtime there and is built with libcamel. |
 
-**Semantic** (`SemanticDiag`) — 199 (185 errors, 14 warnings)
+**Semantic** (`SemanticDiag`) — 201 (187 errors, 14 warnings)
 
 | `ReducedPrecisionUnsupported` | E | The call of '{0}' cannot take a value of the reduced-precision element type '{1}'. |
 | `ImplOnBodylessDeclaration` | E | The body-less declaration '{0}' cannot carry '#impl<{1}>': it has no Camel body. |
@@ -1563,6 +1565,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `ImplKernelForeign` | E | The '#impl' tag of '{0}' names '{1}', which another module declares. |
 | `ImplSignatureMismatch` | E | The kernel '{0}' of the '#impl' function '{1}' has the signature {2}, but the function has {3}. |
 | `ImplKernelNotBodyless` | E | The '#impl' tag of '{0}' names '{1}', which has a body. |
+| `StreamInContainer` | E | '{0}' cannot be the element of {1}: a stream is consumed once, while the elements of a container are read more than once. |
 | `NodeOfNotAParameter` | E | '{0}' is not a const parameter of the rule '{1}', so node_of({0}) names no node. |
 <!-- camel-for-ai end: diagnostics -->
 
@@ -2241,7 +2244,7 @@ add_constant: (t: Txn, g: Graph, value: bool) => Node
 add_constant: (t: Txn, g: Graph, value: string) => Node
 ```
 
-**`rewrite`** — import { ... } from rewrite — 12 name(s)
+**`rewrite`** — import { ... } from rewrite — 22 name(s)
 
 ```text
 rewrite: (p: Program, rules: Rule[]) => Program!
@@ -2249,7 +2252,17 @@ rewrite: (p: Program, rules: Rule[], strict: bool) => Program!
 saturate: (p: Program, rules: Rule[], rounds: int) => Program!
 saturate: (p: Program, rules: Rule[], rounds: int, strict: bool) => Program!
 extract: (p: Program, cost: string) => Program!
-check: (rules: Rule[], samples: int, seed: int) => string
+check: (rules: Rule[], samples: int, seed: int) => CheckReport
+check_text: (r: CheckReport) => string
+check_row_count: (r: CheckReport) => int
+check_rule: (r: CheckReport, row: int) => string!
+check_instance: (r: CheckReport, row: int) => string!
+check_verdict: (r: CheckReport, row: int) => string!
+check_proposition: (r: CheckReport, row: int) => string!
+check_evidence: (r: CheckReport, row: int) => string!
+check_reason: (r: CheckReport, row: int) => string!
+check_coverage: (r: CheckReport, row: int) => string!
+check_coverage_table: () => string
 run: <rules: Rule[], rounds: int = 16, strict: bool = false, explain: bool = false> (p: Program) => Run<Program>!
 explain: (r: Run<Program>, a: Node, b: Node) => Proof!
 explain_all: (r: Run<Program>) => Proof!
