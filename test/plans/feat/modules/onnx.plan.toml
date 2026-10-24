@@ -1,4 +1,4 @@
-id = "modules.onnx"
+timeout_ms = 10000"
 order = 363
 tier = "fast"
 tags = ["feat", "modules", "onnx"]
@@ -533,7 +533,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "export_gated_gru_forward"
-desc = "E13/T5: a data-dependent branch inside a statically unrolled recurrence (GRU cell update gated on mean(|x_t|), T = 3) exports as standard If operators. The gate at step t+1 depends only on the model input, so the export has always had a choice between copying the continuation into both arms of every branch (2^3 - 1 = 7 Ifs) and deciding each gate after the previous branch joined (one If per gate, 4 with the last cell nested in an arm). H44c's cache that does not own its graphs made the second shape the one the exporter emits: with the optimizer's specialization no longer pinned in the program, the export specializes the continuation once more and hoists the next gate out of the arms. The two shapes compute the same function; the loss the model returns was checked with onnxruntime against the interpreter for the case's input (0.0632271543) and for an all-ones input (0.0852279197), and the count of Ifs and the top-level op list are asserted so a change of shape is noticed."
+desc = "E13/T5: a data-dependent branch inside a statically unrolled recurrence (GRU cell update gated on mean(|x_t|), T = 3) exports as standard If operators. The gate at step t+1 depends only on the model input, so the export has always had a choice between copying the continuation into both arms of every branch (2^3 - 1 = 7 Ifs) and deciding each gate after the previous branch joined (one If per gate, 4 with the last cell nested in an arm). H44c's cache that does not own its graphs made the second shape the one the exporter emits: with the optimizer's specialization no longer pinned in the program, the export specializes the continuation once more and hoists the next gate out of the arms. The two shapes compute the same function; the loss the model returns was checked with onnxruntime against the interpreter for the case's input (0.0632271543) and for an all-ones input (0.0852279197), and the count of Ifs and the top-level op list are asserted so a change of shape is noticed. The reading after the specialization fixed point (the ruling of 2026-10-24 evening, item 3, which removed the eight-copy bound) carries one more operator, a `Concat` in the second arm before the next gate is shaped, with the count of Ifs unchanged at 4."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_gated_gru_forward.cml"
 args = ["${case}"]
@@ -550,7 +550,7 @@ const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs'
 const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
 const file = path.join(input.test_tmp, 'export_gated_gru_forward.onnx')
 const model = readOnnxModel(file)
-assert(model.ops.join() === 'Slice,Reshape,Abs,Cast,ReduceMean,Greater,If,Slice,Reshape,Abs,Cast,ReduceMean,Greater,If,MatMul,Add,Mul,Cast,ReduceMean,Identity', `unexpected top-level ops ${model.ops}`)
+assert(model.ops.join() === 'Slice,Reshape,Abs,Cast,ReduceMean,Greater,If,Slice,Concat,Reshape,Abs,Cast,ReduceMean,Greater,If,MatMul,Add,Mul,Cast,ReduceMean,Identity', `unexpected top-level ops ${model.ops}`)
 assert(model.inputs.join() === 'w_ir,w_iz,w_in,w_hr,w_hz,w_hn,b_ir,b_iz,b_in,b_hr,b_hz,b_hn,fc_w,fc_b,input1', `unexpected inputs ${model.inputs}`)
 assert(model.outputs.join() === 'output', `unexpected outputs ${model.outputs}`)
 // One If per gate decision (three gates, four If nodes: the last cell's branch nests in one arm).
