@@ -1718,8 +1718,20 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                  ++i) {
                 unifyTypeVars(argumentSignature->normTypeAt(i), normInputTypes[i], bindings);
             }
-            if (expectedResult != nullptr && argumentSignature->hasExitType()) {
-                unifyTypeVars(argumentSignature->exitType(), expectedResult, bindings);
+            // The type of the position the call stands at is one more source for a variable the
+            // arguments left open, but a position that takes the value by putting it into the
+            // form does not say which of the two forms the value has (design principles 3.8,
+            // 5.2, `determinedByPosition`). `let v: int? = [1, 2]->reduce<(a: int, b: int):
+            // int => a + b, 0>` stands in an `int?` position and the reduction is an `int`, put
+            // into the form there; reading the position as the result type made the deferred
+            // initial value an `int?` too (`(a: int, b: int) => int, int?`), and the call was
+            // refused as a whole with `SemanticDiag::NoMatchingFunction` even though every
+            // argument the program wrote is an `int`. A signature whose own exit type is
+            // already `T?` keeps the whole position: the form is the call's, not the position's.
+            if (expectedResult != nullptr && argumentSignature->hasExitType() &&
+                asTagged(argumentSignature->exitType()) == nullptr) {
+                unifyTypeVars(
+                    argumentSignature->exitType(), determinedByPosition(expectedResult), bindings);
             }
         }
         // `i` is a `with` parameter's index: the binding above put `withInputs` in the

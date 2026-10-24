@@ -480,6 +480,26 @@ assert(out === want, `unexpected output: ${out}`)
 """
 timeout_ms = 8000
 
+# A position that takes a value by putting it into the form (`T?`, `T!`) takes the value itself
+# and the payload, so it does not determine which of the two the value is (design principles 3.8,
+# 5.2): a call standing there keeps the type its own arguments give it, and the form is put on at
+# the position. Before H416 the position's `int?` solved the call's result type variable, the
+# deferred initial value of the reduction was given `int?` with it, and the call was refused as a
+# whole -- the 82 cells of `opt.progen` (seeds 19 and 23), and every position below.
+
+[[tests]]
+name = "context.boxed_position"
+desc = "A `T?` position does not make the call standing in it a `T?`: `let v: int? = xs->reduce<(a: int, b: int): int => a + b, 0>` is an `int` reduction with the form put on at the declaration, at the arm of an `if` under a declared `T?` return, at a struct field and at an `int?` parameter. A lambda with unwritten parameter types takes them at the call, and the accumulator is the position's payload (`f64` when the initial `0` takes it there). A `with` parameter of the concrete type `int?` and the literal `5` in an `int?` declaration still take the form. Before this every construct but the last two was `NoMatchingFunction` (`<(a: int, b: int) => int, int?> (int[])`)."
+kind = "behavior"
+case = "../../../cases/compile/literals/context_boxed_position.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout = "10 10 10\nabc 10\n10 4.0\n5 0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
 [[tests]]
 name = "context.array_argument_out_of_range"
 desc = "An element of an array literal argument takes the element type of the parameter: 3000000000 does not fit the i32 of `sum32([1, 3000000000])`, and the call is refused with `LiteralNotRepresentable` (quoting the element) instead of `NoMatchingFunction`."

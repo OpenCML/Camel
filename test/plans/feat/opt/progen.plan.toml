@@ -14,6 +14,20 @@ expect_exit = 0
 expect_stdout_contains = ["0 wrong", "PASS"]
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+# The work is fixed (25 programs x 41 pipelines = 1,025 cells, each one a compiler run), so what
+# bounds it is its own CPU time, and `timeout_ms` below is the liveness bound only -- the reading
+# the author's ruling of 2026-10-23 asks for, and the one the resnet referees of
+# feat/modules/autodiff and the entries of perf/step_budget state. Measured on the 32-core host
+# of this project, the plan alone under camel-remote -Jobs 8:
+#
+#   86560 ms of CPU / 91858 ms wall  (2026-10-24, the first window in which every cell ran)
+#   82180 ms of CPU / 51220 ms wall  (2026-10-24, the run that turned this entry green)
+#
+# The budget is 150000 ms: 1.73x the higher reading -- the headroom those referees took. The
+# entry's cost grew by the 82 cells H416 made compile, and until then its content failure
+# short-circuited the runner's 4x margin, which read 300000 / 86560 = 3.47x when the cells began
+# to run and is what the budget states instead.
+cpu_budget_ms = 150000
 timeout_ms = 300000
 
 [[tests]]
