@@ -1081,18 +1081,39 @@ slot_t whyNotKernel(ArgsView &, ArgsView &norm, Context &ctx) {
             "InvalidArgument", "why_not reads a node of the program the run produced",
             "<rewrite::why_not>");
     }
-    const auto *program = fromSlot<const camel::runtime::Program *>(run->slotAt(0));
-    if (value->program() != program) {
+    if (value->program() != fromSlot<const camel::runtime::Program *>(run->slotAt(0))) {
         return makeError(
             "InvalidArgument",
             "why_not reads a node of the program the run produced; a value the run started from is "
             "followed with explain, which names the value it became",
             "<rewrite::why_not>");
     }
-    auto *full          = fromSlot<ProofObject *>(nullablePayload(field));
+    auto *full                  = fromSlot<ProofObject *>(nullablePayload(field));
     const RewriteRecord &record = full->record();
+    // The record is the proof's own copy of the run's log, on the C++ heap: this reference stays
+    // good whatever the collector does with the proof itself.
+    //
+    // Everything else this kernel reads lives on the GC heap, and every call below can collect -- a
+    // generic rule's instance is made here and a rule's `when` condition runs here -- so each is
+    // read again from where the collector keeps it, which is rule 2 of
+    // docs/technical/36_gc_handle_rules.md. The rule is the address this kernel used to keep, and
+    // the one the fix in `callWhen` did not reach (6e0eb52e4): under `CAMEL_GC_POISON=1` the
+    // collector wrote its poison word where the rule had been, and `rule->name()` in the answer at
+    // the end of this function read that word -- SIGSEGV with `nameId` 0xf3900000, measured
+    // 2026-10-24 on rules.why_not_names_the_false_condition. The rule is rooted for the length of
+    // the kernel now and read from the handle at every use; the program and its graphs are read
+    // from the frame again wherever a collecting call stands between the read and the use; and the
+    // value's graph and index are read once, as numbers.
+    mm::RootHandle ruleRoot(
+        mm::autoSpace(), const_cast<RuleObject *>(rule), RuleType::get(), "rewrite.whyNotRule");
+    const auto ruleNow = [&ruleRoot]() { return ruleRoot.getAs<RuleObject>(); };
+    const auto runNow  = [&norm]() { return norm.get<Struct *>(0); };
+    const auto programNow = [&runNow]() {
+        return fromSlot<const camel::runtime::Program *>(runNow()->slotAt(0));
+    };
     const camel::runtime::GraphId graphId = value->graph();
-    const auto draftNode = draftNodeOf(record, nullptr, program, value);
+    const uint32_t valueIndex             = value->index();
+    const auto draftNode = draftNodeOf(record, nullptr, programNow(), value);
     const TupleType *resultType = TupleType::fallible(Type::String());
     const auto answer = [&](std::string text) -> slot_t {
         String *out = String::from(std::move(text), mm::autoSpace());
@@ -1102,20 +1123,22 @@ slot_t whyNotKernel(ArgsView &, ArgsView &norm, Context &ctx) {
     if (!draftNode) {
         return answer(std::format(
             "the run made no rewrite at %{}: the value is not one any step matched or produced",
-            value->index()));
+            valueIndex));
     }
     // A value the run produced has a step behind it: the question "why not" is answered by saying
     // which rewrite did happen, and by which rule.
+    // `answer` allocates, so the iteration below reads the step it answers about and returns: the
+    // record's iterators are not read after that allocation (the record itself does not move).
     for (const camel::runtime::RewriteStep &step : record.steps) {
         if (step.graphId == graphId && step.produced == *draftNode) {
             const std::string before =
                 step.matchedText.empty() ? std::string("%?") : step.matchedText.front();
-            if (step.rule == rule->name()) {
+            if (step.rule == ruleNow()->name()) {
                 return answer(std::format(
                     "the rule fired here in round {} of graph {}: {} was made from {}",
                     step.round, step.graph, step.producedText, before));
             }
-            if (step.rule.starts_with(std::string(rule->name()) + "<")) {
+            if (step.rule.starts_with(std::string(ruleNow()->name()) + "<")) {
                 // The step came from an instance of this generic rule: the answer names it, since
                 // which types an instance was made for is the one thing a generic rule's report
                 // has to say (the ruling of 2026-10-23 on generic-rule-instantiation).
@@ -1128,26 +1151,30 @@ slot_t whyNotKernel(ArgsView &, ArgsView &norm, Context &ctx) {
                 step.round, step.graph, step.producedText, before, step.rule));
         }
     }
-    if (program == nullptr || program->graph(graphId) == nullptr) {
+    if (programNow() == nullptr || programNow()->graph(graphId) == nullptr) {
         return answer(std::format(
             "the graph {} the value belongs to is not in the program the run produced",
             camel::runtime::toText(graphId)));
     }
     try {
-        if (rule->ruleId() != 0) {
+        if (ruleNow()->ruleId() != 0) {
             // A generic rule has no sides of its own: what the value's type has is an instance,
             // and the question is about it (the ruling of 2026-10-23 on
             // generic-rule-instantiation). Which types the rule was instantiated at, and what came
             // of each, is what a reader of a generic rule needs to know.
-            const camel::runtime::GCGraph *graph = program->graph(graphId);
+            const camel::runtime::GCGraph *graph = programNow()->graph(graphId);
             const Type *type =
-                graph != nullptr ? graph->node(value->index())->dataType() : nullptr;
+                graph != nullptr ? graph->node(valueIndex)->dataType() : nullptr;
             if (type == nullptr) {
                 return answer(std::format(
                     "`{}` is a generic rule, and the type of this value is not known here",
-                    rule->name()));
+                    ruleNow()->name()));
             }
-            const uint64_t ruleId = rule->ruleId();
+const uint64_t ruleId = ruleNow()->ruleId();
+            // What the messages below say about the type is read before the instance is made:
+            // making it runs the compiler, which can collect, and `type` is an address on the GC
+            // heap.
+            const std::string typeText = type->toString();
             // A rule of one type parameter is named by this value's type; a rule of more is not,
             // and the tuple that could hold this value is looked for among the registered types
             // (one candidate per position the value's type can stand at). The reason a candidate
@@ -1186,21 +1213,21 @@ slot_t whyNotKernel(ArgsView &, ArgsView &norm, Context &ctx) {
                 // names it and says why it did not fire at this value.
                 const std::string instanceText = instance.typeText;
                 const std::vector<camel::runtime::Rule> &compiled =
-                    instanceRules(ctx, *norm.get<RuleObject *>(1), *entry, index);
+                    instanceRules(ctx, *ruleNow(), *entry, index);
                 if (compiled.empty()) {
                     return answer(std::format(
-                        "`{}<{}>` compiles to no rule", rule->name(), instanceText));
+                        "`{}<{}>` compiles to no rule", ruleNow()->name(), instanceText));
                 }
-                camel::runtime::RuntimeGraphDraftSession session(ctx.shared_from_this(), program);
+                camel::runtime::RuntimeGraphDraftSession session(ctx.shared_from_this(), programNow());
                 camel::runtime::GraphDraft &draft =
-                    session.edit(const_cast<camel::runtime::GCGraph *>(program->graph(graphId)));
+                    session.edit(const_cast<camel::runtime::GCGraph *>(programNow()->graph(graphId)));
                 camel::runtime::DraftWritings writings(
                     draft, record.strict ? camel::core::sem::NumericPolicy::strict()
                                          : camel::core::sem::NumericPolicy::relaxed());
                 const camel::runtime::RuleMiss miss = writings.whyNot(compiled.front(), *draftNode);
                 return answer(std::format(
                     "`{}<{}>` did not fire at {}: {}",
-                    rule->name(),
+                    ruleNow()->name(),
                     instanceText,
                     writings.textOf(*draftNode),
                     miss.detail));
@@ -1208,14 +1235,14 @@ slot_t whyNotKernel(ArgsView &, ArgsView &norm, Context &ctx) {
             if (firstWhy.empty()) {
                 return answer(std::format(
                     "`{}` is a generic rule, and no instance of it could be made for '{}'",
-                    rule->name(), type->toString()));
+                    ruleNow()->name(), typeText));
             }
             if (arity <= 1) {
                 // One type parameter: the tuple the value's type makes is the tuple, and the reason
                 // is the whole answer.
                 return answer(std::format(
                     "`{}` is a generic rule, and no instance of it could be made for '{}': {}",
-                    rule->name(), type->toString(), firstWhy));
+                    ruleNow()->name(), typeText, firstWhy));
             }
             // Two or more: the question gave one value, and which tuple of the registered types
             // that value stood at is what the reader has to be told to judge the reason.
@@ -1223,30 +1250,30 @@ slot_t whyNotKernel(ArgsView &, ArgsView &norm, Context &ctx) {
                 "`{}` is a generic rule, and no instance of it could be made for '{}': "
                 "`{}<{}>` is the first of the {} type tuple(s) that could hold it, and it did not "
                 "come about: {}",
-                rule->name(), type->toString(), rule->name(), firstTuple, tried, firstWhy));
+                ruleNow()->name(), typeText, ruleNow()->name(), firstTuple, tried, firstWhy));
         }
         std::shared_ptr<WhenCall> call;
-        if (rule->when() != nullptr) {
+        if (ruleNow()->when() != nullptr) {
             call       = std::make_shared<WhenCall>();
             call->rule = std::make_shared<mm::RootHandle>(
-                mm::autoSpace(), const_cast<RuleObject *>(rule), RuleType::get(),
+                mm::autoSpace(), const_cast<RuleObject *>(ruleNow()), RuleType::get(),
                 "rewrite.whyNotRule");
             call->vm = std::make_shared<NodeVMSchedPass>(ctx.shared_from_this());
         }
-        const camel::runtime::RuleSource source = sourceOf(*rule, 1, call);
+        const camel::runtime::RuleSource source = sourceOf(*ruleNow(), 1, call);
         std::vector<camel::runtime::Rule> compiled = camel::runtime::compileRule(ctx, source);
         if (compiled.empty()) {
-            return answer(std::format("`{}` compiles to no rule", rule->name()));
+            return answer(std::format("`{}` compiles to no rule", ruleNow()->name()));
         }
-        camel::runtime::RuntimeGraphDraftSession session(ctx.shared_from_this(), program);
+        camel::runtime::RuntimeGraphDraftSession session(ctx.shared_from_this(), programNow());
         camel::runtime::GraphDraft &draft =
-            session.edit(const_cast<camel::runtime::GCGraph *>(program->graph(graphId)));
+            session.edit(const_cast<camel::runtime::GCGraph *>(programNow()->graph(graphId)));
         camel::runtime::DraftWritings writings(
             draft, record.strict ? camel::core::sem::NumericPolicy::strict()
                                  : camel::core::sem::NumericPolicy::relaxed());
         const camel::runtime::RuleMiss miss = writings.whyNot(compiled.front(), *draftNode);
         return answer(std::format(
-            "`{}` did not fire at {}: {}", rule->name(), writings.textOf(*draftNode),
+            "`{}` did not fire at {}: {}", ruleNow()->name(), writings.textOf(*draftNode),
             miss.detail));
     } catch (const camel::runtime::RuleCompileError &e) {
         return makeError("RuleInvalid", e.what(), "<rewrite::why_not>");
