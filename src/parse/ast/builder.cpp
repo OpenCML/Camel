@@ -954,7 +954,7 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
         }
     }
 
-    if (!ruleImportAdded_) {
+    if (!ruleImportAdded_ && typeParams.empty()) {
         ruleImportAdded_ = true;
         auto import_     = std::make_shared<ImportLoad>();
         import_->setTokenRange(extractTokenRangeFromContext(context));
@@ -1013,7 +1013,7 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
                 nodesUsed = nodesUsed || !constValueParam(pair);
             }
         }
-        if (!whenImportAdded_) {
+        if (!whenImportAdded_ && typeParams.empty()) {
             whenImportAdded_   = true;
             auto rewriteImport = std::make_shared<ImportLoad>();
             rewriteImport->setTokenRange(extractTokenRangeFromContext(context));
@@ -1121,6 +1121,23 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
     if (whenFunc) {
         *args << reference(name + "__when");
         makerName = "__rule_when";
+    }
+    // A rule whose head declares type parameters has no function values to give: its sides are
+    // generic functions, and a generic function is instantiated where it is called. The value
+    // carries its templates instead, and the maker takes them under the id it registers them
+    // (the ruling of 2026-10-23 on generic-rule-instantiation); the maker of such a rule is
+    // `__rule_generic`, whatever the arguments after `consts` are.
+    const bool genericHead = !typeParams.empty();
+    if (genericHead) {
+        makerName = "__rule_generic";
+        if (!genericRuleImportAdded_) {
+            genericRuleImportAdded_  = true;
+            auto rewriteImport = std::make_shared<ImportLoad>();
+            rewriteImport->setTokenRange(extractTokenRangeFromContext(context));
+            rewriteImport->setPath("rewrite");
+            rewriteImport->setRefs({Reference("__rule_generic")});
+            imports_.push_back(rewriteImport);
+        }
     }
     node_ptr_t call = createNodeAs<ReservedExprLoad>(ReservedDataOp::Call);
     setNodeTokenRangeByContext(call, context);

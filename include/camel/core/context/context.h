@@ -143,6 +143,8 @@ class Context : public std::enable_shared_from_this<Context> {
     std::unique_ptr<module::ProgramExports> programExports_;
     /// See graphBuildSession.
     std::shared_ptr<void> graphBuildSession_;
+    /// See genericRuleTemplates.
+    std::shared_ptr<void> genericRuleTemplates_;
     /// The regular files of each directory a module was looked up in (getModulePathAndKind),
     /// by their names without the extension, and the names that have a `.cmo`.
     struct DirectoryListing {
@@ -419,6 +421,15 @@ class Context : public std::enable_shared_from_this<Context> {
      * it on first use (camel::compile::gir::Builder::of).
      */
     std::shared_ptr<void> &graphBuildSession() { return graphBuildSession_; }
+
+    /**
+     * The templates of the generic rules this context has compiled, and the instances made from
+     * them: one table per context, indexed by the id a rule value keeps (`ruleId - 1`), so that a
+     * rule value holds an id rather than a pointer and an instance is made once (the ruling of
+     * 2026-10-23 on `generic-rule-instantiation`). Opaque here: the table's type belongs to
+     * camel/compile/gir/rule_templates.h, which creates it on first use.
+     */
+    std::shared_ptr<void> &genericRuleTemplates() { return genericRuleTemplates_; }
 
     /**
      * The exported entities of the program compiled on this context: the names each module

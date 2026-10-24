@@ -1,6 +1,6 @@
 // A rule declares its type parameters after its name, in the same spelling as a function
-// (design principles 5.5). The declaration parses; using a generic rule as a value waits for the
-// rule constructor to take type arguments (the rewrite engine knows no instance for it yet).
+// (design principles 5.5): a generic head makes the pair of functions as any rule does, and it
+// names them to the maker `__rule_generic`, which gives the rule value the id of their templates.
 module generic_head
 
 rule keep::<T>(x: T, y: T) { x => y }

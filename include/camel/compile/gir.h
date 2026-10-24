@@ -5,6 +5,7 @@
 
 #include "gir/draft_graph_builder.h"
 #include "gir/encode.h"
+#include "gir/rule_templates.h"
 #include "gir/types.h"
 
 namespace camel::compile::gir {}
