@@ -2017,6 +2017,25 @@ computation the compiler moves to lower precision (design principles 7.2-7.3). R
 - Failure: fault `RuntimeError` when the name is not one of those.
 - Example: `cast(new([1.0, 2.0]), 'int64')` gives `[1, 2]`
 
+#### `load_npy`
+
+```camel
+load_npy: (path: string) => T[..]
+```
+
+The tensor a NumPy `.npy` file holds, as the element type the program declares: the extents are
+the file's (read them with `shape`, or check them with `as`), and the file's element type must
+be `T` -- a file of another element type is a fault, never a conversion (design principles 5.1,
+5.5). `T` is `f32`, `f64`, `i32`, `i64` or `bool`, the element types the format's storage types
+(`'<f4'`, `'<f8'`, `'<i4'`, `'<i8'`, `'|b1'`) map to, exactly the type given. It is written at
+the call (`load_npy::<f32>(p)`) or taken from the type of the position the call stands in
+(`Tensor<f32, [3]>`, `f32[..]`); `T` is the one type variable no parameter mentions, so a call
+that says neither is not a use of this operator.
+
+- With effects: reads a file.
+- Failure: fault `RuntimeError` when the file is missing, is not a NumPy file, holds a storage type the module does not read, or holds another element type than `T`.
+- Example: `load_npy::<f32>('x.npy')`
+
 #### `show`
 
 ```camel
@@ -2059,19 +2078,6 @@ reads back.
 
 - Pure.
 - Example: `to_bytes(new([1.0, 2.0]))` gives `[0, 0, 128, 63, 0, 0, 0, 64]`
-
-#### `load_npy`
-
-```camel
-load_npy: (path: string) => Tensor
-```
-
-The tensor a NumPy `.npy` file holds: its element type and extents are the file's, known when
-the program runs (check them with `as`, or read them with `shape`).
-
-- With effects: reads a file.
-- Failure: fault `RuntimeError` when the file is missing, is not a NumPy file, or holds a storage type the module does not read.
-- Example: `load_npy('x.npy') as Tensor<f32, [2, 2]>`
 
 #### `save_npy`
 

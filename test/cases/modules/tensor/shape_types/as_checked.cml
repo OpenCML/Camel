@@ -4,7 +4,7 @@ func f(b: Tensor<[3]>): float {
     return sum(b)
 }
 func main(): int sync {
-    let t = load_npy('test/cases/modules/tensor/shape_types/x3.npy')
+    let t = load_npy::<f32>('test/cases/modules/tensor/shape_types/x3.npy')
     println(f(t as Tensor<[3]>))
     return 0
 }

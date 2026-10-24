@@ -85,17 +85,17 @@ func tree_at(words: Tensor): Tree {
 func load_model(data: string): Params {
     let init = data + '/init'
     return {
-        emb: load_npy(init + '/emb.npy'),
-        wi: load_npy(init + '/wi.npy'), wfl: load_npy(init + '/wfl.npy'),
-        wfr: load_npy(init + '/wfr.npy'), wo: load_npy(init + '/wo.npy'),
-        wu: load_npy(init + '/wu.npy'),
-        ui: load_npy(init + '/ui.npy'), ufl: load_npy(init + '/ufl.npy'),
-        ufr: load_npy(init + '/ufr.npy'), uo: load_npy(init + '/uo.npy'),
-        uu: load_npy(init + '/uu.npy'),
-        bi: load_npy(init + '/bi.npy'), bfl: load_npy(init + '/bfl.npy'),
-        bfr: load_npy(init + '/bfr.npy'), bo: load_npy(init + '/bo.npy'),
-        bu: load_npy(init + '/bu.npy'),
-        wout: load_npy(init + '/wout.npy'), bout: load_npy(init + '/bout.npy')
+        emb: load_npy::<f32>(init + '/emb.npy'),
+        wi: load_npy::<f32>(init + '/wi.npy'), wfl: load_npy::<f32>(init + '/wfl.npy'),
+        wfr: load_npy::<f32>(init + '/wfr.npy'), wo: load_npy::<f32>(init + '/wo.npy'),
+        wu: load_npy::<f32>(init + '/wu.npy'),
+        ui: load_npy::<f32>(init + '/ui.npy'), ufl: load_npy::<f32>(init + '/ufl.npy'),
+        ufr: load_npy::<f32>(init + '/ufr.npy'), uo: load_npy::<f32>(init + '/uo.npy'),
+        uu: load_npy::<f32>(init + '/uu.npy'),
+        bi: load_npy::<f32>(init + '/bi.npy'), bfl: load_npy::<f32>(init + '/bfl.npy'),
+        bfr: load_npy::<f32>(init + '/bfr.npy'), bo: load_npy::<f32>(init + '/bo.npy'),
+        bu: load_npy::<f32>(init + '/bu.npy'),
+        wout: load_npy::<f32>(init + '/wout.npy'), bout: load_npy::<f32>(init + '/bout.npy')
     }
 }
 
@@ -129,10 +129,10 @@ func main(data: string, steps: int, lr: float, log_every: int, threads: int): in
     set_num_threads(threads)
 
     // == data ==
-    let train_words = load_npy(data + '/train_words.npy')
-    let train_labels = load_npy(data + '/train_labels.npy')
-    let val_words = load_npy(data + '/val_words.npy')
-    let val_labels = load_npy(data + '/val_labels.npy')
+    let train_words = load_npy::<f32>(data + '/train_words.npy')
+    let train_labels = load_npy::<f32>(data + '/train_labels.npy')
+    let val_words = load_npy::<f32>(data + '/val_words.npy')
+    let val_labels = load_npy::<f32>(data + '/val_labels.npy')
     let initial = load_model(data)
     let train_n = shape(train_words)[0]
     let before = accuracy<initial>(val_words, val_labels)

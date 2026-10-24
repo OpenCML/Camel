@@ -36,7 +36,7 @@ with <x: Tensor<f32>>
 func wide_loss(): float { return sum(wide_mark(sum(x, 1))) }
 func main(): int sync {
     let folder = get_env('TILES_TEST_OUT')
-    let x = load_npy(folder + '/x.npy') as Tensor<f32, [2, 3, 4]>
+    let x = load_npy::<f32>(folder + '/x.npy') as Tensor<f32, [2, 3, 4]>
     save_npy(chained(x), folder + '/chain_cpu.npy')
     save_npy(download(run_preferred_resident<chained>(x)), folder + '/chain_gpu.npy')
     save_npy(fixed(x), folder + '/fixed_cpu.npy')

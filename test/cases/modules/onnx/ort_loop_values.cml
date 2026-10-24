@@ -73,7 +73,7 @@ func flag(b: bool): int {
 }
 
 func main(): int sync {
-    let x = load_npy('x.npy')
+    let x = load_npy::<f32>('x.npy')
     let a = pair(x)
     save_npy(a.0, 'pair_0.npy')
     save_npy(reshape([a.1], [1]), 'pair_1.npy')

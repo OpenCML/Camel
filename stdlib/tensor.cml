@@ -30,6 +30,17 @@ import { is_numeric } from types
 // the call site's argument type instantiates it. That is the spelling P4's endpoint keeps: no
 // signature writes the bare `Tensor` name.
 //
+// A signature that returns a tensor of undeclared element type is gone (the language author's
+// ruling of 2026-10-25, docs/handover/reviews/questions-2026-10-24-evening.md
+// §h450-spelling-and-print-form-leftovers, item 1): `load_npy` declares the element type it
+// expects, the call writes it (`load_npy::<f32>(p)`) or the type of the position it stands in says
+// it, and the runtime checks the file's dtype against it, reporting a fault at the call when the
+// two differ -- the same shape of answer as `json::decode_as`'s decode by type. Its element type
+// is the *result's*, and a declaration's parameters cannot mention a type variable that only the
+// result mentions, so its signature is computed rather than declared: `loadNpyOperatorGroup` in
+// `modules/tensor` is the source and `stdlib/signatures/tensor.cml` the reference, exactly as for
+// `from_bytes`, whose element type is also the call's.
+//
 // Two arms stand side by side here, and they take disjoint arguments, so neither shadows the
 // other and no call becomes ambiguous. Each function below therefore declares the array spelling
 // first (the target) and the module spelling second (the transition):
@@ -80,13 +91,6 @@ export func dim(t: Tensor, axis: i32): int
 /// @example to_bytes(new([1.0, 2.0]))    // [0, 0, 128, 63, 0, 0, 0, 64]
 export func to_bytes::<T>(t: T[..]): Bytes when is_numeric::<T>()
 export func to_bytes(t: Tensor): Bytes
-
-/// The tensor a NumPy `.npy` file holds: its element type and extents are the file's, known when
-/// the program runs (check them with `as`, or read them with `shape`).
-/// @effect reads a file
-/// @fails fault `RuntimeError` when the file is missing, is not a NumPy file, or holds a storage type the module does not read
-/// @example load_npy('x.npy') as Tensor<f32, [2, 2]>
-export func load_npy(path: string): Tensor
 
 /// Writes a tensor to a NumPy `.npy` file, replacing it.
 /// @effect writes a file

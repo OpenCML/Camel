@@ -59,8 +59,8 @@ func loop_ce(m: LoraMlp, i: int, steps: int, nb: int, lr: float): LoraMlp {
     return if i >= steps then m else sync {
         let bi = '{}'->format<i % nb>
         let dir = get_env('CAMEL_FT_BATCHES')
-        let x = load_npy(dir + '/batch_' + bi + '.npy')
-        let t = load_npy(dir + '/target_' + bi + '.npy')
+        let x = load_npy::<f32>(dir + '/batch_' + bi + '.npy')
+        let t = load_npy::<f32>(dir + '/target_' + bi + '.npy')
         let vg = step_ce(m, x, t, lr)
         'CAMEL_BENCH step={} loss={}'->format<i, vg.0>->println
         return loop_ce(vg.1, i + 1, steps, nb, lr)
@@ -80,8 +80,8 @@ func load(): LoraMlp {
 
 func do_export_ce(m: LoraMlp): int sync {
     let dir = get_env('CAMEL_FT_BATCHES')
-    let x = load_npy(dir + '/batch_0.npy')
-    let t = load_npy(dir + '/target_0.npy')
+    let x = load_npy::<f32>(dir + '/batch_0.npy')
+    let t = load_npy::<f32>(dir + '/target_0.npy')
     let lr = ce_lr()
     export_model(
         (mm: LoraMlp, xx: Tensor, tt: Tensor): (float, LoraMlp) => step_ce(mm, xx, tt, lr),

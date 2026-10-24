@@ -2,8 +2,8 @@
  * The declarations of `tensor` are what an importer sees: the extents, the element count, the
  * extent of one axis, the binary form and the module's state are read from `stdlib/tensor.cml`,
  * and the calls reach the operators the C++ module runs. A computed signature (`reshape`, whose
- * shape follows its argument; `from_bytes`, whose element type is a type argument) stays in C++
- * and is imported the same way (handover H151).
+ * shape follows its argument; `from_bytes` and `load_npy`, whose element type is a type argument
+ * or the result's position) stays in C++ and is imported the same way (handover H151, H466).
  */
 module tensor_declaration_import
 
@@ -23,10 +23,12 @@ import {
     num_threads
 } from tensor
 
-// The declared file operators still type-check (this function is not called).
+// The file operators still type-check (this function is not called): `load_npy` writes the
+// element type the file holds, and the file's own element type is checked against it when the
+// call runs.
 func round_trip(t: Tensor, path: string): Tensor sync {
     save_npy(t, path)
-    return load_npy(path)
+    return load_npy::<f32>(path)
 }
 
 func main(): int sync {

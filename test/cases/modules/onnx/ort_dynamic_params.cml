@@ -39,7 +39,7 @@ func main(): int sync {
         println('exported')
         return 0
     } else sync {
-        let r = step(load_npy(get_env('W')), load_npy(get_env('B')), load_npy(get_env('X')))
+        let r = step(load_npy::<f32>(get_env('W')), load_npy::<f32>(get_env('B')), load_npy::<f32>(get_env('X')))
         save_npy(r.0, get_env('OUT0'))
         save_npy(r.1, get_env('OUT1'))
         save_npy(r.2, get_env('OUT2'))

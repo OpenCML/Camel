@@ -59,7 +59,7 @@ func main(): int sync {
         w2: reshape([1.0, -1.0, 0.5], [3, 1]),
         b2: reshape([0.2], [1])
     }
-    let x = load_npy(get_env('X'))
+    let x = load_npy::<f32>(get_env('X'))
     let useMean = get_env('LOSS') == 'mean'
     let vg = if useMean then step_mean(m, x) else step_summean(m, x)
     'CAMEL loss={}'->format<vg.0>->println

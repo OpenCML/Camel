@@ -46,7 +46,7 @@ func loss(x: Tensor, y: Tensor, kind: int): float {
 // == data ==
 func load_model(data: string): Model {
     let init = data + '/init'
-    return { w: load_npy(init + '/w.npy'), b: load_npy(init + '/b.npy') }
+    return { w: load_npy::<f32>(init + '/w.npy'), b: load_npy::<f32>(init + '/b.npy') }
 }
 
 // == evaluate ==
@@ -75,10 +75,10 @@ func main(
     let kind = if model == 'linear' then 0 else 1
 
     // == data ==
-    let train_x = load_npy(data + '/train_x.npy')
-    let train_y = load_npy(data + '/train_y.npy')
-    let val_x = load_npy(data + '/val_x.npy')
-    let val_y = load_npy(data + '/val_y.npy')
+    let train_x = load_npy::<f32>(data + '/train_x.npy')
+    let train_y = load_npy::<f32>(data + '/train_y.npy')
+    let val_x = load_npy::<f32>(data + '/val_x.npy')
+    let val_y = load_npy::<f32>(data + '/val_y.npy')
     let initial = load_model(data)
     let batches = shape(train_x)[0] / batch
     let before = evaluate(initial, val_x, val_y, kind)

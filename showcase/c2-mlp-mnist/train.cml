@@ -59,10 +59,10 @@ func loss(x: Tensor, labels: Tensor): float {
 func load_model(data: string): Mlp {
     let init = data + '/init'
     return {
-        w1: load_npy(init + '/w1.npy'),
-        b1: load_npy(init + '/b1.npy'),
-        w2: load_npy(init + '/w2.npy'),
-        b2: load_npy(init + '/b2.npy')
+        w1: load_npy::<f32>(init + '/w1.npy'),
+        b1: load_npy::<f32>(init + '/b1.npy'),
+        w2: load_npy::<f32>(init + '/w2.npy'),
+        b2: load_npy::<f32>(init + '/b2.npy')
     }
 }
 
@@ -91,11 +91,11 @@ func main(
     set_num_threads(threads)
 
     // == data ==
-    let train_x = load_npy(data + '/train_images.npy')
-    let train_labels = load_npy(data + '/train_labels.npy')
-    let val_x = load_npy(data + '/val_images.npy')
-    let val_labels = load_npy(data + '/val_labels.npy')
-    let order = load_npy(data + '/train_order.npy')
+    let train_x = load_npy::<f32>(data + '/train_images.npy')
+    let train_labels = load_npy::<i64>(data + '/train_labels.npy')
+    let val_x = load_npy::<f32>(data + '/val_images.npy')
+    let val_labels = load_npy::<i64>(data + '/val_labels.npy')
+    let order = load_npy::<i64>(data + '/train_order.npy')
     let dataset_id = trim(read_text(data + '/dataset.id'))
 
     let model = load_model(data)

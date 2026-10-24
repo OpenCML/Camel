@@ -20,12 +20,12 @@ import { now } from time
 
 /// The benchmark input (CAMEL_BENCH_INPUT).
 export func bench_input(): Tensor {
-    return load_npy(get_env('CAMEL_BENCH_INPUT'))
+    return load_npy::<f32>(get_env('CAMEL_BENCH_INPUT'))
 }
 
 /// Loads weight `name` from CAMEL_BENCH_WEIGHTS.
 export func weight(name: string): Tensor {
-    return load_npy(get_env('CAMEL_BENCH_WEIGHTS') + '/' + name + '.npy')
+    return load_npy::<f32>(get_env('CAMEL_BENCH_WEIGHTS') + '/' + name + '.npy')
 }
 
 func warmup(forward: (x: Tensor) => Tensor, x: Tensor, remaining: int): int {
@@ -47,7 +47,7 @@ func timed(forward: (x: Tensor) => Tensor, x: Tensor, remaining: int): int {
 
 /// Exports `forward`, specialized to the benchmark input's dtype and shape, to `path`.
 func export_onnx(forward: (x: Tensor) => Tensor, path: string): int sync {
-    let x = load_npy(get_env('CAMEL_BENCH_INPUT'))
+    let x = load_npy::<f32>(get_env('CAMEL_BENCH_INPUT'))
     let start = now()
     export_model(forward, x, path)
     'CAMEL_BENCH export_ms={}'->format<(now() - start) * 1000.0>->println
@@ -57,7 +57,7 @@ func export_onnx(forward: (x: Tensor) => Tensor, path: string): int sync {
 /// Runs warmup and timed repetitions of `forward` and saves its output.
 func measure(forward: (x: Tensor) => Tensor): int sync {
     set_num_threads(int(get_env('CAMEL_BENCH_THREADS')))
-    let x = load_npy(get_env('CAMEL_BENCH_INPUT'))
+    let x = load_npy::<f32>(get_env('CAMEL_BENCH_INPUT'))
     let warmStart = now()
     let first = forward(x)
     'CAMEL_BENCH compile_ms={}'->format<(now() - warmStart) * 1000.0>->println
@@ -150,7 +150,7 @@ export func run_training(
     stateful: (x: Tensor) => int
 ): int sync {
     set_num_threads(int(get_env('CAMEL_BENCH_THREADS')))
-    let x = load_npy(get_env('CAMEL_BENCH_INPUT'))
+    let x = load_npy::<f32>(get_env('CAMEL_BENCH_INPUT'))
     let gradsDir = get_env('CAMEL_BENCH_GRADS')
     return if gradsDir != '' then dump(x, gradsDir) else if get_env('CAMEL_BENCH_TRAIN_PROTOCOL') == 'stateless' then stateless_training(step, x) else sync {
         'CAMEL_BENCH protocol=stateful updates=consumed-by-next-step'->println
