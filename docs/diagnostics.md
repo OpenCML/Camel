@@ -5178,21 +5178,20 @@ The 'when' condition of '{0}' cannot be evaluated when the declaration is instan
 The condition is checked at instantiation, before the body is built, so it can only read what is known there: the types bound to the declaration's type parameters, and the 'with' arguments the call writes as compile-time constants. Move a runtime test into the body, or make the value a constant.
 ```
 
-**Example** (`test/cases/compile/when/not_constant.cml`, run as `camel test/cases/compile/when/not_constant.cml`)
+**Example** (`test/cases/compile/when/generic_decl_site.cml`, run as `camel test/cases/compile/when/generic_decl_site.cml`)
 
 ```camel
-module when_not_constant
+module when_generic_decl_site
 
-func is_positive(x: int): bool {
-    return x > 0
-}
+import { is_integer } from types
 
-func bad(x: int): int when is_positive(1) {
+func only_int::<T>(x: T): T when is_integerr::<T>() {
     return x
 }
 
 func main(): int sync {
-    return bad(1)
+    println(1)
+    return 0
 }
 ```
 
