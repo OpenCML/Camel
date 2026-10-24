@@ -209,3 +209,8 @@ H254 的评测框架落地，对照组（15 道题的标准解）首稿 15/15 �
 ### reduced-precision-argument-under-the-alias
 
 别名之后**没有"张量参数"与"数组参数"之分**，只有数值数组；不要找判据去区分它们，按名字认 `Tensor` 的那一处随 P4 删除。bf16/f16 是与 f32 同等的浮点类型（7.3），数值数组上的 `%` 对它们**应当支持**（逐元素，在 f32 中算、舍入一次）——今天的 `ReducedPrecisionUnsupported` 是如实标出的实现缺口，补上内核后消失。张量模块的重载面在 P4 删除步之后就是数值数组的重载面，不另存在。
+
+## tensor-alias-transition（重提）与 tensor-elementwise-comparison-vs-array-equality
+
+- **tensor-alias-transition**：计划文字（5.1a 过渡状态与删除步）与依赖表已由我照录进 `docs/design/arrays-memory/plan.cn.md` 的 P4 一节（上次说"照录"却没人能改设计稿，是我漏了）。`var` 形参裸 `Tensor` 时 cell 按声明形参类型接管，是过渡依赖、列进表里，P4 改写成显式泛型后删除；cell 的不变式不放宽。
+- **tensor-elementwise-comparison-vs-array-equality**：数值数组上 `==`/`!=` 是整值相等（`bool`）还是逐元素，牵涉语言对外的语义，**已提交负责人裁定**；在那之前不改分派，`numeric_contract.cml:57` 维持 h450 的改写。
