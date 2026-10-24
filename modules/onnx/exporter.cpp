@@ -1204,7 +1204,29 @@ Value rebuildValue(const Value &like, std::span<const Value> leaves, size_t &nex
     return leaves[next++];
 }
 
-/// Whether an argument can be a carried value of a Loop: a tensor or a numeric / bool scalar.
+/// Whether a tensor type is a shape a Loop state can keep. The tensor flip made every numeric
+/// array a `Tensor`, so an array a program grows and a tensor of the model are one type
+/// (`int[]` is `Tensor<int, [?]>`, the ruling's `unstated-element-type-scalar-and-print 与
+/// tensor-alias-transition`): the one mark left is the single unknown extent the type printer
+/// spells `[]` (`ArrayType::shapeText`). That spelling is the growable array, whose length is a
+/// property of the value rather than a dimension of its type, and a Loop has no state to keep it
+/// in: the ruling of 2026-10-23 keeps that refusal until native multi-dimensional arrays settle
+/// the shapes of fixed-size arrays (H17 items 2 and 4). Everything else is kept: `Tensor` itself
+/// (whose shape the export fixes from the example) and a written shape, however many of its
+/// extents a dimension names (`f32[?, 2]`, the dynamic batch axis).
+bool shapeIsCarriable(const type::Type *ty) {
+    const auto *array = type::asArrayType(ty);
+    if (array == nullptr) {
+        return false;
+    }
+    if (array->isNumericUnknown() || array->anyRank()) {
+        return true;
+    }
+    return array->extents().size() != 1 || !array->extents()[0].isUnknown();
+}
+
+/// Whether an argument can be a carried value of a Loop: a tensor with a shape the Loop can keep,
+/// or a numeric / bool scalar.
 bool isCarriable(const Value &v) {
     if (v.isSymbolic()) {
         return v.form == Value::Form::Tensor || v.form == Value::Form::Scalar;
@@ -1212,7 +1234,10 @@ bool isCarriable(const Value &v) {
     if (v.ty == nullptr) {
         return false;
     }
-    return tensor::isTensorType(v.ty) || tensor::isSupportedTensorScalar(v.ty->code());
+    if (tensor::isSupportedTensorScalar(v.ty->code())) {
+        return true;
+    }
+    return tensor::isTensorType(v.ty) && shapeIsCarriable(v.ty);
 }
 
 /// What a value that a Loop cannot carry is, for a diagnostic: an array, a string, a function.
@@ -1303,12 +1328,13 @@ void leafPaths(const Value &v,
 
 /// Whether the leaf a Loop cannot carry is an array: a carried state with an array field is what
 /// the ruling of 2026-10-23 keeps refused until native multi-dimensional arrays settle the shapes
-/// of fixed-size arrays (H17 items 2 and 4).
+/// of fixed-size arrays (H17 items 2 and 4). The same array `isCarriable` refuses, so a tensor
+/// with a shape the Loop keeps is not reported as an array.
 bool isArrayLeaf(const Value &leaf) {
     if (leaf.isSymbolic()) {
         return leaf.form == Value::Form::IntArray;
     }
-    return leaf.ty != nullptr && leaf.ty->code() == TypeCode::Array;
+    return leaf.ty != nullptr && tensor::isTensorType(leaf.ty) && !shapeIsCarriable(leaf.ty);
 }
 
 /// One leaf, spelled for a diagnostic: what it is, and where it sits in the carried value when
@@ -3848,27 +3874,54 @@ void collectNames(
     }
 }
 
-/// Names for the constants of `root`'s own static area. Binding a function into a program clones
-/// the values it captures (and the objects the entry arguments were bound with) into that area
-/// (`RuntimeGraphDraftSession`'s static-slot clone), so the objects the DATA nodes read are these
-/// and not the ones the captures or the entry arguments name: a name read from a source object
-/// stops at the clone. The area's own types carry what the program wrote — a struct's field names,
-/// a tuple's positions — so the names are read from there. A captured `Tensor` is copied because
-/// the declared type it is bound with leaves the element type and the extents open (the alias's
-/// transitional spelling): the value fixes them, the type does not, and the clone takes the
-/// value's. With the old `Tensor` type the capture was stored as it was, which is why the source
-/// object alone no longer identifies a weight.
-void collectStaticNames(const GCGraph *root, std::unordered_map<slot_t, std::string> &names) {
-    if (root == nullptr) {
-        return;
-    }
-    const auto *layout  = root->staticDataType();
-    const ::Tuple *area = root->staticArea();
-    if (layout == nullptr || area == nullptr) {
-        return;
-    }
-    for (size_t i = 0; i < layout->size() && i < area->size(); ++i) {
-        collectNames(area->get<slot_t>(i), layout->typeAt(i), "", names);
+/// The names of the constants a program holds, for the initializers. A program re-encodes the
+/// values it was built from: the object `fn->tuple()`, the export request's capture or a value
+/// given with `--arg` points at is not the object the program's graphs read, so naming those
+/// alone leaves the initializers anonymous. The constants of every graph of `program` are named
+/// here: a struct by its fields (the same walk), and a value the entry-arg binder read again by
+/// its type and its value, because an array has no field path to be found by.
+void collectProgramNames(
+    const camel::runtime::Program &program, std::unordered_map<slot_t, std::string> &names) {
+    const std::vector<execute::BoundEntryArgument> bound = execute::boundEntryArguments();
+    const auto nameGivenConstant = [&](slot_t slot, const type::Type *ty) {
+        if (bound.empty() || ty == nullptr || names.contains(slot)) {
+            return;
+        }
+        const auto *object = rtdata::fromSlot<const camel::core::rtdata::Object *>(slot);
+        if (object == nullptr) {
+            return;
+        }
+        for (const execute::BoundEntryArgument &argument : bound) {
+            const auto *given =
+                rtdata::fromSlot<const camel::core::rtdata::Object *>(argument.value);
+            if (argument.name.empty() || given == nullptr ||
+                (ty != argument.type && !ty->equals(argument.type))) {
+                continue;
+            }
+            if (object->equals(given, ty, /*deep=*/true)) {
+                names.try_emplace(slot, argument.name);
+                return;
+            }
+        }
+    };
+    for (const GCGraph *graph : program.graphs()) {
+        const ::Tuple *area              = graph->staticArea();
+        const type::TupleType *slotTypes = graph->staticDataType();
+        if (area == nullptr || slotTypes == nullptr) {
+            continue;
+        }
+        for (size_t i = 0; i < slotTypes->size() && i < area->size(); ++i) {
+            const slot_t slot = area->get<slot_t>(i);
+            type::Type *ty    = slotTypes->typeAt(i);
+            if (ty == nullptr) {
+                continue;
+            }
+            if (ty->code() == TypeCode::Struct) {
+                collectNames(slot, ty, "", names);
+            } else if (tensor::isTensorType(ty)) {
+                nameGivenConstant(slot, ty);
+            }
+        }
     }
 }
 
@@ -4523,6 +4576,7 @@ Model translatePrepared(
                 ? simplifyGraph(context, program, exportRewriteConfig(), log, kMaxExportRounds)
                 : simplifyFully(context, program, log);
         root = program->root();
+        collectProgramNames(*program, names);
     } catch (const ExportError &) {
         throw;
     } catch (const std::exception &e) {
@@ -4568,7 +4622,6 @@ Model translatePrepared(
         GraphVizDumpPass(context).apply(program, std::cerr);
     }
 
-    collectStaticNames(root, names);
     Evaluator evaluator(emitter, options, ctx, std::move(names), ctx.sourceContext());
     evaluator.refuseEffects(root);
     emitOutputs(emitter, evaluator.translate(root, inputs), options.outputName);
