@@ -2,9 +2,9 @@
 
 Question raised by the lane `handover/h478-facts-and-fold` (H478) on 2026-10-25, on its integration
 tree (`h465`'s tip `5116c47e6` merged with `origin/develop` `a7a2badc6`). It reproduces the runaway the
-H465 ruling replaced the eight-copy bound with, measures which path makes the key and why the key is
-never found again, and asks for a ruling. **No semantics were changed**: no cap, no guard, no
-`relaxNames`, no key.
+H465 ruling replaced the eight-copy bound with, pins the boundary to `bb4e01be8` (§1b), measures which
+path makes the key and why the key is never found again, and asks for a ruling. **No semantics were
+changed**: no cap, no guard, no `relaxNames`, no key.
 
 ## 1. Reproduced on this tree, verbatim
 
@@ -22,6 +22,43 @@ else running on the host). The plan entry's `timeout_ms = 10000`
 (`test/plans/feat/modules/onnx.plan.toml:31-55`) makes the runner read the same case as a timeout
 (`expected exit 0, got null`). H465 measured 256.99 s on its own tree
 (`export-fold-has-no-fixed-point.md`).
+
+## 1b. The boundary is the commit that removed the count bound (measured here)
+
+The integration lane put the boundary at `bb4e01be8` ("Remove the count bound on a recursive
+function's type specializations"); this lane bisected it again on its own tree, one commit either
+side, building each with the same remote build and running the case directly:
+
+| commit | exit | wall | reading |
+| --- | --- | --- | --- |
+| `bb4e01be8^` (`2c75296b4`) | 0 | **558 ms** | `exported`; the model read with the repo's own reader (`test/cases/modules/onnx/onnx_ops.mjs`) is **14 ops**: `MatMul,Add,Relu,Mul` three times, then `Reshape,Identity` — exactly what the plan asserts |
+| `bb4e01be8` | 1 | **119266 ms** | the error in §1 verbatim, at `export_fold.cml:30:5`; **no model is written** (the `ONNX_OUT` file does not exist) |
+
+`git show bb4e01be8` touches one site, and its whole effect there is this substitution:
+
+    -        if (session.typeSpecializationCount(root) >= kMaxTypeSpecializationsPerRecursiveFunction) {
+    +        if (session.typeSpecializationCount(root) >= kTypeSpecializationFixedPointGuard) {
+                 CAMEL_LOG_INFO_S(
+                     "DraftOpt",
+    -                "FUNC node {} keeps callee '{}': '{}' has {} type specializations.",
+    +                "FUNC node {} cannot specialize '{}': '{}' has {} type specializations.",
+                     funcNodeId, calleeGraph->name(), toText(root),
+    -                kMaxTypeSpecializationsPerRecursiveFunction);
+    -            return false;
+    +                kTypeSpecializationFixedPointGuard);
+    +            throw std::runtime_error(std::format(
+    +                "the type specialization of '{}' did not reach a fixed point: {} instances, each "
+    +                "with a key the one before it did not have", calleeGraph->name(),
+    +                kTypeSpecializationFixedPointGuard));
+             }
+             session.noteTypeSpecialization(root);
+
+and the constant `8` became `4096` (`include/camel/runtime/draft_inline.h`). **What the removal took
+away is the `return false`**: past the eighth copy the call kept its current callee, so the same
+non-convergence §2 and §3 measure was *truncated silently*, and this case produced the right model in
+half a second. Nothing about the key changed in that commit; the guard only turned the truncation into
+a report. That is why the same divergence is invisible on the older trees (they stop at eight) and is a
+red here.
 
 A lane's reading passed on by the coordinator says the guard's error text is **not** in the `h468` /
 `h476` trees, while `refinesType`, `instanceParameterType` and `collectDirectFuncSpecializations` are
