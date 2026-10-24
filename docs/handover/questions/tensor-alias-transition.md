@@ -43,6 +43,7 @@
 | `modules/tensor/module.cpp` 的 `.npy` 加载器/保存器 | 检查值对着 `ArrayType::numericUnknown()` 做形状/元素检查 | 改为对着声明的具体数组类型检查 |
 | `modules/tensor/ops/gradient_ops.cpp#tensorTangentType` | 判断过渡类型有没有切线 | 随钩子删除 |
 | `modules/onnx/emitter.cpp` 的 `Value::constant(..., numericUnknown())` | 数组常量当张量时的声明类型 | 改为值自己的数组类型 |
+| `src/compile/gir/builder_operators.cpp` 的 `var` 实参接管（普通实参与 `with` 实参各一处） | 形参的裸 `Tensor` 与实参值的数组拼法不是同一个类型，cell 的"内容类型必须相等"（`src/core/type/composite/tuple.cpp`）会拒 | 随标记删除：两侧是同一个类型，接管分支删掉（详见下一节） |
 
 **没有让新的消费者依赖它**：所有从 `TensorType` 迁过来的构造点走 `tensor::ops::tensorOf(...)`，元素类型
 来自事实（`facts.dtype`）；过渡类型只在"事实里没有元素类型"时出现，即 `Tensor` 的两种拼写本身。
@@ -54,6 +55,54 @@
 元素槽与静态的 `Tensor` 不符。今天的用例只在这种形参上传秩 ≥ 2 的值（`iterate_tensor.cml` 的
 `countRows(m)`），所以没有可观测的错；秩未知的形参正是删除步要删掉的写法，故不改 `iterKernel`。
 若删除步之前要写这种程序（秩未知形参 + 秩 1 实参 + 把轮次当张量用），它会读到错的值。
+
+## `var` 实参的 cell 按声明形参类型放行：h419 有这一段，`develop`/h438 没有
+
+（测量取自 `handover/h455-flip-var-params` = `handover/h443-flip-survey` + `origin/develop` `3d46c4406`，
+即翻转线；对照 `origin/develop` 与 `handover/h438-tensor-alias`。）
+
+一个 `var` 绑定是调用方的一个**槽**（cell）：`:var/new` 造槽，`:var/get`/`:var/peek` 读，`:op/assn_owned`、
+`:var/take` 在原地改写。槽的**内容类型必须相等**（`TupleType::assignableFrom`，
+`src/core/type/composite/tuple.cpp`）——这是决定，不放宽。`var` 形参写 `Tensor` 时，槽的内容是**值的数组
+拼法**（`f32[?]`、`f32[2, 3]` …），与形参声明的裸 `Tensor`（`ArrayType::numericUnknown()`）不是同一个类型，
+于是调用点被拒。补救在**调用点接管**，不在相等规则里：
+
+- 普通实参：`src/compile/gir/builder_operators.cpp` 的 `enter(...)` 一段，`fdc0813d0`（"give a `var`
+  argument's cell the declared parameter type"）落了这条，负例 `e57d5febe`（非数值槽仍拒）。
+- `with` 实参：同一规则的另一半，`fdc0813d0` **没有**覆盖（它只扫 `normInputs`）。本 lane 在 `withInputs`
+  上加同一段（`59c4dd098`）。两侧逐字：
+
+  ```
+  // 红前（with <var acc: Tensor>，最终产物、源码回退）
+  [FAIL] si_var_argument_with_parameter  197.63 ms
+      [INFO] expected exit 0, got 1
+      [stdout] camel: internal error: Runtime graph 'main' breaks its edge invariants (1 violation(s)):
+      [stdout]   graph 'main' node 7 (10): passes a var float[] as 'with' argument 0 of 'step', which takes a var Tensor
+  // 绿后
+  [PASS] si_var_argument_with_parameter  131.24 ms
+  ```
+
+  GIR 里两侧对齐（`std::gir`，调用方的槽与 callee 的 `with` 端口）：
+  `N18 [label=":var/new", type="OPER", value_type="var Tensor"]` ↔
+  `N00 [label="acc", type="PORT", param_kind="with", param_index="0", value_type="var Tensor"]`；
+  `std::jgir` 同一节点 `{"label": ":var/new", "outputType": "var Tensor"}`。
+
+**实测：这一族在翻转线上已经全绿，在 `develop`/h438 上会重现。**
+`test/plans/feat/linear/var_reference.plan.toml` 的 76 条（`var_tensor.*` 33、`var_grad.*` 33、
+`var_tensor_read*` 10）在翻转线上全部 `[PASS]`（`-Plan test/plans/feat/linear,test/plans/feat/opt
+-Tier fast -Jobs 8`：`[SUMMARY] total: 1548, pass: 1502, fail: 42`，42 条里没有一条属于这一族）；
+而 `origin/develop` 与 `handover/h438-tensor-alias` 上
+`grep isNumericUnknown src/compile/gir/builder_operators.cpp` = **0 命中**（`isNumericUnknown` 本身两侧
+都有，缺的就是这段接管）。两边的用例名集合逐字节相同（各 180 条 `var_*`）。
+⇒ **别名落地那一支必须带上 `fdc0813d0` 这段**，否则 76 条在合并后的树上重现。
+
+同一族在翻转线上剩下的红只有一条，且不在接管这一段：`si_var_argument`（`var s = ones([3])` 传
+`var s: Tensor<f32, [3]>`）要的 `ArgumentNeedsConversion`（"No conversion applies to argument 1: a var
+parameter takes the variable itself"，`src/compile/gir/builder_diagnostics.cpp` 的 `isVar` 分支）现在到不了，
+因为 `collectConversionGaps`（`src/compile/gir/builder_helpers.h`）只把 `want->isOtherType()` 当"一次 `as`
+可达"，数组拼法之间没有这一支；全层 6 条 `expect_diagnostic_name = "SemanticDiag::ArgumentNeedsConversion"`
+的用例（`si_computed_extent_stays_open`、`si_plain_result`、`si_loaded_struct`、`si_computed_slice`、
+`unshaped_argument`、`si_var_argument`）同为这一根，属形状/诊断 lane，不在本 lane 改。
 
 ## 实测：整翻之后还红在哪（fast 层 5899 例，500 红）
 
