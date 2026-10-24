@@ -175,3 +175,29 @@ Successfully installed camel-lang-0.2.30
 装完之后**不设任何环境变量**（连 `CAMEL_HOME` 都不设）跑 `examples/python/rules/basket.py`，
 输出见 [examples/python/rules/README.md](../../examples/python/rules/README.md)：包把
 `CAMEL_HOME` 指到自带的 `camel/.cmlenv/`，扩展模块与 `libcamel` 都在那里。
+
+## 57.7 今天做不到的（边界，不是没实现完的语义）
+
+- **只有非泛型的 `export func`**：`libraryFunction` 不接受泛型函数（它自己就拒绝），所以
+  `python_rules.cml` 里的函数都写成具体类型。泛型函数如何从 Python 传类型实参，是**未定的语义**，
+  已记进 `docs/handover/questions/`。
+- **只有 CPU、连续、单 lane 的数值数组**：`fromDLPack` 对非 `kDLCPU`、`strides != nullptr`、
+  `byte_offset != 0`、非 1 lane、未知 dtype 直接抛 `std::invalid_argument`，绑定把这些原样报给
+  Python。这不是限制参数，是运行时的既有契约。
+- **模块跑在 node VM 上**：扩展模块用的是运行时自己的门 `NodeVMSchedPass`，所以逐元素的工作是
+  解释器速度（一个元素一次闭包调用）。Python 侧要挑遍、或者要 fvm/jit，今天没有门；这是取舍，
+  不是语言语义。`examples/python/rules/README.md` 把这件事和实测数字一起写清楚了。
+- **返回的 NumPy 数组是只读的**：DLPack 没有表达"别人这块内存可写"的字段，NumPy 因此把从
+  capsule 导入的数组标成只读。要写就先 `.copy()`。
+- **元素类型转换**：Python 的 `int`/`float`/`bool`/`str` 会按被调函数的形参转换，数组则要求 dtype
+  与形参一致（`f32[]` 只收 float32）；不一致时报 `ArgumentNotConvertible`，不做隐式逐元素转换。
+
+## 57.8 跑测试
+
+```sh
+node scripts/test.js test/plans/feat/bindings/python_binding.plan.toml --jobs 8
+```
+
+一个测试，7.24 s，`pass: 1, fail: 0`。没有 NumPy 的解释器也能跑：测试自己用 `ctypes` 拼 DLPack
+capsule，NumPy 只在可导入时额外验一遍 `__dlpack__` 那条路。没有 Python 开发文件、扩展模块没被
+构建出来时，`skip_unless` 直接跳过这个测试（不是失败）。

@@ -86,6 +86,7 @@ camel examples/text/word_frequency.cml
 
 ## 其他目录
 
+- [`python/`](python/)：从 Python 里用 Camel。`python/rules/` 是一个 Python 项目，把定价规则写成 Camel 模块（`pip install camel-lang`，然后 `python examples/python/rules/basket.py`）；见 [`python/rules/README.cn.md`](python/rules/README.cn.md) 与 [技术文档 57](../docs/technical/57_python_bindings.md)。
 - [`perf/`](perf/)：`fibs.cml` 用 `perf.perfms` 给递归的斐波那契函数计时（`camel examples/perf/fibs.cml std::fvm`）；输出是测量结果，每次运行都不同。
 - [`tty/`](tty/)：`snake.cml` 是交互式的终端游戏，供手动体验（`camel examples/tty/snake.cml`）；见 [`tty/README.md`](tty/README.md)。
 
