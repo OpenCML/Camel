@@ -280,6 +280,7 @@ func main(): int sync {
 ## 5. 类型系统
 - **函数值没有身份**（负责人 2026-10-24）：函数与区域的值只由它算什么决定，没有"是哪一个对象"之分——不能比较两个函数值是否相等，也不能取它的地址。所以只差参数名或输入的函数体、区域可以被编译器共用一份，程序观察不到。
 - **`when` 写在它守护的体之前**（负责人 2026-10-24）：`when` 是适用条件，属于签名，不属于体后的定义性子句（`fact` 的 `join`/`meet`/`widen`/`narrow`）。函数与规则写在签名之后、体之前，签名一行写不下时 `when` 单独一行（格式化器这样排）：
+  <!-- camel-snippet: fragment: 只示意 when 的位置，函数体从略 -->
   ```camel
   func softmax::<T>(x: T[n, m], axis: int = -1): T[n, m]
       when is_float::<T>()
@@ -367,7 +368,7 @@ func main(): int sync {
 - **标准库签名的文本用类型变量，不用 `any`**（如 `print<T>(x: T)`）。参数个数可变、各参数类型不同的 Camel 函数暂不做。
 - **按类型展开的操作用泛型写，不做编译器内建。** `tree_map` 这类"形状由类型决定、编译期展开"的操作，最终用 Camel 的泛型函数写在库里；为此泛型要能在编译期按结构体、元组的字段递归（设计另行讨论）。在那之前不再增加此类内建，也不另做过渡机制。原生算子的内核不在运行时读取调用的静态类型；需要按类型变化的，在编译期展开。
 - `macro` 与类型计算无关，不要把类型函数建立在 `macro` 之上。
-- **按结构展开的写法**（方案 A，详见 [泛型按结构展开](design/generic-structure/README.cn.md)）：`match type T { case struct => …; case tuple => …; case #leaf => …; case _ => … }` 按类型的形状在实例化时选分支；一个 case 也可以写类型名（`case int`、`case MyStruct`、`case T`），按类型的**身份**精确选分支；`static for (n, F) in fields T => …` 在实例化时展开字段（位置即说明绑定的种类，不写 `constas`；需要字段标签时写 `(n, F, tags)`）；编译期字段访问 `t.[n]`；推导式 `{ … => [n]: e }`、`( … => e )`；`static loop acc = init for (n, F) in fields T do …` 是编译期展开的折叠；可变元数 `..ts` 与展开调用 `f(t, ..ts)`，元数编译期确定、可以为 0。
+- **按结构展开的写法**（方案 A，详见 [泛型按结构展开](design/generic-structure/README.cn.md)）：`match type T { case struct => …; case tuple => …; case #leaf => …; case _ => … }` 按类型的形状在实例化时选分支；一个 case 也可以写类型名（`case int`、`case MyStruct`、`case T`），按类型的**身份**精确选分支；`static for (n, F) in fields T => …` 在实例化时展开字段（位置即说明绑定的种类，不写 `constas`；需要字段标签时写 `(n, F, tags)`）；编译期字段访问 `t.[n]`；推导式 `{ … => [n]: e }`、`( … => e )`；`static loop acc = init for n, F in fields T do …` 是编译期展开的折叠；可变元数 `..ts` 与展开调用 `f(t, ..ts)`，元数编译期确定、可以为 0。
 - 含 `match type` 或 `static for` 的实例**自动内联**进调用者；展开失败给出带静态绑定的**实例化链**（链上的字段名连起来即路径），库可写 `static error "…"`，实例化深度上限可调；路径等由展开产生的值是运行时的值（由常量折叠），不作为编译期参数。
 
 ### 5.6 类型函数与原语
