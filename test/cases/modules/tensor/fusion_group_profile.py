@@ -41,6 +41,14 @@ GOLDEN_JSON = HERE / "fusion_group_none.profile.golden.json"
 # pass declaration (design principles 9.3), which adds nodes to the module's declaration, and
 # the golden records the id this tree produces. The source positions the text report prints are
 # unchanged and are checked there.
+#
+# The text golden moved for the same reason on 2026-10-24: `stdlib/tensor.cml` spells the element
+# type of its tensor signatures as an explicit type variable (`func to_bytes::<T>(t: T[..]) when
+# is_numeric::<T>()`, design principles 4.1), the `when` reads `is_numeric` from the module
+# `types`, so `types` is compiled whenever `tensor` is imported and the report's
+# "compilation - self time by phase" table gains that module's five rows (`resolve types` through
+# `declare types`). Nothing about this program's graph, its operator rows or their counts moved:
+# the five added lines are that table and the diff is only those lines.
 
 # The measured numbers a report prints: durations, shares and byte counts. Everything else in the
 # report is a count or a name, and must not change.

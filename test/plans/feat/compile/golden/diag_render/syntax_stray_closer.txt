@@ -9,5 +9,9 @@ note: the innermost open bracket is this '{', which ')' does not close
  3 | func main(): int sync {
    |                       -
 help: Remove the ')', or add the '(' it was meant to close.
+help: remove the unmatched ')'
+   |
+ 4 |     let x = 1 + )
+   |                 -
 
 camel: 1 error

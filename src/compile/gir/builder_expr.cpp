@@ -70,6 +70,25 @@ node_handle_t Builder::literalDataInType(const GCT::node_ptr_t &gct, Type *expec
     if (expected->assignableFrom(data->type())) {
         return nullptr;
     }
+    // `null` is the compile-time constant of the nullable type it stands in (design principles
+    // 4.4, 5.1): it is made in the position's type while it is made, so a position that requires a
+    // constant -- a parameter default is the one that needs it today -- gets a value of the type,
+    // not a cast of one (coerceTo registers the same constant for the positions that already hold
+    // the literal's own node). Only a `T?` has a `null`: where no nullable type is expected the
+    // literal keeps the type it has on its own, and the place it stands in reports the mismatch.
+    if (data->isNull() && data->type()->code() == TypeCode::Void) {
+        TupleType *tagged = asTagged(expected);
+        if (tagged == nullptr || !tagged->isNullable()) {
+            return nullptr;
+        }
+        const data_ptr_t value = Data::null(tagged);
+        node_handle_t result   = currGraph_->addStaticDataNode(value);
+        rememberConstant(result, value);
+        // No private copy for a varied graph: a null is never written through, so the one
+        // constant node serves every round.
+        registerNodeOrigin(context_, result, gct, "gir.data.null");
+        return result;
+    }
     if (isComposite(data->type()->code())) {
         if (!tt::as_shared<CompositeData>(data)->resolved()) {
             return nullptr;
