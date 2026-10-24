@@ -95,6 +95,17 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
+name = "compound_assignment_on_a_modules_type_directly"
+desc = "`b += c` on a module's type, written outside any generic function where that module's exported `+` is imported: the compound assignment follows the plain operator, whoever declared the type (design principles 4.2, 4.3, 5.7)."
+kind = "behavior"
+case = "../../../cases/compile/module_operators/client_bump_direct.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "3\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
 name = "module_own_operator_wins_over_callers_imports"
 desc = "The expression's module has its own `+`; the caller's imports of two other modules offering it are not candidates, so the module's own overload is chosen without ambiguity."
 kind = "behavior"

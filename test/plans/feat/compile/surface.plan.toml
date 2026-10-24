@@ -115,7 +115,7 @@ expect_output_not_contains = ["Error", "Segmentation fault", "internal error"]
 
 [[tests]]
 name = "surface.composition"
-desc = "`f..g` is the composition `x => g(f(x))` (the ruling of 2026-10-24), a function value like any other. It used to be ConstructNotSupported at the operator, before the meaning was decided."
+desc = "`f..g` is the composition `(x) => g(f(x))` (the ruling of 2026-10-24), a function value like any other. It used to be ConstructNotSupported at the operator, before the meaning was decided."
 kind = "behavior"
 case = "../../../cases/compile/surface/composition.cml"
 args = ["-E", "short", "${case}"]

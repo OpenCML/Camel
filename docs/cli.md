@@ -83,6 +83,23 @@ Both streams carry the same bytes on every platform: a line ends with a line fee
 
         camel: 1 error
 
+    A diagnostic the compiler knows how to repair prints the repair as well, the way rustc prints a suggestion: a `help:` line with the fix's title, and under it the source line the fix leaves behind, with `+` under the text it writes. A fix that only cuts text writes nothing to show, so the line as it stood is printed with `-` under what it cuts. The fix a tool applies from `data.fixes` in JSON is the same change, so `camel file.cml` shows both without any option:
+
+        error[SyntaxDiag::MissingComma]: Expected ',' or ')' before 'b'.
+          --> prog.cml:3:17
+           |
+         3 | func add(a: int b: int): int { return a + b }
+           |                 ^
+        help: The items of a list (parameters, arguments, elements) are separated by ','.
+        help: insert ','
+           |
+         3 | func add(a: int, b: int): int { return a + b }
+           |                +
+
+        camel: 1 error
+
+    A diagnostic that carries no fix has only the `help:` line in words, which is what every diagnostic printed before.
+
     Compile errors are followed by a line with their count (`camel: 1 error`, `camel: 3 errors`); a run-time fault is not.
 
   - `short`: one line per diagnostic, `(module)path:line:col: [Error]: message suggestion (name=..., code=0x...)`. This is the form scripts match; the test runner uses it.
@@ -459,7 +476,7 @@ Errors are printed on stdout, after any program output, as a JSON array of objec
 
   (For `func add(a: int b: int)` written on line 2: the fix inserts at column 15, the space that is already between `int` and `b`, so the file gets `a: int, b: int` and not `a: int , b: int`.)
 
-  A fix is offered only where the compiler knows the text to write, so `fixes` is absent where there is nothing certain to write and `suggestion` is then the advice in words. A reader that gets `fixes` may apply them without asking; a reader that does not must not invent one. Whether a code offers fixes at all is a column of `diagnostics/registry.tsv` — `edit`, or `none: <cause>` naming why not — and `docs/diagnostics.md` prints it for every code; `node scripts/diagnostics-catalog.mjs --check` refuses a declaration that says neither. The cause is one of `runtime` (the report is raised while the program runs, so there is no text to rewrite), `choice` (the repair is a decision only the writer can make), `context` (the repair is known but is not one text: it needs a second place, another file, or a restructuring) and `internal`. The `text` and `short` formats are unchanged: a fix is for a tool, and `help:` is what the reader gets. A new diagnostic declares one of the two in that column, so "every code carries a fix or the reason it has none" is checked rather than remembered.
+  A fix is offered only where the compiler knows the text to write, so `fixes` is absent where there is nothing certain to write and `suggestion` is then the advice in words. A reader that gets `fixes` may apply them without asking; a reader that does not must not invent one. Whether a code offers fixes at all is a column of `diagnostics/registry.tsv` — `edit`, or `none: <cause>` naming why not — and `docs/diagnostics.md` prints it for every code; `node scripts/diagnostics-catalog.mjs --check` refuses a declaration that says neither. The cause is one of `runtime` (the report is raised while the program runs, so there is no text to rewrite), `choice` (the repair is a decision only the writer can make), `context` (the repair is known but is not one text: it needs a second place, another file, or a restructuring) and `internal`. A fix is not for tools alone: the `text` format prints it too (see "Diagnostics" above), so a reader who never sees the JSON is told the same change, and the `short` format is one line and unchanged. A new diagnostic declares one of the two in that column, so "every code carries a fix or the reason it has none" is checked rather than remembered.
 
 ### Effect trace (`std::profile effect_trace="..."`)
 

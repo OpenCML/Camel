@@ -31,8 +31,14 @@ enum class InlineTargetStrategy {
 };
 
 struct InlineRewriteConfig {
-    InlineTargetStrategy inlineStrategy     = InlineTargetStrategy::Hybrid;
-    size_t smallSubgraphMaxNonDataPortNodes = 8;
+    InlineTargetStrategy inlineStrategy  = InlineTargetStrategy::Hybrid;
+    /// How small a callee must be to be inlined as a small one, measured in the callee's own
+    /// computation: its OPERs, the calls it makes and its structural nodes. A constant, a
+    /// parameter, a GATE and the bookkeeping an inline splice adds are not counted, so the same
+    /// function answers the same whatever the splice does (see engine.cpp,
+    /// inlinedComputeNodeCount; review 2026-10-24: "how small is a function" measures the
+    /// compute nodes of the function being inlined).
+    size_t smallSubgraphMaxComputeNodes = 8;
     /// An acyclic callee called from several places is inlined everywhere when the code this
     /// duplicates, (call sites - 1) x its size in non-data nodes, stays within this budget.
     size_t duplicationBudgetNodes = 256;
@@ -72,10 +78,16 @@ enum class InlineDecline : uint8_t {
 struct InlineDeclined {
     std::string caller;
     std::string callee;
-    InlineDecline why  = InlineDecline::Strategy;
-    size_t calleeNodes = 0; // nodes inlining would copy
-    size_t callerNodes = 0;
-    size_t callSites   = 0; // direct calls of the callee in the program
+    InlineDecline why = InlineDecline::Strategy;
+    /// The nodes inlining this callee would copy: what the growth budget and the owner cap pay
+    /// for (see InlineRewriteConfig::maxOwnerNodes).
+    size_t calleeNodes = 0;
+    /// The callee's own computation (the measure of how small it is, see
+    /// InlineRewriteConfig::smallSubgraphMaxComputeNodes): what a message about its size reports
+    /// as "the inlined function has N compute nodes".
+    size_t calleeComputeNodes = 0;
+    size_t callerNodes        = 0;
+    size_t callSites          = 0; // direct calls of the callee in the program
 };
 
 /// What the last run of the rewrite engine with inlining enabled decided about the calls it
@@ -88,7 +100,7 @@ struct InlineReport {
     bool budgetFromParameter = false; // the pipeline wrote growth_budget
     std::string passName;             // the pass that ran the engine (e.g. "std::opt")
     size_t maxOwnerNodes     = 0;
-    size_t smallNodes        = 0; // InlineRewriteConfig::smallSubgraphMaxNonDataPortNodes
+    size_t smallNodes        = 0; // InlineRewriteConfig::smallSubgraphMaxComputeNodes
     std::vector<InlineDeclined> declined; // the calls examined in the engine's last round
 
     const InlineDeclined *find(std::string_view caller, std::string_view callee) const {

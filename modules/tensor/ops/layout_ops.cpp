@@ -58,7 +58,7 @@ int64_t normalizeAxisOrThrow(int64_t axis, size_t rank) {
 // shape(t) -> int[]
 slot_t shapeKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("shape", [&] {
-        return camel::core::rtdata::toSlot(makeShapeArray(tensorArg(norm, 0), resultAllocator()));
+        return camel::core::rtdata::toSlot(makeShapeArray(tensorArg(norm, 0, true), resultAllocator()));
     });
 }
 
@@ -792,7 +792,7 @@ std::vector<OpDef> layoutOps() {
     defs.push_back(OpDef{
         .name      = "shape",
         .exports   = {"shape"},
-        .params    = {{"t", ParamKind::Tensor}},
+        .params    = {{"t", ParamKind::TensorLike}},
         .resultDoc = "int[]",
         .infer         = shapeInfer,
         .kernel        = &shapeKernel,
