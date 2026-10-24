@@ -1044,16 +1044,39 @@ class Builder {
     /// only retypes a constant -- `null` into a `T?` -- is the constant of the type it retypes it
     /// to, and carries it too.
     data_ptr_t constantOfNode(node_handle_t node) const;
-    /// The elements of the sequence a `static loop` walks when the head is written `for i in
-    /// <序列>` (H462, the ruling of 2026-10-24), or nothing when the compiler cannot work the
-    /// sequence out. Today the one sequence it knows is the constant interval `a..b`: the `int`
-    /// values `a`, `a + 1`, ... below `b`, which is the half-open reading `..` has everywhere
-    /// else (`loop ... for i in 0..5` iterates 0 ... 4). The two bounds are read as the compiler
-    /// knows them (a literal, an expression of literals, or a name bound to a constant), without
-    /// building the operand: an interval of no known size is reported by the caller, and its
-    /// refusal is `SemanticDiag::StaticLoopSequenceNotKnown`.
-    std::optional<std::vector<int64_t>>
-    staticLoopSequenceOf(const GCT::node_ptr_t &subject);
+    /// The sequence a `static loop` walks when its head writes one out (`for i in <序列>`; H462
+    /// and the ruling of 2026-10-25 on which `in` forms count, H475). One rule draws the line:
+    /// the expression after `in` is a sequence the compiler works out when it is built only from
+    /// compile-time constants -- literals, names bound to constants, the rounds of an enclosing
+    /// `static` expansion -- joined by operations that are pure and cannot fail (the predicate
+    /// design principles 3.4 names). Then it is evaluated and unrolled where it stands. The
+    /// rounds are values (`a..b`, `range(a, b, step)`, an array literal or a constant array), or
+    /// the types at the positions of a compile-time tuple: `for x in ts` binds each position's
+    /// type, which is exactly what tells a `static loop` from an ordinary `loop` (the ordinary
+    /// one binds the element's value).
+    struct StaticSequence {
+        /// The type every round's value has, when the rounds are values.
+        Type *elementType = nullptr;
+        /// Each round's value, a compile-time constant. Empty when the rounds are types.
+        std::vector<data_ptr_t> values;
+        /// Each round's type, for a compile-time tuple. Empty when the rounds are values.
+        std::vector<Type *> types;
+        bool byTypes() const { return !types.empty(); }
+        size_t rounds() const { return types.empty() ? values.size() : types.size(); }
+    };
+    /// The sequence of `for i in <序列>`, or nothing when the compiler cannot work it out. The
+    /// operand is read, never built: a run-time expression leaves the number of rounds open, and
+    /// the caller reports that (`SemanticDiag::StaticLoopSequenceNotKnown`). The two spellings
+    /// the language refuses on their own -- the deleted two-argument `range(a, b)` and a `range`
+    /// step of zero -- are reported here instead, where they are written.
+    std::optional<StaticSequence> staticLoopSequenceOf(const GCT::node_ptr_t &subject);
+    /// The same sequence where every round is an `int` value: what the build-time evaluator
+    /// reads (`EvalSequenceResolver`), which has no room for a type or for another element type.
+    std::optional<std::vector<int64_t>> staticLoopIntSequenceOf(const GCT::node_ptr_t &subject);
+    /// The value of `expression` when the build-time evaluator works it out, else nothing: the
+    /// evaluation the folding entry points use, with a refusal answered as "no value" rather than
+    /// with a diagnostic, because the caller decides whether the place needs one.
+    data_ptr_t constantValueOrNull(const GCT::node_ptr_t &expression);
     std::optional<std::string> staticValueNamed(const std::string &name) const {
         for (auto scope = staticValueScopes_.rbegin(); scope != staticValueScopes_.rend();
              ++scope) {

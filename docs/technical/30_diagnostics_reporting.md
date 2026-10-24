@@ -138,7 +138,7 @@ independent errors are reported.
 
 **Statements (GIR builder).** `visitExecNode` builds the statements of a block one by one.
 One that fails is skipped; the builder's state (current graph, scopes, type bindings, the
-`sync`/`wait` flags) is put back to what it was before the statement, and the next statement
+`sync` flag) is put back to what it was before the statement, and the next statement
 is built. When the block is done it fails as a whole if any statement failed. So:
 
 - one statement reports at most one error (the first the builder meets in it);
