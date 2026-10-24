@@ -24,11 +24,23 @@ type::Type *vjpTensorType() { return type::ArrayType::numericUnknown(); }
 
 namespace {
 
-/// True when `type` states the element type of its values: an array whose innermost element is a
-/// numeric scalar a tensor kernel has. The undetermined array (`Tensor`, the alias's transitional
-/// spelling) states none, and a node declared with it is specialized at an element type no kernel
-/// can read -- `tensor:subtract` on one answers "Unsupported Tensor dtype" at run time.
+/// True when `type` states the element type of a *tensor*: an array — at a rank, or with none
+/// fixed, which is what a bare `Tensor` is — whose innermost element is a numeric scalar a tensor
+/// kernel has. The undetermined array (`Tensor`, the alias's transitional spelling) states none,
+/// and a node declared with it is specialized at an element type no kernel can read --
+/// `tensor:subtract` on one answers "Unsupported Tensor dtype" at run time.
+///
+/// A scalar is not a tensor and never states a tensor's element type. `:op/div_d` answers
+/// `float64`, which is a numeric scalar, so a rule that scales a gradient by a count and names
+/// the scaling node among the inputs handed the gradient node the scalar's type: the node's value
+/// was the `[3, 2]` tensor and its declared type was one number, so the reader that reads it by
+/// its type (`tensor:sum_to`, which takes its operand for an array) found the element where the
+/// tensor was and refused -- `sum_to: cannot broadcast [3, 2] to []`, the wall behind every red
+/// the f64 arm uncovered.
 bool statesTensorElementType(const type::Type *type) {
+    if (type == nullptr || type->code() != type::TypeCode::Array) {
+        return false;
+    }
     const type::Type *elem = type;
     while (elem != nullptr && elem->code() == type::TypeCode::Array) {
         elem = type::asArrayType(elem)->elemType();
