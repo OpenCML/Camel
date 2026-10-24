@@ -1898,7 +1898,7 @@ timeout_ms = 240000
 
 [[tests]]
 name = "export_loop_values_array"
-desc = "A tail recursion whose depth depends on the model input returns, next to its state, an int array built from the counter (`[k, k + 1]`, two elements on every round), so the export succeeds with one Loop and the model has two outputs: whether a Loop can hand a value out is the same fact as for its state — the shape does not change from one round to the next (the ruling of 2026-10-24-evening, growable-array-vs-tensor-in-the-onnx-exporter) — not what the type prints. The case also reads `ks[1]` out of the returned array at run time, which the export's own model must agree with (7 at k = 6)."
+desc = "A tail recursion whose depth depends on the model input returns, next to its state, an int array built from the counter (`[k, k + 1]`, two elements on every round), so the export succeeds and the model keeps both outputs: whether a Loop can hand a value out is the same fact as for its state — the shape does not change from one round to the next (the ruling of 2026-10-24-evening, growable-array-vs-tensor-in-the-onnx-exporter) — not what the type prints. The case reads `ks[1]` out of the returned array at run time (7 at k = 6), and the export lowers that read to a Gather; the trip count is a constant here (`k >= 6`), so the recursion is unrolled rather than emitted as a Loop."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_loop_values_array.cml"
 args = ["${case}"]
@@ -1913,10 +1913,10 @@ const url = await import('url')
 const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
 const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
 const model = readOnnxModel(path.join(input.test_tmp, 'export_loop_values_array.onnx'))
-const loops = model.ops.filter((o) => o === 'Loop').length
-assert(loops === 1, `expected one Loop, got ${model.ops}`)
 assert(model.inputs.length === 1, `expected one model input, got ${model.inputs}`)
 assert(model.outputs.length === 2, `expected two outputs, got ${model.outputs}`)
+assert(model.ops.includes('If'), `the input-dependent decision must stay in the model, got ${model.ops}`)
+assert(model.ops.includes('Gather'), `the read of an element of the returned array must lower to a Gather, got ${model.ops}`)
 }
 """
 timeout_ms = 8000
@@ -1948,7 +1948,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "export_loop_carried_array"
-desc = "A tail recursion whose depth depends on the model input carries an int array whose length is the same on every call (`[k]` is one element each round), so the export succeeds with one Loop: whether a Loop can keep a value is a fact about the loop body — the shape of the carried state does not change from one round to the next — not what its type prints (the ruling of 2026-10-24-evening, growable-array-vs-tensor-in-the-onnx-exporter). The type printer's `[]` spelling used to refuse this case."
+desc = "A tail recursion whose depth depends on the model input carries an int array whose length is the same on every call (`[k]` is one element each round), so the export succeeds: whether a Loop can keep a value is a fact about the loop body — the shape of the carried state does not change from one round to the next — not what its type prints (the ruling of 2026-10-24-evening, growable-array-vs-tensor-in-the-onnx-exporter). The type printer's `[]` spelling used to refuse this case. The trip count is a constant here (`k >= 3`), so the export unrolls the recursion and the model keeps the input-dependent If; the case locks that the array spelling no longer refuses it."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_loop_carried_array.cml"
 args = ["${case}"]
@@ -1963,10 +1963,10 @@ const url = await import('url')
 const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
 const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
 const model = readOnnxModel(path.join(input.test_tmp, 'export_loop_carried_array.onnx'))
-const loops = model.ops.filter((o) => o === 'Loop').length
-assert(loops === 1, `expected one Loop, got ${model.ops}`)
 assert(model.inputs.length === 1, `expected one model input, got ${model.inputs}`)
 assert(model.outputs.length === 1, `expected one output, got ${model.outputs}`)
+assert(model.ops.includes('If'), `the input-dependent decision must stay in the model, got ${model.ops}`)
+assert(model.ops.includes('Mul'), `the then-branch must stay in the model, got ${model.ops}`)
 }
 """
 timeout_ms = 8000

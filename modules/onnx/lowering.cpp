@@ -812,6 +812,21 @@ Value lowerArrayIndex(const LowerContext &ctx) {
         }
     }
     if (!array.isSymbolic() || array.form != Value::Form::IntArray) {
+        // A constant index reads one element of any element type: `Gather` takes them all, so
+        // `t[0]` on a tensor of the model is the same node the tensor index emitted before the
+        // flip (this operator is what the read became). An index the model input decides is
+        // lowered only for the shape numbers themselves — the read below, which casts them to
+        // int64 — because the element a symbolic index picks out of a numeric array has no type
+        // the export can state, and a Loop or a branch that reads it would be built on a guess.
+        if (!ctx.arg(1).isConstant()) {
+            throw ExportError(
+                std::format("'{}': reading an element of '{}' needs a constant index; an index "
+                            "the model input decides is only supported for an array of shapes "
+                            "(an int array)",
+                            ctx.uri(),
+                            ctx.arg(0).ty == nullptr ? std::string("a numeric array")
+                                                     : ctx.arg(0).ty->toString()));
+        }
         std::string v = ctx.input(0, TypeCode::Float64);
         for (size_t i = 1; i < ctx.size(); ++i) {
             v = ctx.emitter().node(
