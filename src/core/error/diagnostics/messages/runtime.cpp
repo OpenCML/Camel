@@ -153,7 +153,7 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
             {
                 "InvalidArgument",
                 "Invalid argument of '{0}': {1}.",
-                "",
+                "The operator was given an argument it cannot take; the message names the argument and why. The value comes from the program, so what to change is where it was made.",
             },
         },
         {

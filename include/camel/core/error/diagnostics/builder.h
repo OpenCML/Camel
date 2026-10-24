@@ -38,6 +38,16 @@ class DiagnosticBuilder {
     DiagnosticBuilder &related(const TokenRange &range, std::string message);
     DiagnosticBuilder &note(std::string text);
 
+    // The change the report asks for, where the compiler knows the text to write (see DiagFix).
+    // `title` says what the change does ("insert ','"); the edit replaces `range` with
+    // `replacement`, the empty range inserting and the empty replacement deleting.
+    DiagnosticBuilder &fix(std::string title, const CharRange &range, std::string replacement);
+    DiagnosticBuilder &fix(std::string title, const TokenRange &range, std::string replacement);
+    /// Adds one more edit to the fix added last: a change that has to rewrite two places at once
+    /// (a clause that moves) is one fix with several edits.
+    DiagnosticBuilder &alsoFix(const CharRange &range, std::string replacement);
+    DiagnosticBuilder &alsoFix(const TokenRange &range, std::string replacement);
+
     // Message substitution + commit
     template <typename... Args> Diagnostic commit(Args &&...args);
 
@@ -59,6 +69,7 @@ class DiagnosticBuilder {
     std::string modulePath_;
     std::vector<DiagLabel> related_;
     std::vector<std::string> notes_;
+    std::vector<DiagFix> fixes_;
 };
 
 } // namespace camel::core::error

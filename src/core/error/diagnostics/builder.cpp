@@ -65,4 +65,32 @@ DiagnosticBuilder &DiagnosticBuilder::note(std::string text) {
     return *this;
 }
 
+DiagnosticBuilder &
+DiagnosticBuilder::fix(std::string title, const CharRange &range, std::string replacement) {
+    fixes_.push_back(DiagFix{std::move(title), {DiagEdit{range, std::move(replacement)}}});
+    return *this;
+}
+
+DiagnosticBuilder &
+DiagnosticBuilder::fix(std::string title, const TokenRange &range, std::string replacement) {
+    fixes_.push_back(DiagFix{std::move(title), {DiagEdit{range, std::move(replacement)}}});
+    return *this;
+}
+
+DiagnosticBuilder &DiagnosticBuilder::alsoFix(const CharRange &range, std::string replacement) {
+    // Without a fix to add to there is nothing this edit belongs to, and a fix with an edit
+    // nobody asked for is worse than no fix: the caller's `fix` call states the title.
+    if (!fixes_.empty()) {
+        fixes_.back().edits.push_back(DiagEdit{range, std::move(replacement)});
+    }
+    return *this;
+}
+
+DiagnosticBuilder &DiagnosticBuilder::alsoFix(const TokenRange &range, std::string replacement) {
+    if (!fixes_.empty()) {
+        fixes_.back().edits.push_back(DiagEdit{range, std::move(replacement)});
+    }
+    return *this;
+}
+
 } // namespace camel::core::error

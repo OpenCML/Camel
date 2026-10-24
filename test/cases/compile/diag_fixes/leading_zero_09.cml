@@ -1,0 +1,12 @@
+/**
+ * `09` with a leading zero: one decimal digit run that cannot be octal, because 9 is not an octal
+ * digit, so it has exactly one repair and the report carries it. `077`, in
+ * test/cases/parse/numbers/leading_zero.cml, is refused with no fix: octal 77 and decimal 77 are
+ * both readings of it.
+ */
+module diag_fixes_leading_zero_09
+
+func main(): int sync {
+    let a = 09
+    return a
+}
