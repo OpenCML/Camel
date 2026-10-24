@@ -2005,6 +2005,40 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     for (const Argument &input : withInputs) {
         withInputTypes.push_back(valueTypeOf(nodeTypeOf(input.node)));
     }
+    // A `with` parameter declared `var` takes the caller's variable too (design principles 4.4,
+    // 3.5), so the same reading as the ordinary `var` arguments above applies here: the cell is
+    // written through every reference to it, and the declared parameter type is the bound of
+    // what the callee may store. `with <var acc: Tensor>` called with a variable holding
+    // `f32[?, ?]` is that same edge, and the port the runtime graph is checked against is the
+    // parameter's. A cell whose content the parameter cannot take is left alone: the ordinary
+    // report refuses the call.
+    if (argumentSignature != nullptr) {
+        const size_t count = std::min(withInputs.size(), argumentSignature->withTypesCount());
+        for (size_t i = 0; i < count && i < withInputTypes.size(); ++i) {
+            Type *param = argumentSignature->withTypeAt(i);
+            if (!argumentSignature->withIsVarAt(i) || param == nullptr ||
+                containsTypeVar(param) || withInputTypes[i] == nullptr ||
+                withInputs[i].node == nullptr) {
+                continue;
+            }
+            Type *argument      = nodeTypeOf(withInputs[i].node);
+            Type *argumentValue = valueTypeOf(argument);
+            if (argumentValue == argument) {
+                continue; // not a variable: its cell is its value, and coerceTo reports the rest
+            }
+            const auto *content = tt::as_ptr<ArrayType>(param);
+            if (content == nullptr || !content->isNumericUnknown() ||
+                !param->assignableFrom(argumentValue)) {
+                continue;
+            }
+            Type *cell = TupleType::cell(param);
+            if (argument->equals(cell)) {
+                continue; // the cell already stands for what the parameter declares
+            }
+            setNodeType(withInputs[i].node, cell);
+            withInputTypes[i] = param;
+        }
+    }
 
     // An argument that is still a name without a single function value (several overloads, or
     // an operator whose signature is not one function type). Where the callee has one known
