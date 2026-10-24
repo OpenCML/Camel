@@ -5,7 +5,7 @@
 module indices_two_names
 
 func bad(t: (int, int)): int {
-    return static loop acc = 0 for (j, F) in indices t do acc + t.[j]
+    return static loop acc = 0 for j, F in indices t do acc + t.[j]
 }
 
 func main(): int {

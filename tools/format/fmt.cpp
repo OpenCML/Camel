@@ -1269,8 +1269,14 @@ string Formatter::formatTypeInTypePosition(syn::Node type) {
 
 /*
 staticLoopExpr
-    : STATIC LOOP loopState (',' loopState)* staticForHeader DO blockExpr
+    : STATIC LOOP loopState (',' loopState)* staticLoopHeader DO blockExpr
     ;
+staticLoopHeader
+    : FOR (identDef | '_') (',' (identDef | '_'))? IN
+      ('fields' typeExpr | 'indices' dataExpr | dataExpr)
+    ;
+The head is written without the parentheses `static for` still has (H462, the ruling of
+2026-10-24): `for j in indices ts`, `for i in 0..5`, or `for n, F in fields T`.
 */
 any Formatter::visitStaticLoopExpr(cst::StaticLoopExpr context) {
     string text = "static loop ";
@@ -1281,20 +1287,20 @@ any Formatter::visitStaticLoopExpr(cst::StaticLoopExpr context) {
                 any_cast<string>(visit(state.expr()));
         first = false;
     }
-    const auto mode = context->tok(TK::Identifier);
+    const auto valueName = context->get<cst::IdentDef>(0);
+    const auto mode      = context->tok(TK::Identifier);
+    const string body    = any_cast<string>(visitBlockExpr(context->lastChild().node()));
     if (mode && mode.text() == "indices") {
-        text += " for (" +
-                any_cast<string>(visitIdentDef(context->get<cst::IdentDef>(0))) +
-                ") in indices " + any_cast<string>(visit(context->expr())) + " do " +
-                any_cast<string>(visitBlockExpr(context->lastChild().node()));
-        return text;
+        return text + " for " + any_cast<string>(visitIdentDef(valueName)) + " in indices " +
+               any_cast<string>(visit(context->expr())) + " do " + body;
     }
-    text += " for (" +
-            any_cast<string>(visitIdentDef(context->get<cst::IdentDef>(0))) + ", " +
-            any_cast<string>(visitIdentDef(context->get<cst::IdentDef>(1))) + ") in fields " +
-            any_cast<string>(visitType(context->type())) + " do " +
-            any_cast<string>(visitBlockExpr(context->lastChild().node()));
-    return text;
+    if (mode && mode.text() == "fields") {
+        return text + " for " + any_cast<string>(visitIdentDef(valueName)) + ", " +
+               any_cast<string>(visitIdentDef(context->get<cst::IdentDef>(1))) + " in fields " +
+               any_cast<string>(visitType(context->type())) + " do " + body;
+    }
+    return text + " for " + any_cast<string>(visitIdentDef(valueName)) + " in " +
+           any_cast<string>(visit(context->expr())) + " do " + body;
 }
 
 /*

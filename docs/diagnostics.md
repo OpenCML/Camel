@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-266 diagnostics: 247 errors, 19 warnings. 15 carry a machine-applicable edit, 251 say why they carry none.
+267 diagnostics: 248 errors, 19 warnings. 15 carry a machine-applicable edit, 252 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -233,6 +233,7 @@ prints one entry.
 | `0x030001E4` | [SemanticDiag::CompOperandGenericWithoutType](#compoperandgenericwithouttype) | Error | no |
 | `0x030001E5` | [SemanticDiag::RangeTwoArgumentsRemoved](#rangetwoargumentsremoved) | Error | no |
 | `0x030001E6` | [SemanticDiag::RangeStepZero](#rangestepzero) | Error | no |
+| `0x030001E7` | [SemanticDiag::StaticLoopSequenceNotKnown](#staticloopsequencenotknown) | Error | no |
 | `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn | no |
@@ -3567,7 +3568,7 @@ The initial state fixes the state type. Return that type after 'do', or change t
 module static_loop_body_type
 
 func bad(t: {a: int}): int {
-    return static loop acc = 0 for (n, F) in fields {a: int} do "not an int"
+    return static loop acc = 0 for n, F in fields {a: int} do "not an int"
 }
 
 func main(): int {
@@ -3661,7 +3662,7 @@ The names of a loop's state and the name 'for' binds to the element are declared
 module static_loop_name_repeated
 
 func bad(t: {a: int}): int {
-    return static loop n = 0 for (n, F) in fields {a: int} do n + 1
+    return static loop n = 0 for n, F in fields {a: int} do n + 1
 }
 
 func main(): int {
@@ -5151,7 +5152,7 @@ None: choice: the repair is a decision only the writer can make
 module indices_not_tuple
 
 func bad(t: {a: int, b: int}): int {
-    return static loop acc = 0 for (j) in indices t do acc + 1
+    return static loop acc = 0 for j in indices t do acc + 1
 }
 
 func main(): int {
@@ -5253,7 +5254,7 @@ The rest argument '..{0}' must be the last positional argument.
 module rest_arg_not_last
 
 func sum(..ts): int {
-    return static loop acc = 0 for (j) in indices ts do acc + ts.[j]
+    return static loop acc = 0 for j in indices ts do acc + ts.[j]
 }
 
 func main(): int sync {
@@ -5287,7 +5288,7 @@ The rest argument '..{0}' is not a compile-time tuple.
 module rest_arg_not_tuple
 
 func sum(..ts): int {
-    return static loop acc = 0 for (j) in indices ts do acc + ts.[j]
+    return static loop acc = 0 for j in indices ts do acc + ts.[j]
 }
 
 func main(): int sync {
@@ -5321,7 +5322,7 @@ A function with a rest parameter has no runtime arity, so it has no function val
 module rest_as_value
 
 func sum(..ts): int {
-    return static loop acc = 0 for (j) in indices ts do acc + ts.[j]
+    return static loop acc = 0 for j in indices ts do acc + ts.[j]
 }
 
 func main(): int sync {
@@ -7673,6 +7674,36 @@ func main(): int sync {
     let xs = range(0, 10, 0)
     println(xs)
     return 0
+}
+```
+
+### StaticLoopSequenceNotKnown
+
+`0x030001E7` · Error · `SemanticDiag::StaticLoopSequenceNotKnown`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
+**Message**
+
+```text
+The sequence of a 'static loop' must be known when the function is compiled: '{0}' is not.
+```
+
+**Help**
+
+```text
+A 'static loop' is unrolled where it stands, so how many rounds it has must be known then: a constant interval 'a..b' (the half-open [a, b) that '..' is everywhere else, so '0..5' is 0, 1, 2, 3, 4), 'indices ts' for the positions of a compile-time tuple, or 'fields T' for the fields of a type. A run-time array or a run-time value leaves the number of rounds open.
+```
+
+**Example** (`test/cases/compile/static_expansion/static_loop_sequence_unknown.cml`, run as `camel test/cases/compile/static_expansion/static_loop_sequence_unknown.cml`)
+
+```camel
+module static_loop_sequence_unknown
+
+func sumTo(n: int): int {
+    return static loop acc = 0 for i in 0..n do acc + i
 }
 ```
 

@@ -34,7 +34,7 @@ disagree. Read it as the language you are compiling against, not as a snapshot o
 
 ## What each part costs
 
-Budgets, in characters: the file as a whole (112,000), the hand-written half (55,000) and each
+Budgets, in characters: the file as a whole (112,000), the hand-written half (55,400) and each
 generated region (61,000 together). `node scripts/camel-for-ai.mjs --report` prints the current
 numbers, and `--check` fails when one of them is exceeded — including the per-chapter budget in the
 last column below, which is read out of this table and measured against the chapter it names.
@@ -45,7 +45,7 @@ last column below, which is read out of this table and measured against the chap
 | 3. The smallest program that compiles | entry point, module, output, exit | 2,000 |
 | 4. Lexical: names, comments, literals | what the lexer accepts, keywords, operators | 3,200 |
 | 5. Expressions, operators, precedence | how an expression is read | 8,200 |
-| 6. Statements and declarations | functions, parameters, loops, rules, generics, `when` | 6,200 |
+| 6. Statements and declarations | functions, parameters, loops, rules, generics, `when` | 6,850 |
 | 7. Effects and `sync` | what runs in order, and what the compiler folds | 2,700 |
 | 8. Streams (`target`) | `T..`, `yield`, `tee` | 1,500 |
 | 9. Modules and the standard library | imports, exports, namespaces, where the library is | 3,300 |
@@ -58,7 +58,7 @@ last column below, which is read out of this table and measured against the chap
 | Appendix B. Standard library signatures | every exported name — generated | 28,000 |
 | Appendix C. Sources | which normative page each rule comes from | 1,800 |
 | — | generated, all four regions | 61,000 |
-| — | hand-written, this header and sections 2–14 with Appendix C | 55,000 |
+| — | hand-written, this header and sections 2–14 with Appendix C | 55,400 |
 
 ## 2. The shape of a Camel program
 
@@ -453,6 +453,11 @@ func main(): int sync {
   be left out, and the body's value is the next state. The name after `for` is bare — never
   `for i in 0..5 { ... }`, which is `SyntaxDiag::UnexpectedToken`: a `for` on its own is not a
   statement.
+- **`static loop`** folds a compile-time sequence, and its head is written like `loop`'s, without
+  parentheses: `static loop acc = 0 for i in 0..3 do acc + t.[i]`. After `in` comes `indices ts`,
+  `fields T`, or a constant interval `a..b`, half-open as `..` is elsewhere; `i` is a compile-time
+  value and a `t.[i]` key at once. A sequence it cannot work out is
+  `SemanticDiag::StaticLoopSequenceNotKnown`.
 - **`rule`** declares a rewrite an optimizer pass may apply:
   `rule name(<patterns>) when <condition> { <pattern> => <replacement> }` (`<=>` for a rewrite that
   reads both ways). The condition goes between the parameters and the body, the one position a `when`
@@ -493,9 +498,13 @@ func first::<T>(xs: T[]): T? {
     return if len(xs) == 0 then null else xs[0]
 }
 
+func sum3(t: (int, int, int)): int {
+    return static loop acc = 0 for i in 0..3 do acc + t.[i]
+}
+
 func main(): int sync {
     println(area(Shape::Rect { w: 2.0, h: 3.0 }), first([7, 8]) ?? 0, first::<string>([]) ?? 'none')
-    println(loop acc = 0 for i in 0..5 do acc + i, loop n = 3 while n > 0 do n - 1)
+    println(loop acc = 0 for i in 0..5 do acc + i, loop n = 3 while n > 0 do n - 1, sum3((1, 2, 3)))
     return 0
 }
 ```
@@ -1389,7 +1398,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `LambdaParametersNeedParentheses` | E | A lambda's parameters need their parentheses: write '(x) => e', not 'x => e'. |
 | `ComparisonAcrossLines` | W | This '>' is read as a comparison with the next line, which starts with {0}: two statements may have been joined into one. |
 
-**Semantic** (`SemanticDiag`) — 203 (189 errors, 14 warnings)
+**Semantic** (`SemanticDiag`) — 204 (190 errors, 14 warnings)
 
 | `Redeclaration` | E | Redeclaration of reference: '{0}'. |
 | `ModuleNotFound` | E | Module '{0}' not found. {1} |
@@ -1504,6 +1513,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `StaticAccessNotConstant` | E | The key '{0}' of a 't.[...]' access is not known when the function is compiled. |
 | `StaticComprehensionVoidElement` | E | The block for the field '{0}' of '{1}' gives no value, so the comprehension has no element for it. |
 | `StaticIndicesNotTuple` | E | 'indices' walks the positions of a tuple, but '{0}' has type '{1}'. |
+| `StaticLoopSequenceNotKnown` | E | The sequence of a 'static loop' must be known when the function is compiled: '{0}' is not. |
 | `RestParameterNotLast` | E | The rest parameter '..{0}' must be the last parameter. |
 | `RestParameterTypeNotSupported` | E | The rest parameter '..{0}' cannot write a type. |
 | `RestArgumentNotLast` | E | The rest argument '..{0}' must be the last positional argument. |
@@ -1628,7 +1638,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `ConstantExpressionFaults` | W | This constant expression faults whenever it is evaluated ({0}); it is not folded. |
 | `TranslationLinksRuntime` | W | std::cpp has no standalone translation of {0}: the program it writes calls the Camel runtime there and is built with libcamel. |
 
-**Semantic** (`SemanticDiag`) — 203 (189 errors, 14 warnings)
+**Semantic** (`SemanticDiag`) — 204 (190 errors, 14 warnings)
 
 | `ReducedPrecisionUnsupported` | E | The call of '{0}' cannot take a value of the reduced-precision element type '{1}'. |
 | `ImplOnBodylessDeclaration` | E | The body-less declaration '{0}' cannot carry '#impl<{1}>': it has no Camel body. |

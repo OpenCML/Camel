@@ -2,12 +2,12 @@ module static_loop_format
 
 func total(t: {a:int,b:int}): int {
 return static   loop acc=0,best=0
-for(n,F) in   fields {a:int,b:int} do{
+for n,F in   fields {a:int,b:int} do{
 let v:F=t.[n]
 (acc+v,if best < v then v else best)
 }
 }
 
 func first(t: (int,int)): int {
-return static loop acc=0 for(n,F) in fields (int,int) do acc+t.[n]
+return static loop acc=0 for n,F in fields (int,int) do acc+t.[n]
 }

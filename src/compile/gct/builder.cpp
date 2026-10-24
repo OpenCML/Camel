@@ -3561,24 +3561,32 @@ node_ptr_t Builder::visitStaticFor(const AST::node_ptr_t &ast) {
 
 /*
 staticLoopExpr
-    : STATIC LOOP loopState (',' loopState)* staticForHeader DO blockExpr
+    : STATIC LOOP loopState (',' loopState)* staticLoopHeader DO blockExpr
+staticLoopHeader
+    : FOR (identDef | '_') (',' (identDef | '_'))? IN
+      ('fields' typeExpr | 'indices' dataExpr | dataExpr)
 The AST node holds the first values of the state (a Repeated Data), the walked shape, and the
 body (StaticLoopLoad). The GCT node holds the shape first, then the first values, then the EXEC
 body. `F` is an ordinary type variable of the enclosing function's instance, bound per field
-by the graph builder; `n` (or `j` for `indices`) and the state names are bound per round.
+by the graph builder; `n` (or `j` for `indices`, or the element's name for a written sequence)
+and the state names are bound per round. The head of `static loop` lost its parentheses in H462
+(the ruling of 2026-10-24): `in <序列>` is what `static for` still writes between parentheses.
 */
 node_ptr_t Builder::visitStaticLoop(const AST::node_ptr_t &ast) {
     ENTER("StaticLoop");
     ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for StaticLoop");
     const auto &load = ast->loadAs<AST::StaticLoopLoad>();
+    // `fields T` is the only head that names a type (`F`): `indices ts` and a written sequence
+    // bind one name, the entry itself.
+    const bool byFields = !load->byIndices() && !load->bySequence();
 
     std::vector<std::string> state;
     state.reserve(load->state().size());
     for (const Reference &name : load->state()) {
         state.push_back(name.toString());
     }
-    node_ptr_t loopNode =
-        tree_->makeStaticLoop(state, load->valueName(), load->typeName(), load->byIndices());
+    node_ptr_t loopNode = tree_->makeStaticLoop(
+        state, load->valueName(), load->typeName(), load->byIndices(), load->bySequence());
     setOriginFromAst(
         context_,
         loopNode,
@@ -3589,9 +3597,7 @@ node_ptr_t Builder::visitStaticLoop(const AST::node_ptr_t &ast) {
     const ValueUseScope valueUseScope(*this);
     valueUse_ = {};
 
-    if (load->byIndices()) {
-        *loopNode << visitData(ast->at(1));
-    } else {
+    if (byFields) {
         const auto &typeAst = ast->atAs<AST::TypeLoad>(1);
         Type *subject       = visitType(typeAst);
         node_ptr_t typeNode = tree_->makeType(subject);
@@ -3602,6 +3608,10 @@ node_ptr_t Builder::visitStaticLoop(const AST::node_ptr_t &ast) {
             camel::source::OriginKind::GctNode,
             "gct.static.loop.type");
         *loopNode << typeNode;
+    } else {
+        // `indices ts` walks a tuple value and a written sequence is an ordinary expression:
+        // both are built as data, and what they hold is read when the expansion happens.
+        *loopNode << visitData(ast->at(1));
     }
 
     // The first values, evaluated once where the loop is, before the names of the head exist.
@@ -3611,7 +3621,7 @@ node_ptr_t Builder::visitStaticLoop(const AST::node_ptr_t &ast) {
 
     // `F` names the type of one field in the body only (as in `static for`).
     pushScope();
-    if (!load->byIndices()) {
+    if (byFields) {
         typeScope_->insert(
             Reference(load->typeName()),
             TypeVarType::create(load->typeName(), false));

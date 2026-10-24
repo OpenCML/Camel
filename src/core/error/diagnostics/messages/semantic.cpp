@@ -917,6 +917,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::StaticLoopSequenceNotKnown,
+            {
+                "StaticLoopSequenceNotKnown",
+                "The sequence of a 'static loop' must be known when the function is compiled: '{0}' is not.",
+                "A 'static loop' is unrolled where it stands, so how many rounds it has must be known then: a constant interval 'a..b' (the half-open [a, b) that '..' is everywhere else, so '0..5' is 0, 1, 2, 3, 4), 'indices ts' for the positions of a compile-time tuple, or 'fields T' for the fields of a type. A run-time array or a run-time value leaves the number of rounds open.",
+            },
+        },
+        {
             SemanticDiag::RestParameterNotLast,
             {
                 "RestParameterNotLast",
