@@ -23,4 +23,14 @@ data_ptr_t Data::null() {
     return nullData;
 }
 
+data_ptr_t Data::null(type::Type *type) {
+    // Only a `T?` has a `null`: a type with no nullable tag has no null value, and asking for one
+    // is a value of no nullable type in particular rather than a null of that type.
+    if (type == nullptr || type->code() == TypeCode::Void || asTagged(type) == nullptr ||
+        !asTagged(type)->isNullable()) {
+        return null();
+    }
+    return make_shared<NullData>(type);
+}
+
 } // namespace camel::core::data

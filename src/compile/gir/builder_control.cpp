@@ -578,7 +578,17 @@ node_handle_t Builder::coerceTo(node_handle_t node, Type *target, const GCT::nod
     if (TupleType *tagged = asTagged(target)) {
         // `null` is the null slot of every `T?`; any other value enters the payload first.
         if (tagged->isNullable() && source->code() == TypeCode::Void) {
-            return castNodeTo(node, tagged, origin);
+            node_handle_t cast = castNodeTo(node, tagged, origin);
+            // The cast of `null` into a `T?` moves no bits and computes nothing: what the node
+            // stands for is the null constant of the type it is read as. A position that requires
+            // a compile-time constant -- a parameter default is one -- reads the value here
+            // (design principles 4.4), and a `null` that is not a constant (a value the program
+            // computed as `void`) stays a value with no constant.
+            if (const data_ptr_t written = constantOfNode(node);
+                written != nullptr && written->isNull()) {
+                rememberConstant(cast, Data::null(tagged));
+            }
+            return cast;
         }
         node_handle_t inner = coerceTo(node, tagged->payloadType(), origin);
         return inner != nullptr ? castNodeTo(inner, tagged, origin) : nullptr;

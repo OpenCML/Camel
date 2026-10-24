@@ -420,15 +420,11 @@ camel::runtime::RuleSource instanceOf(
 /// `generic-rule-check-surface-and-multi-parameter-instances`).
 constexpr size_t kCheckTupleCap = 64;
 
-/// The type tuples a generic rule is instantiated at, one per type parameter: for a rule of one
-/// parameter the types themselves, and for a rule of more the product of the types over its
-/// parameters, capped at `kCheckTupleCap` tuples in a fixed order. The types are those of every
-/// value the program being rewritten has, each once, in the order the graphs write them. The ruling
-/// of 2026-10-23 on generic-rule-instantiation binds the rule's type variables from the nodes it
-/// matches, so the types are the program's own (not the registered meta-types `check` adds). A
-/// tuple that cannot be written for is remembered as one that did not come about, and the engine
-/// skips it.
-std::vector<std::vector<Type *>> tuplesOf(const camel::runtime::Program &program, size_t arity) {
+/// The types of every value the program has, each once, in the order the graphs write them. Two
+/// things ask for them: the tuples a generic rule is instantiated at where the engine walks the
+/// program's own side, and the types a `check` given a program adds to its candidate set (the
+/// ruling of 2026-10-24 on `generic-rule-check-surface-and-multi-parameter-instances`, §1).
+std::vector<Type *> programValueTypes(const camel::runtime::Program &program) {
     std::vector<Type *> types;
     for (const camel::runtime::GCGraph *graph : program.graphs()) {
         if (isRuleSide(*graph)) {
@@ -452,6 +448,19 @@ std::vector<std::vector<Type *>> tuplesOf(const camel::runtime::Program &program
             }
         }
     }
+    return types;
+}
+
+/// The type tuples a generic rule is instantiated at, one per type parameter: for a rule of one
+/// parameter the types themselves, and for a rule of more the product of the types over its
+/// parameters, capped at `kCheckTupleCap` tuples in a fixed order. The types are those of every
+/// value the program being rewritten has, each once, in the order the graphs write them. The ruling
+/// of 2026-10-23 on generic-rule-instantiation binds the rule's type variables from the nodes it
+/// matches, so the types are the program's own (not the registered meta-types `check` adds). A
+/// tuple that cannot be written for is remembered as one that did not come about, and the engine
+/// skips it.
+std::vector<std::vector<Type *>> tuplesOf(const camel::runtime::Program &program, size_t arity) {
+    const std::vector<Type *> types = programValueTypes(program);
     std::vector<std::vector<Type *>> tuples;
     if (types.empty()) {
         return tuples;
@@ -3217,7 +3226,8 @@ void checkOneRule(
 /// cannot draw is `sampled` with that reason: that is the one place where the check covers less
 /// than the law says, and the reason column is where the ruling has it written.
 void checkGenericRule(
-    Context &ctx, RuleObject &rule, int64_t samples, uint64_t seed, std::vector<CheckRow> &rows) {
+    Context &ctx, RuleObject &rule, int64_t samples, uint64_t seed,
+    const std::vector<Type *> &programTypes, std::vector<CheckRow> &rows) {
     const uint64_t ruleId = rule.ruleId();
     const std::string name(rule.name());
     const auto whole = [&](const std::string &reason) {
@@ -3244,7 +3254,19 @@ void checkGenericRule(
         whole("its head declares no type parameter, so it has no instance to make");
         return;
     }
-    const std::vector<Type *> universe = camel::compile::gir::ruleInstanceTypes();
+    // The types the operator groups registered, and then the types a program the call was given
+    // has (the ruling of 2026-10-24 on `check-program-parameter`): a call that leaves the
+    // parameter out reads its null and the candidate set is the registered types alone, which is
+    // every reading the check had before the parameter existed.
+    std::vector<Type *> universe = camel::compile::gir::ruleInstanceTypes();
+    for (Type *type : programTypes) {
+        const bool known = std::any_of(
+            universe.begin(), universe.end(),
+            [&](const Type *seen) { return seen == type || seen->equals(type); });
+        if (!known) {
+            universe.push_back(type);
+        }
+    }
     if (universe.empty()) {
         whole("no operator group registered a type to instantiate it at");
         return;
@@ -3377,6 +3399,23 @@ void checkGenericRule(
 slot_t checkKernel(ArgsView &, ArgsView &norm, Context &ctx) {
     const int64_t samples = std::max<int64_t>(1, norm.get<Int64>(1));
     const uint64_t seed   = static_cast<uint64_t>(norm.get<Int64>(2));
+    // The program the call was given, or none: the parameter is a `Program?` whose default is
+    // `null` (design principles 4.4; the ruling of 2026-10-24 on `check-program-parameter`), so a
+    // call that leaves it out reads the null constant of the type and has no types of its own to
+    // add. Its types join the candidate set of every generic rule below.
+    std::vector<Type *> programTypes;
+    if (norm.size() > 3) {
+        // A `Program?` is the null slot or a tuple holding the program (rtdata/tagged.h), so the
+        // payload is what names the program: reading the slot as a pointer would read the tuple.
+        const slot_t given = norm.slot(3);
+        if (given != NullSlot) {
+            if (const camel::runtime::Program *program =
+                    fromSlot<const camel::runtime::Program *>(nullablePayload(given));
+                program != nullptr) {
+                programTypes = programValueTypes(*program);
+            }
+        }
+    }
     std::vector<CheckRow> rows;
     const size_t count = norm.get<Array *>(0)->size();
     for (size_t index = 0; index < count; ++index) {
@@ -3387,7 +3426,7 @@ slot_t checkKernel(ArgsView &, ArgsView &norm, Context &ctx) {
             // condition admits over the types the operator groups registered (the ruling of
             // 2026-10-24 on `generic-rule-check-surface-and-multi-parameter-instances`). The index
             // is not passed: the seed of a rule follows its identity, not its place in this array.
-            checkGenericRule(ctx, *made, samples, seed, rows);
+            checkGenericRule(ctx, *made, samples, seed, programTypes, rows);
             continue;
         }
         // A condition is read again from the rule object after every call, so the object is
