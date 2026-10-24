@@ -437,8 +437,8 @@ void Builder::settleGenericRuleMaker(
         name.resize(side);
     }
     const uint64_t ruleId = registerGenericRule(
-        *context_, static_cast<void *>(this), std::move(name), sides[0], sides[1],
-        sides.size() == 3 ? sides[2] : nullptr);
+        *context_, static_cast<void *>(this), std::move(name), typeParameterNames(sides[0]),
+        sides[0], sides[1], sides.size() == 3 ? sides[2] : nullptr);
     const data_ptr_t idValue =
         tt::as_shared<Data>(std::make_shared<PrimaryData<int64_t>>(static_cast<int64_t>(ruleId)));
     const node_handle_t idNode = currGraph_->addStaticDataNode(idValue);
@@ -515,6 +515,75 @@ bool Builder::instantiateRuleTemplates(
         return false;
     }
     return true;
+}
+
+RuleConditionAt Builder::ruleConditionVerdict(
+    const GenericRuleEntry &entry, const std::vector<Type *> &types, std::string &why) {
+    const auto whenTemplate = std::static_pointer_cast<GenericTemplate>(entry.when);
+    if (whenTemplate == nullptr) {
+        // No condition: the law is written for every type the pattern can be built for.
+        return RuleConditionAt::Holds;
+    }
+    // The type parameters of the head, as the rule declares them: the names the condition's type
+    // arguments are bound to. They are read from the entry, so the verdict is asked for exactly the
+    // tuples the enumeration produces (`<T, U>` binds both).
+    if (entry.typeParams.size() != types.size()) {
+        why = std::format(
+            "it takes {} type parameter(s), and it was asked about {}",
+            entry.typeParams.size(),
+            types.size());
+        return RuleConditionAt::Unknown;
+    }
+    type_bindings_t bindings;
+    bindings.reserve(types.size());
+    for (size_t i = 0; i < types.size(); ++i) {
+        bindings.push_back({entry.typeParams[i], types[i]});
+    }
+    if (whenTemplate->func == nullptr || whenTemplate->func->size() < 2) {
+        why = "the condition template has no body to read";
+        return RuleConditionAt::Unknown;
+    }
+    // The condition is asked where the rule was declared, as its instance would be: its predicate
+    // calls resolve in that module's names, and instantiating one builds a body there. That is the
+    // same state `instantiateRuleTemplates` enters, and for the same reason -- this runs while a
+    // pass is applying the rule, long after the module was built. A predicate body that does not
+    // compile for these types is held in a speculative scope, so the attempt is quiet and its
+    // reason is what the caller keeps (the ruling of 2026-10-23 on
+    // `generic-rule-instantiation-set-and-predicate`).
+    WhenResult verdict;
+    std::string said;
+    const bool inModule = this->inModule(whenTemplate->module, [&] {
+        SpeculativeInstantiation quiet(*this);
+        try {
+            verdict = evaluateWhenCondition(
+                whenTemplate->func->at(1), whenTemplate->funcType, bindings, {}, whenTemplate);
+        } catch (const BuildAbortException &) {
+            // The compiler made a verdict this question cannot carry (a call the condition's
+            // predicate makes that is not a compile-time one, an incomplete return type): the
+            // condition is not one the check can ask, and `said` carries what was said.
+            verdict         = WhenResult{};
+            verdict.outcome = WhenOutcome::NotEvaluable;
+        }
+        said = quiet.reason();
+        quiet.close();
+    });
+    if (!inModule) {
+        why = "the module that declared it is not in this builder any more";
+        return RuleConditionAt::Unknown;
+    }
+    if (verdict.fails()) {
+        return RuleConditionAt::Fails;
+    }
+    if (verdict.holds()) {
+        return RuleConditionAt::Holds;
+    }
+    // Everything else -- a condition whose rest reads the values it matches, and a condition the
+    // compiler cannot answer at all -- keeps the tuple: a condition the check cannot ask must not
+    // take an instance away (`why` carries what the compiler said), and a value-dependent one is an
+    // instance whose firing is measured sample by sample, as it is for an ordinary conditional rule.
+    why = !verdict.detail.empty() ? verdict.detail
+                                  : (!said.empty() ? said : "the condition is not a compile-time one");
+    return RuleConditionAt::ValueDependent;
 }
 
 node_handle_t

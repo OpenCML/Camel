@@ -102,15 +102,50 @@ timeout_ms = 20000
 
 [[tests]]
 name = "rules.library_passes_the_check"
-desc = "The rules of the standard library that are not generic pass the check: 200 random instances agree and the engine fires the rule on its own left side, and a conditional rule reports the instances its condition selects. The integer and floating laws are one generic law per fact since the fold, and `check` does not walk a generic rule's instances yet, so each of them is reported as unchecked rather than checked at one type and called a family (the ruling of 2026-10-23 on `generic-rule-check-surface-and-multi-parameter-instances`, §1); the check itself is what `rules.generic_law_*` covers for generic rules. Commutation and association are not rules to check any more: they are properties of the operator's declaration, read by the matcher (rewrite design 2 (second version) 6)."
+desc = "Every rule of the standard library passes the check, including one instance per instance of a generic law: 200 random instances of a rule's two sides agree, the engine fires the rule on its own left side, and a conditional rule reports the instances its condition selects. The integer and floating laws are one generic law per fact since the fold (`when is_integer::<T>()`, `when is_float::<T>()`), and `check` now walks their instances over the types the operator groups registered, filtered by the condition (the ruling of 2026-10-24 on `generic-rule-check-surface-and-multi-parameter-instances`, §1): `int_add_zero<int>` and `int_add_zero<i32>`, `float_mul_one<float>`/`<f32>`/`<bf16>`/`<f16>`, each under its own name. The old blanket `unchecked <name>: a generic rule, whose instances are not checked here` is gone from the report (nothing in the output may carry it). The two instances of each floating law at `bf16` and `f16` are reported `unchecked` with their reason -- the check's sampler draws `int`, `i32`, `float`, `f32`, `bool` and tensors of them, and the element-epsilon tolerance a reduced-precision instance needs is not this lane's to invent (`docs/handover/questions/check-generic-instance-space.md`) -- which is the only `unchecked` the report has. Commutation and association are not rules to check any more: they are properties of the operator's declaration, read by the matcher (rewrite design 2 (second version) 6)."
 kind = "behavior"
 case = "../../../cases/modules/rules/check_library.cml"
 args = ["${case}", "std::nvm"]
 expect_exit = 0
-expect_stdout_contains = ["ok float_double: the condition selects the instances", "ok float32_double: the condition selects the instances", "ok tensor_f32_mul_one: 200 samples agree", "ok tensor_f32_combine: the condition selects the instances", "ok tensor_i64_distribute: 200 samples agree", "unchecked int_add_zero: a generic rule, whose instances are not checked here", "unchecked int_distribute: a generic rule, whose instances are not checked here", "unchecked float_add_minus_zero: a generic rule, whose instances are not checked here", "unchecked float_combine: a generic rule, whose instances are not checked here", "unchecked float_fold: a generic rule, whose instances are not checked here"]
-expect_output_not_contains = ["FAIL"]
+expect_stdout_contains = ["ok int_add_zero<int>: the condition selects the instances", "ok int_add_zero<i32>: the condition selects the instances", "ok int_distribute<int>: the condition selects the instances", "ok int_distribute<i32>: the condition selects the instances", "ok float_add_minus_zero<float>: the condition selects the instances", "ok float_add_minus_zero<f32>: the condition selects the instances", "unchecked float_add_minus_zero<bf16>: the check cannot make a value of type 'bf16'", "unchecked float_add_minus_zero<f16>: the check cannot make a value of type 'f16'", "ok float_combine<float>: the condition selects the instances", "ok float_combine<f32>: the condition selects the instances", "ok float_fold<float>: the condition selects the instances", "ok float_fold<f32>: the condition selects the instances", "ok float_double: the condition selects the instances", "ok float32_double: the condition selects the instances", "ok tensor_f32_mul_one: 200 samples agree", "ok tensor_f32_combine: the condition selects the instances", "ok tensor_i64_distribute: 200 samples agree"]
+expect_output_not_contains = ["FAIL", "a generic rule, whose instances are not checked here", "unchecked int_"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 60000
+
+[[tests]]
+name = "rules.pair_law_is_instantiated_per_type_pair"
+desc = "A law written over two type parameters is a pair of types, not one: `pair_sum_self::<T, U>` (`(a + b) - b => a`) is one rule, and the engine instantiates it at the *pairs* of the program's own types, so the `int` site of `pair_target.cml` is rewritten by `pair_sum_self<int, int>` and the small one by `pair_sum_self<i32, i32>` (the ruling of 2026-10-23 on generic-rule-instantiation assumes one type per value, which left such a law with no instance at all: both rewrites were zero and the proof named nothing). The condition needs both parameters to be integers, so no pair of a floating or string type is an instance of this law at all."
+kind = "behavior"
+case = "../../../cases/modules/rules/pair_target.cml"
+args = ["${case}", "generic_pair_law::counted", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["rewrites 2 rule pair_sum_self", "by pair_sum_self<int, int>", "by pair_sum_self<i32, i32>", "pair law\n3 5\n"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.pair_law_instances_are_checked"
+desc = "`check` enumerates the instances of a law of two type parameters over the product of the types the operator groups registered, filtered by the condition at the type level (the ruling of 2026-10-24 on `generic-rule-check-surface-and-multi-parameter-instances`): `pair_sum_self` has exactly the two instances of the integer pairs, each named with its tuple, and the pairs the condition rejects -- `float`, `bf16`, `string`, everything -- are not instances of this law and are not reported. The old blanket `unchecked pair_sum_self: a generic rule, whose instances are not checked here` is gone, and so is the arity complaint the maker used to answer with."
+kind = "behavior"
+case = "../../../cases/modules/rules/pair_target.cml"
+args = ["${case}", "generic_pair_law::checked", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["ok pair_sum_self<int, int>: the condition selects the instances, fired 64 of 64", "ok pair_sum_self<i32, i32>: the condition selects the instances, fired 64 of 64"]
+expect_output_not_contains = ["FAIL", "a generic rule, whose instances are not checked here", "it takes 2 type parameter", "unchecked pair_sum_self"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.pair_law_no_instance_says_the_body_reason"
+desc = "`why_not` asked about a value of a type no instance of a two-parameter law can hold answers with the reason the *body* gave -- here the string value of `pair_target.cml`'s `greet`, whose `-` takes no string -- and not with how many type parameters the rule takes (the ruling of 2026-10-23 on `generic-rule-instantiation-set-and-predicate`, §3: a failed instantiation is quiet, and `why_not` is where the reason is read). The question gives one value, so the type tuples that could hold it are the pairs of the registered types with a `string` at either position, and the answer names the first of them that did not come about. Before this, the maker answered `it takes 2 type parameter(s), and it was asked for 1`, which says nothing about the law."
+kind = "behavior"
+case = "../../../cases/modules/rules/pair_target.cml"
+args = ["${case}", "generic_pair_law::why_no_instance", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["pair_sum_self<string, string>` is the first", "operator '-' is not defined for these operand types"]
+expect_output_not_contains = ["it takes 2 type parameter(s)"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
 
 [[tests]]
 name = "rules.check_bound_follows_the_permission"
@@ -1119,13 +1154,26 @@ timeout_ms = 60000
 
 [[tests]]
 name = "rules.accuracy_library_passes_the_check"
-desc = "The rules of `rules::accuracy`, checked in two calls: the log-of-softmax rule passes the error check over vectors, matrices and rank-3 tensors (overflow, underflow, denormals and the near-zero log), and the folded scalar laws are reported by `check` as unchecked, because a generic rule has no two sides of its own to sample (the ruling of 2026-10-23 on `generic-rule-check-surface-and-multi-parameter-instances`, §1 -- and `rules.accuracy_licence_gates_simplify` is what shows the folded scalar laws firing at both widths). The report carries the worst-case error ratio. The rule's verdict is sample-dependent: it fails on draws with `inf` and `3.4e+38` in them (recorded in `docs/handover/questions/accuracy-check-sampling.md`), which is why it is measured in a call of its own, over the seed this case has always used."
+desc = "The rules of `rules::accuracy`, checked in two calls: the log-of-softmax rule passes the error check over vectors, matrices and rank-3 tensors (overflow, underflow, denormals and the near-zero log), and the folded scalar laws are checked by instance, `float_log1p<float>`, `float_log1p<f32>`, `float_expm1<float>` and `float_expm1<f32>`, each with its own worst-case error ratio (`check` walks the instances of a generic law over the types the operator groups registered -- the ruling of 2026-10-24 on `generic-rule-check-surface-and-multi-parameter-instances`, §1; `rules.accuracy_licence_gates_simplify` is what shows the folded scalar laws firing at both widths). Neither law has a `bf16`/`f16` instance to report: `math:log1p` and `math:expm1` are registered for `f32`/`f64`, and a failed instantiation is quiet (the ruling of 2026-10-23 on `generic-rule-instantiation-set-and-predicate`, §3). The log-of-softmax rule's verdict is sample-dependent: it fails on draws with `inf` and `3.4e+38` in them (recorded in `docs/handover/questions/accuracy-check-sampling.md`), which is why it is measured in a call of its own, over the seed this case has always used."
 kind = "behavior"
 case = "../../../cases/modules/rules/check_accuracy_library.cml"
 args = ["${case}", "std::nvm"]
 expect_exit = 0
-expect_stdout_contains = ["unchecked float_log1p: a generic rule, whose instances are not checked here", "unchecked float_expm1: a generic rule, whose instances are not checked here", "ok tensor_log_softmax_of_softmax: 100 samples, worst error ratio 1, fired 8 of 8"]
-expect_output_not_contains = ["FAIL"]
+expect_stdout_contains = ["ok float_log1p<float>: 100 samples, worst error ratio", "ok float_log1p<f32>: 100 samples, worst error ratio", "ok float_expm1<float>: 100 samples, worst error ratio", "ok float_expm1<f32>: 100 samples, worst error ratio", "ok tensor_log_softmax_of_softmax: 100 samples, worst error ratio 1, fired 8 of 8"]
+expect_output_not_contains = ["FAIL", "a generic rule, whose instances are not checked here"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+[[tests]]
+name = "rules.every_exported_rule_enters_the_check"
+desc = "The check's input is the library's own list of exported rules, and a verify script asserts it name by name (the ruling of 2026-10-24 on `verification-verdict-surface`, §4: the hand-written list is what drifts, and the library's header rule -- no rule enters `stdlib/rules.cml` without passing the check -- has to be catchable by a test). The script reads `stdlib/rules.cml` (43 exported rules), the case's own source with its comments stripped, and this run's report, and fails unless the three name the same set: a rule added to the library and not to the case, a name the case invents, a rule the case hands over that reaches no line of the report, and any `FAIL` in it. The gap this closes is measured: `tensor_sigmoid_chain` was exported, used by the fusion pass, and reached no `check` call of any case (the check cases handed over 42 of the library's 43 exported rules, and the folding lane counted the same gap as 68 of 69 rules). The rules are handed over in the arrangements the two cases beside this one measured -- the accuracy laws in a call of their own, since the seed an entry is sampled with follows its place in the array (the ruling of 2026-10-24 on `accuracy-check-sampling` is the other lane's change) -- so this case's report is the one a check on coverage reads."
+kind = "behavior"
+case = "../../../cases/modules/rules/check_every_rule.cml"
+args = ["${case}", "std::nvm"]
+verify_script_path = "./verify/check_covers_every_rule.mjs"
+expect_exit = 0
+expect_stdout_contains = ["ok tensor_sigmoid_chain: 200 samples agree, fired 8 of 8", "ok int_add_zero<int>: the condition selects the instances", "ok float_log1p<f32>: 100 samples, worst error ratio", "ok tensor_log_softmax_of_softmax: 100 samples, worst error ratio 1, fired 8 of 8"]
+expect_output_not_contains = ["FAIL", "a generic rule, whose instances are not checked here"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 60000
 

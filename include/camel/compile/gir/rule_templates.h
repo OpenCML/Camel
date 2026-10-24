@@ -66,6 +66,10 @@ struct GenericRuleInstance {
 struct GenericRuleEntry {
     /// The rule's name, as the declaration writes it.
     std::string name;
+    /// The type parameters of the rule's head, in the order the head writes them (`<T>`,
+    /// `<T, U>`): the arity of a tuple an instance is made at, and the names a condition's type
+    /// arguments are bound to. Empty when the entry is not a generic rule's.
+    std::vector<std::string> typeParams;
     /// The templates: `GenericTemplate`s of `name__lhs`, `name__rhs`, and `name__when` when the
     /// rule has a condition (null otherwise). Opaque here; the compile side owns their type.
     std::shared_ptr<void> lhs;
@@ -81,6 +85,37 @@ struct GenericRuleEntry {
     std::shared_ptr<void> compiled;
 };
 
+/// What a rule's condition says about one type tuple at compile time (handover H401).
+enum class RuleConditionAt {
+    /// The condition holds for the tuple, whatever the values are: the tuple is an instance of
+    /// the law. A condition that reads only types (`is_float::<T>()`) answers this.
+    Holds,
+    /// The condition is false for the tuple: the law is not written for it, and the tuple is not
+    /// an instance. A conjunction whose type-level part is false answers this without looking at
+    /// the value-level part (`is_float::<T>() && combineSameSign(c1, c2)` at `T = int`).
+    Fails,
+    /// The condition's type-level part holds, but the rest of it reads values: the tuple is an
+    /// instance whose condition depends on what it matches (`combineSameSign(c1, c2)`), and
+    /// whether it fires is measured sample by sample, as it is for an ordinary conditional rule.
+    ValueDependent,
+    /// The condition could not be asked at all (`why` says why: the builder that declared the
+    /// rule is gone, or the condition is written in a way the compiler cannot evaluate). The
+    /// tuple is kept: a condition the check cannot answer must not take an instance away.
+    Unknown,
+};
+
+/// What the condition of the generic rule `ruleId` says about `types`, asked at compile time,
+/// where the rule was declared. A rule without a condition holds for every tuple. Nothing is
+/// instantiated: this is the type-level filter `check` applies before it tries a tuple.
+RuleConditionAt ruleConditionAt(
+    camel::core::context::Context &context, uint64_t ruleId,
+    const std::vector<camel::core::type::Type *> &types, std::string &why);
+
+/// The types the operator groups registered (OperatorTable::allRegisteredTypes): the candidate set
+/// `check` enumerates the instances of a generic rule over when it is given no program. Built when
+/// it is asked for, from the declarations the loaded modules made.
+std::vector<camel::core::type::Type *> ruleInstanceTypes();
+
 /// The rules the context has registered, in the order they were registered: `ruleId - 1` indexes
 /// it. Rules are registered while a library is compiled and live as long as the context, which is
 /// what lets a rule value keep only an id.
@@ -92,11 +127,12 @@ genericRuleTable(camel::core::context::Context &context);
 GenericRuleEntry *genericRuleEntry(camel::core::context::Context &context, uint64_t ruleId);
 
 /// Registers the templates of one generic rule and answers the id its value keeps: ids start at 1,
-/// and 0 means "not a generic rule" everywhere. `owner` is the builder the templates belong to.
+/// and 0 means "not a generic rule" everywhere. `owner` is the builder the templates belong to,
+/// and `typeParams` the type parameters of the rule's head.
 uint64_t registerGenericRule(
     camel::core::context::Context &context, void *owner, std::string name,
-    const std::shared_ptr<void> &lhs, const std::shared_ptr<void> &rhs,
-    const std::shared_ptr<void> &when);
+    std::vector<std::string> typeParams, const std::shared_ptr<void> &lhs,
+    const std::shared_ptr<void> &rhs, const std::shared_ptr<void> &when);
 
 /// The place, in its rule's `instances`, of the instance of `ruleId` at `types`: the tuple is
 /// instantiated once and kept, and asking twice answers the same place. The attempt never reports
