@@ -1489,6 +1489,44 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             normInputTypes.push_back(valueTypeOf(callableValueType(input.node)));
         }
     }
+    // A variable passed to a `var` parameter is the variable's cell, and the callee's port
+    // holds `cell` of what the parameter declares. The cell is written through every reference
+    // to it (TupleType::assignableFrom), so its content types would have to be equal for the
+    // value to pass -- but the contract is the parameter's, and the declared type is the upper
+    // bound of what the callee may write into the cell. The call therefore gives the caller's
+    // cell the declared content type, widening the argument exactly as the callee's own variable
+    // is typed: this is the cell rule read from the calling side, and it is the callee's port
+    // that the runtime graph is checked against. `normInputTypes` holds the argument's value
+    // type (a cell's content), so the widening is stated on the cell the argument node carries.
+    // Narrower than the parameter it may not be: a cell whose content does not fit the parameter
+    // at all is left as it is, and the ordinary report refuses the call.
+    if (argumentSignature != nullptr) {
+        const size_t count = std::min(normInputs.size(), argumentSignature->normTypesCount());
+        for (size_t i = 0; i < count; ++i) {
+            Type *param = argumentSignature->normTypeAt(i);
+            if (!argumentSignature->normIsVarAt(i) || param == nullptr ||
+                containsTypeVar(param) || normInputTypes[i] == nullptr) {
+                continue;
+            }
+            Type *argument = normInputs[i].node != nullptr ? nodeTypeOf(normInputs[i].node)
+                                                           : normInputTypes[i];
+            Type *argumentValue = valueTypeOf(argument);
+            if (argumentValue == argument) {
+                continue; // not a variable: its cell is its value, and coerceTo reports the rest
+            }
+            const auto *content = tt::as_ptr<ArrayType>(param);
+            if (content == nullptr || !content->isNumericUnknown() ||
+                !param->assignableFrom(argumentValue)) {
+                continue;
+            }
+            Type *cell = TupleType::cell(param);
+            if (argument->equals(cell)) {
+                continue; // the cell already stands for what the parameter declares
+            }
+            setNodeType(normInputs[i].node, cell);
+            normInputTypes[i] = param;
+        }
+    }
     // A `with` argument may be written by name, and a `with` parameter may have a default
     // (design principles 4.4). The binding puts the arguments in the declaration's order and
     // fills the parameters the call leaves out, so that from here on an index into
