@@ -2,9 +2,9 @@
  * An operand of `..` whose type is not settled: `ident` is generic, and a generic function
  * named without its type arguments has no value of one type yet, so the composition is refused.
  * The refusal no longer prints `void` as if it were the operand's type - it says what the
- * operand is and how to settle it (the record is
- * docs/handover/questions/generic-operands-of-composition.md; whether the refusal deserves a
- * diagnostic of its own is still the author's to rule).
+ * operand is and how to settle it (the ruling is docs/handover/reviews/questions-2026-10-23.md,
+ * section generic-operands-of-composition: the expected type instantiates the operands, and this
+ * refusal comes to have a diagnostic of its own).
  */
 module stream_type_comp_operand_generic
 

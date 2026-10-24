@@ -1341,9 +1341,11 @@ node_handle_t Builder::buildComposition(const GCT::node_ptr_t &gct) {
         return intervalValue(lhs, rhs, gct);
     }
     // The operand's type as the message names it. A value whose type is not settled reads as
-// `void`, which is no type the program wrote: a generic function named without its type
-// arguments is the case that reaches here, and the note says how to settle it. The record of
-// the question is docs/handover/questions/generic-operands-of-composition.md.
+    // `void`, which is no type the program wrote: a generic function named without its type
+    // arguments is the case that reaches here, and the note says how to settle it. The ruling is
+    // docs/handover/reviews/questions-2026-10-23.md, section generic-operands-of-composition: the
+    // expected type instantiates the operands, and this refusal comes to have a diagnostic of its
+    // own rather than CompOperandMismatch.
 const auto operandText = [](Type *type) -> std::string {
     if (type == nullptr) {
         return "nothing";

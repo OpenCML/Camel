@@ -224,7 +224,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "stream.comp_operand_generic"
-desc = "An operand of `..` whose type is not settled: a generic function named without its type arguments has no value of one type, so the composition is refused - and the refusal says what the operand is and how to settle it instead of printing `void` as if it were a type (docs/handover/questions/generic-operands-of-composition.md; whether that refusal deserves a diagnostic of its own is still the author's to rule, so the code stays CompOperandMismatch)."
+desc = "An operand of `..` whose type is not settled: a generic function named without its type arguments has no value of one type, so the composition is refused - and the refusal says what the operand is and how to settle it instead of printing `void` as if it were a type (the ruling is docs/handover/reviews/questions-2026-10-23.md, section generic-operands-of-composition: the expected type instantiates the operands, and this refusal comes to have a diagnostic of its own, so this entry's code changes with that lane)."
 kind = "negative"
 case = "../../../cases/compile/stream/comp_operand_generic.cml"
 args = ["${case}"]
