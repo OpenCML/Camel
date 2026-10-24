@@ -438,6 +438,9 @@ void Builder::recordWrite(
     if (waited_ || synced_) {
         uses.clear();
     }
+    // A store is one of the cell's known users (collapseNonEscapingVariableReads): a user the builder
+    // did not record -- a :var/take, a call handed the ar -- makes the cell escape.
+    knownCellUsers_.insert(exit);
     setModifier(variable, exit);
     if (!throughCallee) {
         if (ArmBuild *arm = activeArm()) {
@@ -1166,6 +1169,18 @@ node_handle_t Builder::readVariableThrough(
             linkNodes(LinkType::Ctrl, *modifier, value);
         }
     }
+    // SSA (collapseNonEscapingVariableReads): this read may later take its value from the write that
+    // made it instead of from the cell, so the writer it belongs to is recorded here, while the
+    // builder still knows it. The read node counts as one of the cell's known users.
+    if (sameGraph(variable, currGraph_)) {
+        node_handle_t source = variable;
+        if (auto modifier = modifierOf(variable);
+            modifier.has_value() && sameGraph(*modifier, currGraph_)) {
+            source = *modifier;
+        }
+        variableReadSource_[value] = VariableRead{source, variable};
+        knownCellUsers_.insert(value);
+    }
     // In a sync block a read happens where it is written, like a call.
     if (synced_) {
         if (lastSyncedNode_ != nullptr && shouldAddSyncCtrlLink(lastSyncedNode_, value)) {
@@ -1186,6 +1201,67 @@ node_handle_t Builder::peekVariable(node_handle_t variable) {
     return readVariableThrough(variable, camel::core::oper::VarPeek);
 }
 
+void Builder::collapseNonEscapingVariableReads() {
+    if (variableReadSource_.empty() || currGraph_ == nullptr) {
+        return;
+    }
+    // The reads recorded for this graph, grouped by the cell they read. A cell of an outer graph
+    // belongs to that graph's own turn, so it is skipped here.
+    std::unordered_map<node_handle_t, std::vector<std::pair<node_handle_t, node_handle_t>>> byCell;
+    for (const auto &[read, info] : variableReadSource_) {
+        if (info.cell == nullptr || !sameGraph(info.cell, currGraph_)) {
+            continue;
+        }
+        byCell[info.cell].push_back({read, info.source});
+    }
+    auto &draft = currGraph_->draft();
+    for (auto &[cell, reads] : byCell) {
+        // A `var` parameter of this graph is a resource shared with the caller, and a captured cell
+        // is shared with a closure: both keep their cell.
+        if (nodeKindOf(cell) == camel::runtime::GCNodeKind::Port ||
+            escapingVariables_.contains(cell)) {
+            continue;
+        }
+        const camel::runtime::gc_node_ref_t cellId = nodeIdOf(cell);
+        if (draft.header(cellId) == nullptr) {
+            continue;
+        }
+        // Every user of the cell must be one this builder recorded: one of its reads, or one of its
+        // stores. Any other user -- a `:var/take`, a call the `var` was handed to, a capture port --
+        // is a use this conversion does not model, so the cell keeps its cell.
+        bool known = true;
+        for (auto users : {normUsersOf(cell), withUsersOf(cell), ctrlUsersOf(cell)}) {
+            for (draft_node_ref_t user : users) {
+                if (!knownCellUsers_.contains(nodeDraftOf(cell)->ref(user))) {
+                    known = false;
+                    break;
+                }
+            }
+            if (!known) {
+                break;
+            }
+        }
+        if (!known) {
+            continue;
+        }
+        // The value of a cell nothing has written yet is the one it was made with (:var/new's input).
+        const auto cellInputs = draft.normInputsOf(cellId);
+        for (auto &[read, source] : reads) {
+            const camel::runtime::gc_node_ref_t readId = nodeIdOf(read);
+            if (draft.header(readId) == nullptr) {
+                continue;
+            }
+            const camel::runtime::gc_node_ref_t version =
+                source == cell ? (cellInputs.empty() ? cellId : cellInputs[0]) : nodeIdOf(source);
+            if (version == cellId || draft.header(version) == nullptr) {
+                continue;
+            }
+            // The read's users take the version's value; the read node is not needed any more.
+            draft.replaceAllValueUses(readId, version);
+            draft.eraseNode(readId);
+        }
+    }
+}
 std::optional<std::string> Builder::immutableNameOf(const GCT::node_ptr_t &expr) {
     GCT::node_ptr_t root = expr;
     while (root && root->type() == GCT::NodeKind::ACCS) {

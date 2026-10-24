@@ -3777,3 +3777,22 @@ expect_exit = 0
 expect_stdout = "plain call: value 3.0\nwith_grad: value 3.0 grad 3.0\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+
+[[tests]]
+name = "var_param_reference.an_escaping_var_keeps_its_cell"
+desc = "A `var` handed to a function as a `var` argument escapes: it is a resource shared with the callee (docs/handover/reviews/questions-2026-10-24-evening.md, the var-version-node ruling), so it keeps its cell and its reads stay cell reads -- the graph has :var/get and :var/new nodes. A `var` that only its own graph reads and writes becomes SSA instead: its reads take the value of the write that made them and no :var/get is left (test/cases/opt/generic/specialization_survives_the_round.cml, where the graph has none)."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_param_reference.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const reads = (out.match(/:var\/get/g) || []).length
+assert(reads > 0, `a var handed out as a var argument keeps its cell and its reads, found ${reads} :var/get nodes`)
+const cells = (out.match(/:var\/new/g) || []).length
+assert(cells > 0, `an escaping var keeps its cell, found ${cells} :var/new nodes`)
+}
+"""
+timeout_ms = 8000
