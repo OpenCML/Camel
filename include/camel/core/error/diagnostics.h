@@ -180,6 +180,12 @@ class Diagnostics {
     void fetchAll(const TokenPositions &tokens);
     /// When wrapInArray is false, emit only the joined items (no brackets) for merging.
     void dump(std::ostream &os, bool json = false, bool wrapInArray = true) const;
+    /// The identity of every diagnostic: its code and the line/column of its range and of each
+    /// secondary location, and nothing that is prose. A snapshot taken over this text records what
+    /// the front end made of a file without recording how the report about it is worded, so
+    /// rewording a message, a help text or a note cannot move such a snapshot (H252). Ranges are
+    /// expected to be resolved already (`fetchAll`); one that is not is written as `?`.
+    void dumpIdentity(std::ostream &os) const;
     void clear();
 
     const std::string &moduleName() const { return moduleName_; }

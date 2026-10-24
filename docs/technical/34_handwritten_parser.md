@@ -446,7 +446,7 @@ without names.
 | Test (`test/plans/feat/parse/frontend.plan.toml`) | What it holds |
 |---|---|
 | `grammar.reference_in_step` | the productions above the parser's functions, the grammar blocks of the language reference, the token table and the node kinds agree (`scripts/check-grammar.mjs`) |
-| `frontend.ast_snapshot` | every case of the parse corpus (`test/cases/parse/**`) and every probe gives the AST recorded at the last comparison with ANTLR (`golden/ast_hashes.txt`, a hash per file of the normalized dump). The snapshot is of the parser's tests, not of the repository (H188): other `.cml` files are checked by the plan that owns them |
+| `frontend.ast_snapshot` | every case of the parse corpus (`test/cases/parse/**`) and every probe gives the AST recorded at the last comparison with ANTLR (`golden/ast_hashes.txt`, a hash per file of the normalized dump). A rejected file contributes its diagnostics by **code and place**, never by their wording (`camel-parsecheck hashes` hashes `Diagnostics::dumpIdentity`), so editing a message, a help text or a fix title does not move the snapshot (H252). The snapshot is of the parser's tests, not of the repository (H188): other `.cml` files are checked by the plan that owns them |
 | `frontend.format_keeps_ast` | formatting an accepted file gives a text with the same AST |
 | `frontend.fuzz_lossless_tree` | for mutated programs the parser returns a tree whose leaves are exactly the tokens, and the AST builder accepts every tree without errors |
 

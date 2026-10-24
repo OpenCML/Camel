@@ -1,0 +1,33 @@
+/**
+ * A composite literal is rounded once into the type of its position, wherever it is written
+ * (design principles 5.1; the ruling of 2026-10-23 on
+ * `expected-type-through-literals-and-calls`, item 3): the same value below, written in a
+ * declaration, in a `return`, in a struct field, in an array and in a declared array, prints
+ * the same 1.00000012. A tuple literal in a declaration position rounded through the double it
+ * was lowered to and printed 1.0 before this.
+ */
+module expected_type_declared_tuple
+
+type P = { a: f32, b: f32 }
+
+func viaReturn(): (f32, f32) { return (1.0000000596046447753906251, 2.0) }
+func viaField(): P { return { a: 1.0000000596046447753906251, b: 2.0 } }
+func viaArray(): f32[] { return [1.0000000596046447753906251] }
+
+func main(): int sync {
+    // a declaration, a tuple literal, a struct literal and an array literal
+    let t: (f32, f32) = (1.0000000596046447753906251, 2.0)
+    println('{:.9g}'->format<t.0>)
+    let p: P = { a: 1.0000000596046447753906251, b: 2.0 }
+    println('{:.9g}'->format<p.a>)
+    let xs: f32[] = [1.0000000596046447753906251]
+    println('{:.9g}'->format<xs[0]>)
+    // the same values in return positions
+    let r = viaReturn()
+    println('{:.9g}'->format<r.0>)
+    let f = viaField()
+    println('{:.9g}'->format<f.a>)
+    let a = viaArray()
+    println('{:.9g}'->format<a[0]>)
+    return 0
+}

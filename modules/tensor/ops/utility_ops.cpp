@@ -173,14 +173,14 @@ slot_t loadNpyKernel(ArgsView &, ArgsView &norm, context::Context &) {
 
 slot_t saveNpyKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("save_npy", [&] {
-        saveNpy(tensorArg(norm, 0), camel::utils::pathFromUtf8(stringArg(norm, 1)));
+        saveNpy(tensorArg(norm, 0, true), camel::utils::pathFromUtf8(stringArg(norm, 1)));
         return NullSlot;
     });
 }
 
 slot_t toBytesKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("to_bytes", [&] {
-        const auto bytes = tensorToLittleEndian(tensorArg(norm, 0));
+        const auto bytes = tensorToLittleEndian(tensorArg(norm, 0, true));
         return camel::core::rtdata::toSlot(
             camel::core::rtdata::BytesObject::from(bytes, resultAllocator()));
     });
@@ -227,7 +227,7 @@ std::vector<OpDef> utilityOps() {
         OpDef{
             .name      = "to_bytes",
             .exports   = {"to_bytes"},
-            .params    = {{"t", ParamKind::Tensor}},
+            .params    = {{"t", ParamKind::TensorLike}},
             .resultDoc = "Bytes",
             .infer = [](const InferContext &) -> std::optional<Type *> { return BytesType::get(); },
             .kernel = &toBytesKernel,
@@ -283,7 +283,7 @@ std::vector<OpDef> utilityOps() {
         OpDef{
             .name      = "save_npy",
             .exports   = {"save_npy"},
-            .params    = {{"t", ParamKind::Tensor}, {"path", ParamKind::String}},
+            .params    = {{"t", ParamKind::TensorLike}, {"path", ParamKind::String}},
             .resultDoc = "void",
             .infer     = voidResult,
             .kernel    = &saveNpyKernel,

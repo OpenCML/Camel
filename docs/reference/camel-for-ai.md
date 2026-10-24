@@ -55,7 +55,7 @@ last column below, which is read out of this table and measured against the chap
 | 13. Accepted and then rejected | reserved spellings and their diagnostics | 2,600 |
 | 14. Not implemented yet (`target`) | what to avoid until its design lands | 1,700 |
 | Appendix A. Diagnostics | name, severity, message — generated | 28,000 |
-| Appendix B. Standard library signatures | every exported name — generated | 27,000 |
+| Appendix B. Standard library signatures | every exported name — generated | 28,000 |
 | Appendix C. Sources | which normative page each rule comes from | 1,800 |
 | — | generated, all four regions | 61,000 |
 | — | hand-written, this header and sections 2–14 with Appendix C | 54,000 |
@@ -922,6 +922,8 @@ rule add_zero(x: int) {
 **Write instead:**
 
 ```camel
+import { is_ordered } from types
+
 func pick::<T>(x: T): T when is_ordered::<T>() {
     return x
 }
@@ -1794,8 +1796,12 @@ concat: (a: Tensor | number[], b: Tensor | number[], axis: int) => Tensor
 slice: (t: Tensor, axis: int, start: int, end: int, step?: int) => Tensor
 take: (t: Tensor, indices: Tensor | number[]) => Tensor
 one_hot: (labels: Tensor | number[], classes: int) => Tensor
+shape: (t: T[..]) => int[] when is_numeric::<T>()
 shape: (t: Tensor) => int[]
+numel: (t: T[..]) => int when is_numeric::<T>()
 numel: (t: Tensor) => int
+dim: (t: T[..], axis: int) => int when is_numeric::<T>()
+dim: (t: T[..], axis: i32) => int when is_numeric::<T>()
 dim: (t: Tensor, axis: int) => int
 dim: (t: Tensor, axis: i32) => int
 sum: (t: Tensor) => float
@@ -1818,8 +1824,10 @@ cast: (t: Tensor | number[], dtype: string) => Tensor
 show: (t: Tensor) => void
 show: (t: A[]) => void
 from_bytes: (bytes: Bytes, shape: int[]) => Tensor
+to_bytes: (t: T[..]) => Bytes when is_numeric::<T>()
 to_bytes: (t: Tensor) => Bytes
 load_npy: (path: string) => Tensor
+save_npy: (t: T[..], path: string) => void when is_numeric::<T>()
 save_npy: (t: Tensor, path: string) => void
 num_threads: () => int
 set_num_threads: (n: int) => void
@@ -2253,7 +2261,7 @@ rewrite: (p: Program, rules: Rule[], strict: bool) => Program!
 saturate: (p: Program, rules: Rule[], rounds: int) => Program!
 saturate: (p: Program, rules: Rule[], rounds: int, strict: bool) => Program!
 extract: (p: Program, cost: string) => Program!
-check: (rules: Rule[], samples: int, seed: int) => CheckReport
+check: (rules: Rule[], samples: int = 100, seed: int = 0, program: Program? = null) => CheckReport
 check_text: (r: CheckReport) => string
 check_row_count: (r: CheckReport) => int
 check_rule: (r: CheckReport, row: int) => string!
