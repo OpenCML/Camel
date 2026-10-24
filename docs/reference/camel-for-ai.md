@@ -442,7 +442,7 @@ func main(): int sync {
   `xs[i].f = e`. A path assignment rebinds the whole variable, as if written
   `xs = set(xs, i, set(xs[i], f, e))`; the target must be a variable, and `f().x = 5` is
   `SemanticDiag::AssignmentTargetNotVariable`. Passing a value to a `var` parameter of a function is
-  how a callee can write back into the caller's variable (`wait` orders that write, §7).
+  how a callee can write back into the caller's variable (`sync` orders that write, §7).
 - **Generics** are declared after the name: `func first::<T>(xs: T[]): T? { ... }`, called as
   `first::<int>(xs)` or `first(xs)` when the arguments fix `T`.
 - **`loop`** is the language's own iteration, and it yields its last state:
@@ -695,7 +695,7 @@ run in the order given; a pass parameter is written `key=value` after the pass n
 - The language does not fix the pass order, and the order can change the result: passes modify the
   graph. A pass that consumes the graph (the schedulers and the translators) ends the pipeline;
   passes written after it do not run, with the warning `RuntimeDiag::PassesNeverRun`.
-- The compiler builds the graph from `var`/`let`, `wait` and `sync`; after that those rules no
+- The compiler builds the graph from `var`/`let` and `sync`; after that those rules no
   longer constrain the passes.
 - `std::gir` is the form to read a program's order from — the nodes and the edges between them are
   the program — and `std::rgir` is the same graph for Graphviz.

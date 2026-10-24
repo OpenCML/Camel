@@ -111,8 +111,8 @@ std::string to_string(ReservedDataOp op);
 
 class DataLoad : public Load {
   public:
-    DataLoad(DataType type, bool notNull = false, bool waited = false)
-        : Load(LoadType::Data), dataType_(type), notNull_(notNull), waited_(waited) {}
+    DataLoad(DataType type, bool notNull = false)
+        : Load(LoadType::Data), dataType_(type), notNull_(notNull) {}
 
     const std::string toString() const override {
         std::string result = "DataLoad: " + to_string(dataType_) + this->status();
@@ -123,17 +123,11 @@ class DataLoad : public Load {
 
     const std::string status() const {
         std::string status;
-        if (waited_) {
-            status += " (waited)";
-        }
         if (notNull_) {
             status += " (non-null)";
         }
         return status;
     }
-
-    void wait() { waited_ = true; }
-    bool waited() const { return waited_; }
 
     void setNonNull(bool notNull) { notNull_ = notNull; }
     bool isNonNull() const { return notNull_; }
@@ -142,7 +136,6 @@ class DataLoad : public Load {
   private:
     DataType dataType_;
     bool notNull_;
-    bool waited_;
 };
 
 class UnaryExprLoad : public DataLoad {

@@ -525,8 +525,6 @@ any Builder::dispatch(const GCT::node_ptr_t &node) {
         return visitDRefNode(node);
     case GCT::NodeKind::VARI:
         return visitVariNode(node);
-    case GCT::NodeKind::WAIT:
-        return visitWaitNode(node);
     case GCT::NodeKind::LINK:
         return visitLinkNode(node);
     case GCT::NodeKind::WITH:
@@ -1133,12 +1131,12 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct, Type *tailExpec
         template_scope_ptr_t templateScope;
         type_bindings_t bindings;
         size_t depth;
-        bool waited, synced, varied, declaresVariable, calleeAllowed;
+        bool synced, varied, declaresVariable, calleeAllowed;
         node_handle_t lastSynced;
         explicit StatementState(Builder &b)
             : self(b), graph(b.currGraph_), nodeScope(b.nodeScope_), graphScope(b.graphScope_),
               decoratedScope(b.decoratedScope_), templateScope(b.templateScope_),
-              bindings(b.typeBindings_), depth(b.instantiationDepth_), waited(b.waited_),
+              bindings(b.typeBindings_), depth(b.instantiationDepth_),
               synced(b.synced_), varied(b.varied_), declaresVariable(b.declaresVariable_),
               calleeAllowed(b.genericCalleeAllowed_), lastSynced(b.lastSyncedNode_) {}
         void restore() {
@@ -1149,7 +1147,6 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct, Type *tailExpec
             self.templateScope_        = templateScope;
             self.typeBindings_         = std::move(bindings);
             self.instantiationDepth_   = depth;
-            self.waited_               = waited;
             self.synced_               = synced;
             self.varied_               = varied;
             self.declaresVariable_     = declaresVariable;

@@ -1743,7 +1743,7 @@ compile_graph_ptr_t Builder::instantiateGeneric(
         type_bindings_t bindings;
         ExtentValues extents;
         ConstasValues constas;
-        bool waited, synced, varied, declaresVariable, calleeAllowed;
+        bool synced, varied, declaresVariable, calleeAllowed;
         node_handle_t lastSynced;
         camel::core::module::module_ptr_t module;
         std::vector<std::string> namespacePath;
@@ -1753,7 +1753,6 @@ compile_graph_ptr_t Builder::instantiateGeneric(
             : self(b), graph(b.currGraph_), nodeScope(b.nodeScope_), graphScope(b.graphScope_),
               decoratedScope(b.decoratedScope_), templateScope(b.templateScope_),
               bindings(b.typeBindings_), extents(b.extentBindings_), constas(b.constasBindings_),
-              waited(b.waited_),
               synced(b.synced_), varied(b.varied_),
               declaresVariable(b.declaresVariable_), calleeAllowed(b.genericCalleeAllowed_),
               lastSynced(b.lastSyncedNode_), module(b.module_), namespacePath(b.namespacePath_),
@@ -1774,7 +1773,6 @@ compile_graph_ptr_t Builder::instantiateGeneric(
             self.typeBindings_         = std::move(bindings);
             self.extentBindings_       = std::move(extents);
             self.constasBindings_      = std::move(constas);
-            self.waited_               = waited;
             self.synced_               = synced;
             self.varied_               = varied;
             self.declaresVariable_     = declaresVariable;
@@ -1820,7 +1818,6 @@ compile_graph_ptr_t Builder::instantiateGeneric(
         typeBindings_.insert(typeBindings_.end(), bindings.begin(), bindings.end());
         extentBindings_ = extents;
         constasBindings_ = constas;
-        waited_               = false;
         synced_               = false;
         varied_               = false;
         declaresVariable_     = false;

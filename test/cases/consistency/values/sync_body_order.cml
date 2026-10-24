@@ -2,7 +2,7 @@
  * a sync body: a function that writes its var parameter is ordered between the uses of the
  * variable before and after it.
  */
-module wait_order
+module sync_body_order
 
 func bump(var x: int) {
     x += 5

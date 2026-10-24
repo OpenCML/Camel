@@ -26,7 +26,6 @@ enum class NodeKind : uint8_t {
     NREF, // a name bound to the value of its child
     DREF, // a name read
     VARI, // a variable; child: what it is initialised with
-    WAIT, // `wait`; child: the expression waited for
     LINK, // a call; children: the callee, the arguments
     WITH, // with-arguments bound to a callee; children: the callee, the arguments
     TAPP, // explicit type application; children: the callee, TYPE arguments; no runtime value
