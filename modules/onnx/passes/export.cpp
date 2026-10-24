@@ -536,15 +536,18 @@ explainCallLeft(const core::context::Context &ctx, const GCGraph *root, gc_node_
             why = std::format(
                 "the inliner ran before onnx::export and left this call because {} calls, "
                 "directly or through other functions, a recursive function (a loop), and "
-                "such a function is inlined only while it is small (at most {} nodes besides "
-                "constants and parameters; this one has {}); keep the function that makes "
+                "such a function is inlined only while it is small: the inlined function has {} "
+                "compute nodes (at most {}; a constant, a parameter, a gate and what an inline "
+                "splice adds are not counted); keep the function that makes "
                 "the export_model call small by moving the rest of its work into a function "
                 "it calls",
                 name,
-                report->smallNodes,
-                no->calleeNodes);
+                no->calleeComputeNodes,
+                report->smallNodes);
             break;
         case InlineDecline::Duplication:
+            // The duplication budget is about the nodes inlining would copy (see
+            // InlineDecline::calleeNodes), not about how small the function's own computation is.
             why = std::format(
                 "the inliner ran before onnx::export and left this call because {} is "
                 "called from {} places and is too large ({} nodes) to be copied to each; "
