@@ -179,16 +179,12 @@ class Compiler {
             node.dtype      = resident->dtype;
             node.resident   = std::move(resident);
             // A rank-0 f32 resident value is the f32 scalar of design principles 7.3 — the bytes
-            // the tensor path already carries — so the host type is the scalar one, unless the
-            // program asked for a rank-0 tensor at this boundary and keeps that type.
-            const auto *declared = asDeviceType(type);
-            ty::Type *rank0      = tensor::isTensorType(declared->hostType())
-                                       ? declared->hostType()
-                                       : ty::Type::Float32();
-            ty::Type *exact = node.dtype == DType::F64 ? ty::Type::Float64()
-                              : node.shape.empty()     ? rank0
-                                                       : tensor::TensorType::get(
-                                                             ty::TypeCode::Float32, node.shape);
+            // the tensor path already carries — so the host type is the scalar one. The flip
+            // line's `tensor::ops::tensorOf` already answers the element type itself for an empty
+            // shape (the rank-zero ruling), and `TensorType` is gone, so this side is taken.
+            ty::Type *exact = node.dtype == DType::F64
+                                  ? ty::Type::Float64()
+                                  : tensor::ops::tensorOf(ty::TypeCode::Float32, node.shape);
             return {.type = exact, .tensor = append(std::move(node))};
         }
         if (type->code() == ty::TypeCode::Tuple || type->code() == ty::TypeCode::Struct) {
