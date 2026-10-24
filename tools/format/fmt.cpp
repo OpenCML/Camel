@@ -1320,14 +1320,19 @@ any Formatter::visitCtrlExpr(syn::Node context) {
         string result    = "if " + condition;
         // A comment between the condition and `then`, or between the branch and `else`, stands in
         // no gap a list looks at: the branch of a block-less `if` is an expression, not a list,
-        // and the keyword after it belongs to this visitor alone.
+        // and the keyword after it belongs to this visitor alone. A `//` comment ends the line it
+        // stands on, so `then` must not follow it on that line: written after the comment, the
+        // keyword is read as part of it and the conditional loses it, which is the formatted text
+        // failing to parse (`SyntaxDiag::MissingThen`). The `else` below already ends the line on
+        // this answer; here it was dropped.
         const auto &thenTok = context->tok(TK::KwThen);
-        writeInlineComments(
+        const bool conditionLineEnds = writeInlineComments(
             result,
             context->expr()->lastToken()->index(),
             thenTok.index(),
             context->expr()->lastToken()->endLine());
-        result += " then " + thenBlock;
+        result += conditionLineEnds ? lineEnd() + "then " : " then ";
+        result += thenBlock;
         if (context->tok(TK::KwElse)) {
             const auto &elseTok       = context->tok(TK::KwElse);
             const size_t branchEnd    = context->child(3).node()->lastToken()->index();

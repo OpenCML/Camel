@@ -68,3 +68,14 @@ args = ["${case}"]
 expect_exit = 0
 verify_script_path = "./verify/comments_kept.mjs"
 timeout_ms = 10000
+
+[[tests]]
+name = "format.line_comment_before_then"
+desc = "The minimal shape of a mid-line `//` comment: one between the condition of an `if` and `then`. The comment ends its line, `then` is written on the next one, and the text camel-format writes is a fixed point. Written on the same line after the comment, `then` was read as part of the comment: the output did not parse (`SyntaxDiag::MissingThen`), so formatting the formatter's own output failed here."
+kind = "behavior"
+tool = "camel-format"
+case = "../../../cases/format/line_comment_before_then.cml"
+args = ["${case}"]
+expect_exit = 0
+verify_script_path = "./verify/comments_kept.mjs"
+timeout_ms = 10000
