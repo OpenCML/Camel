@@ -82,6 +82,23 @@
 
     编译错误之后有一行总数（`camel: 1 error`、`camel: 3 errors`）；运行期故障之后没有这一行。
 
+    编译器知道怎么改的诊断把改法也印出来，做法照 rustc 印 suggestion：一行 `help:` 给出改法的标题，它下面是被改法改写后的那一行源码，改法写下的文字用 `+` 标出。只删不写的改法没有“改写后的一行”可看，于是印它原来的样子，被删掉的文字用 `-` 标出。工具从 JSON 的 `data.fixes` 应用的改法就是同一处改动，`camel file.cml` 不加任何选项就能同时看到两者：
+
+        error[SyntaxDiag::MissingComma]: Expected ',' or ')' before 'b'.
+          --> prog.cml:3:17
+           |
+         3 | func add(a: int b: int): int { return a + b }
+           |                 ^
+        help: The items of a list (parameters, arguments, elements) are separated by ','.
+        help: insert ','
+           |
+         3 | func add(a: int, b: int): int { return a + b }
+           |                +
+
+        camel: 1 error
+
+    不带改法的诊断只有文字形式的 `help:` 行，也就是在此之前每条诊断的样子。
+
   - `short`：每条诊断一行，`(module)path:line:col: [Error]: message suggestion (name=..., code=0x...)`。这是脚本匹配的形式，测试运行器用的就是它。
   - `json`：对象数组，含 `range`、`severity`、`code`、`message`、`relatedInformation`（次要位置：`location.path`、`location.range`、`message`）和 `data`（`stage`、`name`、`moduleName`、`modulePath`、`suggestion`、`notes`）。
   - 未给出该选项时，由环境变量 `CAMEL_ERROR_FORMAT` 决定格式。
@@ -278,7 +295,7 @@
 
   （源文件第 2 行写 `func add(a: int b: int)`：改法插在第 15 列，也就是 `int` 与 `b` 之间本来就有的那个空格处，于是得到 `a: int, b: int`，而不是 `a: int , b: int`。）
 
-  只有在编译器知道要写什么文本时才给出改法：写不出确定的文本时没有 `fixes`，此时 `suggestion` 就是用文字说的建议。拿到 `fixes` 的一方可以不再询问就应用；拿不到的一方不得自己编一个。某个码是否给改法由 `diagnostics/registry.tsv` 的一列声明——`edit`，或者 `none: <cause>` 说明为什么不给——`docs/diagnostics.md` 会为每个码印出它，`node scripts/diagnostics-catalog.mjs --check` 会拒绝两者都没写的声明。`cause` 取 `runtime`（运行时才报，源码里没有可改的文本）、`choice`（改法是作者的取舍）、`context`（改法是已知的，但不是一段文本：要改第二处、另一个文件，或者要重构）、`internal`。`text` 与 `short` 两种文本格式故意不变：改法是给工具的，`help:` 才是给人的。新增诊断必须在这一列里写其中之一，于是“每个码要么带改法、要么写明为什么没有”是被检查的，而不是靠记性。
+  只有在编译器知道要写什么文本时才给出改法：写不出确定的文本时没有 `fixes`，此时 `suggestion` 就是用文字说的建议。拿到 `fixes` 的一方可以不再询问就应用；拿不到的一方不得自己编一个。某个码是否给改法由 `diagnostics/registry.tsv` 的一列声明——`edit`，或者 `none: <cause>` 说明为什么不给——`docs/diagnostics.md` 会为每个码印出它，`node scripts/diagnostics-catalog.mjs --check` 会拒绝两者都没写的声明。`cause` 取 `runtime`（运行时才报，源码里没有可改的文本）、`choice`（改法是作者的取舍）、`context`（改法是已知的，但不是一段文本：要改第二处、另一个文件，或者要重构）、`internal`。改法不只是给工具的：`text` 格式也把它印出来（见上文“诊断”），所以看不到 JSON 的读者拿到的也是同一处改动；`short` 格式仍然是一行，没有变化。新增诊断必须在这一列里写其中之一，于是“每个码要么带改法、要么写明为什么没有”是被检查的，而不是靠记性。
 
 ### 效应追踪（`std::profile effect_trace="..."`）
 

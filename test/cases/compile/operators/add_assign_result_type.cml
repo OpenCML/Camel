@@ -1,0 +1,21 @@
+/**
+ * The `+` of a type of the program answers with another type: `a + b` is a `B`, not an `A`, so
+ * `a = a + b` does not hold and `a += b` is not this type's compound assignment — the compound
+ * assignment is reported, not the assignment hiding behind it (design principles 4.2).
+ */
+module add_assign_result_type
+
+type A = { v: int }
+type B = { v: int }
+
+func operator +(a: A, b: A): B {
+    return { v: a.v + b.v }
+}
+
+func main(): int sync {
+    var a: A = { v: 1 }
+    let b: A = { v: 2 }
+    a += b
+    println(a.v)
+    return 0
+}

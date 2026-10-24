@@ -1768,14 +1768,24 @@ class Builder {
     node_handle_t partialApplicationOf(
         node_handle_t target, const GCT::node_ptr_t &origin,
         camel::core::type::FunctionType *expected = nullptr);
-    /// `t += u` for a `t` of a module type without a compound-assignment operator of its
-    /// own (a tensor): the new value is computed and the variable bound to it, `t = t + u`
-    /// (design principles 4.2). `group` is the operator group of the compound assignment
-    /// and `operands` its two operands, already built. Returns nullptr when the form does
-    /// not apply.
+    /// `a op= b` is `a = a op b` (design principles 4.2): the new value is computed and the
+    /// variable bound to it. One rule for every type, whoever declared it: `a op b` must be
+    /// defined for these operands and must give `a`'s own type, and the rebinding applies only
+    /// then. `group` is the operator group of the compound assignment and `operands` its two
+    /// operands, already built; `normTypes` their types, the ones the plain operator is
+    /// resolved with. Returns nullptr when the form does not apply, so that the call reports
+    /// the compound assignment it wrote.
     node_handle_t compoundAssignmentByRebinding(
         const std::string &group, const GCT::node_ptr_t &gct,
-        const std::vector<Argument> &operands);
+        const std::vector<Argument> &operands, const camel::core::type::type_vec_t &normTypes);
+    /// Whether the plain operator `group` has an overload for the types of `operands` (design
+    /// principles 4.3, 5.7): a built-in or a module's own rule is asked by type, one written in
+    /// the program is matched where the operator is resolved. Asked before an operator DREF
+    /// exists, for `+=`, which follows the plain operator
+    /// (`compoundAssignmentByRebinding`).
+    bool plainOperatorAvailableFor(
+        const std::string &group, const std::vector<Argument> &operands,
+        const camel::core::type::type_vec_t &normTypes);
     /// An error at `call` when the conversion `group` (`int`, `i32`, `float`, ...) is given
     /// a literal that does not fit the type (LiteralNotRepresentable).
     void rejectLiteralConversion(
@@ -1922,7 +1932,7 @@ class Builder {
     /// interval of two integers, told apart by the types of the two operands (design principles
     /// 4.2; the author's ruling of 2026-10-24 on `h248-generator-and-composition`). `expected`
     /// is the type of the position the whole expression stands in: a function type there is the
-    /// type the lambda `x => g(f(x))` would have and instantiates the operands (the ruling,
+    /// type the lambda `(x) => g(f(x))` would have and instantiates the operands (the ruling,
     /// section generic-operands-of-composition).
     node_handle_t buildComposition(const GCT::node_ptr_t &gct, Type *expected);
     /// The same, from two operands already built: the sequence position of a loop builds them
@@ -1939,7 +1949,7 @@ class Builder {
     /// `int[]` of `intervalValue` in every other position.
     node_handle_t
     intervalSequenceValue(node_handle_t from, node_handle_t to, const GCT::node_ptr_t &expr);
-    /// The composition `f..g` as the lambda `x => g(f(x))`: a graph of one parameter whose body
+    /// The composition `f..g` as the lambda `(x) => g(f(x))`: a graph of one parameter whose body
     /// calls `f` and then `g`, both of them captures of it.
     node_handle_t composeFunctionValue(
         node_handle_t lhs, node_handle_t rhs, FunctionType *lhsType, FunctionType *rhsType,
@@ -2293,7 +2303,8 @@ class Builder {
         const camel::core::type::type_vec_t &normTypes);
     /// Whether a module that declares one of the operand types exports an overload of `group`
     /// (design principles 5.7). Asked before an operator DREF exists, for `+=`, which follows the
-    /// plain operator (`compoundAssignmentByRebinding`).
+    /// plain operator (`compoundAssignmentByRebinding`) — together with the group's own rules
+    /// and the program's, `plainOperatorAvailableFor`.
     bool hasDeclaringModuleOperator(
         const std::string &group, const camel::core::type::type_vec_t &withTypes,
         const camel::core::type::type_vec_t &normTypes);

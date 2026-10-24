@@ -40,7 +40,8 @@ import { is_numeric } from types
 //     `ones`, `zeros`, `new` and every elementwise operator produce the module's tensor type, and
 //     a `T[..]` parameter cannot bind `T` from it while `Tensor` is a type of its own rather than
 //     the array alias (`f32[..]`). Removing this arm is the rest of P4 — it needs the alias first;
-//     see docs/handover/questions/bare-tensor-signature-rewrite.md for the measurement.
+//     see docs/handover/reviews/questions-2026-10-24-evening.md §bare-tensor-signature-rewrite for
+//     the measurement.
 //
 // `show` keeps the two arms it had. Its second arm is the umbrella parameter the C++ resolver had
 // (a tensor, or *any* array), and a test pins that it narrows nothing: `show([])` binds the empty
