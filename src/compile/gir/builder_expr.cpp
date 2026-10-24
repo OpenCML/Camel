@@ -458,7 +458,7 @@ void Builder::recordWrite(
         uses.clear();
     }
     // A store is one of the cell's known users (collapseNonEscapingVariableReads): a user the builder
-    // did not record -- a :var/take, a call handed the ar -- makes the cell escape.
+    // did not record -- a :var/take, a call handed the `var` -- makes the cell escape.
     knownCellUsers_.insert(exit);
     setModifier(variable, exit);
     if (!throughCallee) {
