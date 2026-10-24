@@ -421,44 +421,17 @@ void Builder::setModifier(node_handle_t input, node_handle_t modifier) {
     nodeModifierMaps_[inputGraph][nodeIdOf(input)] = nodeIdOf(modifier);
 }
 
-void Builder::recordWrite(
-    node_handle_t variable, node_handle_t entry, node_handle_t exit, bool throughCallee) {
-    // `A(i); wait modify(i); B(i)` gives A -> modify -> B (design principles log 2.6). The second
-    // half follows from setModifier. The first: the waited writer is ordered after every
-    // operation that directly used the variable's value before it: the operations that took a
-    // value read from it (the read itself when nothing took it), and the calls and branches
-    // that used the variable through a capture. `wait` orders by this use of the variable, not
-    // by position: in `A(i + 1); wait modify(i)` the direct user is `+`, not A. In a sync block
-    // the block's chain already orders them. A writer that is neither waited nor in a sync
-    // block is not ordered after earlier users; they stay pending for the next waited writer.
+void Builder::recordWrite(node_handle_t variable, node_handle_t exit, bool throughCallee) {
+    // `A(i); modify(i); B(i)` gives A -> modify -> B (design principles log 2.6). The second half
+    // follows from setModifier. The first is the sync block's chain when the write is in one: a
+    // sync body orders its statements. A write outside a sync block is not ordered after earlier
+    // users; they stay pending for the next write.
     auto &uses = pendingUsesOf(variable);
-    if (waited_ && !synced_) {
-        std::unordered_set<node_handle_t> before;
-        for (const VariableUse &use : uses) {
-            bool taken = false;
-            if (use.isRead) {
-                for (auto users : {normUsersOf(use.node), withUsersOf(use.node)}) {
-                    for (draft_node_ref_t user : users) {
-                        before.insert(nodeDraftOf(use.node)->ref(user));
-                        taken = true;
-                    }
-                }
-            }
-            if (!taken) {
-                before.insert(use.node);
-            }
-        }
-        for (node_handle_t node : before) {
-            if (node != exit && shouldAddSyncCtrlLink(node, entry)) {
-                linkNodes(LinkType::Ctrl, node, entry);
-            }
-        }
-    }
-    if (waited_ || synced_) {
+    if (synced_) {
         uses.clear();
     }
     // A store is one of the cell's known users (collapseNonEscapingVariableReads): a user the builder
-    // did not record -- a :var/take, a call handed the ar -- makes the cell escape.
+    // did not record -- a :var/take, a call handed the `var` -- makes the cell escape.
     knownCellUsers_.insert(exit);
     setModifier(variable, exit);
     if (!throughCallee) {
@@ -1138,16 +1111,6 @@ node_handle_t Builder::visitVariNode(const GCT::node_ptr_t &gct) {
     varied_            = old;
     declaresVariable_  = oldDeclares;
     LEAVE("VARI");
-    return node;
-}
-
-node_handle_t Builder::visitWaitNode(const GCT::node_ptr_t &gct) {
-    ENTER("WAIT");
-    bool old        = waited_;
-    waited_         = true;
-    node_handle_t node = valueNodeOf(visit(gct->at(0)));
-    waited_            = old;
-    LEAVE("WAIT");
     return node;
 }
 

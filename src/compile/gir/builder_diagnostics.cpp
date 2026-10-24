@@ -665,11 +665,7 @@ void Builder::rejectUnusedPureResult(const GCT::node_ptr_t &stmt, node_handle_t 
     if (op == nullptr || !camel::core::OperatorTable::instance().isPure(op->uri())) {
         return;
     }
-    // The call as written: `wait` around it changes nothing about its value.
     GCT::node_ptr_t call = stmt;
-    if (call->type() == GCT::NodeKind::WAIT && call->size() == 1) {
-        call = call->at(0);
-    }
     if (call->type() != GCT::NodeKind::LINK || call->size() < 1) {
         return;
     }

@@ -63,7 +63,7 @@ docs/
 - **与代码同提交更新**：改变模块行为或不变量的提交，同时改对应的 internals 篇与 reference 篇（`agents/refactor.md` 的标准里写明）。设计原则的改动落地时，reference 相应段落在同一任务里改完。
 - **编号文档全部改写**：今天的 `docs/technical/NN_*.md`（约 50 篇）与 `docs/language/NN_*.md` 不搬家，按上面的主题**合并、改写**进 `internals/` 与 `reference/`；只记录过一次排查或一次度量的篇（如 import 成本审计、某次性能基线）不进公开文档——结论有价值的并进对应模块篇，其余随 `internal/` 留存。
 
-设计原则（`docs/design-principles.*`）仍是规范，留在 `internal/`；公开的设计取舍页（重组后新建为 `docs/design.md`，现在还不存在）是它面向读者的精简版，随规范更新。
+设计原则（`docs/design-principles.*`）仍是规范，留在 `internal/`；公开的设计取舍页（重组后新建，现在还不存在，见第 6 节 I5）是它面向读者的精简版，随规范更新。
 
 ## 4.5 文件头
 

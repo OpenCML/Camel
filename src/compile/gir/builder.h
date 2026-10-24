@@ -603,7 +603,6 @@ class Builder {
     camel::core::module::ProgramExports ownExports_;
     camel::core::module::ProgramExports *exports_;
 
-    bool waited_;
     bool synced_;
     bool varied_;
     // The numeric permissions in force where the builder is (design principles 7.5): those of
@@ -895,11 +894,11 @@ class Builder {
     // (`let`, a parameter without `var`).
     std::unordered_set<node_handle_t> variables_;
 
-    /// A ar that does not escape becomes SSA (docs/handover/reviews/questions-2026-10-24-evening.md,
+    /// A `var` that does not escape becomes SSA (docs/handover/reviews/questions-2026-10-24-evening.md,
     /// "var-version-node"): every read takes the value of the write that made it, and no read node is
-    /// left reading the cell. A ar that escapes -- captured by a closure, handed out as a ar
-    /// argument, or a ar parameter of this graph -- is a resource and keeps its cell.
-    /// ariableReadSource_ records, per read node, the writer it reads from (the cell itself when
+    /// left reading the cell. A `var` that escapes -- captured by a closure, handed out as a `var`
+    /// argument, or a `var` parameter of this graph -- is a resource and keeps its cell.
+    /// `variableReadSource_` records, per read node, the writer it reads from (the cell itself when
     /// nothing has written yet) and the cell it belongs to; knownCellUsers_ holds the users of a
     /// cell this builder recorded (its reads and its stores), so a cell with any other user
     /// (:var/take, a call, a capture port) is left as a cell.
@@ -1120,7 +1119,7 @@ class Builder {
         node_handle_t origin;
         bool written;
     };
-    // An unwaited write of captured variables outside a sync block, reported once every body
+    // A write of captured variables outside a sync block, reported once every body
     // is built: while a recursive function's body is open its writes are only an upper bound.
     struct PendingIgnoredWrite {
         std::vector<DraftGraphBuilder *> graphs;
@@ -1843,16 +1842,13 @@ class Builder {
         const compile_graph_ptr_t &decoratedGraph, const GCT::node_ptr_t &origin);
     std::optional<node_handle_t> modifierOf(node_handle_t node) const;
     void setModifier(node_handle_t input, node_handle_t modifier);
-    // An operation writes `variable`: later reads and writers are ordered after it, and a
-    // waited one is ordered after the operations before it that used the variable's value. The
-    // operation starts at `entry` and is complete at `exit` (one node for a call; BRCH and
-    // JOIN for a branch). `throughCallee`: the write is one a called function or a branch makes
-    // to a variable, which the summaries already account for.
-    void recordWrite(
-        node_handle_t variable, node_handle_t entry, node_handle_t exit,
-        bool throughCallee = false);
+    // An operation writes `variable`: later reads and writers are ordered after it. The write is
+    // complete at `exit` (one node for a call; the JOIN of a branch). `throughCallee`: the write
+    // is one a called function or a branch makes to a variable, which the summaries already
+    // account for.
+    void recordWrite(node_handle_t variable, node_handle_t exit, bool throughCallee);
     void recordWrite(node_handle_t variable, node_handle_t writer) {
-        recordWrite(variable, writer, writer);
+        recordWrite(variable, writer, false);
     }
     // Orders `node` after the last writer of `variable` in the current graph.
     void orderAfterLastWriter(node_handle_t variable, node_handle_t node);
@@ -1863,7 +1859,7 @@ class Builder {
     // The captured variables of `callee` as nodes of the current graph, which becomes a
     // caller of `callee`.
     std::vector<CapturedUse> capturedUsesOf(const compile_graph_ptr_t &callee);
-    // Reports the unwaited writes of captured variables that turned out to be real.
+    // Reports the writes of captured variables that turned out to be real.
     void reportIgnoredCapturedWrites();
     // Whether running `node` of `graph` is an effect: an operator that is neither pure nor
     // state-only, a call of a function that declares effects (`sync` modifier, `var`
@@ -1942,7 +1938,6 @@ class Builder {
     std::any visitDRefNode(const GCT::node_ptr_t &gct);
     node_handle_t visitCastNode(const GCT::node_ptr_t &gct);
     node_handle_t visitVariNode(const GCT::node_ptr_t &gct);
-    node_handle_t visitWaitNode(const GCT::node_ptr_t &gct);
     node_handle_t visitLinkNode(const GCT::node_ptr_t &gct);
     /// `a..b` (the GCT link of `kCompositionCall`): the composition of two functions, or the
     /// interval of two integers, told apart by the types of the two operands (design principles
@@ -2134,7 +2129,7 @@ class Builder {
     void linkArmEntries(const std::vector<arm_ptr_t> &arms, node_handle_t brchNode);
     /// After the JOIN is there: the variables the arms changed are changed by the branch.
     void mergeArmVariables(
-        const std::vector<arm_ptr_t> &arms, node_handle_t joinNode, node_handle_t brchNode,
+        const std::vector<arm_ptr_t> &arms, node_handle_t joinNode,
         std::vector<node_handle_t> &written);
     /// The names of a block that is not a graph (an arm).
     void enterBlockScope();

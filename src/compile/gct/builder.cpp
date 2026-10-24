@@ -2394,9 +2394,6 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
     const auto &binaryExpr = ast->loadAs<AST::BinaryExprLoad>();
     const auto &lhsASTNode = ast->atAs<AST::DataLoad>(0);
 
-    // Check if the binary expression is marked as "waited"
-    bool waited = binaryExpr->waited();
-
     node_ptr_t opNode = nullptr;
 
     // A dimension of a subscript that slices is not an element index (design principles 5.4):
@@ -2551,30 +2548,6 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
     setOriginFromAst(context_, res, ast, camel::source::OriginKind::GctNode, "gct.binary.link");
     registerGctSemantic(context_, res, ast, std::move(parts), std::move(mergedInputs));
 
-    // If the expression is marked as "waited", wrap it in a WaitLoad node
-    if (waited) {
-        node_ptr_t waitNode = tree_->makeWait();
-        *waitNode << res;
-        setOriginFromAst(context_, waitNode, ast, camel::source::OriginKind::GctNode, "gct.wait");
-        registerGctSemantic(
-            context_,
-            waitNode,
-            ast,
-            {
-                semanticPart(
-                    camel::source::SemanticRole::Keyword,
-                    nodeOrigin(waitNode),
-                    -1,
-                    "wait"),
-                semanticPart(
-                    camel::source::SemanticRole::ValueProducer,
-                    nodeOrigin(res),
-                    -1,
-                    "inner"),
-            },
-            {nodeOrigin(res)});
-        res = waitNode;
-    }
     LEAVE("BinaryExpr");
     return res;
 }
@@ -2625,12 +2598,6 @@ node_ptr_t Builder::visitLogicalExpr(const AST::node_ptr_t &ast) {
               << armOf(CaseType::Else, isAnd ? decidedNode : rhsNode);
 
     node_ptr_t res = brchNode;
-    if (logicalExpr->waited()) {
-        node_ptr_t waitNode = tree_->makeWait();
-        *waitNode << res;
-        setOriginFromAst(context_, waitNode, ast, camel::source::OriginKind::GctNode, "gct.wait");
-        res = waitNode;
-    }
     LEAVE("LogicalExpr");
     return res;
 }
@@ -2657,7 +2624,6 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
 
     node_ptr_t res           = nullptr;
     const auto &reservedExpr = ast->loadAs<AST::ReservedExprLoad>();
-    bool waited              = reservedExpr->waited();
     const auto &lhsASTNode   = ast->atAs<AST::DataLoad>(0);
 
     // Handle different reserved operators
@@ -3083,25 +3049,6 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
         res = nullptr;
     }
 
-    // If the expression is "waited", wrap the result in a WaitLoad node
-    if (waited) {
-        node_ptr_t waitNode = tree_->makeWait();
-        *waitNode << res; // Wait for the result of the reserved expression
-        setOriginFromAst(context_, waitNode, ast, camel::source::OriginKind::GctNode, "gct.wait");
-        registerGctSemantic(
-            context_,
-            waitNode,
-            ast,
-            {
-                semanticPart(
-                    camel::source::SemanticRole::ValueProducer,
-                    nodeOrigin(res),
-                    -1,
-                    "inner"),
-            },
-            {nodeOrigin(res)});
-        res = waitNode;
-    }
     LEAVE("ReservedExpr");
     return res;
 }

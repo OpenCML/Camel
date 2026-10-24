@@ -29,7 +29,7 @@ CAMEL_NODE(ExportDecl, Other)          // 'export' (dataDecl | typeDecl | braced
 CAMEL_NODE(ResourceDecl, Other)        // 'export'? 'resource' identDef ('=' bracketIdents | 'unordered')?
 CAMEL_NODE(UsingNamespaceDecl, Other)  // 'using' 'namespace' identRef
 CAMEL_NODE(NamespaceDecl, Other)       // 'namespace' identRef '{' SEP? (namespaceItem SEP?)* '}'
-CAMEL_NODE(BlockStmt, Other)           // 'wait' stmtBlock | frontMatter? ('#' tagUse)* ('sync'? stmtBlock | funcDecl | typeDecl)
+CAMEL_NODE(BlockStmt, Other)           // frontMatter? ('#' tagUse)* ('sync'? stmtBlock | funcDecl | typeDecl)
 CAMEL_NODE(StmtBlock, Other)           // 'sync'? '{' stmtList? '}'
 CAMEL_NODE(FuncAnno, Other)            // '@' identRef (angledValues | parentIdents)?
 CAMEL_NODE(TagDecl, Other)             // 'export'? 'tag' identDef angledParams? 'on' tagPositions ('read_by' tagReaders)? | 'export'? 'tag' identDef '=' bracketIdents

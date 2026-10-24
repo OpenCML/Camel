@@ -4,7 +4,7 @@
 
 本文档解释 Camel 的同步控制语义，覆盖两层视角：
 
-- **语法语义层**：`sync` / `wait` 在语言中的约束与直觉语义。
+- **语法语义层**：`sync` 在语言中的约束与直觉语义。
 - **编译实现层**：从 AST/GCT 到 GIR 如何落地控制依赖，并最终保证运行时顺序。
 
 ## 1. 设计目标
@@ -19,30 +19,22 @@ Camel 的同步执行语义要求：
 - **Norm/Data 依赖**：谁产出值、谁消费值。
 - **Ctrl 依赖**：谁必须先执行完成，后者才能开始。
 
-## 2. 语法语义层：`sync` 与 `wait`
-
-> **注意（H461）**：函数前缀 `sync func` 与关键字 `wait` 已退役，解析器不再认识它们。2.2、2.3 与第 3 节
-> 描述的是退役前的模型，作为实现记录保留；现行写法见 `docs/language/04_execution_model.md`。
+## 2. 语法语义层：`sync`
 
 本节描述“语言层”定义；后续章节给出对应实现路径。
 
 ### 2.1 语法入口（关键产生式）
 
-- `stmtBlock : SYNC? '{' stmtList? '}'`
-- `blockStmt : WAIT? stmtBlock`
-- `waitExpr : WAIT? assignExpr`
-- `funcDecl : ... modifiers? FUNC identRef parentParams (':' typeExpr)? stmtBlock`
+- `stmtBlock : 'sync'? '{' stmtList? '}'`
+- `funcDecl : frontMatter ('with' angledParams)? 'export'? 'func' (identRef | operatorName) typeParams? parentParams (':' typeExpr)? resourceClause? whenClause? stmtBlock?`
+- `funcData : modifiers? angledParams? parentParams (':' typeExpr)? '=>' blockExpr`（lambda）
+- `funcType : modifiers? angledParams? parentParams '=>' typeExpr resourceClause?`（函数类型）
+- `modifiers : 'sync'+`
 
-`sync` 在函数定义里可以出现在两个位置，它们是**两个不同的东西**（语言设计如此，不是同一修饰符的两种写法）：
-
-- **前缀 `sync func f(...) { ... }` 修饰的是函数**：`sync` 位于 `modifiers` 中，成为函数类型上的
-  `Modifier::Sync`。它声明“这个函数有副作用、需要被同步”——调用方可能需要 `wait` 它。它**不会**把函数体
-  变成同步块。
-- **后缀 `func f(...): T sync { ... }`（以及单独的 `sync { ... }`）修饰的是其后的块**：该块是同步块，
-  它自己直接写着的语句按书写顺序执行（等价于编译器在相邻语句之间插入控制边）；写在里面的分支臂、
-  循环体与嵌套块不继承这个顺序（2.2 的“不向内继承”）。函数类型上没有 `Modifier::Sync`。
-
-二者可以同时使用：`sync func f(...): T sync { ... }`。
+`sync` 只有一个意思：**它使它后面那个块成为同步块**。函数声明里它写在函数体位置——`func f(...): T sync { ... }`
+（也就是 `stmtBlock` 的 `'sync'?`）与单独的 `sync { ... }` 都是这个写法：块自己直接写着的语句按书写顺序执行
+（等价于编译器在相邻语句之间插入控制边）；写在里面的分支臂、循环体与嵌套块不继承这个顺序（2.2 的“不向内继承”）。
+lambda 与函数类型的位置上，同一个 `sync` 写在实参表之前（`sync (x: int) => ...`），落在函数类型的 `modifiers` 上。
 
 ### 2.2 求值规则与 `sync` 块
 
@@ -60,20 +52,20 @@ Camel 的求值是**依赖驱动**的：一个表达式被求值，当且仅当�
 - `sync` 不改变值语义，只增加顺序约束。
 
 ```camel
-// 函数修饰符：函数体不是同步块，println 的结果未被使用，因此不执行（设计如此）
-sync func f(): int {
+// 函数体不是同步块，println 的结果未被使用，因此不执行（设计如此）
+func f(): int {
     println("hello")
     return 1
 }
 
 // 函数体是同步块：println 执行，然后返回 1
-sync func g(): int sync {
+func g(): int sync {
     println("hello")
     return 1
 }
 ```
 
-### 2.3 引用、`var`、`let` 与 `wait`
+### 2.3 引用、`var` 与 `let`
 
 - Camel 中一切值**默认按引用传递**。`var` 标记可变对象，`let` 标记不可变对象。
 - `var` 形参是真正的引用：被调函数对它的写入就是对调用方变量的写入；在任何调度器、任何遍之后
@@ -83,16 +75,11 @@ sync func g(): int sync {
 - 同一个变量传给两个 `var` 形参是别名：两个形参指同一个对象。
 - `let` 的不可变性是**编译期校验**，不是对内存加锁：修改变量的操作本身是 `sync` 的，且必须声明哪个形参
   是 `var`；`let` 变量不能传给 `var` 形参，因而无从修改。
-- **`wait`** 作用于它后面的那**一个表达式**：`wait` 前后的操作如果用到了该表达式的值，或用到了被它修改的
-  值（即用到了它的副作用），就与它局部有序。例：`A(i); wait modify(i); B(i)`，编译器自动插入
-  `A → modify → B` 的控制依赖。这正是“默认按引用”这一设计的原因。
-- **`wait` 不是机械的排序，它依靠 `var` 的使用情况来排序。** 被排在修改之前的，是此前**直接使用**了该
-  变量的值的那些节点。`A(i + 1); wait modify(i)` 中直接使用 `i` 的是 `+`，所以 `modify` 排在 `+` 之后，
-  而不保证排在 `A` 之后——这是正确的行为，不是缺陷（测试 `wait_direct_user.graph` 从图上锁定这两条：
-  有 `+ → modify`，没有 `A → modify`）。
-- 被 `wait` 的表达式如果不涉及任何 `var`（例如只有输入输出类副作用的 `wait println(...)`），`wait` 没有
-  可依据的东西，也就没有意义：它不产生任何边，也不会让这个调用执行。这类调用应当写在同步块里。
-  因此不写 `wait` 不是错误，写了没有可排序对象的 `wait` 也不是错误。
+- **写入的顺序来自写它的那个同步块。** 同一个变量在同一同步块里的多次写入按书写顺序排列：`before(i + 1); modify(i)`
+  里 `before` 排在 `modify` 之前，即使 `before` 根本没碰到 `i`。函数体不是同步块时，写入与此前的读取之间没有顺序，
+  只与读到它的操作按依赖排序，编译器给出 `IgnoredSideEffect` 告警。测试
+  `test/cases/linear/byref/order_direct_user.cml`（图 `order_direct_user.graph`）从图上锁定这两条：有
+  `before → modify`，也有 `modify →` 写在它之后的那次读取。
 - 同步块内**它自己直接写着的**表达式按书写顺序执行（写在里面的臂、循环体与嵌套块不继承这个顺序，
   见 2.2），这也包括：以一个值结尾的同步块（值在块内最后一个表达式之后交出）、
   写在同步块里的 `sync { }` 块（它自己是外层链上的一个语句，块内按它自己的写法）、
@@ -104,10 +91,9 @@ sync func g(): int sync {
 
 ### 2.4 静态约束
 
-- 函数修饰符 `sync`（前缀 `sync func`）与关键字 `wait` 已退役（H461）：`var` 形参是资源参数，
-  不再有任何声明要求，也不再因此告警（原 `VarParamInAsyncFunction`/`CapturedWriteInAsyncFunction`
-  随前缀一起删除）。
-- 写在函数体位置的 `sync`（函数体是同步块）与 lambda 的 `sync` 前缀保留。
+- `var` 形参是资源参数（设计原则 3.3），不需要声明，也不因为“在非同步上下文里”告警。
+- `sync` 只写在块之前：函数体位置（函数体是同步块）与单独的 `sync { ... }`；lambda 与函数类型的位置上
+  写在实参表之前（2.1）。
 - 调用带 `var` 形参的函数或算子、直接调用写入被捕获变量的函数、或进入有分支臂写入被捕获变量的分支，
   而不在同步块内：`IgnoredSideEffect` 告警。
 - 把 `let` 对象传给 `var` 形参：编译期错误（见 2.3）。
@@ -120,10 +106,9 @@ sync func g(): int sync {
 
 符合规范、已由测试锁定的行为：
 
-1. 非同步函数体中，结果未被使用的效应调用（例如一条 `println(...)` 语句）不执行，在所有调度器上一致；
-   在它前面写 `wait` 也一样（不涉及 `var`，`wait` 无可依据，见 2.3）。
-2. 前缀 `sync func` 只给函数类型加 `Modifier::Sync`，函数体是普通块；后缀 `sync` 使函数体成为同步块。
-   AST 中这是两个独立的标记（`src/parse/ast/builder.cpp` 的 `visitFuncDecl` / `visitStmtBlock`）。
+1. 非同步函数体中，结果未被使用的效应调用（例如一条 `println(...)` 语句）不执行，在所有调度器上一致。
+2. 函数体位置的 `sync` 使这个函数体成为同步块：AST 上它记在 `stmtBlock` 的 `synced` 标志上
+   （`src/parse/ast/builder.cpp` 的 `visitStmtBlock`）。
 3. 结果作为返回值的效应调用（`return println(...)`）在数据路径上，会执行。
 
 与规范的差距（跟踪项见 `OWNER-QUESTIONS` 的 A1、A3–A6、A9）：
@@ -139,8 +124,8 @@ sync func g(): int sync {
   同步块之外、没有任何东西依赖它而被丢弃的效应（不纯算子、有副作用的函数调用、赋值、含这类分支臂的分支）
   由 `EffectNotExecuted` 报告：每张图建完后，从出口沿数据边和控制边反向可达之外的效应节点就是被丢弃的
   （`Builder::reportDroppedEffects`）。通过函数值的调用只能按类型识别。
-- **`wait` 的跟踪范围**：`A(i); wait modify(i); B(i)` 的两段依赖都已建立（3.3）。不带 `wait` 且不在同步块
-  内的写入与此前的读取之间没有顺序。经由捕获（含模块顶层变量）的写入，对直接调用和分支已经跟踪（3.3）；
+- **写入与读取的顺序**：同步块内直接写着的写入与读取按书写顺序（3.3）。不在同步块内的写入与此前的读取
+  之间没有顺序。经由捕获（含模块顶层变量）的写入，对直接调用和分支已经跟踪（3.3）；
   通过函数值（作为实参、返回值或存放起来的 lambda / 函数）进行的调用不在其内：函数类型不携带“写入了哪些
   被捕获变量”这一信息。
 
@@ -203,38 +188,33 @@ func main(): int sync {
 
 ### 3.1 AST 层标记
 
-- 解析器在 `stmtBlock` 上记录 `synced` 标志。
-- 解析器在 `waitExpr`（以及语法允许时的 `WAIT stmtBlock`）上记录 `waited` 标志。
+- 解析器在 `stmtBlock` 上记录 `synced` 标志（`func f(...): T sync { ... }` 与单独的 `sync { ... }`）。
 
 ### 3.2 GCT 层节点
 
 - `StmtBlock(sync=...)` lower 为 `ExecLoad(synced)`。
-- `wait` 表达式 lower 为 `WaitLoad(innerExpr)` 包装（二元表达式、保留表达式等路径均有实现）。
 
 ### 3.3 GIR Builder 状态机
 
-`src/compile/gir/builder.cpp` 中有两类关键状态：
+`src/compile/gir/builder.cpp` 中有一个关键状态：
 
 - `synced_`：当前是否在同步执行上下文。
-- `waited_`：当前表达式是否被 `wait` 包装。
 
 行为要点：
 
 - `visitExecNode` 进入/退出时切换 `synced_`。
-- `visitWaitNode` 进入/退出时切换 `waited_`。
 - `visitLinkNode` 在处理调用/链接时，若参数为 `var` 语义：
-  - `!waited_ && !synced_` => 触发 `IgnoredSideEffect`。
+  - 不在同步块内（`!synced_`）=> 触发 `IgnoredSideEffect`。
   - 在 `synced_` 中，通过 `lastSyncedNode_` 串联控制边，构造顺序链；对变量的读取（`:var/get`）同样进入
     这条链。
-  - 调用成为该变量的写入者（`recordWrite`）：此后对该变量的读取与写入都排在它之后；若它带 `wait` 且不在
-    同步块内，它还排在此前用过该变量取值的每个操作之后（`A → modify → B`）。
+  - 调用成为该变量的写入者（`recordWrite`）：此后对该变量的读取与写入都排在它之后。
 - **被捕获的变量**（包括模块顶层变量）。函数、lambda、分支臂引用外层图的变量时，变量的单元经捕获端口进入
   子图，函数类型里没有它。Builder 为每张图记一份摘要（`CaptureSummary`）：捕获了哪些变量、函数体自己写了
   哪些、直接调用了哪些图（含分支臂）。图的写入集合是这份调用关系上的最小不动点（`capturedWritesOf`）：
   自己写的，加上被调图写的、且自己也捕获了的那些；递归调用不给函数自己的集合增加任何东西。
   - 直接调用一张图（`visitLinkNode`，被调图已知）或进入分支（`visitBrchNode`，从 `BRCH` 到 `JOIN`）时，
     对被调图捕获的每个变量：调用/分支排在该变量此前的写入者之后；被调图写它，就按上一条记为写入者
-    （分支以 `BRCH` 为起点、`JOIN` 为完成点）；只读，就记为一次使用，排在此后带 `wait` 的写入者之前。
+    （分支以 `BRCH` 为起点、`JOIN` 为完成点）；只读，就记为一次使用。
   - 函数体还没建完时（递归调用自身，直接或经由分支臂）它将来写什么还不知道。此时在函数体内部按
     “它捕获的变量都可能被写”来排序（保守，只多加控制边）；函数建完后对外的摘要是精确的，告警也在全部
     函数体建完后按精确的集合发出。
@@ -247,12 +227,13 @@ func main(): int sync {
     全程序的函数体建完之后、在链接步取不动点。
   - 通过函数值的调用（`CALL` 节点、交给算子的 lambda）不查摘要。
 
-> 这就是语言层“sync/wait 控制副作用可见性”的具体编译落点。
+> 这就是语言层“同步块控制副作用可见性”的具体编译落点。
 
 ### 3.4 当前实现边界
 
-从现有代码可见，`wait` 的核心语义落实在 `waitExpr -> WaitLoad` 路径。  
-`WAIT stmtBlock` 的 AST 标记目前未在 GCT builder 中形成对称的专门 lower 逻辑（即 block 级 waited 标志未被同等消费）；这不影响 `wait expr` 主路径，但属于后续可增强点。
+`sync` 的实现只有三处：`stmtBlock` 的 `synced` 标志（3.1）、`StmtBlock` lower 成 `ExecLoad(synced)`（3.2），
+以及建图器按 `synced_` 在相邻语句之间连控制边（3.3）。还没有接上的一处见 2.5：函数体不是同步块时嵌套的
+`sync { ... }` 块，它的块尾没有接到外层出口。
 
 ### 3.5 控制边约简现在在哪（H95 结论）
 

@@ -2373,7 +2373,7 @@ node_handle_t Builder::buildBranch(
     // The branch is the user of the variables its arms used, and the writer of those they
     // wrote. It begins at BRCH and is complete at JOIN.
     std::vector<node_handle_t> capturedWrites;
-    mergeArmVariables(armList, joinNode, brchNode, capturedWrites);
+    mergeArmVariables(armList, joinNode, capturedWrites);
     const auto originOf = [&](node_handle_t variable) {
         const auto origin = captureOriginOf_.find(variable);
         return origin != captureOriginOf_.end() ? origin->second : variable;
@@ -2393,7 +2393,7 @@ node_handle_t Builder::buildBranch(
             outer->directWrites.insert(arm->directWrites.begin(), arm->directWrites.end());
         }
     }
-    if (!capturedWrites.empty() && !waited_ && !synced_) {
+    if (!capturedWrites.empty() && !synced_) {
         std::vector<node_handle_t> origins;
         for (node_handle_t variable : capturedWrites) {
             origins.push_back(originOf(variable));
@@ -2468,7 +2468,7 @@ void Builder::linkArmEntries(const std::vector<arm_ptr_t> &arms, node_handle_t b
 }
 
 void Builder::mergeArmVariables(
-    const std::vector<arm_ptr_t> &arms, node_handle_t joinNode, node_handle_t brchNode,
+    const std::vector<arm_ptr_t> &arms, node_handle_t joinNode,
     std::vector<node_handle_t> &written) {
     std::vector<node_handle_t> order;
     std::unordered_map<node_handle_t, bool> wrote;
@@ -2491,7 +2491,7 @@ void Builder::mergeArmVariables(
     for (node_handle_t variable : order) {
         if (wrote[variable]) {
             written.push_back(variable);
-            recordWrite(variable, brchNode, joinNode, true);
+            recordWrite(variable, joinNode, true);
         } else {
             pendingUsesOf(variable).push_back({joinNode, false});
         }
@@ -3204,7 +3204,7 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
     // Running the loop is like entering an arm: it uses every variable its parts used and
     // writes those they wrote.
     std::vector<node_handle_t> capturedWrites;
-    mergeArmVariables(parts, loopNode, loopNode, capturedWrites);
+    mergeArmVariables(parts, loopNode, capturedWrites);
     const auto originOf = [&](node_handle_t variable) {
         const auto origin = captureOriginOf_.find(variable);
         return origin != captureOriginOf_.end() ? origin->second : variable;
@@ -3224,7 +3224,7 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
             outer->directWrites.insert(part->directWrites.begin(), part->directWrites.end());
         }
     }
-    if (!capturedWrites.empty() && !waited_ && !synced_) {
+    if (!capturedWrites.empty() && !synced_) {
         std::vector<node_handle_t> origins;
         for (node_handle_t variable : capturedWrites) {
             origins.push_back(originOf(variable));
