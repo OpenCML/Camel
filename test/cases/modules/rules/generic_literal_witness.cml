@@ -32,13 +32,13 @@ func portOf(p: Program, function: string): Node {
     return ports[0]
 }
 
-/// The law applied once, then the question at the `int` parameter: the instance was made, and what
-/// the answer says about it names its type (`cancel_wide_addend<int>`).
+/// The law applied once, then the question at the `int` parameter the law rewrote: the instance
+/// was made, and the answer says the rule fired there as `cancel_wide_addend<int>`.
 export func why_wide(p: Program): Program! sync {
     return match p->run<[cancel_wide_addend], explain: true> {
         case error e => { throw e }
         case r => sync {
-            return match why_not(r, cancel_wide_addend, portOf(r.result, 'i64_zero')) {
+            return match why_not(r, cancel_wide_addend, portOf(r.result, 'i64_wide')) {
                 case error e => sync { println(e); return r.result }
                 case reason => sync { println(reason); return r.result }
             }

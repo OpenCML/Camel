@@ -1220,12 +1220,12 @@ timeout_ms = 10000
 
 [[tests]]
 name = "rules.generic_literal_is_instantiated_for_the_type_that_holds_it"
-desc = "A literal inside a generic rule's body takes its type where the body is instantiated (the ruling of 2026-10-23 on `literal-inside-a-generic-body`), so `cancel_wide_addend` -- the wide addend cancels, asked of every integer type -- is a rule for the `int` value of `generic_target.cml` and has no instance for the `i32` one. Asked at the `int` parameter, `why_not` names the instance the type has (`cancel_wide_addend<int>`) rather than failing, and nothing of the attempt that the narrow type cannot have reaches the program: the run ends at exit 0 and the program still runs."
+desc = "A literal inside a generic rule's body takes its type where the body is instantiated (the ruling of 2026-10-23 on `literal-inside-a-generic-body`), so `cancel_wide_addend` -- the wide addend cancels, asked of every integer type -- is a rule for the `int` sites of `generic_target.cml` and has no instance for the `i32` one. The proof of the run names the instance the `int` site was rewritten by (`cancel_wide_addend<int>`), and nothing of the attempt that the narrow type cannot have reaches the program: the run ends at exit 0 and the program still prints what it printed."
 kind = "behavior"
 case = "../../../cases/modules/rules/generic_target.cml"
 args = ["${case}", "generic_literal_witness::why_wide", "std::nvm"]
 expect_exit = 0
-expect_stdout_contains = ["`cancel_wide_addend<int>` did not fire at", "generic law", "7 8 9 1.5"]
+expect_stdout_contains = ["fired here in round 1", "as `cancel_wide_addend<int>`", "generic law", "7 8 9 1.5"]
 expect_output_not_contains = ["GenericFunctionAsValue", "cannot be represented as type"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
