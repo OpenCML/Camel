@@ -15,13 +15,17 @@
  * (`verification-licence-to-precondition`, licence 3, option A: `sampled` and "not examined (why)"
  * are written separately and never mixed).
  *
- * Each row carries the five things the ruling asked a row to carry, plus the two a reader needs to
+ * Each row carries the five things the ruling asked a row to carry, plus the three a reader needs to
  * reproduce it: the `rule`, the `instance` (a generic law's type tuple, empty when the rule is not
  * generic), the `verdict`, the `proposition` (what the verdict is about: `equality`,
  * `real equality + IEEE on special values` or `error bound`), the `evidence` (`solver`,
  * `samples <n>`, `counterexample` or `none`), the `reason` (why nothing was examined, or why a
- * rule that is not a counterexample is still `refuted`), and the `detail` (the rest of the line:
- * how often the engine fired, the worst error ratio, the values a counterexample has).
+ * rule that is not a counterexample is still `refuted`), the `detail` (the rest of the line:
+ * how often the engine fired, the worst error ratio, the values a counterexample has), and the
+ * `coverage` (H247, slice S1: what the translation layer made of the rule's two sides -- the
+ * proposition it read, or `beyond translation coverage` with the reason it refused; a rule outside
+ * the coverage is `sampled` and this is where the reason is written, the ruling of 2026-10-24 on
+ * `verification-verdict-surface`, 3).
  *
  * The record is declared here and not in module.cpp so the format has one owner: the module builds
  * it and `checkreport.cpp` prints it.
@@ -54,8 +58,8 @@ inline constexpr const char *kVerdictProved  = "proved";
 inline constexpr const char *kVerdictRefuted = "refuted";
 inline constexpr const char *kVerdictSampled = "sampled";
 
-/// One row of the table: `rule`, `instance`, `verdict`, `proposition`, `evidence`, `reason`, and
-/// the free `detail` the fixed rendering puts last.
+/// One row of the table: `rule`, `instance`, `verdict`, `proposition`, `evidence`, `reason`, the
+/// free `detail` the fixed rendering puts last, and the `coverage` of the translation.
 struct CheckRow {
     std::string rule;
     std::string instance;
@@ -64,6 +68,7 @@ struct CheckRow {
     std::string evidence;
     std::string reason;
     std::string detail;
+    std::string coverage;
 
     /// The rule as the report names it: `name` for a rule of its own, `name<types>` for one
     /// instance of a generic law.

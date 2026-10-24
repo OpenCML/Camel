@@ -46,6 +46,7 @@
 #include "camel/runtime/writings.h"
 #include "camel/utils/assert.h"
 #include "src/passes/sched/nodevm/nodevm.h"
+#include "verify/translate.h"
 
 #include <algorithm>
 #include <bit>
@@ -2671,6 +2672,11 @@ void checkOneRule(
     const std::string proposition              = propositionOf(source.needs);
     const bool conditional                       = source.when != nullptr;
     const camel::core::sem::PermissionMask needs = source.needs;
+    // What the translation layer made of this rule's two sides (H247, slice S1). The sides are read
+    // once, here: the same two sides are the rule's own graphs, whatever the instance. A rule the
+    // layer cannot translate is `sampled` with the reason written in the coverage column (the ruling
+    // of 2026-10-24 on `verification-verdict-surface`, 3).
+    const std::string coverage = camel::verify::translate(source).column();
     const auto addRow = [&](std::string_view verdict, std::string evidence, std::string reason,
                             std::string detail) {
         CheckRow row;
@@ -2681,6 +2687,7 @@ void checkOneRule(
         row.evidence    = std::move(evidence);
         row.reason      = std::move(reason);
         row.detail      = std::move(detail);
+        row.coverage    = coverage;
         rows.push_back(std::move(row));
     };
     const uint64_t constParams                   = constMaskOf(source);
@@ -3026,6 +3033,9 @@ void checkGenericRule(
         row.proposition = propositionOf(rule.needs());
         row.evidence    = "none";
         row.reason      = reason;
+        // No two sides were built, so there is nothing the translation layer could read.
+        row.coverage = camel::verify::uncoveredColumn(
+            "the check did not build the rule's two sides: " + reason);
         rows.push_back(std::move(row));
     };
     auto root = std::make_shared<mm::RootHandle>(
@@ -3126,17 +3136,8 @@ void checkGenericRule(
                 break;
             }
         }
-        if (!cannot.empty()) {
-            CheckRow row;
-            row.rule        = name;
-            row.instance    = instance.typeText;
-            row.verdict     = kVerdictSampled;
-            row.proposition = propositionOf(rule.needs());
-            row.evidence    = "none";
-            row.reason      = std::format("the check cannot make a value of type '{}'", cannot);
-            rows.push_back(std::move(row));
-            continue;
-        }
+        // The rule source is built before the sampler is asked anything: the translation layer reads
+        // the same two sides, and its answer belongs on the row even when no value could be made.
         std::shared_ptr<WhenCall> call;
         if (instance.when != nullptr) {
             call              = std::make_shared<WhenCall>();
@@ -3150,6 +3151,18 @@ void checkGenericRule(
         }
         const RuleObject &currentRule = *root->getAs<RuleObject>();
         const camel::runtime::RuleSource source = instanceOf(currentRule, 1, instance, call);
+        if (!cannot.empty()) {
+            CheckRow row;
+            row.rule        = name;
+            row.instance    = instance.typeText;
+            row.verdict     = kVerdictSampled;
+            row.proposition = propositionOf(rule.needs());
+            row.evidence    = "none";
+            row.reason      = std::format("the check cannot make a value of type '{}'", cannot);
+            row.coverage    = camel::verify::translate(source).column();
+            rows.push_back(std::move(row));
+            continue;
+        }
         checkOneRule(ctx, source, samples, stream, instance.typeText, rows);
     }
 }
@@ -3272,6 +3285,21 @@ slot_t checkReasonKernel(ArgsView &, ArgsView &norm, Context &) {
     return rowColumnKernel(norm, "<rewrite::check_reason>", &CheckRow::reason);
 }
 
+/// What the translation layer made of one row's rule (H247, slice S1): the proposition it read out
+/// of the two sides, or `beyond translation coverage` with the reason it refused. A rule outside
+/// the coverage is `sampled` and this is where the reason is written (the ruling of 2026-10-24 on
+/// `verification-verdict-surface`, 3).
+slot_t checkCoverageKernel(ArgsView &, ArgsView &norm, Context &) {
+    return rowColumnKernel(norm, "<rewrite::check_coverage>", &CheckRow::coverage);
+}
+
+/// The declared coverage of the translation layer: which widths and operators it translates, what
+/// it refuses, and that a rule's condition is not a premise yet. The boundary is a value and not a
+/// paragraph, so a reader reads it and a test pins it.
+slot_t coverageTableKernel(ArgsView &, ArgsView &, Context &) {
+    return toSlot(String::from(camel::verify::coverageTable(), mm::autoSpace()));
+}
+
 class RewriteExecutor final : public Executor {
   public:
     explicit RewriteExecutor(context_ptr_t ctx) : Executor(std::move(ctx), kernels()) {}
@@ -3302,6 +3330,8 @@ class RewriteExecutor final : public Executor {
             {"check_proposition", checkPropositionKernel},
             {"check_evidence", checkEvidenceKernel},
             {"check_reason", checkReasonKernel},
+            {"check_coverage", checkCoverageKernel},
+            {"check_coverage_table", coverageTableKernel},
             {"analysis", camel::rewritemod::analysisKernel},
         };
     }
@@ -3467,6 +3497,8 @@ class RewriteModule final : public BuiltinModule {
              {"check_proposition", true},
              {"check_evidence", true},
              {"check_reason", true},
+             {"check_coverage", true},
+             {"check_coverage_table", true},
              {"analysis", false}});
         loaded_ = true;
         return true;
