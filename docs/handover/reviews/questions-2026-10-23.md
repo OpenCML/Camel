@@ -369,3 +369,20 @@ export func check(rules: Rule[], samples: int = …, seed: int = …, program: P
 ## 复核：归约按元素类型分臂
 
 `sum`/`min`/`max` 每种元素类型一条内核声明、执行器里的运行期 `switch (codeOf(…))` 删除——按裁定落地，好。同一文件里的**排序**还是旧形态：内核"读元素类型码"，bf16/f16 在运行期按名字拒绝（`stdlib/array.cml` 排序一节的注释）。照归约的做法改：每种元素类型一条声明、`when` 分臂，bf16/f16 要么有自己的臂，要么在编译期就没有匹配的内核而走函数体（不在运行期拒绝）。排在第一梯队之后。
+
+## bare-tensor-parameter-instantiation（裸 `Tensor` 形参要不要按调用点实例化）
+
+**必须。** 这是设计原则 5.5 本身："泛型函数按实参类型实例化……每用一组具体类型调用，就实例化出一张类型全部具体的子图"。形参类型里开放的部分——元素类型 `T`、维度包 `..`（`Tensor<T>` 即 `T[..]`）——都是泛型的部分，调用点的实参类型把它们定下来，函数体按此实例化，秩随之静态已知。develop 上图里写着 `Tensor<float32>` 且秩可用，正是这个行为；翻转后整段前向与反传都是 `numericUnknown()`，是丢了实例化，不是导出器的问题。
+
+- 过渡期的裸 `Tensor` 形参按"元素类型与维度都开放的泛型形参"处理，按调用点实例化；P4 的终点仍是签名里不许写裸 `Tensor`（`any-element-array` 的复核），写成头部声明的 `::<T>` 加 `T[..]` 或具体类型。两者同向：实例化之后图上只有具体类型。
+- `var Tensor` 一族随之解决：实例化后形参类型就是实参的 `f32[?, ?]`，cell 的"内容类型相等"成立。cell 的不变式不放宽，也不需要只加宽的兼容路径。
+- 本轮运行时求轴的 `sum_to` **不保留**：实例化之后不存在"秩在运行时才知道"的张量（维度大小可以运行时才知道，秩不会），它没有要服务的情形；按"不计兼容"删掉，`lowering_grad.cpp` 的 8 处照旧按静态秩降级。`tensor-flip-integration.md` 相应改写。
+- 验收：两例 `export_grad_matmul_vector` 回到 develop 的行为（`Squeeze`/`Unsqueeze` 计数照旧）；38 个 `var Tensor` 用例全绿；出口图里没有 `f32[..]` 站点。
+
+## f32-scalar-to-the-device 与 tensor-reduction-element-type
+
+**两条都选 1，都是已有裁定的实施缺口，不是新的设计决定。** 以后同类问题（"代码与原则或已有裁定不一致，按原则改代码"），协调者直接按原则改，不必走问题通道。
+
+- **设备侧的标量是元素类型**（`gpu-scalar-operand`）：`supportedLeaves` 与 `buildResidentType` 接受 f32 标量叶子（及 `int`/`i32`、bf16/f16，按元素类型的族），不再只认 `Float64`。`stdlib/signatures/tiles.cml` 的参考签名与 `resident_scalars.cml` 里"标量在边界上保持 float"的写法按此改正——那是旧规则的残留。设备图里没有 f64 标量；程序真的写了 f64 张量时，标量就是 f64，同样按元素类型。
+- **张量归约返回元素类型**（设计原则 7.3 原文"返回元素类型（与张量归约一致）"）：`sum`/`mean` 对 `Tensor<f32>` 是 `f32`，对 f64 是 `float`，累加在 f64 中、舍入一次。现有程序里把结果交给 `float` 的地方改写显式转换（不计兼容）。P4 之后张量与数组是同一种类型，`sum` 本来就只有一个泛型定义，这个不一致会自然消失；现在先按原则改正，不等 P4。
+- 验收照两份问题文件的建议：`runtimeScalar` 与 `conditional` 在 `--devices cpu` 下退出 0、值与宿主一致；`source<scale>((x, k))`（`k: f32`）解析得过；`crosslane` 写成 `s + sum(s)` 后成为设备区域。
