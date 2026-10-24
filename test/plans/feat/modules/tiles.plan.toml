@@ -459,7 +459,7 @@ expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::DeviceUnavailable"
 expect_diagnostic_code = "0x04000070"
 expect_output_contains = ["CUDA device 0 was named by --devices but is not available"]
-expect_stdout_not_contains = ["PROGRAM_EXECUTED"]
+expect_stdout_not_contains = ["ran\n"]
 timeout_ms = 30000
 
 [[tests]]
@@ -473,7 +473,7 @@ expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::DeviceUnavailable"
 expect_diagnostic_code = "0x04000070"
 expect_output_contains = ["CUDA device 7 was named by --devices but is not available"]
-expect_stdout_not_contains = ["PROGRAM_EXECUTED"]
+expect_stdout_not_contains = ["ran\n"]
 timeout_ms = 30000
 
 [[tests]]
@@ -488,7 +488,7 @@ expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::DeviceUnavailable"
 expect_diagnostic_code = "0x04000070"
 expect_output_contains = ["CUDA device 0 was named by --devices but is not available", "missing: 0, 1"]
-expect_stdout_not_contains = ["PROGRAM_EXECUTED"]
+expect_stdout_not_contains = ["ran\n"]
 timeout_ms = 30000
 
 [[tests]]
@@ -504,7 +504,7 @@ expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::DeviceUnavailable"
 expect_diagnostic_code = "0x04000070"
 expect_output_contains = ["CUDA device 1 was named by --devices but is not available", "this machine has 1 CUDA device (ordinal 0)"]
-expect_stdout_not_contains = ["PROGRAM_EXECUTED"]
+expect_stdout_not_contains = ["ran\n"]
 timeout_ms = 30000
 
 [[tests]]
