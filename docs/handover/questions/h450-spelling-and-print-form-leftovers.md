@@ -116,28 +116,37 @@ tensor 模块的 infer 不再被选中 ⇒ **静态检查整体消失**，只剩
 `si_plain_result`、`si_loaded_struct`、`si_computed_slice`、`si_branch_join`、`si_recursion_leaf`、
 `si_tuple_return`、`si_var_argument`），帮助文本给出 `as` 的写法。
 
-## 七、`[]` 改走 core 之后，onnx 导出器不再接受「按下标读一个浮点数组」（实测，未修）
+## 七、`[]` 改走 core 之后，onnx 导出器不再接受「按下标读一个浮点数组」（实测；h456 已修，2026-10-25）
 
 `modules.onnx/export_branch`、`modules.onnx/ort_branch`（各 2 变体：operator/pass 与 ort）在按裁定把
-`gate(t: Tensor)` 写成终态（`f32[4]` / `f32[..]`）之后，仍然红，且原因**不是拼写**：
+`gate(t: Tensor)` 写成终态（`f32[4]` / `f32[..]`）之后曾经红，且原因**不是拼写**：
 
 ```
 export_branch.cml:20:5: [Error]: onnx.export_model: ':op/idx_arr': only int arrays (shapes) can be
 indexed by the model input
 ```
 
-根因：导出器的下标规则只覆盖 **int 数组（形状）**——`modules/onnx/lowering.cpp:798-819`
-（`lowerArrayIndex`：符号 int 数组 + 常量下标 → `Gather`；否则 `throw ExportError("only int arrays
-(shapes) can be indexed by the model input")`）。翻转前 `t[0]`（t 是浮点张量）走的是 tensor 模块自己的
-`idx` 算子，导出器对它另有规则；翻转后 `[]` 统一走 core 的 `:op/idx_arr`，那条规则不认浮点数组，于是
-「从模型输入读一个元素当条件」的图拒绝导出——这正是这两个用例存在的理由（If 的条件由输入算出来）。
+根因：导出器的下标规则当时只覆盖 **int 数组（形状）**——`modules/onnx/lowering.cpp` 的
+`lowerArrayIndex`。翻转前 `t[0]`（t 是浮点张量）走的是 tensor 模块自己的 `idx` 算子，导出器对它另有
+规则；翻转后 `[]` 统一走 core 的 `:op/idx_arr`，那条规则不认浮点数组，于是「从模型输入读一个元素当
+条件」的图拒绝导出——这正是这两个用例存在的理由（If 的条件由输入算出来）。
 
-归 h460/h449 同一处：这是「`[]` 从模块算子改走 core」的第三个落点（前两个是静态越界检查丢失、
-`autodiff: no derivative rule for ':op/idx_take'`）。可用的修法很小：`Gather` 对任意数据类型都成立，
-常量下标时把浮点数组的输入直接交给 `Gather`（当前代码用 `ctx.input(0, TypeCode::Int64)` 把输入钉成
-int64），只保留「浮点数组 + 非常量下标」为拒绝。本 lane 没落：这属于导出器的能力矩阵，且放宽它可能
-让别的应当拒绝的程序被接受，应由掌握导出器用例的车道改并验收。（2026-10-25：已转 h456 那条线，
-本 lane 不再动导出器。）
+**已修**：整批集成树（`228a2ba6a`）里 `lowerArrayIndex`（`:801-836`）对**常量下标**已按任意元素类型
+输出 `Gather`（`ctx.input(0, TypeCode::Float64)`），只把「模型输入决定的、从数值数组里取元素」留为
+拒绝，并用更具体的文本说明（“… needs a constant index; an index the model input decides is only
+supported for an array of shapes (an int array)”）。合树后 `modules.onnx/export_branch`、
+`modules.onnx/ort_branch`、`exemplars/08_structured_control_flow` 的 export 均绿。本 lane 未动
+导出器。
+
+归 h460/h456 同一处：这是「`[]` 从模块算子改走 core」的第三个落点（前两个是静态越界检查丢失、
+`autodiff: no derivative rule for ':op/idx_take'`）。修法就是上面 h456 落的那一处：`Gather` 对任意
+数据类型都成立，常量下标时把浮点数组的输入直接交给 `Gather`，只保留「数值数组 + 模型输入决定的下标」
+为拒绝。本 lane 不再动导出器。
+
+（2026-10-25 合并后补：`exemplars/04_staticness/static-export` 是这一族里**唯一**剩下的非打印形态
+残留——`onnx_ops` 实测 `Slice,Reshape,Add,Slice,Reshape,Add,Slice,Concat,Reshape,Add,Identity`，用例
+期望 `…,Slice,Reshape,Add,Identity`，即静态展开的一条链上导出器多出一个 `Concat`。这不是打印形态，
+也不是本 lane 的口径，留给导出器/展开那条线判。）
 
 ## 八、`constas` 的形状实参不静态比对（回归，已修，`bbb3a4a18`）
 
