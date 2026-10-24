@@ -137,3 +137,41 @@ absent name:   camel.DiagnosticError name=NoSuchExport: 'python_rules' exports n
   这时 `str(e)` 里写的是那个名字，不编造位置。
 - **诊断文本原样保留**在 `e.camel_text` 里，就是命令行 `camel` 会打印的那段（含源码上下文），
   便于 Python 侧直接转述。
+
+## 57.6 `pip install`
+
+打包这条路今天的现状是：已有的 `scripts/pypi-rollup.js` 会把 `out/<tag>/` 折进包、建 wheel、
+改 tag、放到 `dist/pypi/`。这一片给它补了三件事，都是"在一台拿不到包索引的机器上也要成立"：
+
+1. `CAMEL_PYPI_SKIP_BUILD=1`：只折 `out/<tag>/`、不重新构建（wheel 的内容本来就来自 `out/<tag>/`）。
+2. 建 wheel 用 `build` 模块，没有它就用 `pip wheel --no-build-isolation`（离线机器装不上 `build`）。
+3. 改 tag 不再用 `wheel tags`——wheel 0.45 已经删掉了那个命令行——改用仓库自己的
+   `scripts/wheel_retag.py`（`zipfile` 重写 `*.dist-info/WHEEL` 的 `Tag:` 并改名）。
+   顺带：每次 rollup 先清掉 `pypi/camel-lang/{build,dist}`，否则上一次失败留下的 `dist/*.whl`
+   会被一起发布。
+
+逐字命令与输出（参照主机，无网络）：
+
+```sh
+npm run build
+CAMEL_PYPI_SKIP_BUILD=1 npm run pypi:rollup
+```
+
+```
+[STEP] Retagging wheel(s): cp310-cp310-linux_x86_64
+[DONE] Final wheel(s) in dist/pypi/: camel_lang-0.2.30-cp310-cp310-linux_x86_64.whl
+-rw-rw-r-- 1 zjwei zjwei 12846898 camel_lang-0.2.30-cp310-cp310-linux_x86_64.whl
+```
+
+装它、用它（`--no-index` 是为了证明不需要网络；`--target` 只是为了不动那台机器的环境）：
+
+```
+$ python -m pip install --no-index --no-deps --target /tmp/camel-pkg dist/pypi/*.whl
+Processing ./dist/pypi/camel_lang-0.2.30-cp310-cp310-linux_x86_64.whl
+Installing collected packages: camel-lang
+Successfully installed camel-lang-0.2.30
+```
+
+装完之后**不设任何环境变量**（连 `CAMEL_HOME` 都不设）跑 `examples/python/rules/basket.py`，
+输出见 [examples/python/rules/README.md](../../examples/python/rules/README.md)：包把
+`CAMEL_HOME` 指到自带的 `camel/.cmlenv/`，扩展模块与 `libcamel` 都在那里。
