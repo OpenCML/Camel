@@ -429,7 +429,17 @@ Type *substituteExtentValues(Type *type, const ExtentValues &values, const Exten
     case TypeCode::Array: {
         auto *array = static_cast<ArrayType *>(type);
         Type *elem  = substituteExtentValues(array->elemType(), values, packs);
-        return elem == array->elemType() ? type : ArrayType::create(elem);
+        // An array's own extents name values too (`f32[n]` with a `constas n: int`), and they are
+        // where such a name lives now that `[]` is the core array type: replace them as the type
+        // arguments of a module type are replaced, so the parameter of a call becomes the concrete
+        // one (`f32[3]`) and an argument of another extent is refused (design principles 5.4 gives
+        // the shape check to the core; ruling 2026-10-24 evening, `print-form-flip-2026-10-25`
+        // item 1). While the name stayed in the type, an array with a named extent accepts every
+        // extent, so `total(3, ones([4]))` with `x: f32[n]` was taken as it was.
+        if (const Type *named = array->withExtentValues(values, packs); named != nullptr) {
+            array = const_cast<ArrayType *>(static_cast<const ArrayType *>(named));
+        }
+        return elem == array->elemType() ? array : array->withElementType(elem);
     }
     case TypeCode::Tuple: {
         auto *tuple  = static_cast<TupleType *>(type);
