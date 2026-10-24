@@ -316,10 +316,10 @@ assert(reads.some(r => edge(join[1], r, 'CTRL')), 'missing JOIN -> read of c aft
 timeout_ms = 10000
 
 [[tests]]
-name = "wait_direct_user.default"
+name = "order_direct_user.default"
 desc = "A(i + 1); modify(i) in a sync body: the value read by `+` is the old one and the read after modify the new one. Pipeline: default (no pass)."
 kind = "behavior"
-case = "../../../cases/linear/byref/wait_direct_user.cml"
+case = "../../../cases/linear/byref/order_direct_user.cml"
 args = ["${case}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -332,10 +332,10 @@ assert(out === '2011', `unexpected output: ${out}`)
 timeout_ms = 20000
 
 [[tests]]
-name = "wait_direct_user.fvm"
+name = "order_direct_user.fvm"
 desc = "A(i + 1); modify(i) in a sync body: the value read by `+` is the old one and the read after modify the new one. Pipeline: std::fvm."
 kind = "behavior"
-case = "../../../cases/linear/byref/wait_direct_user.cml"
+case = "../../../cases/linear/byref/order_direct_user.cml"
 args = ["${case}", "std::fvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -348,10 +348,10 @@ assert(out === '2011', `unexpected output: ${out}`)
 timeout_ms = 20000
 
 [[tests]]
-name = "wait_direct_user.jit"
+name = "order_direct_user.jit"
 desc = "A(i + 1); modify(i) in a sync body: the value read by `+` is the old one and the read after modify the new one. Pipeline: std::jit."
 kind = "behavior"
-case = "../../../cases/linear/byref/wait_direct_user.cml"
+case = "../../../cases/linear/byref/order_direct_user.cml"
 args = ["${case}", "std::jit"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -364,10 +364,10 @@ assert(out === '2011', `unexpected output: ${out}`)
 timeout_ms = 20000
 
 [[tests]]
-name = "wait_direct_user.tf"
+name = "order_direct_user.tf"
 desc = "A(i + 1); modify(i) in a sync body: the value read by `+` is the old one and the read after modify the new one. Pipeline: std::tf."
 kind = "behavior"
-case = "../../../cases/linear/byref/wait_direct_user.cml"
+case = "../../../cases/linear/byref/order_direct_user.cml"
 args = ["${case}", "std::tf"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -380,10 +380,10 @@ assert(out === '2011', `unexpected output: ${out}`)
 timeout_ms = 20000
 
 [[tests]]
-name = "wait_direct_user.inline"
+name = "order_direct_user.inline"
 desc = "A(i + 1); modify(i) in a sync body: the value read by `+` is the old one and the read after modify the new one. Pipeline: std::opt::inline."
 kind = "behavior"
-case = "../../../cases/linear/byref/wait_direct_user.cml"
+case = "../../../cases/linear/byref/order_direct_user.cml"
 args = ["${case}", "std::opt::inline"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -396,10 +396,10 @@ assert(out === '2011', `unexpected output: ${out}`)
 timeout_ms = 20000
 
 [[tests]]
-name = "wait_direct_user.opt"
+name = "order_direct_user.opt"
 desc = "A(i + 1); modify(i) in a sync body: the value read by `+` is the old one and the read after modify the new one. Pipeline: std::opt."
 kind = "behavior"
-case = "../../../cases/linear/byref/wait_direct_user.cml"
+case = "../../../cases/linear/byref/order_direct_user.cml"
 args = ["${case}", "std::opt"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -412,10 +412,10 @@ assert(out === '2011', `unexpected output: ${out}`)
 timeout_ms = 20000
 
 [[tests]]
-name = "wait_direct_user.simplify"
+name = "order_direct_user.simplify"
 desc = "A(i + 1); modify(i) in a sync body: the value read by `+` is the old one and the read after modify the new one. Pipeline: std::opt."
 kind = "behavior"
-case = "../../../cases/linear/byref/wait_direct_user.cml"
+case = "../../../cases/linear/byref/order_direct_user.cml"
 args = ["${case}", "std::opt"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -428,10 +428,10 @@ assert(out === '2011', `unexpected output: ${out}`)
 timeout_ms = 20000
 
 [[tests]]
-name = "wait_direct_user.macro"
+name = "order_direct_user.macro"
 desc = "A(i + 1); modify(i) in a sync body: the value read by `+` is the old one and the read after modify the new one. Pipeline: std::macro."
 kind = "behavior"
-case = "../../../cases/linear/byref/wait_direct_user.cml"
+case = "../../../cases/linear/byref/order_direct_user.cml"
 args = ["${case}", "std::macro"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -444,10 +444,10 @@ assert(out === '2011', `unexpected output: ${out}`)
 timeout_ms = 20000
 
 [[tests]]
-name = "wait_direct_user.macro_fvm"
+name = "order_direct_user.macro_fvm"
 desc = "A(i + 1); modify(i) in a sync body: the value read by `+` is the old one and the read after modify the new one. Pipeline: std::macro std::fvm."
 kind = "behavior"
-case = "../../../cases/linear/byref/wait_direct_user.cml"
+case = "../../../cases/linear/byref/order_direct_user.cml"
 args = ["${case}", "std::macro", "std::fvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -460,10 +460,10 @@ assert(out === '2011', `unexpected output: ${out}`)
 timeout_ms = 20000
 
 [[tests]]
-name = "wait_direct_user.macro_jit"
+name = "order_direct_user.macro_jit"
 desc = "A(i + 1); modify(i) in a sync body: the value read by `+` is the old one and the read after modify the new one. Pipeline: std::macro std::jit."
 kind = "behavior"
-case = "../../../cases/linear/byref/wait_direct_user.cml"
+case = "../../../cases/linear/byref/order_direct_user.cml"
 args = ["${case}", "std::macro", "std::jit"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -476,10 +476,10 @@ assert(out === '2011', `unexpected output: ${out}`)
 timeout_ms = 20000
 
 [[tests]]
-name = "wait_direct_user.macro_tf"
+name = "order_direct_user.macro_tf"
 desc = "A(i + 1); modify(i) in a sync body: the value read by `+` is the old one and the read after modify the new one. Pipeline: std::macro std::tf."
 kind = "behavior"
-case = "../../../cases/linear/byref/wait_direct_user.cml"
+case = "../../../cases/linear/byref/order_direct_user.cml"
 args = ["${case}", "std::macro", "std::tf"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -492,10 +492,10 @@ assert(out === '2011', `unexpected output: ${out}`)
 timeout_ms = 20000
 
 [[tests]]
-name = "wait_direct_user.macro_inline"
+name = "order_direct_user.macro_inline"
 desc = "A(i + 1); modify(i) in a sync body: the value read by `+` is the old one and the read after modify the new one. Pipeline: std::macro std::opt::inline."
 kind = "behavior"
-case = "../../../cases/linear/byref/wait_direct_user.cml"
+case = "../../../cases/linear/byref/order_direct_user.cml"
 args = ["${case}", "std::macro", "std::opt::inline"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -508,10 +508,10 @@ assert(out === '2011', `unexpected output: ${out}`)
 timeout_ms = 20000
 
 [[tests]]
-name = "wait_direct_user.macro_opt"
+name = "order_direct_user.macro_opt"
 desc = "A(i + 1); modify(i) in a sync body: the value read by `+` is the old one and the read after modify the new one. Pipeline: std::macro std::opt."
 kind = "behavior"
-case = "../../../cases/linear/byref/wait_direct_user.cml"
+case = "../../../cases/linear/byref/order_direct_user.cml"
 args = ["${case}", "std::macro", "std::opt"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -524,10 +524,10 @@ assert(out === '2011', `unexpected output: ${out}`)
 timeout_ms = 20000
 
 [[tests]]
-name = "wait_direct_user.macro_simplify"
+name = "order_direct_user.macro_simplify"
 desc = "A(i + 1); modify(i) in a sync body: the value read by `+` is the old one and the read after modify the new one. Pipeline: std::macro std::opt."
 kind = "behavior"
-case = "../../../cases/linear/byref/wait_direct_user.cml"
+case = "../../../cases/linear/byref/order_direct_user.cml"
 args = ["${case}", "std::macro", "std::opt"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -540,10 +540,10 @@ assert(out === '2011', `unexpected output: ${out}`)
 timeout_ms = 20000
 
 [[tests]]
-name = "wait_direct_user.inline_fvm"
+name = "order_direct_user.inline_fvm"
 desc = "A(i + 1); modify(i) in a sync body: the value read by `+` is the old one and the read after modify the new one. Pipeline: std::opt::inline std::fvm."
 kind = "behavior"
-case = "../../../cases/linear/byref/wait_direct_user.cml"
+case = "../../../cases/linear/byref/order_direct_user.cml"
 args = ["${case}", "std::opt::inline", "std::fvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -556,10 +556,10 @@ assert(out === '2011', `unexpected output: ${out}`)
 timeout_ms = 20000
 
 [[tests]]
-name = "wait_direct_user.simplify_tf"
+name = "order_direct_user.simplify_tf"
 desc = "A(i + 1); modify(i) in a sync body: the value read by `+` is the old one and the read after modify the new one. Pipeline: std::opt std::tf."
 kind = "behavior"
-case = "../../../cases/linear/byref/wait_direct_user.cml"
+case = "../../../cases/linear/byref/order_direct_user.cml"
 args = ["${case}", "std::opt", "std::tf"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -572,10 +572,10 @@ assert(out === '2011', `unexpected output: ${out}`)
 timeout_ms = 20000
 
 [[tests]]
-name = "wait_direct_user.macro_opt_jit"
+name = "order_direct_user.macro_opt_jit"
 desc = "A(i + 1); modify(i) in a sync body: the value read by `+` is the old one and the read after modify the new one. Pipeline: std::macro std::opt std::jit."
 kind = "behavior"
-case = "../../../cases/linear/byref/wait_direct_user.cml"
+case = "../../../cases/linear/byref/order_direct_user.cml"
 args = ["${case}", "std::macro", "std::opt", "std::jit"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -588,10 +588,10 @@ assert(out === '2011', `unexpected output: ${out}`)
 timeout_ms = 20000
 
 [[tests]]
-name = "wait_direct_user.graph"
+name = "order_direct_user.graph"
 desc = "`before(i + 1); modify(i)` in a sync body: the body orders its statements, so the graph has the control edge `before` -> `modify` even though `before` never touches `i`, and the read written after `modify` follows it. (The retired `wait` ordered the direct user of `i` instead: `+` -> `modify` and no `before` -> `modify`.)"
 kind = "behavior"
-case = "../../../cases/linear/byref/wait_direct_user.cml"
+case = "../../../cases/linear/byref/order_direct_user.cml"
 args = ["${case}", "std::gir"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]

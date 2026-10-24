@@ -38,7 +38,7 @@
  *                       the name of its type (empty for `indices`); flag A: `indices`
  *     SCOMP             tag: 0 for `{ ... }`, 1 for `( ... )`, 2 for `T { ... }` (then child 1
  *                       is the type node naming `T`)
- *     VARI, WAIT, ANNO, SACC  nothing
+ *     VARI, ANNO, SACC  nothing
  *
  * Ownership and lifetime. Nodes are made by a Tree (tree.h) in its arena and are never freed
  * one by one: a node, its child array, the names it points to and the constants it refers to

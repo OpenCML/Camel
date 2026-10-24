@@ -29,9 +29,9 @@
  * Three relations are kept apart (design 8.2): computation dependence is the graph's data
  * edges; a resource conflict is two accesses to overlapping parts of one resource, at least one
  * of them a write, which the queries of camel/runtime/resources.h find; asynchronous
- * completion is not the core's concern (a node's result is there when it has run). `sync` and
- * `wait` keep their meaning: they are how the front end orders conflicting effects in the graph
- * (control edges), never synchronisation primitives of a device.
+ * completion is not the core's concern (a node's result is there when it has run). `sync` keeps
+ * its meaning: a sync body is how the front end orders conflicting effects in the graph
+ * (control edges), never a synchronisation primitive of a device.
  *
  * An operator that declares nothing is read conservatively (conservativeResources): a pure one
  * touches no resource and returns a new value; any other reads, writes and may return every
