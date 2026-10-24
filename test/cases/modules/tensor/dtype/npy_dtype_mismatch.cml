@@ -1,0 +1,13 @@
+// The element type the call declares must be the file's: an array of another element type is a
+// fault reported where the call stands, never a conversion (design principles 5.1, 5.5; handover
+// H466). The file holds int64 (the tree's only non-f32 `.npy`) and the call declares f32, so the
+// load faults before the value exists.
+module tensor_dtype_npy_dtype_mismatch
+
+import { load_npy } from tensor
+
+func main(): int sync {
+    let t = load_npy::<f32>('test/cases/modules/nn/fixtures/checkpoint-v1/odd.npy')
+    println(t)
+    return 0
+}

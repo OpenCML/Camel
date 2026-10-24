@@ -72,7 +72,7 @@ sync func spin(m: Block, i: int, steps: int, nb: int): Block {
     return if i >= steps then m else sync {
         let si = '{}'->format<i>
         let bi = '{}'->format<i % nb>
-        let x = load_npy(get_env('CAMEL_FT_BATCHES') + '/batch_' + bi + '.npy')
+        let x = load_npy::<f32>(get_env('CAMEL_FT_BATCHES') + '/batch_' + bi + '.npy')
         let vg = step(m, x)
         'CAMEL_BENCH step={} loss={}'->format<i, vg.0>->println
         let dump = get_env('CAMEL_FT_DUMP')

@@ -113,7 +113,9 @@ template <typename T> T readElement(const std::byte *src, bool swap) {
 
 } // namespace
 
-Array *loadNpy(const std::filesystem::path &path, mm::IAllocator &allocator) {
+Array *loadNpy(
+    const std::filesystem::path &path, mm::IAllocator &allocator,
+    std::optional<TypeCode> declaredElement) {
     std::ifstream in(path, std::ios::binary);
     if (!in) {
         fail(path, "cannot open file");
@@ -172,6 +174,25 @@ Array *loadNpy(const std::filesystem::path &path, mm::IAllocator &allocator) {
 
     // The file's element type is the tensor's: `load_npy` never converts (design principles
     // 5.1; design/arrays-memory plan 5.2). An f8 file is an f64 tensor, an i4 file an i32 one.
+    if (declaredElement.has_value()) {
+        // What the program declared for this load is checked here, where the file's own element
+        // type becomes known: a `.npy` file's dtype is decided by whoever wrote it, so the one
+        // thing that cannot be decided when the program is compiled is checked when it runs, at
+        // the call (the fault carries its position), and never repaired by a conversion
+        // (design principles 5.5: the runtime has no type information; handover H466).
+        const TypeCode declared = *declaredElement;
+        if (!isSupportedTensorScalar(declared)) {
+            fail(
+                path,
+                "the declared element type '" + elementTypeSpelling(declared) +
+                    "' is not one a .npy file holds");
+        }
+        if (dtype != declared) {
+            fail(
+                path, "the file holds " + elementTypeSpelling(dtype) + " and the program declares " +
+                          elementTypeSpelling(declared));
+        }
+    }
     Array *tensor = createTensor(dtype, h.shape, allocator);
     const uint64_t count = tensor->numel();
     std::vector<std::byte> raw(count * h.itemSize);

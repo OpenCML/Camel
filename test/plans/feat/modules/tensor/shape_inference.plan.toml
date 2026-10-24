@@ -89,7 +89,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "si_loaded_struct"
-desc = "A struct with a field loaded from a file, passed to a with parameter whose field is shaped: the field is named and the conversion is suggested for it."
+desc = "A struct with a field loaded from a file, passed to a with parameter whose field is shaped: the field is named (`Tensor<float32>`, the element type the load declared) and the conversion, which writes the shape alone, is suggested for it."
 kind = "negative"
 case = "../../../../cases/modules/tensor/shape_inference/loaded_struct.cml"
 args = ["${case}"]
@@ -97,7 +97,7 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ArgumentNeedsConversion"
 expect_diagnostic_line = 11
 expect_diagnostic_column = 17
-expect_output_contains = ["element .w of with-argument 1 ('p', for parameter 'm') has type 'Tensor', which is less exact than 'Tensor<float32, [3]>'", "'p.w as Tensor<f32, const [3]>'"]
+expect_output_contains = ["element .w of with-argument 1 ('p', for parameter 'm') has type 'Tensor<float32>', which is less exact than 'Tensor<float32, [3]>'", "'p.w as Tensor<f32, const [3]>'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 

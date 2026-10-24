@@ -7,8 +7,8 @@ func arithmetic(a: Tensor<f32>, b: Tensor<f32>): (Tensor<f32>, Tensor<f32>, Tens
 }
 func main(): int sync {
     let folder = get_env('TILES_TEST_OUT')
-    let a = load_npy(folder + '/a.npy') as Tensor<f32>
-    let b = load_npy(folder + '/b.npy') as Tensor<f32>
+    let a = load_npy::<f32>(folder + '/a.npy') as Tensor<f32>
+    let b = load_npy::<f32>(folder + '/b.npy') as Tensor<f32>
     let cpu = arithmetic(a, b)
     let gpu = download(run_preferred_resident<arithmetic>((a, b)))
     save_npy(cpu.0, folder + '/cpu0.npy')

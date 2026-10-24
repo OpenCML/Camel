@@ -63,14 +63,14 @@ timeout_ms = 10000
 
 [[tests]]
 name = "unshaped_argument"
-desc = "A tensor of unknown shape (loaded at run time) does not fit a parameter with a declared shape; the diagnostic names the argument, both types and the conversion to write (`t as Tensor<const [3]>`, see as_checked; `reshape` with a constant shape is the other checked way in, see reshape_gives_shape)."
+desc = "A tensor loaded at run time has the element type the load declared and an unknown shape, so it does not fit a parameter with a declared shape: the diagnostic names the argument, both types (`Tensor<float32>` and `Tensor<?, [3]>`) and the conversion to write (`t as Tensor<const [3]>`, which writes the shape alone because the element type already agrees -- see as_checked; `reshape` with a constant shape is the other checked way in, see reshape_gives_shape)."
 kind = "negative"
 case = "../../../../cases/modules/tensor/shape_types/unshaped_argument.cml"
 args = ["${case}"]
 envs = ["X=test/cases/modules/tensor/shape_types/x3.npy"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ArgumentNeedsConversion"
-expect_output_contains = ["argument 1 ('t', for parameter 'b') has type 'Tensor', which is less exact than 'Tensor<?, [3]>'", "'t as Tensor<const [3]>'"]
+expect_output_contains = ["argument 1 ('t', for parameter 'b') has type 'Tensor<float32>', which is less exact than 'Tensor<?, [3]>'", "'t as Tensor<const [3]>'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 

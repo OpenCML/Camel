@@ -52,16 +52,16 @@ func step(m: Gru, x: Tensor): (float, Gru) {
 
 func loaded(dir: string): Gru {
     return {
-        w_ir: load_npy(dir + '/w_ir.npy'), w_iz: load_npy(dir + '/w_iz.npy'), w_in: load_npy(dir + '/w_in.npy'),
-        w_hr: load_npy(dir + '/w_hr.npy'), w_hz: load_npy(dir + '/w_hz.npy'), w_hn: load_npy(dir + '/w_hn.npy'),
-        b_ir: load_npy(dir + '/b_ir.npy'), b_iz: load_npy(dir + '/b_iz.npy'), b_in: load_npy(dir + '/b_in.npy'),
-        b_hr: load_npy(dir + '/b_hr.npy'), b_hz: load_npy(dir + '/b_hz.npy'), b_hn: load_npy(dir + '/b_hn.npy'),
-        fc_w: load_npy(dir + '/fc_w.npy'), fc_b: load_npy(dir + '/fc_b.npy')
+        w_ir: load_npy::<f32>(dir + '/w_ir.npy'), w_iz: load_npy::<f32>(dir + '/w_iz.npy'), w_in: load_npy::<f32>(dir + '/w_in.npy'),
+        w_hr: load_npy::<f32>(dir + '/w_hr.npy'), w_hz: load_npy::<f32>(dir + '/w_hz.npy'), w_hn: load_npy::<f32>(dir + '/w_hn.npy'),
+        b_ir: load_npy::<f32>(dir + '/b_ir.npy'), b_iz: load_npy::<f32>(dir + '/b_iz.npy'), b_in: load_npy::<f32>(dir + '/b_in.npy'),
+        b_hr: load_npy::<f32>(dir + '/b_hr.npy'), b_hz: load_npy::<f32>(dir + '/b_hz.npy'), b_hn: load_npy::<f32>(dir + '/b_hn.npy'),
+        fc_w: load_npy::<f32>(dir + '/fc_w.npy'), fc_b: load_npy::<f32>(dir + '/fc_b.npy')
     }
 }
 
 func main(): int sync {
-    let r = step(loaded(get_env('PARAMS')), load_npy(get_env('X')))
+    let r = step(loaded(get_env('PARAMS')), load_npy::<f32>(get_env('X')))
     save_npy(reshape([r.0], [1]), get_env('OUT') + '/loss.npy')
     save_params(r.1, get_env('OUT') + '/params')
     println('ran')

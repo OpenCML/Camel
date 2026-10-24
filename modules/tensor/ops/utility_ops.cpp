@@ -132,9 +132,82 @@ slot_t showKernel(ArgsView &, ArgsView &norm, context::Context &) {
     });
 }
 
+/**
+ * The element types a `.npy` file can hold, with the operator name each one takes
+ * (`tensor:load_npy_f32`). The reader maps the five storage types the format's `descr` names
+ * (`'<f4'`, `'<f8'`, `'<i4'`, `'<i8'`, `'|b1'`) to exactly these (npy.cpp): a file of another
+ * element type is refused when it is read, and no call can declare one. The names are literals
+ * because an `OpDef` holds a `string_view`.
+ */
+constexpr std::pair<TypeCode, std::string_view> kNpyElementTypes[] = {
+    {TypeCode::Float32, "load_npy_f32"},
+    {TypeCode::Float64, "load_npy_f64"},
+    {TypeCode::Int32, "load_npy_i32"},
+    {TypeCode::Int64, "load_npy_i64"},
+    {TypeCode::Bool, "load_npy_bool"}};
+
+/**
+ * The element type of a `load_npy` call's result: the explicit type argument the call writes
+ * (`load_npy::<f32>(p)`) or the element type of the position the call stands in (`Tensor<f32,
+ * [3]>`, `f32[..]`). The result is `Tensor<dtype>`, the concrete element type, so every position
+ * that takes a tensor takes the load; the kernel checks the file's own element type against it
+ * and a mismatch is a fault at the call (design principles 5.5; handover H466). One resolver per
+ * element type a `.npy` file can hold, and none of them accepts a call that names no element type
+ * and stands where none is expected.
+ */
+class LoadNpyResolver final : public FuncTypeResolver {
+  public:
+    explicit LoadNpyResolver(TypeCode dtype) : dtype_(dtype) {}
+
+    std::optional<FunctionType *>
+    resolve(const type_vec_t &, const type_vec_t &, const ModifierSet &) const override {
+        return std::nullopt;
+    }
+
+    std::optional<FunctionType *> resolveForCall(
+        const type_vec_t &types,
+        Type *expected,
+        const type_vec_t &with,
+        const type_vec_t &norm,
+        static_args_t,
+        const ModifierSet &modifiers) const override {
+        if (!with.empty() || norm.size() != 1 || norm[0]->code() != TypeCode::String) {
+            return std::nullopt;
+        }
+        std::optional<TypeCode> requested;
+        if (types.size() == 1) {
+            requested = types[0]->code();
+        } else if (types.empty()) {
+            if (const auto target = tensorFactsOf(expected); target.dtype) {
+                requested = target.dtype;
+            }
+        }
+        if (!requested || *requested != dtype_) {
+            return std::nullopt;
+        }
+        return FunctionType::create({}, {{Type::String(), false}}, TensorType::get(dtype_), modifiers);
+    }
+
+    /// The candidate line a failed resolution prints (`NoMatchingFunction`): the element type the
+    /// call would have to name, and the result it gives.
+    std::string signature() const override {
+        return "::<" + std::string(dtypeName(dtype_)) + ">(path: string) => Tensor<" +
+               std::string(dtypeName(dtype_)) + ">";
+    }
+
+  private:
+    TypeCode dtype_;
+};
+
 slot_t loadNpyKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("load_npy", [&] {
-        return wrap(loadNpy(camel::utils::pathFromUtf8(stringArg(norm, 0)), resultAllocator()));
+        // The element type the call declares (`load_npy::<f32>(p)`, or the element type of the
+        // position the call stands in): the file's dtype must be that one. The scheduler puts the
+        // call's own type here, so a load inside a generic function checks the instance's type,
+        // not the declaration's `T` (design principles 5.5; handover H466).
+        const TensorFacts declared = tensorFactsOf(norm.resultType());
+        return wrap(loadNpy(
+            camel::utils::pathFromUtf8(stringArg(norm, 0)), resultAllocator(), declared.dtype));
     });
 }
 
@@ -235,17 +308,24 @@ std::vector<OpDef> utilityOps() {
             .infer     = voidResult,
             .kernel    = &showKernel,
             .traits    = impure});
-    defs.push_back(
-        OpDef{
-            .name      = "load_npy",
-            .exports   = {"load_npy"},
-            .params    = {{"path", ParamKind::String}},
-            .resultDoc = "Tensor",
-            .infer     = [](const InferContext &) -> std::optional<Type *> {
-                return TensorType::Default();
-            },
-            .kernel = &loadNpyKernel,
-            .traits = impure});
+    // One operator per element type a `.npy` file can hold. `load_npy`'s element type is the one
+    // the call declares, and no parameter can mention a type variable that is the *result's*
+    // element type, so the signature is computed rather than declared: the entry in
+    // `stdlib/signatures/tensor.cml` is the reference, `LoadNpyResolver` is the source, and the
+    // group below is what a call resolves against (handover H466; design principles 6.4).
+    for (const auto &[dtype, name] : kNpyElementTypes) {
+        defs.push_back(
+            OpDef{
+                .name      = name,
+                .exports   = {},
+                .params    = {{"path", ParamKind::String}},
+                .resultDoc = "Tensor",
+                .infer     = [dtype](const InferContext &) -> std::optional<Type *> {
+                    return TensorType::get(dtype);
+                },
+                .kernel = &loadNpyKernel,
+                .traits = impure});
+    }
     defs.push_back(
         OpDef{
             .name      = "save_npy",
@@ -310,6 +390,15 @@ std::vector<OpDef> utilityOps() {
             .kernel = &libraryKernel,
             .traits = {}});
     return defs;
+}
+
+oper_group_ptr_t loadNpyOperatorGroup() {
+    std::vector<std::pair<std::string, type::resolver_ptr_t>> rules;
+    for (const auto &[dtype, name] : kNpyElementTypes) {
+        rules.emplace_back(
+            std::string("tensor:") + std::string(name), std::make_shared<LoadNpyResolver>(dtype));
+    }
+    return OperatorGroup::create("load_npy", rules);
 }
 
 } // namespace camel::tensor::ops

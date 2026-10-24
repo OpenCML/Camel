@@ -359,6 +359,25 @@ export func cast(t: Tensor | number[], dtype: string): Tensor
 // `show` is declared: its result is fixed `void` and its umbrella parameter is two declarations
 // (a tensor, and any array). See `stdlib/tensor.cml`.
 
+// `load_npy` is computed: the element type of its result is the one the call declares, and a
+// declaration's parameters cannot mention a type variable that only the result mentions. Its
+// group is `loadNpyOperatorGroup` in `modules/tensor` (the `#op` tag below names its rules): one
+// per element type a `.npy` file can hold.
+
+/// The tensor a NumPy `.npy` file holds, as the element type the program declares: the extents are
+/// the file's (read them with `shape`, or check them with `as`), and the file's element type must
+/// be `T` -- a file of another element type is a fault, never a conversion (design principles 5.1,
+/// 5.5). `T` is `f32`, `f64`, `i32`, `i64` or `bool`, the element types the format's storage types
+/// (`'<f4'`, `'<f8'`, `'<i4'`, `'<i8'`, `'|b1'`) map to, exactly the type given. It is written at
+/// the call (`load_npy::<f32>(p)`) or taken from the type of the position the call stands in
+/// (`Tensor<f32, [3]>`, `f32[..]`); `T` is the one type variable no parameter mentions, so a call
+/// that says neither is not a use of this operator.
+/// @effect reads a file
+/// @fails fault `RuntimeError` when the file is missing, is not a NumPy file, holds a storage type the module does not read, or holds another element type than `T`
+/// @example load_npy::<f32>('x.npy')
+#op<'tensor:load_npy_*'>
+export func load_npy::<T>(path: string): T[..]
+
 // ---- binary form ----
 
 /// A tensor of the given shape made of little-endian elements. The element type is the explicit

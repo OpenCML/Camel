@@ -81,7 +81,7 @@ func startE(x: Tensor): Hold {
 }
 
 func main(): int sync {
-    let x = load_npy('x.npy')
+    let x = load_npy::<f32>('x.npy')
     let a = start(x)
     save_npy(a.h, 'rec_0.npy')
     save_npy(a.acc, 'rec_1.npy')

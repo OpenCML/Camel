@@ -28,6 +28,7 @@
 #include "kernels/parallel.h"
 #include "npy.h"
 #include "ops/binary_ops.h"
+#include "ops/catalog.h"
 #include "ops/registry.h"
 #include "passes/fuse.h"
 #include "tensor.h"
@@ -51,13 +52,16 @@ class TensorExecutor : public Executor {
 /// computed, is also exported under the type namespace (`Tensor.shape`): a declaration cannot
 /// write that alias, and the compiler points it at the declaration when the declaration
 /// replaces the module's entity for the name (Module::replaceTypeQualifiedAliases).
+/// `load_npy` is not among them: the element type of its result is the one the call declares
+/// (`load_npy::<f32>(p)`), and a declaration's parameters cannot mention a type variable that is
+/// the result's element type, so its signature is computed (`loadNpyOperatorGroup`, recorded in
+/// `stdlib/signatures/tensor.cml`, handover H466).
 constexpr std::string_view kDeclaredOperators[] = {
     "dim",
     "gemm_backend",
     "gemm_library",
     "gemm_library_threads",
     "gemm_threads",
-    "load_npy",
     "num_threads",
     "numel",
     "save_npy",
@@ -85,6 +89,9 @@ TensorModule::TensorModule(context_ptr_t ctx) : BuiltinModule("tensor", ctx) {
     const auto binary = camel::tensor::ops::fromBytesOperatorGroup();
     exportEntity(Reference("from_bytes"), binary);
     exportEntity(Reference(std::vector<std::string>{"Tensor"}, "from_bytes"), binary);
+    const auto npyLoad = camel::tensor::ops::loadNpyOperatorGroup();
+    exportEntity(Reference("load_npy"), npyLoad);
+    exportEntity(Reference(std::vector<std::string>{"Tensor"}, "load_npy"), npyLoad);
     for (const auto &group : OpRegistry::instance().operatorGroups("tensor")) {
         if (!isDeclaredOperator(group->name())) {
             exportEntity(group->name(), group);

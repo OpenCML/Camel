@@ -98,8 +98,8 @@ sync func loop_ce_adam(m: LoraMlp, st: OptimizerState, i: int, steps: int, nb: i
     return if i >= steps then (m, st) else sync {
         let bi = '{}'->format<i % nb>
         let dir = get_env('CAMEL_FT_BATCHES')
-        let x = load_npy(dir + '/batch_' + bi + '.npy')
-        let t = load_npy(dir + '/target_' + bi + '.npy')
+        let x = load_npy::<f32>(dir + '/batch_' + bi + '.npy')
+        let t = load_npy::<f32>(dir + '/target_' + bi + '.npy')
         let vg = step_ce_adam(m, st, x, t, lr)
         'CAMEL_BENCH step={} loss={}'->format<i, vg.0>->println
         return loop_ce_adam(vg.1, vg.2, i + 1, steps, nb, lr)
@@ -118,8 +118,8 @@ sync func loop_ce(m: LoraMlp, i: int, steps: int, nb: int): LoraMlp {
     return if i >= steps then m else sync {
         let bi = '{}'->format<i % nb>
         let dir = get_env('CAMEL_FT_BATCHES')
-        let x = load_npy(dir + '/batch_' + bi + '.npy')
-        let t = load_npy(dir + '/target_' + bi + '.npy')
+        let x = load_npy::<f32>(dir + '/batch_' + bi + '.npy')
+        let t = load_npy::<f32>(dir + '/target_' + bi + '.npy')
         let vg = step_ce(m, x, t)
         'CAMEL_BENCH step={} loss={}'->format<i, vg.0>->println
         return loop_ce(vg.1, i + 1, steps, nb)
@@ -148,7 +148,7 @@ func do_export_full(m: LoraMlp): int sync {
 }
 
 func do_step_dump(m: LoraMlp): int sync {
-    let x = load_npy(get_env('CAMEL_BENCH_INPUT'))
+    let x = load_npy::<f32>(get_env('CAMEL_BENCH_INPUT'))
     let vg = step(m, x)
     'CAMEL_BENCH loss={}'->format<vg.0>->println
     save_params(vg.1, get_env('CAMEL_FT_DUMP'))
@@ -157,16 +157,16 @@ func do_step_dump(m: LoraMlp): int sync {
 
 func do_export_ce(m: LoraMlp): int sync {
     let dir = get_env('CAMEL_FT_BATCHES')
-    let x = load_npy(dir + '/batch_0.npy')
-    let t = load_npy(dir + '/target_0.npy')
+    let x = load_npy::<f32>(dir + '/batch_0.npy')
+    let t = load_npy::<f32>(dir + '/target_0.npy')
     export_model(step_ce, (m, x, t), get_env('CAMEL_BENCH_EXPORT'))
     return 0
 }
 
 func do_export_ce_adam(m: LoraMlp): int sync {
     let dir = get_env('CAMEL_FT_BATCHES')
-    let x = load_npy(dir + '/batch_0.npy')
-    let t = load_npy(dir + '/target_0.npy')
+    let x = load_npy::<f32>(dir + '/batch_0.npy')
+    let t = load_npy::<f32>(dir + '/target_0.npy')
     let lr = adam_lr()
     export_model(
         (mm: LoraMlp, st: OptimizerState, xx: Tensor, tt: Tensor): (float, LoraMlp, OptimizerState) => step_ce_adam(mm, st, xx, tt, lr),
