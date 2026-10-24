@@ -1,20 +1,28 @@
-/** Every rule of the standard rules passes the check (rewrite design 5.2). */
+/**
+ * Every rule of the standard rules passes the check (rewrite design 5.2).
+ *
+ * The integer and floating laws are one generic law per fact since the fold (`when is_integer::<T>()`,
+ * `when is_float::<T>()`), and `check` does not yet walk a generic rule's instances: it says so
+ * plainly for each of them ("unchecked ...") instead of checking one type and calling the family
+ * done (the ruling of 2026-10-23 on `generic-rule-check-surface-and-multi-parameter-instances`, §1:
+ * with no program, `check` is to use "the types the operator group registered" that satisfy the
+ * condition). The rules below that are not generic -- the tensor laws, `float_double`,
+ * `float32_double` -- are checked as before, and the pending walk is what this list is waiting for.
+ */
 module check_library
 import { check } from rewrite
 import {
         int_add_self, int_add_zero, int_combine, int_combine_one, int_distribute, int_div_one, int_fold, int_fold_add, int_mul_one, int_mul_zero, int_neg_neg, int_sub_self, int_sub_zero,
-        int32_add_self, int32_add_zero, int32_combine, int32_combine_one, int32_distribute, int32_div_one, int32_fold, int32_fold_add, int32_mul_one, int32_mul_zero, int32_neg_neg, int32_sub_self, int32_sub_zero,
         float_add_minus_zero, float_add_self, float_combine, float_combine_mixed, float_combine_one, float_combine_one_mixed, float_div_one, float_double, float_fold, float_mul_one, float_neg_neg, float_sub_zero,
-        float32_add_minus_zero, float32_add_self, float32_combine, float32_combine_mixed, float32_combine_one, float32_combine_one_mixed, float32_div_one, float32_double, float32_fold, float32_mul_one, float32_neg_neg, float32_sub_zero,
+        float32_double,
         tensor_f32_add_minus_zero, tensor_f32_add_self, tensor_f32_combine, tensor_f32_combine_mixed, tensor_f32_combine_one, tensor_f32_combine_one_mixed, tensor_f32_div_one, tensor_f32_double, tensor_f32_fold, tensor_f32_mul_one, tensor_f32_neg_neg, tensor_f32_sub_zero, tensor_i64_distribute
 } from rules
 
 func main(): int sync {
     print(check([
         int_add_self, int_add_zero, int_combine, int_combine_one, int_distribute, int_div_one, int_fold, int_fold_add, int_mul_one, int_mul_zero, int_neg_neg, int_sub_self, int_sub_zero,
-        int32_add_self, int32_add_zero, int32_combine, int32_combine_one, int32_distribute, int32_div_one, int32_fold, int32_fold_add, int32_mul_one, int32_mul_zero, int32_neg_neg, int32_sub_self, int32_sub_zero,
         float_add_minus_zero, float_add_self, float_combine, float_combine_mixed, float_combine_one, float_combine_one_mixed, float_div_one, float_double, float_fold, float_mul_one, float_neg_neg, float_sub_zero,
-        float32_add_minus_zero, float32_add_self, float32_combine, float32_combine_mixed, float32_combine_one, float32_combine_one_mixed, float32_div_one, float32_double, float32_fold, float32_mul_one, float32_neg_neg, float32_sub_zero,
+        float32_double,
         tensor_f32_add_minus_zero, tensor_f32_add_self, tensor_f32_combine, tensor_f32_combine_mixed, tensor_f32_combine_one, tensor_f32_combine_one_mixed, tensor_f32_div_one, tensor_f32_double, tensor_f32_fold, tensor_f32_mul_one, tensor_f32_neg_neg, tensor_f32_sub_zero, tensor_i64_distribute
     ], 200, 7))
     return 0
