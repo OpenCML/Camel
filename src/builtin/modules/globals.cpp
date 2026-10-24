@@ -2137,7 +2137,9 @@ std::make_shared<StaticCheckedResolver>(
         // The elements a `for` takes from a string (design principles 11.1): its code points,
         // each a one-character string. The loop builder converts a string to that array once,
         // before the first round; a program does not write `__iter__` itself. A map adds its
-        // own overload (collection.cpp), and the tensor module adds one for tensors.
+        // own overload (collection.cpp); the tensor module had one too, and it went with the P4
+        // deletion step -- a numeric array is the core's to iterate (`t[i]` along the first
+        // dimension), so no module takes part in a `for` over a tensor.
         OperatorGroup::create(
             "__iter__",
             {

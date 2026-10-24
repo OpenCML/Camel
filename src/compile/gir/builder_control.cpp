@@ -2665,7 +2665,7 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
     // from `core.loopDomain` (runtime/core_facts.cpp, constantLength). The author's ruling of
     // 2026-10-24 (docs/handover/reviews/questions-2026-10-24-evening.md section
     // loop-domain-through-the-tensor-iterator) states it once, in the core, for every array;
-    // the module's `iter` goes away with the P4 alias (one thing, one spelling).
+    // the module's `iter` went with the P4 alias (one thing, one spelling).
     //
     // `__iter__` reaches a compilation unit only if it imports the module that declares it, and
     // the standard library's own array code compiles without it.
