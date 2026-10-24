@@ -4,5 +4,9 @@ error[SyntaxDiag::MissingToken]: Expected ':' before 'int'.
  3 | func f(a int): int { return a }
    |          ^^^
 help: One token is missing at the caret and the message names it; nothing else in the file has to change.
+help: insert ':'
+   |
+ 3 | func f(a: int): int { return a }
+   |         +
 
 camel: 1 error

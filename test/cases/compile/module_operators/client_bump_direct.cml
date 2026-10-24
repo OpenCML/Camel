@@ -1,0 +1,16 @@
+/**
+ * `+=` on a module's type written where the type's module is imported, and outside any generic
+ * function: the plain `+` is the declaring module's exported one, so the rebinding works here
+ * too (design principles 4.2, 5.7).
+ */
+module client_bump_direct
+
+import { Box, mk } from models
+
+func main(): int sync {
+    var b: Box = mk(1)
+    let c: Box = mk(2)
+    b += c
+    println(b.v)
+    return 0
+}

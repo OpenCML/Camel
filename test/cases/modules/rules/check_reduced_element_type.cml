@@ -1,0 +1,51 @@
+/**
+ * A rule instance at `bf16` or `f16` is checked, not skipped.
+ *
+ * `is_float::<T>()` covers the two reduced-precision floating types (stdlib/types.cml; design
+ * principles 7.3), so the maker builds one instance of every floating law per element type,
+ * `bf16` and `f16` included. Until this lane, the check could make no *value* of either type:
+ * every such instance was `sampled` with `evidence none` and the reason
+ *
+ *   the check cannot make a value of type 'bf16'
+ *
+ * (the ruling of 2026-10-23 on `check-generic-instance-space`, 3, opened this lane for exactly
+ * that: "bf16/f16 单开一条车道：它们的元素类型 epsilon 是 2^-8 / 2^-10 ... 把这两个元素类型做出
+ * 来，让相关法则能在它们上面被检验"). The sampler now draws a `bf16` and an `f16` as it draws an
+ * f32 -- the drawn value is rounded once into the element type, the slot holds the element's own
+ * two-byte pattern and the value compared is the f32 it widens to exactly -- a tensor of either
+ * element type is two bytes per element, and the comparison uses the element epsilon of the type
+ * the instance is at (`elementEpsilon`: bf16 2^-8, f16 2^-10) rather than f32's.
+ *
+ * The case reads three things:
+ *
+ *   * the ruling's own law, `float_add_minus_zero`, at `float`, `f32`, `bf16` and `f16`: the row
+ *     of each reduced-precision instance says `evidence samples 200` where it used to say
+ *     `evidence none`, and the whole report no longer contains the reason above;
+ *   * `float_combine`, a law that asks for `reassociate` and whose two sides therefore differ by
+ *     a rounding: its `bf16` and `f16` instances are compared with their own element epsilon. A
+ *     comparison with f32's epsilon (or with nothing, the old byte comparison) would either
+ *     refute a legal reassociation or accept an illegal one, so this is the row that says the
+ *     epsilon is the element type's and not a constant;
+ *   * the f32 and f64 instances of the same laws, and `float32_double`, which is not generic at
+ *     all: their rows are byte for byte what they were.
+ *
+ * The count of rows is pinned too, because the way to make a reduced-precision instance quiet
+ * would be to stop making it: the report has one row per instance the condition admits.
+ */
+module check_reduced_element_type
+
+import { check, check_text, check_row_count, check_verdict, check_proposition, check_evidence, check_reason } from rewrite
+import {
+        float_add_minus_zero, float_mul_one, float_combine, float_fold, float32_double
+} from rules
+
+/// The report of the five laws, printed as its fixed rendering (the acceptance surface) and as
+/// the columns of its rows, so the text and the table are read here as they are everywhere else.
+func main(): int sync {
+    let report = check([
+        float_add_minus_zero, float_mul_one, float_combine, float_fold, float32_double
+    ], 200, 7)
+    print(check_text(report))
+    println("rows", check_row_count(report))
+    return 0
+}

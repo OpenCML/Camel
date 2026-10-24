@@ -1,0 +1,37 @@
+/**
+ * `check`'s `program` parameter is a `Program?` whose default is `null` (the ruling of 2026-10-24
+ * on `check-program-parameter`; design principles 4.4): a call may leave it out, and a call may
+ * give the program the check is about. `samples` and `seed` have defaults too, so the one-argument
+ * call the ruling writes is written as it stands there.
+ *
+ * A generic law's candidate set is the types the operator groups registered, and then the types a
+ * program the call was given has: `sum_swap` has no instance at `Vec` unless the program names it,
+ * which is what the two reports below differ in.
+ */
+module check_program_parameter
+
+import { check } from rewrite
+import { current, Program } from graph
+import { Tensor } from tensor
+
+type Vec = Tensor<f32, [3]>
+
+rule add_zero(x: int) { x + 0 => x }
+rule sum_swap::<T>(a: T, b: T) { a + b => b + a }
+
+// The program's own type: no operator group registered `Vec`, so only a program that has it can
+// add it to a law's candidate set.
+func touch(x: Vec): Vec {
+    return x + x
+}
+
+func main(): int sync {
+    // The `program` parameter left out: its default is the null constant of `Program?`.
+    println(check([add_zero, sum_swap], 100, 1))
+    // The parameter given: the program's own types join the candidate set.
+    let here: Program? = current()
+    println(check([add_zero, sum_swap], 100, 1, here))
+    // Every parameter but the rules left out.
+    println(check([add_zero, sum_swap]))
+    return 0
+}

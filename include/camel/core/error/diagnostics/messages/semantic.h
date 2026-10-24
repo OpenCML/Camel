@@ -356,7 +356,11 @@ enum class SemanticDiag : uint32_t {
     CompOperandGenericWithoutType = 0x0001E4,
     /// The interval of two integers is written `a..b` and nothing else: the two-parameter `range(a, b)`
     /// the language used to have is gone (design principles 4.2; the author's ruling of 2026-10-24).
-    RangeTwoArgumentsRemoved    = 0x0001E5,
+    RangeTwoArgumentsRemoved = 0x0001E5,
+    /// `range(a, b, 0)` is no sequence at all: the step never moves (design principles 4.2; the
+    /// author's ruling of 2026-10-24 on `h426-interval-step-form`, which makes a step of 0 a fault
+    /// and a constant one a compile-time error).
+    RangeStepZero               = 0x0001E6,
     ReducedPrecisionUnsupported = 0x0001D7,
     // #impl<f> (design principles 10.4): the Camel body of the function is its semantics and the
     // body-less declaration f of the same module is the operator that runs it. The graph builder
