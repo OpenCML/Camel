@@ -340,6 +340,19 @@ own sentence: **rank 0 is the element type itself**.
     `Tensor` parameter must be instantiated per call site is asked, with these measurements, in
     `docs/handover/questions/bare-tensor-parameter-instantiation.md`; if the author rules yes,
     (a) is a compatibility path rather than the fix, and this entry says so either way.
+    **(a) stays on this branch, unmerged, deliberately** — its own admission is the reason: no
+    measurement reaches it while `matmul_grad_rhs` refuses, and code no measurement reaches is
+    not what this project puts on develop. It is committed and safe here, it rides with the
+    flip's landing, and (b)'s ruling decides whether it is the fix or a compatibility path. It is
+    not forgotten code; it is code waiting for its precondition. The question itself was
+    cherry-picked onto develop (`8d9095f5b`) so the author can see it — a question living only on
+    an unmerged branch is invisible to him.
+
+- **The rank-0 chapter, closed, and what waits on (b)**: `modules/onnx/lowering_grad.cpp` has
+  **eight** lowerings that require a stated rank of an operand (`sum_to`, `expand_axis`, the two
+  `matmul_grad_*`, the two conv gradients, and two more), and `sum_to` is now the one that no
+  longer does. Eight, of which one is dynamic, is how much of the ONNX gradient path is waiting
+  on the (b) ruling rather than on more engineering.
   - **Then**: `declaration_evaluator`'s `EVAL_MISMATCH op=tensor:add (f32[], f32[]) … no instance
     for a call the kernel accepts` — 1 entry. The harness reports a rank-0 operand as the element
     (`f32[]` prints for rank 0) while the kernel boxes it, so the instance search
