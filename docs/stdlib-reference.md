@@ -1299,8 +1299,9 @@ new: (values: Tensor | number[]) => Tensor
 ```
 
 A tensor made of a nested number array (or of a tensor, copied into contiguous row-major
-storage); the element type follows the values: `f32` for floats, `int64` for integers, `bool`
-for booleans.
+storage); the element type follows the values: `float` for a float (design principles 5.1: a
+float literal's own type is `float`, which is `f64`), `int64` for an integer and `bool` for a
+boolean.
 
 - Pure.
 - Example: `new([[1.0, 2.0], [3.0, 4.0]])`

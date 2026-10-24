@@ -1550,6 +1550,35 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     };
 
     FunctionType *argumentSignature = signatureForArgumentContext(targetNode);
+    // The type of the position the call stands in, aligned with the callee's result type, solves
+    // the type variables that result mentions (design principles 5.1, 5.5; the ruling of
+    // 2026-10-23 on `expected-type-through-literals-and-calls`). Every variable the result
+    // mentions — not only one that appears in the result alone — is solved here, and a parameter
+    // that mentions one of them is a position with an expected type like any other: the
+    // arguments are built with the substituted parameter, so `keep([1.0, 2.0], 2)` in an `f32[]`
+    // position builds the array as an `f32[]` and a literal takes the type of that position
+    // while it is made, as it does in a declaration, a return or a field. The variables the
+    // arguments themselves determine are solved after they are built, as they were; a parameter
+    // this leaves open gives its argument no expected type.
+    //
+    // A `void` position is not a requirement but the absence of one: a value written where nothing
+    // is wanted is discarded (`let x = <call>` binds the value to a name and checks it against
+    // nothing), so it solves no variable — `sum([1, 2, 3])` there is a `sum` of an `int[]`, not of
+    // a `void[]`. A result-only variable solved from a discarded position would otherwise take
+    // `void` as its type.
+    type_bindings_t positionBindings;
+    if (argumentSignature != nullptr && expectedResult != nullptr &&
+        expectedResult->code() != TypeCode::Void && argumentSignature->hasExitType() &&
+        containsTypeVar(argumentSignature)) {
+        unifyTypeVars(argumentSignature->exitType(), expectedResult, positionBindings);
+    }
+    const auto parameterInPosition = [&](Type *parameter) -> Type * {
+        if (parameter == nullptr || positionBindings.empty()) {
+            return parameter;
+        }
+        Type *solved = substituteTypeVars(parameter, positionBindings);
+        return containsTypeVar(solved) ? nullptr : solved;
+    };
     // `v = e`: the value takes the type of the place it is written to, as inPlaceRebindingOf
     // already does for the forms it rewrites. The assignment's own signature follows the
     // place's type, so the call gives the value no expected type of its own; here only a
@@ -1610,6 +1639,10 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         if (isAssignment && i == 2 && assignedType != nullptr) {
             wanted = assignedType;
         }
+        // The type variables the position solved are in the parameter now (design principles
+        // 5.1, 5.5): a parameter that still mentions one gives its argument no expected type,
+        // as it did.
+        wanted = parameterInPosition(wanted);
         ExpectedValueScope argumentScope(
             expectedValueType_,
             wanted && !containsTypeVar(wanted) ? wanted : nullptr);

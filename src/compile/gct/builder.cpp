@@ -3984,11 +3984,13 @@ node_ptr_t Builder::visitArrayData(const AST::node_ptr_t &ast) {
     }
 
     auto arrayData = factory.build();
-    if (!dangling) {
-        // Every element is a constant: the array is one literal, and the values its elements
-        // were written as are kept for the type it may take later (GIR).
-        tree_->setLiteralElements(arrayData, std::move(literalElements));
-    }
+    // The value each element was written as is kept even when another element is computed: the
+    // position of the whole literal decides the type of the elements it did write, and an element
+    // converted from the double it was lowered to instead of from the value written is rounded
+    // twice (design principles 5.1; the ruling of 2026-10-23 on
+    // `expected-type-through-literals-and-calls`, item 3). A computed element has no value of
+    // its own, but it keeps its position, which is where it is reported.
+    tree_->setLiteralElements(arrayData, std::move(literalElements));
     node_ptr_t res = tree_->makeData(arrayData);
 
     if (dangling) {
@@ -4285,6 +4287,14 @@ node_ptr_t Builder::visitDataInto(const AST::node_ptr_t &ast, Type *type, bool &
             }
         } else if (load->dataType() == AST::DataType::Struct && type->code() == TypeCode::Struct) {
             return visitStructInto(ast, type, entered);
+        } else if (load->dataType() == AST::DataType::Tuple && type->code() == TypeCode::Tuple) {
+            // A tuple literal is positional like an array, and its elements are positions with an
+            // expected type too (`let t: (f32, f32) = (1.0, 2.0)`; design principles 5.1). Built
+            // as the declared type, each element is converted from the value it was written as;
+            // left to declaredValue, the whole tuple was converted from the doubles its elements
+            // had been lowered to, and every element was rounded twice (the ruling of 2026-10-23
+            // on `expected-type-through-literals-and-calls`, item 3).
+            return visitTupleInto(ast, type, entered);
         }
     }
     if (elemType == nullptr || ast->type() != AST::LoadType::Data ||
@@ -4401,9 +4411,13 @@ node_ptr_t Builder::visitArrayInto(const AST::node_ptr_t &ast, Type *arrayType, 
         }
     }
     const data_ptr_t built = factory.build();
-    if (!dangling) {
-        tree_->setLiteralElements(built, std::move(literalElements));
-    }
+    // Each element's value as it was written is kept even when another element of the literal is
+    // computed (design principles 5.1): the position of the whole literal decides the type of
+    // the elements it did write, and an element converted from the double it was lowered to
+    // instead of from the value written is rounded twice (the ruling of 2026-10-23 on
+    // `expected-type-through-literals-and-calls`, item 3). A computed element has no value of
+    // its own, but it keeps its position, which is where it is reported.
+    tree_->setLiteralElements(built, std::move(literalElements));
     node_ptr_t res = tree_->makeData(built);
     // The literal is the value of the type asked for when the two types are the same. When
     // they are not (a named struct type, say), the caller still applies the declared value or
@@ -4414,6 +4428,73 @@ node_ptr_t Builder::visitArrayInto(const AST::node_ptr_t &ast, Type *arrayType, 
         res = execNode;
     }
     LEAVE("ArrayData");
+    return res;
+}
+
+/// The tuple literal `ast` built with every element in the type its position gives it
+/// (`let t: (f32, f32) = (1.0, 2.0)`, `let p: (P, int) = (p0, 1)`): a literal element becomes
+/// the element type exactly, converted from the value it was written as; an element that is
+/// computed has no value of its own and keeps its position as a hole, and an element that is
+/// not a literal keeps its own type, which the GIR builder reports if it does not fit (design
+/// principles 5.1). Only when the literal writes as many elements as the tuple type: any other
+/// shape is left to the ordinary build, which reports it.
+node_ptr_t Builder::visitTupleInto(const AST::node_ptr_t &ast, Type *tupleType, bool &entered) {
+    ENTER("TupleData");
+    entered           = false;
+    auto *tType       = tt::as_ptr<TupleType>(tupleType);
+    const auto &items = *ast->atAs<AST::RepeatedLoad>(0);
+    if (tType == nullptr || items.size() != tType->size()) {
+        LEAVE("TupleData");
+        return visitData(ast);
+    }
+    for (size_t i = 0; i < tType->size(); ++i) {
+        if (tType->typeAt(i) == nullptr || containsTypeVar(tType->typeAt(i))) {
+            LEAVE("TupleData");
+            return visitData(ast);
+        }
+    }
+    // The tuple is the one the position names, as for an array (`visitArrayInto`: the element
+    // type comes from the position, not from the elements): a computed element is a hole with
+    // no type of its own, and the position's type is what the remaining elements are converted
+    // into. Left to the factory, the type would come from the elements — the hole becoming
+    // whatever a hole is — and a literal nested in another literal would then fall back to its
+    // ordinary build and lose the position's element types (design principles 5.1; the ruling
+    // of 2026-10-23 on `expected-type-through-literals-and-calls`, item 3).
+    data_vec_t data;
+    bool dangling       = false;
+    node_ptr_t execNode = makeExec(false, true);
+    std::vector<Tree::LiteralElement> literalElements;
+    for (size_t i = 0; i < items.size(); ++i) {
+        Type *elemType      = tType->typeAt(i);
+        bool nested         = false;
+        node_ptr_t dataNode = visitDataInto(items[i], elemType, nested);
+        if (!nested) {
+            dataNode = literalNodeInType(dataNode, elemType, items[i]);
+        }
+        literalElements.push_back(writtenElement(dataNode));
+        auto [element, elementDangling] = extractData(dataNode, execNode, dangling);
+        if (elementDangling) {
+            dangling = true;
+        }
+        if (!elementDangling && (element == nullptr || element->type() == nullptr ||
+                                 !elemType->assignableFrom(element->type()))) {
+            // An element written as a variable keeps its own type (design principles 5.1): the
+            // tuple is of an unnamed tuple type whose element is of another type, and the
+            // position it is written in reports it, as it would without this build.
+            LEAVE("TupleData");
+            return visitData(ast);
+        }
+        data.push_back(element);
+    }
+    const data_ptr_t built = TupleData::create(tupleType, std::move(data));
+    tree_->setLiteralElements(built, std::move(literalElements));
+    node_ptr_t res = tree_->makeData(built);
+    entered        = true;
+    if (dangling) {
+        *execNode << res;
+        res = execNode;
+    }
+    LEAVE("TupleData");
     return res;
 }
 
@@ -4497,10 +4578,12 @@ node_ptr_t Builder::visitStructInto(const AST::node_ptr_t &ast, Type *structType
         LEAVE("StructData");
         return visitData(ast);
     }
-    if (!dangling) {
+    {
         // A StructData holds its fields in the type's order, so the elements are recorded in
         // that order whatever order they were written in; a diagnostic then points at the
-        // element that failed, not at the literal.
+        // element that failed, not at the literal. This holds when a field is computed too: the
+        // fields the literal did write keep the value they were written as (design principles
+        // 5.1; the ruling of 2026-10-23 on `expected-type-through-literals-and-calls`, item 3).
         const auto object = std::dynamic_pointer_cast<StructData>(built);
         std::vector<Tree::LiteralElement> literalElements;
         if (object != nullptr) {
@@ -4555,7 +4638,11 @@ node_ptr_t Builder::visitStructData(const AST::node_ptr_t &ast) {
     }
 
     auto structData = factory.build();
-    if (!dangling) {
+    {
+        // The value every field was written as is kept even when another field is computed: the
+        // position of the whole literal decides each written field's type, and a field converted
+        // from the double it was lowered to is rounded twice (design principles 5.1; the ruling
+        // of 2026-10-23 on `expected-type-through-literals-and-calls`, item 3).
         const auto object = std::dynamic_pointer_cast<StructData>(structData);
         std::vector<Tree::LiteralElement> literalElements;
         if (object != nullptr) {
@@ -4601,9 +4688,10 @@ node_ptr_t Builder::visitTupleData(const AST::node_ptr_t &ast) {
     }
 
     auto tupleData = factory.build();
-    if (!dangling) {
-        tree_->setLiteralElements(tupleData, std::move(literalElements));
-    }
+    // As for an array or a struct literal: each element's value as written is kept even when
+    // another element is computed (design principles 5.1; the ruling of 2026-10-23 on
+    // `expected-type-through-literals-and-calls`, item 3).
+    tree_->setLiteralElements(tupleData, std::move(literalElements));
     node_ptr_t res = tree_->makeData(tupleData);
 
     // If there are dangling nodes, attach them to the execution node
