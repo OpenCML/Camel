@@ -58,7 +58,7 @@ kind = "behavior"
 case = "../../../../cases/modules/tensor/shape_inference/row_loop.cml"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_contains = ["tensor([      5.,       7.,       9.], dtype=float32)", "42"]
+expect_stdout_contains = ["[5.0, 7.0, 9.0", "42"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 

@@ -769,7 +769,7 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
 expect_diagnostic_line = 10
 expect_diagnostic_column = 16
-expect_output_contains = ["Invalid call to '__mul__'", "(Tensor<float32, [3]>, float)", "the scalar operand has type 'float', but the tensor's element type is 'f32'", "write the conversion, f32(value)"]
+expect_output_contains = ["Invalid call to '__mul__'", "(f32[3], float)", "the scalar operand has type 'float', but the tensor's element type is 'f32'", "write the conversion, f32(value)"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
@@ -796,7 +796,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "context.tensor_literal_element_kind_in_instance"
-desc = "The element type of a generic body is the instantiation's (design principles 5.5), so the instance `half::<Tensor<int64, [4]>>` refuses `0.5` at the literal and the refusal names the instance. Before this the instance computed the f32 product and stopped on the return type instead."
+desc = "The element type of a generic body is the instantiation's (design principles 5.5), so the instance `half::<int[4]>` refuses `0.5` at the literal and the refusal names the instance. Before this the instance computed the f32 product and stopped on the return type instead."
 kind = "negative"
 case = "../../../cases/compile/literals/element_literal_not_representable_generic.cml"
 args = ["-E", "short", "${case}"]
@@ -804,7 +804,7 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::LiteralNotRepresentable"
 expect_diagnostic_line = 13
 expect_diagnostic_column = 16
-expect_output_contains = ["The literal '0.5' cannot be represented as type 'int'", "the value would be truncated", "in the instance 'half<Tensor<int64, [4]>>'"]
+expect_output_contains = ["The literal '0.5' cannot be represented as type 'int'", "the value would be truncated", "in the instance 'half<int[4]>'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 

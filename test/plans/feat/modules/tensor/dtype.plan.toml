@@ -255,6 +255,6 @@ args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
-expect_stdout = "gx tensor([[    0.1,     0.3,     0.7],\n        [    0.1,     0.3,     0.7]], dtype=float32)\ngp tensor([    1.1,     0.8,       1.], dtype=float32)\n"
+expect_stdout = "gx [[0.1, 0.3, 0.7], [0.1, 0.3, 0.7]]\ngp [1.1, 0.8, 1.0]\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000

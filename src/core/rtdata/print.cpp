@@ -67,7 +67,9 @@ void pushText(std::vector<PrintItem> &stack, std::string_view text) {
 /// Pushes the parts of one dimension of an array value: one bracket level per dimension, and the
 /// elements of the last dimension as slots that print by `elemType`. `base` is the flat index the
 /// dimension starts at. The items go on the stack in reverse, because the work list pops from the
-/// back (the opening bracket is written by the caller before the list is walked).
+/// back; the opening bracket of the outermost dimension is written by the caller before the list
+/// is walked, and every deeper level gets its own opening bracket pushed right after its rows
+/// (each row is a value of its own, so a rank-2 value prints `[[a, b], [c, d]]`).
 void pushArray(
     const Array *array, const Type *elemType, size_t dim, uint64_t base,
     std::vector<PrintItem> &stack) {
@@ -86,6 +88,7 @@ void pushArray(
             pushSlot(stack, array->getSlot(at), elemType);
         } else {
             pushArray(array, elemType, dim + 1, at, stack);
+            pushText(stack, "[");
         }
         if (i > 0) {
             pushText(stack, ", ");
