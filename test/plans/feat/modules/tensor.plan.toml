@@ -229,7 +229,7 @@ verify_script = """
 const out = input.normalized.stdout
 const e = match(/exp (\S+) (\S+) (\S+) (\S+) (\S+) (\S+)/, out)
 assert(Number(e[1]) === 1 && approx(e[2], Math.E, 1e-6) && approx(e[3], 1 / Math.E, 1e-7), `exp values ${e[0]}`)
-assert(e[4] === 'inf' && Number(e[5]) === 27 * 2 ** -149 && e[6] === 'true', `exp saturation ${e[0]}`) // e^-100 is the subnormal 27 * 2^-149, not 0
+assert(e[4] === 'inf' && Math.fround(Number(e[5])) === 27 * 2 ** -149 && e[6] === 'true', `exp saturation ${e[0]}`) // e^-100 is the subnormal 27 * 2^-149, not 0; its text is the shortest f32 round-trip (3.8e-44), so the value is rounded back to the f32 the check names
 const t = match(/tanh (\S+) (\S+) (\S+) (\S+)/, out)
 assert(Number(t[1]) === 0 && approx(t[2], Math.tanh(0.5), 1e-7) && Number(t[3]) === 1 && Number(t[4]) === -1, `tanh ${t[0]}`)
 const s = match(/sigmoid (\S+) (\S+) (\S+)/, out)
@@ -323,7 +323,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.output
-assert(text.includes("Invalid call to 'matmul' with argument types <> (Tensor<float32, [2, 3]>, Tensor<float32, [4, 5]>): matmul inner dimensions differ: 3 vs 4."), 'missing compile-time conflict detail')
+assert(text.includes("Invalid call to 'matmul' with argument types <> (f32[2, 3], f32[4, 5]): matmul inner dimensions differ: 3 vs 4."), 'missing compile-time conflict detail')
 assert(text.includes('SemanticDiag::ArgumentsRejected'), 'expected a semantic (compile-time) diagnostic')
 assert(!text.includes('unreachable'), 'nothing may run')
 }
@@ -615,7 +615,7 @@ case = "../../../cases/modules/tensor/numeric_contract.cml"
 args = ["${case}"]
 envs = ["CAMEL_TENSOR_ISA=generic"]
 expect_exit = 0
-expect_stdout_contains = ["matmul fma_step=0.0004883408546447754\nmatmul chain=16777216.0\nsoftmax equal=0.0\nsoftmax nan_count=3"]
+expect_stdout_contains = ["matmul fma_step=0.0004883408546447754\nmatmul chain=16777216.0\nsoftmax equal=0.0\nsoftmax axis=[nan, nan, nan]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
