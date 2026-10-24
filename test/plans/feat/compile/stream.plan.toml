@@ -6,7 +6,7 @@ desc = "The stream surface of H248: `f..g` and the interval `a..b` (H248 group 1
 
 [[tests]]
 name = "stream.composition"
-desc = "`f..g` is the composition `x => g(f(x))`: `(inc..dbl)(3)` is `dbl(inc(3))` = 8, not `inc(dbl(3))` = 7. It used to be ConstructNotSupported at the operator."
+desc = "`f..g` is the composition `(x) => g(f(x))`: `(inc..dbl)(3)` is `dbl(inc(3))` = 8, not `inc(dbl(3))` = 7. It used to be ConstructNotSupported at the operator."
 kind = "behavior"
 case = "../../../cases/compile/stream/composition.cml"
 args = ["${case}"]
@@ -58,7 +58,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "stream.comp_operand_not_unary"
-desc = "The composition `f..g` is the lambda `x => g(f(x))`, so `f` is unary: a left operand of two parameters has no reading, and the diagnostic says how many it takes."
+desc = "The composition `f..g` is the lambda `(x) => g(f(x))`, so `f` is unary: a left operand of two parameters has no reading, and the diagnostic says how many it takes."
 kind = "negative"
 case = "../../../cases/compile/stream/comp_operand_not_unary.cml"
 args = ["${case}"]
@@ -256,7 +256,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "stream.comp_expected_type"
-desc = "`f..g` is the lambda `x => g(f(x))` (design principles 4.2), so the function type the position expects is the type that lambda would have: it gives the composition its input - the parameter of `f` - and its output - the result of `g` - and it instantiates a generic operand where it stands, exactly as the lambda's calls are instantiated under that type. `let h: (x: int) => int = x => ident(ident(x))` passed before this, so the composition must too (the ruling is docs/handover/reviews/questions-2026-10-23.md, section generic-operands-of-composition). It used to be CompOperandMismatch at the `..`, with the operand printed as `void`."
+desc = "`f..g` is the lambda `(x) => g(f(x))` (design principles 4.2), so the function type the position expects is the type that lambda would have: it gives the composition its input - the parameter of `f` - and its output - the result of `g` - and it instantiates a generic operand where it stands, exactly as the lambda's calls are instantiated under that type. `let h: (x: int) => int = (x) => ident(ident(x))` passed before this, so the composition must too (the ruling is docs/handover/reviews/questions-2026-10-23.md, section generic-operands-of-composition). It used to be CompOperandMismatch at the `..`, with the operand printed as `void`."
 kind = "behavior"
 case = "../../../cases/compile/stream/comp_expected_type.cml"
 args = ["${case}"]
@@ -268,7 +268,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "stream.comp_chain"
-desc = "The expected type reaches every link of a chain: `f..g..h` is `x => h(g(f(x)))`, so the composition's input types `f`, what `f` returns types `g`, what `g` returns types `h`, and the result the position expects is what `h` gives. The three operands of this case take three different instances (`wrap::<int>`, `head::<int>`, `wrap::<int>`), which a distribution that handed them one and the same type could not produce. The lambda written out is the same value."
+desc = "The expected type reaches every link of a chain: `f..g..h` is `(x) => h(g(f(x)))`, so the composition's input types `f`, what `f` returns types `g`, what `g` returns types `h`, and the result the position expects is what `h` gives. The three operands of this case take three different instances (`wrap::<int>`, `head::<int>`, `wrap::<int>`), which a distribution that handed them one and the same type could not produce. The lambda written out is the same value."
 kind = "behavior"
 case = "../../../cases/compile/stream/comp_chain.cml"
 args = ["${case}"]

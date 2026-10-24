@@ -45,7 +45,7 @@ std::optional<std::string_view> binaryOperatorGroup(std::string_view symbol);
 /// The name the compiler writes for `a..b` before the two readings of the construct are told
 /// apart (design principles 4.2; the author's ruling of 2026-10-24 on
 /// `h248-generator-and-composition`): between two functions it is the composition `f..g`, the
-/// lambda `x => g(f(x))`, and between two integers it is the interval `[a, b)`. The graph
+/// lambda `(x) => g(f(x))`, and between two integers it is the interval `[a, b)`. The graph
 /// builder writes the construct as one call of this name and the GIR builder resolves it, since
 /// only there are the types of the two operands known. No program writes the name.
 inline constexpr std::string_view kCompositionCall = "$comp::..";

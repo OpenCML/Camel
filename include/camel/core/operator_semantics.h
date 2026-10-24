@@ -254,6 +254,33 @@ struct RewriteErrorBound {
     double relative = 0.0;
 };
 
+/**
+ * The element epsilon of a floating element type: the relative difference one rounding in that
+ * type may introduce, which is the unit a rule's error bound is measured in
+ * (`RewriteErrorBound.ulps`; modules/rewrite/module.cpp compares two sides with it).
+ *
+ * Every element type has its own, and the two reduced-precision floating types are not f32 with
+ * its number (design principles 7.3; the ruling of 2026-10-23 on `check-generic-instance-space`,
+ * 3, which opened the lane: "误差界里的 epsilon 取元素类型的（bf16 是 2^-8，f16 是 2^-10）"):
+ *
+ *   bf16   2^-8    8 significand bits (1 sign, 8 exponent, 7 stored)
+ *   f16    2^-10   the ruling's number for the type
+ *   f32    2^-24   24 significand bits
+ *   f64    2^-53   53 significand bits
+ *
+ * A type that is not one of these four has no element epsilon and reads as 0: a caller that asks
+ * about an integer or a boolean is asking the wrong question, and a silent f32 answer would be
+ * the one thing this table exists to prevent.
+ *
+ * This is a *declaration* of a type fact, not the tolerance every comparison has always used:
+ * `agreeFloat` in modules/rewrite/module.cpp keeps the two constants its f32 and f64 verdicts
+ * were measured with (1.2e-7 and 2.3e-16, one full ulp of the type where this is the half of it,
+ * rounded to two digits). Changing those halves every f32 bound and moves readings this lane is
+ * required to leave alone, so it is a numeric-contract change of its own and is filed as a
+ * question (`docs/handover/questions/`), not made here.
+ */
+double elementEpsilon(type::TypeCode element);
+
 /// The error one operator node may add, in ulps of its element type, from its declaration.
 double stepUlps(const NumericSemantics &numeric);
 

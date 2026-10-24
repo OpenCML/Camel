@@ -107,7 +107,7 @@ func main(): int sync {
 
 ```cml
 func main(): int sync {
-    let total = range(1, 6)
+    let total = 1..6
         ->map<(x: int): int => x * x>
         ->filter<(x: int): bool => x % 2 == 1>
         ->reduce<(acc: int, x: int): int => acc + x, 0>
@@ -534,7 +534,7 @@ let found    = loop hit = -1 for x in xs while hit < 0 do if x > 9 then x else h
 
 - **状态**：一个名字时，循环体的值与循环的值就是这个值；几个名字（逗号分开）时，循环体给出它们按书写顺序组成的元组，循环的值也是这个元组，用 `let (a, b) = loop ...` 或 `.0`、`.1` 取出。状态的类型是初值的类型；循环体的值必须是这个类型（能自动装入的除外，如 `int` 进入 `int?`），否则是 `SemanticDiag::LoopBodyTypeMismatch`。`null` 与空数组 `[]` 作初值时没有自己的类型，写 `null as T?`，或先把空数组带类型绑定到一个名字（`let none: int[] = []`）再用这个名字（`SemanticDiag::LoopStateWithoutType`）。
 - **`for x in xs`** 每轮按顺序取序列 `xs` 的一个元素；`xs` 是数组、字符串、映射或张量，别的类型是 `SemanticDiag::LoopSequenceNotIterable`。
-  - **数组**：元素本身，`range(a, b)` 就是一个数组。
+  - **数组**：元素本身，`a..b` 就是一个数组。
   - **字符串**：按码点，每个元素是只含这个字符的字符串，与 `s[i]` 相同（11.1）：`for c in '中文'` 的两轮是 `'中'`、`'文'`；多字节的字符按一个码点算一次。
   - **映射**：`(键, 值)` 元组，按键的顺序（11.3 的遍历顺序，与 `items(m)` 相同），不是插入顺序：`for kv in m` 取到的键严格递增，元组用 `kv.0`、`kv.1` 取出。
   - **张量**：沿第一维，每个元素是去掉第一维后的子张量（与这一维上的一段共享同一份数据，不复制）：rank 2 的 `Tensor<f32, [2, 3]>` 给出两个 `Tensor<f32, [3]>`，rank 1 给出 rank 0 的子张量（`sum(x)` 是它的数）。形状未知的 `Tensor` 的元素类型是 `Tensor`。rank 0 的张量没有第一维，不是序列。
@@ -644,7 +644,7 @@ func main(): int sync {
 
 ```cml
 func main(): int sync {
-    let xs = range(1, 6)
+    let xs = 1..6
     println(xs->map<(x: int): int => x * x>)
     println(xs->filter<(x: int): bool => x % 2 == 0>)
     println(xs->reduce<(acc: int, x: int): int => acc + x, 0>)

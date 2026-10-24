@@ -461,13 +461,25 @@ const PASS_NAMES = new Set()
     }
 }
 
-// A module's passes: the declarations of stdlib/<module>.cml and the names the module registers.
+// A module's Camel passes: the declarations of stdlib/<module>.cml, and the names the module
+// registers (the loop below).
+//
+// What a pass is, and why the shape is tested rather than the head alone: a pass is a function of
+// the graph, so its declaration takes the graph function as its value and says so —
+// `export func expand::<F>(f: F): F! when is_function::<F>()`. The head `::<T>` alone does not
+// make one: every generic function of the module is written that way, and reading the head alone
+// put `array::reverse`, `array::sum`, `random::choice`, `optim::init` and `tensor::show` among the
+// passes of their modules. The explicit-generic spelling the design gives a tensor signature
+// (`export func to_bytes::<T>(t: T[..]) when is_numeric::<T>()`, design principles 4.1) joined that
+// set, and `tensor::to_bytes` is then a "pass name followed by `(`" on the page that names the
+// operator (`docs/design/training/bytes.cn.md`), which the command line has never read as a pass:
+// only the head-plus-shape reading keeps the rule about passes and stops reporting operators.
 {
     for (const entry of fs.readdirSync(path.join(REPO_ROOT, 'stdlib'))) {
         if (!entry.endsWith('.cml') || entry === 'std.cml') continue
         const module = entry.slice(0, -4)
         for (const match of read(`stdlib/${entry}`).matchAll(
-            /^\s*export\s+func\s+([A-Za-z_][A-Za-z0-9_]*)\s*::\s*<[^>]+>\s*\(/gm
+            /^\s*export\s+func\s+([A-Za-z_][A-Za-z0-9_]*)\s*::\s*<([A-Za-z_][A-Za-z0-9_]*)>\s*\([^\n]*when\s+is_function::<\2>\(\)/gm
         )) {
             PASS_NAMES.add(`${module}::${match[1]}`)
         }

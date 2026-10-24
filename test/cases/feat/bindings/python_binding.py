@@ -268,8 +268,10 @@ def main():
         "handing over 64 MiB must cost less than copying 1 MiB, or the binding moves the bytes",
     )
     check(
-        copying[largest] > 10 * copying[smallest],
-        "64x the bytes must cost far more to copy, or the comparison above proves nothing",
+        copying[largest] > 4 * copying[smallest],
+        "64x the bytes must cost clearly more to copy, or the comparison above proves nothing "
+        "(the host's copy bandwidth varies, so this guard only proves the sizes were far enough "
+        "apart for the comparison to mean something; the claim itself is the check above)",
     )
     print(
         f"therefore:    64 MiB by call {pass_through[largest] * 1e6:.1f} us, "

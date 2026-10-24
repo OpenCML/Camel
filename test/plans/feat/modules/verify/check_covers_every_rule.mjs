@@ -144,13 +144,29 @@ const refuted = (name) => {
     const word = new RegExp(`^refuted\\s+${name}(?![A-Za-z0-9_])`)
     return stdout.split('\n').some((line) => word.test(line.trim()))
 }
-// One rule of the library is `refuted` under the draws, and it is a finding rather than a
-// regression: `tensor_f32_combine_mixed`'s own guard (`combineMixedSign`) assumes `reassociate`
-// covers the opposite-sign cancellation, and a tensor with a `1e+30` element loses five digits of
-// it, which is 27 ulps of the result against the 11 the reassociate bound allows (H247 finding,
-// reported to the coordinator). The names are written here so that any *other* rule going red still
-// fails the run, and the count of them is printed below.
-const knownRefuted = new Set(['tensor_f32_combine_mixed'])
+// The list of rules allowed to be `refuted` is empty, and it is written here rather than dropped so
+// that the count below still catches a name added back by accident. It used to hold
+// `tensor_f32_combine_mixed`, whose own guard (`combineMixedSign`) was read as assuming `reassociate`
+// covers the opposite-sign cancellation: a tensor with a `1e+30` element, `c1 = 48`, `c2 = -47` gave
+// two element-type results 27 ulps of the result apart, `1.0000041e+30` and `1e+30`, and the rule was
+// refused by measuring those two against each other. The ruling of 2026-10-24 on
+// `verification-report-surface-s0` withdrew that method -- a `reassociate` rule is compared where the
+// real value is, both sides evaluated in the reference's precision -- and the rule is `sampled`
+// (H439). No rule is excused now, so every `refuted` line fails the run.
+//
+// One rule IS still `refuted`, at the type the reduced-precision lane made checkable:
+// `float_combine_mixed`'s guard is incomplete at `f16` -- `x = 10000.0`, `c1 = 39`, `c2 = -55` are
+// ordinary elements of `f16`, both products of the left side overflow (390000 and -550000 against
+// 65504), so its left side is a NaN (`inf + -inf`) where the right side is an infinity
+// (`10000 * -16`); the guard checks the coefficients' finiteness, not that the two products stay
+// finite, and `no_infs` does not license turning a NaN into an infinity (the proposition of a
+// `reassociate` rule is `real equality + IEEE on special values`, and IEEE does not call the two
+// equal). At `f32`/`f64` the same hole is unreachable with the values the sampler draws; at `f16` a
+// four-digit value reaches it, and the draw that exposes it depends on the seed, which is why the
+// coverage case's seed is the one this reading is pinned at. Reported with the lane
+// (`docs/handover/questions/reduced-element-epsilon-and-rounding.md`, 四); fixing the guard belongs
+// to the rules library's own lane, and this entry comes out with it.
+const knownRefuted = new Set(['float_combine_mixed'])
 const failed = [...verdicts.keys()].filter((name) => refuted(name) && !knownRefuted.has(name))
 if (failed.length > 0) {
     fail(`${input.test_name ?? payload.test_name}: the check failed ${failed.length} rule(s): ${failed.join(', ')}`)
@@ -168,5 +184,7 @@ console.log(
     `${exported.length} exported rule(s) of ${path.relative(repoRoot, library)} are all handed to ` +
         `the check, and all ${checked.length} of them have a line in its report ` +
         `(${notExported.length} rule(s) are not exported and are not asked about); ` +
-        `${known.length} of them is refuted and named as known (${known.join(', ')})`
+        (knownRefuted.size === 0
+            ? `no rule of them is refuted`
+            : `${known.length} of them is refuted and named as known (${known.join(', ')})`)
 )
