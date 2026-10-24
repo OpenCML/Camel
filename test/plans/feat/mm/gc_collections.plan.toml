@@ -10,7 +10,7 @@ desc = "Maps and sets under collection stress: a table keeps its keys and values
 # allocation, with the collector that does not move objects and with the one that does. The
 # output must be exactly that of an undisturbed run.
 
-# Twenty-four of the entries below declare their own cost bound (cpu_budget_ms) and their timeouts
+# Thirty-six of the entries below declare their own cost bound (cpu_budget_ms) and their timeouts
 # are liveness bounds, by the author's ruling of 2026-10-23
 # (docs/handover/reviews/questions-2026-10-23.md, "declaration-cost-gate" (a)):
 #
@@ -23,7 +23,8 @@ desc = "Maps and sets under collection stress: a table keeps its keys and values
 # second and 21.3-50.8 s in the third, against the 15 s that the plan-wide 60 s default timeout
 # allows, and the load is other people's work (the host's 1-minute load average read
 # 76.41/76.92/80.97, 85.69/91.25/84.56 and up to 112.8 in those three windows).
-# Measured at three run lengths on 2026-10-24 -- eleven slow plans in one run at -Jobs 8
+# The twenty-four nvm, fvm and jit arms were measured at three run lengths on 2026-10-24: in
+# eleven slow plans in one run at -Jobs 8
 # (186 tests), then this plan in a run of fifteen plan files, then this plan in a run of three
 # plan files (76 tests) -- with each entry's own CPU readings beside it: 1.63x the highest of
 # the three is the budget, rounded up to the next 1000 ms, which is the headroom the four
@@ -31,15 +32,44 @@ desc = "Maps and sets under collection stress: a table keeps its keys and values
 # spread 0.3-3.5 % across the three windows where their walls spread 9-84 %: on this host the
 # wall of a fixed program moved by up to four fifths while its CPU time moved by at most 3.5 %.
 #
-# The twenty-four entries also declare their own timeout_ms: the plan-wide 60 s default would have
-# the wall clock decide again (2.7x the busiest wall of the tree cases, 1.4x of the tiny ones), so
-# the tree cases take 120 s and the tiny ones 300 s -- 5.5x and 6.8x their busiest walls, which is
-# the hang detector the ruling keeps the timeout for.
-# The `_prl` arms of the same cases carry no budget and are not CPU-heavy: the same program reads
-# 10-40 ms of CPU there against 4.6-17.3 s on std::nvm and std::fvm, so what the stress costs on
-# those two back ends is not visible on std::prl. Both arms print the same expected output, so no
-# entry of this plan notices; whether it is the scheduler's safepoint policy or the collector not
-# being reached under std::prl is a separate question, and this plan does not answer it.
+# The thirty-six entries also declare their own timeout_ms: the plan-wide 60 s default would have
+# the wall clock decide again (2.7x the busiest wall of the tree cases of those twenty-four, 1.4x
+# of the tiny ones), so the tree cases take 120 s and the tiny ones 300 s -- 5.5x and 6.8x their
+# busiest walls, which is the hang detector the ruling keeps the timeout for. The twelve `_prl`
+# arms below keep the timeout of their case, and the note at the end of this head gives its factor.
+# The twenty-two `_prl` arms of the collection-stress cases used to run the program and not the
+# stress. The answer to the question the earlier note left open is the scheduler's safepoint
+# policy: the parallel scheduler's gate paced its collections -- after a collection the next
+# started no sooner than twice the time it took
+# (src/passes/sched/taskflow/taskflow.cpp#TaskflowGcGate::collect, which holds the collector at a
+# third of a production run) -- and skipped 3,525 of the 3,532 polls the tree cases reached and
+# 627 of the 630 the small ones reached. Those arms were left with 3 to 18 collections, at most
+# two of them while a flow was running, against the 3,538 the same tree case makes on std::fvm and
+# the 4,235 it makes on std::nvm; the collector was reached and the program ran: 6,555 operator
+# calls and 5,772 allocations, the same numbers as on std::fvm, and the same lines of output.
+# The twenty-two now ask for their collections to be served one for one
+# (std::prl gc_stress=true, the pass parameter the author's ruling of 2026-10-23 asks for, named
+# to say what it does; every run that does not write it keeps the pacing, which is what
+# feat/mm/gc_elder_exhaustion.plan.toml sizes its std::tf arms
+# against), and they read what their nvm and fvm siblings read: 9.02-9.47 s of CPU for the six tree
+# cases and 15.00-15.56 s for the six tiny ones, against 8.88-10.41 s and 14.72-17.53 s on those
+# two back ends, with 3,535 major collections in place of 6 to 9 and 78 to 1,014 while a flow was
+# running in place of at most two. The ten small arms stay under a second: 0.36-0.72 s of CPU, 633
+# major collections in place of 5 or 6, and the plan-wide default timeout still covers the
+# runner's 4x margin 22 times over.
+# The two collection-constant `_prl` arms carry no control, because the gate never held their work
+# back: their programs run in one flow, so their collections come from the interpreter's safepoints
+# and not from the gate (4,621 major collections with 17 of their 21 polls capped, against 4,626
+# with none capped; 45 against 55 for the small constant, which collects at every first allocation
+# anyway).
+# The twelve `gc.collection_trees_*_prl` entries declare a bound and a timeout of their own, taken
+# from the three windows measured for them on 2026-10-24 (1.63x the busiest of the three, rounded
+# up to the next 1000 ms; each arm records its three readings beside the number). Their timeouts are
+# the ones their case already carried -- 120 s is 4.0x the busiest tree wall these windows read and
+# 300 s 5.7x the busiest tiny one, where the nvm tiny arm read 72.57 s under the same 300 s -- and
+# one arm's wall moved from 17.9 s to 29.7 s while its CPU moved from 9.09 s to 9.27 s, which is
+# why the bound is CPU. These twelve readings were taken on the loaded host the way the
+# twenty-four's were, and every run of them since has stayed inside the bound they set.
 
 [defaults]
 kind = "behavior"
@@ -65,7 +95,7 @@ envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFE
 [[tests]]
 name = "gc.collections_major_stable_prl"
 desc = "Maps and sets on std::prl with the non-moving collector, stress mode major, heap verification before and after every collection."
-args = ["${case}", "std::gc::verify", "${run_prl}"]
+args = ["${case}", "std::gc::verify", "std::prl gc_stress=true"]
 envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
 
 [[tests]]
@@ -83,7 +113,7 @@ envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFE
 [[tests]]
 name = "gc.collections_major_young_prl"
 desc = "Maps and sets on std::prl with the moving young-generation collector, stress mode major, heap verification before and after every collection."
-args = ["--gc", "generational", "${case}", "std::gc::verify", "${run_prl}"]
+args = ["--gc", "generational", "${case}", "std::gc::verify", "std::prl gc_stress=true"]
 envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
 
 [[tests]]
@@ -101,7 +131,7 @@ envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFE
 [[tests]]
 name = "gc.collections_both_stable_prl"
 desc = "Maps and sets on std::prl with the non-moving collector, stress mode both, heap verification before and after every collection."
-args = ["${case}", "std::gc::verify", "${run_prl}"]
+args = ["${case}", "std::gc::verify", "std::prl gc_stress=true"]
 envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
 
 [[tests]]
@@ -119,7 +149,7 @@ envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFE
 [[tests]]
 name = "gc.collections_both_young_prl"
 desc = "Maps and sets on std::prl with the moving young-generation collector, stress mode both, heap verification before and after every collection."
-args = ["--gc", "generational", "${case}", "std::gc::verify", "${run_prl}"]
+args = ["--gc", "generational", "${case}", "std::gc::verify", "std::prl gc_stress=true"]
 envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
 
 [[tests]]
@@ -169,7 +199,7 @@ envs = ["CAMEL_COLL_VALIDATE=1", "CAMEL_COLL_LEAF_CAPACITY=2", "CAMEL_COLL_FANOU
 [[tests]]
 name = "gc.collections_tiny_major_stable_prl"
 desc = "Maps and sets as trees of tiny tables on std::prl with the non-moving collector, stress mode major, heap verification before and after every collection."
-args = ["${case}", "std::gc::verify", "${run_prl}"]
+args = ["${case}", "std::gc::verify", "std::prl gc_stress=true"]
 envs = ["CAMEL_COLL_VALIDATE=1", "CAMEL_COLL_LEAF_CAPACITY=2", "CAMEL_COLL_FANOUT=4", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
 
 [[tests]]
@@ -187,7 +217,7 @@ envs = ["CAMEL_COLL_VALIDATE=1", "CAMEL_COLL_LEAF_CAPACITY=2", "CAMEL_COLL_FANOU
 [[tests]]
 name = "gc.collections_tiny_major_young_prl"
 desc = "Maps and sets as trees of tiny tables on std::prl with the moving young-generation collector, stress mode major, heap verification before and after every collection."
-args = ["--gc", "generational", "${case}", "std::gc::verify", "${run_prl}"]
+args = ["--gc", "generational", "${case}", "std::gc::verify", "std::prl gc_stress=true"]
 envs = ["CAMEL_COLL_VALIDATE=1", "CAMEL_COLL_LEAF_CAPACITY=2", "CAMEL_COLL_FANOUT=4", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
 
 [[tests]]
@@ -205,7 +235,7 @@ envs = ["CAMEL_COLL_VALIDATE=1", "CAMEL_COLL_LEAF_CAPACITY=2", "CAMEL_COLL_FANOU
 [[tests]]
 name = "gc.collections_tiny_minor_stable_prl"
 desc = "Maps and sets as trees of tiny tables on std::prl with the non-moving collector, stress mode minor, heap verification before and after every collection."
-args = ["${case}", "std::gc::verify", "${run_prl}"]
+args = ["${case}", "std::gc::verify", "std::prl gc_stress=true"]
 envs = ["CAMEL_COLL_VALIDATE=1", "CAMEL_COLL_LEAF_CAPACITY=2", "CAMEL_COLL_FANOUT=4", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 
 [[tests]]
@@ -223,7 +253,7 @@ envs = ["CAMEL_COLL_VALIDATE=1", "CAMEL_COLL_LEAF_CAPACITY=2", "CAMEL_COLL_FANOU
 [[tests]]
 name = "gc.collections_tiny_minor_young_prl"
 desc = "Maps and sets as trees of tiny tables on std::prl with the moving young-generation collector, stress mode minor, heap verification before and after every collection."
-args = ["--gc", "generational", "${case}", "std::gc::verify", "${run_prl}"]
+args = ["--gc", "generational", "${case}", "std::gc::verify", "std::prl gc_stress=true"]
 envs = ["CAMEL_COLL_VALIDATE=1", "CAMEL_COLL_LEAF_CAPACITY=2", "CAMEL_COLL_FANOUT=4", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 
 [[tests]]
@@ -241,7 +271,7 @@ envs = ["CAMEL_COLL_VALIDATE=1", "CAMEL_COLL_LEAF_CAPACITY=2", "CAMEL_COLL_FANOU
 [[tests]]
 name = "gc.collections_tiny_both_stable_prl"
 desc = "Maps and sets as trees of tiny tables on std::prl with the non-moving collector, stress mode both, heap verification before and after every collection."
-args = ["${case}", "std::gc::verify", "${run_prl}"]
+args = ["${case}", "std::gc::verify", "std::prl gc_stress=true"]
 envs = ["CAMEL_COLL_VALIDATE=1", "CAMEL_COLL_LEAF_CAPACITY=2", "CAMEL_COLL_FANOUT=4", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
 
 [[tests]]
@@ -259,7 +289,7 @@ envs = ["CAMEL_COLL_VALIDATE=1", "CAMEL_COLL_LEAF_CAPACITY=2", "CAMEL_COLL_FANOU
 [[tests]]
 name = "gc.collections_tiny_both_young_prl"
 desc = "Maps and sets as trees of tiny tables on std::prl with the moving young-generation collector, stress mode both, heap verification before and after every collection."
-args = ["--gc", "generational", "${case}", "std::gc::verify", "${run_prl}"]
+args = ["--gc", "generational", "${case}", "std::gc::verify", "std::prl gc_stress=true"]
 envs = ["CAMEL_COLL_VALIDATE=1", "CAMEL_COLL_LEAF_CAPACITY=2", "CAMEL_COLL_FANOUT=4", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
 
 [[tests]]
@@ -296,9 +326,14 @@ timeout_ms = 120000
 name = "gc.collection_trees_tree_major_stable_prl"
 desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array and `T?` values, built and cut down entry by entry while the earlier versions are kept, under the default widths on std::prl with the non-moving collector, stress mode major, heap verification before and after every collection."
 case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
-args = ["${case}", "std::gc::verify", "${run_prl}"]
+args = ["${case}", "std::gc::verify", "std::prl gc_stress=true"]
 envs = ["CAMEL_COLL_VALIDATE=1", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
 expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
+# CPU 9.27 s, 9.09 s and 9.12 s in the three windows taken for this arm on 2026-10-24:
+# 1.63x the busiest, rounded up to the next 1000 ms, is 16 s. The head says what
+# std::prl gc_stress=true does here, and the tree case keeps its 120 s timeout.
+cpu_budget_ms = 16000
+timeout_ms = 120000
 
 [[tests]]
 name = "gc.collection_trees_tree_major_young_nvm"
@@ -334,9 +369,14 @@ timeout_ms = 120000
 name = "gc.collection_trees_tree_major_young_prl"
 desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array and `T?` values, built and cut down entry by entry while the earlier versions are kept, under the default widths on std::prl with the moving young-generation collector, stress mode major, heap verification before and after every collection."
 case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
-args = ["--gc", "generational", "${case}", "std::gc::verify", "${run_prl}"]
+args = ["--gc", "generational", "${case}", "std::gc::verify", "std::prl gc_stress=true"]
 envs = ["CAMEL_COLL_VALIDATE=1", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
 expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
+# CPU 9.22 s, 9.1 s and 9.18 s in the three windows taken for this arm on 2026-10-24:
+# 1.63x the busiest, rounded up to the next 1000 ms, is 16 s. The head says what
+# std::prl gc_stress=true does here, and the tree case keeps its 120 s timeout.
+cpu_budget_ms = 16000
+timeout_ms = 120000
 
 [[tests]]
 name = "gc.collection_trees_tree_minor_stable_nvm"
@@ -372,9 +412,14 @@ timeout_ms = 120000
 name = "gc.collection_trees_tree_minor_stable_prl"
 desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array and `T?` values, built and cut down entry by entry while the earlier versions are kept, under the default widths on std::prl with the non-moving collector, stress mode minor, heap verification before and after every collection."
 case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
-args = ["${case}", "std::gc::verify", "${run_prl}"]
+args = ["${case}", "std::gc::verify", "std::prl gc_stress=true"]
 envs = ["CAMEL_COLL_VALIDATE=1", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
+# CPU 9.32 s, 9.36 s and 9.4 s in the three windows taken for this arm on 2026-10-24:
+# 1.63x the busiest, rounded up to the next 1000 ms, is 16 s. The head says what
+# std::prl gc_stress=true does here, and the tree case keeps its 120 s timeout.
+cpu_budget_ms = 16000
+timeout_ms = 120000
 
 [[tests]]
 name = "gc.collection_trees_tree_minor_young_nvm"
@@ -410,9 +455,14 @@ timeout_ms = 120000
 name = "gc.collection_trees_tree_minor_young_prl"
 desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array and `T?` values, built and cut down entry by entry while the earlier versions are kept, under the default widths on std::prl with the moving young-generation collector, stress mode minor, heap verification before and after every collection."
 case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
-args = ["--gc", "generational", "${case}", "std::gc::verify", "${run_prl}"]
+args = ["--gc", "generational", "${case}", "std::gc::verify", "std::prl gc_stress=true"]
 envs = ["CAMEL_COLL_VALIDATE=1", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
+# CPU 9.35 s, 9.47 s and 9.33 s in the three windows taken for this arm on 2026-10-24:
+# 1.63x the busiest, rounded up to the next 1000 ms, is 16 s. The head says what
+# std::prl gc_stress=true does here, and the tree case keeps its 120 s timeout.
+cpu_budget_ms = 16000
+timeout_ms = 120000
 
 [[tests]]
 name = "gc.collection_trees_tree_both_stable_nvm"
@@ -448,9 +498,14 @@ timeout_ms = 120000
 name = "gc.collection_trees_tree_both_stable_prl"
 desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array and `T?` values, built and cut down entry by entry while the earlier versions are kept, under the default widths on std::prl with the non-moving collector, stress mode both, heap verification before and after every collection."
 case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
-args = ["${case}", "std::gc::verify", "${run_prl}"]
+args = ["${case}", "std::gc::verify", "std::prl gc_stress=true"]
 envs = ["CAMEL_COLL_VALIDATE=1", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
 expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
+# CPU 9.02 s, 9.09 s and 9.15 s in the three windows taken for this arm on 2026-10-24:
+# 1.63x the busiest, rounded up to the next 1000 ms, is 15 s. The head says what
+# std::prl gc_stress=true does here, and the tree case keeps its 120 s timeout.
+cpu_budget_ms = 15000
+timeout_ms = 120000
 
 [[tests]]
 name = "gc.collection_trees_tree_both_young_nvm"
@@ -486,9 +541,14 @@ timeout_ms = 120000
 name = "gc.collection_trees_tree_both_young_prl"
 desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array and `T?` values, built and cut down entry by entry while the earlier versions are kept, under the default widths on std::prl with the moving young-generation collector, stress mode both, heap verification before and after every collection."
 case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
-args = ["--gc", "generational", "${case}", "std::gc::verify", "${run_prl}"]
+args = ["--gc", "generational", "${case}", "std::gc::verify", "std::prl gc_stress=true"]
 envs = ["CAMEL_COLL_VALIDATE=1", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
 expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
+# CPU 9.25 s, 9.26 s and 9.28 s in the three windows taken for this arm on 2026-10-24:
+# 1.63x the busiest, rounded up to the next 1000 ms, is 16 s. The head says what
+# std::prl gc_stress=true does here, and the tree case keeps its 120 s timeout.
+cpu_budget_ms = 16000
+timeout_ms = 120000
 
 [[tests]]
 name = "gc.collection_trees_tiny_major_stable_nvm"
@@ -524,9 +584,14 @@ timeout_ms = 300000
 name = "gc.collection_trees_tiny_major_stable_prl"
 desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array and `T?` values, built and cut down entry by entry while the earlier versions are kept, under tiny tables on std::prl with the non-moving collector, stress mode major, heap verification before and after every collection."
 case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
-args = ["${case}", "std::gc::verify", "${run_prl}"]
+args = ["${case}", "std::gc::verify", "std::prl gc_stress=true"]
 envs = ["CAMEL_COLL_VALIDATE=1", "CAMEL_COLL_LEAF_CAPACITY=2", "CAMEL_COLL_FANOUT=4", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
 expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
+# CPU 15.17 s, 15.49 s and 15.11 s in the three windows taken for this arm on 2026-10-24:
+# 1.63x the busiest, rounded up to the next 1000 ms, is 26 s. The head says what
+# std::prl gc_stress=true does here, and the tiny case keeps its 300 s timeout.
+cpu_budget_ms = 26000
+timeout_ms = 300000
 
 [[tests]]
 name = "gc.collection_trees_tiny_major_young_nvm"
@@ -562,9 +627,14 @@ timeout_ms = 300000
 name = "gc.collection_trees_tiny_major_young_prl"
 desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array and `T?` values, built and cut down entry by entry while the earlier versions are kept, under tiny tables on std::prl with the moving young-generation collector, stress mode major, heap verification before and after every collection."
 case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
-args = ["--gc", "generational", "${case}", "std::gc::verify", "${run_prl}"]
+args = ["--gc", "generational", "${case}", "std::gc::verify", "std::prl gc_stress=true"]
 envs = ["CAMEL_COLL_VALIDATE=1", "CAMEL_COLL_LEAF_CAPACITY=2", "CAMEL_COLL_FANOUT=4", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
 expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
+# CPU 15.05 s, 15.18 s and 15.3 s in the three windows taken for this arm on 2026-10-24:
+# 1.63x the busiest, rounded up to the next 1000 ms, is 25 s. The head says what
+# std::prl gc_stress=true does here, and the tiny case keeps its 300 s timeout.
+cpu_budget_ms = 25000
+timeout_ms = 300000
 
 [[tests]]
 name = "gc.collection_trees_tiny_minor_stable_nvm"
@@ -600,9 +670,14 @@ timeout_ms = 300000
 name = "gc.collection_trees_tiny_minor_stable_prl"
 desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array and `T?` values, built and cut down entry by entry while the earlier versions are kept, under tiny tables on std::prl with the non-moving collector, stress mode minor, heap verification before and after every collection."
 case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
-args = ["${case}", "std::gc::verify", "${run_prl}"]
+args = ["${case}", "std::gc::verify", "std::prl gc_stress=true"]
 envs = ["CAMEL_COLL_VALIDATE=1", "CAMEL_COLL_LEAF_CAPACITY=2", "CAMEL_COLL_FANOUT=4", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
+# CPU 15.33 s, 15.12 s and 15.54 s in the three windows taken for this arm on 2026-10-24:
+# 1.63x the busiest, rounded up to the next 1000 ms, is 26 s. The head says what
+# std::prl gc_stress=true does here, and the tiny case keeps its 300 s timeout.
+cpu_budget_ms = 26000
+timeout_ms = 300000
 
 [[tests]]
 name = "gc.collection_trees_tiny_minor_young_nvm"
@@ -638,9 +713,14 @@ timeout_ms = 300000
 name = "gc.collection_trees_tiny_minor_young_prl"
 desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array and `T?` values, built and cut down entry by entry while the earlier versions are kept, under tiny tables on std::prl with the moving young-generation collector, stress mode minor, heap verification before and after every collection."
 case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
-args = ["--gc", "generational", "${case}", "std::gc::verify", "${run_prl}"]
+args = ["--gc", "generational", "${case}", "std::gc::verify", "std::prl gc_stress=true"]
 envs = ["CAMEL_COLL_VALIDATE=1", "CAMEL_COLL_LEAF_CAPACITY=2", "CAMEL_COLL_FANOUT=4", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
+# CPU 15.3 s, 15.44 s and 15.3 s in the three windows taken for this arm on 2026-10-24:
+# 1.63x the busiest, rounded up to the next 1000 ms, is 26 s. The head says what
+# std::prl gc_stress=true does here, and the tiny case keeps its 300 s timeout.
+cpu_budget_ms = 26000
+timeout_ms = 300000
 
 [[tests]]
 name = "gc.collection_trees_tiny_both_stable_nvm"
@@ -676,9 +756,14 @@ timeout_ms = 300000
 name = "gc.collection_trees_tiny_both_stable_prl"
 desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array and `T?` values, built and cut down entry by entry while the earlier versions are kept, under tiny tables on std::prl with the non-moving collector, stress mode both, heap verification before and after every collection."
 case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
-args = ["${case}", "std::gc::verify", "${run_prl}"]
+args = ["${case}", "std::gc::verify", "std::prl gc_stress=true"]
 envs = ["CAMEL_COLL_VALIDATE=1", "CAMEL_COLL_LEAF_CAPACITY=2", "CAMEL_COLL_FANOUT=4", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
 expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
+# CPU 15.06 s, 15.1 s and 15.56 s in the three windows taken for this arm on 2026-10-24:
+# 1.63x the busiest, rounded up to the next 1000 ms, is 26 s. The head says what
+# std::prl gc_stress=true does here, and the tiny case keeps its 300 s timeout.
+cpu_budget_ms = 26000
+timeout_ms = 300000
 
 [[tests]]
 name = "gc.collection_trees_tiny_both_young_nvm"
@@ -714,9 +799,14 @@ timeout_ms = 300000
 name = "gc.collection_trees_tiny_both_young_prl"
 desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array and `T?` values, built and cut down entry by entry while the earlier versions are kept, under tiny tables on std::prl with the moving young-generation collector, stress mode both, heap verification before and after every collection."
 case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
-args = ["--gc", "generational", "${case}", "std::gc::verify", "${run_prl}"]
+args = ["--gc", "generational", "${case}", "std::gc::verify", "std::prl gc_stress=true"]
 envs = ["CAMEL_COLL_VALIDATE=1", "CAMEL_COLL_LEAF_CAPACITY=2", "CAMEL_COLL_FANOUT=4", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
 expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
+# CPU 15.32 s, 15 s and 15.49 s in the three windows taken for this arm on 2026-10-24:
+# 1.63x the busiest, rounded up to the next 1000 ms, is 26 s. The head says what
+# std::prl gc_stress=true does here, and the tiny case keeps its 300 s timeout.
+cpu_budget_ms = 26000
+timeout_ms = 300000
 
 [[tests]]
 name = "gc.collection_constant_trees_nvm"

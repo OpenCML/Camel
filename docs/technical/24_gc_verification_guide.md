@@ -85,6 +85,7 @@ Use these controls for deterministic GC validation:
 | `CAMEL_GC_STRESS_ALLOC=N` | Request collection every `N` auto-space allocations. |
 | `CAMEL_GC_STRESS_SAFEPOINT=N` | Request collection every `N` runtime safepoints. |
 | `CAMEL_GC_STRESS_MODE=minor|major|both` | Select the requested stress collection kind. |
+| `std::prl gc_stress=true` | Serve every collection the stress asks for, in place of letting the parallel scheduler pace them. The scheduler otherwise starts the next collection no sooner than twice the time the last one took, which holds the collector at a third of a production run but skips almost every request of a run whose work is the stress itself: the `_prl` arms of `feat/mm/gc_collections.plan.toml` read 12 collections against the 3,538 the same tree case made on `std::fvm` until they asked for this. Every other run keeps the pacing (`docs/technical/06_runtime_and_execution.md`). |
 | `CAMEL_GC_LOG_MOVES=1` | Log object movement in the young-copying path. |
 | `--gc generational` | Run the generational collector: young objects are copied. `CAMEL_GC_ENABLE_YOUNG_COPYING=1` is the older spelling and no longer changes anything. |
 | `CAMEL_GC_POISON=1` | Safepoint poisoning: every safepoint moves every young object and poisons where it was (`36_gc_handle_rules.md` section 8). Implies the generational collector. |

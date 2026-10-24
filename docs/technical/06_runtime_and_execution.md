@@ -218,6 +218,16 @@ independent calls of heavy graphs. For a program that is sequential by its depen
   the stop-the-world handshake is unchanged, and the stress tests with a verified major
   collection at every safepoint pass).
 
+**Pacing the collector.** The gate starts the next collection no sooner than twice the time the
+last one took, so the collector takes at most a third of a run however often the workers poll
+(`TaskflowGcGate::collect`). A run whose work *is* the collections -- an arm under the GC stress
+settings, where the stress asks for a collection at every safepoint -- says so with
+`std::prl gc_stress=true`, which serves every collection it asks for: with the pacing, the gate
+skipped 3,525 of the 3,532 polls of the `_prl` arms of
+`test/plans/feat/mm/gc_collections.plan.toml` and left them with 12 collections against the
+3,538 the same case made on `std::fvm`. Every other run keeps the pacing, which is what the
+`std::tf` arms of `test/plans/feat/mm/gc_elder_exhaustion.plan.toml` are sized against.
+
 **The stack of a worker thread, and a dependency on the inside of Taskflow.** The evaluator nests
 on the native stack, and the default recursion limit is measured against 8 MiB (section 4.4).
 `tf::Executor` starts its workers with `std::thread`, which cannot be told a stack size: a
