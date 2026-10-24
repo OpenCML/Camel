@@ -1209,11 +1209,35 @@ timeout_ms = 10000
 
 [[tests]]
 name = "rules.generic_law_no_instance_is_said_by_why_not"
-desc = "A type the law cannot be written for costs nothing but a remembered attempt: the string value of `generic_target.cml`'s `greet` is not an operator the integer pattern has, the failed instantiation reports nothing where it happens (the run ends at exit 0 with its program intact), and `why_not` repeats the reason -- the pattern has no operator for that type (the ruling of 2026-10-23 on `generic-rule-instantiation-set-and-predicate`, §3)."
+desc = "A type the law cannot be written for costs nothing but a remembered attempt: the string value of `generic_target.cml`'s `greet` is not an operator the integer pattern has, the failed instantiation reports nothing where it happens (the run ends at exit 0 with its program intact), and `why_not` repeats the verdict the body gave -- not a phrase the maker guessed about it (the ruling of 2026-10-23 on `generic-rule-instantiation-set-and-predicate`, §3)."
 kind = "behavior"
 case = "../../../cases/modules/rules/generic_target.cml"
 args = ["${case}", "generic_law::why_no_instance", "std::nvm"]
 expect_exit = 0
-expect_stdout_contains = ["`add_minus_zero` is a generic rule, and no instance of it could be made for 'string': the pattern has no operator for this type"]
+expect_stdout_contains = ["`add_minus_zero` is a generic rule, and no instance of it could be made for 'string': No matching function found for argument types: <> (string, float)", "generic law", "7 8 9 1.5"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.generic_literal_is_instantiated_for_the_type_that_holds_it"
+desc = "A literal inside a generic rule's body takes its type where the body is instantiated (the ruling of 2026-10-23 on `literal-inside-a-generic-body`), so `cancel_wide_addend` -- the wide addend cancels, asked of every integer type -- is a rule for the `int` value of `generic_target.cml` and has no instance for the `i32` one. Asked at the `int` parameter, `why_not` names the instance the type has (`cancel_wide_addend<int>`) rather than failing, and nothing of the attempt that the narrow type cannot have reaches the program: the run ends at exit 0 and the program still runs."
+kind = "behavior"
+case = "../../../cases/modules/rules/generic_target.cml"
+args = ["${case}", "generic_literal_witness::why_wide", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["`cancel_wide_addend<int>` did not fire at", "generic law", "7 8 9 1.5"]
+expect_output_not_contains = ["GenericFunctionAsValue", "cannot be represented as type"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.generic_literal_refusal_is_what_why_not_repeats"
+desc = "The reason a generic rule has no instance is the verdict the body gave, not a phrase the maker guessed: `i32` satisfies `is_integer` and has `+` and `-`, so the pattern is writable there -- what is not is the literal `3000000000`, which the body refuses where it is instantiated. The refusal reports nothing where it happens (the run ends at exit 0 with its program intact) and `why_not` repeats it (the ruling of 2026-10-23 on `literal-inside-a-generic-body` and on `generic-rule-instantiation-set-and-predicate`, §3)."
+kind = "behavior"
+case = "../../../cases/modules/rules/generic_target.cml"
+args = ["${case}", "generic_literal_witness::why_narrow", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["no instance of it could be made for 'i32': The literal '3000000000' cannot be represented as type 'i32'", "generic law", "7 8 9 1.5"]
+expect_stdout_not_contains = ["the pattern has no operator for this type"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000

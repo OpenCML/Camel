@@ -1287,6 +1287,12 @@ class Builder {
         /// that knows a candidate nobody chose is not the program's business (a rule's search for an
         /// instance for one type: the reason is remembered and reported only when the user asks).
         void close();
+        /// What the bodies held back said, as one line: the first error's message, or empty when
+        /// they said nothing (a search the caller skipped for its own reason, not the body's).
+        /// Read before the scope ends, which is when the sink is dropped; a caller that remembers
+        /// the attempt as one that did not come about keeps this as its reason, and `why_not` is
+        /// where a reader gets it (nothing is reported where the body said it).
+        std::string reason() const;
 
       private:
         Builder &self_;

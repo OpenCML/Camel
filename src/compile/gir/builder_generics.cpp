@@ -480,6 +480,7 @@ bool Builder::instantiateRuleTemplates(
     // belongs to (the same state a top-level declaration of it is built in). What a body says when
     // it does not compile for these types stays out of the program (the ruling of 2026-10-23 on
     // generic-rule-instantiation-set-and-predicate), and `why` is all that is kept of the attempt.
+    std::string said;
     const GCT::node_ptr_t origin = lhsTemplate->func;
     const bool inModule          = this->inModule(lhsTemplate->module, [&] {
         SpeculativeInstantiation quiet(*this);
@@ -488,6 +489,9 @@ bool Builder::instantiateRuleTemplates(
         when = lhs != nullptr && rhs != nullptr && whenTemplate != nullptr
                    ? instantiateGeneric(whenTemplate, bindings, {}, {}, origin)
                    : nullptr;
+        // What the bodies said, read while the scope still holds it: it is the reason the attempt
+        // is remembered by, and nobody hears it where it was said.
+        said = quiet.reason();
         quiet.close();
     });
     if (!inModule) {
@@ -497,12 +501,17 @@ bool Builder::instantiateRuleTemplates(
     }
     if (lhs == nullptr || rhs == nullptr) {
         lhs = rhs = when = nullptr;
-        why = "the pattern has no operator for this type";
+        // Why the instance cannot be made is what the body said, and the maker's own phrase only
+        // stands when it said nothing: `i32` has `+` and `-`, and a rule whose literal does not
+        // fit the type is not one whose pattern has no operator there (the ruling of 2026-10-23
+        // on `literal-inside-a-generic-body`, and on
+        // `generic-rule-instantiation-set-and-predicate`, §3).
+        why = said.empty() ? "the pattern has no operator for this type" : said;
         return false;
     }
     if (whenTemplate != nullptr && when == nullptr) {
         lhs = rhs = when = nullptr;
-        why = "the condition has no operator for this type";
+        why = said.empty() ? "the condition has no operator for this type" : said;
         return false;
     }
     return true;

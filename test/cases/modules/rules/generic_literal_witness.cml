@@ -1,0 +1,61 @@
+/**
+ * A literal inside a generic rule's body takes its type where the body is instantiated (the ruling
+ * of 2026-10-23 on `literal-inside-a-generic-body`), and a type it does not fit is refused there:
+ * `3000000000` fits `int` and not `i32`, so `cancel_wide_addend` is instantiated for `int` and has
+ * no instance for `i32`, though `is_integer::<i32>()` is true and `i32` has `+` and `-`. The two
+ * questions below are the two halves of that: at the parameter of `i64_zero` the answer names the
+ * instance that was made, and at the parameter of `i32_zero` it repeats what the body said when it
+ * was tried -- which is the only place a failed instantiation is ever read, since one reports
+ * nothing where it happens (the ruling of 2026-10-23 on
+ * `generic-rule-instantiation-set-and-predicate`, §3).
+ */
+module generic_literal_witness
+
+import { Graph, Node, NodeKind, Program, graphs, kind, name, nodes } from graph
+import { Run, run, why_not } from rewrite
+import { is_integer } from types
+
+/// The wide addend cancels, where the type holds it: `x + C - C` is `x` for every integer type
+/// whose values can hold `C`. The law is asked of both integer widths and can only be written for
+/// the wide one, which is what the case is about.
+rule cancel_wide_addend::<T>(x: T) { x + 3000000000 - 3000000000 => x } when is_integer::<T>()
+
+/// The nodes of one function of the program, by the name of its graph.
+func nodesOf(p: Program, function: string): Node[] {
+    let found = graphs(p)->filter<(g: Graph): bool => name(g) == function>
+    return nodes(found[0])
+}
+
+/// The parameter of a function: the value the question is asked at.
+func portOf(p: Program, function: string): Node {
+    let ports = nodesOf(p, function)->filter<(n: Node): bool => kind(n) == NodeKind::Port>
+    return ports[0]
+}
+
+/// The law applied once, then the question at the `int` parameter: the instance was made, and what
+/// the answer says about it names its type (`cancel_wide_addend<int>`).
+export func why_wide(p: Program): Program! sync {
+    return match p->run<[cancel_wide_addend], explain: true> {
+        case error e => { throw e }
+        case r => sync {
+            return match why_not(r, cancel_wide_addend, portOf(r.result, 'i64_zero')) {
+                case error e => sync { println(e); return r.result }
+                case reason => sync { println(reason); return r.result }
+            }
+        }
+    }
+}
+
+/// The same question at the `i32` parameter, where the body's literal does not fit: no instance
+/// could be made, and the answer repeats why.
+export func why_narrow(p: Program): Program! sync {
+    return match p->run<[cancel_wide_addend], explain: true> {
+        case error e => { throw e }
+        case r => sync {
+            return match why_not(r, cancel_wide_addend, portOf(r.result, 'i32_zero')) {
+                case error e => sync { println(e); return r.result }
+                case reason => sync { println(reason); return r.result }
+            }
+        }
+    }
+}
