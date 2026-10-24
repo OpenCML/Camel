@@ -1,0 +1,72 @@
+/**
+ * A gradient written inside a `#gpu` scope: the derived graph has to be built at compile time,
+ * or the scope holds a runtime operator no pass ever sees.
+ *
+ * `grad`/`with_grad` build the derived graph while they run (`autodiff::gradFunction`), long
+ * after every pass has finished, so a `#gpu` scope that asks for a gradient hands the scope an
+ * operator the device has no program for: `autodiff:with_grad` is not in the device capability
+ * table, and the scope would be refused with
+ *
+ *   `#gpu` scope 'step': operator 'autodiff:with_grad' has no device program (the module
+ *   provides none).
+ *
+ * (docs/design/gpu/plan.cn.md 2.6, the finding that decides the expansion pass). `tiles::compile`
+ * applies `autodiff::expand` to the scope graphs first, so the call site becomes a function
+ * constant holding `grad(loss)`: the scope then holds that graph, whose operators the device is
+ * asked about instead — a refusal, if one comes, names a tensor operator of the backward pass.
+ *
+ * Both the primal `loss` and the scope function `step` carry the tag, so the derived graph
+ * inherits the primal's placement (plan 2.3): the report shows `grad(loss)` as a `#gpu` body.
+ *
+ * The values are the hand-written gradient of `loss = sum(x * p0)`: `d/dp0` is the column sum of
+ * `x`, so for `x = [1..6]` it is `[5, 7, 9]`. `step` asks for it in the scope (expanded at compile
+ * time) and `step_host` asks for it outside any scope (the operator at run time): both paths
+ * print the same value, and the plan's own entry compares the two runs.
+ *
+ * Red when: the expansion does not run (the scope is refused with `autodiff:with_grad` instead of
+ * a tensor operator of the derived graph), the derived graph does not inherit the primal's
+ * placement (the report does not show `grad(loss)` as a `#gpu` body), or the expansion changes
+ * the value (the run with the pass prints another gradient than the run without it).
+ */
+module gpu_grad_expand
+
+import { Tensor, abs, reshape, sum } from tensor
+import { with_grad } from autodiff
+
+type M = {
+    p0: Tensor<f32, [3]>,
+    x: Tensor<f32, [2, 3]>,
+}
+
+#gpu
+with <m: M>
+func loss(): float sync {
+    return sum(m.x * m.p0)
+}
+
+#gpu
+func step(m: M): Tensor<f32, [3]> sync {
+    let vg = with_grad(loss)<m>()
+    return vg.1.p0
+}
+
+func step_host(m: M): Tensor<f32, [3]> sync {
+    let vg = with_grad(loss)<m>()
+    return vg.1.p0
+}
+
+func main(): int sync {
+    let m = {
+        p0: reshape([0.5, 0.25, 2.0] as f32[], [3]),
+        x: reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[], [2, 3]),
+    }
+    let in_scope = step(m)
+    let outside = step_host(m)
+    let expected = reshape([5.0, 7.0, 9.0] as f32[], [3])
+    let zero = sum(expected - expected)
+    println("in_scope {}"->format<in_scope>)
+    println("outside {}"->format<outside>)
+    println("moved {}"->format<zero + sum(abs(in_scope - outside))>)
+    println("wrong {}"->format<zero + sum(abs(outside - expected))>)
+    return 0
+}
