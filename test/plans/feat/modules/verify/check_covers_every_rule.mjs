@@ -164,7 +164,8 @@ const refuted = (name) => {
 // equal). At `f32`/`f64` the same hole is unreachable with the values the sampler draws; at `f16` a
 // four-digit value reaches it, and the draw that exposes it depends on the seed, which is why the
 // coverage case's seed is the one this reading is pinned at. Reported with the lane
-// (`docs/handover/questions/reduced-element-epsilon-and-rounding.md`, 四); fixing the guard belongs
+// (`docs/handover/reviews/questions-2026-10-24-evening.md` §reduced-element-epsilon-and-rounding,
+// 四); fixing the guard belongs
 // to the rules library's own lane, and this entry comes out with it.
 const knownRefuted = new Set(['float_combine_mixed'])
 const failed = [...verdicts.keys()].filter((name) => refuted(name) && !knownRefuted.has(name))

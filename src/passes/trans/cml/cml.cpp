@@ -1988,14 +1988,26 @@ class CmlPrinter {
             // `a` to `b - 1`, and the operator the front end lowers it to. Writing the operator
             // back as the interval is what keeps the round trip a round trip; the two-parameter
             // `range(a, b)` no longer compiles (SemanticDiag::RangeTwoArgumentsRemoved).
-            if (inputs.size() != 2) {
-                fail(ref, "an interval without its two bounds");
+            if (inputs.size() == 2) {
+                return {
+                    std::format(
+                        "{}..{}", intervalOperand(expression(inputs[0]), kIntervalPrecedence),
+                        intervalOperand(expression(inputs[1]), kIntervalPrecedence + 1)),
+                    kIntervalPrecedence};
             }
-            return {
-                std::format(
-                    "{}..{}", intervalOperand(expression(inputs[0]), kIntervalPrecedence),
-                    intervalOperand(expression(inputs[1]), kIntervalPrecedence + 1)),
-                kIntervalPrecedence};
+            if (inputs.size() == 3) {
+                // The stepped range `range(a, b, step)`: written back as the call it is, so the
+                // program the printer writes reads the way the program it prints did (the
+                // author's ruling of 2026-10-24 on `h426-interval-step-form`).
+                return {
+                    std::format(
+                        "range({}, {}, {})",
+                        expression(inputs[0]).text,
+                        expression(inputs[1]).text,
+                        expression(inputs[2]).text),
+                    100};
+            }
+            fail(ref, "a range without its bounds");
         }
 
         std::string name;

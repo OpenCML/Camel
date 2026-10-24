@@ -236,6 +236,16 @@ Module::importedBindingsForRef(const Reference &ref, ImportLayer layer) const {
         if (!startsWith(parts, binding.localPrefixParts)) {
             continue;
         }
+        // The prelude (the module with no name) is layer 5 on its own (`hasImportedRef` with
+        // ImportLayer::Ambient). It brings every import along with an empty prefix and an empty
+        // remote prefix, so a `using namespace m` would otherwise reach the built-in of a name
+        // through layer 4 -- where the language's rule puts the prelude below every layer the
+        // program wrote, and a `using namespace` brings the module's own names, not the prelude
+        // again (design principles 6.x; the author's ruling of 2026-10-24).
+        if (binding.mod != nullptr && binding.mod->name().empty() &&
+            binding.remotePrefixParts.empty()) {
+            continue;
+        }
         std::vector<std::string> remoteParts = binding.remotePrefixParts;
         remoteParts.insert(
             remoteParts.end(),
