@@ -3,6 +3,80 @@ order = 320
 tier = "fast"
 tags = ["feat", "opt", "inline"]
 
+# ---- 5.7: the body of an inlined `sync` function keeps the chain it brings ----
+
+[[tests]]
+name = "body_chain_verbatim.reference"
+desc = "The corpus without a pass: the caller prints 1, the body prints 101 and 102, then the caller prints the result 4 and 2."
+kind = "behavior"
+case = "../../../cases/opt/inline/body_chain_verbatim.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "1\n101\n102\n4\n2\n"
+timeout_ms = 10000
+
+[[tests]]
+name = "body_chain_verbatim.inline.runs"
+desc = "Each back end runs the inlined body's own chain in its written order between the caller's statements (5.7: the spliced block is a block of its own)."
+kind = "behavior"
+case = "../../../cases/opt/inline/body_chain_verbatim.cml"
+args = ["${case}", "std::opt::inline", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_stdout_exact = "1\n101\n102\n4\n2\n"
+timeout_ms = 10000
+
+[[tests]]
+name = "body_chain_verbatim.inline.order_edges"
+desc = "5.7's extra constraint: after the splice every effect node of the body is ordered after the statement written before the call, beside the chain the body brought."
+kind = "behavior"
+case = "../../../cases/opt/inline/body_chain_verbatim.cml"
+args = ["${case}", "std::opt::inline", "std::jgir"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+    const graph = JSON.parse(input.normalized.stdout).graphs.find(g => g.name === 'main')
+    assert(graph, 'main graph missing')
+    const label = id => graph.nodes.find(n => n.id === id)?.label
+    const valueOf = id => {
+        const edge = graph.edges.find(e => e.target === id && e.kind === 'normal')
+        return edge ? label(edge.source) : undefined
+    }
+    const prints = graph.nodes.filter(n => n.label === ':io/println')
+    const printOf = value => prints.find(n => valueOf(n.id) === String(value))
+    const before = printOf(1)
+    const body = [printOf(101), printOf(102)]
+    assert(before, 'the statement written before the call must survive')
+    assert(body[0] && body[1], 'both statements of the body must survive the splice')
+    assert(!graph.nodes.some(n => n.kind === 'CALL' || n.kind === 'FUNC'), 'the call must be inlined away')
+    for (const node of body) {
+        assert(
+            graph.edges.some(e => e.kind === 'order' && e.source === before.id && e.target === node.id),
+            `the body's print of ${valueOf(node.id)} is not ordered after the statement before the call`)
+    }
+    // Beside the order edges the body keeps the chain it brought: its own statements are joined to
+    // each other in their written order, and the first of them to what the call was written after.
+    // The kind of those edges is not named: 5.7 asks for the order, not for ctrl or sync.
+    const joins = (source, target) => graph.edges.some(
+        e => e.source === source && e.target === target && (e.kind === 'control' || e.kind === 'sync'))
+    assert(joins(before.id, body[0].id), 'the body is not joined to the statement before the call')
+    assert(joins(body[0].id, body[1].id), 'the body statements are not joined in their written order')
+    // The spliced body keeps its source: its statements lie in a region of its own that records the
+    // function they are a copy of (5.7), so a reader can still tell them from the caller's.
+    const regionOf = node => (graph.regions || []).find(r => r.id === node.region)
+    for (const node of body) {
+        const region = regionOf(node)
+        assert(region && region.kind === 'inline' && region.inlined === 'inner',
+            `the body statement ${valueOf(node.id)} does not record its source function`)
+    }
+    const callerRegion = regionOf(before)
+    assert(!callerRegion || callerRegion.kind !== 'inline',
+        'the statement before the call must stay the own statement of the caller')
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
 [[tests]]
 name = "consecutive_sync_calls.opt.gates"
 desc = "The integrated optimizer reduces unused inlined return gates to the one gate that orders the program result after all four prints."

@@ -174,6 +174,19 @@ enum GCNodeFlag : uint8_t {
     kGCNodeFlagSyncStatement = 1 << 2,
 };
 
+/// Whether a node of `kind` that carries operator `oper` computes its value from its inputs alone
+/// (design principles 3.3): the kinds that own no resource, and the operators the table declares
+/// `pure`. This is the classification `checkOrderEdges` reads: nothing orders a pure node
+/// (docs/design/effects/edges.cn.md 4.6). `oper` is `kNoOper` for every kind but OPER.
+bool nodeIsPure(GCNodeKind kind, camel::core::OperId oper);
+
+/// Pure *and* unable to fault: the computation the model lets a pass arrange anywhere -- off the
+/// sync chain, out of a loop body or an arm, away when a rewrite drops it (design principles 3.4),
+/// and without an order edge after an inline (docs/design/effects/edges.cn.md 5.7). An operator
+/// that may fault is not free: what it does when it fails is observable, so its place is kept. An
+/// operator nobody declared is not known never to fault, so it is not free either.
+bool nodeIsFreelySchedulable(GCNodeKind kind, camel::core::OperId oper);
+
 /// Properties a graph has besides its nodes (GCGraph::flags).
 enum GCGraphFlag : uint8_t {
     /// The function of the graph is a macro (design principles 8): `std::macro` may evaluate a

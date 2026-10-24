@@ -19,6 +19,7 @@
 
 #include "camel/core/context/frame.h"
 #include "camel/core/mm.h"
+#include "camel/core/operator_table.h"
 #include "camel/core/rtdata/array.h"
 #include "camel/core/rtdata/collection.h"
 #include "camel/core/rtdata/func.h"
@@ -38,6 +39,39 @@
 #include <stdexcept>
 
 namespace camel::runtime {
+
+bool nodeIsPure(GCNodeKind kind, camel::core::OperId oper) {
+    switch (kind) {
+    case GCNodeKind::Data:
+    case GCNodeKind::Port:
+    case GCNodeKind::Cast:
+    case GCNodeKind::Copy:
+    case GCNodeKind::Fill:
+    case GCNodeKind::Accs:
+    case GCNodeKind::Brch:
+    case GCNodeKind::Join:
+        return true;
+    case GCNodeKind::Oper:
+        return camel::core::OperatorTable::instance().isPure(oper);
+    default:
+        // A call, a function, a gate, a loop: an anchor that may be an effect, and nothing
+        // refuses an order on it (docs/design/effects/edges.cn.md 4.6).
+        return false;
+    }
+}
+
+bool nodeIsFreelySchedulable(GCNodeKind kind, camel::core::OperId oper) {
+    if (!nodeIsPure(kind, oper)) {
+        return false;
+    }
+    if (kind != GCNodeKind::Oper) {
+        // The kinds above own no resource and raise nothing.
+        return true;
+    }
+    const std::optional<camel::core::OperatorTraits> traits =
+        camel::core::OperatorTable::instance().find(oper);
+    return traits.has_value() && !traits->mayFault;
+}
 
 using camel::core::rtdata::fromSlot;
 using camel::core::rtdata::Object;
