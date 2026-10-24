@@ -1,15 +1,16 @@
-# The tensor flip after integrating develop: 454 red, the nine SIGSEGVs fixed, and what each red is
+# The tensor flip after integrating develop: 372 red, the nine SIGSEGVs fixed, rank 0 in progress
 
 `origin/develop` (`ea624c980`) is merged into the flip's frozen tip (`c8e5e561d`) as
 `5dad9d646`, a real merge commit. The flip's diff is untouched: no rebase, no rewrite.
 
-**Read this note for the current state**: the ledger below has two measurement points — the
-integration (`5dad9d646`, 494 red, nine SIGSEGVs) and the crash round (`9670cd287`, 454 red,
-zero signals) — and the ranking at the end is written from the later one. Every number says
-which target produced it: `smoke,feat --tier fast --jobs 8` is what the integration round ran
-(through the remote helper's `-Tier fast`); **`node scripts/test.js test/plans --tier fast
---jobs 8` is this lane's gate from now on**, whole tree, because five crash sites live in the
-`gpu.profile` plan, which smoke+feat never selects.
+**Read this note for the current state**: the ledger below has three measurement points — the
+integration (`5dad9d646`, 494 red, nine SIGSEGVs), the crash round (`9670cd287`, 454 red, zero
+signals) and the first rank-0 slice (`1fc410091`, 372 red) — and the ranking at the end is
+written from the last one. Every number says which target produced it: `smoke,feat --tier fast
+--jobs 8` is what the integration round ran (through the remote helper's `-Tier fast`);
+**`node scripts/test.js test/plans --tier fast --jobs 8` is this lane's gate from now on**,
+whole tree, because five crash sites live in the `gpu.profile` plan, which smoke+feat never
+selects.
 
 ## What the merge brought, and how the two collisions were resolved
 
@@ -40,13 +41,16 @@ author's rulings.
 | integrated `5dad9d646` | same | 5966 | **494** | 11 | 223.0 s |
 | `origin/develop` `ea624c980` | same (same window, `-NoBuild`) | 5956 | **0** | 11 | 172.6 s |
 | integrated + crash round `9670cd287` | `node scripts/test.js test/plans --tier fast --jobs 8` | 5972 | **454** | 11 | 282.7 s |
+| + rank-0 shape 1 `1fc410091` | same | 5972 | **372** | 11 | 291.8 s |
 
-The last row is the whole tree, not smoke+feat: it selects six more tests than the row above,
-`gpu.profile/{host_loop.nvm,host_loop.fvm,host_loop.jit,json.nvm,off.nvm}` and its neighbour, and
-all six pass after the crash round and **all of them crash on `5dad9d646`** (cause C below). So
-the two rows compare test for test: **494 → 454, forty reds green, none new**, and the nine
-`expected exit 0, got null` entries are **zero** (`notes/h388-fast-fixed2.log`, case-level
-per-test output under `test/results/log/20261024_021832_2719996/`).
+The last two rows are the whole tree, not smoke+feat: they select six more tests than the row
+above, `gpu.profile/{host_loop.nvm,host_loop.fvm,host_loop.jit,json.nvm,off.nvm}` and its
+neighbour, and all six pass after the crash round and **all of them crash on `5dad9d646`**
+(cause C below). So the rows compare test for test: the integration's **494** becomes **454**,
+then **372** — forty reds green in the crash round and **82 more** in the first rank-0 slice,
+none new either time, and the nine `expected exit 0, got null` entries are **zero** in both
+(`notes/h388-fast-fixed2.log`, `notes/h388-fast-s1-clean.log`; case-level per-test output under
+`test/results/log/20261024_021832_2719996/` and `…/20261024_024048_851820/`).
 
 Logs: `notes/h388-fast-integrated.log`, `notes/h388-fast-develop-base.log`, the flip's own
 `h366-flip7.log`, and the crash round's `notes/h388-fast-fixed2.log`; per-test class lists in
@@ -63,33 +67,72 @@ Bucketing is the attribution report's, applied by one classifier to both logs: t
 diagnostic in the block, with the diagnostic classes taking precedence over the runner's text.
 
 | class | flip tip | integrated | + crash round | delta, integrated → now |
-|---|---|---|---|---|
-| kernel element-type refusal | 162 | 3 | 0 | −3 |
-| `NoMatchingFunction` hole | 49 | 49 | 7 | −42 (see below) |
-| internal error | 43 | 43 | 40 | −3 |
-| exit-code catch-all | 88 | 243 | 250 | +7 |
-| print form | 59 | 63 | 75 | +12 |
-| runtime error | 22 | 26 | 15 | −11 |
-| other text | 66 | 67 | 67 | 0 |
-| **total** | **489** | **494** | **454** | **−40** |
-| of which `expected exit N, got null` (a signal) | — | **9** | **0** | **−9** |
+|---|---|---|---|---|---|
+| kernel element-type refusal | 162 | 3 | 0 | 0 | −3 |
+| `NoMatchingFunction` hole | 49 | 49 | 7 | 7 | −42 (see below) |
+| internal error | 43 | 43 | 40 | 38 | −5 |
+| exit-code catch-all | 88 | 243 | 250 | 119 | −124 |
+| print form | 59 | 63 | 75 | 92 | +29 |
+| runtime error | 22 | 26 | 15 | 32 | +6 |
+| other text | 66 | 67 | 67 | 84 | +17 |
+| **total** | **489** | **494** | **454** | **372** | **−122** |
+| of which `expected exit N, got null` (a signal) | — | **9** | **0** | **0** | **−9** |
 
 **Read the `NoMatchingFunction` row with care**: 49 → 7 is a property of the *block* the
 classifier reads, not of the flip. The hole is still there in every one of those cases — running
 `test/cases/trans/annotated/boundaries.cml std::agir` on `9670cd287` still prints
 `error[SemanticDiag::NoMatchingFunction]: … operator '>' is not defined for these operand
-types`, exit 1 — and at case level **47 of the 454 failing entries still name a
-`SemanticDiag::NoMatchingFunction`** in their captured output (49 before, by block). What moved
-is which part of a failing snapshot diff lands inside the block. Sixty-two other reds moved
-class the same way: a crash or an earlier wall no longer stops them first, so they now report
-the next expectation that fails (`NoMatchingFunction`/`runtime-error`/`INTERNAL`/`kernel-refusal`
-→ exit-code for 46 of them, → print form for 10). They are still red; the numbers above count
-them once each.
+types`, exit 1 — and at case level **47 of the 372 failing entries still name a
+`SemanticDiag::NoMatchingFunction`** in their captured output (47 of 454 before this slice, 49
+before the crash round, by block). What moved is which part of a failing snapshot diff lands
+inside the block. Other reds moved class the same way, twice over: a crash or an earlier wall no
+longer stops them first, so they now report the next expectation that fails. They are still red;
+the numbers above count them once each.
 
-The transition from the integration to now is otherwise exact: **40 reds green, none new**, and
-the green ones are the crash round's own families — the nine signal tests, the `tiles.*.source`
+The transition from the integration to now is otherwise exact: **122 reds green, none new**, and
+the green ones are the crash round's families — the nine signal tests, the `tiles.*.source`
 gradient lowering (9), the `export_train_step` family (15), `grad_through_as.*.nvm` (3),
-`train_step*` (4) and the rest.
+`train_step*` (4) — plus the first rank-0 slice's 82, listed below.
+
+## The rank-0 slice, shape 1 (`1fc410091`): 82 reds, and the wall's size
+
+The acceptance is the ruling's sentence — rank 0 is the element type itself — and the first shape
+was the wall the f64 arm uncovered: `sum_to: cannot broadcast [N] to []`, which **158 of the 454
+failing entries named** (and with it `matmul does not accept rank-0 tensors`, 4, and
+`gelu_grad`'s shape check, 2).
+
+The cause was in the *backward* graph's types, not in `sum_to`: `statesTensorElementType`
+(`modules/tensor/ops/vjp.cpp`) accepted any type whose innermost element is a numeric scalar, and
+a scalar's innermost element is itself, so `float64` passed. `meanVjp` scales the gradient by the
+count through `:op/div_d`, which answers `float64`, and names that node among the inputs its new
+node is typed from — so both of `multiplyVjp`'s products were declared **`float64`, a rank-zero
+scalar, while their value was the `[3, 2]` tensor**. `sum_to` reads its operand by that declared
+type, took it for a scalar tensor, boxed what it read as one number, and refused: the shapes in
+the message are the like's `[3, 2]` against the boxed `[]` — the gradient was never the wrong
+shape, its type was.
+
+The predicate now requires an array — at a rank, or with none fixed (a bare `Tensor`) — and falls
+through to the undetermined array otherwise, which every tensor kernel reads as a tensor. The
+scaled value is untouched: the count division stays in f64 and `broadcast_like` fills at the
+tensor's own element type, so a reduction still accumulates in f64 and rounds once
+(reduced-precision ruling (d)).
+
+Measured after the slice, on the same run and by the same `grep -rl` over `…/fail`:
+
+| lever | before | after |
+|---|---|---|
+| `sum_to: cannot broadcast [N] to []` | 158 entries | **0** |
+| `matmul does not accept rank-0 tensors` | 4 | **0** |
+| `gelu_grad` shape check | 2 | **0** |
+| `tensor:sum_to: the rank of an operand is not known statically` (ONNX export) | 1 | 2 |
+| `EVAL_MISMATCH` (declaration evaluator) | 1 | 1 |
+| `Expected Tensor argument` (`Tensor<void>` VJP typing) | 3 | 5 |
+| `breaks its edge invariants` (`var Tensor`) | 43 | 41 |
+
+Repro exit codes, before → after (`std::fvm`, `$R=~/camel-work/h388-flip-staging`): the crash
+round's `min_i2.cml` (mean over all), `min_i3.cml` (sum over all), `min_j1.cml` (matmul @ vector),
+`min_j3.cml` (vector @ vector) and `min_i1.cml` (mean_axis with a gradient) were `1, 1, 1, 1, 0`
+with the wall named and are **`0`** now.
 
 ## The crash round (`9670cd287`): nine signals to zero, two causes
 
@@ -232,46 +275,50 @@ the integrated tree, over five cases (`compile/numeric/gemm_library.cml`,
 
 ## What has to be decided
 
-Landing the flip now moves develop from 0 to 454 red, none of them a signal. The rest is known
+Landing the flip now moves develop from 0 to 372 red, none of them a signal. The rest is known
 and ranked, from the ledger above (gate: `node scripts/test.js test/plans --tier fast --jobs 8`,
-5972 tests / 454 fail / 11 skip, `9670cd287`). The acceptance for the first item is the ruling's
+5972 tests / 372 fail / 11 skip, `1fc410091`). The acceptance for the first item is the ruling's
 own sentence: **rank 0 is the element type itself**.
 
-- **The rank-0 representation first.** Three shapes, and the first is most of the lever (entry
-  counts from `grep -rl` over `test/results/log/20261024_021832_2719996/fail`):
-  - `sum_to: cannot broadcast [N] to []` — **158 of the 454 failing entries name it**, the wall
-    the f64 arm exposed at the integration (153 of the 155 new exit-code reds). Repros: the
-    `min_i2.cml` and `min_j1.cml` of the crash round, and the tests `export_grad_mean`,
-    `export_grad_matmul_vector`. The same shape is why `matmul` refuses a rank-0 operand
-    (4 entries, `grad_library*`) and why `gelu_grad`'s shape check fails (2).
-  - `onnx::export_model`: "tensor:sum_to: the rank of an operand is not known statically" — 1
-    entry, `pass_export_grad_matmul_vector`; the operand's rank is open where the export needs it
-    fixed.
-  - `declaration_evaluator`'s `EVAL_MISMATCH op=tensor:add (f32[], f32[]) … no instance for a
-    call the kernel accepts` — 1 entry. The harness reports a rank-0 operand as the element
+- **The rank-0 representation.** Three shapes, the first done (entry counts from `grep -rl` over
+  the run's `fail/`):
+  - **Done** (`1fc410091`, 82 reds): `sum_to: cannot broadcast [N] to []` — 158 entries, the wall
+    the f64 arm exposed at the integration, and with it `matmul`'s rank-0 refusal (4) and
+    `gelu_grad`'s shape check (2). A gradient node of a tensor was declared with a *scalar* type,
+    so `sum_to` read the tensor as a number. See the slice's own section above.
+  - **Next**: `onnx::export_model`: "tensor:sum_to: the rank of an operand is not known
+    statically" — **2 entries** now (1 before the slice: the fixed graphs reach the export and it
+    is the export that needs the rank fixed). The operand's rank is open where the export needs a
+    number; the gradient nodes the VJP rules emit carry the undetermined array when no input
+    states a tensor element type, so this is the same value/type agreement one step later.
+  - **Then**: `declaration_evaluator`'s `EVAL_MISMATCH op=tensor:add (f32[], f32[]) … no instance
+    for a call the kernel accepts` — 1 entry. The harness reports a rank-0 operand as the element
     (`f32[]` prints for rank 0) while the kernel boxes it, so the instance search
     (`sem::instantiate`, `include/camel/core/index_semantics.h:501`) finds none; that entry point
     is core, so this shape is a diagnosis for the core lane unless the harness can name the
     operand the way the kernel reads it.
-- **Then the `var Tensor` edge invariant**: 40 reds, one root cause (a declared `Tensor`
+- **Then the `var Tensor` edge invariant**: 41 reds, one root cause (a declared `Tensor`
   parameter against a concrete `f64[?, ?]` variable). A *different* lever: a compile-time
   invariant on a concrete value reaching a declared-unknown type, not value/type agreement at
   rank 0.
 - **Then the 22 declarations** (`tensor:gt`, `:add`, `:sum`, `:numel`, `:show` written over
   `Tensor<T>` in the module): 47 failing entries name a `NoMatchingFunction` at case level, the
-  22 among them.
-- **Then the `Tensor<void>` VJP typing**: 3 reds, the `train_step.loss.*` family, whose element
-  type is undetermined where the ruling says it is always determined.
-- **Then the 75 print-form goldens** and the 5 new pins, as expectation updates that follow from
-  the ruling that the printer prints by the type the value holds.
+  22 among them, and the count has not moved across either slice.
+- **Then the `Tensor<void>` VJP typing**: 5 reds, the `train_step.loss.*` family reached further,
+  whose element type is undetermined where the ruling says it is always determined.
+- **Then the 92 print-form goldens** and the 5 new pins, as expectation updates that follow from
+  the ruling that the printer prints by the type the value holds. This is the class that grew
+  most as the walls came down (63 at the integration, 92 now), so it is the *last* item only
+  because the ruling that fixes it is the author's to make.
 - **The nine SIGSEGVs are done** (`9670cd287`): zero signals, five of the nine tests pass, and
-  the other four are on the rank-0 wall above. This lane's gate stays the whole tree, because
+  the other four are on the rank-0 shapes above. This lane's gate stays the whole tree, because
   five crash sites live outside smoke+feat.
 
 Cost of landing now, in user-visible behaviour: `Tensor` is a numeric-array alias whose
 unstated element type reads as f64, rank-0 values are the element type itself, tensor printing
 is the array printer's, and `var Tensor` parameters produce a hard "defect of the compiler"
 message. Recommendation: **do not land yet**; the integration has settled the element-type
-question on the kernel side (`sum_to_f64` is now a real arm) and the crash round has taken the
-signals to zero, so what is left is the rank-0 path and the items ranked above it, and one run
-per slice measures the reds it moves.
+question on the kernel side (`sum_to_f64` is now a real arm), the crash round has taken the
+signals to zero and the first rank-0 shape has taken 82 reds off the wall, so what is left is
+rank 0's other two shapes and the items ranked above them, and one run per slice measures the
+reds it moves.
