@@ -1,4 +1,4 @@
-internal	UnknownInternalError	0x000000	error	An error has occurred: {0}.
+internal	UnknownInternalError	0x000000	error	An error has occurred: {0}.	The compiler reached a state it has no code for, so nothing in the program is known to be wrong. Report it together with the program that reached it.
 # severity = 0 (Error)
 lexical	IllegalCharacter	0x000000	error	Illegal character '{0}'.	No token starts with this character. Outside strings and comments a program consists of ASCII characters; a name is made of letters, digits and '_'.
 lexical	InvalidNumberFormat	0x000001	error	Invalid number format: '{0}'.	A number is decimal digits without a leading zero, or '0x', '0b' or '0o' followed by digits of that base: octal 63 is '0o77', not '077'; '09' and '077' are not number tokens. In an entry argument and a conversion text a leading zero is decimal ('077' is 77).
@@ -16,8 +16,8 @@ syntax	AssignmentInCondition	0x000005	error	'=' assigns; it cannot be used in th
 syntax	KeywordAsIdentifier	0x000006	error	'{0}' is a keyword and cannot be used as a name.	Choose another name, for example '{0}_'.
 syntax	MissingComma	0x000007	error	Expected {1} before {0}.	The items of a list (parameters, arguments, elements) are separated by ','.
 syntax	MissingInitializer	0x000008	error	The declaration of '{0}' has no value.	A declaration binds a name to a value: let {0} = <value>, or with a type: let {0}: <type> = <value>.
-syntax	MissingToken	0x000009	error	Expected {0} before {1}.
-syntax	UnexpectedToken	0x00000A	error	Unexpected {0}{1}.
+syntax	MissingToken	0x000009	error	Expected {0} before {1}.	One token is missing at the caret and the message names it; nothing else in the file has to change.
+syntax	UnexpectedToken	0x00000A	error	Unexpected {0}{1}.	The token fits nothing that can stand where it is. What the parser expected instead follows the semicolon above: a list whose items have no ',' between them, a bracket that is not closed and a reserved word where a name belongs are the usual causes.
 syntax	UnexpectedEndOfFile	0x00000B	error	The file ends in the middle of a construct{0}.	Something opened earlier is not finished: check the last declaration of the file.
 syntax	ComparisonNeedsSpace	0x00000C	error	This '<' touches {0}, so it opens an angle-bracket argument list, which {1} does not continue.	A '<' directly after a name, a literal or a closing bracket starts '<...>' arguments, as in f<a>(x). If a comparison is meant, put a space before the '<': a < b.
 syntax	AngleCloseAfterSpace	0x00000D	error	This '>' follows a space and is read as the comparison operator, so the angle-bracket list it was meant to close is still open at {0}.	The '>' that closes '<...>' touches the last item or starts its line: f<a, b>. Directly inside '<...>', a '>' after a space is a comparison (xs->filter<(x: int) => x > 1>).
@@ -416,7 +416,7 @@ runtime	InvalidNumberText	0x000030	error	Cannot convert the string '{0}' to {1}.
 runtime	FormatFailed	0x000031	error	Cannot format with the format string '{0}': {1}.	A replacement field is a pair of braces, optionally holding a format specification after a colon. There must be one argument per field, and a literal brace is written twice.
 runtime	OperandTypeUnsupported	0x000032	error	'{0}' does not support a value of type '{1}'; it takes {2}.	Convert the value to a supported type before the call.
 runtime	FieldNotFound	0x000033	error	The struct has no field '{0}'.	A struct is indexed by the name of one of its fields.
-runtime	InvalidArgument	0x000034	error	Invalid argument of '{0}': {1}.
+runtime	InvalidArgument	0x000034	error	Invalid argument of '{0}': {1}.	The operator was given an argument it cannot take; the message names the argument and why. The value comes from the program, so what to change is where it was made.
 runtime	FileOpenFailed	0x000035	error	'{0}' cannot open the file '{1}': {2}.	Check that the path exists and that the program may access it; a relative path is taken from the directory the program is run in. Where a missing file is expected, fs.try_read_text returns an error value instead of ending the program.
 runtime	FileSystemError	0x000036	error	'{0}' failed for '{1}': {2}.	Check the path and the permissions of the directories on it.
 # 0x37 (JsonDecodeFailed) was the fault of json.decode on text that is not JSON; decode

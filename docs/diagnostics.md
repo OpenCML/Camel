@@ -292,6 +292,12 @@ prints one entry.
 An error has occurred: {0}.
 ```
 
+**Help**
+
+```text
+The compiler reached a state it has no code for, so nothing in the program is known to be wrong. Report it together with the program that reached it.
+```
+
 **Example** (`test/cases/compile/collections/err_key_float.cml`, run as `camel test/cases/compile/collections/err_key_float.cml`)
 
 ```camel
@@ -637,6 +643,12 @@ A declaration binds a name to a value: let {0} = <value>, or with a type: let {0
 Expected {0} before {1}.
 ```
 
+**Help**
+
+```text
+One token is missing at the caret and the message names it; nothing else in the file has to change.
+```
+
 **Example** (`test/cases/compile/fstring/lambda_spec.cml`, run as `camel test/cases/compile/fstring/lambda_spec.cml`)
 
 ```camel
@@ -655,6 +667,12 @@ func main(): int sync {
 
 ```text
 Unexpected {0}{1}.
+```
+
+**Help**
+
+```text
+The token fits nothing that can stand where it is. What the parser expected instead follows the semicolon above: a list whose items have no ',' between them, a bracket that is not closed and a reserved word where a name belongs are the usual causes.
 ```
 
 **Example** (`test/cases/compile/check/syntax_error.cml`, run as `camel check --syntax-only -O short test/cases/compile/check/syntax_error.cml`)
@@ -7642,6 +7660,12 @@ func main(): int sync {
 
 ```text
 Invalid argument of '{0}': {1}.
+```
+
+**Help**
+
+```text
+The operator was given an argument it cannot take; the message names the argument and why. The value comes from the program, so what to change is where it was made.
 ```
 
 **Example** (`test/cases/compile/collections/fault_untyped_array.cml`, run as `camel test/cases/compile/collections/fault_untyped_array.cml ${backend}`)

@@ -17,6 +17,7 @@
 
 #include <algorithm>
 #include <format>
+#include <optional>
 #include <set>
 
 using namespace camel::core::error;
@@ -30,6 +31,46 @@ CharRange rangeOfToken(const TokenBuffer &buffer, uint32_t index) {
     const size_t line   = buffer.lineOf(token.begin);
     const size_t column = buffer.columnOf(token.begin);
     return CharRange{{line, column}, {line, column + token.length()}};
+}
+
+/// The range from byte `begin` to byte `end`, in the positions a diagnostic counts (0-based
+/// line, column in code points). Unlike rangeOfToken this survives a run that spans lines and a
+/// cut inside a multi-byte character, which is what a fix's own range may be.
+CharRange rangeOfBytes(const TokenBuffer &buffer, uint32_t begin, uint32_t end) {
+    const char *source    = buffer.source().data();
+    const size_t size     = buffer.source().size();
+    const size_t beginLine = buffer.lineOf(begin);
+    const size_t beginCol  = buffer.columnOf(begin);
+    size_t line            = beginLine;
+    size_t column          = beginCol;
+    for (uint32_t i = begin; i < end && i < size; ++i) {
+        if (source[i] == '\n') {
+            ++line;
+            column = 0;
+        } else if ((static_cast<unsigned char>(source[i]) & 0xC0) != 0x80) {
+            ++column;
+        }
+    }
+    return CharRange{{beginLine, beginCol}, {line, column}};
+}
+
+/// The empty range at byte `offset`: where a fix inserts text.
+CharRange pointAt(const TokenBuffer &buffer, uint32_t offset) {
+    return rangeOfBytes(buffer, offset, offset);
+}
+
+/// The text a wanted item would be written as, when it has exactly one spelling: a keyword or an
+/// operator spells itself out; a name, a number, a string and a whole expression are described
+/// ("a name") and have no one spelling to insert.
+std::optional<std::string> spellingOf(uint8_t item) {
+    if (item >= SyntaxError::Expression) {
+        return std::nullopt; // an expression, a declaration, a statement, a type, a pattern
+    }
+    const TokenKind kind = static_cast<TokenKind>(item);
+    if (kind == TokenKind::Eof || (!isKeyword(kind) && !isPunctuation(kind))) {
+        return std::nullopt;
+    }
+    return std::string(tokenKindText(kind));
 }
 
 char closerOf(char opener) { return opener == '(' ? ')' : opener == '[' ? ']' : '}'; }
@@ -160,6 +201,100 @@ struct BracketScan {
     }
 };
 
+/// The decimal reading of a digit run written with a leading zero, when it is the only reading:
+/// `09` cannot be octal, and a run of zeros is zero in every base. `077` is left alone, because
+/// the writer may have meant octal 63 - the help names `0o77` for that - and a report that
+/// cannot tell the two apart offers no edit.
+std::optional<std::string> decimalOfLeadingZeroRun(const std::string &written) {
+    if (written.size() < 2 || written[0] != '0') {
+        return std::nullopt;
+    }
+    for (char c : written) {
+        if (c < '0' || c > '9') {
+            return std::nullopt;
+        }
+    }
+    const bool onlyZeros = written.find_first_not_of('0') == std::string::npos;
+    if (!onlyZeros && written.find_first_of("89") == std::string::npos) {
+        return std::nullopt; // `077` reads as both 63 and 77
+    }
+    const size_t first = written.find_first_not_of('0');
+    return onlyZeros ? std::string("0") : written.substr(first);
+}
+
+/// Where a missing token goes and what is written there.
+struct Insertion {
+    uint32_t at = 0;  // the byte offset the text is inserted at
+    std::string text;
+};
+
+/// The change that supplies the token `kind` missing in front of the token at `index`: its
+/// spelling, with the space it needs and no second space next to one the file already has.
+///
+/// A bracket, and an operator that only ever stands in front of something, is inserted bare and
+/// touching what follows - `>` closes an angle-bracket list only when nothing separates it from
+/// the last argument. A separator touches the item before it, so it goes at the start of the
+/// horizontal space that is already there and that space ends up after it (`a: int b` becomes
+/// `a: int, b`, not `a: int , b`) and it brings a trailing space when there is none. A word stands
+/// alone on both sides: it keeps the space in front of it and brings the one behind.
+Insertion insertionFor(const TokenBuffer &buffer, uint32_t index, TokenKind kind) {
+    const std::string text(tokenKindText(kind));
+    switch (kind) {
+    case TokenKind::LParen:
+    case TokenKind::RParen:
+    case TokenKind::LBracket:
+    case TokenKind::RBracket:
+    case TokenKind::LBrace:
+    case TokenKind::RBrace:
+    case TokenKind::Lt:
+    case TokenKind::LAngle:
+    case TokenKind::Gt:
+    case TokenKind::Bang:
+    case TokenKind::BangBang:
+    case TokenKind::Tilde:
+    case TokenKind::Question:
+        return {buffer[index].begin, text};
+    default:
+        break;
+    }
+    const std::string &source = buffer.source();
+    const uint32_t begin      = buffer[index].begin;
+    uint32_t run              = begin;
+    while (run > 0 && (source[run - 1] == ' ' || source[run - 1] == '\t')) {
+        --run;
+    }
+    const bool spaced = run < begin;
+    if (kind == TokenKind::Comma || kind == TokenKind::Semi || kind == TokenKind::Colon) {
+        return spaced ? Insertion{run, text} : Insertion{begin, text + " "};
+    }
+    return spaced ? Insertion{begin, text + " "} : Insertion{begin, " " + text + " "};
+}
+
+/// The node of kind `kind` that covers `token`, innermost first; a null node when there is none.
+/// The parser closes a declaration after it has read what trails it, so the last token of the
+/// node that ends at `token` is the end of the trailing part.
+Node findNodeCovering(const Node &node, NodeKind kind, uint32_t token) {
+    for (size_t i = 0; i < node.childCount(); ++i) {
+        const Child child = node.child(i);
+        if (!child.isNode()) {
+            continue;
+        }
+        const Node candidate = child.node();
+        const TokenRef first = candidate.firstToken();
+        const TokenRef last  = candidate.lastToken();
+        if (!first || !last || first.index() > token || last.index() < token) {
+            continue;
+        }
+        if (candidate.is(kind)) {
+            return candidate;
+        }
+        if (Node deeper = findNodeCovering(candidate, kind, token)) {
+            return deeper;
+        }
+    }
+    return Node();
+}
+
 } // namespace
 
 void reportLexicalErrors(const TokenBuffer &buffer, Diagnostics &diagnostics) {
@@ -172,19 +307,43 @@ void reportLexicalErrors(const TokenBuffer &buffer, Diagnostics &diagnostics) {
             // The whole written run (`09`, `077`, `0o8`), not one character of it: the text is
             // what the reader has to change (H15i).
             const std::string text(buffer.source().substr(error.begin, error.end - error.begin));
-            diagnostics.of(LexicalDiag::InvalidNumberFormat)
-                .at(CharRange{{line, column}, {line, buffer.columnOf(error.end)}})
-                .commit(text);
+            auto builder = diagnostics.of(LexicalDiag::InvalidNumberFormat)
+                               .at(CharRange{{line, column}, {line, buffer.columnOf(error.end)}});
+            if (auto decimal = decimalOfLeadingZeroRun(text)) {
+                builder.fix(
+                    "write the number without its leading zero",
+                    rangeOfBytes(buffer, error.begin, error.end),
+                    *decimal);
+            }
+            builder.commit(text);
             break;
         }
-        case LexErrorKind::UnclosedString:
+        case LexErrorKind::UnclosedString: {
+            const std::string &source = buffer.source();
+            const char quote = source[error.begin];
+            // Close the string where its writer almost certainly meant to: the end of the line it
+            // opens on. The lexer reads an unclosed string all the way to the end of the file, so
+            // a quote there would compile and put every following line inside the string - a fix
+            // that is applied without asking must not quietly change what the program means.
+            size_t lineEnd = source.find('\n', error.begin);
+            if (lineEnd == std::string::npos) {
+                lineEnd = source.size();
+            } else if (lineEnd > error.begin && source[lineEnd - 1] == '\r') {
+                --lineEnd;
+            }
             diagnostics.of(LexicalDiag::UnclosedStringLiteral)
                 .at(range)
-                .commit(std::string(1, buffer.source()[error.begin]));
+                .fix(
+                    "close the string at the end of the line",
+                    pointAt(buffer, static_cast<uint32_t>(lineEnd)),
+                    std::string(1, quote))
+                .commit(std::string(1, quote));
             break;
+        }
         case LexErrorKind::UnterminatedComment:
             diagnostics.of(LexicalDiag::UnterminatedComment)
                 .at(CharRange{{line, column}, {line, column + 2}})
+                .fix("close the comment", pointAt(buffer, error.end), "*/")
                 .commit("'/*' without its '*/'");
             break;
         case LexErrorKind::IllegalCharacter: {
@@ -197,6 +356,7 @@ void reportLexicalErrors(const TokenBuffer &buffer, Diagnostics &diagnostics) {
             }
             diagnostics.of(LexicalDiag::IllegalCharacter)
                 .at(range)
+                .fix("remove it", rangeOfBytes(buffer, error.begin, error.begin + length), "")
                 .commit(buffer.source().substr(error.begin, length));
             break;
         }
@@ -246,16 +406,39 @@ void reportSyntaxErrors(const Tree &tree, Diagnostics &diagnostics) {
                     at(opener->token),
                     std::format("the '{}' that is not closed is opened", openerOf(closer)));
             }
+            // The closer goes right after the last token that was read: what is missing is the
+            // bracket, and the formatter puts it on its own line if it belongs there.
+            if (previous != offending) {
+                builder.fix(
+                    std::format("insert the '{}' that is missing", closer),
+                    pointAt(buffer, buffer[previous].end),
+                    std::string(1, closer));
+            }
             builder.commit(
                 std::string(1, closer),
                 std::string(1, openerOf(closer)),
                 describeToken(buffer, offending));
         };
 
+        // The whitespace immediately in front of `token`, without the comments that may stand
+        // further back: what a fix removes when a space is the mistake.
+        auto spaceBefore = [&](uint32_t token) {
+            uint32_t begin = buffer[token].begin;
+            uint32_t end   = begin;
+            const std::string &source = buffer.source();
+            while (end > 0 && (source[end - 1] == ' ' || source[end - 1] == '\t')) {
+                --end;
+            }
+            return rangeOfBytes(buffer, end, begin);
+        };
+
         // 1. `;;`: one separator between statements.
         if (error.kind == SyntaxError::Kind::ExtraSemicolon) {
             if (once(SyntaxDiag::ExtraSemicolon, offending)) {
-                diagnostics.of(SyntaxDiag::ExtraSemicolon).at(at(offending)).commit();
+                diagnostics.of(SyntaxDiag::ExtraSemicolon)
+                    .at(at(offending))
+                    .fix("remove the extra ';'", at(offending), "")
+                    .commit();
             }
             continue;
         }
@@ -284,6 +467,7 @@ void reportSyntaxErrors(const Tree &tree, Diagnostics &diagnostics) {
                             context.back().kind,
                             closer));
                 }
+                builder.fix(std::format("remove the unmatched '{}'", closer), at(stray), "");
                 builder.commit(std::string(1, closer), std::string(1, openerOf(closer)));
                 handled = true;
                 break;
@@ -296,9 +480,15 @@ void reportSyntaxErrors(const Tree &tree, Diagnostics &diagnostics) {
         // 3. Rule 1: the parse failed directly inside an angle-bracket list.
         if (error.kind == SyntaxError::Kind::AngleCloseAfterSpace) {
             if (once(SyntaxDiag::AngleCloseAfterSpace, error.aux)) {
-                diagnostics.of(SyntaxDiag::AngleCloseAfterSpace)
-                    .at(at(error.aux))
-                    .commit(describeToken(buffer, offending));
+                auto builder = diagnostics.of(SyntaxDiag::AngleCloseAfterSpace).at(at(error.aux));
+                // The space that has to go is the one between the last argument and the '>'
+                // (error.aux); `offending` is where the still-open list was noticed instead.
+                const CharRange space = spaceBefore(error.aux);
+                if (!(space.start.line == space.end.line &&
+                      space.start.character == space.end.character)) {
+                    builder.fix("remove the space before '>'", space, "");
+                }
+                builder.commit(describeToken(buffer, offending));
             }
             continue;
         }
@@ -313,13 +503,31 @@ void reportSyntaxErrors(const Tree &tree, Diagnostics &diagnostics) {
                     anglePosition > 0 ? scan.significant[anglePosition - 1] : error.aux;
                 diagnostics.of(SyntaxDiag::ComparisonNeedsSpace)
                     .at(at(error.aux))
+                    .fix(
+                        "write a space before '<'",
+                        pointAt(buffer, buffer[error.aux].begin),
+                        " ")
                     .commit(describeToken(buffer, host), describeToken(buffer, offending));
             }
             continue;
         }
         if (error.kind == SyntaxError::Kind::LineStartsWithSign) {
             if (once(SyntaxDiag::LineStartsWithOperator, offending)) {
-                diagnostics.of(SyntaxDiag::LineStartsWithOperator).at(at(offending)).commit(off);
+                auto builder = diagnostics.of(SyntaxDiag::LineStartsWithOperator).at(at(offending));
+                // The operator cannot start a line, so the line it starts belongs to the one
+                // before it: the break and the indent become one space.
+                const std::string &source = buffer.source();
+                uint32_t lineStart        = buffer[offending].begin;
+                while (lineStart > 0 && source[lineStart - 1] != '\n') {
+                    --lineStart;
+                }
+                if (lineStart > 0) {
+                    builder.fix(
+                        "join this line to the one before it",
+                        rangeOfBytes(buffer, lineStart - 1, buffer[offending].begin),
+                        " ");
+                }
+                builder.commit(off);
             }
             continue;
         }
@@ -335,17 +543,28 @@ void reportSyntaxErrors(const Tree &tree, Diagnostics &diagnostics) {
             }
             if (!atEof || open.empty()) {
                 if (once(SyntaxDiag::MissingToken, offending)) {
-                    diagnostics.of(SyntaxDiag::MissingToken)
-                        .at(at(offending))
-                        .commit(describeExpected(error.expected), describeToken(buffer, offending));
+                    auto builder = diagnostics.of(SyntaxDiag::MissingToken).at(at(offending));
+                    if (auto spelling = spellingOf(error.expected[0])) {
+                        const Insertion insertion =
+                            insertionFor(buffer, offending, static_cast<TokenKind>(error.expected[0]));
+                        builder.fix(
+                            std::format("insert '{}'", *spelling),
+                            pointAt(buffer, insertion.at),
+                            insertion.text);
+                    }
+                    builder.commit(
+                        describeExpected(error.expected), describeToken(buffer, offending));
                 }
                 continue;
             }
         }
         if (error.kind == SyntaxError::Kind::MissingThen) {
             if (once(SyntaxDiag::MissingThen, offending)) {
+                const Insertion insertion =
+                    insertionFor(buffer, offending, TokenKind::KwThen);
                 diagnostics.of(SyntaxDiag::MissingThen)
                     .at(at(offending))
+                    .fix("insert 'then'", pointAt(buffer, insertion.at), insertion.text)
                     .commit(describeToken(buffer, offending));
             }
             continue;
@@ -363,9 +582,35 @@ void reportSyntaxErrors(const Tree &tree, Diagnostics &diagnostics) {
         //    so the trailing `when` is named rather than left as a token that did not fit.
         if (error.kind == SyntaxError::Kind::WhenAfterBody) {
             if (once(SyntaxDiag::WhenAfterBody, offending)) {
-                diagnostics.of(SyntaxDiag::WhenAfterBody)
-                    .at(at(offending))
-                    .commit(describeToken(buffer, offending));
+                auto builder = diagnostics.of(SyntaxDiag::WhenAfterBody).at(at(offending));
+                // The clause moves, so the fix has two edits: the text of the clause is written
+                // out in front of the body's '{' and taken away from where it stands. Both
+                // places come from the tokens alone - the '{' is the one the '}' in front of
+                // `when` closes, and the clause runs to the last token of the declaration it
+                // ends.
+                const OpenDelimiter *body = nullptr;
+                if (position > 0 && position - 1 < scan.openAt.size()) {
+                    const std::vector<OpenDelimiter> &beforeTheBrace = scan.openAt[position - 1];
+                    for (auto it = beforeTheBrace.rbegin(); it != beforeTheBrace.rend(); ++it) {
+                        if (it->kind == '{') {
+                            body = &*it;
+                            break;
+                        }
+                    }
+                }
+                const Node decl = findNodeCovering(tree.root(), NodeKind::RuleDecl, offending);
+                const TokenRef clauseEnd = decl ? decl.lastToken() : TokenRef();
+                if (body != nullptr && clauseEnd && clauseEnd.index() >= offending) {
+                    const std::string clause(buffer.source().substr(
+                        buffer[offending].end, clauseEnd.end() - buffer[offending].end));
+                    builder.fix(
+                        "move the condition in front of the body",
+                        pointAt(buffer, buffer[body->token].begin),
+                        "when" + clause + " ");
+                    builder.alsoFix(
+                        rangeOfBytes(buffer, buffer[offending].begin, clauseEnd.end()), "");
+                }
+                builder.commit(describeToken(buffer, offending));
             }
             continue;
         }
@@ -400,8 +645,11 @@ void reportSyntaxErrors(const Tree &tree, Diagnostics &diagnostics) {
                        (kind == TokenKind::Comma || isCloser(kind));
             })) {
             if (once(SyntaxDiag::MissingComma, offending)) {
+                const Insertion insertion =
+                    insertionFor(buffer, offending, TokenKind::Comma);
                 diagnostics.of(SyntaxDiag::MissingComma)
                     .at(at(offending))
+                    .fix("insert ','", pointAt(buffer, insertion.at), insertion.text)
                     .commit(describeToken(buffer, offending), describeExpected(error.expected));
             }
             continue;

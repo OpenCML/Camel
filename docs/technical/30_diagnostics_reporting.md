@@ -19,6 +19,7 @@ Choices that belong to the language author are collected in section 7, marked in
 | `type`, `specific`, `severity` | The 32-bit code: type (8 bits), severity (4), number (20). |
 | `name` | `<Type>::<Name>`, the name of the catalog entry. |
 | `message`, `suggestion` | The entry's templates with the report's values filled in. |
+| `fixes` | The changes the report asks for that a tool can apply without asking (`DiagFix`; see "The JSON `data` object"). |
 | `range` | The primary location: a line/column range, or a span or origin resolved when shown. |
 | `related` | Secondary locations (`DiagLabel`): a range and a sentence fragment about it. |
 | `notes` | Remarks without a location. |
@@ -54,9 +55,21 @@ schema to grow:
 | `name` | always | `<Type>::<Name>`, the catalog entry. |
 | `moduleName` | always | The name the diagnostic carries for its module: the compilation unit's — the declared `module` name, or `main` for an entry file that declares none — and, for a diagnostic located only by a position (a run-time fault, a tag warning), the stem of `modulePath`. It is `""` exactly when `modulePath` is. |
 | `modulePath` | always | The file the diagnostic is *located* in; `""` exactly when it has no source position. |
-| `suggestion` | when non-empty | The help text. |
+| `suggestion` | when non-empty | The help text: what to do, in words, for a reader. |
+| `fixes` | when non-empty | What to write, for a tool: an array of fixes, each with a `title` and the `edits` that carry it out, an edit giving a `range` and the `replacement` for it. |
 | `notes` | when non-empty | The remark lines. |
 | `relatedElided`, `promotedFromWarning` | when true | See section 5. |
+
+A fix (`DiagFix`) is the same advice as `suggestion` where it has exactly one machine-applicable
+spelling: rustc's suggestions and an editor's code action are the model. It is attached where the
+diagnostic is raised (`DiagnosticBuilder::fix`, and `alsoFix` for a fix that has to rewrite two
+places at once, such as a clause that moves), so the report says the range because the compiler
+knows it - nothing infers a position from the message afterwards. Two properties keep it safe for
+a tool to apply without asking, and the shape `toJson` builds carries both: the edits of one fix
+name disjoint ranges of the file the diagnostic is located in, and they replace text as written
+rather than text an earlier edit produced. Where the compiler cannot name the text to write there
+is no fix at all, and `suggestion` is the advice; a guess with a range and a replacement is worse
+than a sentence, because a tool applies it.
 
 The two module fields describe the diagnostic's own file, never a module its message happens to
 name. `ModuleNotFound` at an import is located at the import: `data` names the importing module

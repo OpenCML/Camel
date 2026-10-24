@@ -449,6 +449,17 @@ Errors are printed on stdout, after any program output, as a JSON array of objec
 - Every graph a pass commits (and every graph the front end encodes) is validated structurally, in release builds as well: node, slot and edge references in range, inputs and outputs mirroring each other, `BRCH`/`JOIN` arm counts, a `GATE` with a value and a control input, a direct call passing as many arguments as its callee takes. A violation is a `RuntimeDiag::PassInternalError` naming the pass that committed the graph, before anything runs.
 - An exception that escapes a pass without being a diagnostic (graph validation when a rewrite is committed, a cycle met while a scheduler builds its execution order) is reported as `RuntimeDiag::PassInternalError` (`0x0400000C`) with stage `pass:<name>`, the exception text in the message, no source position, and exit code 1. It marks a defect of the compiler, not a refusal of the program. The stage names the pass even when it is a scheduling pass, so it does not tell whether part of the program had already run. An exception outside any pass is reported as `InternalDiag::UnknownInternalError` with stage `internal`.
 - `data.stage` tells where in the pipeline the diagnostic was raised: `parse`, `typecheck`, `compile` (see "Resource limits"), `pass:<name>` for a rewrite or translation pass (including an unknown pass name), `run` for a scheduling pass (`std::nvm`, `std::fvm`, `std::jit`, `std::tf`), or `internal`.
+- `data.fixes`, when it is there, is the change the diagnostic asks for, in the shape of an editor's code action: an array of fixes, each applied on its own, and inside each one an array of edits that are applied together. An edit replaces the text its `range` covers with `replacement`, counted like every other range here (0-based lines and columns, `end` exclusive). The empty range inserts, the empty `replacement` deletes, and the edits of one fix name disjoint ranges of the file the diagnostic is located in (`data.modulePath`): they are applied to the text as written, never to the text an earlier edit produced.
+
+  ```json
+  [
+  {"range":{"start":{"line":2,"character":16},"end":{"line":2,"character":17}},"severity":"Error","code":"0x02000007","source":"Camel","message":"Expected ',' or ')' before 'b'.","data":{"stage":"parse","name":"SyntaxDiag::MissingComma","moduleName":"m","modulePath":"m.cml","suggestion":"The items of a list (parameters, arguments, elements) are separated by ','.","fixes":[{"title":"insert ','","edits":[{"range":{"start":{"line":2,"character":15},"end":{"line":2,"character":15}},"replacement":","}]}]}}
+  ]
+  ```
+
+  (For `func add(a: int b: int)` written on line 2: the fix inserts at column 15, the space that is already between `int` and `b`, so the file gets `a: int, b: int` and not `a: int , b: int`.)
+
+  A fix is offered only where the compiler knows the text to write, so `fixes` is absent where there is nothing certain to write and `suggestion` is then the advice in words. A reader that gets `fixes` may apply them without asking; a reader that does not must not invent one. The `text` and `short` formats are unchanged: a fix is for a tool, and `help:` is what the reader gets.
 
 ### Effect trace (`std::profile effect_trace="..."`)
 

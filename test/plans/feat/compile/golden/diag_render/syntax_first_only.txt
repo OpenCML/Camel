@@ -10,11 +10,13 @@ error[SyntaxDiag::UnexpectedToken]: Unexpected 'func'; expected an expression.
    |
  5 |     return func
    |            ^^^^
+help: The token fits nothing that can stand where it is. What the parser expected instead follows the semicolon above: a list whose items have no ',' between them, a bracket that is not closed and a reserved word where a name belongs are the usual causes.
 
 error[SyntaxDiag::UnexpectedToken]: Unexpected '}'; expected an expression.
    --> <ROOT>/test/cases/compile/diag_render/syntax_first_only.cml:10:1
     |
  10 | }
     | ^
+help: The token fits nothing that can stand where it is. What the parser expected instead follows the semicolon above: a list whose items have no ',' between them, a bracket that is not closed and a reserved word where a name belongs are the usual causes.
 
 camel: 3 errors

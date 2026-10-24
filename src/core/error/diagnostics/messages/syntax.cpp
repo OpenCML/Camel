@@ -81,7 +81,7 @@ const std::unordered_map<SyntaxDiag, DiagInfo> &getSyntaxDiagInfoMap() {
             {
                 "MissingToken",
                 "Expected {0} before {1}.",
-                "",
+                "One token is missing at the caret and the message names it; nothing else in the file has to change.",
             },
         },
         {
@@ -89,7 +89,7 @@ const std::unordered_map<SyntaxDiag, DiagInfo> &getSyntaxDiagInfoMap() {
             {
                 "UnexpectedToken",
                 "Unexpected {0}{1}.",
-                "",
+                "The token fits nothing that can stand where it is. What the parser expected instead follows the semicolon above: a list whose items have no ',' between them, a bracket that is not closed and a reserved word where a name belongs are the usual causes.",
             },
         },
         {
