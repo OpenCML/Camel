@@ -1498,7 +1498,7 @@ any Formatter::visitLinkExpr(cst::LinkExpr context) { return formatBiOpsList(con
 
 /*
 compExpr
-    : annoExpr (('..' | '?..') annoExpr)*
+    : annoExpr ('..' annoExpr)*
     ;
 */
 any Formatter::visitCompExpr(cst::CompExpr context) { return formatBiOpsList(context, false); }

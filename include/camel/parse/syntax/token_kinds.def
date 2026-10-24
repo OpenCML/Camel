@@ -119,7 +119,6 @@ CAMEL_PUNCT(Question, "?")
 CAMEL_PUNCT(QuestionQuestion, "??")
 CAMEL_PUNCT(Arrow, "->")
 CAMEL_PUNCT(QuestionArrow, "?->")
-CAMEL_PUNCT(QuestionDotDot, "?..")
 CAMEL_PUNCT(FatArrow, "=>")
 CAMEL_PUNCT(Backslash, "\\")
 CAMEL_PUNCT(Underscore, "_")             // the wildcard pattern; `_x` is a name

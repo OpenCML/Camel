@@ -1895,6 +1895,18 @@ class Builder {
     node_handle_t visitVariNode(const GCT::node_ptr_t &gct);
     node_handle_t visitWaitNode(const GCT::node_ptr_t &gct);
     node_handle_t visitLinkNode(const GCT::node_ptr_t &gct);
+    /// `a..b` (the GCT link of `kCompositionCall`): the composition of two functions, or the
+    /// interval of two integers, told apart by the types of the two operands (design principles
+    /// 4.2; the author's ruling of 2026-10-24 on `h248-generator-and-composition`).
+    node_handle_t buildComposition(const GCT::node_ptr_t &gct);
+    /// The composition `f..g` as the lambda `x => g(f(x))`: a graph of one parameter whose body
+    /// calls `f` and then `g`, both of them captures of it.
+    node_handle_t composeFunctionValue(
+        node_handle_t lhs, node_handle_t rhs, FunctionType *lhsType, FunctionType *rhsType,
+        const GCT::node_ptr_t &gct);
+    /// The interval `a..b` of two integers as the array `int[]`: the call `range(a, b)`.
+    node_handle_t intervalValue(
+        node_handle_t lhs, node_handle_t rhs, const GCT::node_ptr_t &gct);
     node_handle_t visitWithNode(const GCT::node_ptr_t &gct);
     node_handle_t visitTypeApplication(const GCT::node_ptr_t &gct);
     FunctionType *signatureForArgumentContext(node_handle_t target) const;

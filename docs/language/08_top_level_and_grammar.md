@@ -172,7 +172,7 @@ unaryExpr          : linkExpr (('as' | 'is') typeExpr)?
 linkExpr           : negExpr (('->' | '?->') compExpr)*
 negExpr            : ('-' | '!' | '~') negPower | compExpr
 negPower           : ('-' | '!' | '~') negPower | compExpr ('^' negPower)?
-compExpr           : annoExpr (('..' | '?..') annoExpr)*
+compExpr           : annoExpr ('..' annoExpr)*
 annoExpr           : accessExpr (indices | parentArgues | structData | angledValues | typeArguments | '!'
 memberAccess       : '.' (IDENTIFIER | INTEGER | REAL | '[' dataExpr ']')
 accessExpr         : primaryData ('.' (IDENTIFIER | INTEGER | REAL | '[' dataExpr ']'))*

@@ -1278,6 +1278,135 @@ node_handle_t Builder::pathAssignmentOf(const GCT::node_ptr_t &gct) {
     return visitLinkNode(rebinding);
 }
 
+namespace {
+// The names the graph of a composition gives to its parameter and to the two functions it
+// captures: no program writes them, and they are inserted in that graph's own scope.
+constexpr std::string_view kCompParameter = "$comp_arg";
+constexpr std::string_view kCompLhs       = "$comp_f";
+constexpr std::string_view kCompRhs       = "$comp_g";
+// The built-in `range(start, end)`, which is what the interval reading of `..` is: referred to
+// by the name the compiler writes for a built-in operator (design principles 4.2).
+constexpr std::string_view kRangeCall = "$builtin::range";
+} // namespace
+
+node_handle_t Builder::buildComposition(const GCT::node_ptr_t &gct) {
+    // The two operands are values, and a function written by name is its value here as it is in
+    // any argument position.
+    node_handle_t lhs = argumentNodeOf(visit(gct->at(1)), gct->at(1));
+    node_handle_t rhs = argumentNodeOf(visit(gct->at(2)), gct->at(2));
+    Type *lhsType     = nodeTypeOf(lhs);
+    Type *rhsType     = nodeTypeOf(rhs);
+    const bool bothFunctions = lhsType != nullptr && rhsType != nullptr &&
+                               lhsType->code() == TypeCode::Function &&
+                               rhsType->code() == TypeCode::Function;
+    if (bothFunctions) {
+        auto *lhsFunc = static_cast<FunctionType *>(lhsType);
+        auto *rhsFunc = static_cast<FunctionType *>(rhsType);
+        // `f` is unary: the composed function takes the one argument `f` takes (design
+        // principles 4.2).
+        if (lhsFunc->normTypesCount() != 1 || lhsFunc->withTypesCount() != 0 ||
+            !lhsFunc->hasExitType()) {
+            diags_->of(SemanticDiag::CompOperandNotUnary)
+                .atOrigin(gct->origin())
+                .commit(lhsFunc->toString(), std::to_string(lhsFunc->normTypesCount()));
+            throw BuildAbortException();
+        }
+        return composeFunctionValue(lhs, rhs, lhsFunc, rhsFunc, gct);
+    }
+    // Two integers are the interval `[a, b)` (design principles 4.2). `int` is the language's
+    // integer type (`Type::Int()` is `Int64`), and the interval is the array of them.
+    if (lhsType != nullptr && rhsType != nullptr && lhsType->code() == TypeCode::Int64 &&
+        rhsType->code() == TypeCode::Int64) {
+        return intervalValue(lhs, rhs, gct);
+    }
+    diags_->of(SemanticDiag::CompOperandMismatch)
+        .atOrigin(gct->origin())
+        .commit(
+            lhsType != nullptr ? lhsType->toString() : std::string("nothing"),
+            rhsType != nullptr ? rhsType->toString() : std::string("nothing"));
+    throw BuildAbortException();
+}
+
+node_handle_t Builder::composeFunctionValue(
+    node_handle_t lhs, node_handle_t rhs, FunctionType *lhsType, FunctionType *rhsType,
+    const GCT::node_ptr_t &gct) {
+    // The composition is the lambda `x => g(f(x))` and nothing else (design principles 4.2; the
+    // author's ruling of 2026-10-24 on `h248-generator-and-composition`): it has the parameter
+    // of `f`, the result of `g`, and the two functions as its captures. Its type, its generic
+    // instantiation and its overloads are the ones that lambda has, because it is built as one.
+    FunctionTypeFactory factory;
+    factory.addNormArg(
+        std::string(kCompParameter), lhsType->normTypeAt(0), lhsType->normIsVarAt(0));
+    factory.setExitType(rhsType->exitType());
+    FunctionType *type        = factory.build();
+    compile_graph_ptr_t graph = enterScope(type);
+    const bool outerSynced        = synced_;
+    const node_handle_t outerLast = lastSyncedNode_;
+    const auto restore            = [&] {
+        synced_                  = outerSynced;
+        lastSyncedNode_          = outerLast;
+        bodyStates_[graph.get()] = BodyState::Built;
+    };
+    try {
+        bodyStates_[graph.get()] = BodyState::Open;
+        const auto make = [&](GCT::node_ptr_t node) {
+            node->setOrigin(gct->origin());
+            return node;
+        };
+        const auto nameNode = [&](std::string_view name) {
+            return make(tree_->makeDRef(std::string(name)));
+        };
+        // The parameter's port, and the two functions: a name of an enclosing graph used in a
+        // nested one is what a closure captures, and insertNode makes exactly that of them.
+        size_t portCount = 0;
+        for (draft_node_ref_t port : graph->draft().normPorts()) {
+            insertNode(std::string(kCompParameter), graph->draft().ref(port));
+            ++portCount;
+        }
+        ASSERT(portCount == 1, "A composition has exactly one parameter.");
+        insertNode(std::string(kCompLhs), lhs);
+        insertNode(std::string(kCompRhs), rhs);
+        GCT::node_ptr_t inner = make(tree_->makeLink(1));
+        *inner << nameNode(kCompLhs) << nameNode(kCompParameter);
+        GCT::node_ptr_t outer = make(tree_->makeLink(1));
+        *outer << nameNode(kCompRhs) << inner;
+        // The call is the value of the function, so it runs whenever the function is called.
+        synced_         = true;
+        lastSyncedNode_ = {};
+        node_handle_t value = visitLinkNode(outer);
+        setGraphReturnFromResult(graph, nodeIdOf(value), nodeIdOf(value), nodeTypeOf(value));
+        restore();
+        unit_->builtBodies.push_back(graph);
+    } catch (...) {
+        restore();
+        leaveScope();
+        throw;
+    }
+    leaveScope();
+    return createFuncDataNode(graph, true, false);
+}
+
+node_handle_t Builder::intervalValue(
+    node_handle_t lhs, node_handle_t rhs, const GCT::node_ptr_t &gct) {
+    // `a..b` of two integers is the array of them from `a` to `b - 1`, left closed and right
+    // open, as the slice `t[a:b]` is (design principles 4.2). That is what `range(a, b)` gives,
+    // and the interval is that call; the ruling retires the written form, not the operation.
+    const auto make = [&](GCT::node_ptr_t node) {
+        node->setOrigin(gct->origin());
+        return node;
+    };
+    const auto nameNode = [&](const std::string &name) { return make(tree_->makeDRef(name)); };
+    const std::string lhsName = bindTemporary(lhs);
+    const std::string rhsName = bindTemporary(rhs);
+    GCT::node_ptr_t call      = make(tree_->makeLink(2));
+    *call << make(tree_->makeDRef(std::string(kRangeCall))) << nameNode(lhsName)
+          << nameNode(rhsName);
+    node_handle_t value = visitLinkNode(call);
+    nodeScope_->erase(lhsName, false);
+    nodeScope_->erase(rhsName, false);
+    return value;
+}
+
 node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     ENTER("LINK");
     Type *expectedResult = expectedValueType_;
@@ -1313,6 +1442,15 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             LEAVE("LINK");
             return built;
         }
+    }
+    // `a..b` (gct.comp): one construct of two readings, told apart by the types of its two
+    // operands, and they are known only here (design principles 4.2; the author's ruling of
+    // 2026-10-24 on `h248-generator-and-composition`).
+    if (gct->size() == 3 && gct->at(0)->type() == GCT::NodeKind::DREF &&
+        gct->at(0)->name() == camel::core::kCompositionCall) {
+        node_handle_t composed = buildComposition(gct);
+        LEAVE("LINK");
+        return composed;
     }
     // An expression of literals only is computed now, exactly (design principles 5.1):
     // `1 + 2`, `2 ^ 10`, `0.1 + 0.2 == 0.3`. Its value takes the type this position expects,
