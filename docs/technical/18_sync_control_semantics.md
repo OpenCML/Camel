@@ -78,7 +78,7 @@ func g(): int sync {
 - **写入的顺序来自写它的那个同步块。** 同一个变量在同一同步块里的多次写入按书写顺序排列：`before(i + 1); modify(i)`
   里 `before` 排在 `modify` 之前，即使 `before` 根本没碰到 `i`。函数体不是同步块时，写入与此前的读取之间没有顺序，
   只与读到它的操作按依赖排序，编译器给出 `IgnoredSideEffect` 告警。测试
-  `test/cases/linear/byref/wait_direct_user.cml`（图 `wait_direct_user.graph`）从图上锁定这两条：有
+  `test/cases/linear/byref/order_direct_user.cml`（图 `order_direct_user.graph`）从图上锁定这两条：有
   `before → modify`，也有 `modify →` 写在它之后的那次读取。
 - 同步块内**它自己直接写着的**表达式按书写顺序执行（写在里面的臂、循环体与嵌套块不继承这个顺序，
   见 2.2），这也包括：以一个值结尾的同步块（值在块内最后一个表达式之后交出）、
