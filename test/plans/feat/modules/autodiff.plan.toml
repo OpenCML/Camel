@@ -1563,6 +1563,36 @@ expect_output_contains = ["loss_gap=0.000000000", "grad_gap=0.000000000"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
 
+# `loop_grad_iterable_tensors` compares a record array's loop gradient with the one of the same
+# model written as a tuple, so it pins the two against each other but not against the value: a
+# gradient dropped at the loop would have to be dropped in the tuple form too to slip through. This
+# case pins the record array's loop gradient against a finite difference of the loss itself. The
+# two agree to 1.1e-2, which is f32 rounding at the finite difference's step (the analytic value
+# printed is 94.84, the two-sided difference 94.828963). Read with `std::nvm` and `std::fvm`, the
+# two schedulers that build the gradient differently.
+
+[[tests]]
+name = "loop_grad_record_tensor_fd"
+desc = "A loop over an array of records that own tensors, its gradient checked against a finite difference of the loss: d=94.840000 fd=94.828963 gap=0.011036873, and the analytic value is the hand-computed one (sum(h0 @ d0 @ (I + 2 d1 s)) + sum(h1 @ 2 d1) at s = 0.25)."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/loop_grad_record_tensor_fd.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_exact = "loop_grad_record_tensor_fd d=94.840000 fd=94.828963 gap=0.011036873\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "loop_grad_record_tensor_fd.fvm"
+desc = "The same finite-difference check of a record array's loop gradient when std::fvm runs grad."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/loop_grad_record_tensor_fd.cml"
+args = ["${case}", "${run_fvm}"]
+expect_exit = 0
+expect_stdout_exact = "loop_grad_record_tensor_fd d=94.840000 fd=94.828963 gap=0.011036873\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
 [[tests]]
 name = "loop_grad_iterable_length"
 desc = "The length of an iterated array is taken from the value the forward loop walked, not from the type: the same function called with n = 2 and n = 4 differentiates to 3 and 10."
