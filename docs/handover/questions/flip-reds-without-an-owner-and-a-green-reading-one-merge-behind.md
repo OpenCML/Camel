@@ -101,9 +101,19 @@ h480 的转绿清单在它自己的树上成立、在审计基线上不成立，
   按调用点构造的 `Type*`）写进问答。
 
 其余 8 条红各有归属：`nn.lrit`/`lrit`/`nn.mnist`/`mnist`（`50305479f` 的提问文件）、
-`print_and_recompile`（h485 未合）、`declaration_evaluator`（`7b6b93cbb` 只把消息写成
+`print_and_recompile`（**另一半**：`var_param` 的值路落点，已交作者；打印器那一半已由
+`handover/h485-printer-var-read` 落地）、`declaration_evaluator`（`7b6b93cbb` 只把消息写成
 `dtype differs (kernel f64, declaration f32)`；红的原因是验证脚本要求零 `EVAL_MISMATCH`，
 问题写在 `rank-zero-array-and-a-float-literal.md`）、
-`loop_grad_tensor_iterable.{runtime.nvm,macro.fvm}`（h446 未合）。第一轮第二节那两条
-「报了绿但审计基线上仍红」的，本轮两棵树上都是 `[PASS]`。本轮快照里 h485 / h487 / h488 /
-h446 四条 lane 还没合进来，它们的转绿清单未复核。
+`rules.tensor_saturation_keeps_values`/`export_fold`（上面两条）。第一轮第二节那两条
+「报了绿但审计基线上仍红」的，本轮两棵树上都是 `[PASS]`。
+
+**集成 lane 于 tip `512840ee0` 更正（2026-10-25）**：本页快照写的时候 h485 / h487 / h488 / h446
+四条 lane 还没合进来，现在它们**都是 `512840ee0` 的祖先**，读数如下：
+- `handover/h485-printer-var-read` 已合（打印器读写成变量本名），`print_and_recompile` 仍红，原因只剩
+  `var_param` 值路那一半；
+- `handover/h446-flip-autodiff` 已合：`loop_grad_tensor_iterable.runtime.nvm` 与 `.macro.fvm`
+  两条**已转绿**（并新增 `.macro.jit`），三后端逐字读数相同；红数 10 → 8；
+- `handover/h487-graph-facts` 已合：`test/plans/gpu/tiles.plan.toml` 3 红 → **101/101**；
+- `handover/h488-data-model-alias` 已合（纯文档，红集合不变）。
+所以本页 104 行与 107 行原先写的「h485 未合」「h446 未合」两条归属已不成立，按上面的事实读。
