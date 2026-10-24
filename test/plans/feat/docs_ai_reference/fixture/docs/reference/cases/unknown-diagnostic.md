@@ -108,4 +108,4 @@ len: (x: string) => int
 join: (xs: string[], by: string) => string
 ```
 <!-- camel-for-ai end: stdlib-signatures -->
-The compiler answers `SemanticDiag::NotARealDiagnostic` here.
+The compiler answers `SemanticDiag::EnumMatchNotExhaustive` here.

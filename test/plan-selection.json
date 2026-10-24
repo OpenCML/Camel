@@ -271,6 +271,11 @@
             "plans": ["feat/parse/frontend.plan.toml"]
         },
         {
+            "comment": "The reference for AI readers and the script that generates its four regions from the token table, the parser productions, the diagnostics registry and the stdlib page: docs_ai_reference re-checks the regions, the diagnostic names and the character budget, and compiles every counter-example against the compiler; docs_links compiles and runs the page's snippets like any other reader-facing page.",
+            "paths": ["scripts/camel-for-ai.mjs"],
+            "plans": ["feat/docs_ai_reference.plan.toml", "feat/docs_links.plan.toml"]
+        },
+        {
             "comment": "The standard-include check: portability.std_includes runs it over src, include, modules and tools. The source-tree artifact check is the same kind of property of the sources, and portability.source_artifacts runs it. The checker's --clean delegates to scripts/clean.js, whose own plan pins the tiers and the tracked-file rule.",
             "paths": ["scripts/check-std-includes.mjs", "scripts/check-source-artifacts.mjs", "scripts/clean.js"],
             "plans": ["feat/tools/portability.plan.toml", "feat/tools/clean.plan.toml"]
@@ -326,8 +331,8 @@
             "plans": ["smoke", "feat/docs_links.plan.toml", "feat/tools/portability.plan.toml"]
         },
         {
-            "comment": "Documentation checks. The root Markdown files are scanned by the same guards (README, CONTRIBUTING, ROADMAP, the code of conduct); agents/ is the development guide. Smoke is included because a documentation change is usually part of a code change and the report's gate runs it; it is ten tests, not a mirror of the tree.",
-            "paths": ["docs/", "AGENTS.md", "agents/", "README.md", "CONTRIBUTING.md", "ROADMAP.md", "CODE_OF_CONDUCT.md", "SECURITY.md"],
+            "comment": "Documentation checks. The root Markdown files are scanned by the same guards (README, CONTRIBUTING, ROADMAP, the code of conduct); agents/ is the development guide. llms.txt is the root index of the reference for AI readers, so a change to it is a documentation change. Smoke is included because a documentation change is usually part of a code change and the report's gate runs it; it is ten tests, not a mirror of the tree.",
+            "paths": ["docs/", "AGENTS.md", "agents/", "README.md", "CONTRIBUTING.md", "ROADMAP.md", "CODE_OF_CONDUCT.md", "SECURITY.md", "llms.txt"],
             "plans": ["smoke", "feat/docs_links.plan.toml", "feat/tools/portability.plan.toml"]
         },
         {

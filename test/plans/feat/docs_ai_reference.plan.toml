@@ -87,7 +87,7 @@ tool = "node"
 case = "../../../scripts/camel-for-ai.mjs"
 args = ["${case}", "--check", "--root", "test/plans/feat/docs_ai_reference/fixture", "--document", "docs/reference/cases/unknown-diagnostic.md"]
 expect_exit = 1
-expect_stdout_contains = ["the document names SemanticDiag::NotARealDiagnostic, which diagnostics/registry.tsv does not declare"]
+expect_stdout_contains = ["the document names SemanticDiag::EnumMatchNotExhaustive, which diagnostics/registry.tsv does not declare"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 60000
 
