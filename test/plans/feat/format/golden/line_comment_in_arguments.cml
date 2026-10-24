@@ -1,0 +1,11 @@
+func add(a: int, b: int): int {
+    return a + b
+}
+
+func main(): int {
+    let s = add(
+        1, // the first
+        2
+    )
+    return s
+}

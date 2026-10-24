@@ -231,3 +231,59 @@ snapshot_compare = "text_exact"
 golden = "./golden/imports_first_declaration.cml"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
+
+[[tests]]
+name = "format.line_comment_before_then_snapshot"
+desc = "A `//` comment between the condition of an `if` and `then`. The comment ends its line, so `then` is written on the next one: written after the comment on the same line, the keyword was read as part of the comment and the formatted text no longer parsed (`SyntaxDiag::MissingThen`)."
+kind = "snapshot"
+tool = "camel-format"
+case = "../../../cases/format/line_comment_before_then.cml"
+args = ["${case}"]
+expect_exit = 0
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "./golden/line_comment_before_then.cml"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "format.line_comment_in_returned_if_snapshot"
+desc = "The same gap where the conditional is the value of a `return` (`return if len(hits) == 0 // ... then ...`): `then` is written on the line after the comment, where the parser finds it."
+kind = "snapshot"
+tool = "camel-format"
+case = "../../../cases/format/line_comment_in_returned_if.cml"
+args = ["${case}"]
+expect_exit = 0
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "./golden/line_comment_in_returned_if.cml"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "format.line_comment_in_arguments_snapshot"
+desc = "A `//` comment after an argument of a call keeps the line it was written on, and the argument that follows it stays on the next one."
+kind = "snapshot"
+tool = "camel-format"
+case = "../../../cases/format/line_comment_in_arguments.cml"
+args = ["${case}"]
+expect_exit = 0
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "./golden/line_comment_in_arguments.cml"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "format.line_comment_after_let_snapshot"
+desc = "A `//` comment at the end of a `let` ends that line, and the declaration that follows it stays on its own."
+kind = "snapshot"
+tool = "camel-format"
+case = "../../../cases/format/line_comment_after_let.cml"
+args = ["${case}"]
+expect_exit = 0
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "./golden/line_comment_after_let.cml"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
