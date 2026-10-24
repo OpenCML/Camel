@@ -276,6 +276,25 @@ whose element is stated and whose extents are not) and the parameter's cell hold
 all 38 are green. The flip spells "a tensor whose shape is not known" two ways in two places, and
 the cell equality rule cannot see them as one.
 
+**Chosen: widen at the call** (ruled next round; recorded here so the choice is not re-argued).
+Reason: (i) the acceptance settles it — 38 programs develop compiles and runs must keep doing so,
+so rejecting the call is out on the evidence alone; (ii) it is sound rather than a relaxation —
+the cell invariant says a cell is written through every reference to it, so the cell must admit
+every value the callee may store, and the declared parameter type *is* that bound; (iii) if the
+author rules instantiation for (b), this is the same rule seen from the caller's side, and the two
+mechanisms converge instead of being built twice. Two conditions on it: `TupleType::assignableFrom`
+stays **exactly as it is**, and a cell whose element type genuinely cannot be written by the callee
+must still be refused — the widening must not swallow a non-numeric-to-numeric mismatch.
+
+**Insertion point, pinned** (so the next attempt does not re-search): call arguments go through
+`Builder::coerceTo` (`src/compile/gir/builder_control.cpp`), reached from the call path whose own
+comment says "A value the type cannot hold is reported by coerceTo" (`builder_calls.cpp`), and a
+**cell** argument is where the declared parameter type has to be taken. Safe rule to implement:
+ascribe the caller's cell to the parameter's type only when the parameter's content is the
+transitional unstated tensor (`ArrayType::numericUnknown()`) and `assignableFrom` accepts the
+argument — which by construction refuses a non-numeric element, the second condition above — and
+leave everything else to the invariant, which keeps firing for genuine mismatches.
+
 **Where the fix belongs**: make the two spellings agree at the call — in the compiler's
 `var`-argument path (`src/compile/gir/**`), where the caller's cell should take the declared
 parameter type at the call — **not** in the invariant, and **not** by rejecting the call: the
