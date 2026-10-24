@@ -119,9 +119,11 @@ using EvalCallResolver  = std::function<data_ptr_t(
     const camel::core::type::type_bindings_t &vars, size_t depth)>;
 /// How the evaluator works out the sequence of a `static loop` whose head writes one out
 /// (`for i in 0..5`, H462, the ruling of 2026-10-24). It is the same reading the graph builder
-/// uses (`Builder::staticLoopSequenceOf`), passed in as a callback because the evaluator is a
-/// helper that holds no builder: a `when` predicate and the expansion must agree on the elements
-/// a head names, and a sequence the compiler cannot work out comes back as nothing.
+/// uses (`Builder::staticLoopIntSequenceOf`, the `int` half of `Builder::staticLoopSequenceOf`,
+/// which has no room for a type or for another element type), passed in as a callback because
+/// the evaluator is a helper that holds no builder: a `when` predicate and the expansion must
+/// agree on the elements a head names, and a sequence the compiler cannot work out comes back
+/// as nothing.
 using EvalSequenceResolver =
     std::function<std::optional<std::vector<int64_t>>(const GCT::node_ptr_t &)>;
 
@@ -806,8 +808,9 @@ class GctConstantEvaluator {
     std::unordered_map<std::string, Type *> typeEnv_;
     EvalDataResolver dataResolver_;
     EvalCallResolver callResolver_;
-    /// How a `static loop`'s written sequence is read (`Builder::staticLoopSequenceOf`); null when
-    /// the caller has no builder to ask, and then a sequence is not a sequence the compiler knows.
+    /// How a `static loop`'s written sequence is read (`Builder::staticLoopIntSequenceOf`); null
+    /// when the caller has no builder to ask, and then a sequence is not a sequence the compiler
+    /// knows.
     EvalSequenceResolver sequenceResolver_;
     size_t depth_ = 0;
     /// How many EXECs enclose the expression being evaluated: 1 is the body itself, more is a
@@ -1317,7 +1320,7 @@ const std::string written = callee->at(0)->name();
                                 call, callee, arguments, evalArg, vars, depth);
                         },
                         [this](const GCT::node_ptr_t &subject) {
-                            return staticLoopSequenceOf(subject);
+                            return staticLoopIntSequenceOf(subject);
                         },
                         0);
                     std::optional<bool> foldedValue;
@@ -1822,7 +1825,7 @@ Builder::FoldedCall Builder::evaluateCallAtBuildTime(
     try {
         result.data = GctConstantEvaluator::runFunction(
             func, bindings, arguments, withArguments, dataResolver, callResolver,
-            [this](const GCT::node_ptr_t &subject) { return staticLoopSequenceOf(subject); },
+            [this](const GCT::node_ptr_t &subject) { return staticLoopIntSequenceOf(subject); },
             depth + 1);
     } catch (const EvalFailure &failure) {
         switch (failure.kind) {
@@ -1894,6 +1897,17 @@ data_ptr_t Builder::evaluateCallInsideBody(
     return folded.data;
 }
 
+data_ptr_t Builder::constantValueOrNull(const GCT::node_ptr_t &expression) {
+    // The same evaluation the folding entry points use, with a refusal answered as "no value":
+    // a place that needs a constant decides for itself whether the refusal is worth a
+    // diagnostic (the sequence of a `static loop` reports its own, by name).
+    try {
+        return compileTimeExpression(expression);
+    } catch (const EvalFailure &) {
+        return nullptr;
+    }
+}
+
 data_ptr_t Builder::compileTimeExpression(const GCT::node_ptr_t &expression) {
     if (expression == nullptr) {
         return nullptr;
@@ -1911,7 +1925,7 @@ data_ptr_t Builder::compileTimeExpression(const GCT::node_ptr_t &expression) {
     };
     return GctConstantEvaluator::runExpression(
         expression, typeBindings_, nullptr, callResolver,
-        [this](const GCT::node_ptr_t &subject) { return staticLoopSequenceOf(subject); }, 0);
+        [this](const GCT::node_ptr_t &subject) { return staticLoopIntSequenceOf(subject); }, 0);
 }
 
 [[noreturn]] void Builder::reportFoldRefusal(
