@@ -922,6 +922,8 @@ rule add_zero(x: int) {
 **Write instead:**
 
 ```camel
+import { is_ordered } from types
+
 func pick::<T>(x: T): T when is_ordered::<T>() {
     return x
 }
