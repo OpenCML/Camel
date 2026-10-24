@@ -253,7 +253,7 @@ const std::vector<oper_group_ptr_t> &getCollectionOperatorGroups() {
             {{":coll/map_get_or",
               keyed(
                   2,
-                  "<key: K, default: V> (m: Map<K, V>) => V",
+                  "<key: K, fallback: V> (m: Map<K, V>) => V",
                   [=](Type *coll, const type_vec_t &config) -> optional<Type *> {
                       const MapType *map = mapWithKey(coll, config[0]);
                       if (map == nullptr || !map->valueType()->equals(config[1])) {
@@ -333,27 +333,27 @@ const std::vector<oper_group_ptr_t> &getCollectionOperatorGroups() {
               typed(
                   0,
                   2,
-                  "(a: Map<K, V>, b: Map<K, V>) => Map<K, V>",
+                  "(m: Map<K, V>, other: Map<K, V>) => Map<K, V>",
                   [=](const type_vec_t &, const type_vec_t &norm) -> optional<Type *> {
                       const CollectionType *coll = sameCollections(norm);
                       return itself(coll != nullptr && coll->isMap() ? coll : nullptr);
                   })}}),
         OperatorGroup::create(
             "union",
-            {{":coll/set_union", setOperation("(a: Set<T>, b: Set<T>) => Set<T>")}}),
+            {{":coll/set_union", setOperation("(s: Set<T>, other: Set<T>) => Set<T>")}}),
         OperatorGroup::create(
             "intersect",
-            {{":coll/set_intersect", setOperation("(a: Set<T>, b: Set<T>) => Set<T>")}}),
+            {{":coll/set_intersect", setOperation("(s: Set<T>, other: Set<T>) => Set<T>")}}),
         OperatorGroup::create(
             "difference",
-            {{":coll/set_difference", setOperation("(a: Set<T>, b: Set<T>) => Set<T>")}}),
+            {{":coll/set_difference", setOperation("(s: Set<T>, other: Set<T>) => Set<T>")}}),
         OperatorGroup::create(
             "is_subset",
             {{":coll/set_is_subset",
               typed(
                   0,
                   2,
-                  "(a: Set<T>, b: Set<T>) => bool",
+                  "(s: Set<T>, other: Set<T>) => bool",
                   [=](const type_vec_t &, const type_vec_t &norm) -> optional<Type *> {
                       return boolIf(sameSets(norm) != nullptr);
                   })}}),

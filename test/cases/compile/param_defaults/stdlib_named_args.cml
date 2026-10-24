@@ -1,21 +1,36 @@
 /**
- * A named argument binds to the position its name marks in a rule the C++ modules register, as it
- * does with a declaration: `len`'s one parameter is `x` in the string, array, map and set rules
- * alike, so `len(x: ...)` reaches every one of them and the argument's type decides which runs
- * (stdlib-conventions, "the same meaning at a position shares its name"; the ruling is
- * docs/handover/reviews/questions-2026-10-23.md, stdlib-overload-parameter-names, 选 1: "含义相同
- * 的三处统一名字（`json.get` 的 `index` → `key`、`len` 的 `c` → `x`、`items` 的 `s` → `m`），具名
- * 调用随之可用").
+ * A named argument binds to the position its name marks in the rules a C++ module registers, as it
+ * does in a declaration: `len`'s one parameter is `x` in the string, array, map and set rules,
+ * `items`' is `m` in the map and set rules, `json.get`'s with-parameter is `key` in all eight of
+ * its declarations, and `json.as_int`'s ordinary one is `j`. Whether a call can give an argument
+ * by name does not depend on whether the callee is a Camel declaration or a group of rules C++
+ * registered (the ruling is docs/handover/reviews/questions-2026-10-23.md,
+ * named-arguments-at-operator-groups; the names themselves come from
+ * stdlib-overload-parameter-names, 选 1: `json.get` 的 `index` → `key`、`len` 的 `c` → `x`、
+ * `items` 的 `s` → `m`).
  *
- * Every named call is written beside the same call positionally: the two are one call and print
- * the same numbers, so the name is a spelling of the position and nothing else.
+ * The name is written in the list that holds the parameter: an ordinary one in the parentheses,
+ * a `with` one in the angle brackets (`j->get<key: 'a'>`, design principles 4.4).
+ *
+ * Every named call is written beside the same call written positionally: the two are one call and
+ * print the same numbers, so the name is a spelling of the position and nothing else.
  *
  * The names of a rule are the names the reference page declares for it, which is what
- * `registry.overload_position_names_agree` reads back from `inspect --ops`.
+ * `registry.overload_position_names_agree` reads back from `inspect --ops`, and what
+ * `--verify-ops` compares against the declaration files item by item.
  */
 module param_stdlib_named_args
 
 import { trim } from str
+import { Json, decode, get, as_int } from json
+
+func report(j: Json): int sync {
+    // `json.get`'s with-parameter is `key` in every one of its eight declarations, and `as_int`'s
+    // ordinary parameter is `j`, so both spellings of a with-list bind here.
+    println(j->get<key: 'a'>->as_int ?? -1, j->get<'a'>->as_int ?? -1)
+    println(as_int(j: j->get<key: 'b'>) ?? -1, j->get<'b'>->as_int ?? -1)
+    return 0
+}
 
 func main(): int sync {
     let m = [("a", 1), ("b", 2)] as Map<string, int>
@@ -23,9 +38,11 @@ func main(): int sync {
     // The name reaches the position in each rule, and the type of the argument picks the rule.
     println(len(x: "abc"), len(x: [1, 2, 3]))
     println(len(x: m), len(x: s))
-    // The same four calls, positionally.
+    println(items(m: m), items(m: s))
+    // The same five calls, positionally.
     println(len("abc"), len([1, 2, 3]), len(m), len(s))
+    println(items(m), items(s))
     // A single rule of a declaration module: its one parameter is `s`.
     println("[" + trim(s: "  x  ") + "]", "[" + trim("  x  ") + "]")
-    return 0
+    return decode('{"a": 7, "b": 8}') ?-> report !! 1
 }

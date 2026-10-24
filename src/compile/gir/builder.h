@@ -819,15 +819,24 @@ class Builder {
     /// of a generic declaration. Null for a function value, an operator, or an overload set.
     const std::vector<std::optional<ParameterDefaultValue>> *defaultsOfCallee(
         node_handle_t callee, bool isWith) const;
-    /// One declaration a name stands for: its signature, and the owner its parameter defaults are
-    /// kept under (a graph or a generic template).
+    /// One declaration a name stands for: the names of its parameters -- `with` ones first, then
+    /// the ordinary ones -- and the owner its parameter defaults are kept under (a graph, a
+    /// generic template, or the URI of a native rule).
     struct CalleeDeclaration {
-        FunctionType *signature = nullptr;
-        const void *owner      = nullptr;
+        const void *owner = nullptr;
+        /// A native rule's URI: a default of a body-less declaration is kept under it
+        /// (`nativeDefaults_`), the one name the call and the declaration share.
+        std::string uri;
+        std::vector<std::string> withNames;
+        std::vector<std::string> normNames;
+        /// Whether the declaration gives every parameter a name: one that does not is one a named
+        /// argument cannot reach, and the call is refused rather than bound to a guess.
+        bool readable = false;
     };
     /// The declarations a callee stands for and the name they are written under: a generic
-    /// function's templates, or the graphs of a name with several functions. Null for a value, a
-    /// native operator group, and a name with one declaration (whose call reads its signature).
+    /// function's templates, the graphs of a name with several functions, or the rules of an
+    /// operator group. Null for a value and for a name with one Camel declaration (whose call
+    /// reads its signature).
     struct CalleeSet {
         std::string label;
         std::vector<CalleeDeclaration> declarations;
