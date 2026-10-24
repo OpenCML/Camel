@@ -548,6 +548,10 @@ ExpandResult expandDefinition(
     draft.setNormInputs(call, arguments);
     draft.setCtrlInputs(call, ctrl);
     draft.setNodeOrigin(call, origin);
+    // The call stands where the node stood, so it is a statement of the same block: the statements
+    // written after it follow it, and it follows what the node followed
+    // (docs/design/effects/edges.cn.md 4).
+    draft.takeStatementPlace(node, call);
     draft.replaceAllValueUses(node, call);
     draft.replaceAllCtrlUses(node, call);
     draft.eraseNode(node);

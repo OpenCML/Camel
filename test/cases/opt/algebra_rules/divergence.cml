@@ -9,11 +9,15 @@ module divergence
 //                  it, the rule engine retargets the anchor onto the port.
 //   anchor_mul32   `x * 1` at i32, in the same position: the same difference on the other integer
 //                  type, so the difference is the position and not the type.
-//   effect_mul_zero  `println(5) * 0`. The legacy C++ law table has no `x * 0` law, so neither the
-//                  deleted table nor the reference mode touches it; the rules library has
-//                  `int_mul_zero`, so the library replaces the product by the constant 0 and the
-//                  effect the product read is left without a user. Design principles 9.7 forbids
-//                  that rewrite, and this corpus is where it is measured.
+//
+// `effect_mul_zero` used to be the third difference and is kept in the corpus as the agreement
+// instead: `println(5) * 0`. The legacy law table has no `x * 0` law and leaves it alone; the rules
+// library has `int_mul_zero`, which would replace the product by the constant 0 and leave the print
+// without a user, and the engine refuses that match, because the part the right side drops is a
+// call and not a pure computation (design principles 9.7). Both sides therefore keep the effect, and
+// the two entries that pin it -- `algebra_rules.divergence.library_runs` for the values and
+// `algebra_rules.divergence.differs` for the graph -- turn red if a rule or an engine change drops
+// it again.
 
 func anchor_add(x: int): int {
     return x + 0

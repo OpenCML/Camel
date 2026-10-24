@@ -14,6 +14,7 @@
 
 #include <cstdint>
 #include <string>
+#include <unordered_map>
 
 namespace camel::runtime {
 class Program;
@@ -70,5 +71,26 @@ bool hasPlacementFact(const runtime::Program &program);
 /// `TILES_PLACEMENT` lines, one JSON object per graph, for the pass that reads the fact. Empty
 /// when the program has no placement fact at all, so an untagged program's output is unchanged.
 std::string placementReport(const runtime::Program &program);
+
+/// Which nodes a `#gpu` scope covers (docs/design/gpu/plan.cn.md 2.3): the body of a function
+/// whose body placement is `GpuRequired`, and, transitively, the bodies of the functions it
+/// calls. A node covered by a scope owes the device an answer: the compiler never runs it on the
+/// host in silence, and code written in an arm or a loop of a covered graph is a segment of that
+/// region rather than a reason to fall back.
+class GpuScopes {
+  public:
+    /// The scopes of the graphs of `program`.
+    explicit GpuScopes(const runtime::Program &program);
+
+    /// Whether `node` of `graph` is in a scope. A node with a placement fact of its own is not
+    /// in one when that fact is `cpu`: `#cpu` inside a scope is the written way out.
+    bool covers(const runtime::GCGraph &graph, runtime::gc_node_ref_t node) const;
+
+    /// The scope that covers `graph`, or nullptr when none does.
+    const runtime::GCGraph *scopeOf(const runtime::GCGraph &graph) const;
+
+  private:
+    std::unordered_map<const runtime::GCGraph *, const runtime::GCGraph *> scopeOf_;
+};
 
 } // namespace camel::tiles

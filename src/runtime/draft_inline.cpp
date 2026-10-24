@@ -1291,10 +1291,19 @@ DraftInlineResult inlineCallableInDraft(
         funcNodeId,
         static_cast<void *>(calleeGraph));
 
-    // What the body has to wait on: the control predecessors of the call.
+    // What the body has to wait on: the control predecessors of the call, and the statement the
+    // call was written after in its `sync` block (the chain is an ordering of its own,
+    // docs/design/effects/edges.cn.md 1.5). The bodies of the statements in it are a chain of
+    // another block, so the order crosses to them as control, exactly as it does for the other
+    // ordering the call carried.
     std::vector<gc_node_ref_t> ctrlPreds(
         draft.ctrlInputsOf(funcNodeId).begin(),
         draft.ctrlInputsOf(funcNodeId).end());
+    for (gc_node_ref_t syncPred : draft.syncInputsOf(funcNodeId)) {
+        if (std::ranges::find(ctrlPreds, syncPred) == ctrlPreds.end()) {
+            ctrlPreds.push_back(syncPred);
+        }
+    }
     ctrlPreds                  = controlFrontier(draft, ctrlPreds);
     const bool hasExternalCtrl = !ctrlPreds.empty();
 
@@ -1546,6 +1555,19 @@ DraftInlineResult inlineCallableInDraft(
     // inlined output/completion anchor instead.
     draft.replaceAllValueUses(funcNodeId, result.valueExit);
     draft.replaceAllCtrlUses(funcNodeId, result.ctrlExit);
+    // The statements written directly after the call keep their place in the chain of the block
+    // they are written in: the call is gone, so they follow what the call followed. They do not
+    // follow the body's anchor instead -- that anchor is a node of the region the body was given,
+    // and a sync edge never leaves the region of its block. `closeChainOver` writes that place, and
+    // the control edge that names the same pair beside it; it runs here rather than inside eraseNode
+    // below because the users have to be known before the call's own edges go.
+    //
+    // What the body ordered before those statements used to be carried as one order edge into the
+    // body's anchor as well (7ca495665). It is gone: an order edge only orders something that has an
+    // order, and the following statement is a plain statement of the block, not an effect
+    // (docs/design/effects/edges.cn.md 1.5, 4.6). The ordering it named is what the body's region
+    // carries once it stands on the chain as one statement of the block.
+    draft.closeChainOver(funcNodeId);
 
     draft.eraseNode(funcNodeId);
     CAMEL_LOG_INFO_S("DraftInline", "Inline splice finished for draft node {}.", funcNodeId);

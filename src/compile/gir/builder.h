@@ -394,6 +394,20 @@ class Builder {
         oper_group_ptr_t group;
     };
     std::unordered_map<const GenericTemplate *, ImplTemplateKernel> implTemplateKernels_;
+    // The applicability condition a rule of a body-less declaration was written with (design
+    // principles 4.4: `when` says where a rule applies), by the rule's resolver. Its one reader
+    // is the `#impl` machinery: for the kernel of an `#impl` function the condition is what says
+    // which instances of that function the rule is the executor of, so an instance outside it
+    // has no executor and runs the function's body (design principles 10.4). A rule without a
+    // condition applies wherever its signature does.
+    struct NativeRuleCondition {
+        GCT::Tree::WhenClause clause;
+        // The module that declares the rule: its condition's predicate is looked up there,
+        // wherever the instance that selects the rule is built (evaluateWhenCondition).
+        const ModuleUnit *unit = nullptr;
+    };
+    std::unordered_map<const camel::core::type::FuncTypeResolver *, NativeRuleCondition>
+        nativeRuleConditions_;
     // generic instance of one, a lambda at the top level): the root graph lists as its own
     // functions only the entry module's, so that what the program does not use of the
     // modules it imports is not part of it.
@@ -538,6 +552,12 @@ class Builder {
     camel::core::context::context_ptr_t context_;
     camel::core::module::module_ptr_t module_;
     camel::core::error::diagnostics_ptr_t diags_;
+    /// The speculative scope in force, if any: the only thing it changes is what a *body build*
+    /// reports (`BodyDiagnostics`) and how a body that does not compile is answered
+    /// (`instantiateGeneric` returns nullptr instead of aborting). Every other diagnostic goes to
+    /// `diags_` wherever it is made, scope or no scope.
+    class SpeculativeInstantiation;
+    SpeculativeInstantiation *speculative_ = nullptr;
     /// The program's export table (see the constructors): `exports_` points at `ownExports_`
     /// for a builder of a program of its own, or at the context's table for the context's
     /// program. Never at a module's table: that is the module's own (native) declarations.
@@ -776,6 +796,24 @@ class Builder {
     /// of a generic declaration. Null for a function value, an operator, or an overload set.
     const std::vector<std::optional<ParameterDefaultValue>> *defaultsOfCallee(
         node_handle_t callee, bool isWith) const;
+    /// One declaration a name stands for: its signature, and the owner its parameter defaults are
+    /// kept under (a graph or a generic template).
+    struct CalleeDeclaration {
+        FunctionType *signature = nullptr;
+        const void *owner      = nullptr;
+    };
+    /// The declarations a callee stands for and the name they are written under: a generic
+    /// function's templates, or the graphs of a name with several functions. Null for a value, a
+    /// native operator group, and a name with one declaration (whose call reads its signature).
+    struct CalleeSet {
+        std::string label;
+        std::vector<CalleeDeclaration> declarations;
+    };
+    std::optional<CalleeSet> declarationsOfCallee(node_handle_t callee) const;
+    /// Whether one of the declarations gives the parameter at `position` of `isWith`'s list a
+    /// default. A call whose callee is several declarations fills no default (one declaration
+    /// writes it), so it reports the parameter instead.
+    bool anyDeclarationDefaults(const CalleeSet &set, size_t position, bool isWith) const;
     /// Binds the arguments written at a call to the callee's parameters: a name to the parameter
     /// it names, an omitted parameter to its default (design principles 4.4). Reports an unknown
     /// name, a parameter given twice, and a parameter left without a value. `isWith` selects the
@@ -791,6 +829,17 @@ class Builder {
     void bindArguments(
         std::vector<Argument> &inputs, node_handle_t callee, const GCT::node_ptr_t &call,
         FunctionType *signature, bool isWith);
+    /// Binds the named arguments of a call whose callee is several declarations, where no single
+    /// signature answers for which parameter a name is (design principles 4.4). The parameter at a
+    /// position carries the same name in every declaration of the set, so a name the call writes
+    /// means one position there and the argument is placed at it; a name no declaration has, a
+    /// name different declarations give to different positions, and a name at a position a
+    /// declaration names differently are refused, as is a call that leaves a parameter of the set
+    /// without a value (a default is written by one declaration, and the call does not say which
+    /// one it means).
+    void bindNamedArgumentsToDeclarations(
+        std::vector<Argument> &inputs, const CalleeSet &set, const GCT::node_ptr_t &call,
+        bool isWith);
     // Variables: the nodes bound by `var` (declarations, `var` parameters, the ports that capture
     // them). Such a node does not hold a value but the variable's cell (TupleType::cell), which
     // is what a `var` parameter or a capture receives; a value is read out of it by `:var/get`
@@ -1156,6 +1205,62 @@ class Builder {
     compile_graph_ptr_t instantiateGenericAs(
         const generic_template_ptr_t &tmpl, FunctionType *expected, const GCT::node_ptr_t &origin,
         std::string &why);
+    /// A body build inside a speculative scope: while this lives, what the body reports goes to the
+    /// scope's sink. The body of a candidate is the only thing a search may hold back, and this is
+    /// the only door into that sink.
+    class BodyDiagnostics {
+      public:
+        explicit BodyDiagnostics(Builder &builder);
+        ~BodyDiagnostics();
+
+      private:
+        Builder &self_;
+        SpeculativeInstantiation *scope_;
+        camel::core::error::diagnostics_ptr_t outer_;
+    };
+    /// The diagnostics of a body that does not compile for the types it was tried with, and the
+    /// answer to them. A position that fixes the type variables of a generic name tries the
+    /// candidates its name offers one after another, and a candidate whose *body* does not compile
+    /// for those types is not the one the position wants: what its body said is about a function the
+    /// program does not use, so it is held here instead of reported, and the attempt is answered
+    /// with "no instance" (`instantiateGeneric` returns nullptr) rather than with an abort. The
+    /// attempt that failed remembers the failure in its template (`GenericInstance::failed`,
+    /// :77-78), so a second attempt at the same types makes no diagnostic and does not build the
+    /// body again.
+    ///
+    /// Nothing else is held. The argument form of a call, a `constas` value that is not constant, a
+    /// condition that cannot be answered, an incomplete return type and every other verdict of the
+    /// program reach the sink in place the moment they are made, whether a scope is open or not: a
+    /// search may skip a candidate, never a verdict. What is held is only ever the body of a
+    /// candidate that may still turn out not to be the one wanted.
+    ///
+    /// A caller with no candidate left calls `attach()`, which adds those errors to the sink in
+    /// place -- so the refusal that follows carries them, at the positions and with the labels the
+    /// body gave them -- and ends the scope; a caller that found its instance lets the scope end,
+    /// which drops them. The search that has no fallback does not use this at all: one candidate and
+    /// no alternative is not speculative, and its diagnostics are the program's.
+    class SpeculativeInstantiation {
+      public:
+        friend class BodyDiagnostics;
+        explicit SpeculativeInstantiation(Builder &builder);
+        ~SpeculativeInstantiation();
+        /// Adds the errors of the bodies that did not compile to the sink in place, and ends the
+        /// scope: from here the builder reports where it always did, so the diagnostic the caller
+        /// is about to make is the program's, and it is preceded by what the bodies said.
+        void attach();
+        /// Ends the scope and reports nothing more: what the bodies said is dropped, for a caller
+        /// that knows a candidate nobody chose is not the program's business (a rule's search for an
+        /// instance for one type: the reason is remembered and reported only when the user asks).
+        void close();
+
+      private:
+        Builder &self_;
+        /// The scope this one replaced, so that scopes nest.
+        SpeculativeInstantiation *previous_ = nullptr;
+        camel::core::error::diagnostics_ptr_t outer_;
+        camel::core::error::diagnostics_ptr_t inner_;
+        bool settled_ = false;
+    };
     /// The function value of the generic function `node` names, instantiated for the type
     /// the position expects; an error (GenericFunctionAsValue) that says which variables
     /// cannot be determined when `expected` is not a function type that fixes them.
@@ -1299,6 +1404,15 @@ class Builder {
     /// which is the semantics, and gives the same result.
     void adoptImplKernel(
         const generic_template_ptr_t &tmpl, const compile_graph_ptr_t &graph, FunctionType *funcType);
+    /// Whether the rule `rule` of a body-less declaration applies to an instance of these types:
+    /// the condition the declaration wrote, answered for the instance's types (design principles
+    /// 4.4), with the declaration's own type parameters bound by them. True when the rule has no
+    /// condition. A condition that cannot be answered from the types alone is reported as the
+    /// defect it is (reportWhenProblem).
+    bool declaredRuleApplies(
+        const camel::core::type::resolver_ptr_t &rule, const std::string &name,
+        const camel::core::type::type_vec_t &withTypes,
+        const camel::core::type::type_vec_t &normTypes);
     /// The kernel of `graphs` when they are exactly the one `#impl` body: what a call of the
     /// function is, instead of a call of the body (design principles 10.4).
     std::optional<ImplKernel> implKernelOf(const graph_set_ptr_t &graphs) const;
@@ -2217,10 +2331,13 @@ class Builder {
     node_handle_t foldLiteralCall(const GCT::node_ptr_t &gct, camel::core::type::Type *expected);
     /// The design principles 5.1 resolution order for the operands of an operator: a literal
     /// operand takes the type of the other operand when that one is numeric, and then the
-    /// value is converted exactly (an operand that does not fit is reported).
+    /// value is converted exactly (an operand that does not fit is reported). With
+    /// `anyOperatorCall`, a named operator call (`add(x, 2.0)`) is adapted as well; without it
+    /// only the infix operators whose operands are related that way.
     void adaptLiteralOperands(
         const std::string &group, std::vector<Argument> &inputs,
-        camel::core::type::type_vec_t &types, const GCT::node_ptr_t &call);
+        camel::core::type::type_vec_t &types, const GCT::node_ptr_t &call,
+        bool anyOperatorCall = false);
     /// The return type the function around the current position declares (looking out of
     /// branch arms), or nullptr when it declares none.
     camel::core::type::Type *declaredExitTypeHere() const;

@@ -402,8 +402,13 @@ visible. `--changed` prints a `[WARN]` naming every changed file no rule matched
 the policy excludes are not called holes). And the self-test `test/tools/selftest/run.mjs` walks
 every file in the index plus the untracked, not ignored files, and fails on a class that neither
 a directory rule nor a file rule selects, unless the class is on its allowlist with a reason. The
-plan side is checked the same way: every plan file must be selected by a case path it names, or
-the self-test fails and names the plan (H201). The
+plan side is checked the same way, except that its verdict is about the branch: every plan file in
+git's index must be selected by a case path it names, or the self-test fails and names the plan
+(H201). A plan file that is only in the working tree -- an agent's scratch plan, written to try a
+case out -- is not one of the branch's plans, and the self-test names it as a note instead of
+failing the run: the live tree is shared with whoever is working in it, and two gates of another
+task went red on exactly such a draft (H368). Committing the file makes the check red for real.
+The
 allowlist names only the deliberately unselectable layers (perf, GC stress, progen, the PyTorch
 comparisons) and files no plan reads (vendored code, packaging, CI configuration, repository
 metadata). A new kind of file therefore cannot appear without a rule or a reason: add
@@ -483,14 +488,22 @@ Every `[[tests]]` entry may use these common fields:
 - `expect_exit`
   Optional integer expected process exit code.
 - `timeout_ms`
-  Optional process timeout in milliseconds. Default is `10000`. A timeout is a pass condition on
-  wall time, so it is a bound only with room under it: the runner fails a test that used more
-  than a quarter of its timeout (`TIMEOUT_MARGIN` in `test/tools/run-tests.mjs`), and prints the
-  measured number. A test that legitimately needs a large bound states the measurement in a
-  comment next to the value ("20 s: 2.1 s alone, 4.2 s at `-Jobs 8`"); a test that sits at its
-  bound on a quiet machine has no margin for a busy one and is fixed, not raised. A fast case
-  with no reason for a special bound uses the runner default (`10000`): a 4 s bound is a speed
-  assertion, and it is rejected as soon as the case takes a second on a loaded host.
+  Optional process timeout in milliseconds. Default is `10000`. A timeout is a pass condition, so it
+  is a bound only with room under it: the runner fails a test that used more than a quarter of its
+  timeout **of its own CPU time** (`TIMEOUT_MARGIN` in `test/tools/run-tests.mjs`), and prints the
+  measured number and the wall clock beside it. The quantity is the work's, not the host's: on a
+  shared host a passing test's wall clock is who else is running, and a rule that read it failed the
+  plan runner's own self-test at random (H368). A host whose kernel reports no CPU time (no
+  `/proc/self/stat`) has no such reading, so there the rule falls back to the wall clock and the run
+  says so once; a host that has the reading and does not get one for a test fails that test, because
+  a margin nobody can read is not a margin. A test that legitimately needs a large bound states the
+  measurement in a comment next to the value ("20 s: 2.1 s alone, 4.2 s at `-Jobs 8`"); a test that
+  sits at its bound on a quiet machine has no margin for a busy one and is fixed, not raised. A fast
+  case with no reason for a special bound uses the runner default (`10000`): a 4 s bound is a speed
+  assertion, and it is rejected as soon as the case takes a quarter of it in its own CPU time. A
+  test whose own CPU time exceeds its wall clock is multi-threaded work: the reading sums its
+  threads, so a bound on its total work belongs in `cpu_budget_ms` (measured over the whole fast
+  layer on 2026-10-24: 21 of 5,873 tests, all ONNX-runtime, dlpack and fuzz cases).
 - `cpu_budget_ms`
   Optional. The test's cost bound in milliseconds of **CPU time** (user + system) of the test's own
   process tree, read by `test/tools/child-cpu.mjs`, which the runner runs the command under. A test

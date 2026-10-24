@@ -91,6 +91,26 @@ case = "../../tools/startup-cost.mjs"
 args = ["${case}"]
 expect_exit = 0
 expect_stdout_contains = ["startup.cost metric=cpu_user_plus_system", "startup.cost version", "startup.cost imports_nothing", "startup.cost inspect_ops", "startup.cost imports_all", "declaration.cost declarations=", "per_declaration_us=", "total_ms=", "duplicates=0"]
+# The runner judges this entry on its own CPU time for the same reason the tool inside it
+# already reads its four ceilings that way (see the header above), by the author's ruling of
+# 2026-10-23 (docs/handover/reviews/questions-2026-10-23.md, "declaration-cost-gate" (a)):
+#
+#   "改量 CPU 时间，不量墙钟。共享主机上的墙钟随负载漂移 ... 进程的 CPU 时间（用户态 + 内核态）基本
+#    不随负载变"
+#
+# Measured on the Linux host (32 threads; the 1-minute load read 76.41/76.92/80.97 and
+# 85.69/91.25/84.56), the entry at two run lengths:
+#
+#   7.58 s of CPU / 14.77 s wall   (2026-10-24, nine perf plans in one run at -Jobs 8)
+#   7.40 s of CPU / 17.59 s wall   (2026-10-24, those plans beside feat/mm/gc and two gpu plans)
+#
+# The 248 processes of the measurement are the entry's work, and it is fixed, so a reading is the
+# slope of its own CPU against that work. The CPU figure spreads 2.4 % between the windows where
+# the wall clock spreads 19 %. The budget is 13 s: 1.63x the higher reading rounded up to the
+# next 1000 ms -- the headroom the four resnet referees of feat/modules/autodiff.plan.toml took
+# -- and 1.72x the busiest reading seen. The timeout below stays and is now only what it says:
+# 120 s is 6.8x the busiest wall of 17.59 s, so it catches a hang, not a busy host.
+cpu_budget_ms = 13000
 # Four commands (two warm-ups plus five samples of twelve runs each: 248 processes) and 21 rounds of
 # `inspect --ops` took 18.6-18.9 s on this host at load 92.9, so 120 s catches a hang, not a slow run.
 timeout_ms = 120000

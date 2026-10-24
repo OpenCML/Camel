@@ -1,0 +1,18 @@
+/**
+ * Two generic overloads of one name, and a position that fixes the types of both: the first one's
+ * body does not compile for them (`len` of an `int`), the second one's does. The name stands for
+ * the function the position wants, so the first attempt is a candidate that does not apply and not
+ * an error in the program (design principles 5.5).
+ *
+ * The second binding repeats the name at the same types: the instance that failed is remembered as
+ * failed in its template, so the second time it is not built again and nothing is reported either.
+ */
+func pick::<T>(x: T, y: T): T { return len(x) }
+func pick::<T>(x: int, y: T): T { return y }
+
+func main(): int sync {
+    let f: (x: int, y: int) => int = pick
+    let g: (x: int, y: int) => int = pick
+    println(f(1, 2) + g(3, 4))
+    return 0
+}

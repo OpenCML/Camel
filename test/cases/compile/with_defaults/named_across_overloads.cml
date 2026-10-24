@@ -1,0 +1,27 @@
+/**
+ * A named `with` argument binds across an overload set when every declaration names each `with`
+ * position the same way: `rounds` is the first `with` parameter of both declarations of `show`, so
+ * `show<rounds: 2>(3)` and `show<rounds: 2>('a')` each reach the declaration its argument's type
+ * selects (design principles 4.4, handover H376).
+ */
+module with_named_across_overloads
+
+with <rounds: int = 8>
+func show(x: int): string {
+    return string(x * rounds)
+}
+
+with <rounds: int = 8>
+func show(x: string): string {
+    return x + string(rounds)
+}
+
+func main(): int sync {
+    let number = show<rounds: 2>(3)
+    let positional = show<2>(3)
+    let text = show<rounds: 2>('a')
+    'with named_across_overloads number={} positional={} text={}'
+    ->format<number, positional, text>
+    ->println
+    return 0
+}

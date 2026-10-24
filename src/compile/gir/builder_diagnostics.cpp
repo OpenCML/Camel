@@ -1122,6 +1122,14 @@ void Builder::rejectLiteralValue(
         reason = folded ? "the value " + value.toString() +
                               " is too small to be represented (the nearest value is zero)"
                         : "too small to be represented (the nearest value is zero)";
+    } else if (!literal::kindEnters(value, type)) {
+        // A value of a kind the type has no form of: a fractional value in an integer type, an
+        // imaginary part in a real one. Said before the range, which would answer a question the
+        // value does not raise (`0.5` is not outside the range of an integer, it is not an
+        // integer). The words match the ones a decimal literal in an integer type already gets
+        // (rejectLiteralData, `int(1.9)`).
+        reason = isIntegerType(type) ? "the value would be truncated"
+                                     : "the value cannot become that type";
     } else if (!range.empty()) {
         // A folded expression is quoted as written, so the value it came to is also said.
         reason = folded ? "the value " + value.toString() + " is out of range (" + range + ")"
@@ -1337,6 +1345,68 @@ void Builder::checkDeclaredReturn(
     }
     diag.commit(resultType->toString(), declared->toString(), funcType->toString());
     throw BuildAbortException();
+}
+
+// ---- A body that does not compile for the types it was tried with ----
+
+Builder::SpeculativeInstantiation::SpeculativeInstantiation(Builder &builder)
+    : self_(builder), previous_(builder.speculative_), outer_(builder.diags_) {
+    // The sink of the bodies answers for the module the search happens in: the same name and the
+    // same file, so a diagnostic kept from it reads as one the builder would have made. The sink is
+    // not swapped in here: only a body build writes to it (`BodyDiagnostics`), so a verdict the
+    // attempt makes on its way to the body is reported where it always was.
+    inner_ = std::make_shared<Diagnostics>(
+        outer_->moduleName(), outer_->modulePath(), outer_->sourceContext());
+    inner_->setConfig(outer_->getConfig());
+    self_.speculative_ = this;
+}
+
+Builder::SpeculativeInstantiation::~SpeculativeInstantiation() {
+    settled_ = true;
+    if (self_.speculative_ == this) {
+        self_.speculative_ = previous_;
+    }
+    if (self_.diags_ == inner_) {
+        // A body that is still open when the scope ends: nothing kept it, so nothing is reported.
+        self_.diags_ = outer_;
+    }
+}
+
+void Builder::SpeculativeInstantiation::close() {
+    settled_ = true;
+    if (self_.speculative_ == this) {
+        self_.speculative_ = previous_;
+    }
+    if (self_.diags_ == inner_) {
+        self_.diags_ = outer_;
+    }
+}
+
+void Builder::SpeculativeInstantiation::attach() {
+    if (settled_) {
+        return;
+    }
+    // The errors carry what the body said about them (the instance and the call that asked for it,
+    // from addRelatedToErrorsFrom); they are added to the sink in place, in order, and then the
+    // scope ends, so the refusal the caller makes next is reported with them.
+    for (const Diagnostic *error : inner_->errors()) {
+        outer_->add(Diagnostic(*error));
+    }
+    close();
+}
+
+Builder::BodyDiagnostics::BodyDiagnostics(Builder &builder)
+    : self_(builder), scope_(builder.speculative_) {
+    if (scope_ != nullptr) {
+        outer_        = self_.diags_;
+        self_.diags_  = scope_->inner_;
+    }
+}
+
+Builder::BodyDiagnostics::~BodyDiagnostics() {
+    if (scope_ != nullptr && self_.diags_ == scope_->inner_) {
+        self_.diags_ = outer_;
+    }
 }
 
 } // namespace camel::compile::gir

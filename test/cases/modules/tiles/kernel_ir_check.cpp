@@ -449,12 +449,13 @@ void checkGeneralReductions() {
 void checkRegions() {
     auto require=[](bool ok) {if(!ok) throw std::runtime_error("invalid dependency-convex region partition");};
     // IDs are deliberately not topological; duplicated operands remain one boundary value.
-    std::vector<RegionNode> chain={{{2,2},true,true},{{},false,false},{{1},true,false},{{},true,false}};
+    // `order` is empty here: these graphs order nothing for ordering's own sake.
+    std::vector<RegionNode> chain={{{2,2},{},true,true},{{},{},false,false},{{1},{},true,false},{{},{},true,false}};
     auto regions=partitionRegions(chain);
     require(regions.size()==1 && regions[0].members==std::vector<size_t>{2,0} &&
             regions[0].inputs==std::vector<size_t>{1} && regions[0].outputs==std::vector<size_t>{0});
     // Contracting 1 and 3 would create R -> CPU2 -> R. The direct edge cannot justify it.
-    std::vector<RegionNode> detour={{{},false,false},{{0},true,false},{{1},false,false},{{1,2},true,true}};
+    std::vector<RegionNode> detour={{{},{},false,false},{{0},{},true,false},{{1},{},false,false},{{1,2},{},true,true}};
     regions=partitionRegions(detour);
     require(regions.size()==2 && regions[0].members==std::vector<size_t>{1} &&
             regions[1].members==std::vector<size_t>{3} && regions[1].inputs==std::vector<size_t>({1,2}));
@@ -470,21 +471,36 @@ void checkRegions() {
     auto badRegions=regions; badRegions[0].outputs.clear(); invalidTransfers(badRegions);
     badRegions=regions; badRegions[1].members.push_back(1); invalidTransfers(badRegions);
     // Multiple regions share one host input; unused CPU consumers must not trigger downloads.
-    std::vector<RegionNode> split={{{},false,false},{{0},true,false},{{0,1},true,true},{{1},false,false}};
+    std::vector<RegionNode> split={{{},{},false,false},{{0},{},true,false},{{0,1},{},true,true},{{1},{},false,false}};
     std::vector<Region> splitRegions={{{1},{0},{1}},{{2},{0,1},{2}}};
     transfers=planRegionTransfers(split,splitRegions);
     require(transfers.uploads==std::vector<size_t>{0} && transfers.downloads==std::vector<size_t>{2});
     split[0].embedded=true;
     require(planRegionTransfers(split,splitRegions).uploads.empty());
     // Shared intermediates exported to CPU remain exits even when the GPU chain fuses.
-    std::vector<RegionNode> shared={{{},false,false},{{0},true,false},{{1},true,true},{{1},false,true}};
+    std::vector<RegionNode> shared={{{},{},false,false},{{0},{},true,false},{{1},{},true,true},{{1},{},false,true}};
     regions=partitionRegions(shared);
     require(regions.size()==1 && regions[0].outputs==std::vector<size_t>({1,2}));
     // A CPU diamond prevents a contraction only if it leaves and re-enters the same region.
-    std::vector<RegionNode> diamond={{{},false,false},{{0},true,false},{{0},false,false},{{1,2},true,true}};
+    std::vector<RegionNode> diamond={{{},{},false,false},{{0},{},true,false},{{0},{},false,false},{{1,2},{},true,true}};
     regions=partitionRegions(diamond);require(regions.size()==1 && regions[0].inputs==std::vector<size_t>({0,2}));
     auto rejects=[&](std::vector<RegionNode> graph) {try{(void)partitionRegions(graph);}catch(const std::exception&){return;}throw std::runtime_error("invalid region graph accepted");};
-    rejects({{{1},true,true}});rejects({{{0},true,true}});rejects({{{1},true,true},{{0},false,false}});
-    require(partitionRegions({{{},true,false}}).empty());
+    rejects({{{1},{},true,true}});rejects({{{0},{},true,true}});rejects({{{1},{},true,true},{{0},{},false,false}});
+    require(partitionRegions({{{},{},true,false}}).empty());
+    // An ordering edge is a dependency without a value: it keeps the node it points at live and
+    // ordered like any other edge, and a region boundary carries no value across it.
+    std::vector<RegionNode> ordered={{{},{},true,false},{{},{0},true,true}};
+    regions=partitionRegions(ordered);
+    if(!(regions.size()==2 &&
+         std::any_of(regions.begin(),regions.end(),[](const Region &r){return r.members==std::vector<size_t>{0};})))
+        throw std::runtime_error("an ordering edge did not keep its predecessor live");
+    // Two control regions never contract into one, however eligible the nodes are.
+    std::vector<RegionNode> arms={{{},{},true,false},{{0},{},true,true}};
+    arms[0].control=1;arms[1].control=2;
+    regions=partitionRegions(arms);
+    if(regions.size()!=2) throw std::runtime_error("a region spanned two control regions");
+    arms[1].control=1;
+    regions=partitionRegions(arms);
+    if(regions.size()!=1 || regions[0].members.size()!=2) throw std::runtime_error("one control region did not contract");
     std::cout<<"tiles regions: convexity, boundaries, liveness and dependency order passed\n";
 }

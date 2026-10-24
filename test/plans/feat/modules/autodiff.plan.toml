@@ -2971,3 +2971,23 @@ expect_stdout_contains = ["second_order_array_append_init d0=6.0 d1=2.0"]
 expect_output_contains = ["no derivative rule for operator ':tangent/init_arr'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
+
+[[tests]]
+name = "f64_broadcast_grad"
+desc = "An f64 gradient through a broadcast: sum(x * p0) with x a Tensor<f64, [2, 3]> and p0 a Tensor<f64, [3]> multiplies by broadcasting p0 over the rows, and tensor:sum_to is the reduction of that broadcast, so this is where an f64 gradient was refused with \"'the gradient kernels' does not support a value of type 'Tensor<f64>'\". Both gradients are printed and both distances are 0.0 against the values written out by hand from the forward expression (d/dx is the row broadcast of p0, d/dp0 the column sum [5, 7, 9]). The wide pair sums 2^24 + 1 in the third column: 16777217.0 in f64 and 16777216.0 if the value is accumulated in f32, so its printed third coordinate and its distance (0.0 against 1.0) say which accumulator the arm uses."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/f64_broadcast_grad.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const text = input.normalized.stdout
+assert(text.includes('f64_broadcast_grad value=22.25 a_x=0.0 a_p0=0.0 wa=0.0'), `unexpected distances: ${text}`)
+assert(text.includes('gx tensor([[        0.5,        0.25,       2.],'), `the x gradient is not the row broadcast of p0: ${text}`)
+assert(text.includes('[        0.5,        0.25,       2.]], dtype=float64)'), `the x gradient is not f64: ${text}`)
+assert(text.includes('gp tensor([      5.,       7.,       9.], dtype=float64)'), `the p0 gradient is not the column sum of x: ${text}`)
+assert(text.includes('wp tensor([ 16777217.,       2.,  16777217.], dtype=float64)'), `the wide sum did not accumulate in f64: ${text}`)
+}
+"""
+timeout_ms = 10000

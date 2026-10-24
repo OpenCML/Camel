@@ -50,6 +50,39 @@ assert(field('minor') >= 10, `the young generation was collected in every cycle:
 assert(field('moved') > 0, `the moving collector moved nothing: ${line[0]}`)
 }
 """
+# The cost bound is this test's own CPU time (user + system), and the timeout below is its liveness
+# bound, by the author's ruling of 2026-10-23 (docs/handover/reviews/questions-2026-10-23.md,
+# "declaration-cost-gate" (a)):
+#
+#   "改量 CPU 时间，不量墙钟。共享主机上的墙钟随负载漂移 ... 进程的 CPU 时间（用户态 + 内核态）基本
+#    不随负载变"
+#
+# Measured on the Linux host (32 threads, shared with other worktrees and engines; the 1-minute load
+# read 76.41/76.92/80.97 before the first window and 85.69/91.25/84.56 before the second), the
+# twelve entries of this plan at two run lengths (nine perf plans in one run at -Jobs 8, then
+# those plans beside feat/mm/gc and two gpu plans):
+#
+#   gc_timeit_cycles.generational     3.22 s CPU /  6.68 s wall   (first window)
+#   gc_timeit_cycles.generational     3.21 s CPU /  5.58 s wall   (second window)
+#   gc_timeit_cycles.mark_sweep       4.87 s CPU /  9.39 s wall   (first window)
+#   gc_timeit_cycles.mark_sweep       4.77 s CPU /  8.33 s wall   (second window)
+#   gc_soak_long.generational        42.17 s CPU / 80.99 s wall   (first window)
+#   gc_soak_long.generational        42.36 s CPU / 84.43 s wall   (second window)
+#   gc_soak_long.mark_sweep         104.46 s CPU /241.63 s wall   (first window)
+#   gc_soak_long.mark_sweep         104.56 s CPU /206.32 s wall   (second window)
+#   gc_live_gb.generational           5.44 s CPU /  9.97 s wall   (first window)
+#   gc_live_gb.generational           4.93 s CPU /  9.44 s wall   (second window)
+#   gc_live_gb.mark_sweep             7.90 s CPU / 16.57 s wall   (first window)
+#   gc_live_gb.mark_sweep             7.22 s CPU / 13.01 s wall   (second window)
+#
+# Every entry is one fixed program, so a reading is its own CPU against its work. The CPU
+# figures spread 0.1-10 % between the windows where the wall clock spreads 17-29 %. Each budget
+# is 1.63x that entry's higher reading rounded up to the next 1000 ms -- the headroom the four
+# resnet referees of feat/modules/autodiff.plan.toml took -- and 1.63-1.86x the busiest reading
+# seen. gc_soak_long.mark_sweep is the entry the wall bound reddened on this host: 241.63 s of
+# wall in the first window is 1.07x the 225 s the 900 s timeout's 4x margin allows, while its CPU
+# read 104.46 s there and 104.56 s in the second window, 0.1 % apart.
+cpu_budget_ms = 6000
 timeout_ms = 300000
 
 [[tests]]
@@ -75,6 +108,10 @@ const field = (name) => {
 assert(field('major') >= 10, `mark-sweep did not collect in every cycle: ${line[0]}`)
 }
 """
+# 1.63x the 4.87 s CPU read above (the higher of 4.87 s and 4.77 s) rounded up: 1.64x the busiest.
+# The timeout below stays; by the ruling quoted on gc_timeit_cycles.generational it is the
+# liveness bound only.
+cpu_budget_ms = 8000
 timeout_ms = 300000
 
 [[tests]]
@@ -102,6 +139,10 @@ assert(field('minor') >= 3000, `minor collections ran throughout: ${line[0]}`)
 assert(field('minor_pause_max_ms') <= 200, `no long stop: ${line[0]}`)
 }
 """
+# 1.63x the 42.36 s CPU read above (the higher of 42.17 s and 42.36 s) rounded up: 1.65x the
+# busiest reading seen. The timeout below stays as the liveness bound (the ruling quoted on
+# gc_timeit_cycles.generational above).
+cpu_budget_ms = 70000
 timeout_ms = 900000
 
 [[tests]]
@@ -127,6 +168,11 @@ assert(field('elder_reserved_mb') <= 64, `the elder space is bounded: ${line[0]}
 assert(field('major') >= 200, `major collections ran throughout: ${line[0]}`)
 }
 """
+# 1.63x the 104.56 s CPU read above (the higher of 104.46 s and 104.56 s) rounded up: 1.64x the
+# busiest reading seen. This is the entry the wall clock reddened: see the table above.
+# The timeout below stays as the liveness bound (the ruling quoted on
+# gc_timeit_cycles.generational above).
+cpu_budget_ms = 171000
 timeout_ms = 900000
 
 [[tests]]
@@ -156,6 +202,10 @@ const field = (name) => {
 assert(field('elder_live_mb') >= 1200 && field('elder_reserved_mb') <= 2304, `elder space: ${line[0]}`)
 }
 """
+# 1.63x the 5.44 s CPU read above (the higher of 5.44 s and 4.93 s) rounded up: 1.65x the busiest.
+# The timeout below stays as the liveness bound (the ruling quoted on
+# gc_timeit_cycles.generational above).
+cpu_budget_ms = 9000
 timeout_ms = 900000
 
 [[tests]]
@@ -180,4 +230,8 @@ const field = (name) => {
 assert(field('elder_live_mb') >= 1400 && field('elder_reserved_mb') <= 2304, `elder space: ${line[0]}`)
 }
 """
+# 1.63x the 7.90 s CPU read above (the higher of 7.90 s and 7.22 s) rounded up: 1.65x the busiest.
+# The timeout below stays as the liveness bound (the ruling quoted on
+# gc_timeit_cycles.generational above).
+cpu_budget_ms = 13000
 timeout_ms = 900000

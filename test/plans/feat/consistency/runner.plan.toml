@@ -13,10 +13,15 @@ case = "../../../tools/selftest/run.mjs"
 args = ["${case}"]
 expect_exit = 0
 expect_stdout_contains = ["runner self-test ok"]
-# 180 s: the self-test starts 36 nested runs (32 at a time), so its wall time is the host's, not
-# the work's. Measured 10.5 s standalone and 16.2-23.5 s inside the parallel gate at -Jobs 8;
-# four times the worst of those is 94 s. 180 s is that 4x over a host twice as busy again and
-# still fails a nested run that hangs.
+# The deciding reading is this self-test's own CPU time, not the wall clock: the runner's margin
+# rule reads the CPU of every test's process tree (H368). Six runs of this case inside the fast
+# layer at -Jobs 8 on 2026-10-24 read 12.41-12.69 s of CPU against 22.0-23.5 s of wall -- a 2.3%
+# spread in the figure that decides, where the wall clock spread 6.5% in the same six runs. The
+# same fixture read 7.22-7.39 s of CPU when its nested tests ran unwrapped; the wrapper that makes
+# the reading is now under every test, its own nested runs included, and that cost is this
+# test's own work. The margin is 45 s, so the bound has more than three times the work in it. 180 s
+# is the liveness bound: a nested run that hangs must not hold the gate, and the wall this test
+# takes on this host (15.8-23.5 s measured inside gates) is the host's.
 timeout_ms = 180000
 # No `parallel = false`: this test starts the runner itself, and it used to be serial because
 # the inner run cleared tmp/test, deleting the outer run's scratch. Every run now owns

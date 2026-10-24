@@ -186,6 +186,42 @@ class Formatter {
         return prefix;
     }
 
+    /// The comments that stand between a declaration's front matter - the tags and the annotations
+    /// it writes on lines of its own - and the token the declaration goes on with: a doc comment
+    /// written between `#impl<...>` and `func` stands inside the declaration, in no gap a list or a
+    /// range looks at, and it is the declaration's own comment as much as one written above the
+    /// tag. `commentsBefore` writes the comments above the first token (above the tag); this writes
+    /// the ones after the element that ends at `afterToken`, where the reader put them. Nothing is
+    /// moved, so the text a formatter returns holds the same bytes in the same order, and a scan of
+    /// it (a byte offset a generated name is derived from, say) reads the same.
+    ///
+    /// The line the element and each comment ends on is the line the next one starts on (what
+    /// `writeList` does with the same arithmetic); the result ends with the line end the next
+    /// element of the declaration starts on, so a caller writes an element and the end of its line
+    /// in one call, with or without a comment between them.
+    std::string commentsInFrontMatter(size_t afterToken) {
+        std::string result;
+        size_t lastStop = tokens[afterToken].line() + countLines(tokens[afterToken].text());
+        for (size_t i = afterToken + 1; i < tokens.size() && tokens[i].channel > 1; i++) {
+            if (commentWritten(i)) {
+                continue;
+            }
+            // A comment on the element's own line is separated by a space; one below it keeps the
+            // line the reader gave it, a blank line below included (two at most, as a list keeps
+            // the blank lines between its items).
+            const long skips =
+                static_cast<long>(tokens[i].line()) - static_cast<long>(lastStop);
+            if (skips <= 0) {
+                result += " ";
+            } else {
+                result += lineEnd(skips > 2 ? 2 : static_cast<int>(skips));
+            }
+            writeCommentText(result, i);
+            lastStop = tokens[i].line() + countLines(tokens[i].text());
+        }
+        return result + lineEnd();
+    }
+
     inline std::string lineEnd(int repeat = 1) {
         if (repeat <= 0) {
             return "";

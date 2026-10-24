@@ -182,6 +182,11 @@ Type *Type::unify(Type *other) const { return equals(other) ? const_cast<Type *>
 
 Type *Type::widened() const { return const_cast<Type *>(this); }
 
+Type *Type::literalOperandType() const {
+    const bool numeric = isNumericScalar(code_) || camel::core::type::isComplex(code_);
+    return numeric ? const_cast<Type *>(this) : nullptr;
+}
+
 bool Type::extentForms(std::vector<ExtentForm> &out) const {
     (void)out;
     return false;

@@ -1,0 +1,17 @@
+/// A literal operand beside a tensor takes the tensor's element type (design principles 5.1), so
+/// `x * 0.5` with an `int` tensor is a literal the element type cannot hold: an error at the
+/// expression, not an f32 product that the declared return type then contradicts. The value is
+/// not out of the integer's range, it is not an integer: "the value would be truncated".
+module element_literal_not_representable
+
+import { Tensor, reshape, cast, sum } from tensor
+
+func half(x: Tensor<int>): Tensor<f32> {
+    return x * 0.5
+}
+
+func main(): int sync {
+    let x = cast(reshape([1.0, 2.0, 3.0, 4.0] as f32[], [4]), "int64")
+    println(sum(half(x)))
+    return 0
+}

@@ -1,15 +1,16 @@
 # Fixture of test/tools/selftest/load-class/run.mjs: the same work with a real bound. It must
-# pass, or the margin rule would be "no test may run", not "state a margin".
+# pass, or the margin rule would be "no test may run", not "state a margin". Both fixtures burn
+# their own CPU time over the same eight workers and the same deadline; only the bound differs.
 id = "selftest.load_class.room"
 order = 1
 tier = "fast"
 
 [[tests]]
 name = "room_to_spare"
-desc = "400 ms of work against a 120 s timeout: the bound is not today's wall time."
+desc = "eight workers of CPU work against a 120 s timeout: the bound is not the work's own time."
 kind = "behavior"
 tool = "node"
-case = "../load-class/sleep.mjs"
-args = ["${case}", "400"]
+case = "burn_parallel.mjs"
+args = ["${case}", "400", "8"]
 expect_exit = 0
 timeout_ms = 120000

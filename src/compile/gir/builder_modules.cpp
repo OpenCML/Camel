@@ -70,6 +70,14 @@ bool typesCanAgree(
     if (left->code() == TypeCode::TypeVar) {
         const auto *var = static_cast<const TypeVarType *>(left);
         if (const auto bound = leftBindings.find(var->name()); bound != leftBindings.end()) {
+            if (bound->second == left) {
+                // The variable is bound to itself: two signatures that write the same variable
+                // name in two parameters of one kind (`k::<T>(a: T, b: T)` twice) equate it with
+                // itself here, and following that binding again asks the same question forever
+                // (such a pair used to run the compiler out of stack). The binding already
+                // answers this question, and the answer is yes.
+                return true;
+            }
             return typesCanAgree(bound->second, right, leftBindings, rightBindings);
         }
         leftBindings.emplace(var->name(), right);
@@ -78,6 +86,9 @@ bool typesCanAgree(
     if (right->code() == TypeCode::TypeVar) {
         const auto *var = static_cast<const TypeVarType *>(right);
         if (const auto bound = rightBindings.find(var->name()); bound != rightBindings.end()) {
+            if (bound->second == right) {
+                return true; // the mirror of the case above
+            }
             return typesCanAgree(left, bound->second, leftBindings, rightBindings);
         }
         rightBindings.emplace(var->name(), left);
@@ -529,7 +540,24 @@ void Builder::declareNativeOperator(const GCT::node_ptr_t &gct) {
     // rule of the language allows (design principles 4.3, 5.1; handover H94, ruling 2). A fixed
     // declaration beside a generic one is no such pair: the fixed one is the more specific, and
     // a call it accepts is its own.
+    //
+    // Two generic declarations whose `when` conditions exclude each other are the exception the
+    // language author ruled on (2026-10-24, "impl-declaration-arms",
+    // docs/handover/reviews/questions-2026-10-23.md): "同名声明按 `when` 互斥分臂就是重载，
+    // `signaturesCanAgree` 忽略 `when` 是缺陷" -- `when` is the applicability condition of an
+    // overload (design principles 4.4), so each declaration covers one family of types and the
+    // two may stand side by side. The conditions are asked about the types the compiler
+    // registers (`separateWhenConditions`): a type that satisfies both is reported with the two
+    // declarations, and a condition the compiler cannot answer leaves the pair refused as before.
     const bool generic = resolver->fixedSignature() == nullptr;
+    const auto *ownWhen = GCT::Tree::of(gct)->whenOf(gct);
+    const auto ask = [this](const GCT::node_ptr_t &condition, FunctionType *signature,
+                            const ModuleUnit *unit,
+                            const camel::core::type::type_bindings_t &bindings) {
+        // The condition belongs to the declaration that wrote it and is answered in that
+        // declaration's module, wherever the pair is being checked (evaluateWhenCondition).
+        return evaluateWhenCondition(condition, signature, bindings, {}, nullptr, unit);
+    };
     for (auto &group : unit_->nativeOperators) {
         if (group.name != name) {
             continue;
@@ -544,13 +572,53 @@ void Builder::declareNativeOperator(const GCT::node_ptr_t &gct) {
                 otherDeclared->fixedSignature() != nullptr) {
                 continue;
             }
-            if (signaturesCanAgree(otherDeclared->funcType(), funcType)) {
-                diags_->of(SemanticDiag::NativeDeclarationOverlap)
-                    .atOrigin(gct->origin())
-                    .commit(
-                        name, otherDeclared->funcType()->toString(), funcType->toString());
-                throw BuildAbortException();
+            if (!signaturesCanAgree(otherDeclared->funcType(), funcType)) {
+                continue;
             }
+            const auto *otherWhen = [&]() -> const GCT::Tree::WhenClause * {
+                const auto found = nativeRuleConditions_.find(other.get());
+                return found == nativeRuleConditions_.end() ? nullptr : &found->second.clause;
+            }();
+            const ModuleUnit *otherUnit = [&]() -> const ModuleUnit * {
+                const auto found = nativeRuleConditions_.find(other.get());
+                return found == nativeRuleConditions_.end() ? unit_ : found->second.unit;
+            }();
+            if (ownWhen != nullptr && otherWhen != nullptr) {
+                SpeculativeInstantiation quiet(*this);
+                std::string overlappingType;
+                const ConditionSeparation separation = separateWhenConditions(
+                    ownWhen->condition,
+                    otherWhen->condition,
+                    [&](const camel::core::type::type_bindings_t &bindings) {
+                        return ask(ownWhen->condition, funcType, unit_, bindings);
+                    },
+                    [&](const camel::core::type::type_bindings_t &bindings) {
+                        return ask(
+                            otherWhen->condition, otherDeclared->funcType(), otherUnit, bindings);
+                    },
+                    overlappingType);
+                if (separation == ConditionSeparation::Disjoint) {
+                    // One family of element types each: this rule is the executor of the
+                    // instances its own condition admits, and of no others (declaredRuleApplies).
+                    continue;
+                }
+                if (separation == ConditionSeparation::Overlapping) {
+                    // A rule of one name and one signature is told from its sibling by its
+                    // condition alone, so the report names each declaration by both.
+                    diags_->of(SemanticDiag::WhenDeclarationOverlap)
+                        .atOrigin(gct->origin())
+                        .commit(
+                            name,
+                            overlappingType,
+                            otherDeclared->funcType()->toString() + " — when " + otherWhen->text,
+                            funcType->toString() + " — when " + ownWhen->text);
+                    throw BuildAbortException();
+                }
+            }
+            diags_->of(SemanticDiag::NativeDeclarationOverlap)
+                .atOrigin(gct->origin())
+                .commit(name, otherDeclared->funcType()->toString(), funcType->toString());
+            throw BuildAbortException();
         }
     }
     if (auto graphs = graphScope_->get(name, false); graphs.has_value()) {
@@ -560,6 +628,13 @@ void Builder::declareNativeOperator(const GCT::node_ptr_t &gct) {
                 throw BuildAbortException();
             }
         }
+    }
+    if (const auto *when = GCT::Tree::of(gct)->whenOf(gct)) {
+        // The condition this rule was written with (design principles 4.4): `when` says where a
+        // rule applies, and the `#impl` machinery reads it as the arms of a kernel -- the
+        // instances of the function this rule is the executor of (declaredRuleApplies). A pass
+        // declaration is not an operator and is read before this point, so it never reaches here.
+        nativeRuleConditions_[resolver.get()] = NativeRuleCondition{*when, unit_};
     }
     auto found = std::find_if(
         unit_->nativeOperators.begin(),
@@ -673,6 +748,49 @@ bool Builder::sameImplSignature(FunctionType *function, FunctionType *kernel) {
     return !function->hasExitType() || function->exitType()->equals(kernel->exitType());
 }
 
+bool Builder::declaredRuleApplies(
+    const camel::core::type::resolver_ptr_t &rule, const std::string &name,
+    const type_vec_t &withTypes, const type_vec_t &normTypes) {
+    const auto found = nativeRuleConditions_.find(rule.get());
+    if (found == nativeRuleConditions_.end()) {
+        // No condition: the rule applies wherever its signature does.
+        return true;
+    }
+    // The instance's parameter types are what the declaration's type parameters are here, and
+    // they are what its condition asks about (`is_armed::<T>()`): the same bindings the rule's
+    // own resolution makes, from the declaration's closed signature.
+    FunctionType *declared = nullptr;
+    camel::core::type::type_bindings_t bindings;
+    if (const auto *generic = dynamic_cast<const DeclaredFuncTypeResolver *>(rule.get());
+        generic != nullptr) {
+        declared = generic->funcType();
+        for (size_t i = 0; i < declared->withTypesCount() && i < withTypes.size(); ++i) {
+            if (!unifyTypeVars(declared->withTypeAt(i), valueTypeOf(withTypes[i]), bindings)) {
+                return false;
+            }
+        }
+        for (size_t i = 0; i < declared->normTypesCount() && i < normTypes.size(); ++i) {
+            if (!unifyTypeVars(declared->normTypeAt(i), valueTypeOf(normTypes[i]), bindings)) {
+                return false;
+            }
+        }
+    }
+    // A rule has no `with` arguments of its own where it is selected for a kernel, so a
+    // condition that reads one of the declaration's cannot be answered here; whatever the
+    // outcome, a condition that is neither true nor false is the declaration's defect and is
+    // reported where it is written, never taken for an arm that applies.
+    const WhenResult verdict = evaluateWhenCondition(
+        found->second.clause.condition, declared, bindings, {}, nullptr, found->second.unit);
+    if (verdict.holds()) {
+        return true;
+    }
+    if (verdict.fails()) {
+        return false;
+    }
+    reportWhenProblem(verdict, name, found->second.clause.condition);
+    return false;
+}
+
 void Builder::adoptImplKernel(
     const generic_template_ptr_t &tmpl, const compile_graph_ptr_t &graph, FunctionType *funcType) {
     if (tmpl == nullptr || graph == nullptr || funcType == nullptr) {
@@ -686,14 +804,19 @@ void Builder::adoptImplKernel(
     // Which rule of the declaration is this instance's executor (H228: one operator, per-type
     // executors). A rule with a fixed signature answers for the signature it names; a rule
     // declared with the function's own type parameters is asked with the instance's parameter
-    // types, and its own result type is what a call of the instance gets.
+    // types, and its own result type is what a call of the instance gets. A rule only applies
+    // where its own condition says it does (design principles 4.4): a rule whose condition is
+    // false for these types does not apply, and the next candidate is tried -- which is what
+    // makes the arms of a generic kernel sayable at all, since its single rule otherwise accepts
+    // every element type the function admits.
     const type_vec_t withTypes(funcType->withTypesSpan().begin(), funcType->withTypesSpan().end());
     const type_vec_t normTypes(funcType->normTypesSpan().begin(), funcType->normTypesSpan().end());
     std::string uri;
     camel::core::type::resolver_ptr_t executor;
     for (const auto &[ruleUri, resolver] : kernel.group->resolvers()) {
         if (FunctionType *fixed = resolver->fixedSignature(); fixed != nullptr) {
-            if (sameImplSignature(funcType, fixed)) {
+            if (sameImplSignature(funcType, fixed) &&
+                declaredRuleApplies(resolver, kernel.name, withTypes, normTypes)) {
                 uri      = ruleUri;
                 executor = resolver;
                 break;
@@ -703,8 +826,8 @@ void Builder::adoptImplKernel(
         if (executor != nullptr) {
             continue;
         }
-        if (resolver->resolve(withTypes, normTypes, Modifier::None)
-                .has_value()) {
+        if (resolver->resolve(withTypes, normTypes, Modifier::None).has_value() &&
+            declaredRuleApplies(resolver, kernel.name, withTypes, normTypes)) {
             uri      = ruleUri;
             executor = resolver;
         }
@@ -908,6 +1031,19 @@ void Builder::resolveImplDeclarations(const GCT::node_ptr_t &root) {
                         funcType->toString());
                 throw BuildAbortException();
             }
+            // The rule the declaration names is this instance's executor only where the
+            // declaration's own condition says it is (design principles 4.4): a non-generic
+            // function's types are known here, and a rule narrowed to other types leaves this
+            // instance without an executor. A signature the declaration does not name at all is
+            // the misuse reported above, not a narrowing.
+            camel::core::type::resolver_ptr_t executor;
+            const type_vec_t withTypes(
+                funcType->withTypesSpan().begin(), funcType->withTypesSpan().end());
+            const type_vec_t normTypes(
+                funcType->normTypesSpan().begin(), funcType->normTypesSpan().end());
+            if (declaredRuleApplies(kernel, tag->kernel, withTypes, normTypes)) {
+                executor = kernel;
+            }
             // The graph the declaration made, by the declared type object (overloads share a
             // name and differ by it; builder.cpp, enterScope).
             compile_graph_ptr_t body;
@@ -923,13 +1059,25 @@ void Builder::resolveImplDeclarations(const GCT::node_ptr_t &root) {
             if (body == nullptr) {
                 continue; // its declaration was refused, and that error is reported
             }
+            if (executor == nullptr) {
+                // No executor for these types: this instance runs the body, which is the
+                // semantics and gives the same result, and a direct call of the function is a
+                // call of that graph rather than of a kernel (adoptImplKernel's no-executor
+                // path, for the instance of a generic function).
+                body->draft().setFlags(
+                    static_cast<uint8_t>(body->draft().flags() | camel::runtime::kGraphFlagImplBody));
+                body->draft().setImplKernelUri(std::string(uri));
+                continue;
+            }
             // A direct call resolves in the kernel's own one-rule group: the operator path
             // then picks the type, the conversions and the execution the kernel declares.
             ImplKernel record;
             record.name  = tag->kernel;
             record.uri   = uri;
             record.group = OperatorGroup::create(
-                group->name(), std::vector<std::pair<std::string, camel::core::type::resolver_ptr_t>>{{uri, kernel}});
+                group->name(),
+                std::vector<std::pair<std::string, camel::core::type::resolver_ptr_t>>{
+                    {uri, executor}});
             implKernels_[body.get()] = std::move(record);
             // The graph stays the semantic body: expanding the function means reading this
             // graph, and a consumer that asks for it (autodiff, fusion, export, a rule) gets

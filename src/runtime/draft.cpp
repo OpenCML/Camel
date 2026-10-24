@@ -1285,6 +1285,94 @@ void GraphDraft::appendInputEntry(gc_node_ref_t userId, DraftEdgeSlot slot, gc_n
     slotCountRef(h, slot)++;
 }
 
+void GraphDraft::closeChainOver(gc_node_ref_t id) {
+    requireOneWriting("closeChainOver");
+    ++mutations_;
+    const std::vector<gc_node_ref_t> syncInputs(syncInputsOf(id).begin(), syncInputsOf(id).end());
+    const std::vector<gc_node_ref_t> syncUsers(syncUsersOf(id).begin(), syncUsersOf(id).end());
+    for (gc_node_ref_t user : syncUsers) {
+        if (user == id || !alive(user)) {
+            continue;
+        }
+        // A sync edge joins two statements of one block, so a predecessor of the node this chain
+        // closes over that belongs to another block cannot become the successor's predecessor: the
+        // successor heads its own block's chain instead (docs/design/effects/edges.cn.md 4.6).
+        std::vector<gc_node_ref_t> kept;
+        for (gc_node_ref_t pred : syncInputs) {
+            if (alive(pred) && nodeRegion(pred) == nodeRegion(user)) {
+                kept.push_back(pred);
+            }
+        }
+        setSyncInputs(user, kept);
+        // While the control kind still exists it names the same pair beside the sync edge: the two
+        // orderings have to agree until the control edges go (src/runtime/graph_edges.cpp,
+        // checkControlAndSyncAgree reads that back). The edge is written rather than inferred,
+        // because the path through the node this chain closes over is the one about to disappear.
+        for (gc_node_ref_t pred : kept) {
+            const auto ctrl = ctrlInputsOf(user);
+            if (std::ranges::find(ctrl, pred) == ctrl.end()) {
+                appendInput(DraftEdgeKind::Ctrl, user, pred);
+            }
+        }
+    }
+}
+
+void GraphDraft::takeStatementPlace(gc_node_ref_t oldId, gc_node_ref_t newId) {
+    requireOneWriting("takeStatementPlace");
+    if (oldId == newId) {
+        return;
+    }
+    const DraftNodeHeader *oldHeader = header(oldId);
+    const DraftNodeHeader *newHeader = header(newId);
+    if (oldHeader == nullptr || newHeader == nullptr ||
+        (oldHeader->runtimeFlags & kGCNodeFlagSyncStatement) == 0) {
+        // Nothing stood in a chain, so there is no place to take.
+        return;
+    }
+    if (nodeRegion(oldId) != nodeRegion(newId)) {
+        // The replacer is not a statement of the block the replaced one was written in: the chain
+        // closes over the replaced node instead (closeChainOver).
+        return;
+    }
+    if (!syncInputsOf(newId).empty() || !syncUsersOf(newId).empty()) {
+        // A node already written somewhere in a chain keeps that place: moving a second one onto it
+        // would fork the chain.
+        return;
+    }
+    ++mutations_;
+    // The replacer is the block's statement now (docs/design/effects/edges.cn.md 1.5): the seal
+    // check reads the flag back, and a sync edge may only join statements of the block
+    // (docs/design/effects/edges.cn.md 4.6).
+    setNodeRuntimeFlags(
+        newId, static_cast<uint8_t>(newHeader->runtimeFlags | kGCNodeFlagSyncStatement));
+    const std::vector<gc_node_ref_t> preds(syncInputsOf(oldId).begin(), syncInputsOf(oldId).end());
+    const std::vector<gc_node_ref_t> users(syncUsersOf(oldId).begin(), syncUsersOf(oldId).end());
+    std::vector<gc_node_ref_t> kept;
+    for (gc_node_ref_t pred : preds) {
+        if (alive(pred) && nodeRegion(pred) == nodeRegion(newId)) {
+            kept.push_back(pred);
+        }
+    }
+    setSyncInputs(newId, kept);
+    for (gc_node_ref_t pred : kept) {
+        const auto ctrl = ctrlInputsOf(newId);
+        if (std::ranges::find(ctrl, pred) == ctrl.end()) {
+            appendInput(DraftEdgeKind::Ctrl, newId, pred);
+        }
+    }
+    for (gc_node_ref_t user : users) {
+        if (user == newId || !alive(user) || nodeRegion(user) != nodeRegion(newId)) {
+            continue;
+        }
+        const gc_node_ref_t only[1] = {newId};
+        setSyncInputs(user, only);
+        const auto ctrl = ctrlInputsOf(user);
+        if (std::ranges::find(ctrl, newId) == ctrl.end()) {
+            appendInput(DraftEdgeKind::Ctrl, user, newId);
+        }
+    }
+}
+
 void GraphDraft::eraseNode(gc_node_ref_t id) {
     requireOneWriting("eraseNode");
     ++mutations_;
@@ -1307,6 +1395,9 @@ void GraphDraft::eraseNode(gc_node_ref_t id) {
     const std::vector<gc_node_ref_t> ctrlUsers  = copy(usersOf(id, DraftEdgeSlot::Ctrl));
     const std::vector<gc_node_ref_t> orderUsers = copy(usersOf(id, DraftEdgeSlot::Order));
     const std::vector<gc_node_ref_t> syncUsers  = copy(usersOf(id, DraftEdgeSlot::Sync));
+    // The block's chain closes over a statement the graph loses: its successors follow what it
+    // followed, and the control edge naming the same pair is written beside the sync edge.
+    closeChainOver(id);
 
     for (gc_node_ref_t input : normInputs) {
         removeUserRef(input, id, DraftEdgeSlot::NormalPorts);

@@ -16,7 +16,11 @@
  *     `x: f32`: both literals are f32), and a literal where a value of a numeric type is
  *     expected takes the expected type (`let y: float = 1`, `f(2)` with `f(x: f32)`,
  *     `return 2` under `f32`). A value the type cannot hold is a compile-time error, never a
- *     value cut to size.
+ *     value cut to size;
+ *   - an operand that is an array or a tensor gives its element type, so `t * 0.5` with a
+ *     `Tensor<int64>` asks for an integer `0.5` and is refused: the element type of the
+ *     declaration, or of the instantiation the body is checked for (design principles 5.5), is
+ *     the type every element of the result is computed in.
  *
  * What does NOT change: a value that already has a type never converts by itself. `n + 1.0`
  * with `n: int`, `let y: float = n`, and returning an `int` under `f32` stay errors. Only a
@@ -296,8 +300,8 @@ node_handle_t Builder::foldLiteralCall(const GCT::node_ptr_t &gct, Type *expecte
 
 void Builder::adaptLiteralOperands(
     const std::string &group, std::vector<Argument> &inputs, type_vec_t &types,
-    const GCT::node_ptr_t &call) {
-    if (inputs.size() < 2 || !isFoldedOperator(group)) {
+    const GCT::node_ptr_t &call, bool anyOperatorCall) {
+    if (inputs.size() < 2 || (!anyOperatorCall && !isFoldedOperator(group))) {
         return;
     }
     // The value of the other operand decides the literal's type ("二元运算中另一个操作数的
@@ -309,29 +313,50 @@ void Builder::adaptLiteralOperands(
         if (!value.has_value() || i >= types.size() || types[i] == nullptr) {
             continue;
         }
-        Type *other = nullptr;
+        Type *other        = nullptr;
+        Type *otherOperand = nullptr;
         for (size_t j = 0; j < types.size() && other == nullptr; ++j) {
             if (j == i || types[j] == nullptr) {
                 continue;
             }
             Type *candidate = valueTypeOf(types[j]);
-            // A bf16 or f16 operand takes the literal too: it is a floating type of the language,
-            // and a literal has one of it (design principles 5.1, 7.3). Leaving it out left
-            // `bf16_v + 0.0` with no overload at all, while `f32_v + 0.0` is an f32 sum.
-            if (candidate != nullptr &&
-                (candidate->isPrimitive() || camel::core::type::isComplex(candidate->code())) &&
-                (candidate->code() == TypeCode::Int32 || candidate->code() == TypeCode::Int64 ||
-                 camel::core::type::isFloatingScalar(candidate->code()) ||
-                 camel::core::type::isComplex(candidate->code()))) {
-                other = candidate;
+            // The type of the other operand decides, and the operand's type says what it gives a
+            // literal (design principles 5.1): a numeric scalar gives itself, a numeric array its
+            // element type (a tensor's element type included — leaving element types out left
+            // `bf16_v + 0.0` with no overload at all, while `f32_v + 0.0` is an f32 sum). One
+            // answer for both, so the rule is stated once.
+            if (candidate != nullptr) {
+                other        = candidate->literalOperandType();
+                otherOperand = candidate;
             }
         }
         if (other == nullptr || other->equals(types[i])) {
             continue;
         }
+        // The two differ exactly when an operand gave its *element* type rather than its own: a
+        // numeric scalar gives itself, an array or a tensor gives the type its elements have. The
+        // distinction is what the refusal below turns on.
+        const bool elementType = otherOperand != nullptr && !other->equals(otherOperand);
         if (!literal::kindEnters(*value, other)) {
-            // A float literal and an integer operand: the literal cannot become an integer,
-            // and the integer operand keeps its type. No overload is the report.
+            // A value of a kind the other operand's type has no form of.
+            //
+            // Beside a numeric scalar the literal keeps its own type and the operator is the
+            // report: `n + 1.0` with `n: int` has no `(int, float)` overload, and that is the
+            // answer the program gets. Beside an array or a tensor, the operand gave its element
+            // type, and the operator computes in it throughout, so a value of another kind would
+            // be narrowed into every element without a word: `t * 0.5` with a `Tensor<int64>`
+            // computes the f32 product the declaration's return type then contradicts. Design
+            // principles 5.1 and 5.5: the element type is the one the declaration writes or the
+            // one the instantiation fixes, and a literal it cannot hold is refused at the
+            // expression - but only where the operator relates its operands elementwise, which is
+            // the program's own arithmetic operator call (`anyOperatorCall` is false, and the
+            // guard above admits no other group there). A named operator call is adapted in a
+            // retry after a first resolution failed, and a retry that fails leaves the original
+            // report standing: `rand:sample(xs, 2.0)` with an `int[]` is the count's type, not an
+            // element of the array.
+            if (elementType && !anyOperatorCall) {
+                rejectLiteralValue(*value, other, inputs[i].expr);
+            }
             continue;
         }
         // A value that does not fit the other operand's type is a compile-time error.

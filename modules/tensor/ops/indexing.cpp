@@ -150,7 +150,9 @@ constexpr uint64_t kI64Lowest    = 0x8000000000000000u;
 constexpr uint64_t kI64Highest   = 0x7fffffffffffffffu;
 
 /// The laws of an operator are listed per element type in this order; the instance names the
-/// one of its operand's dtype.
+/// one of its operand's dtype. An operator whose list is not in this order and lists two float
+/// arms asks for its own arm instead of calling this (sum_to: f32 then f64, and position 1 is
+/// int64 for the tables that list f32, i64, bool).
 std::optional<uint8_t> lawIndex(std::optional<TypeCode> dtype) {
     if (dtype == TypeCode::Float32) {
         return 0;
@@ -721,24 +723,49 @@ std::optional<IndexedInstance> reduceAxisIndexing(const InferContext &ctx) {
     return b.finish(std::move(out), WriteMode::Combine, *law);
 }
 
+/// The position of the law `sum_to` reduction uses for `dtype`, in the order the operator lists
+/// them: f32 (0) then f64 (1). nullopt for every other element type, so an int64 or bool operand
+/// gets no instance -- which is what its kernel's refusal says. Written here rather than by
+/// lawIndex because the shared position map is the tables' (f32, i64, bool) order, where 1 is
+/// int64, and an int64 operand taking sum_to's position 1 would name the f64 arm and read as an
+/// answer the operator accepts.
+std::optional<uint8_t> sumToLaw(std::optional<TypeCode> dtype) {
+    if (dtype == TypeCode::Float32) {
+        return 0;
+    }
+    if (dtype == TypeCode::Float64) {
+        return 1;
+    }
+    return std::nullopt;
+}
+
 /**
  * sum_to(g, like): g summed down to like's shape, which g broadcasts from. Both shapes known.
  * When they are equal the kernel returns g itself: an identity map, no arithmetic. Otherwise
  * every axis of g is a dim; it is a Reduction dim where like has no such axis or has extent 1
  * against g's larger extent, and the result is written at like's coordinates.
+ *
+ * Its arms are the float widths its kernel carries, f32 then f64, and each names the law at its
+ * own position in that list; an integer or bool operand gets no instance, which is what the
+ * kernel's refusal says (design principles 5.1: no conversion to reach an arm).
  */
 std::optional<IndexedInstance> sumToIndexing(const InferContext &ctx) {
     const auto g    = shapeOf(ctx, 0);
     const auto like = shapeOf(ctx, 1);
-    const auto law  = lawIndex(ctx.facts(0).dtype);
-    if (!g || !like || !fullyKnown(*g) || !fullyKnown(*like) || !law || like->size() > g->size()) {
+    if (!g || !like || !fullyKnown(*g) || !fullyKnown(*like) || like->size() > g->size()) {
         return std::nullopt;
     }
     IndexBuilder b;
     if (*g == *like) {
+        // Equal shapes: the kernel returns its input itself, so every element type is carried
+        // through and the law is never read.
         const auto dims = dimsOver(b, 0, *g);
         b.instance.norm = {IndexBuilder::affine(dims), IndexBuilder::none()};
         return b.finish(dims);
+    }
+    const auto law = sumToLaw(ctx.facts(0).dtype);
+    if (!law) {
+        return std::nullopt;
     }
     const size_t shift = g->size() - like->size();
     std::vector<DimRole> roles(g->size(), DimRole::Reduction);

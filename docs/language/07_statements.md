@@ -125,7 +125,7 @@ func main(): int sync {
 
 - **默认值是编译期常量表达式**，在声明处求值一次，调用处补进图里：不是每次调用重新求值。所以它不能读同一个声明的形参（`ParamDefaultNotConstant`），也不能是运行期才算出来的值；类型不合是 `ParamDefaultWrongType`。
 - **有默认值的形参之后的形参也必须有默认值**（`ParamAfterDefault`），这样按位置给出时不会出现"后面有值、前面没有"的洞。
-- **按名字的实参写在按位置的之后**，写法与结构体字面量一致：`scale(3, by: 4)`。名字不是该函数的形参是 `ParamArgumentUnknown`，同一个形参给两次是 `ParamArgumentDuplicate`，漏掉没有默认值的形参是 `ParamArgumentMissing`，按名字的实参之后又写按位置的实参是 `ParamArgumentPositionalAfterNamed`。名字在调用处解析，所以被调函数必须是一个已知的声明：同时有几个重载时按名字给实参是 `ParamArgumentCallee`。
+- **按名字的实参写在按位置的之后**，写法与结构体字面量一致：`scale(3, by: 4)`。名字不是该函数的形参是 `ParamArgumentUnknown`，同一个形参给两次是 `ParamArgumentDuplicate`，漏掉没有默认值的形参是 `ParamArgumentMissing`，按名字的实参之后又写按位置的实参是 `ParamArgumentPositionalAfterNamed`。名字在调用处解析：被调函数是一个已知声明时，名字就是它的形参；被调函数是若干个重载时，同一个位置的形参必须在每个重载里同名，名字才指到一个形参上，这样 `opt: …` 这样的实参对每个重载都成立——某个重载把那个位置的形参叫成别的名字，或者一个名字在不同重载里落在不同位置，都是 `OverloadParameterNames`。重载的调用不补默认值：默认值只属于一个声明。被调函数不是已知声明（函数值，或签名各不相同的算子组）时按名字给实参是 `ParamArgumentCallee`。
 - **函数值不携带默认值**：`let g = scale` 之后，`g` 的每个形参都要自己给。默认值属于声明，不属于类型。
 
 ### 7.4.2 `with` 形参
@@ -176,7 +176,7 @@ func main(): int sync {
 
 ### 7.4.3 重载
 
-同一个块里同名而形参类型不同的函数是重载，各有自己的子图。调用按书写顺序取第一个形参接受实参的。
+同一个块里同名而形参类型不同的函数是重载，各有自己的子图。调用取形参接受实参、`when` 条件也成立的那一个；这样的候选不止一个时报 `SemanticDiag::AmbiguousCall`，按声明顺序取舍不是规则（设计原则 4.4、5.1）。
 
 ```cml
 func show(x: int): string { return 'int ' + string(x) }
@@ -192,7 +192,7 @@ func main(): int sync {
 int 1 string a
 ```
 
-- 形参类型完全相同的第二个同名函数是 `SemanticDiag::Redeclaration`（返回类型与形参名不参与区分）。
+- 形参类型完全相同的第二个同名函数是 `SemanticDiag::Redeclaration`（返回类型与形参名不参与区分），除非**两条声明都写了 `when` 且两条条件互斥**：那样它们是重载，各覆盖一族类型（设计原则 4.4；语言作者的裁定，2026-10-24，`docs/handover/reviews/questions-2026-10-23.md`「## impl-declaration-arms」：「同名声明按 `when` 互斥分臂就是重载，`signaturesCanAgree` 忽略 `when` 是缺陷」）。互斥是逐个类型求出来的：对编译器登记的类型（各种标量类型，以及数组、元组、函数、结构体各一个样本）分别把条件里的类型变量绑成该类型、各求两条条件，**有一个类型同时满足两条**就是重叠，报 `SemanticDiag::WhenDeclarationOverlap`，消息指出那个类型与两条声明（各连同自己的条件）。条件里有不能在编译期求值的部分（求不出）时按旧规则拒绝，不当成互斥。这条检查对所有带 `when` 的同名重载一视同仁，不是 `#impl` 声明的特例。
 - 泛型函数不能与其他函数同名。
 - 代表一组重载的名字不能当值用（[6.9](06_expressions.md#69-lambda-与函数类型)）。
 
@@ -244,7 +244,7 @@ func main(): int sync {
 - 运算符的形参个数不对、带 `with` 形参或 `var` 形参，是 `SemanticDiag::OperatorOverloadInvalid`。泛型的重载把类型参数写在运算符名字后的 `::<…>` 里（`func operator +::<T>(a: T[], b: T[]): T[]`），不写在形参类型里。
 - **各层的重载合成一组。** 其他名字只取最近的一层（局部 > 本模块 > 导入的 > 内建），运算符例外（设计原则 10.2）：本模块的、导入的模块导出的、内建的与 C++ 模块的重载是同一组，一次调用取接受这些操作数的那一个。
 - **更具体的重载优先**（设计原则 4.3）。“更具体”的定义：一个程序的重载，形参类型恰好就是操作数的类型（不经装入 `T?`、`T!`），而其他接受这些操作数的都只是把它们当作某一族类型中的一员——内建或 C++ 模块中按类型规则接受多种类型的算子（数组、元组、结构体的按内容比较，张量上的运算），或泛型的重载——这时调用取这个程序的重载。于是结构体可以有自己的相等：`func operator ==(a: V, b: V): bool` 让 `p == q`（`p`、`q` 是 `V`）调用它，而不是按内容比较；其他结构体类型仍按内容比较。内建算子中为恰好这些类型声明的（`int + int`、`float == float`）与之同样具体：声明这样的重载是 `SemanticDiag::OperatorOverloadConflict`。
-- 除此之外有两个都接受时是 `SemanticDiag::AmbiguousCall`，诊断列出它们（两个泛型的重载、两个模块为同样的形参类型各给一个）；同一模块里形参类型相同的两个重载是 `SemanticDiag::Redeclaration`。普通调用与部分应用（`f<w>` 作值）遇到同一遍里有多个候选时也报这个诊断。
+- 除此之外有两个都接受时是 `SemanticDiag::AmbiguousCall`，诊断列出它们（两个泛型的重载、两个模块为同样的形参类型各给一个）；同一模块里形参类型相同的两个重载是 `SemanticDiag::Redeclaration`（两条都写了 `when` 且条件互斥时它们是分臂的重载，见 [7.4.3](#743-重载)）。普通调用与部分应用（`f<w>` 作值）遇到同一遍里有多个候选时也报这个诊断。
 - **导出**：`export func operator +(...)`。导入一个模块（`import { V } from m`，或 `import m`）就带来它导出的全部运算符重载，与 C++ 模块的运算符一样，不必也不能按名字导入。
 - **命名空间块里声明的运算符属于模块**（设计原则 4.3）：它的名字不带命名空间（运算符没有可以限定的名字），与写在模块顶层的一样导出、一样参与重载；它的签名与函数体在所在的块里查找名字，可以不带前缀使用同一块里的类型。
 - 运算符的重载在图上就是一次普通的函数调用。`__x__` 形式的名字仍是保留的，程序不直接写。
@@ -565,6 +565,55 @@ export func add(a: int, b: int): int {
 - `f` 必须是**同一模块**的无体声明。按设计它是这个模块的私有声明（不导出：内核是实现细节，不是模块接口），写在函数同一个模块里。别的模块的声明（`SemanticDiag::ImplKernelForeign`）、没有声明的名字（`ImplKernelUnknown`）、带函数体的函数（`ImplKernelNotBodyless`）、以及写在无体声明自己身上的 `#impl`（`ImplOnBodylessDeclaration`）都被拒绝，`#impl` 也不能写在 lambda、类型、字段或块上（标签位置错误）。拥有 `.cmo` 的模块（`stdlib/tensor.cml` 之于 `tensor.cmo`）同样可以声明内核并写下定义：`.cml` 与同名 `.cmo` 是**同一个模块**（H94），声明模块可以有函数体（语言作者的裁定，2026-10-23，`docs/handover/reviews/questions-2026-10-23.md`「## impl-kernel-site」：「选 (a)，而且取宽的那一种：声明模块可以有函数体，`DeclarationModuleHasBody` 删除」）。
 - **泛型函数可以带 `#impl`**：内核是一条同样带类型参数的无体声明（`sum_kernel::<T>`），按 H228「一个算子、按类型的执行器」在实例化时选执行器——声明里的固定规则按签名匹配，带类型参数的规则用该实例的类型求解。某个 `T` 没有执行器时，这个实例就执行函数体：函数体本来就是语义，结果相同；`std::profile` 标出它走的是哪条路（`docs/handover/reviews/questions-2026-10-23.md`「## impl-kernel-site」：「泛型函数可以带 `#impl`」）。
 - **签名必须一致**：`with` 与普通参数的个数、类型和 `var` 标记相同，结果类型相同，内核没有 `constas` 参数；不一致报 `ImplSignatureMismatch`。
+- **内核覆盖哪些类型，由内核声明自己的 `when` 说**（设计原则 4.4：`when` 在规则里就是「这条规则在此适用于……」；10.4；H228）。一条带函数自身类型参数的内核声明对函数能实例化出的每个类型都求解得出，所以「它实现哪些实例」必须另外写下来：在无体声明上写 `when 条件`，条件在实例化时按该实例的实参类型求值（声明的类型参数由这些类型绑定，谓词在声明所在模块里解析）。条件为假时这条规则对这个实例不适用，重载选择去试这个内核的其他规则（固定规则仍是更具体的，设计原则 4.3）；没有一条适用时这个实例就没有执行器、执行函数体——与「某个 `T` 没有执行器」是同一条路，`std::profile` 同样标出走了哪条路。条件不能只按类型回答时（读了声明自己的 `with` 形参、不是编译期查询等）报 `WhenConditionNotConstant` 等既有诊断，不会静默当成适用。例：
+
+  ```cml
+  func is_armed::<T>(): bool {
+      return match type T {
+          case i32 => true
+          case _ => false
+      }
+  }
+
+  #op<':op/add_i'>
+  func add_kernel::<T>(a: T, b: T): T when is_armed::<T>()   // 只实现 i32 的实例
+
+  #impl<add_kernel>
+  func add::<T>(a: T, b: T): T { return a - (0 - b) }        // int 的实例没有执行器，走函数体
+  ```
+
+  这条条件的读者就是 `#impl` 选执行器的这条路径（`Builder::declaredRuleApplies`）；无体声明在别处（普通调用解析、函数值）仍只按签名匹配，所以按 `when` 分臂的内核只有经 `#impl` 函数调用时才按臂选择：直接写内核名调用、或取它的函数值时，同名内核之间没有条件可依据。
+- **同名内核声明按 `when` 分臂**：一个内核名字可以声明多次，条件互斥时它们是重载，各是一族类型的执行器（语言作者的裁定，2026-10-24，同上「## impl-declaration-arms」：「同名声明按 `when` 互斥分臂就是重载……`array_reduce.cpp` 里的运行期 `switch (codeOf(norm))` 删除」）。按族的执行器各写一条声明即可，不必把两族写成一个并集条件，也不必在函数体里按类型分派：
+
+  ```cml
+  func is_armed::<T>(): bool {
+      return match type T {
+          case i32 => true
+          case _ => false
+      }
+  }
+
+  func is_f32::<T>(): bool {
+      return match type T {
+          case f32 => true
+          case _ => false
+      }
+  }
+
+  #op<':op/add_i'>
+  func add_kernel::<T>(a: T, b: T): T when is_armed::<T>()   // i32 的实例走 :op/add_i
+
+  #op<':op/add_f'>
+  func add_kernel::<T>(a: T, b: T): T when is_f32::<T>()     // f32 的实例走 :op/add_f
+
+  #impl<add_kernel>
+  export func add::<T>(a: T, b: T): T {
+      return a + b                                           // 两族之外的实例走这里
+  }
+  ```
+
+  按元素类型分族的数组归约写法相同：`sum_kernel::<T>(xs: T[])` 声明两条，一条 `when is_integer::<T>()`、一条 `when is_float::<T>()`，各自写本模块那个族的算子；执行器里那个运行期的元素类型 `switch` 因此删除。
+  互斥检查在声明处做，规则与 [7.4.3](#743-重载) 一节所述相同：有一个类型同时满足两条是 `SemanticDiag::WhenDeclarationOverlap`，消息指出那个类型与两条声明；条件求不出时按旧规则拒绝（`SemanticDiag::NativeDeclarationOverlap`）。
 - **默认不展开**：普通调用直接调用内核算子（图上是一个 `OPER`，标签是内核的 URI）。普通遍与执行器到不了函数体，函数体也不会内联进调用者；编译与执行的代价与直接调用一个原子算子相同。语义图照样建出来并保留着，只是不在普通程序可达的图里。
 - **按需展开**：需要看内部的消费者取标签留下的语义图。函数值（`let g = add`、`grad(add)`）就是语义图；运行期还可以从 `Program::implBodies` 取到带 `kGraphFlagImplBody` 的图。目前还没有生产遍去展开 `#impl` 函数体，标签把这件事留给自动微分、融合、导出与规则按需去做；`test::impl` 测试遍是这条路径的演示：它从 `Program::implBodies` 读语义体、展开被标函数的体，并与去掉标签的同一段 Camel 体逐节点比较。差分测试保证内核路径与函数体路径的结果一致（有容差时在测试里写明）。
 

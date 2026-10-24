@@ -5,7 +5,7 @@ tags = ["feat", "tools"]
 
 # The guard against the class of test that fails only when the machine is busy. Each case below
 # is a selftest of one half of it: a shared writable place or a fixed port (check-load-class),
-# and a wall-clock bound with no margin (the runner's TIMEOUT_MARGIN).
+# and a bound with no margin over the work's own CPU time (the runner's TIMEOUT_MARGIN).
 
 [[tests]]
 name = "load_class.shared_place"

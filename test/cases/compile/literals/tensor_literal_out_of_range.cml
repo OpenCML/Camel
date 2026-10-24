@@ -1,0 +1,16 @@
+/// H371: a literal operand beside a tensor takes the tensor's element type (design principles
+/// 5.1), so `x * 1.0e40` with an `f32` tensor is a literal the element type cannot hold: an
+/// error at the expression, not a product that silently reads as `inf`.
+module tensor_literal_out_of_range
+
+import { Tensor, reshape, sum } from tensor
+
+func scale(x: Tensor<f32, [3]>): Tensor<f32, [3]> {
+    return x * 1.0e40
+}
+
+func main(): int sync {
+    let x = reshape([1.0, 2.0, 3.0] as f32[], [3])
+    println(sum(scale(x)))
+    return 0
+}

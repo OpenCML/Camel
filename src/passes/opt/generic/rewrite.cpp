@@ -154,10 +154,15 @@ void replaceNode(GraphDraft &draft, gc_node_ref_t id, gc_node_ref_t replacement)
     const auto copy = [](std::span<const gc_node_ref_t> refs) {
         return std::vector<gc_node_ref_t>(refs.begin(), refs.end());
     };
-    // Users keep running after what `id` ran after: its control predecessors, and the ordered
-    // nodes its value came from (a use of a value implies its producer's ordering; a constant
-    // replacing it does not carry that).
+    // Users keep running after what `id` ran after: its control predecessors, the statement it was
+    // written after in its `sync` block, and the ordered nodes its value came from (a use of a
+    // value implies its producer's ordering; a constant replacing it does not carry that).
     auto preds = copy(draft.ctrlInputsOf(id));
+    for (gc_node_ref_t source : draft.syncInputsOf(id)) {
+        if (std::ranges::find(preds, source) == preds.end()) {
+            preds.push_back(source);
+        }
+    }
     for (gc_node_ref_t source : orderedSources(draft, id)) {
         if (std::ranges::find(preds, source) == preds.end()) {
             preds.push_back(source);
@@ -173,6 +178,12 @@ void replaceNode(GraphDraft &draft, gc_node_ref_t id, gc_node_ref_t replacement)
         }
     }
     const auto ctrlUsers = copy(draft.ctrlUsersOf(id));
+    // The statements written directly after the removed one keep their place in the chain: the
+    // chain is an ordering of its own (docs/design/effects/edges.cn.md 1.5 and 4.6), so a successor
+    // follows what the removed node followed rather than only being ordered by it. eraseNode closes
+    // the chain over the removed node, with the control edge naming the same pair beside the sync
+    // edge; this only has to know which users are already this node's successors in the chain.
+    const auto syncUsers = copy(draft.syncUsersOf(id));
 
     if (replacement != kInvalidNodeRef) {
         draft.replaceAllValueUses(id, replacement);
@@ -186,6 +197,10 @@ void replaceNode(GraphDraft &draft, gc_node_ref_t id, gc_node_ref_t replacement)
         draft.unlinkInput(camel::runtime::DraftEdgeKind::Ctrl, user, id);
     }
     for (gc_node_ref_t user : users) {
+        if (std::ranges::find(syncUsers, user) != syncUsers.end()) {
+            // Its place in the chain orders it, and eraseNode writes the edge that says so.
+            continue;
+        }
         for (gc_node_ref_t pred : preds) {
             camel::runtime::appendControlDependency(draft, pred, user);
         }
