@@ -457,7 +457,7 @@ func first(t: (int, float)) {
 
 ```cml
 func sum(t: (int, int, int)): int {
-    return static loop acc = 0 for (j) in indices t do acc + t.[j]
+    return static loop acc = 0 for j in indices t do acc + t.[j]
 }
 
 func positions(t: (int, string)): (int, int) {
@@ -490,28 +490,47 @@ func rebuild::<T>(t: T) {
 
 ### 6.8.5 `static loop`
 
-`static loop state = init, ... for (n, F) in fields T do expression` is the fold form of `static for`: the field list is expanded when the function is instantiated, each field advances the state one round, and the graph has no loop node.
+`static loop state = init, ... for n, F in fields T do expression` is the fold form of `static for`: the field list is expanded when the function is instantiated, each field advances the state one round, and the graph has no loop node.
 
 ```
-static loop name = init (, name = init)* (for (n, F) in fields T | for (j) in indices ts) do expression
+static loop name = init (, name = init)* for head do expression
+
+head : n, F in fields T          // by field: n is the field's name, F its type
+     | j in indices ts           // by tuple position: j is the position
+     | i in sequence             // by the sequence's elements, see below
 ```
 
 - The head is the same as the `loop` of [6.8.6](#686-loop): with one name the loop's value is that value; with several names the body gives a tuple in the order written and the loop's value is that tuple. The state names are visible in the body only; the first values are evaluated once where the loop is, and the state names are not visible in them. A name may not be repeated (`SemanticDiag::LoopNameRepeated`).
 - Each round's body value is the next state, and its type must be the state's type (except for the implicit conversions, an `int` into an `int?`); otherwise it is `SemanticDiag::LoopBodyTypeMismatch`. An empty struct or tuple has no rounds and the value is the first value.
-- The walk is the header shared with `static for`: `for (n, F) in fields T` (by field) or `for (j) in indices ts` (by tuple position, with the rules of `indices` in 6.8.4). There is no `while`, no `for` over an ordinary sequence, and no `break`/`continue`. `T` / `ts` must be a concrete struct or ordinary tuple (the rules of 6.8.4). When it is a type parameter of an enclosing generic, the trip count is decided by the type at instantiation — that is the count known at instantiation.
+- The walk is the header shared with `static for`, written without the parentheses a `static loop` used to carry (the ruling of 2026-10-24 unifies the two spellings): `for n, F in fields T` walks by field, `for j in indices ts` walks by tuple position (the rules of `indices` in 6.8.4), and every other spelling walks the elements of the sequence written after `in`. There is no `while`, no `for` over an ordinary sequence, and no `break`/`continue`. `T` / `ts` must be a concrete struct or ordinary tuple (the rules of 6.8.4). When it is a type parameter of an enclosing generic, the trip count is decided by the type at instantiation — that is the count known at instantiation.
+- The sequence after `in` is decided by **one rule**, not by a list of accepted spellings (the ruling of 2026-10-25): when the expression is built only from compile-time constants (literals, names bound to constants, the round variables of an enclosing `static` expansion) through operations that can be **freely scheduled** (pure and unable to fail, the one predicate of [design principles](../../design-principles.en.md) 3.4), the compiler works it out and unrolls it. So all of these walk: a constant interval `a..b` (half-open, the reading `..` has everywhere, so `0..5` is 0…4; both ends are `int`, and `..` builds no float or character interval), `range(a, b, step)` (all three arguments constant, the step must be written out, the rounds follow the interval rule of design principles 4.2, and a step of 0 is `SemanticDiag::RangeStepZero`), an array literal or a constant array (by element), and a compile-time tuple `ts` (by element, where **each round's `i` is the type at that position** — which is exactly what tells a `static loop` from an ordinary `loop`: an ordinary `loop`'s variable is the element's value, while a `static loop` over a tuple gives the type at that position; `indices ts` walks positions and gives an `int`, and both are in 6.8.4). What the compiler cannot work out is `SemanticDiag::StaticLoopSequenceNotKnown`, naming the expression that was written; a count that is not fixed (a sequence given by a parameter, say) is that case.
+- A second name in the head means something only when the element itself is a pair: `fields` gives a (name, type) pair, so `n, F` is legal; `indices` and an ordinary sequence have no type name to give, so a second name there is a syntax error. The three names the same rule allows (`n, F, tags`) stand only once some spelling gives three things, and none does today, so a third name is a syntax error too.
 - It expands to straight-line code: each round builds the `ACCS` it reads, in field order, the previous round's state is directly the value the next round reads, and `static loop` has no node of its own. A `return` in the body leaves the function, as in an ordinary function; it does not leave the loop.
 - Its effects are those of straight-line code: whether the body is a sync block is decided by the body itself (3.2), and each round's effects run in field order.
 
 ```cml
 func count::<T>(t: T): int {
-    return static loop n = 0 for (name, F) in fields T do n + 1
+    return static loop n = 0 for name, F in fields T do n + 1
 }
 
 func total_and_max(t: {a: int, b: int}): (int, int) {
     return static loop total = 0, best = 0
-        for (n, F) in fields {a: int, b: int} do {
+        for n, F in fields {a: int, b: int} do {
             (total + t.[n], if best < t.[n] then t.[n] else best)
         }
+}
+
+func sum_to(n: int): int {
+    return static loop acc = 0 for i in 0..n do acc + i
+}
+
+func stepped(): int {
+    return static loop acc = 0 for i in range(0, 10, 3) do acc + i
+}
+
+func from_array(): int {
+    let xs = [1, 2, 3]
+    return static loop acc = 0 for x in xs do acc + x
 }
 ```
 

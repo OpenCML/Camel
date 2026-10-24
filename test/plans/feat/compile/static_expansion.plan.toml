@@ -550,6 +550,80 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
+name = "static_loop_sequence_forms"
+desc = "The sequence of a `static loop` is decided by one rule, not a list of spellings (the ruling of 2026-10-25, H475): an expression built only from compile-time constants through pure operations that cannot fail is worked out and unrolled. `range(a, b, step)` with constant arguments walks `a, a + step, ...` (a negative step walks downwards), an array literal and a `let` bound once to an array walk by element, and an element that is not an integer is still a compile-time constant of the array's element type -- a string element is a `t.[s]` key by its own text."
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/static_loop_sequence_forms.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const want = [
+  "18",
+  "9",
+  "6",
+  "15",
+  "30",
+].join(String.fromCharCode(10))
+assert(input.normalized.stdout.trim() === want, `static loop over a computed sequence changed: ${input.normalized.stdout}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "static_loop_sequence_tuple"
+desc = "`for x in ts` walks a compile-time tuple by element and each round's `x` is the type at that position (the ruling of 2026-10-25, H475) -- what tells a `static loop` from an ordinary `loop`, whose variable is the element's value. `x` is used where a type is needed (`tag::<x>()`, as `load_at::<F>` uses `F`), and an empty tuple has no round."
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/static_loop_sequence_tuple.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const want = [
+  "6",
+  "0",
+].join(String.fromCharCode(10))
+assert(input.normalized.stdout.trim() === want, `static loop over a compile-time tuple changed: ${input.normalized.stdout}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "static_loop_sequence_range_two"
+desc = "The sequence of a `static loop` follows the interval rules of design principles 4.2: the two-argument `range(a, b)` is deleted (one thing one spelling -- a step of one is `a..b`), so it is refused where it is written, pointing at the name, before any sequence is worked out."
+kind = "negative"
+case = "../../../cases/compile/static_expansion/static_loop_sequence_range_two.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::RangeTwoArgumentsRemoved"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "static_loop_sequence_range_step_zero"
+desc = "A `range` step of 0 names no sequence at all, and a constant step is known where it is written: the `static loop` head refuses it there, pointing at the step."
+kind = "negative"
+case = "../../../cases/compile/static_expansion/static_loop_sequence_range_step_zero.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::RangeStepZero"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "static_loop_sequence_runtime_array"
+desc = "An array whose length is not fixed when the function is compiled leaves the number of rounds open and is not a sequence the compiler works out: the one rule asks for an expression built only from compile-time constants, and a parameter is not one. The refusal names the expression that was written (the same `SemanticDiag::StaticLoopSequenceNotKnown` as a parameter bound)."
+kind = "negative"
+case = "../../../cases/compile/static_expansion/static_loop_sequence_runtime_array.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::StaticLoopSequenceNotKnown"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
 name = "indices"
 desc = "`indices` (H51 step 6) walks the positions of a tuple value at instantiation, in both `static for` and `static loop`: `j` is an ordinary int and a compile-time key, the trip count is the tuple's arity (zero for the empty tuple, the type parameter's at instantiation for a generic), and a generator nested in a `fields` body walks a local tuple."
 kind = "behavior"

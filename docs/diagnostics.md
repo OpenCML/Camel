@@ -7692,7 +7692,7 @@ The sequence of a 'static loop' must be known when the function is compiled: '{0
 **Help**
 
 ```text
-A 'static loop' is unrolled where it stands, so how many rounds it has must be known then: a constant interval 'a..b' (the half-open [a, b) that '..' is everywhere else, so '0..5' is 0, 1, 2, 3, 4), 'indices ts' for the positions of a compile-time tuple, or 'fields T' for the fields of a type. A run-time array or a run-time value leaves the number of rounds open.
+A 'static loop' is unrolled where it stands, so how many rounds it has must be known then. Every sequence the compiler works out counts: an expression built only from compile-time constants (literals, names bound to constants, the rounds of an enclosing 'static' expansion) through operations that are pure and cannot fail. So 'a..b' (the half-open [a, b) that '..' is everywhere else, so '0..5' is 0, 1, 2, 3, 4), 'range(a, b, step)' with constant arguments, an array literal or a constant array, 'indices ts' for the positions of a compile-time tuple, 'fields T' for the fields of a type, and 'for x in ts' for the type at each position of a compile-time tuple all count. A run-time array or a run-time value leaves the number of rounds open.
 ```
 
 **Example** (`test/cases/compile/static_expansion/static_loop_sequence_unknown.cml`, run as `camel test/cases/compile/static_expansion/static_loop_sequence_unknown.cml`)

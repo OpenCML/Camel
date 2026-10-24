@@ -338,7 +338,7 @@ func main(): int sync {
 
 ```cml
 func sum(..ts): int {
-    return static loop acc = 0 for (j) in indices ts do acc + ts.[j]
+    return static loop acc = 0 for j in indices ts do acc + ts.[j]
 }
 
 func main(): int sync {
