@@ -303,6 +303,15 @@ export func exit(code: int): void
 
 /// The text fmt with each `{}` placeholder replaced by the next argument; placeholders take
 /// format specifications such as `{:.2f}` and `{:>8}`.
+///
+/// A specification whose argument is a numeric array acts on each element on its own, while the
+/// brackets and the `, ` between the elements are the array's own form: `'{:.4f}'->format<xs>`
+/// with `xs = [0.7692267, 0.780836, 0.77707076]` is `[0.7692, 0.7808, 0.7771]`, and an array of
+/// rank 2 keeps one bracket level per dimension (`[[0.7692, 0.7808], [0.7771, 2.0000]]`). Each
+/// element is written by the specification and by its own type, so `{:.2f}` rounds an `f32`
+/// element and an `f64` element each at two places. An array without a specification prints as
+/// it does everywhere else: every element in the shortest text that reads back as the same
+/// number, which is `'{}'->format<xs>` giving `[0.7692267, 0.780836, 0.77707076]`.
 /// @pure
 /// @fails fault `FormatFailed` when the placeholders and the arguments do not fit
 /// @example '{} is {:.2f}'->format<'x', 2.5>    // 'x is 2.50'
