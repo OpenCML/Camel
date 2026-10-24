@@ -801,3 +801,52 @@ expect_diagnostic_column = 16
 expect_output_contains = ["The literal '0.5' cannot be represented as type 'int'", "the value would be truncated"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
+
+# A literal that holds a computed element is a FILL, not one constant. The position it stands in
+# still gives the literals written in it their types (design principles 5.1): a tuple field, an
+# array field of stated length, an array field of open rank and an array written inside a tuple
+# field take the declared field's element type, converted once from the value written. The element
+# just above the f32 midpoint prints 1.00000012 — not the 1.0 of a rounding through the double it
+# was lowered to, and not the 1.00000006 a float64 element would print (H412). A computed element
+# is a value of its own type: a position the type it has does not enter is not taken, and the
+# mismatch is reported as it was.
+
+[[tests]]
+name = "context.composite_holes"
+desc = "A literal whose sibling element is computed takes the types its position gives its written elements: a tuple field of `(f32, f32)`, an array field of `f32[2]`, an array field of `f32[]`, an array written inside a tuple field, and a tuple in a declared position. The value just above the f32 midpoint prints 1.00000012 — not 1.0 through a double, not 1.00000006 as a float64. Before this the elements written beside the computed one kept their default types and the whole literal was a return type mismatch: `Return type '{ n: int, t: (float, float) }' does not match the function's declared return type 'MA'`."
+kind = "behavior"
+case = "../../../cases/compile/literals/context_composite_holes.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_output_not_contains = ["Error", "Warn"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "1 1.00000012 2",
+  "2 2 1.00000012 2",
+  "3 2 1.00000012 2",
+  "4 2 1.00000012 3",
+  "0.333333343 2",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "context.composite_holes_mismatch"
+desc = "A computed element is a value of its own type and takes no type from the position: `float` where the field is `int`, and a computed `f64[]` where the field is an `f32[2]`, each leave the literal the type its own elements give it, so its literal siblings are not converted either and the return type mismatch is the one reported before (design principles 5.1)."
+kind = "negative"
+case = "../../../cases/compile/literals/context_composite_holes_mismatch.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ReturnTypeMismatch"
+expect_diagnostic_line = 15
+expect_diagnostic_column = 35
+expect_output_contains = ["'{ n: float, t: (float, float) }'", "declared return type 'MA'", "'{ n: int, v: float[] }'", "declared return type 'MB'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
