@@ -261,6 +261,12 @@ DraftNodeInit snapshotNodeInit(const GraphDraft &draft, gc_node_ref_t nodeId) {
         .normInputs   = draft.normInputsOf(nodeId),
         .withInputs   = draft.withInputsOf(nodeId),
         .ctrlInputs   = draft.ctrlInputsOf(nodeId),
+        // The order and sync runs are part of what the node is (docs/design/effects/edges.cn.md 4):
+        // a rewrite that replaces it and drops them loses where it stood -- the statement written
+        // before it in its block's chain, and what ordered it -- and the chain it was part of dies
+        // with it (a devirtualized call used to take the whole `sync` block's effects down).
+        .orderInputs  = draft.orderInputsOf(nodeId),
+        .syncInputs   = draft.syncInputsOf(nodeId),
     };
 }
 
