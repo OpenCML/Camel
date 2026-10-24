@@ -1496,6 +1496,22 @@ canonical quiet NaN, and -0 is below +0.
 - Pure.
 - Example: `minimum(new([1.0, -0.0]), 0.0)` gives `[0.0, -0.0]`
 
+#### `mod`
+
+```camel
+mod: (lhs: Tensor | number, rhs: Tensor | number) => Tensor
+```
+
+a % b per element, with NumPy broadcasting: the language's remainder, the truncated one
+(`camel::utils::remainder`), so the result takes the sign of the left operand and nothing is
+floored — a negative a and a positive b give a negative result. On a floating element type it
+is `fmod`, in the element type's own precision: a bf16 or f16 array computes in f32 and rounds
+once when it is stored. A divisor of zero gives NaN for a floating element type, as IEEE
+division does; an integer element type has the integer remainder.
+
+- Pure.
+- Example: `mod(new([7.5, -7.5]), 2.0)` gives `[1.5, -1.5]`
+
 #### `where`
 
 ```camel

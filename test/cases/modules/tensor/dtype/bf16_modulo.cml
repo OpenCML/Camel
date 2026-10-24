@@ -1,0 +1,60 @@
+/**
+ * `%` over numeric arrays of a reduced element type (design principles 7.3; the ruling in
+ * docs/handover/reviews/questions-2026-10-24-evening.md): bf16 and f16 are floating types on par
+ * with f32, so the remainder of two of their arrays is their element type's own operator applied
+ * elementwise, computed in f32 and rounded once into the element type when it is stored. It is not
+ * a case of reduced precision: `SemanticDiag::ReducedPrecisionUnsupported` is what the same call
+ * reported while the kernel was missing.
+ *
+ * The operator is the language's `%`, the truncated remainder (`camel::utils::remainder`,
+ * include/camel/utils/int_div.h): the result takes the sign of the left operand, and nothing is
+ * floored. The left operand below is chosen so that a floor differs from it:
+ *
+ *   -7.5 %  2.0   truncated  -1.5   (a floor answers  0.5)
+ *    7.5 % -2.0   truncated   1.5   (a floor answers -0.5)
+ *
+ * The reading pins the two halves that a wrong implementation would move:
+ *
+ *   - the values: 7.5 % 2.0 is 1.5, -7.5 % 2.0 is -1.5, 7.5 % -2.0 is 1.5, 1.0 % 4.0 is 1.0;
+ *   - the element type of the result: it is the operands' element type, so four elements are
+ *     eight bytes through `to_bytes` (bf16 0x3FC0 is [192, 63] and 0xBFC0 is [192, 191], f16
+ *     0x3E00 is [0, 62] and 0xBE00 is [0, 190]). An implementation that answered in f32 would
+ *     report sixteen bytes and bytes of the f32 patterns.
+ *
+ * The same definition is written for the wider floating element types and for the integer ones,
+ * which is the language's own remainder and not a second rule; the last lines pin that.
+ *
+ * A literal operand takes the array's element type (design principles 5.1), and the element type
+ * is what the scalar operand is read at: the reading of `x % 2.0` and `x * 2.0` on a bf16 array
+ * is here because both printed a wrong value while the scalar operand was read as a bool — a bf16
+ * or f16 value is two bytes in the low half of its slot, and the kernel was reading those bytes
+ * as an f32 (`-0.0` and `7.3e-40` for the two lines below).
+ */
+module tensor_dtype_bf16_modulo
+
+import { new, to_bytes } from tensor
+import { to_array, size } from bytes
+
+func main(): int sync {
+    let bfLeftValue: bf16[] = [7.5, -7.5, 7.5, 1.0]
+    let bfRightValue: bf16[] = [2.0, 2.0, -2.0, 4.0]
+    let bf = new(bfLeftValue) % new(bfRightValue)
+    println('bf16 values:', bf[0], bf[1], bf[2], bf[3])
+    println('bf16 bytes:', size(to_bytes(bf)), to_array(to_bytes(bf)))
+
+    let halfLeftValue: f16[] = [7.5, -7.5, 7.5, 1.0]
+    let halfRightValue: f16[] = [2.0, 2.0, -2.0, 4.0]
+    let half = new(halfLeftValue) % new(halfRightValue)
+    println('f16 values:', half[0], half[1], half[2], half[3])
+    println('f16 bytes:', size(to_bytes(half)), to_array(to_bytes(half)))
+
+    let wideLeftValue: f64[] = [-7.5]
+    let wideRightValue: f64[] = [2.0]
+    println('f64 value:', (new(wideLeftValue) % new(wideRightValue))[0])
+
+    let intLeftValue: i32[] = [-7]
+    let intRightValue: i32[] = [2]
+    println('i32 value:', (new(intLeftValue) % new(intRightValue))[0])
+    println('mixed scalar:', (new(bfLeftValue) % 2.0)[1], (new(bfLeftValue) * 2.0)[0])
+    return 0
+}

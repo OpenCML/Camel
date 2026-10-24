@@ -1831,7 +1831,7 @@ tree_reduce: <f: (acc: R, leaf: A) => R> (t: T, init: R) => R
 tree_unzip: (r: R, s: S) => ?
 ```
 
-**`tensor`** — import { ... } from tensor — 69 name(s)
+**`tensor`** — import { ... } from tensor — 70 name(s)
 
 ```text
 new: (values: Tensor | number[]) => Tensor
@@ -1850,6 +1850,7 @@ divide: (lhs: Tensor | number, rhs: Tensor | number) => Tensor
 pow: (lhs: Tensor | number, rhs: Tensor | number) => Tensor
 maximum: (lhs: Tensor | number, rhs: Tensor | number) => Tensor
 minimum: (lhs: Tensor | number, rhs: Tensor | number) => Tensor
+mod: (lhs: Tensor | number, rhs: Tensor | number) => Tensor
 where: (cond: Tensor, lhs: Tensor | number, rhs: Tensor | number) => Tensor
 neg: (t: Tensor) => Tensor
 abs: (t: Tensor) => Tensor

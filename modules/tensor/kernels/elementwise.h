@@ -45,6 +45,9 @@ struct ScalarOperand {
         int32_t i32;
         int64_t i;
         bool_t b;
+        /// The two bytes of a bf16 or f16 element, kept as written: the operand is read at the
+        /// element type the value has, so the pattern itself has to be behind it.
+        uint16_t u16;
     } value;
     type::TypeCode dtype;
 
@@ -75,6 +78,12 @@ enum class BinaryOp {
     Pow,
     Max,
     Min,
+    /// The remainder `%`. The language's `%` is the truncated remainder
+    /// (`camel::utils::remainder`, int_div.h), so on a floating element type it is `fmod`: its
+    /// result takes the sign of the left operand, with no flooring, the same definition the
+    /// integer element types already have. Appended last: the operator name table in
+    /// elementwise_ops.cpp is indexed by this enumerator.
+    Mod,
 };
 
 enum class CompareOp {

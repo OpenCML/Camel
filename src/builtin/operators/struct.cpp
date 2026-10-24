@@ -483,30 +483,34 @@ slot_t callTangentOperator(
     return (*op)(with, norm, ctx);
 }
 
+/// True when a module owns the tangent space of `type`. Two kinds share the array code: a
+/// tensor is a numeric array and the module that owns it published its own `add` and
+/// `zeros_like`, while an array of values is answered here. A space a module registered for a
+/// subset of a code is the one that owns those values.
+bool isModuleOwned(Type *type) {
+    const auto *space = camel::core::DerivativeRegistry::instance().findTangentSpace(type);
+    return space != nullptr && space->owns != nullptr;
+}
+
 /// The zero tangent of a value whose tangent type a module owns: the module says how to make it
 /// (`zeros_like`, `add`), and the registry passes that operator's URI on. This is also the zero
 /// of the numeric-unknown array (`Tensor`): its element type is the `Void` marker rather than a
 /// type whose tangent exists, so there is nothing to descend into, and `tensor:zeros_like` reads
 /// the element type the value actually has (the element type follows the value).
-slot_t moduleZeroTangent(Context &ctx, Type *primalType, Type *tangentType, slot_t primal) {
-    const auto *space = camel::core::DerivativeRegistry::instance().findTangentSpace(primalType);
-    if (space == nullptr) {
-        noStructuralTangent("a zero tangent", tangentType);
-    }
-    if (space->zero) {
-        return *space->zero;
-    }
-    if (space->zerosLikeUri.empty()) {
-        noStructuralTangent("a zero tangent", tangentType);
-    }
-    return callTangentOperator(
-        ctx, space->zerosLikeUri, tangentType, {primal}, {primalType});
-}
-
+slot_t moduleZeroTangent(Context &ctx, Type *primalType, Type *tangentType, slot_t primal);
 // The zero tangent of a value of primal type `primalType`, whose tangent type is
 // `tangentType`. `primal` is the primal value: an array's zero has the array's length, and a
 // struct or tuple's fields line up with the primal's, so the shape is taken from it.
+//
+// A type a module owns (a tensor, a numeric array) is not built here at all: its zero is the
+// module's own operator (`tensor:zeros_like`), which answers at the value's dtype and shape.
+// Recursing into a tensor's element type would take the numbers out of the tensor's arithmetic
+// -- and for the numeric-unknown array `Tensor` there is no element type to recurse into, which
+// is the "zero tangent is not defined for tangent type 'void'" fault.
 slot_t zeroTangent(Context &ctx, Type *primalType, Type *tangentType, slot_t primal) {
+    if (isModuleOwned(primalType)) {
+        return moduleZeroTangent(ctx, primalType, tangentType, primal);
+    }
     switch (tangentType->code()) {
     case TypeCode::Float64:
         return toSlot<Float64>(0.0);
@@ -581,11 +585,41 @@ slot_t zeroTangent(Context &ctx, Type *primalType, Type *tangentType, slot_t pri
     default:
         break;
     }
+    // A leaf whose tangent type a module owns (a tensor): the module says how to make the zero
+    // of a value of its type, and the registry passes that operator's URI on.
     return moduleZeroTangent(ctx, primalType, tangentType, primal);
 }
 
+// The zero tangent of a value whose tangent space a module owns: the module published the
+// operator, the registry passes its URI on.
+slot_t moduleZeroTangent(Context &ctx, Type *primalType, Type *tangentType, slot_t primal) {
+    const auto *space = camel::core::DerivativeRegistry::instance().findTangentSpace(primalType);
+    if (space == nullptr) {
+        noStructuralTangent("a zero tangent", tangentType);
+    }
+    if (space->zero) {
+        return *space->zero;
+    }
+    if (space->zerosLikeUri.empty()) {
+        noStructuralTangent("a zero tangent", tangentType);
+    }
+    return callTangentOperator(
+        ctx, space->zerosLikeUri, tangentType, {primal}, {primalType});
+}
+
+// The sum of two tangents of a type whose tangent space a module owns: the module published the
+// operator, the registry passes its URI on.
+slot_t moduleAddTangent(Context &ctx, Type *tangentType, slot_t lhsSlot, slot_t rhsSlot);
+
 // The sum of two tangents of `tangentType`. Both have the same shape.
+//
+// As for the zero, a tangent type a module owns (a tensor) is summed by the module's own
+// `add`, not element by element here: a tensor's tangent is the tensor, and adding two of them
+// is `tensor:add`, which answers at the tensor's dtype and shape.
 slot_t addTangent(Context &ctx, Type *tangentType, slot_t lhsSlot, slot_t rhsSlot) {
+    if (isModuleOwned(tangentType)) {
+        return moduleAddTangent(ctx, tangentType, lhsSlot, rhsSlot);
+    }
     switch (tangentType->code()) {
     case TypeCode::Float64:
         return toSlot<Float64>(fromSlot<Float64>(lhsSlot) + fromSlot<Float64>(rhsSlot));
@@ -655,6 +689,12 @@ slot_t addTangent(Context &ctx, Type *tangentType, slot_t lhsSlot, slot_t rhsSlo
     }
     // A leaf whose tangent type a module owns (a tensor): the module published the operator that
     // adds two of them, and the registry passes its URI on.
+    return moduleAddTangent(ctx, tangentType, lhsSlot, rhsSlot);
+}
+
+// The sum of two tangents of a type whose tangent space a module owns: the module published the
+// operator, the registry passes its URI on.
+slot_t moduleAddTangent(Context &ctx, Type *tangentType, slot_t lhsSlot, slot_t rhsSlot) {
     const auto *space = camel::core::DerivativeRegistry::instance().findTangentSpace(tangentType);
     if (space == nullptr || space->addUri.empty()) {
         noStructuralTangent("a sum of tangents", tangentType);

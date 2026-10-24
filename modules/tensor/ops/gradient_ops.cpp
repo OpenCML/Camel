@@ -512,9 +512,13 @@ void registerTensorTangentSpace() {
     // value its type does not promise — expand_axis on the gradient of a mean_axis, which is the
     // `export_grad_mean` crash. Only the numeric-unknown array — the alias `Tensor`, whose element
     // type is not fixed yet — needs a tangent type stated here; every other array takes its
-    // tangent from its element type (derivative.cpp's computeTangentType).
+    // tangent from its element type (derivative.cpp's computeTangentType). The space owns the
+    // tensors of the array code and not the arrays of values that share it — an array of
+    // structs, tuples or arrays keeps the core's array space (`:tangent/add_arr`,
+    // `:tangent/zeros_arr`), which answers for the values this one does not own.
     camel::core::TangentSpace space;
     space.tangentType  = &tensorTangentType;
+    space.owns         = &isTensorType;
     space.addUri       = "tensor:add";
     space.zerosLikeUri = "tensor:zeros_like";
     camel::core::DerivativeRegistry::instance().setTangentSpace(
