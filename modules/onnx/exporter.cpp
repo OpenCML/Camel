@@ -1417,7 +1417,7 @@ std::string growingLeafName(const type::Type *declared, const Value &v) {
             return std::format("a value of type '{}'", declared->toString());
         }
         if (declared->code() == TypeCode::Struct) {
-            auto *strct = static_cast<type::StructType *>(declared);
+            auto *strct = static_cast<const type::StructType *>(declared);
             for (size_t i = 0; i < strct->size(); ++i) {
                 type::Type *field = strct->typeAt(i);
                 if (lengthIsOpen(field)) {
