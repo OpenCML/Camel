@@ -1323,7 +1323,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `LambdaParametersNeedParentheses` | E | A lambda's parameters need their parentheses: write '(x) => e', not 'x => e'. |
 | `ComparisonAcrossLines` | W | This '>' is read as a comparison with the next line, which starts with {0}: two statements may have been joined into one. |
 
-**Semantic** (`SemanticDiag`) — 202 (188 errors, 14 warnings)
+**Semantic** (`SemanticDiag`) — 203 (189 errors, 14 warnings)
 
 | `Redeclaration` | E | Redeclaration of reference: '{0}'. |
 | `ModuleNotFound` | E | Module '{0}' not found. {1} |
@@ -1505,6 +1505,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `CompOperandNotUnary` | E | '..' composes a unary function on the left; '{0}' takes {1} parameters. |
 | `CompOperandGenericWithoutType` | E | '..' composes two functions, and its {0} operand, the generic function '{1}', has no instance here: write its type arguments ('{1}::<int>'), or give the whole expression an expected function type. |
 | `RangeTwoArgumentsRemoved` | E | The two-parameter 'range(a, b)' is gone; write the interval 'a..b'. |
+| `RangeStepZero` | E | The range 'range({0}, {1}, 0)' has a step of 0, so it is no sequence of integers. |
 | `VarParamInAsyncFunction` | W | Variable parameters are only allowed in sync functions. |
 | `IgnoredSideEffect` | W | {0} is neither waited nor in a sync block, and {1}. |
 | `CapturedWriteInAsyncFunction` | W | {0} writes the captured variable{1} {2} but is not declared with the 'sync' modifier. |
@@ -1561,7 +1562,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `ConstantExpressionFaults` | W | This constant expression faults whenever it is evaluated ({0}); it is not folded. |
 | `TranslationLinksRuntime` | W | std::cpp has no standalone translation of {0}: the program it writes calls the Camel runtime there and is built with libcamel. |
 
-**Semantic** (`SemanticDiag`) — 202 (188 errors, 14 warnings)
+**Semantic** (`SemanticDiag`) — 203 (189 errors, 14 warnings)
 
 | `ReducedPrecisionUnsupported` | E | The call of '{0}' cannot take a value of the reduced-precision element type '{1}'. |
 | `ImplOnBodylessDeclaration` | E | The body-less declaration '{0}' cannot carry '#impl<{1}>': it has no Camel body. |
@@ -1671,7 +1672,7 @@ format: <...args: T...> (fmt: string) => string
 join: <sep: string> (xs: string[]) => string
 len: (x: string) => int
 len: (x: T[..]) => int
-range: (start: int, end: int) => int[]
+range: (start: int, end: int, step?: int) => int[]
 head: (xs: T[]) => T
 last: (xs: T[]) => T
 tail: (xs: T[]) => T[]

@@ -736,21 +736,24 @@ std::any Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
     // A layer has the name when it brings something of it: an import by name of a name the
     // module does not export leaves the name to the next layers (and is reported only when
     // none has it).
+    //
+    // A name brought by name is the name the program means, whatever it is: the reference
+    // written here with an import of it in force has that import's entity and no other layer's
+    // (`import { range } from tensor` is tensor's `range`; the built-in of the same spelling is
+    // the prelude, layer 5, and a name of layer 3 keeps the first layer having it -- design
+    // principles 6.x, "local > this module > imported by name > using > built-in").
     std::optional<camel::core::module::entity> named;
-    if (!isOperatorName(written) && module_->hasImportedRef(written, ImportLayer::Named)) {
-        importedName = true;
-        named        = importedEntity(written, ImportLayer::Named);
+    if (module_->hasImportedRef(written, ImportLayer::Named)) {
+        named = importedEntity(written, ImportLayer::Named);
     }
-    if (isOperatorName(written) || (named.has_value() && named->isOperGroup())) {
-        // Operator groups (`+`, and the operators a module of operators brings) take their
-        // overloads from every layer (design principles 10.2; the graph model, N3).
-        importedName = importedName || module_->hasImportedRef(written);
-        if (importedName) {
-            opt = importedEntity(written);
-        }
-    } else if (named.has_value()) {
-        opt = named;
+    if (named.has_value()) {
+        importedName = true;
+        opt          = named;
     } else if (auto match = throughUsing(written, gct)) {
+        // A `using namespace` is layer 4: it is above the prelude (layer 5) and below a name
+        // imported by name (layer 3), so it is reached before the merged layer that the name's
+        // built-in takes part in. Without this order a name the prelude has -- every built-in --
+        // would answer through the merge and a `using namespace` could never supply it.
         if (!match->ownName.empty()) {
             // A name of this module, opened by a `using namespace` of one of its namespaces.
             GCT::node_ptr_t resolved = tree_->makeDRef(match->ownName);
@@ -760,6 +763,13 @@ std::any Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
         }
         importedName = true;
         opt          = match->entity;
+    } else if (isOperatorName(written) || module_->hasImportedRef(written)) {
+        // Operator groups for a spelling an import did not bring by name (`+`, and the operators
+        // a module of operators brings) take their overloads from every layer (design
+        // principles 10.2; the graph model, N3); a name the prelude has and no layer above it
+        // does is the built-in itself.
+        importedName = true;
+        opt          = importedEntity(written);
     } else if (module_->hasImportedRef(written, ImportLayer::Ambient)) {
         importedName = true;
         opt          = importedEntity(written, ImportLayer::Ambient);

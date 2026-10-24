@@ -2915,6 +2915,37 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 diags_->of(SemanticDiag::RangeTwoArgumentsRemoved).atOrigin(where).commit();
                 throw BuildAbortException();
             }
+            // `range(a, b, step)` is the integers `a`, `a + step`, ... below `b` (design
+            // principles 4.2; the author's ruling of 2026-10-24 on `h426-interval-step-form`), so
+            // a step of 0 names no sequence at all: a fault when the step is known only at the
+            // run, and the refusal here when it is a constant, where the step is written. A
+            // constant step that is not 0 is left to the call: the array it builds is the value
+            // of the program, and building a constant one here would be folding, not checking.
+            if (targetOperator->uri() == ":struct/range" && normInputs.size() == 3 &&
+                withInputs.empty() && gct->size() >= 1 &&
+                gct->at(0)->type() == GCT::NodeKind::DREF && gct->at(0)->name() == "range") {
+                const auto stepIsZero = [](const data_ptr_t &data) {
+                    if (const auto integer = std::dynamic_pointer_cast<LongData>(data);
+                        integer != nullptr) {
+                        return integer->data() == 0;
+                    }
+                    const auto integer = std::dynamic_pointer_cast<IntData>(data);
+                    return integer != nullptr && integer->data() == 0;
+                };
+                if (stepIsZero(constantOfNode(normInputs[2].node))) {
+                    // The caret is under the step, the argument that says why the call can never
+                    // be right.
+                    const GCT::node_ptr_t &stepNode = gct->at(gct->size() - 1);
+                    const auto where =
+                        stepNode->origin() != 0 ? stepNode->origin() : gct->origin();
+                    diags_->of(SemanticDiag::RangeStepZero)
+                        .atOrigin(where)
+                        .commit(
+                            sourceTextOf(normInputs[0].expr),
+                            sourceTextOf(normInputs[1].expr));
+                    throw BuildAbortException();
+                }
+            }
             if (inPlaceCalls_.contains(gct)) {
                 // Written by inPlaceRebindingOf, which checked that this overload has an
                 // in-place form: the call works on the array :var/take hands it.
