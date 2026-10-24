@@ -13,8 +13,10 @@
 #include "builder_support.h"
 
 #include "camel/core/data/base.h"
+#include "camel/core/data/composite/array.h"
 #include "camel/core/rtdata/struct.h"
 #include "camel/core/rtdata/tuple.h"
+#include "camel/core/type/composite/array.h"
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/core/type/text.h"
@@ -32,6 +34,28 @@ using namespace camel::core::data;
 using namespace camel::core::type;
 
 namespace {
+
+/// The text a round's value is known by when the body uses it as the key of a `t.[…]`: the
+/// digits of an integer or the characters of a string, the two renderings the static access
+/// reads a key back with. Anything else (a float element, say) is named by its own text, which
+/// is not a key any structure has: the round is still a value the body can compute with.
+std::string sequenceElementName(const data_ptr_t &data) {
+    if (data == nullptr) {
+        return "?";
+    }
+    if (auto text = std::dynamic_pointer_cast<StringData>(data)) {
+        return text->data();
+    }
+    if (data->type() != nullptr) {
+        if (data->type()->code() == TypeCode::Int64) {
+            return std::to_string(std::dynamic_pointer_cast<PrimaryData<int64_t>>(data)->data());
+        }
+        if (data->type()->code() == TypeCode::Int32) {
+            return std::to_string(std::dynamic_pointer_cast<PrimaryData<int32_t>>(data)->data());
+        }
+    }
+    return data->toString();
+}
 
 std::string typePatternText(const GCT::node_ptr_t &caseNode) {
     const uint16_t patterns = caseNode->typeCasePatterns();
@@ -700,38 +724,75 @@ node_handle_t Builder::visitStaticForNode(
     return lastEffect;
 }
 
-std::optional<std::vector<int64_t>>
+std::optional<Builder::StaticSequence>
 Builder::staticLoopSequenceOf(const GCT::node_ptr_t &subject) {
-    // `for i in <序列>` (H462): the one sequence the compiler works out today is the constant
-    // interval `a..b`. It is read exactly as the `..` operator reads it everywhere else — the
-    // half-open `[a, b)`, so `0..5` gives 0, 1, 2, 3, 4 — and it is the pair of the two bounds
-    // only in the sequence position of a loop (`isIntervalExpr`); in any other position `a..b`
-    // is the `int[]` of `intervalValue`.
-    if (!isIntervalExpr(subject)) {
+    // `for i in <序列>` (H462, and the ruling of 2026-10-25 on which `in` forms count, H475):
+    // one rule, not a list of accepted spellings. The expression after `in` is a sequence the
+    // compiler works out when it is built only from compile-time constants joined by operations
+    // that are pure and cannot fail (design principles 3.4); then it is evaluated and unrolled.
+    // Nothing here builds a node of the operand: a run-time value leaves the rounds open, and
+    // the caller refuses it (`StaticLoopSequenceNotKnown`).
+    if (subject == nullptr) {
         return std::nullopt;
     }
-    // One bound: its value as the compiler knows it, without building anything of a run-time
-    // expression. A literal (or an expression of literals only, `0..(2 + 3)`) is read from the
-    // tree; a name is read from what it is bound to, and only a binding that is not a `var`
-    // (which may be assigned before the loop) counts.
-    const auto boundOf = [&](const GCT::node_ptr_t &expr) -> std::optional<int64_t> {
-        const std::optional<literal::Value> written = literalValueOfExpr(expr);
-        if (written.has_value()) {
-            return written->asInt64();
-        }
-        if (expr->type() != GCT::NodeKind::DREF) {
+    // A sequence the compiler holds as one value: an array literal (`[1, 2, 3]`), or a name
+    // bound to one (`let xs = [1, 2, 3]`; a `var` does not count, it can be assigned another
+    // array before the loop). The rounds are its elements, so walking it costs no node.
+    const auto ofArrayData = [](const data_ptr_t &data) -> std::optional<StaticSequence> {
+        if (data == nullptr || data->type() == nullptr ||
+            data->type()->code() != TypeCode::Array) {
             return std::nullopt;
         }
-        data_ptr_t data = nullptr;
-        const auto bound = nodeAt(expr->name());
-        if (bound.has_value()) {
-            if (isVariable(*bound)) {
-                return std::nullopt;
-            }
-            data = constantOfNode(*bound);
-        } else {
-            data = constantOfNode(staticValueNodeNamed(expr->name()));
+        auto array = std::dynamic_pointer_cast<ArrayData>(data);
+        if (array == nullptr || !array->resolved()) {
+            return std::nullopt;
         }
+        StaticSequence sequence;
+        sequence.elementType = tt::as_ptr<ArrayType>(data->type())->elemType();
+        // Each round is an ordinary value of the array's element type, exactly as the array
+        // would give it: an element written with another of the types that enter it (an `int`
+        // literal in an `f32[]`) takes the element type here, as it would in the array itself.
+        for (const data_ptr_t &element : array->raw()) {
+            data_ptr_t value = element;
+            if (value != nullptr && sequence.elementType != nullptr &&
+                !sequence.elementType->equals(value->type())) {
+                if (data_ptr_t converted = value->convertTo(sequence.elementType)) {
+                    value = converted;
+                }
+            }
+            sequence.values.push_back(value);
+        }
+        return sequence;
+    };
+    const auto ofConstantArray = [&](const GCT::node_ptr_t &value) -> std::optional<StaticSequence> {
+        if (value == nullptr) {
+            return std::nullopt;
+        }
+        if (value->type() == GCT::NodeKind::DATA) {
+            return ofArrayData(value->data());
+        }
+        if (value->type() == GCT::NodeKind::DREF) {
+            const auto bound = nodeAt(value->name());
+            if (bound.has_value()) {
+                if (isVariable(*bound)) {
+                    return std::nullopt;
+                }
+                return ofArrayData(constantOfNode(*bound));
+            }
+            return ofArrayData(constantOfNode(staticValueNodeNamed(value->name())));
+        }
+        return std::nullopt;
+    };
+    if (std::optional<StaticSequence> sequence = ofConstantArray(subject)) {
+        return sequence;
+    }
+    // The integers of a sequence the compiler can count out: `int` ends and a step. Reading one
+    // end reuses what the compiler already knows, without building anything of a run-time
+    // expression: a literal (or an expression of literals only, `0..(2 + 3)`) is read from the
+    // tree, a name is read from what it is bound to -- and only a binding that is not a `var`,
+    // which may be assigned before the loop, counts -- and anything else is put to the
+    // build-time evaluation the rest of the compiler folds with.
+    const auto intOf = [](const data_ptr_t &data) -> std::optional<int64_t> {
         if (data == nullptr) {
             return std::nullopt;
         }
@@ -743,47 +804,178 @@ Builder::staticLoopSequenceOf(const GCT::node_ptr_t &subject) {
         }
         return std::nullopt;
     };
-    const std::optional<int64_t> from = boundOf(subject->at(1));
-    const std::optional<int64_t> to   = boundOf(subject->at(2));
-    if (!from.has_value() || !to.has_value()) {
+    const auto intBoundOf = [&](const GCT::node_ptr_t &expr) -> std::optional<int64_t> {
+        if (expr == nullptr) {
+            return std::nullopt;
+        }
+        const std::optional<literal::Value> written = literalValueOfExpr(expr);
+        if (written.has_value()) {
+            return written->asInt64();
+        }
+        if (expr->type() != GCT::NodeKind::DREF) {
+            return intOf(constantValueOrNull(expr));
+        }
+        data_ptr_t data = nullptr;
+        const auto bound = nodeAt(expr->name());
+        if (bound.has_value()) {
+            if (isVariable(*bound)) {
+                return std::nullopt;
+            }
+            data = constantOfNode(*bound);
+        } else {
+            data = constantOfNode(staticValueNodeNamed(expr->name()));
+        }
+        return intOf(data);
+    };
+    // The rounds `from, from + step, ...` up to but not including `to`, counted exactly as the
+    // `range` that `a..b` lowers to counts them (`__range__`): below `to` for a positive step,
+    // above it for a negative one. Nothing of the sequence is built; the rounds are values.
+    const auto walkIntegers = [](int64_t from, int64_t to, int64_t step) {
+        StaticSequence sequence;
+        sequence.elementType = Type::Int();
+        for (int64_t value = from; step > 0 ? value < to : value > to; value += step) {
+            sequence.values.push_back(
+                tt::as_shared<Data>(std::make_shared<PrimaryData<int64_t>>(value)));
+        }
+        return sequence;
+    };
+    // The constant interval `a..b`: read exactly as the `..` operator reads it everywhere else
+    // (the half-open `[a, b)`, so `0..5` gives 0, 1, 2, 3, 4), and the pair of two bounds only
+    // in the sequence position of a loop (`isIntervalExpr`); in any other position `a..b` is the
+    // `int[]` of `intervalValue`. An interval is two `int` ends and nothing else: `..` builds an
+    // `int[]`, so there is no float or character interval to walk.
+    if (isIntervalExpr(subject)) {
+        const std::optional<int64_t> from = intBoundOf(subject->at(1));
+        const std::optional<int64_t> to   = intBoundOf(subject->at(2));
+        if (!from.has_value() || !to.has_value()) {
+            return std::nullopt;
+        }
+        return walkIntegers(*from, *to, 1);
+    }
+    // A compile-time tuple: `for x in ts` walks its positions and binds the type at each one
+    // (not the element's value -- the ordinary `loop` is the one that binds a value). `ts` is
+    // the rest parameter of the expansion being built; `indices ts` walks the same positions
+    // and binds them as integers, which is what 6.8.4/6.8.5 of the language reference describe.
+    if (subject->type() == GCT::NodeKind::DREF) {
+        if (const RestBinding *rest = restBindingNamed(subject->name())) {
+            Type *tupleType = boundType(rest->tuple.type);
+            if (tupleType != nullptr && tupleType->code() == TypeCode::Tuple &&
+                tree::isInternal(tupleType)) {
+                StaticSequence sequence;
+                for (size_t i = 0; i < tree::arity(tupleType); ++i) {
+                    sequence.types.push_back(tree::childType(tupleType, i));
+                }
+                return sequence;
+            }
+        }
+    }
+    // `range(a, b, step)` with constant arguments: the same integers the interval gives, on the
+    // step the program wrote -- the same path as `a..b`, read by the same reader and counted by
+    // the same walk, because `range` is what the interval lowers to (`intervalValue`) and the
+    // array it builds elsewhere is what these rounds are the elements of. The step has to be
+    // written -- a step of one is `a..b`, one thing one spelling -- so the two-argument call is
+    // refused here as it is where the call stands (`RangeTwoArgumentsRemoved`, which the call
+    // path reports after overload resolution), and a step of zero, which names no sequence at
+    // all, is `RangeStepZero` here as it is there (design principles 4.2; the rulings of
+    // 2026-10-24 on `h248-generator-and-composition` and on `h426-interval-step-form`).
+    if (subject->type() == GCT::NodeKind::LINK && subject->size() >= 1) {
+        const GCT::node_ptr_t &callee = subject->at(0);
+        const bool namedRange = callee != nullptr && callee->type() == GCT::NodeKind::DREF &&
+                                callee->name() == "range";
+        if (namedRange && subject->size() - 1 == 2) {
+            const auto where = callee->origin() != 0 ? callee->origin() : subject->origin();
+            diags_->of(SemanticDiag::RangeTwoArgumentsRemoved).atOrigin(where).commit();
+            throw BuildAbortException();
+        }
+        if (namedRange && subject->size() - 1 == 3) {
+            const GCT::node_ptr_t &stepNode = subject->at(subject->size() - 1);
+            const std::optional<int64_t> step = intBoundOf(stepNode);
+            if (step.has_value() && *step == 0) {
+                const auto where =
+                    stepNode->origin() != 0 ? stepNode->origin() : subject->origin();
+                diags_->of(SemanticDiag::RangeStepZero)
+                    .atOrigin(where)
+                    .commit(sourceTextOf(subject->at(1)), sourceTextOf(subject->at(2)));
+                throw BuildAbortException();
+            }
+            const std::optional<int64_t> start = intBoundOf(subject->at(1));
+            const std::optional<int64_t> end   = intBoundOf(subject->at(2));
+            if (start.has_value() && end.has_value() && step.has_value()) {
+                return walkIntegers(*start, *end, *step);
+            }
+        }
+    }
+    // The one rule's general case: an expression the build-time evaluation already holds as an
+    // array of constants (`compileTimeExpression`, the folding every other constant expression of
+    // the program goes through). A name is not offered to it here: what a `let` or a `var` is
+    // bound to was read above, and a `var` may hold another array by the time the loop runs. A
+    // refusal is a sequence the compiler does not know, and the caller says so by name.
+    if (subject->type() != GCT::NodeKind::DREF) {
+        if (std::optional<StaticSequence> sequence =
+                ofArrayData(constantValueOrNull(subject))) {
+            return sequence;
+        }
+    }
+    return std::nullopt;
+}
+
+std::optional<std::vector<int64_t>>
+Builder::staticLoopIntSequenceOf(const GCT::node_ptr_t &subject) {
+    const std::optional<StaticSequence> sequence = staticLoopSequenceOf(subject);
+    if (!sequence.has_value() || sequence->byTypes()) {
         return std::nullopt;
     }
-    std::vector<int64_t> elements;
-    for (int64_t value = *from; value < *to; ++value) {
-        elements.push_back(value);
+    std::vector<int64_t> values;
+    values.reserve(sequence->values.size());
+    for (const data_ptr_t &value : sequence->values) {
+        if (value == nullptr || value->type() == nullptr) {
+            return std::nullopt;
+        }
+        if (auto number = std::dynamic_pointer_cast<PrimaryData<int64_t>>(value)) {
+            values.push_back(number->data());
+            continue;
+        }
+        if (auto number = std::dynamic_pointer_cast<PrimaryData<int32_t>>(value)) {
+            values.push_back(static_cast<int64_t>(number->data()));
+            continue;
+        }
+        return std::nullopt;
     }
-    return elements;
+    return values;
 }
 
 node_handle_t Builder::visitStaticLoopNode(const GCT::node_ptr_t &gct) {
     ENTER("SLOOP");
     // `static loop s1 = a1, ..., sk = ak for i in <序列> do body`: the fold the fields of `T`
-    // unroll into (`in fields T`), the positions of a tuple value (`in indices ts`), or the
-    // elements of a sequence the compiler works out (`in 0..5`; H462, the ruling of
-    // 2026-10-24, which dropped the head's parentheses). The body is built once per round in the
-    // current graph; its value is the next state. No LOOP node, no region, and nothing of the
-    // state or the generator left in the graph: the first values are ordinary values and each
-    // round reads the previous round's node directly (a DREF to a state name resolves to it).
+    // unroll into (`in fields T`), the positions of a tuple value (`in indices ts`), or a
+    // sequence the compiler works out (`in 0..5`, `in range(0, 9, 3)`, `in [1, 2, 3]`, `in
+    // xs`; H462, the ruling of 2026-10-24, which dropped the head's parentheses, and the ruling
+    // of 2026-10-25 that draws the line by the one rule of `staticLoopSequenceOf`). The body is
+    // built once per round in the current graph; its value is the next state. No LOOP node, no
+    // region, and nothing of the state or the generator left in the graph: the first values are
+    // ordinary values and each round reads the previous round's node directly (a DREF to a
+    // state name resolves to it).
     const bool byIndices  = gct->staticLoopIndices();
     const bool bySequence = gct->staticLoopSequence();
     const bool byFields   = !byIndices && !bySequence;
     Type *subject         = nullptr;
-    // The elements of each round when the head is written as a sequence: each one is a
-    // compile-time constant, exactly as the `j` of `indices` is the round's position.
-    std::vector<int64_t> elements;
+    // The rounds when the head writes a sequence out: a value per round (a constant interval, a
+    // `range`, an array literal or a constant array) or a type per round (a compile-time tuple,
+    // where each round binds the type at its position). Each round is a compile-time constant
+    // either way, exactly as the `j` of `indices` is the round's position.
+    std::optional<StaticSequence> written;
     if (bySequence) {
         // The sequence must be known when the function is compiled (the ruling of 2026-10-24:
         // "`static loop` 的序列必须在编译期已知"): a sequence the compiler cannot work out is
         // refused here, before anything of the body is built.
-        std::optional<std::vector<int64_t>> known = staticLoopSequenceOf(gct->staticLoopOperand());
-        if (!known.has_value()) {
-            const std::string written = sourceTextOf(gct->staticLoopOperand());
+        written = staticLoopSequenceOf(gct->staticLoopOperand());
+        if (!written.has_value()) {
+            const std::string shown = sourceTextOf(gct->staticLoopOperand());
             diags_->of(SemanticDiag::StaticLoopSequenceNotKnown)
                 .atOrigin(gct->origin())
-                .commit(written.empty() ? std::string("?") : written);
+                .commit(shown.empty() ? std::string("?") : shown);
             throw BuildAbortException();
         }
-        elements = std::move(*known);
     } else if (byIndices) {
         // As in visitStaticForNode: the operand only gives the tuple's type.
         const std::any operandRes = visit(gct->staticLoopOperand());
@@ -828,6 +1020,12 @@ node_handle_t Builder::visitStaticLoopNode(const GCT::node_ptr_t &gct) {
     const std::string valueName = gct->staticLoopValueName();
     const std::string typeName  = gct->staticLoopTypeName();
     const GCT::node_ptr_t body  = gct->staticLoopBody();
+    // Whether the round's name is bound to a type rather than to a value: `F` for `fields T`
+    // (which binds the field's name as a value too), and the single name of `for x in ts`, where
+    // the round binds the type at that position and no value at all.
+    const bool bindsRoundType =
+        byFields || (written.has_value() && written->byTypes());
+    const bool bindsRoundValue = !(bySequence && written.has_value() && written->byTypes());
 
     // The names of the head are declared once, together (as for a run-time loop). The walked
     // entry's name `n` (`j`) is one of them for this purpose: `static loop n = ..., ... for
@@ -867,17 +1065,21 @@ node_handle_t Builder::visitStaticLoopNode(const GCT::node_ptr_t &gct) {
     }
     Type *stateType = k == 1 ? stateTypes.front() : TupleType::create(stateTypes);
 
-    const size_t count = bySequence ? elements.size() : tree::arity(subject);
+    const size_t count = bySequence ? written->rounds() : tree::arity(subject);
     for (size_t i = 0; i < count; ++i) {
         // The name of the walked entry: for `fields` the field's name and for `indices` the
-        // position, both as the text the compile-time value bindings carry; for a sequence the
-        // element itself, which is what `t.[i]` reads back as the key.
+        // position, both as the text the compile-time value bindings carry; for a sequence of
+        // values the element itself, which is what `t.[i]` reads back as the key; for a
+        // compile-time tuple the type at that position, which is not a value at all.
         std::string entryName;
         node_handle_t indexNode{};
-        if (bySequence) {
-            entryName = std::to_string(elements[i]);
-            const data_ptr_t elementValue = tt::as_shared<Data>(
-                std::make_shared<PrimaryData<int64_t>>(elements[i]));
+        if (bySequence && written->byTypes()) {
+            if (valueName != "_") {
+                typeBindings_.insert(typeBindings_.begin(), {valueName, written->types[i]});
+            }
+        } else if (bySequence) {
+            const data_ptr_t elementValue = written->values[i];
+            entryName = sequenceElementName(elementValue);
             indexNode = currGraph_->addStaticDataNode(elementValue);
             rememberConstant(indexNode, elementValue);
             registerNodeOrigin(context_, indexNode, body, "gir.static.index");
@@ -893,7 +1095,7 @@ node_handle_t Builder::visitStaticLoopNode(const GCT::node_ptr_t &gct) {
             typeBindings_.insert(typeBindings_.begin(), {typeName, tree::childType(subject, i)});
         }
         staticValueScopes_.emplace_back();
-        if (valueName != "_") {
+        if (valueName != "_" && bindsRoundValue) {
             staticValueScopes_.back().push_back({valueName, entryName, indexNode});
         }
         enterBlockScope();
@@ -915,7 +1117,7 @@ node_handle_t Builder::visitStaticLoopNode(const GCT::node_ptr_t &gct) {
                 unusedStatement_     = outerUnused;
                 leaveBlockScope();
                 staticValueScopes_.pop_back();
-                if (byFields) {
+                if (bindsRoundType) {
                     typeBindings_.erase(typeBindings_.begin());
                 }
                 throw;
@@ -940,7 +1142,7 @@ node_handle_t Builder::visitStaticLoopNode(const GCT::node_ptr_t &gct) {
                             stateType->toString());
                     leaveBlockScope();
                     staticValueScopes_.pop_back();
-                    if (byFields) {
+                    if (bindsRoundType) {
                         typeBindings_.erase(typeBindings_.begin());
                     }
                     throw BuildAbortException();
@@ -968,7 +1170,7 @@ node_handle_t Builder::visitStaticLoopNode(const GCT::node_ptr_t &gct) {
                         stateType->toString());
                 leaveBlockScope();
                 staticValueScopes_.pop_back();
-                if (byFields) {
+                if (bindsRoundType) {
                     typeBindings_.erase(typeBindings_.begin());
                 }
                 throw BuildAbortException();
@@ -990,7 +1192,7 @@ node_handle_t Builder::visitStaticLoopNode(const GCT::node_ptr_t &gct) {
         }
         leaveBlockScope();
         staticValueScopes_.pop_back();
-        if (byFields) {
+        if (bindsRoundType) {
             typeBindings_.erase(typeBindings_.begin());
         }
     }
