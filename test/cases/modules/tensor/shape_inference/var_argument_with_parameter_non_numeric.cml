@@ -8,8 +8,8 @@ module var_argument_with_parameter_non_numeric
 import { Tensor, sum } from tensor
 
 with <var acc: Tensor>
-sync func step(d: float): float sync {
-    wait acc = acc + d
+func step(d: float): float sync {
+    acc = acc + d
     return sum(acc)
 }
 

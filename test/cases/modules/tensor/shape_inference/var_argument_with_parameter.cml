@@ -9,14 +9,14 @@ module var_argument_with_parameter
 import { Tensor, reshape, sum } from tensor
 
 with <var acc: Tensor>
-sync func step(d: float): float sync {
-    wait acc = acc + d
+func step(d: float): float sync {
+    acc = acc + d
     return sum(acc)
 }
 
 func main(): int sync {
     var w = reshape([0.0, 0.0], [2])
-    let r = wait step<w>(0.5)
+    let r = step<w>(0.5)
     println('{} {}'->format<r, sum(w)>)
     return 0
 }
