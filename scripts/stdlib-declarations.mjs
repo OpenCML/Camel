@@ -1006,7 +1006,21 @@ function verifyOps() {
     }
     if (run.status !== 0) {
         const output = `${run.stdout || ''}${run.stderr || ''}`.trim()
-        const lines = output.split('\n').filter(Boolean).map((line) => `--verify-ops: ${line}`)
+        // Two things in the child's output are not problems, and counting them made one red run
+        // read "144 difference(s) between the declarations and the registered operators" and
+        // "145 problem(s) across 25 declaration module(s)" at the same time:
+        //
+        //   - a blank line. A child on Windows ends its lines with `\r\n`, so splitting on `\n`
+        //     leaves a lone `\r`, which `filter(Boolean)` keeps and this script then printed as a
+        //     `--verify-ops: ` problem of its own (it is how a stack trace became 13 problems);
+        //   - the child's own summary line. This script prints the same number in its own last
+        //     line, so the child's copy is a report, not a problem.
+        const lines = output
+            .split(/\r?\n/)
+            .map((line) => line.trimEnd())
+            .filter(Boolean)
+            .filter((line) => !/^\d+ difference\(s\) between the declarations and the registered operators$/.test(line))
+            .map((line) => `--verify-ops: ${line}`)
         return { ok: false, lines }
     }
     return { ok: true, summary: (run.stdout || '').trim().split('\n').filter(Boolean).pop() || '' }

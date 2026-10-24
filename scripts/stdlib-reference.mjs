@@ -1372,7 +1372,15 @@ function camelExe() {
 }
 
 function registeredOperators() {
-    const run = spawnSync(camelExe(), ['inspect', '--ops', PROBE], { encoding: 'utf8', maxBuffer: 1 << 26 })
+    const exe = camelExe()
+    const run = spawnSync(exe, ['inspect', '--ops', PROBE], { encoding: 'utf8', maxBuffer: 1 << 26 })
+    // `spawnSync` reports a binary it could not start (`out/latest` never built, a stale install
+    // from another tree) as `error`, with `status === null` and `stdout`/`stderr` both undefined:
+    // the message below then read "failed (exit null): undefined" and left the reader to guess
+    // which install was missing. `stdlib-declarations.mjs` handles its own `run.error` this way.
+    if (run.error) {
+        throw new Error(`could not run ${exe} inspect --ops: ${run.error.message}`)
+    }
     if (run.status !== 0) {
         throw new Error(`camel inspect --ops failed (exit ${run.status}): ${run.stderr || run.stdout}`)
     }
