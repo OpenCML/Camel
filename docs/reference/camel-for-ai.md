@@ -34,7 +34,7 @@ disagree. Read it as the language you are compiling against, not as a snapshot o
 
 ## What each part costs
 
-Budgets, in characters: the file as a whole (112,000), the hand-written half (54,000) and each
+Budgets, in characters: the file as a whole (112,000), the hand-written half (55,000) and each
 generated region (61,000 together). `node scripts/camel-for-ai.mjs --report` prints the current
 numbers, and `--check` fails when one of them is exceeded — including the per-chapter budget in the
 last column below, which is read out of this table and measured against the chapter it names.
@@ -45,20 +45,20 @@ last column below, which is read out of this table and measured against the chap
 | 3. The smallest program that compiles | entry point, module, output, exit | 2,000 |
 | 4. Lexical: names, comments, literals | what the lexer accepts, keywords, operators | 3,200 |
 | 5. Expressions, operators, precedence | how an expression is read | 8,200 |
-| 6. Statements and declarations | functions, parameters, overloads, generics, `when` | 5,000 |
+| 6. Statements and declarations | functions, parameters, loops, rules, generics, `when` | 6,200 |
 | 7. Effects and `sync` | what runs in order, and what the compiler folds | 2,700 |
 | 8. Streams (`target`) | `T..`, `yield`, `tee` | 1,500 |
 | 9. Modules and the standard library | imports, exports, namespaces, where the library is | 3,300 |
 | 10. Passes, the command line, the graph | how to run a program and look at its graph | 3,000 |
-| 11. Idioms | how Camel code is written when it is written by someone who knows | 3,300 |
-| 12. Common errors | the error, the diagnostic, the fix | 11,600 |
+| 11. Idioms | how Camel code is written when it is written by someone who knows | 3,600 |
+| 12. Common errors | the error, the diagnostic, the fix | 11,800 |
 | 13. Accepted and then rejected | reserved spellings and their diagnostics | 2,600 |
 | 14. Not implemented yet (`target`) | what to avoid until its design lands | 1,700 |
 | Appendix A. Diagnostics | name, severity, message — generated | 28,000 |
 | Appendix B. Standard library signatures | every exported name — generated | 28,000 |
 | Appendix C. Sources | which normative page each rule comes from | 1,800 |
 | — | generated, all four regions | 61,000 |
-| — | hand-written, this header and sections 2–14 with Appendix C | 54,000 |
+| — | hand-written, this header and sections 2–14 with Appendix C | 55,000 |
 
 ## 2. The shape of a Camel program
 
@@ -436,7 +436,10 @@ func main(): int sync {
   unless their `when` conditions cannot both hold.
 - `when <condition>` is a compile-time predicate over the type parameters (`is_numeric::<T>()`,
   `is_ordered::<T>()`, or a constant such as `is_zero(y)`). A declaration whose condition is false is
-  not a candidate, which is how a generic function gets one body per type.
+  not a candidate, which is how a generic function gets one body per type. `is_numeric`, `is_ordered`
+  and the other predicates are names of the `types` module, so a file that writes one imports it
+  (`import { is_numeric } from types`); the condition resolves names where the declaration is written,
+  so a predicate the module does not import is `SemanticDiag::WhenPredicateNotImported`.
 - `let` binds once; `var` can be rebound, also through a path: `p.x = 5`, `xs[0] = 5`,
   `xs[i].f = e`. A path assignment rebinds the whole variable, as if written
   `xs = set(xs, i, set(xs[i], f, e))`; the target must be a variable, and `f().x = 5` is
@@ -444,6 +447,18 @@ func main(): int sync {
   how a callee can write back into the caller's variable (`wait` orders that write, §7).
 - **Generics** are declared after the name: `func first::<T>(xs: T[]): T? { ... }`, called as
   `first::<int>(xs)` or `first(xs)` when the arguments fix `T`.
+- **`loop`** is the language's own iteration, and it yields its last state:
+  `loop acc = 0 for i in 0..5 do acc + i` adds 0 to 4 and gives 10. The states before `for` are
+  written `name = start`, comma-separated; `for <name> in <range>` and `while <condition>` may each
+  be left out, and the body's value is the next state. The name after `for` is bare — never
+  `for i in 0..5 { ... }`, which is `SyntaxDiag::UnexpectedToken`: a `for` on its own is not a
+  statement.
+- **`rule`** declares a rewrite an optimizer pass may apply:
+  `rule name(<patterns>) when <condition> { <pattern> => <replacement> }` (`<=>` for a rewrite that
+  reads both ways). The condition goes between the parameters and the body, the one position a `when`
+  is read in; after the body it is `SyntaxDiag::WhenAfterBody`. A rule is a node of the graph, not a
+  call: declaring one runs nothing, so `camel check` accepts it and a run warns
+  `SemanticDiag::EffectNotExecuted` for it.
 - **Types**: `type Point = { x: int, y: int }`, `type Pair<T> = (T, T)`, and nominal enums
   `type Shape = enum { Circle(float), Rect { w: float, h: float }, Empty }`. A variant is built with
   `Shape::Circle(1.0)` / `Shape::Rect { w: 2.0, h: 3.0 }` / `Shape::Empty`, holds its data privately
@@ -462,6 +477,10 @@ type Shape = enum {
     Empty,
 }
 
+rule add_zero(x: int) {
+    x + 0 => x
+}
+
 func area(s: Shape): float {
     return match s {
         case Shape::Circle(r) => 3.14159 * r * r
@@ -476,6 +495,7 @@ func first::<T>(xs: T[]): T? {
 
 func main(): int sync {
     println(area(Shape::Rect { w: 2.0, h: 3.0 }), first([7, 8]) ?? 0, first::<string>([]) ?? 'none')
+    println(loop acc = 0 for i in 0..5 do acc + i, loop n = 3 while n > 0 do n - 1)
     return 0
 }
 ```
@@ -552,13 +572,18 @@ integers, and `f..g` composition, are implemented today.
 Sources: `docs/design-principles.cn.md` §4.2; `docs/design/io-concurrency-streams/`.
 
 **Common errors.** Streams are not in the language yet, so a stream spelling is refused instead of
-run: `xs..map(inc)` has no reading and the compiler answers `SemanticDiag::UnresolvedReference` —
-there is no stream `map` to find. The fix today is an array with `map` and a filter (§12.14); the
-design draft is `docs/design/io-concurrency-streams/`.
+run: with the function it names declared, `xs..map(inc)` is `SemanticDiag::NoMatchingFunction` —
+`..` composes two functions and nothing else, and there is no stream `map` to find. The fix today is
+an array with `map` and a filter (§12.14); the design draft is
+`docs/design/io-concurrency-streams/`.
 
 <!-- camel-snippet: counter-example: a stream spelling is not in the language yet -->
 
 ```camel
+func inc(x: int): int {
+    return x + 1
+}
+
 func doubled(xs: int[]): int[] {
     return xs..map(inc)
 }
@@ -705,8 +730,14 @@ Written by someone who knows Camel, the same program looks like this.
 - **A function is worth extracting when it is configuration-shaped**: `with` parameters are what a
   model's weights, a tensor's shape or a flag becomes, and the result is a function value that can be
   passed on (`let predict = net<weights>`).
-- **Ranges and composition instead of index loops.** `1..n->map<...>`, `for i in 0..n` for the fused
-  loop, and `f..g` when a pipeline of functions is the value being passed.
+- **Ranges and composition instead of index loops.** `1..n->map<...>`, `1..n->filter<...>->reduce<...>`
+  for a fused accumulation, and `f..g` when a pipeline of functions is the value being passed. When a
+  loop is really a loop, write the language's own form and let it carry the state:
+  `loop acc = 0 for i in 0..n do acc + i` (§6).
+- **Weights are `with` parameters, and `grad` reads the first of them.** With `with <x: float>` in
+  front of `func f(y: float): float`, `f<3.0>(2.0)` is the value at `x = 3.0, y = 2.0` and
+  `grad(f)<3.0>(2.0)` is its derivative in `x`; a function with no `with` parameter is
+  `SemanticDiag::NotDifferentiable`, and a function-typed parameter is not a weight.
 - **`T?` and `T!` are the boundary types.** Let a function that can miss return `T?` and one that can
   fail return `T!`; open them where the decision is made (`??`, `!!`, `match`), not by inventing
   sentinel values like `-1` or `''`.
@@ -752,6 +783,26 @@ export func total_area(kinds: Shape[], scale: float): float {
 Sources: `docs/language/07_statements.md`, `docs/language/06_expressions.md`,
 `docs/design-principles.cn.md` §11.
 
+A model is a configured function, and its weight is a `with` parameter:
+
+```camel
+import { grad } from autodiff
+
+with <x: float>
+func f(y: float): float {
+    return x * x * y + y
+}
+
+func main(): int sync {
+    println(f<3.0>(2.0), grad(f)<3.0>(2.0))
+    return 0
+}
+```
+
+```text
+20.0 12.0
+```
+
 **Common errors.** An idiom is only an idiom if its types line up: a signature that mixes the two
 spellings of the 32-bit integer is `SemanticDiag::NoMatchingFunction` at the call, and the fix is one
 spelling throughout (§5, §12.4).
@@ -792,10 +843,11 @@ func greet(): int sync {
 }
 ```
 
-**2. A type name that is gone.** `Tensor` was the old spelling of a tensor type and is not a type
-any more; the compiler answers `SemanticDiag::UnresolvedTypeReference`. **Wrong:**
+**2. `Tensor` with no import.** `Tensor` is the type name the `tensor` module exports, so it is
+imported; without that the name is unknown and the compiler answers
+`SemanticDiag::UnresolvedTypeReference`. **Wrong:**
 
-<!-- camel-snippet: counter-example: Tensor is not a type name; shapes are written in the brackets -->
+<!-- camel-snippet: counter-example: Tensor is the tensor module's type name and has to be imported -->
 
 ```camel
 func f(x: Tensor): int {
@@ -803,14 +855,26 @@ func f(x: Tensor): int {
 }
 ```
 
-**Write instead** — `T[shape]`, with the shape in the brackets:
+**Write instead** — import the name and build values with the module's functions: a shaped array is
+a different type, so `f32[2, 3]` is six floats and the tensor operators do not take it. A bare
+`Tensor` parameter is on its way out (**target**, `docs/design-principles.cn.md` §5.4).
 
 ```camel
-type Matrix = f32[2, 3]
+import tensor
+import { Tensor } from tensor
 
-func rows(m: Matrix): int {
-    return len(m)
+func twice(x: Tensor): float {
+    return tensor::sum(tensor::multiply(x, 2.0))
 }
+
+func main(): int sync {
+    println(twice(tensor::new([1.0, 2.0])))
+    return 0
+}
+```
+
+```text
+6.0
 ```
 
 **3. `any`, or a value whose type is not known.** There is no `any`; the compiler answers
@@ -1089,14 +1153,15 @@ func main(): int sync {
 }
 ```
 
-A `var` parameter is also only allowed in a `sync` function: declaring one anywhere else is the
-warning `SemanticDiag::VarParamInAsyncFunction`.
+The `var` is allowed only where the declaration carries the **`sync` modifier**, the `sync` written
+before `func`. A sync body does not count: `func bump(var x: int): int sync { ... }` still warns
+`SemanticDiag::VarParamInAsyncFunction`.
 
 **Write instead:**
 
 ```camel
-func bump(var x: int): int {
-    x = x + 1
+sync func bump(var x: int): int sync {
+    wait x += 1
     return x
 }
 
@@ -1269,8 +1334,9 @@ names the design it comes from.
 - **Deleting the two-parameter `range(a, b)`**: `a..b` is the interval now, and `range(a, b)` is the
   same value under a name that is on its way out — `docs/design-principles.cn.md` §4.2. `range` with
   a step is not affected.
-- **`Tensor` as a type name**: deleted; `T[dims]` is the spelling (`docs/design-principles.cn.md`
-  §5.4).
+- **A bare `Tensor` in a signature**: it becomes an explicit type parameter over a shaped type
+  (**target**, `docs/design-principles.cn.md` §5.4). `Tensor` is still the `tensor` module's own
+  type name and is imported by name (§12.2).
 - **Automatic differentiation and ONNX export over `enum`**: both refuse with a located rejection
   rather than mis-compiling (`docs/language/03_data_model.md` §3.5). That is a decision to work with,
   not a `target` to wait for: an enum at a differentiated boundary needs an explicit reading.
@@ -1323,7 +1389,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `LambdaParametersNeedParentheses` | E | A lambda's parameters need their parentheses: write '(x) => e', not 'x => e'. |
 | `ComparisonAcrossLines` | W | This '>' is read as a comparison with the next line, which starts with {0}: two statements may have been joined into one. |
 
-**Semantic** (`SemanticDiag`) — 202 (188 errors, 14 warnings)
+**Semantic** (`SemanticDiag`) — 203 (189 errors, 14 warnings)
 
 | `Redeclaration` | E | Redeclaration of reference: '{0}'. |
 | `ModuleNotFound` | E | Module '{0}' not found. {1} |
@@ -1505,6 +1571,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `CompOperandNotUnary` | E | '..' composes a unary function on the left; '{0}' takes {1} parameters. |
 | `CompOperandGenericWithoutType` | E | '..' composes two functions, and its {0} operand, the generic function '{1}', has no instance here: write its type arguments ('{1}::<int>'), or give the whole expression an expected function type. |
 | `RangeTwoArgumentsRemoved` | E | The two-parameter 'range(a, b)' is gone; write the interval 'a..b'. |
+| `RangeStepZero` | E | The range 'range({0}, {1}, 0)' has a step of 0, so it is no sequence of integers. |
 | `VarParamInAsyncFunction` | W | Variable parameters are only allowed in sync functions. |
 | `IgnoredSideEffect` | W | {0} is neither waited nor in a sync block, and {1}. |
 | `CapturedWriteInAsyncFunction` | W | {0} writes the captured variable{1} {2} but is not declared with the 'sync' modifier. |
@@ -1561,7 +1628,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `ConstantExpressionFaults` | W | This constant expression faults whenever it is evaluated ({0}); it is not folded. |
 | `TranslationLinksRuntime` | W | std::cpp has no standalone translation of {0}: the program it writes calls the Camel runtime there and is built with libcamel. |
 
-**Semantic** (`SemanticDiag`) — 202 (188 errors, 14 warnings)
+**Semantic** (`SemanticDiag`) — 203 (189 errors, 14 warnings)
 
 | `ReducedPrecisionUnsupported` | E | The call of '{0}' cannot take a value of the reduced-precision element type '{1}'. |
 | `ImplOnBodylessDeclaration` | E | The body-less declaration '{0}' cannot carry '#impl<{1}>': it has no Camel body. |
@@ -1579,7 +1646,10 @@ Every name the standard library exports, with its signature. `name: <with-parame
 result`: the ordinary parameters are the data the function works on, the `with` parameters are what
 configures it, and a call chains them — `s->trim->split<','>`, `xs->filter<p>->sort_by<key>`. `int`
 is the 64-bit integer and `float` the 64-bit float. A result `T!` is an error to be handled (`!!`,
-`?->`, `match`), `T?` a value that may be absent (`??`).
+`?->`, `match`), `T?` a value that may be absent (`??`). A signature whose declaration carries type
+parameters is printed without them: `is_numeric: () => bool` is declared `is_numeric::<T>()` and is
+written with its type argument when the arguments do not fix it. `Tensor` is a type name the `tensor`
+module exports, so it is imported (§12.2).
 
 Source: `docs/stdlib-reference.md`, generated from the declarations in `stdlib/*.cml` and
 `stdlib/signatures/*.cml` by `scripts/stdlib-reference.mjs --write`. Regenerate this region with
@@ -1671,7 +1741,7 @@ format: <...args: T...> (fmt: string) => string
 join: <sep: string> (xs: string[]) => string
 len: (x: string) => int
 len: (x: T[..]) => int
-range: (start: int, end: int) => int[]
+range: (start: int, end: int, step?: int) => int[]
 head: (xs: T[]) => T
 last: (xs: T[]) => T
 tail: (xs: T[]) => T[]

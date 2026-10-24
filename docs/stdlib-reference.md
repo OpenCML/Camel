@@ -485,17 +485,21 @@ The number of bytes of a string, or of the first dimension of an array of any ra
 #### `range`
 
 ```camel
-range: (start: int, end: int) => int[]
+range: (start: int, end: int, step?: int) => int[]
 ```
 
-The integers from start up to, not including, end; empty when end is not above start. This is
-what the interval `a..b` becomes on the graph (design principles 4.2); it is not a name a
-program writes: the interval of two integers is written `a..b`, and the two-parameter
-`range(a, b)` it used to be written as is gone (SemanticDiag::RangeTwoArgumentsRemoved).
+The integers of a step: `start`, `start + step`, ... up to, not including, `end`; with no step
+the step is 1, `range(a, b)` is the same sequence as the interval `a..b` and becomes it on the
+graph (design principles 4.2). `step` must move: a step of 0 is a fault, and a constant call
+with a step of 0 is refused where it is written. The result is empty when the step does not
+carry `start` towards `end`. A `for` over an interval is fused by the compiler and builds no
+array; this call builds one.
 
 - Pure.
-- Example (a fragment, not compiled): `0..3` gives `[0, 1, 2]`
-- Why it is not compiled: the interval is written `a..b`; `range(a, b)` is refused, and this built-in is what the interval lowers to
+- Failure: fault `InvalidArgument` when the step is 0.
+- Example (a fragment, not compiled): `range(0, 10, 3)` gives `[0, 3, 6, 9]`
+- Example (a fragment, not compiled): `range(10, 0, -3)` gives `[10, 7, 4, 1]`
+- Why it is not compiled: the interval is written `a..b`; the stepped form is `range(a, b, step)`
 
 #### `head`
 
