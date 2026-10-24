@@ -37,12 +37,16 @@ c005562ecb6383e6 ok test/cases/parse/rulings/doc_comment.cml
 cc32392fed36cd2f ok test/cases/parse/rulings/reserved_and.cml
 7eaaa656fecc2292 no test/cases/parse/syntax/angle_close_after_space.cml
 f0996e2e802a583a no test/cases/parse/syntax/comparison_needs_space.cml
+38305e93eb4f5be8 no test/cases/parse/syntax/ident_list_open.cml
 1800256e2cca0603 no test/cases/parse/syntax/line_starts_with_operator.cml
 a24945bb64fb63aa no test/cases/parse/syntax/missing_then.cml
 2b17772c82721c98 ok test/cases/parse/syntax/postfix_access.cml
+6d666308c57b0b81 no test/cases/parse/syntax/resource_group_open.cml
 296c3ba76674282f ok test/cases/parse/syntax/subscript_forms.cml
+a284050bc82df753 no test/cases/parse/syntax/tag_group_open.cml
 41c46559f542a83c ok test/cases/parse/syntax/tuple_and_parenthesis.cml
 d85056a217270a69 no test/cases/parse/syntax/type_arguments_missing_name.cml
+5763a5729b0b4fca no test/cases/parse/syntax/type_params_open.cml
 3cdde65c3beacbd8 no test/cases/parse/syntax/unterminated_comment.cml
 4c6b6e3195b9ef66 ok probes/probe_d000.cml
 5131da37189b4814 ok probes/probe_d001.cml

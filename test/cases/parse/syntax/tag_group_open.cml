@@ -1,0 +1,9 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+/// A tag group whose text ends right after the `=`. The same shape as the resource group above:
+/// the declaration asks for the `[` and reports it when the text ends there, instead of reading
+/// the terminal token as the bracket and putting one token in the tree twice (H417).
+module syntax_tag_group_open
+
+tag finite =
