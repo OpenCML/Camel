@@ -463,15 +463,19 @@ Expected '{0}' before {2}, to close the '{1}'.
 Every '{1}' needs its '{0}'. The note shows the '{1}' that is still open here.
 ```
 
-**Example** (`test/cases/compile/diag_render/syntax_missing_paren.cml`, run as `camel --error-format text test/cases/compile/diag_render/syntax_missing_paren.cml`)
+**Example** (`test/cases/parse/syntax/ident_list_open.cml`, run as `camel test/cases/parse/syntax/ident_list_open.cml`)
 
 ```camel
-module syntax_missing_paren
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
-func main(): int sync {
-    println((1 + 2)
-    return 0
-}
+/// A list whose text ends where a name was required. The name is asked for through `identDef` and
+/// reported where it should stand; the list closes without one. Reading the token that stands
+/// there instead - the terminal token - put that token in the tree twice and made
+/// `camel-parsecheck fuzz` report "the leaves of the tree are not the tokens of the text" (H417).
+module syntax_ident_list_open
+
+resource a = [b,
 ```
 
 ### UnmatchedClosingDelimiter
