@@ -91,7 +91,9 @@ def main() -> int:
     for uri, f_, g in rows:
         md.append(f"| `{uri}` | {fv(f_)} | {fv(g)} |")
     out_md = REPO / "export_matrix.md"
-    out_md.write_text("\n".join(md) + "\n", encoding="utf-8")
+    # LF on every platform, as .gitattributes stores it: the doc checks compare bytes, and a
+    # Windows run would otherwise write CRLF into a file the repository keeps at LF.
+    out_md.write_text("\n".join(md) + "\n", encoding="utf-8", newline="\n")
     print(f"wrote {out_csv} ({len(rows)} rows) and {out_md}")
     print(f"  forward lowerings: {n_fwd}, gradient lowerings: {n_grad}, none: {len(none)}")
     return 0

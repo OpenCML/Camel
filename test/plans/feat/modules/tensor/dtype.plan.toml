@@ -331,3 +331,31 @@ expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "<tensor:load_npy_f32>: ::<float32>(path: string) => Tensor<float32>", "<tensor:load_npy_i64>: ::<int64>(path: string) => Tensor<int64>"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
+
+# A generic wrapper writes the P4 endpoint: `T[..]` is the numeric array type (`Tensor` is that
+# type, so the open-rank spelling and the alias are one type), and the element type travels on to
+# `load_npy::<T>` -- the calls print the file's own extent, so a wrapper that lost the element type
+# would fault on the int64 file instead (design principles 5.1, 5.2, 5.5).
+
+[[tests]]
+name = "npy_generic_wrapper"
+desc = "A generic function declares its result as `T[..]` and forwards the element type to a typed loader (`func read_as::<T>(p: string): T[..] { return load_npy::<T>(p) }`), and each call reads the file at the caller's element type: `read_as::<f32>` on the f32 `.npy` gives 3 elements and `read_as::<i64>` on the tree's only int64 `.npy` gives 2. This is the spelling the P4 deletion step keeps: no signature writes the bare `Tensor` name, and the element type is a type variable of the head (design principles 5.1, 5.2, 5.5)."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/dtype/npy_generic_wrapper.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout = "3\n2\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "npy_generic_wrapper_mismatch"
+desc = "The element type a generic wrapper declares reaches the load: `read_as::<f32>` on the int64 `.npy` is the same fault as a direct `load_npy::<f32>`, a RuntimeDiag::RuntimeError reported at the call inside the wrapper (`npy_generic_wrapper_mismatch.cml:9:54` is the `load_npy::<T>(p)` of its body, with `T` instantiated to f32) and naming the file's element type and the declared one (`the file holds i64 and the program declares f32`). A wrapper that erased the element type would load the file instead (design principles 5.1, 5.5)."
+kind = "negative"
+case = "../../../../cases/modules/tensor/dtype/npy_generic_wrapper_mismatch.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::RuntimeError"
+expect_output_contains = ["the file holds i64 and the program declares f32", "npy_generic_wrapper_mismatch.cml:9:54"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
