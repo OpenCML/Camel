@@ -124,6 +124,7 @@ func main(): int sync {
 ```
 
 The body of `main` is a synchronous block, so the two calls to `log` execute in order. But `println` belongs to the body of `log` itself, which is not a synchronous block there, so it does not execute. To print, `log` should be declared as `func log(x: int): int sync { ... }`.
+- **Pure computation is deterministic** (the author, 2026-10-24): the same inputs always give the same result. An operation whose result varies with time, scheduling or the outside world is either an effect (such as reading the clock, `now()`) or says it is nondeterministic in its declaration (such as `first_of`, or `merge` in arrival order). Optimisations that reuse results (incremental computation, common-subexpression merging) rely on this.
 
 ### 3.3 Resources, `uses` and `pure`
 
@@ -278,6 +279,16 @@ A `sync` written before a block (including the postfix form on a function body, 
 
 ## 5. The type system
 - **A function value has no identity** (the author, 2026-10-24): the value of a function or a region is decided only by what it computes; there is no "which object it is". Two function values cannot be compared for equality and have no address. So function bodies and regions that differ only in parameter names or inputs may be shared by the compiler, and the program cannot observe it.
+- **`when` comes before the body it guards** (the author, 2026-10-24): `when` is a condition of applicability and belongs to the signature, not to the defining clauses after a body (`fact`'s `join`/`meet`/`widen`/`narrow`). Functions and rules write it after the signature and before the body; when the signature does not fit on one line, `when` takes a line of its own (the formatter lays it out so):
+  ```camel
+  func softmax::<T>(x: T[n, m], axis: int = -1): T[n, m]
+      when is_float::<T>()
+  {
+      ...
+  }
+  rule add_zero::<T>(x: T) when is_integer::<T>() { x + 0 => x }
+  ```
+  A `match` guard likewise comes before `=>` (`case p when c => …`).
 
 ### 5.1 Basic types and numeric types
 
@@ -457,6 +468,7 @@ Keywords are kept only for modifiers that change semantics (such as `sync`, `exp
 - **No permission implies another.** A module can only declare what an operator itself does, and cannot widen the permissions on the caller's behalf.
 - **`unordered_reduce`** grants only "the merge order of this reduction may change", and nothing else.
 - **Exact operators may declare that they are affected by the four assumptions of `finite_math`**; rounding permissions still do not apply to them.
+- **`refine_accuracy`** (rule language v2, 8.10): allows the compiler to replace one writing by another whose error is no larger (`log(1 + x)` → `log1p(x)`, softmax with the maximum subtracted). "No larger" means: on every input, the right side's error does not exceed the left side's error plus the bound the rule declares (in ulps, 2 by default), and it is strictly better somewhere; not allowed by default, granted by a tag.
 
 ### 7.3 Defaults: relaxed by default, tightened by declaration
 
