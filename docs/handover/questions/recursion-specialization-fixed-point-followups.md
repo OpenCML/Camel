@@ -192,3 +192,35 @@ Slice,Concat,Reshape,Abs,Cast,ReduceMean,Greater,If,MatMul,Add,Mul,Cast,ReduceMe
 而这一版拷贝有界正是裁定要的（「特化总量有界」）。所以这是**两个都成立的要求之间的取舍**：
 完全展开（这条用例钉的）与拷贝有界（裁定要的）。两个读数（只做裁定①＝绿、本版＝红）都在这里，
 交给作者定，我没有自行重推这条断言。
+
+## 去上限落地后的新读数：`export_fold` 这条递归真的没有不动点（h465 集成 lane）
+
+裁定第 3 条（"8 只是截断"）落地：`kMaxTypeSpecializationsPerRecursiveFunction = 8` 删除，换成不动点
+守卫 `kTypeSpecializationFixedPointGuard = 4096`，撞上就 `throw`，**不静默停在某个截断形状**
+（`bb4e01be8`）。
+
+- 归属读数：`export_fold` 在翻转批（`228a2ba6a`，73 红那批）**绿**；这次去上限之后才红。它不是翻转
+  造成的，是"去上限"造成的。
+- plan 口径：`timeout_ms` 抬到 60000 也在 60 s 内不返回（60.04 s 被超时杀掉，`expected exit 0,
+  got null`）。我已把它还原成 10000，**测试一行未改**。
+- 主机直跑（`/usr/bin/time camel test/cases/modules/onnx/export_fold.cml`）：
+
+  ```
+  error[RuntimeDiag::RuntimeError]: ... onnx.export_model: the type specialization of 'unroll'
+  did not reach a fixed point: 4096 instances, each with a key the one before it did not have.
+    --> test/cases/modules/onnx/export_fold.cml:30:5
+  WALL 256.99 s
+  ```
+
+  基座同一条 <10 s 且绿。也就是说：无上限读数下 `unroll` 这条递归**没有不动点**（每个实例的键都与
+  前一个不同），而裁定第 3 条"键不同 → extent 与维度名放宽为 `?`"在这条路径上**没有生效**。守卫的
+  `throw` 是**对的行为**（不静默停、也不截断），但它把一个翻前绿的用例变成红，代价是 257 s。
+- 对照（说明守卫不是普遍代价）：同一批里 `specialize_growing_shape.fold_specialize.bounded` 的读数
+  是不动点 **1 个实例**（`GRAPH_STATS {"graphs":99,...,"specializations":1}`），问题只在 `unroll`
+  这类路径上。
+
+两种终态（作者定）：
+
+- (a) 第 3 条的放宽规则覆盖这条路径（守卫留作安全网）；
+- (b) 这条递归的类型确实没有不动点，导出侧应在花掉 257 s 之前用它自己的诊断拒绝它（今天只有守卫
+  在 4096 个实例之后事后报错）。
