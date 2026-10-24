@@ -137,11 +137,11 @@ Two ways to close it, both a decision about form:
 ## The questions
 
 1. Where is a write's value output restored? The body result is measured here and is not the site
-   (segfault, 43 reds, footprints and reader-facing expectations). The alternatives the measurements
-   point at: h464's own landing of the assignment's result type (the goldens pin `var int`, so this
-   lane would not touch them), the SSA conversion learning which reads are graph anchors and which
-   belong to another graph, or every value use of a write reading it -- the general form of the
-   ruling, which is the largest of the three.
+   (segfault, 43 reds, footprints and reader-facing expectations). The candidates, cheapest first:
+   (i) h464's own landing of the assignment's result type -- the goldens pin `var int`, so this lane
+   would not touch them; (ii) the SSA conversion learning which reads are graph anchors and which
+   belong to another graph; (iii) every value use of a write reading it -- the general form of the
+   ruling, and the largest of the three.
 2. How is a body whose value depends on a write written: `return v`, the bare tail expression the
    printer already writes for a lambda's block body, or a GATE on the implicit body value to match an
    explicit `return`?
