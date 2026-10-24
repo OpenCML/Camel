@@ -16,6 +16,7 @@ inline constexpr const char *kEdgesOrderPureTestPass = "test::edges_order_pure";
 inline constexpr const char *kEdgesOrderScheduleTestPass = "test::edges_order_schedule";
 inline constexpr const char *kEdgesOrderSpliceTestPass   = "test::edges_order_splice";
 inline constexpr const char *kEdgesOrderReplaceTestPass  = "test::edges_order_replace";
+inline constexpr const char *kEdgesSyncGateTestPass      = "test::edges_sync_gate";
 
 // Each adds nodes to the root graph, commits, and prints "EDGES accepted" or
 // "EDGES refused: <the commit's message>".
@@ -97,6 +98,17 @@ class EdgesOrderSpliceTestPass : public RuntimeGraphRewritePass {
     apply(const camel::runtime::Program *program, std::ostream &os) override;
 };
 class EdgesOrderReplaceTestPass : public RuntimeGraphRewritePass {
+  public:
+    using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override;
+};
+
+// The GATE of a `sync` block (docs/design/effects/edges.cn.md 5.3): one data port reading a value
+// and one **sync predecessor**, which is the chain's tail, and no control input at all. The pass
+// writes that shape, commits it, and prints what the graph the commit made holds: the commit must
+// accept it, and it must keep the GATE rather than dissolve it into its input.
+class EdgesSyncGateTestPass : public RuntimeGraphRewritePass {
   public:
     using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
     const camel::runtime::Program *

@@ -1851,8 +1851,14 @@ size_t GraphDraft::dissolveUnorderedGates() {
         const std::vector<gc_node_ref_t> gates = gateIds_;
         for (gc_node_ref_t id : gates) {
             const DraftNodeHeader *h = header(id);
-            if (!h || h->kind != GCNodeKind::Gate || !ctrlInputsOf(id).empty() ||
-                normInputsOf(id).empty()) {
+            // A GATE waits on the sync chain's tail (docs/design/effects/edges.cn.md 5.3): its wait
+            // is a **sync predecessor**, and 5.3 keeps a GATE with one -- it "may not be deleted,
+            // and may not be replaced by its input, unless its sync predecessor is already gone".
+            // A gate whose wait is a control input is what that wait used to be written as; the
+            // ones this lane has not moved onto the sync edge keep the old condition. A gate with
+            // neither waits on nothing, and is plain forwarding.
+            if (!h || h->kind != GCNodeKind::Gate || !syncInputsOf(id).empty() ||
+                !ctrlInputsOf(id).empty() || normInputsOf(id).empty()) {
                 continue;
             }
             const gc_node_ref_t value = normInputsOf(id).back();
