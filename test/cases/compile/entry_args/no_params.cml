@@ -1,6 +1,6 @@
 module no_params
 
 func main(): int sync {
-    println('ran')
+    println('PROGRAM_EXECUTED')
     return 0
 }
