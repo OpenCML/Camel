@@ -563,6 +563,14 @@ ScalarOperand ScalarOperand::fromSlot(TypeCode code, slot_t slot) {
     case TypeCode::Int64:
         scalar.value.i = scalarToInt64(code, slot);
         break;
+    // A reduced-precision value is two bytes in the low half of its slot (camel/core/rtdata/
+    // half.h), and the operand is read at the element type it was written with: the two bytes are
+    // kept as they are. Widening them into `f` would put four bytes behind a two-byte element type
+    // and the kernel would read the value as the low half of an f32, which is not the value.
+    case TypeCode::BFloat16:
+    case TypeCode::Float16:
+        scalar.value.u16 = static_cast<uint16_t>(slot);
+        break;
     default:
         scalar.value.b = scalarToBool(code, slot) ? 1 : 0;
         break;
