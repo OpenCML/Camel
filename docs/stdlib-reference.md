@@ -4849,6 +4849,39 @@ never read as one that did not.
 - Failure: error value `IndexError` when the report has no such row.
 - Example: `check_reason(r, 0)` gives `''`
 
+#### `check_coverage`
+
+```camel
+check_coverage: (r: CheckReport, row: int) => string!
+```
+
+What the translation layer made of one row's rule (H247, slice S1): the proposition it read out
+of the rule's two sides -- `integer scalar int: (x + 0) = x`, with `, no premise yet` when the
+declaration carries a condition -- or `beyond translation coverage` followed by the reason it
+refused. The layer never guesses: a rule it cannot translate says which width, operator or node
+kind stopped it, and that rule is `sampled`, never `proved`. A later slice adds the floating
+widths and the conditions as premises; `check_coverage_table` is the boundary as a value.
+
+- Pure.
+- Failure: error value `IndexError` when the report has no such row.
+- Example: `check_coverage(r, 0)` gives `'integer scalar int: (x + 0) = x'`
+
+#### `check_coverage_table`
+
+```camel
+check_coverage_table: () => string
+```
+
+The declared coverage of the translation layer: the widths it translates (`int`, `i32`), the
+widths the design lists beside them and it does not translate yet (`float`, `f32`, `bf16`,
+`f16`), the operators it translates, what happens to integer division and remainder, what is
+beyond translation coverage, and that a rule's condition is not a premise yet (rewrite design
+8.1). The boundary is a value a reader can read and a test can pin, not a paragraph in a design
+document that drifts from the code.
+
+- Pure.
+- Example: `check_coverage_table()` gives `'the coverage of the integer scalar translation\n...'`
+
 #### `run`
 
 ```camel

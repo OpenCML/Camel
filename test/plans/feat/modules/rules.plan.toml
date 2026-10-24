@@ -204,6 +204,56 @@ expect_stdout_contains = ["IndexError", "the report has 1 row(s), and row 1 was 
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
 
+# ---- The translation layer (H247, slice S1): a rule's two sides as integer scalar terms, and the
+# ---- declaration of what the layer covers (rewrite design 8.1).
+
+[[tests]]
+name = "rules.the_translation_boundary_is_a_declared_table"
+desc = "The translation layer's coverage is a value, not a paragraph: `check_coverage_table` answers the widths it translates (`int`, `i32`), the widths the design lists beside them and it does not translate yet (`float`, `f32`, `bf16`, `f16` -- asked of the floating family, so the two reduced-precision widths are not silently left out), the twelve integer operators it translates, what integer division and remainder mean (the fault at a zero divisor is part of the term, design 1.8: the language has no undefined behaviour), what is beyond translation coverage, and that a rule's condition is not a premise yet (S4). Rewrite design 8.1 asks for the coverage set to be declared; a declaration that lives only in a design document drifts from the code, so this one is read out of the code and pinned line by line."
+kind = "behavior"
+case = "../../../cases/modules/rules/verify_translate.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["the coverage of the integer scalar translation", "widths translated: int i32", "widths declared and not translated yet: float f32 bf16 f16 (the floating theory is S3)", "operators translated: :op/add_l :op/add_i :op/sub_l :op/sub_i :op/mul_l :op/mul_i :op/div_l :op/div_i :op/mod_l :op/mod_i :op/neg_l :op/neg_i", "division and remainder: translated, and the fault at a zero divisor is part of the term (the decision carries it)", "beyond translation coverage: a whole tensor, a width or an operator or a node kind not listed above", "a rule's condition: the sides are translated, and the condition is not a premise yet (S4)"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 40000
+
+[[tests]]
+name = "rules.an_integer_rule_is_translated_to_a_proposition"
+desc = "A rule of the integer scalar fragment is translated into the proposition a decision procedure would be handed, and every one of its rows says so in the `coverage` column (H247, slice S1; the ruling of 2026-10-24 on `verification-verdict-surface`, 3, in `docs/handover/reviews/questions-2026-10-23.md`): `x + x => x * 2` at `int` is `integer scalar int: (x + x) = (x * 2)`, and `x + 0 => x` at `i32` is `integer scalar i32: (x + 0) = x`. The column is part of the row's fixed rendering too, so the text a reader reads and the column a tool reads are one answer. With no solver in the build every one of these rows is still `sampled` -- comparing ten samples is not establishing the proposition -- and the report of this case never says `proved`."
+kind = "behavior"
+case = "../../../cases/modules/rules/verify_translate.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["sampled twice: proposition equality, evidence samples 10, fired 8 of 8, coverage integer scalar int: (x + x) = (x * 2)", "sampled plus_zero: proposition equality, evidence samples 10, fired 8 of 8, coverage integer scalar i32: (x + 0) = x", "rows 4", "0 integer scalar int: (x + x) = (x * 2)", "1 integer scalar i32: (x + 0) = x"]
+expect_output_not_contains = ["proved "]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 40000
+
+[[tests]]
+name = "rules.a_rule_outside_the_fragment_is_refused_with_its_reason"
+desc = "A rule the layer cannot translate is refused rather than guessed at, and the reason names the class that stopped it (rewrite design 8.1: 覆盖之外一律拒绝翻译，并给出原因; the ruling of 2026-10-24 on `verification-verdict-surface`, 3: the rule is `sampled` and the reason is written on its row). `x ^ 2 => x * x` is one integer equality in spirit and is refused by the operator the fragment does not carry, `:op/pow_l`, and the rule is refused by its operator before its operands are read. A floating rule is refused by its element type: `float` is `f64` here, declared in the coverage table and not translated yet, and it is the *parameter's* class that decides, so the answer does not depend on which operator happens to stand at the top of the side. Neither rule becomes `proved`, and neither is silently treated as an integer equality."
+kind = "behavior"
+case = "../../../cases/modules/rules/verify_translate.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["sampled squared: proposition equality, evidence samples 10, fired 8 of 8, coverage beyond translation coverage: the operator ':op/pow_l' is not translated", "sampled scaled: proposition equality, evidence samples 10, fired 8 of 8, coverage beyond translation coverage: the element type 'float' is not translated yet (the floating theory is S3)", "2 beyond translation coverage: the operator ':op/pow_l' is not translated", "3 beyond translation coverage: the element type 'float' is not translated yet (the floating theory is S3)"]
+expect_output_not_contains = ["proved "]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 40000
+
+[[tests]]
+name = "rules.a_library_law_says_no_premise_yet_and_a_tensor_law_is_out_of_coverage"
+desc = "Two things the library's own rules make visible. A generic law whose declaration carries a condition (`int_add_zero::<T>(x: T) when is_integer::<T>()`) is translated into its two sides with `, no premise yet` written after them: the condition is what makes the proposition conditional, and turning it into a premise is S4's work, not something this slice may assume away. The law has one row per instance, so the column says it twice -- at `int` and at `i32`. A tensor law is refused as a whole-tensor property (design 8.1's first class): `tensor_f32_mul_one` multiplies a tensor by a scalar, and the layer says the property is over a whole tensor rather than pretending a scalar term for it. The floating family follows the same rule for all four of its widths, including the two the check cannot make a value for: `float`, `f32`, `bf16` and `f16` are each refused by their element type, on the row that also says no value could be drawn."
+kind = "behavior"
+case = "../../../cases/modules/rules/verify_translate.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["0 integer scalar int: (x + 0) = x, no premise yet", "1 integer scalar i32: (x + 0) = x, no premise yet", "2 beyond translation coverage: the property is over a whole tensor", ", coverage integer scalar int: (x + 0) = x, no premise yet", "rows 4", "0 beyond translation coverage: the element type 'f32' is not translated yet (the floating theory is S3)", "1 beyond translation coverage: the element type 'float' is not translated yet (the floating theory is S3)", "2 beyond translation coverage: the element type 'bf16' is not translated yet (the floating theory is S3)", "3 beyond translation coverage: the element type 'f16' is not translated yet (the floating theory is S3)"]
+expect_output_not_contains = ["proved "]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 40000
+
 [[tests]]
 name = "rules.float_permissions_gate_the_laws"
 desc = "The float laws of the library apply where their permissions are granted: same-sign coefficients under the default reassociate, the exact doubling of an integral coefficient with no permission, and the cancellation and product-chain laws only on a node that grants no_infs/no_signed_zeros. The operator counts show which rule fired; the values are what the rewritten expressions compute."

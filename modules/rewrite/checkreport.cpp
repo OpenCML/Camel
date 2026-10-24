@@ -25,6 +25,9 @@ std::string CheckRow::render() const {
     if (!detail.empty()) {
         line += ", " + detail;
     }
+    if (!coverage.empty()) {
+        line += ", coverage " + coverage;
+    }
     line += "\n";
     return line;
 }
