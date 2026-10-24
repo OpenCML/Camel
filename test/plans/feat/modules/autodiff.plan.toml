@@ -1672,16 +1672,25 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
-name = "loop_grad_refuse_tensor_iterable"
-desc = "A loop that iterates over a tensor computed from the differentiated parameter is refused before the loop: iterating a tensor walks its first axis through the operator `tensor:iter`, whose result is an array of slices and which has no derivative rule, so the diagnostic names that operator at the iteration (line 15) instead of dropping the slices' gradient."
-kind = "negative"
-case = "../../../cases/modules/autodiff/loop_grad_refuse_tensor_iterable.cml"
+name = "loop_grad_tensor_iterable.runtime.nvm"
+desc = "A loop that iterates over a tensor's first axis differentiates: a numeric array is a tensor, so `for row in w` walks the rows `tensor:iter` hands out, and the reverse pass scatters each round's slice gradient back at that round's index -- the forward is 21.0 and `d` is the six ones in w's own shape [2, 3], asserted element by element (a gradient of the rounds' own shape prints two numbers instead of six). This case replaced `loop_grad_refuse_tensor_iterable`, which expected the refusal of `tensor:iter`. (grad built at run time)"
+kind = "behavior"
+case = "../../../cases/modules/autodiff/loop_grad_tensor_iterable.cml"
 args = ["${case}", "${run_nvm}"]
-expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::RuntimeError"
-expect_diagnostic_line = 15
-expect_output_contains = ["no derivative rule for operator 'tensor:iter'", "cannot be dropped silently"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+expect_exit = 0
+expect_stdout_exact = "loop_grad_tensor_iterable f=21.0 d=[[1.0, 1.0, 1.0], [1.0, 1.0, 1.0]]\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "loop_grad_tensor_iterable.macro.fvm"
+desc = "The same loop adjoint when std::macro builds the gradient ahead of time and the FastVM runs it: the scatter of each round's slice gradient is placed in the compiled gradient graph, not only in a graph built at run time."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/loop_grad_tensor_iterable.cml"
+args = ["${case}", "std::macro", "${run_fvm}"]
+expect_exit = 0
+expect_stdout_exact = "loop_grad_tensor_iterable f=21.0 d=[[1.0, 1.0, 1.0], [1.0, 1.0, 1.0]]\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
 [[tests]]
