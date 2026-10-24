@@ -401,7 +401,7 @@ case = "../../../cases/loops/err_tensor_rank0.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::LoopSequenceNotIterable"
-expect_diagnostic_line = 10
+expect_diagnostic_line = 13
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 

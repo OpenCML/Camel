@@ -254,8 +254,8 @@ expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
-const out = input.normalized.stdout
-assert(out.includes('[      3.,       3.,       3.,       3.]'), `unexpected output: ${out}`)
+const out = input.normalized.stdout.trim()
+assert(out === '[[3.0, 3.0, 3.0, 3.0], [3.0, 3.0, 3.0, 3.0]]', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 10000
@@ -319,7 +319,7 @@ verify_script = """
 const out = input.normalized.stdout
 const lines = out.split('\n').filter((l) => /^(start|seen|count)/.test(l))
 assert(JSON.stringify(lines) === JSON.stringify(['start', 'seen [7, 8, 9]', 'count 7500']), `unexpected output: ${out}`)
-assert(out.includes('[      0.,       1.,       0.'), `one-hot rows missing: ${out}`)
+assert(out.includes('[[0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0]]'), `one-hot rows missing: ${out}`)
 }
 """
 timeout_ms = 8000
@@ -337,7 +337,7 @@ verify_script = """
 const out = input.normalized.stdout
 const lines = out.split('\n').filter((l) => /^(start|seen|count)/.test(l))
 assert(JSON.stringify(lines) === JSON.stringify(['start', 'seen [7, 8, 9]', 'count 7500']), `unexpected output: ${out}`)
-assert(out.includes('[      0.,       1.,       0.'), `one-hot rows missing: ${out}`)
+assert(out.includes('[[0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0]]'), `one-hot rows missing: ${out}`)
 }
 """
 timeout_ms = 8000
@@ -355,7 +355,7 @@ verify_script = """
 const out = input.normalized.stdout
 const lines = out.split('\n').filter((l) => /^(start|seen|count)/.test(l))
 assert(JSON.stringify(lines) === JSON.stringify(['start', 'seen [7, 8, 9]', 'count 7500']), `unexpected output: ${out}`)
-assert(out.includes('[      0.,       1.,       0.'), `one-hot rows missing: ${out}`)
+assert(out.includes('[[0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0]]'), `one-hot rows missing: ${out}`)
 }
 """
 timeout_ms = 8000
@@ -373,7 +373,7 @@ verify_script = """
 const out = input.normalized.stdout
 const lines = out.split('\n').filter((l) => /^(start|seen|count)/.test(l))
 assert(JSON.stringify(lines) === JSON.stringify(['start', 'seen [7, 8, 9]', 'count 7500']), `unexpected output: ${out}`)
-assert(out.includes('[      0.,       1.,       0.'), `one-hot rows missing: ${out}`)
+assert(out.includes('[[0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0]]'), `one-hot rows missing: ${out}`)
 }
 """
 timeout_ms = 8000
@@ -391,7 +391,7 @@ verify_script = """
 const out = input.normalized.stdout
 const lines = out.split('\n').filter((l) => /^(start|seen|count)/.test(l))
 assert(JSON.stringify(lines) === JSON.stringify(['start', 'seen [7, 8, 9]', 'count 7500']), `unexpected output: ${out}`)
-assert(out.includes('[      0.,       1.,       0.'), `one-hot rows missing: ${out}`)
+assert(out.includes('[[0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0]]'), `one-hot rows missing: ${out}`)
 }
 """
 timeout_ms = 8000
@@ -409,7 +409,7 @@ verify_script = """
 const out = input.normalized.stdout
 const lines = out.split('\n').filter((l) => /^(start|seen|count)/.test(l))
 assert(JSON.stringify(lines) === JSON.stringify(['start', 'seen [7, 8, 9]', 'count 7500']), `unexpected output: ${out}`)
-assert(out.includes('[      0.,       1.,       0.'), `one-hot rows missing: ${out}`)
+assert(out.includes('[[0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0]]'), `one-hot rows missing: ${out}`)
 }
 """
 timeout_ms = 8000
@@ -681,7 +681,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim()
-assert(out === 'tensor([      8.,       8.], dtype=float32)', `unexpected output: ${out}`)
+assert(out === '[8.0, 8.0]', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 8000
@@ -697,7 +697,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim()
-assert(out === 'tensor([      8.,       8.], dtype=float32)', `unexpected output: ${out}`)
+assert(out === '[8.0, 8.0]', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 8000
@@ -713,7 +713,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim()
-assert(out === 'tensor([      8.,       8.], dtype=float32)', `unexpected output: ${out}`)
+assert(out === '[8.0, 8.0]', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 8000
@@ -729,7 +729,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim()
-assert(out === 'tensor([      8.,       8.], dtype=float32)', `unexpected output: ${out}`)
+assert(out === '[8.0, 8.0]', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 8000
@@ -745,7 +745,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim()
-assert(out === 'tensor([      8.,       8.], dtype=float32)', `unexpected output: ${out}`)
+assert(out === '[8.0, 8.0]', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 8000
@@ -761,7 +761,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim()
-assert(out.includes('[      3.,       3.,       3.,       3.]') && out.endsWith('dtype=float32)'), `unexpected output: ${out}`)
+assert(out === '[[3.0, 3.0, 3.0, 3.0], [3.0, 3.0, 3.0, 3.0]]', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 8000
@@ -777,7 +777,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim()
-assert(out.includes('[      3.,       3.,       3.,       3.]') && out.endsWith('dtype=float32)'), `unexpected output: ${out}`)
+assert(out === '[[3.0, 3.0, 3.0, 3.0], [3.0, 3.0, 3.0, 3.0]]', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 8000
@@ -823,7 +823,7 @@ kind = "behavior"
 case = "../../../cases/modules/tensor/reshape_view_gc.cml"
 args = ["${case}", "std::opt::fold", "std::opt::specialize", "std::nvm"]
 expect_exit = 0
-expect_stdout_contains = ["total 16380", "[      2.,       4.,       6.,       8.,      10.,      12.]"]
+expect_stdout_contains = ["total 16380", "[2.0, 4.0, 6.0, 8.0, 10.0, 12.0]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
@@ -1486,6 +1486,6 @@ expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::RuntimeError"
 expect_diagnostic_line = 14
 expect_diagnostic_column = 13
-expect_output_contains = ["before", "conversion to 'Tensor<float32, [3, 2]>' failed: the tensor has shape [2, 3]"]
+expect_output_contains = ["before", "conversion to 'f32[3, 2]' failed: the array has shape [2, 3]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
