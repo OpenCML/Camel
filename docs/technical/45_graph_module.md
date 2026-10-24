@@ -71,7 +71,7 @@
 - `opt::cse` 只合并 `int`、`i32`、`bool` 的常量（`bitEqualType`）：Camel 读不到一个标量的位（`bytes` 编解码的是数组与张量，`math` 没有 `signbit`），`0.0` 与 `-0.0` 用 `==` 相等却是图里两个值，按 `==` 合并会改程序，所以任何浮点常量都不合并。合并节点时它也不合并属性：`tags(n)` 只把属性读成文本、没有写的出口，属性文本不同的两个节点因此不合并，而 C++ 遍会把被合并节点的属性并到一起。
 - `opt::fold` 只折叠**算子**（`NodeKind::Oper`）上的常量：转换、拷贝、访问与填充在 C++ 侧各有一个分支（`isFoldable`），而 `eval(t, n)` 要的是"在值上求值一个算子"，这四种不是算子；按操作数类型就能定出结果的算子（C++ 的 `typeFolder`）也没有出口，`graph` 模块求值的是拿在手里的值。
 - `opt::fold` 不折**分支**上的常量：判定是常量时 C++ 遍会挑一条臂并把结构折掉，而在值上求值一个算子不是折它外层的分支结构。
-- `opt::fold` 不折**返回位置**的常量表达式：C++ 遍的 `isFoldable` 在 return 节点没有控制输入时放行它，`replaceFoldResult` 再把图的 exit、output 与 return 锚点搬到折出来的值上；事务没有搬锚点的操作（`replace` 自带"替换锚点"的拒绝），所以这里只求值、只为必然出故障时报出警告，然后原样留下。`opt::fold` 与 `opt::ctrl` 的其余差别见上表（`opt::ctrl` 要删一条控制边，是事务没有的边手术）。
+- `opt::fold` 不折**返回位置**的常量表达式：C++ 遍的 `isFoldable` 在 return 节点没有控制输入时放行它，`replaceFoldResult` 再把图的 exit、output 与 return 锚点搬到折出来的值上；事务没有搬锚点的操作（`replace` 自带"替换锚点"的拒绝），所以这里只求值、只为必然出故障时报出警告，然后原样留下。`opt::fold` 与 `opt::order` 的其余差别见上表（`opt::order` 要删一条控制边，是事务没有的边手术）。
 
 对照在 `test/plans/feat/opt/camel_passes.plan.toml`：C++ 一侧的图记成 golden，Camel 一侧交给快照测试已有的同构比较（`gir_dot_isomorphic`，`test/tools/gir-dot.mjs`）——节点是种类、类型、形状与出入度，边是两端种类、连接类型与标签，也就是"同样的值、同样的类型、同样的区域结构、同样的接线"。`opt::fold` 另有一条把两侧的转储按文本比的条目：把 origin 号归一化之后两份转储逐字符相同，比同构更强。五个语料（`cse_subject`、`cse_written_variable`、`dce_subject`、`fold_subject`、`fold_fault`）各有一条"遍之前"的条目，断言要合并的重复、要删的死值与要折的运算确实在（没看任何东西的守卫不会通过），一组 `std::jgir` 属性条目（合并的不动点、写过一次的 cell 两侧不合并、程序用到的值还在、没有算子还留在常量上）与四条后端上的结果条目。`fold_fault` 是"必然出故障的常量表达式"那个语料：它在返回位置放一个 `1 / 0`（锚点，不能替换）、在旁边放一个可折的乘法，于是同一轮里既求值又替换，两侧的 jgir 与两侧的警告文本都逐字符相同（`stdout_normalized` 与 `stderr_normalized` 一起比），并且在 `std::nvm` 上跑到那条运行期故障时的结果也与没有这个遍时相同。
 
@@ -82,7 +82,7 @@
 | `opt::fold`：把输入全是常量的纯算子求值 | **已补**：`eval(t, n)` 在值上求值一个算子，返回持有结果的节点，求值出故障就报同一警告并返回 `null` | 写出来了（`opt::fold`） |
 | `opt::fold` 的其余分支：转换、拷贝、访问、填充，以及按操作数类型就能定出结果的算子（`typeFolder`） | `eval` 求值的是**算子**（`NodeKind::Oper`），`Cast`／`Copy`／`Accs`／`Fill` 不是算子，`typeFolder` 也没有出口 | 这些分支仍只在 C++ 侧；`fold_subject` 只用算子的形状，所以这一层没有被两侧比过 |
 | `opt::fold` 折**返回位置**的常量表达式：`isFoldable` 在 return 节点没有控制输入时放行它，`replaceFoldResult` 把图的 exit、output 与 return 锚点搬到折出来的值上 | 搬锚点：事务的 `replace` 拒绝替换锚点（`isReplaceable` 那条），没有别的操作能移动一个锚点 | 只求值（为了必然出故障时报出那条警告）然后原样留下；`fold_subject` 里没有返回位置的常量表达式，所以这一层没有被两侧比过 |
-| `opt::ctrl`：删掉已被必然的数据或控制路径蕴涵的一条控制边 | 删一条边、加一条边：事务只有整节点的 `replace` 与 `erase`，对应 C++ 的 `unlinkInput(Ctrl, …)` 与 `appendControlDependency` | 写不出来 |
+| `opt::order`：删掉已被必然的数据或控制路径蕴涵的一条控制边 | 删一条边、加一条边：事务只有整节点的 `replace` 与 `erase`，对应 C++ 的 `unlinkInput(Ctrl, …)` 与 `appendControlDependency` | 写不出来 |
 | `std::opt::dce` 的 `values_only=false` 那一半：绕过只转发值的 GATE，把它的等待移到消费者 | 同上，这是边手术 | 只落了 `values_only=true` 那一半 |
 | 合并任何非 GC 追踪类型的常量 | 读一个标量的位（`bytes` 编解码的是数组与张量，`math` 没有 `signbit`） | 只合并 `int`、`i32`、`bool`：`0.0` 与 `-0.0` 用 `==` 相等却是图里两个值，按 `==` 合并会改程序 |
 | 合并节点时把属性一起合并 | 写属性（`tags(n)` 只把属性读成文本；`add_constant` 造的是新节点，`replace` 不搬运属性） | 属性文本不同的两个节点不合并 |
