@@ -1,0 +1,31 @@
+id = "opt.probe_half"
+order = 2
+tier = "fast"
+tags = ["feat", "opt", "probe"]
+
+[[tests]]
+name = "probe_half.nvm"
+kind = "behavior"
+case = "../../../cases/opt/generic/probe_half.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "probe_half.specialize_bounded"
+kind = "behavior"
+case = "../../../cases/opt/generic/probe_half.cml"
+args = ["${case}", "std::opt::specialize", "std::stats", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "probe_half.graph"
+kind = "behavior"
+case = "../../../cases/opt/generic/probe_half.cml"
+args = ["${case}", "std::opt::specialize", "std::jgir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
