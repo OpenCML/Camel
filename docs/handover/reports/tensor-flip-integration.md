@@ -286,11 +286,34 @@ own sentence: **rank 0 is the element type itself**.
     the f64 arm exposed at the integration, and with it `matmul`'s rank-0 refusal (4) and
     `gelu_grad`'s shape check (2). A gradient node of a tensor was declared with a *scalar* type,
     so `sum_to` read the tensor as a number. See the slice's own section above.
-  - **Next**: `onnx::export_model`: "tensor:sum_to: the rank of an operand is not known
-    statically" — **2 entries** now (1 before the slice: the fixed graphs reach the export and it
-    is the export that needs the rank fixed). The operand's rank is open where the export needs a
-    number; the gradient nodes the VJP rules emit carry the undetermined array when no input
-    states a tensor element type, so this is the same value/type agreement one step later.
+  - **Next**: `onnx::export_model`: "tensor:sum_to/g: the rank of an operand is not known
+    statically" — **2 entries** (`export_grad_matmul_vector`, `pass_export_grad_matmul_vector`),
+    and the two are the whole family: of the six failing tests that name ONNX, the other four
+    (`export_branch`, `export_train_step_adam`, `export_loop_carried_array_field`,
+    `export_loop_values_array`) fail at an exit code or in their own verification, not on this
+    refusal. **Measured, and it is not where the ranking assumed.** The refusal names `/g`, the
+    *gradient* operand, so the emitted node's type is `f32[..]` — element stated, **rank open**.
+    A temporary print in `gradientTypeFor` (`modules/tensor/ops/vjp.cpp`, reverted) shows why no
+    VJP rule can do better: **every** primal the rules are handed in that case is
+    `array rank=0 open elem=5` (`ArrayType::numericUnknown()`, the bare `Tensor`) and
+    `statesTensorElementType` is false for all of them — 30 sites on the runtime export path, 30
+    on the pass path, and the same in the small `min_i2.cml`. The rank is not in the declared
+    types at all: `loss`/`step` declare `Tensor` parameters, so the whole backward graph is
+    open-rank, and copying the primal's type cannot recover a rank that was never written. The
+    develop comparison says the same thing from the other side: `~/camel-work/Camel` on `develop`
+    exports this case **green on both paths**, and at the same pipeline point (`std::macro
+    std::opt std::gir`) develop labels those nodes `value_type="Tensor<float32>"` where the flip
+    labels them `f32[..]`. The flip's own `tensorFactsOf` is where the exporter loses the shape:
+    for an array whose rank is open it states no shape at all (`modules/tensor/type.cpp`, "an
+    array whose rank is open states no shape at all"), and `staticShape` in
+    `modules/onnx/lowering_grad.cpp` throws on exactly that. Whether develop's `Tensor<f32>`
+    answered a rank or its lowering asked for one, develop's exporter is not stopped here; the
+    flip's is, on 2 tests. So shape 2 has two loci, neither of them the pullback's typing: the
+    export must lower a `sum_to` whose rank is not stated (dynamic `Shape`/`Range` axes in
+    `modules/onnx/lowering_grad.cpp`, the flip's own module and in lane), or the generic body
+    must be instantiated per call site so `Tensor` parameters take their arguments' ranks
+    (compiler/core, not this lane). Two entries, so this is **not** a family that changes the
+    order — it is a correctness question about what an exported model may assume.
   - **Then**: `declaration_evaluator`'s `EVAL_MISMATCH op=tensor:add (f32[], f32[]) … no instance
     for a call the kernel accepts` — 1 entry. The harness reports a rank-0 operand as the element
     (`f32[]` prints for rank 0) while the kernel boxes it, so the instance search
