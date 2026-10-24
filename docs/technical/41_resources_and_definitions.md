@@ -108,7 +108,7 @@ The higher-order `:mark/` operators (they run the functions they are given), `py
 - `requiredOrderings(graph)`: every conflicting pair of nodes of a graph, except nodes in
   different arms of one branch (they never both run), with whether the graph orders them and
   whether by data. A pair the graph leaves unordered is the case design principles section 15
-  lists as undecided (writes through references outside a sync block without `wait`).
+  lists as undecided (writes through references outside a sync block).
 
 The fact kind `core.resources` (Node, class ii, reads declarations) is the node's
 `NodeResources`, at the nodes that touch something; `camel inspect --facts` prints it.

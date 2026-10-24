@@ -239,7 +239,7 @@ Windows). Only Linux x86-64 was run. No JIT code was changed.
 | Native stack | unwound by the exception |
 | Collector roots | frames are roots only while active in a pool; `RootHandle`s and `TaskflowGcRegion`s are RAII. Temporaries of the boundary are unreachable once it is left. No new root interface was added |
 | JIT context | `faultKind`/`faultPc` cleared when the fault is raised; `depthBudget` set on entry |
-| Scheduling state of `sync`/`wait` | none exists at run time: control edges are part of the graph, and the linear order is computed per graph, not kept in the scheduler |
+| Scheduling state of `sync` | none exists at run time: control edges are part of the graph, and the linear order is computed per graph, not kept in the scheduler |
 | Diagnostics sink | nothing was added (3.1) |
 | `var` written inside the boundary | **not rolled back** (1.4) |
 | Output buffers | untouched: what was printed stays, in order |
