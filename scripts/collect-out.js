@@ -30,6 +30,7 @@ import {
     outArtifactBin,
     outArtifactLibs,
     outArtifactInclude,
+    outArtifactPython,
     outArtifactStdlib,
     writeBuildInfo
 } from './common.js'
@@ -50,6 +51,11 @@ function ensureDir(dir) {
 }
 
 const isWindows = process.platform === 'win32'
+
+/** The Python binding's extension module: `_camel.cpython-310-x86_64-linux-gnu.so`, `_camel.pyd` */
+function isPythonExtensionName(name) {
+    return /^_camel[^/\\]*\.(so|pyd|dylib)$/i.test(name)
+}
 
 /** python3xx.dll / python.dll — required to consider the pack complete */
 function isPythonRuntimeDllName(lowerName) {
@@ -268,6 +274,25 @@ function collect(config, tag) {
         for (const dllPath of dlls) {
             const dllName = path.basename(dllPath)
             fs.copyFileSync(dllPath, path.join(libsDir, dllName))
+        }
+    }
+
+    // The Python binding (H253): the CPython extension module, next to libs/ so the runpath
+    // `$ORIGIN/../libs` the build wrote finds libcamel in both layouts. Absent whenever the
+    // configure found no Python development files, which is not a warning: the rest of the
+    // install is complete without it.
+    const pythonBuildDir = [
+        path.join(BASEDIR, 'build', 'python', config),
+        path.join(BASEDIR, 'build', 'python')
+    ].find((dir) => fs.existsSync(dir))
+    if (pythonBuildDir !== undefined) {
+        const pythonDir = outArtifactPython(tag)
+        ensureDir(pythonDir)
+        for (const f of fs.readdirSync(pythonBuildDir)) {
+            const srcPath = path.join(pythonBuildDir, f)
+            if (!fs.statSync(srcPath).isFile()) continue
+            if (!isPythonExtensionName(f)) continue
+            fs.copyFileSync(srcPath, path.join(pythonDir, f))
         }
     }
 

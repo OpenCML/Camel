@@ -45,3 +45,55 @@ H253 要的是"从 Python 里调用 Camel 模块的函数"这条采用路径：*
   pybind11 版本"的组合。
 - **先把 C API 抽成一个稳定的 C 头**：那是更大的工程（要定义 ABI、版本、生命周期），而 H253 要的是
   一条能走的路；现在的门是 `include/` 里已有的 C++ 接口，扩展模块直接编译在仓库里，不需要新的 ABI。
+
+## 57.3 实现
+
+- `bindings/python/module.cpp`：整个扩展模块。它用运行时的门（`Context`、`libraryFunction`、
+  `NodeVMSchedPass`），把 Python 对象转成 `slot_t`，把结果转回 Python；`camel.load` 一次建一个
+  进程级 `Context`，模块只编译一次。
+- `bindings/python/CMakeLists.txt`：`find_package(Python3 ... Development.Module QUIET)`，没有
+  Python 开发文件时**直接跳过**（不进 `out/<tag>/python/`，Python 侧的测试随之跳过），产物落在
+  `build/python/_camel*.so`。
+- `scripts/collect-out.js`：把 `_camel*` 收进 `out/<tag>/python/`，和 `libcamel` 并排。
+- `pypi/camel-lang/src/camel/_native.py`：找扩展模块、预载 `libcamel`、并在包里带了完整安装时把
+  `CAMEL_HOME` 指到 `camel/.cmlenv/`（`pip install` 之后不需要任何环境变量）。
+- `pypi/camel-lang/src/camel/__init__.py`：`load`、`Module`、`Function`，以及把 DLPack capsule 变成
+  `numpy.from_dlpack` 的鸭子类型包装（没有 NumPy 时把 capsule 原样给出）。
+
+## 57.4 证据：零拷贝
+
+同一个进程、同一个缓冲区，`in` 是调用前 Python 侧看到的地址，`out` 是调用返回的 capsule 里
+`dl_tensor.data`：
+
+```
+zero-copy in:  in 0x737ac7188190 == out 0x737ac7188190, 4 f32, no copy
+copy out:      in 0x737ac7188190 != out 0x737a6cfd9040, 4 f32, caller's buffer untouched
+scalars:       energy = 30.0
+numpy:         the array rules.identity returns points at 0x737a76e19d10 as well
+```
+
+`identity(xs)` 原样返回参数，所以它必须给出**同一个地址**；`scale(xs, k)` 自己建块，所以地址必须
+不同，而调用方那块缓冲区必须没被写过。
+
+"不拷贝"在时间上的形状是：**调用成本不随数组增长，拷贝成本随数组增长**。下面是同一个进程里
+一次次调用的最快均值（`memmove` 是这次调用省掉的那一次拷贝，同样在本进程、同样这些字节上测）：
+
+```
+size          pass-through (the binding)   memmove (a copy of the same bytes)
+    1 MiB           13.0 us                   353.6 us
+    4 MiB           13.9 us                  1083.6 us
+   16 MiB           12.8 us                  2563.7 us
+   64 MiB           12.9 us                  4818.3 us
+therefore:    64 MiB by call 12.9 us, by copy 4818.3 us (13.9 GB/s), a factor of 374
+```
+
+内存上的形状：连续 8 次返回，`identity` 的结果指向**同一块**，`scale` 的结果是 8 块。
+
+```
+memory:        8 results of a 4 MiB pass-through hold 4.0 MiB, 8 results of a 4 MiB copy hold 34.0 MiB
+```
+
+（4.0 MiB 是输入那块自己；34.0 MiB = 4.0 + 8×4.0 取整后的读数。）
+
+数组进来的这条路只在分配器是 `mm::autoSpace()` 时零拷贝（`src/core/array/dlpack.cpp` 的
+`fromDLPack`），扩展模块用的就是它；其余分配器会 memcpy，这一点没有改变。

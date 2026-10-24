@@ -259,6 +259,12 @@ add_subdirectory(modules/graph)
 add_subdirectory(modules/rewrite)
 add_subdirectory(modules/onnx)
 
+# The Python binding (H253): the CPython extension `camel._camel`, a host of libcamel that a
+# Python project calls a Camel module through. Independent of modules/python (which embeds Python
+# in Camel, the other direction), so it is added whether or not CAMEL_ENABLE_PYTHON is on; the
+# directory itself returns early when Python's development files are absent.
+add_subdirectory(bindings/python)
+
 # ---------------------------------------------------------------------------------------------
 # The module manifest (H138): one line per .cmo this configure builds, per configuration.
 #

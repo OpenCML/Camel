@@ -40,4 +40,6 @@ include-package-data = true
 script-files = []
 
 [tool.setuptools.package-data]
-camel = [".cmlenv/*"]
+# .cmlenv mirrors out/<tag>/: bin/, libs/, stdlib/, include/ and -- since H253 -- python/, which
+# holds the CPython extension module. One level for the first four, two for python/.
+camel = [".cmlenv/*", ".cmlenv/*/*"]
