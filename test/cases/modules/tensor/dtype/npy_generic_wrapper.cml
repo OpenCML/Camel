@@ -1,0 +1,20 @@
+// `Tensor` is the numeric array type (P4), so a generic function can declare its result as `T[..]`
+// and hand the element type on to `load_npy::<T>`: the endpoint the P4 deletion step keeps, where
+// no signature writes the bare `Tensor` name and the element type is a type variable of the head.
+// The element type is the caller's: the f32 file is read through `read_as::<f32>` and the tree's
+// only int64 `.npy` through `read_as::<i64>`, each with the file's own extents. Nothing is
+// converted -- a mismatch would be a fault at the call, as `npy_generic_wrapper_mismatch` pins
+// (design principles 5.1, 5.2, 5.5).
+module tensor_dtype_npy_generic_wrapper
+
+import { load_npy, numel } from tensor
+
+func read_as::<T>(p: string): T[..] { return load_npy::<T>(p) }
+
+func main(): int sync {
+    let xs = read_as::<f32>('test/cases/modules/tensor/shape_types/x3.npy')
+    println(numel(xs))
+    let labels = read_as::<i64>('test/cases/modules/nn/fixtures/checkpoint-v1/odd.npy')
+    println(numel(labels))
+    return 0
+}
