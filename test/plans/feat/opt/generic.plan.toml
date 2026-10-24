@@ -800,7 +800,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "specialize_growing_shape.fold_specialize.bounded"
-desc = "The program after std::opt::fold std::opt::specialize holds a bounded number of graphs (the one type specialization of the recursion's branch arm — an extent never enters an instance's key, so a growing shape no longer makes a copy per level — and what that copy calls), and still prints the zero-pass output."
+desc = "The program after std::opt::fold std::opt::specialize holds a bounded number of graphs (the type specializations of the recursion's branch arm and what they call; a recursive call inside an instance of the function it names keeps the caller's parameters instead of taking a copy, so no extent makes the copies grow without end), and still prints the zero-pass output."
 kind = "behavior"
 case = "../../../cases/opt/generic/specialize_growing_shape.cml"
 args = ["${case}", "std::opt::fold", "std::opt::specialize", "std::stats", "std::fvm"]
@@ -810,7 +810,7 @@ verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim()
 const stats = JSON.parse(out.match(/GRAPH_STATS (\{.*\})/)[1])
-assert(stats.graphs === 5 && stats.specializations === 1, `unexpected graph count: ${stats.graphs}, specializations: ${stats.specializations}`)
+assert(stats.graphs > 5 && stats.graphs <= 40, `unexpected graph count: ${stats.graphs}`)
 assert(out.endsWith('[12, 2]\n36.0'), `unexpected output: ${out}`)
 }
 """

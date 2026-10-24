@@ -152,3 +152,43 @@ plan 断言的第二句是 `which is a value of type`（红前红后都在这句
 
 `kMaxTypeSpecializationsPerRecursiveFunction` 没有被改动，也没有被当作修复使用；读法 A 下它仍然
 是那四条 ORT 用例唯一的停机点（`count=8`），这正是裁定要说「不靠计数兜底」的地方。
+
+## 7. 落定的一版：第二圈不再造拷贝，而是用调用者自己
+
+第 6 节之后的读法（记作 E）把第二圈的处理从「形参类型取声明」（表里的读法 C）改成
+**「这次调用要的实例就是调用者自己」**：`specializeDirectFuncInDraft` 里当调用者是一个函数自身的
+类型实例、绑定全是类型绑定、且这个实例声明的形参类型都接受实参时，把这处调用的被调用者指到
+调用者自己（不造新拷贝）；不接受时照旧特化。这一版去掉了 `relaxNames` 的第二圈条款，
+`kMaxTypeSpecializationsPerRecursiveFunction` 仍是 8。
+
+红前→红后（整层 fast，基线 fail 295）：
+
+| | 读法 C（上两轮） | 读法 E（本版） |
+|---|---|---|
+| 整层 fail | 297 | **294** |
+| 相对基线 | 减 4、增 6 | **减 4、增 3** |
+| `export_gated_gru_step` / `ort_gated_gru_step` | 红（`an indirect call remains after simplification`） | **绿** |
+| `specialize_growing_shape.fold_specialize.bounded` | 红（`graphs` 5，我把期望改成了 `=== 5`） | **绿**（`GRAPH_STATS {"graphs":12,...,"specializations":1}` 落在原来的 `> 5 && <= 40` 窗口内，故该条期望**还原成基线原文**，不再需要重推） |
+| `shape_unroll.simplify.rgir` | 红 | 红（见下） |
+| `export_gated_gru_forward` | 红 | 红（见下） |
+
+`export_gated_gru_forward`：本版 cap=8 下仍是 `Slice,Reshape,Abs,Cast,ReduceMean,Greater,If,
+Slice,Concat,Reshape,Abs,Cast,ReduceMean,Greater,If,MatMul,Add,Mul,Cast,ReduceMean,Identity`。
+第 6 节测到的 `...,If,MatMul,...` / `ifs=7` 那串是**上一版 + cap=4096** 的读数，没有在本版重测。
+要按 7-If 那条重推，就得同时让上限不再截断（本版在这一条上仍会撞到 8）；动不动上限是作者的决定。
+
+`shape_unroll.simplify.rgir` 的性质判定：**不是裁定①的必然后果**。只做裁定①（extent 不进键、
+元素照旧按实参取）时这一条是**绿**的（那版的新红里没有它）。它是**「第二圈用调用者自己、不再造
+拷贝」**的后果：`run$spec3` 不再是直线，里面有一个 `BRCH`/`JOIN` 和一次 `FUNC run$tspec4`
+（它自己的实例），即递归不再被完全展开成一条链：
+
+```
+["PORT","t"],["PORT","steps"],["PORT","x"],["OPER","tensor:shape"],["DATA","0"],
+["OPER",":op/idx_arr"],["DATA","2"],["OPER",":op/idx_arr"],["OPER",":op/ge_l"],
+["JOIN","JOIN"],["BRCH","BRCH"],["DATA","1"],["OPER","tensor:slice"],["DATA","[0, 0]"],
+["FILL","int[]"],["OPER","tensor:reshape"],["OPER","tensor:add"],["FUNC","run$tspec4"]
+```
+
+而这一版拷贝有界正是裁定要的（「特化总量有界」）。所以这是**两个都成立的要求之间的取舍**：
+完全展开（这条用例钉的）与拷贝有界（裁定要的）。两个读数（只做裁定①＝绿、本版＝红）都在这里，
+交给作者定，我没有自行重推这条断言。

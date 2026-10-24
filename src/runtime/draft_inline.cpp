@@ -590,8 +590,7 @@ std::vector<DraftFormalBinding> collectDirectFuncSpecializations(
     // past the first.
     const GraphId calleeRoot = calleeGraph->typeSpecializationRoot();
     const GraphId callerRoot = draft.typeSpecializationRoot();
-    const bool relaxNames =
-        isValid(calleeRoot) || (isValid(callerRoot) && callerRoot == calleeGraph->id());
+    const bool relaxNames = isValid(calleeRoot);
 
     for (size_t i = 0; i < formals.size(); ++i) {
         DraftStaticValue staticValue = tryResolveStaticValue(draft, actualInputs[i]);
@@ -976,6 +975,34 @@ bool specializeDirectFuncInDraft(
         bindings.size());
     if (bindings.empty()) {
         return false;
+    }
+
+    // The recursive call inside a type instance of the function it names asks for an instance
+    // whose parameters are the ones that instance already states: the one it is in. Making a new
+    // copy there is what unrolled the recursion one level per rewriting pass — the same key again
+    // and again, because every rewrite of a call inside the base invalidates the entry that names
+    // the copy — until the count bound kMaxTypeSpecializationsPerRecursiveFunction stopped it, and
+    // an export found no loop in the result (H463). Nothing is bound by the copy, so the types the
+    // instance states have to accept the arguments; when they do not, the call still specializes.
+    const GraphId instanceRoot = draft.typeSpecializationRoot();
+    if (std::ranges::none_of(
+            bindings, [](const DraftFormalBinding &b) { return b.bindsValue(); }) &&
+        isValid(instanceRoot) && instanceRoot == calleeGraph->id()) {
+        std::vector<gc_node_ref_t> ports(draft.normPorts().begin(), draft.normPorts().end());
+        const auto withPorts = draft.withPorts();
+        ports.insert(ports.end(), withPorts.begin(), withPorts.end());
+        const std::vector<gc_node_ref_t> actuals = orderedFuncActualInputs(draft, funcNodeId);
+        bool accepts = ports.size() == actuals.size();
+        for (size_t i = 0; accepts && i < ports.size(); ++i) {
+            const DraftNodeHeader *port   = draft.header(ports[i]);
+            const DraftNodeHeader *actual = draft.header(actuals[i]);
+            accepts = port && actual && port->dataType && actual->dataType &&
+                      port->dataType->assignableFrom(actual->dataType);
+        }
+        if (accepts) {
+            draft.setCalleeGraph(funcNodeId, draft.id());
+            return true;
+        }
     }
 
     // Type-only specialization of a recursive function is bounded (see
