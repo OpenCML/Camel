@@ -492,14 +492,17 @@ void whereVjp(VjpBuilder &b, const VjpCall &call) {
 // cast(t, dtype): the gradient returns to t's dtype. `cast` also accepts a numeric array, and a
 // numeric array is a tensor here (a tensor is a numeric array: `isTensorType` is
 // `isNumericArrayType`), so its gradient is that array's, taken back to the width its own type
-// states by `tensor:cast_like` rather than refused. The refusal the rule used to make ("no
-// operator that carries a tensor's gradient back into an array") had no input left to fire on
-// once the two spellings became one type, and the gradient of an array was dropped silently
-// instead: `castVjp` answered the *output's* width, and the accumulator refused a gradient of
-// another element type than the value's.
+// states by `tensor:cast_like` rather than refused -- the array's gradient used to be dropped
+// silently because `castVjp` answered the *output's* width and the accumulator refused a gradient
+// of another element type than the value's. A container `cast` converts but cannot carry a
+// gradient back into is refused by name while it depends on a differentiated parameter
+// (`hasTensorAdjoint`).
 void castVjp(VjpBuilder &b, const VjpCall &call) {
     requireVjpInputs(call, 2, 2);
     if (auto dy = b.gradientOf(call.output); dy) {
+        if (!hasTensorAdjoint(b, call, call.inputs[0], "its input")) {
+            return;
+        }
         b.accumulateGradient(call.inputs[0], tensorCastTo(b, call.inputs[0], *dy));
     }
 }

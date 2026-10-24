@@ -1,15 +1,16 @@
 /**
- * The two halves of `concat`'s array part, in one program so the pair is visible.
+ * `concat` with an array part, in one program so both halves are visible.
  *
- *   skip:   y = concat([2.0, 3.0], w, 0)       loss = sum(y * [1, 0, 2, 3])  -> dw = [2, 3]
- *   refuse: y = concat(xs, reshape([...]), 0)  with xs differentiated       -> refused there
+ *   constant part: y = concat([2.0, 3.0], w, 0),  loss = sum(y * [1, 0, 2, 3])   -> dw = [2, 3]
+ *   array part:    y = concat(xs, reshape([10.0, 20.0], [2]), 0), loss = sum(y)  -> dxs = [1, 1]
  *
  * A constant array part carries no gradient to the differentiated parameter, so it is skipped:
- * the first gradient is printed and checked before the second is built. An array part that
- * depends on the parameter would have its gradient dropped, so the reverse pass refuses at that
- * call, naming the operator at its own line — the two behaviours differ, and both are asserted
- * here. `sum` = 5.0 and `sq` = 13.0 are the hand adjoint's own numbers: the zero tensor prints
- * 0.0 twice, and a gradient shifted by the constant part changes both.
+ * `sum` = 5.0 and `sq` = 13.0 are the hand adjoint's own numbers (the zero tensor prints 0.0
+ * twice, and a gradient shifted by the constant part changes both). An array part that depends
+ * on the parameter used to have its gradient dropped and be refused by name at the concat call;
+ * the refusal was removed with this case, which now asserts the adjoint the tensor rule builds
+ * for both parts (`tensor:slice` of the upstream gradient). The distance to [1, 1] is 0.0 only
+ * for that adjoint, and its sum, 2.0, is not the dropped zero.
  */
 module concat_array_part
 
@@ -24,16 +25,23 @@ func skip_constant_array(): float {
 }
 
 with <xs: float[]>
-func refuse_active_array(): float {
+func active_array(): float {
     let y = concat(xs, reshape([10.0, 20.0], [2]), 0)
     return sum(y)
 }
 
 func main(): int sync {
-    let w = reshape([10.0, 20.0], [2])
-    let g = grad(skip_constant_array)<w>()
+    let w  = reshape([10.0, 20.0], [2])
+    let g  = grad(skip_constant_array)<w>()
     'concat_array_part sum={:.1f} sq={:.1f}'->format<sum(g), sum(g * g)>->println
     let xs = [1.0, 2.0]
-    println(grad(refuse_active_array)<xs>())
+    let gx = grad(active_array)<xs>()
+    let d0 = gx[0] - 1.0
+    let d1 = gx[1] - 1.0
+    'concat_array_part array_grad=[{},{}] grad_d={:.1f} value={:.1f}'->format<
+        gx[0],
+        gx[1],
+        d0 * d0 + d1 * d1,
+        sum(concat(xs, reshape([10.0, 20.0], [2]), 0))>->println
     return 0
 }

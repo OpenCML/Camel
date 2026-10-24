@@ -1,0 +1,34 @@
+/**
+ * `concat` accepts a container that is not a numeric array where it accepts a tensor, and such a
+ * container has no adjoint: the part's gradient is a slice of the output gradient, which is a
+ * tensor, while the value the gradient has to return to holds its elements in another shape (design
+ * principles 9.9). A part that depends on a differentiated parameter is refused by name at the
+ * concat call, with the container's type -- the same refusal `refuse_container_reshape` and
+ * `refuse_container_new` assert for `reshape` and `new`.
+ *
+ * The forward call itself runs here: both parts have rank 2 (`float[][]` and the tensor `[1, 2]`),
+ * which is what `concat` requires of them, and it is the backward rule that has no operator for the
+ * container. Without the refusal this program was killed by a signal -- no output, no diagnostic --
+ * because the rule asked for a tensor extent (`tensor:dim`) of a value that holds arrays.
+ *
+ * A numeric array part is not refused: `adjoint_concat_array` and `concat_array_part` assert the
+ * adjoint this rule builds for one. A constant container part takes no gradient of its own and is
+ * skipped, and only that part: its length still places the other part's slice, which is why the
+ * rule asks the container for its length (`:struct/len_arr`) instead of asking a tensor for an
+ * extent it does not have.
+ */
+module refuse_container_concat
+
+import { concat, reshape, sum } from tensor
+import { grad } from autodiff
+
+with <xs: float[][]>
+func loss(): float {
+    return sum(concat(xs, reshape([10.0, 20.0], [1, 2]), 0))
+}
+
+func main(): int sync {
+    let xs: float[][] = [[1.0, 2.0]]
+    println('refuse_container_concat g={}'->format<grad(loss)<xs>()>)
+    return 0
+}

@@ -34,6 +34,22 @@ bool isTensorNode(const VjpBuilder &builder, vjp_node_t node);
 /// A Camel float (float64 or float32) node.
 bool isFloatNode(const VjpBuilder &builder, vjp_node_t node);
 
+/// Whether a rule that converts a value to a tensor (`new`, `cast`, `reshape`, `concat`) can carry
+/// a tensor's gradient back into `input`. A numeric array can: it is a tensor here (`isTensorType`
+/// is `isNumericArrayType`), so the rule's own adjoint answers at the array's own type and nothing
+/// is refused for it. A value of another kind that those calls accept where they accept a tensor --
+/// an array of arrays (`f32[][]`), an array of records -- is converted by the forward rule (it
+/// flattens it), but nothing in this module carries a tensor's gradient back into such a container:
+/// the container's shape is not the tensor's shape and its elements are not the gradient's
+/// elements. A container that carries no gradient of its own is skipped (`false`, the rule returns
+/// without building an adjoint for it); one that depends on a differentiated parameter has no
+/// gradient channel at all, and this refuses it by name with `refuseVjp` (design principles 9.9:
+/// refused, never dropped) -- which also keeps it out of the kernels that would read it as a
+/// tensor, where it is a crash rather than a diagnostic. `what` names the input in the reason
+/// ("its input", "a part of it").
+bool hasTensorAdjoint(
+    const VjpBuilder &builder, const VjpCall &call, vjp_node_t input, std::string_view what);
+
 /// Throws when the call does not have between `minimum` and `maximum` inputs.
 void requireVjpInputs(const VjpCall &call, size_t minimum, size_t maximum);
 
@@ -71,7 +87,8 @@ vjp_node_t staticBool(VjpBuilder &builder, bool value);
 
 /// Accumulates `gradient` (shaped like the result of a broadcasting operation) into `operand`,
 /// reduced to the operand's shape: summed over broadcast axes for a tensor, fully for a float.
-/// Operands of other kinds (numeric arrays, integers) take no gradient.
+/// A numeric array is a tensor here, so an array operand is reduced the way a tensor is; an operand
+/// of another kind is not one the rule can carry a gradient into, and takes none.
 void accumulateOperand(VjpBuilder &builder, vjp_node_t operand, vjp_node_t gradient);
 
 /// `gradient` converted to the float width of `value`: the rules here reduce at float64
