@@ -1,0 +1,15 @@
+id = "modules.h446_probe_slice"
+order = 9999
+tier = "fast"
+tags = ["feat", "modules", "autodiff", "probe"]
+
+[[tests]]
+name = "probe.slice_open_end.probe"
+desc = "H446 probe: run slice_open_end with the zero-tangent probe on."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/slice_open_end.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+envs = ["CAMEL_H446_PROBE=1"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
