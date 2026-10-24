@@ -205,7 +205,9 @@ typeCase           : 'case' typeCasePattern ('|' typeCasePattern)* '=>' blockExp
 staticForExpr      : 'static' staticForHeader '=>' blockExpr
 staticForHeader    : 'for' '(' (identDef | '_') (',' (identDef | '_'))? ')' 'in'
                      ('fields' typeExpr | 'indices' dataExpr)
-staticLoopExpr     : 'static' 'loop' loopState (',' loopState)* staticForHeader 'do' blockExpr
+staticLoopExpr     : 'static' 'loop' loopState (',' loopState)* staticLoopHeader 'do' blockExpr
+staticLoopHeader   : 'for' (identDef | '_') (',' (identDef | '_'))? 'in'
+                     ('fields' typeExpr | 'indices' dataExpr | dataExpr)
 typeCasePattern    : 'struct' | 'tuple' | 'func' | '#' 'leaf' | '_' | typeExpr
 matchCase          : 'case' pattern ('|' pattern)* whenClause? '=>' blockExpr
 pattern            : identRef (identDef | enumTuplePattern | enumStructPattern)? | literal

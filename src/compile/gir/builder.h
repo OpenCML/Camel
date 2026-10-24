@@ -1030,6 +1030,16 @@ class Builder {
     /// only retypes a constant -- `null` into a `T?` -- is the constant of the type it retypes it
     /// to, and carries it too.
     data_ptr_t constantOfNode(node_handle_t node) const;
+    /// The elements of the sequence a `static loop` walks when the head is written `for i in
+    /// <序列>` (H462, the ruling of 2026-10-24), or nothing when the compiler cannot work the
+    /// sequence out. Today the one sequence it knows is the constant interval `a..b`: the `int`
+    /// values `a`, `a + 1`, ... below `b`, which is the half-open reading `..` has everywhere
+    /// else (`loop ... for i in 0..5` iterates 0 ... 4). The two bounds are read as the compiler
+    /// knows them (a literal, an expression of literals, or a name bound to a constant), without
+    /// building the operand: an interval of no known size is reported by the caller, and its
+    /// refusal is `SemanticDiag::StaticLoopSequenceNotKnown`.
+    std::optional<std::vector<int64_t>>
+    staticLoopSequenceOf(const GCT::node_ptr_t &subject);
     std::optional<std::string> staticValueNamed(const std::string &name) const {
         for (auto scope = staticValueScopes_.rbegin(); scope != staticValueScopes_.rend();
              ++scope) {
@@ -1967,7 +1977,7 @@ class Builder {
     /// `match type`: selects a case from the shape of the subject type and builds only that
     /// case's body, in the current graph (no branch node).
     node_handle_t visitTypeMatchNode(const GCT::node_ptr_t &gct);
-    /// `static for (n, F) in fields T`: the body is built once per field, in the current graph.
+    /// `static for n, F in fields T`: the body is built once per field, in the current graph.
     /// With `values`, each round's value is collected instead of dropped (a comprehension); with
     /// `shape`, the type the fields were taken from is handed back for the caller to pack.
     node_handle_t visitStaticForNode(
@@ -1977,7 +1987,7 @@ class Builder {
     /// tuple of the same fields with one FILL; the comprehension leaves no node of its own.
     /// The packed struct, or the build-time tuple of a tuple comprehension (no node).
     std::any visitStaticComprehensionNode(const GCT::node_ptr_t &gct);
-    /// `static loop s1 = a1, ..., sk = ak for (n, F) in fields T do body`: the body is built
+    /// `static loop s1 = a1, ..., sk = ak for n, F in fields T do body`: the body is built
     /// once per field, in the current graph, with the state names bound to the previous round's
     /// values; the value is the last state (a tuple FILL when there are several).
     node_handle_t visitStaticLoopNode(const GCT::node_ptr_t &gct);

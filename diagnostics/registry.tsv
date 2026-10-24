@@ -197,6 +197,11 @@ semantic	StaticComprehensionVoidElement	0x00017A	error	The block for the field '
 # this one takes the next free code after them.
 semantic	StaticIndicesNotTuple	0x000182	error	'indices' walks the positions of a tuple, but '{0}' has type '{1}'.	'indices ts' walks the positions of an ordinary tuple: it needs a value of tuple type (a tuple variable or a tuple literal). A struct has named fields; walk it with 'fields T'. A 'T?' or 'T!' and a mutable cell are leaves (design principles 13.5).	none: choice: the repair is a decision only the writer can make
 #
+# The sequence of a `static loop` (the ruling of 2026-10-24; H462): the head lost the
+# parentheses it carried and takes any sequence known when the function is compiled. One the
+# compiler cannot work out is this.
+semantic	StaticLoopSequenceNotKnown	0x0001E7	error	The sequence of a 'static loop' must be known when the function is compiled: '{0}' is not.	A 'static loop' is unrolled where it stands, so how many rounds it has must be known then: a constant interval 'a..b' (the half-open [a, b) that '..' is everywhere else, so '0..5' is 0, 1, 2, 3, 4), 'indices ts' for the positions of a compile-time tuple, or 'fields T' for the fields of a type. A run-time array or a run-time value leaves the number of rounds open.	none: choice: the repair is a decision only the writer can make
+#
 # Rest parameters (design principles 5.5, H51 step 6): 0x18A and up.
 #/ A rest parameter is not the last of the ordinary parameters.
 semantic	RestParameterNotLast	0x00018A	error	The rest parameter '..{0}' must be the last parameter.	A rest parameter stands for every argument left over, so no parameter can follow it. Move '..{0}' after the other parameters.	none: choice: the repair is a decision only the writer can make

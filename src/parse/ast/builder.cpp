@@ -2676,10 +2676,12 @@ Value Builder::visitStaticForExpr(cst::StaticForExpr context) {
 
 /*
 staticLoopExpr
-    : STATIC LOOP loopState (',' loopState)* staticForHeader DO blockExpr
+    : STATIC LOOP loopState (',' loopState)* staticLoopHeader DO blockExpr
     ;
 The children of the node are described at StaticLoopLoad: a Repeated Data of the first values,
-the walked shape (a type for `fields`, a value for `indices`), and the body.
+the walked shape (a type for `fields`, a value for `indices` and for a sequence), and the body.
+The head's own production (H462) is `staticLoopHeader`: `for i in <序列>`, without the
+parentheses `static for` still has.
 */
 Value Builder::visitStaticLoopExpr(cst::StaticLoopExpr context) {
     ENTER("StaticLoopExpr");
@@ -2695,13 +2697,19 @@ Value Builder::visitStaticLoopExpr(cst::StaticLoopExpr context) {
         bindings.size() > 0 ? std::string(bindings[0]->text()) : std::string("_");
     const std::string typeName =
         bindings.size() > 1 ? std::string(bindings[1]->text()) : std::string("_");
-    const auto mode      = context->tok(TK::Identifier);
-    const bool byIndices = mode && mode.text() == "indices";
-    node_ptr_t loopNode  = createNodeAs<StaticLoopLoad>(state, valueName, typeName, byIndices);
+    // The subject word of the head is the only direct identifier token of the node (`acc`,
+    // `i` and the names of the states are inside their own nodes): `fields`, `indices`, or
+    // nothing at all when what follows `in` is a sequence.
+    const auto mode       = context->tok(TK::Identifier);
+    const bool byIndices  = mode && mode.text() == "indices";
+    const bool byFields   = mode && mode.text() == "fields";
+    const bool bySequence = !byIndices && !byFields;
+    node_ptr_t loopNode =
+        createNodeAs<StaticLoopLoad>(state, valueName, typeName, byIndices, bySequence);
     setNodeTokenRangeByContext(loopNode, context);
     *loopNode << inits;
-    node_ptr_t shapeNode = byIndices ? any2node(visitExpr(context->expr()))
-                                     : any2node(visitType(context->type()));
+    node_ptr_t shapeNode = byIndices || bySequence ? any2node(visitExpr(context->expr()))
+                                                   : any2node(visitType(context->type()));
     *loopNode << shapeNode;
     node_ptr_t bodyNode = any2node(visitBlockExpr(context->lastChild().node()));
     *loopNode << bodyNode;
@@ -2722,7 +2730,7 @@ Value Builder::visitStaticLoopExpr(cst::StaticLoopExpr context) {
                 camel::source::SemanticRole::BranchCondition,
                 nodeOrigin(shapeNode),
                 -1,
-                byIndices ? "indices" : "type"),
+                byIndices ? "indices" : (bySequence ? "sequence" : "type")),
         });
     LEAVE("StaticLoopExpr");
     return loopNode;
