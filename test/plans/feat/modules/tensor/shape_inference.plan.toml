@@ -238,6 +238,20 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
 [[tests]]
+name = "si_var_argument_non_numeric"
+desc = "A cell whose element type is not numeric cannot be written by a `var Tensor` parameter: the widening that gives a `var` argument its parameter's type only applies where `Tensor` accepts the cell's content, so a `string[]` variable is still refused, at the argument."
+kind = "negative"
+case = "../../../../cases/modules/tensor/shape_inference/var_argument_non_numeric.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::NoMatchingFunction"
+expect_diagnostic_line = 17
+expect_diagnostic_column = 17
+expect_output_contains = ["No matching function found for argument types: <> (string[], float)", "var_argument_non_numeric.cml:17:17"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
 name = "si_as_fails"
 desc = "A conversion that fails when it runs names the declared type, the shape the tensor has, and the position of the conversion."
 kind = "behavior"
