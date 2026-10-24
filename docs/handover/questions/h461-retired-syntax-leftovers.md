@@ -72,8 +72,11 @@
 
 ## 四、实测数字（本 lane 终态 gate）
 
-- `smoke + feat -Tier fast -Jobs 8`：`RUN_EXIT=0`，`known failures: 8`（`edges.*` 4 条、`array_reduction_arms.*`
-  与 `array_reduction_complex_reduce.*` 各 2 条后端，与基线同集合），红集只减不增；基线两条红
-  （`docs.links.citations`、`docs.snippets_compile`）仍是红，原因与退役无关（`docs/design-principles.cn.md:283`
-  的 `...` 片段、`docs/design/public-repo/README.cn.md:66` 的失效引用）。
+- 基线（改前）：`total 6155 / pass 6134 / fail 2 / skip 11 / known failures 8`，`RUN_EXIT=1`。
+- 终态（`smoke + test/plans/feat -Tier fast -Jobs 8`）：`total 6152 / pass 6131 / fail 2 / skip 11 /
+  known failures 8`，`RUN_EXIT=1`。**fail 集合与基线同名同数**（`docs.links.citations`、
+  `docs.snippets_compile`），`known failures` 是同一组 8 条（`edges.*` 4 条、
+  `array_reduction_arms.*` 与 `array_reduction_complex_reduce.*` 各 2 条后端）；总数少 3 条
+  = 本 lane 删掉的 3 个用例（见第三节）。两条既有红与退役无关：`docs/design-principles.cn.md:283`
+  的 `...` 片段（`.en.md:283` 同）、`docs/design/public-repo/README.cn.md:66` 的失效引用。
 - `docs/reference/camel-for-ai.md`：110594 / 112000 字符，264 个诊断，四个生成区与来源一致。
