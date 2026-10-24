@@ -929,10 +929,12 @@ node_handle_t Builder::compoundAssignmentByRebinding(
     // `a op= b` is `a = a op b` (design principles 4.2): one rule for every type, whoever
     // declared it — a number's built-in `+`, a `+` the tensor module declares for a numeric
     // array, an `operator +` of the program. What the compound assignment follows is that
-    // operator, so the two things asked of it are the two things the rule states: that `a op b`
-    // be defined for these operands, and that what it gives be `a`'s own type. `int[]` has no
-    // `+`, and a `+` that answers with another type is not a `+=` either; both are refused
-    // here, and the call reports the compound assignment the program wrote.
+    // operator, so what is asked of it is what the ruling of 2026-10-24 says: that `a op b` be
+    // defined for these operands, and that `a = a op b` be a legal assignment — the value the
+    // operator gives fits `a`'s type where the assignment would put it (an addition broadcasts
+    // `f32[]` and `f32[2]` to `f32[2]`, which a `var` holding `f32[]` takes). `int[]` has no
+    // `+`, and a `+` whose value no assignment to `a` would accept is not a `+=` either; both
+    // are refused here, and the call reports the compound assignment the program wrote.
     const auto plainGroup = camel::core::plainGroupOfCompoundAssignment(group);
     if (!plainGroup || operands.size() != 2 || normTypes.size() != operands.size()) {
         return nullptr;
@@ -958,12 +960,12 @@ node_handle_t Builder::compoundAssignmentByRebinding(
            << make(tree_->makeDRef(right));
     // The plain operator is resolved as one written by itself would be: this is where its
     // availability is settled for the arguments, and where its result type is known. A result
-    // of another type than the target's is not this assignment's meaning, so the rebinding
+    // the assignment to `a` would not take is not this assignment's meaning, so the rebinding
     // does not apply and the compound assignment is reported as undefined, exactly as for a
     // type that has no plain operator at all.
     const node_handle_t plain = visitLinkNode(value);
     Type *result             = valueTypeOf(nodeTypeOf(plain));
-    if (result == nullptr || !result->equals(target)) {
+    if (result == nullptr || !target->assignableFrom(result)) {
         return nullptr;
     }
     // The value the plain operator gave is named for the assignment, so that it is computed
@@ -3262,6 +3264,22 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     };
 
     ASSERT(targetFuncType != nullptr, "Target function type must be resolved.");
+    // A declaration that writes the transitional `Tensor` is instantiated here, at the call, by
+    // the element type its arguments have: the call then sees `T[..]` -- `f32[..]` -- where the
+    // declaration wrote the spelling (design principles 5.5; the ruling of 2026-10-23 on
+    // bare-tensor-parameter-instantiation). The declaration itself is not rewritten: one graph
+    // serves every element type until the spelling is deleted at P4. What is instantiated is a
+    // *parameter*, and only its element type is substituted; the result type is not, because a
+    // body may answer with another element type (`export_capability`: an `f32` argument whose
+    // call returns an int tensor) or another rank (`print_value`: `forward` returns rank 1 from
+    // a rank-2 argument), so no claim about the result follows from the arguments alone
+    // (docs/handover/questions/bare-tensor-instantiation-return-rank.md).
+    if (targetOperator == nullptr && targetFuncType != nullptr) {
+        if (FunctionType *instantiated =
+                instantiatedTensorSignature(targetFuncType, withInputTypes, normInputTypes)) {
+            targetFuncType = instantiated;
+        }
+    }
     if (targetOperator == nullptr) {
         enterParameters(targetFuncType);
     } else {
@@ -3450,6 +3468,113 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     }
     LEAVE("LINK");
     return targetNode;
+}
+
+namespace {
+
+/// Whether `type` is the transitional spelling `Tensor` itself: the numeric array whose element
+/// type nobody has fixed and whose rank is open. `Tensor<[3]>` states a rank, and an array that
+/// states an element type states more: both are left as written.
+bool isBareTensorOccurrence(Type *type) {
+    const ArrayType *array = asArrayType(type);
+    return array != nullptr && array->isNumericUnknown() && array->anyRank() &&
+           array->extents().empty();
+}
+
+} // namespace
+
+FunctionType *Builder::instantiatedTensorSignature(
+    FunctionType *funcType, const type_vec_t &withTypes, const type_vec_t &normTypes) {
+    if (funcType == nullptr || funcType->hasRest() || funcType->hasConstas()) {
+        return nullptr;
+    }
+    const size_t withCount = funcType->withTypesCount();
+    const size_t normCount = funcType->normTypesCount();
+    // Only a parameter is instantiated. The result type is the declaration's own: a body may
+    // answer with another element type or another rank than the arguments have, so nothing about
+    // it follows from them (see the call site and
+    // docs/handover/questions/bare-tensor-instantiation-return-rank.md).
+    bool bare = false;
+    for (size_t i = 0; i < withCount && !bare; ++i) {
+        bare = isBareTensorOccurrence(funcType->withTypeAt(i));
+    }
+    for (size_t i = 0; i < normCount && !bare; ++i) {
+        bare = isBareTensorOccurrence(funcType->normTypeAt(i));
+    }
+    if (!bare) {
+        return nullptr;
+    }
+    // The type every bare occurrence takes: the element type the arguments at those positions
+    // have, `T[..]` as the end state writes it. Neither an extent nor a rank is substituted --
+    // the spelling never wrote either, and a body that computes another shape or another rank
+    // (`func forward(x: Tensor): Tensor { return zeros([shape(x)[0]]) + 1.0 }`) answers for
+    // values the declaration never related to its parameters, so a rank read off an argument
+    // would be a claim the value does not make. One of the arguments being a bare `Tensor`
+    // too, a value that is no array, or two arguments whose element types differ leaves the
+    // declaration as written.
+    Type *element       = nullptr;
+    std::vector<Type *> bareArguments;
+    const auto take = [&](Type *param, Type *actual) {
+        if (!isBareTensorOccurrence(param)) {
+            return true;
+        }
+        const ArrayType *array = asArrayType(actual);
+        if (array == nullptr || array->isNumericUnknown() ||
+            !isNumericScalarTypeCode(array->elemTypeCode())) {
+            return false;
+        }
+        Type *each = array->elemType();
+        if (element == nullptr) {
+            element = each;
+        } else if (element != each) {
+            return false;
+        }
+        bareArguments.push_back(const_cast<Type *>(actual));
+        return true;
+    };
+    for (size_t i = 0; i < withCount; ++i) {
+        if (!take(funcType->withTypeAt(i), i < withTypes.size() ? withTypes[i] : nullptr)) {
+            return nullptr;
+        }
+    }
+    for (size_t i = 0; i < normCount; ++i) {
+        if (!take(funcType->normTypeAt(i), i < normTypes.size() ? normTypes[i] : nullptr)) {
+            return nullptr;
+        }
+    }
+    if (element == nullptr || element->code() == TypeCode::Void) {
+        return nullptr;
+    }
+    Type *instance = ArrayType::openRank(element);
+    // The instantiated parameter must still take every argument it was read from, exactly as it
+    // did before: the instance is one element type with the rank left open, so every array of
+    // that element type fits, and the call is not turned into a conversion (design principles
+    // 5.1).
+    for (Type *actual : bareArguments) {
+        if (!instance->assignableFrom(actual)) {
+            return nullptr;
+        }
+    }
+    FunctionTypeFactory factory;
+    factory.setModifiers(funcType->modifiers());
+    factory.setHasCompileInfo(funcType->hasArgNames());
+    const auto nameAt = [&](size_t index) {
+        return funcType->hasArgNames() ? std::string(funcType->argNameAt(index)) : std::string();
+    };
+    for (size_t i = 0; i < withCount; ++i) {
+        Type *param = funcType->withTypeAt(i);
+        factory.addWithArg(
+            nameAt(i), isBareTensorOccurrence(param) ? instance : param, funcType->withIsVarAt(i));
+    }
+    for (size_t i = 0; i < normCount; ++i) {
+        Type *param = funcType->normTypeAt(i);
+        factory.addNormArg(
+            nameAt(withCount + i), isBareTensorOccurrence(param) ? instance : param,
+            funcType->normIsVarAt(i));
+    }
+    factory.setExitType(funcType->hasExitType() ? funcType->exitType() : nullptr);
+    factory.setResources(funcType->resources());
+    return factory.build();
 }
 
 } // namespace camel::compile::gir

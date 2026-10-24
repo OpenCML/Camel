@@ -1228,6 +1228,19 @@ class Builder {
         }
         return isGenericHere(type);
     }
+    /// The signature a call to a declaration that writes the transitional `Tensor` uses: every
+    /// bare occurrence of it (the numeric array nobody has fixed the element type of) is
+    /// instantiated by the element type this call's arguments give it, as `T[..]` -- the spelling
+    /// the end state writes (design principles 5.5; the ruling of 2026-10-23 on
+    /// bare-tensor-parameter-instantiation). No extent and no rank is substituted: the spelling
+    /// never wrote either, and a body may return a value of another shape or another rank than
+    /// its parameters. Null when the declaration writes no bare `Tensor`, and also when these
+    /// arguments cannot fix one -- an argument that is itself a bare `Tensor`, a value that is no
+    /// array, or two arguments whose element types differ -- because the spelling is then the
+    /// declaration's own and stands as written.
+    FunctionType *instantiatedTensorSignature(
+        FunctionType *funcType, const camel::core::type::type_vec_t &withTypes,
+        const camel::core::type::type_vec_t &normTypes);
     // The type parameters of a template in declaration order: the head names first, then the
     // variables its signature writes that the head did not declare.
     std::vector<std::string> typeParameterNames(const generic_template_ptr_t &tmpl) const;
