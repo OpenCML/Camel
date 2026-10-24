@@ -817,6 +817,68 @@ assert(out.endsWith('[12, 2]\n36.0'), `unexpected output: ${out}`)
 timeout_ms = 8000
 
 [[tests]]
+name = "specialize_dim_name_recursion.nvm"
+desc = "A recursion whose parameter is written with a dimension name (`f32[k]`) and whose argument is one element shorter at every level binds the name to a different value each level; the values are the zero-pass ones. The dimension name is written once in this signature, so the compiler warns (DimensionNameUsedOnce) and the program still runs."
+kind = "behavior"
+case = "../../../cases/opt/generic/specialize_dim_name_recursion.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stderr_contains = ["DimensionNameUsedOnce"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === '36.0', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "specialize_dim_name_recursion.bounded"
+desc = "The program after std::opt::specialize holds exactly one instance of the recursion (4 graphs in all): from the second lap of the call cycle the dimension name is widened to an unknown extent (the ruling of 2026-10-24 evening, item 2), so the recursion reaches a fixed point instead of taking a copy per level. The count does not come from kMaxTypeSpecializationsPerRecursiveFunction: the same numbers are read with that bound at 4096."
+kind = "behavior"
+case = "../../../cases/opt/generic/specialize_dim_name_recursion.cml"
+args = ["${case}", "std::opt::specialize", "std::stats", "std::nvm"]
+expect_exit = 0
+expect_stderr_contains = ["DimensionNameUsedOnce"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const stats = JSON.parse(out.match(/GRAPH_STATS (\{.*\})/)[1])
+assert(stats.graphs === 4, `unexpected graph count: ${stats.graphs}`)
+assert(stats.specializations === 1, `unexpected specialization count: ${stats.specializations}`)
+assert(out.endsWith('36.0'), `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "specialize_dim_name_recursion.graph"
+desc = "The graph of the same program names what the widening did to the types: the one instance the recursion takes is declared `(n: int, xs: f32[k]) => f32`, the declaration itself with the name still unbound (never `f32[8]`), and the call its recursive arm makes is the base function, not another instance."
+kind = "behavior"
+case = "../../../cases/opt/generic/specialize_dim_name_recursion.cml"
+args = ["${case}", "std::opt::specialize", "std::jgir"]
+expect_exit = 0
+expect_stderr_contains = ["DimensionNameUsedOnce"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const doc = JSON.parse(input.normalized.stdout.match(/\{[\s\S]*\}/)[0])
+const byId = new Map(doc.graphs.map((g) => [g.id, g]))
+const base = doc.graphs.find((g) => g.name === 'sniff')
+const instance = doc.graphs.find((g) => g.name === 'sniff$spec0')
+assert(base && instance, `graphs: ${doc.graphs.map((g) => g.name).join(', ')}`)
+assert(instance.signature === '(n: int, xs: f32[k]) => f32', `instance declared '${instance.signature}'`)
+const call = instance.nodes.find((n) => n.callee !== undefined)
+assert(call && byId.get(call.callee) === base, `the recursive call is bound to '${call && byId.get(call.callee).name}'`)
+const instances = doc.graphs.filter((g) => g.name.startsWith('sniff$'))
+assert(instances.length === 1, `the recursion took ${instances.length} instances`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
 name = "reshape_view_gc.fold_specialize.nvm"
 desc = "The corpus program of the same defect (a recursion that concatenates onto its tensor argument): std::opt::fold std::opt::specialize terminates and reproduces the zero-pass output."
 kind = "behavior"

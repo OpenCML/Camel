@@ -1,0 +1,29 @@
+/**
+ * A polymorphic recursion whose parameter is written with a dimension name (`f32[k]`), so the
+ * extent of the parameter is a different value at every level of the recursion.
+ *
+ * The ruling of 2026-10-24 evening (model-dependent-recursion-unrolls-after-the-flip, item 2) is
+ * what this case pins: a dimension name is bound from the argument once, and from the second lap
+ * of the call cycle it is widened to an unknown extent, so no level of the recursion asks for a
+ * new type instance and the total number of instances is bounded. It is not the count bound
+ * `kMaxTypeSpecializationsPerRecursiveFunction` that stops it: the readings are the same with that
+ * bound at 8 and at 4096 (see specialize_dim_name_recursion.bounded).
+ *
+ * The readout is the instance's own parameter type: `sniff$spec0` is declared
+ * `(n: int, xs: f32[k]) => f32`, the declaration itself, and the call the recursive arm makes
+ * inside it is bound to no instance at all - widening the name left nothing to specialize on.
+ *
+ * `n` counts levels, so it must be at most the number of elements minus one: the recursion reads
+ * `xs[0]` and passes `xs[1 .. len(xs)]` on, one element shorter each level.
+ */
+module specialize_dim_name_recursion
+
+func sniff(n: int, xs: f32[k]): f32 {
+    let lenv = len(xs)
+    return if n <= 0 then xs[0] else xs[0] + sniff(n - 1, xs[1 .. lenv])
+}
+
+func main(): int sync {
+    println(sniff(7, [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]))
+    return 0
+}
