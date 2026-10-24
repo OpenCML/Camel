@@ -1,16 +1,19 @@
-# The tensor flip after integrating develop: 372 red, the nine SIGSEGVs fixed, rank 0 in progress
+# The tensor flip after integrating develop: 372 red, nine SIGSEGVs fixed, rank 0 done
 
 `origin/develop` (`ea624c980`) is merged into the flip's frozen tip (`c8e5e561d`) as
 `5dad9d646`, a real merge commit. The flip's diff is untouched: no rebase, no rewrite.
 
-**Read this note for the current state**: the ledger below has three measurement points — the
+**Read this note for the current state**: the ledger below has four measurement points — the
 integration (`5dad9d646`, 494 red, nine SIGSEGVs), the crash round (`9670cd287`, 454 red, zero
-signals) and the first rank-0 slice (`1fc410091`, 372 red) — and the ranking at the end is
-written from the last one. Every number says which target produced it: `smoke,feat --tier fast
---jobs 8` is what the integration round ran (through the remote helper's `-Tier fast`);
-**`node scripts/test.js test/plans --tier fast --jobs 8` is this lane's gate from now on**,
-whole tree, because five crash sites live in the `gpu.profile` plan, which smoke+feat never
-selects.
+signals), the first rank-0 slice (`1fc410091`, 372 red) and the second (`4f9345c29`, 372 red,
+no test moved) — and the ranking at the end is written from the last one. Every number says
+which target produced it: `smoke,feat --tier fast --jobs 8` is what the integration round ran
+(through the remote helper's `-Tier fast`); **`node scripts/test.js test/plans --tier fast
+--jobs 8` is this lane's gate from now on**, whole tree, because five crash sites live in the
+`gpu.profile` plan, which smoke+feat never selects. Rank 0 was this lane's largest lever and it
+is now spent: its remaining two shapes are 2 tests and 1 test (the second is core's), so the
+next slice is the `var Tensor` edge invariant's 41 reds, and the print-form class (92) after
+that.
 
 ## What the merge brought, and how the two collisions were resolved
 
@@ -42,6 +45,10 @@ author's rulings.
 | `origin/develop` `ea624c980` | same (same window, `-NoBuild`) | 5956 | **0** | 11 | 172.6 s |
 | integrated + crash round `9670cd287` | `node scripts/test.js test/plans --tier fast --jobs 8` | 5972 | **454** | 11 | 282.7 s |
 | + rank-0 shape 1 `1fc410091` | same | 5972 | **372** | 11 | 291.8 s |
+| + rank-0 shape 2 (a) `4f9345c29` | same | 5972 | **372** | 11 | 215.5 s |
+
+Wall time moves with the host's load (another lane ran `test/plans/perf` in the same window);
+the fail set is what is compared, never the clock.
 
 The last two rows are the whole tree, not smoke+feat: they select six more tests than the row
 above, `gpu.profile/{host_loop.nvm,host_loop.fvm,host_loop.jit,json.nvm,off.nvm}` and its
@@ -67,16 +74,21 @@ Bucketing is the attribution report's, applied by one classifier to both logs: t
 diagnostic in the block, with the diagnostic classes taking precedence over the runner's text.
 
 | class | flip tip | integrated | + crash round | delta, integrated → now |
-|---|---|---|---|---|---|
-| kernel element-type refusal | 162 | 3 | 0 | 0 | −3 |
-| `NoMatchingFunction` hole | 49 | 49 | 7 | 7 | −42 (see below) |
-| internal error | 43 | 43 | 40 | 38 | −5 |
-| exit-code catch-all | 88 | 243 | 250 | 119 | −124 |
-| print form | 59 | 63 | 75 | 92 | +29 |
-| runtime error | 22 | 26 | 15 | 32 | +6 |
-| other text | 66 | 67 | 67 | 84 | +17 |
-| **total** | **489** | **494** | **454** | **372** | **−122** |
-| of which `expected exit N, got null` (a signal) | — | **9** | **0** | **0** | **−9** |
+|---|---|---|---|---|---|---|
+| kernel element-type refusal | 162 | 3 | 0 | 0 | 0 | −3 |
+| `NoMatchingFunction` hole | 49 | 49 | 7 | 7 | 7 | −42 (see below) |
+| internal error | 43 | 43 | 40 | 38 | 38 | −5 |
+| exit-code catch-all | 88 | 243 | 250 | 119 | 119 | −124 |
+| print form | 59 | 63 | 75 | 92 | 92 | +29 |
+| runtime error | 22 | 26 | 15 | 32 | 32 | +6 |
+| other text | 66 | 67 | 67 | 84 | 84 | +17 |
+| **total** | **489** | **494** | **454** | **372** | **372** | **−122** |
+| of which `expected exit N, got null` (a signal) | — | **9** | **0** | **0** | **0** | **−9** |
+
+The last two columns are the two rank-0 slices; shape 2 (a) moved **no** test, which is the
+point of its entry below: it changes what the exporter can express, not what the suite measures.
+Its red set is the shape-1 one exactly — `green=0, new=0`, signals 0, verified by set difference
+over the two runs (`notes/h388-fast-s1-clean.log`, `notes/h388-fast-s2-clean.log`).
 
 **Read the `NoMatchingFunction` row with care**: 49 → 7 is a property of the *block* the
 classifier reads, not of the flip. The hole is still there in every one of those cases — running
@@ -314,6 +326,20 @@ own sentence: **rank 0 is the element type itself**.
     must be instantiated per call site so `Tensor` parameters take their arguments' ranks
     (compiler/core, not this lane). Two entries, so this is **not** a family that changes the
     order — it is a correctness question about what an exported model may assume.
+    **Locus (a) is taken** (`4f9345c29`): `sum_to` now computes its axes in the model —
+    `Shape` of both operands, the leading `rank(g) - rank(like)` axes, and every aligned axis
+    `like` has as 1 and `g` does not (`Equal`/`Not`/`And`/`NonZero`), handed to `ReduceSum` as an
+    input with `noop_with_empty_axes` (opset 13 on). It is the discipline `shapeOperand` already
+    applies to an open extent. Measured effect on the two tests: the refusal moves from
+    `tensor:sum_to/g` to **`tensor:matmul_grad_rhs`** on both paths, and **neither test turns
+    green** — because the case's own verification counts `Squeeze >= 2 && Unsqueeze >= 4`, the
+    *static* vector widening and narrowing, which an unstated rank cannot produce. Eight
+    lowerings in that file ask for a stated rank; `sum_to` was one. So locus (b) is what these
+    two tests need, and the acceptance for them — **"develop's behaviour is not lost", measured:
+    develop exports this case green on both paths** — is *not* met by (a) alone. Whether a bare
+    `Tensor` parameter must be instantiated per call site is asked, with these measurements, in
+    `docs/handover/questions/bare-tensor-parameter-instantiation.md`; if the author rules yes,
+    (a) is a compatibility path rather than the fix, and this entry says so either way.
   - **Then**: `declaration_evaluator`'s `EVAL_MISMATCH op=tensor:add (f32[], f32[]) … no instance
     for a call the kernel accepts` — 1 entry. The harness reports a rank-0 operand as the element
     (`f32[]` prints for rank 0) while the kernel boxes it, so the instance search
