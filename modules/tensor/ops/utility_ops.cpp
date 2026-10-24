@@ -11,6 +11,7 @@
 #include "../kernels/gemm.h"
 #include "../kernels/parallel.h"
 #include "../npy.h"
+#include "camel/core/error/runtime.h"
 #include "camel/core/mm.h"
 #include "camel/core/rtdata/bytes.h"
 #include "camel/core/rtdata/string.h"
@@ -37,7 +38,14 @@ slot_t idxKernel(ArgsView &, ArgsView &norm, context::Context &) {
             throw std::invalid_argument("single-index access requires a rank-1 tensor");
         }
         if (index < 0 || index >= t->dim(0)) {
-            throw std::invalid_argument("tensor index out of bounds");
+            // An index outside the array is one fault whatever its element type is (design
+            // principles 3.9), and this op answers for the value whose element type the type does
+            // not fix (the core's resolver declines those, so that the element is read at the type
+            // the value carries). The fault is therefore raised here with the core's own message
+            // -- `Index 8 is out of range for an array of length 3.` -- rather than a message of
+            // this module's own, which is what a locationless kernel error would read as.
+            camel::core::error::throwRuntimeFault(
+                camel::core::error::RuntimeDiag::IndexOutOfRange, index, "an array", t->size());
         }
         return camel::core::rtdata::toSlot(t->getAsDouble(static_cast<uint64_t>(index)));
     });
@@ -50,8 +58,14 @@ slot_t idx2dKernel(ArgsView &, ArgsView &norm, context::Context &) {
         if (t->rank() != 2) {
             throw std::invalid_argument("two-index access requires a rank-2 tensor");
         }
-        if (row < 0 || row >= t->dim(0) || col < 0 || col >= t->dim(1)) {
-            throw std::invalid_argument("tensor index out of bounds");
+        if (row < 0 || row >= t->dim(0)) {
+            // The same fault as a one-index access, naming the axis the index left (3.9).
+            camel::core::error::throwRuntimeFault(
+                camel::core::error::RuntimeDiag::IndexOutOfRange, row, "an array", t->dim(0));
+        }
+        if (col < 0 || col >= t->dim(1)) {
+            camel::core::error::throwRuntimeFault(
+                camel::core::error::RuntimeDiag::IndexOutOfRange, col, "an array", t->dim(1));
         }
         return camel::core::rtdata::toSlot(
             t->getAsDouble(static_cast<uint64_t>(row * t->dim(1) + col)));
