@@ -139,3 +139,18 @@ expect_diagnostic_column = 5
 expect_output_contains = ["A statement cannot start with '+': the line break before it ended the statement of the line above."]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
+
+[[tests]]
+name = "syntax.type_arguments_missing_name"
+desc = "`pair::<A = int, = string>` writes a named type argument whose name is missing. The name is asked for where it should stand and the list stops there: it used to be passed over in silence, the argument was closed around `= string` alone, and the AST builder read the name that argument does not have - a token handle holding no token - which ended `camel-parsecheck fuzz` with a signal. This case is the minimized input the fuzzer found, written down instead of drawn from a seed."
+kind = "negative"
+case = "../../../cases/parse/syntax/type_arguments_missing_name.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SyntaxDiag::UnexpectedToken"
+expect_diagnostic_code = "0x0200000A"
+expect_diagnostic_line = 10
+expect_diagnostic_column = 29
+expect_output_contains = ["Unexpected '='; expected a name."]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000

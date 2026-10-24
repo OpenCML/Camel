@@ -1,0 +1,10 @@
+import a from y
+import b from x
+
+// The imports stand at the top of the file and not in the order camel-format prints them (module
+// `x` before module `y`), so nothing is declared before them: the gap in front of the first
+// declaration is empty, and the backward comment lookup counted down from 0 in a `size_t` and read
+// in front of the token stream. A debug build's ASSERT named it and `camel-parsecheck fuzz` ended
+// with a signal (seeds 67 and 111); this file is the same shape, one command instead of a seed.
+
+func main(): int { return 0 }
