@@ -852,11 +852,11 @@ func greet(): int sync {
 }
 ```
 
-**2. `Tensor` with no import.** `Tensor` is the type name the `tensor` module exports, so it is
-imported; without that the name is unknown and the compiler answers
-`SemanticDiag::UnresolvedTypeReference`. **Wrong:**
+**2. `Tensor` with no import.** `Tensor` is the `tensor` module's name for the numeric array whose
+element type is not fixed, so it is imported; without that the name is unknown and the compiler
+answers `SemanticDiag::UnresolvedTypeReference`. **Wrong:**
 
-<!-- camel-snippet: counter-example: Tensor is the tensor module's type name and has to be imported -->
+<!-- camel-snippet: counter-example: Tensor is a name the tensor module exports and has to be imported -->
 
 ```camel
 func f(x: Tensor): int {
@@ -864,9 +864,9 @@ func f(x: Tensor): int {
 }
 ```
 
-**Write instead** — import the name and build values with the module's functions: a shaped array is
-a different type, so `f32[2, 3]` is six floats and the tensor operators do not take it. A bare
-`Tensor` parameter is on its way out (**target**, `docs/design-principles.cn.md` §5.4).
+**Write instead** — import the name and build values with the module's functions: `Tensor<f32, [2, 3]>`
+and `f32[2, 3]` write one type, so the tensor operators take either spelling. A bare `Tensor`
+parameter is on its way out (**target**, `docs/design-principles.cn.md` §5.4).
 
 ```camel
 import tensor
@@ -1342,8 +1342,8 @@ names the design it comes from.
   same value under a name that is on its way out — `docs/design-principles.cn.md` §4.2. `range` with
   a step is not affected.
 - **A bare `Tensor` in a signature**: it becomes an explicit type parameter over a shaped type
-  (**target**, `docs/design-principles.cn.md` §5.4). `Tensor` is still the `tensor` module's own
-  type name and is imported by name (§12.2).
+  (**target**, `docs/design-principles.cn.md` §5.4). `Tensor` is still the `tensor` module's name
+  for the numeric array whose element type is not fixed, and it is imported by name (§12.2).
 - **Automatic differentiation and ONNX export over `enum`**: both refuse with a located rejection
   rather than mis-compiling (`docs/language/03_data_model.md` §3.5). That is a decision to work with,
   not a `target` to wait for: an enum at a differentiated boundary needs an explicit reading.
@@ -1654,8 +1654,8 @@ configures it, and a call chains them — `s->trim->split<','>`, `xs->filter<p>-
 is the 64-bit integer and `float` the 64-bit float. A result `T!` is an error to be handled (`!!`,
 `?->`, `match`), `T?` a value that may be absent (`??`). A signature whose declaration carries type
 parameters is printed without them: `is_numeric: () => bool` is declared `is_numeric::<T>()` and is
-written with its type argument when the arguments do not fix it. `Tensor` is a type name the `tensor`
-module exports, so it is imported (§12.2).
+written with its type argument when the arguments do not fix it. `Tensor` is the `tensor` module's
+name for the numeric array whose element type is not fixed, so it is imported (§12.2).
 
 Source: `docs/stdlib-reference.md`, generated from the declarations in `stdlib/*.cml` and
 `stdlib/signatures/*.cml` by `scripts/stdlib-reference.mjs --write`. Regenerate this region with
