@@ -639,7 +639,7 @@ args = ["${case}", "--arg", "x=test/cases/compile/entry_args/bad_shape.npy", "--
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
 expect_diagnostic_line = 9
-expect_output_contains = ["Cannot bind the argument 'x' of 'main'", "[2, 3]", "the tensor has shape [3, 3]"]
+expect_output_contains = ["Cannot bind the argument 'x' of 'main'", "[2, 3]", "the array has shape [3, 3]"]
 expect_output_not_contains = ["tensor(["]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000

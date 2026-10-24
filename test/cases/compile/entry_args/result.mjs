@@ -113,11 +113,13 @@ for (const pass of [null, 'std::fvm', 'std::nvm', 'std::jit', 'std::tf']) {
         { env, encoding: 'utf8' },
     )
     const out = proc.stdout
-    // The ruled printed form is the array's (questions-2026-10-24-evening.md): `tensor(..., dtype=...)`
-    // is gone with `Tensor`, so each member is counted by its own nested brackets.
+    // Printing has one form (the 2026-10-24 ruling): the value's own shape in brackets, each
+    // element in the shortest text of its own type. The tuple holds two rank-2 arrays, so the
+    // tuple's `(` is followed by two `[[` and the text ends with the tuple's `)`.
     const arrays = out.split('[[').length - 1
     check(
-        proc.status === 0 && arrays === 2 && out.includes('0.68779016') && out.includes('1.3755803') && out.endsWith('\n'),
+        proc.status === 0 && arrays === 2 && out.startsWith('([[') && out.endsWith(']])\n') &&
+            out.includes('0.68779016') && out.includes('1.3755803'),
         'tuple result on stdout: two tensors printed',
         `tuple result on stdout: exit ${proc.status}: ${out} ${proc.stderr}`,
     )
