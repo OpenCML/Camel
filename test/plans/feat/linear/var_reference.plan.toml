@@ -3047,6 +3047,70 @@ assert(out === 'plain call: value 1.0 sum(acc) 3.0 | with_grad: value 4.0 sum(ac
 timeout_ms = 20000
 
 [[tests]]
+name = "grad_tuple_read.default"
+desc = "Element reads of a with_grad result: the tuple's elements read as values, through a second name, and a field of the gradient; a tuple a function returns is read the same way."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/grad_tuple_read.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'with_grad: value 1.0 grad 3.0 by name 1.0 grad by name 3.0 | pair: 3.0 2.0', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "grad_tuple_read.macro_fvm"
+desc = "Element reads of a with_grad result: the tuple's elements read as values, through a second name, and a field of the gradient; a tuple a function returns is read the same way."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/grad_tuple_read.cml"
+args = ["${case}", "std::macro", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'with_grad: value 1.0 grad 3.0 by name 1.0 grad by name 3.0 | pair: 3.0 2.0', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "grad_tuple_read.macro_simplify_jit"
+desc = "Element reads of a with_grad result: the tuple's elements read as values, through a second name, and a field of the gradient; a tuple a function returns is read the same way."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/grad_tuple_read.cml"
+args = ["${case}", "std::macro", "std::opt", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'with_grad: value 1.0 grad 3.0 by name 1.0 grad by name 3.0 | pair: 3.0 2.0', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "grad_tuple_read.opt_macro_nvm"
+desc = "Element reads of a with_grad result: the tuple's elements read as values, through a second name, and a field of the gradient; a tuple a function returns is read the same way."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/grad_tuple_read.cml"
+args = ["${case}", "std::opt", "std::macro", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'with_grad: value 1.0 grad 3.0 by name 1.0 grad by name 3.0 | pair: 3.0 2.0', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
 name = "var_tensor_read_after_write.run"
 desc = "Refused with a clear diagnostic instead of a silently wrong gradient: the variable is read after the function assigned it a value that depends on a differentiated parameter (run-time error at the gradient call)."
 kind = "behavior"
