@@ -369,6 +369,28 @@ std::string dumpJsonRuntimeGraph(
             edges("control", g->ctrlInputsOf(ref), [&](auto source) {
                 return g->ctrlOutputsOf(source);
             });
+            // An order edge and a sync edge are not ports: they live in the graph's own arrays,
+            // which is what `std::gir` draws them from too, so neither has an input slot and
+            // neither is addressed by one (docs/design/effects/edges.cn.md 1.5, 5). A dump that
+            // left them out showed a `sync` block's statements joined by nothing.
+            for (const camel::runtime::GCGraphOrderEdge &edge : g->orderPredsOf(ref)) {
+                if (!g->containsNodeRef(edge.pred)) {
+                    continue;
+                }
+                graph["edges"].push_back(
+                    {{"source", nodeId(g, edge.pred)},
+                     {"target", nodeId(g, ref)},
+                     {"kind", "order"}});
+            }
+            for (const camel::runtime::GCGraphSyncEdge &edge : g->syncPredsOf(ref)) {
+                if (!g->containsNodeRef(edge.pred)) {
+                    continue;
+                }
+                graph["edges"].push_back(
+                    {{"source", nodeId(g, edge.pred)},
+                     {"target", nodeId(g, ref)},
+                     {"kind", "sync"}});
+            }
         }
         document["graphs"].push_back(std::move(graph));
     }
