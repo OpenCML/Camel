@@ -178,3 +178,111 @@ N01 [label=":op/add_l", type="OPER", value_type="int"]
 - 没有动 `argsort` 的元素类型集合（仍为 i32/int/f32/float/bool/string）。
 - 没有改调用点的重载解析（问题 1），也没有改 `#impl` 采纳时的 `when` 语义。
 - 没有改 `flatten`、`unique`、归约族（`sum`/`min`/`max`/……）的任何声明或执行器。
+
+---
+
+## 追加（`handover/h399-when-at-call`，2026-10-24）：问题 1 按已有裁定落地，调用点读 `when`
+
+本节只追加，不改上文一行。结论：**问题 1 不需要新的语言裁定**。它是"代码与原则或已有裁定不一致"的实施缺口，
+按 `docs/handover/reviews/questions-2026-10-23.md` 第 384 行已有的做法（"协调者直接按原则改，不必走问题通道"）
+直接改代码。上文"问题 1 / 选项 1"即本车道落地的形态，且已落地；上文问题 3 的 in-place 名与问题 2 的
+bf16/f16/bool 拒绝都保持 h393 的现状，未动。
+
+### 依据（三处，都在本仓库）
+
+1. `docs/design-principles.cn.md` 4.4「适用条件 `when`」（第 272 行，规范性）："条件在实例化时求值；不成立时
+   **这个重载不适用**，重载选择去试同名的其他候选；没有一个适用时**在调用处报错，列出每个候选没满足的条件**。"
+   重载选择就发生在调用处，所以调用点必须读 `when`——不读，这句里的"不适用"与"报错列出条件"都无处成立。
+   这是**写明了的语义**，不是新语义。
+2. 语言作者 2026-10-24 对 `impl-declaration-arms` 的裁定（同文件第 288–294 行）："**选 1。**……`when` 是规则、
+   函数重载与 `match` 守卫唯一的适用条件——同名声明按 `when` 互斥分臂就是重载，`signaturesCanAgree` 忽略
+   `when` 是缺陷"；"**规则统一**：同一检查适用于所有带 `when` 的同名重载（有函数体的普通函数也一样），不是
+   `#impl` 声明的特例。" 该裁定改的是**声明期**检查（`WhenDeclarationOverlap`），而调用期仍是"先写的那条赢"：
+   这正是同一条裁定的实施缺口。
+3. 同文件第 384 行：「都是已有裁定的实施缺口，不是新的设计决定。以后同类问题（"代码与原则或已有裁定不一致，
+   按原则改代码"），协调者直接按原则改，不必走问题通道。」
+
+### 最小复现（两次输出逐字，均在 `origin/develop` 基线 `cf813dfd0` 上量）
+
+同一程序、两条同名 body-less 声明、`when` 互斥，只把两条声明的**书写顺序**对调：
+`test/cases/compile/native/when_order_at_call_i32_first.cml`（i32 臂在前）与
+`test/cases/compile/native/when_order_at_call_int_first.cml`（int 臂在前）。i32 臂是减法、int 臂是加法，
+所以两行数字自己说出每次调用走到了哪个算子。
+
+改前（`camel <case>`，两个文件各一次）：
+
+```
+i32_first:  i32=-4    int=4294967292      # 两行都是 :op/sub_i；int 那行把 i32 减法跑在 int 上（回绕）
+int_first:  i32=42    int=42              # 两行都是 :op/add_l；i32 那行把 int 加法跑在 i32 上
+```
+
+改前的 `std::gir`（逐字，`value_type` 与算子不符）：
+
+```
+i32_first: N02 [label=":op/sub_i", ... value_type="i32"];   N08 [label=":op/sub_i", ... value_type="int"]
+int_first: N02 [label=":op/add_l", ... value_type="i32"];   N08 [label=":op/add_l", ... value_type="int"]
+```
+
+改后（同一棵树、同一命令）：
+
+```
+i32_first:  i32=-4    int=42        exit=0
+int_first:  i32=-4    int=42        exit=0     # 两次逐字相同
+i32_first: N02 [label=":op/sub_i", ... value_type="i32"];   N08 [label=":op/add_l", ... value_type="int"]
+int_first: N02 [label=":op/sub_i", ... value_type="i32"];   N08 [label=":op/add_l", ... value_type="int"]
+```
+
+哪一次是对的：**改后**。依据是设计原则 4.4 的第 272 行（`when` 不成立即"这个重载不适用"）与第 288–290 行的裁定
+（同名声明按 `when` 互斥分臂就是重载）。改前的两次都不是"对的"，它们是同一个缺陷的两个投影：被选中的算子只由
+书写顺序决定，条件根本没被读，于是出现 `value_type="int"` 编到 `:op/sub_i` 这种类型与算子不符的节点，而且
+**不报错**（`4294967292` 是 i32 回绕，不是拒绝）。
+
+不适用时的调用点诊断（改后，逐字）：
+
+```
+error[SemanticDiag::WhenConditionUnmet]: No candidate of 'arms_kernel' applies to (<> (float, float)):
+every candidate's 'when' condition is false. Candidates: (a: T, b: T) => T — when is_arm_i32::<T>();
+(a: T, b: T) => T — when is_arm_int::<T>()
+```
+
+（改前同一次调用编译通过并编到 `:op/sub_i`、`value_type="float"`——即上文探针里的形态。）
+
+### 落地（`src/compile/gir/`）
+
+- `Builder::ruleVerdictForCall`（`builder_modules.cpp`）：把 `declaredRuleApplies` 的问法拆成三答案
+  `Applies / ConditionUnmet / NotThisRule`；`declaredRuleApplies` 改为其中一个答案，`#impl` 采纳路径的行为不变
+  （那两处调用者都已先检查参数个数与签名，`NotThisRule` 不可能出现）。**归约族走的就是这条路径，未改。**
+- `Builder::resolveGroupedCall`（`builder_operators.cpp`）：调用点逐条试候选——"签名收下这组实参 →再问它自己的
+  `when`"；条件为假的不是候选，调用继续试下一条。`visitLinkNode`（写出来的调用）与 `overloadValueFor`（算子名当
+  值用、期望类型已知）都走它。顺序仍在，但只在**都适用**时才是兜底。
+- 一条都不适用时报已有的 `SemanticDiag::WhenConditionUnmet`，候选逐条列出。列表**不能按签名去重**：两条臂的签名
+  文本相同（`(a: T, b: T) => T`），只有 `when` 不同；本车道第一版按签名字典去重，把两条压成了一条——探针查出来的，
+  现按"签名 + 条件"成对去重。
+- 回归：两个用例文件 + `test/plans/feat/compile/native_declarations.plan.toml` 三条（两次行为、一次 `std::gir` 钉
+  `:op/sub_i`=i32 与 `:op/add_l`=int，并断言不存在"算子与元素类型不符"的节点）。
+
+### 一处仍未决，本车道没有自己定：两条 `when` 对同一次调用**同时成立**时取谁
+
+调用点现在按"算子组给出的顺序"取第一条适用的规则（`exportNativeOperators` 的 `stable_sort`：固定签名在前，
+其后是书写顺序）。设计原则 4.4 只写了"不成立时不适用"，没写"都成立时取谁"；**请作者裁定**：
+
+- **选项 A（现状：书写顺序兜底）**。代价：声明期的 `WhenDeclarationOverlap` 只对编译器**登记**的类型逐个求两条
+  `when`（基本类型 + 每种复合形状一个样本），一个没抽样到的类型（例如用户结构体）可以同时满足两条，这时调用点又
+  回到"先写的赢"。语义不好描述。
+- **选项 B（调用点报歧义）**。像同名函数那样报 `rejectAmbiguousCall`（`builder_operators.cpp` 已有）。代价：无条件
+  的重载（`fixedSignature()==nullptr` 的计算签名）今天也允许"两条都收下、先写的赢"，一律报错会动到这一大片既有
+  行为，超出本缺陷范围。
+- **选项 C（声明期检查用封闭类型集）**。把"程序里出现的类型"并进互斥检查（`check` 的 `program` 参数已有先例）。
+  代价：仍然是编译期近似，且要新接口。
+- **建议**：若判 B，只对"带 `when` 的候选"报歧义，无条件的既有重叠留给单独一条车道。
+
+另一处**继承**的行为（不是本车道新定）：条件在调用点问不出来时（例如读一个 `with` 值），
+`reportWhenProblem` 按既有约定把"声明的条件本身"报在声明处，不当作适用。`declaredRuleApplies` 一直如此。
+
+### 本车道没有做的事
+
+- 没有动 h393 已落地的排序族写法（仍是一元素类型一条固定签名声明），也没有给它补 bf16/f16/bool/string/c64。
+- 没有动 `#impl` 采纳（`sum`/`min`/`max` 的臂）、`std::opt` 的规则解析、`OperatorGroup::resolve`/`resolveForCall`
+  本身（核心不读 `when`，筛选在编译器的调用点做）。
+- 没有改声明期检查（`WhenDeclarationOverlap` / `separateWhenConditions`）与 `signaturesCanAgree`。
+- 没有裁定"两条 `when` 同时成立"的优先规则（见上一节）。
