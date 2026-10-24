@@ -36,7 +36,7 @@ arm per element type), the disjoint-`when` declaration rule, the completed liter
 formatter's comment placement, the `#gpu` scope regions, the runtime's statement chain, and the
 author's rulings.
 
-## The three measurements, all on the same host in the same window
+## The measurements, all on the same host in the same window
 
 | tree | command | tests | fail | skip | wall |
 |---|---|---|---|---|---|
@@ -223,7 +223,7 @@ turned green.** Five reds are new, all of them develop's own new tests.
   fixed by it: the 63 print-form reds are the flip's own expectation debt, the array printer
   against goldens written for the tensor printer.
 
-## The `Tensor<void>` refusals: the refusal is gone, the gap is the element type (3 reds)
+## The `Tensor<void>` refusals: the refusal is gone, the gap is the element type (5 reds now)
 
 On `5dad9d646`, `train_step.loss.{nvm,fvm,jit}` (case
 `examples/models/naive-in-expert-out/train_step.cml`) refused with `'the gradient kernels' does
