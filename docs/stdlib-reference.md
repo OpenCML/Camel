@@ -1303,8 +1303,9 @@ new: (values: Tensor | number[]) => Tensor
 ```
 
 A tensor made of a nested number array (or of a tensor, copied into contiguous row-major
-storage); the element type follows the values: `f32` for floats, `int64` for integers, `bool`
-for booleans.
+storage); the element type follows the values: `float` for a float (design principles 5.1: a
+float literal's own type is `float`, which is `f64`), `int64` for an integer and `bool` for a
+boolean.
 
 - Pure.
 - Example: `new([[1.0, 2.0], [3.0, 4.0]])`
@@ -1734,6 +1735,7 @@ an `int64` tensor of shape [labels, classes].
 #### `shape`
 
 ```camel
+shape: (t: T[..]) => int[] when is_numeric::<T>()
 shape: (t: Tensor) => int[]
 ```
 
@@ -1745,6 +1747,7 @@ The extents of a tensor, in order.
 #### `numel`
 
 ```camel
+numel: (t: T[..]) => int when is_numeric::<T>()
 numel: (t: Tensor) => int
 ```
 
@@ -1756,6 +1759,8 @@ The number of elements in a tensor: the product of its extents.
 #### `dim`
 
 ```camel
+dim: (t: T[..], axis: int) => int when is_numeric::<T>()
+dim: (t: T[..], axis: i32) => int when is_numeric::<T>()
 dim: (t: Tensor, axis: int) => int
 dim: (t: Tensor, axis: i32) => int
 ```
@@ -2025,6 +2030,7 @@ passes the stored values through without rounding, so it needs no numeric permis
 #### `to_bytes`
 
 ```camel
+to_bytes: (t: T[..]) => Bytes when is_numeric::<T>()
 to_bytes: (t: Tensor) => Bytes
 ```
 
@@ -2050,6 +2056,7 @@ the program runs (check them with `as`, or read them with `shape`).
 #### `save_npy`
 
 ```camel
+save_npy: (t: T[..], path: string) => void when is_numeric::<T>()
 save_npy: (t: Tensor, path: string) => void
 ```
 
@@ -4736,7 +4743,7 @@ Extracts the program `p` in the cost model named `cost` (for example `"size"`).
 #### `check`
 
 ```camel
-check: (rules: Rule[], samples: int, seed: int) => CheckReport
+check: (rules: Rule[], samples: int = 100, seed: int = 0, program: Program? = null) => CheckReport
 ```
 
 Checks `rules` on `samples` random instances drawn with `seed`, and answers the verdict table
@@ -4749,6 +4756,13 @@ not its place in `rules`, so a rule draws the same samples in any call (the ruli
 on `accuracy-check-sampling`, 1). A build without a solver can answer `sampled` and `refuted`
 and never `proved`: `proved` is a licence's proposition being established, which is not what
 comparing samples does.
+
+`samples` and `seed` have defaults, and `program` names the program whose own types a generic
+law is also checked at: the candidate set is the types every operator group registered, and
+then the types of the values the program has, each once, in the order its graphs write them
+(the ruling of 2026-10-24 on `generic-rule-check-surface-and-multi-parameter-instances`, 1).
+Left out, the candidate set is the registered types alone, so a call that gives no program
+reads exactly what it read before the parameter existed.
 
 - With effects: runs the rules' functions and draws random values.
 - Example: `check(rules, 1000, 7)` gives `the report`

@@ -50,6 +50,11 @@ compilation - self time by phase
  cmo_load autodiff <time>
  parse tensor <time>
  gct tensor <time>
+ resolve types <time>
+ parse types <time>
+ gct types <time>
+ (counting) <time>
+ declare types <time>
  (counting) <time>
  declare tensor <time>
  parse autodiff <time>

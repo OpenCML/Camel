@@ -9,6 +9,19 @@
  * compiler knew the whole answer nothing is reported any more. A diagnostic with nothing certain
  * to write is checked the other way: it has no `fixes` at all, rather than a guess a tool applies.
  *
+ * Two of the checks are properties rather than examples:
+ *
+ *   - every code `diagnostics/registry.tsv` marks `edit` has at least one case here that produces
+ *     a fix and whose application removes the diagnostic - so a code that starts promising an edit
+ *     without a case that proves it fails here, and a case that names a code the registry does not
+ *     mark `edit` fails too (a bijection, asserted in both directions);
+ *   - a code whose fix depends on the text it appears in has both kinds of case: `0x00000001`
+ *     (`077`) is refused with no fix where the leading zero reads two ways, and repaired where it
+ *     reads one way (`09`) - the two runs have to report the same code.
+ *
+ * The `text` format is checked as well: a fix is printed there too, as a `help:` line with the
+ * fix's title and, under it, the source line the fix leaves behind, marked where it writes.
+ *
  * Usage: node proof.mjs
  */
 
@@ -36,8 +49,35 @@ const check = (ok, label, detail) => {
 
 const env = { ...process.env, CAMEL_HOME: process.env.CAMEL_HOME || path.join(REPO_ROOT, 'out', 'latest') }
 
-function run(file) {
-    const proc = spawnSync(CAMEL, [file, '--error-format', 'json'], { env, encoding: 'utf8' })
+const REGISTRY = path.join(REPO_ROOT, 'diagnostics', 'registry.tsv')
+const SECTION_TYPE = {
+    internal: 'InternalDiag',
+    lexical: 'LexicalDiag',
+    syntax: 'SyntaxDiag',
+    semantic: 'SemanticDiag',
+    runtime: 'RuntimeDiag',
+}
+
+/// The names the registry marks `edit`: each one promises a machine-applicable fix, so each one
+/// owes a case here that produces that fix and whose application removes the diagnostic.
+function registryEditNames() {
+    const names = new Set()
+    for (const line of fs.readFileSync(REGISTRY, 'utf8').split('\n')) {
+        if (line.startsWith('#') || line.trim() === '') continue
+        const field = line.split('\t')
+        if (field.length < 7 || field[6] !== 'edit') continue
+        names.add(`${SECTION_TYPE[field[0]]}::${field[1]}`)
+    }
+    return names
+}
+
+/// The name -> code of every case that produced a fix which, applied, removed the diagnostic, and
+/// of every case that reported no fix. The two properties at the end read them.
+const covered = new Map()
+const noFixCodes = new Map()
+
+function run(file, args = ['--error-format', 'json']) {
+    const proc = spawnSync(CAMEL, [file, ...args], { env, encoding: 'utf8' })
     if (proc.error) throw new Error(`cannot run ${CAMEL}: ${proc.error.message}`)
     return proc
 }
@@ -104,7 +144,7 @@ function expectFix({ label, file, name, title, edits, accepted }) {
     const found = diagnosticsOf(proc).filter((d) => d.data.name === name)
     if (found.length !== 1) {
         check(false, label, `wanted one ${name}, got ${found.length}: ${proc.stdout}`)
-        return
+        return { code: null, verified: false }
     }
     const d = found[0]
     const want = [{ title, edits }]
@@ -114,7 +154,7 @@ function expectFix({ label, file, name, title, edits, accepted }) {
         `${label}: the fix is ${title}`,
         `wanted ${JSON.stringify(want)}, got ${JSON.stringify(got)}`
     )
-    if (JSON.stringify(got) !== JSON.stringify(want)) return
+    if (JSON.stringify(got) !== JSON.stringify(want)) return { code: d.code, verified: false }
 
     const fixed = applyEdits(source, d.data.fixes[0].edits)
     const dir = fs.mkdtempSync(path.join(TEMP, 'case-'))
@@ -122,8 +162,9 @@ function expectFix({ label, file, name, title, edits, accepted }) {
     fs.writeFileSync(copy, fixed)
     const after = run(copy)
     const remaining = diagnosticsOf(after)
+    const gone = !remaining.some((r) => r.data.name === name)
     check(
-        !remaining.some((r) => r.data.name === name),
+        gone,
         `${label}: applying it removes the diagnostic`,
         `${name} is still reported: ${after.stdout}`
     )
@@ -134,6 +175,41 @@ function expectFix({ label, file, name, title, edits, accepted }) {
             `exit ${after.status}, ${remaining.length} diagnostic(s): ${after.stdout}${after.stderr}`
         )
     }
+    // The text format prints the fix too: the title as a `help:` line, and under it the source line
+    // the fix leaves behind, marked where it writes (or, for a fix that only cuts text, the line as
+    // it stood, marked where it cuts). The line and the marker are derived from the fix the JSON
+    // carries, so this compares the two formats with each other and not with a copy of one of them.
+    {
+        const shown = run(path.join(CASE_DIR, file), ['--error-format', 'text', '--color', 'never'])
+        const lines = shown.stdout.split('\n')
+        const heading = lines.indexOf(`help: ${title}`)
+        check(heading >= 0, `${label}: the text format names the fix in a help: line`, shown.stdout)
+        if (heading >= 0) {
+            const replaced = edits.every((e) => e.replacement === '')
+                ? source.split('\n')[edits[0].range.start.line]
+                : applyEdits(source, [edits[0]]).split('\n')[edits[0].range.start.line]
+            const window = lines.slice(heading, heading + 6)
+            const shownLine = window.find((line) => /^\s*\d+ \| /.test(line))
+            const itsText = shownLine === undefined ? null : shownLine.replace(/^\s*\d+ \| /, '')
+            check(
+                itsText === replaced,
+                `${label}: the text format prints the line the fix leaves behind`,
+                `in ${JSON.stringify(window)}`
+            )
+            const mark = edits[0].replacement === '' ? '-' : '+'
+            const marked = window.find(
+                (line) => /^\s*\| /.test(line) && line.replace(/^\s*\| /, '').trim().length > 0
+            )
+            const marks = marked === undefined ? '' : marked.replace(/^\s*\| /, '').trim()
+            check(
+                marks.length > 0 && [...marks].every((c) => c === mark),
+                `${label}: the text format marks the columns it ${mark === '+' ? 'writes' : 'cuts'}`,
+                `in ${JSON.stringify(window)}`
+            )
+        }
+    }
+    if (gone) covered.set(name, d.code)
+    return { code: d.code, verified: gone }
 }
 
 /// A case whose repair is not one text: the report has to carry no fix at all.
@@ -142,13 +218,16 @@ function expectNoFix({ label, file, name }) {
     const found = diagnosticsOf(proc).filter((d) => d.data.name === name)
     if (found.length !== 1) {
         check(false, label, `wanted one ${name}, got ${found.length}: ${proc.stdout}`)
-        return
+        return { code: null, hasFix: null }
     }
+    const hasFix = 'fixes' in found[0].data
     check(
-        !('fixes' in found[0].data),
+        !hasFix,
         `${label}: no fix is offered`,
         `got ${JSON.stringify(found[0].data.fixes)}`
     )
+    noFixCodes.set(name, found[0].code)
+    return { code: found[0].code, hasFix }
 }
 
 const render = (name) => `compile/diag_render/${name}.cml`
@@ -308,6 +387,58 @@ expectFix({
 // A name that resolves to nothing: the compiler does not know which name was meant, and a fix that
 // picks one is worse than a sentence.
 expectNoFix({ label: 'unresolved-reference', file: 'compile/semantic/unresolved_reference.cml', name: 'SemanticDiag::UnresolvedReference' })
+
+// --- The two properties, instead of one example per code --------------------------------------
+// Every code the registry marks `edit` promises a machine-applicable fix. That promise is what the
+// registry column is for, so the cases above have to cover the column exactly: a code that starts
+// promising an edit with no case that produces it and proves it by recompiling would otherwise be
+// published unchecked, and a case that repairs a code the registry does not mark `edit` means the
+// column and the compiler disagree.
+{
+    const promised = registryEditNames()
+    check(
+        promised.size > 0,
+        'the registry marks at least one code `edit`',
+        'a property over an empty set is not a pass'
+    )
+    const missing = [...promised].filter((name) => !covered.has(name))
+    check(
+        missing.length === 0,
+        `every code marked 'edit' has a case that produces a fix and removes the diagnostic (${promised.size} code(s))`,
+        `no case proves: ${missing.join(', ')}`
+    )
+    const extra = [...covered.keys()].filter((name) => !promised.has(name))
+    check(
+        extra.length === 0,
+        'every case that produces a fix names a code the registry marks `edit`',
+        `not marked 'edit': ${extra.join(', ')}`
+    )
+    // The name -> code mapping the registry sections imply, confirmed against the compiler: a case
+    // that named the wrong code would satisfy the coverage above without covering anything.
+    const section = { InternalDiag: '0x00', LexicalDiag: '0x01', SyntaxDiag: '0x02', SemanticDiag: '0x03', RuntimeDiag: '0x04' }
+    const wrong = [...covered].filter(([name, code]) => !code.startsWith(section[name.split('::')[0]]))
+    check(wrong.length === 0, 'the code of every covered case belongs to the name it was found under', JSON.stringify(wrong))
+}
+
+// `077` and `09` are one code with two situations: `077` is refused where the leading zero reads
+// two ways (decimal in an entry argument, octal elsewhere) so there is no one text to write, and
+// `09` reads one way so it is repaired. Both cases have to be the same code, or the pair proves
+// nothing about a code that has a fix "sometimes".
+{
+    const name = 'LexicalDiag::InvalidNumberFormat'
+    const withFix = covered.get(name)
+    const without = noFixCodes.get(name)
+    check(
+        withFix !== undefined && without !== undefined,
+        `${name} is locked in both of its situations: with a fix (09) and with none (077)`,
+        `with a fix: ${withFix}, without: ${without}`
+    )
+    check(
+        withFix !== undefined && withFix === without,
+        `both situations report the same code (${without})`,
+        `${withFix} vs ${without}`
+    )
+}
 
 fs.rmSync(TEMP, { recursive: true, force: true })
 console.log(failed === 0 ? 'diagnostic fixes proof: checks passed' : `diagnostic fixes proof: ${failed} check(s) failed`)
