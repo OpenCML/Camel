@@ -3547,6 +3547,17 @@ node_ptr_t Builder::visitStaticLoop(const AST::node_ptr_t &ast) {
         typeScope_->insert(
             Reference(load->typeName()),
             TypeVarType::create(load->typeName(), false));
+    } else if (load->bySequence() && load->valueName() != "_") {
+        // A written sequence's round name is a type as well: `for x in ts` walks a compile-time
+        // tuple and binds the type at each position (the ruling of 2026-10-25, H475), while
+        // `for i in 0..5` binds a value and no type. The name is inserted as an unbound type
+        // variable here, as `F` is: the graph builder binds it at each round when the sequence
+        // gives types, and a sequence of values leaves it unbound, so a body that used the name
+        // in a type position reports that the type is not concrete instead of reading some other
+        // `i` of the same name.
+        typeScope_->insert(
+            Reference(load->valueName()),
+            TypeVarType::create(load->valueName(), false));
     }
     node_ptr_t bodyNode = visitStmtBlock(ast->atAs<AST::StmtBlockLoad>(2));
     popScope();

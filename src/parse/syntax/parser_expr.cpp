@@ -1269,10 +1269,12 @@ void ParserImpl::parseStaticForName() {
 /// 元组）；头上的括号与 `static` 一起进来的遗留，已按“同一件事一种写法”去掉（H462），现在与
 /// 普通 `loop` 的 `for i in <序列>` 同形（头由下面的 `staticLoopHeader` 给出）。序列是
 /// `in fields T`（按结构体的字段）、`in indices ts`（按元组的位置），或任何编译期能求出的
-/// 序列——今天只认常量区间 `a..b`（半开，与 `..` 运算符同一个读法），节点的图 builder 判不出
-/// 时报 `SemanticDiag::StaticLoopSequenceNotKnown`。没有 `while`，也没有运行期序列的 `for`，
-/// 因为轮数必须在编译期确定。`do` 后面是循环体，它的值是下一轮的状态；展开后没有 LOOP 节点。
-/// 迭代变量是编译期常量：`acc + i` 和 `t.[i]` 都能写。
+/// 序列（裁定第 2 条画的那一条规则，见 `docs/handover/reviews/questions-2026-10-24-evening.md`
+/// 的 h462 与 2026-10-25 的 h475：只由编译期常量经可自由排布的运算组成就求值展开）：
+/// 常量区间 `a..b`、`range(a, b, step)`、数组字面量与常量数组、编译期元组 `ts`（那时每轮的
+/// 名字是该位置的类型）。节点的图 builder 判不出时报 `SemanticDiag::StaticLoopSequenceNotKnown`。
+/// 没有 `while`，也没有运行期序列的 `for`，因为轮数必须在编译期确定。`do` 后面是循环体，它的值
+/// 是下一轮的状态；展开后没有 LOOP 节点。迭代变量是编译期常量：`acc + i` 和 `t.[i]` 都能写。
 void ParserImpl::parseStaticLoop() {
     const size_t m = mark();
     bump(); // static
@@ -1304,7 +1306,11 @@ void ParserImpl::parseStaticLoop() {
 /// The head of a `static loop`, written without the parentheses `static for` still has: the
 /// ruling of 2026-10-24 unifies it with the ordinary `loop`'s `for i in <序列>` (one thing, one
 /// spelling). The subject after `in` is a type for `fields`, a value for `indices`, and in every
-/// other case a sequence the compiler must be able to work out (a constant interval today).
+/// other case a sequence the compiler must be able to work out: one rule draws the line (the
+/// rulings of 2026-10-24 and 2026-10-25) -- an expression built only from compile-time constants
+/// through operations that are pure and cannot fail is evaluated and unrolled, so `a..b`,
+/// `range(a, b, step)` with constant arguments, an array literal, a constant array and a
+/// compile-time tuple all count, and anything else is refused by the graph builder.
 /// A second name is legal only with `fields`: it names the field's type, and `indices` and a
 /// plain sequence have no type name to give (the same reading as `staticForHeader`'s).
 void ParserImpl::parseStaticLoopHeader() {
