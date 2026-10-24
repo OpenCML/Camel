@@ -982,7 +982,7 @@ std::optional<Builder::CalleeSet> Builder::declarationsOfCallee(node_handle_t ca
     // set path fills no default -- with one declaration it could, but the rule that a default is
     // written by one declaration is the very reason the two paths differ -- so a group with one
     // rule keeps the signature path too, and what a name reaches there is what that path can read
-    // (a rule whose signature is fixed; docs/handover/questions/one-rule-group-names.md).
+    // (a rule whose signature is fixed; docs/handover/reviews/questions-2026-10-23.md §one-rule-group-names).
     if (set.declarations.size() < 2) {
         return std::nullopt;
     }
