@@ -88,6 +88,14 @@ void GraphDraft::inheritRegion(gc_node_ref_t input, gc_node_ref_t user) {
         reader->header.kind == GCNodeKind::Loop) {
         return;
     }
+    // Neither is a statement of a `sync` block moved: a statement is written where it is written,
+    // and the chain that joins it to the block never leaves the block's region (4.6). A value an
+    // inner region computes is read through that region's result -- the region is what carries it
+    // out (5.7) -- so moving the reader into the region is not how it is reached, and it would pull
+    // every chain edge of the reader across regions with it.
+    if ((reader->header.runtimeFlags & kGCNodeFlagSyncStatement) != 0) {
+        return;
+    }
     // Inline and Block regions only say where code came from: their values are read from outside.
     const auto controlOf = [&](uint32_t region) {
         while (region != 0 && region < regions_.size() &&

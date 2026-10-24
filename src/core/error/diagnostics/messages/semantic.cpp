@@ -1237,6 +1237,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::WhenDeclarationOverlap,
+            {
+                "WhenDeclarationOverlap",
+                "Two declarations of '{0}' both apply to the type '{1}': '{2}' and '{3}'.",
+                "A 'when' condition is what makes two declarations of one signature different overloads (design principles 4.4): each must cover the types the other does not. Narrow the conditions so that no type satisfies both, or give the declarations parameter types that cannot both accept one call.",
+            },
+        },
+        {
             SemanticDiag::NativeDeclarationForeignOperator,
             {
                 "NativeDeclarationForeignOperator",
@@ -1362,6 +1370,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "ParamArgumentCallee",
                 "The argument '{0}' is given by name, and the signature of '{1}' is not known where the call is written.",
                 "Name one function, or give the arguments positionally.",
+            },
+        },
+        {
+            SemanticDiag::OverloadParameterNames,
+            {
+                "OverloadParameterNames",
+                "The argument '{0}' is given by name, and the overloads of '{1}' do not name the parameter at that position the same way.",
+                "Give every overload the same parameter names at the same positions, or give the arguments positionally.",
             },
         },
         {

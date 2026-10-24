@@ -267,9 +267,25 @@ DraftGraphCloneResult cloneRuntimeGraphIntoDraft(
     std::vector<std::vector<gc_node_ref_t>> pendingNormInputs;
     std::vector<std::vector<gc_node_ref_t>> pendingWithInputs;
     std::vector<std::vector<gc_node_ref_t>> pendingCtrlInputs;
+    std::vector<std::vector<gc_node_ref_t>> pendingOrderInputs;
+    std::vector<std::vector<gc_node_ref_t>> pendingSyncInputs;
     pendingNormInputs.reserve(sourceGraph->nodeCount());
     pendingWithInputs.reserve(sourceGraph->nodeCount());
     pendingCtrlInputs.reserve(sourceGraph->nodeCount());
+    pendingOrderInputs.reserve(sourceGraph->nodeCount());
+    pendingSyncInputs.reserve(sourceGraph->nodeCount());
+    // The two orderings that are side arrays of a frozen graph (GCGraph::orderPredsOf,
+    // GCGraph::syncPredsOf) travel with the nodes they join: a clone is the same code, so the
+    // statements of a copied block keep the chain they were written in
+    // (docs/design/effects/edges.cn.md 1.5).
+    const auto remappedPreds = [&](auto edges) {
+        std::vector<gc_node_ref_t> preds;
+        preds.reserve(edges.size());
+        for (const auto &edge : edges) {
+            preds.push_back(remapNodeRef(edge.pred, result.sourceToCloned));
+        }
+        return preds;
+    };
 
     ordinal = 0;
     for (auto it = sourceGraph->nodes().begin(); it != sourceGraph->nodes().end(); ++it) {
@@ -291,6 +307,8 @@ DraftGraphCloneResult cloneRuntimeGraphIntoDraft(
             remapNodeSpan(sourceGraph->withInputsOf(sourceRef), result.sourceToCloned));
         pendingCtrlInputs.push_back(
             remapNodeSpan(sourceGraph->ctrlInputsOf(sourceRef), result.sourceToCloned));
+        pendingOrderInputs.push_back(remappedPreds(sourceGraph->orderPredsOf(sourceRef)));
+        pendingSyncInputs.push_back(remappedPreds(sourceGraph->syncPredsOf(sourceRef)));
         CAMEL_LOG_INFO_S("DraftClone", "Clone remapped inputs for sourceRef={}.", sourceRef);
 
         CAMEL_LOG_INFO_S("DraftClone", "Clone payload for sourceRef={}.", sourceRef);
@@ -392,6 +410,8 @@ DraftGraphCloneResult cloneRuntimeGraphIntoDraft(
         owner.setNormInputs(clonedId, pendingNormInputs[i]);
         owner.setWithInputs(clonedId, pendingWithInputs[i]);
         owner.setCtrlInputs(clonedId, pendingCtrlInputs[i]);
+        owner.setOrderInputs(clonedId, pendingOrderInputs[i]);
+        owner.setSyncInputs(clonedId, pendingSyncInputs[i]);
     }
     CAMEL_LOG_INFO_S("DraftClone", "Clone patched cloned node inputs.");
 
@@ -450,9 +470,13 @@ DraftGraphCloneResult cloneDraftGraphIntoDraft(
     std::vector<std::vector<gc_node_ref_t>> pendingNormInputs;
     std::vector<std::vector<gc_node_ref_t>> pendingWithInputs;
     std::vector<std::vector<gc_node_ref_t>> pendingCtrlInputs;
+    std::vector<std::vector<gc_node_ref_t>> pendingOrderInputs;
+    std::vector<std::vector<gc_node_ref_t>> pendingSyncInputs;
     pendingNormInputs.reserve(ordinal);
     pendingWithInputs.reserve(ordinal);
     pendingCtrlInputs.reserve(ordinal);
+    pendingOrderInputs.reserve(ordinal);
+    pendingSyncInputs.reserve(ordinal);
 
     ordinal = 0;
     for (gc_node_ref_t sourceRef = 0; sourceRef < sourceDraft.nodeSlotCount(); ++sourceRef) {
@@ -468,6 +492,12 @@ DraftGraphCloneResult cloneDraftGraphIntoDraft(
             remapNodeSpan(sourceDraft.withInputsOf(sourceRef), result.sourceToCloned));
         pendingCtrlInputs.push_back(
             remapNodeSpan(sourceDraft.ctrlInputsOf(sourceRef), result.sourceToCloned));
+        // The two orderings travel with the nodes they join: the copied statements keep the chain
+        // the source block wrote them in (docs/design/effects/edges.cn.md 1.5).
+        pendingOrderInputs.push_back(
+            remapNodeSpan(sourceDraft.orderInputsOf(sourceRef), result.sourceToCloned));
+        pendingSyncInputs.push_back(
+            remapNodeSpan(sourceDraft.syncInputsOf(sourceRef), result.sourceToCloned));
 
         const std::vector<std::byte> payload =
             clonePayloadBytes(owner, sourceDraft, sourceRef, result.sourceToCloned);
@@ -525,6 +555,8 @@ DraftGraphCloneResult cloneDraftGraphIntoDraft(
         owner.setNormInputs(clonedId, pendingNormInputs[i]);
         owner.setWithInputs(clonedId, pendingWithInputs[i]);
         owner.setCtrlInputs(clonedId, pendingCtrlInputs[i]);
+        owner.setOrderInputs(clonedId, pendingOrderInputs[i]);
+        owner.setSyncInputs(clonedId, pendingSyncInputs[i]);
     }
 
     auto remapDraftRefs = [&](std::span<const gc_node_ref_t> refs,

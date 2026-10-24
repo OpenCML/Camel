@@ -628,12 +628,12 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
 [[tests]]
 name = "rules.tensor_laws_counts"
-desc = "The tensor element laws of the standard rules, by operator count: `tensor_f32_combine` folds x*3 + x*5 under the default reassociate, the mixed and the product-chain laws wait for the permissions their guards name, `tensor_f32_double` (exact doubling) needs none, the bare-operand laws fold x*c + x with the same permissions as the two-term combine, `tensor_f32_add_self` turns t + t into t*2, the neutral laws reach a bare tensor, coefficients f32 does not hold exactly are left alone, and an i64 tensor keeps its own add (the f32 laws are typed and must not read it)."
+desc = "The tensor element laws of the standard rules, by operator count: `tensor_f32_combine` folds x*3 + x*5 under the default reassociate, the mixed and the product-chain laws wait for the permissions their guards name, `tensor_f32_double` (exact doubling) needs none, the bare-operand laws fold x*c + x with the same permissions as the two-term combine, `tensor_f32_add_self` turns t + t into t*2, the neutral laws reach a bare tensor, a coefficient is an f32 value (the tensor's element type) so `inexact` folds as any other f32 pair does, and an i64 tensor keeps its own add (the f32 laws are typed and must not read it)."
 kind = "behavior"
 case = "../../../cases/modules/rules/tensor_target.cml"
 args = ["${case}", "tensor_counts::report", "rules::simplify", "tensor_counts::report", "std::nvm"]
 expect_exit = 0
-expect_stdout_contains = ["combine 1 2\ncombine_mixed 1 2\ncombine_mixed_granted 1 2\nfold 0 2\nfold_granted 0 2\ndouble 1 2\nself 1 0\none 1 1\none_other 1 1\none_mixed 1 1\none_mixed_granted 1 1\nneutral 1 1\ninexact 1 2\ninexact_one 1 1\ni64_self 1 0\ni64_distribute 1 1\ncombine 0 1\ncombine_mixed 1 2\ncombine_mixed_granted 0 1\nfold 0 2\nfold_granted 0 1\ndouble 0 1\nself 0 1\none 0 1\none_other 0 1\none_mixed 1 1\none_mixed_granted 0 1\nneutral 0 0\ninexact 1 2\ninexact_one 1 1\ni64_self 1 0\ni64_distribute 1 1\n"]
+expect_stdout_contains = ["combine 1 2\ncombine_mixed 1 2\ncombine_mixed_granted 1 2\nfold 0 2\nfold_granted 0 2\ndouble 1 2\nself 1 0\none 1 1\none_other 1 1\none_mixed 1 1\none_mixed_granted 1 1\nneutral 1 1\ninexact 1 2\ninexact_one 1 1\ni64_self 1 0\ni64_distribute 1 1\ncombine 0 1\ncombine_mixed 1 2\ncombine_mixed_granted 0 1\nfold 0 2\nfold_granted 0 1\ndouble 0 1\nself 0 1\none 0 1\none_other 0 1\none_mixed 1 1\none_mixed_granted 0 1\nneutral 0 0\ninexact 0 1\ninexact_one 0 1\ni64_self 1 0\ni64_distribute 1 1\n"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -1141,24 +1141,24 @@ normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trai
 timeout_ms = 10000
 
 [[tests]]
-name = "rules.const_parameter_type_refuses_another_type"
-desc = "The matcher checks a `const` parameter's declared type (rewrite design 2 (second version) 1: `const c: T` matches only a constant of type `T`; reviews/stdlib-rules.md item 2: the `isI32`-style helpers are deleted). A tensor coefficient is an f64 constant even under an f32 element type, so the rule declared for an f32 coefficient must not read `x * 3.0`: the product stays and the sum is 18.0."
+name = "rules.const_parameter_type_reads_its_own_type"
+desc = "The matcher checks a `const` parameter's declared type (rewrite design 2 (second version) 1: `const c: T` matches only a constant of type `T`; reviews/stdlib-rules.md item 2: the `isI32`-style helpers are deleted). A coefficient takes the type of the value it multiplies, so the rule declared for an f32 coefficient reads the tensor's `x * 3.0` (6.0) and leaves the scalar's f64 coefficient alone (15.0)."
 kind = "behavior"
 case = "../../../cases/modules/rules/const_type.cml"
 args = ["${case}", "const_type::by_f32", "std::nvm"]
 expect_exit = 0
-expect_stdout_contains = ["18.0\n"]
+expect_stdout_contains = ["6.0\n15.0\n"]
 normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
 timeout_ms = 10000
 
 [[tests]]
-name = "rules.const_parameter_type_reads_its_own_type"
-desc = "The other half of the same pair: the rule whose `const` parameter is declared f64 does read the f64 coefficient of `x * 3.0`, so the product is replaced and the sum is 6.0. Without it, `rules.const_parameter_type_refuses_another_type` would pass for a rule that never fires at all."
+name = "rules.const_parameter_type_refuses_another_type"
+desc = "The other half of the same pair: the rule declared for an f64 coefficient reads the scalar program's and leaves the tensor's f32 coefficient alone (18.0). Without it, `rules.const_parameter_type_reads_its_own_type` would pass for a rule that never fires at all."
 kind = "behavior"
 case = "../../../cases/modules/rules/const_type.cml"
 args = ["${case}", "const_type::by_f64", "std::nvm"]
 expect_exit = 0
-expect_stdout_contains = ["6.0\n"]
+expect_stdout_contains = ["18.0\n5.0\n"]
 normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
 timeout_ms = 10000
 

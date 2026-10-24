@@ -1,8 +1,10 @@
 /**
  * Local algebra on elementwise tensor operators (design principles 7.3): the operators
  * declare the laws it uses (OperatorSemantics::binary), so a tensor expression is rewritten as the
- * scalar one is, under the same policy. Coefficients are scalar constants the element type holds
- * exactly; the other operand has the type of the result.
+ * scalar one is, under the same policy. A coefficient is a literal beside the tensor, so it takes
+ * the tensor's element type (5.1) and is a value the element type holds exactly; a scalar of
+ * another type is refused at the call rather than narrowed, and `rounded_coefficients` writes the
+ * ones f32 rounds to show that the law reads them as the f32 values they are.
  */
 module algebra_tensor
 
@@ -23,7 +25,7 @@ func chain(x: Vec): Vec {
     return (x * 3.0) * 2.0
 }
 
-func inexact(x: Vec): Vec {
+func rounded_coefficients(x: Vec): Vec {
     return x * 0.1 + x * 0.2
 }
 
@@ -38,7 +40,7 @@ func main(): int sync {
     println(merged(x))
     println(merged_explicit(x))
     println(chain(x))
-    println(inexact(x))
+    println(rounded_coefficients(x))
     println(shared_product(x))
     return 0
 }

@@ -379,6 +379,13 @@ compile_graph_ptr_t Builder::instantiateGenericAs(
         }
     }
     compile_graph_ptr_t graph = instantiateGeneric(tmpl, bindings, {}, {}, origin);
+    if (graph == nullptr) {
+        // The body does not compile for these types, and a scope is open: the attempt may be one
+        // this position should try past (`SpeculativeInstantiation`), and what the body said is
+        // kept there. Outside a scope `instantiateGeneric` has already reported and thrown.
+        why = "its body does not compile for these types";
+        return nullptr;
+    }
     if (!graph->funcType()->hasExitType()) {
         diags_->of(SemanticDiag::CallingIncompleteFunction)
             .atOrigin(origin->origin())
@@ -433,6 +440,10 @@ Builder::genericValueFor(node_handle_t node, Type *expected, const GCT::node_ptr
                     candidates.front()->name + "'");
         }
         std::string why;
+        // A candidate whose body does not compile for the types this position fixes is not the
+        // function it wants: the attempts are quiet about their bodies, and what they said is
+        // reported only when not one of the candidates is usable (SpeculativeInstantiation).
+        SpeculativeInstantiation quiet(*this);
         for (const auto &candidate : candidates) {
             std::string reason;
             if (compile_graph_ptr_t graph = instantiateGenericAs(
@@ -442,6 +453,7 @@ Builder::genericValueFor(node_handle_t node, Type *expected, const GCT::node_ptr
             }
             why = reason;
         }
+        quiet.attach();
         rejectGenericValue(candidates.front(), origin, why);
     }
     const generic_template_ptr_t tmpl = candidates.empty() ? nullptr : candidates.front();
@@ -864,33 +876,44 @@ compile_graph_ptr_t Builder::instantiateForCall(
     // it is passed to, with what is known so far, is the function it has to be; its instance
     // then says what is still open in that parameter (its return type).
     std::vector<std::string> reasons(waiting.size());
-    for (bool progress = true; progress;) {
-        progress = false;
-        for (size_t i = 0; i < waiting.size(); ++i) {
-            if (!waiting[i]) {
-                continue;
+    {
+        // A candidate here is tried for the parameter it is passed to, and one whose body does not
+        // compile for the types so far is not one that can be given them: those bodies are quiet
+        // (`SpeculativeInstantiation`) and the search goes on. Every other diagnostic this function
+        // makes -- the argument form, a `constas` value that is not constant, a condition that
+        // cannot be answered -- is the call's verdict and is reported the moment it is made.
+        SpeculativeInstantiation attempts(*this);
+        for (bool progress = true; progress;) {
+            progress = false;
+            for (size_t i = 0; i < waiting.size(); ++i) {
+                if (!waiting[i]) {
+                    continue;
+                }
+                Type *wanted = substituteTypeVars(patternAt(i), bindings);
+                if (wanted->code() != TypeCode::Function) {
+                    reasons[i] = wanted->code() == TypeCode::TypeVar
+                                     ? "its parameter has no type of its own for it to take"
+                                     : "its parameter is not a function";
+                    continue;
+                }
+                compile_graph_ptr_t instance = instantiateGenericAs(
+                    waiting[i],
+                    tt::as_ptr<FunctionType>(wanted),
+                    inputAt(i).expr,
+                    reasons[i]);
+                if (instance == nullptr) {
+                    continue;
+                }
+                inputAt(i).node = createFuncDataNode(instance, true, false);
+                typeAt(i)       = valueTypeOf(nodeTypeOf(inputAt(i).node));
+                waiting[i]      = nullptr;
+                unifyTypeVars(patternAt(i), actualAt(i), bindings);
+                progress = true;
             }
-            Type *wanted = substituteTypeVars(patternAt(i), bindings);
-            if (wanted->code() != TypeCode::Function) {
-                reasons[i] = wanted->code() == TypeCode::TypeVar
-                                 ? "its parameter has no type of its own for it to take"
-                                 : "its parameter is not a function";
-                continue;
-            }
-            compile_graph_ptr_t instance = instantiateGenericAs(
-                waiting[i],
-                tt::as_ptr<FunctionType>(wanted),
-                inputAt(i).expr,
-                reasons[i]);
-            if (instance == nullptr) {
-                continue;
-            }
-            inputAt(i).node = createFuncDataNode(instance, true, false);
-            typeAt(i)       = valueTypeOf(nodeTypeOf(inputAt(i).node));
-            waiting[i]      = nullptr;
-            unifyTypeVars(patternAt(i), actualAt(i), bindings);
-            progress = true;
         }
+        // The function this call takes is decided: past here the builder reports where it always
+        // did, so the instance the call takes is built with its own errors being the program's.
+        attempts.close();
     }
     std::vector<std::string> names, open;
     collectTypeVars(signature, names);
@@ -1162,6 +1185,11 @@ void Builder::settleGenericOperatorArguments(
         std::vector<std::string> names;
         collectTypeVars(signature, names);
         std::string tried;
+        // The instances the types of the other arguments suggest are candidates, not the answer: one
+        // whose body does not compile for the types it was tried with is simply not one this
+        // operator accepts, so the bodies tried are quiet and what they said is reported only when
+        // the name cannot stand for any of them (SpeculativeInstantiation).
+        SpeculativeInstantiation quiet(*this);
         // An instance that was built and that the operator then refused (its result type
         // is not what the operator needs): the first one stands for the name, so that the
         // operator's own diagnostic says what does not fit.
@@ -1251,11 +1279,13 @@ void Builder::settleGenericOperatorArguments(
         if (tmpl->name.empty()) {
             // The element function of a list comprehension: nothing to take `x` from.
             Type *source = !normTypes.empty() ? valueTypeOf(normTypes.front()) : nullptr;
+            quiet.attach();
             diags_->of(SemanticDiag::ComprehensionSourceRefused)
                 .atOrigin(call->origin())
                 .commit(source != nullptr ? source->toString() : std::string("void"));
             throw BuildAbortException();
         }
+        quiet.attach();
         rejectGenericValue(
             tmpl,
             arg.expr,
@@ -1359,6 +1389,12 @@ compile_graph_ptr_t Builder::instantiateGeneric(
         if (sameBindings(instance.bindings) && instance.extents == extents &&
             sameConstas(instance.constas)) {
             if (instance.failed) {
+                // Built once and it did not compile for these types. Outside a scope that is the
+                // program's error as much as it was the first time; inside one the answer is "no
+                // instance", and nothing is reported that was not reported before.
+                if (speculative_ != nullptr) {
+                    return nullptr;
+                }
                 throw BuildAbortException();
             }
             // A recursive call of the instance being built can share its graph, but only once
@@ -1493,9 +1529,26 @@ compile_graph_ptr_t Builder::instantiateGeneric(
         }
     };
 
+    // Whatever the body of this instance says goes to the scope's sink while it is built: a body
+    // that does not compile for the types it was tried with may belong to a candidate nobody wants,
+    // and it is the one thing a search is allowed to hold back (`SpeculativeInstantiation`). With no
+    // scope open this changes nothing.
+    BodyDiagnostics bodyDiags(*this);
     const size_t instanceIndex = tmpl->instances.size();
     const size_t diagsBefore   = diags_->count();
     const size_t errorsBefore  = diags_->count(Severity::Error);
+    // The bookkeeping of a body that failed, wherever it failed: the instance is remembered as
+    // failed (a second attempt at the same types is answered without building it again), and what
+    // it said is located and labelled as the instance's.
+    const auto markFailed = [&] {
+        if (instanceIndex < tmpl->instances.size()) {
+            tmpl->instances[instanceIndex].failed = true;
+        }
+        if (foreign) {
+            diags_->locateByOriginFrom(diagsBefore);
+        }
+        diags_->addRelatedToErrorsFrom(diagsBefore, instanceLabel, 3);
+    };
     compile_graph_ptr_t graph;
     try {
         BuildState saved(*this, *tmpl);
@@ -1576,24 +1629,28 @@ compile_graph_ptr_t Builder::instantiateGeneric(
         }
         buildFuncBody(tmpl->func, graph, funcType, instanceName, tags);
         leaveScope();
+    } catch (const BuildAbortException &) {
+        markFailed();
+        // A body that does not compile for the types it was tried with is not a function this
+        // position necessarily wants: inside a scope the attempt is answered with "no instance" and
+        // what the body said stays in the scope's sink (`SpeculativeInstantiation`). Outside one the
+        // diagnostic stands and the build aborts, as it always did.
+        if (speculative_ != nullptr) {
+            return nullptr;
+        }
+        throw;
     } catch (...) {
-        if (instanceIndex < tmpl->instances.size()) {
-            tmpl->instances[instanceIndex].failed = true;
-        }
-        if (foreign) {
-            diags_->locateByOriginFrom(diagsBefore);
-        }
-        diags_->addRelatedToErrorsFrom(diagsBefore, instanceLabel, 3);
+        // Not a language error: nothing about it is the caller's to judge.
+        markFailed();
         throw;
     }
     // A statement of the body that fails is skipped so that the rest is still checked; the
     // instance is unusable all the same.
     if (diags_->count(Severity::Error) > errorsBefore) {
-        tmpl->instances[instanceIndex].failed = true;
-        if (foreign) {
-            diags_->locateByOriginFrom(diagsBefore);
+        markFailed();
+        if (speculative_ != nullptr) {
+            return nullptr;
         }
-        diags_->addRelatedToErrorsFrom(diagsBefore, instanceLabel, 3);
         throw BuildAbortException();
     }
     return graph;

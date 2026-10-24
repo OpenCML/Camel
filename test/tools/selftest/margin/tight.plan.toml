@@ -1,15 +1,33 @@
 # Fixture of test/tools/selftest/load-class/run.mjs. It is not under test/plans: its shape is a
-# wall-clock bound with no margin, and the runner must report exactly that.
+# bound with no margin, and the runner must report exactly that.
+#
+# The work is the test's own **CPU time**, not waiting: the margin rule reads the work's CPU time,
+# so a fixture that waited would be a test with no work against a bound with room to spare, and
+# would prove the opposite of what it is here for.
+#
+# The work is spread over eight workers for a reason that is measured rather than neat. A bound
+# under four times the work is by definition a bound with no room for a busy host, and one thread
+# burning that work has to be scheduled for it: 400 ms of CPU on one thread took 970-1040 ms of wall
+# inside a -Jobs 8 gate, so a 1000 ms bound killed the fixture before the margin rule could speak
+# and the self-test went red for the wrong reason. burn_parallel.mjs stops every worker at its own
+# wall deadline, so the wall cannot run away, and the CPU figure the rule reads is the sum over the
+# workers -- which is what the reading is (test/tools/child-cpu.mjs sums the tree).
+#
+# Measured in -Jobs 8 gates on the shared host: 1400 ms of CPU against 857 ms of wall, and 800 ms of
+# CPU against 1014 ms of wall -- the sum moves with the cores the host hands out, which is why the
+# bound sits between the two sides rather than at either end. 1600 ms leaves the wall half again as
+# much room as it has needed, and is still under the 4x margin of the CPU figure even when the host
+# grants the workers a third of a core between them.
 id = "selftest.load_class.tight"
 order = 1
 tier = "fast"
 
 [[tests]]
 name = "tight_bound"
-desc = "400 ms of work against a 1000 ms timeout: less than the 4x margin."
+desc = "eight workers of CPU work against a 1600 ms timeout: less than the 4x margin."
 kind = "behavior"
 tool = "node"
-case = "../load-class/sleep.mjs"
-args = ["${case}", "400"]
+case = "burn_parallel.mjs"
+args = ["${case}", "400", "8"]
 expect_exit = 0
-timeout_ms = 1000
+timeout_ms = 1600

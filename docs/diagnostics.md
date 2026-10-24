@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-255 diagnostics: 236 errors, 19 warnings.
+257 diagnostics: 238 errors, 19 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -222,6 +222,8 @@ prints one entry.
 | `0x030001DB` | [SemanticDiag::ImplSignatureMismatch](#implsignaturemismatch) | Error |
 | `0x030001DC` | [SemanticDiag::ImplKernelNotBodyless](#implkernelnotbodyless) | Error |
 | `0x030001DE` | [SemanticDiag::NodeOfNotAParameter](#nodeofnotaparameter) | Error |
+| `0x030001DF` | [SemanticDiag::OverloadParameterNames](#overloadparameternames) | Error |
+| `0x030001E0` | [SemanticDiag::WhenDeclarationOverlap](#whendeclarationoverlap) | Error |
 | `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
@@ -5594,23 +5596,23 @@ The 'with' argument '{0}' is given by name, and the signature of '{1}' is not kn
 Name the one function the binding is for, or give the 'with' arguments positionally.
 ```
 
-**Example** (`test/cases/compile/with_defaults/callee_unknown.cml`, run as `camel test/cases/compile/with_defaults/callee_unknown.cml`)
+**Example** (`test/cases/compile/with_defaults/overload_default_hole.cml`, run as `camel test/cases/compile/with_defaults/overload_default_hole.cml`)
 
 ```camel
-module with_argument_callee
+module with_overload_default_hole
 
-with <rounds: int = 8>
-func f(x: int): int {
-    return x + rounds
+with <rounds: int = 8, label: string = 'x'>
+func show(a: int): int {
+    return a * rounds
 }
 
-with <rounds: int = 8>
-func f(x: string): string {
-    return x
+with <rounds: int = 8, label: string = 'x'>
+func show(a: string): int {
+    return rounds
 }
 
 func main(): int sync {
-    return f<rounds: 2>(1)
+    return show<label: 'p'>(3)
 }
 ```
 
@@ -6042,21 +6044,21 @@ The argument '{0}' is given by name, and the signature of '{1}' is not known whe
 Name one function, or give the arguments positionally.
 ```
 
-**Example** (`test/cases/compile/param_defaults/callee_unknown.cml`, run as `camel test/cases/compile/param_defaults/callee_unknown.cml`)
+**Example** (`test/cases/compile/param_defaults/overload_default_hole.cml`, run as `camel test/cases/compile/param_defaults/overload_default_hole.cml`)
 
 ```camel
-module param_argument_callee
+module param_overload_default_hole
 
-func f(x: int): int {
-    return x
+func f(a: int, b: int = 0): int {
+    return a * 10 + b
 }
 
-func f(x: int, y: int): int {
-    return x + y
+func f(a: int, b: int, c: int = 0): int {
+    return a * 100 + b * 10 + c
 }
 
 func main(): int sync {
-    return f(1, y: 2)
+    return f(a: 1, c: 3)
 }
 ```
 
@@ -6431,6 +6433,94 @@ func scaled(x: int): int { return x * 2 }
 
 func main(): int sync {
     println(scaled(21))
+    return 0
+}
+```
+
+### OverloadParameterNames
+
+`0x030001DF` · Error · `SemanticDiag::OverloadParameterNames`
+
+**Message**
+
+```text
+The argument '{0}' is given by name, and the overloads of '{1}' do not name the parameter at that position the same way.
+```
+
+**Help**
+
+```text
+Give every overload the same parameter names at the same positions, or give the arguments positionally.
+```
+
+**Example** (`test/cases/compile/param_defaults/overload_names.cml`, run as `camel test/cases/compile/param_defaults/overload_names.cml`)
+
+```camel
+module param_overload_names
+
+func f(a: int, b: int): int {
+    return a * 10 + b
+}
+
+func f(a: int, c: string): int {
+    return a * 10
+}
+
+func main(): int sync {
+    return f(a: 1, b: 2)
+}
+```
+
+### WhenDeclarationOverlap
+
+`0x030001E0` · Error · `SemanticDiag::WhenDeclarationOverlap`
+
+**Message**
+
+```text
+Two declarations of '{0}' both apply to the type '{1}': '{2}' and '{3}'.
+```
+
+**Help**
+
+```text
+A 'when' condition is what makes two declarations of one signature different overloads (design principles 4.4): each must cover the types the other does not. Narrow the conditions so that no type satisfies both, or give the declarations parameter types that cannot both accept one call.
+```
+
+**Example** (`test/cases/compile/native/when_arms_overlap.cml`, run as `camel test/cases/compile/native/when_arms_overlap.cml`)
+
+```camel
+module when_arms_overlap
+
+func is_small_int::<T>(): bool {
+    return match type T {
+        case i32 => true
+        case _ => false
+    }
+}
+
+func is_number::<T>(): bool {
+    return match type T {
+        case int | i32 | float | f32 => true
+        case _ => false
+    }
+}
+
+#op<':op/add_i'>
+func arms_kernel::<T>(a: T, b: T): T when is_small_int::<T>()
+
+#op<':op/sub_i'>
+func arms_kernel::<T>(a: T, b: T): T when is_number::<T>()
+
+#impl<arms_kernel>
+func combine::<T>(a: T, b: T): T {
+    return a * b
+}
+
+func main(): int sync {
+    let x: i32 = 19
+    let y: i32 = 23
+    println(combine(x, y))
     return 0
 }
 ```
@@ -7842,7 +7932,7 @@ func main(): int sync {
 **Help**
 
 ```text
-The `#gpu` tag promises that the device runs everything written in the function or block. Remove the tag, or rewrite the scope so that every operator in it has a device implementation; `--devices cpu` runs the whole program on the host.
+The `#gpu` tag promises that the device runs everything written in the function or block. Remove the tag, write the part the device cannot run under `#cpu`, or rewrite the scope so that every operator in it has a device implementation; `--devices cpu` runs the whole program on the host.
 ```
 
 **Example** (`test/cases/modules/tiles/gpu_scope_refusal.cml`, run as `CUDA_VISIBLE_DEVICES=-1 camel test/cases/modules/tiles/gpu_scope_refusal.cml tiles::compile std::nvm`)
@@ -7925,7 +8015,7 @@ func main(): int sync {
 **Message**
 
 ```text
-`#gpu` scope '{0}': operator '{1}' has no device program ({2}).
+`#gpu` scope '{0}': {1} ({2}).
 ```
 
 **Help**

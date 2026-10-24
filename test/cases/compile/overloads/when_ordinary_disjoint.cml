@@ -1,0 +1,40 @@
+/**
+ * Two ordinary functions of one name and one signature, told apart by their `when` conditions
+ * (design principles 4.4; the language author's ruling of 2026-10-24 on `impl-declaration-arms`,
+ * `docs/handover/reviews/questions-2026-10-23.md`): "规则统一：同一检查适用于所有带 `when` 的同名
+ * 重载（有函数体的普通函数也一样），不是 `#impl` 声明的特例".
+ *
+ * A condition of a function with a body is read when the declarations of its name are compared, so
+ * the two `label` declarations stand here where the second of them was a
+ * `SemanticDiag::Redeclaration` before. Only one of the two conditions can hold for a function
+ * whose parameters are `int` (`is_int::<int>()`), so every call of `label` is the first declaration;
+ * a compiler that took the pair by the order it is written in would be free to take either.
+ */
+module when_ordinary_disjoint
+
+func is_int::<T>(): bool {
+    return match type T {
+        case int => true
+        case _ => false
+    }
+}
+
+func is_text::<T>(): bool {
+    return match type T {
+        case string => true
+        case _ => false
+    }
+}
+
+func label(x: int): string when is_int::<int>() {
+    return 'integer'
+}
+
+func label(x: int): string when is_text::<int>() {
+    return 'text'
+}
+
+func main(): int sync {
+    println(label(7))
+    return 0
+}

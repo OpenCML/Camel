@@ -395,6 +395,9 @@ timeout_ms = 20000
 
 [[tests]]
 name = "gc.rewrite_condition_keeps_drafts_rooted"
+# Fast layer: one rewrite pass over a nine-node program (measured ~0.1 s Release at -Jobs 1), and
+# the slow tier is what let the rooting regression this guards against land unnoticed.
+tier = "fast"
 desc = "A rule with a `when` condition rewrites a program of several functions while every safepoint moves the young objects: the condition is Camel code, so the rewrite session must keep the static values of every draft it has opened relocatable until the commit reads them again, not only those of the draft being rewritten."
 kind = "behavior"
 case = "../../../cases/modules/rules/when_target.cml"
@@ -407,6 +410,8 @@ timeout_ms = 20000
 
 [[tests]]
 name = "gc.saturation_condition_keeps_drafts_rooted"
+# Fast layer: the same reason as the case above, measured at the same cost.
+tier = "fast"
 desc = "The saturation engine with a conditional rule over a program that holds string constants: the drafts of the graphs saturated before the last one keep their static values across the safepoints the conditions reach."
 kind = "behavior"
 case = "../../../cases/modules/rules/extract_boundary.cml"

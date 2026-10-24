@@ -1,7 +1,8 @@
 /**
  * Prints the tensor add and product counts of the tensor target, so the test can see which law
  * fired: `combine` and `double` by default, `fold_granted` and the mixed laws only where the
- * function grants the permission they need, and `inexact` never (its coefficients are not f32).
+ * function grants the permission they need, and `inexact` too, because its coefficients are the
+ * f32 values the source writes: a coefficient beside a tensor takes the element type.
  */
 module tensor_counts
 

@@ -70,6 +70,14 @@ bool typesCanAgree(
     if (left->code() == TypeCode::TypeVar) {
         const auto *var = static_cast<const TypeVarType *>(left);
         if (const auto bound = leftBindings.find(var->name()); bound != leftBindings.end()) {
+            if (bound->second == left) {
+                // The variable is bound to itself: two signatures that write the same variable
+                // name in two parameters of one kind (`k::<T>(a: T, b: T)` twice) equate it with
+                // itself here, and following that binding again asks the same question forever
+                // (such a pair used to run the compiler out of stack). The binding already
+                // answers this question, and the answer is yes.
+                return true;
+            }
             return typesCanAgree(bound->second, right, leftBindings, rightBindings);
         }
         leftBindings.emplace(var->name(), right);
@@ -78,6 +86,9 @@ bool typesCanAgree(
     if (right->code() == TypeCode::TypeVar) {
         const auto *var = static_cast<const TypeVarType *>(right);
         if (const auto bound = rightBindings.find(var->name()); bound != rightBindings.end()) {
+            if (bound->second == right) {
+                return true; // the mirror of the case above
+            }
             return typesCanAgree(left, bound->second, leftBindings, rightBindings);
         }
         rightBindings.emplace(var->name(), left);
@@ -529,7 +540,24 @@ void Builder::declareNativeOperator(const GCT::node_ptr_t &gct) {
     // rule of the language allows (design principles 4.3, 5.1; handover H94, ruling 2). A fixed
     // declaration beside a generic one is no such pair: the fixed one is the more specific, and
     // a call it accepts is its own.
+    //
+    // Two generic declarations whose `when` conditions exclude each other are the exception the
+    // language author ruled on (2026-10-24, "impl-declaration-arms",
+    // docs/handover/reviews/questions-2026-10-23.md): "同名声明按 `when` 互斥分臂就是重载，
+    // `signaturesCanAgree` 忽略 `when` 是缺陷" -- `when` is the applicability condition of an
+    // overload (design principles 4.4), so each declaration covers one family of types and the
+    // two may stand side by side. The conditions are asked about the types the compiler
+    // registers (`separateWhenConditions`): a type that satisfies both is reported with the two
+    // declarations, and a condition the compiler cannot answer leaves the pair refused as before.
     const bool generic = resolver->fixedSignature() == nullptr;
+    const auto *ownWhen = GCT::Tree::of(gct)->whenOf(gct);
+    const auto ask = [this](const GCT::node_ptr_t &condition, FunctionType *signature,
+                            const ModuleUnit *unit,
+                            const camel::core::type::type_bindings_t &bindings) {
+        // The condition belongs to the declaration that wrote it and is answered in that
+        // declaration's module, wherever the pair is being checked (evaluateWhenCondition).
+        return evaluateWhenCondition(condition, signature, bindings, {}, nullptr, unit);
+    };
     for (auto &group : unit_->nativeOperators) {
         if (group.name != name) {
             continue;
@@ -544,13 +572,53 @@ void Builder::declareNativeOperator(const GCT::node_ptr_t &gct) {
                 otherDeclared->fixedSignature() != nullptr) {
                 continue;
             }
-            if (signaturesCanAgree(otherDeclared->funcType(), funcType)) {
-                diags_->of(SemanticDiag::NativeDeclarationOverlap)
-                    .atOrigin(gct->origin())
-                    .commit(
-                        name, otherDeclared->funcType()->toString(), funcType->toString());
-                throw BuildAbortException();
+            if (!signaturesCanAgree(otherDeclared->funcType(), funcType)) {
+                continue;
             }
+            const auto *otherWhen = [&]() -> const GCT::Tree::WhenClause * {
+                const auto found = nativeRuleConditions_.find(other.get());
+                return found == nativeRuleConditions_.end() ? nullptr : &found->second.clause;
+            }();
+            const ModuleUnit *otherUnit = [&]() -> const ModuleUnit * {
+                const auto found = nativeRuleConditions_.find(other.get());
+                return found == nativeRuleConditions_.end() ? unit_ : found->second.unit;
+            }();
+            if (ownWhen != nullptr && otherWhen != nullptr) {
+                SpeculativeInstantiation quiet(*this);
+                std::string overlappingType;
+                const ConditionSeparation separation = separateWhenConditions(
+                    ownWhen->condition,
+                    otherWhen->condition,
+                    [&](const camel::core::type::type_bindings_t &bindings) {
+                        return ask(ownWhen->condition, funcType, unit_, bindings);
+                    },
+                    [&](const camel::core::type::type_bindings_t &bindings) {
+                        return ask(
+                            otherWhen->condition, otherDeclared->funcType(), otherUnit, bindings);
+                    },
+                    overlappingType);
+                if (separation == ConditionSeparation::Disjoint) {
+                    // One family of element types each: this rule is the executor of the
+                    // instances its own condition admits, and of no others (declaredRuleApplies).
+                    continue;
+                }
+                if (separation == ConditionSeparation::Overlapping) {
+                    // A rule of one name and one signature is told from its sibling by its
+                    // condition alone, so the report names each declaration by both.
+                    diags_->of(SemanticDiag::WhenDeclarationOverlap)
+                        .atOrigin(gct->origin())
+                        .commit(
+                            name,
+                            overlappingType,
+                            otherDeclared->funcType()->toString() + " — when " + otherWhen->text,
+                            funcType->toString() + " — when " + ownWhen->text);
+                    throw BuildAbortException();
+                }
+            }
+            diags_->of(SemanticDiag::NativeDeclarationOverlap)
+                .atOrigin(gct->origin())
+                .commit(name, otherDeclared->funcType()->toString(), funcType->toString());
+            throw BuildAbortException();
         }
     }
     if (auto graphs = graphScope_->get(name, false); graphs.has_value()) {

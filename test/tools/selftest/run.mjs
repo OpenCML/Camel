@@ -682,7 +682,7 @@ for (const entry of RULELESS_ALLOWED) {
     }
 }
 
-// --- every plan file is reachable from a case path (H201) -------------------------------------
+// --- every plan file of the branch is reachable from a case path (H201) ------------------------
 // `--changed` selects plans through files, never through a plan's existence. A plan that no case
 // path selects is a plan the change that breaks its cases never runs, and the H182 per-file check
 // cannot see it: the case files themselves are covered, they just select another plan. Both sides
@@ -690,6 +690,17 @@ for (const entry of RULELESS_ALLOWED) {
 // `case` entries each one names (resolved the way the runner resolves them), and the selection
 // `plansForChanges` returns for every case path and its directory. A plan is selected when the
 // selection resolves to its file, or to a directory that contains it.
+//
+// The verdict is about the **branch**, so the population is the plan files git has in its index
+// (H368). A plan file that is only in the working tree -- an agent's scratch plan, written to try a
+// case out and deleted again -- is not one of the branch's plans, and the live tree is shared with
+// whoever is working in it: two gates of another task went red on this check, naming an untracked
+// draft that had nothing to do with the branch under test, and passed again once the draft was
+// removed. Such a file is named as a note instead, so the hole is still visible to the agent that
+// wrote it, and the same file committed makes this check red for real -- which is the gate that
+// matters, because nothing reaches develop uncommitted. The walk itself stays over the directory
+// (a plan file's absence from git is a fact about git, not about the runner), and H182 keeps its
+// own untracked files on purpose: a new class that is not committed yet must still be caught.
 const SELFTEST_PLANS_ROOT = path.join(repoRoot, 'test', 'plans')
 function walkPlanFiles(dir, out = []) {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -700,6 +711,19 @@ function walkPlanFiles(dir, out = []) {
     return out
 }
 const relFromRepo = (candidate) => path.relative(repoRoot, candidate).split(path.sep).join('/')
+const trackedPlanFiles = new Set(
+    execFileSync('git', ['ls-files', '-z', '--cached', '--', 'test/plans'], { cwd: repoRoot, encoding: 'utf8' })
+        .split('\0')
+        .filter(Boolean)
+)
+// The split is only meaningful while git's index actually holds plan files: an index that listed
+// none would turn every plan below into an untracked note and this check would never fire again --
+// a guard that cannot fail is not a guard.
+if (trackedPlanFiles.size === 0) {
+    problems.push(
+        'plan-selection: git lists no plan file in its index under test/plans, so the reachability check below examined nothing (H368)'
+    )
+}
 function planCasePaths(planFile) {
     const text = fs.readFileSync(planFile, 'utf8')
     const cases = []
@@ -754,6 +778,7 @@ function planExemption(planFile, planText) {
 }
 const allPlanFiles = walkPlanFiles(SELFTEST_PLANS_ROOT)
 const unreachablePlans = []
+const scratchPlans = []
 for (const planFile of allPlanFiles) {
     const planText = fs.readFileSync(planFile, 'utf8')
     if (planExemption(planFile, planText)) continue
@@ -763,19 +788,29 @@ for (const planFile of allPlanFiles) {
         candidates.push(relFromRepo(casePath))
         candidates.push(`${relFromRepo(path.dirname(casePath))}/`)
     }
-    if (candidates.length === 0) {
-        unreachablePlans.push(`${relFromRepo(planFile)} (names no case)`)
-        continue
-    }
-    if (!candidates.some((candidate) => selectionSelects(selectionForPath(candidate), planFile))) {
-        const where = relFromRepo(path.dirname(casePaths[0]))
-        unreachablePlans.push(`${relFromRepo(planFile)} (its cases are under ${where}/)`)
-    }
+    const entry = candidates.length === 0
+        ? `${relFromRepo(planFile)} (names no case)`
+        : candidates.some((candidate) => selectionSelects(selectionForPath(candidate), planFile))
+            ? null
+            : `${relFromRepo(planFile)} (its cases are under ${relFromRepo(path.dirname(casePaths[0]))}/)`
+    if (entry === null) continue
+    if (trackedPlanFiles.has(relFromRepo(planFile))) unreachablePlans.push(entry)
+    else scratchPlans.push(entry)
 }
 if (unreachablePlans.length > 0) {
     problems.push(
         `plan-selection: ${unreachablePlans.length} plan file(s) no case path selects, so --changed can never run them: `
         + `${unreachablePlans.join('; ')}. Add a rule that names the plan for the directory its cases live in (H201).`
+    )
+} else if (scratchPlans.length > 0) {
+    // Not a problem: these files are in the working tree and not in git's index, so they are not
+    // the branch's plans (see the block's comment). A scratch plan that no case path selects is
+    // worth saying out loud to whoever left it there, and it is not worth a red run for everyone
+    // else in the tree.
+    console.log(
+        `note: ${scratchPlans.length} untracked plan file(s) under test/plans/ no case path selects, so --changed `
+        + `would never run them if they were committed: ${scratchPlans.join('; ')}. They are not in git's index, `
+        + `so they are not the branch's plans and this check does not fail on them (H368).`
     )
 }
 

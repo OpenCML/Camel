@@ -638,6 +638,17 @@ Type *ArrayType::widened() const {
     return make(elem, std::move(forms), anyRank_, {}, numericUnknown_);
 }
 
+Type *ArrayType::literalOperandType() const {
+    // A literal beside a numeric array is an element of it (`x * 2.0` with `x: f32[3]` is the f32
+    // product), so it takes the element type (design principles 5.1). An array whose element type
+    // nobody fixed (`Tensor`) gives none, and a nested array is not one numeric array.
+    if (numericUnknown_ || elemType_ == nullptr) {
+        return nullptr;
+    }
+    const bool numeric = isNumericScalar(elemTypeCode_) || isComplex(elemTypeCode_);
+    return numeric ? elemType_ : nullptr;
+}
+
 bool ArrayType::extentForms(std::vector<ExtentForm> &out) const {
     out = extents_;
     return true;

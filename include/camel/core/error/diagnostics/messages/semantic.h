@@ -277,6 +277,13 @@ enum class SemanticDiag : uint32_t {
     // Handover H94 (the author's rulings on body-less declarations): 0x17E and up.
     /// Two generic declarations of one name can take the same call (ruling 2).
     NativeDeclarationOverlap = 0x000180,
+    // The language author's ruling of 2026-10-24 on same-named `#impl` declarations split by their
+    // conditions (`docs/handover/reviews/questions-2026-10-23.md`, "impl-declaration-arms"): two
+    // same-named declarations whose `when` conditions are mutually exclusive are overloads and may
+    // stand side by side; a type that satisfies both is this overlap. The conditions are asked about
+    // every type the compiler registers, and a condition it cannot answer leaves the pair refused by
+    // the older code above.
+    WhenDeclarationOverlap = 0x0001E0,
     /// A declaration names an operator of another module (ruling 5).
     NativeDeclarationForeignOperator = 0x000181,
 
@@ -323,6 +330,11 @@ enum class SemanticDiag : uint32_t {
     ParamArgumentMissing = 0x0001CF,
     /// An ordinary argument is given by name where the callee's signature is not known.
     ParamArgumentCallee = 0x0001D0,
+    /// A name is given at a call of several declarations, and the parameter at the position the name
+    /// means is not named the same way in every one of them (design principles 4.4): one named argument
+    /// then means one parameter in one declaration and another in another, so no one parameter answers
+    /// to the name. The rule is one rule for the two lists: a `with` argument is an argument here.
+    OverloadParameterNames = 0x0001DF,
     /// A positional argument is written after a named one.
     ParamArgumentPositionalAfterNamed = 0x0001D1,
     /// The default of an ordinary parameter is not a compile-time constant.

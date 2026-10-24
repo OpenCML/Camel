@@ -1978,6 +1978,23 @@ node_handle_t Builder::buildBranch(
         if (lastSyncedNode_ != nullptr && shouldAddSyncCtrlLink(lastSyncedNode_, brchNode)) {
             linkNodes(LinkType::Ctrl, lastSyncedNode_, brchNode);
         }
+        // A branch is one statement of the block and the join is where that statement's chain goes
+        // on: the statements written after the branch are written directly after it, and the arm
+        // regions hang on the branch itself (docs/design/effects/edges.cn.md 1.5, 5.3, 5.7). The
+        // statement written directly before the branch is the chain's tail there, so the join follows
+        // it -- the shape a loop has, where the node that stands for the statement follows the
+        // statement written before it. Without the link nothing orders the statements after a branch
+        // after the ones before it once the control edges go, and the layout reads it this way
+        // already: it lays the statement written before a branch out before the arms
+        // (src/execute/graph_runtime_support.cpp). A sync edge from the branch to its join instead is
+        // not this link: the layout reads the join's sync predecessor as the statement written
+        // before the branch, and every `??` of test/cases/consistency/entering/fallback_chain.cml
+        // then takes the arm that branch did not.
+        if (lastSyncedNode_ != nullptr && linkCheek(lastSyncedNode_, joinNode)) {
+            markSyncStatement(lastSyncedNode_);
+            markSyncStatement(joinNode);
+            linkNodes(LinkType::Sync, lastSyncedNode_, joinNode);
+        }
         lastSyncedNode_ = joinNode;
         chainedNodes_.insert(brchNode);
         chainedNodes_.insert(joinNode);

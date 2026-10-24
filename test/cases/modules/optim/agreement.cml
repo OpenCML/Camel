@@ -92,8 +92,8 @@ func tensors_at(): Tensors {
 
 func tensors_gradient_at(step: int): Tensors {
     return {
-        w: cast(range(6), 'float32') * (0.0007 * float(step)) - 0.002,
-        b: cast(range(2), 'float32') * (0.03 * float(step)) + 0.001
+        w: cast(range(6), 'float32') * f32(0.0007 * float(step)) - 0.002,
+        b: cast(range(2), 'float32') * f32(0.03 * float(step)) + 0.001
     }
 }
 

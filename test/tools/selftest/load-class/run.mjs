@@ -7,9 +7,16 @@
 //     port, a fixed temporary path in a case) and pass on good/ (the same shape under
 //     ${test_tmp}). A guard that cannot fail is not a guard;
 //   * the runner's margin rule (TIMEOUT_MARGIN in test/tools/run-tests.mjs) must fail a test
-//     that uses a quarter of its timeout or more (margin/tight.plan.toml: 400 ms against
-//     1000 ms) and pass the same work with room (margin/room.plan.toml: 400 ms against 120 s,
-//     which no amount of load on a working machine turns into 30 s);
+//     that uses a quarter of its timeout or more **of its own CPU time** (margin/tight.plan.toml:
+//     eight workers burning to a 400 ms deadline against a 1600 ms bound) and pass the same work
+//     with room (margin/room.plan.toml: the same work against 120 s, which no amount of load on a
+//     working machine turns into 30 s of the test's own CPU time). The reading is the work's, not
+//     the host's (H368); a fixture that waited instead of burning would be a test with no work
+//     against a bound with room, and would stop proving anything the moment the rule stopped
+//     reading the wall clock. A fixture that burned that work on one thread would be killed by its
+//     own liveness bound on a busy host before this rule could speak -- measured at 970-1040 ms of
+//     wall for 400 ms of CPU inside a -Jobs 8 gate against a 1000 ms bound -- so burn_parallel.mjs
+//     stops every worker at a deadline and the wall cannot decide this fixture;
 //   * a test that declares `cpu_budget_ms` is judged on its own CPU time instead of the wall
 //     clock (the author's ruling of 2026-10-23, quoted in run-tests.mjs and
 //     docs/test-plans.md): the same waiting that margin/tight.plan.toml fails passes when the
@@ -176,7 +183,8 @@ if (problems.length > 0) {
 }
 console.log(
     'load-class self-test ok: 3 shared-place rules fire on a bad plan, none on a good one, ' +
-        'the runner refuses a timeout with no margin, a CPU budget passes what the wall clock ' +
-        'fails, fails work over it, leaves the liveness bound to catch a test that waits, and ' +
-        'fails a test whose CPU reading never arrives even when its exit code and stdout are green'
+        'the runner refuses a bound with no room over the work\'s own CPU time, a CPU budget ' +
+        'bounds the work a wall clock cannot see, fails work over it, leaves the liveness bound to ' +
+        'catch a test that waits, and fails a test whose CPU reading never arrives even when its ' +
+        'exit code and stdout are green'
 )

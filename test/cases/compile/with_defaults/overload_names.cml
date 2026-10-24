@@ -1,0 +1,22 @@
+/**
+ * The overloads of one name have to name the parameter at a position the same way, and the rule
+ * holds for the `with` parameters as for the ordinary ones: the first `with` parameter of `show` is
+ * `rounds` in one declaration and `iters` in the other, so `rounds` names no one parameter of
+ * `show` (design principles 4.4, handover H376).
+ */
+module with_overload_names
+
+with <rounds: int = 8>
+func show(x: int): string {
+    return string(x * rounds)
+}
+
+with <iters: int = 8>
+func show(x: string): string {
+    return x + string(iters)
+}
+
+func main(): int sync {
+    println(show<rounds: 2>(3))
+    return 0
+}

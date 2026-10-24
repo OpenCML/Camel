@@ -1,0 +1,244 @@
+{
+  "schema": 1,
+  "generated_at": "2026-10-24T03:25:00+08:00",
+  "what": "The d=64 per-step question decided in retired instructions: the build the recorded sweep table was taken with, and the current build, measured in one window on the same generated program at two run lengths each.",
+  "question": {
+    "file": "docs/handover/reviews/questions-2026-10-23.md",
+    "section": "d64-cpu-step-regression",
+    "ruling": "Wall time and CPU time both carry the host's load; retired instructions hardly vary. Measure both builds at d=64 with 64 and 512 steps and take the slope. 25% more instructions per step is a real regression and is bisected by commit; inside the counter's noise the case closes and the recorded values stay."
+  },
+  "counter": {
+    "events": "perf stat -x, -e instructions:u,task-clock",
+    "wrapper": "docker run --privileged -v /:/host <image> chroot /host /usr/bin/perf stat ...",
+    "why": "kernel.perf_event_paranoid is 4 on this host, so an unprivileged perf is refused; the privileged container holds CAP_PERFMON without a host-wide sysctl change",
+    "slope": "per run length, two lengths (64 and 512 steps) give the per-step count; start-up, JIT warm-up and parameter save cancel in the difference",
+    "case": "test/cases/perf/instruction_counts.py",
+    "plans": [
+      "test/plans/perf/instruction_counts.plan.toml",
+      "test/plans/perf/instruction_counts_load.plan.toml"
+    ]
+  },
+  "host": {
+    "name": "tangshan88",
+    "cpu": "AMD EPYC 7343, 16 physical cores and 32 hardware threads",
+    "load_1m": {
+      "recorded_sweep_d64_t1": [
+        15.6,
+        20.29
+      ],
+      "this_window": [
+        87.1,
+        111.77
+      ],
+      "under_induced_load": [
+        136.15,
+        137.74
+      ]
+    }
+  },
+  "workload": {
+    "template": "examples/models/naive-in-expert-out/train_step.cml",
+    "command": "<camel> -t 1 --block-limit 8192 <generated train_step.cml> std::jit --arg bench=true --arg init_dir=<dir> --arg final_dir=",
+    "threads": 1,
+    "warmup": 3,
+    "lengths": [
+      64,
+      256,
+      512
+    ],
+    "passes": "std::jit only: no tensor::fuse, so every matmul runs the canonical kernels in both builds, which is the path the recorded sweep table measured",
+    "source_sha256": {
+      "64": {
+        "64": "216cee994ed4825bc04297ffca7d9e036aa222b86e29393b0523bd777d096d2f",
+        "256": "e9a2c7af7bf452259995de0e513ebc8ab0bf8f67f381cc6d4b1f2cfca8ff7f2e",
+        "512": "4878a84b802f9362be89121c9c07b3b059bcb0f01094d35d8e8b58ecaf12148f"
+      },
+      "256": {
+        "64": "ca133c9e58ab675bb541885a906bca3b8f24b8c5deeecbf78993801eba4d4ae9",
+        "256": "b9c4de8b0d192fc232df8d1b28cf5bbb1b184dc2297213f60fbcf91a9678456b",
+        "512": "be506cebfebfa65784d3682e5535a3ca3d5f086ca04201ca98e462898f10c0e9"
+      }
+    },
+    "source_note": "the same bytes in all four runs (checked), and the program's own config line is checked against the cell on every run"
+  },
+  "builds": {
+    "recorded": {
+      "revision": "539ad3808bedd07821d3b426a9ac75922a67d30e",
+      "fingerprint": "808a7e445efc55fe384dd988b68e5e7580af92b2aa7054fdec01abedc43f922e",
+      "source_files": 1153,
+      "config": "Release",
+      "built_at": "2026-10-23T18:54:53.990Z",
+      "tensor_blas": "off",
+      "blas_note": "the sweep table's own README records no CAMEL_TENSOR_BLAS for this build; at this commit the option cannot be turned on in this host's configure (find_package(BLAS) fails before the later fallback search), and it cannot affect the measured command either way (see configuration_control)",
+      "attribution": {
+        "number": "2.085 ms/step, d=64, one thread, median of three rounds (2.072-2.089)",
+        "carried_by": "examples/models/naive-in-expert-out/results/2026-10-23-sweep-linux.json",
+        "field": "cells[d_model=64, threads=1].variants.camel.rounds[*].median_ms",
+        "written_by": "829b0fb30 examples: measure the naive step across widths and thread counts",
+        "stamp_in_that_file": {
+          "revision": "2adf18c042b1de3992190aab4553cdb405d1844c",
+          "dirty": true,
+          "dirtyCount": 7,
+          "fingerprint": "808a7e445efc55fe384dd988b68e5e7580af92b2aa7054fdec01abedc43f922e",
+          "fingerprintFiles": 1153,
+          "builtAt": "2026-10-22T21:07:38.914Z"
+        },
+        "tree": "539ad3808 (types: compose the numeric predicates instead of listing them) whose parent is the recorded revision 2adf18c04; the seven dirty paths the sweep recorded are exactly the file set of 539ad3808, which was committed four minutes after that build stamp, so the recorded build's tree is 539ad3808's content",
+        "reproduction": "building 539ad3808 here stamps fingerprint 808a7e445efc with 1153 source files, the fingerprint the sweep file records",
+        "note": "539ad3808 is not an ancestor of 829b0fb30 (the branch was rebased), so the attribution rests on the fingerprint and the file set, not on ancestry"
+      }
+    },
+    "current": {
+      "revision": "0ad92b9610deb064c86e9fe6e114232c54965773",
+      "fingerprint": "2ad1ad1d1e0e0694b7de0c62fea2a770276726e8b628deea7c654c2aa3e07653",
+      "source_files": 1177,
+      "config": "Release",
+      "built_at": "2026-10-23T19:05:52.925Z",
+      "tensor_blas": "on",
+      "blas_note": "library GEMM is /usr/lib/x86_64-linux-gnu/libopenblas.so; unreachable in this command because no tensor::fuse wrote tensor.kernel"
+    }
+  },
+  "cells": {
+    "d64": {
+      "recorded_build": {
+        "instructions_per_step": {
+          "median": 23446506.953125,
+          "samples": [
+            23446602.0201,
+            23445619.067,
+            23446506.9531
+          ],
+          "spread_percent": 0.0042
+        },
+        "cpu_ms_per_step": {
+          "median": 2.47671875,
+          "samples": [
+            2.4487,
+            2.4767,
+            2.7271
+          ],
+          "spread_percent": 11.2431
+        }
+      },
+      "current_build": {
+        "instructions_per_step": {
+          "median": 20430096.19419643,
+          "samples": [
+            20430096.1942,
+            20430277.7902,
+            20429900.2165
+          ],
+          "spread_percent": 0.0018
+        },
+        "cpu_ms_per_step": {
+          "median": 2.3634151785714286,
+          "samples": [
+            2.2937,
+            2.3634,
+            2.396
+          ],
+          "spread_percent": 4.3294
+        }
+      },
+      "ratio_current_over_recorded": {
+        "instructions": 0.8713492476743305,
+        "cpu_ms": 0.9542525482844706
+      }
+    },
+    "d256_control": {
+      "recorded_build": {
+        "instructions_per_step": {
+          "median": 718900802.2611607,
+          "samples": [
+            718900802.2612,
+            718900782.3058
+          ],
+          "spread_percent": 0.0
+        },
+        "cpu_ms_per_step": {
+          "median": 65.45921875,
+          "samples": [
+            65.4592,
+            64.3921
+          ],
+          "spread_percent": 1.6302
+        }
+      },
+      "current_build": {
+        "instructions_per_step": {
+          "median": 620906079.796875,
+          "samples": [
+            620905534.9442,
+            620906079.7969
+          ],
+          "spread_percent": 0.0001
+        },
+        "cpu_ms_per_step": {
+          "median": 63.02064732142857,
+          "samples": [
+            63.0206,
+            56.2973
+          ],
+          "spread_percent": 10.6685
+        }
+      },
+      "ratio_current_over_recorded": {
+        "instructions": 0.8636881164187568,
+        "cpu_ms": 0.962746707413592
+      },
+      "note": "d=512 is not a cell of the harness's rule (d_model = 64 times a square); d=256 is the recorded sweep's next cell and is the control here"
+    }
+  },
+  "load_pair": {
+    "build": "current",
+    "cell": "d=64",
+    "ambient": {
+      "load_1m": {
+        "min": 103.27,
+        "max": 111.77
+      },
+      "instructions_per_step": 20430096.19419643,
+      "cpu_ms_per_step": 2.3634151785714286
+    },
+    "induced_96_spinners": {
+      "load_1m": {
+        "min": 136.15,
+        "max": 137.74
+      },
+      "instructions_per_step": 20430097.82142857,
+      "cpu_ms_per_step": 2.3205580357142854
+    },
+    "ratio_induced_over_ambient": {
+      "instructions": 1.0000000796487754,
+      "cpu_ms": 0.9818664349600021
+    }
+  },
+  "configuration_control": {
+    "build": "current, rebuilt with CAMEL_TENSOR_BLAS=OFF",
+    "cell": "d=64",
+    "load_1m": {
+      "min": 97.61,
+      "max": 98.36
+    },
+    "instructions_per_step": 20430561.484375,
+    "cpu_ms_per_step": 2.288258928571429,
+    "ratio_over_blas_on": 1.0000227747424264,
+    "note": "the same source tree built with and without the system CBLAS differs by 0.002% in instructions per step at this cell, inside the repeats' scatter: the option is not a confound in the comparison above"
+  },
+  "recorded_values_kept": {
+    "sweep_table_d64_t1_ms": 2.085,
+    "round_range": [
+      2.072,
+      2.089
+    ],
+    "cpu_scan_canonical_ms": 2.612,
+    "changed": false
+  },
+  "verdict": {
+    "real_regression": false,
+    "instructions_d64_percent": -12.8651,
+    "instructions_d256_percent": -13.6312,
+    "noise_bound": "the repeats of one slope agree to 0.005% at d=64 and 0.0001% at d=256, so the 13% is 2600 times the counter's scatter",
+    "conclusion": "The current build retires about 13% fewer instructions per step at both d=64 and d=256, the opposite direction from a regression and far outside the counter's noise, so nothing is bisected. The 25% the question asks about is the currency and the host, not the code: the recorded d=64 cell ran at load 15.6-20.3, the same tree measures 2.477 CPU ms/step today at load 87-112 with the same instruction count, and task-clock does not track the induced load either (2.321 against 2.363, inside its own 1-4% repeat scatter, and up to 11% in the recorded build's repeats). The recorded numbers stay as they are."
+  }
+}

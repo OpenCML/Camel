@@ -439,10 +439,13 @@ slot_t runPreferredResidentKernel(ArgsView &with, ArgsView &norm, Context &ctx) 
             // A refusal with no operator names the class the compiler could not build, which is
             // always about the use's shapes or types; one with an operator says which one.
             const bool shape = refusalOper.empty() || refusalShape;
+            const std::string who =
+                refusalOper.empty() ? std::string(fn->graph()->name()) : refusalOper;
             core::error::throwRuntimeFault(
                 core::error::RuntimeDiag::GpuScopeNoDeviceProgram,
                 std::string(fn->graph()->name()),
-                refusalOper.empty() ? std::string(fn->graph()->name()) : refusalOper,
+                // The message takes the whole predicate, as the compile-time report does.
+                "operator '" + who + "' has no device program",
                 shape ? "no device program for this shape" : "no device program for this operator");
         }
         return runHostResidentKernel(with, norm, ctx);

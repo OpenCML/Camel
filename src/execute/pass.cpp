@@ -479,6 +479,7 @@ PassMaker taskflowPass() {
         options.diag      = args.getBool("diag");
         options.bytecode  = args.getBool("bytecode");
         options.gcStats   = static_cast<int>(args.getInt("gc_stats"));
+        options.gcStress  = args.getBool("gc_stress");
         auto pass         = std::make_unique<TaskflowExecSchedPass>(ctx);
         pass->setOptions(options);
         return pass;
