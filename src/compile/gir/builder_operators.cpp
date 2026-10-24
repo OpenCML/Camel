@@ -845,7 +845,12 @@ node_handle_t Builder::overloadValueFor(
 std::optional<oper_idx_ptr_t> Builder::resolveGroupedCall(
     const oper_group_ptr_t &ops, const type_vec_t &explicitTypes, Type *expectedResult,
     const type_vec_t &withTypes, const type_vec_t &normTypes, static_args_t normStatics,
-    std::vector<std::pair<std::string, std::string>> &unmet) {
+    std::vector<std::pair<std::string, std::string>> &unmet, std::vector<std::string> *ambiguous) {
+    std::optional<oper_idx_ptr_t> chosen;
+    // The candidates that write `when` and whose condition holds for these arguments. One of them
+    // is a call that has an answer; two or more are a call that has none, and the writing order
+    // of the declarations is not what settles it (see the declaration of this function).
+    std::vector<std::string> holding;
     for (const auto &[uri, resolver] : ops->resolvers()) {
         auto result = resolver->resolveForCall(
             explicitTypes, expectedResult, withTypes, normTypes, normStatics, Modifier::None);
@@ -869,9 +874,25 @@ std::optional<oper_idx_ptr_t> Builder::resolveGroupedCall(
         if (verdict == RuleVerdict::NotThisRule) {
             continue;
         }
-        return std::make_shared<OperatorIndex>(ops->name(), *result, uri);
+        if (!chosen) {
+            chosen = std::make_shared<OperatorIndex>(ops->name(), *result, uri);
+        }
+        if (ambiguous != nullptr && nativeRuleConditions_.contains(resolver.get())) {
+            // Named by its signature and its condition together: the two arms of one name share
+            // the signature and are told apart by the condition alone, the way
+            // WhenDeclarationOverlap and WhenConditionUnmet name them.
+            holding.push_back(resolver->signature() + " — when " + condition);
+        }
     }
-    return std::nullopt;
+    if (ambiguous != nullptr && holding.size() > 1) {
+        // Sorted, so that the report does not carry the order the declarations were written in:
+        // that order is exactly what must not decide, and a report that listed the candidates in
+        // it would differ between two files holding one program (design principles 4.4).
+        std::ranges::sort(holding);
+        holding.erase(std::ranges::unique(holding).begin(), holding.end());
+        *ambiguous = std::move(holding);
+    }
+    return chosen;
 }
 
 node_handle_t Builder::compoundAssignmentByRebinding(
@@ -2316,6 +2337,26 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             // other candidate applies, the call is reported as one whose conditions are unmet
             // (design principles 4.4), not as an ordinary mismatch and never by writing order.
             std::vector<std::pair<std::string, std::string>> unmetConditions;
+            // The arguments as written, for the ambiguity report: the context arguments first,
+            // then the ordinary ones (the same rendering an ordinary call's ambiguity uses).
+            const auto argumentTypes = [&]() {
+                std::vector<std::string> written;
+                written.reserve(withInputTypes.size() + normInputTypes.size());
+                for (Type *type : withInputTypes) {
+                    written.push_back(type->toString());
+                }
+                for (Type *type : normInputTypes) {
+                    written.push_back(type->toString());
+                }
+                return strutil::join(written, ", ", [](const std::string &s) { return s; });
+            };
+            // Candidates whose own `when` holds for these arguments: one of them is the call,
+            // and more than one is a call with no answer (design principles 4.4; the language
+            // author's ruling of 2026-10-23 on `two-when-conditions-hold`,
+            // docs/handover/reviews/questions-2026-10-23.md: "带 `when` 的候选都适用时，调用处报
+            // 歧义，列出两条候选与各自成立的条件"). The declaration-time check asks about one type
+            // at a time, so this is the first place the pair can be seen.
+            std::vector<std::string> ambiguousConditions;
             auto res = resolveGroupedCall(
                 ops,
                 explicitTypes,
@@ -2323,7 +2364,8 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 withInputTypes,
                 normInputTypes,
                 normStatics,
-                unmetConditions);
+                unmetConditions,
+                &ambiguousConditions);
             if (!res.has_value()) {
                 // A literal operand takes the other operand's type in a named operator call too:
                 // `add(x, 2.0)` with an f32 tensor is the f32 sum, as `x * 2.0` already is
@@ -2343,6 +2385,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                     // The adapted call is tried with its own candidates and its own conditions;
                     // its answer is dropped when it fails, because the report the call gets is
                     // about the arguments the program wrote (the conditions below stand too).
+                    // An ambiguity it finds is not such an answer and is reported below.
                     std::vector<std::pair<std::string, std::string>> retriedUnmet;
                     auto retried = resolveGroupedCall(
                         ops,
@@ -2351,7 +2394,8 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                         withInputTypes,
                         retriedTypes,
                         retriedStatics,
-                        retriedUnmet);
+                        retriedUnmet,
+                        &ambiguousConditions);
                     if (retried.has_value()) {
                         normInputs     = std::move(retriedInputs);
                         normInputTypes = std::move(retriedTypes);
@@ -2359,6 +2403,12 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                         res            = retried;
                     }
                 }
+            }
+            if (!ambiguousConditions.empty()) {
+                // The candidates are listed each with the condition it wrote, sorted, so that
+                // two files holding one program with the declarations in the two orders report
+                // one and the same diagnostic.
+                rejectAmbiguousCall(ops->name(), argumentTypes(), ambiguousConditions, gct);
             }
             if (!res.has_value() && withInputs.empty()) {
                 // `x == null` / `x != null` over a `T?`: the tag of `x`, not a comparison of
