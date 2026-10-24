@@ -344,6 +344,21 @@ function main() {
     const opts = parseArgs(process.argv.slice(2))
     const { manifest, reference, referencePath, referenceSha256, referenceChars } = loadInputs(opts)
     opts.referencePath = referencePath
+
+    // A replay re-judges answers that were written against one text; judging them while the report
+    // names another text would mislabel the run, so the archived sha256 has to be the one in hand.
+    let replayOfSha = null
+    if (opts.solver === 'replay') {
+        const archivedReport = path.join(opts.archive, 'report.json')
+        if (fs.existsSync(archivedReport)) {
+            replayOfSha = JSON.parse(fs.readFileSync(archivedReport, 'utf8')).reference_sha256 ?? null
+            must(
+                replayOfSha === referenceSha256,
+                `the archive was produced against ${replayOfSha}, but the reference in hand is ${referenceSha256}: ` +
+                    'pass the same --reference (or none) as the run being replayed',
+            )
+        }
+    }
     const wanted = opts.tasks ?? manifest.tasks.map((t) => t.id)
     const tasks = manifest.tasks.filter((t) => wanted.includes(t.id))
     must(tasks.length === wanted.length, `unknown task id in ${wanted.join(',')}`)
@@ -365,6 +380,7 @@ function main() {
         camel_bin: opts.camelBin,
         reference_path: opts.reference || REFERENCE_REL,
         reference_sha256: referenceSha256,
+        replays_sha256: replayOfSha,
         reference_chars: referenceChars,
         prompt_header: manifest.solver_prompt_header,
         tasks: [],
@@ -409,6 +425,8 @@ function main() {
         const extracted = opts.solver === 'provided'
             ? answer.replace(/\r\n/g, '\n').trimEnd() + '\n'
             : extractCamel(answer)
+        // Every arm leaves the same two files: what came in, verbatim, and the source compiled.
+        fs.writeFileSync(path.join(opts.archive, task.id, 'round0.response.txt'), answer, 'utf8')
         fs.writeFileSync(path.join(opts.archive, task.id, 'round0.raw.txt'), answer, 'utf8')
         code[task.id] = extracted
         if (extracted) fs.writeFileSync(path.join(opts.archive, task.id, 'round0.cml'), extracted, 'utf8')
@@ -466,16 +484,24 @@ function main() {
                 record.passed_at_round = round
                 continue
             }
-            if (round + 1 < opts.rounds && opts.solver === 'bl') {
-                history[task.id].push({ role: 'assistant', content: '```camel\n' + entry.code + '```' })
-                history[task.id].push({ role: 'user', content: fixTurn(round, { code: entry.code, exit: reading.exit, stdout: reading.stdout, diagnostics }) })
-                must(usageSink.prompt <= opts.tokenBudget, `token budget ${opts.tokenBudget} exceeded (${usageSink.prompt} input tokens): stopping`)
+            // The next round is asked of the subject, or taken from the archive: `replay` re-judges a
+            // run that was already paid for, round by round, without asking anything again. Both
+            // paths leave the same files behind, so a replayed run is the same evidence.
+            if (round + 1 < opts.rounds && (opts.solver === 'bl' || opts.solver === 'replay')) {
                 let answer = ''
-                try {
-                    answer = callBl(history[task.id], opts, usageSink)
-                } catch (error) {
-                    failures.set(task.id, `round ${round + 1}: ${error.message}`)
-                    process.stdout.write(`learnability: ${task.id} got no answer: ${error.message}\n`)
+                if (opts.solver === 'replay') {
+                    const archived = path.join(opts.archive, task.id, `round${round + 1}.response.txt`)
+                    answer = fs.existsSync(archived) ? fs.readFileSync(archived, 'utf8') : ''
+                } else {
+                    history[task.id].push({ role: 'assistant', content: '```camel\n' + entry.code + '```' })
+                    history[task.id].push({ role: 'user', content: fixTurn(round, { code: entry.code, exit: reading.exit, stdout: reading.stdout, diagnostics }) })
+                    must(usageSink.prompt <= opts.tokenBudget, `token budget ${opts.tokenBudget} exceeded (${usageSink.prompt} input tokens): stopping`)
+                    try {
+                        answer = callBl(history[task.id], opts, usageSink)
+                    } catch (error) {
+                        failures.set(task.id, `round ${round + 1}: ${error.message}`)
+                        process.stdout.write(`learnability: ${task.id} got no answer: ${error.message}\n`)
+                    }
                 }
                 fs.writeFileSync(path.join(opts.archive, task.id, `round${round + 1}.response.txt`), answer, 'utf8')
                 code[task.id] = extractCamel(answer)

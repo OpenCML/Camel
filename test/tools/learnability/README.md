@@ -43,13 +43,24 @@ node test/tools/learnability/run.mjs --solver cmd \
      --cmd-template 'my-agent --request {request} --out {answer}' \
      --tasks L01 --archive <archive-dir>
 
-# Recompile an archived run without spending tokens.
+# Recompile an archived run without spending tokens. A replay refuses to run when the reference in
+# hand is not the one the archive was produced against, and it re-judges every archived round, so a
+# run whose compiles failed can be re-read from its own answers alone.
 node test/tools/learnability/run.mjs --solver replay --archive <archive-dir> --rounds 3
 ```
 
+The compiler's path is site-specific. `tasks.json` names the build the H251 lane produced on this
+host; if that worktree has been removed, pass `--camel-bin` with any build of the recorded revision
+and say so in the report: the runs made after 23:00 on 2026-10-24 used
+`/home/zjwei/camel-work/h435-learnability/out/latest/bin/camel` (revision `4ba74c183`, whose
+compiler sources are byte-identical to `2e6438492` — that branch changes documentation and this
+tooling only). `report.json` records the binary that was actually used under `camel_bin`.
+
 Options: `--camel-host` (default `88zjwei`), `--camel-bin`, `--camel-bin`'s `CAMEL_HOME` and
 `LD_LIBRARY_PATH` come from the host environment, `--token-budget` stops a paid run before it
-overspends, `--keep-sandbox` keeps the temporary sandboxes for inspection.
+overspends, `--keep-sandbox` keeps the temporary sandboxes for inspection. `--reference <path>` runs
+the same tasks against another revision of the reference (the report keeps its path and sha256);
+`--max-tokens` and `--timeout` are the paid arm's settings and are recorded with the numbers.
 
 ## The archive is the evidence
 
@@ -60,7 +71,9 @@ A run writes, under `--archive`:
 - `<id>/round<N>.response.txt` — the subject's reply, verbatim, before any parsing;
 - `<id>/round<N>.cml` — the extracted file that was compiled;
 - `rounds/round-N/` — the sources shipped to the compiler, plus `remote.txt`, the compiler's raw
-  answer in the delimited form `remote-compile.sh` prints.
+  answer in the delimited form `remote-compile.sh` prints. Every value in that form is closed by its
+  own newline, so a program that prints without a trailing newline cannot run its stdout into the
+  next marker; the comparison trims the newline, so what is judged is still the compiler's bytes.
 
 `report.json` records the reference's sha256 and character count, so a before/after pair can be
 shown to differ in the reference and not in anything else.
