@@ -388,6 +388,20 @@ expectFix({
 // picks one is worse than a sentence.
 expectNoFix({ label: 'unresolved-reference', file: 'compile/semantic/unresolved_reference.cml', name: 'SemanticDiag::UnresolvedReference' })
 
+// A lambda's parameters need their parentheses (the author's ruling of 2026-10-24): the one name
+// that stands before the arrow is the whole parameter list, so wrapping it is the whole repair and
+// the program compiles. A list of names gets no fix: `x, y => e` and the arguments of a call read
+// the same way before the arrow (`f(a, x => e)`), and wrapping the wrong range is a wrong change a
+// tool would apply without asking.
+expectFix({
+    label: 'lambda-needs-parentheses',
+    file: 'parse/rulings/lambda_without_parentheses.cml',
+    name: 'SyntaxDiag::LambdaParametersNeedParentheses',
+    title: 'put the parameters in parentheses',
+    edits: [{ range: { start: { line: 16, character: 35 }, end: { line: 16, character: 36 } }, replacement: '(x)' }],
+    accepted: true,
+})
+
 // --- The two properties, instead of one example per code --------------------------------------
 // Every code the registry marks `edit` promises a machine-applicable fix. That promise is what the
 // registry column is for, so the cases above have to cover the column exactly: a code that starts
@@ -439,7 +453,6 @@ expectNoFix({ label: 'unresolved-reference', file: 'compile/semantic/unresolved_
         `${withFix} vs ${without}`
     )
 }
-
 fs.rmSync(TEMP, { recursive: true, force: true })
 console.log(failed === 0 ? 'diagnostic fixes proof: checks passed' : `diagnostic fixes proof: ${failed} check(s) failed`)
 process.exit(failed === 0 ? 0 : 1)

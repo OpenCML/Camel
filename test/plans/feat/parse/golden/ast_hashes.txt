@@ -29,6 +29,7 @@ e2dddce52f9ad973 ok test/cases/parse/rulings/if_statement.cml
 a7686bff37a9aa93 ok test/cases/parse/rulings/import_rename.cml
 d2cd4d6bebf76cee ok test/cases/parse/rulings/import_rename_hides.cml
 6d44b624e338a9da ok test/cases/parse/rulings/imports_with_comments.cml
+ee32bfc8973342f9 no test/cases/parse/rulings/lambda_without_parentheses.cml
 07be36ee9efeca9c ok test/cases/parse/rulings/loop_forms.cml
 c52fec6465c58bb2 no test/cases/parse/rulings/loop_is_keyword.cml
 3a1e14b153143d1c no test/cases/parse/rulings/loop_needs_clause.cml

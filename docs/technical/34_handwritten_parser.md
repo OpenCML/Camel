@@ -346,6 +346,7 @@ syntax errors: the parser saw the tokens without the offending text.
 | `UnexpectedToken`, `UnexpectedEndOfFile` | anything else, with what would have fitted |
 | `ComparisonNeedsSpace`, `AngleCloseAfterSpace` (new) | rule 1, section 2 |
 | `LineStartsWithOperator` (new) | rule 2, section 3 |
+| `LambdaParametersNeedParentheses` (new) | a name stands directly before a `=>` that fits nothing: a lambda's parameters are written in parentheses (5.9, the ruling of 2026-10-24) |
 | `LexicalDiag::UnterminatedComment` (now raised) | `/*` without `*/` |
 
 ## 7. Verification against the ANTLR parser

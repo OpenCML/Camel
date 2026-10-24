@@ -1932,7 +1932,7 @@ class Builder {
     /// interval of two integers, told apart by the types of the two operands (design principles
     /// 4.2; the author's ruling of 2026-10-24 on `h248-generator-and-composition`). `expected`
     /// is the type of the position the whole expression stands in: a function type there is the
-    /// type the lambda `x => g(f(x))` would have and instantiates the operands (the ruling,
+    /// type the lambda `(x) => g(f(x))` would have and instantiates the operands (the ruling,
     /// section generic-operands-of-composition).
     node_handle_t buildComposition(const GCT::node_ptr_t &gct, Type *expected);
     /// The same, from two operands already built: the sequence position of a loop builds them
@@ -1949,7 +1949,7 @@ class Builder {
     /// `int[]` of `intervalValue` in every other position.
     node_handle_t
     intervalSequenceValue(node_handle_t from, node_handle_t to, const GCT::node_ptr_t &expr);
-    /// The composition `f..g` as the lambda `x => g(f(x))`: a graph of one parameter whose body
+    /// The composition `f..g` as the lambda `(x) => g(f(x))`: a graph of one parameter whose body
     /// calls `f` and then `g`, both of them captures of it.
     node_handle_t composeFunctionValue(
         node_handle_t lhs, node_handle_t rhs, FunctionType *lhsType, FunctionType *rhsType,

@@ -2,7 +2,7 @@ id = "parse.rulings"
 order = 306
 tier = "fast"
 tags = ["feat", "parse", "syntax"]
-desc = "The syntax rulings of design principles 4.2: the precedence of `^`, literals with an exponent, renamed imports, documentation comments, an `if` statement without a block, and the postfix marks of a type (`?`, `!` and the stream's `..`, read left to right)."
+desc = "The syntax rulings of design principles 4.2: the precedence of `^`, literals with an exponent, renamed imports, documentation comments, an `if` statement without a block, and the postfix marks of a type (`?`, `!` and the stream's `..`, read left to right). Two rulings of 2026-10-24 are read here: the right side of `as` is a type, and a lambda's parameters are written in parentheses (5.9)."
 
 [[tests]]
 name = "rulings.power"
@@ -259,6 +259,22 @@ expect_diagnostic_code = "0x02000011"
 expect_diagnostic_line = 11
 expect_diagnostic_column = 21
 expect_output_contains = ["The right side of 'as' is a type; write the interval as '(a..b)'."]
+expect_output_not_contains = ["UnknownInternalError", "Unexpected"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rulings.lambda_needs_parentheses"
+desc = "A lambda's parameters are written in parentheses (the author's ruling of 2026-10-24, on `composition-expected-type-edges` item 4): `x => e` is not a lambda, because a rule body's `x => x` already spends that arrow, so the unparenthesised spelling is named - SyntaxDiag::LambdaParametersNeedParentheses, at the `=>`, saying which parentheses to write. The composition `f..g`, which is the lambda `(x) => g(f(x))`, is accepted in the line above it, so the two spellings are told apart in one program. It used to be `Unexpected '=>'; expected '}'.` at the `=>`."
+kind = "negative"
+case = "../../../cases/parse/rulings/lambda_without_parentheses.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SyntaxDiag::LambdaParametersNeedParentheses"
+expect_diagnostic_code = "0x02000012"
+expect_diagnostic_line = 17
+expect_diagnostic_column = 38
+expect_output_contains = ["A lambda's parameters need their parentheses: write '(x) => e', not 'x => e'."]
 expect_output_not_contains = ["UnknownInternalError", "Unexpected"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
