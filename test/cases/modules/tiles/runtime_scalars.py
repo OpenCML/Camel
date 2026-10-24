@@ -18,7 +18,10 @@ for vm in ['std::nvm', 'std::fvm', 'std::jit']:
     assert lines[:3] == ['true'] * 3, 'scalar arguments or captures changed CUDA source'
     assert lines[3:9] == ['0.0'] * 6, 'scalar input value or precision lost'
     plan = json.loads(lines[9])
-    assert plan['kernels'] == 1 and len(plan['stages'][0]['members']) == 2, plan
+    # `scale`'s scalar takes the element type beside it (design principles 7.3), so the kernel is
+    # the multiply alone: an f32 scalar is an operand of it, not a value a conversion node turns
+    # into one, which is why the stage has one member and not two.
+    assert plan['kernels'] == 1 and len(plan['stages'][0]['members']) == 1, plan
     reports = [json.loads(line) for line in lines[10:]]
     assert reports[1]['optimized']['compile_cache_hit'], 'changed scalar values missed code cache'
     for report in reports:
