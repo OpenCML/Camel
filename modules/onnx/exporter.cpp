@@ -3867,25 +3867,42 @@ Value Evaluator::symbolicIntArray(
     for (size_t k = 0; k < fillSlots.size(); ++k) {
         elems[static_cast<size_t>(fillSlots[k])] = values[k];
     }
-    std::vector<std::string> parts;
     std::vector<int64_t> known;
+    std::vector<bool> symbolic;
     for (size_t i = 0; i < elems.size(); ++i) {
         if (!elems[i] || elems[i]->isConstant()) {
             const int64_t v = elems[i] ? tensor::scalarToInt64(elems[i]->ty->code(), elems[i]->slot)
                                        : templ->get<rtdata::Int64>(i);
-            const int64_t one[] = {v};
-            parts.push_back(emitter_.int64s(one));
             known.push_back(v);
+            symbolic.push_back(false);
             continue;
         }
         if (elems[i]->form != Value::Form::Scalar) {
             unsupported(act, "an int array element that depends on the model input must be an int");
         }
-        const int64_t axis[] = {0};
+        known.push_back(tensor::kUnknownDim);
+        symbolic.push_back(true);
+    }
+    if (std::ranges::none_of(symbolic, [](bool s) { return s; })) {
+        // Every element is a constant: simplification folds an array literal only where replacing
+        // it is execution-safe, and one inside a branch arm reaches the export unfolded, so this
+        // path sees literals the model already holds the value of. The vector is then one
+        // initializer; a Concat of constant parts would compute at model-run time what the
+        // exporter already knows, and where the same shape is also a literal the model folds, the
+        // two writings of one shape disagree over a `Concat` that need not be in the model.
+        return Value::symbolicIntArray(emitter_.int64s(known), known);
+    }
+    std::vector<std::string> parts;
+    const int64_t axis[] = {0};
+    for (size_t i = 0; i < elems.size(); ++i) {
+        if (!symbolic[i]) {
+            const int64_t one[] = {known[i]};
+            parts.push_back(emitter_.int64s(one));
+            continue;
+        }
         parts.push_back(emitter_.node(
             "Unsqueeze",
             {emitter_.operand(*elems[i], TypeCode::Int64), emitter_.int64s(axis)}));
-        known.push_back(tensor::kUnknownDim);
     }
     return Value::symbolicIntArray(
         emitter_.node("Concat", std::move(parts), {Attribute::makeInt("axis", 0)}),
