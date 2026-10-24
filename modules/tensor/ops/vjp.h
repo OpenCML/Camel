@@ -82,6 +82,15 @@ void accumulateOperand(VjpBuilder &builder, vjp_node_t operand, vjp_node_t gradi
 /// a gradient of another element type instead of converting it.
 vjp_node_t floatGradientAtWidth(VjpBuilder &builder, vjp_node_t value, vjp_node_t gradient);
 
+/// `tensorCastTo` is `floatGradientAtWidth` for a value that states an element type of any
+/// numeric kind: the gradient is converted to the value's own type with `tensor:cast_like` and
+/// declared with it, so the accumulator receives a gradient of the element type the value has.
+/// A conversion whose result is at another element type than its input (`cast` answers at the
+/// dtype it was given) is what needs it -- handing the accumulator a gradient of another element
+/// type is refused, and reading a number at another width is not the derivative (design
+/// principles 9.9).
+vjp_node_t tensorCastTo(VjpBuilder &builder, vjp_node_t value, vjp_node_t gradient);
+
 /// Gradients of lhs @ rhs given the output gradient dy (batch dims and vectors included).
 void accumulateMatmulGradients(
     VjpBuilder &builder,

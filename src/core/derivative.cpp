@@ -140,14 +140,27 @@ Type *computeTangentType(Type *primal) {
         return elems.empty() ? nullptr : TupleType::create(std::move(elems));
     }
     case TypeCode::Array: {
-        Type *elem    = tt::as_ptr<ArrayType>(primal)->elemType();
+        const ArrayType *array = tt::as_ptr<ArrayType>(primal);
+        // An array whose element type is numeric but not fixed yet — `Tensor`, the alias's
+        // transitional spelling — states no element type: its only element type is `Void`, which
+        // is the marker and not a type anything can be sliced to. Taking a tangent from it would
+        // build the array of that `Void` element's tangent, which is nothing, and every zero
+        // tangent and sum of tangents over such a value then refused ("a zero tangent is not
+        // defined for tangent type 'void'") although the value it is the tangent of is a tensor
+        // and `tensor:zeros_like`/`tensor:add` answer for it. The kind that owns the values
+        // states the tangent type: it is the value's own type, and the element type follows the
+        // value (docs/handover/reviews/questions-2026-10-23.md, rank-zero-tensor and
+        // unstated-element-type-scalar-and-print).
+        if (array->isNumericUnknown()) {
+            return DerivativeRegistry::instance().statedTangentType(primal);
+        }
+        Type *elem    = array->elemType();
         Type *tangent = elem ? tangentTypeOf(elem) : nullptr;
         if (tangent != nullptr) {
             return ArrayType::create(tangent);
         }
-        // No element type to take a tangent from — the numeric-unknown array `Tensor` is an
-        // array whose element type is not fixed yet. A kind whose values share the array code
-        // states its own answer through the registry; without one there is no tangent.
+        // A kind whose values share the array code states its own answer through the registry;
+        // without one there is no tangent.
         return DerivativeRegistry::instance().statedTangentType(primal);
     }
     default:
