@@ -786,61 +786,71 @@ Builder::staticLoopSequenceOf(const GCT::node_ptr_t &subject) {
     if (std::optional<StaticSequence> sequence = ofConstantArray(subject)) {
         return sequence;
     }
+    // The integers of a sequence the compiler can count out: `int` ends and a step. Reading one
+    // end reuses what the compiler already knows, without building anything of a run-time
+    // expression: a literal (or an expression of literals only, `0..(2 + 3)`) is read from the
+    // tree, a name is read from what it is bound to -- and only a binding that is not a `var`,
+    // which may be assigned before the loop, counts -- and anything else is put to the
+    // build-time evaluation the rest of the compiler folds with.
+    const auto intOf = [](const data_ptr_t &data) -> std::optional<int64_t> {
+        if (data == nullptr) {
+            return std::nullopt;
+        }
+        if (auto number = std::dynamic_pointer_cast<PrimaryData<int64_t>>(data)) {
+            return number->data();
+        }
+        if (auto number = std::dynamic_pointer_cast<PrimaryData<int32_t>>(data)) {
+            return static_cast<int64_t>(number->data());
+        }
+        return std::nullopt;
+    };
+    const auto intBoundOf = [&](const GCT::node_ptr_t &expr) -> std::optional<int64_t> {
+        if (expr == nullptr) {
+            return std::nullopt;
+        }
+        const std::optional<literal::Value> written = literalValueOfExpr(expr);
+        if (written.has_value()) {
+            return written->asInt64();
+        }
+        if (expr->type() != GCT::NodeKind::DREF) {
+            return intOf(constantValueOrNull(expr));
+        }
+        data_ptr_t data = nullptr;
+        const auto bound = nodeAt(expr->name());
+        if (bound.has_value()) {
+            if (isVariable(*bound)) {
+                return std::nullopt;
+            }
+            data = constantOfNode(*bound);
+        } else {
+            data = constantOfNode(staticValueNodeNamed(expr->name()));
+        }
+        return intOf(data);
+    };
+    // The rounds `from, from + step, ...` up to but not including `to`, counted exactly as the
+    // `range` that `a..b` lowers to counts them (`__range__`): below `to` for a positive step,
+    // above it for a negative one. Nothing of the sequence is built; the rounds are values.
+    const auto walkIntegers = [](int64_t from, int64_t to, int64_t step) {
+        StaticSequence sequence;
+        sequence.elementType = Type::Int();
+        for (int64_t value = from; step > 0 ? value < to : value > to; value += step) {
+            sequence.values.push_back(
+                tt::as_shared<Data>(std::make_shared<PrimaryData<int64_t>>(value)));
+        }
+        return sequence;
+    };
     // The constant interval `a..b`: read exactly as the `..` operator reads it everywhere else
     // (the half-open `[a, b)`, so `0..5` gives 0, 1, 2, 3, 4), and the pair of two bounds only
     // in the sequence position of a loop (`isIntervalExpr`); in any other position `a..b` is the
     // `int[]` of `intervalValue`. An interval is two `int` ends and nothing else: `..` builds an
     // `int[]`, so there is no float or character interval to walk.
     if (isIntervalExpr(subject)) {
-        // One bound: its value as the compiler knows it, without building anything of a run-time
-        // expression. A literal (or an expression of literals only, `0..(2 + 3)`) is read from
-        // the tree; a name is read from what it is bound to, and only a binding that is not a
-        // `var` (which may be assigned before the loop) counts; anything else is put to the same
-        // build-time evaluation the rest of the compiler folds with.
-        const auto intOf = [](const data_ptr_t &data) -> std::optional<int64_t> {
-            if (data == nullptr) {
-                return std::nullopt;
-            }
-            if (auto number = std::dynamic_pointer_cast<PrimaryData<int64_t>>(data)) {
-                return number->data();
-            }
-            if (auto number = std::dynamic_pointer_cast<PrimaryData<int32_t>>(data)) {
-                return static_cast<int64_t>(number->data());
-            }
-            return std::nullopt;
-        };
-        const auto boundOf = [&](const GCT::node_ptr_t &expr) -> std::optional<int64_t> {
-            const std::optional<literal::Value> written = literalValueOfExpr(expr);
-            if (written.has_value()) {
-                return written->asInt64();
-            }
-            if (expr->type() != GCT::NodeKind::DREF) {
-                return intOf(constantValueOrNull(expr));
-            }
-            data_ptr_t data = nullptr;
-            const auto bound = nodeAt(expr->name());
-            if (bound.has_value()) {
-                if (isVariable(*bound)) {
-                    return std::nullopt;
-                }
-                data = constantOfNode(*bound);
-            } else {
-                data = constantOfNode(staticValueNodeNamed(expr->name()));
-            }
-            return intOf(data);
-        };
-        const std::optional<int64_t> from = boundOf(subject->at(1));
-        const std::optional<int64_t> to   = boundOf(subject->at(2));
+        const std::optional<int64_t> from = intBoundOf(subject->at(1));
+        const std::optional<int64_t> to   = intBoundOf(subject->at(2));
         if (!from.has_value() || !to.has_value()) {
             return std::nullopt;
         }
-        StaticSequence sequence;
-        sequence.elementType = Type::Int();
-        for (int64_t value = *from; value < *to; ++value) {
-            sequence.values.push_back(
-                tt::as_shared<Data>(std::make_shared<PrimaryData<int64_t>>(value)));
-        }
-        return sequence;
+        return walkIntegers(*from, *to, 1);
     }
     // A compile-time tuple: `for x in ts` walks its positions and binds the type at each one
     // (not the element's value -- the ordinary `loop` is the one that binds a value). `ts` is
@@ -859,11 +869,15 @@ Builder::staticLoopSequenceOf(const GCT::node_ptr_t &subject) {
             }
         }
     }
-    // `range(a, b, step)` with constant arguments: the integers `a`, `a + step`, ... (below `b`
-    // for a positive step, above it for a negative one; design principles 4.2, the ruling of
-    // 2026-10-24 on h426-interval-step-form). The step has to be written -- a step of one is
-    // `a..b`, one thing one spelling -- so the two-argument call stays refused here as it is
-    // everywhere else, and a step of zero, which names no sequence at all, is a fault.
+    // `range(a, b, step)` with constant arguments: the same integers the interval gives, on the
+    // step the program wrote -- the same path as `a..b`, read by the same reader and counted by
+    // the same walk, because `range` is what the interval lowers to (`intervalValue`) and the
+    // array it builds elsewhere is what these rounds are the elements of. The step has to be
+    // written -- a step of one is `a..b`, one thing one spelling -- so the two-argument call is
+    // refused here as it is where the call stands (`RangeTwoArgumentsRemoved`, which the call
+    // path reports after overload resolution), and a step of zero, which names no sequence at
+    // all, is `RangeStepZero` here as it is there (design principles 4.2; the rulings of
+    // 2026-10-24 on `h248-generator-and-composition` and on `h426-interval-step-form`).
     if (subject->type() == GCT::NodeKind::LINK && subject->size() >= 1) {
         const GCT::node_ptr_t &callee = subject->at(0);
         const bool namedRange = callee != nullptr && callee->type() == GCT::NodeKind::DREF &&
@@ -874,48 +888,28 @@ Builder::staticLoopSequenceOf(const GCT::node_ptr_t &subject) {
             throw BuildAbortException();
         }
         if (namedRange && subject->size() - 1 == 3) {
-            const auto intArgument = [&](size_t i) -> std::optional<int64_t> {
-                const data_ptr_t data = constantValueOrNull(subject->at(i + 1));
-                if (data == nullptr) {
-                    return std::nullopt;
-                }
-                if (auto number = std::dynamic_pointer_cast<PrimaryData<int64_t>>(data)) {
-                    return number->data();
-                }
-                if (auto number = std::dynamic_pointer_cast<PrimaryData<int32_t>>(data)) {
-                    return static_cast<int64_t>(number->data());
-                }
-                return std::nullopt;
-            };
-            const std::optional<int64_t> start = intArgument(0);
-            const std::optional<int64_t> end   = intArgument(1);
-            const std::optional<int64_t> step  = intArgument(2);
+            const GCT::node_ptr_t &stepNode = subject->at(subject->size() - 1);
+            const std::optional<int64_t> step = intBoundOf(stepNode);
+            if (step.has_value() && *step == 0) {
+                const auto where =
+                    stepNode->origin() != 0 ? stepNode->origin() : subject->origin();
+                diags_->of(SemanticDiag::RangeStepZero)
+                    .atOrigin(where)
+                    .commit(sourceTextOf(subject->at(1)), sourceTextOf(subject->at(2)));
+                throw BuildAbortException();
+            }
+            const std::optional<int64_t> start = intBoundOf(subject->at(1));
+            const std::optional<int64_t> end   = intBoundOf(subject->at(2));
             if (start.has_value() && end.has_value() && step.has_value()) {
-                if (*step == 0) {
-                    const GCT::node_ptr_t &stepNode = subject->at(subject->size() - 1);
-                    const auto where =
-                        stepNode->origin() != 0 ? stepNode->origin() : subject->origin();
-                    diags_->of(SemanticDiag::RangeStepZero)
-                        .atOrigin(where)
-                        .commit(sourceTextOf(subject->at(1)), sourceTextOf(subject->at(2)));
-                    throw BuildAbortException();
-                }
-                StaticSequence sequence;
-                sequence.elementType = Type::Int();
-                for (int64_t value = *start; *step > 0 ? value < *end : value > *end;
-                     value += *step) {
-                    sequence.values.push_back(
-                        tt::as_shared<Data>(std::make_shared<PrimaryData<int64_t>>(value)));
-                }
-                return sequence;
+                return walkIntegers(*start, *end, *step);
             }
         }
     }
-    // Anything else the build-time evaluation works out to an array of constants: the same one
-    // rule, reached through a pure call with constant arguments (`for i in three()` where `three`
-    // returns `[1, 2, 3]`). A name is not offered here: what a `let` or a `var` is bound to was
-    // read above, and a `var` may hold another array by the time the loop runs. A refusal is a
-    // sequence the compiler does not know.
+    // The one rule's general case: an expression the build-time evaluation already holds as an
+    // array of constants (`compileTimeExpression`, the folding every other constant expression of
+    // the program goes through). A name is not offered to it here: what a `let` or a `var` is
+    // bound to was read above, and a `var` may hold another array by the time the loop runs. A
+    // refusal is a sequence the compiler does not know, and the caller says so by name.
     if (subject->type() != GCT::NodeKind::DREF) {
         if (std::optional<StaticSequence> sequence =
                 ofArrayData(constantValueOrNull(subject))) {

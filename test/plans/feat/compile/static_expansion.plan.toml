@@ -591,6 +591,17 @@ assert(input.normalized.stdout.trim() === want, `static loop over a compile-time
 timeout_ms = 8000
 
 [[tests]]
+name = "static_loop_sequence_tuple_value"
+desc = "The other reading of `for x in ts` is refused by name: each round's `x` is the type at that position (the ruling of 2026-10-25, H475), so using it as a value (`acc + x`, the program the h471 measurement wrote for the tuple form) asks a type to be a value, and the ordinary `loop` is the one whose variable is the element's value."
+kind = "negative"
+case = "../../../cases/compile/static_expansion/static_loop_sequence_tuple_value.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::UnresolvedReference"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
 name = "static_loop_sequence_range_two"
 desc = "The sequence of a `static loop` follows the interval rules of design principles 4.2: the two-argument `range(a, b)` is deleted (one thing one spelling -- a step of one is `a..b`), so it is refused where it is written, pointing at the name, before any sequence is worked out."
 kind = "negative"

@@ -7624,18 +7624,17 @@ The two-parameter 'range(a, b)' is gone; write the interval 'a..b'.
 The language has one spelling for the integers from 'a' to 'b - 1' (design principles 4.2; the author's ruling of 2026-10-24 on `h248-generator-and-composition`): the interval 'a..b', left closed and right open, as the slice 't[a:b]' is, and the array of them. 'range(0, 10)' becomes '0..10'. A 'for' over an interval is fused by the compiler, so 'for i in 0..n' builds no array. The two-parameter 'range' is the only spelling deleted: a module's own interval-like function (a tensor's, say) is that module's own, reached by its qualified name or at another arity, while an unqualified two-argument 'range(a, b)' is this built-in.
 ```
 
-**Example** (`test/cases/compile/stream/range_two_arguments.cml`, run as `camel test/cases/compile/stream/range_two_arguments.cml`)
+**Example** (`test/cases/compile/static_expansion/static_loop_sequence_range_two.cml`, run as `camel test/cases/compile/static_expansion/static_loop_sequence_range_two.cml`)
 
 ```camel
-// The two-parameter `range(a, b)` is deleted: the interval `a..b` is the one spelling (design
-// principles 4.2, the ruling of 2026-10-24). The call is refused where it stands, with the
-// spelling to write instead.
-module h426_range_two_arguments
+module static_loop_sequence_range_two
 
-func main(): int sync {
-    let xs = range(0, 3)
-    println(xs)
-    return 0
+func sum(): int {
+    return static loop acc = 0 for i in range(0, 3) do acc + i
+}
+
+func main(): int {
+    return sum()
 }
 ```
 
@@ -7659,19 +7658,17 @@ The range 'range({0}, {1}, 0)' has a step of 0, so it is no sequence of integers
 The integers of `range(a, b, step)` are `a`, `a + step`, ... below `b`, so the step decides which integers the range holds: a step that does not move names no one sequence, whatever the bounds are (design principles 4.2; the author's ruling of 2026-10-24 on `h426-interval-step-form`). The step is a constant here, so the call can never be right and the refusal is at the call, where the step is written. Give a non-zero step, or write the interval `a..b` when the step is 1. A step that is not constant is a fault of the run instead (RuntimeDiag::InvalidArgument).
 ```
 
-**Example** (`test/cases/compile/stream/range_step_zero.cml`, run as `camel test/cases/compile/stream/range_step_zero.cml`)
+**Example** (`test/cases/compile/static_expansion/static_loop_sequence_range_step_zero.cml`, run as `camel test/cases/compile/static_expansion/static_loop_sequence_range_step_zero.cml`)
 
 ```camel
-// `range(a, b, 0)` names no sequence at all: the step never moves, so no integers are the
-// sequence and no sequence is the array (design principles 4.2; the author's ruling of
-// 2026-10-24 on `h426-interval-step-form`). The step is a constant here, so the refusal is at the
-// call, under the step the program wrote, and says both ways to write what it meant.
-module h426_range_step_zero
+module static_loop_sequence_range_step_zero
 
-func main(): int sync {
-    let xs = range(0, 10, 0)
-    println(xs)
-    return 0
+func sum(): int {
+    return static loop acc = 0 for i in range(0, 9, 0) do acc + i
+}
+
+func main(): int {
+    return sum()
 }
 ```
 
