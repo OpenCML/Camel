@@ -9,7 +9,7 @@ func main(): int sync {
     println(native_callback(f, 3), native_callback(g, 3), native_callback(f, 3))
     let w = (x: int): int => loop s = x while s < 20 do s + 7
     println(native_callback(w, 3))
-    let results = range(0, 64)->map<(i: int): int => native_callback(f, i)>
+    let results = 0..64->map<(i: int): int => native_callback(f, i)>
     println(results->reduce<(a: int, b: int): int => a + b, 0>)
     return 0
 }

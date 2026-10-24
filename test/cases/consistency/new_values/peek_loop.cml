@@ -7,7 +7,7 @@ module peek_loop
 func build(n: int): int sync {
     var out: int[] = []
     var total = 0
-    range(0, n)->foreach<sync (i: int) => sync {
+    0..n->foreach<sync (i: int) => sync {
         out = out->append<i>
         total += len(out)
         return null

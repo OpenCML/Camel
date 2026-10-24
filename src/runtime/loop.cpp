@@ -614,18 +614,41 @@ void validateRuntimeLoopInterface(
     }
     if (iterableAt == 1) {
         Type *sequence = graph->node(norm.front())->dataType();
-        if (sequence == nullptr || sequence->code() != TypeCode::Array) {
-            loopFails(graph, node, std::format("it iterates over a '{}'", typeText(sequence)));
+        const bool intervalIterable =
+            graph->loopIterableFormOf(node) == camel::core::LoopIterableForm::Interval;
+        Type *element = nullptr;
+        if (intervalIterable) {
+            // The sequence is the pair of the interval's two bounds, not an array of its
+            // elements: `for i in a..b` is fused by the compiler (design principles 4.2).
+            const auto *bounds = sequence != nullptr && sequence->code() == TypeCode::Tuple
+                                     ? static_cast<const TupleType *>(sequence)
+                                     : nullptr;
+            if (bounds == nullptr || bounds->size() != 2 || bounds->typeAt(0) == nullptr ||
+                bounds->typeAt(1) == nullptr || bounds->typeAt(0)->code() != TypeCode::Int64 ||
+                bounds->typeAt(1)->code() != TypeCode::Int64) {
+                loopFails(
+                    graph,
+                    node,
+                    std::format(
+                        "it iterates an interval written as a '{}', not as its two integers",
+                        typeText(sequence)));
+            }
+            element = Type::Int64();
+        } else {
+            if (sequence == nullptr || sequence->code() != TypeCode::Array) {
+                loopFails(graph, node, std::format("it iterates over a '{}'", typeText(sequence)));
+            }
+            element = static_cast<ArrayType *>(sequence)->elemType();
         }
-        Type *element = static_cast<ArrayType *>(sequence)->elemType();
-        Type *port    = bodyType(bodyPorts().front());
+        Type *port = bodyType(bodyPorts().front());
         if (port == nullptr || element == nullptr || !port->assignableFrom(element)) {
             loopFails(
                 graph,
                 node,
                 std::format(
-                    "its body takes elements of type '{}' from an array of '{}'",
+                    "its body takes elements of type '{}' from {} of '{}'",
                     typeText(port),
+                    intervalIterable ? "an interval" : "an array",
                     typeText(element)));
         }
     }

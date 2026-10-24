@@ -2,11 +2,11 @@ id = "compile.stream"
 order = 336
 tier = "fast"
 tags = ["feat", "compile", "stream"]
-desc = "The stream surface of H248: `f..g` and the interval `a..b` (H248 group 1, slice A: the ruled readings of `..`, and the removal of `?..`), and the stream type `T..` (slice B: one type however it is spelled, the suffix read left to right, and the linearity refusal)."
+desc = "The stream surface of H248: `f..g` and the interval `a..b` (H248 group 1, slice A: the ruled readings of `..`, and the removal of `?..`); and the interval line of H426: the two-parameter `range(a, b)` is deleted, and `for i in 0..n` is fused by the compiler rather than materialised."
 
 [[tests]]
 name = "stream.composition"
-desc = "`f..g` is the composition `x => g(f(x))`: `(inc..dbl)(3)` is `dbl(inc(3))` = 8, not `inc(dbl(3))` = 7. It used to be ConstructNotSupported at the operator."
+desc = "`f..g` is the composition `(x) => g(f(x))`: `(inc..dbl)(3)` is `dbl(inc(3))` = 8, not `inc(dbl(3))` = 7. It used to be ConstructNotSupported at the operator."
 kind = "behavior"
 case = "../../../cases/compile/stream/composition.cml"
 args = ["${case}"]
@@ -58,7 +58,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "stream.comp_operand_not_unary"
-desc = "The composition `f..g` is the lambda `x => g(f(x))`, so `f` is unary: a left operand of two parameters has no reading, and the diagnostic says how many it takes."
+desc = "The composition `f..g` is the lambda `(x) => g(f(x))`, so `f` is unary: a left operand of two parameters has no reading, and the diagnostic says how many it takes."
 kind = "negative"
 case = "../../../cases/compile/stream/comp_operand_not_unary.cml"
 args = ["${case}"]
@@ -256,7 +256,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "stream.comp_expected_type"
-desc = "`f..g` is the lambda `x => g(f(x))` (design principles 4.2), so the function type the position expects is the type that lambda would have: it gives the composition its input - the parameter of `f` - and its output - the result of `g` - and it instantiates a generic operand where it stands, exactly as the lambda's calls are instantiated under that type. `let h: (x: int) => int = x => ident(ident(x))` passed before this, so the composition must too (the ruling is docs/handover/reviews/questions-2026-10-23.md, section generic-operands-of-composition). It used to be CompOperandMismatch at the `..`, with the operand printed as `void`."
+desc = "`f..g` is the lambda `(x) => g(f(x))` (design principles 4.2), so the function type the position expects is the type that lambda would have: it gives the composition its input - the parameter of `f` - and its output - the result of `g` - and it instantiates a generic operand where it stands, exactly as the lambda's calls are instantiated under that type. `let h: (x: int) => int = (x) => ident(ident(x))` passed before this, so the composition must too (the ruling is docs/handover/reviews/questions-2026-10-23.md, section generic-operands-of-composition). It used to be CompOperandMismatch at the `..`, with the operand printed as `void`."
 kind = "behavior"
 case = "../../../cases/compile/stream/comp_expected_type.cml"
 args = ["${case}"]
@@ -268,7 +268,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "stream.comp_chain"
-desc = "The expected type reaches every link of a chain: `f..g..h` is `x => h(g(f(x)))`, so the composition's input types `f`, what `f` returns types `g`, what `g` returns types `h`, and the result the position expects is what `h` gives. The three operands of this case take three different instances (`wrap::<int>`, `head::<int>`, `wrap::<int>`), which a distribution that handed them one and the same type could not produce. The lambda written out is the same value."
+desc = "The expected type reaches every link of a chain: `f..g..h` is `(x) => h(g(f(x)))`, so the composition's input types `f`, what `f` returns types `g`, what `g` returns types `h`, and the result the position expects is what `h` gives. The three operands of this case take three different instances (`wrap::<int>`, `head::<int>`, `wrap::<int>`), which a distribution that handed them one and the same type could not produce. The lambda written out is the same value."
 kind = "behavior"
 case = "../../../cases/compile/stream/comp_chain.cml"
 args = ["${case}"]
@@ -311,5 +311,185 @@ expect_diagnostic_line = 13
 expect_diagnostic_column = 20
 expect_output_contains = ["'..' takes two functions or two integers; the left operand is '(x: int) => int' and the right one 'int'."]
 expect_output_not_contains = ["UnknownInternalError", "Warning", "has no instance here"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "stream.interval_loop"
+desc = "`for i in 0..n` is fused by the compiler (the ruling of 2026-10-24 on `h248-generator-and-composition`): the loop walks the two bounds, so the rounds are `a .. b - 1`, an interval that ends where it starts and one whose end is below its start run no round, the bounds are read once, and the end takes no round."
+kind = "behavior"
+case = "../../../cases/compile/stream/interval_loop.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_starts_with = "1234\n0\n0\n10\n2\n0\n"
+expect_output_not_contains = ["UnknownInternalError", "[Error]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+
+[[tests]]
+name = "stream.interval_loop_fused"
+desc = "The graph of `for i in 0..n` holds no array and no `:struct/range`: the loop's sequence is the pair of bounds (`\"iterable\": \"interval\"`), where the same interval bound to a name lowers to the `:struct/range` call that builds the `int[]`."
+kind = "behavior"
+case = "../../../cases/compile/stream/interval_loop.cml"
+args = ["${case}", "std::jgir", "canonical=true"]
+expect_exit = 0
+expect_output_contains = ["\"iterable\": \"interval\""]
+expect_output_not_contains = ["struct/range", "UnknownInternalError", "[Error]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+
+[[tests]]
+name = "stream.interval_loop_not_materialised"
+desc = "Two million rounds under an 8 MB heap cap: the fused loop runs, where an `int[]` of the same interval (16 MB) is refused with RuntimeDiag::MemoryExhausted. This is the observable half of `for i in 0..n` builds no array."
+kind = "behavior"
+case = "../../../cases/compile/stream/interval_loop_not_materialised.cml"
+args = ["${case}", "std::nvm"]
+envs = ["CAMEL_GC_HEAP_LIMIT_MB=8"]
+expect_exit = 0
+expect_stdout_starts_with = "2000000\n"
+expect_output_not_contains = ["MemoryExhausted", "UnknownInternalError", "[Error]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+
+[[tests]]
+name = "stream.interval_own_range"
+desc = "The deletion is the built-in, not the identifier: a module's own `range(a, b)` keeps its name and is called as it declares (the tensor module's `range` is the standard case), so the diagnostic cannot misfire on one."
+kind = "behavior"
+case = "../../../cases/compile/stream/interval_own_range.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_starts_with = "[3, 0]\n"
+expect_output_not_contains = ["RangeTwoArgumentsRemoved", "UnknownInternalError", "[Error]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+
+[[tests]]
+name = "stream.range_two_arguments"
+desc = "The two-parameter `range(a, b)` is deleted: `a..b` is the one spelling, so the call is refused where it stands, under the name the program wrote, with the interval to write instead."
+kind = "negative"
+case = "../../../cases/compile/stream/range_two_arguments.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::RangeTwoArgumentsRemoved"
+expect_diagnostic_code = "0x030001E5"
+expect_diagnostic_line = 7
+expect_diagnostic_column = 14
+expect_output_contains = ["The two-parameter 'range(a, b)' is gone; write the interval 'a..b'."]
+expect_output_not_contains = ["UnknownInternalError", "Warning"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+
+[[tests]]
+name = "stream.interval_cml"
+desc = "`std::cml` prints the interval as `a..b` again: the operator a value-position interval lowers to is the interval's own spelling, and the printed program compiles back to the same graph (the round trip itself is pinned by feat.trans.cml, over test/cases/trans/cml/interval.cml)."
+kind = "behavior"
+case = "../../../cases/compile/stream/interval.cml"
+args = ["${case}", "std::cml"]
+expect_exit = 0
+expect_stdout_contains = ["let xs: int[] = 1..5", "println(0..n)"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+
+[[tests]]
+name = "stream.interval_loop_cml"
+desc = "`std::cml` prints the sequence of a fused loop as the interval: the graph holds the two bounds (`LoopIterableForm::Interval`), and the source form is `for i in a..b`, with a bound parenthesised when it has to be (`(-2)..3`, `0..(n + 1)`)."
+kind = "behavior"
+case = "../../../cases/compile/stream/interval_loop.cml"
+args = ["${case}", "std::cml"]
+expect_exit = 0
+expect_stdout_contains = ["for i in 0..5", "for i in 3..3", "for i in 5..1", "for i in 0..(n + 1)", "for i in (-2)..3", "for i in 1..4"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+
+[[tests]]
+name = "stream.range_step"
+desc = "`range(a, b, step)` is the integers `a`, `a + step`, ... below `b`, and above `b` when the step is negative: the array form of the interval with a step, empty when the step carries the start to the side it does not go, and `range(a, b, 1)` the same integers as `a..b` (the author's ruling of 2026-10-24 on `h426-interval-step-form`). The step may be an expression."
+kind = "behavior"
+case = "../../../cases/compile/stream/range_step.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "[0, 3, 6, 9]\n[0, 3, 6]\n[1]\n[10, 7, 4, 1]\n[10, 7, 4]\n[]\n[]\n[]\n[]\n[0, 4, 8, 12, 16]\n[20, 16, 12, 8, 4]\n[0, 1, 2, 3, 4]\n[0, 1, 2, 3, 4]\n[2, 4, 6, 8]\n"
+expect_output_not_contains = ["UnknownInternalError", "[Error]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+
+[[tests]]
+name = "stream.range_step_zero"
+desc = "A constant step of 0 is refused where it is written: `range(0, 10, 0)` names no sequence, so the call is refused under the step, with the interval to write for the unit step (SemanticDiag::RangeStepZero; the author's ruling of 2026-10-24 on `h426-interval-step-form`)."
+kind = "negative"
+case = "../../../cases/compile/stream/range_step_zero.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::RangeStepZero"
+expect_diagnostic_code = "0x030001E6"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 27
+expect_output_contains = ["The range 'range(0, 10, 0)' has a step of 0, so it is no sequence of integers."]
+expect_output_not_contains = ["UnknownInternalError", "Warning"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+
+[[tests]]
+name = "stream.range_step_runtime"
+desc = "A step the compiler does not know is the run's: `range(0, 10, k)` with `k` 3 and -3 is the sequence it names, and with `k` 0 the fault the array form raises, RuntimeDiag::InvalidArgument, at the call (the author's ruling of 2026-10-24 on `h426-interval-step-form`)."
+kind = "negative"
+case = "../../../cases/compile/stream/range_step_runtime.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
+expect_output_contains = ["[0, 3, 6, 9]", "[]", "the step is 0 (from 0 to 10); a range needs a step that moves"]
+expect_output_not_contains = ["UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+
+[[tests]]
+name = "stream.range_import_wins"
+desc = "A name imported by name is the name the program means: with `import { range } from tensor` the call is tensor's `range`, at its one-argument and three-argument arities, and the built-in of the same spelling (the prelude, the lowest layer) does not answer for the name (design principles 6.x; the author's ruling of 2026-10-24 on the name lookup order). The graph names the entity that answered."
+kind = "behavior"
+case = "../../../cases/compile/stream/range_import_wins.cml"
+args = ["${case}", "std::jgir", "canonical=true"]
+expect_exit = 0
+expect_output_contains = ["tensor:range"]
+expect_output_not_contains = ["struct/range", "UnknownInternalError", "[Error]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+
+[[tests]]
+name = "stream.range_using_wins"
+desc = "`using namespace` is layer 4, above the built-in: after `using namespace tensor` the one-argument `range(5)` is tensor's, which the merged layer the built-in takes part in cannot answer (design principles 6.x; the author's ruling of 2026-10-24 on the name lookup order)."
+kind = "behavior"
+case = "../../../cases/compile/stream/range_using_wins.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_starts_with = "tensor([      0,       1,       2,       3,       4], dtype=int64)"
+expect_output_not_contains = ["NoMatchingFunction", "UnknownInternalError", "[Error]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+
+[[tests]]
+name = "stream.range_two_arguments_builtin"
+desc = "A named import does not take the built-in out of the language: where the imported `range` has no rule for two arguments, the built-in still answers, and the two-parameter spelling is still the one that is gone (SemanticDiag::RangeTwoArgumentsRemoved), refused under the name the program wrote."
+kind = "negative"
+case = "../../../cases/compile/stream/range_two_arguments_builtin.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::RangeTwoArgumentsRemoved"
+expect_diagnostic_code = "0x030001E5"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 13
+expect_output_contains = ["The two-parameter 'range(a, b)' is gone; write the interval 'a..b'."]
+expect_output_not_contains = ["UnknownInternalError", "Warning"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000

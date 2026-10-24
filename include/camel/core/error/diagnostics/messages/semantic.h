@@ -122,11 +122,11 @@ enum class SemanticDiag : uint32_t {
     ModuleTypeCycle      = 0x000111,
     InvalidAnnotation    = 0x000112,
     // The structured loop (design principles 3.10): 0x120 and up.
-    LoopSequenceNotIterable = 0x000120,
     LoopBodyTypeMismatch    = 0x000121,
     LoopStateWithoutType    = 0x000122,
     LoopConditionNotBool    = 0x000123,
     LoopNameRepeated        = 0x000124,
+    LoopSequenceNotIterable = 0x000120,
     // Rulings of 2026-10-19 (design principles log 2.13): the nominal enum, 0x130 and up.
     DuplicateEnumVariant   = 0x000130,
     DuplicateEnumField     = 0x000131,
@@ -354,7 +354,14 @@ enum class SemanticDiag : uint32_t {
     CompOperandNotUnary = 0x0001E2,
     /// An operand of `..` is the name of a generic function, and nothing at this position says which instance it stands for. The refusal names the operand and both ways to settle it (the author's ruling of 2026-10-24, section generic-operands-of-composition of docs/handover/reviews/questions-2026-10-23.md).
     CompOperandGenericWithoutType = 0x0001E4,
-    ReducedPrecisionUnsupported   = 0x0001D7,
+    /// The interval of two integers is written `a..b` and nothing else: the two-parameter `range(a, b)`
+    /// the language used to have is gone (design principles 4.2; the author's ruling of 2026-10-24).
+    RangeTwoArgumentsRemoved = 0x0001E5,
+    /// `range(a, b, 0)` is no sequence at all: the step never moves (design principles 4.2; the
+    /// author's ruling of 2026-10-24 on `h426-interval-step-form`, which makes a step of 0 a fault
+    /// and a constant one a compile-time error).
+    RangeStepZero               = 0x0001E6,
+    ReducedPrecisionUnsupported = 0x0001D7,
     // #impl<f> (design principles 10.4): the Camel body of the function is its semantics and the
     // body-less declaration f of the same module is the operator that runs it. The graph builder
     // resolves the tag when it declares the module, so no pass reads it and it names no reader.

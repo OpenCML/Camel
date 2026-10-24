@@ -230,7 +230,15 @@ class Document:
             self.edge(vid, target, "callee")
         if "loop" in node:
             loop = node["loop"]
-            self.V[vid]["loop"] = [loop.get("kind"), loop.get("collectionCount", 0)]
+            # `iterable` is the form the loop's elements come from: absent for the array every
+            # other loop iterates, `"interval"` for the two bounds of `for i in a..b`, which the
+            # compiler fuses (design principles 4.2). A printed program that materialised the
+            # interval instead would be a different graph, and this is where that is caught.
+            self.V[vid]["loop"] = [
+                loop.get("kind"),
+                loop.get("collectionCount", 0),
+                loop.get("iterable"),
+            ]
             for key in ("condition", "body"):
                 target = "NULL" if loop.get(key) is None else f"G:{loop[key]}"
                 self.edge(vid, target, f"loop_{key}")

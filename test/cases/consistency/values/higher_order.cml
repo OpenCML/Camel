@@ -5,7 +5,7 @@
 module higher_order
 
 func main(): int sync {
-    let xs = range(0, 40)
+    let xs = 0..40
     let squares = xs->map<(x: int): int => x * x>
     let evens = squares->filter<(x: int): bool => x % 2 == 0>
     println(squares)

@@ -149,7 +149,7 @@ export func drop::<T>(xs: T[]): T[] {
 /// Each element with its index.
 /// @example enumerate(['a', 'b'])    // [(0, 'a'), (1, 'b')]
 export func enumerate::<T>(xs: T[]): (int, T)[] {
-    return zip(range(0, len(xs)), xs)
+    return zip(0..len(xs), xs)
 }
 
 /// The elements of the inner arrays, in order. The primitive behind `flat_map`.

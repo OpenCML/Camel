@@ -288,6 +288,7 @@ gc_node_ref_t GraphDraft::addLoopNode(
     dataIndex = ensureValueSlot(*this, type, dataIndex);
     const GCLoopRef ref{
         .kind            = body.kind,
+        .iterableForm    = body.iterableForm,
         .condRef         = payloadGraphIndexOf(body.condGraph),
         .bodyRef         = payloadGraphIndexOf(body.bodyGraph),
         .collectionCount = body.collectionCount,
@@ -452,6 +453,16 @@ void GraphDraft::setLoopCollectionCount(gc_node_ref_t id, uint32_t count) {
         "Only a LOOP node has collection slots.");
     auto *body            = DraftNodeView::payloadAs<GCLoopRef>(draftNode);
     body->collectionCount = count;
+}
+
+void GraphDraft::setLoopIterableInterval(gc_node_ref_t id) {
+    ++mutations_;
+    DraftNode *draftNode = node(id);
+    ASSERT(
+        draftNode != nullptr && draftNode->header.kind == GCNodeKind::Loop,
+        "Only a LOOP node iterates an interval.");
+    auto *body          = DraftNodeView::payloadAs<GCLoopRef>(draftNode);
+    body->iterableForm = camel::core::LoopIterableForm::Interval;
 }
 
 void GraphDraft::rewriteNode(gc_node_ref_t id, const DraftNodeInit &init) {

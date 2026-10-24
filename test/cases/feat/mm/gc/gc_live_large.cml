@@ -11,11 +11,11 @@ func row(i: int, k: int): int[] {
 }
 
 func block(n: int, k: int): int[][] {
-    return range(0, n)->map<(i: int): int[] => row(i, k)>
+    return 0..n->map<(i: int): int[] => row(i, k)>
 }
 
 func blocks(count: int, n: int): int[][][] {
-    return range(0, count)->map<(b: int): int[][] => block(n, b)>
+    return 0..count->map<(b: int): int[][] => block(n, b)>
 }
 
 func probe(live: int[][][], n: int): int {

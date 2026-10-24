@@ -8,7 +8,7 @@ func inv(x: int): int { return 60 / (x - 3) }
 
 func main(): int sync {
     println('before')
-    let ys = range(0, 8)->map<inv>
+    let ys = 0..8->map<inv>
     println(ys)
     println('not reached')
     return 0

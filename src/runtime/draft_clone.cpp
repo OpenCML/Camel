@@ -47,6 +47,7 @@ remapNodeSpan(std::span<const gc_node_ref_t> refs, const std::vector<gc_node_ref
 std::vector<std::byte> loopPayloadBytes(GraphDraft &owner, const GCLoopBody &loop) {
     const GCLoopRef ref{
         .kind            = loop.kind,
+        .iterableForm    = loop.iterableForm,
         .condRef         = owner.payloadGraphIndexOf(loop.condGraph),
         .bodyRef         = owner.payloadGraphIndexOf(loop.bodyGraph),
         .collectionCount = loop.collectionCount,

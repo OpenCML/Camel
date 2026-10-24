@@ -18,7 +18,7 @@ func churn(i: int, n: int, acc: int): int {
 }
 
 func inner_sum(seed: int): int {
-    return range(0, 16)
+    return 0..16
         ->map<(i: int): int => fib(18 + (seed + i) % 3)>
         ->reduce<(acc: int, cur: int): int => acc + cur, 0>
 }

@@ -93,6 +93,9 @@ struct Style {
     std::string underline(const std::string &t) const { return wrap("4", t); }
     std::string gutter(const std::string &t) const { return wrap("1;34", t); }
     std::string secondary(const std::string &t) const { return wrap("1;36", t); }
+    /// The markers of a fix: the text it writes, and the text it cuts.
+    std::string written(const std::string &t) const { return wrap("1;32", t); }
+    std::string cut(const std::string &t) const { return wrap("1;31", t); }
     std::string severity(Severity s, const std::string &t) const {
         switch (s) {
         case Severity::Error:
@@ -398,6 +401,140 @@ std::vector<MarkedLine> markRange(
     return out;
 }
 
+// ---- The fix, drawn as the text format shows it ----
+/// One source line of a fix, and the columns to mark under it.
+struct FixLine {
+    size_t line      = 0;
+    std::string text; // drawn text, already cut to the width limit
+    size_t markStart = 0;
+    size_t markWidth = 0;
+    char mark        = '+';
+};
+
+/// The byte offset of code point `character` of one line (the end of the line when it is past it).
+size_t byteOfCodePoint(const std::string &line, size_t character) {
+    size_t i = 0;
+    for (size_t c = 0; c < character && i < line.size(); ++c) {
+        decodeUtf8(line, i);
+    }
+    return i;
+}
+
+size_t codePointsOf(std::string_view text) {
+    size_t n = 0;
+    for (size_t i = 0; i < text.size(); ++n) {
+        decodeUtf8(text, i);
+    }
+    return n;
+}
+
+/// The lines a fix writes, in the order of its edits: what the edit replaces, read the way rustc
+/// shows a suggestion. An edit that writes text is drawn as the line it leaves behind, with `+`
+/// under the text it writes; an edit that only cuts text writes nothing to show, so the line as it
+/// stood is drawn with `-` under what it cuts. Empty when the whole fix cannot be drawn - an edit's
+/// range is a token range, or names a line the file does not have - because a fix drawn at the
+/// wrong place is worse than one not drawn at all.
+std::vector<FixLine> fixLines(
+    const DiagFix &fix, const Diagnostic &d, const LineProvider &lineAt,
+    const RenderOptions &options) {
+    std::vector<FixLine> out;
+    for (const DiagEdit &edit : fix.edits) {
+        const auto resolved = resolveSourceRange(edit.range, d.sourceContext);
+        if (!resolved) {
+            return {};
+        }
+        const CharRange range = *resolved;
+        if (range.end.line < range.start.line) {
+            return {};
+        }
+        const bool cuts = range.end.line > range.start.line ||
+                          range.end.character > range.start.character;
+        if (edit.replacement.empty()) {
+            // Nothing is written, so the line as it will read cannot show what the fix removes.
+            if (cuts) {
+                size_t elided = static_cast<size_t>(-1);
+                for (const MarkedLine &line : markRange(range, lineAt, options, elided)) {
+                    FixLine entry;
+                    entry.line      = line.line;
+                    entry.text      = line.text;
+                    entry.markStart = line.markStart;
+                    entry.markWidth = line.markWidth;
+                    entry.mark      = '-';
+                    out.push_back(std::move(entry));
+                }
+            }
+            continue;
+        }
+        std::vector<std::string> block;
+        for (size_t l = range.start.line; l <= range.end.line; ++l) {
+            auto text = lineAt(l);
+            if (!text) {
+                return {};
+            }
+            block.push_back(*text);
+        }
+        std::string joined;
+        for (size_t i = 0; i < block.size(); ++i) {
+            if (i) {
+                joined += '\n';
+            }
+            joined += block[i];
+        }
+        auto offsetOf = [&](size_t line, size_t character) {
+            size_t at = 0;
+            for (size_t l = range.start.line; l < line; ++l) {
+                at += block[l - range.start.line].size() + 1;
+            }
+            const std::string &text = block[line - range.start.line];
+            return at + std::min(byteOfCodePoint(text, character), text.size());
+        };
+        const size_t startOffset = offsetOf(range.start.line, range.start.character);
+        const size_t endOffset   = offsetOf(range.end.line, range.end.character);
+        if (startOffset > endOffset || endOffset > joined.size()) {
+            return {};
+        }
+        const std::string after =
+            joined.substr(0, startOffset) + edit.replacement + joined.substr(endOffset);
+        // The code points of the text the fix writes, counted in the block it wrote them into.
+        const size_t firstWritten = codePointsOf(joined.substr(0, startOffset));
+        const size_t writtenCount = codePointsOf(edit.replacement);
+        size_t at                 = 0;
+        size_t lineNumber         = range.start.line;
+        size_t before             = 0; // code points of `after` in front of `at`
+        for (;;) {
+            const size_t newline = after.find('\n', at);
+            const std::string text =
+                after.substr(at, newline == std::string::npos ? std::string::npos : newline - at);
+            const size_t count = codePointsOf(text);
+            const size_t from  = std::max(before, firstWritten);
+            const size_t to    = std::min(before + count, firstWritten + writtenCount);
+            const MarkedLine marked = markLine(
+                lineNumber,
+                text,
+                to > from ? from - before : 0,
+                to > from ? to - before : 0,
+                false,
+                false,
+                false,
+                options);
+            FixLine entry;
+            entry.line      = marked.line;
+            entry.text      = marked.text;
+            entry.markStart = marked.markStart;
+            entry.markWidth = to > from ? marked.markWidth : 0;
+            entry.mark      = '+';
+            out.push_back(std::move(entry));
+            ++lineNumber;
+            before += count + (newline == std::string::npos ? 0 : 1);
+            if (newline == std::string::npos) {
+                break;
+            }
+            at = newline + 1;
+        }
+    }
+    return out;
+}
+
 std::string rtrim(std::string s) {
     while (!s.empty() && (s.back() == ' ' || s.back() == '\t')) {
         s.pop_back();
@@ -590,6 +727,13 @@ std::string renderRich(const Diagnostic &d, const RenderOptions &options, const 
                 d.sourceContext,
                 options));
     }
+    // The fixes, drawn before the excerpt's width is fixed: a fix may mark a line further down
+    // the file than the message itself, and the gutter has to be wide enough for both.
+    const LineProvider lines = lineProviderFor(path, d.sourceContext);
+    std::vector<std::vector<FixLine>> fixBlocks;
+    for (const DiagFix &fix : d.fixes) {
+        fixBlocks.push_back(fixLines(fix, d, lines, options));
+    }
     size_t maxLine = 0;
     auto consider  = [&](const Block &b) {
         for (const MarkedLine &l : b.lines) {
@@ -599,6 +743,11 @@ std::string renderRich(const Diagnostic &d, const RenderOptions &options, const 
     consider(primary);
     for (const Block &b : secondary) {
         consider(b);
+    }
+    for (const std::vector<FixLine> &block : fixBlocks) {
+        for (const FixLine &l : block) {
+            maxLine = std::max(maxLine, l.line + 1);
+        }
     }
     const size_t gutterWidth = digits(maxLine) + 1;
 
@@ -636,6 +785,29 @@ std::string renderRich(const Diagnostic &d, const RenderOptions &options, const 
     }
     if (!d.suggestion.empty()) {
         appendLabelled(out, "help", d.suggestion, options.wrapWidth, style);
+    }
+    // The fix itself, where the compiler knows the text to write: the title as a `help:` line and,
+    // under it, the source line the fix leaves behind, marked where it writes - what rustc shows
+    // under a suggestion, so that a reader of the text sees what to change and not only that there
+    // is something to change. A tool reads the same change from `data.fixes` in JSON.
+    for (size_t i = 0; i < d.fixes.size(); ++i) {
+        appendLabelled(out, "help", d.fixes[i].title, options.wrapWidth, style);
+        const std::vector<FixLine> &block = fixBlocks[i];
+        if (block.empty()) {
+            continue;
+        }
+        const std::string pad(gutterWidth, ' ');
+        out += pad + " " + style.gutter("|") + "\n";
+        for (const FixLine &line : block) {
+            std::string number = std::to_string(line.line + 1);
+            number.insert(0, gutterWidth > number.size() ? gutterWidth - number.size() : 0, ' ');
+            out += rtrim(style.gutter(number + " |") + " " + line.text) + "\n";
+            if (line.markWidth > 0) {
+                const std::string marks(line.markWidth, line.mark);
+                out += pad + " " + style.gutter("|") + " " + std::string(line.markStart, ' ') +
+                       (line.mark == '+' ? style.written(marks) : style.cut(marks)) + "\n";
+            }
+        }
     }
     while (!out.empty() && out.back() == '\n') {
         out.pop_back();

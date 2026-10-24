@@ -327,11 +327,19 @@ export func len(x: T[..]): int
 
 // ---- arrays ----
 
-/// The integers from start up to, not including, end; empty when end is not above start.
+/// The integers of a step: `start`, `start + step`, ... up to, not including, `end`; with no step
+/// the step is 1, `range(a, b)` is the same sequence as the interval `a..b` and becomes it on the
+/// graph (design principles 4.2). `step` must move: a step of 0 is a fault, and a constant call
+/// with a step of 0 is refused where it is written. The result is empty when the step does not
+/// carry `start` towards `end`. A `for` over an interval is fused by the compiler and builds no
+/// array; this call builds one.
 /// @pure
-/// @example range(0, 3)    // [0, 1, 2]
+/// @fails fault `InvalidArgument` when the step is 0
+/// @example range(0, 10, 3)     // [0, 3, 6, 9]
+/// @example range(10, 0, -3)    // [10, 7, 4, 1]
+/// @example-fragment the interval is written `a..b`; the stepped form is `range(a, b, step)`
 #op<':struct/range'>
-export func range(start: int, end: int): int[]
+export func range(start: int, end: int, step?: int): int[]
 
 /// The first element. An empty array has none: check len first.
 /// @pure

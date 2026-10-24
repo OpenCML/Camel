@@ -21,22 +21,54 @@
 
 module tensor
 
+import { is_numeric } from types
+
+// The shape of a signature (design principles 4.1 and 5.5; the language author's ruling of
+// 2026-10-24 on `bare-tensor-parameter-instantiation-measured`,
+// docs/handover/reviews/questions-2026-10-23.md): the element type of a tensor operand is an
+// explicit type variable of the head, written `func f::<T>(x: T[..]) when is_numeric::<T>()`, and
+// the call site's argument type instantiates it. That is the spelling P4's endpoint keeps: no
+// signature writes the bare `Tensor` name.
+//
+// Two arms stand side by side here, and they take disjoint arguments, so neither shadows the
+// other and no call becomes ambiguous. Each function below therefore declares the array spelling
+// first (the target) and the module spelling second (the transition):
+//
+//   * `t: T[..]` takes a native array of any rank and any numeric element type — `f32[3]`,
+//     `f32[2, 3]`, `f32[..]`, `int[3]` — and the body sees the element type the call bound.
+//   * `t: Tensor` (the bare module spelling) is what the operators of this module still return:
+//     `ones`, `zeros`, `new` and every elementwise operator produce the module's tensor type, and
+//     a `T[..]` parameter cannot bind `T` from it while `Tensor` is a type of its own rather than
+//     the array alias (`f32[..]`). Removing this arm is the rest of P4 — it needs the alias first;
+//     see docs/handover/reviews/questions-2026-10-24-evening.md §bare-tensor-signature-rewrite for
+//     the measurement.
+//
+// `show` keeps the two arms it had. Its second arm is the umbrella parameter the C++ resolver had
+// (a tensor, or *any* array), and a test pins that it narrows nothing: `show([])` binds the empty
+// array's element type and the kernel faults at run time
+// (test/plans/feat/compile/native_declarations.plan.toml, tensor_show_empty_array.cml). A third
+// arm over `T[..]` would make every rank-1 numeric array ambiguous with that umbrella.
+
 // ---- shape and reshaping ----
 
 /// The extents of a tensor, in order.
 /// @pure
 /// @example shape(new([[1.0, 2.0], [3.0, 4.0]]))    // [2, 2]
+export func shape::<T>(t: T[..]): int[] when is_numeric::<T>()
 export func shape(t: Tensor): int[]
 
 /// The number of elements in a tensor: the product of its extents.
 /// @pure
 /// @example numel(zeros([2, 3]))    // 6
+export func numel::<T>(t: T[..]): int when is_numeric::<T>()
 export func numel(t: Tensor): int
 
 /// The extent of one axis; a negative axis counts from the last one (`-1` is the last axis).
 /// @pure
 /// @fails fault `RuntimeError` when the axis is outside the rank
 /// @example dim(new([[1.0, 2.0], [3.0, 4.0]]), 1)    // 2
+export func dim::<T>(t: T[..], axis: int): int when is_numeric::<T>()
+export func dim::<T>(t: T[..], axis: i32): int when is_numeric::<T>()
 export func dim(t: Tensor, axis: int): int
 export func dim(t: Tensor, axis: i32): int
 
@@ -46,6 +78,7 @@ export func dim(t: Tensor, axis: i32): int
 /// reads back.
 /// @pure
 /// @example to_bytes(new([1.0, 2.0]))    // [0, 0, 128, 63, 0, 0, 0, 64]
+export func to_bytes::<T>(t: T[..]): Bytes when is_numeric::<T>()
 export func to_bytes(t: Tensor): Bytes
 
 /// The tensor a NumPy `.npy` file holds: its element type and extents are the file's, known when
@@ -59,6 +92,7 @@ export func load_npy(path: string): Tensor
 /// @effect writes a file
 /// @fails fault `RuntimeError` when the file cannot be written
 /// @example save_npy(zeros([2, 2]), 'x.npy')
+export func save_npy::<T>(t: T[..], path: string): void when is_numeric::<T>()
 export func save_npy(t: Tensor, path: string): void
 
 // ---- conversion and display ----

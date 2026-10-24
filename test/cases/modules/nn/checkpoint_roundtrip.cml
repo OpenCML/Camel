@@ -36,7 +36,7 @@ func update(s: State): State {
     }
 }
 func advance(s: State, count: int): State {
-    return loop state = s for i in range(0, count) do update(state)
+    return loop state = s for i in 0..count do update(state)
 }
 func show(s: State): int sync {
     println(s.step)

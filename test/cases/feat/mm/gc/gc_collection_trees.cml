@@ -41,7 +41,7 @@ func names(i: int, n: int, acc: Set<string>): Set<string> {
 }
 
 func grid(n: int): Map<(int, string), string?> {
-    return range(0, n)->map<(i: int): ((int, string), string?) => ((i % 9, key_of(i)), (key_of(i * 2)) as string?)> as Map<(int, string), string?>
+    return 0..n->map<(i: int): ((int, string), string?) => ((i % 9, key_of(i)), (key_of(i * 2)) as string?)> as Map<(int, string), string?>
 }
 
 func main(): int sync {

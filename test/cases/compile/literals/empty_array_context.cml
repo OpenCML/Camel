@@ -15,7 +15,7 @@ func takes(xs: float[]): int {
 
 func squares(n: int): int[] sync {
     // The function's declared return type is the loop's position: `acc` is an `int[]`.
-    loop acc = [] for i in range(0, n) do acc->append<i * i>
+    loop acc = [] for i in 0..n do acc->append<i * i>
 }
 
 func halves(): float[] sync {
@@ -25,7 +25,7 @@ func halves(): float[] sync {
 
 func inferred(n: int): int[] sync {
     // No expected type here: the value the body appends gives the state its element type.
-    let squares = loop acc = [] for i in range(0, n) do acc->append<i * i>
+    let squares = loop acc = [] for i in 0..n do acc->append<i * i>
     return squares
 }
 

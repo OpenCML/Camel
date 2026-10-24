@@ -9,7 +9,7 @@ func collatz_steps(n: int, steps: int): int {
 }
 
 func main(): int sync {
-    let steps = range(1, 20001)->map<(n: int): int => collatz_steps(n, 0)>
+    let steps = 1..20001->map<(n: int): int => collatz_steps(n, 0)>
     println(steps->reduce<(acc: int, cur: int): int => acc + cur, 0>)
     return 0
 }

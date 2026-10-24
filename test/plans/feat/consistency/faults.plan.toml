@@ -171,7 +171,7 @@ desc = "A fault in one element of a map nested in a map."
 case = "../../../cases/consistency/faults/fault_in_nested_map.cml"
 expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
 expect_diagnostic_line = 7
-expect_diagnostic_column = 50
+expect_diagnostic_column = 43
 expect_stdout_starts_with = "before\n"
 
 [[tests]]

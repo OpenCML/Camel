@@ -13,7 +13,7 @@ func bad(x: int): int {
 
 func main(): int sync {
     println('before')
-    let ys = range(0, 64)->map<bad>
+    let ys = 0..64->map<bad>
     println(ys)
     println('not reached')
     return 0

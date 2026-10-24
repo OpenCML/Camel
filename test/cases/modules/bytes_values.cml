@@ -24,7 +24,7 @@ func main(): int sync {
     println(file_size(path))
     println(to_array(read_bytes(path)))
     println(tree_map<count>({ raw: binary, more: (encode('abc'), binary) }))
-    replace(path, from_array(range(0, 0)))
+    replace(path, from_array(0..0))
     println(file_size(path))
     return 0
 }

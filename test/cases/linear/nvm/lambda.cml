@@ -31,10 +31,10 @@ func valid_points(points: Point[]): Point[] {
 // Render only the points that remain after validation.
 func render(snake: Point[]): void sync {
     let cleaned = valid_points(snake)
-    let rows = range(0, HEIGHT)
+    let rows = 0..HEIGHT
 
     rows->foreach<(y: int) => sync {
-        let cols = range(0, WIDTH)
+        let cols = 0..WIDTH
         cols->map<(x: int): string => {
             let p = { x: x, y: y }
             return if cleaned->contains<p> then 'O' else '.'

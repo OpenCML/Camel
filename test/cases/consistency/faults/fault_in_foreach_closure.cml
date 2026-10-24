@@ -6,7 +6,7 @@ module fault_in_foreach_closure
 
 func main(): int sync {
     var total = 0
-    range(0, 8)->foreach<sync (x: int) => sync {
+    0..8->foreach<sync (x: int) => sync {
         total = total + 12 / (3 - x)
         println(total)
     }>

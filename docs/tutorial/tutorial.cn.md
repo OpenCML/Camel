@@ -258,7 +258,7 @@ Camel 里没有“提前返回”。让分支成为函数体的最后一个表�
 module arrays
 
 func main(): int sync {
-    let xs = range(1, 11)                                     // [1, ..., 10]
+    let xs = 1..11    // [1, ..., 10]
     let squares = xs->map<(x: int): int => x * x>
     let evens = squares->filter<(x: int): bool => x % 2 == 0>
     let total = evens->reduce<(acc: int, x: int): int => acc + x, 0>
@@ -305,12 +305,12 @@ import { seed, randint } from random
 func main(): int sync {
     seed(42)
     // Wrong tool: randint advances a hidden state, so each element depends on which ran first.
-    let drawn = range(0, 8)->map<(i: int): int => randint(0, 99)>
+    let drawn = 0..8->map<(i: int): int => randint(0, 99)>
     println(drawn)
 
     seed(42)
     // reduce runs in element order on every back end.
-    let ordered = range(0, 8)->reduce<(acc: int[], i: int): int[] => concat(acc, [randint(0, 99)]), [0]->slice<0, 0>>
+    let ordered = 0..8->reduce<(acc: int[], i: int): int[] => concat(acc, [randint(0, 99)]), [0]->slice<0, 0>>
     println(ordered)
     return 0
 }

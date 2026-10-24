@@ -46,7 +46,7 @@ func digits(n: int, acc: int[]): int[] {
 // A parallel inner function: a map whose element function is a serial recursion, with a
 // captured value.
 func inner_sum(seed: int): int {
-    return range(0, 12)
+    return 0..12
         ->map<(i: int): int => fib(10 + (seed + i) % 4) + gcd(seed + 12, i + 18)>
         ->reduce<(acc: int, cur: int): int => acc + cur, 0>
 }
@@ -59,7 +59,7 @@ func drive(step: int, steps: int, acc: int): int {
 
 // Not serial (a reduce in the first arm), and its other arm is a tail call of a serial graph.
 func sum_to(n: int): int {
-    return if n < 50 then range(0, n + 1)->reduce<(acc: int, cur: int): int => acc + cur, 0>
+    return if n < 50 then 0..(n + 1)->reduce<(acc: int, cur: int): int => acc + cur, 0>
         else churn(0, n, 7)
 }
 
@@ -71,12 +71,12 @@ func main(): int sync {
     println(norm(3.0, 4.0))
     println(digits(907152, []))
     // a parallel map over serial element functions
-    println(range(1, 9)->map<(n: int): int => collatz(n * 37, 0)>)
-    println(range(0, 6)->map<(i: int): float => norm(float(i), 1.0)>->map<(x: float): int => int(x * 1000.0)>)
+    println(1..9->map<(n: int): int => collatz(n * 37, 0)>)
+    println(0..6->map<(i: int): float => norm(float(i), 1.0)>->map<(x: float): int => int(x * 1000.0)>)
     // serial element functions that allocate (arrays built step by step on every worker)
-    println(range(0, 24)->map<(i: int): int => len(digits(i * 123457 + 1, [])) * 10 + digits(i + 7, [])[0]>)
+    println(0..24->map<(i: int): int => len(digits(i * 123457 + 1, [])) * 10 + digits(i + 7, [])[0]>)
     // a filter over a serial predicate
-    println(range(1, 40)->filter<(n: int): bool => gcd(n, 36) == 1>)
+    println(1..40->filter<(n: int): bool => gcd(n, 36) == 1>)
     // a serial driver that calls a parallel inner function
     println(drive(0, 6, 1))
     // a tail call from a graph of the scheduler into a serial graph, and the arm that stays

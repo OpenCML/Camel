@@ -10,8 +10,10 @@
                                                     [--allow-empty REASON]
 
 snapshot  Every .cml case of the parse corpus (test/cases/parse) and every probe (probes.py) is
-          parsed; a hash of the normalized AST of each (or of its diagnostics, when it is
-          rejected) is compared with test/plans/feat/parse/golden/ast_hashes.txt. The golden list
+          parsed; a hash of the normalized AST of each (or of its diagnostics' code and place,
+          when it is rejected) is compared with test/plans/feat/parse/golden/ast_hashes.txt. The
+          diagnostics are recorded by code and position and never by their wording, so rewording
+          a message, a help text or a note leaves this file alone (H252). The golden list
           was recorded when the hand-written parser was last compared, tree for tree, with the
           ANTLR parser it replaced; a line that changes means the parser reads that file
           differently. The snapshot is a snapshot of the parser's own tests, not of the

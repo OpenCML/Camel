@@ -22,7 +22,7 @@ func step(acc: float, i: int): float {
 }
 
 func main(): int sync {
-    let total = range(0, 4000)->reduce<step, 0.0>
+    let total = 0..4000->reduce<step, 0.0>
     println(total)
     return 0
 }
