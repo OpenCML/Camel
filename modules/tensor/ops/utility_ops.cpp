@@ -84,16 +84,40 @@ std::optional<Type *> indexInfer(const InferContext &ctx) {
     }
     return Type::Float64();
 }
+
+/// A value with no dimension, asked for the first dimension a loop walks: the element it holds
+/// (the rank-zero ruling, docs/handover/reviews/questions-2026-10-23.md section rank-zero-tensor)
+/// has none to give. One message for both ways a loop meets one — the rank-0 array `wrap` keeps for
+/// a slot whose type promises an array, and the element itself where such a slot holds no pointer
+/// at all (the transition-period bare `Tensor`, the gap the author's ruling of 2026-10-25 on
+/// no-dimension-value-in-an-array-typed-slot builds no mechanism for). It names what the loop
+/// needed; reading the element's bits as a pointer is what used to say an argument "cannot be null".
+constexpr const char *kNoFirstDimensionToIterate =
+    "a value with no dimension has no first dimension to iterate";
+
+/// The sequence `for x in xs` walks. `xs` is read as the array its type promises when it is a
+/// numeric array — a tensor — and through `tensorArg` otherwise, which boxes an element whose type
+/// states one (a rank-0 tensor's value is a scalar slot) so a kernel can read it.
+Array *iterationSequence(ArgsView &norm) {
+    Type *type = norm.type(0);
+    if (type != nullptr && isTensorType(type) && norm.get<Array *>(0) == nullptr) {
+        throw std::invalid_argument(kNoFirstDimensionToIterate);
+    }
+    return tensorArg(norm, 0);
+}
+
 /// `for x in t`: the elements of a tensor along its first dimension, in order. A tensor of
 /// rank n >= 2 gives, for each i, the sub-tensor of shape shape[1:] that starts at row i (a
 /// view of the same block); a rank-1 tensor gives, for each i, the rank-0 sub-tensor at i.
-/// A rank-0 tensor has no first dimension: it is not iterable, which is an error when the
-/// shape is known and a fault otherwise.
+/// A value with no dimension has no first dimension: it is not iterable. A type never states a
+/// rank-0 shape (`tensorOf` answers an empty shape with the element type, so `reshape(x, [])` is a
+/// scalar and a `for` over it is refused where it is written, with `LoopSequenceNotIterable`); the
+/// guard below stays for a shape a value carries that no type stated.
 std::optional<Type *> iterInfer(const InferContext &ctx) {
     const TensorFacts in = ctx.facts(0);
     if (in.shape) {
         if (in.shape->empty()) {
-            throw std::invalid_argument("a rank-0 tensor has no first dimension");
+            throw std::invalid_argument(kNoFirstDimensionToIterate);
         }
         StaticShape row(in.shape->begin() + 1, in.shape->end());
         return ArrayType::create(tensorOf(in.dtype, row));
@@ -103,9 +127,9 @@ std::optional<Type *> iterInfer(const InferContext &ctx) {
 
 slot_t iterKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("iter", [&] {
-        Array *t = tensorArg(norm, 0);
+        Array *t = iterationSequence(norm);
         if (t->rank() == 0) {
-            throw std::invalid_argument("a rank-0 tensor has no first dimension");
+            throw std::invalid_argument(kNoFirstDimensionToIterate);
         }
         const auto shape    = t->shapeSpan();
         const uint64_t rows = static_cast<uint64_t>(shape[0]);

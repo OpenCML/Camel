@@ -395,27 +395,27 @@ timeout_ms = 8000
 
 [[tests]]
 name = "loops.err_tensor_rank0"
-desc = "`for` over a scalar: a value with no dimension is the element it holds, so `reshape(x, [])` gives the element type rather than a rank-0 array, and a scalar is not iterable. The refusal is at compile time."
+desc = "`for` over a scalar: a value with no dimension is the element it holds, so `reshape(x, [])` gives the element type rather than a rank-0 array, and a scalar is not iterable. The refusal is at compile time, where the `for` is written."
 kind = "negative"
 case = "../../../cases/loops/err_tensor_rank0.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::LoopSequenceNotIterable"
-expect_diagnostic_line = 10
+expect_diagnostic_line = 13
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
 [[tests]]
 name = "loops.fault_tensor_rank0"
-desc = "`for` over a tensor whose rank is only 0 at run time: the fault is reported at the loop's sequence on nvm and on fvm."
+desc = "Reshaping to no dimension a tensor whose element count is not one: the target is the element itself, so a two-element tensor has no value to become, and the shape arrives through a parameter, so the refusal is when the reshape runs (not at the call). The loop that follows is never reached: `for` over a value with no dimension is refused where it is written (loops.err_tensor_rank0)."
 kind = "negative"
 case = "../../../cases/loops/fault_tensor_rank0.cml"
 args = ["-E", "short", "${case}", "${backend}"]
 backends = ["nvm", "fvm"]
 expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::RuntimeError"
-expect_output_contains = ["iter: a rank-0 tensor has no first dimension"]
-expect_diagnostic_line = 16
+expect_diagnostic_name = "RuntimeDiag::TensorDimensionMismatch"
+expect_output_contains = ["reshape changes tensor element count: [2] -> []"]
+expect_diagnostic_line = 13
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
