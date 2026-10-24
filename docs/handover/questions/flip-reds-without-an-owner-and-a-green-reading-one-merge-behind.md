@@ -139,3 +139,11 @@ h446 四条 lane 还没合进来，它们的转绿清单未复核。
   （D+A，理由是秩二维张量的散回缺失会让程序跑出错误值）；`bf0a54b9b` 又把正例加回来，
   负例改指向 `rows: f32[][]`。`known_fail` 仍 6 处标记，与 develop 逐行相同；本轮没有
   「报了绿但实际仍红」，也没有改弱期望或加 `known_fail`，故无新问题文件。
+
+同一棵树上还有一条值得记的读数：`print_and_recompile`（`feat.trans.cml` 的**唯一**一条用例）
+**仍红**，但红的原因换了一个 —— h485（`8f6aeac88`）已合入本树，第一、二轮那条断在
+`linear.printed.cml:11:24`（`cml1` 未解析）的 `AssertionError` 已经消失，现在断在
+`test/cases/trans/cml/var_param.cml`：`std::cml cannot print bump: the return type is a tagged,
+nullable or cell tuple.` 这正是 h485 自己的问答页
+`2026-10-25-cml-read-of-a-write-and-the-write-valued-body.md` 里写的 `var_param: DIFFERENT`
+（写回读的版本化裁决未定），所以它是有主的，不是无主红。
