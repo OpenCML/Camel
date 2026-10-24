@@ -847,16 +847,16 @@ function renderDoc() {
     out.push('  `T!` and the program handles it with `!!`, `?->` or `match`. A result that may not exist is')
     out.push('  `T?`, handled with `??`. An entry without a failure line does not fail.')
     out.push("- **Named arguments**: a call may give a parameter by name (`f(x: 1)`, `len(x: xs)`) when")
-    out.push('  the name gives that position the same name in every form it has; the type of the argument')
-    out.push('  then decides which form runs (`len`\'s one parameter is `x` for a string, an array, a map')
-    out.push('  and a set, so one name reaches all four). Where the signature of a name cannot be settled')
-    out.push('  from a call written by name, no named argument binds yet: `items` and the `json` accessors')
-    out.push('  (`get`, `as_int`) report that the signature is not known where the call is written, and')
-    out.push('  whether such a name should take one is a question before the language author. `contains`')
-    out.push('  and `py_call` take none for a reason of their own: `contains` names its collection `xs` in')
-    out.push('  one form and `s` in the others, and its with-parameter means the value in two forms and the')
-    out.push('  substring in the third; the two forms of `py_call` differ in arity (a rest list against two')
-    out.push('  optional collections).')
+    out.push('  the name gives that position the same name in every form the callee has, whether the callee is')
+    out.push('  a Camel declaration or a group of built-in rules; the type of the argument then decides which')
+    out.push("  form runs (`len`'s one parameter is `x` for a string, an array, a map and a set, so one name")
+    out.push('  reaches all four). The name is written in the list that holds the parameter: an ordinary one')
+    out.push("  in the parentheses (`len(x: xs)`), a `with` one in the angle brackets (`j->get<key: 'port'>`).")
+    out.push('  A form that gives a position no name, or leaves its count to the arguments (a rest list --')
+    out.push("  `py_call`'s two forms differ in arity as well), is one no named argument reaches: the call")
+    out.push('  reports that the signature is not known where the call is written. `contains` refuses a named')
+    out.push('  argument for a reason of its own: its position 0 means an element in two forms and the')
+    out.push('  substring in the third, so the name would mean another thing in one of them.')
     out.push('- Write one call that has with-arguments per statement when several appear in one argument')
     out.push('  list: `f<a>(x), g<b>(y)` is read as comparisons.')
     out.push('')
@@ -1392,6 +1392,122 @@ function countsAgree(declared, registered) {
     return declared === registered || declared < 0 || registered < 0
 }
 
+// ---- reading the parameter names of a signature ---------------------------------------------
+//
+// The name at the head of a parameter (`key: K`, `...rest: U...`, `args?: (...)`, `var n: int`) is
+// what a named argument binds to, so the names on the two sides have to be the same ones at the
+// same positions -- the counts alone agree while the names drift (the language author's ruling,
+// 2026-10-24: `--verify-ops` compares the whole signature, not only the number of parameters).
+
+const BRACKETS = { '(': ')', '[': ']', '{': '}', '<': '>' }
+
+// The index of the bracket closing the one at `open`, or -1. Each group is balanced, so counting
+// the opening bracket's own character finds its partner (`<m: Map<K, V>>` closes at the last `>`).
+function partnerBracket(text, open) {
+    const close = BRACKETS[text[open]]
+    let depth = 0
+    for (let i = open; i < text.length; i++) {
+        if (text[i] === '=' && text[i + 1] === '>') {
+            i++
+            continue
+        }
+        if (text[i] === text[open]) depth++
+        else if (text[i] === close && --depth === 0) return i
+    }
+    return -1
+}
+
+// The index of the `=>` between a signature's parameters and its result: the last one outside
+// every group (the `=>` of a function type written as a parameter is inside one).
+function resultArrow(signature) {
+    let depth = 0
+    let arrow = -1
+    for (let i = 0; i < signature.length; i++) {
+        const c = signature[i]
+        if (c === '=' && signature[i + 1] === '>') {
+            if (depth === 0) arrow = i
+            i++
+            continue
+        }
+        if ('([{<'.includes(c)) depth++
+        else if (')]}>'.includes(c)) depth--
+    }
+    return arrow
+}
+
+// The name the parameter `spelling` writes at its head; '' when it writes none, or writes a
+// parameter that is never given by name (a rest parameter collects the arguments left over).
+function parameterName(spelling) {
+    const part = spelling.trim()
+    if (part === '' || part.startsWith('...')) return ''
+    const found = /^(?:var\s+)?([A-Za-z_]\w*)\s*\??\s*:/.exec(part)
+    return found ? found[1] : ''
+}
+
+// The names of the parameters written between brackets, split at the commas that are not nested;
+// null when one of them writes no name.
+function namesInList(text) {
+    const names = []
+    let at = 0
+    for (;;) {
+        let depth = 0
+        let comma = -1
+        for (let i = at; i < text.length; i++) {
+            const c = text[i]
+            if (c === '=' && text[i + 1] === '>') {
+                i++
+                continue
+            }
+            if ('([{<'.includes(c)) depth++
+            else if (')]}>'.includes(c)) depth--
+            else if (c === ',' && depth === 0) {
+                comma = i
+                break
+            }
+        }
+        const part = text.slice(at, comma < 0 ? text.length : comma).trim()
+        if (part === '') return comma < 0 ? names : null
+        const name = parameterName(part)
+        if (name === '') return null
+        names.push(name)
+        if (comma < 0) return names
+        at = comma + 1
+    }
+}
+
+// The parameter names one registered signature writes, `with` ones first. null when the text is
+// not a signature (a computed rule that spells something else), so nothing is compared for it.
+function registeredNames(signature) {
+    const arrow = resultArrow(signature || '')
+    if (arrow < 0) return null
+    const head = signature.slice(0, arrow)
+    let at = 0
+    let withNames = []
+    if (head.startsWith('<')) {
+        const close = partnerBracket(head, 0)
+        if (close < 0) return null
+        withNames = namesInList(head.slice(1, close))
+        if (withNames === null) return null
+        at = close + 1
+    }
+    while (at < head.length && /\s/.test(head[at])) at++
+    if (head[at] !== '(') return null
+    const close = partnerBracket(head, at)
+    if (close < 0) return null
+    const normNames = namesInList(head.slice(at + 1, close))
+    if (normNames === null) return null
+    return { with: withNames, norm: normNames }
+}
+
+// The parameter names a declaration writes, at the same two lists. null when one of its
+// parameters writes none (`with <f>` has no name), which is a different problem, not a comparison.
+function namesOfDeclaration(entry) {
+    const withNames = namesInList(entry.with.join(', '))
+    const normNames = namesInList(entry.norm.join(', '))
+    if (withNames === null || normNames === null) return null
+    return { with: withNames, norm: normNames }
+}
+
 function verifyOps() {
     const registered = registeredOperators()
     const problems = []
@@ -1477,6 +1593,40 @@ function verifyOps() {
                 continue
             }
             checked++
+            // A parameter's name is what a named argument binds to, so the declaration and the
+            // registered rule have to give a position the same name: comparing the counts alone
+            // left the two free to drift apart (`len`'s string rule recorded no name at all, and
+            // the page and the compiler disagreed for as long as nothing read the names). The
+            // comparison is per position, so a name that several declarations share type by type
+            // is compared against every rule that answers to it.
+            //
+            // The types are not compared the same way. A declaration of one name may differ from
+            // the registered rule in type (that is what an overload is: `len` is declared for
+            // `string`, `T[..]`, `Map<K, V>` and `Set<T>`, and one rule of `len` writes
+            // `Map<K, V> | Set<T>`), and the two sides spell the same type in different words
+            // (`i32` for `int`, `(a: float, b: float) => float` for `(...) => NumericAggregate`,
+            // `P` for `grad of P`): comparing them item by item reports one difference per
+            // overload and per alias, which is what it did when it was tried (408 differences,
+            // still 15 when only names with one declaration and one rule were compared).
+            const ruleNames = registeredNames(op.signature)
+            if (ruleNames !== null) {
+                for (const entry of matching) {
+                    const declared = namesOfDeclaration(entry)
+                    if (declared === null) continue
+                    for (const [side, what] of [['with', 'with'], ['norm', 'ordinary']]) {
+                        const mine = declared[side]
+                        const theirs = ruleNames[side]
+                        if (mine.length !== theirs.length) continue
+                        for (let i = 0; i < mine.length; i++) {
+                            if (mine[i] === theirs[i]) continue
+                            problems.push(
+                                `${entry.file}:${entry.line}: '${entry.name}' names ${what} parameter ${i + 1} ` +
+                                    `'${mine[i]}', and ${op.uri} registers '${theirs[i]}': ${op.signature}`,
+                            )
+                        }
+                    }
+                }
+            }
             // One operator is declared once per type it accepts (unions are retired), and the
             // declarations of a name share one description: the doc comment is read with the
             // first of them.
@@ -1629,3 +1779,4 @@ if (mode === '--write' || mode === '--verify-doc') {
     console.log('usage: node scripts/stdlib-reference.mjs --write | --verify-doc | --verify-ops | --verify-docs | --audit [--compile]')
     process.exit(2)
 }
+

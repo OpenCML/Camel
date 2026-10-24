@@ -87,10 +87,13 @@ timeout_ms = 30000
 # a named argument binds to (`len(x: xs)`), and it is why `stdlib/json.cml` and
 # `stdlib/signatures/globals.cml` rename a position. The declaration files and the rules C++
 # registers are two places a rule's names are written; `registry.signatures_match` compares their
-# parameters and this compares the names, so the two cannot drift apart again.
+# parameters and names position by position, and this compares the names within one name's rules,
+# so the two cannot drift apart again. Two sets are the counter-examples the reference page states:
+# `contains`, whose first position means an element in one form and a substring in another, and
+# `py_call`, whose parameter count follows the arguments.
 [[tests]]
 name = "registry.overload_position_names_agree"
-desc = "One position, one name: `json.get`'s with-parameter is `key` in every one of its eight rules (a string argument is a member key, an integer one an element index), `len`'s one parameter is `x` in the string, array, map and set rules, and `items`' is `m` in the map and set rules. These are the names the reference page declares for them. `contains` and `py_call` are not such sets -- their positions differ in meaning, or their arity differs -- so they take no named argument, as the reference page states."
+desc = "One position, one name: `json.get`'s with-parameter is `key` in every one of its eight declarations and in `:coll/map_get` (a string argument is a member key, an integer one an element index), `len`'s one parameter is `x` in the string, array, map and set rules, `items`' is `m` in the map and set rules, and `json.as_int`'s ordinary parameter is `j` in all four. These are the names the reference page declares for them, and every rule of each such set names the position -- a rule that gives no name would take no named argument silently. `contains` and `py_call` are not such sets: `contains` names its first position `value` in the collection forms and `sub` in the string form, and `py_call`'s parameter count follows its arguments (two forms that differ in arity), so neither takes a named argument, as the reference page states."
 kind = "behavior"
 case = "../../../cases/modules/stdlib/registry_all.cml"
 args = ["inspect", "--ops", "${case}"]
@@ -112,14 +115,30 @@ const oneNamePerSet = (what, rules, position, expected) => {
   }
 }
 oneNamePerSet('json.get', ops.filter((o) => o.uri === 'json:get'), 0, 'key')
+oneNamePerSet('get', ops.filter((o) => o.name === 'get'), 0, 'key')
+oneNamePerSet('json.as_int', ops.filter((o) => o.uri === 'json:as_int'), 0, 'j')
 oneNamePerSet('len', ops.filter((o) => o.name === 'len'), 0, 'x')
 oneNamePerSet('items', ops.filter((o) => o.name === 'items'), 0, 'm')
-// `contains` is the set the reference page says takes no named argument: its rules do not agree
-// on a name for their first position (`value` against `sub`), which is the condition a named
-// argument binds under. This is that state, written down.
+// `contains` is the set the reference page says takes no named argument: every rule names its
+// first position, but they do not agree on the name -- an element (`value`) in the two collection
+// forms, the substring (`sub`) in the string form. A rule that gave the position no name at all is
+// the other state this rules out: it would bind no name while looking like it agreed.
 const contains = ops.filter((o) => o.name === 'contains').map((o) => names(o)[0])
 assert(contains.length > 1, `contains: only ${contains.length} rule(s) listed`)
+assert(contains.every((n) => n !== undefined),
+  `every rule of contains must name its first position: ${contains.join(', ')}`)
+assert(contains.includes('value') && contains.includes('sub'),
+  `contains names its first position 'value' in the collection forms and 'sub' in the string form: ${contains.join(', ')}`)
 assert(new Set(contains).size > 1, `contains would take a named argument if its rules agreed: ${contains.join(', ')}`)
+// `py_call` is the other set the page says takes no named argument, for the other reason: its
+// parameter count follows the arguments (a rest list), so no position is a parameter a name could
+// mark, and the two forms of the name differ in arity.
+const pyCall = ops.filter((o) => o.name === 'py_call')
+assert(pyCall.length === 2, `py_call: ${pyCall.length} rule(s) listed`)
+assert(pyCall.every((o) => o.norm === -1),
+  `py_call's parameters follow its arguments: ${pyCall.map((o) => o.norm).join(', ')}`)
+assert(pyCall[0].signature !== pyCall[1].signature,
+  `the two forms of py_call differ in arity: ${pyCall.map((o) => o.signature).join(' | ')}`)
 }
 """
 timeout_ms = 20000

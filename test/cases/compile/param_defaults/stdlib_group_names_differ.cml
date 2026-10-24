@@ -1,0 +1,13 @@
+/**
+ * `contains` is the operator group the reference page says takes no named argument: its position 0
+ * holds an element in the two collection forms (`value`) and the substring in the string form
+ * (`sub`), so one name would mean another thing in one of them (stdlib-conventions, 4:
+ * "含义不同的位置不强行同名"). The call is refused by name -- OverloadParameterNames, at the
+ * argument -- rather than bound to a position that means two things.
+ */
+module param_stdlib_group_names_differ
+
+func main(): int sync {
+    println([1, 2, 3]->contains<value: 2>)
+    return 0
+}
