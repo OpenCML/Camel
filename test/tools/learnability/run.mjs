@@ -67,6 +67,7 @@ function parseArgs(argv) {
         camelBin: '$HOME/camel-work/h425-ai-reference/out/latest/bin/camel',
         remoteRoot: '/tmp/camel-learnability',
         tokenBudget: 1500000,
+        timeoutSeconds: 900,
         cmdTemplate: null,
         provided: null,
         keepSandbox: false,
@@ -89,6 +90,7 @@ function parseArgs(argv) {
         else if (key === '--cmd-template') opts.cmdTemplate = take()
         else if (key === '--provided') opts.provided = take()
         else if (key === '--token-budget') opts.tokenBudget = Number(take())
+        else if (key === '--timeout') opts.timeoutSeconds = Number(take())
         else if (key === '--keep-sandbox') opts.keepSandbox = true
         else usage(`unknown option ${key}`)
     }
@@ -185,7 +187,7 @@ function callBl(messages, opts, usageSink) {
     fs.writeFileSync(messagesPath, JSON.stringify(messages), 'utf8')
     // `bl` is a Node CLI; on Windows it is reached through its shim, so one of the two spellings
     // is used, never both -- a retry would spend the request twice.
-    const args = ['text chat', '--messages-file', messagesPath, '--model', opts.model, '--output', 'json', '--max-tokens', '8192']
+    const args = ['text', 'chat', '--messages-file', messagesPath, '--model', opts.model, '--output', 'json', '--max-tokens', '8192', '--timeout', String(opts.timeoutSeconds)]
     const final = process.platform === 'win32'
         ? run('cmd', ['/c', 'bl', ...args], { shell: false })
         : run('bl', args, { shell: false })
@@ -357,6 +359,7 @@ function main() {
     // Round 0: every task gets one first draft, from the reference and nothing else.
     const code = {}
     const history = {}
+    const failures = new Map()
     for (const task of tasks) {
         fs.mkdirSync(path.join(opts.archive, task.id), { recursive: true })
         let answer = null
@@ -373,9 +376,18 @@ function main() {
                 { role: 'system', content: 'You are a careful programmer who has never seen Camel.' },
                 { role: 'user', content: firstTurn(manifest, task, reference) },
             ]
-            answer = opts.solver === 'bl'
-                ? callBl(history[task.id], opts, usageSink)
-                : callCmd(history[task.id], opts, task.id, 0)
+            // A failed call is recorded as that task's own outcome and the run goes on: one task
+            // that timed out must not cost the other twelve, and a retry would spend the request
+            // twice.
+            try {
+                answer = opts.solver === 'bl'
+                    ? callBl(history[task.id], opts, usageSink)
+                    : callCmd(history[task.id], opts, task.id, 0)
+            } catch (error) {
+                answer = ''
+                failures.set(task.id, `round 0: ${error.message}`)
+                process.stdout.write(`learnability: ${task.id} got no answer: ${error.message}\n`)
+            }
             fs.writeFileSync(path.join(opts.archive, task.id, 'round0.response.txt'), answer, 'utf8')
             must(usageSink.prompt <= opts.tokenBudget, `token budget ${opts.tokenBudget} exceeded (${usageSink.prompt} input tokens): stopping`)
         }
@@ -396,7 +408,7 @@ function main() {
             const record = records.get(task.id)
             if (record.passed_at_round !== null) continue
             if (code[task.id] === null) {
-                record.rounds.push({ round, code: null, diagnostics: [], pass: false, why: 'no fenced block in the answer' })
+                record.rounds.push({ round, code: null, diagnostics: [], pass: false, why: failures.get(task.id) || 'no fenced block in the answer' })
                 continue
             }
             readings[task.id] = {
@@ -444,7 +456,13 @@ function main() {
                 history[task.id].push({ role: 'assistant', content: '```camel\n' + entry.code + '```' })
                 history[task.id].push({ role: 'user', content: fixTurn(round, { code: entry.code, exit: reading.exit, stdout: reading.stdout, diagnostics }) })
                 must(usageSink.prompt <= opts.tokenBudget, `token budget ${opts.tokenBudget} exceeded (${usageSink.prompt} input tokens): stopping`)
-                const answer = callBl(history[task.id], opts, usageSink)
+                let answer = ''
+                try {
+                    answer = callBl(history[task.id], opts, usageSink)
+                } catch (error) {
+                    failures.set(task.id, `round ${round + 1}: ${error.message}`)
+                    process.stdout.write(`learnability: ${task.id} got no answer: ${error.message}\n`)
+                }
                 fs.writeFileSync(path.join(opts.archive, task.id, `round${round + 1}.response.txt`), answer, 'utf8')
                 code[task.id] = extractCamel(answer)
                 fs.writeFileSync(path.join(opts.archive, task.id, `round${round + 1}.raw.txt`), answer, 'utf8')
@@ -455,6 +473,7 @@ function main() {
 
     for (const task of tasks) report.tasks.push(records.get(task.id))
     report.usage = { input_tokens: usageSink.prompt, cached_input_tokens: usageSink.cached, output_tokens: usageSink.completion }
+    report.failures = Object.fromEntries(failures)
 
     const attempted = report.tasks.length
     const passed = report.tasks.filter((t) => t.passed_at_round !== null).length
