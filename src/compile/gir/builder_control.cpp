@@ -11,6 +11,7 @@
 
 #include "camel/compile/gir/static_function.h"
 #include "camel/core/data/composite/tuple.h"
+#include "camel/core/data/ref.h"
 #include "camel/core/numeric_convert.h"
 #include "camel/core/operator_names.h"
 #include "camel/core/rtdata/string.h"
@@ -768,6 +769,175 @@ Builder::compositeDataInType(const data_ptr_t &data, Type *type, const GCT::node
                 origin,
                 literalElementAt(written, index));
             ++index;
+            if (converted == nullptr) {
+                return nullptr;
+            }
+            factory.add(converted);
+        }
+        return factory.build();
+    }
+    return nullptr;
+}
+
+data_ptr_t Builder::compositeWithHolesInType(
+    const data_ptr_t &data, Type *position, const GCT::node_ptr_t &origin,
+    const std::vector<std::string> &refNames, const type_vec_t &refTypes,
+    const std::vector<size_t> &refHoles, std::vector<size_t> &holeSlots) {
+    // Design principles 5.1: a literal in a position takes the position's type element by
+    // element. A literal with a computed element is a FILL, not one constant, so
+    // compositeDataInType cannot walk it — and its written elements used to keep their default
+    // types (`{ n: x, t: (1.0, 2.0), v: [1.0] }` was `(float, float)` and `float[]` where the
+    // declared fields are `(f32, f32)` and `f32[]`). The computed element is a value of its own
+    // type and enters only when the type it has is one the position takes there; when it is
+    // not, the position does not fit and the literal keeps the type its own elements give it.
+    if (data == nullptr || position == nullptr || asTagged(position) != nullptr ||
+        origin == nullptr) {
+        return nullptr;
+    }
+    auto composite = std::dynamic_pointer_cast<CompositeData>(data);
+    if (composite == nullptr || position->code() != data->type()->code()) {
+        return nullptr;
+    }
+    const auto *written = GCT::Tree::of(origin)->literalElementsOf(data);
+    // The type the position gives each of the literal's computed elements, per kind: an array or
+    // a tuple is positional (its holes are element indexes), a struct is by the placeholder the
+    // computed field left behind.
+    const auto holeTypesByIndex = [&]() {
+        std::vector<Type *> types(
+            data->type()->code() == TypeCode::Tuple
+                ? std::dynamic_pointer_cast<TupleData>(data)->raw().size()
+                : std::dynamic_pointer_cast<ArrayData>(data)->raw().size(),
+            nullptr);
+        const std::vector<size_t> holes = composite->holes();
+        for (size_t i = 0; i < holes.size() && i < refTypes.size(); ++i) {
+            if (holes[i] < types.size()) {
+                types[holes[i]] = valueTypeOf(refTypes[i]);
+            }
+        }
+        return types;
+    };
+    const auto holeTypeNamed = [&](const data_ptr_t &value) -> Type * {
+        // The placeholder a computed element left in the literal: its name is the reference the
+        // GCT gave it, and the node it stands for is the one holding that reference's value.
+        if (value == nullptr || value->type()->code() != TypeCode::Ref) {
+            return nullptr;
+        }
+        const std::string &ref = tt::as_shared<RefData>(value)->ref();
+        for (size_t i = 0; i < refNames.size() && i < refTypes.size(); ++i) {
+            if (refNames[i] == ref) {
+                return valueTypeOf(refTypes[i]);
+            }
+        }
+        return nullptr;
+    };
+    if (position->code() == TypeCode::Array) {
+        const auto *arrayType = tt::as_ptr<ArrayType>(position);
+        const auto array      = std::dynamic_pointer_cast<ArrayData>(data);
+        Type *elemType        = arrayType != nullptr ? arrayType->elemType() : nullptr;
+        if (array == nullptr || elemType == nullptr || elemType->code() == TypeCode::Void ||
+            !holdsStatedLength(arrayType, array.get())) {
+            return nullptr;
+        }
+        const std::vector<Type *> holeTypes = holeTypesByIndex();
+        if (holeTypes.size() != array->raw().size()) {
+            return nullptr;
+        }
+        ArrayDataFactory factory;
+        factory.setElemType(elemType);
+        for (size_t i = 0; i < array->raw().size(); ++i) {
+            if (holeTypes[i] != nullptr) {
+                if (!elemType->assignableFrom(holeTypes[i])) {
+                    return nullptr;
+                }
+                factory.add(array->raw()[i]);
+                continue;
+            }
+            data_ptr_t converted = literalElementInType(
+                array->raw()[i], elemType, origin, literalElementAt(written, i));
+            if (converted == nullptr) {
+                return nullptr;
+            }
+            factory.add(converted);
+        }
+        return factory.build();
+    }
+    if (position->code() == TypeCode::Struct) {
+        auto *structType       = tt::as_ptr<StructType>(position);
+        const auto *ownType    = tt::as_ptr<StructType>(data->type());
+        const auto object      = std::dynamic_pointer_cast<StructData>(data);
+        if (structType == nullptr || ownType == nullptr || object == nullptr ||
+            object->raw().size() != structType->size() || refHoles.size() != refNames.size()) {
+            return nullptr;
+        }
+        // Where the computed fields sit in the position: the literal's own type and the position
+        // state the same fields, each in its own order (design principles 5.2).
+        std::vector<size_t> slots;
+        slots.reserve(refHoles.size());
+        for (size_t index : refHoles) {
+            if (index >= ownType->size()) {
+                return nullptr;
+            }
+            const std::optional<size_t> at = structType->findField(ownType->fieldName(index));
+            if (!at.has_value()) {
+                return nullptr;
+            }
+            slots.push_back(*at);
+        }
+        StructDataFactory factory;
+        size_t index = 0;
+        for (const auto &[name, value] : object->raw()) {
+            const std::optional<size_t> fieldIndex = structType->findField(name);
+            if (!fieldIndex.has_value()) {
+                return nullptr;
+            }
+            Type *fieldType = structType->typeAt(*fieldIndex);
+            if (Type *hole = holeTypeNamed(value); hole != nullptr) {
+                if (fieldType == nullptr || !fieldType->assignableFrom(hole)) {
+                    return nullptr;
+                }
+                factory.add(name, value);
+            } else {
+                data_ptr_t converted = literalElementInType(
+                    value, fieldType, origin, literalElementAt(written, index));
+                if (converted == nullptr) {
+                    return nullptr;
+                }
+                factory.add(name, converted);
+            }
+            ++index;
+        }
+        // A value of the position itself: the literal is the named type the position names, and
+        // its fields are in that type's order (design principles 5.2).
+        std::shared_ptr<StructData> built = factory.buildAs(structType);
+        if (built == nullptr) {
+            return nullptr;
+        }
+        holeSlots = std::move(slots);
+        return built;
+    }
+    if (position->code() == TypeCode::Tuple) {
+        const auto *tupleType = tt::as_ptr<TupleType>(position);
+        const auto object     = std::dynamic_pointer_cast<TupleData>(data);
+        if (tupleType == nullptr || object == nullptr ||
+            object->raw().size() != tupleType->size()) {
+            return nullptr;
+        }
+        const std::vector<Type *> holeTypes = holeTypesByIndex();
+        if (holeTypes.size() != object->raw().size()) {
+            return nullptr;
+        }
+        TupleDataFactory factory;
+        for (size_t i = 0; i < object->raw().size(); ++i) {
+            Type *elemType = tupleType->typeAt(i);
+            if (holeTypes[i] != nullptr) {
+                if (elemType == nullptr || !elemType->assignableFrom(holeTypes[i])) {
+                    return nullptr;
+                }
+                factory.add(object->raw()[i]);
+                continue;
+            }
+            data_ptr_t converted = literalElementInType(
+                object->raw()[i], elemType, origin, literalElementAt(written, i));
             if (converted == nullptr) {
                 return nullptr;
             }

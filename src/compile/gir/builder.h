@@ -2408,6 +2408,26 @@ class Builder {
     camel::core::data::data_ptr_t compositeDataInType(
         const camel::core::data::data_ptr_t &data, camel::core::type::Type *type,
         const GCT::node_ptr_t &origin);
+    /// The same walk as compositeDataInType for a literal that is not one constant: some of its
+    /// elements are computed (`refNames` / `refTypes` are the names the GCT gave them and the
+    /// types of the nodes they stand for, in the literal's reference order), and the elements it
+    /// did write take the types `position` states for them — a tuple, array or struct field the
+    /// position does not reach otherwise (design principles 5.1). nullptr when the position does
+    /// not fit the literal: another kind or shape, or a computed element that is not of the type
+    /// the position gives that element — the literal then keeps the type its own elements give
+    /// it, and the place it was written in reports the mismatch. The converted literal is a
+    /// value of `position` itself, a named struct type included (design principles 5.2).
+    /// `refHoles` is where the computed elements sit in the literal's own type, parallel to
+    /// `refNames`; on success `holeSlots` holds where they sit in `position`, which is what the
+    /// fill of the value reads. An array and a tuple are positional, so the indexes are the same;
+    /// the fields of a struct are the same by name but a named type states its own order (design
+    /// principles 5.2), so the slot of a computed field is the field of that name in `position`,
+    /// not the index it had in the literal's type.
+    camel::core::data::data_ptr_t compositeWithHolesInType(
+        const camel::core::data::data_ptr_t &data, camel::core::type::Type *position,
+        const GCT::node_ptr_t &origin, const std::vector<std::string> &refNames,
+        const camel::core::type::type_vec_t &refTypes, const std::vector<size_t> &refHoles,
+        std::vector<size_t> &holeSlots);
     /// One element (field) of a composite literal as a value of `type`: the value itself when
     /// the type accepts it, the exact conversion when it is a literal (`written` is the
     /// element as it was written, when the GCT kept it: its value and its position), nullptr

@@ -111,15 +111,34 @@ node_handle_t Builder::visitDataNode(const GCT::node_ptr_t &gct) {
             auto holes           = composedData->holes();
             type_vec_t refTypes;
             std::vector<node_handle_t> refNodes;
+            std::vector<std::string> refNames;
             for (const auto &ref : composedData->refs()) {
                 const auto &refNode = elementNodeOf(std::string(ref), gct);
+                refNames.push_back(std::string(ref));
                 refTypes.push_back(nodeTypeOf(refNode));
                 refNodes.push_back(refNode);
             }
             ASSERT(
                 holes.size() == refNodes.size(),
                 "Composite holes must match unresolved reference count.");
-            if (dataType->code() == TypeCode::Array && !refTypes.empty()) {
+            // The position this literal stands in gives it its type while it is made, element by
+            // element, even when one of its elements is computed: it is a FILL then, not one
+            // constant, and the elements it wrote kept their default types before this
+            // (`{ n: x, t: (1.0, 2.0) }` was a `(float, float)` field where the declaration says
+            // `(f32, f32)`; design principles 5.1). A position the literal does not fit leaves it
+            // the type its own elements give it, and the place it was written in reports the
+            // mismatch, as it did.
+            Type *position        = expectedValueType_;
+            data_ptr_t positioned = nullptr;
+            // Where the computed elements sit in the value the fill reads: the literal's own type
+            // states them, and the position may state the same fields in another order.
+            std::vector<size_t> holeSlots = holes;
+            if (position != nullptr && !containsTypeVar(position)) {
+                positioned = compositeWithHolesInType(
+                    data, position, gct, refNames, refTypes, holes, holeSlots);
+            }
+            if (positioned == nullptr && dataType->code() == TypeCode::Array &&
+                !refTypes.empty()) {
                 // The element type of the literal: what its literal elements fixed (`[x, 5]` is
                 // an `int[]`), else what the computed elements join to (`[x, null]`, `[a, b]` with
                 // an `int` and an `int?`; design principles 3.8, 5.1). An element that is not of
@@ -159,26 +178,30 @@ node_handle_t Builder::visitDataNode(const GCT::node_ptr_t &gct) {
                     throw BuildAbortException();
                 }
             }
-            auto filledType = dataType->resolved()
-                                  ? dataType
-                                  : tt::as_ptr<CompositeType>(dataType->clone())->resolve(refTypes);
+            auto filledType = positioned != nullptr
+                                  ? position
+                                  : (dataType->resolved()
+                                         ? dataType
+                                         : tt::as_ptr<CompositeType>(dataType->clone())
+                                               ->resolve(refTypes));
             // The literal part of the array takes the element type the computed part gave the
             // array: a constant element written as an unnamed struct in another order is copied
             // into the named type it enters (design principles 5.2), so every slot is of the
             // array's element type.
-            data_ptr_t literalData = data;
-            if (filledType->code() == TypeCode::Array && !filledType->equals(data->type())) {
+            data_ptr_t literalData = positioned != nullptr ? positioned : data;
+            if (positioned == nullptr && filledType->code() == TypeCode::Array &&
+                !filledType->equals(data->type())) {
                 if (data_ptr_t converted = data->convertTo(filledType)) {
                     literalData = converted;
                 }
             }
-            auto payload    = runtime::makeFillPayload(fillKindForType(filledType), holes);
+            auto payload    = runtime::makeFillPayload(fillKindForType(filledType), holeSlots);
             node_handle_t srcNode = currGraph_->addStaticDataNode(literalData, filledType);
             node                  = currGraph_->addFillNode(filledType, payload);
             linkNodes(LinkType::Norm, srcNode, node);
             // An array written in place with some elements computed: the constant elements
             // stay known to the operators the array is passed to (StaticArg::elements).
-            if (auto array = std::dynamic_pointer_cast<ArrayData>(data);
+            if (auto array = std::dynamic_pointer_cast<ArrayData>(literalData);
                 array && filledType->code() == TypeCode::Array) {
                 Type *elemType = tt::as_ptr<ArrayType>(filledType)->elemType();
                 std::vector<std::optional<slot_t>> elements(array->raw().size());

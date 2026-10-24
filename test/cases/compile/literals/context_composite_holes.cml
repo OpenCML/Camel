@@ -1,0 +1,36 @@
+/**
+ * Handover H412: a literal with a computed element is a FILL, not one constant, and the position
+ * it stands in still gives its written elements their types (design principles 5.1). A tuple
+ * field, an array field (fixed length and open rank) and an array written inside a tuple field
+ * each take the declared field's element type even though a sibling field of the same literal is
+ * computed; so does a tuple in a declared position. The value just above the f32 midpoint prints
+ * 1.00000012 rather than its float64 1.00000006: it became f32 where it was written, converted
+ * once from the value written (design principles 5.1, 5.2).
+ */
+module literal_context_composite_holes
+
+type MA = { n: int, t: (f32, f32) }
+type MB = { n: int, v: f32[2] }
+type MC = { n: int, v: f32[] }
+type MD = { n: int, t: (f32[2], f32) }
+
+// The sibling `n` is computed, so each returned literal is a FILL over the field `n`.
+func tupleField(n: int): MA { return { n: n, t: (1.0000000596046447753906251, 2.0) } }
+func arrayFixed(n: int): MB { return { n: n, v: [1.0000000596046447753906251, 2.0] } }
+func arrayOpen(n: int): MC { return { n: n, v: [1.0000000596046447753906251, 2.0] } }
+func arrayInTuple(n: int): MD { return { n: n, t: ([1.0000000596046447753906251, 2.0], 3.0) } }
+
+func main(): int sync {
+    let a = tupleField(1)
+    println(a.n, '{:.9g}'->format<a.t.0>, '{:.9g}'->format<a.t.1>)
+    let b = arrayFixed(2)
+    println(b.n, len(b.v), '{:.9g}'->format<b.v[0]>, '{:.9g}'->format<b.v[1]>)
+    let c = arrayOpen(3)
+    println(c.n, len(c.v), '{:.9g}'->format<c.v[0]>, '{:.9g}'->format<c.v[1]>)
+    let d = arrayInTuple(4)
+    println(d.n, len(d.t.0), '{:.9g}'->format<d.t.0[0]>, '{:.9g}'->format<d.t.1>)
+    // the same rule in a declared position, with the second element computed
+    let p: (f32, f32) = (0.3333333333333333, a.t.1)
+    println('{:.9g}'->format<p.0>, '{:.9g}'->format<p.1>)
+    return 0
+}
