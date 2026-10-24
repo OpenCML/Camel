@@ -245,11 +245,31 @@ slot_t cloneStaticSlot(
     case TypeCode::Array: {
         auto *array     = fromSlot<::Array *>(slot);
         auto *arrayType = static_cast<ArrayType *>(type);
-        // The clone has the value's own extents and element count. The size overload is the
-        // rank-1 convenience (include/camel/core/rtdata/array.h): a multi-dimensional value that
-        // went through it came out rank 1 with its first extent's worth of elements, so a (2, 3)
-        // file bound to a parameter read back as [2] with two elements and a matmul of two such
-        // values failed with "inner dimensions differ: 2 vs 3".
+        // A compact array is pure data (include/camel/core/rtdata/array.h: the storage class comes
+        // from the element type), so its clone is the value's own element type and extents, and
+        // `Array::clone` reads both from the value rather than from the type the slot is declared
+        // with. The declared type may state neither: `Tensor` — the alias's transitional spelling
+        // — means "numeric, the element type is not written down", and a value cloned under it came
+        // out a slot array with no element type at one slot an element. A kernel that reads the
+        // value by its dtype then refused (`sum: Unsupported Tensor dtype`, `matmul: ...`,
+        // `subtract: ...`) and a reader that asks for the width of an element got one the value
+        // has not (`to_bytes`). A native multidimensional array is its element type and its shape
+        // (design principles 5.4), and an unstated element type means the type does not say which
+        // one the value has — not that the value has none — so the clone takes the value's (the
+        // ruling the `nn`/`optim` tensor leaf already follows, develop's 392d7e734).
+        if (array != nullptr && array->isCompact()) {
+            auto *clonedArray =
+                static_cast<::Array *>(array->clone(mm::autoSpace(), arrayType, false));
+            objectCache.emplace(object, clonedArray);
+            return toSlot<Object *>(clonedArray);
+        }
+        // A slot array is a container of references, whose elements are cloned with the type the
+        // element states (a closure names a graph of `program`). The clone has the value's own
+        // extents and element count: the size overload is the rank-1 convenience
+        // (include/camel/core/rtdata/array.h): a multi-dimensional value that went through it came
+        // out rank 1 with its first extent's worth of elements, so a (2, 3) file bound to a
+        // parameter read back as [2] with two elements and a matmul of two such values failed with
+        // "inner dimensions differ: 2 vs 3".
         auto *clonedArray = ::Array::create(mm::autoSpace(), arrayType, array->shapeSpan());
         objectCache.emplace(object, clonedArray);
         for (uint64_t i = 0; i < array->numel(); ++i) {
