@@ -69,34 +69,44 @@ suffix-less plan target (H201). Its mirror (H205) fails, by name, when a fast ca
 slow-cost plan in full, unless the plan is the only one running that case or
 `test/plan-selection.json` records the shared case in `slowCaseOwners` with a reason.
 
-## Layers: fast, slow And debug
+## Layers: fast, slow, milestone And debug
 
-`tier` puts a test in one of three layers. It may be set on the plan (the default for all its
-tests) or on one `[[tests]]` entry (an override), with the values `fast`, `slow` and `debug`:
+`tier` puts a test in one of four layers. It may be set on the plan (the default for all its
+tests) or on one `[[tests]]` entry (an override), with the values `fast`, `slow`, `milestone` and
+`debug`:
 
 - `fast` is the default layer and the one `npm run test` runs. It must stay useful for a
   developer loop: on an 8-core machine a parallel fast run is expected to finish in about two
   minutes (measured on a machine that other worktrees were using at the same time, so it
   took longer).
-- `slow` is everything whose result is still worth having but whose cost does not belong in
-  the loop: the comparisons against PyTorch, the collector stress and poison scans, the random
-  program checks (progen and fuzzing), the performance benchmarks, and any other single test
-  that takes about five seconds or more.
+- `slow` is the release gate's layer: the plan files `scripts/release-gate.mjs` names in
+  `SLOW_PLANS`, run one by one. It is everything whose result is still worth having but whose cost
+  does not belong in the developer loop, and that a shared host can still carry: the large
+  front-end and debugger suites, the paced and soaked collection plans, the GPU tile plans, and any
+  other single test that takes about five seconds or more.
+- `milestone` is the layer that only runs at a milestone, on a quiet machine: the plans
+  `agents/test.md` holds back (the full suite, the GC poison sweep and stress plans, progen, the
+  PyTorch comparisons and the perf/timeit plans -- the ones `scripts/plan-inventory.mjs` lists in
+  `FORBIDDEN`, whose own files say `tier = "milestone"`), the copies a sweep did not sample, and
+  any other test whose cost or whose measurement is a property of the machine. No ordinary run and
+  no gate selects them; `--tier milestone` does.
 - `debug` is a test that is only meaningful with assertions compiled in: it aborts on purpose,
   or it checks something a Release build removes. It runs only under `--tier debug`, never under
-  `fast`, `slow` or `all`, because those three run the Release binary.
+  `fast`, `slow`, `milestone` or `all`, because those four run the Release binary.
 
 Rules for a new test:
 
 - It is fast by default: do not mark a test slow to make the default set look fast.
 - If it takes about five seconds or more, it **must** be marked `slow` and say in its `desc` (or
   in a comment) why the time is inherent. The same applies when a plan's tests are slow as a
-  group: put `tier = "slow"` on the plan itself and say why in the plan's `desc`.
+  group: put `tier = "slow"` on the plan itself and say why in the plan's `desc`. A test that takes
+  minutes, or whose number depends on what else the machine is doing, belongs in `milestone`
+  instead.
 - A test that needs another test's result (`compare_to`, `backends_agree`) is kept in the same
   layer as that test. When a layer filter would separate them, the runner keeps the reference
   too, so a selected test never fails only because its baseline was filtered out.
-- A plan written before the split still works: any `tier` other than `slow`/`debug` is the fast
-  layer.
+- A plan written before the split still works: any `tier` other than `slow`, `milestone` or
+  `debug` is the fast layer.
 - Naming a plan **file** as the target runs all its tests, whatever `--tier` says; the layer
   still filters a directory target and the whole tree. This keeps a named slow test reachable
   without `--tier all` and keeps `--tier` meaningful for a broad run.
@@ -864,8 +874,9 @@ The fast sample is risk-based. A source plan whose `tags` include one of `risk_t
 `risk_sample` tests (two or three: a collection, a closure or an iterator moves objects across
 safepoints in more ways, so one sample is thin there); every other source plan keeps
 `fast_sample`. The first tests of each source plan are taken, preferring one whose program runs
-to completion; without either field every copy follows the plan's layer. `--tier all` keeps
-every copy, and that is what a milestone run uses. `feat/mm/gc_poison_sweep.plan.toml` is the
+to completion; without either field every copy follows the plan's layer, and with `fast_sample`
+the copies the sample did not take are the `milestone` layer -- the full sweep is a milestone run,
+and `--tier milestone` is what selects those copies. `feat/mm/gc_poison_sweep.plan.toml` is the
 sweep: it checks the handle rules of the collector (`docs/technical/36_gc_handle_rules.md`)
 against the tests of the modules, so an operator added later is covered as soon as it has a
 test. A test that cannot run under a sweep (it asserts wall-clock time, or which graphs a back
@@ -888,7 +899,8 @@ end compiles) says `sweep = false` with a comment.
   follows the record: a run whose record was moved prunes the tree it is writing to, not the checkout's
   `test/results`, which nothing in that run is adding to.
 - The timeouts above apply to one test; a parallel run does not relax them, and a test whose
-  time depends on the machine's load belongs alone (`parallel = false`) or in the slow layer.
+  time depends on the machine's load belongs alone (`parallel = false`) or in a layer a gate does
+  not run: `slow` when a shared host can still carry it, `milestone` when it cannot.
 
 ## CUDA visibility
 
@@ -987,7 +999,7 @@ The case must emit the expected JSON benchmark payload format used by the runner
 ## Performance Measurement
 
 The plans under `test/plans/perf/` -- one plan file per benchmark, every one of them carrying the
-`slow` tier -- are measured on purpose, never by a gate. They are not in
+`milestone` tier -- are measured on purpose, never by a gate. They are not in
 `npm run test` (which runs `--tier fast`), editing one of them does not select it from `--changed`
 (see "Selecting Plans From A Change"), and no CI job runs them: the only tooling that runs them is
 the plan runner, with the plan file named as its target. That is the policy, not an

@@ -310,6 +310,7 @@ const tierDir = path.join(here, 'tier')
 const tierPlan = path.join(tierDir, 'tier.plan.toml')
 const tierFast = runRunner(['--tier', 'fast', tierDir])
 const tierSlow = runRunner(['--tier', 'slow', tierDir])
+const tierMilestone = runRunner(['--tier', 'milestone', tierDir])
 const tierAll = runRunner(['--tier', 'all', tierDir])
 if (!tierFast.output.includes('[SUMMARY] total: 2, pass: 2, fail: 0')) {
     problems.push(`--tier fast (directory): unexpected summary (${summaryLine(tierFast.output)})`)
@@ -323,11 +324,19 @@ if (!tierSlow.output.includes('[SUMMARY] total: 1, pass: 1, fail: 0')) {
 if (statusLines(tierSlow.output).join(', ') !== 'PASS tier.slow') {
     problems.push(`--tier slow (directory) ran: ${statusLines(tierSlow.output).join(', ')}`)
 }
-if (!tierAll.output.includes('[SUMMARY] total: 3, pass: 3, fail: 0')) {
+// The milestone layer is its own name, not a synonym for slow: the fast and the slow runs above
+// must not have selected it.
+if (!tierMilestone.output.includes('[SUMMARY] total: 1, pass: 1, fail: 0')) {
+    problems.push(`--tier milestone (directory): unexpected summary (${summaryLine(tierMilestone.output)})`)
+}
+if (statusLines(tierMilestone.output).join(', ') !== 'PASS tier.milestone') {
+    problems.push(`--tier milestone (directory) ran: ${statusLines(tierMilestone.output).join(', ')}`)
+}
+if (!tierAll.output.includes('[SUMMARY] total: 4, pass: 4, fail: 0')) {
     problems.push(`--tier all (directory): unexpected summary (${summaryLine(tierAll.output)})`)
 }
-// `all` is the Release layers, fast and slow: the debug-layer test of the fixture must stay out
-// of it, because an aborting test would run against the Release binary and never abort.
+// `all` is the Release layers, fast, slow and milestone: the debug-layer test of the fixture must
+// stay out of it, because an aborting test would run against the Release binary and never abort.
 if (statusLines(tierAll.output).includes('PASS tier.debug')) {
     problems.push('--tier all ran the debug test; the debug layer is opt-in')
 }
@@ -341,12 +350,13 @@ for (const [label, run] of [
     ['default tier', runRunner([tierPlan])],
     ['--tier fast', runRunner(['--tier', 'fast', tierPlan])],
     ['--tier slow', runRunner(['--tier', 'slow', tierPlan])],
+    ['--tier milestone', runRunner(['--tier', 'milestone', tierPlan])],
 ]) {
-    if (!run.output.includes('[SUMMARY] total: 4, pass: 4, fail: 0')) {
+    if (!run.output.includes('[SUMMARY] total: 5, pass: 5, fail: 0')) {
         problems.push(`named plan (${label}): unexpected summary (${summaryLine(run.output)})`)
     }
     const ran = statusLines(run.output)
-    if (ran.join(', ') !== 'PASS tier.fast, PASS tier.default, PASS tier.slow, PASS tier.debug') {
+    if (ran.join(', ') !== 'PASS tier.fast, PASS tier.default, PASS tier.slow, PASS tier.milestone, PASS tier.debug') {
         problems.push(`named plan (${label}) ran: ${ran.join(', ')}`)
     }
     if (!run.output.includes('named plan target(s) run in full')) {
@@ -391,6 +401,22 @@ if (!sweepAll.output.includes('[SUMMARY] total: 18, pass: 18, fail: 0')) {
 }
 if (statusLines(sweepAll.output).filter((line) => line.includes('poison:')).length !== 9) {
     problems.push('sweep --tier all did not keep every copy')
+}
+// The copies the sample did not take are the milestone layer, by name: `--tier milestone` selects
+// exactly those five (risky 2, plain 3) and none of the four the fast layer sampled.
+const sweepMilestone = runRunner(['--tier', 'milestone', sweepDir])
+if (sweepMilestone.status !== 0) problems.push(`sweep milestone: runner exit ${sweepMilestone.status}, expected 0`)
+if (!sweepMilestone.output.includes('[SUMMARY] total: 5, pass: 5, fail: 0')) {
+    problems.push(`sweep milestone: unexpected summary (${summaryLine(sweepMilestone.output)})`)
+}
+const milestonePoison = statusLines(sweepMilestone.output).filter((line) => line.includes('poison:'))
+const milestoneRisky = milestonePoison.filter((line) => line.includes('poison:selftest.sweep.risky:'))
+const milestonePlain = milestonePoison.filter((line) => line.includes('poison:selftest.sweep.plain:'))
+if (milestonePoison.length !== 5 || milestoneRisky.length !== 2 || milestonePlain.length !== 3) {
+    problems.push(
+        `sweep --tier milestone ran ${milestonePoison.length} copies (risky ${milestoneRisky.length}, ` +
+            `plain ${milestonePlain.length}), expected the 5 unsampled ones (2 + 3)`
+    )
 }
 
 //  --- a sweep copy's identity carries its source plan ------------------------------------
@@ -838,9 +864,9 @@ for (const target of ['test/plans/feat/exemplars', 'feat.exemplars']) {
     }
 }
 // The suffix-less target must also run: naming a plan file runs it in full, so the tier fixture's
-// four tests (fast, default, slow, debug) all run whatever the tier says.
+// five tests (fast, default, slow, milestone, debug) all run whatever the tier says.
 const shorthand = runTestCli([path.join(here, 'tier', 'tier')])
-if (shorthand.status !== 0 || !shorthand.output.includes('[SUMMARY] total: 4, pass: 4, fail: 0')) {
+if (shorthand.status !== 0 || !shorthand.output.includes('[SUMMARY] total: 5, pass: 5, fail: 0')) {
     problems.push(`target shorthand: a plan target without its suffix did not run in full (${summaryLine(shorthand.output)})`)
 }
 

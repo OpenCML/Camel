@@ -1,6 +1,6 @@
 id = "mm.gc_elder_exhaustion"
 order = 366
-tier = "slow"
+tier = "milestone"
 tags = ["feat", "mm", "gc", "higher-order"]
 desc = """
 Programs that allocate more small arrays than the elder space holds (32 MB) inside the element

@@ -98,7 +98,7 @@ H21-1 的 `t[idx]` 落地后，可以按批把多棵树拼成一个数组，训�
 
 ## 测试
 
-`test/plans/perf/showcase_d5.plan.toml`（`tier = "slow"`）跑 `--profile small`：256 句、
+`test/plans/perf/showcase_d5.plan.toml`（`tier = "milestone"`）跑 `--profile small`：256 句、
 200 步，整条计划约 6 秒（主要是两次 PyTorch 导入）。数值越界即失败。
 
 ## 不提交的东西

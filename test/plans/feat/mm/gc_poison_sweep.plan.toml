@@ -22,8 +22,8 @@ every other plan one; the sample prefers a test that runs its program to complet
 operators move objects across safepoints in more ways, so one sample is thin there, while a
 plan that only parses or computes scalars needs one safepoint poisoned to catch a kept pointer
 or a missing root. The default developer run therefore poisons a safepoint in every plan; the
-full sweep of every test is `npm run test:all` / `--tier all` (the unsampled copies are the slow
-layer, and `--tier all` adds the sampled fast ones).
+full sweep of every test is `--tier milestone` (or `npm run test:all`: the unsampled copies are the
+milestone layer, and `--tier all` adds the sampled fast ones).
 
 The plans of the rewrite module and of the standard rule libraries keep three samples as well
 (`rules`): a rule's condition decides which nodes a rewrite matches, and a defect in one of those

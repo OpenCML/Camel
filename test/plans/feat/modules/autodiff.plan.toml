@@ -2284,7 +2284,7 @@ timeout_ms = 20000
 [[tests]]
 name = "benchmark_gradients_vs_torch"
 # Slow layer: measured 8.3 s in the full serial run.
-tier = "slow"
+tier = "milestone"
 desc = "The training gradient of nine benchmark models (mlp, mlp_big, lenet, lenet_big, gru, gru_big, transformer, transformer4, transformer_big) against PyTorch float32 autograd on the benchmark weights and input (benchmarks/train.py --check): the gradient of mean(y * y) with respect to every weight, under std::macro std::nvm and under std::macro std::opt std::nvm, each weight within 1e-4 of the reference (max|diff| over the weight's largest gradient entry, floored at 1e-3 of the model's). 1e-4 is the benchmark's agreement tolerance; the worst of the nine measures 6.7e-06. This is the second of the two numerical comparisons (native execution against PyTorch), not the exported artifact against native execution. resnet and resnetbn are checked by the next four entries: a float32-against-float32 comparison is not a test of their rules."
 kind = "behavior"
 tool = "python"
@@ -2328,7 +2328,7 @@ timeout_ms = 900000
 [[tests]]
 name = "resnet_gradient_smooth_vs_torch64"
 # Slow layer: measured 6.3 s in the full serial run.
-tier = "slow"
+tier = "milestone"
 desc = "resnet with relu replaced by tanh on both sides (benchmarks/tools/grad_referee.py --activation tanh): Camel's gradient against PyTorch float64 autograd, every weight within 1e-4 (measured 1.4e-06). The rules of conv2d with stride and padding, the residual sum, the two axis means and the linear layer, with no kink for float32 rounding to cross."
 kind = "behavior"
 tool = "python"
@@ -2373,7 +2373,7 @@ timeout_ms = 300000
 [[tests]]
 name = "resnetbn_gradient_smooth_vs_torch64"
 # Slow layer: measured 14.5 s in the full serial run.
-tier = "slow"
+tier = "milestone"
 desc = "resnetbn (20 training-mode batch_norms) with relu replaced by tanh on both sides: Camel's gradient against PyTorch float64 autograd, each of the 62 weights that have a gradient within 1e-4 (measured 7.8e-06), the loss and the 40 running statistics the forward leaves agreeing to 2e-7. The 20 conv biases in front of a batch_norm have a gradient of exactly zero (float64: 1e-17); what float32 computes there is the rounding of a sum that cancels, and it is accepted within 1e-4 of the floor or when no farther from float64 than PyTorch float32 on the same weight (measured: Camel 2.7e-04 of the floor, that is 2.7e-07 of the model's largest gradient entry; PyTorch float32 1.0e-03). Whether exactly-zero gradients need a bound of their own is open (benchmarks/README.md, Gradient agreement)."
 kind = "behavior"
 tool = "python"
@@ -2400,7 +2400,7 @@ timeout_ms = 300000
 [[tests]]
 name = "resnet_gradient_relu_kinks_vs_torch64"
 # Slow layer: measured 21.1 s in the full serial run.
-tier = "slow"
+tier = "milestone"
 desc = "resnet as benchmarked, against PyTorch float64 autograd. The direct comparison is outside 1e-4 (3.1e-03 on stem_w; PyTorch float32 is 1.6e-03 from float64 on another weight) because the gradient is discontinuous where a relu input crosses zero and, of 8.9 million relu inputs, a few lie within float32 rounding of zero. The test requires that the gap is exactly that: Camel's gradient must be within 1e-4 of the float64 gradient recomputed with a few named relu decisions reversed, each of them a unit whose float64 input is within half the layer's float32/float64 forward drift of zero (measured: 2 units, inputs -3.9e-09 and +4.0e-08 in layers whose largest input is 3.4 and 5.3; residual 3.9e-07). A wrong rule is not explained by reversing such units and fails."
 kind = "behavior"
 tool = "python"
@@ -2432,7 +2432,7 @@ timeout_ms = 3600000
 [[tests]]
 name = "resnetbn_gradient_relu_kinks_vs_torch64"
 # Slow layer: measured 42.6 s in the full serial run.
-tier = "slow"
+tier = "milestone"
 desc = "resnetbn as benchmarked, against PyTorch float64 autograd, by the criterion of resnet_gradient_relu_kinks_vs_torch64. The direct comparison is 7.6e-02 for Camel and 9.5e-02 for PyTorch float32 (one reversed relu decision in a 4x4 plane behind a batch_norm moves single kernel-gradient entries by several percent, and everything upstream by a few thousandths); with 3 named relu decisions reversed (float64 inputs -3.8e-08, -1.8e-07, -2.4e-07) the float64 gradient is within 5.4e-06 of Camel's on the weights that have a gradient."
 kind = "behavior"
 tool = "python"

@@ -122,7 +122,7 @@ inside.
 
 ## Tests
 
-`test/plans/perf/showcase_c1.plan.toml` (`tier = "slow"`) runs `--profile small`: 512 rows,
+`test/plans/perf/showcase_c1.plan.toml` (`tier = "milestone"`) runs `--profile small`: 512 rows,
 200 steps, batch 32, about five seconds including both PyTorch imports.  It fails when a
 numeric bound is exceeded.
 

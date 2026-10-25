@@ -1,6 +1,6 @@
 id = "perf.instruction_counts"
 order = 425
-tier = "slow"
+tier = "milestone"
 tags = ["perf", "training", "instructions"]
 
 # Retired user-space instructions per step of the naive training step, by the slope over two run

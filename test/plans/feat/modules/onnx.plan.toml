@@ -644,7 +644,7 @@ timeout_ms = 60000
 [[tests]]
 name = "ort_train_step_adam"
 # Slow layer: measured 5.8 s in the full serial run.
-tier = "slow"
+tier = "milestone"
 desc = "T3: the exported Adam step runs on ONNX Runtime with the optimizer state fed back; five steps match torch.optim.Adam and Camel's native nn:adam on the loss and every updated parameter (<= 1e-5)."
 kind = "behavior"
 tool = "python"
@@ -659,7 +659,7 @@ timeout_ms = 120000
 [[tests]]
 name = "resnetbn_train_step_export"
 # Slow layer: measured 9.2 s in the full serial run.
-tier = "slow"
+tier = "milestone"
 desc = "T4: the literal ResNet-18 training step (20 training-mode batch_norms, running statistics as graph I/O) exports, passes onnx.checker(full_check), and matches Camel native execution on every one of the 123 outputs on ONNX Runtime (benchmarks/train.py --check-onnx)."
 kind = "behavior"
 tool = "python"
@@ -815,7 +815,7 @@ timeout_ms = 60000
 [[tests]]
 name = "pass_export_equals_export_model"
 # Slow layer: measured 15.9 s in the full serial run.
-tier = "slow"
+tier = "milestone"
 desc = "For twenty-six programs (forward, training steps with sgd/Adam/batch-norm/conv/frozen parameters, an If, dynamic axes, and since the pass finishes simplification with the example shapes: the four branched training steps, the gated GRU forward and its training step, the dynamic-batch mean step, a local variable, a float array literal, gradients through mean and vector matmul, a loop that returns its state with a counter and the gradient of a loss over it) the model written by `std::macro std::opt onnx::export` and the one written by export_model both pass onnx.checker(full_check) and give bit-identical ONNX Runtime outputs on the same inputs (numpy array_equal)."
 kind = "behavior"
 tool = "python"
@@ -1676,7 +1676,7 @@ timeout_ms = 8000
 [[tests]]
 name = "export_tree_recursion"
 # Slow layer: measured 32.7 s in the full serial run.
-tier = "slow"
+tier = "milestone"
 desc = "A function that calls itself twice on one path with a depth that depends on the model input (tree recursion) is refused by export_model with a diagnostic that names the two calls outside tail position, located at the second one. The refusal is a shape test now rather than a budget running out: export turns recursion into loops only for a linear recursion, so the case fails immediately instead of unrolling until the doubling graph outgrows one runtime graph."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_tree_recursion.cml"
