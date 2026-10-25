@@ -30,6 +30,7 @@ Camel 是图原生的通用编程语言：程序只表达计算意图——要�
 按新提纲已写好的章（中英文同步，各自独立成页）：
 [1 五分钟见到图](01_five_minutes.cn.md) ·
 [2 值、类型与 `let`](02_values_and_let.cn.md) ·
+[3 函数与管道](03_functions_and_pipes.cn.md) ·
 [5 数组与循环](05_arrays_and_loops.cn.md) ·
 [9 按依赖求值](09_evaluation_by_dependency.cn.md) ·
 [17 教编译器一条定律](17_teaching_a_law.cn.md)
