@@ -9,7 +9,7 @@ module fold_cast
 
 import { Tensor, reshape, sum } from tensor
 
-func weights(): Tensor { return reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[], [2, 3]) }
+func weights(): Tensor<f32> { return reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[], [2, 3]) }
 
 func three(): int { return 3 }
 

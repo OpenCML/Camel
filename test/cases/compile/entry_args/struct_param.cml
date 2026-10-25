@@ -12,7 +12,7 @@ type Linear = { w: Tensor<f32, [3, 4]>, b: Tensor<f32, [4]> }
 type Model = { fc: Linear }
 
 with <p: Model>
-func main(x: Tensor<f32, [2, 3]>, scale: f32): (Tensor, Tensor) {
+func main(x: Tensor<f32, [2, 3]>, scale: f32): (Tensor<f32>, Tensor<f32>) {
     let h = tanh(x @ p.fc.w + p.fc.b)
     return (h, h * scale)
 }

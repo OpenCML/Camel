@@ -8,7 +8,7 @@ module refuse_tensor
 
 import { Tensor, ones } from tensor
 
-func scale(x: Tensor, k: float): Tensor {
+func scale(x: f32[..], k: f32): f32[..] {
     return x * k
 }
 

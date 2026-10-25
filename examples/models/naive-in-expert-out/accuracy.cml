@@ -14,16 +14,16 @@ import {
 import { is_inf, is_nan } from math
 import { softmax_cross_entropy } from nn
 
-func naive_softmax(x: Tensor): Tensor {
+func naive_softmax(x: f32[..]): f32[..] {
     let e = exp(x)
     return e / sum(e, -1, true)
 }
 
-func naive_log_softmax(x: Tensor): Tensor {
+func naive_log_softmax(x: f32[..]): f32[..] {
     return log(naive_softmax(x))
 }
 
-func naive_cross_entropy(logits: Tensor, labels: int): float {
+func naive_cross_entropy(logits: f32[..], labels: int): float {
     let p = naive_softmax(logits)
     let picked = sum(log(p) * cast(one_hot(new([labels]), 8), 'float32'))
     return -picked

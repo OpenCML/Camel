@@ -10,20 +10,20 @@ import { with_grad } from autodiff
 import { sgd } from nn
 
 type Mlp = {
-    fc1_w: Tensor, fc1_b: Tensor,
-    fc2_w: Tensor, fc2_b: Tensor,
-    fc3_w: Tensor, fc3_b: Tensor
+    fc1_w: f32[..], fc1_b: f32[..],
+    fc2_w: f32[..], fc2_b: f32[..],
+    fc3_w: f32[..], fc3_b: f32[..]
 }
 
 with <m: Mlp>
-func loss(x: Tensor): float {
+func loss(x: f32[..]): float {
     let h1 = relu(x @ m.fc1_w + m.fc1_b)
     let h2 = relu(h1 @ m.fc2_w + m.fc2_b)
     let y = h2 @ m.fc3_w + m.fc3_b
     return mean(y * y)
 }
 
-func train(m: Mlp, x: Tensor, steps: int, last: float): float {
+func train(m: Mlp, x: f32[..], steps: int, last: float): float {
     let vg = with_grad(loss)<m>(x)
     return if steps == 0 then last
         else train(sgd(m, vg.1, 0.000001), x, steps - 1, vg.0)

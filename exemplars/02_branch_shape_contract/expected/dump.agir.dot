@@ -30,9 +30,9 @@ digraph GraphIR {
         N0A [label="env:get_env", type="OPER", role="effect", origin=<ORIGIN>, span="18:17-18:24", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="string"];
         N0B [label="true", type="DATA", origin=<ORIGIN>, span="18:36-18:42", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="string"];
         N0C [label=":op/eq_s", type="OPER", origin=<ORIGIN>, span="18:33-18:35", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="bool"];
-        N0D [label="pick", type="FUNC", origin=<ORIGIN>, span="18:12-18:43", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="Tensor"];
-        N0E [label="tensor:matmul", type="OPER", origin=<ORIGIN>, span="18:44-18:45", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="Tensor"];
-        N0F [label=":io/println", type="OPER", role="effect", origin=<ORIGIN>, span="18:4-18:11", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="Tensor"];
+        N0D [label="pick", type="FUNC", origin=<ORIGIN>, span="18:12-18:43", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="f32[..]"];
+        N0E [label="tensor:matmul", type="OPER", origin=<ORIGIN>, span="18:44-18:45", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="f32[..]"];
+        N0F [label=":io/println", type="OPER", role="effect", origin=<ORIGIN>, span="18:4-18:11", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="f32[..]"];
         N10 [label="0", type="DATA", origin=<ORIGIN>, span="19:11-19:12", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="int"];
         N11 [label="GATE", type="GATE", value_type="int"];
         N11 -> O01 [label="0", type="EXIT"];

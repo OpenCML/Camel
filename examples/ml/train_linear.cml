@@ -7,18 +7,18 @@ import { grad } from autodiff
 import { Tensor, reshape, shape, sum } from tensor
 import { sgd } from nn
 
-type Linear = { weight: Tensor }
+type Linear = { weight: f32[..] }
 
 // Mean squared error of the model on (X, y). The model is the first `with`
 // parameter, so `grad` differentiates it; the targets are captured `with` data and stay
 // constant.
-with <layer: Linear, y: Tensor>
-func mse_loss(X: Tensor): float {
+with <layer: Linear, y: f32[..]>
+func mse_loss(X: f32[..]): float {
     let errors = X @ layer.weight - y
     return sum(errors * errors) / float(shape(X)[0])
 }
 
-func train(layer: Linear, X: Tensor, y: Tensor, rate: float, steps: int): Linear {
+func train(layer: Linear, X: f32[..], y: f32[..], rate: float, steps: int): Linear {
     let loss_grad = grad(mse_loss)
     let grads = loss_grad<layer, y>(X)       // a Linear: the gradient of the first `with` parameter
     return if steps == 0 then layer

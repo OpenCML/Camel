@@ -11,9 +11,9 @@ import { export_model } from onnx
 import { mkdirs, file_size } from fs
 import { get_env } from env
 
-type Weights = { hidden: Tensor, out: Tensor }
+type Weights = { hidden: f32[..], out: f32[..] }
 
-func forward(x: Tensor, w: Weights): Tensor {
+func forward(x: f32[..], w: Weights): f32[..] {
     return tanh(x @ w.hidden) @ w.out
 }
 
@@ -37,7 +37,7 @@ func main(): int sync {
     mkdirs(dir)
     // The closure captures the weights, so they are stored in the model; `[0]` leaves the
     // first axis (the batch size) open.
-    export_model((t: Tensor): Tensor => forward(t, w), x, path, [0])
+    export_model((t: f32[..]): f32[..] => forward(t, w), x, path, [0])
     println('model file written:', file_size(path) > 0)
     return 0
 }
