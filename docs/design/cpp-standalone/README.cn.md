@@ -377,7 +377,7 @@ rt::Fallible<int64_t> v7 = rt::attempt([&] { return risky(rt::call(depth, site_5
 
 `random` 模块的算子（`rand:seed`、`rand`、`randn`、`randint`、`choice`、`sample`、`shuffle`）由 `camel/standalone/random.h` 译：与模块用同一个 `std::mt19937_64`（默认种子相同）和 `camel/utils/random.h` 的同一套分布（整数用 Lemire 的方法，正态用极坐标法与 fdlibm 的对数），洗牌与抽样的取下标方式也照模块写，所以种子相同时生成的程序与解释器打印相同的数【实测：`draws.cml`、`modules/std/random/basic.cml`】。
 
-内部算子 `:op/assn_owned` 与 `:struct/append_arr_in_place`（`acc = acc->append<v>` 按 `append` 声明的原地形式改写成的两个节点，`:var/take(acc)` 交出变量单元里的数组）写成 `acc = rt::append(std::move(acc), v);`，捕获或经 `var` 参数共享的单元写成 `acc.set(rt::append(acc.take(), v));`：变量在这次调用里交出它的数组，没有别人拿着时 `rt::append` 原地追加，这正是解释器里“只有变量引用它”的标记（`holdsUnsharedArray`）所做的；元素若是表达式先算进一个局部，读到的仍是交出之前的数组。`:var/peek`（不清除那个标记的读）在生成的程序里与 `:var/get` 相同，引用计数本身就记着同一件事【实测：`consistency/new_values/rebinding_loop.cml`、`peek_loop.cml`、`peek.cml` 与 `std::fvm` 相同】。
+内部算子 `:op/assn_owned` 与 `:struct/append_arr_in_place`（`acc = acc->append<v>` 按 `append` 声明的原地形式改写成的两个节点，`:var/take(acc)` 交出变量单元里的数组）写成 `acc = rt::append(std::move(acc), v);`，捕获或经 `var` 参数共享的单元写成 `acc.set(rt::append(acc.take(), v));`：变量在这次调用里交出它的数组，没有别人拿着时 `rt::append` 原地追加，这正是解释器里执行计划标的“复用输入自身的存储”与数组自己的计数（`Array::canWriteInPlace`）所做的；元素若是表达式先算进一个局部，读到的仍是交出之前的数组。`:var/peek`（不结束那份证明的读）在生成的程序里与 `:var/get` 相同，引用计数本身就记着同一件事【实测：`consistency/new_values/rebinding_loop.cml`、`peek_loop.cml`、`peek.cml` 与 `std::fvm` 相同】。
 
 运行时里有两处行为看起来是意外，生成的程序照样复现，并报告给负责人（第 14 节）：`println<'{}+{}'>(1, 2)` 打印 `1+2` 之后多一个空行；`print<'{}-{}'>(3, 4)` 在末尾加了换行【实测 `m5.cml`】。【10.6 已裁定：这是解释器的缺陷，已修掉，生成的程序随之改正。】
 
