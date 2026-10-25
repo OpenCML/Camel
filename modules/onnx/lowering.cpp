@@ -679,15 +679,15 @@ Value lowerSliceSub(const LowerContext &ctx) {
     const int64_t written    = ctx.has(5) ? ctx.constInt(5) : 3;
     const bool wroteStart    = (written & 2) != 0;
     const bool wroteEnd      = (written & 1) != 0;
-    const int64_t extent     = (*facts.shape)[static_cast<size_t>(at)];
+    const std::optional<int64_t> extent = (*facts.shape)[static_cast<size_t>(at)];
     const int64_t zero[] = {0}, one[] = {1}, two[] = {2}, minusOne[] = {-1};
     const auto int64Cast = intAttr("to", static_cast<int64_t>(elemTypeOf(TypeCode::Int64)));
 
     // The extent as a one-element int64 tensor: the number now, or read from the value's shape
     // when the axis' extent is not known at export time.
     std::string extentVec;
-    if (extent != tensor::kUnknownDim) {
-        const int64_t n[] = {extent};
+    if (extent.has_value()) {
+        const int64_t n[] = {*extent};
         extentVec         = e.int64s(n);
     } else {
         const int64_t axisIndex[] = {at};
@@ -707,8 +707,8 @@ Value lowerSliceSub(const LowerContext &ctx) {
     const auto boundOf = [&](size_t index, bool isStart) {
         const bool known    = ctx.arg(index).isConstant();
         const int64_t value = known ? ctx.constInt(index) : 0;
-        const bool legal    = known && extent != tensor::kUnknownDim && value >= 0 &&
-                           (isStart && step < 0 ? value < extent : value <= extent);
+        const bool legal    = known && extent.has_value() && value >= 0 &&
+                           (isStart && step < 0 ? value < *extent : value <= *extent);
         if (legal) {
             const int64_t proved[] = {value};
             return e.int64s(proved); // the write site proved it a position of the axis
@@ -732,17 +732,17 @@ Value lowerSliceSub(const LowerContext &ctx) {
     const std::string start =
         wroteStart ? boundOf(2, true)
                    : (step > 0 ? e.int64s(zero)
-                               : (extent != tensor::kUnknownDim
-                                      ? e.int64s(std::vector<int64_t>{extent - 1})
+                               : (extent.has_value()
+                                      ? e.int64s(std::vector<int64_t>{*extent - 1})
                                       : e.node("Sub", {extentVec, e.int64s(one)})));
     const std::string end = wroteEnd ? boundOf(3, false) : (step > 0 ? extentVec : e.int64s(minusOne));
 
     // The length of the slice, when the extent and both bounds are known now.
-    int64_t length = tensor::kUnknownDim;
-    if (extent != tensor::kUnknownDim && (wroteStart ? ctx.arg(2).isConstant() : true) &&
+    std::optional<int64_t> length;
+    if (extent.has_value() && (wroteStart ? ctx.arg(2).isConstant() : true) &&
         (wroteEnd ? ctx.arg(3).isConstant() : true)) {
-        const int64_t s = wroteStart ? ctx.constInt(2) : (step > 0 ? 0 : extent - 1);
-        const int64_t n = wroteEnd ? ctx.constInt(3) : (step > 0 ? extent : -1);
+        const int64_t s = wroteStart ? ctx.constInt(2) : (step > 0 ? 0 : *extent - 1);
+        const int64_t n = wroteEnd ? ctx.constInt(3) : (step > 0 ? *extent : -1);
         length          = step > 0 ? (s < n ? (n - s + step - 1) / step : 0)
                                    : (s > n ? (s - n - step - 1) / (-step) : 0);
     }
