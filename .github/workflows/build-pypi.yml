@@ -496,6 +496,10 @@ jobs:
           # The same program the native smoke uses, and for the same reason: it imports a stdlib
           # module, so the run reaches the `.cmo` path where the duplicate-library defect lived.
           printf 'module main\n\nimport { sqrt } from math\n\nfunc main() sync {\n    println(string(sqrt(2.0)))\n    return 0\n}\n' > "$RUNNER_TEMP/shared/hello.cml"
+          # A module of our own with one array entry point, so the interop run below calls a
+          # function rather than only reading the names of the surface: `totals: f32[]` is the
+          # shape `examples/python/rules/rules.cml` exports.
+          printf 'module rules\n\nexport func double_totals(values: f32[]): f32[] {\n    return values->map<(value: f32): f32 => f32(float(value) * 2.0)>\n}\n' > "$RUNNER_TEMP/shared/rules.cml"
           cat > "$RUNNER_TEMP/shared/smoke.sh" <<'SMOKE'
           set -eu
           # A clean container with nothing but the wheel: 5.37 item 4. `numpy` is what the
@@ -533,6 +537,17 @@ jobs:
           for name in ("load", "Module", "Session", "CamelError"):
               assert hasattr(camel, name), name
           print("camel.load / Module / Session / CamelError present")
+
+          # And the crossing itself, which the names above cannot see (5.37 item 4: "a NumPy
+          # call to a module function"). NumPy 2 writes the strides explicitly even for a compact
+          # array, and that is the form the import path has to read as compact: testing the strides
+          # pointer for null refused every NumPy array while this smoke stayed green, because it
+          # only ever asked whether the names were there (H604).
+          rules = camel.load("/shared/rules.cml")
+          values = numpy.arange(4, dtype=numpy.float32)
+          doubled = rules.double_totals(values)
+          assert list(doubled) == [0.0, 2.0, 4.0, 6.0], list(doubled)
+          print("a NumPy array crossed by __dlpack__:", list(doubled))
           PY
           else
             echo "--- import camel must refuse, clearly (5.37 item 7) ---"
