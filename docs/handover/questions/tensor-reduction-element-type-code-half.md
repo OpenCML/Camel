@@ -59,3 +59,56 @@
    - (a) 定义也改写元素类型：`sum(x) / (numel(x) as f32)`（定义与内核同一个类型故事）；
    - (b) 保持 `as float`，"除以 float 再舍回元素类型"，由求值/打印一侧补那一次舍入。
    两条都能让"内核 == 定义"继续成立，但定义库是规范文本（设计原则 7.1），所以由作者选。
+
+## 五、一轮"按元素类型做整体归约"的实测（翻转线 `09192bf70`）
+
+本轮的任务是把它在翻转线上按那条归约轮分支（`handover/h536-reduction-round`，只作参考读、未并入）的
+规则重做。做法是先量，再决定落哪一半；结论是**代码那一半一条都不在 tiles 车道的允许文件集内**，而 tiles
+那一半单独落地读不到任何行为，所以本轮只补这份读数（问题 1 由此有答案）。
+
+### 5.1 改前逐字：`sum` 对 `Tensor<f32>` 今天答 `float`
+
+临时探针（跑完即删，不入库）：
+
+    func total(x: Tensor<f32>): f32 { return sum(x) }
+    func main(): int sync { println(total(reshape([1.0, 2.0, 3.0] as f32[], [3]))); return 0 }
+
+`camel <case> std::nvm` 的读数：
+
+    element_typed_reduction_probe.cml:4:35: [Error]: Return type 'float' does not match the
+    function's declared return type 'f32'. (name=SemanticDiag::ReturnTypeMismatch, code=0x03000011)
+
+同一程序把返回类型写成 `: float` 就编过，打印 `6.0`。即今天 f32 张量的整体归约给 f64；那条参考分支上是
+同一条诊断的反向（`Return type 'f32' does not match ... 'float'`），因为那一半已经落了。
+
+### 5.2 区域那一半为什么不能单独落
+
+- `modules/tiles/src/compiler.cpp:865-880` 只在 `inferred` 是 Float64 时取整张量归约，并把它注成
+  `DType::F64`；`inferred` 来自 §一 的 `scalarFloatInfer`。把这里的守卫放宽成"F32 或 F64"今天**没有输入**
+  能满足：语言层（§5.1）根本不产出 f32 的整体归约。
+- 更硬的边界是 **law 表**，不在 tiles 里：`modules/tiles/src/reduction_kernel.cpp:95-102` 要求整张量形的
+  `law.result == f64`，而 law 由 `modules/tensor/ops/indexing.cpp` 声明（§一的 `sum_f32(f32, f64, f64)`）。
+  只要那条 law 还写 f64，tiles 侧接受 f32 注解也过不了这道检查，除非同时改 `modules/tensor`。
+- 所以 tiles 那一半（`compiler.cpp`、`reduction_kernel.cpp`、`schedule.cpp`、`serial_kernel.cpp`，加上
+  `test/cases/modules/tiles/plan_check.cpp:652` 那条"f32 注解决不被接受"的钉子）今天落地只做两件事：
+  放宽一条钉子、加一段读不到的死代码。
+
+### 5.3 参考读数：那条分支的 tip（`770d956ff`）在 `test/plans/gpu/tiles.plan.toml` 上
+
+`total: 101, pass: 78, fail: 23`（经主机实测）。其中 12 条是这条规则的**直接**结果——函数声明
+`: float` 而返回归约，诊断逐字是 `Return type 'f32' does not match the function's declared return
+type 'float'`（`branches.cml:7` ×3、`matmul_edges.cml:9` ×3、`grad_expand.cml:44` ×3、
+`grad_dynamic.cml:27`、`grad_expand_plain.cml:27` ×2）；另外 11 条是数值读数
+（`value_gradient` ×3、`resident_scalars` ×3 报 scalar precision，`numeric_permission_boundaries` 与
+`numeric_permissions_moving_gc` 报 `-8.526513e-14`，`matmul_rounding` ×3 报 FMA 链残差
+`-1.4210855e-14`）。那条分支自己的页在更早的 tip 上记过 13 条并 A/B 证明不是它那条车道；13 与 23 的差
+没有进一步拆开，这里只报读数。翻转线上同一个计划今天是 `101 / pass 101 / fail 0`。
+
+### 5.4 §四 问题 1 的答案
+
+代码那一半要动的是：`modules/tensor/ops/reduction_ops.cpp`（`scalarFloatInfer`）、
+`modules/tensor/kernels/reduce.*`（一次舍入）、`modules/tensor/ops/indexing.cpp`（law 表的结果类型）、
+`stdlib/signatures/tensor.cml`，以及把归约结果交给 `float` 的程序——本树有 206 个 `.cml`、346 处
+`return sum(`/`mean(`。**没有一条落在 tiles 车道的允许文件集内**，所以它归一条能动 `modules/tensor` 与
+`test/cases/**` 的车道，tiles 侧那 4 处跟随其后（参考分支的 `7e8608546`、`a2334af46`、`d5895e7b5` 就是
+那 4 处的样子）。§四 问题 2（定义库怎么写）仍归作者。
