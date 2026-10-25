@@ -91,6 +91,19 @@ struct NodePattern {
     std::vector<NodePattern> args;
 };
 
+/// One argument the fact was queried with (`range<limit>`), kept where the description lives: a
+/// value of a scalar type is the slot itself, a value the collector manages is held by a root
+/// handle, which follows it when the collector moves it. The fact's functions are called with
+/// these long after the query's own frame is gone, so the value has to be kept here.
+struct WithValue {
+    slot_t scalar = 0;
+    std::shared_ptr<mm::RootHandle> object;
+
+    slot_t slot() const {
+        return object != nullptr ? reinterpret_cast<slot_t>(object->get()) : scalar;
+    }
+};
+
 /// The fact of one declaration, with the values it needs to compute it: the functions are rooted
 /// for as long as the description is used (a description is kept per key, name and arguments).
 struct Definition {
@@ -98,6 +111,9 @@ struct Definition {
     /// the fact kind and the stored value are all keyed by.
     std::string key;
     type::Type *factType = nullptr;
+    /// What the query wrote out, in the order the declaration declares them: every function the
+    /// declaration generates is called with them, so a case reads them by name.
+    std::vector<WithValue> withValues;
     /// initial, join, meet, widen, narrow, then (pattern, fact)* per case.
     std::vector<std::shared_ptr<mm::RootHandle>> roots;
     size_t initial = 0;
@@ -207,13 +223,25 @@ struct Frame {
     std::unique_ptr<NodeVMSchedPass> vm;
     std::unordered_map<uint32_t, slot_t> memo;
     std::unordered_set<uint32_t> active;
+    /// The arguments of the query, as the call needs them: rebuilt before every call, because a
+    /// value the collector manages is followed by its root handle and the slot it had has to be
+    /// read again; the capacity is kept, so a call of a fact allocates nothing after the first.
+    std::vector<slot_t> withScratch;
 
     slot_t call(size_t functionIndex, std::span<const slot_t> args) {
         ::Function *fn = definition->roots[functionIndex]->getAs<::Function>();
         // A clause is a function value of the module the analysis is declared in: what its body
         // captured where it was written is in the closure the value was made with, and calling it
         // by its graph alone would leave those captures empty.
-        return vm->callFunction(fn, args);
+        //
+        // The arguments the query was written with go in as the function's `with` arguments: the
+        // generated functions declare the declaration's `with` parameters, so a case names one and
+        // reads the value the query wrote out.
+        withScratch.clear();
+        for (const WithValue &one : definition->withValues) {
+            withScratch.push_back(one.slot());
+        }
+        return vm->callFunction(fn, args, withScratch);
     }
     slot_t initialValue() { return call(definition->initial, {}); }
     slot_t joinValues(slot_t a, slot_t b) {
@@ -600,6 +628,23 @@ std::shared_ptr<Definition> buildDefinition(
             "fact",
             "the fact type of a fact must be a scalar (int, float or bool)");
     }
+    // What the query wrote out (`range<3>`): the arguments sit between the name and the node
+    // parameters, in the order the declaration declares them, and every function of the
+    // declaration is called with them.
+    const size_t withCount = nodeBegin > 7 ? nodeBegin - 7 : 0;
+    for (size_t i = 0; i < withCount; ++i) {
+        const size_t index = 7 + i;
+        type::Type *argType = norm.type(index);
+        WithValue value;
+        if (argType != nullptr && type::isGCTraced(argType->code())) {
+            value.object = std::shared_ptr<mm::RootHandle>(new mm::RootHandle(
+                mm::autoSpace(), norm.get<rtdata::Object *>(index), argType,
+                "rewrite.fact.with"));
+        } else {
+            value.scalar = norm.slot(index);
+        }
+        definition->withValues.push_back(std::move(value));
+    }
     for (size_t index = onBegin; index + 2 < count; index += 3) {
         ::Function *patternFn = norm.get<::Function *>(index);
         definition->roots.push_back(root(index));     // pattern
@@ -762,11 +807,24 @@ slot_t analysisKernel(ArgsView &, ArgsView &norm, camel::core::context::Context 
     frame.source     = source;
     frame.context    = &ctx;
     frame.vm         = std::make_unique<NodeVMSchedPass>(ctx.shared_from_this());
-    Frame *previous  = currentFrame;
-    currentFrame     = &frame;
     gc_node_ref_t anchor = camel::runtime::kInvalidNodeRef;
+    // `currentFrame` says which evaluation a nested query may answer from, and it names a frame on
+    // this thread's stack: it has to name this frame exactly while this evaluation runs, and the
+    // one that was here before, or nothing, the moment this evaluation stops running -- however it
+    // stops. `evaluateQuery` throws `FactQueryNoValue` whenever the parts it was given are no
+    // value's operands (the condition of a rule that does not apply here, which the engine catches
+    // above), so the ordinary way out of this function is an unwind, not a return; assigning
+    // `currentFrame` back on the way past the call would leave every frame that unwound past it
+    // pointing at a frame that no longer exists, and the next query of the same fact compares its
+    // key against a slot of a dead frame -- a read of a stack slot whose contents the next call
+    // has already overwritten. The restore is therefore tied to the frame's lifetime by the
+    // guard, not to reaching the end of the evaluation.
+    struct RestoresCurrent {
+        Frame *previous;
+        ~RestoresCurrent() { currentFrame = previous; }
+    } restore{currentFrame};
+    currentFrame = &frame;
     const slot_t fact = evaluateQuery(frame, parts, anchor);
-    currentFrame      = previous;
 
     if (!fromDraft) {
         const camel::runtime::fact::Anchor factAnchor{source.program, source.graph, anchor};

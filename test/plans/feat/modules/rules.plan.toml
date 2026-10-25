@@ -1607,3 +1607,25 @@ expect_output_contains = ["The fact 'sign' has no 'case _', so nothing says what
 expect_output_not_contains = ["UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
+
+[[tests]]
+name = "rules.fact_with_argument_is_read_by_a_case"
+desc = "The arguments a fact is queried with are the fact's, and they reach the functions the declaration generates: `fact times` multiplies a constant by `with <factor: int>` and its initial case is the argument negated, so a case reads the value by name. Two rules ask the same pattern for different constants -- `mul_by_two` fires where `times<2>(y) == 4` (the constant is 2) and `mul_by_three` where `times<3>(y) == 9` (the constant is 3) -- and on a target with a product by 1 and a product by 2 the first rewrites the one product and the second none, so which constant a rule rewrites is the value the case read. `x * 2` is rewritten to `x + x`, so the numbers of the program are unchanged."
+kind = "behavior"
+case = "../../../cases/modules/rules/fact_with_value.cml"
+args = ["${case}", "fact_with_value::report", "fact_with_value::apply_two", "fact_with_value::report", "fact_with_value::apply_three", "fact_with_value::report", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["one 1 two 1\none 1 two 0\none 1 two 0\n7 14\n"]
+timeout_ms = 20000
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+
+[[tests]]
+name = "rules.a_condition_whose_fact_query_finds_nothing_does_not_leave_a_frame_behind"
+desc = "A rule whose condition queries a fact over the parts of the redex and finds no value leaves the rewrite able to go on, and leaves nothing of its own behind. This is the minimal shape of the fact condition path: one two-parameter fact (`sub(a, b)`) whose case queries a second fact (`sign(y)`), asked from a rule's `when` about the operands of a product no subtraction has. The first query of `sub` answers nothing and throws `FactQueryNoValue`, which the condition turns into `false`; the query is asked again on the next match, and must not read anything of the evaluation that already ended. The point of the case is that the pass runs to the end and the product survives: it died with SIGSEGV on the host before the fix (exit 139, stdout stopping at the report before `apply`)."
+kind = "behavior"
+case = "../../../cases/modules/rules/fact_no_value.cml"
+args = ["${case}", "fact_no_value::report", "fact_no_value::apply", "fact_no_value::report", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["kept 1\nkept 1\nkept 14\n"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000

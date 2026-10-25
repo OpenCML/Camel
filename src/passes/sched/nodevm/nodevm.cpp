@@ -748,6 +748,25 @@ slot_t NodeVMSchedPass::call(
             framePool_.release(rootFrame);
         }
         throw;
+    } catch (...) {
+        // Every other exception a native operator throws leaves this device the same way a fault
+        // does, and it has to leave with its frames. `FactQueryNoValue` is the one that reaches
+        // here in practice: a fact query inside a rule's condition that names parts no value has
+        // throws it, and whoever evaluates the condition catches it and answers "this rule does
+        // not apply here" (modules/rewrite/module.cpp, callWhen), so it is an ordinary outcome of
+        // a condition, not a fault. Measured with the pool's own counters on a case whose
+        // condition asks a two-parameter fact: a graph that runs to the end leaves 0 frames
+        // outstanding, and the same graph with one such query left 4 -- one per unwinding
+        // activation, because only the two clauses above released. The pool is a stack allocator
+        // whose top is the next frame's address, so a frame that is not released leaves the top
+        // above a frame that is still in use and the next acquire hands that frame out twice; the
+        // slots of the two activations then overwrite each other.
+        currRecursionDepth_--;
+        releaseTailFrames(tailLow, tailHigh);
+        if (rootFrame) {
+            framePool_.release(rootFrame);
+        }
+        throw;
     }
 }
 

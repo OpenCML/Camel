@@ -363,8 +363,11 @@ declare `with` parameters -- `fact range<limit: int = 5>(v: int): int` -- which 
 fact is: they must be compile-time constants (a non-constant argument is a compile error), and the
 description, the fact kind (`user.fact.range<3>`) and the stored value are all keyed by the name
 and the arguments, so `range<3>(x)` and `range<5>(x)` are two facts, each computed and cached on
-its own. The generated `range__join` and its optional siblings carry the declaration's `with`
-parameters, so a clause may name one (`join Interval::widen_after<widen_after>`).
+its own. Every function the declaration generates -- `range__initial`, the `range__join` and its
+optional siblings, and each case's pattern and fact function -- carries the declaration's `with`
+parameters, so a clause or a case names one and reads the value the query wrote out
+(`join Interval::widen_after<widen_after>`), and the engine passes the query's arguments to them
+as the `with` arguments of the call.
 
 **`#requires` (implemented, H2b).** `#requires(reassociate, finite_math)` before a rule resolves the
 names to `sem::PermissionMask` -- `finite_math` expands to its four bits -- and fills the `needs`
