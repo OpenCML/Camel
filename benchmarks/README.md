@@ -523,11 +523,11 @@ rounding of zero is unlikely there, not impossible.
 .venv/bin/python tools/grad_referee.py --model resnet --seed 1 --seed 2 --seed 3 --no-fd
 ```
 
-Numbers: torch 2.14.0 CPU, Linux x86-64. The earlier
-`resnetbn/tools/grad_envelope.py` called the gap "physically unreachable in
-float32" and showed a kink from one coordinate's one-sided differences. The
-kink is right; the gap is not a precision limit (it is absent without relu and
-absent on some draws), and that script is replaced by `grad_referee.py`.
+Numbers: torch 2.14.0 CPU, Linux x86-64. The earlier gradient-envelope tool
+called the gap "physically unreachable in float32" and showed a kink from one
+coordinate's one-sided differences. The kink is right; the gap is not a precision
+limit (it is absent without relu and absent on some draws), and `grad_referee.py`
+replaced that tool.
 
 ## Numerical agreement
 
