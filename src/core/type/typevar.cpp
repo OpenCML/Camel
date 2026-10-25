@@ -27,22 +27,20 @@ TypeVarType::TypeVarType(const std::string &name, bool binder)
 
 TypeVarType *TypeVarType::create(const std::string &name, bool binder) {
     // One object per variable name and binding mark, from the type table (see intern.h): every
-    // occurrence of `T` is one type with one id, instead of a fresh object per occurrence.
-    // `equals` compares the name and ignores the mark (see below), so the mark-less occurrence is
-    // the canonical form: an occurrence that binds and a use of it are one type, which is what
-    // the compiler's name-keyed substitution already assumes.
-    const std::string *text        = TypeTable::instance().internText(name);
-    const uintptr_t words[2]       = {reinterpret_cast<uintptr_t>(text), binder ? 1u : 0u};
-    const uintptr_t plain[2]       = {reinterpret_cast<uintptr_t>(text), 0u};
-    const auto allocate            = [&](bool marked) -> Type * {
-        void *mem = allocTypeStorage<TypeVarType>(TypeStorageKind::TypeVar);
-        return new (mem) TypeVarType(name, marked);
-    };
+    // occurrence of `T` is one type with one id, instead of a fresh object per occurrence. A type
+    // variable's identity is its binding site (the ruling of 2026-10-24 evening, item 1), so the
+    // name and the mark are both in the key and **neither is erased**: the mark says whether this
+    // occurrence is one an argument can bind, which is not a spelling, and it is what keeps a
+    // declaration's own parameter object and a binding occurrence in a signature apart. The
+    // variable is therefore its own canonical form -- `equals` ignores the mark, so an occurrence
+    // that binds and a plain use of the same name are one type to every type check.
+    const std::string *text  = TypeTable::instance().internText(name);
+    const uintptr_t words[2] = {reinterpret_cast<uintptr_t>(text), binder ? 1u : 0u};
     return static_cast<TypeVarType *>(TypeTable::instance().intern(
-        TypeTable::Shape::TypeVar, std::span<const uintptr_t>(words, 2),
-        [&]() -> Type * { return allocate(binder); },
-        TypeTable::Canonical{
-            std::span<const uintptr_t>(plain, 2), [&]() -> Type * { return allocate(false); }}));
+        TypeTable::Shape::TypeVar, std::span<const uintptr_t>(words, 2), [&]() -> Type * {
+            void *mem = allocTypeStorage<TypeVarType>(TypeStorageKind::TypeVar);
+            return new (mem) TypeVarType(name, binder);
+        }));
 }
 
 std::string TypeVarType::toString() const { return name_; }
