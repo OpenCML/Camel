@@ -9,7 +9,7 @@
 [![CI](https://github.com/OpenCML/Camel/actions/workflows/ci.yml/badge.svg)](https://github.com/OpenCML/Camel/actions/workflows/ci.yml)
 [![版本](https://img.shields.io/github/v/tag/OpenCML/Camel?label=version&color=blue)](https://github.com/OpenCML/Camel/tags)
 [![许可证：MIT](https://img.shields.io/badge/license-MIT-green.svg)](../LICENSE)
-[![平台](https://img.shields.io/badge/platforms-Linux%20%7C%20Windows-lightgrey.svg)](setup.cn.md)
+[![平台](https://img.shields.io/badge/platforms-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey.svg)](setup.cn.md)
 [![VS Code](https://img.shields.io/visual-studio-marketplace/v/Kogler7.open-cml-extension?label=VS%20Code&logo=visualstudiocode)](https://marketplace.visualstudio.com/items?itemName=Kogler7.open-cml-extension)
 [![Stars](https://img.shields.io/github/stars/OpenCML/Camel?style=social)](https://github.com/OpenCML/Camel/stargazers)
 
@@ -120,6 +120,14 @@ rule add_zero::<T>(x: T) when is_integer::<T>() { x + 0 => x }
 
 ## 快速开始
 
+### 安装
+
+```bash
+pip install camel-lang
+```
+
+装好后 `camel` 命令就在 `PATH` 上，Python 里也能 `import camel`。发布的 wheel 覆盖 Linux（x64、arm64）、macOS（Apple Silicon）与 Windows（x64）。`camel` 命令在任何 Python 3 上都能装；从 Python 调用 Camel 需要 CPython 3.10 或更新的版本。
+
 ### 从源码构建
 
 需要 Clang 19+、CMake 3.25+、Ninja、Conan 2.10+ 与 Node.js 18+。各平台的工具链见 [setup.cn.md](setup.cn.md)。
@@ -130,7 +138,7 @@ npm install          # npm 包与 C++ 依赖（需要联网）
 npm run build        # Release 构建，产物在 out/latest
 ```
 
-把 `out/latest/bin` 加进 `PATH`，`CAMEL_HOME` 设为 `out/latest`。CI 构建并测试 Linux x64 与 Windows x64。
+把 `out/latest/bin` 加进 `PATH`，`CAMEL_HOME` 设为 `out/latest`。CI 构建并测试 Linux（x64、arm64）、macOS（Apple Silicon）与 Windows（x64）。
 
 ### Hello, Camel
 
@@ -155,13 +163,16 @@ Hello, Camel!
 
 在 VS Code 安装 [OpenCML-Ext](https://marketplace.visualstudio.com/items?itemName=Kogler7.open-cml-extension)：高亮、语言服务、交互式的图浏览，以及能在遍之间暂停的调试器。把 `opencmlLanguageServer.camelPath` 指向你的 `camel`。见[插件说明](https://github.com/OpenCML/OpenCML-Ext#readme)与[调试指南](debugging.cn.md)。
 
-### Python
+### 在 Python 里用
 
-```bash
-npm run pypi:rollup  # 从本树构建 camel-lang wheel
+```python
+import camel
+
+stats = camel.load("stats.cml")      # 一个 Camel 模块
+y = stats.normalize(x)               # NumPy 数组零拷贝进出
 ```
 
-见 [pypi-packaging.md](pypi-packaging.md) 与 [Python 绑定](technical/57_python_bindings.md)。
+出错时抛 `camel.CamelError`，带着诊断与位置。
 
 ## 文档
 

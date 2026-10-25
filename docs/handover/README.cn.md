@@ -605,6 +605,40 @@ CI 的触发不改（只在 `v*` 标签与手动触发时运行，不花 runner 
    - 以后不再写"能写但会被拒绝的写法一览"这类页面。
 5. **顺序**：第 4 条现在就做。第 3 条在第 1 条定稿后做，与 H251 合并（H251 的"一个文件写全语言"作废）。第 2 条与教程改写（5.35）、文档清理（5.00）一起做，按页落实。
 
+### 5.37 H257 `pip install camel-lang` 之后就能用（负责人 2026-10-25）
+
+负责人："普通用户想要使用 camel 最便捷的办法是直接 pip install camel-lang"；"查一下现在 pypi 发布脚本能不能让用户自然使用 camel"。README 的安装一节已经按目标写成 `pip install camel-lang`。决策者查到的现状（2026-10-25）：
+
+- **PyPI 上最新的还是 0.0.13**（2025-03，只有 Windows 一个包）。v0.2.28–v0.2.31 打标签后，`build-pypi.yml` 的 8 个 wheel 都构建成功，可信发布也换到了令牌，但上传第一个文件就被 PyPI 拒绝：`400 Binary wheel 'camel_lang-0.2.31-cp310-cp310-linux_x86_64.whl' has an unsupported platform tag 'linux_x86_64'`（负责人贴出的日志）。上传在第一个错误处整体中止，所以 Windows 的 4 个包也一个都没上去。
+- **根因是 Linux 包的平台标签**：取自构建机（`packaging.tags` 的第一项），在 ubuntu-latest 上是 `linux_x86_64`。PyPI 只收 `manylinux`/`musllinux` 标签的 Linux 包，而要打这种标签，就得在 manylinux 环境里构建、用 auditwheel 检查并修复。现在两样都没做，所以 Linux 包既传不上去，传上去了也只保证在构建机同款系统上能跑。
+- **`camel` 命令靠 shell/cmd 包装脚本找二进制**，找法是"脚本目录的 `../lib/python*/site-packages`"，Debian 的 `dist-packages` 等布局下找不到，失败时还要用户去设 `CAMEL_HOME`。
+- **冒烟测试只做了 `import camel`**，没有跑 `camel` 命令，也没有跑一个程序。
+- 包里的杂项：`cpm` 是一个只打印"Hello! Camel Package Manager!"的占位命令；`__version__` 写死成 0.2.30（已经落后）；包描述还是"Next-Generation Language for AI and HPC"；分类里写了 MacOS（没有 macOS 包）和"Human Machine Interfaces"；没有 `requires-python`；包页面的 README 只有一句话。
+
+要做的：
+1. **Linux 包在 manylinux 容器里构建（最先做，它挡着整个发布）**：用 `manylinux_2_28`（AlmaLinux 8），构建后用 `auditwheel repair` 检查并打上正确的标签，让 Ubuntu 20.04/22.04、Colab 都能装。若依赖做不到 2_28，在报告里写明卡在哪个库、最低能做到多少。工作流里加一道检查：标签不是 `manylinux_*`/`win_*` 的包，在构建那一步就失败，不要等到上传时才被 PyPI 拒绝。
+2. **`camel`、`camel-ls`、`camel-db`、`camel-format` 改成 `[project.scripts]` 入口**：一个很短的 Python 函数，按包自己的位置找到 `.cmlenv/bin/` 下的二进制并 `exec` 它（参数、退出码、信号原样传递）。删掉 `wrapper-dist` 那套 shell/cmd 包装脚本和"请设 `CAMEL_HOME`"的提示。二进制从自己的目录找标准库，不需要任何环境变量。
+3. **杂项**：删掉 `cpm`；`__version__` 从包的元数据读（`importlib.metadata`），不再写死；描述改成定位那句话（"A graph-native general-purpose programming language, with AI as its primary application"）；分类按实际平台写，开发阶段写 Alpha；加 `requires-python = ">=3.10"`；包页面的 README 用主 README 的"为什么""安装""从 Python 用"三节。
+4. **冒烟测试按用户的样子来**：在干净的环境里（Linux 用 `ubuntu:22.04` 与 `python:3.12-slim` 两个容器，Windows 用一个新的虚拟环境）只做 `pip install <wheel>`，然后跑 `camel --version`、`camel hello.cml`、`camel hello.cml std::jit`，以及一段 `import camel` 加 NumPy 调用一个模块函数。任何一步失败，工作流就失败。
+5. **发布**：可信发布已经登记好，能换到令牌。第 1 条做完后，打一个标签走一遍完整发布，在报告里贴出 PyPI 页面上的版本和文件列表，以及在一台没有构建环境的机器上 `pip install camel-lang` 之后跑通 `hello.cml` 的记录。
+
+6. **平台范围扩大（负责人 2026-10-25："至少支持 mac"）**：发布的 wheel 与 CI 覆盖下面四个平台，每次发布都构建、冒烟测试、上传：
+   - Linux x64（`manylinux_2_28_x86_64`）、Linux arm64（`manylinux_2_28_aarch64`，`ubuntu-24.04-arm` 运行器）；
+   - macOS arm64（Apple Silicon，`macos-latest`）：用 `delocate` 把依赖的动态库打进包、修正装载路径（macOS 上对应 auditwheel 的工具），部署目标写明（如 `MACOSX_DEPLOYMENT_TARGET=13.0`），二进制按 macOS 的要求做 ad-hoc 签名，保证从 pip 装上就能运行；
+   - Windows x64。
+   arm64 两格的指令集基线用 `baseline`（`x86-64-v3` 只适用于 x86-64）。Intel Mac 与 Windows arm64 暂不发布：前者苹果已停产，后者用户很少；以后有需要再加一格，不另作设计。`ci.yml` 里 macOS 那一腿的注释说"wheel 工作流已经在 macOS 上构建"，实际矩阵里 macOS 是注释掉的，随本条改成真实情况，并把 macOS 那一腿从可选改成每次发布都跑。
+7. **Python 版本：本体与互操作分开（负责人 2026-10-25："不直接支持的版本可以只安装 camel 本体，方便用户体验 camel"）**。现在每个平台 × 每个 Python 版本各做一次完整的原生构建（2 × 4 = 8 次，平台扩到四个就是 16 次），而 `camel` 二进制、运行库与标准库其实与 Python 版本无关，只有两处互操作与版本有关：从 Python 调 Camel 的扩展模块（`bindings/python`），以及 Camel 调 Python 的嵌入模块（`modules/python`，现在按版本各编一个桥接库）。改成：
+   - **每个平台只做一次原生构建**，出两个同名的 wheel，由 pip 按解释器自动挑：
+     - `camel_lang-<ver>-cp310-abi3-<平台>.whl`：本体加互操作。两处互操作都只用 CPython 的稳定 ABI（Limited API，`Py_LIMITED_API=0x030A0000`），编一次，就覆盖 CPython 3.10 及以后的所有版本，包括还没发布的版本；嵌入模块链接 `python3`（稳定 ABI 的那个库），不再按版本各编一个桥接库。
+     - `camel_lang-<ver>-py3-none-<平台>.whl`：只有本体。任何 Python 3 都能装，包括 3.9 及更早的版本、自由线程版（3.13t/3.14t，它们目前不支持稳定 ABI）、PyPy。装上就有 `camel` 命令，能写、能跑 Camel 程序。
+   - pip 在 CPython 3.10+ 上会优先选第一个，其余解释器上落到第二个，用户只需要 `pip install camel-lang`。`requires-python` 放宽到 `>=3.8`。
+   - **只装了本体时 `import camel`**：报一条清楚的 `ImportError`，说明从 Python 调用 Camel 需要 CPython 3.10 或更新的版本，`camel` 命令照常可用。不报晦涩的找不到扩展模块。
+   - 如果稳定 ABI 实在覆盖不了某个用到的接口，在报告里列出是哪几个、换成了什么写法；不退回按版本各编一遍。自由线程版要不要单独出互操作的 wheel，等 CPython 的自由线程稳定 ABI 落地后再看。
+   - 这样四个平台一共四次原生构建、八个 wheel。冒烟测试每个平台跑三个解释器：CPython 3.10（最低）、当前最新的 CPython（互操作能用）、一个只拿到本体的解释器（3.9 或 PyPy：`camel hello.cml` 能跑，`import camel` 给出上面那条消息）。
+8. **JIT 在 arm64 上**：`std::jit` 现在只有 x86-64 的代码生成器，arm64 上由 `std::fvm` 的字节码解释器执行，结果相同、速度不同，并在 `-v` 日志里说明一次。这一点照实写进安装与命令行文档。aarch64 的代码生成器另立任务，排在 P4 与 GPU 之后，不挡发布。
+
+人手：单独一条小车道，不占 H242 与 P4。
+
 ### 5.0 调度
 
 任务之间的并行与先后由施工负责人自行安排（可同时调度多个子代理）；任务书只写依赖的硬前提。下文各任务中"某车道"的字样只是历史标记，不约束调度。

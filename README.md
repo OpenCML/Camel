@@ -9,7 +9,7 @@
 [![CI](https://github.com/OpenCML/Camel/actions/workflows/ci.yml/badge.svg)](https://github.com/OpenCML/Camel/actions/workflows/ci.yml)
 [![Version](https://img.shields.io/github/v/tag/OpenCML/Camel?label=version&color=blue)](https://github.com/OpenCML/Camel/tags)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Platforms](https://img.shields.io/badge/platforms-Linux%20%7C%20Windows-lightgrey.svg)](docs/setup.en.md)
+[![Platforms](https://img.shields.io/badge/platforms-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey.svg)](docs/setup.en.md)
 [![VS Code](https://img.shields.io/visual-studio-marketplace/v/Kogler7.open-cml-extension?label=VS%20Code&logo=visualstudiocode)](https://marketplace.visualstudio.com/items?itemName=Kogler7.open-cml-extension)
 [![Stars](https://img.shields.io/github/stars/OpenCML/Camel?style=social)](https://github.com/OpenCML/Camel/stargazers)
 
@@ -120,6 +120,14 @@ The rules behind this table are in the [design principles](docs/design-principle
 
 ## Quick start
 
+### Install
+
+```bash
+pip install camel-lang
+```
+
+This puts the `camel` command on your `PATH`, and `import camel` in Python. Wheels are published for Linux (x64, arm64), macOS (Apple silicon) and Windows (x64). The `camel` command installs on any Python 3; calling Camel from Python needs CPython 3.10 or newer.
+
 ### Build from source
 
 You need Clang 19+, CMake 3.25+, Ninja, Conan 2.10+ and Node.js 18+. [docs/setup.en.md](docs/setup.en.md) lists the toolchain per platform.
@@ -130,7 +138,7 @@ npm install          # npm packages and the C++ dependencies (needs network acce
 npm run build        # Release build into out/latest
 ```
 
-Put `out/latest/bin` on your `PATH` and set `CAMEL_HOME` to `out/latest`. CI builds and tests Linux x64 and Windows x64.
+Put `out/latest/bin` on your `PATH` and set `CAMEL_HOME` to `out/latest`. CI builds and tests Linux (x64, arm64), macOS (Apple silicon) and Windows (x64).
 
 ### Hello, Camel
 
@@ -155,13 +163,16 @@ Hello, Camel!
 
 Install [OpenCML-Ext](https://marketplace.visualstudio.com/items?itemName=Kogler7.open-cml-extension) for VS Code: highlighting, language services, an interactive graph browser, and a debugger that can pause between passes. Point `opencmlLanguageServer.camelPath` at your `camel` executable. See the [extension README](https://github.com/OpenCML/OpenCML-Ext#readme) and the [debugging guide](docs/debugging.en.md).
 
-### Python
+### From Python
 
-```bash
-npm run pypi:rollup  # builds the camel-lang wheel from this tree
+```python
+import camel
+
+stats = camel.load("stats.cml")      # a Camel module
+y = stats.normalize(x)               # NumPy arrays cross without a copy
 ```
 
-See [docs/pypi-packaging.md](docs/pypi-packaging.md) and the [Python bindings](docs/technical/57_python_bindings.md).
+A failure arrives as a `camel.CamelError` carrying the diagnostic and its location.
 
 ## Documentation
 
