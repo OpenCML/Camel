@@ -1237,7 +1237,7 @@ void queries(std::ostream &os) {
     // a read that is valid only where the input holds it, a fault elsewhere.
     query(os, "show_reshape_open_first_extent", "tensor:reshape", {T(StaticShape{std::nullopt}), ints},
           {std::nullopt, Arg::intsArg({1})});
-    query(os, "show_reshape", "tensor:reshape", {T(StaticShape{2, 6}), ints}, {std::nullopt, Arg::intsArg({3, std::nullopt})});
+    query(os, "show_reshape", "tensor:reshape", {T(StaticShape{2, 6}), ints}, {std::nullopt, Arg::intsArg({3, -1})});
     query(os, "show_reshape_unit_axes", "tensor:reshape", {T(StaticShape{2, 1, 6}), ints},
           {std::nullopt, Arg::intsArg({1, 2, 6})});
     query(os, "show_matmul_batched", "tensor:matmul", {T(StaticShape{std::nullopt, 2, 3, 4}), T(StaticShape{4, std::nullopt})}, {});
