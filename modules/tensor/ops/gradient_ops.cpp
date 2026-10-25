@@ -290,7 +290,11 @@ void sumToVjp(VjpBuilder &b, const VjpCall &call) {
     if (auto dy = b.gradientOf(call.output)) {
         b.accumulateGradient(
             call.inputs[0],
-            addTensorOperFor(b, call.inputs[0], "tensor:broadcast_like", {*dy, call.inputs[0]}));
+            addTensorOperFor(
+                b,
+                call.inputs[0],
+                "tensor:broadcast_like",
+                {tensorGradientAtElementType(b, call.inputs[0], *dy), call.inputs[0]}));
     }
 }
 
@@ -300,7 +304,7 @@ void broadcastLikeVjp(VjpBuilder &b, const VjpCall &call) {
     if (auto dy = b.gradientOf(call.output)) {
         const vjp_node_t g = call.inputs[0];
         if (isTensorNode(b, g)) {
-            b.accumulateGradient(g, addTensorOperFor(b, g, "tensor:sum_to", {*dy, g}));
+            b.accumulateGradient(g, addTensorOperFor(b, g, "tensor:sum_to", {tensorGradientAtElementType(b, g, *dy), g}));
         } else if (isFloatNode(b, g)) {
             // tensor:sum answers at float64; a value of type f32 keeps the gradient at its own
             // width (see floatGradientAtWidth).

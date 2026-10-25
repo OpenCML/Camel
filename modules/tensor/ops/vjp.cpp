@@ -253,11 +253,37 @@ vjp_node_t tensorCastTo(VjpBuilder &builder, vjp_node_t value, vjp_node_t gradie
     return floatGradientAtWidth(builder, value, gradient);
 }
 
+/// A gradient of `value` at the element type `value` states, and unchanged when it already is:
+/// `sum_to` and `broadcast_like` read their gradient operand at the target's element type
+/// (`gradientLikeTyped` in gradient_ops.cpp), while the gradient operators whose kernels compute
+/// in f32 only declare f32 (`gradientLike`, same file): a gradient that reaches a rule as f32
+/// where the value it is the gradient of is f64 is a pair the signature refuses, and the rule
+/// that produced it states the conversion (vjp.h, tensorCastTo). A node whose type leaves the
+/// element out takes no conversion here, the same as in the accumulator.
+vjp_node_t tensorGradientAtElementType(
+    VjpBuilder &builder, vjp_node_t value, vjp_node_t gradient) {
+    type::Type *valueType    = builder.nodeType(value);
+    type::Type *gradientType = builder.nodeType(gradient);
+    if (!statesTensorElementType(valueType) || !statesTensorElementType(gradientType)) {
+        return gradient;
+    }
+    const TensorFacts valueFacts    = tensorFactsOf(valueType);
+    const TensorFacts gradientFacts = tensorFactsOf(gradientType);
+    if (!valueFacts.dtype || !gradientFacts.dtype || *valueFacts.dtype == *gradientFacts.dtype) {
+        return gradient;
+    }
+    return tensorCastTo(builder, value, gradient);
+}
+
 void accumulateOperand(VjpBuilder &builder, vjp_node_t operand, vjp_node_t gradient) {
     if (isTensorNode(builder, operand)) {
         builder.accumulateGradient(
             operand,
-            addTensorOperFor(builder, operand, "tensor:sum_to", {gradient, operand}));
+            addTensorOperFor(
+                builder,
+                operand,
+                "tensor:sum_to",
+                {tensorGradientAtElementType(builder, operand, gradient), operand}));
     } else if (isFloatNode(builder, operand)) {
         const vjp_node_t total = isTensorNode(builder, gradient)
                                      ? addFloatOper(builder, "tensor:sum", {gradient})
