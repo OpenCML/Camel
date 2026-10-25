@@ -168,7 +168,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_output_not_contains = []
 expect_diagnostic_name = "SemanticDiag::ImmutablePassedToVarParam"
-expect_diagnostic_line = 11
+expect_diagnostic_line = 10
 expect_diagnostic_column = 10
 expect_output_contains = ["'k' is immutable and cannot be passed to a var parameter of 'bump'", "SemanticDiag::IgnoredSideEffect"]
 
@@ -203,7 +203,7 @@ expect_output_not_contains = []
 expect_stdout_starts_with = "before\n"
 expect_stdout_not_contains = ["after"]
 expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
-expect_diagnostic_line = 8
+expect_diagnostic_line = 7
 expect_diagnostic_column = 15
 expect_output_contains = ["Index 5 is out of range for an array of length 3"]
 
@@ -596,7 +596,7 @@ backends = false
 args = ["${case}"]
 expect_exit = 1
 expect_output_not_contains = []
-expect_output_contains = ["10_pure_callback_wrong.cml:16:18: [Error]: No matching function found", "(name=SemanticDiag::NoMatchingFunction, code=0x0300000F)", "apply: (f: (x: int) => int pure, x: int) => int"]
+expect_output_contains = ["10_pure_callback_wrong.cml:15:18: [Error]: No matching function found", "(name=SemanticDiag::NoMatchingFunction, code=0x0300000F)", "apply: (f: (x: int) => int pure, x: int) => int"]
 
 [[tests]]
 name = "tutorial.examples.10_exercise"

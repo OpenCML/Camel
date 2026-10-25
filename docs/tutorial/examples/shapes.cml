@@ -1,5 +1,4 @@
 // A library module used by 12_modules.cml.
-module shapes
 
 import { sqrt } from math
 

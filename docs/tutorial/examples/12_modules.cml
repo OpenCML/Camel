@@ -1,6 +1,5 @@
 // Importing from a standard module and from a file next to this one.
 // Run: camel docs/tutorial/examples/12_modules.cml
-module modules_demo
 
 import { sqrt } from math
 import { hypot, Vec } from shapes
