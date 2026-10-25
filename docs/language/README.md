@@ -16,6 +16,7 @@
 | 6 | [表达式](06_expressions.md) | 访问、调用、管道、运算符、`??`/`!!`/`?->`、`if`、`match`、lambda、高阶算子、优先级 |
 | 7 | [语句与声明](07_statements.md) | `let`/`var`、`return`/`throw`、函数、`with` 形参、重载、泛型、标注、类型声明 |
 | 8 | [程序与文法](08_top_level_and_grammar.md) | 顶层结构、文法概要 |
+| 9 | [规则与事实](09_rules_and_facts.md) | `rule`、`when` 与许可、类型参数与 `with` 参数、规则集与遍、`fact` 与子句、检查与解释 |
 
 ## 相关文档
 

@@ -54,5 +54,6 @@ Hello, Camel!
 | [6 表达式](06_expressions.md) | 字面量、访问、调用、管道、运算符、`if`、`match`、lambda |
 | [7 语句与声明](07_statements.md) | `let`/`var`、`return`/`throw`、块、函数、泛型、类型声明 |
 | [8 程序与文法](08_top_level_and_grammar.md) | 顶层结构、入口、文法概要 |
+| [9 规则与事实](09_rules_and_facts.md) | `rule` 与条件、类型参数与 `with` 参数、规则集、`fact`、检查与解释 |
 
 **循环。** `loop` 是带状态的表达式：状态写在循环头上，循环体的值是下一轮的状态，整个循环的值是最终状态。`loop acc = 0 for x in xs do acc + x` 每轮按顺序取序列的一个元素；`loop i = 1, acc = 0 while i <= n do (i + 1, acc + i)` 在条件成立时继续；两种写在一起时每轮先看条件、再取元素。没有 `break` 与 `continue`：提前结束写成 `while` 条件，跳过一轮的其余部分写成 `if`。循环不占调用深度，任意多轮都可以。精确规则见 [6.8.6](06_expressions.md#686-loop)。
