@@ -57,7 +57,7 @@ kind = "negative"
 case = "../../../../cases/modules/tensor/shape_types/propagated_mismatch.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["Tensor<[2, 5]>", "SemanticDiag::NoMatchingFunction"]
+expect_output_contains = ["f32[2, 5]", "SemanticDiag::NoMatchingFunction"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
@@ -70,7 +70,7 @@ args = ["${case}"]
 envs = ["X=test/cases/modules/tensor/shape_types/x3.npy"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ArgumentNeedsConversion"
-expect_output_contains = ["argument 1 ('t', for parameter 'b') has type 'f32[..]', which is less exact than 'Tensor<[3]>'", "'t as Tensor<[3]>'"]
+expect_output_contains = ["argument 1 ('t', for parameter 'b') has type 'f32[..]', which is less exact than 'f32[3]'", "'t as f32[3]'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
@@ -161,7 +161,7 @@ kind = "behavior"
 case = "../../../../cases/modules/tensor/shape_types/as_runtime_mismatch.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["ran", "conversion to 'Tensor<[4]>' failed: the array has shape [3]", "as_runtime_mismatch.cml:9:15"]
+expect_output_contains = ["ran", "conversion to 'f32[4]' failed: the array has shape [3]", "as_runtime_mismatch.cml:9:15"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
 
@@ -173,6 +173,6 @@ case = "../../../../cases/modules/tensor/shape_types/as_static_mismatch.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::DynamicCastForbidden"
-expect_output_contains = ["f32[3]", "Tensor<[4]>"]
+expect_output_contains = ["f32[3]", "f32[4]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000

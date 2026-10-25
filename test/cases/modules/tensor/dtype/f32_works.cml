@@ -6,7 +6,7 @@ module tensor_dtype_f32_works
 import { Tensor, new, reshape, zeros, ones, multiply, sum, to_bytes } from tensor
 import { to_array } from bytes
 
-func twice(x: Tensor<f32>): Tensor {
+func twice(x: Tensor<f32>): Tensor<f32> {
     return multiply(x, 2.0)
 }
 

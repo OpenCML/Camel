@@ -24,7 +24,7 @@ func fast::<T>(a: T[..], b: T[..]): T[..] when is_numeric::<T>() {
     return a @ b
 }
 
-func max_abs(t: Tensor): float {
+func max_abs(t: f32[..]): float {
     return sum(max(max(abs(t), 0), 0))
 }
 

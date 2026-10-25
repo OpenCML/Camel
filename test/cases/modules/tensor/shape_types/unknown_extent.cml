@@ -1,6 +1,6 @@
 module shape_unknown_extent
 import { Tensor, zeros, ones, reshape, sum, tanh, load_npy } from tensor
-func f(x: Tensor<[?, 3]>, w: Tensor<[3, 2]>): Tensor<[?, 2]> {
+func f(x: Tensor<f32, [?, 3]>, w: Tensor<f32, [3, 2]>): Tensor<f32, [?, 2]> {
     return tanh(x @ w)
 }
 func main(): int sync {

@@ -7,7 +7,7 @@
 module var_argument_non_numeric
 import { Tensor, sum } from tensor
 
-func step(var t: Tensor, d: float): float sync {
+func step(var t: f64[], d: float): float sync {
     t = t + d
     return sum(t)
 }

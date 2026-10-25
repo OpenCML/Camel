@@ -10,15 +10,16 @@
 module tensor_print_value
 
 import { Tensor, ones, zeros, shape, numel, reshape, argmin, tanh, new, sum } from tensor
+import { is_numeric } from types
 
-func forward(x: Tensor): Tensor {
+func forward(x: f32[..]): f32[..] {
     let s = shape(x)
     return zeros([s[0]]) + 1.0
 }
 
 // The three helpers return the same string the value itself prints as, so the assertion side can
 // compare two spellings of one value without pinning the text of `println`.
-func probe(label: string, v: Tensor): string sync {
+func probe::<T>(label: string, v: T[..]): string when is_numeric::<T>() sync {
     return `${label} shape=${shape(v)} numel=${numel(v)} name=${v}`
 }
 
