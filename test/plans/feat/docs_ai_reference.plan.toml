@@ -37,7 +37,7 @@ desc = "Every counter-example in the page is compiled, and the diagnostic its en
 kind = "behavior"
 tool = "node"
 case = "../../../scripts/camel-for-ai.mjs"
-# The install is named on the command line (the author's ruling of 2026-10-25): `${camel}` is the
+# The install is named on the command line: `${camel}` is the
 # compiler of the build under test. Only this entry starts a compiler, so only it names one.
 args = ["${case}", "--verify-errors", "--camel", "${camel}"]
 expect_exit = 0

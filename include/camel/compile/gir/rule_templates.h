@@ -9,7 +9,7 @@
  * instantiated where it is called, not given a value (design principles 5.5). Such a rule carries
  * its templates instead, and the engine instantiates them where the rule matches: one instance per
  * type tuple, kept for the life of the context, so a second application at the same types reuses
- * the first (the ruling of 2026-10-23 on `generic-rule-instantiation`).
+ * the first.
  *
  * This header is the compile side's record of that. The rewrite module reads it through the
  * context, which holds the table opaquely; what a template is stays private to
@@ -47,7 +47,7 @@ struct GenericRuleInstance {
     std::string typeText;
     /// False when no instance could be made, with `why` saying why. A failed instantiation is
     /// silent: nothing of what the compiler said about the types it was tried with is reported
-    /// (the ruling of 2026-10-23 on `generic-rule-instantiation-set-and-predicate`).
+    /// 
     bool made = false;
     std::string why;
     /// The instance itself, when it was made: its two sides and its condition, in one program of
@@ -85,7 +85,7 @@ struct GenericRuleEntry {
     std::shared_ptr<void> compiled;
 };
 
-/// What a rule's condition says about one type tuple at compile time (handover H401).
+/// What a rule's condition says about one type tuple at compile time.
 enum class RuleConditionAt {
     /// The condition holds for the tuple, whatever the values are: the tuple is an instance of
     /// the law. A condition that reads only types (`is_float::<T>()`) answers this.

@@ -203,7 +203,7 @@ name = "gc_pacing.churn_prl"
 # Paced, the byte high-water mark this arm used to bound is a schedule and not the pacing: how much
 # is allocated between asking for a collection at a safepoint and a thread reaching the next one is
 # what the machine decided. Measured on the Linux host (2026-10-24, 32 threads, 1-minute load
-# 110-127) with eight copies of this case at once, which is the condition H101 named:
+#  110-127) with eight copies of this case at once, which is the condition named:
 #
 #   paced:        peak 7200000 B, minor 300   (six of the eight copies)
 #                 peak 9600000 B, minor 299   (one: one asked-for collection had not run yet)
@@ -214,7 +214,7 @@ name = "gc_pacing.churn_prl"
 #
 # Every other figure was the same paced too (base 0, low 2400000, total 180000000, major 0,
 # promoted 6). So the arm runs unpaced and asserts the program's own allocation pattern, plus the
-# counts the ruling of 2026-10-23 asks for ("assert the collection count and the released amount"):
+# counts the rule asks for ("assert the collection count and the released amount"):
 # every collection the program asked for was served (minor = requested), no major collection ran,
 # 597 blocks were released and the peak is one window plus one block -- the serial arm's numbers,
 # which is what this arm's description claims. `parallel = false` stays for the layer's throughput,

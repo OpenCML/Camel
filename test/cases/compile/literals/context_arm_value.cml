@@ -1,5 +1,5 @@
 /**
- * Handover H27, item 2 (design principles 5.1, amended): the value of an `if` or `match` arm
+ * Handover, item 2 (design principles 5.1, amended): the value of an `if` or `match` arm
  * takes the expected type of the whole expression, as a declaration's value does. With
  * `let x: float`, the arm values are floats (`1`, printed `1.0`); with `let z: i32` they are
  * i32s; and an arm that is an array literal takes the element type of the whole (`[1.0]` is an

@@ -1,6 +1,6 @@
 /**
  * What a `reassociate` rule is checked against: real equality on the finite values, and IEEE
- * equality, bit for bit, on the special ones (the ruling of 2026-10-24 on
+ * equality, bit for bit, on the special ones (the rule on
  * `verification-report-surface-s0`, which corrected the method the library's
  * `tensor_f32_combine_mixed` was refused by).
  *
@@ -11,7 +11,7 @@
  * number. A reassociation is allowed to change the rounding, so the comparison is made in the
  * reference's precision and the rule is `sampled`; the line `refuted tensor_f32_combine_mixed` this
  * case's library twin used to print, with `1.0000041e+30` and `1e+30` as its two values, is the
- * method that ruling withdrew.
+ * method that rule withdrew.
  *
  * The other three rules state what the second half of the proposition still refuses, each with the
  * half that decides it written into the row:

@@ -3,7 +3,7 @@
 
 // Run one command and report the CPU time (user + system) the kernel charged to it and to every
 // process it waited for. This is the reading a plan's `cpu_budget_ms` is judged against: the
-// process's own CPU time, not the wall clock, by the author's ruling of 2026-10-23 on the shared
+// process's own CPU time, not the wall clock, by the rule on the shared
 // host (docs/handover/reviews/questions-2026-10-23.md, "declaration-cost-gate" (a)):
 //
 //   "改量 CPU 时间，不量墙钟。共享主机上的墙钟随负载漂移 ... 进程的 CPU 时间（用户态 + 内核态）基本

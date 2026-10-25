@@ -3,7 +3,7 @@ order = 902
 tier = "slow"
 tags = ["showcase", "slow", "c6", "vae", "autoencoder"]
 
-# The small configuration of showcase/c6-vae (H13): four Gaussian clusters in the plane, a
+# The small configuration of showcase/c6-vae: four Gaussian clusters in the plane, a
 # 2-16-2 VAE, 200 Adam steps, and a fixed epsilon file shared by both implementations.  It
 # runs in seconds and fails when the losses disagree beyond the tolerances.  The data and the
 # report go under ${test_tmp}, this run's own scratch directory: a literal `tmp/...` is one
@@ -21,7 +21,7 @@ expect_exit = 0
 expect_stdout_contains = ["c6 compare: PASS"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 # The cost bound is this test's own CPU time (user + system), and the timeout below is its liveness
-# bound, by the author's ruling of 2026-10-23 (docs/handover/reviews/questions-2026-10-23.md,
+# bound, by the rule (docs/handover/reviews/questions-2026-10-23.md,
 # "declaration-cost-gate" (a)):
 #
 #   "改量 CPU 时间，不量墙钟。共享主机上的墙钟随负载漂移 ... 进程的 CPU 时间（用户态 + 内核态）基本
@@ -38,6 +38,6 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 # The CPU figure spreads 11.9 % between the windows where the wall clock spreads more. The budget is
 # 15 s: 1.63x the higher reading rounded up to the next 1000 ms -- the headroom the four resnet
 # referees of feat/modules/autodiff.plan.toml took -- and 1.65x the busiest reading seen.
-# The timeout below stays; by the ruling above it is now only the liveness bound.
+# The timeout below stays; it is only the liveness bound.
 cpu_budget_ms = 15000
 timeout_ms = 120000

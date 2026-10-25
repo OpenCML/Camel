@@ -2,7 +2,7 @@
  * The smallest function a model can be: one input-dependent product, exported by the runtime
  * operator. The export simplifies a private copy of the bound function (`rules::simplify` is its
  * algebraic stage), and that copy is not a version of the running program: a checked commit there
- * must not compare it with the program that is running (H112).
+ * must not compare it with the program that is running.
  */
 module export_minimal
 

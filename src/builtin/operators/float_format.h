@@ -11,7 +11,7 @@
  *
  * A bf16 or an f16 is a float type of its own, so `the same number` is an element of that type
  * and its text is the shortest that reads back as that element (camel/core/rtdata/half.h,
- * `halfText`; ruling 2026-10-23, "reduced-precision-text"): the value is carried as the f32 it
+ * `halfText`; rule 2026-10-23, "reduced-precision-text"): the value is carried as the f32 it
  * widens to, exactly, and the format says whose text to write, so the one rule reaches `format`
  * and string interpolation as it reaches `println`.
  *

@@ -1,5 +1,5 @@
 /**
- * H20-2 manual probe: take rows (array and int-tensor indices, repeated rows), one_hot, and the
+ *  2 manual probe: take rows (array and int-tensor indices, repeated rows), one_hot, and the
  * two softmax cross-entropy forms agreeing in value and gradient. The differentiated value is
  * the first `with` parameter.
  */

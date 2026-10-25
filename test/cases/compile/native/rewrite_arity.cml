@@ -3,7 +3,7 @@
  * the call, and the overloads the message lists are the declaration's
  * `(p: Program, rules: Rule[]) => Program!` and
  * `(p: Program, rules: Rule[], strict: bool) => Program!` — `stdlib/rewrite.cml`, not
- * the C++ module (handover H183).
+ * the C++ module.
  */
 module rewrite_arity
 

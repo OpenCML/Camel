@@ -1,5 +1,5 @@
 /**
- * A decimal digit run with a leading zero is not a number token (H15i): it used to be cut into
+ * A decimal digit run with a leading zero is not a number token: it used to be cut into
  * `0` and `77`, which hid the mistake. The diagnostic covers the whole written run.
  */
 module parse_numbers_leading_zero

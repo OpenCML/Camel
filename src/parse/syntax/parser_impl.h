@@ -93,7 +93,7 @@ class ParserImpl {
     };
     /// A type position named by the grammar: after `fields` and after `match type`
     /// the head `(` opens a tuple or a parenthesised type, never a parameter list, so `fields ()`
-    /// is the empty tuple type (design principles 5.6, H79 ruling 1). The flag is read and
+    /// is the empty tuple type (design principles 5.6). The flag is read and
     /// cleared at the head of the type; a nested type keeps the function-type reading.
     bool typeHead_ = false;
     struct TypeHeadScope {
@@ -283,7 +283,7 @@ class ParserImpl {
         return toks_[i].kind == TK::Identifier && tree_.tokens_.text(i) == word;
     }
     /// `{` at token offset `n` opens a struct literal: `{ name: ...`, `{ ...`, or a struct
-    /// comprehension `{ static for ...` (H51 step 4). Anything else is a block.
+    /// comprehension `{ static for...`. Anything else is a block.
     bool braceIsStruct(uint32_t n) const {
         const TK next = peek(n + 1);
         return next == TK::Ellipsis || (next == TK::Identifier && peek(n + 2) == TK::Colon) ||
@@ -360,7 +360,7 @@ class ParserImpl {
     void parseKeyValuePair();
     void parsePairedValues(TK closer);
     /// `pairedValues`, and in a call's parentheses also a positional written after a named one,
-    /// kept apart so that the call can refuse it (design principles 4.4, handover H276).
+    /// kept apart so that the call can refuse it (design principles 4.4).
     void parseArgumentValues(TK closer);
     void parseDataList(TK closer);
     void parseArguments(TK closer);

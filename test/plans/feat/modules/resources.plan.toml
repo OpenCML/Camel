@@ -81,7 +81,7 @@ const captured = out.split('\n').filter((l) => /^RESOURCES footprint \S+ rmw var
 assert(captured.length === 1, `the captured closure's footprint: ${JSON.stringify(captured)}`)
 // This test used to write `RESOURCES order main 23 24 external ordered by control`: a pair of
 // effects outside the program was a pair whatever they touched. A conflict is judged by resource
-// alone now (design principles 3.3, F9; the ruling: "冲突只按资源判断；不同资源上的效应之间没有
+// alone now (design principles 3.3, F9; the rule: "冲突只按资源判断；不同资源上的效应之间没有
 // 顺序，要有顺序就写同步块"), so the pair is the accesses' and its kind is `resource`: the
 // generator and the console are different resources and are not a pair at all, while two writes of
 // one resource keep the order the `sync` body gives them.

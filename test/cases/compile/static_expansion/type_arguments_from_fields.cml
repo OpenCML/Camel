@@ -3,7 +3,7 @@
  * argument of a recursive call: the tree walk the checkpoint design needs (design/generic-structure
  * 3.1.3) is an ordinary generic function. The leaf produces an `int` for every leaf type, so the
  * walk is shown on a type whose leaves are all `int`; producing the leaf's own value needs a
- * native operator for the leaf type (handover H103).
+ * native operator for the leaf type.
  */
 module type_arguments_from_fields
 

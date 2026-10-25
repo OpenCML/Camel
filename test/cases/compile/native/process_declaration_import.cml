@@ -1,7 +1,7 @@
 /**
  * The declarations of `process` are what an importer sees: `sleep` takes the declared `int` and
  * answers nothing, and `whoami` and `cpu_count` take nothing and answer the declared `string`
- * and `int`. Every call reaches the C++ operator (handover H163).
+ * and `int`. Every call reaches the C++ operator.
  */
 module process_declaration_import
 

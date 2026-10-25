@@ -1,5 +1,5 @@
 /**
- * The value may be any compile-time constant, not only an `int` (H51 ruling, 2026-10-22): a
+ * The value may be any compile-time constant, not only an `int` (rule, 2026-10-22): a
  * `float` value that no type reads is as legal as an `int` one.
  */
 module constas_type_not_int

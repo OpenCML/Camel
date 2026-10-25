@@ -1,4 +1,4 @@
-/// H232: a relative module name cannot escape its directories. `..lib` is a name with a relative
+/// a relative module name cannot escape its directories. `..lib` is a name with a relative
 /// prefix (two dots drop two components from the importing module's name); the importing module
 /// is the entry program, whose name `main` has one component, so no name can be formed. It is not
 /// `../lib` (a syntax error) and it is not the filesystem path `/lib`: the import fails with

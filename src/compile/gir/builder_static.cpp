@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 /*
- * `match type` (design principles 5.5, handover H51 step 1): the subject is a type known
+ * `match type` (design principles 5.5 step 1): the subject is a type known
  * after instantiation, and only the case its shape selects is built. The selected body is
  * straight-line code in the current graph: no branch node, no region, nothing left of the
  * cases that are not selected.
@@ -262,7 +262,7 @@ void Builder::walkStaticBodyNames(
         // The rest parameter and the `constas` values of the instance being expanded are
         // compile-time names, not nodes of a scope: a case that is not selected must still see
         // them, or the unselected case of a `match type` would resolve differently from the
-        // selected one (H51 step 13 writes `tree_map` this way).
+        // selected one (step 13 writes `tree_map` this way).
         if (!found && restBindingNamed(node->name()) != nullptr) {
             found = true;
         }
@@ -627,13 +627,13 @@ node_handle_t Builder::visitStaticForNode(
     ENTER("SFOR");
     // A `static for` written as a statement drops every round's value; written as the generator
     // of a comprehension (`values`), each round's value is one field of the result. Two
-    // generators share the node: `fields T` walks a type's fields, `indices ts` (H51 step 6)
+    // generators share the node: `fields T` walks a type's fields, `indices ts`.
     // walks the positions of a tuple value.
     const bool byIndices = gct->staticForIndices();
     Type *subject        = nullptr;
     if (byIndices) {
         // `indices e` reads only the type of `e`. A build-time tuple gives it without a FILL
-        // (H51 step 6): `ts`, or a tuple comprehension whose elements stay separate nodes.
+        // `ts`, or a tuple comprehension whose elements stay separate nodes.
         const std::any operandRes = visit(gct->staticForOperand());
         if (operandRes.type() == typeid(StaticTuple)) {
             subject = boundType(any_cast<const StaticTuple &>(operandRes).type);
@@ -770,7 +770,7 @@ node_handle_t Builder::visitStaticForNode(
 
 std::optional<Builder::StaticSequence>
 Builder::staticLoopSequenceOf(const GCT::node_ptr_t &subject) {
-    // `for i in <序列>` (H462, and the ruling of 2026-10-25 on which `in` forms count, H475):
+    // `for i in <序列>` (and the rule on which `in` forms count):
     // one rule, not a list of accepted spellings. The expression after `in` is a sequence the
     // compiler works out when it is built only from compile-time constants joined by operations
     // that are pure and cannot fail (design principles 3.4); then it is evaluated and unrolled.
@@ -897,7 +897,7 @@ Builder::staticLoopSequenceOf(const GCT::node_ptr_t &subject) {
         return walkIntegers(*from, *to, 1);
     }
     // A compile-time tuple: `for x in ts` walks its positions and binds the element at each one
-    // -- `ts.[i]`, a value whose type is the type of that position (the ruling of 2026-10-25: the
+    //  -- `ts.[i]`, a value whose type is the type of that position (the
     // round's name is the element's value, "`x` 的类型随位置变"; the type at a position is read
     // off it with `typeof x`, and `fields T` is the spelling that gives a name and a type). `ts`
     // is the tuple of values the expansion was given, a rest parameter (`..ts`) included. `indices
@@ -924,8 +924,8 @@ Builder::staticLoopSequenceOf(const GCT::node_ptr_t &subject) {
     // written -- a step of one is `a..b`, one thing one spelling -- so the two-argument call is
     // refused here as it is where the call stands (`RangeTwoArgumentsRemoved`, which the call
     // path reports after overload resolution), and a step of zero, which names no sequence at
-    // all, is `RangeStepZero` here as it is there (design principles 4.2; the rulings of
-    // 2026-10-24 on `h248-generator-and-composition` and on `h426-interval-step-form`).
+    // all, is `RangeStepZero` here as it is there (design principles 4.2; the rules of
+    //  2026-10-24 on ` -generator-and-composition` and on ` -interval-step-form`).
     if (subject->type() == GCT::NodeKind::LINK && subject->size() >= 1) {
         const GCT::node_ptr_t &callee = subject->at(0);
         const bool namedRange = callee != nullptr && callee->type() == GCT::NodeKind::DREF &&
@@ -997,7 +997,7 @@ node_handle_t Builder::visitStaticLoopNode(const GCT::node_ptr_t &gct) {
     // `static loop s1 = a1, ..., sk = ak for i in <序列> do body`: the fold the fields of `T`
     // unroll into (`in fields T`), the positions of a tuple value (`in indices ts`), or a
     // sequence the compiler works out (`in 0..5`, `in range(0, 9, 3)`, `in [1, 2, 3]`, `in
-    // xs`; H462, the ruling of 2026-10-24, which dropped the head's parentheses, and the ruling
+    // xs`, which dropped the head's parentheses
     // of 2026-10-25 that draws the line by the one rule of `staticLoopSequenceOf`). The body is
     // built once per round in the current graph; its value is the next state. No LOOP node, no
     // region, and nothing of the state or the generator left in the graph: the first values are
@@ -1013,7 +1013,7 @@ node_handle_t Builder::visitStaticLoopNode(const GCT::node_ptr_t &gct) {
     // either way, exactly as the `j` of `indices` is the round's position.
     std::optional<StaticSequence> written;
     if (bySequence) {
-        // The sequence must be known when the function is compiled (the ruling of 2026-10-24:
+        // The sequence must be known when the function is compiled (
         // "`static loop` 的序列必须在编译期已知"): a sequence the compiler cannot work out is
         // refused here, before anything of the body is built.
         written = staticLoopSequenceOf(gct->staticLoopOperand());
@@ -1486,7 +1486,7 @@ node_handle_t Builder::visitStaticAccessNode(const GCT::node_ptr_t &gct) {
 
     const bool dropped = gct == unusedStatement_;
     // A build-time tuple has no container node to project from: `ts.[j]` is the element node
-    // itself, chosen here (H51 step 6). No FILL and no ACCS are built.
+    // itself, chosen here. No FILL and no ACCS are built.
     const std::any targetRes = visit(gct->staticAccessTarget());
     if (targetRes.type() == typeid(StaticTuple)) {
         const StaticTuple &tuple = any_cast<const StaticTuple &>(targetRes);

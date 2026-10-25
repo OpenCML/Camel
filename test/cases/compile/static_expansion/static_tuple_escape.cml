@@ -1,5 +1,5 @@
 /**
- * `ts` is a build-time tuple, not a value (H51 step 6): returning it asks for a runtime tuple
+ * `ts` is a build-time tuple, not a value: returning it asks for a runtime tuple
  * that the rest parameter does not have, and is refused instead of materialized.
  */
 module static_tuple_escape

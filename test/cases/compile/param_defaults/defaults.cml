@@ -1,6 +1,6 @@
 /**
  * The defaults of ordinary parameters, and ordinary arguments given by name (design principles
- * 4.4, handover H276). The rule is the `with` rule: a default is a compile-time constant
+ *  4.4). The rule is the `with` rule: a default is a compile-time constant
  * evaluated where the declaration is, and a call gives the parameters by position, or by name
  * after the positional ones. The declaration's order is the one order: a name selects its
  * parameter, wherever it was written.

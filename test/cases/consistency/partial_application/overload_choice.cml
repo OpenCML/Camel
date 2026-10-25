@@ -1,5 +1,5 @@
 /**
- * Handover H27d: a context argument chooses its overload exactly as an ordinary call does
+ * Handover: a context argument chooses its overload exactly as an ordinary call does
  * (design principles 4.4, 5.1) -- exact match first, and only when no exact match exists may
  * the literal enter a parameter type. With `with <k: int>` and `with <k: f32>` both
  * declared, `scale<2>` is the `int` one, and `s(3)` is 6 (the f32 overload would print

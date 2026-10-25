@@ -1,7 +1,7 @@
 /**
- * `#impl` on a generic function (ruling impl-kernel-site, 2026-10-23: "泛型函数可以带 `#impl`").
+ * `#impl` on a generic function ("泛型函数可以带 `#impl`").
  * The kernel is a body-less declaration of the same module, and which executor an instance gets
- * is decided when the instance is made (H228: one operator, per-type executors).
+ * is decided when the instance is made (: one operator, per-type executors).
  *
  * `at` declares its kernel with the function's own type parameters, so every instance of it has
  * an executor: `at([7, 8, 9], 0)` is one OPER of `:op/idx_arr`.

@@ -2,9 +2,9 @@
 // Copyright (c) the OpenCML Organization
 // SPDX-License-Identifier: MIT
 
-// The manual entry point for performance measurement (handover H167).
+// The manual entry point for performance measurement.
 //
-// The perf layer is deliberately outside `--changed` and outside `npm run test` (H154 section 6,
+// The perf layer is deliberately outside `--changed` and outside `npm run test` (section 6,
 // test/plan-selection.json): its plans are long, two of them hold gigabytes, four compare against
 // PyTorch, and a threshold on a shared host reds for being busy. The consequence is that nothing
 // notices a performance regression. This script is the one place that can measure it on purpose:
@@ -24,7 +24,7 @@
 //
 // Two numbers per repetition: the wall clock, and on Linux the child's own CPU time (user+system),
 // read from the `cutime`/`cstime` fields of /proc/self/stat around the child. Wall clock is what a
-// user waits; CPU time is what the work costs. H142 made the same choice for the same reason: at
+// user waits; CPU time is what the work costs. made the same choice for the same reason: at
 // load 200 the wall clock is mostly waiting for a core, while the CPU column's two independent runs
 // differed by under 3%. A case whose child CPU is at least 250 ms is
 // judged on CPU, where the 10 ms tick of /proc is a few percent at most; a shorter one is judged on
@@ -36,7 +36,7 @@
 //                                         -> "inconclusive", never a pass: the line says "measured
 //     at load N" and the next step is to rerun within the band. A CPU case is compared at any load,
 //     because child CPU time is what the work costs rather than how long the host made it wait:
-//     H142 judged by CPU for that reason, and its two independent CPU runs differed by under 3%,
+//      The judgement is by CPU for that reason: two independent CPU runs differed by under 3%,
 //     while the wall clock at load 150..215 is 2-5x the quiet one;
 //   * the current and baseline spreads (p10..p90) overlap -> "ok (spread overlaps)": a regression
 //     is never claimed from numbers that a busy host can produce;
@@ -50,11 +50,11 @@
 // The baseline is data, not a ceiling: test/perf-baseline.json records the medians, both spreads,
 // the exact command of every case, the commit, the build's own stamp (out/latest/build-info.json),
 // the repetition count and the host load at the time. It is seeded on the Linux host because the
-// numbers are that host's; a baseline from another machine is not comparable (H142).
+// numbers are that host's; a baseline from another machine is not comparable.
 //
 // The plans this script refuses are refused by name, with the policy that keeps them out of every
 // gate. `--list` prints the whole classification; the numbers behind it are in
-// handover note ⟨f14c90d⟩ (H167), and docs/test-plans.md "Performance measurement" states the rule.
+// and docs/test-plans.md "Performance measurement" states the rule.
 
 import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
@@ -91,12 +91,12 @@ const POLICY =
     'plans are heavy: they saturate every core for minutes and are worth running only at a ' +
     'milestone, by the coordinator, on a quiet machine."'
 
-// The plans of test/plans/perf (H167 classified them; H349 classified the four the list had
+// The plans of test/plans/perf (classified them; classified the four the list had
 // missed and made the check below a property of the directory): what each one measures, what it
 // costs on the shared host, whether it already has a baseline or a ceiling of its own, and whether
 // this gate can take it. `cases` exist only for the gateable plans: the argv is the plan's own
 // command, so the number the gate reads is the number the plan reads. The costs are the plan
-// comments' own measurements plus H167's one run of each gateable plan, and the plan's own bounds
+// comments' own measurements plus one run of each gateable plan, and the plan's own bounds
 // for the plans this classification did not run; the report has the evidence.
 const PLANS = [
     {
@@ -497,7 +497,7 @@ function readLoad() {
 // self/stat fields 16 and 17. spawnSync has already waited for the child when it returns, and the
 // kernel folds a reaped child's CPU into these fields at that point, so the delta around one spawn
 // is exactly that child. Node cannot ask for RUSAGE_CHILDREN, and this is the load-invariant half
-// of the measurement (H142: the wall clock at load 215 is 2-3 times the quiet one, the CPU time is
+// of the measurement (: the wall clock at load 215 is 2-3 times the quiet one, the CPU time is
 // within a few percent).
 function childrenCpuSeconds() {
     if (process.platform !== 'linux') {
@@ -666,7 +666,7 @@ function installDir(camel) {
     return path.dirname(path.dirname(camel))
 }
 
-// The build's own stamp (H149): which sources produced this install, and whether they were dirty.
+// The build's own stamp: which sources produced this install, and whether they were dirty.
 // It is the strongest condition a baseline can record, because it names the binary, not the tree.
 function buildStamp(camel) {
     const file = path.join(installDir(camel), 'build-info.json')
@@ -898,7 +898,7 @@ function printConditions(caseCount, options, revision, build, host, load) {
 
 // The plan files the tree holds, and how that set differs from PLANS. The list is a classification,
 // not a count: a new perf plan has to say whether this gate takes it (and why not, if not), the
-// same way stdlib-declarations.mjs makes a new operator module name itself (H173). `--list` names
+// same way stdlib-declarations.mjs makes a new operator module name itself. `--list` names
 // every plan of the directory exactly once, and the two sets are compared as sets, never by count.
 function perfPlanFiles() {
     const directory = path.join(REPO_ROOT, 'test', 'plans', 'perf')
@@ -940,7 +940,7 @@ function planInventory() {
 }
 
 // Every way the classification can fail to describe the directory, printed by name. A directory
-// that yields no plan at all fails too: a guard that examined nothing is not a pass (H185), and a
+// that yields no plan at all fails too: a guard that examined nothing is not a pass, and a
 // rename or a moved tree would otherwise turn the whole check into a silent success.
 function reportInventoryProblems(inventory) {
     const shown = displayPath(inventory.directory)

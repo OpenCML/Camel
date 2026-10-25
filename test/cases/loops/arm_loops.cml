@@ -1,4 +1,4 @@
-// A loop written as the value of a branch arm (H45). The round of a loop starts where the
+// A loop written as the value of a branch arm. The round of a loop starts where the
 // region of the arm starts: an arm is one range of the execution order between the BRCH and the
 // JOIN, and the first round's events (the start of the loop and the test of the round) lie at
 // the first node of the loop's regions, which is a port of the body, not an operator. Every

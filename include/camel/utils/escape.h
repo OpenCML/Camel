@@ -71,14 +71,14 @@ inline std::string encodeEscapes(const std::string &input) {
 /// escape of its own, `\${`, which the interpolation lexer and the AST builder decode before this
 /// point; it is what keeps `${` from starting an interpolation, not a character escape. `\$` is a
 /// character escape in every string, ordinary and triple-quoted included: a reader who writes it
-/// gets a `$` whichever quotes they are in (H89, ruling 2).
+/// gets a `$` whichever quotes they are in (rule 2).
 ///
 /// `doubleBraces` is set for the pattern text of a formatted string. There a brace that an escape
 /// produces (`\x7B`, `\u{7B}`) is a literal brace of the pattern, and `format` reads an undoubled
 /// `{` as the start of a placeholder; the braces written in the text were already doubled by the
 /// AST builder, so the ones decoded here are doubled now. Every other string passes false.
 ///
-/// The escapes are `\0`, `\xHH`, `\u{H…}` and the named ones (H89: the set is the one of Rust).
+/// The escapes are `\0`, `\xHH`, `\u{H…}` and the named ones (: the set is the one of Rust).
 /// Everything else is an unknown escape: it is kept as written and, when `unknownEscapes` is not
 /// null, its spelling (the backslash and the character, or the whole octal-looking run) is
 /// appended there, without repeats, for the caller to report as an unknown escape. In particular
@@ -166,14 +166,14 @@ inline std::string decodeEscapes(
             case '`':
                 // A backtick is a character like any other: in an ordinary string it is the
                 // character itself, and in a formatted string the lexer has already used it to
-                // find the end of the string. Every string decodes it here (H20 item 1).
+                // find the end of the string. Every string decodes it here (item 1).
                 oss << '`';
                 i += 2;
                 break;
             case '$':
                 // A `$` is a character like any other. The one place it is not is the `\${` of a
                 // formatted string, which is a structural escape decoded before this point; every
-                // other `\$`, in every string kind, is a plain dollar sign (H89, ruling 2).
+                // other `\$`, in every string kind, is a plain dollar sign (rule 2).
                 oss << '$';
                 i += 2;
                 break;
@@ -184,7 +184,7 @@ inline std::string decodeEscapes(
             case '5':
             case '6':
             case '7':
-                // An octal escape without the leading zero: unknown since H89. It is kept as
+                // An octal escape without the leading zero: not part of the language. It is kept as
                 // written, and reported with the whole run it spells.
                 noteUnknown(octalRun(i));
                 oss << '\\' << next;

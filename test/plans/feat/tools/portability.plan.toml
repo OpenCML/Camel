@@ -22,7 +22,7 @@ expect_stdout_contains = ["every standard header used is reached through its inc
 normalizers = ["normalize_newlines"]
 timeout_ms = 60000
 
-# The source tree is not an install (H191). A `.cmo` is a module binary and a `.so` / `.dll` /
+# The source tree is not an install. A `.cmo` is a module binary and a `.so` / `.dll` /
 # `.pdb` / `.o` is a linker output: both belong in `build/` or `out/<tag>/`, and the module loader
 # finds modules beside the executable and under `CAMEL_HOME`, so nothing has to be written next to
 # `stdlib/*.cml`. The build runs the same script at the end of `copyBuildArtifacts`, so a step that

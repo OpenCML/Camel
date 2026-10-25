@@ -1,5 +1,5 @@
 /**
- * Handover H27c: a context argument is a position with an expected type, like an ordinary
+ * Handover: a context argument is a position with an expected type, like an ordinary
  * argument (design principles 4.4, 5.1). `scale<2>` binds an int literal to `with <k: f32>`,
  * `at<[7.0, 8.0]>` binds an array literal to `with <xs: f32[]>`, and `offset<{ x: 1, y: 2 }>`
  * binds a struct literal to `with <p: Point>`; the captured values have the parameter's

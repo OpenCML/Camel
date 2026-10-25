@@ -4751,12 +4751,12 @@ check: (rules: Rule[], samples: int = 100, seed: int = 0, program: Program? = nu
 ```
 
 Checks `rules` on `samples` random instances drawn with `seed`, and answers the verdict table
-(H247, slice S0). Each row of the table carries the rule, the instance (a generic law's type
+(slice S0). Each row of the table carries, the instance (a generic law's type
 tuple), the verdict, what the verdict is about and the evidence or the reason for it; the
 verdicts are `proved`, `refuted` and `sampled`, and every line of the report wears one of them
-as its first word (the ruling of 2026-10-24 on `verification-verdict-surface`, 2). The sample
+as its first word (the rule on `verification-verdict-surface`, 2). The sample
 stream of a rule follows the rule's identity -- its name and its instance's type tuple -- and
-not its place in `rules`, so a rule draws the same samples in any call (the ruling of 2026-10-24
+not its place in `rules`, so a rule draws the same samples in any call (
 on `accuracy-check-sampling`, 1). A build without a solver can answer `sampled` and `refuted`
 and never `proved`: `proved` is a licence's proposition being established, which is not what
 comparing samples does.
@@ -4764,7 +4764,7 @@ comparing samples does.
 `samples` and `seed` have defaults, and `program` names the program whose own types a generic
 law is also checked at: the candidate set is the types every operator group registered, and
 then the types of the values the program has, each once, in the order its graphs write them
-(the ruling of 2026-10-24 on `generic-rule-check-surface-and-multi-parameter-instances`, 1).
+(the rule on `generic-rule-check-surface-and-multi-parameter-instances`, 1).
 Left out, the candidate set is the registered types alone, so a call that gives no program
 reads exactly what it read before the parameter existed.
 
@@ -4838,7 +4838,7 @@ be examined on is `sampled` with its reason, never a fourth word.
 check_proposition: (r: CheckReport, row: int) => string!
 ```
 
-What one row's verdict is about (the ruling of 2026-10-24 on
+What one row's verdict is about (the rule on
 `verification-licence-to-precondition`): `equality` for a rule that needs no permission,
 `real equality + IEEE on special values` for the rules that ask for `reassociate` or `contract`,
 and `error bound` for the ones that ask for `refine_accuracy` or `change_precision`.
@@ -4882,7 +4882,7 @@ never read as one that did not.
 check_coverage: (r: CheckReport, row: int) => string!
 ```
 
-What the translation layer made of one row's rule (H247, slice S1): the proposition it read out
+What the translation layer made of one row's rule: the proposition it read out
 of the rule's two sides -- `integer scalar int: (x + 0) = x`, with `, no premise yet` when the
 declaration carries a condition -- or `beyond translation coverage` followed by the reason it
 refused. The layer never guesses: a rule it cannot translate says which width, operator or node

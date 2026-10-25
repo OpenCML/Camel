@@ -1,7 +1,7 @@
 /**
  * A declaration in the entry module stands for an operator of the module it writes itself to be:
  * its URI's prefix is the declared name `bytes`, not the runtime name `main` the entry file has
- * (design principles 10.1; handover H94, ruling 4).
+ * (design principles 10.1; handover).
  */
 module bytes
 
