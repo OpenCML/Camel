@@ -353,9 +353,13 @@ sampled fold_scales: proposition equality, evidence samples 100, fired 8 of 8, c
 - Readers: `rule_name`, `rule_two_way`, `rule_needs` and `rule_consts` read a `Rule`; the `Run` that `run<rules>` returns is read by `explain`, `explain_all` and `why_not` ([standard library reference](../../stdlib-reference.md)).
 - **Asserting "which rule fired" from a graph dump**: such an assertion compares `text` blocks of the dump, and before comparing it must **normalize the attributes that carry a position** — `origin`, `span`, `srcfile` and the like — and it compares an excerpt as a run of consecutive lines. Otherwise changing an unrelated line, or a temporary directory, turns the assertion red: even `origin` of one node differs before and after a rewrite.
 
-A small program that does nothing else shows how to read it: the `math:abs_l` node inside `distance` is gone after `fired::simplify`, and that is what "this rule fired" reads like. (Lines that do not carry a position are left out here, and the values of `origin` are exactly the kind of thing that changes.)
+A small program that does nothing else shows how to read it: the source of `distance` is `abs(a + b)`, and after
+`fired::simplify` its cluster has no `math:abs_l` node (`N05` is the `:op/add_l`, and its exit edge goes straight
+to the cluster's exit `O04`); that is what "this rule fired" reads like. The excerpt is one run of consecutive
+lines of the output, with the position-carrying ones left out (the values of `origin` are exactly the kind of
+thing that changes):
 
-<!-- camel-snippet: graph-dump: the text block is an excerpt of two std::gir dumps, not the program's stdout -->
+<!-- camel-snippet: graph-dump: the text block is one excerpt of the dump after the pass, not the program's stdout -->
 
 ```cml
 // fired.cml
@@ -375,24 +379,35 @@ export func simplify(p: Program): Program! {
 func distance(a: int, b: int): int {
     return abs(a + b)
 }
+
+func main(): int sync {
+    println(distance(1, -2))
+    return 0
+}
 ```
 
 ```bash
-camel ./fired.cml std::gir
 camel ./fired.cml fired::simplify std::gir
 ```
 
 ```text
-distance (camel ./fired.cml std::gir):
-    N0A [label=":op/add_l", type="OPER", origin=4150, span="15:17-15:18", srcfile="./fired.cml", value_type="int"];
-    N0B [label="math:abs_l", type="OPER", origin=4151, span="15:11-15:14", srcfile="./fired.cml", value_type="int"];
-    N0A -> N0B [label="0|0", type="NORM"];
-    N0B -> O04 [label="0", type="EXIT"];
-
-distance (camel ./fired.cml fired::simplify std::gir):
-    N0A [label=":op/add_l", type="OPER", origin=4269, span="15:17-15:18", srcfile="./fired.cml", value_type="int"];
-    N0A -> O04 [label="0", type="EXIT"];
+            label="distance";
+            F04 [label="ARGS", type="ARGS"];
+            O04 [label="EXIT", type="EXIT"];
+            N03 [label="a", type="PORT", param_name="a", param_kind="normal", param_index="0", value_type="int"];
+            N04 [label="b", type="PORT", param_name="b", param_kind="normal", param_index="1", value_type="int"];
+            N05 [label=":op/add_l", type="OPER", origin=4343, span="14:17-14:18", srcfile="./fired.cml", value_type="int"];
+            F04 -> N03 [label="0", type="NORM_PORT"];
+            F04 -> N04 [label="1", type="NORM_PORT"];
+            N05 -> O04 [label="0", type="EXIT"];
+            N03 -> N05 [label="0|0", type="NORM"];
+            N04 -> N05 [label="0|1", type="NORM"];
+        }
 ```
+
+Without the pass (`camel ./fired.cml std::gir`) the same cluster also holds `N06 [label="math:abs_l", …]`: its
+edges are `N05 -> N06` and `N06 -> O04`, and after the pass that `N06 -> O04` becomes `N05 -> O04` while the
+`math:abs_l` node is gone.
 
 ## 9.8 Forms that are not implemented
 

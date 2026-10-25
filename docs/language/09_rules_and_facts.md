@@ -353,9 +353,11 @@ sampled fold_scales: proposition equality, evidence samples 100, fired 8 of 8, c
 - 读取器：`rule_name`、`rule_two_way`、`rule_needs`、`rule_consts` 读一条 `Rule`；`run<rules>` 返回的 `Run` 由 `explain`、`explain_all`、`why_not` 读（[标准库参考](../stdlib-reference.md)）。
 - **读图转储断言"哪个规则开火了"**：这类断言比较的是转储里的 `text` 块，比较前要**先把与位置有关的属性归一化**——`origin`、`span`、`srcfile` 一类——再比；节选按"在输出里连续出现"来比。否则改一行无关的代码、换一个临时目录，断言就会红：同一个节点在改写前后连 `origin` 都不同。
 
-下面用一个只做这件事的小程序看它的读法：`distance` 里的 `math:abs_l` 节点在 `fired::simplify` 之后没有了，这就是"这条规则开火了"。（这里省掉了与位置无关的那几行，`origin` 的值正是上面说的那类会变的东西。）
+下面用一个只做这件事的小程序看它的读法：`distance` 的源码是 `abs(a + b)`，跑过 `fired::simplify` 之后这个簇里
+没有 `math:abs_l` 节点了（`N05` 是 `:op/add_l`，它的出口边直接连到簇的出口 `O04`），这就是"这条规则开火了"。
+节选是产出里连续的一段，与位置无关的那几行省掉了（`origin` 正是上面说的那类会变的值）：
 
-<!-- camel-snippet: graph-dump: the text block is an excerpt of two std::gir dumps, not the program's stdout -->
+<!-- camel-snippet: graph-dump: the text block is one excerpt of the dump after the pass, not the program's stdout -->
 
 ```cml
 // fired.cml
@@ -375,24 +377,34 @@ export func simplify(p: Program): Program! {
 func distance(a: int, b: int): int {
     return abs(a + b)
 }
+
+func main(): int sync {
+    println(distance(1, -2))
+    return 0
+}
 ```
 
 ```bash
-camel ./fired.cml std::gir
 camel ./fired.cml fired::simplify std::gir
 ```
 
 ```text
-distance (camel ./fired.cml std::gir):
-    N0A [label=":op/add_l", type="OPER", origin=4150, span="15:17-15:18", srcfile="./fired.cml", value_type="int"];
-    N0B [label="math:abs_l", type="OPER", origin=4151, span="15:11-15:14", srcfile="./fired.cml", value_type="int"];
-    N0A -> N0B [label="0|0", type="NORM"];
-    N0B -> O04 [label="0", type="EXIT"];
-
-distance (camel ./fired.cml fired::simplify std::gir):
-    N0A [label=":op/add_l", type="OPER", origin=4269, span="15:17-15:18", srcfile="./fired.cml", value_type="int"];
-    N0A -> O04 [label="0", type="EXIT"];
+            label="distance";
+            F04 [label="ARGS", type="ARGS"];
+            O04 [label="EXIT", type="EXIT"];
+            N03 [label="a", type="PORT", param_name="a", param_kind="normal", param_index="0", value_type="int"];
+            N04 [label="b", type="PORT", param_name="b", param_kind="normal", param_index="1", value_type="int"];
+            N05 [label=":op/add_l", type="OPER", origin=4343, span="14:17-14:18", srcfile="./fired.cml", value_type="int"];
+            F04 -> N03 [label="0", type="NORM_PORT"];
+            F04 -> N04 [label="1", type="NORM_PORT"];
+            N05 -> O04 [label="0", type="EXIT"];
+            N03 -> N05 [label="0|0", type="NORM"];
+            N04 -> N05 [label="0|1", type="NORM"];
+        }
 ```
+
+不跑这条遍时（`camel ./fired.cml std::gir`），同一个簇里还有 `N06 [label="math:abs_l", …]`：边是
+`N05 -> N06` 与 `N06 -> O04`；跑过之后那条 `N06 -> O04` 变成 `N05 -> O04`，`math:abs_l` 的节点没有了。
 
 ## 9.8 尚未实现的形态
 
