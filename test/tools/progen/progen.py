@@ -261,11 +261,11 @@ CHECK_RANGE = range(1, 26)
 # With generate.VERSION 3 (the features comprehension, nullable, partial and ifnoelse) every
 # seed of the range passes; the seed left out under VERSION 1 (5, finding F18) is another
 # program now.
-# Seed 16 (handover H15, literals take their type from the context): `e23` declares `float` and
+# Seed 16 (literals take their type from the context): `e23` declares `float` and
 # one arm of a `match` expression in it ends in `return 5 - 10`. That `return` is the value of
 # its arm, and the arm's position (the `var v32 = match …` it is written in) expects no type, so
 # the value is an `int`, as the other arms of the match are and as the generator's reference
-# evaluator types it: the arm join holds. It is back in the batch since handover H24 (a `return`
+# evaluator types it: the arm join holds. It is back in the batch since (a `return`
 # in an arm no longer takes the function's declared return type). See
 # test/cases/opt/progen/README.md, J5.
 CHECK_EXCLUDED = {}
@@ -353,7 +353,7 @@ SIZE_HELP = ("multiplies the number of functions and of statements of main (defa
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--camel", help="the install to measure: the `camel` binary to run, else "
-                                    "$CAMEL_HOME/bin/camel, else this tree's out/latest/bin/camel")
+                                    "this tree's out/latest/bin/camel")
     sub = ap.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("show")
     p.add_argument("--seed", type=int, required=True)
@@ -407,7 +407,7 @@ def main(argv=None):
     p.set_defaults(fn=lambda a: print("\n".join(f"{k:<10} {v}" for k, v in FEATURES.items())) or 0)
     args = ap.parse_args(argv)
     # Every `camel` this run starts is the one `--camel` names (one rule, in one place:
-    # test/tools/camel_arg.py); a run that measured another install is what the ruling of
+    # test/tools/camel_arg.py); a run that measured another install is what the rule of
     # 2026-10-25 refuses, so the switch is an argument and never an environment variable.
     runner.CAMEL = args.camel
     return args.fn(args)

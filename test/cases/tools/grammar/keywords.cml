@@ -1,6 +1,7 @@
 // Every keyword of the lexer in a position the parser accepts it in, where there is one.
-// `inner`, `outer`, `atomic` and `shared` are no longer keywords: they are ordinary names
-// (H107), so they appear below as values.
+// `inner`, `outer`, `atomic`, `shared`, `is`, `of`, `keyof`, `try`, `catch` and `finally` are
+// not keywords: they are ordinary names (handover 5.00 "语法层收口" item 5), so they appear
+// below as values.
 module keywords
 
 import { now } from time
@@ -17,6 +18,7 @@ export let shared_value = 3
 type Alias = int
 type Handle = 'handle'
 type Raw = string
+type Shape = enum { Circle(float), Rect { w: float, h: float }, Empty }
 
 let inner = 4
 let outer = 5
@@ -39,20 +41,16 @@ func control(dir: string, xs: int[]): int! {
     }
     let squares = [x * x for x in xs if x > 1]
     let checked = picked as float
-    let same = picked is int
     let kind: typeof picked = 4
-    try {
-        throw 'failed'
-    } catch e: Error {
-        throw e
-    } finally {
-        return picked
-    }
+    let is = 8
+    let of = 9
+    let keyof = 10
+    let try = 11
+    let catch = 12
+    let finally = 13
+    throw 'failed'
 }
 
-func generic::<T>(x: T, y: tag of T, z: Tensor<f32, [n, 4]>): T {
+func generic::<T>(x: T, y: T, z: f32[..]): T {
     return x
 }
-
-// reserved by the lexer, used by no parser rule (a syntax error)
-enum keyof

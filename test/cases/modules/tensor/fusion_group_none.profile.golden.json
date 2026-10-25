@@ -2,10 +2,10 @@
  "allocations": {
   "blocks": 0,
   "bytes": 0,
-  "calls": 115,
+  "calls": 54,
   "inside_blocks": 0,
   "inside_bytes": 0,
-  "inside_calls": 101,
+  "inside_calls": 40,
   "inside_ns": 0,
   "ns": 0
  },
@@ -93,7 +93,7 @@
   {
    "alloc_blocks": 0,
    "alloc_bytes": 0,
-   "alloc_calls": 15,
+   "alloc_calls": 5,
    "alloc_ns": 0,
    "calls": 5,
    "device": "cpu",
@@ -103,7 +103,7 @@
   {
    "alloc_blocks": 0,
    "alloc_bytes": 0,
-   "alloc_calls": 9,
+   "alloc_calls": 3,
    "alloc_ns": 0,
    "calls": 3,
    "device": "cpu",
@@ -113,7 +113,7 @@
   {
    "alloc_blocks": 0,
    "alloc_bytes": 0,
-   "alloc_calls": 54,
+   "alloc_calls": 18,
    "alloc_ns": 0,
    "calls": 18,
    "device": "cpu",
@@ -123,7 +123,7 @@
   {
    "alloc_blocks": 0,
    "alloc_bytes": 0,
-   "alloc_calls": 9,
+   "alloc_calls": 3,
    "alloc_ns": 0,
    "calls": 3,
    "device": "cpu",
@@ -153,7 +153,7 @@
   {
    "alloc_blocks": 0,
    "alloc_bytes": 0,
-   "alloc_calls": 6,
+   "alloc_calls": 3,
    "alloc_ns": 0,
    "calls": 2,
    "device": "cpu",
@@ -173,7 +173,7 @@
   "allocations_per_round": {
    "blocks": 0.0,
    "bytes": 0.0,
-   "calls": 27.0,
+   "calls": 9.0,
    "ns": 0
   },
   "kernels_per_round": 0.0,

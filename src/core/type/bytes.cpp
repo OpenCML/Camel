@@ -5,6 +5,7 @@
 
 #include "camel/core/type/bytes.h"
 #include "camel/core/mm.h"
+#include "camel/core/type/intern.h"
 namespace camel::core::type {
 BytesType::BytesType() : OtherType(typeCode()) {}
 TypeCode BytesType::typeCode() {
@@ -12,9 +13,12 @@ TypeCode BytesType::typeCode() {
     return code;
 }
 BytesType *BytesType::get() {
-    static auto *type =
-        new (mm::permSpace().alloc(sizeof(BytesType), alignof(BytesType))) BytesType();
-    return type;
+    // One object for the one `Bytes` code, from the type table: a graph that records the type
+    // names the table's entry, and `equals` is that one object (see intern.h).
+    return static_cast<BytesType *>(TypeTable::instance().internOther(
+        typeCode(), std::span<const uintptr_t>(), [&]() -> Type * {
+            return new (mm::permSpace().alloc(sizeof(BytesType), alignof(BytesType))) BytesType();
+        }));
 }
 std::string BytesType::toString() const { return "Bytes"; }
 std::string BytesType::mangle() const { return "Bytes"; }

@@ -48,7 +48,7 @@ expect_stdout = "total=1.0 grad_sum=6.0\ngather=1.0 grad_sum=6.0 row0=3.0 row1=3
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
-# bf16 and f16 are stored element types of their own (H238): two bytes, and every kernel computes
+# bf16 and f16 are stored element types of their own: two bytes, and every kernel computes
 # in f32 and rounds once. A conversion into them is written by the program, so it needs no numeric
 # permission: `change_precision` governs a computation the compiler moves to lower precision
 # (design principles 7.2-7.3).
@@ -212,7 +212,14 @@ case = "../../../../cases/modules/tensor/dtype/string_refused.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::InvalidTypeArgument"
-expect_output_contains = ["the element type is f32, f64, bf16, f16, i32, i64 or bool, not 'string'"]
+# `Tensor` is the numeric array (P4: `Tensor<dtype, shape>` and `dtype[shape]` are one type), so the
+# element type is refused where the array's own arguments are read, and the sentence says so in the
+# type-argument frame the other parameterised types use: the accepted set is still enumerated and the
+# offending type is still named. Measured on the host, verbatim:
+#   .../string_refused.cml:8:15: [Error]: The arguments of the type 'Tensor<...>' are not accepted:
+#   the element type of a Tensor is a numeric scalar (i32, i64, f32, f64, bf16, f16, bool, c64 or
+#   c128), not 'string'.
+expect_output_contains = ["the element type of a Tensor is a numeric scalar (i32, i64, f32, f64, bf16, f16, bool, c64 or c128), not 'string'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
@@ -255,6 +262,116 @@ args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
-expect_stdout = "gx tensor([[    0.1,     0.3,     0.7],\n        [    0.1,     0.3,     0.7]], dtype=float32)\ngp tensor([    1.1,     0.8,       1.], dtype=float32)\n"
+expect_stdout = "gx [[0.1, 0.3, 0.7], [0.1, 0.3, 0.7]]\ngp [1.1, 0.8, 1.0]\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+# `%` over numeric arrays of the reduced element types. bf16 and f16 are floating types on par
+# with f32 (7.3), so the remainder of two of their arrays is their own operator applied
+# elementwise — computed in f32, rounded once into the element type — not a reduced-precision
+# case. Before the kernel existed the same lines were refused at the call:
+#
+#   bf16_modulo.cml:35:33: [Error]: The call of 'operator %' cannot take a value of the
+#     reduced-precision element type 'bf16'. ...
+#   bf16_modulo.cml:41:37: [Error]: The call of 'operator %' cannot take a value of the
+#     reduced-precision element type 'f16'. ...
+#   bf16_modulo.cml:47:49: [Error]: No matching function found for argument types: <>
+#     (float[], float[]); operator '%' is not defined for these operand types. ...
+#   bf16_modulo.cml:51:48: [Error]: ... (i32[], i32[]) ...
+#
+# (SemanticDiag::ReducedPrecisionUnsupported for the two reduced element types,
+# SemanticDiag::NoMatchingFunction for the other two, whose `%` did not exist at all.)
+[[tests]]
+name = "bf16_modulo"
+desc = "`%` over numeric arrays of the reduced element types: 7.5 % 2.0 is 1.5, -7.5 % 2.0 is -1.5, 7.5 % -2.0 is 1.5 and 1.0 % 4.0 is 1.0 for bf16 and for f16 — the language's truncated remainder (camel::utils::remainder), the sign of the left operand, with no flooring. The result's element type is the operands' own, so four elements are eight bytes through `to_bytes` and the patterns are bf16 0x3FC0/0xBFC0/0x3F80 ([192, 63], [192, 191], [128, 63]) and f16 0x3E00/0xBE00/0x3C00 ([0, 62], [0, 190], [0, 60]): an implementation answering in f32 would report sixteen bytes and f32 patterns. The same definition is written for f64 and i32 arrays (-1.5, -1) and for an array with a literal operand, which takes the element type (design principles 5.1): -7.5 % 2.0 is -1.5 and 7.5 * 2.0 is 15.0 with the array's element type bf16 — the literal used to be read as a bool through the scalar operand, which printed -0.0 and 7.3e-40 for those two lines."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/dtype/bf16_modulo.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout = "bf16 values: 1.5 -1.5 1.5 1.0\nbf16 bytes: 8 [192, 63, 192, 191, 192, 63, 128, 63]\nf16 values: 1.5 -1.5 1.5 1.0\nf16 bytes: 8 [0, 62, 0, 190, 0, 62, 0, 60]\nf64 value: -1.5\ni32 value: -1\nmixed scalar: -1.5 15.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+# `load_npy` declares the element type of the file it reads (handover H466, design principles 5.5):
+# the call writes it, or the position the call stands in fixes it, and the file's own element type
+# has to be that one.
+
+[[tests]]
+name = "npy_element_type"
+desc = "`load_npy` reads an f32 `.npy` as `Tensor<f32>` (`load_npy::<f32>`) and the tree's only int64 `.npy` as `Tensor<i64>` (`load_npy::<i64>`), each with the file's extents (3 and 2 elements); a third load writes no type argument at all and takes the element type from the declared type of the position it stands in (`let typed: Tensor<f32> = load_npy(p)`). Before H466 the result had no element type the program could state, and the only spelling was the untyped `load_npy(p)`."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/dtype/npy_element_type.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout = "3\n2\n3\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "npy_dtype_mismatch"
+desc = "An int64 `.npy` read as `load_npy::<f32>(p)` is a RuntimeDiag::RuntimeError at the call, at the position of the type argument the call writes (`npy_dtype_mismatch.cml:10:21`), naming the file's element type and the declared one (`the file holds i64 and the program declares f32`). Before H466 no element type was declared, so a file of any element type loaded as-is and the mismatch could not be reported at all (design principles 5.1, 5.5)."
+kind = "negative"
+case = "../../../../cases/modules/tensor/dtype/npy_dtype_mismatch.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::RuntimeError"
+expect_output_contains = ["the file holds i64 and the program declares f32", "npy_dtype_mismatch.cml:10:21"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "npy_no_element_type"
+desc = "`load_npy(p)` with no type argument, standing where no element type is expected, does not resolve: the element type is the one type variable no parameter mentions, so the call is refused (No matching function found, `SemanticDiag::NoMatchingFunction`) and the candidates print the five element types a `.npy` file can hold, each with the type argument it takes (`<tensor:load_npy_f32>: ::<float32>(path: string) => Tensor<float32>`). Before H466 this call compiled and returned a tensor whose element type was whatever the file held (design principles 5.5)."
+kind = "negative"
+case = "../../../../cases/modules/tensor/dtype/npy_no_element_type.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "<tensor:load_npy_f32>: ::<float32>(path: string) => Tensor<float32>", "<tensor:load_npy_i64>: ::<int64>(path: string) => Tensor<int64>"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+# A generic wrapper writes the P4 endpoint: `T[..]` is the numeric array type (`Tensor` is that
+# type, so the open-rank spelling and the alias are one type), and the element type travels on to
+# `load_npy::<T>` -- the calls print the file's own extent, so a wrapper that lost the element type
+# would fault on the int64 file instead (design principles 5.1, 5.2, 5.5).
+
+[[tests]]
+name = "npy_generic_wrapper"
+desc = "A generic function declares its result as `T[..]` and forwards the element type to a typed loader (`func read_as::<T>(p: string): T[..] { return load_npy::<T>(p) }`), and each call reads the file at the caller's element type: `read_as::<f32>` on the f32 `.npy` gives 3 elements and `read_as::<i64>` on the tree's only int64 `.npy` gives 2. This is the spelling the P4 deletion step keeps: no signature writes the bare `Tensor` name, and the element type is a type variable of the head (design principles 5.1, 5.2, 5.5)."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/dtype/npy_generic_wrapper.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout = "3\n2\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "npy_generic_wrapper_mismatch"
+desc = "The element type a generic wrapper declares reaches the load: `read_as::<f32>` on the int64 `.npy` is the same fault as a direct `load_npy::<f32>`, a RuntimeDiag::RuntimeError reported at the call inside the wrapper (`npy_generic_wrapper_mismatch.cml:9:54` is the `load_npy::<T>(p)` of its body, with `T` instantiated to f32) and naming the file's element type and the declared one (`the file holds i64 and the program declares f32`). A wrapper that erased the element type would load the file instead (design principles 5.1, 5.5)."
+kind = "negative"
+case = "../../../../cases/modules/tensor/dtype/npy_generic_wrapper_mismatch.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::RuntimeError"
+expect_output_contains = ["the file holds i64 and the program declares f32", "npy_generic_wrapper_mismatch.cml:9:54"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+# A scalar operand beside a reduced-precision tensor: the literal takes the element type the
+# operator declares (design principles 5.1), and the operand is read as the two-byte pattern of
+# that type, which is the same bytes an element of it occupies (camel/core/rtdata/half.h). Held in
+# a wider member of the operand's storage, every line below answers with the element 9.18e-40 (the
+# bf16 pattern 0x0001) or, on the addition side, with 10: the tensor's elements and the number the
+# program wrote met as two different values, and nothing was diagnosed.
+[[tests]]
+name = "reduced_scalar_operand"
+desc = "A literal and an f32 value beside a `Tensor<bf16>` or a `Tensor<f16>` are read in the element type: `sum(b * 2.0)` is 20, `sum(b + 2.0)` is 18, `sum(h * 2.0)` is 20, `sum(where(b > 2.0, b, 0.0))` is 7, and a tensor on the right reads by the same rule (`sum(2.0 - b)` is -2). Read through a wider member of the storage, the products were 9.18e-40 and the sums 10."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/dtype/reduced_scalar_operand.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout = "20.0 5.0 18.0 6.0 5.0\n20.0 5.0 18.0 6.0\n20.0 20.0\n7.0 7.0\n20.0 18.0 -2.0\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000

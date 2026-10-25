@@ -1,11 +1,11 @@
 /**
  * A constant typed by a declared struct type that says neither element type nor shape, used
  * inside a recursion. Since a struct type's identity is its declaration (design principles
- * 5.2, H5), the literal `{ w: weights() }` is a value of `P`, and `m` is a `P` wherever it is
+ *  5.2), the literal `{ w: weights }` is a value of `P`, and `m` is a `P` wherever it is
  * seen, including where the recursion is called. The loop is therefore the same at every
  * level, the simplification ends, and the export succeeds.
  *
- * Before H5 the value was an unnamed struct typed by its fields where the constant was
+ * Before the value was an unnamed struct typed by its fields where the constant was
  * visible: each unrolled level was more precisely typed than the loop, one more level was
  * unrolled each time, and the export was refused (TranslationRefused at the recursive call,
  * or the unlocated "Runtime draft encoding failed to allocate ... bytes"). The onnx plan keeps
@@ -16,21 +16,21 @@ module unended_unrolling
 import { Tensor, reshape, sum, tanh } from tensor
 import { export_model } from onnx
 
-type P = { w: Tensor }
+type P = { w: f32[..] }
 
-func weights(): Tensor {
+func weights(): f32[..] {
     let w: f32[] = [0.5, -0.25, 0.1, 0.3]
     return reshape(w, [2, 2])
 }
 
 with <m: P>
-func walk(h: Tensor, k: int): Tensor {
+func walk(h: f32[..], k: int): f32[..] {
     return if k >= 6 | sum(h * h) < 1.0 then h else walk<m>(tanh(h @ m.w) * 0.3 + h * 0.6, k + 1)
 }
 
 func mk(): P { return { w: weights() } }
 
-func model(x: Tensor): Tensor {
+func model(x: f32[..]): f32[..] {
     let m = mk()
     return walk<m>(x, 0)
 }

@@ -10,7 +10,7 @@ sys.path.insert(0, str(ROOT / 'test' / 'tools'))
 from camel_arg import camel_from_argv  # noqa: E402
 
 # `--camel <path>` names the install this case measures; without it the install is
-# `$CAMEL_HOME/bin/camel`, else this tree's `out/latest/bin/camel`. One rule, in one place:
+# this tree's `out/latest/bin/camel`. One rule, in one place:
 # test/tools/camel_arg.py. `ARGV` is this process's arguments without the `--camel` pair.
 EXE, ARGV = camel_from_argv(ROOT)
 env = dict(os.environ, CUDA_VISIBLE_DEVICES="-1")

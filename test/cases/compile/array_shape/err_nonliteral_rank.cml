@@ -1,0 +1,13 @@
+// A one-dimensional constant that is not written as a nested literal at the position: it is an
+// `f32[4]` of four elements where the annotation states `f32[2, 2]`. 2 * 2 is its element count,
+// and that alone does not make it one array of that shape (design principles 5.1, 5.4): only a
+// source whose own nesting already gives the shape -- a nested literal, a constant a folded
+// `reshape` names -- is read as the shape the position states. Nothing is reshaped to fit.
+module array_shape_err_nonliteral_rank
+
+func main(): int sync {
+    let flat: f32[] = [1.0, 2.0, 3.0, 4.0]
+    let one = flat as f32[4]
+    let b: f32[2, 2] = one
+    return 0
+}

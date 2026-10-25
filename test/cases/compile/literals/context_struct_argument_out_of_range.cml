@@ -1,5 +1,5 @@
 /**
- * Handover H27b: the fields of a struct literal argument enter the field types of its
+ * Handover: the fields of a struct literal argument enter the field types of its
  * parameter, so a field the field type cannot hold is refused once the callee is known
  * (`LiteralNotRepresentable`), not left as a `{ x: float, y: float }` with no matching function.
  */

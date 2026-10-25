@@ -12,6 +12,7 @@
 #include "builtin/operators/set_value.h"
 #include "builtin/operators/tagged.h"
 #include "camel/core/context/context.h"
+#include "camel/core/type/composite/array.h"
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/enum.h"
 #include "camel/core/type/resolver.h"
@@ -21,6 +22,10 @@
 #include "camel/utils/log.h"
 
 #include <algorithm>
+#include <format>
+#include <optional>
+#include <string>
+#include <vector>
 
 using namespace std;
 using namespace camel::core::context;
@@ -127,18 +132,19 @@ resolver_ptr_t namedStaticSignature(const char *name, Type *param, Type *exit) {
                                Type::Bool())                                                       \
     }
 
-/// A compound assignment of a group: the target is the type and keeps it, the value is the type.
+/// A compound assignment of a group: the target is the type and keeps it, the value is the type,
+/// and what the write gives is the version of the variable: the cell itself.
 #define CAMEL_HALF_ASSIGN(STEM)                                                                    \
     {":op/" STEM "_bf",                                                                            \
      StaticFuncTypeResolver::create(                                                               \
          {},                                                                                       \
          {{Type::BFloat16(), true}, {Type::BFloat16(), false}},                                    \
-         Type::BFloat16())},                                                                       \
+         TupleType::cell(Type::BFloat16()))},                                                      \
     {                                                                                              \
         ":op/" STEM "_f6", StaticFuncTypeResolver::create(                                         \
                                {},                                                                 \
                                {{Type::Float16(), true}, {Type::Float16(), false}},                \
-                               Type::Float16())                                                    \
+                               TupleType::cell(Type::Float16()))                                   \
     }
 
 /// A unary operator of a group (`-x`): the operand is the type and so is the result.
@@ -149,6 +155,326 @@ resolver_ptr_t namedStaticSignature(const char *name, Type *param, Type *exit) {
         ":op/" STEM "_f6",                                                                         \
             StaticFuncTypeResolver::create({}, {{Type::Float16(), false}}, Type::Float16())        \
     }
+
+/**
+ * The static checks of a subscript on an array (design principles 3.9 and 5.4; the "越界" rule of
+ * docs/design-principles.cn.md: where the compiler can know the length — a fixed-length type is
+ * the case it names — an index or a slice bound outside it is a compile-time error, not a silent
+ * truncation and not something left to the run). An array whose type states a constant extent for
+ * its first dimension has a length the compiler knows, so `t[i]` with a constant `i` outside it,
+ * and `t[a:b]` with constant bounds outside it, are refused where they are written. An array whose
+ * type states no extent (`int[]`) keeps the run-time fault: its length is not part of its type,
+ * which is the case `feat.consistency.faults`' `fault.array_index_constant` records.
+ *
+ * The same static extent makes the slice a view sharing the block (5.4), so its first dimension
+ * must be the only one and its step the constant 1: a slice of a rank-2 or deeper array, and a
+ * step other than 1, are views with strides, which need the multidimensional array representation
+ * of H17, and are refused at the call rather than lowered to a copy that would not share the
+ * block. Where the extent is not in the type the operator is left to its kernel, which reads a
+ * stepped slice as a copy — the H17 deviation `feat.linear.subscript`'s `subscript.step` records.
+ *
+ * These are the checks the tensor module's `indexInfer` and `sliceSubInfer` made for `t[i]` and
+ * `t[a:b]` before `Tensor` became an array (H419): a `Tensor` is an array now, so the built-in
+ * `[]` operators are the ones its subscripts reach, and the rule has to be here or it is nowhere.
+ */
+
+/// The constant extent the type states for axis 0: an array of a fixed rank whose first extent is
+/// a constant. nullopt for `T[]` (one unknown extent), for an open-rank type (`T[..]`), and for a
+/// type that is not an array.
+std::optional<int64_t> staticFirstExtent(const Type *type) {
+    const ArrayType *array = asArrayType(type);
+    if (array == nullptr || array->anyRank() || array->rank() < 1) {
+        return std::nullopt;
+    }
+    const ExtentForm &first = array->extents()[0];
+    return first.isConstant() ? std::optional<int64_t>(first.constant()) : std::nullopt;
+}
+
+/// The value of an argument the compiler knows — a literal, or a static the graph builder supplies
+/// for one — when it is one at all.
+std::optional<int64_t> constantArg(static_args_t statics, size_t index) {
+    if (statics.size() <= index || !statics[index].value.has_value()) {
+        return std::nullopt;
+    }
+    return static_cast<int64_t>(*statics[index].value);
+}
+
+/// Why `t[i]` cannot be this call: the index and the extent are both constants and the index
+/// leaves the extent. The wording is the one the tensor module's `indexInfer` used for `t[i]`
+/// before the flip, so the report a program gets does not depend on which module declared the
+/// array.
+std::optional<std::string> staticIndexRejection(const type_vec_t &norm, static_args_t statics) {
+    if (norm.size() != 2 || norm[1] == nullptr || norm[1]->code() != TypeCode::Int64) {
+        return std::nullopt;
+    }
+    const std::optional<int64_t> extent = staticFirstExtent(norm[0]);
+    const std::optional<int64_t> index  = constantArg(statics, 1);
+    if (!extent || !index || (*index >= 0 && *index < *extent)) {
+        return std::nullopt;
+    }
+    return std::format("index {} is outside axis 0 of extent {}", *index, *extent);
+}
+
+/// Whether `t` is a tensor the module that owns tensors slices: a numeric array that is
+/// open-rank (`f32[..]`, the transition spelling of `Tensor`), of rank 2 or more, or rank 1 with a
+/// stated extent (`f32[6]`, what a tensor operator returns and what `Tensor<f32, [6]>` names).
+/// What stays the core's is the program's own array of values: rank 1 with no extent stated
+/// (`T[]`) -- the form an array literal has and the form the core's array operators build and take
+/// -- because the programs that subscript one without importing the tensor module must keep
+/// working (docs/handover/questions/subscript-operator-choice-and-the-rank-two-refusal.md §二: the
+/// same narrowing `t[idx]` already has on this line, where a rank-2 array is refused by the core
+/// and the module's `tensor:idx_take` answers another rank or an open rank).
+
+/// Why `t[a:b]` / `t[a:b:s]` cannot be this call: a constant bound leaves the statically known
+/// first extent, or the result would not be a view of a rank-1 array.
+std::optional<std::string> staticSliceRejection(const type_vec_t &norm, static_args_t statics) {
+    if (norm.size() != 6) {
+        return std::nullopt;
+    }
+    const ArrayType *array = asArrayType(norm[0]);
+    if (array == nullptr) {
+        return std::nullopt;
+    }
+    if (!array->anyRank() && array->rank() >= 2) {
+        return std::string(
+            "a slice of the first dimension of a tensor of rank 2 or more is a view with "
+            "strides, which needs the multidimensional array representation of H17");
+    }
+    const std::optional<int64_t> extent = staticFirstExtent(norm[0]);
+    if (!extent) {
+        return std::nullopt; // `T[]`: the length is not in the type, and the kernel reads it
+    }
+    if (const std::optional<int64_t> step = constantArg(statics, 4); !step || *step != 1) {
+        return std::string(
+            "a slice step other than the constant 1 is a view with strides, which needs the "
+            "multidimensional array representation of H17");
+    }
+    // The bounds as the slice reads them: a bound the program did not write is 0 for the start and
+    // the end of the array for the end, which the two-bit mask the compiler writes with the call
+    // says (`globals.cpp`, `__slice__`).
+    const std::optional<int64_t> mask = constantArg(statics, 5);
+    if (!mask) {
+        return std::nullopt;
+    }
+    const std::optional<int64_t> from =
+        (*mask & 2) != 0 ? constantArg(statics, 2) : std::optional<int64_t>(0);
+    const std::optional<int64_t> to = (*mask & 1) != 0 ? constantArg(statics, 3) : extent;
+    if (!from || !to) {
+        return std::nullopt; // a bound the compiler does not know: the kernel reads it
+    }
+    if (*from < 0 || *from > *extent || *to < 0 || *to > *extent) {
+        return std::format(
+            "slice bounds {}..{} are outside the first dimension of extent {}",
+            *from,
+            *to,
+            *extent);
+    }
+    return std::nullopt;
+}
+
+/// An operator's own rule plus the checks above: the call is refused where it is written when the
+/// operator's constants and the argument types say it can never be right. The inner rule is
+/// untouched, so a call whose constants are inside — and every call the compiler knows nothing
+/// about — resolves exactly as it did.
+class StaticCheckedResolver final : public FuncTypeResolver {
+  public:
+    using Check = std::optional<std::string> (*)(const type_vec_t &, static_args_t);
+
+    StaticCheckedResolver(resolver_ptr_t inner, Check check)
+        : inner_(std::move(inner)), check_(check) {}
+
+    std::optional<FunctionType *> resolve(
+        const type_vec_t &with, const type_vec_t &norm,
+        const ModifierSet &modifiers) const override {
+        return inner_->resolve(with, norm, modifiers);
+    }
+
+    /// A rejected call is one whose arguments do not fit, so the value-carrying resolution the
+    /// drafts use answers for it exactly as for any other mismatch.
+    std::optional<FunctionType *> resolveWith(
+        const type_vec_t &with, const type_vec_t &norm, static_args_t normStatics,
+        const ModifierSet &modifiers) const override {
+        if (check_(norm, normStatics).has_value()) {
+            return std::nullopt;
+        }
+        return inner_->resolveWith(with, norm, normStatics, modifiers);
+    }
+
+    /// The reason the call cannot be right, for the report the call gets (`ArgumentsRejected`).
+    std::optional<std::string> explainRejection(
+        const type_vec_t &with, const type_vec_t &norm, static_args_t normStatics,
+        const ModifierSet &modifiers) const override {
+        if (auto reason = check_(norm, normStatics)) {
+            return reason;
+        }
+        return inner_->explainRejection(with, norm, normStatics, modifiers);
+    }
+
+    std::string signature() const override { return inner_->signature(); }
+    FunctionType *fixedSignature() const override { return inner_->fixedSignature(); }
+    bool parameterNames(std::vector<std::string> &with, std::vector<std::string> &norm)
+        const override {
+        return inner_->parameterNames(with, norm);
+    }
+    bool varParameters(std::vector<bool> &with, std::vector<bool> &norm) const override {
+        return inner_->varParameters(with, norm);
+    }
+    std::optional<camel::core::error::SemanticDiag> rejectionDiag() const override {
+        return inner_->rejectionDiag();
+    }
+
+  private:
+    resolver_ptr_t inner_;
+    Check check_;
+};
+
+/// Whether `slice(t, axis, start, end, step?)` is a call the core's own slice operator answers:
+/// the value is a rank-1 array whose length the type states, the axis is the constant 0 -- the
+/// only axis a rank-1 array has -- the step is the constant 1 or not written, and both bounds are
+/// constants inside that length.
+///
+/// Everything else keeps the tensor module's function form: another axis, a higher or an open
+/// rank, a bound outside the length, a bound that counts from the end, or an axis, a bound or a
+/// step the compiler does not know. The two spellings are one node with one rule and one adjoint
+/// rule (the author's ruling of 2026-10-25, discrete-gradient-and-rank-one-slice-ownership, point
+/// 2: `t[a:b]` and `slice(t, 0, a, b)` are the same node), and this predicate is what the core
+/// can answer of it today: a rank-1 array, the axis it is sliced along, and bounds that are the
+/// positions they name. The function form's own reading of its arguments -- a negative bound
+/// counts from the end, an out-of-range one is refused by name -- is the tensor module's
+/// (`sliceFunctionKernel`, `sliceFunctionInfer`), and a call it answers stays there until the two
+/// readings are one; see the question page for the readings this leaves apart.
+bool isCoreSliceCall(const type_vec_t &norm, static_args_t statics) {
+    if (norm.size() < 4 || norm.size() > 5) {
+        return false;
+    }
+    if (norm[0] == nullptr || norm[0]->code() != TypeCode::Array) {
+        return false;
+    }
+    const ArrayType *array = tt::as_ptr<ArrayType>(norm[0]);
+    if (array->anyRank() || array->rank() != 1) {
+        return false;
+    }
+    if (array->elemType() == nullptr || array->elemType()->code() == TypeCode::Void) {
+        return false;
+    }
+    for (size_t i = 1; i < norm.size(); ++i) {
+        if (norm[i] == nullptr || norm[i]->code() != TypeCode::Int64) {
+            return false;
+        }
+    }
+    const std::optional<int64_t> extent = staticFirstExtent(norm[0]);
+    const std::optional<int64_t> axis   = constantArg(statics, 1);
+    const std::optional<int64_t> from   = constantArg(statics, 2);
+    const std::optional<int64_t> to     = constantArg(statics, 3);
+    const std::optional<int64_t> step =
+        norm.size() >= 5 ? constantArg(statics, 4) : std::optional<int64_t>(1);
+    if (!extent || !axis || *axis != 0 || !from || !to || !step || *step != 1) {
+        return false;
+    }
+    return *from >= 0 && *to >= 0 && *from <= *extent && *to <= *extent;
+}
+
+/// A rule of the core's own that answers only the calls a predicate accepts and says nothing about
+/// the rest. Unlike `StaticCheckedResolver` -- whose check is also the reason a call is reported
+/// with, because the call it refuses is one no other rule answers -- this one is one overload
+/// among several that answer the same name: the calls it leaves are the other overload's, and a
+/// rule that declined a call has no reason of its own to report for it. Reporting one would put
+/// the core's wording in front of the module's on a call the module refuses with its own.
+class PredicatedResolver final : public FuncTypeResolver {
+  public:
+    using Predicate = bool (*)(const type_vec_t &, static_args_t);
+
+    PredicatedResolver(resolver_ptr_t inner, Predicate accepts)
+        : inner_(std::move(inner)), accepts_(accepts) {}
+
+    static resolver_ptr_t create(resolver_ptr_t inner, Predicate accepts) {
+        return resolver_ptr_t(new PredicatedResolver(std::move(inner), accepts));
+    }
+
+    std::optional<FunctionType *> resolve(
+        const type_vec_t &with, const type_vec_t &norm,
+        const ModifierSet &modifiers) const override {
+        // A path that carries no constant arguments cannot see the axis and the bounds the
+        // predicate reads: it answers nothing and leaves the call to the overloads that can.
+        if (!accepts_(norm, {})) {
+            return std::nullopt;
+        }
+        return inner_->resolve(with, norm, modifiers);
+    }
+
+    std::optional<FunctionType *> resolveWith(
+        const type_vec_t &with, const type_vec_t &norm, static_args_t normStatics,
+        const ModifierSet &modifiers) const override {
+        if (!accepts_(norm, normStatics)) {
+            return std::nullopt;
+        }
+        return inner_->resolveWith(with, norm, normStatics, modifiers);
+    }
+
+    std::optional<std::string> explainRejection(
+        const type_vec_t &with, const type_vec_t &norm, static_args_t normStatics,
+        const ModifierSet &modifiers) const override {
+        if (!accepts_(norm, normStatics)) {
+            return std::nullopt;
+        }
+        return inner_->explainRejection(with, norm, normStatics, modifiers);
+    }
+
+    std::string signature() const override { return inner_->signature(); }
+    FunctionType *fixedSignature() const override { return inner_->fixedSignature(); }
+    bool parameterNames(std::vector<std::string> &with, std::vector<std::string> &norm)
+        const override {
+        return inner_->parameterNames(with, norm);
+    }
+    bool varParameters(std::vector<bool> &with, std::vector<bool> &norm) const override {
+        return inner_->varParameters(with, norm);
+    }
+    std::optional<camel::core::error::SemanticDiag> rejectionDiag() const override {
+        return inner_->rejectionDiag();
+    }
+
+  private:
+    resolver_ptr_t inner_;
+    Predicate accepts_;
+};
+
+/// The type a slice of `norm[0]` has: an array of the value's element type, one dimension, whose
+/// length is not in the type. Which positions a slice takes is a value -- the length of the array
+/// it is taken from -- and the core's arrays are the rank-1 arrays whose extent the type does not
+/// state (`T[]`); a slice of one is another one. A tensor whose extent the type does state
+/// (`f32[6]`) is read the same way: the slice of what the type calls six elements is not a value
+/// the type can call an extent without reading the bounds.
+std::optional<Type *> sliceResultType(const type_vec_t &norm) {
+    if (norm.empty() || norm[0] == nullptr || norm[0]->code() != TypeCode::Array) {
+        return std::nullopt;
+    }
+    Type *elem = tt::as_ptr<ArrayType>(norm[0])->elemType();
+    if (elem == nullptr || elem->code() == TypeCode::Void) {
+        return std::nullopt;
+    }
+    return ArrayType::create(elem);
+}
+
+/// `slice(t, axis, start, end, step?)` -- the function form of the same slice node the subscript
+/// lowers to. The core answers the call it can: a rank-1 array of a stated element type, the axis
+/// 0, and constant bounds inside the length the type states (isCoreSliceCall). Every other call
+/// -- another axis, a higher or open rank, a negative or out-of-range bound, an axis or a bound
+/// the compiler does not know -- is the tensor module's function form, which answers any axis and
+/// any rank. So `x[1:4]` and `slice(x, 0, 1, 4)` are one node for a rank-1 value whose length is
+/// stated, which is what the ruling asks for, and the module keeps the readings the core does not
+/// have yet.
+resolver_ptr_t coreSliceFunctionResolver() {
+    return PredicatedResolver::create(
+        DynamicFuncTypeResolver::create(
+            {{0, {}}, {-1, {}}},
+            "(t: T[], axis: int, start: int, end: int, step: int) => T[]",
+            [](const type_vec_t &with, const type_vec_t &norm,
+               const ModifierSet &) -> optional<Type *> {
+                (void)with;
+                return sliceResultType(norm);
+            }),
+        isCoreSliceCall);
+}
 
 } // namespace
 
@@ -650,12 +976,12 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     ":op/assn_owned",
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {2, {true, false}}},
-                        "(var self: T[], value: T[]) => T[]",
+                        "(var self: T[], value: T[]) => var T[]",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<Type *> {
                             if (norm[0]->code() != TypeCode::Array || !norm[0]->equals(norm[1]))
                                 return nullopt;
-                            return norm[0];
+                            return TupleType::cell(norm[0]);
                         }),
                 },
             }),
@@ -671,55 +997,55 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Int32(), true}, {Type::Int32(), false}},
-                        Type::Int32()),
+                        TupleType::cell(Type::Int32())),
                 },
                 {
                     ":op/assn_l",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Int64(), true}, {Type::Int64(), false}},
-                        Type::Int64()),
+                        TupleType::cell(Type::Int64())),
                 },
                 {
                     ":op/assn_f",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Float32(), true}, {Type::Float32(), false}},
-                        Type::Float32()),
+                        TupleType::cell(Type::Float32())),
                 },
                 {
                     ":op/assn_d",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Float64(), true}, {Type::Float64(), false}},
-                        Type::Float64()),
+                        TupleType::cell(Type::Float64())),
                 },
                 {
                     ":op/assn_s",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::String(), true}, {Type::String(), false}},
-                        Type::String()),
+                        TupleType::cell(Type::String())),
                 },
                 {
                     ":op/assn_b",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Bool(), true}, {Type::Bool(), false}},
-                        Type::Bool()),
+                        TupleType::cell(Type::Bool())),
                 },
                 {
                     ":op/assn",
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {2, {true, false}}},
-                        "(var self: T, other: T) => T",
+                        "(var self: T, other: T) => var T",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<Type *> {
                             // The target keeps its declared type; the value only has to fit it.
                             if (!norm[0]->assignableFrom(norm[1])) {
                                 return nullopt;
                             }
-                            return norm[0];
+                            return TupleType::cell(norm[0]);
                         }),
                 },
             }),
@@ -731,49 +1057,49 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Int32(), true}, {Type::Int32(), false}},
-                        Type::Int32()),
+                        TupleType::cell(Type::Int32())),
                 },
                 {
                     ":op/assn_add_l",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Int64(), true}, {Type::Int64(), false}},
-                        Type::Int64()),
+                        TupleType::cell(Type::Int64())),
                 },
                 {
                     ":op/assn_add_f",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Float32(), true}, {Type::Float32(), false}},
-                        Type::Float32()),
+                        TupleType::cell(Type::Float32())),
                 },
                 {
                     ":op/assn_add_d",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Float64(), true}, {Type::Float64(), false}},
-                        Type::Float64()),
+                        TupleType::cell(Type::Float64())),
                 },
                 {
                     ":op/assn_add_s",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::String(), true}, {Type::String(), false}},
-                        Type::String()),
+                        TupleType::cell(Type::String())),
                 },
                 {
                     ":op/assn_add_c",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Complex64(), true}, {Type::Complex64(), false}},
-                        Type::Complex64()),
+                        TupleType::cell(Type::Complex64())),
                 },
                 {
                     ":op/assn_add_z",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Complex128(), true}, {Type::Complex128(), false}},
-                        Type::Complex128()),
+                        TupleType::cell(Type::Complex128())),
                 },
                 // bf16 and f16: `acc += x` on one of them (design principles 7.3).
                 CAMEL_HALF_ASSIGN("assn_add"),
@@ -786,42 +1112,42 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Int32(), true}, {Type::Int32(), false}},
-                        Type::Int32()),
+                        TupleType::cell(Type::Int32())),
                 },
                 {
                     ":op/assn_sub_l",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Int64(), true}, {Type::Int64(), false}},
-                        Type::Int64()),
+                        TupleType::cell(Type::Int64())),
                 },
                 {
                     ":op/assn_sub_f",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Float32(), true}, {Type::Float32(), false}},
-                        Type::Float32()),
+                        TupleType::cell(Type::Float32())),
                 },
                 {
                     ":op/assn_sub_d",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Float64(), true}, {Type::Float64(), false}},
-                        Type::Float64()),
+                        TupleType::cell(Type::Float64())),
                 },
                 {
                     ":op/assn_sub_c",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Complex64(), true}, {Type::Complex64(), false}},
-                        Type::Complex64()),
+                        TupleType::cell(Type::Complex64())),
                 },
                 {
                     ":op/assn_sub_z",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Complex128(), true}, {Type::Complex128(), false}},
-                        Type::Complex128()),
+                        TupleType::cell(Type::Complex128())),
                 },
                 CAMEL_HALF_ASSIGN("assn_sub"),
             }),
@@ -833,42 +1159,42 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Int32(), true}, {Type::Int32(), false}},
-                        Type::Int32()),
+                        TupleType::cell(Type::Int32())),
                 },
                 {
                     ":op/assn_mul_l",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Int64(), true}, {Type::Int64(), false}},
-                        Type::Int64()),
+                        TupleType::cell(Type::Int64())),
                 },
                 {
                     ":op/assn_mul_f",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Float32(), true}, {Type::Float32(), false}},
-                        Type::Float32()),
+                        TupleType::cell(Type::Float32())),
                 },
                 {
                     ":op/assn_mul_d",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Float64(), true}, {Type::Float64(), false}},
-                        Type::Float64()),
+                        TupleType::cell(Type::Float64())),
                 },
                 {
                     ":op/assn_mul_c",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Complex64(), true}, {Type::Complex64(), false}},
-                        Type::Complex64()),
+                        TupleType::cell(Type::Complex64())),
                 },
                 {
                     ":op/assn_mul_z",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Complex128(), true}, {Type::Complex128(), false}},
-                        Type::Complex128()),
+                        TupleType::cell(Type::Complex128())),
                 },
                 CAMEL_HALF_ASSIGN("assn_mul"),
             }),
@@ -880,42 +1206,42 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Int32(), true}, {Type::Int32(), false}},
-                        Type::Int32()),
+                        TupleType::cell(Type::Int32())),
                 },
                 {
                     ":op/assn_div_l",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Int64(), true}, {Type::Int64(), false}},
-                        Type::Int64()),
+                        TupleType::cell(Type::Int64())),
                 },
                 {
                     ":op/assn_div_f",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Float32(), true}, {Type::Float32(), false}},
-                        Type::Float32()),
+                        TupleType::cell(Type::Float32())),
                 },
                 {
                     ":op/assn_div_d",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Float64(), true}, {Type::Float64(), false}},
-                        Type::Float64()),
+                        TupleType::cell(Type::Float64())),
                 },
                 {
                     ":op/assn_div_c",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Complex64(), true}, {Type::Complex64(), false}},
-                        Type::Complex64()),
+                        TupleType::cell(Type::Complex64())),
                 },
                 {
                     ":op/assn_div_z",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Complex128(), true}, {Type::Complex128(), false}},
-                        Type::Complex128()),
+                        TupleType::cell(Type::Complex128())),
                 },
                 CAMEL_HALF_ASSIGN("assn_div"),
             }),
@@ -927,14 +1253,14 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Int32(), true}, {Type::Int32(), false}},
-                        Type::Int32()),
+                        TupleType::cell(Type::Int32())),
                 },
                 {
                     ":op/assn_mod_l",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Int64(), true}, {Type::Int64(), false}},
-                        Type::Int64()),
+                        TupleType::cell(Type::Int64())),
                 },
             }),
         // No built-in type has `@`; a module that has it (tensor) provides `@=` or it is rejected.
@@ -947,70 +1273,70 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Int32(), true}, {Type::Int32(), false}},
-                        Type::Int32()),
+                        TupleType::cell(Type::Int32())),
                 },
                 {
                     ":op/assn_pow_l",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Int64(), true}, {Type::Int64(), false}},
-                        Type::Int64()),
+                        TupleType::cell(Type::Int64())),
                 },
                 {
                     ":op/assn_pow_f",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Float32(), true}, {Type::Float32(), false}},
-                        Type::Float32()),
+                        TupleType::cell(Type::Float32())),
                 },
                 {
                     ":op/assn_pow_d",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Float64(), true}, {Type::Float64(), false}},
-                        Type::Float64()),
+                        TupleType::cell(Type::Float64())),
                 },
                 {
                     ":op/assn_pow_c",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Complex64(), true}, {Type::Complex64(), false}},
-                        Type::Complex64()),
+                        TupleType::cell(Type::Complex64())),
                 },
                 {
                     ":op/assn_pow_c_i",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Complex64(), true}, {Type::Int32(), false}},
-                        Type::Complex64()),
+                        TupleType::cell(Type::Complex64())),
                 },
                 {
                     ":op/assn_pow_c_l",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Complex64(), true}, {Type::Int64(), false}},
-                        Type::Complex64()),
+                        TupleType::cell(Type::Complex64())),
                 },
                 {
                     ":op/assn_pow_z",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Complex128(), true}, {Type::Complex128(), false}},
-                        Type::Complex128()),
+                        TupleType::cell(Type::Complex128())),
                 },
                 {
                     ":op/assn_pow_z_i",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Complex128(), true}, {Type::Int32(), false}},
-                        Type::Complex128()),
+                        TupleType::cell(Type::Complex128())),
                 },
                 {
                     ":op/assn_pow_z_l",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Complex128(), true}, {Type::Int64(), false}},
-                        Type::Complex128()),
+                        TupleType::cell(Type::Complex128())),
                 },
                 CAMEL_HALF_ASSIGN("assn_pow"),
             }),
@@ -1022,7 +1348,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Bool(), true}, {Type::Bool(), false}},
-                        Type::Bool()),
+                        TupleType::cell(Type::Bool())),
                 },
             }),
         OperatorGroup::create(
@@ -1033,7 +1359,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Bool(), true}, {Type::Bool(), false}},
-                        Type::Bool()),
+                        TupleType::cell(Type::Bool())),
                 },
             }),
         // ======= Logical operators =======
@@ -1128,8 +1454,11 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                             -> optional<Type *> {
                             // By content (design principles 4.2): both sides of one type,
                             // an array, a tuple or a struct, every part of which is itself
-                            // comparable (no function value, no tensor). Anything else has no
-                            // overload, which is a located compile-time error.
+                            // comparable (no function value), and a numeric array whose element
+                            // type its values carry (a tensor), which the module that declares
+                            // it registers as comparable. A primitive has its own entry above,
+                            // so it is not this one's business; anything else has no overload,
+                            // which is a located compile-time error.
                             const TypeCode code  = norm[0]->code();
                             const bool composite = code == TypeCode::Array ||
                                                    code == TypeCode::Struct ||
@@ -1137,7 +1466,8 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                                                     !tt::as_ptr<TupleType>(norm[0])->isCell() &&
                                                     !tt::as_ptr<TupleType>(norm[0])->isTagged());
                             // An enum compares by its variant and then its fields.
-                            const bool comparable = composite || asEnumType(norm[0]) != nullptr;
+                            const bool comparable = composite || asEnumType(norm[0]) != nullptr ||
+                                                    isRegisteredContentComparableType(code);
                             if (!comparable || !norm[0]->equals(norm[1]) ||
                                 !isContentComparable(norm[0])) {
                                 return nullopt;
@@ -1215,8 +1545,11 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                             -> optional<Type *> {
                             // By content (design principles 4.2): both sides of one type,
                             // an array, a tuple or a struct, every part of which is itself
-                            // comparable (no function value, no tensor). Anything else has no
-                            // overload, which is a located compile-time error.
+                            // comparable (no function value), and a numeric array whose element
+                            // type its values carry (a tensor), which the module that declares
+                            // it registers as comparable. A primitive has its own entry above,
+                            // so it is not this one's business; anything else has no overload,
+                            // which is a located compile-time error.
                             const TypeCode code  = norm[0]->code();
                             const bool composite = code == TypeCode::Array ||
                                                    code == TypeCode::Struct ||
@@ -1224,7 +1557,8 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                                                     !tt::as_ptr<TupleType>(norm[0])->isCell() &&
                                                     !tt::as_ptr<TupleType>(norm[0])->isTagged());
                             // An enum compares by its variant and then its fields.
-                            const bool comparable = composite || asEnumType(norm[0]) != nullptr;
+                            const bool comparable = composite || asEnumType(norm[0]) != nullptr ||
+                                                    isRegisteredContentComparableType(code);
                             if (!comparable || !norm[0]->equals(norm[1]) ||
                                 !isContentComparable(norm[0])) {
                                 return nullopt;
@@ -1234,8 +1568,11 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                 },
                 CAMEL_HALF_COMPARE("ne"),
             }),
-        // `===` and `!==` are not supported for now (design principles 4.2): the front end
-        // refuses them, so there is no operator behind them.
+        // `===` and `!==` are the elementwise comparison (design principles 4.2), so they are
+        // not here: their groups are `__strict_eq__` and `__strict_neq__`, built from the scalar
+        // entries of these two where this module exports its groups, and the tensor module adds
+        // the array entry to them. `==` and `!=` do not name them: the whole comparison is the
+        // reduction of the elementwise one, and a program gets it from this group alone.
         // <、<=、>、>=
         OperatorGroup::create(
             "__lt__",
@@ -1695,21 +2032,40 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
             {
                 {
                     ":op/idx_arr",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {2, {false, false}}},
-                        "(arr: T[], index: int) => T",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<Type *> {
-                            if (norm[0]->code() != TypeCode::Array ||
-                                norm[1]->code() != TypeCode::Int64)
-                                return nullopt;
-                            return tt::as_ptr<ArrayType>(norm[0])->elemType();
-                        }),
+std::make_shared<StaticCheckedResolver>(
+                        DynamicFuncTypeResolver::create(
+                            {{0, {}}, {2, {false, false}}},
+                            "(arr: T[], index: int) => T",
+                            [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                                -> optional<Type *> {
+                                if (norm[0]->code() != TypeCode::Array ||
+                                    norm[1]->code() != TypeCode::Int64)
+                                    return nullopt;
+                                Type *elem = tt::as_ptr<ArrayType>(norm[0])->elemType();
+                                // An array whose element type nobody stated (its element is `Void`) has no
+                                // element type to name the value a subscript reads: this op
+                                // answers with the element type, and the module that owns
+                                // numeric arrays reads the element at the element type the
+                                // value itself carries, which is what its own overload of
+                                // `t[idx]` does (design principles 5.2). Declining here leaves
+                                // the value to that overload.
+                                if (elem == nullptr || elem->code() == TypeCode::Void) {
+                                    return nullopt;
+                                }
+                                return elem;
+                            }),
+                        staticIndexRejection),
                 },
                 {
                     ":op/idx_take",
                     // `t[idx]` with an int array takes the rows the indices name, in that
-                    // order (design principles 5.4; `take` in its function form).
+                    // order, along the first dimension -- for a rank-1 array the row is the
+                    // element (design principles 5.4; the `take` its function form names).
+                    // The result's shape is `[len(idx)] + shape(t)[1:]`: the length the index
+                    // array's own type states (`int[3]` names three rows, `int[]` a length
+                    // nobody fixed), then every dimension of the array but the first. A type
+                    // whose rank is open (`f32[..]`) fixes neither, so the rows taken are rows
+                    // again and the result is that same open-rank array.
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {2, {false, false}}},
                         "(arr: T[], indices: int[]) => T[]",
@@ -1718,10 +2074,23 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                             if (norm[0]->code() != TypeCode::Array ||
                                 norm[1]->code() != TypeCode::Array)
                                 return nullopt;
-                            const auto &indices = tt::as_ptr<ArrayType>(norm[1]);
+                            auto *const arr           = tt::as_ptr<ArrayType>(norm[0]);
+                            const auto *const indices = tt::as_ptr<ArrayType>(norm[1]);
                             if (indices->elemType()->code() != TypeCode::Int64)
                                 return nullopt;
-                            return norm[0];
+                            // The indices are a list of positions: a rank-1 array, or one whose
+                            // rank the type leaves open.
+                            if (!indices->anyRank() && indices->rank() != 1)
+                                return nullopt;
+                            if (arr->anyRank())
+                                return norm[0];
+                            std::vector<ExtentForm> extents;
+                            extents.push_back(indices->rank() == 1
+                                                  ? indices->extents().front()
+                                                  : ExtentForm::unknown());
+                            const auto stated = arr->extents();
+                            extents.insert(extents.end(), stated.begin() + 1, stated.end());
+                            return ArrayType::create(arr->elemType(), extents);
                         }),
                 },
                 {
@@ -1852,7 +2221,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                 },
             }),
         // `println` on the standard error stream, with the same declaration shape (the author's
-        // ruling on H134 question 2: it is in the prelude, so no import).
+        // rule on question 2: it is in the prelude, so no import).
         OperatorGroup::create(
             "eprintln",
             {
@@ -1956,7 +2325,9 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
         // The elements a `for` takes from a string (design principles 11.1): its code points,
         // each a one-character string. The loop builder converts a string to that array once,
         // before the first round; a program does not write `__iter__` itself. A map adds its
-        // own overload (collection.cpp), and the tensor module adds one for tensors.
+        // own overload (collection.cpp); the tensor module had one too, and it went with the P4
+        // deletion step -- a numeric array is the core's to iterate (`t[i]` along the first
+        // dimension), so no module takes part in a `for` over a tensor.
         OperatorGroup::create(
             "__iter__",
             {
@@ -2064,7 +2435,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                             // `range(a, b)` is the interval of the integers from `a` to `b - 1`
                             // and `range(a, b, step)` is the same sequence with a step, as the
                             // language's `a..b` is the one without one (design principles 4.2;
-                            // the author's ruling of 2026-10-24). One rule for the two spellings:
+                            // One rule for the two spellings:
                             // a second rule of the same URI would leave the table (which holds
                             // one resolver per URI) with the last one only, so every re-typing of
                             // the call would read the other spelling's arity.
@@ -2100,6 +2471,12 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                             return arrType;
                         }),
                 },
+                {
+                    // The function form of the same slice node the subscript lowers to; see
+                    // coreSliceFunctionResolver for the calls each of the two answers.
+                    ":op/slice_sub",
+                    coreSliceFunctionResolver(),
+                },
             }),
         OperatorGroup::create(
             "__slice__",
@@ -2107,23 +2484,43 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                 {
                     ":op/slice_sub",
                     // `t[a:b]`, `t[a:b:s]`, `t[:b]`, `t[a:]`, `t[:]`: the slice of the first
-                    // dimension a subscript writes (design principles 5.4). The last argument is
-                    // a two-bit mask: bit 0 says whether the end was written (`t[a:]` runs to
-                    // the end), bit 1 whether the start was (`xs[:: -1]` starts at the last
-                    // element).
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {5, {false, false, false, false, false}}},
-                        "(arr: T[], start: int, end: int, step: int, written: int) => T[]",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<Type *> {
-                            if (norm[0]->code() != TypeCode::Array)
-                                return nullopt;
-                            for (size_t i = 1; i < 5; ++i) {
-                                if (norm[i]->code() != TypeCode::Int64)
+                    // dimension a subscript writes (design principles 5.4). The call is the
+                    // slice node itself -- the value, the axis (0: a subscript slices the first
+                    // dimension), the two bounds, the step, and a two-bit mask: bit 0 says
+                    // whether the end was written (`t[a:]` runs to the end), bit 1 whether the
+                    // start was (`xs[:: -1]` starts at the last element). A fixed-shape array's
+                    // subscript is checked here, where its constants are (staticSliceRejection).
+                    std::make_shared<StaticCheckedResolver>(
+                        DynamicFuncTypeResolver::create(
+                            {{0, {}}, {6, {false, false, false, false, false, false}}},
+                            "(arr: T[], axis: int, start: int, end: int, step: int, written: int) "
+                            "=> T[]",
+                            [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
+                                -> optional<Type *> {
+                                if (norm[0]->code() != TypeCode::Array)
                                     return nullopt;
-                            }
-                            return norm[0];
-                        }),
+                                for (size_t i = 1; i < 6; ++i) {
+                                    if (norm[i]->code() != TypeCode::Int64)
+                                        return nullopt;
+                                }
+                                Type *elem = tt::as_ptr<ArrayType>(norm[0])->elemType();
+                                // One rule for both `[]` forms, for every rank and every element
+                                // type (the author's ruling of 2026-10-25, section
+                                // discrete-gradient-and-rank-one-slice-ownership, point 2: the two
+                                // subscripts are answered by the core alone, and the module copy
+                                // and the dispatch by "whose array is this" are the transition
+                                // types' residue, deleted together with the module's own
+                                // subscript kernel and type rule). An array whose element type
+                                // nobody stated -- the bare `Tensor` spelling, whose element is
+                                // `Void` -- has no element type to hand back, and keeps the array
+                                // type it has: a step-1 slice of a compact array is a view, so the
+                                // element type the value carries at run time is the one it keeps.
+                                if (elem == nullptr || elem->code() == TypeCode::Void) {
+                                    return norm[0];
+                                }
+                                return sliceResultType(norm);
+                            }),
+                        staticSliceRejection),
                 },
             }),
         OperatorGroup::create(
@@ -2490,6 +2887,29 @@ GlobalsBuiltinModule::GlobalsBuiltinModule(context_ptr_t ctx) : BuiltinModule(""
     }
     for (const auto &group : collectionGroups) {
         exportEntity(group->name(), group);
+    }
+    // `===` and `!==` (design principles 4.2): on a scalar they are `==` and `!=`, and on an
+    // array the tensor module exports an elementwise entry of its own into these groups. The
+    // scalar entries are taken from the groups that compare as a whole rather than written a
+    // second time, so a scalar type in one is in both; what is left out is the one entry that
+    // compares a composite as a whole, which is `==`'s alone.
+    for (const auto &[strict, whole] :
+         {std::pair<const char *, const char *>{"__strict_eq__", "__eq__"},
+          std::pair<const char *, const char *>{"__strict_neq__", "__neq__"}}) {
+        const auto &groups = getGlobalOperatorGroups();
+        const auto from    = std::find_if(groups.begin(), groups.end(), [&](const auto &group) {
+            return group->name() == whole;
+        });
+        std::vector<std::pair<std::string, resolver_ptr_t>> resolvers;
+        for (const auto &[uri, resolver] : (*from)->resolvers()) {
+            // A scalar entry has one fixed signature; the entry that compares a composite as a
+            // whole resolves per type and is not one of them.
+            if (resolver->fixedSignature() != nullptr) {
+                resolvers.push_back({uri, resolver});
+            }
+        }
+        exportEntity(
+            std::string(strict), OperatorGroup::create(std::string(strict), std::move(resolvers)));
     }
     // The operators over T? and T! (design principles 3.8).
     for (const auto &group : getTaggedOperatorGroups()) {

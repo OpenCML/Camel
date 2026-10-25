@@ -87,7 +87,7 @@ enum class TypeCode : uint32_t {
     // ask instead of `isPrimitive`.
     Complex64  = makeTypeCode(TypeFlag::Primitive | TypeFlag::GC_Traced, 0x011),
     Complex128 = makeTypeCode(TypeFlag::Primitive | TypeFlag::GC_Traced, 0x012),
-    // Reduced-precision floating types (design principles 7.3, H238): `bf16` and `f16`, the
+    // Reduced-precision floating types (design principles 7.3): `bf16` and `f16`, the
     // element types of `Tensor<bf16>` and `Tensor<f16>` and scalar types of the language as
     // well — a literal has one, and it has the written conversion, the arithmetic and the
     // comparisons of any other float (camel/core/rtdata/half.h). A value of one fits in a slot
@@ -98,7 +98,7 @@ enum class TypeCode : uint32_t {
     Float16  = makeTypeCode(TypeFlag::Primitive, 0x015),
     // The stream `T..` (design principles 5.4): the elements of `T` that arrive one after
     // another, produced on demand. A type of its own, not the open-rank array `T[..]`: the
-    // author's ruling of 2026-10-24 (h248-stream-type-surface) makes the stream a core type and
+    // rule (-stream-type-surface) makes the stream a core type and
     // keeps the two suffix readings apart. GC-traced, like an array: a stream value holds the
     // producer of its elements.
     Stream   = makeTypeCode(TypeFlag::Composite | TypeFlag::GC_Traced, 0x016),
@@ -195,8 +195,11 @@ class Type {
     TypeCode code_;
 
   private:
-    // Set once by the TypeTable, before the object is handed to anyone else.
-    TypeId typeId_ = kNoTypeId;
+    // Set once by the TypeTable, before the object is handed to anyone else. `canonicalId_` is
+    // this type's own id when its key names nothing, and the id of the same structure with the
+    // naming words erased when it does (camel/core/type/intern.h).
+    TypeId typeId_      = kNoTypeId;
+    TypeId canonicalId_ = kNoTypeId;
 
   public:
     Type() = delete;
@@ -206,8 +209,17 @@ class Type {
     const TypeCode &code() const;
 
     /// The id of this type in the TypeTable, or kNoTypeId when it is not interned (see
-    /// intern.h for which types are). Lock-free.
+    /// intern.h for which types are). Lock-free. A frozen node records this id, so the object
+    /// keeps the names it was written with for printing.
     TypeId typeId() const { return typeId_; }
+    /**
+     * The id of the same type with the naming words of its key erased (a dimension name, a pack
+     * name, a parameter name): two types that `equals` are equal here, so this is the id the
+     * graph's invariants, its content hashes and the e-graph's expression classes compare, and
+     * it is the structural hash the type module does not otherwise have. kNoTypeId when the
+     * table does not hold the type. Lock-free.
+     */
+    TypeId canonicalId() const { return canonicalId_; }
     /// True when the TypeTable holds this object: it is the one object of its structure (as
     /// far as its components are interned) and must not be modified.
     bool isInterned() const { return typeId_ != kNoTypeId; }
@@ -221,6 +233,14 @@ class Type {
     virtual std::string toString() const;
     virtual std::string mangle() const;
     virtual Type *clone(bool deep = false) const;
+
+    /**
+     * The type a frozen graph records for this type: itself for every type that is a type. The
+     * one exception is an open signature (function.h), which a compiler still writes and which is
+     * not a type yet: its frozen form is the signature as it stands, interned (func.cpp). A graph
+     * names the type table's entry for a node's type, so this is what makes `typeIdOf` total.
+     */
+    virtual Type *closed() const { return const_cast<Type *>(this); }
 
     virtual bool equals(Type *type) const;
     /**
@@ -285,6 +305,11 @@ class Type {
     bool operator==(Type *other) const = delete;
     bool operator!=(Type *other) const = delete;
 
+    /**
+     * The one object of a bare type of this code, held by the type table: two `f32`s written in
+     * two places are one type, one id. Every caller that asks for a primitive dtype asks here,
+     * so no dart thrown at a code makes a second object of it.
+     */
     static Type *create(TypeCode code);
     static Type *Int32();
     static Type *Int64();

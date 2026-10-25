@@ -62,7 +62,6 @@ bool ParserImpl::startsExpr(TK kind) const {
     case TK::Tilde:
     case TK::KwIf:
     case TK::KwMatch:
-    case TK::KwTry:
     case TK::KwLoop:
     case TK::KwSync:
         return true;
@@ -75,7 +74,6 @@ bool ParserImpl::startsExpr(TK kind) const {
 /// ctrlExpr : 'if' logicalOrExpr 'then' blockExpr ('else' blockExpr)?
 ///          | 'match' identRef '{' matchCase+ '}'
 ///          | 'match' 'type' typeExpr '{' typeCase* '}'
-///          | 'try' stmtBlock catchClause+ ('finally' stmtBlock)?
 void ParserImpl::parseExpr() {
     Depth depth(*this);
     if (depth.tooDeep()) {
@@ -87,12 +85,10 @@ void ParserImpl::parseExpr() {
         return parseIf();
     case TK::KwMatch:
         return parseMatch();
-    case TK::KwTry:
-        return parseTry();
     case TK::KwLoop:
         return parseLoop();
     case TK::KwStatic:
-        // `static for` is a statement (H51 step 3): only `static loop` is an expression, so a
+        // `static for` is a statement. only `static loop` is an expression, so a
         // `static for` here keeps its old reading (the token is unexpected below).
         if (peek(1) == TK::KwLoop) {
             return parseStaticLoop();
@@ -297,16 +293,16 @@ void ParserImpl::parseNullable() {
     }
 }
 
-/// unaryExpr : linkExpr (('as' | 'is') typeExpr)?
+/// unaryExpr : linkExpr ('as' typeExpr)?
 /// (The prefix operators `-`, `!` and `~` are taken by negExpr, under `->`.)
-/// The right side is always a type (the author's ruling of 2026-10-24), and the type reads its
+/// The right side is always a type, and the type reads its
 /// own marks: `x as int..` is a conversion to the stream type. A number or a name written
 /// directly after the `..` is not a type, though — `x as int..5` is the interval reading of `..`
 /// written where a type stands — and it is reported as such rather than as a stray token.
 void ParserImpl::parseUnary() {
     const size_t m = mark();
     parseLink();
-    if ((cur_ == TK::KwAs || cur_ == TK::KwIs) && !panic_) {
+    if (cur_ == TK::KwAs && !panic_) {
         bump();
         const uint32_t opToken = prev_;
         parseType();
@@ -470,7 +466,7 @@ void ParserImpl::parseAnno() {
 
 /// accessExpr : primaryData ('.' (IDENTIFIER | INTEGER | REAL | '[' dataExpr ']'))*
 /// `t.0.1` arrives as `t`, `.`, and the REAL `0.1`: the AST builder splits it. `t.[n]` names a
-/// field or an element by a compile-time key instead of a literal name (H51 step 4).
+/// field or an element by a compile-time key instead of a literal name.
 void ParserImpl::parseAccess() {
     const size_t m = mark();
     parsePrimary();
@@ -752,7 +748,7 @@ void ParserImpl::parsePairedValues(TK closer) {
 /// argumentValues : (keyValuePair | indexValue) (',' (keyValuePair | indexValue))*
 /// The named arguments of a call come first; a positional one after them is kept as its own
 /// `StrayPositional`, so that the call reports it where it is written instead of the parser
-/// failing on a name that is not there (design principles 4.4, handover H276).
+/// failing on a name that is not there (design principles 4.4).
 void ParserImpl::parseArgumentValues(TK closer) {
     const size_t m = mark();
     if (pairStartsAt(0)) {
@@ -1004,7 +1000,7 @@ void ParserImpl::parseArrayData() {
 }
 
 /// structData : '{' (pairedValues ','?)? '}' | '{' staticForExpr '}'
-/// The second form is a struct comprehension (H51 step 4): `{ static for (n, F) in fields T => e }`
+/// The second form is a struct comprehension. `{ static for n, F in fields T => e }`
 /// builds a struct with the fields of `T`, in declaration order, each holding one round's value.
 /// It is written where a value is needed; the `static for` node itself is the one a statement
 /// uses, only here its value is taken.
@@ -1034,7 +1030,7 @@ void ParserImpl::parseStructData() {
 
 /// tupleData : '(' dataList? ','? ')' | '(' staticForExpr ')'
 /// Also the parenthesized expression: one element and no comma. The second form is a tuple
-/// comprehension (H51 step 4): `( static for (n, F) in fields T => e )` has the elements of `T`
+///  comprehension.: `(static for n, F in fields T => e)` has the elements of `T`
 /// in declaration order, each one round's value.
 void ParserImpl::parseTupleData() {
     const size_t m = mark();
@@ -1143,7 +1139,7 @@ void ParserImpl::parseMatch() {
 }
 
 /// matchTypeExpr : 'match' 'type' typeExpr '{' typeCase* '}'
-/// The type after `match type` is a type position (H79 ruling 1): a `(` there always opens a
+/// The type after `match type` is a type position (rule 1): a `(` there always opens a
 /// type, so `match type () { ... }` is a match on the empty tuple type.
 void ParserImpl::parseMatchType() {
     const size_t m = mark();
@@ -1185,14 +1181,14 @@ void ParserImpl::parseTypeCase() {
 }
 
 /// staticForExpr : 'static' staticForHeader '=>' blockExpr
-/// `static for (n, F) in fields T => 块`（H51 步骤 3）：把结构体或元组的字段表在实例化时展开，
+/// `static for n, F in fields T => 块`：把结构体或元组的字段表在实例化时展开，
 /// 每个字段一份块。`n` 是字段名（元组是十进制下标），`F` 是字段类型；两者都只在块内可见。
-/// `static for (j) in indices ts => 块`（H51 步骤 6）：把元组 `ts` 的每个位置展开一次，`j`
+/// `static for j in indices ts => 块`：把元组 `ts` 的每个位置展开一次，`j`
 /// 是这一轮的位置（编译期整数）。两种头共用一个解析函数，只有 `in` 后面的写法不同。
 /// 这是展开机制，不是运行期循环：块里没有 SFOR/LOOP 节点，展开出的代码直接在当前图里。
 /// The header is shared with `static loop`: the same `for ... in ...` says what is walked, and
 /// only what follows it differs (`=> 块` or `do 表达式`).
-/// `fields` 后面是类型位置（H79 裁定 1）：`(` 一律按类型读，`fields ()` 是空元组类型。
+/// `fields` 后面是类型位置：`(` 一律按类型读，`fields ()` 是空元组类型。
 void ParserImpl::parseStaticFor() {
     const size_t m = mark();
     bump(); // static
@@ -1203,7 +1199,7 @@ void ParserImpl::parseStaticFor() {
     close(m, NK::StaticForExpr);
 }
 
-/// staticForHeader : 'for' '(' (identDef | '_') (',' (identDef | '_'))* ')' 'in'
+/// staticForHeader : 'for' (identDef | '_') (',' (identDef | '_'))* 'in'
 ///                                          ('fields' typeExpr | 'indices' dataExpr)
 /// `fields` walks the fields of a type and binds up to three names (`n`, `F`, `tags`); `indices`
 /// walks the elements of an ordinary tuple and binds one name (`j`, the position as an integer).
@@ -1213,25 +1209,15 @@ void ParserImpl::parseStaticFor() {
 /// gives the triple (name, type, tags), every other element gives one thing -- so any number of
 /// names is read here and the count is checked where the walked shape is known
 /// (`SemanticDiag::StaticHeadNameCount`).
+/// The head is written without parentheses, exactly as the ordinary `loop`'s `for i in <序列>`
+/// is; `parseStaticLoopHeader` reads its names the same way (`parseStaticForNameList`).
 void ParserImpl::parseStaticForHeader() {
     if (!panic_ && expect(TK::KwFor)) {
-        if (!panic_ && expect(TK::LParen)) {
-            parseStaticForName();
-            // Any number of names: how many the element gives is a semantic question (`fields`
-            // gives three, everything else one), so a head that names more than that is
-            // `SemanticDiag::StaticHeadNameCount`, not a syntax error.
-            while (cur_ == TK::Comma && !panic_) {
-                bump();
-                parseStaticForName();
-            }
-            if (!panic_) {
-                expect(TK::RParen);
-            }
-        }
+        parseStaticForNameList();
         if (!panic_ && expect(TK::KwIn)) {
             if (atWord(0, "fields")) {
                 bump();
-                // `fields` is followed by a type position (H79 ruling 1): the `(` there is
+                // `fields` is followed by a type position (rule 1): the `(` there is
                 // always a type, so `fields ()` is the empty tuple. `static for` and
                 // `static loop` share this header, so the reading is enforced here rather than
                 // at either caller.
@@ -1250,8 +1236,8 @@ void ParserImpl::parseStaticForHeader() {
     }
 }
 
-/// One name of a `for (...)` head: a name, or `_`, a place that binds nothing (the wildcard of
-/// `match`). It is closed as an `identDef` whose text is `_`, so `(n, _)` keeps both positions
+/// One name of a `for` head: a name, or `_`, a place that binds nothing (the wildcard of
+/// `match`). It is closed as an `identDef` whose text is `_`, so `n, _` keeps both positions
 /// and the walked entry still has a type name (`F`) where one is written.
 void ParserImpl::parseStaticForName() {
     if (cur_ == TK::Underscore && !panic_) {
@@ -1263,15 +1249,27 @@ void ParserImpl::parseStaticForName() {
     parseIdentDef();
 }
 
+/// The names of a `for` head, shared by `static for` and `static loop` so that the two spell one
+/// head -- any number of names, separated by commas, ending at `in`. How many the element gives
+/// is a semantic question (`fields` gives three, everything else one), so a head that names more
+/// than that is `SemanticDiag::StaticHeadNameCount`, not a syntax error.
+void ParserImpl::parseStaticForNameList() {
+    if (panic_) {
+        return;
+    }
+    parseStaticForName();
+    while (cur_ == TK::Comma && !panic_) {
+        bump();
+        parseStaticForName();
+    }
+}
+
 /// staticLoopExpr : 'static' 'loop' loopState (',' loopState)* staticLoopHeader 'do' blockExpr
-/// `static loop acc = 0 for i in 0..5 do 表达式`（H51 步骤 5；作者的裁决 2026-10-24，见
-/// docs/handover/reviews/questions-2026-10-24-evening.md 的 loop-for-and-static-loop）：在
-/// 实例化时展开的折叠。状态头与普通的 `loop` 相同（一个名字时结果就是这个值，多个名字时是
-/// 元组）；头上的括号与 `static` 一起进来的遗留，已按“同一件事一种写法”去掉（H462），现在与
-/// 普通 `loop` 的 `for i in <序列>` 同形（头由下面的 `staticLoopHeader` 给出）。序列是
-/// `in fields T`（按结构体的字段）、`in indices ts`（按元组的位置），或任何编译期能求出的
-/// 序列（裁定第 2 条画的那一条规则，见 `docs/handover/reviews/questions-2026-10-24-evening.md`
-/// 的 h462 与 2026-10-25 的 h475：只由编译期常量经可自由排布的运算组成就求值展开）：
+/// `static loop acc = 0 for i in 0..5 do 表达式`：在实例化时展开的折叠。状态头与普通的 `loop`
+/// 相同（一个名字时结果就是这个值，多个名字时是元组）；`for ... in ...` 这一段与 `static for`
+/// 同形，不写括号，只由后面的 `do 表达式` / `=> 块` 区分（头由下面的 `staticLoopHeader` 给出）。
+/// 序列是 `in fields T`（按结构体的字段）、`in indices ts`（按元组的位置），或任何编译期能求出的
+///  序列（只由编译期常量经可自由排布的运算组成就求值展开）：
 /// 常量区间 `a..b`、`range(a, b, step)`、数组字面量与常量数组、编译期元组 `ts`（那时每轮的
 /// 名字是该位置的类型）。节点的图 builder 判不出时报 `SemanticDiag::StaticLoopSequenceNotKnown`。
 /// 没有 `while`，也没有运行期序列的 `for`，因为轮数必须在编译期确定。`do` 后面是循环体，它的值
@@ -1304,12 +1302,12 @@ void ParserImpl::parseStaticLoop() {
 
 /// staticLoopHeader : 'for' (identDef | '_') (',' (identDef | '_'))* 'in'
 ///                    ('fields' typeExpr | 'indices' dataExpr | dataExpr)
-/// The head of a `static loop`, written without the parentheses `static for` still has: the
-/// ruling of 2026-10-24 unifies it with the ordinary `loop`'s `for i in <序列>` (one thing, one
-/// spelling). The subject after `in` is a type for `fields`, a value for `indices`, and in every
-/// other case a sequence the compiler must be able to work out: one rule draws the line (the
-/// rulings of 2026-10-24 and 2026-10-25) -- an expression built only from compile-time constants
-/// through operations that are pure and cannot fail is evaluated and unrolled, so `a..b`,
+/// The head is the same one `static for` writes: both read their names with
+/// `parseStaticForNameList`, so the two constructs cannot drift apart. The subject after `in` is a
+/// type for `fields`, a value for `indices`, and in every other case a sequence the compiler must
+/// be able to work out: one rule draws the line (the rules) -- an expression built only from
+/// compile-time constants through operations that are pure and cannot fail is evaluated and
+/// unrolled, so `a..b`,
 /// `range(a, b, step)` with constant arguments, an array literal, a constant array and a
 /// compile-time tuple all count, and anything else is refused by the graph builder.
 /// The head may name up to three things: `fields` gives the triple (name, type, tags) and every
@@ -1319,11 +1317,7 @@ void ParserImpl::parseStaticLoopHeader() {
     if (panic_ || !expect(TK::KwFor)) {
         return;
     }
-    parseStaticForName();
-    while (cur_ == TK::Comma && !panic_) {
-        bump();
-        parseStaticForName();
-    }
+    parseStaticForNameList();
     if (panic_ || !expect(TK::KwIn)) {
         return;
     }
@@ -1545,24 +1539,6 @@ void ParserImpl::parseEnumStructPattern() {
     close(m, NK::EnumStructPattern);
 }
 
-/// The `try` of ctrlExpr (reserved: the AST builder reports it as not part of the language).
-void ParserImpl::parseTry() {
-    const size_t m = mark();
-    bump();
-    parseStmtBlock();
-    if (!panic_ && cur_ != TK::KwCatch) {
-        unexpected({e(TK::KwCatch)});
-    }
-    while (cur_ == TK::KwCatch && !panic_) {
-        parseCatchClause();
-    }
-    if (cur_ == TK::KwFinally && !panic_) {
-        bump();
-        parseStmtBlock();
-    }
-    close(m, NK::TryExpr);
-}
-
 /// loopExpr : 'loop' loopState (',' loopState)* loopFor? loopWhile? 'do' blockExpr
 /// loopState : identDef '=' logicalOrExpr
 /// loopFor : 'for' identDef 'in' logicalOrExpr
@@ -1623,20 +1599,6 @@ void ParserImpl::parseLoop() {
         parseBlockExpr();
     }
     close(m, NK::LoopExpr);
-}
-
-/// catchClause : 'catch' identDef ':' typeExpr stmtBlock
-void ParserImpl::parseCatchClause() {
-    const size_t m = mark();
-    bump();
-    parseIdentDef();
-    if (!panic_ && expect(TK::Colon)) {
-        parseType();
-        if (!panic_) {
-            parseStmtBlock();
-        }
-    }
-    close(m, NK::CatchClause);
 }
 
 } // namespace camel::parse::syntax

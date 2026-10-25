@@ -49,7 +49,7 @@ bool ParserImpl::typeStartsAt(uint32_t n) const {
 /// typeExpr : interType ('?' | '!' | '..')*
 /// A mark is `?` (may be null), `!` (may have failed) or `..` (the type is a stream). The marks
 /// are read left to right and each one wraps what is written before it, with no special case
-/// (the author's ruling of 2026-10-24): `T?..` is `(T?)..`, the stream of a nullable `T`, and
+/// `T?..` is `(T?)..`, the stream of a nullable `T`, and
 /// `T..?` is the possibly absent stream. `T..` and `T[..]` are therefore two types.
 ///
 /// A dimension written after a stream mark applies to the stream: `T..[3]` is an array of three
@@ -163,15 +163,11 @@ void ParserImpl::parseKeyInterType() {
     }
 }
 
-/// typeUnit : (identDef 'of')? arrayType
+/// typeUnit : arrayType
+///
+/// `A of B` used to be read here and reported as not implemented; `of` is not a keyword of the
+/// language, so the form is an ordinary syntax error (handover 5.00 "语法层收口" item 5).
 void ParserImpl::parseTypeUnit() {
-    if (cur_ == TK::Identifier && peek(1) == TK::KwOf) {
-        const size_t m = mark();
-        parseIdentDef();
-        bump();
-        parseArrayType();
-        return close(m, NK::TypeUnit);
-    }
     parseArrayType();
 }
 
@@ -271,7 +267,7 @@ void ParserImpl::parseSpecType() {
 /// else a tuple type.
 void ParserImpl::parsePrimaryType() {
     // After `fields` and after `match type` the parser is in a type position: the head `(` opens
-    // a tuple or a parenthesised type, so `fields ()` is the empty tuple type (H79 ruling 1).
+    // a tuple or a parenthesised type, so `fields ` is the empty tuple type (rule 1).
     // The flag belongs to the head only: a type nested in the parentheses keeps the
     // function-type reading, and a function type at that head is written between one more pair
     // of parentheses (`fields ((x: int) => int)`).
@@ -291,7 +287,7 @@ void ParserImpl::parsePrimaryType() {
         // The operand stops before an assignment: `let v: typeof a = b` declares `v`.
         const size_t m = mark();
         bump();
-        if (cur_ == TK::KwIf || cur_ == TK::KwMatch || cur_ == TK::KwTry) {
+        if (cur_ == TK::KwIf || cur_ == TK::KwMatch) {
             parseExpr();
         } else {
             parseLogicalOr();

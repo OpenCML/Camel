@@ -96,6 +96,25 @@ inline CharRange rangeOf(syn::TokenRef start, syn::TokenRef end) {
 }
 inline CharRange rangeOf(syn::TokenRef token) { return rangeOf(token, token); }
 
+// Whether an expression reads a name as data: a `RefData` of that text, at any depth (`x * c`
+// reads `x` and `c`). The left side of a rule is what binds its `const` parameters, and a read
+// there is the position that matches the constant. A member name (`x.c`) and a type are not
+// `RefData` nodes, so neither is read here, and neither binds anything.
+inline bool readsDataName(syn::Node node, const std::string &name) {
+    if (!node) {
+        return false;
+    }
+    if (node.is(NK::RefData) && node.text() == name) {
+        return true;
+    }
+    for (const syn::Node &child : node.nodes()) {
+        if (readsDataName(child, name)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 inline camel::source::origin_id_t
 deriveAstAnchorOrigin(const node_ptr_t &owner, syn::TokenRef token, const std::string &label) {
     if (!g_sourceContext || g_sourceFileId == camel::source::kInvalidSourceFileId || !owner ||
@@ -391,6 +410,12 @@ Value Builder::visitProgram(cst::Program context) {
 
     *root_ << stmts;
 
+    // The tags written before `module` (visitModuleDecl): the module's child, after the
+    // statements, so that the three children a module has always had keep their indices.
+    if (moduleTagUses_) {
+        *root_ << moduleTagUses_;
+    }
+
     LEAVE("Program");
     return root_;
 }
@@ -425,8 +450,8 @@ Value Builder::visitDecl(syn::Node context) {
         return visitTagDecl(cst::TagDecl(context));
     case NK::RuleDecl:
         return visitRuleDecl(cst::RuleDecl(context));
-    case NK::AnalysisDecl:
-        return visitAnalysisDecl(cst::AnalysisDecl(context));
+    case NK::FactDecl:
+        return visitFactDecl(cst::FactDecl(context));
     default:
         return Value();
     }
@@ -485,12 +510,16 @@ Value Builder::visitStmtList(cst::StmtList context) {
 }
 
 /*
-moduleDecl : MODULE identDef ;
+moduleDecl : frontMatter? MODULE identDef ;
 */
 Value Builder::visitModuleDecl(cst::ModuleDecl context) {
     ENTER("ModuleDecl");
     Reference ref(context->get<cst::IdentDef>()->text());
     module_->setRef(ref);
+    // The tags written before `module` (`#gpu module m`, design principles 13.4) are the module's
+    // facts; they are put on the module node by visitProgram, once it exists. The list is made
+    // only when there are uses, so a module that writes none has exactly the tree it had before.
+    moduleTagUses_ = tagUseListOf(context);
     LEAVE("ModuleDecl");
     return Value();
 }
@@ -757,7 +786,7 @@ bool Builder::rejectParenthesizedName(cst::FuncAnno context) {
               "'#[reassociate, contract]', '#[finite_math]', ...) before the function or the "
               "block"
             : "an annotation takes '<...>' arguments, not '(...)'; a tag is written '#name', "
-              "'#name<args>' or '#[a, b]'";
+              "'#name(args)' or '#[a, b]'";
     diags_->of(SemanticDiag::InvalidAnnotation)
         .at(rangeOf(context->firstToken(), context->lastToken()))
         .commit(annotation, why);
@@ -773,7 +802,7 @@ bool Builder::rejectVjpAnnotation(cst::FuncAnno context) {
         .at(rangeOf(context->firstToken(), context->lastToken()))
         .commit(
             annotation,
-            "a custom derivative rule is a declaration tag now: write '#vjp<rule>' before the "
+            "a custom derivative rule is a declaration tag now: write '#vjp(rule)' before the "
             "function (design principles 6.2, 8)");
     return true;
 }
@@ -809,8 +838,8 @@ funcDecl   :
         FUNC identRef parentParams (':' typeExpr)? stmtBlock ;
 */
 /*
-ruleDecl : 'export'? IDENTIFIER identDef ruleContext? parentParams '{' ruleBody '}'
-           (IDENTIFIER dataExpr)? ;
+ruleDecl : frontMatter? ('with' angledParams)? 'export'? IDENTIFIER identDef typeParams?
+           ruleContext? parentParams whenClause? '{' ruleBody '}' ;
 ruleBody : dataExpr ('=>' | '<=>') dataExpr ;
 
 A rule is the shorthand of a pair of functions with the same parameters, the left one the pattern
@@ -825,6 +854,19 @@ holds them (rewrite design 2 (second version) 8.5):
 the value `name` (type `Rule`): it is held in a variable, passed and returned like any value,
 stored in a `Rule[]`, exported and imported. `consts` has bit i set when the parameter i is
 `const`.
+
+A rule that declares `with` parameters is a function of them instead (design principles 5.5):
+
+    with <tile: int>
+    rule tile_matmul(a: f32[m, k], b: f32[k, n]) when m % tile == 0 { ... }
+
+makes the three sides functions of `tile` as well, and
+
+    with <tile: int>
+    func tile_matmul(): Rule => __rule_when('tile_matmul', ..., tile_matmul__lhs<tile>, ...)
+
+so that `tile_matmul<64>` -- the same spelling a function's partial application has -- calls it
+and gives the `Rule`, and `tile_matmul` alone does too when every parameter has a default.
 */
 Value Builder::visitRuleDecl(cst::RuleDecl context) {
     ENTER("RuleDecl");
@@ -842,9 +884,14 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
     const auto sides  = body->exprs();
     const bool twoWay = body->has(TK::Equiv);
     const auto params = context->get<cst::ParentParams>();
+    // The rule's `with` parameters, written before `export` as a function writes them (design
+    // principles 4.4, 5.5). They are the rule's own, so the left side, the right side and the
+    // condition are all functions of them and read them by name, and the value the rule is
+    // written as is a function of them too.
+    const auto withParams = context->get<cst::AngledParams>();
     // The rule's applicability condition is part of its signature, so it is written between the
     // parameters and the body (`rule add_zero::<T>(x: T) when is_integer::<T>() { … }`, design
-    // principles 4.4; the ruling of 2026-10-24). A trailing `when` is a syntax error and is
+    // principles 4.4). A trailing `when` is a syntax error and is
     // reported by name (`SyntaxDiag::WhenAfterBody`); its expression is still read here, so the
     // refusal that follows is about the placement and not about a missing condition.
     const auto whenClause = context->get<cst::WhenClause>();
@@ -869,7 +916,42 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
         }
     }
 
-    // `#requires<...>`: the numeric permissions the rule needs (design principles 7.2). The
+    // A `const` parameter is matched by the left side, and the left side is what binds it: the
+    // parameter it is declared with is the constant's value in the condition, and the node of
+    // that constant is the hidden node parameter the condition takes when the declaration has
+    // one. A left side that reads no such name gives the parameter no position to match a
+    // constant in, so the declaration is refused here, where it is written: the rule says
+    // nothing about the program, and a condition that reaches the node through `node_of` has no
+    // node to read -- which is the state the engine's own guards report as an internal error at
+    // every match. `consts` is what the rule value carries (`__rule`), and it is read here the
+    // same way, so the check covers exactly the parameters the engine treats as constant.
+    if (params) {
+        const auto paired = params->get<cst::PairedParams>();
+        for (const auto pair : paired->all<cst::KeyParamPair>()) {
+            if (!pair->has(TK::KwConst)) {
+                continue;
+            }
+            const auto ident = pair->get<cst::IdentDef>();
+            if (!ident) {
+                continue;
+            }
+            const std::string written(ident->text());
+            if (readsDataName(sides[0], written)) {
+                continue;
+            }
+            diags_->of(SemanticDiag::RuleConstParamNotMatched)
+                .at(rangeOf(ident->firstToken(), ident->lastToken()))
+                .commit(written, name);
+        }
+    }
+
+// A `with` parameter of a rule is a compile-time value the rule is specialised by: every
+    // function the declaration becomes -- the two sides and the condition -- takes it as a
+    // `constas` parameter, so the instance an application makes reads it from a static slot and
+    // both sides may write it (design principles 5.4, 5.5). The grammar writes the type of a `with`
+    // parameter of a rule, and `constasParams` below reads every pair it writes: a pair without one
+    // is the parser's to refuse, not this pass's.
+    // `#requires(...)`: the numeric permissions the rule needs (design principles 7.2). The
     // arguments are the names of the standard permission tags, not values: a permission tag is
     // a compile-time fact, so the requirement is checked here, when the rule is compiled, and
     // an argument that names no permission is a located diagnostic rather than a silent pass.
@@ -925,30 +1007,30 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
                 // argument, with the list of the permissions that can be named.
                 diags_->of(SemanticDiag::TagNotAPermission).at(at).commit(name);
             };
-            bool inAngles = false;
-            size_t argFrom = 0;
+            bool inArguments = false;
+            size_t argFrom   = 0;
             for (size_t i = begin; i <= end; ++i) {
                 if (syn::isTrivia(tokens[i].kind)) {
                     continue;
                 }
                 const std::string_view text = tokens.text(i);
-                if (!inAngles) {
-                    if (text == "<") {
-                        inAngles = true;
-                        argFrom  = i + 1;
+                if (!inArguments) {
+                    if (text == "(") {
+                        inArguments = true;
+                        argFrom     = i + 1;
                     }
                     continue;
                 }
-                if (text == ">") {
+                if (text == ")") {
                     resolve(argFrom, i == 0 ? 0 : i - 1);
-                    inAngles = false;
+                    inArguments = false;
                 } else if (text == ",") {
                     resolve(argFrom, i == 0 ? 0 : i - 1);
                     argFrom = i + 1;
                 }
             }
-            if (!inAngles && argCount == 0) {
-                // `#requires` without any `<...>` argument requires nothing, which is never
+            if (!inArguments && argCount == 0) {
+                // `#requires` without any argument requires nothing, which is never
                 // what was meant, so say how many arguments the form takes.
                 diags_->of(SemanticDiag::TagArgumentCount)
                     .at(rangeOf(tagRef->firstToken(), tagRef->lastToken()))
@@ -966,18 +1048,48 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
         imports_.push_back(import_);
     }
 
-    // One side as a function of the rule's parameters: `func name__<side>(params) => expr`.
+    // The rule's `with` parameters as the `constas` parameters of every function the declaration
+    // becomes: same names, same declared types, in the order they are written, ahead of the rule's
+    // own parameters. A `constas` parameter is a compile-time value, so it is no port of a side: the
+    // ports stay the rule's own parameters, and the value an application binds is read from the
+    // instance's static slot (design principles 5.4, 5.5).
+    const auto constasParams = [&](node_ptr_t ownParams) {
+        node_ptr_t list = createNodeAs<RepeatedLoad>("NamedPair");
+        setNodeTokenRangeByContext(list, context);
+        if (withParams) {
+            for (const auto pair : withParams->get<cst::PairedParams>()->all<cst::KeyParamPair>()) {
+                const auto ident = pair->get<cst::IdentDef>();
+                if (!ident || !pair->type()) {
+                    continue;
+                }
+                node_ptr_t named = createNodeAs<NamedPairLoad>(
+                    Reference(std::string(ident->text())), false, false, false, true);
+                setNodeTokenRangeByContext(named, pair);
+                *named << any2node(visitType(pair->type()));
+                node_ptr_t noDefault = createNodeAs<OptionalLoad>("DataExpr");
+                setNodeTokenRangeByContext(noDefault, pair);
+                *named << noDefault;
+                *list << named;
+            }
+        }
+        for (size_t i = 0; i < ownParams->size(); ++i) {
+            *list << ownParams->at(i);
+        }
+        return list;
+    };
+
+    // One side as a function of the rule's parameters: `func name__<side>(params) => expr`. A side
+    // is read as a pattern the engine matches and rebuilds with, so its ports are the rule's own
+    // parameters; a `with` parameter is a `constas` parameter of it, which the instance reads from
+    // a static slot, and either side may write it (design principles 5.5).
     const auto side = [&](const std::string &suffix, syn::Node expr) {
         const Reference sideRef = qualifyRef(Reference(name + suffix));
         node_ptr_t funcTypeNode = createNodeAs<FuncTypeLoad>();
         setNodeTokenRangeByContext(funcTypeNode, context);
         unwrapNodeAs<FuncTypeLoad>(funcTypeNode)->setTypeParams(typeParams);
         *funcTypeNode << createNodeAs<RepeatedLoad>("NamedPair");
-        if (params) {
-            *funcTypeNode << any2node(visitParentParams(params));
-        } else {
-            *funcTypeNode << createNodeAs<RepeatedLoad>("NamedPair");
-        }
+        *funcTypeNode << constasParams(
+            params ? any2node(visitParentParams(params)) : createNodeAs<RepeatedLoad>("NamedPair"));
         node_ptr_t typeOptNode = createNodeAs<OptionalLoad>("Type");
         setNodeTokenRangeByContext(typeOptNode, context);
         *funcTypeNode << typeOptNode;
@@ -1003,7 +1115,7 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
     node_ptr_t whenFunc;
     if (when) {
         // The condition of this rule is being built: `node_of(c)` is read here and nowhere else
-        // (the ruling of 2026-10-23 on `rule_when_const_node`), and the name of the rule is what
+        // and the name of the rule is what
         // a refusal names.
         ruleWhenName_ = name;
         const auto paired = params ? params->get<cst::PairedParams>() : cst::PairedParams();
@@ -1033,7 +1145,7 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
             imports_.push_back(graphImport);
         }
         const Reference whenRef = qualifyRef(Reference(name + "__when"));
-        // The hidden node parameter of every `const` parameter (the ruling of 2026-10-23 on
+        // The hidden node parameter of every `const` parameter (the rule on
         // `rule_when_const_node`: "条件函数按 `const` 形参追加隐藏的节点形参，构建期把
         // `node_of(c)` 换成它；不引入新类型"). The condition takes the rule's parameters first,
         // in the order they are written, and then one node per `const` parameter, in the same
@@ -1082,8 +1194,10 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
         node_ptr_t whenType = createNodeAs<FuncTypeLoad>();
         setNodeTokenRangeByContext(whenType, when);
         unwrapNodeAs<FuncTypeLoad>(whenType)->setTypeParams(typeParams);
+        // The condition is a function of the rule's `with` parameters as the sides are, so it
+        // reads them by name (`when m % tile == 0`) and they are `constas` parameters of it too.
         *whenType << createNodeAs<RepeatedLoad>("NamedPair");
-        *whenType << whenParams;
+        *whenType << constasParams(whenParams);
         node_ptr_t whenResult = createNodeAs<OptionalLoad>("Type");
         node_ptr_t boolType   = createNodeAs<RefTypeLoad>(Reference("bool"));
         setNodeTokenRangeByContext(boolType, when);
@@ -1112,6 +1226,11 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
         setNodeTokenRangeByContext(refNode, context);
         return refNode;
     };
+    // One side as the maker takes it: the name of the side's function; or, for the condition, which
+    // is a function of the rule's `with` parameters, that name with the parameters bound
+    // (`name__when<tile>`), the partial application of the condition. The condition is called by
+    // the engine with the values its function value carries, so the value reaches it there, while
+    // the two sides are patterns and take the rule's parameters alone.
     node_ptr_t args = createNodeAs<RepeatedLoad>("Data");
     setNodeTokenRangeByContext(args, context);
     *args << literal(LiteralType::String, name);
@@ -1125,13 +1244,14 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
         *args << reference(name + "__when");
         makerName = "__rule_when";
     }
-    // A rule whose head declares type parameters has no function values to give: its sides are
-    // generic functions, and a generic function is instantiated where it is called. The value
-    // carries its templates instead, and the maker takes them under the id it registers them
-    // (the ruling of 2026-10-23 on generic-rule-instantiation); the maker of such a rule is
-    // `__rule_generic`, whatever the arguments after `consts` are.
-    const bool genericHead = !typeParams.empty();
-    if (genericHead) {
+    // A rule that is instantiated -- one whose head declares type parameters, or whose `with`
+    // parameters the instance is specialised by -- has no function values to give: its functions
+    // are templates (a generic function is instantiated where it is called, and a function of a
+    // `constas` parameter has no value either). The value carries the id the maker registers the
+    // templates under, and the values bound to the `with` parameters follow the id, so the rule
+    // value is a `Rule` of the values it was bound to (design principles 5.4, 5.5).
+    const bool instantiated = !typeParams.empty() || withParams;
+    if (instantiated) {
         makerName = "__rule_generic";
         if (!genericRuleImportAdded_) {
             genericRuleImportAdded_  = true;
@@ -1141,14 +1261,77 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
             rewriteImport->setRefs({Reference("__rule_generic")});
             imports_.push_back(rewriteImport);
         }
+        // The value of each `with` parameter, in the order it is declared: the maker puts them in
+        // the rule value, and the instance the engine makes reads them from there.
+        if (withParams) {
+            for (const auto pair : withParams->get<cst::PairedParams>()->all<cst::KeyParamPair>()) {
+                *args << reference(std::string(pair->get<cst::IdentDef>()->text()));
+            }
+        }
     }
     node_ptr_t call = createNodeAs<ReservedExprLoad>(ReservedDataOp::Call);
     setNodeTokenRangeByContext(call, context);
     *call << reference(makerName) << args << createNodeAs<RepeatedLoad>("NamedData");
 
-    // The rule is a module-level value, not a function: `let name = __rule(...)` (rewrite design
-    // 2 (second version) 8.5). A value can be held, passed, returned and put in a `Rule[]`; a
-    // function that made one could only be called.
+    if (withParams) {
+        // A rule with `with` parameters is a function of them (design principles 5.5):
+        // `with <tile: int> func name(): Rule => __rule_generic('name', ..., name__lhs, name__rhs,
+        // tile)`. `name<64>`, the spelling a function's partial application has, calls it and gives
+        // the `Rule`; used as it is (`name`), the call is made with the defaults, so a rule whose
+        // parameters all have one is a `Rule` value by its name alone.
+        if (!ruleTypeImportAdded_) {
+            ruleTypeImportAdded_ = true;
+            auto ruleImport      = std::make_shared<ImportLoad>();
+            ruleImport->setTokenRange(extractTokenRangeFromContext(context));
+            ruleImport->setPath("rewrite");
+            ruleImport->setRefs({Reference("Rule")});
+            imports_.push_back(ruleImport);
+        }
+        node_ptr_t bindType = createNodeAs<FuncTypeLoad>();
+        setNodeTokenRangeByContext(bindType, context);
+        unwrapNodeAs<FuncTypeLoad>(bindType)->setTypeParams({});
+        *bindType << any2node(visitAngledParams(withParams));
+        *bindType << createNodeAs<RepeatedLoad>("NamedPair");
+        node_ptr_t bindResult = createNodeAs<OptionalLoad>("Type");
+        setNodeTokenRangeByContext(bindResult, context);
+        node_ptr_t ruleType = createNodeAs<RefTypeLoad>(Reference("Rule"));
+        setNodeTokenRangeByContext(ruleType, context);
+        *bindResult << ruleType;
+        *bindType << bindResult;
+
+        node_ptr_t stmts = createNodeAs<RepeatedLoad>("Stmt");
+        setNodeTokenRangeByContext(stmts, context);
+        node_ptr_t valueStmt = createNodeAs<ExprStmtLoad>();
+        setNodeTokenRangeByContext(valueStmt, context);
+        *valueStmt << call;
+        *stmts << valueStmt;
+        node_ptr_t bindBody = createNodeAs<StmtBlockLoad>();
+        setNodeTokenRangeByContext(bindBody, context);
+        *bindBody << stmts;
+
+        node_ptr_t bindData = createNodeAs<FuncDataLoad>(ref);
+        setNodeTokenRangeByContext(bindData, context);
+        *bindData << bindType << bindBody;
+        node_ptr_t bindDecl = createNodeAs<FuncDeclLoad>(ref);
+        setNodeTokenRangeByContext(bindDecl, context);
+        // The function the declaration is written as, not one the program wrote: the graph
+        // builder marks its graph, and a use of the name as a value makes the call that binds
+        // the parameters instead of a function value (`ruleBindingValueOf`).
+        unwrapNodeAs<FuncDeclLoad>(bindDecl)->setRuleBinding();
+        *bindDecl << bindData;
+
+        LEAVE("RuleDecl");
+        std::vector<node_ptr_t> bound{lhsFunc, rhsFunc};
+        if (whenFunc) {
+            bound.push_back(whenFunc);
+        }
+        bound.push_back(bindDecl);
+        return bound;
+    }
+
+    // A rule without `with` parameters is a module-level value, not a function:
+    // `let name = __rule(...)` (rewrite design 2 (second version) 8.5). A value can be held,
+    // passed, returned and put in a `Rule[]`; a function that made one could only be called.
     node_ptr_t typeList = createNodeAs<RepeatedLoad>("Type");
     setNodeTokenRangeByContext(typeList, context);
     node_ptr_t dataList = createNodeAs<RepeatedLoad>("Data");
@@ -1186,41 +1369,59 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
 }
 
 /*
-analysisDecl : frontMatter? 'export'? 'analysis' identDef parentParams? ':' typeExpr
-               '{' analysisClause* '}'
-analysisClause : 'initial' '=>' dataExpr
-               | ('join' | 'widen') '(' identList? ')' '=>' dataExpr
-               | 'on' '(' ('const' identDef ':' typeExpr | dataExpr) ')' '=>' dataExpr
+factDecl : ('with' angledParams)? 'export'? 'fact' identDef typeParams? parentParams? ':' typeExpr
+           'match' logicalOrExpr '{' factCase* '}' factClause*
+factCase : 'case' factPattern '=>' dataExpr
+factPattern : 'const' identDef (':' typeExpr)? | dataExpr
+factClause : IDENTIFIER dataExpr
 
-An analysis is compiled to plain functions and one call of `__analysis`:
+A fact is compiled to plain functions and one call of `__fact`:
 
-    func range__initial() => 0.0
-    func range__join(a, b) => max(a, b)
-    func range__widen(a, b) => ...                  (join when omitted)
-    func range__on0(x: int, y: int) => x + y        (the pattern; never run)
-    func range__on0_fact(x: graph::Node, y: graph::Node) => range(x) + range(y)
-    func range(n: graph::Node): T => __analysis('range', range__initial, range__join,
-        range__widen, n, range__on0, range__on0_fact, constMask, ...)
+    func depth__initial() => 0
+    func depth__join(a0: int, a1: int) => max(a0, a1)
+    func depth__case0(c: int) => c                      (a `const` case: the matcher binds the
+    func depth__case0_fact(c: int) => 1                  value, not a node)
+    func depth__case1(x: int, y: int) => x + y          (a case over the construction: the
+    func depth__case1_fact(x: Node, y: Node) => max(depth(x), depth(y)) + 1   matcher reads it,
+    func depth(n: Node): int => __fact('depth', depth__initial, depth__join, ...)  nothing runs it)
 
-The pattern function carries the shape the matcher reads: its parameters are the pattern
-variables (typed `int` unless the clause declares a `const c: T`), and its body is the operator
-expression. The fact function takes the matched nodes (or the values of `const` parameters) and
-computes the fact. `__analysis` is an operator of the module `rewrite`, imported here.
+The cases are the engine's clauses: a pattern function carries the shape the matcher reads (its
+parameters are the pattern variables, typed `int`; a `const` case declares the type of its
+constant), and a fact function computes the fact of a value that matched. `case _`, which must be
+the last case, becomes `initial`: what the fact says of a value no other case matched, and what a
+value that depends on itself settles on.
 
-A declaration with parameters (`analysis pair(a: Node, b: Node): bool`) is a multi-parameter
-query: the parameters are the pattern variables a rule's condition hands it (`pair(x, y)`), and
-`__analysis` receives one node per parameter instead of the single queried value. The engine
-reads the fact of the value those parts belong to; the declaration without parameters keeps the
-one-value form (`range(n)`).
+Each trailing clause names one binary function, and the fact merges two facts by calling it:
+`join` (required) is how the facts of two writings of one value are merged, `meet` how equivalent
+writings meet, `widen` accelerates a loop and `narrow` tightens it afterwards. `meet`, `widen` and
+`narrow` default to `join`; the first version computes no loop acceleration. A clause is read in a
+function of its own, of the fact's type, so that a name of several overloads (or a lambda) is
+resolved where the fact's type is known.
+
+The declaration's `with` parameters are the arguments the query is written with
+(`depth<8>(x)`, and one with a default may be left out). They are copied onto the query function
+and marked `constas` there: the compiler must compute the argument, since the argument is part of
+which fact this is, and the engine computes and caches one fact per argument. A case or a trailing
+clause cannot name one: the engine calls those functions with the value the fact is about, without
+the arguments the query was written with (the refusal below says so).
+
+The head parameters are the parts of a value the query is written on
+(`aligned(x, y)` for `fact aligned(a: int, b: int)`), and are typed `Node` in the generated
+function: the head's types say what a `const` case's constant is. A declaration with none is the
+one-value form (`depth(n)`).
+
+A fact whose value type is one of its own type parameters (`fact depth::<T>(v: T): int`) is
+parsed but not compiled: the functions the engine is given are values, and a generic function is
+not one.
 */
-Value Builder::visitAnalysisDecl(cst::AnalysisDecl context) {
-    ENTER("AnalysisDecl");
-    if (!analysisImportAdded_) {
-        analysisImportAdded_ = true;
-        auto rewriteImport     = std::make_shared<ImportLoad>();
+Value Builder::visitFactDecl(cst::FactDecl context) {
+    ENTER("FactDecl");
+    if (!factImportAdded_) {
+        factImportAdded_ = true;
+        auto rewriteImport = std::make_shared<ImportLoad>();
         rewriteImport->setTokenRange(extractTokenRangeFromContext(context));
         rewriteImport->setPath("rewrite");
-        rewriteImport->setRefs({Reference("__analysis")});
+        rewriteImport->setRefs({Reference("__fact")});
         imports_.push_back(rewriteImport);
         auto graphImport = std::make_shared<ImportLoad>();
         graphImport->setTokenRange(extractTokenRangeFromContext(context));
@@ -1229,116 +1430,179 @@ Value Builder::visitAnalysisDecl(cst::AnalysisDecl context) {
         imports_.push_back(graphImport);
     }
 
+    const auto giveUp = [&](const std::string &what) {
+        diags_->of(SemanticDiag::ConstructNotSupported)
+            .at(rangeOf(context->firstToken()))
+            .commit("fact", what);
+        return Value();
+    };
     const std::string name = std::string(context->get<cst::IdentDef>()->text());
     const Reference ref    = qualifyRef(Reference(name));
     if (context->has(TK::KwExport)) {
         export_->addRef(ref);
     }
+    if (context->get<cst::TypeParams>()) {
+        LEAVE("FactDecl");
+        return giveUp(
+            "a fact whose value is one of its own type parameters is not compiled: the engine is "
+            "given the functions the fact is made of, and a function with type parameters is not "
+            "a value it can hold");
+    }
     const auto typeExprs = context->types();
     if (typeExprs.size() != 1) {
-        diags_->of(SemanticDiag::ConstructNotSupported)
-            .at(rangeOf(context->firstToken()))
-            .commit("analysis", "an analysis declaration needs the type of its fact");
-        LEAVE("AnalysisDecl");
-        return Value();
+        LEAVE("FactDecl");
+        return giveUp("a fact declaration needs the type of its fact");
     }
     const syn::Node factType = typeExprs[0];
-    const auto clauseNodes   = context->all<cst::AnalysisClause>();
 
-    // The expressions of the three fixed clauses; a `widen` that is absent is a `join`.
-    syn::Node initialExpr, joinExpr, widenExpr;
-    std::vector<std::string> joinParams, widenParams;
-    struct OnClause {
-        syn::Node pattern;
-        syn::Node rhs;
-        std::string constName;
-        syn::Node constType;
-    };
-    std::vector<OnClause> onClauses;
-    for (const auto clause : clauseNodes) {
-        const std::string keyword = clause->tok(TK::Identifier).text();
-        const auto exprs          = clause->exprs();
-        if (keyword == "initial") {
-            if (!exprs.empty()) {
-                initialExpr = exprs[0];
-            }
-        } else if (keyword == "join" || keyword == "widen") {
-            const auto idents = clause->get<cst::IdentList>();
-            std::vector<std::string> names;
-            if (idents) {
-                for (const auto ident : idents->all<cst::IdentDef>()) {
-                    names.push_back(std::string(ident->text()));
-                }
-            }
-            syn::Node body = exprs.empty() ? syn::Node() : exprs[0];
-            if (keyword == "join") {
-                joinExpr   = body;
-                joinParams = names;
-            } else {
-                widenExpr   = body;
-                widenParams = names;
-            }
-        } else if (keyword == "on") {
-            OnClause on;
-            const auto types = clause->types();
-            if (types.size() == 1 && exprs.size() == 1) {
-                on.constName = std::string(clause->get<cst::IdentDef>()->text());
-                on.constType = types[0];
-                on.pattern   = syn::Node();
-                on.rhs       = exprs[0];
-            } else if (exprs.size() == 2) {
-                on.pattern = exprs[0];
-                on.rhs     = exprs[1];
-            } else {
-                continue;
-            }
-            onClauses.push_back(std::move(on));
+    std::vector<syn::Node> cases;
+    if (const auto body = context->get<cst::FactBody>()) {
+        for (const auto each : body->all<cst::FactCase>()) {
+            cases.push_back(each);
         }
     }
-    if (!initialExpr || !joinExpr) {
-        diags_->of(SemanticDiag::ConstructNotSupported)
+    if (cases.empty()) {
+        LEAVE("FactDecl");
+        return giveUp("a fact needs the cases that say what it is, and 'case _' last");
+    }
+    const auto lastPattern = cases.back()->get<cst::FactPattern>();
+    if (!lastPattern || !lastPattern->has(TK::Underscore)) {
+        diags_->of(SemanticDiag::FactCaseDefaultMissing)
             .at(rangeOf(context->firstToken()))
-            .commit("analysis", "an analysis needs `initial` and `join`");
-        LEAVE("AnalysisDecl");
+            .commit(name);
+        LEAVE("FactDecl");
         return Value();
     }
+    const syn::Node initialRhs = cases.back()->expr(0);
 
-    // The names bound by the pattern of an `on` clause, in the order the pattern function
-    // declares them. A bare reference is a variable; the callee of a call is not (`abs(x)`
-    // binds x, not abs), and a qualified name belongs to a module.
-    const std::function<void(syn::Node, std::vector<std::string> &)> collectVars =
-        [&](syn::Node node, std::vector<std::string> &out) {
-            if (!node || node.empty()) {
-                return;
-            }
-            if (node.kind() == NK::RefData) {
-                const std::string text = std::string(node.text());
-                if (text.find("::") == std::string::npos &&
-                    std::find(out.begin(), out.end(), text) == out.end()) {
-                    out.push_back(text);
-                }
-                return;
-            }
-            if (node.kind() == NK::AnnoExpr && node->get<cst::ParentArgues>()) {
-                for (size_t i = 1; i < node->childCount(); ++i) {
-                    collectVars(node->child(i).node(), out);
-                }
-                return;
-            }
-            for (size_t i = 0; i < node->childCount(); ++i) {
-                collectVars(node->child(i).node(), out);
-            }
-        };
+    // The trailing clauses, as written. Each names one binary function; only `join` is required.
+    syn::Node joinClause, meetClause, widenClause, narrowClause;
+    for (const auto clause : context->all<cst::FactClause>()) {
+        const std::string keyword = clause->tok(TK::Identifier).text();
+        const auto exprs          = clause->exprs();
+        if (exprs.size() != 1) {
+            continue;
+        }
+        if (keyword == "join") {
+            joinClause = exprs[0];
+        } else if (keyword == "meet") {
+            meetClause = exprs[0];
+        } else if (keyword == "widen") {
+            widenClause = exprs[0];
+        } else if (keyword == "narrow") {
+            narrowClause = exprs[0];
+        }
+    }
+    if (!joinClause) {
+        LEAVE("FactDecl");
+        return giveUp(
+            "a fact needs a 'join': it says how the facts of two writings of one value are "
+            "merged");
+    }
 
-    const auto makeFunc = [&](const std::string &fname,
-                              const std::vector<std::pair<std::string, node_ptr_t>> &params,
-                              node_ptr_t retType,
-                              node_ptr_t body) -> node_ptr_t {
+    // The `with` parameters, as written. Every function that carries them builds its own copy:
+    // an expression tree is not shared between two declarations.
+    std::vector<std::string> withNames;
+    if (const auto params = context->get<cst::AngledParams>()) {
+        if (const auto paired = params->get<cst::PairedParams>()) {
+            for (const auto pair : paired->all<cst::KeyParamPair>()) {
+                if (pair->get<cst::IdentDef>()) {
+                    withNames.push_back(std::string(pair->get<cst::IdentDef>()->text()));
+                }
+            }
+        }
+    }
+    // The `with` parameters of the declaration, once per function that carries them: an expression
+    // tree is not shared between two declarations. On the query function they are `constas`, the
+    // mark that says "the compiler must compute this argument"; on the functions the engine calls
+    // they are plain `with` parameters, because the engine passes the query's arguments to them as
+    // the `with` arguments of the call, so a case names one and reads the value.
+    const auto withPairs = [&](bool asConstas) {
+        std::vector<node_ptr_t> built;
+        const auto params = context->get<cst::AngledParams>();
+        if (!params) {
+            return built;
+        }
+        const auto paired = params->get<cst::PairedParams>();
+        if (!paired) {
+            return built;
+        }
+        for (const auto pair : paired->all<cst::KeyParamPair>()) {
+            if (!pair->get<cst::IdentDef>()) {
+                continue;
+            }
+            const std::string paramName(pair->get<cst::IdentDef>()->text());
+            node_ptr_t named = createNodeAs<NamedPairLoad>(
+                Reference(paramName), false, false, false, /*isConstas=*/asConstas);
+            setNodeTokenRangeByContext(named, context);
+            if (pair->type()) {
+                *named << any2node(visitType(pair->type()));
+            } else {
+                node_ptr_t inferNode = createNodeAs<InferTypeLoad>(Reference());
+                setNodeTokenRangeByContext(inferNode, pair->get<cst::IdentDef>());
+                *named << inferNode;
+            }
+            node_ptr_t defaultOpt = createNodeAs<OptionalLoad>("DataExpr");
+            if (pair->expr()) {
+                setNodeTokenRangeByContext(defaultOpt, pair->expr());
+                *defaultOpt << any2node(visitExpr(pair->expr()));
+            }
+            *named << defaultOpt;
+            built.push_back(named);
+        }
+        return built;
+    };
+
+    const auto literal = [&](LiteralType type, const std::string &text) {
+        node_ptr_t node = createNodeAs<LiteralLoad>(Literal(type, text));
+        setNodeTokenRangeByContext(node, context);
+        return node;
+    };
+    const auto reference = [&](const std::string &text) {
+        node_ptr_t node = createNodeAs<RefDataLoad>(Reference(text));
+        setNodeTokenRangeByContext(node, context);
+        return node;
+    };
+    const auto callOf = [&](node_ptr_t callee, std::vector<node_ptr_t> theArgs) {
+        node_ptr_t dataList = createNodeAs<RepeatedLoad>("Data");
+        setNodeTokenRangeByContext(dataList, context);
+        for (const auto &each : theArgs) {
+            *dataList << each;
+        }
+        node_ptr_t namedList = createNodeAs<RepeatedLoad>("NamedData");
+        setNodeTokenRangeByContext(namedList, context);
+        node_ptr_t call = createNodeAs<ReservedExprLoad>(ReservedDataOp::Call);
+        setNodeTokenRangeByContext(call, context);
+        *call << callee << dataList << namedList;
+        return call;
+    };
+    const auto blockOf = [&](node_ptr_t expr) {
+        node_ptr_t stmt = createNodeAs<ExprStmtLoad>();
+        setNodeTokenRangeByContext(stmt, context);
+        *stmt << expr;
+        node_ptr_t stmts = createNodeAs<RepeatedLoad>("Stmt");
+        setNodeTokenRangeByContext(stmts, context);
+        *stmts << stmt;
+        node_ptr_t block = createNodeAs<StmtBlockLoad>();
+        setNodeTokenRangeByContext(block, context);
+        *block << stmts;
+        return block;
+    };
+    const auto makeFunc =
+        [&](const std::string &fname, const std::vector<node_ptr_t> &withParams,
+            const std::vector<std::pair<std::string, node_ptr_t>> &params, node_ptr_t retType,
+            node_ptr_t body) -> node_ptr_t {
         const Reference fnRef = qualifyRef(Reference(fname));
         node_ptr_t funcType   = createNodeAs<FuncTypeLoad>();
         setNodeTokenRangeByContext(funcType, context);
-        *funcType << createNodeAs<RepeatedLoad>("NamedPair");
+        node_ptr_t withList = createNodeAs<RepeatedLoad>("NamedPair");
+        setNodeTokenRangeByContext(withList, context);
+        for (const auto &each : withParams) {
+            *withList << each;
+        }
+        *funcType << withList;
         node_ptr_t normParams = createNodeAs<RepeatedLoad>("NamedPair");
+        setNodeTokenRangeByContext(normParams, context);
         for (const auto &[pname, ptype] : params) {
             node_ptr_t named = createNodeAs<NamedPairLoad>(Reference(pname), false, false);
             setNodeTokenRangeByContext(named, context);
@@ -1366,157 +1630,195 @@ Value Builder::visitAnalysisDecl(cst::AnalysisDecl context) {
     };
 
     std::vector<node_ptr_t> declarations;
-    declarations.push_back(
-        makeFunc(name + "__initial", {}, typeOf(factType), any2node(visitBlockExpr(initialExpr))));
-    std::vector<std::pair<std::string, node_ptr_t>> joinParamsDecl;
-    for (size_t i = 0; i < 2; ++i) {
-        joinParamsDecl.emplace_back(
-            i < joinParams.size() ? joinParams[i] : "a" + std::to_string(i), typeOf(factType));
+    declarations.push_back(makeFunc(
+        name + "__initial", withPairs(false), {}, typeOf(factType),
+        any2node(visitBlockExpr(initialRhs))));
+    // One function per clause: it calls the function the clause names, of the fact's type, so that
+    // a name with several overloads is resolved where the type is known.
+    const auto mergeFunc = [&](const std::string &suffix, syn::Node clause) -> node_ptr_t {
+        std::vector<std::pair<std::string, node_ptr_t>> params = {
+            {"a0", typeOf(factType)}, {"a1", typeOf(factType)}};
+        node_ptr_t callee = any2node(visitExpr(clause));
+        node_ptr_t body   = blockOf(callOf(callee, {reference("a0"), reference("a1")}));
+        return makeFunc(name + suffix, withPairs(false), params, typeOf(factType), body);
+    };
+    declarations.push_back(mergeFunc("__join", joinClause));
+    if (meetClause) {
+        declarations.push_back(mergeFunc("__meet", meetClause));
     }
-    declarations.push_back(
-        makeFunc(name + "__join", joinParamsDecl, typeOf(factType), any2node(visitBlockExpr(joinExpr))));
-    if (widenExpr) {
-        std::vector<std::pair<std::string, node_ptr_t>> widenParamsDecl;
-        for (size_t i = 0; i < 2; ++i) {
-            widenParamsDecl.emplace_back(
-                i < widenParams.size() ? widenParams[i] : "a" + std::to_string(i),
-                typeOf(factType));
-        }
-        declarations.push_back(
-            makeFunc(name + "__widen", widenParamsDecl, typeOf(factType), any2node(visitBlockExpr(widenExpr))));
+    if (widenClause) {
+        declarations.push_back(mergeFunc("__widen", widenClause));
+    }
+    if (narrowClause) {
+        declarations.push_back(mergeFunc("__narrow", narrowClause));
     }
 
-    // The `on` clauses: the pattern function and the function that computes the fact.
-    struct CompiledOn {
+    // The head parameters: what the query is written on. Their types are not read here -- the
+    // pattern variables are nodes, or `int` where the pattern reads a shape -- but the first one
+    // gives a `const` case the type of its constant when the case writes none.
+    std::vector<std::string> queryArgs;
+    syn::Node firstHeadType;
+    if (const auto params = context->get<cst::ParentParams>()) {
+        if (const auto paired = params->get<cst::PairedParams>()) {
+            for (const auto pair : paired->all<cst::KeyParamPair>()) {
+                if (!pair->get<cst::IdentDef>()) {
+                    continue;
+                }
+                queryArgs.push_back(std::string(pair->get<cst::IdentDef>()->text()));
+                if (!firstHeadType && pair->type()) {
+                    firstHeadType = pair->type();
+                }
+            }
+        }
+    }
+    if (queryArgs.empty()) {
+        queryArgs.push_back("n");
+    }
+    std::vector<std::pair<std::string, node_ptr_t>> queryParams;
+    for (const auto &arg : queryArgs) {
+        queryParams.emplace_back(arg, refType("Node"));
+    }
+
+    // The names bound by a case's pattern. A bare reference is a variable; the callee of a call is
+    // not (`abs(x)` binds x, not abs), and a qualified name belongs to a module.
+    const std::function<void(syn::Node, std::vector<std::string> &)> collectVars =
+        [&](syn::Node node, std::vector<std::string> &out) {
+            if (!node || node.empty()) {
+                return;
+            }
+            if (node.kind() == NK::RefData) {
+                const std::string text = std::string(node.text());
+                if (text.find("::") == std::string::npos &&
+                    std::find(out.begin(), out.end(), text) == out.end()) {
+                    out.push_back(text);
+                }
+                return;
+            }
+            if (node.kind() == NK::AnnoExpr && node->get<cst::ParentArgues>()) {
+                for (size_t i = 1; i < node->childCount(); ++i) {
+                    collectVars(node->child(i).node(), out);
+                }
+                return;
+            }
+            for (size_t i = 0; i < node->childCount(); ++i) {
+                collectVars(node->child(i).node(), out);
+            }
+        };
+
+    struct CompiledCase {
         std::string patternFn;
         std::string factFn;
         uint64_t constMask = 0;
     };
-    std::vector<CompiledOn> compiled;
-    const auto nodeType = [&]() { return refType("Node"); };
-    for (size_t index = 0; index < onClauses.size(); ++index) {
-        const OnClause &on = onClauses[index];
-        const std::string prefix = name + "__on" + std::to_string(index);
+    std::vector<CompiledCase> compiled;
+    for (size_t index = 0; index + 1 < cases.size(); ++index) {
+        const syn::Node one         = cases[index];
+        const auto pattern          = one->get<cst::FactPattern>();
+        const syn::Node patternExpr = pattern ? pattern->expr(0) : syn::Node();
+        const syn::Node constDef    = pattern ? pattern->get<cst::IdentDef>() : syn::Node();
+        const std::string constName = constDef ? constDef->text() : std::string();
+        const syn::Node rhs         = one->expr(0);
+        // `case const c => ...`: the case is about one constant, and the fact function is given
+        // the value itself. The type is the one written, or the head's first parameter's.
+        syn::Node constType;
+        if (!constName.empty() && pattern) {
+            const auto written = pattern->types();
+            constType = written.size() == 1 ? written[0] : syn::Node();
+        }
+        if (!constName.empty()) {
+            if (!constType) {
+                constType = firstHeadType;
+            }
+            if (!constType) {
+                LEAVE("FactDecl");
+                return giveUp(
+                    "a 'const' case needs a type: write the type of the constant, or declare the "
+                    "value the fact is about with a type");
+            }
+        }
         std::vector<std::string> vars;
-        if (!on.constName.empty()) {
-            vars.push_back(on.constName);
+        if (!constName.empty()) {
+            vars.push_back(constName);
         } else {
-            collectVars(on.pattern, vars);
+            collectVars(patternExpr, vars);
         }
         if (vars.empty()) {
-            diags_->of(SemanticDiag::ConstructNotSupported)
-                .at(rangeOf(context->firstToken()))
-                .commit("analysis", "an `on` pattern names no variable");
-            continue;
+            LEAVE("FactDecl");
+            return giveUp("a case pattern names no variable, so the case says nothing");
         }
+
         std::vector<std::pair<std::string, node_ptr_t>> patternParams;
         std::vector<std::pair<std::string, node_ptr_t>> factParams;
         uint64_t mask = 0;
         for (size_t i = 0; i < vars.size(); ++i) {
-            if (i == 0 && !on.constName.empty()) {
-                patternParams.emplace_back(vars[i], typeOf(on.constType));
-                factParams.emplace_back(vars[i], typeOf(on.constType));
+            if (i == 0 && !constName.empty()) {
+                patternParams.emplace_back(vars[i], typeOf(constType));
+                factParams.emplace_back(vars[i], typeOf(constType));
                 mask |= uint64_t{1} << i;
             } else {
                 patternParams.emplace_back(vars[i], refType("int"));
-                factParams.emplace_back(vars[i], nodeType());
+                factParams.emplace_back(vars[i], refType("Node"));
             }
         }
+        const std::string prefix = name + "__case" + std::to_string(index);
         node_ptr_t patternBody;
-        if (!on.constName.empty()) {
-            // The `const` clause matches any constant of the type and binds its value: the
-            // pattern is the parameter itself, so the matcher binds the node and the fact
-            // function receives the value (the body of the clause is the fact).
-            node_ptr_t patternRef = createNodeAs<RefDataLoad>(Reference(on.constName));
-            setNodeTokenRangeByContext(patternRef, context);
-            node_ptr_t stmt = createNodeAs<ExprStmtLoad>();
-            setNodeTokenRangeByContext(stmt, context);
-            *stmt << patternRef;
-            node_ptr_t stmts = createNodeAs<RepeatedLoad>("Stmt");
-            setNodeTokenRangeByContext(stmts, context);
-            *stmts << stmt;
-            patternBody = createNodeAs<StmtBlockLoad>();
-            setNodeTokenRangeByContext(patternBody, context);
-            *patternBody << stmts;
+        if (!constName.empty()) {
+            // The pattern binds the constant itself: the matcher binds the node and the fact
+            // function receives the value.
+            patternBody = blockOf(reference(constName));
         } else {
-            patternBody = any2node(visitBlockExpr(on.pattern));
+            patternBody = any2node(visitBlockExpr(patternExpr));
         }
         declarations.push_back(makeFunc(
-            prefix,
-            patternParams,
-            on.constName.empty() ? refType("int") : typeOf(on.constType),
-            patternBody));
-        declarations.push_back(
-            makeFunc(prefix + "_fact", factParams, typeOf(factType), any2node(visitBlockExpr(on.rhs))));
+            prefix, withPairs(false), patternParams,
+            constName.empty() ? refType("int") : typeOf(constType), patternBody));
+        declarations.push_back(makeFunc(
+            prefix + "_fact", withPairs(false), factParams, typeOf(factType),
+            any2node(visitBlockExpr(rhs))));
         compiled.push_back({prefix, prefix + "_fact", mask});
     }
 
-    // The query function: `func name(a: Node, b: Node): T => __analysis(...)`. Its parameters
-    // are the pattern variables a rule's condition hands it; without a parameter list the query
-    // takes the value itself (`range(n)`), as it always has.
-    std::vector<std::pair<std::string, node_ptr_t>> queryParams;
-    std::vector<std::string> queryArgs;
-    if (const auto params = context->get<cst::ParentParams>()) {
-        if (const auto paired = params->get<cst::PairedParams>()) {
-            for (const auto pair : paired->all<cst::KeyParamPair>()) {
-                const std::string pname(pair->get<cst::IdentDef>()->text());
-                node_ptr_t ptype = pair->type() ? typeOf(pair->type()) : refType("Node");
-                queryParams.emplace_back(pname, ptype);
-                queryArgs.push_back(pname);
-            }
-        }
-    }
-    if (queryParams.empty()) {
-        queryParams.emplace_back("n", refType("Node"));
-        queryArgs.push_back("n");
-    }
+    // The query function: `func depth(n: Node): int => __fact(...)`. Its parameters are the parts
+    // of a value a rule's condition hands it; without a parameter list the query takes the value
+    // itself (`depth(n)`), as it always has.
     node_ptr_t args = createNodeAs<RepeatedLoad>("Data");
     setNodeTokenRangeByContext(args, context);
-    const auto literal = [&](LiteralType type, const std::string &text) {
-        node_ptr_t node = createNodeAs<LiteralLoad>(Literal(type, text));
-        setNodeTokenRangeByContext(node, context);
-        return node;
-    };
-    const auto reference = [&](const std::string &text) {
-        node_ptr_t node = createNodeAs<RefDataLoad>(Reference(text));
-        setNodeTokenRangeByContext(node, context);
-        return node;
-    };
     *args << literal(LiteralType::String, name);
     *args << reference(name + "__initial");
     *args << reference(name + "__join");
-    *args << reference(widenExpr ? name + "__widen" : name + "__join");
+    *args << reference(meetClause ? name + "__meet" : name + "__join");
+    *args << reference(widenClause ? name + "__widen" : name + "__join");
+    *args << reference(narrowClause ? name + "__narrow" : name + "__join");
+    // How many arguments the query was written with, then the arguments themselves: the engine
+    // computes and caches one fact per argument.
+    *args << literal(LiteralType::Integer, std::to_string(withNames.size()));
+    for (const std::string &paramName : withNames) {
+        *args << reference(paramName);
+    }
     for (const std::string &arg : queryArgs) {
         *args << reference(arg);
     }
-    for (const CompiledOn &on : compiled) {
-        *args << reference(on.patternFn);
-        *args << reference(on.factFn);
-        *args << literal(LiteralType::Integer, std::to_string(on.constMask));
+    for (const CompiledCase &one : compiled) {
+        *args << reference(one.patternFn);
+        *args << reference(one.factFn);
+        *args << literal(LiteralType::Integer, std::to_string(one.constMask));
     }
     node_ptr_t call = createNodeAs<ReservedExprLoad>(ReservedDataOp::Call);
     setNodeTokenRangeByContext(call, context);
-    *call << reference("__analysis") << args << createNodeAs<RepeatedLoad>("NamedData");
-    node_ptr_t exprStmt = createNodeAs<ExprStmtLoad>();
-    setNodeTokenRangeByContext(exprStmt, context);
-    *exprStmt << call;
-    node_ptr_t stmts = createNodeAs<RepeatedLoad>("Stmt");
-    setNodeTokenRangeByContext(stmts, context);
-    *stmts << exprStmt;
-    node_ptr_t block = createNodeAs<StmtBlockLoad>();
-    setNodeTokenRangeByContext(block, context);
-    *block << stmts;
-    declarations.push_back(makeFunc(name, queryParams, typeOf(factType), block));
+    *call << reference("__fact") << args << createNodeAs<RepeatedLoad>("NamedData");
+    declarations.push_back(
+        makeFunc(name, withPairs(true), queryParams, typeOf(factType), blockOf(call)));
 
-    LEAVE("AnalysisDecl");
+    LEAVE("FactDecl");
     return declarations;
 }
 
 /*
         | ('export')? 'tag' identDef '=' bracketIdents ;
 A tag is a name in the namespace of functions and types (design principles 6.2). The AST keeps
-the positions as a bit set (TagPosition), the parameters as written, the members of a group and
-the passes its declaration names; the GCT builder registers the tag with them.
+the positions as a bit set (TagPosition), the type parameters and the condition as written, the
+parameters as written, the members of a group and the passes its declaration names; the GCT
+builder registers the tag with them.
 */
 Value Builder::visitTagDecl(cst::TagDecl context) {
     ENTER("TagDecl");
@@ -1528,7 +1830,12 @@ Value Builder::visitTagDecl(cst::TagDecl context) {
     auto decl = declNode->loadAs<TagDeclLoad>();
     decl->setDoc(docOf(context));
 
-    if (const auto params = context->get<cst::AngledParams>()) {
+    if (const auto typeParams = context->get<cst::TypeParams>()) {
+        for (const auto ident : typeParams->all<cst::IdentDef>()) {
+            decl->addTypeParam(ident->text());
+        }
+    }
+    if (const auto params = context->get<cst::ParentParams>()) {
         const auto paired = params->get<cst::PairedParams>();
         for (const auto pair : paired->all<cst::KeyParamPair>()) {
             TagDeclLoad::Param param;
@@ -1564,6 +1871,13 @@ Value Builder::visitTagDecl(cst::TagDecl context) {
                 decl->addReader(value_cast<Reference>(visitIdentRef(reader)));
             }
         }
+        if (const auto when = context->get<cst::WhenClause>()) {
+            // The condition is kept as written, without the `when` word: a tag carries no
+            // instance of its own for the type parameters to be bound in, so what the condition
+            // says (`is_function::<F>()`) is read as the text it is, the same way a pass
+            // declaration's condition is read.
+            decl->setWhen(std::string(when->expr().sourceText()));
+        }
     }
 
     if (context->tok(TK::KwExport)) {
@@ -1582,8 +1896,8 @@ std::vector<node_ptr_t> Builder::tagUsesOf(cst::TagUse context) {
         const auto name = value_cast<Reference>(visitIdentRef(ref->get<cst::IdentRef>()));
         node_ptr_t use  = createNodeAs<TagUseLoad>(name);
         setNodeTokenRangeByContext(use, ref);
-        if (const auto values = ref->get<cst::AngledValues>()) {
-            // A tag whose arguments are names, not values (`#reads<reassociate, contract>`):
+        if (const auto arguments = ref->get<cst::ParentArgues>()) {
+            // A tag whose arguments are names, not values (`#reads(reassociate, contract)`):
             // each argument is the name as written, carried as a string constant. Whether the
             // name is a tag is the GIR builder's question; here it is only text.
             const auto id = camel::core::tag::find(name.toString());
@@ -1591,26 +1905,26 @@ std::vector<node_ptr_t> Builder::tagUsesOf(cst::TagUse context) {
                 id.has_value() ? camel::core::tag::get(*id) : nullptr;
             if (decl != nullptr && decl->names) {
                 node_ptr_t dataList = createNodeAs<RepeatedLoad>("Data");
-                setNodeTokenRangeByContext(dataList, values);
+                setNodeTokenRangeByContext(dataList, arguments);
                 const syn::TokenBuffer &tokens = context.tree()->tokens();
                 std::string current;
                 const auto flush = [&]() {
                     if (!current.empty()) {
                         node_ptr_t literalNode =
                             createNodeAs<LiteralLoad>(Literal(LiteralType::String, current));
-                        setNodeTokenRangeByContext(literalNode, values);
+                        setNodeTokenRangeByContext(literalNode, arguments);
                         *dataList << literalNode;
                         current.clear();
                     }
                 };
-                for (size_t i = values->firstToken().index();
-                     i <= values->lastToken().index() && i < tokens.size();
+                for (size_t i = arguments->firstToken().index();
+                     i <= arguments->lastToken().index() && i < tokens.size();
                      ++i) {
                     if (syn::isTrivia(tokens[i].kind)) {
                         continue;
                     }
                     const std::string_view text = tokens.text(i);
-                    if (text == "<" || text == ">") {
+                    if (text == "(" || text == ")") {
                         flush();
                     } else if (text == ",") {
                         flush();
@@ -1623,12 +1937,12 @@ std::vector<node_ptr_t> Builder::tagUsesOf(cst::TagUse context) {
                 uses.push_back(use);
                 continue;
             }
-            const ArgumentValues args = value_cast<ArgumentValues>(visitAngledValues(values));
+            const ArgumentValues args = value_cast<ArgumentValues>(visitParentArgues(arguments));
             if (args.named && args.named->size() > 0) {
                 // A tag takes positional arguments only: it names its parameters where it is
                 // declared, and the pass that reads the tag matches them by position.
                 diags_->of(SemanticDiag::TagArgumentNamed)
-                    .at(rangeOf(values->firstToken(), values->lastToken()))
+                    .at(rangeOf(arguments->firstToken(), arguments->lastToken()))
                     .commit(args.named->at(0)->load()->toString());
             }
             *use << args.data;
@@ -1639,6 +1953,15 @@ std::vector<node_ptr_t> Builder::tagUsesOf(cst::TagUse context) {
 }
 
 void Builder::addTagUses(const node_ptr_t &owner, const syn::Node &context) {
+    if (node_ptr_t list = tagUseListOf(context)) {
+        *owner << list;
+    }
+}
+
+/// The tag uses written in `context`, as one repeated node, or null when there are none. Kept
+/// apart from addTagUses because a module's tags belong to a node (the module's) that is made
+/// after the declaration has been visited.
+node_ptr_t Builder::tagUseListOf(const syn::Node &context) {
     node_ptr_t list = nullptr;
     for (const auto tagUse : context->all<cst::TagUse>()) {
         for (const auto &use : tagUsesOf(tagUse)) {
@@ -1649,9 +1972,7 @@ void Builder::addTagUses(const node_ptr_t &owner, const syn::Node &context) {
             *list << use;
         }
     }
-    if (list) {
-        *owner << list;
-    }
+    return list;
 }
 
 Value Builder::visitFuncDecl(cst::FuncDecl context) {
@@ -2985,15 +3306,10 @@ Value Builder::visitCtrlExpr(syn::Node context) {
     } break;
 
     default:
-        // TRY stmtBlock catchClause+ (FINALLY stmtBlock)?
-        // Not part of the language (design principles 1): its shape on the graph would
-        // depend on what the block contains. The diagnostic names what replaces it.
-        diags_->of(SemanticDiag::TryCatchNotInLanguage)
-            .at(rangeOf(context->firstToken(), context->lastToken()))
-            .commit();
-        // The error above stops compilation; a placeholder keeps the rest of the file checked.
-        ctrlNode = createNodeAs<NullLoad>();
-        setNodeTokenRangeByContext(ctrlNode, context);
+        // Every kind `visitExpr` sends here has a case above. `try`/`catch`/`finally` are not
+        // part of the language (design principles 3.9) and are not tokens any more, so the
+        // parser never builds a node for them (handover 5.00 "语法层收口" item 5).
+        throw std::runtime_error("Invalid control expression");
     }
     LEAVE("CtrlExpr");
     return ctrlNode;
@@ -3419,7 +3735,7 @@ Value Builder::visitNullableExpr(cst::NullableExpr context) {
 
 /*
 unaryExpr
-    : linkExpr ((AS | IS) typeExpr)?
+    : linkExpr (AS typeExpr)?
     | ('!' | '-' | '~') linkExpr
     ;
 */
@@ -3430,24 +3746,12 @@ Value Builder::visitUnaryExpr(syn::Node context) {
     switch (context.is(NK::CastExpr) ? 1 : 2) {
     case 1: {
         {
-            ReservedDataOp op;
-            if (context->tok(TK::KwAs)) {
-                op = ReservedDataOp::As;
-            } else if (context->tok(TK::KwIs)) {
-                op = ReservedDataOp::Is;
-            } else {
+            if (!context->tok(TK::KwAs)) {
                 throw std::runtime_error("Invalid unary operator: " + context->child(0)->text());
-            }
-            if (context->tok(TK::KwIs)) {
-                // There is no run-time type test. `x is T` used to be accepted with a warning
-                // and compiled as `x`.
-                diags_->of(SemanticDiag::ConstructNotSupported)
-                    .at(rangeOf(context->tok(TK::KwIs)))
-                    .commit("is", "the operator is not implemented");
             }
             node_ptr_t dataNode = any2node(visitExpr(context->expr()));
             node_ptr_t typeNode = any2node(visitType(context->type()));
-            res                 = createNodeAs<ReservedExprLoad>(op);
+            res                 = createNodeAs<ReservedExprLoad>(ReservedDataOp::As);
             setNodeTokenRangeByContext(res, context);
             *res << dataNode << typeNode;
             registerAstSemanticBundle(
@@ -3456,12 +3760,9 @@ Value Builder::visitUnaryExpr(syn::Node context) {
                     semanticPart(
                         camel::source::SemanticRole::Operator,
                         deriveAstAnchorOrigin(
-                            res,
-                            context->tok(TK::KwAs) ? context->tok(TK::KwAs)
-                                                   : context->tok(TK::KwIs),
-                            "ast.unary.keyword"),
+                            res, context->tok(TK::KwAs), "ast.unary.keyword"),
                         -1,
-                        context->tok(TK::KwAs) ? "as" : "is"),
+                        "as"),
                     semanticPart(
                         camel::source::SemanticRole::Receiver,
                         nodeOrigin(dataNode),
@@ -3572,7 +3873,7 @@ Value Builder::visitLinkExpr(cst::LinkExpr context) {
             calleeNode    = rhsNode->at(0);
             namedDataList = rhsNode->at(2);
             // The merged call stands for the one on the right: a positional argument written
-            // after a name there is still the same refusal (handover H276).
+            // after a name there is still the same refusal.
             linkNode->loadAs<ReservedExprLoad>()->setPositionalAfterNamed(
                 rhsNode->loadAs<ReservedExprLoad>()->positionalAfterNamed());
             calleeNode->setParent(nullptr);
@@ -3670,7 +3971,7 @@ annoExpr
 */
 Value Builder::visitAnnoExpr(cst::AnnoExpr context) {
     ENTER("AnnoExpr");
-    // `node_of(c)` in a rule's condition (the ruling of 2026-10-23 on `rule_when_const_node`):
+    // `node_of(c)` in a rule's condition :
     // "条件函数按 `const` 形参追加隐藏的节点形参，构建期把 `node_of(c)` 换成它；不引入新类型"
     // and "名字是 `node_of(c)`，只接受该规则（或 `fact` 的 `case`）自己的形参名". The call is
     // read here, before the callee is built, and becomes the hidden node parameter the rule
@@ -3755,7 +4056,7 @@ Value Builder::visitAnnoExpr(cst::AnnoExpr context) {
                 node_ptr_t namedDataList = values.named;
                 if (values.positionalAfterNamed != nullptr) {
                     // `f(a: 1, 2)`: the call refuses it, at the argument out of place
-                    // (design principles 4.4, handover H276).
+                    // (design principles 4.4).
                     exprNode->loadAs<ReservedExprLoad>()->setPositionalAfterNamed(
                         nodeOrigin(values.positionalAfterNamed));
                 }
@@ -4038,7 +4339,7 @@ structData
 Value Builder::visitStructData(cst::StructData context) {
     ENTER("StructData");
     if (const auto generator = context->get<cst::StaticForExpr>()) {
-        // `{ static for (n, F) in fields T => e }`: the value has the fields of `T`, each from one
+        // `{ static for n, F in fields T => e }`: the value has the fields of `T`, each from one
         // round; the generator is built once and the rounds are packed in the graph builder.
         node_ptr_t compNode = createNodeAs<StructCompLoad>();
         setNodeTokenRangeByContext(compNode, context);
@@ -4204,7 +4505,7 @@ std::string decodeFStringText(std::string_view text) {
 }
 
 /// An interpolation is empty when it holds no token that is neither white space nor a comment
-/// (the author's criterion, H89 ruling 3). White space is never a token, so this is: every token
+/// (the author's criterion). White space is never a token, so this is: every token
 /// is Eof or a comment. `Command` (the ignored `#!` line) and `Error` are not comments, and either
 /// leaves the interpolation non-empty.
 bool isEmptyInterpolation(const syn::TokenBuffer &tokens) {
@@ -4253,7 +4554,7 @@ size_t unicodeEscapeEnd(std::string_view text, size_t i) {
 
 /// The pattern text for `format`: the literal braces of a formatted string are doubled, so
 /// `format` prints them. A valid `\u{H…}` is a character escape, not format syntax: its braces are
-/// left alone for decodeEscapes, which doubles a brace the escape produces (H89). An invalid one
+/// left alone for decodeEscapes, which doubles a brace the escape produces. An invalid one
 /// is kept as written, so its braces are format syntax and are doubled here.
 std::string escapeFormatBraces(std::string_view text) {
     std::string out;
@@ -4355,7 +4656,7 @@ Value Builder::visitFStringData(cst::Literal context) {
         syn::TokenBuffer tokens = syn::Lexer::tokenizeRange(source, part.exprBegin, part.exprEnd);
         // No token that is neither white space nor a comment is `${}`, `${ }`, `${:spec}` or
         // `${/*c*/}`: an interpolation without an expression is its own mistake, not a parse
-        // error inside an expression (H20 item 1, H89 ruling 3). `${/**/ 1}` has a token and is
+        // error inside an expression (item 1). `${/**/ 1}` has a token and is
         // an expression.
         if (isEmptyInterpolation(tokens)) {
             diags_->of(SyntaxDiag::EmptyInterpolation).at(interpolationRange(part)).commit();
@@ -4371,7 +4672,7 @@ Value Builder::visitFStringData(cst::Literal context) {
         if (!sub.root() || sub.hasErrors()) {
             // The first ':' outside every bracket ends the expression. A lambda with a return
             // type has such a ':' at its top level, so its `=>` ended up in the specification
-            // and the expression is incomplete: say what the fix is (H20 item 1).
+            // and the expression is incomplete: say what the fix is (item 1).
             if (part.hasSpec) {
                 const std::string_view spec = whole.substr(
                     part.specBegin, static_cast<size_t>(part.specEnd) - part.specBegin);
@@ -4694,25 +4995,6 @@ Value Builder::visitKeyInterType(cst::KeyInterType context) {
 /*
 typeUnit : (identDef OF)? arrayType ;
 */
-Value Builder::visitTypeUnit(cst::TypeUnit context) {
-    ENTER("TypeUnit");
-    node_ptr_t res = nullptr;
-    if (context->get<cst::IdentDef>()) {
-        // `name of T` used to end in an exception without a position.
-        diags_->of(SemanticDiag::ConstructNotSupported)
-            .at(rangeOf(context->firstToken(), context->lastToken()))
-            .commit(
-                context->get<cst::IdentDef>()->text() + " of ...",
-                "the 'of' type form is not implemented");
-        // The error above stops compilation; the type itself keeps the rest checked.
-        res = any2node(visitType(context->type()));
-    } else if (context->type()) {
-        res = any2node(visitType(context->type()));
-    }
-    LEAVE("TypeUnit");
-    return res;
-}
-
 /*
 arrayType
     : specType arrayDim+
@@ -5039,7 +5321,6 @@ Value Builder::visitExpr(syn::Node context) {
     case NK::MatchExpr:
     case NK::MatchTypeExpr:
     case NK::StaticForExpr:
-    case NK::TryExpr:
         return visitCtrlExpr(context);
     case NK::LoopExpr:
         return visitLoopExpr(cst::LoopExpr(context));
@@ -5112,8 +5393,6 @@ Value Builder::visitType(syn::Node context) {
         return visitKeyUnionDiffType(cst::KeyUnionDiffType(context));
     case NK::KeyInterType:
         return visitKeyInterType(cst::KeyInterType(context));
-    case NK::TypeUnit:
-        return visitTypeUnit(cst::TypeUnit(context));
     case NK::ArrayType:
         return visitArrayType(cst::ArrayType(context));
     case NK::ArrayDim:

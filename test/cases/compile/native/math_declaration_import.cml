@@ -3,7 +3,7 @@
  * `clamp`), `sqrt` with its four spellings and the two shifts with both integer types for the
  * count are read from `stdlib/math.cml`, and the calls reach the operators the C++ module runs.
  * The constant `pi` is still the C++ module's value, visible through the same declaration module
- * (handover H113; H202).
+ * ().
  */
 module math_declaration_import
 

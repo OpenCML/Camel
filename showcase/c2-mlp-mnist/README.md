@@ -229,7 +229,7 @@ spelling. The example binds `with_grad(loss)` outside the loop and uses
 `let (value, gradient) = loss_with_grad<m>(x, y)` inside.
 
 The small configuration is registered in `test/plans/perf/showcase_c2.plan.toml`
-(`tier = "slow"`): it runs 200 steps on the synthetic stand-in, runs both sides, checks the
+(`tier = "milestone"`): it runs 200 steps on the synthetic stand-in, runs both sides, checks the
 tolerances above, and takes a few seconds (3.3 s in the recorded run). H10's fast/slow split
 has landed: the default `npm run test` skips the slow tier and `npm run test:all` (or
 `--tier all`) runs it.

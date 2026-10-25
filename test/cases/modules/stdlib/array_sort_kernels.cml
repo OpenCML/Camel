@@ -1,10 +1,10 @@
 /**
- * The sorting family of `array` after the per-element split (H393; the ruling
+ * The sorting family of `array` after the per-element split (
  * docs/handover/reviews/questions-2026-10-23.md, section 「复核：归约按元素类型分臂」: the sorts
  * still read the element type code, and become what the reductions became).
  *
  * One body-less declaration per element type, each naming its own element type's operator
- * (`#op<'array:sort_i'>` for `i32`, `#op<'array:sort_d'>` for `float`, ...) and taking that
+ * (`#op('array:sort_i')` for `i32`, `#op('array:sort_d')` for `float`, ...) and taking that
  * element type in its signature, so the element type is fixed where the executor is chosen and no
  * executor reads an array's element type code. `array_sort_kernels.paths` is what pins that down:
  * one profile row per element type and one call each, and no row for a sort as a whole. A compiler

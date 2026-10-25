@@ -1,0 +1,17 @@
+// A generic function whose signature is still wider than the wrap width (80) after the `when`
+// clause has moved to its own line: the parameters go one per line as well, and the result type
+// follows the closing parenthesis (handover 5.00 "格式化器", the ruling of 2026-10-25).
+func combine_all::<T>(
+    first: Tensor<T>,
+    second: Tensor<T>,
+    third: Tensor<T>,
+    scale: T
+): Tensor<T>
+    when is_numeric::<T>() {
+    return first + second + third
+}
+
+// A head that fits keeps the clauses on the signature's line.
+func add::<T>(a: T, b: T): T when is_numeric::<T>() {
+    return a + b
+}

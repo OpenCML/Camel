@@ -22,27 +22,27 @@ func layers(x: Tensor<f32, [2, 3]>, b: Tensor<f32, [3]>, w: Tensor<f32, [3, 4]>)
 }
 
 /// The first extent is open: a parameter without a value; the bias broadcasts on the other.
-func rows(x: Tensor<f32, [?, 3]>, b: Tensor<f32, [3]>): Tensor {
+func rows(x: Tensor<f32, [?, 3]>, b: Tensor<f32, [3]>): Tensor<f32> {
     return x + b
 }
 
 /// Both first extents are open: either may be 1, so whether it broadcasts is not known (Q9).
-func open(x: Tensor<f32, [?, 3]>, y: Tensor<f32, [?, 3]>): Tensor {
+func open(x: Tensor<f32, [?, 3]>, y: Tensor<f32, [?, 3]>): Tensor<f32> {
     return x + y
 }
 
 /// Nothing is known of the rank.
-func unknown(x: Tensor<f32>, y: Tensor<f32>): Tensor {
+func unknown(x: Tensor<f32>, y: Tensor<f32>): Tensor<f32> {
     return x * y
 }
 
 /// The program allows the sum to be regrouped.
 #[reassociate]
-func regrouped(x: Tensor<f32, [4, 5]>): Tensor {
+func regrouped(x: Tensor<f32, [4, 5]>): Tensor<f32> {
     return sum(x, 1)
 }
 
-func pooled(x: Tensor<f32, [1, 1, 4, 4]>): Tensor {
+func pooled(x: Tensor<f32, [1, 1, 4, 4]>): Tensor<f32> {
     return max_pool2d(x, 2, 2, 1)
 }
 

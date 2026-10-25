@@ -17,7 +17,7 @@
  * k state values. Without collection slots the body gives the next state alone: the value when
  * k = 1, the k-tuple when k > 1. The LOOP node's value is the last state.
  *
- * Collection slots. A graph producer (no source syntax exists for this yet; the H4d design)
+ * Collection slots. A graph producer (no source syntax exists for this yet; the design)
  * may give a LOOP node s typed collection slots. Each round the body then also produces one
  * value per slot, and the loop collects them into one array per slot, in round order. The
  * node's value is (state_1, ..., state_k, array_1, ..., array_s): the state components first,
@@ -114,7 +114,7 @@ class LoopView {
     /// node the graph marks `constant` -- is evaluated where it is read, in place, so it is left
     /// out unless `constants` asks for it. A value that is merely loop-invariant (a parameter, a
     /// module value read through a capture port, a variable's cell) is not constant and stays an
-    /// input (design principles 3.10; the author's ruling of 2026-10-21).
+    /// input (design principles 3.10).
     std::vector<gc_node_ref_t> externalInputs(bool constants = false) const;
 
     // ---- Correspondence between the node and the ports of its regions ----

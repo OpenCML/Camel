@@ -25,7 +25,7 @@ class GCGraph;
 
 namespace camel::core::error {
 
-/// The message of `diag` with `args` put in place of `{0}`, `{1}`, ...: the sentence a
+/// The message of `diag` with `args` put in place of `{0}`, `{1}`, ... the sentence a
 /// diagnostic reports, without its position or help. For a report nested inside another — the
 /// reason an entry argument was refused says what made it unreadable (design principles 10.6).
 std::string runtimeDiagMessage(RuntimeDiag diag, const std::vector<std::string> &args);
@@ -49,6 +49,12 @@ struct ExecutionSiteHint {
     camel::runtime::GCGraph *runtimeGraph   = nullptr;
     size_t pc                               = 0;
     camel::source::origin_id_t cachedOrigin = camel::source::kInvalidOriginId;
+    /// Keep the site that raised the fault in the report as a related position, beside the
+    /// position the hint names. Off by default: a fault of a macro is reported where the macro
+    /// stands and the call that ran it adds nothing, and a kernel that reports a fault of the
+    /// program it was asked to translate wants both -- the construct the fault is about, and the
+    /// call that asked for the work, which is what tells two calls of the same kernel apart.
+    bool keepRaiseSite = false;
 };
 
 struct ExecutionSite {
@@ -95,7 +101,7 @@ template <typename T> std::string argToString(const T &value) {
 } // namespace runtime_fault_detail
 
 /// A query of a declaration with parameters named parts that are no value's operands (in either
-/// order a commutative operator allows). It is not a fault of the program: the ruling of
+/// order a commutative operator allows). It is not a fault of the program: the rule of
 /// 2026-10-23 on `rule_when_const_node` makes the condition that reads such a query false -- the
 /// rule does not apply here, the pass does not fail ("条件里的事实查询找不到时，条件为假（这条规则在
 /// 此不适用），而不是遍失败——条件本来就是"适用与否"的判断"). Whoever evaluates a condition catches

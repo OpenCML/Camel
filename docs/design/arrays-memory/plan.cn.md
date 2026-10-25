@@ -320,7 +320,7 @@ Tensor<f32>               // f32[..]
 
 - 87 个用例文件含 `const [`；逐个按 `Tensor<T, const [d]>` → `Tensor<T, [d]>` 改写；其中 20 个含 `-1`，逐个改 `?`（`Tensor<f32, const [-1, 3]>` → `Tensor<f32, [?, 3]>`）。
 - 12 个用例含 `constas`：形状位置改写为首次出现的名字，其余引用；例如 `f<T>(x: T[constas n, 4])` → `f<T>(x: T[n, 4])`。
-- `test/cases/modules/tensor/static_types.cml`：`var w = zeros([2, 1]); w = grow(w) (Tensor any)` 依赖"任意秩加宽"；按 Q5 的结论（同秩加宽）改写成两次 `var` 或显式 `as`。
+- `test/cases/modules/tensor/static_types.cml`：`var w = zeros([2, 1]); w = grow(w) (Tensor any)` 依赖"任意秩加宽"；按 Q5 的结论（同秩加宽）改写成两次 `var` 或显式 `as`。另有一处与加宽无关：`grow(t: Tensor): Tensor` 的裸 `Tensor` 签名返回过渡类型，进不了元素类型已定的格子（`f32[?, ?]`）；改写签名为具体类型（`grow(t: f32[?, ?]): f32[?, ?]`）。
 - `test/cases/tools/grammar/keywords.cml` 的 `Tensor<f32, const [constas n, 4]>` 改写为 `Tensor<f32, [n, 4]>`，并重新生成 `test/plans/feat/tools/golden/grammar/keywords.scopes` 金标。
 - 新增 `test/cases/compile/array_shape/*`：语法、绑定、`?`、`..s`、线性、常量名、诊断、`T[]` 不变、`T[][]` 嵌套、`as` 检查；`test/plans/feat/compile/array_shape.plan.toml`。
 - AST/格式化/金样：新增语法进入 `feat/format` 的往返语料；`feat/compile` 的 AST 快照只对 smoke 语料，不改既有快照。
@@ -365,7 +365,7 @@ P4 的终点：
   `log_softmax` 的裁定）；
 - **值的元素类型总在类型里**；形状可以是 `?`（大小运行时才知道是值的事，不是类型的事）。
 
-删除步（作为 P4 之后的一次独立提交，或 P4 提交内最后一步，由计划的所有者定）：
+删除步（P4 合入 develop 之前完成，负责人 2026-10-25：不留过渡、不留技术债。过渡状态只能存在于翻转分支上，develop 上不出现别名 `Tensor`、`numericUnknown` 或本节依赖表里的任何一处）：
 1. `ArrayType::numericUnknown*` 与其标记 `numericUnknown_` 删除；`Tensor` 的 `Reference` 改为
    `Tensor<T>` 形式（元素类型参数必填，`Tensor<..>` 的 `applyArguments` 只接受类型参数 + 形状参数）；
 2. 签名里出现裸 `Tensor` 的诊断（`InvalidTypeArgument` 或新的语法诊断）；
@@ -385,8 +385,12 @@ P4 的终点：
 | `src/core/derivative.h/.cpp#setTangentType`/`statedTangentType` | 过渡类型的元素是 `Void`，结构上取不到切线，所以新加一个注册钩子 | 随过渡类型删除；`computeTangentType` 的 `Array` 分支恢复只走元素类型 |
 | `modules/autodiff/pullback.cpp#carriesGradient` 的 `Array` 分支 | 同上（`tangentTypeOf` 判据） | 可恢复为 `carriesGradient(elemType)` |
 | `modules/tensor/module.cpp` 的 `.npy` 加载器/保存器 | 检查值对着 `ArrayType::numericUnknown()` 做形状/元素检查 | 改为对着声明的具体数组类型检查 |
-| `modules/tensor/ops/gradient_ops.cpp#tensorTangentType` | 判断过渡类型有没有切线 | 随钩子删除 |
+| `modules/tensor/ops/gradient_ops.cpp#registerTensorTangentSpace` | 判断过渡类型有没有切线 | 随钩子删除：切线类型由元素类型给出 |
 | `modules/onnx/emitter.cpp` 的 `Value::constant(..., numericUnknown())` | 数组常量当张量时的声明类型 | 改为值自己的数组类型 |
+| `src/core/rtdata/equality.cpp` 的 `registerContentComparableType` / `isRegisteredContentComparableType`，以及 `isContentComparableImpl` 里的 `isNumericUnknown()` 分支 | 让模块的 `Tensor` 类型与元素类型未定的数组参加整体比较 `==` | 随过渡类型删除：张量就是数组，走数组自己的比较；注册表整个删掉 |
+| `modules/tensor/ops/layout_ops.cpp` 的 `OpDef idx_take`（`.exports = {"__idx__"}`）与 `setVjp(defs, "idx_take", &takeVjp)` | 模块的 `Tensor` 值经它参加 `t[idx]`；核心 `:op/idx_take` 已对任意秩按第 0 维取行、带反向 | 删掉这份副本，`t[idx]` 只有核心一条规则；函数形式 `tensor::take` 保留；`export_matrix` 去掉 `tensor:idx_take` 一行；`take_rows`、`gather_grad_f64`、`discrete_zero`、`gather_discrete_index_zero` 四个用例的 `t[idx]` 落到核心 |
+| `stdlib/rules.cml` 的 `tensor_f32_*`、`tensor_i64_*` 一族规则（约 13 条） | 张量是单独的类型，标量的代数律管不到它，于是每条律再抄一份 `Tensor<f32>` 版本 | 删掉这一族；标量那条律推广到数值数组（逐元素成立，元素与数组共用同一条律，写法由 H232 的车道定），同一条代数律只写一次 |
+| 切片：张量模块的 `tensor:slice`（含 `__slice__` 导出）与 `globals.cpp` 里按"是不是程序自己的数组"分派下标的 `isTensorSubscript` | 模块的 `Tensor` 值经它参加 `t[a:b]`，核心只答 `T[]` | 切片只有核心一个算子、一条伴随规则（`t[a:b]` 与 `slice(t, 0, a, b)` 同一个节点，对任何秩、任何元素类型），模块副本与按类型分派的那段一起删掉；伴随交回的值带写明的元素类型与形状 |
 | `src/compile/gir/builder_operators.cpp` 的 `var` 实参接管（普通实参与 `with` 实参各一处） | 形参的裸 `Tensor` 与实参值的数组拼法不是同一个类型，cell 的"内容类型必须相等"（`src/core/type/composite/tuple.cpp`）会拒 | 随标记删除：两侧是同一个类型，接管分支删掉（详见下一节） |
 
 **没有让新的消费者依赖它**：所有从 `TensorType` 迁过来的构造点走 `tensor::ops::tensorOf(...)`，元素类型
@@ -396,7 +400,7 @@ P4 的终点：
 
 ### 5.2 元素类型精确
 
-- 删除 `normalizeTensorDType`（P4 已删；`TensorType::get` 只校验元素类型，`modules/tensor/type.cpp#TensorType::get` 起）：`Tensor<float>` 就是 `float[..]`（f64 存储），`Tensor<i32>` 就是 `i32[..]`，`Tensor<f64>` 就是 `f64[..]`。`zeros`/`ones` 等不写 dtype 的构造仍是 f32（与今天一致）。
+- 删除 `normalizeTensorDType`（P4 已删；`TensorType::get` 只校验元素类型，`modules/tensor/type.cpp` 起）：`Tensor<float>` 就是 `float[..]`（f64 存储），`Tensor<i32>` 就是 `i32[..]`，`Tensor<f64>` 就是 `f64[..]`。`zeros`/`ones` 等不写 dtype 的构造仍是 f32（与今天一致）。
 - 审计模块内核的 dtype 支持：elementwise 已支持 f32/f64/i32/i64（`modules/tensor/kernels/elementwise.cpp`）；conv/bn 的若干内核只接受 `const float*`（`kernels/conv.cpp` 283+、404+、572+）。这些算子的推断处要声明只支持 f32（今天没有声明，遇到 f64 会读错），遇到 f64 输入报运行时故障（而不是静默读错）。测试里没有 `Tensor<float>` 的用例（已核对），只有 `Tensor<int>` 出现在 `modules/nn` 的 checkpoint 用例里，`int` 就是 i64，与今天相同。
 - 删除 `TensorType::castSafetyFrom/castSlotFrom` 里的 dtype 归一化；`as` 的检查变成 `ArrayType::castSlotFrom` 的形状检查（P2）。
 
@@ -445,6 +449,8 @@ P4 的终点：
 
 - 464 处 `Tensor<`、87 个文件：P3 已把 `const [` 改写为 `[`；P4 再把仍然依赖"张量类型语义"的断言改写（打印、`as`、`var` 加宽、类型文本）。这一步与 P3 的改写分开提交，便于二分。
 - `test/cases/modules/tensor/static_types.cml`、`var_tensor_reference.cml`、`shape_inference/var_argument*.cml`：`var` 加宽与裸 `Tensor` 的用法按 Q5 调整。
+- 签名里写裸 `Tensor` 的示例与用例（`test/cases/modules/nn/lrit.cml`、`mnist.cml` 及其 `nn.*` 计划条目等）：P4 终点上裸 `Tensor` 签名是编译错误，按 5.1a 改写成具体元素类型与秩（`var` 形参收的是同秩加宽后的格子类型，写 `f32[?, ?]`；非 `var` 形参可以写定 extent，如 `f32[?, 1]`）或在头部声明的泛型；不放宽可赋值规则，也不把格子写成裸 `Tensor`。
+- `grad(f)` 的结果类型（`modules/tensor/ops/vjp.cpp#vjpTensorType`）：由被微分值的切线类型给出，`grad of f32[?, 4]` 就是 `f32[?, 4]`；不再返回过渡类型（`test/cases/feat/mm/gc/gc_training_peak.cml` 的 `sgd(wf, g, 0.5)` 依赖这一条）。
 - 新增 `test/cases/compile/array_alias/*`：`Tensor<f32>` ≡ `f32[..]`、`Tensor<f32, [2, 3]>` ≡ `f32[2, 3]`、裸 `Tensor` 接受 `int[3]` 拒绝 `string[3]`、`Tensor<string>` 报错、`Tensor<f32>` 的类型文本、`var` 加宽、`as` 的形状检查、四个后端一致。
 - `test/plans/feat/compile/array_alias.plan.toml`。
 
@@ -536,7 +542,7 @@ Array *rowCopy(mm::IAllocator &allocator, uint64_t row) const;
 
 一个"返回新数组"的算子可以在调用者写 `xs = xs->op(...)`（或 `xs = op(xs, ...)`）时**原地**完成，当且仅当：
 
-1. **编译器证明旧值不可观察**：`Builder::inPlaceRebindingOf` 只对"把结果赋回同一个变量"的重绑写法改写；变量单元持有的数组由 `holdsUnsharedArray` 标记，任何读（`let y = xs`、传参、放进容器）都会清掉标记；`take` 在标记仍在时返回原数组。`LOOP` 的状态在下一轮开始时旧值不可见，按批复第 4 条同样标记（已落地）。
+1. **编译器证明旧值不可观察**：`Builder::inPlaceRebindingOf` 只对"把结果赋回同一个变量"的重绑写法改写；这份证明在内存规划里一次定下、随执行计划交给各后端（`ExecPlan::storageReuseOf`）：值由本图所造、且此后没有会留下引用的读（`let y = xs`、传参、放进容器：`:var/get`）时，更新节点标为复用输入自身的存储（`Input`）；证明不了的格子交第二层的计数（`ByArrayCount`）；有观察者时标为拷贝（`Copy`）。只喂给留不下引用的读（`:var/peek`）不结束证明。`LOOP` 的状态在下一轮开始时旧值不可见，按批复第 4 条同样处理（已落地）。
 2. **运行时证明存储可写**：`Array::canWriteInPlace()`——紧凑、Camel 自有块、计数为 1、偏移 0、不是视图；内联数组没有块，恒为真。外部块永不原地（设计 11.3）。
 3. **算子允许**：结果与操作数 0 的元素类型和形状相同，且内核只做同下标读写（或压缩/重排自身）。
 

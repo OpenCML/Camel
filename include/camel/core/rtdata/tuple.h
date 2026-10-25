@@ -63,7 +63,7 @@ class Tuple : public rtdata::Object {
 
     /// One field as the raw slot it is stored as, without the initialized check: a printer
     /// renders a value that may still be under construction (a collection a higher-order
-    /// operator is filling) and shows its unwritten elements instead of aborting (H31).
+    /// operator is filling) and shows its unwritten elements instead of aborting.
     slot_t slotAt(size_t index) const {
         ASSERT(index < size(), "Index out of range");
         if (isView()) {
@@ -124,16 +124,6 @@ class Tuple : public rtdata::Object {
 
     /// Where the slot data of a real tuple begins: the end of this header (aggregate.h).
     static constexpr size_t slotDataOffset() noexcept { return sizeof(Tuple); }
-
-    /// For a variable cell (TupleType::cell) only: whether the array in its slot is referred
-    /// to by this cell and by nothing else, so that the variable may grow it in place (the
-    /// rebinding `acc = acc->append<v>`, :op/assn_owned). Only the in-place assignment sets
-    /// it, after it stored an array made by :var/take and an in-place form; every read of the
-    /// variable and every other write clears it (ops.cpp), because from then on another
-    /// reference may exist. A new tuple, and a clone, start without it. Not part of the value:
-    /// equals() and print() ignore it.
-    bool holdsUnsharedArray() const { return unsharedArray_ != 0; }
-    void setHoldsUnsharedArray(bool unshared) { unsharedArray_ = unshared ? 1 : 0; }
 
     virtual bool
     equals(const rtdata::Object *other, const type::Type *type, bool deep = false) const override {
@@ -291,9 +281,6 @@ class Tuple : public rtdata::Object {
 
   private:
     uint32_t size_;
-    // See holdsUnsharedArray(). It takes the four bytes of padding between size_ and data_,
-    // so a tuple has the same layout and size as before it was added.
-    uint32_t unsharedArray_ = 0;
     slot_t data_[];
 };
 

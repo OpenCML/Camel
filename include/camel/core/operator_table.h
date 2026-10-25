@@ -183,6 +183,12 @@ struct OperatorTraits {
     /// constants is evaluated ahead of time by `std::macro`, and the result is materialised as a
     /// constant. `grad` and `with_grad` declare it; an ordinary operator does not.
     bool macro = false;
+    /// Its calls may be evaluated ahead of time and their results kept as values (the foldable
+    /// fact of the record). False for an operator that must run where the program writes it,
+    /// though running it has no effect: a rule's value holds the functions of its sides, and a
+    /// `fact` installs the fact of its declaration, and neither is a value a pass may
+    /// compute, move, merge or drop.
+    bool foldable = true;
 };
 
 /**
@@ -297,6 +303,15 @@ class OperatorTable {
         std::string_view protocol,
         std::initializer_list<std::pair<std::string_view, bool>> operators);
 
+    /// Declares the operators `protocol:name` that are pure and may not be folded: running one has
+    /// no effect, and no pass may compute a call of it ahead of time, keep its result as a
+    /// constant, move it, merge it with an identical call or drop it. `rewrite` declares its rule
+    /// makers and its `fact` this way: what they make holds the functions of the rule's sides,
+    /// which the collector does not trace, and installing the facts of a declaration is the
+    /// declaration itself.
+    void declareUnfoldable(
+        std::string_view protocol, std::initializer_list<std::string_view> operators);
+
     // ---- Queries --------------------------------------------------------------------------
 
     /// Declared traits of the operator, or nullopt when nobody declared it.
@@ -306,6 +321,14 @@ class OperatorTable {
     /// True when the operator is declared pure.
     bool isPure(OperId id) const;
     bool isPure(std::string_view uri) const;
+
+    /// True when a call of the operator may be computed by the compiler or a pass itself and its
+    /// result treated as a value: it has no effect, and it is foldable (isPure and the foldable
+    /// fact). False for every operator that has an effect, and for a pure one that must run where
+    /// the program writes it (declareUnfoldable). A pass that folds, moves, merges or drops a
+    /// call asks this, not isPure.
+    bool mayBeRecomputed(OperId id) const;
+    bool mayBeRecomputed(std::string_view uri) const;
 
     /// True when execution can invoke function inputs. Lock-free.
     bool callsGraphs(OperId id) const {
@@ -354,6 +377,12 @@ class OperatorTable {
     /// The in-place form of the operator `uri`, or nullopt when it has none.
     std::optional<std::string> inPlaceForm(std::string_view uri) const;
 
+    /// The operator an in-place form stands for: the form of `uri` whose result it computes by
+    /// changing the first argument (`:op/set_index` for `:op/set_index_in_place`), or nullopt
+    /// when `uri` is not an in-place form. The text lives in the table's symbol storage, so the
+    /// view stays valid; a node whose storage must not be reused runs this form instead.
+    std::optional<std::string_view> plainForm(std::string_view uri) const;
+
     /// Declares that the operator `uri` may return one of its operands, changed in place, when
     /// the compiler hands it a value no one else holds (design principles 11.3; the block must
     /// also be unshared and Camel-owned at run time, Array::canWriteInPlace). One fact, written
@@ -395,12 +424,12 @@ class OperatorTable {
     type::resolver_ptr_t resolver(OperId id) const;
     type::resolver_ptr_t resolver(std::string_view uri) const;
 
-    // ---- Groups, and the types a group registered (handover H401) ---------------------------
+    //  ---- Groups, and the types a group registered ---------------------------
 
     /// Declares the overloads of one operator group, at module load time: its name and the URI of
     /// each of its overloads. `OperatorGroup` declares itself here when it is created, so the
     /// table can answer which types a group was registered for -- what `check` takes the
-    /// instances of a generic rule from (the ruling of 2026-10-24 on
+    /// instances of a generic rule from (the rule on
     /// `generic-rule-check-surface-and-multi-parameter-instances`), and what a future `vmap` or
     /// a target's element-type extraction reads. Declaring the same group twice adds to it: the
     /// groups of one name a program sees are merged (OperatorGroup::merged).
@@ -408,6 +437,12 @@ class OperatorTable {
 
     /// The names of the declared groups, in the order they were first declared.
     std::vector<std::string> groups() const;
+
+    /// The URIs of the overloads declared for the group `group`, in declaration order, and empty
+    /// when no group of that name was declared. The group name is the one the language writes for
+    /// it (`println`), so a reader of a program's text can tell whether a name is an operator and
+    /// what its overloads are.
+    std::vector<std::string> groupOperators(std::string_view group) const;
 
     /// The types one group registered: every type the fixed signature of one of its overloads
     /// mentions (its `with` parameters, its ordinary parameters and its result), each once, in
@@ -541,6 +576,9 @@ class OperatorTable {
         std::unique_ptr<TypeFolder> folder;
         /// The in-place form (setInPlaceForm); kEmptySym when there is none.
         SymId inPlace = kEmptySym;
+        /// What this operator is the in-place form of (setInPlaceForm, written on the form's own
+        /// entry); kEmptySym for every operator that is not one.
+        SymId plain = kEmptySym;
         /// The operator may return its operand (declareReusesOperand): an elementwise operator
         /// that writes into an operand it owns, rather than allocating a result.
         bool reusesOperand = false;

@@ -1,6 +1,6 @@
 /**
  * Raw mode and reading input are ordered: both name the one `stdin` resource (the author's
- * ruling on H134 question 1, `io:terminal` merged into `stdin`), so a terminal-mode call and a
+ * rule on question 1, `io:terminal` merged into `stdin`), so a terminal-mode call and a
  * stdin read in one body must keep their order. `test::resources` prints each node's declared
  * resources and every pair that must keep its order; `std::gir` then translates the graph, so
  * the program is not executed (the runner gives the process a pipe, not a terminal).

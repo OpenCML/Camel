@@ -11,6 +11,7 @@
 
 #include "lowering.h"
 
+#include "../tensor/ops/support.h"
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
 
@@ -49,8 +50,8 @@ tensor::StaticShape staticShape(const TensorFacts &facts, std::string_view what)
 }
 
 bool fullyKnown(const tensor::StaticShape &shape) {
-    for (int64_t d : shape) {
-        if (d == tensor::kUnknownDim) {
+    for (const std::optional<int64_t> &d : shape) {
+        if (!d.has_value()) {
             return false;
         }
     }
@@ -61,7 +62,7 @@ bool fullyKnown(const tensor::StaticShape &shape) {
 std::string shapeOperand(const LowerContext &ctx, size_t index) {
     const TensorFacts facts = ctx.facts(index);
     if (facts.shape && fullyKnown(*facts.shape)) {
-        return ctx.emitter().int64s(*facts.shape);
+        return ctx.emitter().int64s(tensor::extentsOf(*facts.shape));
     }
     return ctx.emitter().node("Shape", {ctx.input(index)});
 }
@@ -82,9 +83,9 @@ sumTo(const LowerContext &ctx, const std::string &g, const TensorFacts &gFacts, 
             axes.push_back(static_cast<int64_t>(i));
             continue;
         }
-        const int64_t want = likeShape[i - lead], have = gShape[i];
+        const std::optional<int64_t> want = likeShape[i - lead], have = gShape[i];
         if (want == 1 && have != 1) {
-            if (have == tensor::kUnknownDim) {
+            if (!have) {
                 throw ExportError(
                     std::format("{}: cannot tell whether a dynamic axis was broadcast", ctx.uri()));
             }
@@ -221,10 +222,11 @@ Value lowerSliceGrad(const LowerContext &ctx) {
     if (ctx.constInt(5, 1) != 1) {
         throw ExportError("tensor:slice_grad: only unit steps can be exported");
     }
-    const int64_t extent = likeShape[static_cast<size_t>(axis)];
-    if (extent == tensor::kUnknownDim) {
+    const std::optional<int64_t> extentOpt = likeShape[static_cast<size_t>(axis)];
+    if (!extentOpt) {
         throw ExportError("tensor:slice_grad: the sliced axis must have a static extent");
     }
+    const int64_t extent = *extentOpt;
     const auto clamp = [&](int64_t v) {
         v = v < 0 ? v + extent : v;
         return std::clamp<int64_t>(v, 0, extent);
@@ -508,7 +510,7 @@ Value zeroTree(Emitter &e, const Value &p) {
         Value::constant(rtdata::toSlot(static_cast<rtdata::Float64>(0)), type::Type::Float64()),
         facts.dtype);
     const std::string shape = facts.shape && fullyKnown(*facts.shape)
-                                  ? e.int64s(*facts.shape)
+                                  ? e.int64s(tensor::extentsOf(*facts.shape))
                                   : e.node("Shape", {e.operand(p)});
     return Value::symbolic(e.node("Expand", {zero, shape}), facts.dtype, facts.shape);
 }
@@ -524,11 +526,11 @@ Value lowerAdamState(const LowerContext &ctx) {
 /// The static extent of a spatial axis, or an export error naming the operator.
 int64_t staticExtent(
     const tensor::StaticShape &shape, size_t axis, std::string_view uri, std::string_view what) {
-    const int64_t d = shape[axis];
-    if (d == tensor::kUnknownDim) {
+    const std::optional<int64_t> d = shape[axis];
+    if (!d) {
         throw ExportError(std::format("{}: the {} must be known statically", uri, what));
     }
-    return d;
+    return *d;
 }
 
 /// (input, kernel) shapes shared by the three conv2d gradient operators.
@@ -598,11 +600,11 @@ Value lowerConv2dKernelGrad(const LowerContext &ctx) {
     // The crop is a no-op when the extents work out exactly (e.g. stride 1); emit it only when
     // static shapes cannot prove that, or prove a surplus.
     bool exact = false;
-    if (x[2] != tensor::kUnknownDim && x[3] != tensor::kUnknownDim) {
-        const int64_t OH = (x[2] + 2 * padding - KH) / stride + 1;
-        const int64_t OW = (x[3] + 2 * padding - KW) / stride + 1;
-        exact            = x[2] + 2 * padding - (OH - 1) * stride == KH &&
-                           x[3] + 2 * padding - (OW - 1) * stride == KW;
+    if (x[2].has_value() && x[3].has_value()) {
+        const int64_t OH = (*x[2] + 2 * padding - KH) / stride + 1;
+        const int64_t OW = (*x[3] + 2 * padding - KW) / stride + 1;
+        exact            = *x[2] + 2 * padding - (OH - 1) * stride == KH &&
+                           *x[3] + 2 * padding - (OW - 1) * stride == KW;
     }
     if (!exact) {
         const int64_t starts[] = {0, 0}, ends[] = {KH, KW}, axes[] = {2, 3};
@@ -637,13 +639,13 @@ Value lowerBatchNormTrainGrad(const LowerContext &ctx) {
     }
     const auto gammaFacts = ctx.facts(1);
     if (!gammaFacts.shape || gammaFacts.shape->size() != 1 ||
-        (*gammaFacts.shape)[0] == tensor::kUnknownDim) {
+        !(*gammaFacts.shape)[0].has_value()) {
         throw ExportError(
             std::format(
                 "{}: the channel count (gamma's extent) must be known statically",
                 ctx.uri()));
     }
-    const int64_t C      = (*gammaFacts.shape)[0];
+    const int64_t C      = *(*gammaFacts.shape)[0];
     const double eps     = ctx.constNumber(3, 1e-5);
     const std::string x  = ctx.input(0, f);
     const std::string dy = ctx.input(2, f);
@@ -674,7 +676,7 @@ Value lowerBatchNormTrainGrad(const LowerContext &ctx) {
     type::Type *resultType = ctx.resultType();
     if (!resultType || resultType->code() != TypeCode::Tuple) {
         resultType = type::TupleType::create(
-            {tensor::TensorType::get(f), tensor::TensorType::get(f), tensor::TensorType::get(f)});
+            {tensor::ops::tensorOf(f, std::nullopt), tensor::ops::tensorOf(f, std::nullopt), tensor::ops::tensorOf(f, std::nullopt)});
     }
     return Value::aggregate(resultType, {std::move(dxV), std::move(dgV), std::move(dbV)});
 }

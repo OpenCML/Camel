@@ -29,7 +29,7 @@ namespace camel::runtime {
 struct RuleSource {
     std::string name;
     uint16_t id = 0;
-    /// The numeric permissions the rule needs (`#requires<...>`).
+    /// The numeric permissions the rule needs (`#requires(...)`).
     camel::core::sem::PermissionMask needs = camel::core::sem::kNoPermissions;
     /// `<=>`: the rule holds both ways.
     bool bidirectional = false;
@@ -41,7 +41,7 @@ struct RuleSource {
     /// The condition, if the declaration has one.
     std::function<bool(const Match &)> when;
     /// The condition's parameter count, when it has one: the sides' parameters, each `const` one
-    /// followed by the hidden node parameter `node_of` reaches it through (the ruling of
+    /// followed by the hidden node parameter `node_of` reaches it through (the rule of
     /// 2026-10-23 on `rule_when_const_node`). The rule's own parameters come first, in the order
     /// it writes them; the hidden node parameters follow, one per `const` parameter, in the same
     /// order.

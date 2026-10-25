@@ -62,7 +62,7 @@ showcase, which treat the stable form as uniformly "no worse".
 
 **(a) Licence the stable form with the trade documented.** Keep
 `exp(x) / sum(exp(x), axis, true) => softmax(x, axis)` behind
-`#requires<refine_accuracy>`, and state in the library that it removes
+`#requires(refine_accuracy)`, and state in the library that it removes
 overflow, underflow and 0/0 (the naive form returns NaN for logits above
 `ln(FLT_MAX)` or below about -104) while its relative error on elements about
 60 below the maximum can be worse by roughly one to two orders of magnitude

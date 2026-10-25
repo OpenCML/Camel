@@ -1,0 +1,140 @@
+id = "modules.rules_conditions"
+order = 394
+tier = "fast"
+tags = ["feat", "modules", "rules", "rewrite"]
+desc = "The purity of a rule's condition: a condition decides whether a rule applies to a redex, and the engine evaluates it while it holds a session on the program being rewritten, so an effect in it (a rewrite, a commit, a print) acts inside that session and is refused where the rule is written. A rule's right side is a term over what the rule matched, so a call there is not a term at all, and a program that interleaves a transaction with a rewrite without a condition leaves the engine working rather than crashing."
+
+[[tests]]
+name = "rules.condition_that_rewrites_is_refused"
+desc = "A rule whose condition calls a function that rewrites: the nested rewrite opens a session of its own and commits a new program while the outer rewrite is still reading the old one. The effect is in `publish_now`, not in the condition's own body, and the report names it, the rule it belongs to, and the position of the rewrite call. The module does not load."
+kind = "negative"
+case = "../../../cases/modules/rules/condition_rewrite.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::EffectInRuleCondition"
+expect_diagnostic_code = "0x030001AD"
+expect_diagnostic_line = 15
+expect_diagnostic_column = 18
+expect_output_contains = ["The call of 'rewrite' in the function 'publish_now' has an effect, and it is inside the condition of the rule 'add_zero'"]
+expect_output_not_contains = ["RewriteConflict"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.condition_that_commits_is_refused"
+desc = "The same rule with a commit in its condition: the transaction commits a new node and publishes a program the outer rewrite is not reading. The reported effect is the first one the condition's function runs, the print of the arm, and the position is that of the call; the rule and the function are both named. The module does not load, so the commit never happens."
+kind = "negative"
+case = "../../../cases/modules/rules/condition_commit.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::EffectInRuleCondition"
+expect_diagnostic_code = "0x030001AD"
+expect_diagnostic_line = 15
+expect_diagnostic_column = 32
+expect_output_contains = ["The call of 'println' in the function 'publish_now' has an effect, and it is inside the condition of the rule 'add_zero'"]
+expect_output_not_contains = ["added node"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.condition_that_prints_is_refused"
+desc = "The effect written in the function the condition calls, with the condition an ordinary predicate over the constant the rule matched otherwise: a condition that prints is refused like one that commits, because the print is an effect of the same evaluation. The position of the print is the reported one, and the rule and the function are named."
+kind = "negative"
+case = "../../../cases/modules/rules/condition_println.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::EffectInRuleCondition"
+expect_diagnostic_code = "0x030001AD"
+expect_diagnostic_line = 12
+expect_diagnostic_column = 12
+expect_output_contains = ["The call of 'println' in the function 'reports' has an effect, and it is inside the condition of the rule 'keep_positive'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.pure_condition_runs"
+desc = "A condition that is an ordinary predicate over the constant the rule matched (the shape every law of the standard library writes): the coefficient's value is read and nothing else happens, so the rule applies and the program is rewritten. This is the check's positive half: reading the same kind of condition it refuses above reports nothing."
+kind = "behavior"
+case = "../../../cases/modules/rules/condition_pure.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "rewritten\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.effect_in_a_right_side_is_a_rule_error"
+desc = "The interleaving written in a rule's right side, where no condition is involved: a right side is a term over the operators, the constants and the parameters the rule matched, so a call of a function there is not a term. The engine answers with the error value `RuleInvalid` and the run ends without a crash. No program that avoids a rule condition reaches a conflict of the rewrite session, so the module answers no error kind for one and the right side's own error is what a caller sees."
+kind = "behavior"
+case = "../../../cases/modules/rules/commit_during_rewrite.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 1
+expect_stdout_contains = ["outer error value:  RuleInvalid", "the right side has a term that is not an operator, a constant or a parameter"]
+expect_output_not_contains = ["inner ok", "RewriteConflict"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.generic_condition_effect_is_refused"
+desc = "The question page's program: the same rule and the same condition as `condition_commit.cml`, under a head that declares a type parameter. The declaration carries templates instead of two functions, so the condition is not a function of the rule's object, and the check reads the template: the effect the condition calls is refused at the rule's own declaration, with the rule's definition named as related information. The module does not load."
+kind = "negative"
+case = "../../../cases/modules/rules/condition_generic_commit.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::EffectInRuleCondition"
+expect_diagnostic_code = "0x030001AD"
+expect_diagnostic_line = 17
+expect_diagnostic_column = 32
+expect_output_contains = ["The call of 'println' in the function 'publish_now' has an effect, and it is inside the condition of the rule 'add_zero'", "[the rule 'add_zero' is declared here at 12:1]"]
+expect_output_not_contains = ["PassInternalError", "RewriteConflict", "added node"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.generic_condition_effect_at_instantiation"
+desc = "A generic rule whose condition calls a generic function: which candidate the call takes is decided by the type arguments of the instance, so the effect is only known when the instance is made, and the rule's declaration has no effect written in it to find. The instance is checked as it is made, and the verdict is about the rule rather than about the attempt at one type tuple, so it goes where the user reads it and not into the held sink. The engine makes instances while the program runs, where the module's own build is over and no longer holds a report: the verdict reaches the reader through the channel the run reports through, at the effect's own line and column, with the rule's definition as related information, and the run stops there -- the condition, and so the effect in it, is never evaluated. Before this check the same program died with `PassInternalError` while the engine held a session on the program."
+kind = "behavior"
+case = "../../../cases/modules/rules/condition_generic_print.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::EffectInRuleCondition"
+expect_diagnostic_code = "0x030001AD"
+expect_diagnostic_line = 14
+expect_diagnostic_column = 5
+expect_stdout_contains = ["The call of 'println' in the function 'announce<Node>' has an effect, and it is inside the condition of the rule 'add_zero'", "[the rule 'add_zero' is declared here at 11:1]"]
+expect_output_not_contains = ["PassInternalError", "internal error", "RewriteConflict", "announce  Node(2, 2)"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.fact_clause_reads_the_value_it_captured"
+desc = "A fact whose clauses read a value of the module they are declared in: every value's fact is that value (times a thousand, so nothing else can be mistaken for it). A clause is a function value of the module, and the value is one it captured where it was written; a call that passes the graph alone reads the capture as an empty slot and the reader then reads a number nothing computed."
+kind = "behavior"
+case = "../../../cases/modules/rules/fact_capture_target.cml"
+args = ["${case}", "fact_capture::report", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "depth  35002\n4\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.pass_body_reads_the_value_it_captured"
+desc = "A pass written in Camel whose body reads a value of its own module and takes a `with` parameter: the pass is run through the entry of its module's program, which computes the module's values and binds them before it calls the pass, so the body reads the capture and the parameter. This is the third of the call sites that hand a function its execution: the other two hold a function value and pass its closure."
+kind = "behavior"
+case = "../../../cases/modules/rules/capture_pass_target.cml"
+args = ["${case}", "capture_pass::report label=p", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "base  7  label  p\ntarget ok\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.interleaved_transaction_is_not_a_rewrite_conflict"
+desc = "The other interleaving, with no rule condition and no rule's right side in it: a graph transaction commits a new program and the rewrite of the program it started from runs after it. That session does not write anything of its own over the new program, so no conflict is reported and the run succeeds; a conflict of two writes of one program is the graph module's to report, not the rewrite module's."
+kind = "behavior"
+case = "../../../cases/modules/rules/interleaved_commit.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "interleaved ok\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000

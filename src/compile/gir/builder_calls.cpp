@@ -102,7 +102,7 @@ node_handle_t Builder::functionValueOf(node_handle_t node, const GCT::node_ptr_t
     if (boundWithArgs_.contains(node)) {
         // `f<w>` as a value is a partial application (design principles 4.4). The binding
         // used to be dropped here, without a word. It is located at `f<w>` itself, not at the
-        // statement the binding is written in (H9 1.6).
+        // statement the binding is written in (1.6).
         const auto withIt = boundWithOrigin_.find(node);
         const GCT::node_ptr_t at =
             withIt != boundWithOrigin_.end() ? withIt->second : origin;
@@ -282,7 +282,7 @@ node_handle_t Builder::partialApplicationOf(
         if (arg.name) {
             // A function value has no parameter names to bind a name to, and the binding it
             // would make is not the prefix of parameters a value carries: name a parameter
-            // only in a call (design principles 4.4, handover H235).
+            // only in a call (design principles 4.4).
             diags_->of(SemanticDiag::WithArgumentInValue)
                 .atOrigin(arg.expr != nullptr ? arg.expr->origin() : at)
                 .commit(*arg.name);
@@ -301,7 +301,7 @@ node_handle_t Builder::partialApplicationOf(
     // position says which function it wants, with the parameters that are left).
     //
     // A context argument chooses its overload exactly as an ordinary call does (design
-    // principles 4.4, 5.1; H27d): a function whose `with` parameters take the bound values
+    // principles 4.4, 5.1): a function whose `with` parameters take the bound values
     // exactly is tried first, and only when no function takes them exactly may a literal
     // enter a parameter type. With `with <k: int>` and `with <k: f32>` both declared,
     // `scale<2>` is the `int` one; `half<2>` with only `with <k: f32>` still binds the
@@ -390,7 +390,7 @@ node_handle_t Builder::partialApplicationOf(
         candidates.push_back(tt::as_ptr<FunctionType>(type));
     }
     // Exact matches first; a literal enters a parameter type only when there is none. Several
-    // candidates in the pass that is used are an ambiguity (design principles 5.1, H27e): it
+    // candidates in the pass that is used are an ambiguity (design principles 5.1): it
     // is recorded here and reported when the binding is refused for good, because the position
     // may still say which function is meant (a parameter of function type, overloadValueFor,
     // or the type of the call this value is passed to). Declaration order never chooses, and
@@ -484,7 +484,8 @@ node_handle_t Builder::partialApplicationOf(
                    : std::format("{}{}", prefix, i);
     };
     for (size_t i = bound.size(); i < withCount; ++i) {
-        factory.addWithArg(nameAt(i, "__w", i), calleeType->withTypeAt(i), false);
+        factory.addWithArg(
+            nameAt(i, "__w", i), calleeType->withTypeAt(i), false, calleeType->withNeedsValueAt(i));
     }
     for (size_t i = 0; i < calleeType->normTypesCount(); ++i) {
         factory.addNormArg(
@@ -519,7 +520,7 @@ node_handle_t Builder::partialApplicationOf(
 
     compile_graph_ptr_t graph     = enterScope(type);
     // The graph is the value `f<w>`: it is located at that expression, so the function value
-    // made from it covers `f<w>` and not the statement it is written in (H9 1.6).
+    // made from it covers `f<w>` and not the statement it is written in (1.6).
     registerGraphOrigin(
         context_,
         graph,
@@ -573,6 +574,149 @@ node_handle_t Builder::partialApplicationOf(
     }
     leaveScope();
     return createFuncDataNode(graph, true, false);
+}
+
+compile_graph_ptr_t
+Builder::singleGraphOfDref(const DraftGraphBuilder::DrefTarget &target) const {
+    if (std::holds_alternative<graph_ptr_t>(target)) {
+        return std::get<graph_ptr_t>(target);
+    }
+    // A name declared once in the module still comes back as the set of the graphs it has there
+    // (a name may be declared once and hold several overloads): one is a declaration.
+    if (std::holds_alternative<graph_vec_ptr_t>(target)) {
+        auto graphs = asCompileGraphVec(target);
+        if (graphs && graphs->size() == 1) {
+            return graphs->front();
+        }
+    }
+    return nullptr;
+}
+
+const Builder::TopLevelDeclaration *
+Builder::ruleBindingOf(const compile_graph_ptr_t &graph) const {
+    if (graph == nullptr) {
+        return nullptr;
+    }
+    const auto known = topLevelFunctions_.find(graph.get());
+    if (known == topLevelFunctions_.end() || known->second == nullptr ||
+        known->second->gct == nullptr || !known->second->gct->ruleBinding()) {
+        return nullptr;
+    }
+    return known->second;
+}
+
+bool Builder::isRuleBindingTarget(node_handle_t node) const {
+    if (node == nullptr || !nodeIsKind(node, runtime::GCNodeKind::Dref)) {
+        return false;
+    }
+    return ruleBindingOf(singleGraphOfDref(nodeGraphOf(node)->drefTarget(node))) != nullptr;
+}
+
+node_handle_t Builder::ruleBindingValueOf(node_handle_t target, const GCT::node_ptr_t &at) {
+    const compile_graph_ptr_t graph =
+        singleGraphOfDref(nodeGraphOf(target)->drefTarget(target));
+    const TopLevelDeclaration *declaration = ruleBindingOf(graph);
+    ASSERT(declaration != nullptr, "A rule's binding function is declared at the top level.");
+    FunctionType *calleeType = graph->funcType();
+
+    // The values written beside the name (`name<value>`) are the `with` arguments, in the order
+    // they were written: the nodes visitWithNode built, bound to names so the synthesised call
+    // reads them once.
+    std::vector<Argument> bound;
+    GCT::node_ptr_t calleeGct = nullptr;
+    if (const auto it = boundWithArgs_.find(target); it != boundWithArgs_.end()) {
+        bound = std::move(it->second);
+        if (const auto callee = boundWithCallee_.find(target); callee != boundWithCallee_.end()) {
+            calleeGct = callee->second;
+        }
+        boundWithArgs_.erase(it);
+        boundWithCallee_.erase(target);
+        boundWithOrigin_.erase(target);
+    }
+    if (calleeGct == nullptr) {
+        // `name` alone: the name is the DREF this was reached through, and it is the callee of
+        // the call the value is.
+        calleeGct = at;
+    }
+    // A parameter the value does not bind is filled from its default. A parameter that has none
+    // leaves no `Rule` to write: the rule is a function of it, and the name is a call of that
+    // function only when every parameter is bound (design principles 5.5).
+    const std::vector<std::optional<ParameterDefaultValue>> *withDefaults = nullptr;
+    if (const auto it = defaults_.find(graph.get()); it != defaults_.end() && !it->second.with.empty()) {
+        withDefaults = &it->second.with;
+    }
+    const std::string ruleName(declaration->names.front());
+    // What the rule is bound to: one value per `with` parameter, in the order the declaration
+    // writes them, written beside the name or given by the parameter's default. A rule value
+    // carries them, and they are the value half of the instance key the engine makes the rule's
+    // sides at, so each is a compile-time value of the parameter's type (design principles 5.4,
+    // 5.5).
+    std::vector<data_ptr_t> withValues;
+    withValues.reserve(calleeType->withTypesCount());
+    for (size_t i = 0; i < calleeType->withTypesCount(); ++i) {
+        Type *declared = calleeType->withTypeAt(i);
+        const std::string paramName(calleeType->argNameAt(i));
+        if (i < bound.size()) {
+            withValues.push_back(
+                ruleWithArgumentValue(bound[i], declared, ruleName, paramName, at));
+            continue;
+        }
+        const ParameterDefaultValue *fallback = nullptr;
+        if (withDefaults != nullptr && i < withDefaults->size() &&
+            (*withDefaults)[i].has_value()) {
+            fallback = &(*withDefaults)[i].value();
+        }
+        if (fallback == nullptr || fallback->data == nullptr) {
+            if (fallback == nullptr) {
+                diags_->of(SemanticDiag::RuleWithParameterUnbound)
+                    .atOrigin(at->origin())
+                    .commit(paramName, ruleName);
+                throw BuildAbortException();
+            }
+            diags_->of(SemanticDiag::RuleWithArgumentNotConstant)
+                .atOrigin(at->origin())
+                .commit(paramName, ruleName, declared != nullptr ? declared->toString() : "?");
+            throw BuildAbortException();
+        }
+        data_ptr_t value = fallback->data;
+        if (declared != nullptr && !declared->equals(value->type())) {
+            if (data_ptr_t converted = value->clone()->convertTo(declared); converted != nullptr) {
+                value = std::move(converted);
+            }
+        }
+        withValues.push_back(std::move(value));
+    }
+
+    const auto make = [&](GCT::node_ptr_t node) {
+        node->setOrigin(at->origin());
+        return node;
+    };
+    // The call is made with the values themselves, as the constants they are: the binding function
+    // hands them to the maker, which is what the instance key is read from, so no other writing of
+    // a value can stand in for them. A constant is a node of the graph being built, and the
+    // parameters are bound to it as any other argument.
+    std::vector<std::string> boundNames;
+    boundNames.reserve(withValues.size());
+    for (const data_ptr_t &value : withValues) {
+        const node_handle_t constant = currGraph_->addStaticDataNode(value);
+        rememberConstant(constant, value);
+        registerNodeOrigin(context_, constant, at, "gir.rule.with");
+        boundNames.push_back(bindTemporary(valueOf(constant)));
+    }
+    GCT::node_ptr_t with = make(tree_->makeWith(boundNames.size()));
+    *with << tree_->clone(calleeGct);
+    for (const std::string &name : boundNames) {
+        *with << make(tree_->makeDRef(name));
+    }
+    GCT::node_ptr_t call = make(tree_->makeLink(0));
+    *call << with;
+    // The call is the one the binding makes, so the name inside it stays the name: the values
+    // bound here are what the parameters take, and the parameters left over are filled from
+    // their defaults by the call itself.
+    const bool outerRuleBindingCallee = std::exchange(ruleBindingCallee_, true);
+    node_handle_t value               = visitLinkNode(call);
+    ruleBindingCallee_                = outerRuleBindingCallee;
+    return value;
 }
 
 compile_graph_ptr_t Builder::forwardingGraphOf(const compile_graph_ptr_t &target) {
@@ -758,7 +902,7 @@ void Builder::evaluateDefaults(
     // A default that reads a parameter of the same declaration is not a constant, and the
     // parameter is only a name where the declaration's own scope is in force. Elsewhere the
     // name is not looked up at all, so that a module-level value of the same name is not taken
-    // for it. Both kinds of parameter are checked (design principles 4.4, handover H276).
+    // for it. Both kinds of parameter are checked (design principles 4.4).
     const auto readsParameter = [&](const GCT::node_ptr_t &node, const auto &self) -> bool {
         if (node == nullptr) {
             return false;
@@ -937,7 +1081,7 @@ std::optional<Builder::CalleeSet> Builder::declarationsOfCallee(node_handle_t ca
             // The rules of an operator group are the declarations of its name (design principles
             // 6.4): whether a call can give an argument by name does not depend on whether the
             // callee is a Camel declaration or a group of rules a C++ module registered (the
-            // language author's ruling, 2026-10-24, "named arguments reach operator groups";
+            // language rule, 2026-10-24, "named arguments reach operator groups";
             // docs/handover/reviews/questions-2026-10-23.md). The name has to mark the same
             // position in every rule, exactly as it has to in every declaration of a name, and a
             // rule that cannot place a name (a signature that follows its arguments and spells

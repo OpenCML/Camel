@@ -41,12 +41,12 @@ Requirements: Node.js 20 or later and VS Code 1.82 or later.
 
 ```bash
 cd editors/vscode
-npm install
+npm ci
 npm run package
 code --install-extension camel-lang-0.1.0.vsix
 ```
 
-`npm run package` checks the grammar against the lexer, compiles the TypeScript source and writes `camel-lang-<version>.vsix`. To try the extension without installing it, open `editors/vscode` in VS Code after `npm install` and `npm run compile`, and press F5.
+`npm ci` installs exactly what `package-lock.json` records, and the two packages that decide what a token's scope is (`vscode-textmate`, `vscode-oniguruma`) are pinned to an exact version in `package.json` as well, so no install can drift away from the recorded scopes. `npm run package` checks the grammar against the lexer, compiles the TypeScript source and writes `camel-lang-<version>.vsix`. To try the extension without installing it, open `editors/vscode` in VS Code after `npm ci` and `npm run compile`, and press F5.
 
 The extension looks for `camel-ls` in this order: the setting `camel.server.path`, then `$CAMEL_HOME/bin`, then `PATH`. `camel` (for the run command) is found the same way, with the setting `camel.path`. When `camel-ls` is not found the extension reports where it looked and points at the setting; syntax highlighting does not depend on the server.
 
@@ -303,7 +303,7 @@ node scripts/test.js test/plans/feat/tools/grammar.plan.toml
 ```
 
 - `grammar.tables` and `grammar.files` need nothing installed. The first fails when the lexer gains or loses a keyword, the parser a literal token, or the compiler a built-in type name that the grammar does not follow.
-- `grammar.scopes.*` tokenise a set of programs with the libraries VS Code itself uses and compare the scopes of every token with golden files under `test/plans/feat/tools/golden/grammar/`. They are **skipped** until `npm install` has been run in `editors/vscode`.
+- `grammar.scopes.*` tokenise a set of programs with the libraries VS Code itself uses and compare the scopes of every token with golden files under `test/plans/feat/tools/golden/grammar/`. They are **skipped** until `npm ci` has been run in `editors/vscode`: only a checkout with those packages installed runs them in the gate. A golden records the **text of its case file**, so a case that changed (a new spelling, a retired keyword) with no golden regenerated turns these red; `node test/tools/run-tests.mjs --update-golden` is the command that records them again.
 
 After a deliberate change to the grammar, look at the new scopes, then record them:
 

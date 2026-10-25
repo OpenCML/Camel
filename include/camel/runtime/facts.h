@@ -162,7 +162,7 @@ struct KindInfo {
  *   compute  the value at the anchors, or nullopt when there is none (an OPER whose operator
  *            declares no index semantics has no instance). Required for GraphContent (the value
  *            is read from the graph) and for verify(); a kind computed only by its owner (a
- *            module's analysis) may leave it empty.
+ *            module's fact) may leave it empty.
  *   print    one line of text (camel inspect --facts). Required.
  *   cone     Dependency::Cone: a hash of everything compute reads at the anchors.
  *   encode / decode   a portable text form of the value (persist.h): GraphContent and Derived

@@ -1,0 +1,62 @@
+/**
+ * A rule whose condition asks a fact over the parts of the redex, where no value has those parts.
+ *
+ * `drop_by_one`'s condition asks `sub(x, node_of(c)) == 1`: the parts are the factor's node and
+ * the coefficient's node, and a subtraction is not a product, so the query finds nothing. A
+ * condition is the test of whether the rule applies here (design principles 4.4), so a query that
+ * finds nothing makes it false and the rule does not apply -- the product stays, and the pass goes
+ * on to the next rule.
+ *
+ * `sign` is declared first and is not itself queried by a condition: it is the fact `sub`'s case
+ * computes, so a query of `sub` runs a query of `sign` inside the condition of the rule. A
+ * declaration no rule queries is not a condition path, and the two-parameter query is what this
+ * case is about.
+ *
+ * `kept` must keep its product and its value `14`, and the pass must reach the end: a query with
+ * no answer is an outcome of a condition (the rule does not apply), not a death of the pass.
+ */
+module fact_no_value
+
+import { Program, Node, Graph, graphs, nodes, op, op_name, name } from graph
+import { max } from math
+import { rewrite } from rewrite
+
+fact sign: int match v {
+    case const c: int => c
+    case _       => 0
+} join max
+
+fact sub(a: Node, b: Node): int match (a, b) {
+    case x - y   => sign(y)
+    case _       => 0
+} join max
+
+rule drop_by_one(x: int, const c: int) when sub(x, node_of(c)) == 1 { x * c => x }
+
+func opText(n: Node): string {
+    return match op(n) {
+        case null => ''
+        case o => op_name(o)
+    }
+}
+
+func countOf(p: Program, function: string, operator: string): int {
+    let found = graphs(p)->filter<(g: Graph): bool => name(g) == function>
+    return len(nodes(found[0])->filter<(n: Node): bool => opText(n) == operator>)
+}
+
+export func apply(p: Program): Program! sync {
+    return rewrite(p, [drop_by_one])
+}
+
+export func report(p: Program): Program! sync {
+    println('kept', countOf(p, 'kept', ':op/mul_l'))
+    return p
+}
+
+func kept(a: int): int { return a * 2 }
+
+func main(): int sync {
+    println('kept', kept(7))
+    return 0
+}

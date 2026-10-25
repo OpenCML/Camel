@@ -71,7 +71,7 @@ bool debugRunBlockSelfTest() {
     }
 
     // DLPack carries a complex number as its two parts: dtype code 5, 64 bits for c64 and 128
-    // for c128, lanes 1 (H15b, H15c item 5). One tensor of NumPy complex128 is a row of
+    // for c128, lanes 1 (item 5). One tensor of NumPy complex128 is a row of
     // (real, imaginary) doubles, in that order; one of complex64 a row of two floats.
     Array *complex128 = Array::create(mm::autoSpace(), ArrayType::create(Type::Complex128()), 20);
     if (!complex128->isCompact() || complex128->block() == nullptr ||

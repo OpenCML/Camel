@@ -2,7 +2,7 @@ module bounds_unknown_runtime
 import { Tensor, reshape, slice, sum, shape, load_npy } from tensor
 func main(): int sync {
     println('ran')
-    let b = load_npy('test/cases/modules/tensor/shape_types/x3.npy')
+    let b = load_npy::<f32>('test/cases/modules/tensor/shape_types/x3.npy')
     println(shape(slice(b, 0, 1, 1)))
     println(b[8])
     return 0

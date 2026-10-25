@@ -3,12 +3,15 @@
  * decides a branch; `t[1] * 2.0` computes a host number that re-enters tensor
  * math. std::argir marks both crossings (role scalar-boundary), the branch's
  * join (branch-contract) and the effect (println).
+ *
+ * `gate` is written with its element type and shape (`f32[4]`), the terminal spelling: a bare
+ * `Tensor` parameter leaves the element type unstated, so `t[0]` had no type for `t[0] > 0.5`.
  */
 module scalar_boundary
 
-import { Tensor, reshape, relu } from tensor
+import { reshape, relu } from tensor
 
-func gate(t: Tensor): Tensor {
+func gate(t: f32[4]): f32[4] {
     return if t[0] > 0.5 then relu(t) else t * (t[1] * 2.0)
 }
 

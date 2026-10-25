@@ -20,13 +20,19 @@ StreamType *StreamType::make(Type *elemType) {
     // The element type is the whole key: `int..` written once and `int..` reached through a
     // `type` alias, a generic instantiation or a graph are one object, which is what makes
     // equality, overload selection and `#impl` signature agreement agree with each other.
-    uintptr_t words[1] = {reinterpret_cast<uintptr_t>(elemType)};
-    const auto createObject = [&]() -> Type * {
+    Type *plainElement       = TypeTable::instance().canonical(elemType);
+    const uintptr_t words[1] = {typeKeyWord(elemType)};
+    const uintptr_t plain[1] = {typeKeyWord(plainElement)};
+    const auto createObject  = [&](Type *element) -> Type * {
         void *mem = allocTypeStorage<StreamType>(TypeStorageKind::Stream);
-        return new (mem) StreamType(elemType);
+        return new (mem) StreamType(element);
     };
-    Type *type =
-        TypeTable::instance().intern(TypeTable::Shape::Stream, std::span<const uintptr_t>(words, 1), createObject);
+    Type *type = TypeTable::instance().intern(
+        TypeTable::Shape::Stream, std::span<const uintptr_t>(words, 1),
+        [&]() -> Type * { return createObject(elemType); },
+        TypeTable::Canonical{
+            std::span<const uintptr_t>(plain, 1),
+            [&]() -> Type * { return createObject(plainElement); }});
     return static_cast<StreamType *>(type);
 }
 

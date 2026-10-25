@@ -37,7 +37,7 @@ digraph GraphIR {
             N0B [label="1", type="DATA", origin=<ORIGIN>, span="27:18-27:19", srcfile="<ROOT>/test/cases/opt/camel_passes/cse_subject.cml", value_type="int"];
             N0C [label=":op/add_l", type="OPER", origin=<ORIGIN>, span="27:16-27:17", srcfile="<ROOT>/test/cases/opt/camel_passes/cse_subject.cml", value_type="int"];
             N0D [label=":var/peek", type="OPER", value_type="int"];
-            N0E [label=":op/assn_l", type="OPER", origin=<ORIGIN>, span="27:9-27:10", srcfile="<ROOT>/test/cases/opt/camel_passes/cse_subject.cml", value_type="int"];
+            N0E [label=":op/assn_l", type="OPER", origin=<ORIGIN>, span="27:9-27:10", srcfile="<ROOT>/test/cases/opt/camel_passes/cse_subject.cml", value_type="var int"];
             N0F [label=":op/mul_l", type="OPER", origin=<ORIGIN>, span="28:17-28:18", srcfile="<ROOT>/test/cases/opt/camel_passes/cse_subject.cml", value_type="int"];
             N10 [label=":var/peek", type="OPER", value_type="int"];
             N11 [label=":op/add_l", type="OPER", origin=<ORIGIN>, span="29:13-29:14", srcfile="<ROOT>/test/cases/opt/camel_passes/cse_subject.cml", value_type="int"];
@@ -56,7 +56,7 @@ digraph GraphIR {
             N0C -> N0E [label="0|1", type="NORM"];
             N10 -> N0F [label="0|0", type="NORM"];
             N08 -> N0F [label="1|1", type="NORM"];
-            N07 -> N10 [label="3|0", type="NORM"];
+            N0E -> N10 [label="0|0", type="NORM"];
             N0E -> N10 [label="0|0", type="CTRL"];
             N09 -> N11 [label="0|0", type="NORM"];
             N0F -> N11 [label="0|1", type="NORM"];

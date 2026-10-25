@@ -1,6 +1,6 @@
 module body_chain_verbatim
 
-// The corpus of 5.7 (docs/design/effects/edges.cn.md, handover H242): the body of an inlined `sync`
+// The corpus of 5.7 (docs/design/effects/edges.cn.md): the body of an inlined `sync`
 // function brings a chain of its own, and those statements are the statements of the body's own
 // block, not of the caller's. The caller prints 1, the body prints 101 and 102, the caller prints
 // the result the body returned (4) and then 2, and every one of those effects must run in that

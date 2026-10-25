@@ -30,7 +30,7 @@ namespace camel::parse::ast {
 
 /// The arguments of a call or a binding, as they are written: the positional ones, the named
 /// ones, and the first positional one written after a named one (`f(a: 1, 2)`), which the call
-/// refuses where it is built (design principles 4.4, handover H276). The parser keeps the two
+/// refuses where it is built (design principles 4.4). The parser keeps the two
 /// lists apart; the third field is the evidence that they were interleaved.
 struct ArgumentValues {
     node_ptr_t data                   = nullptr;
@@ -70,6 +70,9 @@ class Builder {
     camel::source::source_file_id_t sourceFileId_ = camel::source::kInvalidSourceFileId;
 
     std::shared_ptr<ModuleLoad> module_ = std::make_shared<ModuleLoad>();
+    /// The tags written before `module` (`#gpu module m`, design principles 13.4), made by
+    /// visitModuleDecl and attached to the module node by visitProgram. Null when there are none.
+    node_ptr_t moduleTagUses_ = nullptr;
     std::vector<std::shared_ptr<ImportLoad>> imports_;
     std::shared_ptr<ExportLoad> export_ = std::make_shared<ExportLoad>();
     std::vector<std::string> namespaceStack_;
@@ -92,23 +95,26 @@ class Builder {
     Value visitExportDecl(syntax::cst::ExportDecl context);
     Value visitUsingNamespaceDecl(syntax::cst::UsingNamespaceDecl context);
     Value visitRuleDecl(syntax::cst::RuleDecl context);
-    Value visitAnalysisDecl(syntax::cst::AnalysisDecl context);
+    Value visitFactDecl(syntax::cst::FactDecl context);
     /// The import of the module `rewrite` that rule declarations need was made.
     bool ruleImportAdded_ = false;
-    /// The imports an analysis declaration needs (`__analysis`, `graph.Node`) were made.
-    bool analysisImportAdded_ = false;
+    /// The imports a fact declaration needs (`__fact`, `graph.Node`) were made.
+    bool factImportAdded_ = false;
     /// The imports a rule condition needs (`__rule_when`, `graph.Node`) were made.
     bool whenImportAdded_ = false;
     /// The import of the maker a generic rule needs (`__rule_generic`) was made: a rule whose head
     /// declares type parameters carries its templates and is made by that maker alone.
     bool genericRuleImportAdded_ = false;
+    /// The import of `rewrite.Rule` was made: the function a rule with `with` parameters is
+    /// written as gives a `Rule`, and the type is named in its signature.
+    bool ruleTypeImportAdded_ = false;
     /// The import of `graph.Node` for a rule condition was made: a condition whose parameters are
     /// all `const` names values, not nodes, and does not need it.
     bool whenNodeImportAdded_ = false;
     /// The `node_of` names of the condition being built: a `const` parameter of a rule that the
     /// condition reaches with `node_of(c)`, and the hidden node parameter appended to the
     /// condition for it. Empty outside a rule condition, so `node_of` written anywhere else is
-    /// refused by name (the ruling of 2026-10-23 on `rule_when_const_node`).
+    /// refused by name.
     std::map<std::string, std::string> ruleWhenNodeParams_;
     /// The rule whose condition is being built, for the refusal above.
     std::string ruleWhenName_;
@@ -127,7 +133,7 @@ class Builder {
     Value visitTagDecl(syntax::cst::TagDecl context);
     /// The permission groups the program declares (`tag fast = [reassociate, contract]`), by
     /// the name they are declared with, expanded to the permissions their members grant. A
-    /// `#requires<fast>` written in the same program can name one of them (design principles
+    /// `#requires(fast)` written in the same program can name one of them (design principles
     /// 7.2: a permission is a tag, and a group of permissions is a tag too). Built before the
     /// declarations are visited, because a rule's requirement is read while it is parsed.
     void collectProgramPermissionGroups(syntax::cst::Program program);
@@ -141,6 +147,10 @@ class Builder {
     /// The tag uses written before `context`, attached to `owner` as its next child, a
     /// RepeatedLoad("TagUse"); nothing when it has none.
     void addTagUses(const node_ptr_t &owner, const syntax::Node &context);
+    /// The tag uses written in `context` as one RepeatedLoad("TagUse"), or null when there are
+    /// none. A module's tags are made this way: their owner (the module node) exists only after
+    /// the declaration has been visited.
+    node_ptr_t tagUseListOf(const syntax::Node &context);
     Value visitNamespaceDecl(syntax::cst::NamespaceDecl context);
     /// `topLevel`: a declaration of the module or of a namespace block, whose names take the
     /// path of the enclosing namespaces (`namespace Config { let limit = 10 }` declares
@@ -175,7 +185,7 @@ class Builder {
     Value visitStaticForExpr(syntax::cst::StaticForExpr context);
     Value visitStaticLoopExpr(syntax::cst::StaticLoopExpr context);
     TypeCaseKind typeCaseKindOf(syntax::cst::TypeCasePattern pattern);
-    /// IfExpr, MatchExpr, MatchTypeExpr, TryExpr.
+    /// IfExpr, MatchExpr, MatchTypeExpr, StaticForExpr.
     Value visitCtrlExpr(syntax::Node context);
     Value visitLoopExpr(syntax::cst::LoopExpr context);
     Value visitAssignExpr(syntax::cst::AssignExpr context);
@@ -216,7 +226,6 @@ class Builder {
     Value visitDiffType(syntax::cst::DiffType context);
     Value visitKeyUnionDiffType(syntax::cst::KeyUnionDiffType context);
     Value visitKeyInterType(syntax::cst::KeyInterType context);
-    Value visitTypeUnit(syntax::cst::TypeUnit context);
     Value visitArrayType(syntax::cst::ArrayType context);
     Value visitArrayDim(syntax::cst::ArrayDim context);
     /// The extents and the pack one `[...]` was written with.

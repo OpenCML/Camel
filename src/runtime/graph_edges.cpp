@@ -22,6 +22,7 @@
 #include "camel/core/type/composite/tuple.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/program.h"
+#include "camel/utils/assert.h"
 
 #include <format>
 #include <stdexcept>
@@ -40,6 +41,7 @@ class EdgeChecker {
         : program_(program), graph_(graph), state_(state) {}
 
     std::vector<std::string> run() {
+        checkNodeTypeIds();
         checkWritings();
         checkOrderEdges();
         checkSyncEdges();
@@ -51,6 +53,32 @@ class EdgeChecker {
     }
 
   private:
+    /**
+     * Every type id a frozen node names came from the type table's interning path, and the debug
+     * assertion is this check: `TypeTable::adopt` -- the door an id could be handed to an object
+     * beside the table, which is how a type's *object identity* got written into a graph -- is
+     * gone, so an id the table does not hold is a type no path built. A build without assertions
+     * still reports it here rather than reading a type out of the table's range.
+     */
+    void checkNodeTypeIds() {
+        const auto &table = TypeTable::instance();
+        for (auto it = graph_.nodes().begin(); it != graph_.nodes().end(); ++it) {
+            const GCNode &node = **it;
+            if (node.typeId != kNoTypeId && !table.holds(node.typeId)) {
+                violations_.push_back(
+                    std::format(
+                        "graph '{}' node {}: names type id {} the type table does not hold",
+                        graph_.name(),
+                        it.ref(),
+                        node.typeId));
+            }
+        }
+        ASSERT(
+            violations_.empty(),
+            "A frozen graph names a type id that did not come from the type table's interning "
+            "path (see typeIdOf in src/runtime/graph.cpp).");
+    }
+
     /// The other half of the structural rule of 4.6: a sync edge joins two statements one `sync`
     /// block writes directly -- or the block's chain tail to the block's value -- and nothing else.
     /// The builder records that fact on each node it chains (kGCNodeFlagSyncStatement), so the
@@ -193,7 +221,12 @@ class EdgeChecker {
             const GCNode *b = graph_.node(entry.b);
             if (a->kind == GCNodeKind::Dead || b->kind == GCNodeKind::Dead) {
                 bad("names a node a rewrite removed");
-            } else if (a->typeId != b->typeId) {
+            } else if (
+                camel::core::type::TypeTable::instance().canonicalIdOf(a->typeId) !=
+                camel::core::type::TypeTable::instance().canonicalIdOf(b->typeId)) {
+                // By the canonical id, which is the structural identity of the type: two nodes
+                // whose types are one type under `equals` (the names in a key erased) have one
+                // canonical id, so this is "the same type" and not "the same object".
                 bad("is between nodes of different types");
             } else if (graph_.nodeRegion(entry.a) != graph_.nodeRegion(entry.b)) {
                 bad("is between nodes of different regions");

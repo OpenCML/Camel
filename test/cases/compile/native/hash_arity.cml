@@ -1,6 +1,6 @@
 /**
  * Both declarations of `hash:sha256` take one ordinary argument: a second one is refused at the
- * call, and the overloads the message lists are the declaration's two (handover H163).
+ * call, and the overloads the message lists are the declaration's two.
  */
 module hash_arity
 

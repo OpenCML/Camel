@@ -10,15 +10,15 @@ import { Tensor, ones, reshape, slice, sum, shape, tanh, zeros } from tensor
 import { export_model } from onnx
 import { get_env } from env
 
-func at(x: Tensor, t: int): Tensor {
+func at(x: f32[..], t: int): f32[..] {
     return reshape(slice(x, 1, t, t + 1), [shape(x)[0], shape(x)[2]])
 }
 
-func scan(t: int, steps: int, x: Tensor, h: Tensor): Tensor {
+func scan(t: int, steps: int, x: f32[..], h: f32[..]): f32[..] {
     return if t >= steps then h else if sum(h) > 2.5 then h else scan(t + 1, steps, x, tanh(h + at(x, t)))
 }
 
-func back(t: int, steps: int, x: Tensor): Tensor {
+func back(t: int, steps: int, x: f32[..]): f32[..] {
     return if t >= steps then zeros([shape(x)[0], shape(x)[2]]) else tanh(back(t + 1, steps, x) * 0.5 + at(x, t))
 }
 
@@ -26,7 +26,7 @@ func main(): int sync {
     let steps = int(get_env('STEPS'))
     let x = ones([2, steps, 3]) * 0.1
     export_model(
-        (x: Tensor): (Tensor, Tensor) =>
+        (x: f32[..]): (f32[..], f32[..]) =>
             (scan(0, shape(x)[1], x, zeros([shape(x)[0], shape(x)[2]])), back(0, shape(x)[1], x)),
         x,
         get_env('ONNX_OUT')

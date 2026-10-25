@@ -37,7 +37,8 @@ Parts partsOf(
     ModifierSet modifiers, const std::vector<param_t> &withTypes,
     const std::vector<param_t> &normTypes, Type *exitType, bool hasNames,
     const std::vector<std::string> &argNames, bool hasRest,
-    const std::vector<uint16_t> &constasIndices, const sem::ResourceSignature &resources) {
+    const std::vector<uint16_t> &constasIndices, const std::vector<uint16_t> &withConstIndices,
+    const sem::ResourceSignature &resources) {
     Parts parts;
     parts.modifiers = modifiers;
     parts.resources = resources;
@@ -49,6 +50,7 @@ Parts partsOf(
     parts.hasNames     = hasNames;
     parts.hasRest      = hasRest;
     parts.constasIndices = constasIndices;
+    parts.withConstIndices = withConstIndices;
     if (hasNames) {
         ASSERT(argNames.size() == parts.params.size(), "One name per parameter.");
         parts.names.reserve(argNames.size());
@@ -73,6 +75,7 @@ FunctionType *FunctionTypeFactory::build() {
         argNames_,
         hasRest_,
         constasIndices_,
+        withConstIndices_,
         resources_));
 }
 
@@ -86,6 +89,7 @@ OpenFunctionType *FunctionTypeFactory::buildOpen() {
         argNames_,
         hasRest_,
         constasIndices_,
+        withConstIndices_,
         resources_));
 }
 
@@ -101,7 +105,8 @@ FunctionType::FunctionType(const Parts &parts, bool open)
       modifiers_(parts.modifiers), withCount_(static_cast<uint16_t>(parts.withCount)),
       normCount_(static_cast<uint16_t>(parts.params.size() - parts.withCount)),
       hasNames_(parts.hasNames), hasRest_(parts.hasRest),
-      constasIndices_(parts.constasIndices), resources_(parts.resources), open_(open) {
+      constasIndices_(parts.constasIndices), withConstIndices_(parts.withConstIndices),
+      resources_(parts.resources), open_(open) {
     for (size_t i = 0; i < parts.params.size(); ++i) {
         const auto &[type, isVar] = parts.params[i];
         types()[i]                = type;
@@ -137,18 +142,25 @@ template <> FunctionType *FunctionType::allocate<FunctionType>(const Parts &part
 }
 
 FunctionType *FunctionType::intern(const Parts &parts) {
-    // The key is everything a signature consists of (see intern.h; types by address): the
-    // counts, the modifiers, the result type, each parameter with its `var` mark, and the names.
+    // The key is everything a signature consists of (see intern.h; the component types by id):
+    // the counts, the modifiers, the result type, each parameter with its `var` mark, and the
+    // names. Parameter names are in the key because a type prints them, but `equals` ignores them
+    // (text.cpp: sameType), so the signature of the same parameters with the names erased is this
+    // type's canonical form: `(a: int) => int` and `(int) => int` are one type.
     std::vector<uintptr_t> key;
     key.reserve(6 + parts.params.size() * (parts.hasNames ? 3 : 2));
     key.push_back(parts.withCount);
     key.push_back(parts.params.size());
     key.push_back(static_cast<uintptr_t>(parts.modifiers.mask));
-    key.push_back(reinterpret_cast<uintptr_t>(parts.exitType));
+    key.push_back(typeKeyWord(parts.exitType));
     key.push_back(parts.hasNames ? 1 : 0);
     key.push_back(parts.hasRest ? 1 : 0);
     key.push_back(parts.constasIndices.size());
     key.insert(key.end(), parts.constasIndices.begin(), parts.constasIndices.end());
+    // A `with` parameter whose argument is part of what the declaration means is part of what the
+    // signature is: two signatures that differ there are not the same signature.
+    key.push_back(parts.withConstIndices.size());
+    key.insert(key.end(), parts.withConstIndices.begin(), parts.withConstIndices.end());
     // The resources are part of what a signature promises: two types that differ only there are
     // not the same type (design effects plan 2.2).
     key.push_back(static_cast<uintptr_t>(parts.resources.mode));
@@ -180,16 +192,39 @@ FunctionType *FunctionType::intern(const Parts &parts) {
         key.push_back(internSymbol(parts.resources.allocates->name));
     }
     key.push_back(parts.resources.external ? 1 : 0);
+    // The head ends here; the parameters and the names follow, so the canonical key can reuse it.
+    const size_t head = key.size();
     for (const auto &[type, isVar] : parts.params) {
-        key.push_back(reinterpret_cast<uintptr_t>(type));
+        key.push_back(typeKeyWord(type));
         key.push_back(isVar ? 1 : 0);
     }
     if (parts.hasNames) {
         key.insert(key.end(), parts.names.begin(), parts.names.end());
     }
-    Type *type = TypeTable::instance().intern(TypeTable::Shape::Function, key, [&]() -> Type * {
-        return allocate<FunctionType>(parts);
-    });
+    TypeTable::Canonical canonical;
+    std::vector<uintptr_t> plainKey;
+    Parts plainParts;
+    if (parts.hasNames) {
+        plainParts          = parts;
+        plainParts.hasNames = false;
+        plainParts.names.clear();
+        plainParts.exitType = TypeTable::instance().canonical(parts.exitType);
+        for (auto &[type, isVar] : plainParts.params) {
+            type = TypeTable::instance().canonical(type);
+        }
+        plainKey.assign(key.begin(), key.begin() + head);
+        plainKey[4] = 0; // hasNames
+        plainKey[3] = typeKeyWord(plainParts.exitType);
+        for (const auto &[type, isVar] : plainParts.params) {
+            plainKey.push_back(typeKeyWord(type));
+            plainKey.push_back(isVar ? 1 : 0);
+        }
+        canonical = TypeTable::Canonical{
+            plainKey, [&]() -> Type * { return allocate<FunctionType>(plainParts); }};
+    }
+    Type *type = TypeTable::instance().intern(
+        TypeTable::Shape::Function, key,
+        [&]() -> Type * { return allocate<FunctionType>(parts); }, canonical);
     return static_cast<FunctionType *>(type);
 }
 
@@ -201,6 +236,7 @@ FunctionType::Parts FunctionType::parts() const {
     parts.hasNames  = hasNames_;
     parts.hasRest   = hasRest_;
     parts.constasIndices = constasIndices_;
+    parts.withConstIndices = withConstIndices_;
     parts.resources = resources_;
     parts.params.reserve(paramCount());
     for (size_t i = 0; i < paramCount(); ++i) {
@@ -313,6 +349,16 @@ Type *FunctionType::clone(bool deep /* = false */) const {
         }
     }
     return intern(copy);
+}
+
+Type *FunctionType::closed() const {
+    // An open signature is the function's identity while it is built, not a type yet: what a
+    // graph records for it is the signature as it stands, interned like any other. A graph is
+    // frozen after the builder is done, so the result type is the one the body decided.
+    if (!open_) {
+        return const_cast<FunctionType *>(this);
+    }
+    return intern(parts());
 }
 
 bool FunctionType::equals(Type *other) const { return typeEquals(this, other); }

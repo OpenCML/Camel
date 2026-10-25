@@ -1,6 +1,6 @@
 # Tiles 的路线：`tiles::compile` 遍与块级内核（设计提案）
 
-状态：**第 8 节六条已由语言作者裁定（2026-10-15），另定 `@kernel` 为 Tiles 模块提供的可选标注（第 6.5 节）。本稿不含源码改动。**
+状态：**第 8 节六条已由语言作者裁定（2026-10-15），另定 `#kernel` 为 Tiles 模块提供的可选标注（第 6.5 节）。本稿不含源码改动。**
 日期：2026-10-15。
 依据：[设计原则](../../design-principles.cn.md)（尤其 3.3：纯度，7.2：`unordered_reduce`，5.4：命名维度 `constas`，3.10：`LOOP` 的 `do` 写法，第 7 节：浮点数值契约）；[索引计算、调度与资源图](../indexed-computation/README.md)（下称 IC 稿）；[图数据模型](../graph-model/README.cn.md)；[算子语义与图事实](../op-semantics/README.cn.md)（下称语义稿）；[`modules/tiles`](../../../modules/tiles/README.md)。
 
@@ -171,7 +171,7 @@ func matmul_block(a: TileRow<f32, [BM, K]>, b: TileCol<f32, [K, BN]>): Tile<f32,
 ### 6.3 备选：Triton 式的指针与程序编号
 
 ```camel
-@kernel
+#kernel
 func softmax_row(x: Ptr<f32>, y: Ptr<f32>, n: int, stride: int) {
     let row  = program_id(0)
     let offs = arange(0, 1024)
@@ -183,12 +183,12 @@ func softmax_row(x: Ptr<f32>, y: Ptr<f32>, n: int, stride: int) {
 
 熟悉 Triton 的人上手快，但它是命令式的：`store` 是效应，内核的语义依赖写入的位置与顺序；CPU 参考语义要另行定义；与图原生、按依赖求值的方向相悖。**不推荐作为主写法**；如需要，可以作为第 6.2 节表达不了的情形（不规则写入、原子累加）的低层逃生口，放在以后。
 
-### 6.5 `@kernel` 标注（已定）
+### 6.5 `#kernel` 标注（已定）
 
-块级内核的函数上可以写 `@kernel`：
+块级内核的函数上可以写 `#kernel`：
 
 ```camel
-@kernel
+#kernel
 func softmax_row(x: Tile<f32, [1, 1024]>): Tile<f32, [1, 1024]> {
     let m = x->max<axis: 1>
     let e = (x - m)->exp
@@ -197,10 +197,10 @@ func softmax_row(x: Tile<f32, [1, 1024]>): Tile<f32, [1, 1024]> {
 ```
 
 - 含义：**这个函数必须能编译为块级内核**。编译器据此检查：只用块上的运算、没有效应、块形状是常量；不满足时在这个函数上报错，而不是到运行时才退回 CPU。
-- 它不改变语义：去掉 `@kernel`，或在 CPU 上执行，它仍是普通函数，结果仍是 GPU 结果的参考语义。
-- 它由 Tiles 模块提供，是标注而不是语言关键字（与计划中的 `@numeric(...)` 同类；行首的 `@` 是标注，见 4.1）。编辑器与语言服务器据此标出内核。
-- 写法仍是第 6.2 节的函数式写法；`@kernel` 不引入第 6.3 节的指针与程序编号。
-- **实现途径（2026-10-19）**：核心已有通用的节点属性与"授予属性的装饰器"，`@kernel` 可以完全在 Tiles 模块里实现，不需要核心为它写代码：模块导出 `attrDecoratorGroup("kernel", "tiles:kernel", 0, ...)`（`camel/core/module/attr_decorator.h`），在 `load()` 里以 `attr::registerKey("tiles.kernel", {...})` 登记这个键（值的种类与合并规则：标记用 `Unit`，嵌套取内层，只与相同的值合并），再 `OperatorTable::declareGrant("tiles:kernel", {.key = "tiles.kernel"})`，执行器把 `kernel` 映射到 `attrDecoratorIdentity`。程序写 `@kernel func f(...)`（或 `@kernel { ... }`）时，建图阶段就给 `f` 自己的节点及其中写下的分支臂、循环体、lambda 加上属性 `tiles.kernel`（不含被调函数）；Tiles 以 `GCGraph::nodeAttrs(ref)`（`camel/core/node_attrs.h` 的 `attr::valueOf(set, attr::key("tiles.kernel"))`）读出并据此检查。属性随内联、克隆、`LOOP` 降低保留，`std::gir` 显示为 `attrs="tiles.kernel"`。值的种类还有任意宽度的标志集、整数、字符串、图的引用与元组（如设备偏好可用一个 `Symbol` 值的键）。数值许可（`nodePermissions`）暂不变，待 `enum` 实现后一并迁到同一机制，届时另行说明。
+- 它不改变语义：去掉 `#kernel`，或在 CPU 上执行，它仍是普通函数，结果仍是 GPU 结果的参考语义。
+- 它是标签而不是语言关键字（设计原则 6.6 的标准标签，可写限定名 `#[tiles::kernel]`；见 6.2）。编辑器与语言服务器据此标出内核。
+- 写法仍是第 6.2 节的函数式写法；`#kernel` 不引入第 6.3 节的指针与程序编号。
+- **实现途径**：标签由声明它的库定义、由读取它的遍实现（设计原则 6.2、6.3）。读取 `#kernel` 的遍与第 6.2 节的块级内核语言是第 7 节尚未做的部分；在此之前写下 `#kernel` 只表达这个函数必须能编译为块级内核，没有遍读它时按 9.4 给出警告。
 
 ### 6.4 原子与不规则写入
 
@@ -228,7 +228,7 @@ T1–T3 不必等核心，可以立刻开始；T4 起与核心同步。
 1. **分界**：语义（迭代域、索引映射、归约、许可、资源、形状事实）放在 Camel 图上，Tiles 只私有物理层。建议：采纳。
 2. **主入口**：以 `tiles::compile` 遍为主、`run_preferred_resident` 为便捷入口；`:tiles/exec` 是带 `callsGraphs` 声明的普通算子，语义等于调用区域子图，去掉该遍结果不变。建议：采纳。
 3. **块级内核的写法**：甲，块类型加对块的 `map`（第 6.2 节，函数式，CPU 上即参考语义）；乙，Triton 式指针加程序编号（第 6.3 节，命令式）。建议：甲为主写法，乙暂不提供。
-4. **名字**：`Tile<T, [shape]>`、`x->tiles<[...]>`、`->untile`、`Tile::zeros` 等，是否就用这些，或另取。建议：先用这些，以 Tiles 模块的导出为准，不进入语言关键字。另定：`@kernel` 作为 Tiles 模块提供的可选标注（第 6.5 节）。
+4. **名字**：`Tile<T, [shape]>`、`x->tiles<[...]>`、`->untile`、`Tile::zeros` 等，是否就用这些，或另取。建议：先用这些，以 Tiles 模块的导出为准，不进入语言关键字。另定：`#kernel` 作为 Tiles 模块提供的可选标注（第 6.5 节）。
 5. **块的形状**：块的形状必须是编译期常量或 `constas` 绑定的名字（第一阶段只接受常量）。建议：如此。
 6. **原子与不规则写入**：第一阶段不提供，以后经"改变归约顺序"许可提供。建议：如此。
 
@@ -245,11 +245,11 @@ T1–T3 不必等核心，可以立刻开始；T4 起与核心同步。
 
 ## 10. 2026-10-16 评审与下一步（语言作者已同意，交 Tiles 执行）
 
-依据：对 `develop` f2a12a5e 时 `modules/tiles` 的评审（读 README、IMPLEMENTATION、`docs/design/tiles-targets`、`docs/design/native-subgraph-call` 与源码结构；未在 GPU 上运行）。
+依据：对 `develop` f2a12a5e 时 `modules/tiles` 的评审（读 README、IMPLEMENTATION、`docs/design/tiles-targets` 与源码结构；未在 GPU 上运行）。
 
 ### 10.1 已经做对、继续保持的
 
-语义开始上图（算子标识与版本、数值分类、索引实例、`rowMajorView` 推出的物理映射、按归约规律选择并行最大值）；NVRTC 的 `fmad`、`prec-div`、`prec-sqrt`、`ftz` 显式固定并进入缓存键；只在授予 `contract` 时收缩乘加；矩阵乘按规范 FMA 链；主机标量成为运行时参数；同一行内多个归约共享中间值（softmax、layernorm 成为一个内核）；结构化内核表示 `kernel_ir`；区域间传输规划与常驻复用；原生算子回调 Camel 子图的通用服务（四个后端与并行调度器）。`#gpu` 标签作为"希望在 GPU 上执行"的编译期声明，与 `tiles::compile`（自动）和 `@kernel`（专家内核）并存；`@gpu` 装饰器已删除（GPU 设计第 6 节）。
+语义开始上图（算子标识与版本、数值分类、索引实例、`rowMajorView` 推出的物理映射、按归约规律选择并行最大值）；NVRTC 的 `fmad`、`prec-div`、`prec-sqrt`、`ftz` 显式固定并进入缓存键；只在授予 `contract` 时收缩乘加；矩阵乘按规范 FMA 链；主机标量成为运行时参数；同一行内多个归约共享中间值（softmax、layernorm 成为一个内核）；结构化内核表示 `kernel_ir`；区域间传输规划与常驻复用；原生算子回调 Camel 子图的通用服务（四个后端与并行调度器）。`#gpu` 标签作为"希望在 GPU 上执行"的编译期声明，与 `tiles::compile`（自动）和 `#kernel`（专家内核）并存；`@gpu` 装饰器已删除（GPU 设计第 6 节）。
 
 ### 10.2 三处纠正（按此执行）
 
@@ -266,7 +266,7 @@ T1–T3 不必等核心，可以立刻开始；T4 起与核心同步。
 3. **其余算子与图事实迁到核心**：索引实例、归约规律、资源声明、定义图、图事实（`ctx.facts()`），去掉 Tiles 内与核心重复的推断，保持单一事实来源。
 4. **异步执行与设备常驻**：流、事件、内存池；相邻调用间的值留在设备上。
 5. **矩阵乘的性能**：接 cuBLAS（按 7.3 默认可用 f32 cuBLAS，须关闭 TF32 并保证可复现；安全模式下需逐位等于规范 FMA 链，做不到时不交给 cuBLAS），之后 Tensor Core（需 `change_precision` 许可）。
-6. **块级内核 `@kernel`**（第 6 节）。
+6. **块级内核 `#kernel`**（第 6 节）。
 
 ### 10.4 核心这边相应的已知缺口
 

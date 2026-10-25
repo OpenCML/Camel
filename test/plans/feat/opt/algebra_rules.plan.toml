@@ -29,7 +29,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 # Every entry runs the same corpus through both sides with the same pass list, and the measurement is
 # the difference between the two results.
 #
-# The ruling of 2026-10-23 (`docs/handover/reviews/questions-2026-10-23.md`) settled what a difference
+# The rule (`docs/handover/reviews/questions-2026-10-23.md`) settled what a difference
 # means, and this file is read under it: `std::opt::algebra` and `rules::simplify` are the same thing
 # (the reference mode is the `neutral_only` subset of the C++ side that remains), the library's
 # default numeric grant is design principles 7.3's default -- which allows `reassociate` and
@@ -40,7 +40,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 # (`rule-conditions-and-policy` items 2 and 3): the one left in this corpus is the anchored form --
 # the C++ pass's `isReplaceable` refuses to rewrite the graph's exit, output and returned value,
 # while the engine rewrites the matched node and moves the anchor onto the replacement, as the
-# ruling's item 3 says the engine must. The effect refusal below is decreed the same way, as a local
+# rule's item 3 says the engine must. The effect refusal below is decreed the same way, as a local
 # subgraph check before a rule is applied (`rule-drops-effect`).
 #
 #   `by_cpp`     the reference side of this tree, recorded as a golden: its graph (`std::gir` /
@@ -49,7 +49,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 #                (`test/tools/gir-dot.mjs`), the comparison the snapshot tests use: a node is its
 #                kind, its type, its shape and its in/out degree, an edge is its endpoints, its link
 #                type and its label. The dumps are not compared as text, because the rule engine's
-#                commit leaves the port without the span the C++ replacement copies onto it (H160
+#                 commit leaves the port without the span the C++ replacement copies onto it (
 #                section 4); the only normalization is the plan's — paths and origin ids.
 #   `table`      the same corpus through `measure::report`, which prints one line per graph: its
 #                nodes, its edges and its operator counts. `tables.mjs` is the property: every graph
@@ -94,6 +94,12 @@ desc = "The rule library reaches the same graph the legacy pass reaches on all t
 case = "../../../cases/opt/algebra_rules/agreement.cml"
 args = ["${case}", "rules::simplify", "std::opt::dce values_only=true", "std::gir"]
 verify_script_path = "../../../cases/opt/algebra_rules/algebra_graph_equal.mjs"
+
+# `measure::report` is the pass `test/cases/opt/algebra_rules/measure.cml` declares: a pass is
+# loaded by name from the entry program's directory, so that file is what prints the table these
+# entries compare. It locks the counting itself -- one line per graph, the number of rewrites each
+# side performs and the first difference it found -- and it is the same program the reference mode
+# and the library mode are read through, so the two tables cannot be counted differently.
 
 [[tests]]
 name = "algebra_rules.agreement.cpp_table"
@@ -148,10 +154,10 @@ compare_fields = ["exit_code", "stdout_normalized"]
 # Two of them, and they are the anchored forms: the C++ pass's `isReplaceable` refuses the graph's
 # exit, output and returned value, so `anchor_add` and `anchor_mul32` keep their operation as the
 # named node there; the engine rewrites the matched node and moves the anchor onto the replacement,
-# which is what the ruling of 2026-10-23 gives the engine as its job and not as a rule condition
+# which is what the rule gives the engine as its job and not as a rule condition
 # (`docs/handover/reviews/questions-2026-10-23.md`, `rule-conditions-and-policy` item 3), so those
 # two graphs exit at the port the rule's right side wrote. `effect_mul_zero` was a third difference
-# and is an agreement now: the engine check the ruling's `rule-drops-effect` decrees (before a rule is
+# and is an agreement now: the engine check the rule's `rule-drops-effect` decrees (before a rule is
 # applied, the subgraph the pattern variables its right side does not use bound is examined, and an
 # effect node, or a node carrying a sync or order edge, there refuses the application) refuses the
 # match that used to drop the print. `library_runs` and `differs` below pin that agreement, and a
@@ -242,7 +248,7 @@ golden = "./golden/algebra_rules.tensor.cpp.txt"
 
 [[tests]]
 name = "algebra_rules.tensor.table"
-desc = "The library's table against the deleted C++ law table's, out of 5 graphs: `tensor_double` is the one form both rewrite (`t + t` becomes `t * 2.0`), `tensor_combine` is refused by the deleted table for the `reassociate` grant its float path demands while the library's `#requires<reassociate>` is granted (design principles 7.3's default allows it; the old table's `relaxed()` policy is its own deviation), and two forms are left by both — `tensor_fold`, which needs the `no_infs` grant no node carries, and `tensor_zero`, whose replacement is a zero tensor of the matched shape: the rule language does write it, as a right side that calls a Camel function (rule language v2 section 4, `t * 0.0 => zeros_like(t)`), which is H232 step 3, so what is missing here is a law and not a language feature. The values the program prints are the values the C++ side printed, line for line."
+desc = "The library's table against the deleted C++ law table's, out of 5 graphs: `tensor_double` is the one form both rewrite (`t + t` becomes `t * 2.0`), `tensor_combine` is refused by the deleted table for the `reassociate` grant its float path demands while the library's `#requires(reassociate)` is granted (design principles 7.3's default allows it; the old table's `relaxed()` policy is its own deviation), and two forms are left by both — `tensor_fold`, which needs the `no_infs` grant no node carries, and `tensor_zero`, whose replacement is a zero tensor of the matched shape: the rule language does write it, as a right side that calls a Camel function (rule language v2 section 4, `t * 0.0 => zeros_like(t)`), which is H232 step 3, so what is missing here is a law and not a language feature. The values the program prints are the values the C++ side printed, line for line."
 case = "../../../cases/opt/algebra_rules/tensor_forms.cml"
 args = ["${case}", "rules::simplify", "std::opt::dce values_only=true", "measure::report", "std::nvm"]
 verify_script_path = "../../../cases/opt/algebra_rules/tables.mjs"

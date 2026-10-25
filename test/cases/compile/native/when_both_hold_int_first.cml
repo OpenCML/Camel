@@ -2,7 +2,7 @@
  * The twin of `when_both_hold_i32_first.cml`: the same program with the two declarations of
  * `dual_kernel` written in the other order. Both conditions hold for the call
  * `dual_kernel(x, y)` (`T` is `i32`, `U` is `int`), so the call is ambiguous and which
- * declaration is written first cannot decide it (the language author's ruling of 2026-10-23 on
+ * declaration is written first cannot decide it (the rule on
  * `two-when-conditions-hold`, `docs/handover/reviews/questions-2026-10-23.md`). This file must
  * therefore report exactly the diagnostic its twin reports.
  */
@@ -24,10 +24,10 @@ func is_first_i32::<T>(): bool {
     }
 }
 
-#op<':op/add_l'>
+#op(':op/add_l')
 func dual_kernel::<T, U>(a: T, b: U): T when is_second_int::<U>()
 
-#op<':op/sub_i'>
+#op(':op/sub_i')
 func dual_kernel::<T, U>(a: T, b: U): T when is_first_i32::<T>()
 
 func main(): int sync {

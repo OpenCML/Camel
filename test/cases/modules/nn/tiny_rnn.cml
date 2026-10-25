@@ -10,15 +10,15 @@ import { Tensor, full, shape, sum, tanh, zeros } from tensor
 import { sgd } from nn
 
 type TinyRnn = {
-    wxh: Tensor,
-    whh: Tensor,
-    why: Tensor,
-    b: Tensor,
-    by: Tensor
+    wxh: f32[..],
+    whh: f32[..],
+    why: f32[..],
+    b: f32[..],
+    by: f32[..]
 }
 
 with <model: TinyRnn>
-func rnn_loss(x0: Tensor, x1: Tensor, target: Tensor): float {
+func rnn_loss(x0: f32[..], x1: f32[..], target: f32[..]): float {
     let h0 = zeros([1, 2])
     let h1 = tanh((x0 @ model.wxh) + (h0 @ model.whh) + model.b)
     let h2 = tanh((x1 @ model.wxh) + (h1 @ model.whh) + model.b)
@@ -38,7 +38,7 @@ func init(): TinyRnn {
     }
 }
 
-func train(model: TinyRnn, x0: Tensor, x1: Tensor, target: Tensor, steps: int): TinyRnn {
+func train(model: TinyRnn, x0: f32[..], x1: f32[..], target: f32[..], steps: int): TinyRnn {
     return if steps == 0 then model else train(sgd(model, grad(rnn_loss)<model>(x0, x1, target), 0.05), x0, x1, target, steps - 1)
 }
 

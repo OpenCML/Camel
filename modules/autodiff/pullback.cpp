@@ -54,10 +54,12 @@ using ::Modifier;
 using camel::core::aggregateElement;
 using camel::core::aggregateSize;
 using camel::core::DerivativeRegistry;
+using camel::core::gradientElementIndex;
+using camel::core::gradientTypeOf;
 using camel::core::isAggregate;
-using camel::core::tangentElementIndex;
+using camel::core::machineryTangentElementIndex;
+using camel::core::machineryTangentTypeOf;
 using camel::core::TangentSpace;
-using camel::core::tangentTypeOf;
 using camel::core::vjp_node_t;
 using camel::core::VjpBuilder;
 using camel::core::VjpCall;
@@ -79,6 +81,28 @@ using type::StructType;
 using type::TupleType;
 using type::Type;
 using type::TypeCode;
+
+/// Which of the two answers of the core's tangent query a node's tangent is built for (the
+/// author's ruling of 2026-10-25 on discrete-tuple-tangent-space-and-machinery-aggregates; see
+/// `gradientTypeOf` and `machineryTangentTypeOf`). `Machinery` is the tangent of a value the
+/// transform carries itself -- a loop's state, a captured tuple, an aggregate on the reverse tape
+/// -- and `User` is the gradient `grad`/`with_grad` hands back, which is the parameter's own
+/// gradient type. The same program value is asked about for either audience; what differs is who
+/// reads the answer, never the value's shape.
+enum class TangentAudience { Machinery, User };
+
+/// The type a tangent of `primal` is declared with, for `audience`.
+Type *tangentTypeFor(Type *primal, TangentAudience audience) {
+    return audience == TangentAudience::User ? gradientTypeOf(primal)
+                                             : machineryTangentTypeOf(primal);
+}
+
+/// Position of element `index` of `aggregate` in the tangent built for `audience`, or nullopt
+/// when that tangent does not keep the element.
+std::optional<size_t> tangentPositionFor(Type *aggregate, size_t index, TangentAudience audience) {
+    return audience == TangentAudience::User ? gradientElementIndex(aggregate, index)
+                                             : machineryTangentElementIndex(aggregate, index);
+}
 
 [[noreturn]] void fail(const std::string &message) {
     throwRuntimeFault(RuntimeDiag::RuntimeError, "autodiff: " + message);
@@ -135,13 +159,17 @@ using type::TypeCode;
 thread_local camel::source::source_context_ptr_t currentSource;
 
 /// The element type a tangent of `type` is made of: an array's innermost element type, or the type
-/// itself. A module-owned type (a tensor) is its own element type: the core cannot see inside it,
-/// and this build's tensor element type is f32 -- a written `Tensor<f64>` is refused before a value
-/// of it can exist -- so comparing the two types' codes is the comparison there is to make.
+/// itself. An array that states no element type (`Tensor`, the alias's transitional spelling) has
+/// none to report: nothing there says which width a gradient must have, so the caller checks
+/// nothing rather than refusing a gradient of a width the type never named.
 Type *tangentElementType(Type *type) {
-    Type *tangent = tangentTypeOf(type);
+    Type *tangent = machineryTangentTypeOf(type);
     while (tangent != nullptr && tangent->code() == TypeCode::Array) {
-        tangent = tt::as_ptr<ArrayType>(tangent)->elemType();
+        Type *elem = tt::as_ptr<ArrayType>(tangent)->elemType();
+        if (elem == nullptr || elem->code() == TypeCode::Void) {
+            return nullptr;
+        }
+        tangent = elem;
     }
     return tangent;
 }
@@ -576,7 +604,7 @@ std::vector<gc_node_ref_t> portsOf(const GraphDraft &draft) {
 
 bool anyTangent(std::span<Type *const> types) {
     for (Type *t : types) {
-        if (tangentTypeOf(t) != nullptr) {
+        if (machineryTangentTypeOf(t) != nullptr) {
             return true;
         }
     }
@@ -596,15 +624,23 @@ std::string uniqueSuffix() {
 /// array whose elements have no tangent has none, and a loop that iterates or captures one while
 /// it depends on a differentiated value is refused instead (see Backward::run).
 bool carriesGradient(Type *type) {
-    if (type == nullptr || tangentTypeOf(type) == nullptr) {
+    if (type == nullptr || machineryTangentTypeOf(type) == nullptr) {
         return false;
     }
-    if (type->code() == TypeCode::Array) {
-        return carriesGradient(tt::as_ptr<type::ArrayType>(type)->elemType());
+    if (const ArrayType *array = asArrayType(type)) {
+        // An array's gradient is carried as the array of its elements' gradients, and an array
+        // whose element has no tangent has none (an integer array's element): the element type is
+        // the answer. The transitional type needed the tangent-type lookup for this, because its
+        // element was `Void` and no element could be reached (docs/design/arrays-memory/plan.cn.md
+        // section 5.1a's table row `carriesGradient`: restored to `carriesGradient(elemType)`).
+        return carriesGradient(array->elemType());
+    }
+    if (machineryTangentTypeOf(type) == nullptr) {
+        return false;
     }
     if (isAggregate(type)) {
         for (size_t i = 0; i < aggregateSize(type); ++i) {
-            if (tangentElementIndex(type, i) && carriesGradient(aggregateElement(type, i))) {
+            if (machineryTangentElementIndex(type, i) && carriesGradient(aggregateElement(type, i))) {
                 return true;
             }
         }
@@ -617,7 +653,7 @@ bool carriesGradient(Type *type) {
 /// in a loop, where only the types a gradient can be carried in do (carriesGradient).
 using TangentEligibility = bool (*)(Type *);
 
-bool hasTangentType(Type *type) { return tangentTypeOf(type) != nullptr; }
+bool hasTangentType(Type *type) { return machineryTangentTypeOf(type) != nullptr; }
 
 /// The graphs differentiating one function: its forward graph returning (value, pullback) and
 /// the pullback graph, with their types. Tangents are ordered like the function's ports (with
@@ -651,10 +687,10 @@ PullbackPlan makePlanTypes(
     std::vector<Type *> tangents;
     for (Type *t : portTypes) {
         if (eligible(t)) {
-            tangents.push_back(tangentTypeOf(t));
+            tangents.push_back(machineryTangentTypeOf(t));
         }
     }
-    Type *const dyType = eligible(valueType) ? tangentTypeOf(valueType) : nullptr;
+    Type *const dyType = eligible(valueType) ? machineryTangentTypeOf(valueType) : nullptr;
     plan.portTypes     = std::move(portTypes);
     plan.valueType     = valueType;
     plan.eligible      = eligible;
@@ -896,6 +932,10 @@ class Backward final : public VjpBuilder {
     void run(const std::vector<gc_node_ref_t> &order);
     /// Full gradient of a primal value; zero when none reached it.
     gc_node_ref_t gradient(gc_node_ref_t primal);
+    /// The gradient `grad`/`with_grad` hands back for the differentiated parameter `primal`: the
+    /// same tangent, built with the *user*'s rule (`gradientTypeOf`), so its type is the
+    /// parameter's own gradient type. See `materialize` for the two audiences.
+    gc_node_ref_t userGradient(gc_node_ref_t primal);
 
     /// Whether `node` is a value that depends on a differentiated parameter but has no
     /// gradient channel of its own (design principles 9.9). Such a value may be carried as an
@@ -968,8 +1008,12 @@ class Backward final : public VjpBuilder {
     /// What produced `gradient` (an operator of the derivative rule, a constant, a rule call), for
     /// the message of checkGradientType.
     std::string producerOf(gc_node_ref_t gradient) const;
-    gc_node_ref_t materialize(Tangent &tangent, Type *primalType, gc_node_ref_t primal);
-    gc_node_ref_t zero(Type *primalType, gc_node_ref_t primal);
+    /// Builds the gradient of `primal` out of the parts that reached it, for one of the two
+    /// audiences `computeGradientType` answers for: the machinery's own tangent, or the gradient
+    /// `grad`/`with_grad` hands back (see `gradient` and `userGradient`).
+    gc_node_ref_t materialize(
+        Tangent &tangent, Type *primalType, gc_node_ref_t primal, TangentAudience audience);
+    gc_node_ref_t zero(Type *primalType, gc_node_ref_t primal, TangentAudience audience);
     gc_node_ref_t add(Type *primalType, gc_node_ref_t lhs, gc_node_ref_t rhs);
 
     void visit(gc_node_ref_t node);
@@ -1665,39 +1709,72 @@ gc_node_ref_t packState(
     return addAggregate(draft, TupleType::create(types), values);
 }
 
+/// The type a node the machinery builds is declared with: the value's tangent type when it has one,
+/// and the value's own type when it has none. The machinery's tangent keeps only the members that
+/// need a gradient (`machineryTangentTypeOf`), so this is asked about one such node, not about a
+/// whole parameter tree.
+Type *tangentNodeType(Type *primal) {
+    Type *tangent = machineryTangentTypeOf(primal);
+    return tangent != nullptr ? tangent : primal;
+}
+
+/// The zero of a discrete scalar: an integer or a boolean has derivative zero by definition
+/// (design principles 9.9), and the user's gradient keeps such a member at its own type
+/// (`gradientTypeOf`: a number is its own gradient, at zero). A discrete value a module holds (an
+/// integer tensor) is not answered here: the tangent space of its kind gives the zero operator that
+/// builds a zero of the value's own shape and element type (`tensor:zeros_like`).
+std::optional<slot_t> discreteZeroSlot(Type *type) {
+    switch (type->code()) {
+    case TypeCode::Int32:
+        return toSlot<int32_t>(0);
+    case TypeCode::Int64:
+        return toSlot<int64_t>(0);
+    case TypeCode::Bool:
+        return toSlot<bool>(false);
+    default:
+        return std::nullopt;
+    }
+}
+
 /// The zero of `primal`'s tangent; `primalValue` is the primal value (a tensor's zero is taken
 /// from it).
 gc_node_ref_t addZeroTangent(GraphDraft &draft, Type *primal, gc_node_ref_t primalValue) {
     if (isAggregate(primal)) {
         std::vector<gc_node_ref_t> zeros;
         for (size_t i = 0; i < aggregateSize(primal); ++i) {
-            if (!tangentElementIndex(primal, i)) {
+            if (!machineryTangentElementIndex(primal, i)) {
                 continue;
             }
             Type *element = aggregateElement(primal, i);
             zeros.push_back(addZeroTangent(draft, element, addField(draft, primal, primalValue, i)));
         }
-        return addAggregate(draft, tangentTypeOf(primal), zeros);
+        return addAggregate(draft, machineryTangentTypeOf(primal), zeros);
     }
     const TangentSpace *space = DerivativeRegistry::instance().findTangentSpace(primal);
     if (space == nullptr) {
+        // A discrete scalar has no tangent space: its zero is the constant of its own type, which
+        // is what a discrete member of the user's gradient is (a zero of the member's own shape and
+        // element type, so the parameter tree and the gradient tree pair).
+        if (const auto discrete = discreteZeroSlot(primal)) {
+            return draft.materializeStaticValue(*discrete, primal);
+        }
         fail(std::format("no zero gradient for type '{}'", primal->toString()));
     }
     if (space->zero) {
-        return draft.materializeStaticValue(*space->zero, tangentTypeOf(primal));
+        return draft.materializeStaticValue(*space->zero, tangentNodeType(primal));
     }
     const std::array<gc_node_ref_t, 1> input{primalValue};
-    return addOper(draft, tangentTypeOf(primal), space->zerosLikeUri, input);
+    return addOper(draft, tangentNodeType(primal), space->zerosLikeUri, input);
 }
 
 /// `lhs + rhs` of the tangents of `primal`, element-wise for an aggregate (a state or a captured
 /// value may be a tuple, a struct or a model).
 gc_node_ref_t addTangentSum(GraphDraft &draft, Type *primal, gc_node_ref_t lhs, gc_node_ref_t rhs) {
     if (isAggregate(primal)) {
-        Type *tangent = tangentTypeOf(primal);
+        Type *tangent = machineryTangentTypeOf(primal);
         std::vector<gc_node_ref_t> sums;
         for (size_t i = 0; i < aggregateSize(primal); ++i) {
-            const auto position = tangentElementIndex(primal, i);
+            const auto position = machineryTangentElementIndex(primal, i);
             if (!position) {
                 continue;
             }
@@ -1712,10 +1789,15 @@ gc_node_ref_t addTangentSum(GraphDraft &draft, Type *primal, gc_node_ref_t lhs, 
     }
     const TangentSpace *space = DerivativeRegistry::instance().findTangentSpace(primal);
     if (space == nullptr || space->addUri.empty()) {
+        // A discrete scalar carries no gradient: two zeros add to the zero of its own type. It is
+        // here for the same reason as the zero above.
+        if (const auto discrete = discreteZeroSlot(primal)) {
+            return draft.materializeStaticValue(*discrete, primal);
+        }
         fail(std::format("cannot add gradients of type '{}'", primal->toString()));
     }
     const std::array<gc_node_ref_t, 2> inputs{lhs, rhs};
-    return addOper(draft, tangentTypeOf(primal), space->addUri, inputs);
+    return addOper(draft, tangentNodeType(primal), space->addUri, inputs);
 }
 
 /// Whether the reverse loop goes on: one more round while the index is not negative. The
@@ -1757,7 +1839,7 @@ void buildReverseBody(
                 components.push_back(ports[loop.stateSlot[j]]);
             }
         }
-        dy = addAggregate(draft, tangentTypeOf(loop.stateValueType), components);
+        dy = addAggregate(draft, machineryTangentTypeOf(loop.stateValueType), components);
     }
     std::vector<gc_node_ref_t> args{dy};
     for (size_t c = 0; c < loop.residualTypes.size(); ++c) {
@@ -1804,10 +1886,28 @@ void buildReverseBody(
             *loop.elementTangent);
         const std::array<gc_node_ref_t, 3> scatter{
             ports[loop.arraySlot], ports.front(), element};
+        // Which scatter takes that element's gradient back is the iterated value's own kind's
+        // answer, not one hard-wired operator: the registry states it beside the kind's add and
+        // zero (`TangentSpace::scatterUri`). An array whose elements the core holds one slot each
+        // scatters a slot (`:tangent/scatter_add_arr`), a tensor scatters a row of its own dtype
+        // (`tensor:row_add_at`), and the two are not interchangeable -- a row's gradient written
+        // as one slot is the garbage the rank-2 loop printed
+        // (test/cases/modules/autodiff/loop_grad_refuse_slice_iterable.cml). The registry is keyed
+        // by the type code, and a tensor and an array of records share the array code until the
+        // ownership predicate tells the two apart, so the numeric-array test is that question asked
+        // here, where the iterated value's own type is in hand.
+        const TangentSpace *const space =
+            DerivativeRegistry::instance().findTangentSpace(loop.iterableType);
+        const std::string_view scatterUri =
+            (isNumericArrayType(loop.iterableType) &&
+             machineryTangentTypeOf(loop.iterableType) != nullptr && space != nullptr &&
+             !space->scatterUri.empty())
+                ? std::string_view(space->scatterUri)
+                : std::string_view(":tangent/scatter_add_arr");
         next.push_back(addOper(
             draft,
             loop.tangentsType->typeAt(*loop.arrayTangent),
-            ":tangent/scatter_add_arr",
+            scatterUri,
             scatter));
     }
     draft.setRegionResult(region, packState(draft, stateTypes, next));
@@ -2331,7 +2431,7 @@ void ForwardRewrite::rewriteClosureCall(
     for (gc_node_ref_t capture : graph->closureNodes()) {
         portTypes.push_back(graph->node(capture)->dataType());
     }
-    const bool carriesFlow = tangentTypeOf(type->exitType()) != nullptr && anyTangent(portTypes);
+    const bool carriesFlow = machineryTangentTypeOf(type->exitType()) != nullptr && anyTangent(portTypes);
     if (!carriesFlow || graph->isMacro()) {
         return; // nothing to differentiate: the call stays, a constant to the reverse pass
     }
@@ -2395,7 +2495,7 @@ void ForwardRewrite::rewriteClosureCall(
     }
     const auto *body = reinterpret_cast<const rt::GCOperBody *>(draft_.payloadOf(callee).data());
     // The two operators of this module that take a function, recognised by id. (A custom rule
-    // is a declaration tag now, `#vjp<rule>`: it is not a call of an operator.)
+    // is a declaration tag now, `#vjp(rule)`: it is not a call of an operator.)
     static const camel::core::OperId kGrad =
         camel::core::OperatorTable::instance().intern("autodiff:grad");
     static const camel::core::OperId kValueAndGrad =
@@ -2445,12 +2545,12 @@ void ForwardRewrite::rewriteCall(gc_node_ref_t call) {
     FunctionType *type     = callee->funcType();
     const auto portTypes   = portTypesOf(callee);
     Type *valueType        = type->exitType();
-    const bool carriesFlow = tangentTypeOf(valueType) != nullptr && anyTangent(portTypes);
+    const bool carriesFlow = machineryTangentTypeOf(valueType) != nullptr && anyTangent(portTypes);
     if (!carriesFlow || callee->isMacro()) {
         return;
     }
     if (hasRule(callee)) {
-        // The declaration has a custom rule (`#vjp<rule>`): the call computes its ordinary
+        // The declaration has a custom rule (`#vjp(rule)`): the call computes its ordinary
         // value as it is, and the rule, not the body, gives the gradient. The call is a site
         // the backward pass replaces (visitRuleSite), as a call through a function value is.
         ::Function *rule = ruleOf(draft_.program(), callee);
@@ -2502,7 +2602,7 @@ void ForwardRewrite::rewriteCall(gc_node_ref_t call) {
 
 void ForwardRewrite::rewriteBranch(gc_node_ref_t join) {
     Type *valueType = typeOf(draft_, join);
-    if (tangentTypeOf(valueType) == nullptr) {
+    if (machineryTangentTypeOf(valueType) == nullptr) {
         return;
     }
     const std::vector<gc_node_ref_t> arms = copyOf(draft_.withInputsOf(join));
@@ -2619,7 +2719,7 @@ void ForwardRewrite::rewriteBranch(gc_node_ref_t join) {
         const gc_node_ref_t value = arm.value;
         auto pullback = std::make_unique<GraphDraft>();
         pullback->setFuncType(types.pullbackType);
-        const gc_node_ref_t dy = addPort(*pullback, tangentTypeOf(valueType));
+        const gc_node_ref_t dy = addPort(*pullback, machineryTangentTypeOf(valueType));
         pullback->appendNormPort(dy);
         std::vector<gc_node_ref_t> differentiated;
         for (gc_node_ref_t input : shared) {
@@ -2749,9 +2849,9 @@ void Backward::accumulateInto(
     ASSERT(tangent.materialized == kInvalidNodeRef, "autodiff: gradient changed after use.");
     if (isAggregate(primalType)) {
         // Keep aggregates element-wise: split a whole-value gradient into its elements.
-        Type *tangentType = tangentTypeOf(primalType);
+        Type *tangentType = machineryTangentTypeOf(primalType);
         for (size_t i = 0; i < aggregateSize(primalType); ++i) {
-            const auto position = tangentElementIndex(primalType, i);
+            const auto position = machineryTangentElementIndex(primalType, i);
             if (!position) {
                 continue;
             }
@@ -2830,45 +2930,61 @@ void Backward::mergeInto(
 gc_node_ref_t Backward::add(Type *primalType, gc_node_ref_t lhs, gc_node_ref_t rhs) {
     const TangentSpace *space = DerivativeRegistry::instance().findTangentSpace(primalType);
     if (space == nullptr || space->addUri.empty()) {
+        if (const auto discrete = discreteZeroSlot(primalType)) {
+            // Two zeros of a discrete value add to the zero of its own type (design principles
+            // 9.9): it carries no gradient, and the user's gradient keeps such a member in its
+            // place, at its own type.
+            return target_.materializeStaticValue(*discrete, primalType);
+        }
         fail(std::format("cannot add gradients of type '{}'", primalType->toString()));
     }
     const std::array<gc_node_ref_t, 2> inputs{lhs, rhs};
-    return autodiff::addOper(target_, tangentTypeOf(primalType), space->addUri, inputs);
+    return autodiff::addOper(target_, tangentNodeType(primalType), space->addUri, inputs);
 }
 
-gc_node_ref_t Backward::zero(Type *primalType, gc_node_ref_t primal) {
+gc_node_ref_t Backward::zero(Type *primalType, gc_node_ref_t primal, TangentAudience audience) {
     if (isAggregate(primalType)) {
         Tangent none;
-        return materialize(none, primalType, primal);
+        return materialize(none, primalType, primal, audience);
     }
     const TangentSpace *space = DerivativeRegistry::instance().findTangentSpace(primalType);
     if (space == nullptr) {
+        if (const auto discrete = discreteZeroSlot(primalType)) {
+            // The zero of a discrete scalar, at its own type: the user's gradient keeps such a
+            // member at the zero of its own type and shape (`gradientTypeOf` would have given the
+            // parameter no gradient at all if it stood alone, and the machinery drops it).
+            return target_.materializeStaticValue(*discrete, primalType);
+        }
         fail(std::format("no zero gradient for type '{}'", primalType->toString()));
     }
     if (space->zero) {
-        return target_.materializeStaticValue(*space->zero, tangentTypeOf(primalType));
+        return target_.materializeStaticValue(*space->zero, tangentNodeType(primalType));
     }
     const gc_node_ref_t value = primal;
     return autodiff::addOper(
         target_,
-        tangentTypeOf(primalType),
+        tangentNodeType(primalType),
         space->zerosLikeUri,
         std::span<const gc_node_ref_t>(&value, 1));
 }
 
 // `primal` is the target-graph node of the primal value, used for zeros only.
-gc_node_ref_t Backward::materialize(Tangent &tangent, Type *primalType, gc_node_ref_t primal) {
+gc_node_ref_t Backward::materialize(
+    Tangent &tangent, Type *primalType, gc_node_ref_t primal, TangentAudience audience) {
     if (tangent.materialized != kInvalidNodeRef) {
         return tangent.materialized;
     }
     if (!isAggregate(primalType)) {
         tangent.materialized =
-            tangent.value != kInvalidNodeRef ? tangent.value : zero(primalType, primal);
+            tangent.value != kInvalidNodeRef ? tangent.value : zero(primalType, primal, audience);
         return tangent.materialized;
     }
     std::vector<gc_node_ref_t> values;
     for (size_t i = 0; i < aggregateSize(primalType); ++i) {
-        if (!tangentElementIndex(primalType, i)) {
+        // Which elements the tangent keeps is the audience's answer: the machinery's tangent drops
+        // the members that need no gradient, the user's gradient keeps every member of a parameter
+        // that has one (a discrete member included, at the zero of its own type).
+        if (!tangentPositionFor(primalType, i, audience)) {
             continue;
         }
         Type *elementType = aggregateElement(primalType, i);
@@ -2878,12 +2994,12 @@ gc_node_ref_t Backward::materialize(Tangent &tangent, Type *primalType, gc_node_
         const gc_node_ref_t element =
             needsPrimal ? addField(target_, primalType, primal, i) : kInvalidNodeRef;
         if (it == tangent.elements.end()) {
-            values.push_back(zero(elementType, element));
+            values.push_back(zero(elementType, element, audience));
         } else {
-            values.push_back(materialize(it->second, elementType, element));
+            values.push_back(materialize(it->second, elementType, element, audience));
         }
     }
-    tangent.materialized = addAggregate(target_, tangentTypeOf(primalType), values);
+    tangent.materialized = addAggregate(target_, tangentTypeFor(primalType, audience), values);
     return tangent.materialized;
 }
 
@@ -2895,7 +3011,19 @@ gc_node_ref_t Backward::gradient(gc_node_ref_t primal) {
     }
     // The primal value is only read for zeros; avoid capturing it otherwise.
     const bool needsPrimal = tangent.empty() || isAggregate(type);
-    return materialize(tangent, type, needsPrimal ? ref(primal) : kInvalidNodeRef);
+    return materialize(
+        tangent, type, needsPrimal ? ref(primal) : kInvalidNodeRef, TangentAudience::Machinery);
+}
+
+gc_node_ref_t Backward::userGradient(gc_node_ref_t primal) {
+    Type *type       = typeOf(forward_, primal);
+    Tangent &tangent = gradients_[primal];
+    // The gradient the user is handed is built for the *user*'s question, not the tape's: it has
+    // the parameter's own gradient type (`gradientTypeOf`), a discrete member included. Whatever
+    // the tape materialized for the same node is a different value of a different type, so this
+    // builds its own.
+    tangent.materialized = kInvalidNodeRef;
+    return materialize(tangent, type, ref(primal), TangentAudience::User);
 }
 
 // A Map or a Set has no tangent, so activity would end at one, and what is read back out of
@@ -2908,8 +3036,8 @@ void Backward::refuseActiveCollection(gc_node_ref_t node, Type *type) {
         return;
     }
     const bool differentiable =
-        tangentTypeOf(coll->keyType()) != nullptr ||
-        (coll->valueType() != nullptr && tangentTypeOf(coll->valueType()) != nullptr);
+        machineryTangentTypeOf(coll->keyType()) != nullptr ||
+        (coll->valueType() != nullptr && machineryTangentTypeOf(coll->valueType()) != nullptr);
     if (!differentiable) {
         return;
     }
@@ -2949,7 +3077,7 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
     // region reads it (a loop's body reads it outside the value order of the node), and it does
     // not become differentiated by being visited.
     for (gc_node_ref_t id : differentiated_) {
-        if (tangentTypeOf(typeOf(forward_, id)) != nullptr) {
+        if (machineryTangentTypeOf(typeOf(forward_, id)) != nullptr) {
             active_.insert(id);
         }
     }
@@ -2975,7 +3103,7 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
             return false;
         }
         return (type->code() == TypeCode::Tuple || type->code() == TypeCode::Struct) &&
-               tangentTypeOf(type) != nullptr;
+               machineryTangentTypeOf(type) != nullptr;
     };
     // A branch's condition, its arm selector, and a `where`'s mask are control: the value
     // chooses which data is read, and the reader's gradient flows through the chosen data, not
@@ -3081,7 +3209,7 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
                 (active_.contains(*iterable) || tainted_.contains(*iterable))) {
                 Type *const iterableType = typeOf(forward_, *iterable);
                 if (iterableType->code() == TypeCode::Array &&
-                    tangentTypeOf(iterableType) == nullptr) {
+                    machineryTangentTypeOf(iterableType) == nullptr) {
                     Type *const elementType = tt::as_ptr<type::ArrayType>(iterableType)->elemType();
                     failAt(
                         forward_.nodeOrigin(node),
@@ -3095,6 +3223,46 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
                             iterableType->toString(),
                             whereIs(forward_.nodeOrigin(*iterable)),
                             elementType->toString()));
+                }
+                // A round of a loop over an array whose elements are themselves arrays (a rank-2
+                // or higher numeric array, whose rounds are its slices) cannot be reversed yet:
+                // such an array's tangent is the array of its *elements'* tangents, one rank short
+                // of the value (src/core/derivative.cpp, the Array case of `computeTangent`), so both
+                // the zero tangent the reverse loop starts from and its per-round scatter-add are
+                // typed one rank short of the array they accumulate into. `std::macro std::jgir`
+                // prints them, `tensor:zeros_like` and `:tangent/scatter_add_arr` both of type
+                // `f32[]`, while the array is `f32[2, 3]`; the rounds' slices then landed in a
+                // container nothing filled, and the gradient came back as uninitialized memory --
+                // two garbage floats where the hand adjoint has six ones
+                // (test/cases/modules/autodiff/loop_grad_tensor_iterable.cml, `shape(d) = [2]`).
+                // Refuse the loop by name until an array's tangent is the array itself.
+                else if (iterableType->code() == TypeCode::Array) {
+                    // What a round gives is the array's element along its first dimension
+                    // (design principles 5.4): a slice one dimension shorter, not `elemType`,
+                    // which is the scalar of a flat rank-2 array. A numeric array's slice is a row
+                    // of the tensor, and the tensor's own scatter takes it back
+                    // (`tensor:row_add_at`, `TangentSpace::scatterUri`). An array whose rounds are
+                    // arrays *as values* -- a nested array, whose elements are not numbers but
+                    // arrays -- has no such scatter yet, and its rounds would be written into a
+                    // gradient nothing has the shape of, so the loop is refused by name instead.
+                    Type *const roundType =
+                        tt::as_ptr<type::ArrayType>(iterableType)->firstDimensionElement();
+                    const bool slicedValues =
+                        roundType != nullptr && roundType->code() == TypeCode::Array;
+                    if (slicedValues && !isNumericArrayType(iterableType)) {
+                        failAt(
+                            forward_.nodeOrigin(node),
+                            std::format(
+                                "a 'loop' iterates over an array of type '{}'{} whose rounds are "
+                                "its slices: a round of that array is itself an array, and the "
+                                "reverse pass cannot scatter the gradient of a slice back into "
+                                "it yet (an array's tangent is the array of its elements' "
+                                "tangents, one rank short of the value). Iterate an array whose "
+                                "rounds are numbers or records, or take the slices' gradient "
+                                "another way",
+                                iterableType->toString(),
+                                whereIs(forward_.nodeOrigin(*iterable))));
+                    }
                 }
             }
         }
@@ -3175,7 +3343,7 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
         }
         // A variable is state, not a differentiable input: its cell is never active, and a
         // read of it (checked above) is a constant of the call.
-        if ((tangentTypeOf(type) == nullptr && !carrier) || isCellType(type)) {
+        if ((machineryTangentTypeOf(type) == nullptr && !carrier) || isCellType(type)) {
             refuseActiveCollection(node, type);
             refuseActiveEnum(node, type);
             // A value that cannot carry a gradient but is computed from one is tainted: it may
@@ -3195,7 +3363,7 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
             continue;
         }
         // A function passed in from outside is given: it does not depend on a parameter.
-        bool active = differentiated_.contains(node) && tangentTypeOf(type) != nullptr;
+        bool active = differentiated_.contains(node) && machineryTangentTypeOf(type) != nullptr;
         active |= inputActive || inputTainted;
         if (!active) {
             continue;
@@ -3267,7 +3435,7 @@ void Backward::reportRefusals(const std::vector<gc_node_ref_t> &order) {
         const bool unreached = before.contains(node) && active_.contains(node) &&
                                kindOf(forward_, node) == GCNodeKind::Call &&
                                !sites_.contains(node) &&
-                               tangentTypeOf(typeOf(forward_, node)) != nullptr;
+                               machineryTangentTypeOf(typeOf(forward_, node)) != nullptr;
         if (met.contains(node) || unreached) {
             refusals_.push_back(
                 Refusal{.origin = forward_.nodeOrigin(node), .reason = refusalReason(node)});
@@ -3422,7 +3590,7 @@ void Backward::checkVariableReads(const std::vector<gc_node_ref_t> &order) {
         bool depends      = false;
         if (!isCellType(type)) {
             if (kindOf(forward_, node) == GCNodeKind::Port) {
-                depends = tangentTypeOf(type) != nullptr;
+                depends = machineryTangentTypeOf(type) != nullptr;
             } else if (!(kindOf(forward_, node) == GCNodeKind::Oper &&
                          camel::core::oper::isVariableRead(operId(node)))) {
                 for (auto inputs : {forward_.normInputsOf(node), forward_.withInputsOf(node)}) {
@@ -3438,7 +3606,7 @@ void Backward::checkVariableReads(const std::vector<gc_node_ref_t> &order) {
     for (gc_node_ref_t read : order) {
         if (kindOf(forward_, read) != GCNodeKind::Oper ||
             !camel::core::oper::isVariableRead(operId(read)) ||
-            tangentTypeOf(typeOf(forward_, read)) == nullptr) {
+            machineryTangentTypeOf(typeOf(forward_, read)) == nullptr) {
             continue;
         }
         if (!inPlace_) {
@@ -3449,7 +3617,18 @@ void Backward::checkVariableReads(const std::vector<gc_node_ref_t> &order) {
                 "written there, can be taken as a constant. Pass the value instead of the "
                 "variable");
         }
-        const gc_node_ref_t cell = forward_.normInputsOf(read).front();
+        gc_node_ref_t cell = forward_.normInputsOf(read).front();
+        // A read of a cell takes the version it reads from -- the write that made it, whose own
+        // first input is the cell (the var version node ruling) -- so a read written after an
+        // assignment names that assignment here, not the cell. What the checks below are about is
+        // the cell: the write it reads is one of the cell's users either way.
+        if (kindOf(forward_, cell) == GCNodeKind::Oper &&
+            camel::core::OperatorTable::instance().isAssignment(operId(cell))) {
+            const auto written = forward_.normInputsOf(cell);
+            if (!written.empty()) {
+                cell = written.front();
+            }
+        }
         if (kindOf(forward_, cell) != GCNodeKind::Port) {
             fail(
                 "a variable of a differentiable type that is declared inside the differentiated "
@@ -3578,7 +3757,7 @@ void Backward::visitCallSite(gc_node_ref_t node, const CallSite &site) {
         if (const auto position = site.plan.tangentIndex(i)) {
             accumulate(
                 site.inputs[i],
-                addAccs(target_, tangentTypeOf(site.plan.portTypes[i]), tangents, *position));
+                addAccs(target_, machineryTangentTypeOf(site.plan.portTypes[i]), tangents, *position));
         }
     }
 }
@@ -3605,7 +3784,7 @@ void Backward::visitRuleSite(gc_node_ref_t node, const CallSite &site) {
                 site.inputs[i],
                 count == 1
                     ? result
-                    : addAccs(target_, tangentTypeOf(site.plan.portTypes[i]), result, *position));
+                    : addAccs(target_, machineryTangentTypeOf(site.plan.portTypes[i]), result, *position));
         }
     }
     producing_ = kInvalidNodeRef;
@@ -3633,7 +3812,7 @@ void Backward::visitOper(gc_node_ref_t node) {
     std::vector<ValueWith> valueWith;
     size_t withIndex = 0;
     for (gc_node_ref_t input : forward_.withInputsOf(node)) {
-        if (active_.contains(input) && tangentTypeOf(typeOf(forward_, input)) != nullptr) {
+        if (active_.contains(input) && machineryTangentTypeOf(typeOf(forward_, input)) != nullptr) {
             valueWith.push_back(ValueWith{.input = input, .index = withIndex});
             active = true;
         }
@@ -3760,7 +3939,7 @@ void Backward::visitFill(gc_node_ref_t node) {
         const auto values    = copyOf(forward_.withInputsOf(node));
         const auto slots     = body->slots();
         const auto *array    = tt::as_ptr<type::ArrayType>(type);
-        Type *elementTangent = tangentTypeOf(array->elemType());
+        Type *elementTangent = machineryTangentTypeOf(array->elemType());
         if (elementTangent == nullptr) {
             return;
         }
@@ -3803,12 +3982,12 @@ void Backward::visitForward(gc_node_ref_t node, bool convert) {
     }
     const gc_node_ref_t source = inputs.front();
     Type *sourceType           = typeOf(forward_, source);
-    Type *sourceTangent        = tangentTypeOf(sourceType);
+    Type *sourceTangent        = machineryTangentTypeOf(sourceType);
     if (sourceTangent == nullptr) {
         return;
     }
     gc_node_ref_t g = gradient(node);
-    if (convert && !sourceTangent->equals(tangentTypeOf(typeOf(forward_, node)))) {
+    if (convert && !sourceTangent->equals(machineryTangentTypeOf(typeOf(forward_, node)))) {
         const gc_node_ref_t cast = target_.addCastNode(sourceTangent);
         target_.setNormInputs(cast, std::span<const gc_node_ref_t>(&g, 1));
         g = cast;
@@ -3980,7 +4159,7 @@ void Engine::build(Pending &pending) {
 
     auto pullback = std::make_unique<GraphDraft>();
     pullback->setFuncType(plan.pullbackType);
-    const gc_node_ref_t dy = addPort(*pullback, tangentTypeOf(plan.valueType));
+    const gc_node_ref_t dy = addPort(*pullback, machineryTangentTypeOf(plan.valueType));
     pullback->appendNormPort(dy);
 
     const auto ports = portsOf(forward);
@@ -4084,7 +4263,7 @@ LoopBodyPlan Engine::buildLoopBody(
         plan.stateTypes.push_back(view.stateType(j));
     }
     plan.stateValueType = stateCount == 1 ? plan.stateTypes.front() : TupleType::create(plan.stateTypes);
-    plan.dyType = carriesGradient(plan.stateValueType) ? tangentTypeOf(plan.stateValueType) : nullptr;
+    plan.dyType = carriesGradient(plan.stateValueType) ? machineryTangentTypeOf(plan.stateValueType) : nullptr;
     if (plan.dyType == nullptr) {
         return plan; // nothing can flow through the loop: the caller leaves it alone
     }
@@ -4309,8 +4488,11 @@ GCGraph *Engine::gradient(GCGraph *function, bool withValue) {
     backward.run(order);
 
     // The differential form differentiates the first `with` parameter (9.9); the other `with`
-    // parameters are constants and the ordinary parameters are data.
-    gc_node_ref_t result = backward.gradient(withPorts.front());
+    // parameters are constants and the ordinary parameters are data. What the call hands back is
+    // the parameter's *gradient*, so it is built for the user: `with_grad(loss)<m>(x, y)` gives a
+    // gradient of the same type as `m`, a discrete member of `m` included, whatever the tape
+    // carried for it (`userGradient`).
+    gc_node_ref_t result = backward.userGradient(withPorts.front());
     if (withValue) {
         const std::array<gc_node_ref_t, 2> pair{value, result};
         result = addAggregate(*draft, signature->functionType->exitType(), pair);
@@ -4359,6 +4541,65 @@ GCGraph *Engine::gradient(GCGraph *function, bool withValue) {
 
 } // namespace
 
+namespace {
+
+/// The member of `type` that has no gradient, by the path to it inside the value and its type. A
+/// struct or a tuple has a gradient exactly when every member has one (the author's rulings of
+/// 2026-10-25, on discrete-gradient-and-rank-one-slice-ownership and on
+/// discrete-tuple-tangent-space-and-machinery-aggregates), so the reason a whole value is refused
+/// is always one member: the refusal names that member -- "field `s` has type string", "element 1
+/// has type string" -- and not only the value's own type. The path is the member's field name, or
+/// its position where the member is a tuple's element: it is the refusal that says "field" or
+/// "element" in front of it.
+std::optional<std::pair<std::string, Type *>> memberWithoutTangent(
+    Type *type, const std::string &path) {
+    if (type == nullptr) {
+        return std::nullopt;
+    }
+    const auto hasTangent = [](Type *member) { return gradientTypeOf(member) != nullptr; };
+    if (type->code() == TypeCode::Struct) {
+        auto *st = tt::as_ptr<type::StructType>(type);
+        for (size_t i = 0; i < st->size(); ++i) {
+            Type *field = st->typeAt(i);
+            if (hasTangent(field)) {
+                continue;
+            }
+            std::string name = path.empty() ? std::string(st->fieldName(i))
+                                            : std::format("{}.{}", path, st->fieldName(i));
+            if (isAggregate(field)) {
+                if (auto inner = memberWithoutTangent(field, name)) {
+                    return inner;
+                }
+            }
+            return std::make_pair(name, field);
+        }
+        return std::nullopt;
+    }
+    if (type->code() == TypeCode::Tuple) {
+        auto *tuple = tt::as_ptr<type::TupleType>(type);
+        for (size_t i = 0; i < tuple->size(); ++i) {
+            Type *element = tuple->typeAt(i);
+            if (hasTangent(element)) {
+                continue;
+            }
+            // A member is named by its field name, or -- in a tuple, which has none -- by its
+            // position ("1", and "t.1" one level in). How that reads is the refusal's business,
+            // which adds "field `...`" / "element ..." for the top-level member only.
+            std::string name = path.empty() ? std::format("{}", i) : std::format("{}.{}", path, i);
+            if (isAggregate(element)) {
+                if (auto inner = memberWithoutTangent(element, name)) {
+                    return inner;
+                }
+            }
+            return std::make_pair(name, element);
+        }
+        return std::nullopt;
+    }
+    return std::make_pair(path, type);
+}
+
+} // namespace
+
 std::string differentiationRefusal(FunctionType *function) {
     Type *valueType = function->exitType();
     if (valueType == nullptr ||
@@ -4380,7 +4621,22 @@ std::string differentiationRefusal(FunctionType *function) {
             "variables (design principles 3.5)",
             first->toString());
     }
-    if (tangentTypeOf(first) == nullptr) {
+    if (gradientTypeOf(first) == nullptr) {
+        // Name the member that fails: a struct or a tuple has a gradient exactly when every
+        // member has one, so the author is told which field has the type that has none (the
+        // ruling of 2026-10-25 on discrete-gradient-and-rank-one-slice-ownership: "the diagnostic
+        // names that field"; and the one on
+        // discrete-tuple-tangent-space-and-machinery-aggregates, which gives a tuple the same
+        // rule -- a member is named by its position there).
+        if (auto member = memberWithoutTangent(first, "")) {
+            return std::format(
+                "its first `with` parameter has type {}, whose {} has type {}, which has no "
+                "gradient (a float, a tensor, or a struct or tuple of them)",
+                first->toString(),
+                first->code() == TypeCode::Tuple ? std::format("element {}", member->first)
+                                                 : std::format("field `{}`", member->first),
+                member->second->toString());
+        }
         return std::format(
             "its first `with` parameter has type {}, which has no gradient (a float, a tensor, "
             "or a struct or tuple of them)",
@@ -4397,7 +4653,7 @@ std::optional<GradientSignature> gradientSignature(FunctionType *function, bool 
     // The first `with` parameter is the differentiated one; every other parameter is passed
     // through so the gradient function runs the function. A `var` parameter stays one, so its
     // caller passes the variable and the function's writes reach it.
-    signature.gradientType = tangentTypeOf(function->withTypeAt(0));
+    signature.gradientType = gradientTypeOf(function->withTypeAt(0));
     Type *valueType        = function->exitType();
     Type *result           = withValue
                                  ? TupleType::create(std::vector<Type *>{valueType, signature.gradientType})

@@ -26,7 +26,7 @@ func error_of_doc(f: Json!) {
 }
 
 /// The accessors of a plain `Json`, which take the `Json?` layer the calls produce and still
-/// give the value: the behaviour of a document that was decoded before H16.
+/// give the value: the behaviour of a document that was decoded before.
 func report(j: Json): int sync {
     println(j->get<'a'>->get<0>->as_int ?? 0)
     println(j->get<'s'>->as_string ?? '?')

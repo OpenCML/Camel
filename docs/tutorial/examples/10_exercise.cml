@@ -1,0 +1,27 @@
+// The answer to the exercise of chapter 10: a `var` written inside a sync block, and a callback
+// that has to be pure.
+// Run: camel docs/tutorial/examples/10_exercise.cml
+module exercise_effects
+
+func sum_upto(n: int): int sync {
+    var total = 0
+    loop i = 1 while i <= n do sync {
+        total += i
+        i + 1
+    }
+    return total
+}
+
+func apply(f: (x: int) => int pure, x: int): int {
+    return f(x)
+}
+
+func square(x: int): int pure {
+    return x * x
+}
+
+func main(): int sync {
+    println(sum_upto(4))
+    println(apply(square, 5))
+    return 0
+}

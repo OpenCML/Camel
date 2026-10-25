@@ -190,17 +190,34 @@ graph train_step [body placement=gpu]
   N2  :nn/sgd (m, N1.1, 0.01)  [placement=gpu]  // 原地写 m 的设备块
 ```
 
-### 2.4 拒绝：不支持的算子与主机效果
+### 2.4 拒绝：不支持的算子与无法确定放置的节点
 
 `deviceCapable(oper)` = 在 `operations()` 表里 ∧ pure ∧ 无外部效果。H218 已经用它拒绝 `#gpu` 作用域并报 `RuntimeDiag::GpuScopeUnsupported = 0x000071`；G1 把判定扩到：
 
 - 传递闭包里的**每个**被调图（不只是作用域自己的图）；
-- 主机效果算子（`print`/`println`、文件写、`save_npy`）——它们不是"设备做不到的算子"，但同样不能在设备段里执行；
-- 作用域里**无法确定放置**的节点（老代码/第三方建图没有盖章）。
+- 作用域里**无法确定放置**的节点（老代码/第三方建图没有盖章）。落地上这一条的形态要说清：`stampNode` 让**每一种**节点创建时都写 `currentAttrs_`，作用域对被调图又是传递闭包（§2.3），所以"节点没有自己的事实"一律由作用域回答（设备），不存在第三种"不知道"的状态；一个作用域**给不出去处**的节点，就是既没有放置事实、也没有设备程序的那一个，它以 `GpuScopeNoDeviceProgram`（闭包里的模块不提供设备程序）报出。
+
+**主机效果不是拒绝，是作用域边界**（第 3 问的裁定，取代本文初稿的"一律拒绝"）：`print`/`println`、文件写、`save_npy` 这类效果算子**不参与设备段**，它们放在**主机**上，观察点由遍插一个**显式的 `download`** 节点，`std::profile` 的 `syncs` 把它数出来。理由：作用域承诺的是"这一段计算在哪跑"，不是"这一段程序没有主机观察"；效果算子没有设备实现，但它也不需要设备实现——它是段与主机之间的那一次传输。所以：
+
+| 作用域里的节点 | 处置 |
+|---|---|
+| 有设备实现的纯算子 | 进段，在设备上跑 |
+| 主机效果算子（`print`、文件写、`save_npy`） | 留主机，边界处一个显式 `download`（`syncs` 计数） |
+| 没有设备实现、也不是主机效果的算子 | 拒绝：`GpuScopeUnsupported`；闭包里的模块没有设备程序时是 `GpuScopeNoDeviceProgram` |
+
+落地状态要说清：**两半都已落地**（`#gpu` 里写 `println` 不再报 `GpuScopeUnsupported`，作用域照旧是一个设备单元；效果写在作用域体内时照常执行，观察点有一次显式传输）。修的是**切分**，执行计划不动：
+
+- 执行计划（`src/execute/graph_runtime_support.cpp` 的 `computeExecutionOrder`）从图的出口往回走，只认数据边、同步边与顺序边，"哪些节点要跑"不额外认别的根：同步块之外、结果没人用的带效应调用**本来就不执行**（设计原则 3.1），把它当根会改变整门语言的语义。所以段被抽出去之后，宿主语句到出口的那条链必须不断在段调用这里。
+- 断链的地方是切分：段把成员语句换成段调用，就要把被替换语句的**同步输入、顺序输入**原样接到替换它的节点上（`docs/design/effects/edges.cn.md` §4），并且它**排序过的**那些节点改由段调用排序。顺序在今天的图里由两种边并行携带到控制边退场为止（控制边与同步边同写一条顺序，`src/runtime/draft.cpp` 的 `closeChainOver`），所以两边都要接。实现在 `modules/tiles/src/region_outline.cpp`：段成员的控制前驱接到调用上，成员控制过的节点把该成员换成调用——只动这一份顺序引用，图的出口、区域的值、分支的 JOIN 这些引用留给遍下面按值替换，否则出口会被提前改成调用而不是它该有的值。
+- 切分不必另加"切点"：`partitionRegions` 的合并只沿**数据**输入进行，商图的无环判定按输入 + 顺序做（`RegionNode::order` 来自 `graph.ctrlInputsOf`），效果横在两个成员之间时那次合并被拒，段于是在效果处**自然分开**——`observed` 落地成两段（这一形状的读数：`device kernels` 3、`compiles` 2、`run_preferred_resident` 2 次）。效果读的那个值的 `tiles:download` 在那之前就已经在图上（`std::jgir` 里 `observed` 有它，`modules/tiles/src/graph_regions.cpp` 的 `analyzeRegions` 与 `regions.cpp` 的 `planRegionTransfers` 都不认识执行计划），缺的一直只是那条顺序边。§3.6 的第 6 条要把这张表换成驻留结论，那时"效果是观察点"要在新口径里重新落。
+
+改之前：`#gpu` 函数体里的 `println` **不执行**——效果节点和它读的那次 `download` 都不在执行计划里，所以那一次传输也没发生（有卡时 `to_host_bytes` 只有 12、`syncs` 2），`--devices cpu` 与有卡时都不打印；改之后：两种运行都打印。有卡时（一块卡、一条流，公共同步路径）`syncs` 从 2 变 3，**多出来的那一次就是观察点**：一次上传（`tiles:retain_preferred` 把实参送上卡）加两次下载（效果读的值、`main` 读回的返回值），`to_host_bytes` 从 12 变 20。`syncs` 数的是真实的等待（按值计的数是 `downloads`/`transfers`），所以钉数要在固定的流数下取；整程序最少 2 次——设备段的输入张量必须上传，体内**没有**效果的对照程序也是 2。`TILES_RESIDENCY` 读的是放置事实而不是遍插入的节点，所以它对 `observed` 照旧记 `downloads: 0`（效果节点带的是作用域的 `gpu` 事实）。传输节点在两种运行下都写出来，有没有设备是**运行时**决定：`--devices cpu` 下一次传输都不写、`syncs` 记 0，效果照样打印。
 
 诊断形状：一条诊断列出作用域里**所有**不合格算子（URI + origin + 原因），给出两条出路（写 `#cpu` 块，或 `--devices cpu`），不让用户一条一条试。`--devices cpu` **不改变可编译集合**：支持面在编译期定死，`--devices cpu` 只决定"编出来的段在哪执行"（主机后端执行同一段图）。否则同一个程序在有无设备时编译结果不同，这就是"静默地为错的设备编译"。
 
 `#gpu` 写了而流水线里没有 `tiles::compile`：沿用 9.4 的 `SemanticDiag::TagHasNoReader = 0x100160` 警告。两边合起来，任何"标签被忽略"的情形都至少有一条诊断。
+
+空作用域（`#gpu` 块里没有设备算子、全被常量折叠掉）**不加警告**（第 5 问）：那不是写错，`tiles::inspect` 显示 0 个段就够了；"标签没有读者"仍按上面那一条报。
 
 ### 2.5 图内区域：分支、循环、调用的切分
 
@@ -222,26 +239,22 @@ graph step [body placement=gpu]
   LOOP (state, k)                  // 主机；LoopBody 是一个段
 ```
 
-### 2.6 派生图在编译期：一个必需的展开遍
+### 2.6 派生图在编译期：`std::macro`，不新增遍
 
-上面"作用域覆盖它的梯度"在今天的机制下**不成立**，这是写这份计划时最重要的发现：`grad`/`with_grad` 是**运行期**算子，`modules/autodiff/operators.cpp::gradFunction` 在算子执行时才调用 `buildGradientGraph` 建出派生图。流水线遍在那之前就跑完了，所以派生图：
+本文初稿这里写着"派生图只在运行期建、遍看不见，所以要新增一个展开遍 `autodiff::expand`"。**那个读数不成立，撤回**：`grad`、`with_grad`、`vjp` 在 `modules/autodiff/operators.cpp` 里登记为 **macro 算子**（`.macro = true`），`f` 编译期可知时，流水线里的 **`std::macro` 已经在编译期把它展开成导数图**（`pullback.cpp` 的 `macroCallee`），后面的遍都看得见它。教程第 16 节写的也是这个。
 
-- 不会被任何遍（包括 `tiles::compile`）看见，因此不会被编译；
-- 在解释器里执行，于是**反向永远在主机上**——验收第六项"含反向"直接失败。
+所以"作用域覆盖它的梯度"是这样成立的：
 
-决定（G1 的一部分，见 §7 的 S5b）：
-
-1. 新增模块遍 `autodiff::expand`。它在 `tiles::compile` **之前**运行：对每个 `grad(f)` / `with_grad(f)` 调用点，若 `f` 静态可知（命名函数或静态闭包常量），就在编译期调用 `buildGradientGraph` 建出派生图（需要时给 draft 组加一个 draft 版本，把派生图连同它的 program 挂到同一 session），把调用点换成"持有该图的函数常量"——和运行期算子产生的值形状相同：一个 `Function` 值，`with` 参数在调用点绑定，而不是在图里固化。
-2. 派生图继承 primal 的放置（§2.3 的两条），因此和 primal 一起进同一个单元（§4.1）。
-3. 作用域里 `f` **不**静态可知的 `grad`（函数值来自参数、返回值或运行期计算）→ 编译期报错，`GpuScopeUnsupported 0x000071`，消息点名 `grad`/`with_grad` 与该调用点，说清"`#gpu` 作用域里的梯度需要编译期可知的函数"。
-4. `#gpu` 之外完全不变：没有 `autodiff::expand` 时 `grad` 仍按运行期构建，解释执行。
-5. `tiles::compile` 在 `#gpu` 作用域里看到未展开的 `grad`/`with_grad`（遍没有跑）→ 报"缺少前置遍"，消息里**点名 `autodiff::expand`**（本仓库对前置遍的既有做法：库的诊断点名缺少的遍，流水线永远是显式的）。这条诊断**先于** §2.4 的"不支持的算子"：前者有明确的修法（加一个遍），后者只是"这个算子放不上去"。
+1. **不新增任何遍。** `#gpu` 作用域里的梯度，靠流水线里 `std::macro` 在 `tiles::compile` **之前**展开。`tiles::compile` 是这件事的**消费者，不是作者**：它不调用任何展开遍，也不改变流水线的写法。
+2. **派生图继承 primal 的放置**（§2.3 的两条）：派生图创建时抄 primal 图 body 区域 0 的 attrs，VJP 新建的节点从它的 primal 节点抄 `tiles.placement`。因此派生图与 primal 一起进同一个单元（§4.1），`TILES_PLACEMENT` 里能看到它 `body=gpu-required`。
+3. `tiles::compile` 在作用域里看到**未展开**的 `grad`/`with_grad`（函数操作数是编译期可知的函数常量，说明缺的是遍）→ 报"缺少前置遍"，消息里**点名 `std::macro`**（`RuntimeDiag::GpuScopeMacroNotExpanded`；本仓库对前置遍的既有做法：库的诊断点名缺少的遍，流水线永远是显式的）。这条诊断**先于** §2.4 的"不支持的算子"：前者有明确的修法（加一个遍），后者只是"这个算子放不上去"。
+4. 作用域里 `f` **编译期不可知**的 `grad`（函数值来自参数、返回值或运行期计算）→ 编译期报错，`GpuScopeUnsupported 0x000071`，消息点名 `grad`/`with_grad` 与该调用点，说清"`#gpu` 作用域里的梯度需要编译期可知的函数"。这一条不是缺遍：任何遍都展开不了它。
+5. `#gpu` 之外完全不变：不在作用域里的 `grad` 仍按运行期构建、解释执行。
 
 ```gir
-# 展开前
-N30 :autodiff/with_grad  (DATA(Function loss))   [placement=gpu]
-N31 :call  (N30, m) (x)                          [placement=gpu]
-# 展开后
+# 展开前（流水线里没有 std::macro）
+N30 :autodiff/with_grad  (DATA(Function loss))   [placement=gpu]   → 报缺前置遍，点名 std::macro
+# 展开后（流水线：std::macro tiles::compile）
 graph d(loss)          body attrs={tiles.placement=gpu}     // primal 的放置抄过来
   PORT m, x
   … 反向节点，类型由 §5.2 的规则给出 …
@@ -249,7 +262,7 @@ N30 :DATA(Function(d(loss)))                     [placement=gpu]   // 函数常�
 N31 :call  (N30, m) (x)                          [placement=gpu]
 ```
 
-这个遍是 H49 里**唯一**新增的遍；它不改变语言，也不改变 `grad` 的语义（值相同），只是把"什么时候建派生图"从运行期移到编译期，让"编译整段"这件事对反向也成立。
+这条撤回**不改变**本文其余部分：作用域、传播、段落、单元的定义都不动，S5b 因此只剩"放置的继承"与"缺少前置遍"的诊断，不依赖张量并进数组。
 
 ### 2.7 G1 的文件、测试与门禁
 
@@ -267,6 +280,38 @@ N31 :call  (N30, m) (x)                          [placement=gpu]
 - `placement_no_reader.cml`（negative）：只有 `#gpu` 没有 `tiles::compile` → `TagHasNoReader` 警告。
 
 门禁：`feat/compile`（GIR 快照）、`feat/modules/tiles`、`feat/modules/autodiff`、`smoke`。
+
+### 2.8 G1 的施工步骤
+
+编号仍按 §0 的 S1–S10。**S1–S5b 已落地，不重做**（判据见下表）；本节把 G1 剩下的工作排成可施工的两步，每步给目标、边界、依赖、验收读数与未决点。`modules/` 侧的施工顺序见 [plan-modules.cn.md](plan-modules.cn.md)（M0–M10），但它的 M3 已被复核撤回——派生图由 `std::macro` 在编译期展开，**本项不新增遍**，按 §2.6 写。
+
+**已落地（判据是文件与符号，不是看板）**
+
+| 项 | 判据 | 未落地的部分 |
+|---|---|---|
+| 设备选择与启动校验（S1） | `include/camel/execute/devices.h` 的 `DeviceSelection`/`DeviceValidator`；`src/execute/devices.cpp` 的 `parseDeviceSelection`、`selectDevices`、`registerDeviceValidator`、`validateSelectedDevices`（`--devices cpu` 与不给 `--devices` 都在这里直接通过）；`modules/tiles/include/tiles/internal/capability.h` 的 `CudaDeviceAvailability`、`DeviceUnavailable`、`configuredCudaOrdinal`；`RuntimeDiag::DeviceUnavailable = 0x04000070`。计划条目 `test/plans/feat/modules/tiles.plan.toml` 的 `device_startup.*` 六条 | 无 |
+| 一个键、两个标签（S2） | `src/core/tags.cpp` 里 `attr::registerKey("tiles.placement", {Symbol, inner(), equalOnly()})`，`#gpu` 与 `#cpu` 两个 `Decl` 用**同一个** `key`、`readBy = {"tiles::compile"}`；`src/compile/gir/builder.cpp` 的 `setRegionAttrs(0, bodyTags.nodes)`（函数体）与 `enterBlockScope` 一侧的 `GCRegionKind::Block` + `setRegionAttrs(block, blockTags.nodes)`；`src/compile/gir/graph_encode.cpp` 编码 region 0 的 attrs。用例 `test/cases/modules/tiles/gpu_scope_segments.cml`、`placement_query.cml` | 标签的落点仍含模块位置（G1-1） |
+| 放置解析与报告（S3） | `modules/tiles/include/tiles/internal/placement.h` 的 `Placement`/`PlacementScope`/`PlacementDecision`、`placementOf`、`bodyPlacementOf`、`GpuScopes`；`modules/tiles/src/placement.cpp` 的四步顺序与 `placementReport`（打 `TILES_PLACEMENT`）；`modules/tiles/src/region_pass.cpp` 在改写前打印它。计划条目 `placement.query`、`gpu_scope.placement_facts`、`gpu_scope.placement_without_a_device` / `_with_a_device` | 无 |
+| 拒绝（S4） | `RuntimeDiag::GpuScopeUnsupported = 0x04000071`、`GpuScopeNoDeviceProgram = 0x040001A7`；`modules/tiles/include/tiles/internal/regions.h` 的 `gpuRefusal` 的三条原因串（`no device program for this operator` / `for this shape` / `the module provides none`）。用例 `test/cases/gpu/nofallback/refused_operator.cml`、`refused_shape.cml`、`two_refusals.cml`，计划条目 `nofallback.*` 与 `nofallback.one_diagnostic_lists_every_refused_operator` | 无 |
+| 图内区域：臂与循环体各自成段（S5a） | `modules/tiles/include/tiles/internal/regions.h` 的 `RegionNode::control` 与 `analyzeRegions(..., const GpuScopes *)`；`modules/tiles/src/region_outline.cpp` 用 `draft.setInsertRegion` 把段的调用写在成员所在的控制区域，`BRCH`/`JOIN`/`LOOP` 留主机。用例 `nofallback/branch.cml`、`loop.cml`，计划条目 `nofallback.branch_arms_are_segments`、`branch_segment_is_written_in_the_arm`、`branch_scope_returns_what_the_host_returns`、`loop_is_a_segment` | 循环条件读设备张量时每轮一次 `download`（G2-2） |
+| 派生图继承放置（S5b） | `modules/tiles/src/placement.cpp` 的 `calleeGraphOf` 把持有函数常量的 `Call` 也算作 callee；`RuntimeDiag::GpuScopeMacroNotExpanded = 0x040001A9`；`modules/tiles/src/region_pass.cpp` 的注释写明展开者是 `std::macro`。用例 `test/cases/gpu/nofallback/grad_expand.cml`、`grad_dynamic.cml`，计划条目 `grad_expand.*` 六条 | 无 |
+| 主机效果不是拒绝 | `modules/tiles/include/tiles/internal/regions.h` 的 `gpuRefusal` 注释"Unresolved types and index instances are not refusals … and neither are host effects nor the structural host code"；`modules/tiles/src/region_outline.cpp` 插传输那一圈以 `device` 非空为条件。计划条目 `gpu_scope.host_effect_is_the_boundary`、`gpu_scope.host_effect_synchronises` | 无（体内效果的执行与那一次 `download` 已落地，见 G1-2） |
+
+#### G1-1 标签的落点收口：撤掉模块位置，命名空间块顶上
+
+- **目标**：`#gpu`/`#cpu` 的合法落点是**函数、块与命名空间块**；命名空间块里的每个函数都带上这个事实，函数自己写的是内层、胜出。`Positions` 的 `Module` 位、解析器与 AST/GCT/GIR 里读 `module` 前标签的部分、格式化器的对应处理、`gpu_scope_module.cml` 一并删掉，用例改成命名空间块。
+- **边界**：不动"一个键、两个标签"与放置解析的四步顺序；不动 Tiles 的读写点；本条**不在本车道重复施工**。
+- **依赖**：`handover/h554-no-module-decl`（工作树 `D:\Projects\Camel-wt\h554-no-module-decl` 已从 `origin/develop` 开出，改动未提交，尚未落到分支）——G1-1 是它的交付，本计划只引用它的状态。G1-2 与它无依赖关系。
+- **验收读数**：新用例（命名空间块的标签传播，替换今天的 `test/cases/modules/tiles/gpu_scope_module.cml`；计划条目沿用 `gpu_scope.*` 前缀，名字由 G1-1 的车道定）：命令 `camel --devices cpu <用例> tiles::compile std::nvm`，`TILES_PLACEMENT` 里命名空间块里的函数 `body_fact` 是 `gpu`，块里自己写 `#cpu` 的那个函数是 `host`；`camel inspect --tags <用例>` 里 `#gpu`/`#cpu` 的 `on` 不再列模块位置；负例：标签写在 `module` 前报解析/语义诊断（该用例随 G1-1 一起删）。
+- **未决点**：问题页第 8 条（命名空间块用现成的 `Nodes` 位，还是新增 `Namespace` 位）。
+
+#### G1-2 作用域体内的主机效果：执行，并插一次显式 `download`
+
+- **目标**：`#gpu` 函数体（或块）里写的 `println`/文件写/`save_npy` 照常执行，位置在主机；遍在值的边界处插一个显式 `tiles:download`，`std::profile` 把那次等待数进 `device_work.syncs`。一个观察点一次：`#gpu` 体里一次 `println` 的读数是 `syncs: 1`。
+- **边界**：不改"效果不是拒绝"这一半（已落地）；不改 `--devices cpu` 下"不写任何传输"的行为；不做设备上的效果（没有这种算子）。
+- **依赖**：`handover/h556-gpu-effect` 与它的返工（`handover/h567-gpu-effect-rework`）已落地——修在**切分**（`modules/tiles/src/region_outline.cpp`：段的成员语句换成段调用时，把被替换语句的同步输入、顺序输入与它排序过的节点原样交给调用），执行计划不把效果当根（见 §2.4 的落地状态）；机制上依赖 §3.6 的 G2-2 的观察点定义（本条是那一步的第一个用例）。
+- **验收读数**：`test/cases/modules/tiles/gpu_scope_host_effect.cml` 在 `tiles::compile` 下体内 `println` 有输出（改之前没有输出、`TILES_RESIDENCY` 记 `"downloads":0`）；有卡时计划条目 `gpu_scope.host_effect_synchronises` 读 `std::profile json=` 的 `device_work.syncs`（一块卡一条流：3，改之前 2）与 `to_host_bytes`（20，改之前 12）。设备无关的那一半：`camel --devices cpu <用例> tiles::compile std::nvm` 的 stdout 里有 `println` 的内容，计划条目 `gpu_scope.host_effect_is_the_boundary` 钉住它。防回退两条（计划条目 `gpu_scope.unused_effect_outside_a_sync_block_does_not_run`、`gpu_scope.unused_effect_stays_dropped_through_the_pass`、`gpu_scope.arm_effect_runs_only_in_the_arm_taken`）：同步块之外没人用的 `println` 加不加 `tiles::compile` 都不执行、都报 `EffectNotExecuted`；分支没选中的臂里的 `println` 不执行。
+- **未决点**：问题页第 2 条（观察点与 `syncs` 的计数口径）。
 
 ---
 
@@ -304,6 +349,12 @@ save_npy(download(y), p)   // N3 :tiles/download (B2)     → 块 B3: device=-1
 - `#cpu` 块：入口一个 `download`、出口一个 `upload`（显式节点），每轮两次传输——测试**钉住这个数**，不让它悄悄变成每算子一次；
 - 传输合批：沿用 H49a 的聚合（元组/结构体按叶子 `ACCS` 拆、再装回），一次调用最多一对整块传输。
 
+**落地状态**：驻留结论就是唯一的传输表。`modules/tiles/src/residency.cpp` 的 `planResidency` 读放置事实后逐段回答入口上传、出口下载与段间驻留交接，`modules/tiles/src/region_outline.cpp` 只按这张结论插节点，区域分析原先自己算的那张并存的表（`planRegionTransfers`，按"是不是段成员"作答）已删除。新口径只在块**改变**的地方写传输：段成员按段算设备值，其余值按产生它的节点算，已经落在设备上的值不再被上传（旧表把段外读到的每个值都上传一次，即使它本来就在设备上），段与段之间是驻留交接（同一块，不拷贝）。签名的声明也参与判块：`Device<T>` 形参/返回类型断言这个值本来就在设备上，因此不产生入口上传、出口也不下载；普通声明断言宿主值，调用点与 callee 入口各写一次。`inspectRegions` 的 JSON 把三个答案放进每个 `region`（`uploads`/`downloads`/`resident`，`schema` 升到 2），图级汇总仍写在 `transfers`。
+
+**还没落地的观察点**：`#cpu` 块（入口一次 `download`、出口一次 `upload`）与 `LoopCond` 读设备张量（每轮一次主机观察）。两条都要求宿主块、循环条件成为**独立的段**，而今天的段划分把 `#cpu` 块和循环的条件、体一并放进它们所在的那个段（`graph_regions.cpp` 的 `insideLoop`），边界不存在，因此没有可钉的读数；它们随"把宿主块与条件拆成段"的那一步落地。
+
+**还没落地的调用**：`#gpu` 图之间的调用今天仍各写一次：callee 入口一次上传、出口一次写回。原因不是驻留结论，而是**签名的类型**：`#gpu` 体的算子声明的是普通值，所以它的形参只能声明普通类型，返回类型也只能是普通类型；而驻留 kern 是**按拿到的类型**读值的（`module.cpp` 的 `hostArgument`/`prepareProgram`：设备类型当设备值用，普通类型当宿主值上传）。callee 出口若留在设备上，调用点拿到的就是"类型写普通值、实际是设备值"的值，段算子会把它当宿主张量再上传一次并失败（实测报 `upload currently requires f32 tensor leaves`）；单输入的段连可改的类型位置都没有，调用点形参的类型由被调者签名钉住。等"设备块不再是第二个类型身份"（第 10 节问题 2）落地、签名不必写 `Device<T>` 之后，callee 出口才能留在设备上，这一次上传与一次写回才随之消失。
+
 ### 3.3 传输节点与调度
 
 传输是普通 `OPER` 节点（`:tiles/upload`、`:tiles/download`），带数据边；`upload`/`download` 已经用 `declareResources` 声明了资源（`module.cpp` 约 769–806 行），所以顺序由资源边保证，**不需要**新的调度语义。放置是节点/值的事实，调度器不推断放置，只按边决定就绪；**调度器也不决定提交**——它把段算子排到就绪，提交发生在段算子内部（下一个"立即返回"，见 §3.4）。
@@ -329,6 +380,44 @@ N12 :tiles/download (B4) [host]          → 等 event 17，拷贝到主机块
 测试：`device_block_identity.cml`（上传后原值仍可读、放置不改变类型与名字、同一值的两个块各自带 device）、`device_inplace.cml`（`refcount==1` 原地、优化器 0 分配）、`resident_loop.cml`（状态跨轮驻留、每轮传输数）、`resident_cpu_block.cml`（每轮两次传输）、`async_scope.cml`（提交后主机先做事、`std::profile` 的 `syncs` 每段 1 次）、`device_fault_site.cml`（故障在 exec 节点报、origin 正确）。
 
 门禁：`feat/modules/tiles`、`feat/modules/tensor`、`smoke`；GPU 用例用 `skip_unless = ["node", "test/tools/have-cuda-device.mjs", "0"]`，在 88 主机上由 `camel-remote.ps1` 跑。
+
+### 3.6 G2 的施工步骤
+
+**已落地（判据是文件与符号）**
+
+| 项 | 判据 | 未落地的部分 |
+|---|---|---|
+| 驻留结论是一份可读的答案（S7 的一半） | `modules/tiles/src/residency.cpp` 的 `residencyReport`：每个块的类（`blocks.device`/`blocks.host`）、跨界的值（`crossings`，一个值一次，带 `kind`/`region`/`where`）、调用的 `transfers`、`per_round`；`modules/tiles/src/region_pass.cpp` 在改写前打印 `TILES_RESIDENCY`。用例 `test/cases/modules/tiles/resident_loop.mjs`（计划条目 `resident_loop_declares_its_blocks`）钉住"结论说 device→device 调用 `transfers: 0`、body `crossings: []`、`per_round: 0`，而今天的轮廓仍在 callee 入口留 1 个 `tiles:upload`/`tiles:download`" | 传输由这份结论驱动（今天由区域分析自己算）、`mm::Block::device_` 的写入者、异步跨算子边界 |
+| 传输是普通节点 | `modules/tiles/src/module.cpp` 的 `tiles:upload`/`tiles:download` 与 `declareResources`（资源 `tiles:device`），顺序由资源边给；`modules/tiles/src/region_outline.cpp` 的 `transferAggregate`、`modules/tiles/src/tree_transfer.cpp` 的整树合批 | 无 |
+| 设备值的内部表示与完成令牌 | `modules/tiles/include/tiles/device.h` 的 `DeviceValue`/`DeviceStorage`/`DeviceCompletion`/`HostLeaf`/`uploadValues`/`downloadValues`/`placeOnDevice`/`retainHostValue`/`executeResident`；`modules/tiles/include/tiles/internal/submission.h` 的 `SubmittedProgram`/`submitProgram`；`modules/tiles/include/tiles/internal/cuda_submission.h` 的 `Submission` | 完成令牌跨算子边界（G2-3） |
+| 公共路径仍是同步的 | `modules/tiles/src/module.cpp` 的 `upload`/`download`/`run_preferred_resident`；`modules/tiles/src/cuda.cpp` 在返回前取 `downloadValues` 的结果。用例 `async_execution.cml`、`async_submission.py` | 这是本项**要保留**的行为，不是待修项 |
+
+#### G2-1 设备块就是数组值
+
+- **目标**：设备上的张量就是普通数组值——`TensorType` 与源码里的名字都不变，`mm::Block::device_` 填 DLPack 的 `device_type`/`device_id`（`include/camel/core/array/dlpack.h` 已带这两个字段）；设备块的 owner（流、事件、大小、释放回调）由 Tiles 的设备层持有，块用 `adoptExternal(..., release)` 释放它；`refCount() == 1` ∧ 输出类型与形状同输入 ∧ 算子允许原地 → 写同一块，否则新块。"同一个值两种放置"是同一个值在两个用途上的放置事实，**不是第二个值、不是第二个类型身份**。
+- **与 P4 的接口（元素类型、秩、驻留）**：元素类型与秩来自值自己的类型（今天的 `TensorType` 的 extents 与元素类型；P4 把 `Tensor` 并进数组之后是数组值的 dtype 与 shape），块只加 `device_` 这一处事实；驻留**不是类型的一部分**。`Device<T>` 保留为签名上的放置断言（`modules/tiles/include/tiles/device.h` 的 `DeviceType`），普通值传给 `Device<T>` 形参时由遍插 `tiles:upload` 节点，图上看得见；P4 合入前不引入第二套 dtype/秩，也不用 `TensorType::Default()` 兜底。
+- **边界**：不改公共 `upload`/`download`/`run_preferred_resident` 的同步语义；不把"同一值多种写法"提升成图上的写法等价（`writings.h` 不进这一条）；不做 DLPack 零拷贝导出（H50）。
+- **依赖**：G1（标签与段）；`include/camel/core/mm/block.h` 与数组值的所有者（`src/runtime/**`）要对齐接口；P4 合入后重跑本步的接口读数（元素类型与秩）。
+- **验收读数**：新用例 `test/cases/modules/tiles/device_block_identity.cml`——`upload` 之后原值仍可读、类型与名字不变、两个块各自的 `device()`（主机块 0；设备块的字段取值与"0 是主机"这条现有语义怎么对齐，见问题页第 7 条）；`device_inplace.cml`——计数为 1 时原地写，读数取 `std::profile json=` 的 `allocations.calls`（优化器多轮下不随步数增长）与 `inplace_updates.*` 两个计数，二者都要有；`device_tree.cml` 的 DLPack 段加设备字段断言。今天的读数是 `mm::Block::device()` 恒为 0（守卫先红，见上表）。设备无关的那一半现在就能取：`camel --devices cpu <用例> std::gir` 里 `tiles:upload`/`tiles:download` 是普通 `OPER` 节点，`TILES_RESIDENCY` 的 `blocks` 已经把两类值分开数。
+- **未决点**：问题页第 1 条（owner 与释放归属）、第 7 条（P4 合入后元素类型与秩的接口）。
+
+#### G2-2 驻留由图推出、主机观察时下载
+
+- **目标**：`modules/tiles/src/residency.cpp` 的结论成为插传输的依据，`region_outline.cpp` 按它在放置变化处插节点。观察点定在**值跨边界的那一次写入**：设备值被主机消费者读（`download` 或主机算子）、主机效果算子（`println`/文件写/`save_npy`）、图的出口写回、`LoopCond` 读设备张量（每轮一次主机观察）。一个值在边界上只插一次传输，不是每个读者一次；`#cpu` 块的入口一次 `download`、出口一次 `upload`（每轮两次）。
+- **`download` 插在哪、`syncs` 怎么数**：传输节点插在边界那一侧的值写入处（数据边 + 资源边给顺序，见 §3.3）；每一次主机等待记一次 `synchronise(what)`，读数就是 `std::profile` 的 `device_work.syncs`。G2 的口径是"一个观察点一次"，所以 `#gpu` 体里一次 `println` 的读数是 1（今天没有传输、也不打印，见 G1-2）。
+- **边界**：`--devices cpu` 下一次传输都不写（`region_outline.cpp` 插传输那一圈以 `device` 非空为条件），所以观察点的读数只在有卡时取；不改无标签程序的轮廓结果；循环条件那一半与 G4 分界——G2 每轮主机观察一次，G4 才改成设备上判条件。
+- **依赖**：G2-1；G1-2（体内效果是一次观察点）；P4（值的元素类型与秩决定传输的叶子形状）。
+- **验收读数**：`test/cases/modules/tiles/resident_loop.mjs` 的既有关系翻转——`TILES_RESIDENCY` 说 device→device 调用 `transfers: 0`、body `crossings: []`、`per_round: 0`，而今天同一份 jgir 的 callee 入口还有 1 个 `tiles:upload`/`tiles:download` 节点；G2-2 之后这个节点数必须是 0（`resident_loop_declares_its_blocks` 的注释里那句"the number the insertion changes"随之改成 0）。新用例 `resident_cpu_block.cml`（`#cpu` 块每轮恰好两次传输）与 `resident_loop.cml`（状态跨轮、每轮 0 次）逐字钉数字；`std::profile json=` 的 `device_work.transfers`/`to_device_bytes`/`to_host_bytes` 与 `regions<f>()` 的分析（`modules/tiles/src/graph_regions.cpp::inspectRegions` 的 JSON 键 `uploads`/`downloads`/`resident`）互相对照，两个读数都要有。
+- **未决点**：问题页第 2 条（观察点与 `syncs` 的计数口径）、第 6 条（两张传输表合一还是并存）。
+
+#### G2-3 异步提交
+
+- **目标**：提交发生在段的 exec 算子内部——`submitProgram` 的 outputs + completion 记在输出块的 owner 上，算子**立即返回** pending 设备值；主机观察时才等；故障记进 fault word，在 exec 节点按 source origin 报出（与今天的 `raiseFault(fault, graph, nodeRef)` 同一路径）。
+- **与"按依赖求值"的关系**：**不引入新的顺序语义**。调度器仍只按数据边与资源边决定"就绪"，提交顺序就是依赖顺序；异步不改变任何可观察的值，只改变"谁在什么时候等"，而等待点就是 G2-2 定下的观察点。
+- **边界**：公共 `upload`/`download`/`run_preferred_resident` 保持同步（H218 保留它们作为显式路径）；不加语言原语、不加新算子；不做跨流的多设备（G7）、不做 CUDA Graph 捕获（H50）。
+- **依赖**：G2-1、G2-2；`DeviceCompletion`/`Submission`/`SubmittedProgram` 已存在，本步是把完成令牌从后端内部带出到块的 owner。
+- **验收读数**：新用例 `test/cases/modules/tiles/async_scope.cml`（提交后主机先做自己的事，观察点只有一次等待：`device_work.syncs` 每段 1）；既有 `async_execution.cml`、`test/cases/modules/tiles/async_submission.py` 与 `async_submission_*.cpp`、计划条目 `gpu_scope.host_effect_synchronises` 保持绿；`device_fault_site.cml`（故障在 exec 节点报、origin 正确）。设备无关的那一半今天就能取：`camel --devices cpu <用例> tiles::compile std::nvm` 的数值读数与无 `tiles::compile` 时逐位相同。
+- **未决点**：问题页第 3 条（pending 设备值能否穿过不观察它的主机算子）。
 
 ---
 
@@ -389,6 +478,65 @@ Draft §1 记下的缺口是"设备 64 MiB / 32 项"：训练规模下每步的�
 测试：`scope_one_compilation.cml`（一个作用域一次编译：`inspect` 一份产物、`deviceCompiles==1`）、`scope_symbolic_shapes.cml`（`constas n` 两个不同 n → 一次编译、两次 launch）、`scope_unknown_shapes.cml`（`?` 两个形状 → 两个特化、有界）、`scope_cache_disk.cml`（两次进程运行，第二次 0 次编译）、`scope_cache_invalidate.cml`（改 helper 源、改声明、换 arch 各 miss 一次）、`memory_pool.cml`（稳态每步 0 次直接分配、峰值不涨）。
 
 门禁：`feat/modules/tiles`、`smoke`；磁盘缓存用例只在 GPU 主机上跑（第二次运行要新进程）。
+
+### 4.6 G3 的施工步骤
+
+**已落地（判据是文件与符号）**
+
+| 项 | 判据 | 未落地的部分 |
+|---|---|---|
+| 一个作用域一份编译产物的进程内那一半 | `modules/tiles/src/compiled_region.cpp` 的 `compileTypes`/`prepareProgram`/`hasCompiledRegion` 与目标事实 `tiles.compiled_region`（`rt::fact::registerKind` 的 `FactClass::Target`、`Scope::Graph`，目标哈希 `0x74696c6573000004`；stamp 由 `FactStore` 给图修订 + 声明纪元） | 单元是（作用域图, 放置）的传递闭包、`tiles.compiled_scope`（G3-1） |
+| 进程内的代码生成缓存 | `modules/tiles/src/codegen_cache.cpp` 的 `planKey`（`key.number(8); // Process-local key schema; not a persistent semantic fingerprint.`）与 `modules/tiles/include/tiles/internal/codegen_cache.h` 的 `GenerationCacheStats{hits, misses, entries, retainedBytes}` | 形状签名、落盘与失效矩阵（G3-2） |
+| 显存池已有实现与读数 | `modules/tiles/include/tiles/internal/cuda_backend.h` 的 `MemoryPool`/`PoolPolicy`/`MemoryPolicy`/`PoolStats`/`AllocationLease`；`modules/tiles/src/cuda_pool.cpp`（`capacityFor` 的 size class、OOM 时回收本类空闲块重试一次）；native 检查 `test/cases/modules/tiles/memory_pool_check.cpp`、`memory_pool_failures.cpp`，以及 `async_submission.py` 的 `tiles pool: …` 断言 | 上界自适应（`MemoryPolicy::device{64 MiB, 32}` 今天是固定值，G3-3） |
+
+#### G3-1 整段编译：单元 =（作用域图, 放置）
+
+- **目标**：一个 `#gpu` 函数/块，加上它传递闭包里**同放置**的被调图，一起编成**一个** `Program`，段是它的入口；作用域图上记目标事实 `tiles.compiled_scope`（`tiles.compiled_region` 的扩展）。同一作用域两次调用只编译一次；同一个函数被两处调用而放置不同 → 两份单元。
+- **边界**：不改 `tiles::compile` 的入口写法（仍是 `RuntimeGraphRewritePass`）；本条不做落盘；支持面（bf16/Tensor Core、融合、优化器多张量融合）是 H50。
+- **依赖**：G1（段）、G2-3（提交在段算子内部）；P4 决定单元入口的值类型与形状从哪里读（问题页第 7 条）。
+- **验收读数**：`inspect<f>(x)` 的计划 JSON（段表 `stages[].members[]`，既有计划条目 `gpu_scope.inspect_segments`）里一个作用域一份产物、段是入口；`std::profile json=` 的 `device_work.compiles` 在同一作用域被调两次之后仍是 1；新用例 `test/cases/modules/tiles/placement_callee.cml`（无标签 helper 从 `#gpu` 与主机两处调用 → 两份单元，段表里两份 helper 图）。
+- **未决点**：问题页第 6 条（`tiles.compiled_scope` 与 `tiles.compiled_region` 的键怎么接）。
+
+#### G3-2 按形状签名缓存（内存与磁盘）
+
+- **目标**：编译单元的持久指纹由五段拼成——① 单元的规范化图编码（`src/compile/gir/graph_encode.cpp`，含 body、区域与节点 attrs）；② 用到的每个算子的**声明键 + 语义版本**；③ 目标身份（arch、NVRTC 版本、代码生成 schema 号、调度策略参数）；④ 放置；⑤ 编译器的构建身份（`scripts/build-info.js` 写出的构建指纹，一次构建内不变）。**不用源哈希**。**形状签名**（每个入口张量 extents 的规范形式 + 秩）是**特化表**的键、不是单元的键（§4.2）：符号维（`constas n`）编一次；`?` 按形状签名特化，入有界 LRU；形状签名变化只增一条特化，单元不重编。
+- **失效条件逐条**：图修订变（编辑）、声明纪元变（模块重编译）、目标身份变、放置变、编译器构建身份变 → miss 并重编；形状签名变 → 不失效，只增一条特化。加载时**重新校验**（指纹 + 记录的输出类型与形状 vs 当前推断），任何一项不一致 → miss。
+- **磁盘位置与清理**：沿用 §4.3 的约定——`CAMEL_HOME` 下的版本目录，带上限与 LRU，清理由该目录的显式入口负责；磁盘缓存用例把目录指到每次运行的临时目录，共享主机上的残留不得把"第二次命中"变成假绿。不写墙钟阈值作为断言。
+- **边界**：不改 `std::profile` 的既有字段（池与缓存的计数是新增字段）；不做跨用户共享、不做网络缓存；不改 `MemoryPolicy::uncached()`。
+- **依赖**：G3-1、G2-2（形状决定传输与存储计划）、P4（extents 的规范形式）。
+- **验收读数**：§4.5 已排的用例逐条：`scope_one_compilation.cml`（`inspect<f>(x)` 一份产物、`device_work.compiles == 1`）、`scope_symbolic_shapes.cml`（`constas n` 两个不同的 `n` → 一次编译、两次 launch）、`scope_unknown_shapes.cml`（`?` 两个形状 → 两条特化、有界）、`scope_cache_disk.cml`（两次进程运行，第二次 `device_work.compiles == 0`）、`scope_cache_invalidate.cml`（改 helper 源、改声明、换 arch、伪造旧构建指纹各 miss 一次）。读数形态：`std::profile json=` 的 `device_work.compiles`/`compile_ns` 与 `GenerationCacheStats` 两个计数都要读，二者不一致即失败。守卫先红：今天没有形状签名这个键，也没有落盘。
+- **未决点**：问题页第 4 条（默认落盘与否、目录、清理与版本目录）。
+
+#### G3-3 自适应显存池
+
+- **目标**：池的上界不再固定（今天 `MemoryPolicy::device{64 MiB, 32}`、`host{16 MiB, 32}`）：按 size class 分级（`MemoryPool::capacityFor` 已有）、按工作集高水位自适应、空闲显存不足时先 trim 再分配，并保留"OOM 时回收本类空闲块重试一次"。驻留决定"哪块还活着"，池决定"活着的块从哪来"，两者正交。
+- **测什么**：`PoolStats` 的 `checkouts`/`reuses`/`allocations`/`cached`/`freed`/`trims`/`oomRetries`/`abandoned`/`idleBytes`/`disabled`；`std::profile` 的池高水位（新字段，与 `device_work` 并列）；稳态断言"每步 `allocations` 不增长"与"峰值不随步数增长"——步数用同一程序多轮，读数只用计数，不用时间。
+- **上界怎么定**（选一条写进实现，另一条留在问题页第 5 条）：(a) 设备总显存的比例 + 分配前的空闲显存探测，比例是硬上限；(b) 工作集高水位——池只保留测出的稳态高水位，超出即释放，冷启动与稳态分开报。两条都只用池与 profile 的计数，不读墙钟时间。
+- **边界**：不改 `MemoryPolicy::uncached()` 与 `PoolPolicy` 的 native 语义；不改公共 API；不做多设备多池（G7）。
+- **依赖**：G2-1（owner 从池里取、释放回池）；P4（工作集由数组值的生存期决定）。
+- **验收读数**：`memory_pool_check.cpp`、`memory_pool_failures.cpp` 与 `async_submission.py` 的 pool 断言保持绿（逐字断言形如 `tiles pool: rounding, best fit, caps and trim counters passed`、`tiles pool: OOM trim-and-retry-once and non-OOM rejection passed`）；§4.5 已排的 `memory_pool.cml`：稳态下每步的直接分配（`PoolStats.allocations` 的增量）为 0、`idleBytes` 不随轮数增长、峰值不涨。设备无关的那一半（native 检查 + `PoolStats`）今天就能取。
+- **未决点**：问题页第 5 条（上界依据）。
+
+#### G3-4 删除清单与依赖顺序
+
+**`@gpu`、`run`、`run_device`：已删除，不重做。** 判据：`git grep -n "@gpu\|run_device\|tiles:run\b" -- src modules stdlib test docs/language docs/reference` 无匹配；只有历史文档与 `run_preferred_resident` 这个名字还在。删除后谁接管：放置只写 `#gpu`，设备由 `--devices` 在执行时选（`include/camel/execute/devices.h`）。
+
+**Tiles 私有的驻留存储：今天在哪（逐字清单，删除步的对象）**
+
+1. `modules/tiles/src/resident_storage.cpp`——`HostStorage`、`retainHostValue`、`downloadValue`（"Backend-independent resident reads and immutable native host snapshots"）。
+2. `modules/tiles/include/tiles/device.h`——`DeviceStorage`、`DeviceValue`、`HostLeaf`、`uploadValue`/`uploadValues`/`downloadValue`/`downloadValues`、`placeOnDevice`、`retainHostValue`、`executeResident`（文件头："Typed device values own native storage, never pointers into Camel's moving heap"）。
+3. `modules/tiles/include/tiles/internal/submission.h`——`SubmittedProgram`、`submitProgram`（"Backend-native pending results. These never cross a Camel operator boundary."）。
+4. `modules/tiles/src/cuda.cpp`、`cuda_submission.cpp`、`cuda_resources.cpp`——后端自己的分配、固定内存暂存与 `CompletionEvent`。
+5. `modules/tiles/src/module.cpp`——`tiles:run_preferred_resident`（保留为内部入口）、`tiles:upload`、`tiles:download`。
+6. 钉住私有存储读数的用例：`test/cases/modules/tiles/resident.cml`、`resident_compute.cml`、`resident_outputs.cml`、`resident_scalars.cml`、`resident_graph.py`，以及 `resident_loop.mjs` 后半段"twice is one resident call"那一句。
+
+**删掉后谁接管**：数组值的设备块（`include/camel/core/mm/block.h` 的 `device_` + 设备层的 owner 记录，G2-1）；传输是普通的值写入节点（`tiles:upload`/`tiles:download`，G2-2）；提交在段的 exec 节点内部（G2-3）。**保留**的是算子本身：`upload`/`download`/`run_preferred_resident` 仍是显式路径与可回退入口（[GPU 设计稿](README.cn.md) §6 第 3 条），删的是它们背后的**私有驻留存储**——设备值不再由 Tiles 自己的存储持有，而是普通的数组块。范围之外的回退行为（`resident_fallback.cml`、`resident_fallback_fault.cml`）不变。
+
+**依赖顺序（不能反）**：G2-1 → G2-2 → G2-3 → 本条。删除步不得先做：先删等于把设备上的值弄丢。
+
+**验收读数**：删除步之后 `git grep -n "resident_storage\|retainHostValue\|executeResident" -- modules/tiles` 只剩显式路径的调用点（清单第 1、2 项里被删的那几个符号不再有调用者）；`resident*.cml` 与 `resident_loop.mjs` 的读数换成同一批数字的新来源——`mm::Block::device()` 与 `TILES_RESIDENCY` 的 `blocks`/`crossings`；窄门禁 `feat/modules/tiles` + `smoke` 全绿。
+
+**未决点**：问题页第 1 条（owner 与释放归属，决定第 1、2 项删到什么程度）。
 
 ---
 

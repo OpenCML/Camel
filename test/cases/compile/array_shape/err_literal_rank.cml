@@ -1,0 +1,8 @@
+// A flat literal where a rank-2 shape is stated: `[1.0, 2.0, 3.0, 4.0]` is an `f32[4]`, and it is
+// not read as the `f32[2, 2]` the annotation states (design principles 5.1, 5.4).
+module array_shape_err_literal_rank
+
+func main(): int {
+    let b: f32[2, 2] = [1.0, 2.0, 3.0, 4.0]
+    return 0
+}

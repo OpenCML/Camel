@@ -49,7 +49,7 @@ bool keepDimsArg(ArgsView &norm, size_t index) {
 
 template <k::ReduceOp Op> slot_t reduceAxisKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("reduce", [&] {
-        return wrap(k::reduceAxis(
+        return wrap(norm.resultType(), k::reduceAxis(
             Op,
             tensorArg(norm, 0),
             intArg(norm, 1),
@@ -127,19 +127,23 @@ int64_t axisOrLast(ArgsView &norm, size_t index) {
 
 slot_t softmaxKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("softmax", [&] {
-        return wrap(k::softmax(tensorArg(norm, 0), axisOrLast(norm, 1), resultAllocator()));
+        return wrap(
+            norm.resultType(),
+            k::softmax(tensorArg(norm, 0), axisOrLast(norm, 1), resultAllocator()));
     });
 }
 
 slot_t logSoftmaxKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("log_softmax", [&] {
-        return wrap(k::logSoftmax(tensorArg(norm, 0), axisOrLast(norm, 1), resultAllocator()));
+        return wrap(
+            norm.resultType(),
+            k::logSoftmax(tensorArg(norm, 0), axisOrLast(norm, 1), resultAllocator()));
     });
 }
 
 slot_t softmaxGradKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("softmax_grad", [&] {
-        return wrap(k::softmaxGrad(
+        return wrap(norm.resultType(), k::softmaxGrad(
             tensorArg(norm, 0),
             tensorArg(norm, 1),
             axisOrLast(norm, 2),
@@ -185,8 +189,8 @@ std::optional<Type *> layerNormInfer(const InferContext &ctx) {
         }
         bool fits = p->size() <= x->size();
         for (size_t d = 0; fits && d < p->size(); ++d) {
-            const int64_t want = (*x)[x->size() - p->size() + d], have = (*p)[d];
-            fits = want == kUnknownDim || have == kUnknownDim || want == have;
+            const std::optional<int64_t> want = (*x)[x->size() - p->size() + d], have = (*p)[d];
+            fits = !want.has_value() || !have.has_value() || want == have;
         }
         if (!fits) {
             throw ShapeError(std::format(
@@ -205,7 +209,7 @@ std::optional<Type *> layerNormInfer(const InferContext &ctx) {
 slot_t layerNormKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("layer_norm", [&] {
         const double eps = hasArg(norm, 3) ? numberArg(norm, 3) : 1e-5;
-        return wrap(k::layerNorm(
+        return wrap(norm.resultType(), k::layerNorm(
             tensorArg(norm, 0),
             tensorArg(norm, 1),
             tensorArg(norm, 2),
@@ -221,7 +225,11 @@ void sumVjp(VjpBuilder &b, const VjpCall &call) {
     if (auto dy = b.gradientOf(call.output)) {
         b.accumulateGradient(
             call.inputs[0],
-            addTensorOper(b, "tensor:broadcast_like", {*dy, call.inputs[0]}));
+            addTensorOperFor(
+                b,
+                call.inputs[0],
+                "tensor:broadcast_like",
+                {*dy, call.inputs[0]}));
     }
 }
 
@@ -232,14 +240,18 @@ void meanVjp(VjpBuilder &b, const VjpCall &call) {
         const vjp_node_t count =
             addFloatOper(b, ":op/ltod", {b.addOper(Type::Int64(), "tensor:numel", std::array{x})});
         const vjp_node_t share = addFloatOper(b, ":op/div_d", {*dy, count});
-        b.accumulateGradient(x, addTensorOper(b, "tensor:broadcast_like", {share, x}));
+        b.accumulateGradient(x, addTensorOperFor(b, x, "tensor:broadcast_like", {share, x}));
     }
 }
 
 /// dy of a reduction over an axis, re-expanded to the input's shape.
 vjp_node_t expandReduced(VjpBuilder &b, const VjpCall &call, vjp_node_t dy) {
     const vjp_node_t keepDims = call.inputs.size() > 2 ? call.inputs[2] : staticBool(b, false);
-    return addTensorOper(b, "tensor:expand_axis", {dy, call.inputs[0], call.inputs[1], keepDims});
+    return addTensorOperFor(
+        b,
+        call.inputs[0],
+        "tensor:expand_axis",
+        {dy, call.inputs[0], call.inputs[1], keepDims});
 }
 
 void sumAxisVjp(VjpBuilder &b, const VjpCall &call) {
@@ -266,8 +278,8 @@ void meanAxisVjp(VjpBuilder &b, const VjpCall &call) {
 void extremumAxisVjp(VjpBuilder &b, const VjpCall &call) {
     requireVjpInputs(call, 2, 3);
     if (auto dy = b.gradientOf(call.output)) {
-        const vjp_node_t selected =
-            addTensorOper(b, "tensor:eq", {call.inputs[0], expandReduced(b, call, call.output)});
+        const vjp_node_t selected = addTensorOper(
+            b, "tensor:strict_eq", {call.inputs[0], expandReduced(b, call, call.output)});
         b.accumulateGradient(
             call.inputs[0],
             addTensorOper(b, "tensor:multiply", {expandReduced(b, call, *dy), selected}));
@@ -283,7 +295,7 @@ void softmaxVjp(VjpBuilder &b, const VjpCall &call) {
         }
         b.accumulateGradient(
             call.inputs[0],
-            b.addOper(vjpTensorType(), "tensor:softmax_grad", inputs));
+            addTensorOperFor(b, call.inputs[0], "tensor:softmax_grad", inputs));
     }
 }
 
@@ -316,7 +328,11 @@ void layerNormVjp(VjpBuilder &b, const VjpCall &call) {
             }
             b.accumulateGradient(
                 call.inputs[static_cast<size_t>(which)],
-                b.addOper(vjpTensorType(), "tensor:layer_norm_grad", inputs));
+                addTensorOperFor(
+                    b,
+                    call.inputs[static_cast<size_t>(which)],
+                    "tensor:layer_norm_grad",
+                    inputs));
         }
     }
 }

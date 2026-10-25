@@ -45,6 +45,22 @@ Tuple *variableOf(ArgsView &norm) {
     return cell;
 }
 
+// The value a name hands out when another name for it exists. An array the two names could see a
+// write through hands out a share of its storage (Array::shareForSecondName), so the references
+// to that storage count the names and a write in place needs the only one. Everything else -- a
+// scalar, an array no write could be seen through -- is handed out as it is.
+slot_t shareForSecondName(slot_t value, const Type *valueType) {
+    if (valueType == nullptr || valueType->code() != TypeCode::Array) {
+        return value;
+    }
+    Array *array = rtdata::fromSlot<Array *>(value);
+    if (array == nullptr) {
+        return value;
+    }
+    Array *second = array->shareForSecondName(mm::autoSpace());
+    return second == array ? value : rtdata::toSlot(second);
+}
+
 // ---- Complex numbers (c64, c128) ---------------------------------------------------------
 //
 // The arithmetic is the one of the two IEEE parts in the width of the value. A c64 operand is
@@ -155,9 +171,10 @@ std::complex<T> powerOperand(const Complex *base, ArgsView &norm, size_t index) 
 
 template <typename T> slot_t complexPowBinary(ArgsView &norm, TypeCode code, bool assign) {
     Complex *base = nullptr;
+    Tuple *cell   = nullptr;
     if (assign) {
-        Tuple *cell = variableOf(norm);
-        base        = cell->get<Complex *>(0);
+        cell = variableOf(norm);
+        base = cell->get<Complex *>(0);
     } else {
         base = norm.get<Complex *>(0);
     }
@@ -169,8 +186,9 @@ template <typename T> slot_t complexPowBinary(ArgsView &norm, TypeCode code, boo
             code,
             mm::autoSpace()));
     if (assign) {
-        Tuple *cell = variableOf(norm);
         cell->set<slot_t>(0, slot, static_cast<TupleType *>(norm.type(0)));
+        // The write gives the version of the variable: the cell itself.
+        return toSlot(cell);
     }
     return slot;
 }
@@ -187,41 +205,54 @@ template <typename T> slot_t complexAssign(ArgsView &norm, TypeCode code, Comple
             code,
             mm::autoSpace()));
     cell->set<slot_t>(0, slot, static_cast<TupleType *>(norm.type(0)));
-    return slot;
+    // The write gives the version of the variable: the cell itself.
+    return toSlot(cell);
 }
 
 } // namespace
 
 slot_t __builtin__var_new__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Tuple *cell = Tuple::create(1, mm::autoSpace());
-    cell->set<slot_t>(0, norm.slot(0), TupleType::cell(norm.type(0)));
+    // The cell is a name of the value from here on, and the expression that gave it may be named
+    // elsewhere (a read of another variable, a `let` binding, an argument): the storage is
+    // counted for the new name (shareForSecondName).
+    cell->set<slot_t>(
+        0, shareForSecondName(norm.slot(0), norm.type(0)), TupleType::cell(norm.type(0)));
     return toSlot(cell);
 }
 
 slot_t __builtin__var_get__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Tuple *cell = variableOf(norm);
-    // The value leaves the variable: from here on something else may refer to it, so the
-    // variable no longer grows it in place (:op/assn_owned sets the mark again).
-    cell->setHoldsUnsharedArray(false);
-    return cell->get<slot_t>(0);
+    // The value leaves the variable: from here on something else may refer to it, so what the
+    // read hands out is one of the names of the value and the storage is counted for it
+    // (shareForSecondName). The memory plan reads this read (against :var/peek) as the fact that
+    // ends the proof that the variable's value has no other observer
+    // (docs/design/arrays-memory/README.cn.md 4.3.1).
+    return shareForSecondName(cell->get<slot_t>(0), valueTypeOf(norm.type(0)));
 }
 
 // A read of a variable whose value goes only to operations that cannot keep it (the length,
 // an element of scalars, a comparison, ...) and that all run before the variable is written
 // again (Builder::markNonRetainingReads). The array cannot be referred to by anything but the
-// variable after such a read, so the read leaves the variable's mark (holdsUnsharedArray) as
-// it is; otherwise it is :var/get.
+// variable after such a read, so it does not end the proof that the variable's value has no
+// other observer: the memory plan reads it as the read that leaves the variable's own storage
+// reusable; :var/get is the read that ends it.
 slot_t __builtin__var_peek__(ArgsView &with, ArgsView &norm, Context &ctx) {
     return variableOf(norm)->get<slot_t>(0);
 }
 
 slot_t __builtin__assn__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    slot_t rhs  = norm.slot(1);
     Tuple *cell = variableOf(norm);
+    // The value stored is a name of its own from here on, and whatever named it before still
+    // does: the storage is counted for the new name (shareForSecondName), so a later write
+    // through it cannot be seen through the other one.
+    slot_t rhs = shareForSecondName(norm.slot(1), norm.type(1));
     cell->set<slot_t>(0, rhs, static_cast<TupleType *>(norm.type(0)));
-    // The value stored may be referred to from elsewhere.
-    cell->setHoldsUnsharedArray(false);
-    return rhs;
+    // What a write gives is the version of the variable: the cell itself,
+    // holding what was written. The value written is the write's second
+    // operand, and the builder takes it from there where an assignment
+    // stands where a value is wanted.
+    return toSlot(cell);
 }
 
 // `xs = xs->sort`, `acc = acc->append<v>` written as a statement, for an operator that
@@ -231,32 +262,33 @@ slot_t __builtin__assn__(ArgsView &with, ArgsView &norm, Context &ctx) {
 //     :op/assn_owned(xs, <the in-place form>(..., :var/take(xs)))
 //
 // The meaning is that of the rebinding (design principles 11.3): the operator returns a
-// new value and the variable is bound to it. :var/take hands the in-place form an array no one
-// else refers to: the variable's own array when the variable is its only holder (the mark set
-// by :op/assn_owned), otherwise a copy of it. The form changes that array and returns it, and
-// :op/assn_owned stores it and sets the mark, as nothing else refers to it. Between the two
-// nothing reads the variable: the three are one statement of a sync block.
+// new value and the variable is bound to it. :var/take hands the in-place form the variable's
+// own array and the variable keeps nothing; whether the form writes that array in place or
+// copies it is the memory plan's decision, made once and written into the execution plan
+// (docs/design/arrays-memory/README.cn.md 4.3.1). :op/assn_owned stores the result, which is
+// then the value this variable made. Between the two nothing reads the variable: the three are
+// one statement of a sync block.
 //
 // Collectors: the copy is a new object, and the in-place forms reorder the slots of an array
-// of numbers, which hold no references. The flag is a field of the cell (it moves with it).
+// of numbers, which hold no references.
 slot_t __builtin__var_take__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    Tuple *cell    = variableOf(norm);
-    auto *cellType = static_cast<TupleType *>(norm.type(0));
-    auto *arrType  = static_cast<ArrayType *>(cellType->typeAt(0));
-    Array *arr     = cell->get<Array *>(0);
-    if (cell->holdsUnsharedArray()) {
-        return toSlot(arr);
-    }
-    return toSlot(static_cast<Array *>(arr->clone(mm::autoSpace(), arrType)));
+    Tuple *cell        = variableOf(norm);
+    auto *cellType     = static_cast<TupleType *>(norm.type(0));
+    const slot_t value = cell->get<slot_t>(0);
+    // A real move: the cell keeps no reference to the value it handed out, so what the update
+    // operator holds is all there is of it, and the cell is filled again by the assignment that
+    // stores the result.
+    cell->set<slot_t>(0, NullSlot, cellType);
+    return value;
 }
 
 slot_t __builtin__assn_owned__(ArgsView &with, ArgsView &norm, Context &ctx) {
     const slot_t value = norm.slot(1);
     Tuple *cell        = variableOf(norm);
     cell->set<slot_t>(0, value, static_cast<TupleType *>(norm.type(0)));
-    // Made by :var/take and an in-place form for this variable: no one else refers to it.
-    cell->setHoldsUnsharedArray(true);
-    return value;
+    // As for :op/assn: the write gives the version of the variable, the
+    // cell itself.
+    return toSlot(cell);
 }
 
 slot_t __builtin__assn_add_i__(ArgsView &with, ArgsView &norm, Context &ctx) {
@@ -265,7 +297,7 @@ slot_t __builtin__assn_add_i__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Int32 rhs   = norm.get<Int32>(1);
     lhs += rhs;
     cell->set(0, lhs);
-    return toSlot(lhs);
+    return toSlot(cell);
 }
 
 slot_t __builtin__assn_add_l__(ArgsView &with, ArgsView &norm, Context &ctx) {
@@ -274,7 +306,7 @@ slot_t __builtin__assn_add_l__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Int64 rhs   = norm.get<Int64>(1);
     lhs += rhs;
     cell->set(0, lhs);
-    return toSlot(lhs);
+    return toSlot(cell);
 }
 
 slot_t __builtin__assn_add_f__(ArgsView &with, ArgsView &norm, Context &ctx) {
@@ -283,7 +315,7 @@ slot_t __builtin__assn_add_f__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Float32 rhs = norm.get<Float32>(1);
     lhs += rhs;
     cell->set(0, lhs);
-    return toSlot(lhs);
+    return toSlot(cell);
 }
 
 slot_t __builtin__assn_add_d__(ArgsView &with, ArgsView &norm, Context &ctx) {
@@ -292,14 +324,14 @@ slot_t __builtin__assn_add_d__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Float64 rhs = norm.get<Float64>(1);
     lhs += rhs;
     cell->set(0, lhs);
-    return toSlot(lhs);
+    return toSlot(cell);
 }
 
 slot_t __builtin__assn_add_s__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Tuple *cell    = variableOf(norm);
     String *result = String::concat(cell->get<String *>(0), norm.get<String *>(1), mm::autoSpace());
     cell->set<slot_t>(0, toSlot(result), static_cast<TupleType *>(norm.type(0)));
-    return toSlot(result);
+    return toSlot(cell);
 }
 
 slot_t __builtin__assn_sub_i__(ArgsView &with, ArgsView &norm, Context &ctx) {
@@ -308,7 +340,7 @@ slot_t __builtin__assn_sub_i__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Int32 rhs   = norm.get<Int32>(1);
     lhs -= rhs;
     cell->set(0, lhs);
-    return toSlot(lhs);
+    return toSlot(cell);
 }
 
 slot_t __builtin__assn_sub_l__(ArgsView &with, ArgsView &norm, Context &ctx) {
@@ -317,7 +349,7 @@ slot_t __builtin__assn_sub_l__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Int64 rhs   = norm.get<Int64>(1);
     lhs -= rhs;
     cell->set(0, lhs);
-    return toSlot(lhs);
+    return toSlot(cell);
 }
 
 slot_t __builtin__assn_sub_f__(ArgsView &with, ArgsView &norm, Context &ctx) {
@@ -326,7 +358,7 @@ slot_t __builtin__assn_sub_f__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Float32 rhs = norm.get<Float32>(1);
     lhs -= rhs;
     cell->set(0, lhs);
-    return toSlot(lhs);
+    return toSlot(cell);
 }
 
 slot_t __builtin__assn_sub_d__(ArgsView &with, ArgsView &norm, Context &ctx) {
@@ -335,7 +367,7 @@ slot_t __builtin__assn_sub_d__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Float64 rhs = norm.get<Float64>(1);
     lhs -= rhs;
     cell->set(0, lhs);
-    return toSlot(lhs);
+    return toSlot(cell);
 }
 
 slot_t __builtin__assn_mul_i__(ArgsView &with, ArgsView &norm, Context &ctx) {
@@ -344,7 +376,7 @@ slot_t __builtin__assn_mul_i__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Int32 rhs   = norm.get<Int32>(1);
     lhs *= rhs;
     cell->set(0, lhs);
-    return toSlot(lhs);
+    return toSlot(cell);
 }
 
 slot_t __builtin__assn_mul_l__(ArgsView &with, ArgsView &norm, Context &ctx) {
@@ -353,7 +385,7 @@ slot_t __builtin__assn_mul_l__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Int64 rhs   = norm.get<Int64>(1);
     lhs *= rhs;
     cell->set(0, lhs);
-    return toSlot(lhs);
+    return toSlot(cell);
 }
 
 slot_t __builtin__assn_mul_f__(ArgsView &with, ArgsView &norm, Context &ctx) {
@@ -362,7 +394,7 @@ slot_t __builtin__assn_mul_f__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Float32 rhs = norm.get<Float32>(1);
     lhs *= rhs;
     cell->set(0, lhs);
-    return toSlot(lhs);
+    return toSlot(cell);
 }
 
 slot_t __builtin__assn_mul_d__(ArgsView &with, ArgsView &norm, Context &ctx) {
@@ -371,7 +403,7 @@ slot_t __builtin__assn_mul_d__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Float64 rhs = norm.get<Float64>(1);
     lhs *= rhs;
     cell->set(0, lhs);
-    return toSlot(lhs);
+    return toSlot(cell);
 }
 
 slot_t __builtin__assn_div_i__(ArgsView &with, ArgsView &norm, Context &ctx) {
@@ -385,7 +417,7 @@ slot_t __builtin__assn_div_i__(ArgsView &with, ArgsView &norm, Context &ctx) {
 
     lhs = camel::utils::quotient(lhs, rhs);
     cell->set(0, lhs);
-    return toSlot(lhs);
+    return toSlot(cell);
 }
 
 slot_t __builtin__assn_div_l__(ArgsView &with, ArgsView &norm, Context &ctx) {
@@ -399,7 +431,7 @@ slot_t __builtin__assn_div_l__(ArgsView &with, ArgsView &norm, Context &ctx) {
 
     lhs = camel::utils::quotient(lhs, rhs);
     cell->set(0, lhs);
-    return toSlot(lhs);
+    return toSlot(cell);
 }
 
 slot_t __builtin__assn_div_f__(ArgsView &with, ArgsView &norm, Context &ctx) {
@@ -413,7 +445,7 @@ slot_t __builtin__assn_div_f__(ArgsView &with, ArgsView &norm, Context &ctx) {
 
     lhs = camel::utils::quotient(lhs, rhs);
     cell->set(0, lhs);
-    return toSlot(lhs);
+    return toSlot(cell);
 }
 
 slot_t __builtin__assn_div_d__(ArgsView &with, ArgsView &norm, Context &ctx) {
@@ -440,7 +472,7 @@ template <typename T> static slot_t assignMod(ArgsView &norm) {
     }
     lhs = camel::utils::remainder(lhs, rhs);
     cell->set(0, lhs);
-    return toSlot(lhs);
+    return toSlot(cell);
 }
 
 slot_t __builtin__assn_mod_i__(ArgsView &with, ArgsView &norm, Context &ctx) {
@@ -456,7 +488,7 @@ template <typename T> static slot_t assignPow(ArgsView &norm) {
     Tuple *cell = variableOf(norm);
     T lhs       = static_cast<T>(std::pow(cell->get<T>(0), norm.get<T>(1)));
     cell->set(0, lhs);
-    return toSlot(lhs);
+    return toSlot(cell);
 }
 
 slot_t __builtin__assn_pow_i__(ArgsView &with, ArgsView &norm, Context &ctx) {
@@ -482,14 +514,14 @@ slot_t __builtin__assn_and__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Tuple *cell = variableOf(norm);
     Bool lhs    = cell->get<Bool>(0) && norm.get<Bool>(1);
     cell->set(0, lhs);
-    return toSlot(lhs);
+    return toSlot(cell);
 }
 
 slot_t __builtin__assn_or__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Tuple *cell = variableOf(norm);
     Bool lhs    = cell->get<Bool>(0) || norm.get<Bool>(1);
     cell->set(0, lhs);
-    return toSlot(lhs);
+    return toSlot(cell);
 }
 
 slot_t __builtin__or__(ArgsView &with, ArgsView &norm, Context &ctx) {

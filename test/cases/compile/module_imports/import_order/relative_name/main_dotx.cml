@@ -1,4 +1,4 @@
-/// H232: `.x` is a relative module name that can be formed: one dot drops one component of the
+/// `.x` is a relative module name that can be formed: one dot drops one component of the
 /// importing module's name `main`, which has one, so the name is `x`. The file is looked for in
 /// this module's own directory first (design principles 10.2), never at the filesystem root.
 module main_dotx

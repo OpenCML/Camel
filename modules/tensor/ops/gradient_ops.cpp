@@ -32,14 +32,14 @@ Array *likeArg(ArgsView &norm, size_t index) { return tensorArg(norm, index); }
 slot_t zerosLikeKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("zeros_like", [&] {
         const Array *t = tensorArg(norm, 0);
-        return wrap(k::full(t->dtype(), t->shapeSpan(), 0.0, resultAllocator()));
+        return wrap(norm.resultType(), k::full(t->dtype(), t->shapeSpan(), 0.0, resultAllocator()));
     });
 }
 
 slot_t onesLikeKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("ones_like", [&] {
         const Array *t = tensorArg(norm, 0);
-        return wrap(k::full(t->dtype(), t->shapeSpan(), 1.0, resultAllocator()));
+        return wrap(norm.resultType(), k::full(t->dtype(), t->shapeSpan(), 1.0, resultAllocator()));
     });
 }
 
@@ -62,7 +62,9 @@ slot_t dimKernel(ArgsView &, ArgsView &norm, context::Context &) {
 
 slot_t sumToKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("sum_to", [&] {
-        return wrap(k::sumTo(tensorArg(norm, 0), likeArg(norm, 1)->shapeSpan(), resultAllocator()));
+        return wrap(
+            norm.resultType(),
+            k::sumTo(tensorArg(norm, 0), likeArg(norm, 1)->shapeSpan(), resultAllocator()));
     });
 }
 
@@ -75,15 +77,19 @@ slot_t broadcastLikeKernel(ArgsView &, ArgsView &norm, context::Context &) {
         // f64 is 0.0078125, and a row of them is not the adjoint.
         const TypeCode dtype = like->dtype();
         if (norm.type(0)->code() == TypeCode::Float64 || norm.type(0)->code() == TypeCode::Float32) {
-            return wrap(k::fill(numberArg(norm, 0), dtype, like->shapeSpan(), resultAllocator()));
+            return wrap(
+                norm.resultType(),
+                k::fill(numberArg(norm, 0), dtype, like->shapeSpan(), resultAllocator()));
         }
-        return wrap(k::broadcastTo(tensorArg(norm, 0), like->shapeSpan(), resultAllocator()));
+        return wrap(
+            norm.resultType(),
+            k::broadcastTo(tensorArg(norm, 0), like->shapeSpan(), resultAllocator()));
     });
 }
 
 slot_t expandAxisKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("expand_axis", [&] {
-        return wrap(k::expandAxis(
+        return wrap(norm.resultType(), k::expandAxis(
             tensorArg(norm, 0),
             likeArg(norm, 1)->shapeSpan(),
             intArg(norm, 2),
@@ -94,13 +100,17 @@ slot_t expandAxisKernel(ArgsView &, ArgsView &norm, context::Context &) {
 
 slot_t geluGradKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("gelu_grad", [&] {
-        return wrap(k::geluGrad(tensorArg(norm, 0), tensorArg(norm, 1), resultAllocator()));
+        return wrap(
+            norm.resultType(),
+            k::geluGrad(tensorArg(norm, 0), tensorArg(norm, 1), resultAllocator()));
     });
 }
 
 slot_t erfGradKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("erf_grad", [&] {
-        return wrap(k::erfGrad(tensorArg(norm, 0), tensorArg(norm, 1), resultAllocator()));
+        return wrap(
+            norm.resultType(),
+            k::erfGrad(tensorArg(norm, 0), tensorArg(norm, 1), resultAllocator()));
     });
 }
 
@@ -111,7 +121,7 @@ slot_t layerNormGradKernel(ArgsView &, ArgsView &norm, context::Context &) {
         if (which < 0 || which > 2) {
             throw std::invalid_argument("layer_norm_grad: unknown gradient selector");
         }
-        return wrap(k::layerNormGrad(
+        return wrap(norm.resultType(), k::layerNormGrad(
             tensorArg(norm, 0),
             tensorArg(norm, 1),
             tensorArg(norm, 2),
@@ -124,7 +134,7 @@ slot_t layerNormGradKernel(ArgsView &, ArgsView &norm, context::Context &) {
 // slice_grad(dy, like, axis, start, end, step?)
 slot_t sliceGradKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("slice_grad", [&] {
-        return wrap(k::sliceGrad(
+        return wrap(norm.resultType(), k::sliceGrad(
             tensorArg(norm, 0),
             likeArg(norm, 1)->shapeSpan(),
             intArg(norm, 2),
@@ -141,7 +151,7 @@ template <bool Lhs> slot_t matmulGradKernel(ArgsView &, ArgsView &norm, context:
         const Array *dy  = tensorArg(norm, 0);
         const Array *lhs = tensorArg(norm, 1);
         const Array *rhs = tensorArg(norm, 2);
-        return wrap(
+        return wrap(norm.resultType(),
             Lhs ? k::matmulGradLhs(dy, lhs, rhs, useLibrary, resultAllocator())
                 : k::matmulGradRhs(dy, lhs, rhs, useLibrary, resultAllocator()));
     });
@@ -151,7 +161,9 @@ slot_t castLikeKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("cast_like", [&] {
         Array *g          = tensorArg(norm, 0);
         const Array *like = likeArg(norm, 1);
-        return wrap(g->dtype() == like->dtype() ? g : k::cast(g, like->dtype(), resultAllocator()));
+        return wrap(
+            norm.resultType(),
+            g->dtype() == like->dtype() ? g : k::cast(g, like->dtype(), resultAllocator()));
     });
 }
 
@@ -166,7 +178,7 @@ slot_t permuteInverseKernel(ArgsView &, ArgsView &norm, context::Context &) {
             }
             inverse[static_cast<size_t>(p)] = static_cast<int64_t>(i);
         }
-        return wrap(k::permute(tensorArg(norm, 0), inverse, resultAllocator()));
+        return wrap(norm.resultType(), k::permute(tensorArg(norm, 0), inverse, resultAllocator()));
     });
 }
 
@@ -212,7 +224,7 @@ std::optional<Type *> permuteInverseInfer(const InferContext &ctx) {
     if (!shape || !perm || perm->size() != shape->size()) {
         return tensorOf(TypeCode::Float32, std::nullopt);
     }
-    StaticShape result(shape->size(), kUnknownDim);
+    StaticShape result(shape->size(), std::nullopt);
     const auto rank = static_cast<int64_t>(perm->size());
     for (size_t i = 0; i < perm->size(); ++i) {
         const int64_t p = (*perm)[i] < 0 ? (*perm)[i] + rank : (*perm)[i];
@@ -238,17 +250,6 @@ OpDef internal(
 
 // ---------------------------------------------------------------- tangent space
 
-Type *tensorTangentType(Type *primal) {
-    if (!isTensorType(primal)) {
-        return nullptr;
-    }
-    if (auto dtype = tensorFactsOf(primal).dtype;
-        dtype && *dtype != TypeCode::Float32 && *dtype != TypeCode::Float64) {
-        return nullptr; // integer and boolean tensors have no gradient
-    }
-    return primal;
-}
-
 /// An integer or boolean tensor is discrete: its derivative is zero by definition (design
 /// principles 9.9). It has no tangent space, but a value computed from a parameter and held in
 /// one -- an argmax result, a comparison mask -- neither loses a gradient nor must be refused
@@ -271,7 +272,7 @@ void sumToVjp(VjpBuilder &b, const VjpCall &call) {
     if (auto dy = b.gradientOf(call.output)) {
         b.accumulateGradient(
             call.inputs[0],
-            addTensorOper(b, "tensor:broadcast_like", {*dy, call.inputs[0]}));
+            addTensorOperFor(b, call.inputs[0], "tensor:broadcast_like", {*dy, call.inputs[0]}));
     }
 }
 
@@ -281,7 +282,7 @@ void broadcastLikeVjp(VjpBuilder &b, const VjpCall &call) {
     if (auto dy = b.gradientOf(call.output)) {
         const vjp_node_t g = call.inputs[0];
         if (isTensorNode(b, g)) {
-            b.accumulateGradient(g, addTensorOper(b, "tensor:sum_to", {*dy, g}));
+            b.accumulateGradient(g, addTensorOperFor(b, g, "tensor:sum_to", {*dy, g}));
         } else if (isFloatNode(b, g)) {
             // tensor:sum answers at float64; a value of type f32 keeps the gradient at its own
             // width (see floatGradientAtWidth).
@@ -299,7 +300,11 @@ void expandAxisVjp(VjpBuilder &b, const VjpCall &call) {
         const vjp_node_t keepDims = call.inputs.size() > 3 ? call.inputs[3] : staticBool(b, true);
         b.accumulateGradient(
             call.inputs[0],
-            addTensorOper(b, "tensor:sum_axis", {*dy, call.inputs[2], keepDims}));
+            addTensorOperFor(
+                b,
+                call.inputs[0],
+                "tensor:sum_axis",
+                {*dy, call.inputs[2], keepDims}));
     }
 }
 
@@ -308,7 +313,7 @@ void castLikeVjp(VjpBuilder &b, const VjpCall &call) {
     if (auto dy = b.gradientOf(call.output)) {
         b.accumulateGradient(
             call.inputs[0],
-            addTensorOper(b, "tensor:cast_like", {*dy, call.inputs[0]}));
+            addTensorOperFor(b, call.inputs[0], "tensor:cast_like", {*dy, call.inputs[0]}));
     }
 }
 
@@ -317,7 +322,7 @@ void permuteInverseVjp(VjpBuilder &b, const VjpCall &call) {
     if (auto dy = b.gradientOf(call.output)) {
         b.accumulateGradient(
             call.inputs[0],
-            addTensorOper(b, "tensor:permute", {*dy, call.inputs[1]}));
+            addTensorOperFor(b, call.inputs[0], "tensor:permute", {*dy, call.inputs[1]}));
     }
 }
 
@@ -369,11 +374,11 @@ std::vector<OpDef> gradientOps() {
                 return std::nullopt;
             }
             int64_t count = 1;
-            for (int64_t d : *shape) {
-                if (d == kUnknownDim) {
+            for (const std::optional<int64_t> &d : *shape) {
+                if (!d) {
                     return std::nullopt;
                 }
-                count *= d;
+                count *= *d;
             }
             return camel::core::rtdata::toSlot(static_cast<camel::core::rtdata::Int64>(count));
         }});
@@ -393,11 +398,11 @@ std::vector<OpDef> gradientOps() {
             }
             const auto rank = static_cast<int64_t>(shape->size());
             const int64_t axis = *axisArg < 0 ? *axisArg + rank : *axisArg;
-            if (axis < 0 || axis >= rank || (*shape)[static_cast<size_t>(axis)] == kUnknownDim) {
+            if (axis < 0 || axis >= rank || !(*shape)[static_cast<size_t>(axis)].has_value()) {
                 return std::nullopt;
             }
             return camel::core::rtdata::toSlot(
-                static_cast<camel::core::rtdata::Int64>((*shape)[static_cast<size_t>(axis)]));
+                static_cast<camel::core::rtdata::Int64>(*(*shape)[static_cast<size_t>(axis)]));
         }});
 
     defs.push_back(internal(
@@ -486,13 +491,33 @@ std::vector<OpDef> gradientOps() {
 }
 
 void registerTensorTangentSpace() {
+    // A tensor is a numeric array, so the code the tangent space and the discrete predicate are
+    // registered for is the array's. The space is the tensor's own: summing two gradients and
+    // writing the zero gradient are tensor operations (`tensor:add`, `tensor:zeros_like`), which
+    // answer at the tensor's dtype and shape. The array kind's space (`:tangent/add_arr`,
+    // `:tangent/zeros_arr`) is the one for an array whose elements are values the core holds one
+    // slot each: it sums through `get<slot_t>` and answers a slot array, which is not a numeric
+    // tensor. A tensor gradient that came back as one left the next tensor operator reading a
+    // value its type does not promise — expand_axis on the gradient of a mean_axis, which is the
+    // `export_grad_mean` crash. The tangent type of an array is taken from its element type
+    // (derivative.cpp's `computeTangent`), so nothing states one here: a tensor's element type
+    // is always in its type. The space owns the
+    // tensors of the array code and not the arrays of values that share it — an array of
+    // structs, tuples or arrays keeps the core's array space (`:tangent/add_arr`,
+    // `:tangent/zeros_arr`), which answers for the values this one does not own.
     camel::core::TangentSpace space;
-    space.tangentType  = &tensorTangentType;
+    space.owns         = &isTensorType;
     space.addUri       = "tensor:add";
     space.zerosLikeUri = "tensor:zeros_like";
-    camel::core::DerivativeRegistry::instance().setTangentSpace(TensorType::typeCode(), space);
+    // One row's gradient goes back to its row: a round of a loop over a tensor takes the row an
+    // index names, so the scatter has to write a row of the tensor's own dtype and width.
+    // `tensor:row_add_at(acc, index, row)` is that scatter, the single-index counterpart of
+    // `tensor:take_grad`.
+    space.scatterUri = "tensor:row_add_at";
+    camel::core::DerivativeRegistry::instance().setTangentSpace(
+        camel::core::type::TypeCode::Array, std::move(space));
     camel::core::DerivativeRegistry::instance().setDiscretePredicate(
-        TensorType::typeCode(), &tensorIsDiscrete);
+        camel::core::type::TypeCode::Array, &tensorIsDiscrete);
 }
 
 } // namespace camel::tensor::ops

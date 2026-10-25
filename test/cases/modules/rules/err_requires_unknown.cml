@@ -3,7 +3,7 @@ module err_requires_unknown
 import { Program } from graph
 import { rewrite } from rewrite
 
-#requires<reassociate2>
+#requires(reassociate2)
 rule r(x: int) { x + 0 => x }
 
 export func apply(p: Program): Program! {

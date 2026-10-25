@@ -201,7 +201,7 @@ timeout_ms = 30000
 
 [[tests]]
 name = "writings.facts"
-desc = "The fact of a value with several writings is the join of the facts of its writings (the analysis of the rewrite design 4.2); a value with one writing has the fact of that writing."
+desc = "The fact of a value with several writings is the join of the facts of its writings (the fact of the rewrite design 7.5); a value with one writing has the fact of that writing."
 kind = "behavior"
 case = "../../../cases/feat/mm/writings/congruence.cml"
 args = ["${case}", "test::writings", "std::nvm"]
@@ -248,7 +248,7 @@ expect_stdout_contains = ["RULES refused: Rule 'add_swap_both' holds both ways (
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
 
-# The drawing of the state where a value has several writings (H225). Each case runs the same
+# The drawing of the state where a value has several writings. Each case runs the same
 # program — `x + x` and `x * 2` are two writings of one value — through one pipeline and checks
 # the drawing as a property of what came out, never as a count of lines: a check that examined no
 # class at all fails, and `draw_classes.guard` shows the same check refusing a dump of the program

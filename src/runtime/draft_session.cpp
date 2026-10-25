@@ -22,6 +22,7 @@
 #include "camel/core/rtdata/struct.h"
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/type/composite/composite.h"
+#include "camel/core/type/intern.h"
 #include "camel/utils/log.h"
 #include "camel/utils/pointer_set.h"
 
@@ -243,11 +244,36 @@ slot_t cloneStaticSlot(
         return toSlot<Object *>(clonedTuple);
     }
     case TypeCode::Array: {
-        auto *array       = fromSlot<::Array *>(slot);
-        auto *arrayType   = static_cast<ArrayType *>(type);
-        auto *clonedArray = ::Array::create(mm::autoSpace(), arrayType, array->size());
+        auto *array     = fromSlot<::Array *>(slot);
+        auto *arrayType = static_cast<ArrayType *>(type);
+        // A compact array is pure data (include/camel/core/rtdata/array.h: the storage class comes
+        // from the element type), so its clone is the value's own element type and extents, and
+        // `Array::clone` reads both from the value rather than from the type the slot is declared
+        // with. The declared type may state neither: `Tensor` — the alias's transitional spelling
+        // — means "numeric, the element type is not written down", and a value cloned under it came
+        // out a slot array with no element type at one slot an element. A kernel that reads the
+        // value by its dtype then refused (`sum: Unsupported Tensor dtype`, `matmul: ...`,
+        // `subtract: ...`) and a reader that asks for the width of an element got one the value
+        // has not (`to_bytes`). A native multidimensional array is its element type and its shape
+        // (design principles 5.4), and an unstated element type means the type does not say which
+        // one the value has — not that the value has none — so the clone takes the value's (the
+        // ruling the `nn`/`optim` tensor leaf already follows, develop's 392d7e734).
+        if (array != nullptr && array->isCompact()) {
+            auto *clonedArray =
+                static_cast<::Array *>(array->clone(mm::autoSpace(), arrayType, false));
+            objectCache.emplace(object, clonedArray);
+            return toSlot<Object *>(clonedArray);
+        }
+        // A slot array is a container of references, whose elements are cloned with the type the
+        // element states (a closure names a graph of `program`). The clone has the value's own
+        // extents and element count: the size overload is the rank-1 convenience
+        // (include/camel/core/rtdata/array.h): a multi-dimensional value that went through it came
+        // out rank 1 with its first extent's worth of elements, so a (2, 3) file bound to a
+        // parameter read back as [2] with two elements and a matmul of two such values failed with
+        // "inner dimensions differ: 2 vs 3".
+        auto *clonedArray = ::Array::create(mm::autoSpace(), arrayType, array->shapeSpan());
         objectCache.emplace(object, clonedArray);
-        for (size_t i = 0; i < array->size(); ++i) {
+        for (uint64_t i = 0; i < array->numel(); ++i) {
             clonedArray->set<slot_t>(
                 i,
                 shouldTraverseStaticSlotType(arrayType->elemType()) ? cloneStaticSlot(
@@ -636,14 +662,42 @@ bool sameContent(const GCGraph &before, const GCGraph &after) {
     const auto sameArray = [](const auto *x, const auto *y, size_t n) {
         return n == 0 || (x != nullptr && y != nullptr && std::memcmp(x, y, n * sizeof(*x)) == 0);
     };
+    // A node record's own typeId counts by its canonical id: two records whose types are one type
+    // under `equals` (the names in a type's key erased) are the same content, which is the whole
+    // point of a type having no identity but its structure.
+    const auto &table      = camel::core::type::TypeTable::instance();
+    const auto sameNodes = [&sameArray, &table](
+                               const GCNode *x, const GCNode *y, size_t n) {
+        if (n == 0) {
+            return true;
+        }
+        if (x == nullptr || y == nullptr) {
+            return false;
+        }
+        constexpr size_t kTypeAt    = offsetof(GCNode, typeId);
+        constexpr size_t kTypeBytes = sizeof(GCNode::typeId);
+        for (size_t i = 0; i < n; ++i) {
+            const auto *rx = reinterpret_cast<const unsigned char *>(&x[i]);
+            const auto *ry = reinterpret_cast<const unsigned char *>(&y[i]);
+            if (std::memcmp(rx, ry, kTypeAt) != 0 ||
+                table.canonicalIdOf(x[i].typeId) != table.canonicalIdOf(y[i].typeId) ||
+                std::memcmp(
+                    rx + kTypeAt + kTypeBytes, ry + kTypeAt + kTypeBytes,
+                    sizeof(GCNode) - kTypeAt - kTypeBytes) != 0) {
+                return false;
+            }
+        }
+        return true;
+    };
     if (a->nodeCount != b->nodeCount || a->edgeCount != b->edgeCount ||
         a->payloadWordCount != b->payloadWordCount || a->normPortCount != b->normPortCount ||
         a->withPortCount != b->withPortCount || a->closureCount != b->closureCount ||
         a->entryNode != b->entryNode ||
         a->exitNode != b->exitNode || a->outputNode != b->outputNode ||
         a->returnNode != b->returnNode || a->returnKind != b->returnKind ||
-        before.funcType() != after.funcType() || before.closureType() != after.closureType() ||
-        before.staticDataType() != after.staticDataType() ||
+        table.canonicalId(before.funcType()) != table.canonicalId(after.funcType()) ||
+        table.canonicalId(before.closureType()) != table.canonicalId(after.closureType()) ||
+        table.canonicalId(before.staticDataType()) != table.canonicalId(after.staticDataType()) ||
         before.hasNodePermissions() != after.hasNodePermissions() ||
         before.hasNodeAttrs() != after.hasNodeAttrs() || a->hasRegions != b->hasRegions) {
         return false;
@@ -656,7 +710,7 @@ bool sameContent(const GCGraph &before, const GCGraph &after) {
             continue;
         }
         if (x.nodeCount != y.nodeCount || x.edgeCount != y.edgeCount ||
-            !sameArray(x.nodes(), y.nodes(), x.nodeCount) ||
+            !sameNodes(x.nodes(), y.nodes(), x.nodeCount) ||
             !sameArray(x.edges, y.edges, x.edgeCount) ||
             (a->hasPermissions && !sameArray(x.permissions, y.permissions, x.nodeCount)) ||
             (a->hasAttrs && !sameArray(x.attrs, y.attrs, x.nodeCount)) ||
@@ -698,7 +752,8 @@ bool sameContent(const GCGraph &before, const GCGraph &after) {
         return false;
     }
     for (size_t i = 0; fa && i < fa->size(); ++i) {
-        if (fa->typeAt(i) != fb->typeAt(i)) {
+        // By canonical id: two frames whose slot types are one type are the same frame.
+        if (table.canonicalId(fa->typeAt(i)) != table.canonicalId(fb->typeAt(i))) {
             return false;
         }
     }
@@ -733,7 +788,7 @@ bool sameContent(const GCGraph &before, const GCGraph &after) {
 // ---------------------------------------------------------------------------------------------
 // The Debug-only safepoint draft-root check.
 //
-// The red line (handover note ⟨b2dbdd6⟩ (H74)): while a session holds a draft open, every safepoint the session
+// The red line: while a session holds a draft open, every safepoint the session
 // reaches must keep the draft's static values relocatable, or a collection at that safepoint
 // leaves the raw slots in the draft pointing at where the objects were. The root registration
 // itself stays where it is: the session's RootScope registers an external tracer, and a
@@ -933,7 +988,10 @@ size_t RuntimeSpecializationKeyHasher::operator()(const RuntimeSpecializationKey
         hashCombine(seed, static_cast<uint8_t>(binding.kind));
         hashCombine(seed, binding.index);
         hashCombine(seed, binding.value);
-        hashCombine(seed, binding.type);
+        // The type enters as its canonical id, the same relation the key compares by
+        // (specializations.h): hashing the object would put two equal keys in two buckets.
+        hashCombine(
+            seed, camel::core::type::TypeTable::instance().canonicalId(binding.type));
         hashCombine(seed, binding.runtimeFlags);
     }
     return seed;
@@ -1321,7 +1379,7 @@ std::vector<GraphId> RuntimeGraphDraftSession::conflicts() const {
     // real conflict. A session over a private program — the ONNX export's bound copy, a function
     // value's program, a subgraph root, a detached rewrite — holds a program that nobody else
     // writes, whose ids are not versions of the context's program at all: comparing the two
-    // reports every graph the copy made or replaced as a conflict (H112). There is nothing to
+    // reports every graph the copy made or replaced as a conflict. There is nothing to
     // check for those, and a checked commit must not refuse work it owns.
     const bool contextProgram = mayPublish_ || current == program_;
     if (!contextProgram || runtimeRoot_ != program_->root()) {

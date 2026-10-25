@@ -20,6 +20,7 @@
 #include "camel/core/type/composite/stream.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/core/type/enum.h"
+#include "camel/core/type/intern.h"
 
 #include <format>
 #include <optional>
@@ -414,14 +415,11 @@ std::vector<TextItem> typeParts(const Type *type, bool mangle) {
     switch (type->code()) {
     case TypeCode::Array: {
         const auto *array = static_cast<const ArrayType *>(type);
-        if (array->isNumericUnknown()) {
-            if (mangle) {
-                return {literal("Array_Tensor_" + array->shapeMangle())};
-            }
-            if (array->extents().empty() && array->anyRank() && array->packName().empty()) {
-                return {literal("Tensor")};
-            }
-            return {literal("Tensor<" + array->tensorShapeText() + ">")};
+        // The name that awaits its element type prints as the name the author wrote, so the
+        // report about it names what is on the page. The name is deleted once no program writes
+        // it (docs/design/arrays-memory/plan.cn.md section 5.1a).
+        if (isElementTypeOpenArray(array)) {
+            return {literal("Tensor")};
         }
         if (mangle) {
             return {
@@ -544,7 +542,6 @@ bool sameType(const Type *a, const Type *b) {
             // dimension here; dimension names are signature metadata, as parameter names are
             // for function types (this is what the tensor type's equality did before).
             if (lhs->anyRank() != rhs->anyRank() ||
-                lhs->isNumericUnknown() != rhs->isNumericUnknown() ||
                 lhs->extents().size() != rhs->extents().size()) {
                 return false;
             }
@@ -570,7 +567,7 @@ bool sameType(const Type *a, const Type *b) {
         }
         case TypeCode::Stream: {
             // `T..` is one type per element type: the element decides, and nothing else is
-            // part of it (the author's ruling of 2026-10-24: `T..` and `T[..]` are different
+            // part of it (`T..` and `T[..]` are different
             // types, and the suffix is read left to right).
             const auto *lhs = static_cast<const StreamType *>(left);
             const auto *rhs = static_cast<const StreamType *>(right);
@@ -681,5 +678,16 @@ std::string typeToString(const Type *type) { return typeText(type, false); }
 std::string typeMangle(const Type *type) { return typeText(type, true); }
 
 bool typeEquals(const Type *a, const Type *b) { return sameType(a, b); }
+
+bool sameCanonicalType(const Type *a, const Type *b) {
+    if (a == b) {
+        return true;
+    }
+    TypeTable &table  = TypeTable::instance();
+    const TypeId left = table.canonicalId(a);
+    // kNoTypeId is the id of every type the table does not hold, so it says nothing about a
+    // structure; two such types are the same type only by being the same object, above.
+    return left != kNoTypeId && left == table.canonicalId(b);
+}
 
 } // namespace camel::core::type

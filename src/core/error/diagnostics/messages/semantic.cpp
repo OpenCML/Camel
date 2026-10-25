@@ -365,14 +365,6 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
-            SemanticDiag::TryCatchNotInLanguage,
-            {
-                "TryCatchNotInLanguage",
-                "'try'/'catch' is not part of Camel.",
-                "An operation that can fail returns a value of type 'T!'. Give a fallback with 'a !! b', hand an error on with 'x ?-> f', or inspect it with 'match r {{ case error e => ... case v => ... }}'. Faults (division by zero, an index out of range) are not errors and end the program; isolating them is the job of the fault-isolation operator.",
-            },
-        },
-        {
             SemanticDiag::TaggedOperandMismatch,
             {
                 "TaggedOperandMismatch",
@@ -569,7 +561,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "InvalidAnnotation",
                 "The annotation '@{0}' is not accepted: {1}.",
-                "A line that starts with '@' annotates the function declaration or the block that follows. '@name' and '@name<args>' are decorators of a function or of a block; '@name(args)' is no longer accepted (numeric permissions are tags, design principles 7.2). A tag is written with '#': '#name', '#name<args>' or '#[a, b<v>]' (design principles 6.2).",
+                "A line that starts with '@' annotates the function declaration or the block that follows. '@name' and '@name<args>' are decorators of a function or of a block; '@name(args)' is no longer accepted (numeric permissions are tags, design principles 7.2). A tag is written with '#': '#name', '#name(args)' or '#[a, b(v)]' (design principles 6.2).",
             },
         },
         {
@@ -712,8 +704,8 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             SemanticDiag::DimensionMismatch,
             {
                 "DimensionMismatch",
-                "Argument {0} has extent {1}, but the dimensions the earlier arguments bound do not allow it.",
-                "The dimensions a signature names are one value for the whole call: every argument whose type writes the same name must have the extent the name was bound to.",
+                "{0} has extent {1}, but {2}.",
+                "A shape is one value wherever it is stated. The dimensions a signature names are one value for the whole call: every argument whose type writes the same name must have the extent the name was bound to. A literal must write the shape the position it stands in states: a flat '[1.0, 2.0, 3.0, 4.0]' is an 'f32[4]', not an 'f32[2, 2]'. Nothing is reshaped to fit.",
             },
         },
         {
@@ -777,7 +769,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "TagArgumentNamed",
                 "A tag argument is positional: '{0}' is named.",
-                "A tag's parameters are given in the order the tag declares them: write '#tag<a, b>', not '#tag<x: a>'.",
+                "A tag's parameters are given in the order the tag declares them: write '#tag(a, b)', not '#tag(x: a)'.",
             },
         },
         {
@@ -785,7 +777,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "TagArgumentType",
                 "The parameter '{0}' of the tag '{1}' is declared '{2}', but the argument is '{3}' ({4}).",
-                "A tag argument is a compile-time constant of the kind the parameter declares: write an integer for 'int', a real for 'float', 'true' or 'false' for 'bool', a string for 'string', and the name of a function for 'func' (the fact is the graph reference of that function).",
+                "A tag argument is a compile-time constant of the kind the parameter declares: write an integer for 'int', a real for 'float', 'true' or 'false' for 'bool', a string for 'string', and the name of a function for a parameter that carries one (the fact is the graph reference of that function).",
             },
         },
         {
@@ -800,16 +792,16 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             SemanticDiag::RuleTagNotRequires,
             {
                 "RuleTagNotRequires",
-                "A rule may be preceded only by '#requires<...>', not by the tag '{0}'.",
-                "State the permissions the rule needs as tag arguments: '#requires<reassociate>' (design principles 7.2).",
+                "A rule may be preceded only by '#requires(...)', not by the tag '{0}'.",
+                "State the permissions the rule needs as tag arguments: '#requires(reassociate)' (design principles 7.2).",
             },
         },
         {
             SemanticDiag::TagParameterType,
             {
                 "TagParameterType",
-                "The parameter '{0}' of the tag '{1}' is declared '{2}': a tag parameter is an int, a float, a bool, a string or a func.",
-                "Declare the parameter with the kind of the argument the tag is written with: 'tag {1}<{0}: int> on ...'; a 'func' parameter is written with the name of a function ('#vjp<rule>').",
+                "The parameter '{0}' of the tag '{1}' is declared '{2}': a tag parameter is an int, a float, a bool, a string, a concrete function type, or a type parameter the condition selects with is_function.",
+                "Declare the parameter with the kind of the argument the tag is written with: 'tag {1}({0}: int) on ...'. A parameter that carries a function is a type parameter with a condition ('export tag vjp::<F>(rule: F) on func when is_function::<F>()') or a concrete function type ('tag rule(f: (x: int) => int) on field').",
             },
         },
         {
@@ -818,6 +810,22 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "TagShadowsPermission",
                 "The tag '{0}' is declared with the name of a tag of the language.",
                 "A numeric permission (design principles 7.2) and its group and `strict` (7.4) are tags of the core, and a program may not declare a tag of that name: the core's tag would still be what '#{0}' means, and the declaration would never be read. Rename the tag.",
+            },
+        },
+        {
+            SemanticDiag::TagFieldNameAmbiguous,
+            {
+                "TagFieldNameAmbiguous",
+                "Two tags on this field are written '{0}': '{1}' and '{2}'.",
+                "The `tags` struct names one field per tag, by the tag's own name, so two tags of one name would be one field of the record. Rename one of them, or write only one of the two.",
+            },
+        },
+        {
+            SemanticDiag::TagFunctionArgumentNotReadable,
+            {
+                "TagFunctionArgumentNotReadable",
+                "The tag '{0}' takes a function for its parameter '{1}', and a 'static' head cannot give a function value yet.",
+                "A parameter that carries a function carries the function as its graph reference: an internal number, not a value the language has. Do not read the tags of this field at a 'static' head; a function argument stays a fact for a pass that reads the tag after the program is compiled.",
             },
         },
         {
@@ -858,6 +866,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "GenericInstantiationCycle",
                 "The generic function '{0}' is instantiated with {1} while that same instance is being built, and its return type is not known yet.",
                 "A recursive generic call can be built only after the return type is known. Write the return type of the function, or make the recursive call use strictly smaller type arguments.",
+            },
+        },
+        {
+            SemanticDiag::GenericTypeArgumentGrows,
+            {
+                "GenericTypeArgumentGrows",
+                "The recursive call makes the type argument '{0}' of the generic function '{1}' grow from '{2}' to '{3}': every instance's type argument would contain the one before it, so specialization never stops.",
+                "The type arguments of a generic function are its instance key, so a call that hands it a type built out of the type it already has asks for a new instance at every level: 'f::<T>(x: T)' calling 'f([x])' makes 'T', then 'T[]', then 'T[][]'. No set of instances reaches a fixed point. Write the recursion so that its type argument is the same at every level, and take what changes as a value parameter.",
             },
         },
         {
@@ -1141,6 +1157,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::EffectInRuleCondition,
+            {
+                "EffectInRuleCondition",
+                "{0} has an effect, and it is inside the condition of the rule '{1}'.",
+                "A rule's condition decides whether the rule applies to a redex, and the engine evaluates it while it holds a session on the program being rewritten: a commit or a rewrite there acts inside that session, and a commit replaces the program the engine is reading. Keep the condition a predicate over the values the rule matched, and write the effect in the rule's right side or in the program around the rewrite.",
+            },
+        },
+        {
             SemanticDiag::WithArgumentUnknown,
             {
                 "WithArgumentUnknown",
@@ -1305,7 +1329,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "SameShapeComprehensionMismatch",
                 "The shape {0} is filled from the fields of {1}.",
-                "Write `T {{ static for (n, F) in fields T => ... }}`: the generator must walk the shape the comprehension constructs.",
+                "Write `T {{ static for n, F in fields T => ... }}`: the generator must walk the shape the comprehension constructs.",
             },
         },
         {
@@ -1314,6 +1338,22 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "StaticMatchPatternCannotMatch",
                 "The identity pattern '{0}' cannot select a type here: {1}.",
                 "An identity pattern is exact: it selects only the type it names, after the declaration's type variables are bound. Name a concrete type, do not write the same type twice in one case, and put a pattern an earlier case already selects before that case or remove it.",
+            },
+        },
+        {
+            SemanticDiag::FactArgumentNotConstant,
+            {
+                "FactArgumentNotConstant",
+                "The argument '{0}' of a fact is not a compile-time constant of type '{1}'.",
+                "A fact is computed once for the arguments it is queried with, and two different arguments are two different facts. An argument is therefore a value the compiler computes where the query is written: a literal, a name a constas or with parameter records, or the result of a pure call on those. Write a constant here, or query the fact from a place where the value is one.",
+            },
+        },
+        {
+            SemanticDiag::FactCaseDefaultMissing,
+            {
+                "FactCaseDefaultMissing",
+                "The fact '{0}' has no 'case _', so nothing says what it is for a value no other case matched.",
+                "The cases read how a value was built, and every fact needs one case that takes whatever they do not: 'case _', written last. Its value is also what a value that depends on itself settles on.",
             },
         },
         {
@@ -1477,6 +1517,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::SliceStepZero,
+            {
+                "SliceStepZero",
+                "The slice 't[a:b:s]' has a step of 0, so it takes no element at all, whatever its bounds are.",
+                "A slice takes every step-th element from its start, so the step decides which elements it has: with a positive step 'a', 'a + step', ... below 'b', and with a negative one backwards from the start. A step that does not move names no slice, so a constant step of 0 is refused where it is written (design principles 5.4). Give a non-zero step, or write 't[a:b]' when the step is 1. A step that is not constant is a fault of the run instead (RuntimeDiag::InvalidArgument).",
+            },
+        },
+        {
             SemanticDiag::ReducedPrecisionUnsupported,
             {
                 "ReducedPrecisionUnsupported",
@@ -1488,8 +1536,8 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             SemanticDiag::ImplOnBodylessDeclaration,
             {
                 "ImplOnBodylessDeclaration",
-                "The body-less declaration '{0}' cannot carry '#impl<{1}>': it has no Camel body.",
-                "'#impl<f>' is written before a function whose Camel body is the semantics; f is the body-less declaration of the operator that runs it. A body-less declaration is the kernel itself and needs no tag: remove the tag, or write the body.",
+                "The body-less declaration '{0}' cannot carry '#impl({1})': it has no Camel body.",
+                "'#impl(f)' is written before a function whose Camel body is the semantics; f is the body-less declaration of the operator that runs it. A body-less declaration is the kernel itself and needs no tag: remove the tag, or write the body.",
             },
         },
         {
@@ -1538,6 +1586,46 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "NodeOfNotAParameter",
                 "'{0}' is not a const parameter of the rule '{1}', so node_of({0}) names no node.",
                 "node_of reaches the node of a const parameter, so that a condition can read a fact or a shape of the constant: write it over a name the rule declares const, as in the condition sign(node_of(c)) == 1 of the rule r(x: int, const c: float) whose sides are x * c and x. A parameter that is not const is a node of the draft already, so the condition names it directly, and a name that is not a parameter of this rule has no node here.",
+            },
+        },
+        {
+            SemanticDiag::TensorElementTypeRequired,
+            {
+                "TensorElementTypeRequired",
+                "The type '{0}' states no element type: a tensor's element type is part of its type, so this spelling is not a type of a value.",
+                "Every tensor type writes its element type: 'Tensor<f32>' (a rank nobody fixes yet), 'Tensor<f32, [2, 3]>', or the array type itself, 'f32[..]' and 'f32[2, 3]'. A signature that takes a tensor of any element type declares a type variable in its head and writes it as the element type -- 'func f::<T>(x: Tensor<T>)', which is the same type as 'func f::<T>(x: T[..])' -- and the call's argument fixes that type variable, so the body sees the element type the call bound. A shape written without an element type ('Tensor<[3]>') leaves the same question open.",
+            },
+        },
+        {
+            SemanticDiag::BranchElementTypeMismatch,
+            {
+                "BranchElementTypeMismatch",
+                "The two arms of the branch have different element types: '{0}' and '{1}'. An array's element type is part of its type, and a number of one element type does not become a number of another by itself.",
+                "Give the two arms one element type: write the conversion on the arm that needs it -- f32(v) for a value, cast(v, 'float32') for a name -- or build both arms at the element type the value is to have, which is the element type a declaration writes. An int[] and an f32[] have no common type, so the join picks neither of the two and invents no third.",
+            },
+        },
+        {
+            SemanticDiag::RuleConstParamNotMatched,
+            {
+                "RuleConstParamNotMatched",
+                "'{0}' is a `const` parameter of the rule '{1}', and the left side matches no constant for it.",
+                "A `const` parameter means the left side matches a constant there: in the rule r(x: int, const c: int), whose sides are x * c and x, the left side matches the constant through c. The left side is what binds the parameter, and a `const` parameter it does not use leaves the rule saying nothing about the program -- its condition has no node to reach through node_of either.",
+            },
+        },
+        {
+            SemanticDiag::RuleWithParameterUnbound,
+            {
+                "RuleWithParameterUnbound",
+                "'{0}' is a `with` parameter of the rule '{1}', it has no default, and the rule value here binds nothing for it.",
+                "A rule whose declaration writes `with` parameters is a function of them, and only `name<value>` gives the `Rule`: `tile_matmul<64>` binds `tile` there. An unbound parameter is not the same as an unset one - the rule value would carry no value for the rule's functions to read - so the use is refused rather than a rule made that cannot match. Write the binding where the rule value is written (`tile_matmul<64>`), or give the parameter a default in the declaration (`with <tile: int = 16>`), which binds it wherever the name is used as it is.",
+            },
+        },
+        {
+            SemanticDiag::RuleWithArgumentNotConstant,
+            {
+                "RuleWithArgumentNotConstant",
+                "The value bound to the `with` parameter '{0}' of the rule '{1}' is not a compile-time constant of the type '{2}'.",
+                "A rule's `with` value is part of what selects the instance the rule's sides and its condition are made at, so it is known while the program is compiled: write a literal, a constant, or a constant expression of an integer, real, bool or string type. A value the compiler cannot work out would need one instance for every value it could take.",
             },
         },
         {

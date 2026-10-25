@@ -123,7 +123,7 @@ bool hasPassSignature(
 }
 
 /// The passes a module provides, by name: the pass declarations of its `.cml` file, which is what
-/// `<module>::<name>` can name (H130, H233, ruling of 2026-10-23). "Which passes it provides" is
+/// `<module>::<name>` can name . "Which passes it provides" is
 /// read from the declaration and from nothing else: an exported function is a pass because the
 /// module declared it one, never because its signature happens to look like one, and never because
 /// C++ registered a kernel under that name. The declaration's applicability condition is what
@@ -132,7 +132,7 @@ bool hasPassSignature(
 ///
 /// Only a declaration module is read this way. `declarationModule()` is what says that the `.cml` is
 /// the single statement of a native module's surface, and `Context` sets it exactly where a `.cml`
-/// is found beside the `.cmo` it declares (6.4, H19 step 1). A module written in Camel is read the
+/// is found beside the `.cmo` it declares (6.4, step 1). A module written in Camel is read the
 /// older way, from the functions it exports: it declares its passes itself, and there the exported
 /// `(p: Program) => Program!` function is its pass — the shape is the whole declaration.
 std::vector<std::string> passNamesOf(
@@ -226,6 +226,11 @@ class CamelPass final : public GraphIRPass {
         }
         NodeVMSchedPass vm(context_);
         const slot_t argument = camel::core::rtdata::toSlot(const_cast<Program *>(program));
+        // What the pass body captured is not reached through a function value here: a library
+        // function is looked up as a program, and its entry graph computes the values of its module
+        // and binds them before it calls the function, so the captures are filled before the body
+        // runs. There is no closure left for this caller to pass, and the entry graph, not a
+        // function value, is what `callGraph` is for.
         const slot_t result   = vm.callGraph(
             tool->program,
             tool->graph,
@@ -269,7 +274,7 @@ void registerCamelPass(
         module, function, problem, errorLocation, &lookup);
     if (lookup.absent) {
         // The module is there and compiles, and the name is not one of its passes: the reason to
-        // give is what it does provide, not a "not found" over the whole pipeline (H130). A name
+        // give is what it does provide, not a "not found" over the whole pipeline. A name
         // whose module is not there (or is not written in Camel) stays unknown, with `problem`
         // cleared: the pipeline lists the passes it does know.
         problem.clear();
@@ -302,7 +307,7 @@ void registerCamelPass(
     descriptor.make = [module, function, params](const context_ptr_t &ctx, const PassArgs &args) {
         return std::make_unique<CamelPass>(ctx, module, function, params, args);
     };
-    // A Camel pass says which tags it reads with `#reads<...>` on its function: that is what
+    // A Camel pass says which tags it reads with `#reads(...)` on its function: that is what
     // makes a tag's facts read, exactly as a C++ module's `read_by` does (design principles
     // 6.2). The module is the one the pass was compiled from (already in the context).
     try {

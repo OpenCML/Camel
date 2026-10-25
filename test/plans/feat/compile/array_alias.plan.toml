@@ -1,0 +1,121 @@
+# P4's acceptance suite (docs/design/arrays-memory/plan.cn.md section 5): Tensor is an alias of the
+# native array type. It was moved here from test/cases/compile/array_alias/ and its per-test
+# `known_fail` marks came off in the same commit that made these cases pass.
+#
+# `alias.bare_tensor` (below) and the signature in test/cases/loops/iterate_tensor.cml were the two
+# places that locked the *transitional* spelling: a signature writes the element type of a tensor,
+# so a bare `Tensor` is refused where it is written and the report teaches the spelling that
+# states one -- genericity declared in the head (`func f::<T>(x: Tensor<T>)`) or a concrete
+# element type (`f32[..]`, `f32[2, 3]`).
+id = "compile.array_alias"
+order = 343
+tier = "fast"
+tags = ["feat", "compile", "types", "array", "tensor", "alias"]
+desc = "`Tensor` is an alias of the native array type (docs/design/arrays-memory/plan.cn.md section 5): `Tensor<f32, [2, 3]>` and `f32[2, 3]` are one type, a tensor type always states its element type, the shape a `var` widens to keeps its rank, a bare numeric array enters a shaped position through the checked conversion, and the printed text of every spelling is the array's."
+
+[[tests]]
+name = "alias.eq_two_spellings"
+desc = "The two spellings are one type: a value bound as `f32[2, 3]` fills a `Tensor<f32, [2, 3]>` parameter, a value bound as `Tensor<f32, [2, 3]>` fills an `f32[2, 3]` parameter, and a `Tensor<f32, [2, 3]>` value fills `f32[..]` (`Tensor<f32>`). Every argument states its extent where it is made, so the calls bind and check a real shape."
+kind = "behavior"
+case = "../../../cases/compile/array_alias/eq_two_spellings.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.trim().split(String.fromCharCode(10))
+assert(lines.length === 3, `expected three lines, got ${lines.length}`)
+assert(lines[0].trim() === '2', `from_tensor_type printed ${lines[0]}`)
+assert(lines[1].trim() === '2', `from_array_type printed ${lines[1]}`)
+assert(lines[2].trim() === '2', `any_rank printed ${lines[2]}`)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "alias.bare_tensor"
+desc = "A tensor type states its element type, so a signature that writes the name alone is refused where it is written: the report names the type and says which spellings state one (`Tensor<f32>`, `Tensor<f32, [2, 3]>`, `f32[..]`), and that a signature taking any element type declares a type variable in its head (`func f::<T>(x: Tensor<T>)`). The positive spelling of that rewrite is test/cases/loops/iterate_tensor.cml."
+kind = "negative"
+case = "../../../cases/compile/array_alias/bare_tensor.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::TensorElementTypeRequired"
+expect_output_contains = ["The type 'Tensor' states no element type", "Tensor<f32>", "func f::<T>(x: Tensor<T>)", "T[..]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "alias.type_text"
+desc = "The printed form of each spelling: `Tensor<f32>` is `f32[..]` and `Tensor<f32, [2, 3]>` is `f32[2, 3]`. The candidate list of a refused call names both in one line."
+kind = "negative"
+case = "../../../cases/compile/array_alias/type_text.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::NoMatchingFunction"
+expect_output_contains = ["takes: (a: f32[..], b: f32[2, 3]) => int"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "alias.as_shape_check"
+desc = "A bare numeric array enters a shaped position through `as`; the shape is checked when the conversion runs and the value's shape is the one declared."
+kind = "behavior"
+case = "../../../cases/compile/array_alias/as_shape_check.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 0
+expect_stdout_contains = ["2"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "alias.err_as_shape"
+desc = "The checked conversion refuses a value whose shape is not the one the type names, and the message gives the shape the value has. It is a runtime refusal, not a dynamic cast refused at compile time."
+kind = "negative"
+case = "../../../cases/compile/array_alias/err_as_shape.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 1
+expect_stdout_contains = ["conversion to 'f32[3, 2]' failed: the array has shape [2, 3]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "alias.err_element_type"
+desc = "The element type of the alias is a numeric scalar; `Tensor<string>` is refused with InvalidTypeArgument and the message names the set the type takes."
+kind = "negative"
+case = "../../../cases/compile/array_alias/err_element_type.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::InvalidTypeArgument"
+expect_output_contains = ["the element type of a Tensor is a numeric scalar (i32, i64, f32, f64, bf16, f16, bool, c64 or c128), not 'string'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "alias.var_widening"
+desc = "`var` widening keeps the rank (plan Q5): a rank-2 tensor binding widens to `f32[?, ?]`, so it still fills a rank-2 parameter after a second assignment. A binding that widened to an any-rank type would fill no rank-2 parameter."
+kind = "behavior"
+case = "../../../cases/compile/array_alias/var_widening.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 0
+expect_stdout_contains = ["4"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "alias.err_var_rank"
+desc = "The other half of Q5: the widening keeps the rank, so a rank-1 value does not enter the rank-2 binding a `var` established."
+kind = "negative"
+case = "../../../cases/compile/array_alias/err_var_rank.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::NoMatchingFunction"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 /*
- * `match type` (design principles 5.5, handover H51 step 1): the subject is a type known
+ * `match type` (design principles 5.5 step 1): the subject is a type known
  * after instantiation, and only the case its shape selects is built. The selected body is
  * straight-line code in the current graph: no branch node, no region, nothing left of the
  * cases that are not selected.
@@ -14,6 +14,8 @@
 
 #include "camel/core/data/base.h"
 #include "camel/core/data/composite/array.h"
+#include "camel/core/data/composite/struct.h"
+#include "camel/core/data/primary.h"
 #include "camel/core/node_attrs.h"
 #include "camel/core/rtdata/struct.h"
 #include "camel/core/rtdata/tuple.h"
@@ -25,6 +27,7 @@
 #include "camel/utils/scope.h"
 
 #include <charconv>
+#include <map>
 #include <numeric>
 
 #define DEBUG_LEVEL -1
@@ -262,7 +265,7 @@ void Builder::walkStaticBodyNames(
         // The rest parameter and the `constas` values of the instance being expanded are
         // compile-time names, not nodes of a scope: a case that is not selected must still see
         // them, or the unselected case of a `match type` would resolve differently from the
-        // selected one (H51 step 13 writes `tree_map` this way).
+        // selected one (step 13 writes `tree_map` this way).
         if (!found && restBindingNamed(node->name()) != nullptr) {
             found = true;
         }
@@ -586,38 +589,87 @@ struct StaticExpansionScope {
     ~StaticExpansionScope() { --depth; }
 };
 
+/// The tag a fact on a field belongs to: its attribute key is the tag's qualified name, and the
+/// declaration is where the name the program writes and the parameters its arguments were
+/// written for are read.
+const camel::core::tag::Decl *tagOf(camel::core::attr::AttrKey key) {
+    const auto id = camel::core::tag::find(std::string(camel::core::attr::keyName(key)));
+    return id.has_value() ? camel::core::tag::get(*id) : nullptr;
+}
+
+/// The name a tag is written under in the program (`width`), not the qualified name of its
+/// attribute key (`m::width`): this is the field name `tags.width` reads.
+std::string tagFieldName(camel::core::attr::AttrKey key, const camel::core::tag::Decl *decl) {
+    if (decl != nullptr) {
+        return decl->ident;
+    }
+    return std::string(camel::core::attr::keyName(key));
+}
+
 } // namespace
 
+camel::core::data::data_ptr_t Builder::tagArgumentsRecord(
+    const camel::core::tag::Decl *decl, const std::string &qualified,
+    camel::core::attr::AttrValueId id, const GCT::node_ptr_t &head) {
+    const camel::core::attr::Value value = camel::core::attr::value(id);
+    std::vector<camel::core::attr::AttrValueId> items;
+    if (value.kind == camel::core::attr::ValueKind::Tuple) {
+        items = value.items;
+    } else if (value.kind != camel::core::attr::ValueKind::Unit) {
+        items.push_back(id);
+    }
+    StructDataFactory record;
+    for (size_t i = 0; i < items.size(); ++i) {
+        const std::string name =
+            decl != nullptr && i < decl->params.size() ? decl->params[i].name : std::to_string(i);
+        record.add(name, tagArgumentValue(decl, qualified, i, items[i], head));
+    }
+    return record.build();
+}
+
 node_handle_t Builder::staticFieldTagsNode(
-    Type *subject, size_t index, const GCT::node_ptr_t &where) {
-    // The tags written on the field, as the names of the tags in the order the declaration wrote
-    // them: a compile-time `string[]`, the third thing `fields T` gives (`(n, F, tags)`). The
-    // facts of a field are kept by the module that declares the type (`tag::attachToField`), so
-    // this reads them there; a type declared elsewhere and a type that is not a struct (a tuple,
-    // whose positions are not fields) give no tags, and the list is empty.
-    std::vector<std::string> names;
+    Type *subject, size_t index, const GCT::node_ptr_t &where, const GCT::node_ptr_t &head) {
+    // The tags written on the field, as a compile-time struct: one field per tag, named by the
+    // tag, whose value is the record of that tag's arguments. A field of
+    // `type Box = { #width(8) low: int, high: int }` under `tag width(w: int)` gives
+    // `{ width: { w: 8 } }` for `low` and `{}` for `high`, so `tags.width.w` reads the value where
+    // the round's type has that field, `fields typeof(tags)` walks the names, and each round's
+    // `tags` has the type its own field's tags make. The facts of a field are kept by the module
+    // that declares the type (`tag::attachToField`), so this reads them there; a type declared
+    // elsewhere and a type that is not a struct (a tuple, whose positions are not fields) give no
+    // tags, and the record is empty.
+    StructDataFactory tags;
     if (subject != nullptr && subject->code() == TypeCode::Struct && module_ != nullptr) {
         const StructDecl *decl = tt::as_ptr<StructType>(subject)->decl();
         if (decl != nullptr && decl->moduleName() == module_->name()) {
-            camel::core::attr::AttrSetId tags =
+            camel::core::attr::AttrSetId facts =
                 module_->fieldTags(Reference(decl->name()), index);
-            if (tags == camel::core::attr::kNoAttrs && !decl->shortName().empty() &&
+            if (facts == camel::core::attr::kNoAttrs && !decl->shortName().empty() &&
                 decl->shortName() != decl->name()) {
-                tags = module_->fieldTags(Reference(decl->shortName()), index);
+                facts = module_->fieldTags(Reference(decl->shortName()), index);
             }
-            for (const camel::core::attr::Attr &entry : camel::core::attr::entries(tags)) {
-                names.emplace_back(std::string(camel::core::attr::keyName(entry.key)));
+            // `tags` names a field by the tag alone, so two tags of one name would be one field
+            // of the record: the second one is reported rather than dropped by the factory.
+            std::map<std::string, std::string> written;
+            for (const camel::core::attr::Attr &entry : camel::core::attr::entries(facts)) {
+                const camel::core::tag::Decl *tagDecl = tagOf(entry.key);
+                const std::string qualified(std::string(camel::core::attr::keyName(entry.key)));
+                const std::string name = tagFieldName(entry.key, tagDecl);
+                const auto first       = written.find(name);
+                if (first != written.end()) {
+                    diags_->of(SemanticDiag::TagFieldNameAmbiguous)
+                        .atOrigin(head->origin())
+                        .commit(name, first->second, qualified);
+                    throw BuildAbortException();
+                }
+                written.emplace(name, qualified);
+                tags.add(name, tagArgumentsRecord(tagDecl, qualified, entry.value, head));
             }
         }
     }
-    data_vec_t elements;
-    elements.reserve(names.size());
-    for (const std::string &name : names) {
-        elements.push_back(tt::as_shared<Data>(std::make_shared<StringData>(name)));
-    }
-    const data_ptr_t tags = tt::as_shared<Data>(ArrayData::from(Type::String(), elements));
-    node_handle_t node    = currGraph_->addStaticDataNode(tags);
-    rememberConstant(node, tags);
+    const data_ptr_t value = tags.build();
+    node_handle_t node     = currGraph_->addStaticDataNode(value);
+    rememberConstant(node, value);
     registerNodeOrigin(context_, node, where, "gir.static.tags");
     return node;
 }
@@ -627,13 +679,13 @@ node_handle_t Builder::visitStaticForNode(
     ENTER("SFOR");
     // A `static for` written as a statement drops every round's value; written as the generator
     // of a comprehension (`values`), each round's value is one field of the result. Two
-    // generators share the node: `fields T` walks a type's fields, `indices ts` (H51 step 6)
+    // generators share the node: `fields T` walks a type's fields, `indices ts`.
     // walks the positions of a tuple value.
     const bool byIndices = gct->staticForIndices();
     Type *subject        = nullptr;
     if (byIndices) {
         // `indices e` reads only the type of `e`. A build-time tuple gives it without a FILL
-        // (H51 step 6): `ts`, or a tuple comprehension whose elements stay separate nodes.
+        // `ts`, or a tuple comprehension whose elements stay separate nodes.
         const std::any operandRes = visit(gct->staticForOperand());
         if (operandRes.type() == typeid(StaticTuple)) {
             subject = boundType(any_cast<const StaticTuple &>(operandRes).type);
@@ -699,7 +751,7 @@ node_handle_t Builder::visitStaticForNode(
         // The third name of `(n, F, tags)`: the field's tags, a compile-time value like `n`.
         node_handle_t tagsNode{};
         if (!byIndices && tagsName != "_") {
-            tagsNode = staticFieldTagsNode(subject, i, body);
+            tagsNode = staticFieldTagsNode(subject, i, body, gct);
         }
         staticValueScopes_.emplace_back();
         if (valueName != "_") {
@@ -770,7 +822,7 @@ node_handle_t Builder::visitStaticForNode(
 
 std::optional<Builder::StaticSequence>
 Builder::staticLoopSequenceOf(const GCT::node_ptr_t &subject) {
-    // `for i in <序列>` (H462, and the ruling of 2026-10-25 on which `in` forms count, H475):
+    // `for i in <序列>` (and the rule on which `in` forms count):
     // one rule, not a list of accepted spellings. The expression after `in` is a sequence the
     // compiler works out when it is built only from compile-time constants joined by operations
     // that are pure and cannot fail (design principles 3.4); then it is evaluated and unrolled.
@@ -897,7 +949,7 @@ Builder::staticLoopSequenceOf(const GCT::node_ptr_t &subject) {
         return walkIntegers(*from, *to, 1);
     }
     // A compile-time tuple: `for x in ts` walks its positions and binds the element at each one
-    // -- `ts.[i]`, a value whose type is the type of that position (the ruling of 2026-10-25: the
+    //  -- `ts.[i]`, a value whose type is the type of that position (the
     // round's name is the element's value, "`x` 的类型随位置变"; the type at a position is read
     // off it with `typeof x`, and `fields T` is the spelling that gives a name and a type). `ts`
     // is the tuple of values the expansion was given, a rest parameter (`..ts`) included. `indices
@@ -924,8 +976,8 @@ Builder::staticLoopSequenceOf(const GCT::node_ptr_t &subject) {
     // written -- a step of one is `a..b`, one thing one spelling -- so the two-argument call is
     // refused here as it is where the call stands (`RangeTwoArgumentsRemoved`, which the call
     // path reports after overload resolution), and a step of zero, which names no sequence at
-    // all, is `RangeStepZero` here as it is there (design principles 4.2; the rulings of
-    // 2026-10-24 on `h248-generator-and-composition` and on `h426-interval-step-form`).
+    // all, is `RangeStepZero` here as it is there (design principles 4.2; the rules of
+    //  2026-10-24 on ` -generator-and-composition` and on ` -interval-step-form`).
     if (subject->type() == GCT::NodeKind::LINK && subject->size() >= 1) {
         const GCT::node_ptr_t &callee = subject->at(0);
         const bool namedRange = callee != nullptr && callee->type() == GCT::NodeKind::DREF &&
@@ -997,7 +1049,7 @@ node_handle_t Builder::visitStaticLoopNode(const GCT::node_ptr_t &gct) {
     // `static loop s1 = a1, ..., sk = ak for i in <序列> do body`: the fold the fields of `T`
     // unroll into (`in fields T`), the positions of a tuple value (`in indices ts`), or a
     // sequence the compiler works out (`in 0..5`, `in range(0, 9, 3)`, `in [1, 2, 3]`, `in
-    // xs`; H462, the ruling of 2026-10-24, which dropped the head's parentheses, and the ruling
+    // xs`, which dropped the head's parentheses
     // of 2026-10-25 that draws the line by the one rule of `staticLoopSequenceOf`). The body is
     // built once per round in the current graph; its value is the next state. No LOOP node, no
     // region, and nothing of the state or the generator left in the graph: the first values are
@@ -1013,7 +1065,7 @@ node_handle_t Builder::visitStaticLoopNode(const GCT::node_ptr_t &gct) {
     // either way, exactly as the `j` of `indices` is the round's position.
     std::optional<StaticSequence> written;
     if (bySequence) {
-        // The sequence must be known when the function is compiled (the ruling of 2026-10-24:
+        // The sequence must be known when the function is compiled (
         // "`static loop` 的序列必须在编译期已知"): a sequence the compiler cannot work out is
         // refused here, before anything of the body is built.
         written = staticLoopSequenceOf(gct->staticLoopOperand());
@@ -1077,7 +1129,7 @@ node_handle_t Builder::visitStaticLoopNode(const GCT::node_ptr_t &gct) {
 
     // The names of the head are declared once, together (as for a run-time loop). The walked
     // entry's name `n` (`j`) is one of them for this purpose: `static loop n = ..., ... for
-    // (n, F)` would read the state where it meant the field.
+    // n, F` would read the state where it meant the field.
     {
         std::unordered_set<std::string> names;
         if (valueName != "_") {
@@ -1142,7 +1194,7 @@ node_handle_t Builder::visitStaticLoopNode(const GCT::node_ptr_t &gct) {
         // The third name of `(n, F, tags)`: the field's tags, a compile-time value like `n`.
         node_handle_t tagsNode{};
         if (bindsRoundType && tagsName != "_") {
-            tagsNode = staticFieldTagsNode(subject, i, body);
+            tagsNode = staticFieldTagsNode(subject, i, body, gct);
         }
         staticValueScopes_.emplace_back();
         if (valueName != "_" && bindsRoundValue && (indexNode != nullptr || byFields)) {
@@ -1423,7 +1475,7 @@ node_handle_t Builder::visitStaticAccessNode(const GCT::node_ptr_t &gct) {
 
     // The key is a compile-time constant: a literal, the `n` of an enclosing `static for`, a
     // name bound once to a constant (`let first = ( static for ... ).[0]`), or an expression
-    // whose value is known at build time (`( static for (n, F) in fields S => n ).[0]` in the
+    // whose value is known at build time (`( static for n, F in fields S => n ).[0]` in the
     // library is such an expression: a comprehension over the field names, indexed at 0).
     const auto keyOfData = [](const data_ptr_t &data) -> std::optional<std::string> {
         if (auto text = std::dynamic_pointer_cast<StringData>(data)) {
@@ -1486,7 +1538,7 @@ node_handle_t Builder::visitStaticAccessNode(const GCT::node_ptr_t &gct) {
 
     const bool dropped = gct == unusedStatement_;
     // A build-time tuple has no container node to project from: `ts.[j]` is the element node
-    // itself, chosen here (H51 step 6). No FILL and no ACCS are built.
+    // itself, chosen here. No FILL and no ACCS are built.
     const std::any targetRes = visit(gct->staticAccessTarget());
     if (targetRes.type() == typeid(StaticTuple)) {
         const StaticTuple &tuple = any_cast<const StaticTuple &>(targetRes);

@@ -31,7 +31,7 @@ std::optional<StaticShape> shapeFromArg(const InferContext &ctx, size_t index) {
     if (auto partial = ctx.partialInts(index)) {
         StaticShape shape;
         for (const auto &extent : *partial) {
-            shape.push_back(extent && *extent >= 0 ? *extent : kUnknownDim);
+            shape.push_back(extent && *extent >= 0 ? std::optional<int64_t>(*extent) : std::nullopt);
         }
         return shape;
     }
@@ -46,7 +46,9 @@ InferFn shapedInfer(std::optional<TypeCode> dtype) {
 
 slot_t newKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("new", [&] {
-        return wrap(tensorFromArray(norm.slot(0), norm.type(0), resultAllocator()));
+        return wrap(
+            norm.resultType(),
+            tensorFromArray(norm.slot(0), norm.type(0), resultAllocator()));
     });
 }
 
@@ -54,20 +56,22 @@ std::optional<Type *> newInfer(const InferContext &ctx) { return tensorOf(ctx.fa
 
 slot_t zerosKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("zeros", [&] {
-        return wrap(
+        return wrap(norm.resultType(),
             createTensor(TypeCode::Float32, shapeArg(norm, 0), resultAllocator(), true));
     });
 }
 
 slot_t onesKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("ones", [&] {
-        return wrap(k::full(TypeCode::Float32, shapeArg(norm, 0), 1.0, resultAllocator()));
+        return wrap(
+            norm.resultType(),
+            k::full(TypeCode::Float32, shapeArg(norm, 0), 1.0, resultAllocator()));
     });
 }
 
 slot_t fullKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("full", [&] {
-        return wrap(k::full(
+        return wrap(norm.resultType(), k::full(
             norm.type(1)->code(),
             shapeArg(norm, 0),
             numberArg(norm, 1),
@@ -81,7 +85,7 @@ std::optional<Type *> fullInfer(const InferContext &ctx) {
 
 slot_t randomKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("random", [&] {
-        return wrap(k::randomUniform(
+        return wrap(norm.resultType(), k::randomUniform(
             shapeArg(norm, 0),
             numberArg(norm, 1),
             numberArg(norm, 2),
@@ -93,7 +97,9 @@ slot_t randnKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("randn", [&] {
         const double mean   = hasArg(norm, 1) ? numberArg(norm, 1) : 0.0;
         const double stddev = hasArg(norm, 2) ? numberArg(norm, 2) : 1.0;
-        return wrap(k::randomNormal(shapeArg(norm, 0), mean, stddev, resultAllocator()));
+        return wrap(
+            norm.resultType(),
+            k::randomNormal(shapeArg(norm, 0), mean, stddev, resultAllocator()));
     });
 }
 
@@ -109,20 +115,22 @@ slot_t rangeKernel(ArgsView &, ArgsView &norm, context::Context &) {
                 step = intArg(norm, 2);
             }
         }
-        return wrap(k::arange(start, stop, step, resultAllocator()));
+        return wrap(norm.resultType(), k::arange(start, stop, step, resultAllocator()));
     });
 }
 
 std::optional<Type *> rangeInfer(const InferContext &) {
-    return tensorOf(TypeCode::Int64, StaticShape{kUnknownDim});
+    return tensorOf(TypeCode::Int64, StaticShape{std::nullopt});
 }
 
 slot_t eyeKernel(ArgsView &, ArgsView &norm, context::Context &) {
-    return runKernel("eye", [&] { return wrap(k::eye(intArg(norm, 0), resultAllocator())); });
+    return runKernel(
+        "eye",
+        [&] { return wrap(norm.resultType(), k::eye(intArg(norm, 0), resultAllocator())); });
 }
 
 std::optional<Type *> eyeInfer(const InferContext &ctx) {
-    const int64_t n = ctx.constInt(0).value_or(kUnknownDim);
+    const std::optional<int64_t> n = ctx.constInt(0);
     return tensorOf(TypeCode::Float32, StaticShape{n, n});
 }
 
@@ -133,29 +141,21 @@ slot_t seedKernel(ArgsView &, ArgsView &norm, context::Context &) {
 
 const std::vector<ParamSpec> kShapeParam = {{"shape", ParamKind::IntArray}};
 
-// new(values): an array's elements in a tensor of the inferred shape. A tensor argument is that
-// tensor in a new value, so its gradient passes through; an array argument is continuous when
-// its elements are (design principles 9.9), and its adjoint would put the elements of dy back in
-// an array of the same shape. No operator of this module produces an array from a tensor's
-// gradient, so an array that depends on a differentiated parameter is refused by name instead of
-// silently dropped — the refusal `reshape` and `concat` make for the same reason. A constant
-// array starts no gradient flow, so the call that converts one is never visited.
+// new(values): an array's elements in a tensor of the inferred shape. Its argument may be a
+// numeric array or a tensor, and a numeric array is a tensor here (a tensor is a numeric array:
+// `isTensorType` is `isNumericArrayType`), so the gradient is the same value at the argument's
+// own type: `new` does not change the element type or the shape's meaning, so nothing is
+// converted and the gradient passes through, declared with the argument's type. A container the
+// module converts but cannot carry a gradient back into (an array of arrays, an array of records)
+// is refused by name while it depends on a differentiated parameter, and a constant one starts no
+// gradient flow, so the call that converts it is never visited (`hasTensorAdjoint`).
 void newVjp(VjpBuilder &b, const VjpCall &call) {
     requireVjpInputs(call, 1, 1);
-    if (isTensorNode(b, call.inputs[0])) {
-        if (auto dy = b.gradientOf(call.output)) {
-            b.accumulateGradient(call.inputs[0], *dy);
+    if (auto dy = b.gradientOf(call.output)) {
+        if (!hasTensorAdjoint(b, call, call.inputs[0], "its input")) {
+            return;
         }
-        return;
-    }
-    if (b.isActive(call.inputs[0])) {
-        refuseVjp(
-            call,
-            "its input is a numeric array of type '" + b.nodeType(call.inputs[0])->toString() +
-                "', not a tensor, and this module has no operator that carries a tensor's "
-                "gradient back into an array; the array's gradient would be dropped silently. "
-                "Build the tensor from a differentiable tensor (a parameter, a slice of one) "
-                "instead of converting an array");
+        b.accumulateGradient(call.inputs[0], tensorCastTo(b, call.inputs[0], *dy));
     }
 }
 

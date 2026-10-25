@@ -1,6 +1,6 @@
 id = "perf.collections_fuzz"
 order = 410
-tier = "slow"
+tier = "milestone"
 tags = ["perf", "collections", "map", "set", "fuzz", "gc"]
 desc = "The long runs of the random and differential tests of `Map<K, V>` and `Set<T>` (test/tools/collfuzz/collfuzz.py; docs/technical/31_map_and_set.md, section 8). The short runs are in the default set (compile.collections `collfuzz.quick`, mm.gc_collections `gc.collfuzz`); these take minutes and are run on demand: `node scripts/test.js test/plans/perf/collections_fuzz.plan.toml`."
 
@@ -23,7 +23,7 @@ desc = "200 programs of 60 operations on collections of up to about 70 entries, 
 args = ["${case}", "check", "--seeds", "1000:1200", "--ops", "60", "--size", "24", "--matrix", "quick"]
 expect_stdout_contains = ["3200 of 3200 runs agree with the reference", "PASS"]
 # The cost bound is this test's own CPU time (user + system), and the timeout below is its liveness
-# bound, by the author's ruling of 2026-10-23 (docs/handover/reviews/questions-2026-10-23.md,
+# bound, by the rule (docs/handover/reviews/questions-2026-10-23.md,
 # "declaration-cost-gate" (a)):
 #
 #   "改量 CPU 时间，不量墙钟。共享主机上的墙钟随负载漂移 ... 进程的 CPU 时间（用户态 + 内核态）基本
@@ -51,7 +51,7 @@ expect_stdout_contains = ["3200 of 3200 runs agree with the reference", "PASS"]
 # The CPU figures spread 0.1-1.6 % across the first two windows and move by at most 2.0 % to the
 # third. Each budget is 1.63x that entry's highest reading rounded up to the next 1000 ms -- the
 # headroom the four resnet referees of feat/modules/autodiff.plan.toml took -- and 1.63-1.64x the
-# busiest reading seen. The timeouts below stay; by the ruling above they are now only the liveness
+# busiest reading seen. The timeouts below stay; by the rule above they are now only the liveness
 # bounds, and the longest wall seen (64.47 s) is well inside the smallest of their margins,
 # 450 s.
 cpu_budget_ms = 151000
@@ -63,7 +63,7 @@ desc = "60 programs of 150 operations on collections of up to several hundred en
 args = ["${case}", "check", "--seeds", "2000:2060", "--ops", "150", "--size", "120", "--matrix", "quick"]
 expect_stdout_contains = ["960 of 960 runs agree with the reference", "PASS"]
 # 1.63x the 61.33 s CPU read above (the highest of 60.24 s, 59.35 s and 61.33 s) rounded up: 1.63x
-# the busiest. The timeout below stays as the liveness bound (the ruling quoted on
+# the busiest. The timeout below stays as the liveness bound (the rule quoted on
 # collfuzz.many_small above).
 cpu_budget_ms = 100000
 timeout_ms = 1800000
@@ -74,7 +74,7 @@ desc = "40 programs of 40 operations under collection stress (a collection every
 args = ["${case}", "check", "--seeds", "3000:3040", "--ops", "40", "--size", "16", "--matrix", "gc"]
 expect_stdout_contains = ["720 of 720 runs agree with the reference", "PASS"]
 # 1.63x the 68.46 s CPU read above (the higher of 68.46 s and 67.55 s) rounded up: 1.64x the
-# busiest. The timeout below stays as the liveness bound (the ruling quoted on
+# busiest. The timeout below stays as the liveness bound (the rule quoted on
 # collfuzz.many_small above).
 cpu_budget_ms = 112000
 timeout_ms = 3600000
@@ -85,7 +85,7 @@ desc = "6 programs of 60 operations on collections of up to about 150 entries un
 args = ["${case}", "check", "--seeds", "4000:4006", "--ops", "60", "--size", "50", "--matrix", "gc", "--timeout", "1800"]
 expect_stdout_contains = ["108 of 108 runs agree with the reference", "PASS"]
 # 1.63x the 78.52 s CPU read above (the higher of 78.52 s and 77.94 s) rounded up: 1.63x the
-# busiest. The timeout below stays as the liveness bound (the ruling quoted on
+# busiest. The timeout below stays as the liveness bound (the rule quoted on
 # collfuzz.many_small above).
 cpu_budget_ms = 128000
 timeout_ms = 3600000

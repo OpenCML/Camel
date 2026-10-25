@@ -9,8 +9,8 @@ import { Tensor, full, zeros, sum, tanh } from tensor
 import { OptimizerState, sgd, adam, adam_state } from nn
 
 type Linear = {
-    weight: Tensor,
-    bias: Tensor
+    weight: f32[..],
+    bias: f32[..]
 }
 
 type ResidualMlp = {
@@ -21,18 +21,18 @@ type ResidualMlp = {
 }
 
 with <layer: Linear>
-func linear(x: Tensor): Tensor {
+func linear(x: f32[..]): f32[..] {
     return x @ layer.weight + layer.bias
 }
 
 with <model: ResidualMlp>
-func forward(x: Tensor): Tensor {
+func forward(x: f32[..]): f32[..] {
     let hidden = tanh(x->linear<model.l0>)
     return hidden->linear<model.l1> + x->linear<model.skip>
 }
 
 with <model: ResidualMlp>
-func loss(x: Tensor, target: Tensor): float {
+func loss(x: f32[..], target: f32[..]): float {
     let diff = x->forward<model> - target
     return sum(diff * diff) / 4.0
 }
@@ -46,11 +46,11 @@ func init(): ResidualMlp {
     }
 }
 
-func train_sgd(model: ResidualMlp, x: Tensor, y: Tensor, steps: int): ResidualMlp {
+func train_sgd(model: ResidualMlp, x: f32[..], y: f32[..], steps: int): ResidualMlp {
     return if steps == 0 then model else train_sgd(sgd(model, grad(loss)<model>(x, y), 0.1), x, y, steps - 1)
 }
 
-func train_adam(model: ResidualMlp, state: OptimizerState, x: Tensor, y: Tensor, steps: int): ResidualMlp {
+func train_adam(model: ResidualMlp, state: OptimizerState, x: f32[..], y: f32[..], steps: int): ResidualMlp {
     let updated = adam(model, grad(loss)<model>(x, y), state, 0.05)
     return if steps == 0 then model else train_adam(updated.0, updated.1, x, y, steps - 1)
 }

@@ -1,5 +1,5 @@
 /**
- * A declaration may take any number of `constas` parameters (H51 ruling, 2026-10-22), in any
+ * A declaration may take any number of `constas` parameters (rule, 2026-10-22), in any
  * position, and each value is its own part of the instance key: `mix(1, 2, 3)` and
  * `mix(2, 1, 3)` are two instances, so the two orders give different results.
  */

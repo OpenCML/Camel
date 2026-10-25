@@ -1,0 +1,40 @@
+/// A host effect inside a `#gpu` scope is the scope's boundary, not a refusal (docs/design/gpu/plan.cn.md
+/// 2.4): `print` is not an operator the device must run, so it stays on the host and the value it
+/// observes is downloaded at the observation point. `std::profile` counts that synchronisation.
+///
+/// The effect is not a root of the graph: it is a statement of the body's chain, and the pass cuts
+/// the body into segments beside it rather than around a list of observable nodes
+/// (docs/design/gpu/plan.cn.md 2.4). A statement a segment replaces hands its place, and everything
+/// that place carried, to the call that replaces it -- its inputs and those it ordered, in every
+/// kind the graph writes that ordering in (docs/design/effects/edges.cn.md 4) -- so the `println`
+/// stays in the executed graph between the two segments. The first segment is the two elementwise
+/// operators before it, and the `println` reads that segment's result, which is why a
+/// `tiles:download` stands there and the run waits there too; the operator of `return` is the second
+/// segment. Both ways of running print it: with a card
+/// the observation point is a real transfer, and `--devices cpu` runs the segments on the host and
+/// writes no transfer at all.
+///
+/// The numbers are taken in the one configuration the back end has today: one device, one stream, the
+/// public synchronous path, so every transfer batch is one wait. `syncs` counts waits, where
+/// `downloads`/`transfers` count values; with a card this run counts 3 -- the argument's upload, the
+/// value the effect reads, and the value `main` reads -- and the same program without the effect in
+/// the body counts 2.
+///
+/// Red when: the scope is refused for the effect, the effect does not run (nothing is printed), or
+/// the observation point is not transferred.
+module tiles_gpu_scope_host_effect
+
+import { Tensor, reshape, sum } from tensor
+
+#gpu
+func observed(x: Tensor<f32, [3]>): Tensor<f32, [3]> sync {
+    let y = x * 2.0
+    println(sum(y))
+    return y + 1.0
+}
+
+func main(): int sync {
+    let x = reshape([1.0, 2.0, 3.0] as f32[], [3])
+    println('result {}'->format<observed(x)>)
+    return 0
+}

@@ -8,6 +8,7 @@
 #include "state.h"
 
 #include "camel/core/mm.h"
+#include "camel/core/type/intern.h"
 
 #include <ostream>
 
@@ -23,11 +24,14 @@ TypeCode OptimizerStateType::typeCode() {
 }
 
 Type *OptimizerStateType::Default() {
-    static OptimizerStateType *type = [] {
-        void *mem = mm::permSpace().alloc(sizeof(OptimizerStateType), alignof(OptimizerStateType));
-        ASSERT(mem != nullptr, "Failed to allocate OptimizerStateType from permSpace");
-        return new (mem) OptimizerStateType();
-    }();
+    // One object for the one `OptimizerState` code, from the type table (see intern.h).
+    static Type *type = TypeTable::instance().internOther(
+        typeCode(), std::span<const uintptr_t>(), [&]() -> Type * {
+            void *mem =
+                mm::permSpace().alloc(sizeof(OptimizerStateType), alignof(OptimizerStateType));
+            ASSERT(mem != nullptr, "Failed to allocate OptimizerStateType from permSpace");
+            return new (mem) OptimizerStateType();
+        });
     return type;
 }
 

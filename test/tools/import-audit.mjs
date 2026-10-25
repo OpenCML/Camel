@@ -1,19 +1,19 @@
 // Copyright (c) the OpenCML Organization
 // SPDX-License-Identifier: MIT
 
-// What `import m` does today, for every module of the standard library (handover H222).
+// What `import m` does today, for every module of the standard library.
 //
 // The language author ruled on 2026-10-22 that `import` executes no code (design principles
 // 3.1, and the row "模块顶层的 `let`": a module-level `let` is a node of the public root graph,
 // evaluated when something depends on it). `import pyplot` initialising CPython was the
-// measurement that produced the ruling; this tool is the audit the ruling implies, module by
+// measurement that produced; this tool is the audit the rule implies, module by
 // module, with a probe per row.
 //
 // For each module it answers three questions and prints one line:
 //
 //   class=c   import declares names and does nothing else that can be observed: the operators,
 //             the executor factory, the pass, the tag, the node role or the entry-argument
-//             loader are registered, and a registration table is declaration (the ruling's own
+//              loader are registered, and a registration table is declaration (the rule's own
 //             strictness note). A module-level `let` in a Camel module is a root-graph node and
 //             is not evaluated either.
 //   class=b   import does work that must stay there until the author rules otherwise: today
@@ -245,7 +245,7 @@ function scanModule(module) {
 }
 
 // The install this run measures: `--camel <path>` names it (main parses the argument), else
-// `$CAMEL_HOME/bin/camel`, else this tree's `out/latest/bin/camel`. One rule, in one place:
+// this tree's `out/latest/bin/camel`. One rule, in one place:
 // test/tools/camel-arg.mjs.
 let CAMEL = defaultCamel(REPO_ROOT)
 
@@ -533,7 +533,7 @@ function main(argv) {
         return failures.length === 0 ? 0 : 1
     }
     if (!fs.existsSync(CAMEL)) {
-        throw new Error(`no camel binary at ${CAMEL}: build this tree once, or pass --camel <path> or set CAMEL_HOME`)
+        throw new Error(`no camel binary at ${CAMEL}: build this tree once, or pass --camel <path>`)
     }
 
     const rows = []

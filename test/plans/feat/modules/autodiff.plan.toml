@@ -391,7 +391,7 @@ kind = "behavior"
 case = "../../../cases/modules/autodiff/second_order.cml"
 args = ["${case}", "${run_nvm}"]
 expect_exit = 0
-expect_stdout_contains = ["scalar d2=12", "tensor([      6.,     -12.,       3.], dtype=float32)"]
+expect_stdout_contains = ["scalar d2=12.0", "[6.0, -12.0, 3.0]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 6000
 
@@ -402,7 +402,7 @@ kind = "behavior"
 case = "../../../cases/modules/autodiff/second_order.cml"
 args = ["${case}", "std::macro", "std::stats", "std::opt", "std::stats", "${run_nvm}"]
 expect_exit = 0
-expect_stdout_contains = ["scalar d2=12", "tensor([      6.,     -12.,       3.], dtype=float32)"]
+expect_stdout_contains = ["scalar d2=12.0", "[6.0, -12.0, 3.0]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
@@ -552,7 +552,7 @@ kind = "behavior"
 case = "../../../cases/modules/autodiff/second_order.cml"
 args = ["${case}", "${run_fvm}"]
 expect_exit = 0
-expect_stdout_contains = ["scalar d2=12", "tensor([      6.,     -12.,       3.], dtype=float32)"]
+expect_stdout_contains = ["scalar d2=12.0", "[6.0, -12.0, 3.0]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 6000
 
@@ -713,7 +713,7 @@ kind = "behavior"
 case = "../../../cases/modules/autodiff/second_order.cml"
 args = ["${case}", "std::macro", "std::opt", "${run_fvm}"]
 expect_exit = 0
-expect_stdout_contains = ["scalar d2=12", "tensor([      6.,     -12.,       3.], dtype=float32)"]
+expect_stdout_contains = ["scalar d2=12.0", "[6.0, -12.0, 3.0]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 6000
 
@@ -724,7 +724,7 @@ kind = "behavior"
 case = "../../../cases/modules/autodiff/second_order.cml"
 args = ["${case}", "std::macro", "std::opt", "${run_jit}"]
 expect_exit = 0
-expect_stdout_contains = ["scalar d2=12", "tensor([      6.,     -12.,       3.], dtype=float32)"]
+expect_stdout_contains = ["scalar d2=12.0", "[6.0, -12.0, 3.0]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 6000
 
@@ -835,7 +835,7 @@ kind = "behavior"
 case = "../../../cases/modules/autodiff/second_order.cml"
 args = ["${case}", "${run_jit}"]
 expect_exit = 0
-expect_stdout_contains = ["scalar d2=12", "tensor([      6.,     -12.,       3.], dtype=float32)"]
+expect_stdout_contains = ["scalar d2=12.0", "[6.0, -12.0, 3.0]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 6000
 
@@ -1349,7 +1349,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === 'tensor([ 0.7692,  0.7808,  0.7771], dtype=float32) | tensor([  2.782,    1.71, -0.8943], dtype=float32) | tensor([   2.89,   2.242,   2.462], dtype=float32) | tensor([ 0.2471,  0.2094,  0.1147], dtype=float32) | tensor([ 0.8553,  0.4799, -0.6468], dtype=float32)', `unexpected output: ${out}`)
+assert(out === '[0.7692267, 0.780836, 0.77707076] | [2.7822266, 1.7102305, -0.8943019] | [2.8903537, 2.2424502, 2.4619071] | [0.24714534, 0.20941703, 0.11465219] | [0.855341, 0.47992235, -0.6467736]', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 8000
@@ -1365,7 +1365,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === 'tensor([ 0.7692,  0.7808,  0.7771], dtype=float32) | tensor([  2.782,    1.71, -0.8943], dtype=float32) | tensor([   2.89,   2.242,   2.462], dtype=float32) | tensor([ 0.2471,  0.2094,  0.1147], dtype=float32) | tensor([ 0.8553,  0.4799, -0.6468], dtype=float32)', `unexpected output: ${out}`)
+assert(out === '[0.7692267, 0.780836, 0.77707076] | [2.7822266, 1.7102305, -0.8943019] | [2.8903537, 2.2424502, 2.4619071] | [0.24714534, 0.20941703, 0.11465219] | [0.855341, 0.47992235, -0.6467736]', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 8000
@@ -1381,7 +1381,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === 'tensor([ 0.7692,  0.7808,  0.7771], dtype=float32) | tensor([  2.782,    1.71, -0.8943], dtype=float32) | tensor([   2.89,   2.242,   2.462], dtype=float32) | tensor([ 0.2471,  0.2094,  0.1147], dtype=float32) | tensor([ 0.8553,  0.4799, -0.6468], dtype=float32)', `unexpected output: ${out}`)
+assert(out === '[0.7692267, 0.780836, 0.77707076] | [2.7822266, 1.7102305, -0.8943019] | [2.8903537, 2.2424502, 2.4619071] | [0.24714534, 0.20941703, 0.11465219] | [0.855341, 0.47992235, -0.6467736]', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 8000
@@ -1397,11 +1397,10 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === 'tensor([ 0.7692,  0.7808,  0.7771], dtype=float32) | tensor([  2.782,    1.71, -0.8943], dtype=float32) | tensor([   2.89,   2.242,   2.462], dtype=float32) | tensor([ 0.2471,  0.2094,  0.1147], dtype=float32) | tensor([ 0.8553,  0.4799, -0.6468], dtype=float32)', `unexpected output: ${out}`)
+assert(out === '[0.7692267, 0.780836, 0.77707076] | [2.7822266, 1.7102305, -0.8943019] | [2.8903537, 2.2424502, 2.4619071] | [0.24714534, 0.20941703, 0.11465219] | [0.855341, 0.47992235, -0.6467736]', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 8000
-
 
 [[tests]]
 name = "loop_grad_sum"
@@ -1563,6 +1562,36 @@ expect_output_contains = ["loss_gap=0.000000000", "grad_gap=0.000000000"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
 
+# `loop_grad_iterable_tensors` compares a record array's loop gradient with the one of the same
+# model written as a tuple, so it pins the two against each other but not against the value: a
+# gradient dropped at the loop would have to be dropped in the tuple form too to slip through. This
+# case pins the record array's loop gradient against a finite difference of the loss itself. The
+# two agree to 1.1e-2, which is f32 rounding at the finite difference's step (the analytic value
+# printed is 94.84, the two-sided difference 94.828963). Read with `std::nvm` and `std::fvm`, the
+# two schedulers that build the gradient differently.
+
+[[tests]]
+name = "loop_grad_record_tensor_fd"
+desc = "A loop over an array of records that own tensors, its gradient checked against a finite difference of the loss: d=94.840000 fd=94.828963 gap=0.011036873, and the analytic value is the hand-computed one (sum(h0 @ d0 @ (I + 2 d1 s)) + sum(h1 @ 2 d1) at s = 0.25)."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/loop_grad_record_tensor_fd.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_exact = "loop_grad_record_tensor_fd d=94.840000 fd=94.828963 gap=0.011036873\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "loop_grad_record_tensor_fd.fvm"
+desc = "The same finite-difference check of a record array's loop gradient when std::fvm runs grad."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/loop_grad_record_tensor_fd.cml"
+args = ["${case}", "${run_fvm}"]
+expect_exit = 0
+expect_stdout_exact = "loop_grad_record_tensor_fd d=94.840000 fd=94.828963 gap=0.011036873\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
 [[tests]]
 name = "loop_grad_iterable_length"
 desc = "The length of an iterated array is taken from the value the forward loop walked, not from the type: the same function called with n = 2 and n = 4 differentiates to 3 and 10."
@@ -1672,15 +1701,48 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
-name = "loop_grad_refuse_tensor_iterable"
-desc = "A loop that iterates over a tensor computed from the differentiated parameter is refused before the loop: iterating a tensor walks its first axis through the operator `tensor:iter`, whose result is an array of slices and which has no derivative rule, so the diagnostic names that operator at the iteration (line 15) instead of dropping the slices' gradient."
+name = "loop_grad_tensor_iterable.runtime.nvm"
+desc = "The adjoint of a loop over a tensor's first axis, where the refusal stood: `for row in w` takes the row an index names (`w` is `f32[2, 3]`, so the rows are rank-1 slices), and the reverse pass scatters each round's row gradient back with the tensor's own scatter, `tensor:row_add_at` (`TangentSpace::scatterUri`) -- a row of the tensor's dtype at its own width, not the core's slot-array `:tangent/scatter_add_arr`. `d` is the six ones in `w`'s own shape, and the same derivative is read again as a finite difference along `v` = [1..6] with `eps` = 2^-10 = 9.765625e-4 (the case writes `e = 1.0 / 1024.0`): `fd` (the two-sided difference of the forward) and `dot` (`sum(d * v)`) agree, `ok` is the case's own `gap < 0.001`, and the plan asserts the whole line, so `ok=true` is required. Before the scatter was there the program printed two uninitialized floats and `shape(d)` was `[2]`. (grad built at run time)"
+kind = "behavior"
+case = "../../../cases/modules/autodiff/loop_grad_tensor_iterable.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_exact = "loop_grad_tensor_iterable f=21.0 d=[[1.0, 1.0, 1.0], [1.0, 1.0, 1.0]] fd=21.000000 dot=21.000000 gap=0.000000 ok=true\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "loop_grad_tensor_iterable.macro.fvm"
+desc = "The same adjoint and the same finite difference when std::macro builds the gradient ahead of time and the FastVM runs it: the row scatter is placed in the compiled gradient graph, not only in a graph built at run time, and both readings agree there too."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/loop_grad_tensor_iterable.cml"
+args = ["${case}", "std::macro", "${run_fvm}"]
+expect_exit = 0
+expect_stdout_exact = "loop_grad_tensor_iterable f=21.0 d=[[1.0, 1.0, 1.0], [1.0, 1.0, 1.0]] fd=21.000000 dot=21.000000 gap=0.000000 ok=true\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "loop_grad_tensor_iterable.macro.jit"
+desc = "The same adjoint and the same finite difference on the third backend: the JIT-enabled bytecode VM runs the compiled gradient graph and gives the identical reading, so the row scatter is in the graph and not in one backend's interpreter."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/loop_grad_tensor_iterable.cml"
+args = ["${case}", "std::macro", "${run_jit}"]
+expect_exit = 0
+expect_stdout_exact = "loop_grad_tensor_iterable f=21.0 d=[[1.0, 1.0, 1.0], [1.0, 1.0, 1.0]] fd=21.000000 dot=21.000000 gap=0.000000 ok=true\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "loop_grad_refuse_slice_iterable.runtime.nvm"
+desc = "A loop whose rounds are arrays *as values* is still refused at the loop: `rows` is an array of rank-1 tensors, so `for row in rows` takes a tensor each round and that round's gradient is a tensor, which the reverse pass has no scatter for (an array's tangent is the array of its elements' tangents, and the element's place in it is not a slot of the value's own dtype). The diagnostic is located at the loop (line 24) and names the `for`'s sequence by type and by where it is written. The shape that used to be refused here -- a rank-2 tensor, whose rounds are rows of its own dtype -- now differentiates (`loop_grad_tensor_iterable`). (grad built at run time)"
 kind = "negative"
-case = "../../../cases/modules/autodiff/loop_grad_refuse_tensor_iterable.cml"
+case = "../../../cases/modules/autodiff/loop_grad_refuse_slice_iterable.cml"
 args = ["${case}", "${run_nvm}"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::RuntimeError"
-expect_diagnostic_line = 15
-expect_output_contains = ["no derivative rule for operator 'tensor:iter'", "cannot be dropped silently"]
+expect_diagnostic_line = 24
+expect_output_contains = ["a 'loop' iterates over an array of type '", "whose rounds are its slices", "a round of that array is itself an array", "cannot scatter the gradient of a slice back into it yet"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
@@ -1731,7 +1793,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === 'loss | helper | helper: done | loss: helper returned | 0.557950884103775 | loss | helper | helper: done | loss: helper returned | tensor([  1.769,   1.781,   1.777], dtype=float32) | loss | helper | helper: done | loss: helper returned | (0.557950884103775, tensor([  1.769,   1.781,   1.777], dtype=float32))', `unexpected output: ${out}`)
+assert(out === 'loss | helper | helper: done | loss: helper returned | 0.557950884103775 | loss | helper | helper: done | loss: helper returned | [1.7692266, 1.7808359, 1.7770708] | loss | helper | helper: done | loss: helper returned | (0.557950884103775, [1.7692266, 1.7808359, 1.7770708])', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 12000
@@ -1747,7 +1809,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === 'loss | helper | helper: done | loss: helper returned | 0.557950884103775 | loss | helper | helper: done | loss: helper returned | tensor([  1.769,   1.781,   1.777], dtype=float32) | loss | helper | helper: done | loss: helper returned | (0.557950884103775, tensor([  1.769,   1.781,   1.777], dtype=float32))', `unexpected output: ${out}`)
+assert(out === 'loss | helper | helper: done | loss: helper returned | 0.557950884103775 | loss | helper | helper: done | loss: helper returned | [1.7692266, 1.7808359, 1.7770708] | loss | helper | helper: done | loss: helper returned | (0.557950884103775, [1.7692266, 1.7808359, 1.7770708])', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 12000
@@ -1763,7 +1825,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === 'loss | helper | helper: done | loss: helper returned | 0.557950884103775 | loss | helper | helper: done | loss: helper returned | tensor([  1.769,   1.781,   1.777], dtype=float32) | loss | helper | helper: done | loss: helper returned | (0.557950884103775, tensor([  1.769,   1.781,   1.777], dtype=float32))', `unexpected output: ${out}`)
+assert(out === 'loss | helper | helper: done | loss: helper returned | 0.557950884103775 | loss | helper | helper: done | loss: helper returned | [1.7692266, 1.7808359, 1.7770708] | loss | helper | helper: done | loss: helper returned | (0.557950884103775, [1.7692266, 1.7808359, 1.7770708])', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 12000
@@ -1779,7 +1841,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === 'loss | helper | helper: done | loss: helper returned | 0.557950884103775 | loss | helper | helper: done | loss: helper returned | tensor([  1.769,   1.781,   1.777], dtype=float32) | loss | helper | helper: done | loss: helper returned | (0.557950884103775, tensor([  1.769,   1.781,   1.777], dtype=float32))', `unexpected output: ${out}`)
+assert(out === 'loss | helper | helper: done | loss: helper returned | 0.557950884103775 | loss | helper | helper: done | loss: helper returned | [1.7692266, 1.7808359, 1.7770708] | loss | helper | helper: done | loss: helper returned | (0.557950884103775, [1.7692266, 1.7808359, 1.7770708])', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 12000
@@ -1795,10 +1857,24 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === 'tensor([  1.935,   1.959,   1.951], dtype=float32) | tensor([  3.581,    2.37, -0.5429], dtype=float32) | tensor([ 0.2471,  0.2094,  0.1147], dtype=float32) | tensor([   2.89,   2.242,   2.462], dtype=float32) | tensor([  1.165,   1.178,   1.174], dtype=float32) | tensor([   1.25,   0.625,  -0.875], dtype=float32) | tensor([ 0.6224,  0.4746,   0.115], dtype=float32) | tensor([  1.165,   1.178,   1.174], dtype=float32) | tensor([ 0.4628,  0.4682,  0.4664], dtype=float32) | tensor([ 0.2382,  0.2388,  0.2386], dtype=float32)', `unexpected output: ${out}`)
+assert(out === '[1.9345258, 1.9592321, 1.9512241] | [3.5810165, 2.369704, -0.5429288] | [0.24714534, 0.20941703, 0.11465219] | [2.8903537, 2.2424502, 2.4619071] | [1.1652992, 1.1783961, 1.1741533] | [1.25, 0.625, -0.875] | [0.6224288, 0.47459483, 0.115042746] | [1.1652992, 1.1783961, 1.1741533] | [0.46280712, 0.46815383, 0.46641457] | [0.23816949, 0.23876452, 0.23857346]', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 12000
+
+[[tests]]
+name = "grad_function_values.reference"
+desc = "The gradients the four tests above pin are not the compiler agreeing with itself: grad_function_values_reference.py writes every loss again as a NumPy float64 function, differentiates it by central finite differences, runs grad_function_values.cml with the compiler under test, and compares what it printed. Its tolerance is 2e-3 relative to the largest element of the reference gradient, which is what float32 against float64 finite differences costs."
+kind = "behavior"
+tool = "python"
+case = "../../../cases/modules/autodiff/grad_function_values_reference.py"
+args = ["${case}", "values", "--check-camel", "${camel}"]
+skip_unless = ["${python}", "-c", "import numpy"]
+expect_exit = 0
+expect_stdout_contains = ["10 gradients checked, 0 wrong"]
+expect_output_not_contains = ["MISMATCH", "camel failed"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 120000
 
 [[tests]]
 name = "grad_function_values.macro"
@@ -1811,7 +1887,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === 'tensor([  1.935,   1.959,   1.951], dtype=float32) | tensor([  3.581,    2.37, -0.5429], dtype=float32) | tensor([ 0.2471,  0.2094,  0.1147], dtype=float32) | tensor([   2.89,   2.242,   2.462], dtype=float32) | tensor([  1.165,   1.178,   1.174], dtype=float32) | tensor([   1.25,   0.625,  -0.875], dtype=float32) | tensor([ 0.6224,  0.4746,   0.115], dtype=float32) | tensor([  1.165,   1.178,   1.174], dtype=float32) | tensor([ 0.4628,  0.4682,  0.4664], dtype=float32) | tensor([ 0.2382,  0.2388,  0.2386], dtype=float32)', `unexpected output: ${out}`)
+assert(out === '[1.9345258, 1.9592321, 1.9512241] | [3.5810165, 2.369704, -0.5429288] | [0.24714534, 0.20941703, 0.11465219] | [2.8903537, 2.2424502, 2.4619071] | [1.1652992, 1.1783961, 1.1741533] | [1.25, 0.625, -0.875] | [0.6224288, 0.47459483, 0.115042746] | [1.1652992, 1.1783961, 1.1741533] | [0.46280712, 0.46815383, 0.46641457] | [0.23816949, 0.23876452, 0.23857346]', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 12000
@@ -1827,7 +1903,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === 'tensor([  1.935,   1.959,   1.951], dtype=float32) | tensor([  3.581,    2.37, -0.5429], dtype=float32) | tensor([ 0.2471,  0.2094,  0.1147], dtype=float32) | tensor([   2.89,   2.242,   2.462], dtype=float32) | tensor([  1.165,   1.178,   1.174], dtype=float32) | tensor([   1.25,   0.625,  -0.875], dtype=float32) | tensor([ 0.6224,  0.4746,   0.115], dtype=float32) | tensor([  1.165,   1.178,   1.174], dtype=float32) | tensor([ 0.4628,  0.4682,  0.4664], dtype=float32) | tensor([ 0.2382,  0.2388,  0.2386], dtype=float32)', `unexpected output: ${out}`)
+assert(out === '[1.9345258, 1.9592321, 1.9512241] | [3.5810165, 2.369704, -0.5429288] | [0.24714534, 0.20941703, 0.11465219] | [2.8903537, 2.2424502, 2.4619071] | [1.1652992, 1.1783961, 1.1741533] | [1.25, 0.625, -0.875] | [0.6224288, 0.47459483, 0.115042746] | [1.1652992, 1.1783961, 1.1741533] | [0.46280712, 0.46815383, 0.46641457] | [0.23816949, 0.23876452, 0.23857346]', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 12000
@@ -1843,7 +1919,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === 'tensor([  1.935,   1.959,   1.951], dtype=float32) | tensor([  3.581,    2.37, -0.5429], dtype=float32) | tensor([ 0.2471,  0.2094,  0.1147], dtype=float32) | tensor([   2.89,   2.242,   2.462], dtype=float32) | tensor([  1.165,   1.178,   1.174], dtype=float32) | tensor([   1.25,   0.625,  -0.875], dtype=float32) | tensor([ 0.6224,  0.4746,   0.115], dtype=float32) | tensor([  1.165,   1.178,   1.174], dtype=float32) | tensor([ 0.4628,  0.4682,  0.4664], dtype=float32) | tensor([ 0.2382,  0.2388,  0.2386], dtype=float32)', `unexpected output: ${out}`)
+assert(out === '[1.9345258, 1.9592321, 1.9512241] | [3.5810165, 2.369704, -0.5429288] | [0.24714534, 0.20941703, 0.11465219] | [2.8903537, 2.2424502, 2.4619071] | [1.1652992, 1.1783961, 1.1741533] | [1.25, 0.625, -0.875] | [0.6224288, 0.47459483, 0.115042746] | [1.1652992, 1.1783961, 1.1741533] | [0.46280712, 0.46815383, 0.46641457] | [0.23816949, 0.23876452, 0.23857346]', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 12000
@@ -1859,7 +1935,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === 'loss1 | apply | apply: first call done | loss1: applied | tensor([  1.165,   1.178,   1.174], dtype=float32) | loss2 | make | loss2: made | tensor([ 0.2471,  0.2094,  0.1147], dtype=float32) | loss3 | loss3: built | tensor([  1.935,   1.959,   1.951], dtype=float32)', `unexpected output: ${out}`)
+assert(out === 'loss1 | apply | apply: first call done | loss1: applied | [1.1652992, 1.1783961, 1.1741533] | loss2 | make | loss2: made | [0.24714534, 0.20941703, 0.11465219] | loss3 | loss3: built | [1.9345258, 1.9592321, 1.9512241]', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 12000
@@ -1875,7 +1951,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === 'loss1 | apply | apply: first call done | loss1: applied | tensor([  1.165,   1.178,   1.174], dtype=float32) | loss2 | make | loss2: made | tensor([ 0.2471,  0.2094,  0.1147], dtype=float32) | loss3 | loss3: built | tensor([  1.935,   1.959,   1.951], dtype=float32)', `unexpected output: ${out}`)
+assert(out === 'loss1 | apply | apply: first call done | loss1: applied | [1.1652992, 1.1783961, 1.1741533] | loss2 | make | loss2: made | [0.24714534, 0.20941703, 0.11465219] | loss3 | loss3: built | [1.9345258, 1.9592321, 1.9512241]', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 12000
@@ -1891,7 +1967,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === 'loss1 | apply | apply: first call done | loss1: applied | tensor([  1.165,   1.178,   1.174], dtype=float32) | loss2 | make | loss2: made | tensor([ 0.2471,  0.2094,  0.1147], dtype=float32) | loss3 | loss3: built | tensor([  1.935,   1.959,   1.951], dtype=float32)', `unexpected output: ${out}`)
+assert(out === 'loss1 | apply | apply: first call done | loss1: applied | [1.1652992, 1.1783961, 1.1741533] | loss2 | make | loss2: made | [0.24714534, 0.20941703, 0.11465219] | loss3 | loss3: built | [1.9345258, 1.9592321, 1.9512241]', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 12000
@@ -1907,7 +1983,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === 'loss1 | apply | apply: first call done | loss1: applied | tensor([  1.165,   1.178,   1.174], dtype=float32) | loss2 | make | loss2: made | tensor([ 0.2471,  0.2094,  0.1147], dtype=float32) | loss3 | loss3: built | tensor([  1.935,   1.959,   1.951], dtype=float32)', `unexpected output: ${out}`)
+assert(out === 'loss1 | apply | apply: first call done | loss1: applied | [1.1652992, 1.1783961, 1.1741533] | loss2 | make | loss2: made | [0.24714534, 0.20941703, 0.11465219] | loss3 | loss3: built | [1.9345258, 1.9592321, 1.9512241]', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 12000
@@ -2087,7 +2163,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === 'tensor([ 0.7692,  0.7808,  0.7771], dtype=float32) | tensor([ 0.6864,  0.7286,  0.7144], dtype=float32)', `unexpected output: ${out}`)
+assert(out === '[0.7692267, 0.780836, 0.77707076] | [0.6864027, 0.7285644, 0.7143563]', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 12000
@@ -2103,7 +2179,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === 'tensor([ 0.7692,  0.7808,  0.7771], dtype=float32) | tensor([ 0.6864,  0.7286,  0.7144], dtype=float32)', `unexpected output: ${out}`)
+assert(out === '[0.7692267, 0.780836, 0.77707076] | [0.6864027, 0.7285644, 0.7143563]', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 12000
@@ -2119,7 +2195,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === 'tensor([ 0.7692,  0.7808,  0.7771], dtype=float32) | tensor([ 0.6864,  0.7286,  0.7144], dtype=float32)', `unexpected output: ${out}`)
+assert(out === '[0.7692267, 0.780836, 0.77707076] | [0.6864027, 0.7285644, 0.7143563]', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 12000
@@ -2135,7 +2211,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === 'tensor([ 0.7692,  0.7808,  0.7771], dtype=float32) | tensor([ 0.6864,  0.7286,  0.7144], dtype=float32)', `unexpected output: ${out}`)
+assert(out === '[0.7692267, 0.780836, 0.77707076] | [0.6864027, 0.7285644, 0.7143563]', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 12000
@@ -2283,7 +2359,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "benchmark_gradients_vs_torch"
-# Slow layer: measured 8.3 s in the full serial run (handover note ⟨617198c⟩ (H10)).
+# Slow layer: measured 8.3 s in the full serial run.
 tier = "slow"
 desc = "The training gradient of nine benchmark models (mlp, mlp_big, lenet, lenet_big, gru, gru_big, transformer, transformer4, transformer_big) against PyTorch float32 autograd on the benchmark weights and input (benchmarks/train.py --check): the gradient of mean(y * y) with respect to every weight, under std::macro std::nvm and under std::macro std::opt std::nvm, each weight within 1e-4 of the reference (max|diff| over the weight's largest gradient entry, floored at 1e-3 of the model's). 1e-4 is the benchmark's agreement tolerance; the worst of the nine measures 6.7e-06. This is the second of the two numerical comparisons (native execution against PyTorch), not the exported artifact against native execution. resnet and resnetbn are checked by the next four entries: a float32-against-float32 comparison is not a test of their rules."
 kind = "behavior"
@@ -2295,11 +2371,11 @@ expect_exit = 0
 expect_stdout_contains = ["== transformer_big (camel_opt_nvm)", "gradient check: PASS"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 # The cost bound is this check's own CPU time (user + system), and the timeout is its liveness
-# bound, by the author's ruling of 2026-10-23 (docs/handover/reviews/questions-2026-10-23.md,
+# bound, by the rule (docs/handover/reviews/questions-2026-10-23.md,
 # "declaration-cost-gate" (a)):
 #
 #   "改量 CPU 时间，不量墙钟。共享主机上的墙钟随负载漂移，这正是 40/45/100/90 ms 在负载 106–130
-#    下报红的原因；进程的 CPU 时间（用户态 + 内核态）基本不随负载变（H167 的判定已经用 CPU 中位数）。
+#     下报红的原因；进程的 CPU 时间（用户态 + 内核态）基本不随负载变（该判定已经用 CPU 中位数）。
 #    四条命令的天花板改为按 CPU 时间、取安静主机中位数加余量；"负载下红不算回归"的口径因此不需要。"
 #
 # The wall clock this check reads is the host's and not its own: 127.2 s in the slow layer at
@@ -2327,7 +2403,7 @@ timeout_ms = 900000
 
 [[tests]]
 name = "resnet_gradient_smooth_vs_torch64"
-# Slow layer: measured 6.3 s in the full serial run (handover note ⟨617198c⟩ (H10)).
+# Slow layer: measured 6.3 s in the full serial run.
 tier = "slow"
 desc = "resnet with relu replaced by tanh on both sides (benchmarks/tools/grad_referee.py --activation tanh): Camel's gradient against PyTorch float64 autograd, every weight within 1e-4 (measured 1.4e-06). The rules of conv2d with stride and padding, the residual sum, the two axis means and the linear layer, with no kink for float32 rounding to cross."
 kind = "behavior"
@@ -2339,13 +2415,13 @@ expect_exit = 0
 expect_stdout_contains = ["verdict resnet seed=benchmark activation=tanh: PASS (", "gradient referee: PASS"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 # The cost bound is this referee's own CPU time (user + system), and the timeout is its liveness
-# bound, by the author's ruling of 2026-10-23 (docs/handover/reviews/questions-2026-10-23.md,
+# bound, by the rule (docs/handover/reviews/questions-2026-10-23.md,
 # "declaration-cost-gate" (a)):
 #
 #   "改量 CPU 时间，不量墙钟。共享主机上的墙钟随负载漂移 ... 进程的 CPU 时间（用户态 + 内核态）基本
 #    不随负载变"
 #
-# The ruling asks for a quiet host's median plus a margin. Nothing on this shared host was quiet (the
+# The rule asks for a quiet host's median plus a margin. Nothing on this shared host was quiet (the
 # 1-minute load stayed between 83 and 162 across every run), and the median of load-affected
 # readings would leave only 13-21% of room to the busiest of them, so each of these four budgets is
 # taken from the highest reading with that same margin instead: the direction that cannot fire on the
@@ -2372,7 +2448,7 @@ timeout_ms = 300000
 
 [[tests]]
 name = "resnetbn_gradient_smooth_vs_torch64"
-# Slow layer: measured 14.5 s in the full serial run (handover note ⟨617198c⟩ (H10)).
+# Slow layer: measured 14.5 s in the full serial run.
 tier = "slow"
 desc = "resnetbn (20 training-mode batch_norms) with relu replaced by tanh on both sides: Camel's gradient against PyTorch float64 autograd, each of the 62 weights that have a gradient within 1e-4 (measured 7.8e-06), the loss and the 40 running statistics the forward leaves agreeing to 2e-7. The 20 conv biases in front of a batch_norm have a gradient of exactly zero (float64: 1e-17); what float32 computes there is the rounding of a sum that cancels, and it is accepted within 1e-4 of the floor or when no farther from float64 than PyTorch float32 on the same weight (measured: Camel 2.7e-04 of the floor, that is 2.7e-07 of the model's largest gradient entry; PyTorch float32 1.0e-03). Whether exactly-zero gradients need a bound of their own is open (benchmarks/README.md, Gradient agreement)."
 kind = "behavior"
@@ -2383,7 +2459,7 @@ skip_unless = ["${python}", "-c", "import numpy, psutil, torch"]
 expect_exit = 0
 expect_stdout_contains = ["verdict resnetbn seed=benchmark activation=tanh: PASS (", "gradient referee: PASS"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-# CPU time, by the ruling quoted on resnet_gradient_smooth_vs_torch64 above; measured with it:
+# CPU time, by the rule quoted on resnet_gradient_smooth_vs_torch64 above; measured with it:
 #
 #   52.27 s of CPU / 36.99 s wall   (2026-10-24, -Jobs 8)
 #   54.27 s of CPU / 47.09 s wall   (2026-10-24, -Jobs 8)
@@ -2399,7 +2475,7 @@ timeout_ms = 300000
 
 [[tests]]
 name = "resnet_gradient_relu_kinks_vs_torch64"
-# Slow layer: measured 21.1 s in the full serial run (handover note ⟨617198c⟩ (H10)).
+# Slow layer: measured 21.1 s in the full serial run.
 tier = "slow"
 desc = "resnet as benchmarked, against PyTorch float64 autograd. The direct comparison is outside 1e-4 (3.1e-03 on stem_w; PyTorch float32 is 1.6e-03 from float64 on another weight) because the gradient is discontinuous where a relu input crosses zero and, of 8.9 million relu inputs, a few lie within float32 rounding of zero. The test requires that the gap is exactly that: Camel's gradient must be within 1e-4 of the float64 gradient recomputed with a few named relu decisions reversed, each of them a unit whose float64 input is within half the layer's float32/float64 forward drift of zero (measured: 2 units, inputs -3.9e-09 and +4.0e-08 in layers whose largest input is 3.4 and 5.3; residual 3.9e-07). A wrong rule is not explained by reversing such units and fails."
 kind = "behavior"
@@ -2410,7 +2486,7 @@ skip_unless = ["${python}", "-c", "import numpy, psutil, torch"]
 expect_exit = 0
 expect_stdout_contains = ["verdict resnet seed=benchmark activation=relu: PASS", "gradient referee: PASS"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-# CPU time, by the ruling quoted on resnet_gradient_smooth_vs_torch64 above; measured with it
+# CPU time, by the rule quoted on resnet_gradient_smooth_vs_torch64 above; measured with it
 # (the same 32-thread host, the four referees of this plan together at -Jobs 8):
 #
 #   438.40 s of CPU / 161.99 s wall   (2026-10-24)
@@ -2424,14 +2500,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 # 1.52x the busiest reading seen. That is a wider room than the wall bound it replaces, which fired
 # at 900 s against a loaded wall of 162-382 s for this same entry.
 cpu_budget_ms = 960000
-# 60 min: liveness only, by the ruling above. The referee is CPU-bound, each Camel run inside it is
+#  60 min: liveness only, by the rule above. The referee is CPU-bound, each Camel run inside it is
 # capped at 1800 s, and the wall clock this used to be judged on (the runner's 4x margin) read the
 # neighbours rather than this test.
 timeout_ms = 3600000
 
 [[tests]]
 name = "resnetbn_gradient_relu_kinks_vs_torch64"
-# Slow layer: measured 42.6 s in the full serial run (handover note ⟨617198c⟩ (H10)).
+# Slow layer: measured 42.6 s in the full serial run.
 tier = "slow"
 desc = "resnetbn as benchmarked, against PyTorch float64 autograd, by the criterion of resnet_gradient_relu_kinks_vs_torch64. The direct comparison is 7.6e-02 for Camel and 9.5e-02 for PyTorch float32 (one reversed relu decision in a 4x4 plane behind a batch_norm moves single kernel-gradient entries by several percent, and everything upstream by a few thousandths); with 3 named relu decisions reversed (float64 inputs -3.8e-08, -1.8e-07, -2.4e-07) the float64 gradient is within 5.4e-06 of Camel's on the weights that have a gradient."
 kind = "behavior"
@@ -2516,15 +2592,16 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
-name = "grad_refuse_int"
-desc = "Refused at compile time with NotDifferentiable: the first `with` parameter is an int."
-kind = "negative"
-case = "../../../cases/modules/autodiff/grad_refuse_int.cml"
-args = ["${case}", "std::macro"]
-expect_exit = 1
-expect_diagnostic_line = 11
-expect_output_contains = ["SemanticDiag::NotDifferentiable", "has type int, which has no gradient"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+name = "grad_int_zero"
+desc = "An `int` parameter is differentiable and its gradient is the zero of its own type: `let g: int = grad(twice)<3>(2.0)` gives the int `0`, and the printed line is the only value in it. The gradient type of a parameter is a question of its own, asked for the user -- a number is its own gradient type, at zero -- and `string`/function parameters are still refused (`grad_refuse_string`, `grad_refuse_function`), because they have no gradient type at all (the author's ruling of 2026-10-25 on discrete-tuple-tangent-space-and-machinery-aggregates). The machinery's own question about the same int is still answered `no` (it carries no gradient through the tape)."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/grad_int_zero.cml"
+args = ["${case}", "std::macro", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "grad_int_zero g=0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
 [[tests]]
@@ -2553,14 +2630,52 @@ timeout_ms = 8000
 
 [[tests]]
 name = "grad_refuse_struct"
-desc = "Refused at compile time with NotDifferentiable: the first `with` parameter is a struct whose members have no tangent."
+desc = "Refused at compile time with NotDifferentiable: the first `with` parameter is a struct with a field that has no tangent space, and the refusal names that field (`s`, a `string`) rather than saying only that the struct has none."
 kind = "negative"
 case = "../../../cases/modules/autodiff/grad_refuse_struct.cml"
 args = ["${case}", "std::macro"]
 expect_exit = 1
 expect_diagnostic_line = 13
-expect_output_contains = ["SemanticDiag::NotDifferentiable", "has type Plain, which has no gradient"]
+expect_output_contains = ["SemanticDiag::NotDifferentiable", "has type Plain, whose field `s` has type string, which has no gradient"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "grad_refuse_tuple"
+desc = "Refused at compile time with NotDifferentiable: the first `with` parameter is a tuple with a member that has no gradient, and the refusal names that member by its position (`element 1`, a `string`) rather than saying only that the tuple has none. A tuple answers by the same rule as a struct -- a member without a gradient makes the whole parameter have none (the author's ruling of 2026-10-25 on discrete-tuple-tangent-space-and-machinery-aggregates)."
+kind = "negative"
+case = "../../../cases/modules/autodiff/grad_refuse_tuple.cml"
+args = ["${case}", "std::macro"]
+expect_exit = 1
+expect_diagnostic_line = 20
+expect_output_contains = ["SemanticDiag::NotDifferentiable", "whose element 1 has type string, which has no gradient"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "grad_struct_all_discrete"
+desc = "A model whose every field is discrete is differentiable: the tangent space of a struct is taken field by field, and an integer and a boolean each have one -- their own type, with the value zero -- so the gradient is the model's own type, all zeros. There is no \"at least one trainable field\" exception (the author's ruling of 2026-10-25 on discrete-gradient-and-rank-one-slice-ownership)."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/grad_struct_all_discrete.cml"
+args = ["${case}", "std::macro", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "12.0\n0\nfalse\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "grad_tuple_discrete_member"
+desc = "A tuple model keeps its discrete member in the gradient: `with <m: (f32[..], int)>` gets `(f32[..], int)` back, with the `int` at zero, and `let g: (f32[..], int) = gradient` pins that the gradient is the model's own type. What decides is who reads the answer -- the user's `grad`/`with_grad` gradient against the machinery's own aggregates -- not whether the parameter is a struct or a tuple (the author's ruling of 2026-10-25 on discrete-tuple-tangent-space-and-machinery-aggregates)."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/grad_tuple_discrete_member.cml"
+args = ["${case}", "std::macro", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "grad_tuple_discrete_member value=12.0 grad_sum=6.0 k=0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
 [[tests]]
@@ -2627,7 +2742,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "vjp.cross_module.macro.nvm"
-desc = "A function declared with `#vjp<rule>` in one module is differentiated from another module: the declaration tag's graph reference is read from the frozen graph, so the rule (10 * dy) is used instead of the derivative of the body (20 and 10, not 16 and 4). The library is imported by two modules, so the second import is served by the module cache: a tag that did not survive it would lose its rule."
+desc = "A function declared with `#vjp(rule)` in one module is differentiated from another module: the declaration tag's graph reference is read from the frozen graph, so the rule (10 * dy) is used instead of the derivative of the body (20 and 10, not 16 and 4). The library is imported by two modules, so the second import is served by the module cache: a tag that did not survive it would lose its rule."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/vjp_cross_module.cml"
 args = ["${case}", "std::macro", "${run_nvm}"]
@@ -2659,7 +2774,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "vjp_old_annotation_removed"
-desc = "The old `@vjp<rule>` decorator is deleted: it is reported at the annotation as `SemanticDiag::InvalidAnnotation`, naming `#vjp<rule>`, not at the operator it used to resolve to."
+desc = "The old `@vjp<rule>` decorator is deleted: it is reported at the annotation as `SemanticDiag::InvalidAnnotation`, naming `#vjp(rule)`, not at the operator it used to resolve to."
 kind = "negative"
 case = "../../../cases/modules/autodiff/err_vjp_annotation.cml"
 args = ["${case}"]
@@ -2667,7 +2782,7 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::InvalidAnnotation"
 expect_diagnostic_line = 10
 expect_diagnostic_column = 1
-expect_output_contains = ["#vjp<rule>"]
+expect_output_contains = ["#vjp(rule)"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
@@ -2740,29 +2855,80 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
 [[tests]]
-name = "slice_grad_refuse_reshape_array"
-desc = "A float array is continuous (design principles 9.9). Reshaping one into a tensor has a known adjoint, but no operator here carries a tensor's gradient back into an array, so reshape refuses at the operator and names it instead of dropping the array's gradient; the refusal is located at the reshape call (line 22)."
-kind = "negative"
-case = "../../../cases/modules/autodiff/refuse_reshape_array.cml"
+name = "slice_grad_negative_step"
+desc = "A slice that takes its elements backwards (`x[5:0:-2]`) differentiates: the core's slice adjoint scatters the gradient back through the same step, so the three elements the slice took (`x[5]`, `x[3]`, `x[1]`) receive the values they were multiplied by and no other element does -- the sum of the gradient is 3.0 for a loss that multiplies them by ones. The first extent is open, so the step is not statically known and the slice runs rather than being refused at the call."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/slice_grad_negative_step.cml"
 args = ["${case}", "${run_nvm}"]
-expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::RuntimeError"
-expect_diagnostic_line = 22
-expect_output_contains = ["cannot differentiate operator 'tensor:reshape'", "no operator that carries a tensor's gradient back into an array"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+expect_exit = 0
+expect_stdout_exact = "3.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
 [[tests]]
-name = "slice_grad_refuse_concat_array"
-desc = "concat's array part is continuous too: an array part that depends on the differentiated parameter is refused at the concat call (line 23), naming the operator, rather than being left out of the gradient. A constant array part is still skipped, not refused."
-kind = "negative"
-case = "../../../cases/modules/autodiff/refuse_concat_array.cml"
+name = "array_take_grad.macro.fvm"
+desc = "The same array row-take adjoints when std::macro builds the gradient ahead of time and the FastVM runs it: the row scatter is placed in the compiled gradient graph, not only in a graph built at run time."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/array_take_grad.cml"
+args = ["${case}", "std::macro", "${run_fvm}"]
+expect_exit = 0
+expect_stdout_exact = "[7.0, 0.0, 3.0, 0.0, 0.0]\n[0.0, 3.0, 0.0, 0.0, 2.0]\narray_take_grad repeated_d=0.0 pair_d=0.0 nested_d=0.0 nonzero=136.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "array_take_grad.runtime.nvm"
+desc = "A row take of an array gathers whole rows, so its adjoint is the upstream gradient of those rows added back into the rows the indices named: the row scatter tangent/scatter_take_arr. Checked against adjoints written out by hand for a repeated index (xs[[0,2,0]] with weights 2,3,5 gives [7,0,3,0,0]), a plain pair ([0,3,0,0,2]) and a take of a take ([7,0,4,0,0]); the printed raw gradients are pinned too. `nonzero` is the summed squared distance to the zero array — 136.0 from the tree — so a rule that returned zeros prints 0.0 and fails. (grad built at run time)"
+kind = "behavior"
+case = "../../../cases/modules/autodiff/array_take_grad.cml"
 args = ["${case}", "${run_nvm}"]
-expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::RuntimeError"
-expect_diagnostic_line = 23
-expect_output_contains = ["cannot differentiate operator 'tensor:concat'", "carries a tensor's gradient back into an array"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+expect_exit = 0
+expect_stdout_exact = "[7.0, 0.0, 3.0, 0.0, 0.0]\n[0.0, 3.0, 0.0, 0.0, 2.0]\narray_take_grad repeated_d=0.0 pair_d=0.0 nested_d=0.0 nonzero=136.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "adjoint_reshape_array.runtime.nvm"
+desc = "A float array is continuous (design principles 9.9) and a reshape moves no element, so the adjoint of `reshape(a, shape)` is the upstream gradient read back in the element order of `a` -- the tensor rule, since a numeric array is a tensor. The case asserts the gradient itself: `g.w` is 5.0 against the hand adjoint of the trap, `gw` is printed element by element against [2.0, 3.0, 5.0, 7.0], the weights that reach each element of w (a different number for each, so a misplaced or reordered gradient fails), `gw_d` is the squared distance to it (0.0), and `trap` is 12.0 * g.w = 60.0, which is 0.0 for a gradient that left the array out of the reshape. This case replaced `slice_grad_refuse_reshape_array`, which expected the refusal. (grad built at run time)"
+kind = "behavior"
+case = "../../../cases/modules/autodiff/adjoint_reshape_array.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_exact = "adjoint_reshape_array grad=5.0 trap=60.0 gw=[2.0, 3.0, 5.0, 7.0] gw_d=0.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "adjoint_reshape_array.macro.fvm"
+desc = "The same reshape adjoint when std::macro builds the gradient ahead of time and the FastVM runs it: the reshape of the upstream gradient is placed in the compiled gradient graph, not only in a graph built at run time."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/adjoint_reshape_array.cml"
+args = ["${case}", "std::macro", "${run_fvm}"]
+expect_exit = 0
+expect_stdout_exact = "adjoint_reshape_array grad=5.0 trap=60.0 gw=[2.0, 3.0, 5.0, 7.0] gw_d=0.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "adjoint_concat_array.runtime.nvm"
+desc = "concat's array part is continuous too (design principles 9.9): the adjoint of an array part is the slice of the upstream gradient that covers it, which is what the tensor rule builds. The case asserts the gradient itself: `g.w` is 2.0 against the hand adjoint of the trap, `gw` is printed element by element against [3.0, 4.0] for an array part that sits after a constant part, `gw_d` is the squared distance to it (0.0), and `trap` is 12.0 * g.w = 24.0, which is 0.0 for a gradient that left the array out of the concat. This case replaced `slice_grad_refuse_concat_array`, which expected the refusal. (grad built at run time)"
+kind = "behavior"
+case = "../../../cases/modules/autodiff/adjoint_concat_array.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_exact = "adjoint_concat_array grad=2.0 trap=24.0 gw=[3.0, 4.0] gw_d=0.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "adjoint_concat_array.macro.fvm"
+desc = "The same concat adjoint when std::macro builds the gradient ahead of time and the FastVM runs it: the slice of the upstream gradient is placed in the compiled gradient graph, not only in a graph built at run time."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/adjoint_concat_array.cml"
+args = ["${case}", "std::macro", "${run_fvm}"]
+expect_exit = 0
+expect_stdout_exact = "adjoint_concat_array grad=2.0 trap=24.0 gw=[3.0, 4.0] gw_d=0.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
 [[tests]]
@@ -2788,29 +2954,47 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
 [[tests]]
-name = "refuse_new_array"
-desc = "`new` has an adjoint: a tensor argument passes its gradient through. An array argument's adjoint would put the tensor's gradient back in an array of the same shape, and no operator here carries a gradient from a tensor into an array, so an array that depends on the differentiated parameter is refused at the new call (line 17), naming the operator and the array's type, instead of dropping the array's gradient. A constant array is not refused: it starts no gradient flow, so the call is never visited."
-kind = "negative"
-case = "../../../cases/modules/autodiff/refuse_new_array.cml"
+name = "adjoint_new_array.runtime.nvm"
+desc = "`new(xs)` converts a numeric array into a tensor, and an array's tangent is the array of its elements' tangents (design principles 9.9), so the adjoint is the tensor's gradient read back in the array's order -- the identity, since `new` moves no element. The case asserts the gradient itself: `g` is printed element by element against [1.0, 1.0] for a sum, and `gw` against [2.0, 3.0, 4.0] for a weighted read of the tensor's elements. This case replaced `refuse_new_array`, which expected the refusal and the silent zero behind it. (grad built at run time)"
+kind = "behavior"
+case = "../../../cases/modules/autodiff/adjoint_new_array.cml"
 args = ["${case}", "${run_nvm}"]
-expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::RuntimeError"
-expect_diagnostic_line = 17
-expect_output_contains = ["cannot differentiate operator 'tensor:new'", "no operator that carries a tensor's gradient back into an array"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+expect_exit = 0
+expect_stdout_exact = "adjoint_new_array g=[1.0, 1.0] gw=[2.0, 3.0, 4.0]\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
 [[tests]]
-name = "refuse_cast_array"
-desc = "`cast` takes a numeric array as well as a tensor, and an array's tangent is the array of its elements' tangents (design principles 9.9): the gradient of the tensor it returns would have to go back into an array, which no operator here builds from a tensor's gradient. The rule used to drop it and the pass materialized the array's zero -- [0.0, 0.0, 0.0] for a loss whose gradient is [1, 1, 1], the silent zero this class of defect is about. It is refused by name at the cast call (line 18), like new, reshape and concat, naming the operator and the array's type. A constant array is not refused: it starts no gradient flow."
-kind = "negative"
-case = "../../../cases/modules/autodiff/refuse_cast_array.cml"
+name = "adjoint_new_array.macro.fvm"
+desc = "The same new adjoint when std::macro builds the gradient ahead of time and the FastVM runs it: the tensor's gradient is read back into the array in the compiled gradient graph, not only in a graph built at run time."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/adjoint_new_array.cml"
+args = ["${case}", "std::macro", "${run_fvm}"]
+expect_exit = 0
+expect_stdout_exact = "adjoint_new_array g=[1.0, 1.0] gw=[2.0, 3.0, 4.0]\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "adjoint_cast_array.runtime.nvm"
+desc = "`cast` accepts a numeric array as well as a tensor, and an array's tangent is the array of its elements' tangents (design principles 9.9), so the adjoint of `cast(xs, 'float32')` is the tensor's gradient cast back to the array's element type. The case asserts the gradient itself: `g` is printed element by element against [1.0, 1.0, 1.0] -- the array the rule used to drop and materialize as zeros -- and `gw` against [2.0, 3.0, 4.0]. This case replaced `refuse_cast_array`, which expected the refusal. (grad built at run time)"
+kind = "behavior"
+case = "../../../cases/modules/autodiff/adjoint_cast_array.cml"
 args = ["${case}", "${run_nvm}"]
-expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::RuntimeError"
-expect_diagnostic_line = 18
-expect_output_contains = ["cannot differentiate operator 'tensor:cast'", "numeric array of type 'float[]'", "would be dropped silently"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+expect_exit = 0
+expect_stdout_exact = "adjoint_cast_array g=[1.0, 1.0, 1.0] gw=[2.0, 3.0, 4.0]\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "adjoint_cast_array.macro.fvm"
+desc = "The same cast adjoint when std::macro builds the gradient ahead of time and the FastVM runs it: the cast back into the array's element type is placed in the compiled gradient graph, not only in a graph built at run time."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/adjoint_cast_array.cml"
+args = ["${case}", "std::macro", "${run_fvm}"]
+expect_exit = 0
+expect_stdout_exact = "adjoint_cast_array g=[1.0, 1.0, 1.0] gw=[2.0, 3.0, 4.0]\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
 [[tests]]
@@ -2836,17 +3020,53 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
 [[tests]]
-name = "concat_array_part.skipped_and_refused"
-desc = "`concat`'s array part, both halves in one program so the pair is visible. A constant array part is skipped: for concat([2.0, 3.0], w, 0) weighted by [1, 0, 2, 3] the gradient of w is [2, 3], printed as sum=5.0 sq=13.0 - the hand adjoint's own numbers, which the zero tensor would print as 0.0 twice and a shifted gradient would change. An array part that depends on the differentiated parameter is refused at the concat call (line 28), naming the operator, after the first gradient has been printed."
+name = "refuse_container_reshape"
+desc = "A container that is not a numeric array has no adjoint. `reshape(xs, [4])` with `xs: float[][]` is flattened by the forward rule, which is why the call itself runs; the backward rule is not: `tensor:reshape` of the upstream gradient answers with a tensor, which is a flat numeric array, while the value the gradient has to return to holds its elements in another shape (`f32[][]` holds arrays). Nothing here carries a tensor's gradient back into such a container, so a container that depends on a differentiated parameter is refused by name, with its type, at the reshape call (line 26) instead of being dropped. A numeric array is a tensor and is not refused: `adjoint_reshape_array` asserts the adjoint this same rule builds for one. The refusal is also what keeps the container out of the kernels, which read it as a tensor: without it this program was killed by a signal (no output, no diagnostic) rather than faulting. (grad built at run time)"
 kind = "negative"
-case = "../../../cases/modules/autodiff/concat_array_part.cml"
+case = "../../../cases/modules/autodiff/refuse_container_reshape.cml"
 args = ["${case}", "${run_nvm}"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::RuntimeError"
-expect_diagnostic_line = 28
-expect_stdout_contains = ["concat_array_part sum=5.0 sq=13.0"]
-expect_output_contains = ["cannot differentiate operator 'tensor:concat'", "carries a tensor's gradient back into an array"]
+expect_diagnostic_line = 26
+expect_output_contains = ["cannot differentiate operator 'tensor:reshape'", "no operator carries a tensor's gradient back into one", "type 'float[][]'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "refuse_container_new"
+desc = "`new(xs)` with `xs: float[][]` converts the container to a tensor by flattening it, and the container has no adjoint: the gradient would have to return as an array of arrays, which no operator of this module builds from a tensor's gradient. The call is refused by name, with the container's type, at the new call (line 21); `refuse_container_reshape` is the same refusal for `reshape`. A numeric array is a tensor and is not refused (`adjoint_new_array` asserts its adjoint), and a constant container is converted by the forward rule and never visited here. Without the refusal this program faulted in the kernels, which read the container as a tensor: \"Expected Tensor argument\", with no place in the source to point at. (grad built at run time)"
+kind = "negative"
+case = "../../../cases/modules/autodiff/refuse_container_new.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::RuntimeError"
+expect_diagnostic_line = 21
+expect_output_contains = ["cannot differentiate operator 'tensor:new'", "no operator carries a tensor's gradient back into one", "type 'float[][]'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "refuse_container_concat"
+desc = "`concat` accepts a container that is not a numeric array where it accepts a tensor, and the part has no adjoint: its gradient is a slice of the output gradient, a tensor, while the value the gradient has to return to holds its elements in another shape. Both parts here have rank 2 (`xs: float[][]` and the tensor `[1, 2]`, which is what concat requires of them), so the forward call runs and only the backward rule has no operator for the container: it is refused by name, with the container's type, at the concat call (line 27). A numeric array part is not refused (`adjoint_concat_array` and `concat_array_part` assert its adjoint), and a constant container part is skipped while its length still places the other part's slice. Without the refusal this program was killed by a signal -- no output, no diagnostic -- because the rule asked `tensor:dim` for an extent of a value that holds arrays. (grad built at run time)"
+kind = "negative"
+case = "../../../cases/modules/autodiff/refuse_container_concat.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::RuntimeError"
+expect_diagnostic_line = 27
+expect_output_contains = ["cannot differentiate operator 'tensor:concat'", "no operator carries a tensor's gradient back into one", "type 'float[][]'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "concat_array_part.skipped_and_active"
+desc = "`concat`'s array part, both halves in one program so the pair is visible. A constant array part is skipped: for concat([2.0, 3.0], w, 0) weighted by [1, 0, 2, 3] the gradient of w is [2, 3], printed as sum=5.0 sq=13.0 -- the hand adjoint's own numbers, which the zero tensor would print as 0.0 twice and a shifted gradient would change. An array part that depends on the differentiated parameter takes the gradient of the slice of the output it covers: for concat(xs, [10.0, 20.0], 0) summed, xs's adjoint is [1.0, 1.0], printed element by element, with grad_d its squared distance to that adjoint (0.0) and value the forward sum (33.0). The second half used to be refused at the concat call; it is asserted here since the refusal went."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/concat_array_part.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_exact = "concat_array_part sum=5.0 sq=13.0\nconcat_array_part array_grad=[1.0,1.0] grad_d=0.0 value=33.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
 [[tests]]
@@ -2974,7 +3194,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "f64_broadcast_grad"
-desc = "An f64 gradient through a broadcast: sum(x * p0) with x a Tensor<f64, [2, 3]> and p0 a Tensor<f64, [3]> multiplies by broadcasting p0 over the rows, and tensor:sum_to is the reduction of that broadcast, so this is where an f64 gradient was refused with \"'the gradient kernels' does not support a value of type 'Tensor<f64>'\". Both gradients are printed and both distances are 0.0 against the values written out by hand from the forward expression (d/dx is the row broadcast of p0, d/dp0 the column sum [5, 7, 9]). The wide pair sums 2^24 + 1 in the third column: 16777217.0 in f64 and 16777216.0 if the value is accumulated in f32, so its printed third coordinate and its distance (0.0 against 1.0) say which accumulator the arm uses."
+desc = "An f64 gradient through a broadcast: sum(x * p0) with x a Tensor<f64, [2, 3]> and p0 a Tensor<f64, [3]> multiplies by broadcasting p0 over the rows, and tensor:sum_to is the reduction of that broadcast, so this is where an f64 gradient was refused with \"'the gradient kernels' does not support a value of type 'Tensor<f64>'\". Both gradients are printed in the array form and both distances are 0.0 against the values written out by hand from the forward expression (d/dx is the row broadcast of p0, d/dp0 the column sum [5, 7, 9]). The wide pair sums 2^24 + 1 in the third column: 16777217.0 in f64 and 16777216.0 if the value is accumulated in f32, so its printed third coordinate and its distance (0.0 against 1.0) say which accumulator the arm uses."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/f64_broadcast_grad.cml"
 args = ["${case}", "${run_nvm}"]
@@ -2984,10 +3204,9 @@ verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.stdout
 assert(text.includes('f64_broadcast_grad value=22.25 a_x=0.0 a_p0=0.0 wa=0.0'), `unexpected distances: ${text}`)
-assert(text.includes('gx tensor([[        0.5,        0.25,       2.],'), `the x gradient is not the row broadcast of p0: ${text}`)
-assert(text.includes('[        0.5,        0.25,       2.]], dtype=float64)'), `the x gradient is not f64: ${text}`)
-assert(text.includes('gp tensor([      5.,       7.,       9.], dtype=float64)'), `the p0 gradient is not the column sum of x: ${text}`)
-assert(text.includes('wp tensor([ 16777217.,       2.,  16777217.], dtype=float64)'), `the wide sum did not accumulate in f64: ${text}`)
+assert(text.includes('gx [[0.5, 0.25, 2.0], [0.5, 0.25, 2.0]]'), `the x gradient is not the row broadcast of p0: ${text}`)
+assert(text.includes('gp [5.0, 7.0, 9.0]'), `the p0 gradient is not the column sum of x: ${text}`)
+assert(text.includes('wp [16777217.0, 2.0, 16777217.0]'), `the wide sum did not accumulate in f64: ${text}`)
 }
 """
 timeout_ms = 10000

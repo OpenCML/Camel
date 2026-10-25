@@ -43,7 +43,7 @@ timeout_ms = 120000
 
 [[tests]]
 name = "frontend.fuzz_lossless_tree"
-# Slow layer: measured 9.7 s in the full serial run (handover note ⟨617198c⟩ (H10)).
+# Slow layer: measured 9.7 s in the full serial run.
 tier = "slow"
 desc = "3000 mutated programs (tokens deleted, duplicated, swapped, inserted, files cut and spliced, white space changed): the parser returns for each a tree whose leaves are exactly the tokens of the text, and the AST builder accepts every tree without errors."
 kind = "behavior"

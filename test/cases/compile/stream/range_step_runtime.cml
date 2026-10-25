@@ -1,7 +1,7 @@
 // The step of a stepped range is not always a constant: when it is not, the step is the run's and
 // a step of 0 is the fault the array form raises there (RuntimeDiag::InvalidArgument), because the
-// refusal of a constant step cannot see it (design principles 4.2; the author's ruling of
-// 2026-10-24 on `h426-interval-step-form`). A step that is not 0 is the sequence it names.
+// refusal of a constant step cannot see it (design principles 4.2; the rule of
+//  2026-10-24 on ` -interval-step-form`). A step that is not 0 is the sequence it names.
 module h426_range_step_runtime
 
 func counted(k: int): int[] { return range(0, 10, k) }

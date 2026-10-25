@@ -1,0 +1,62 @@
+/**
+ * The adjoint of `reshape` on a numeric array (design principles 9.9). A reshape moves no
+ * element, so the adjoint of `reshape(a, shape)` is the upstream gradient read back in the
+ * element order of `a`. The tensor rule does exactly that (`shape` of the input, then `reshape`
+ * of the gradient), and a numeric array is a tensor, so nothing array-specific had to be built.
+ * Until the flip this program was refused by name at the reshape call; the commit that removed
+ * the refusal rewrote its case, which now asserts the gradient the rule builds.
+ *
+ * Hand adjoints, written out from the forward expressions:
+ *   a = [m.w * 2.0, m.w * 3.0], t = reshape(a, [2]), loss = sum(t):
+ *       d loss / d m.w = 2.0 + 3.0 = 5.0
+ *   weighted(w) = sum(reshape(w, [2, 2]) * reshape([2, 3, 5, 7], [2, 2])):
+ *       d / d w = [2.0, 3.0, 5.0, 7.0]   (the weight that reaches each element of w; the
+ *                                         reshape itself contributes nothing but the order)
+ * The gradient printed with `{}` is compared with that adjoint element by element, and `gw_d`
+ * is its squared distance as a number, so a wrong gradient fails as one. `trap` is 12.0 * g.w:
+ * 60.0 for the adjoint above and 0.0 for a gradient that left the array out of the reshape,
+ * which is the defect this case is about.
+ */
+module adjoint_reshape_array
+
+import { reshape, sum } from tensor
+import { grad } from autodiff
+
+type Model = { w: float }
+
+with <m: Model>
+func loss(): float {
+    let a = [m.w * 2.0, m.w * 3.0]
+    let t = reshape(a, [2])
+    return sum(t)
+}
+
+with <w: float[]>
+func weighted_reshape(): float {
+    let s = reshape(w, [2, 2])
+    let c = reshape([2.0, 3.0, 5.0, 7.0] as f64[], [2, 2])
+    return sum(s * c)
+}
+
+// The squared distance from a four-element gradient to the adjoint written out by hand: the
+// language has no array arithmetic that could hide a mistake in it.
+func distance(g: float[], e0: float, e1: float, e2: float, e3: float): float {
+    let d0 = g[0] - e0
+    let d1 = g[1] - e1
+    let d2 = g[2] - e2
+    let d3 = g[3] - e3
+    return d0 * d0 + d1 * d1 + d2 * d2 + d3 * d3
+}
+
+func main(): int sync {
+    let model = { w: 2.0 }
+    let g     = grad(loss)<model>()
+    let w     = [1.0, 2.0, 3.0, 4.0]
+    let gw    = grad(weighted_reshape)<w>()
+    'adjoint_reshape_array grad={:.1f} trap={:.1f} gw={} gw_d={:.1f}'->format<
+        g.w,
+        12.0 * g.w,
+        gw,
+        distance(gw, 2.0, 3.0, 5.0, 7.0)>->println
+    return 0
+}

@@ -1,5 +1,5 @@
 /**
- * H20-2 manual probe: take rows (array and int-tensor indices, repeated rows), one_hot, and the
+ *  2 manual probe: take rows (array and int-tensor indices, repeated rows), one_hot, and the
  * two softmax cross-entropy forms agreeing in value and gradient. The differentiated value is
  * the first `with` parameter.
  */
@@ -9,7 +9,7 @@ import { Tensor, reshape, range, take, one_hot, shape, sum, abs, cast } from ten
 import { softmax_cross_entropy, softmax_cross_entropy_grad } from nn
 import { grad } from autodiff
 
-with <w: Tensor>
+with <w: f32[..]>
 func row_sum(): float {
     return sum(take(w, [0, 0, 1]))
 }

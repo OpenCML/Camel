@@ -1,13 +1,13 @@
 /**
  * A struct comprehension keeps the field names and the declaration order of the type it walks,
- * but each field's type is the type of that round's value (H79 ruling 2): `F` is `int` for `a`
+ * but each field's type is the type of that round's value (rule 2): `F` is `int` for `a`
  * and `float` for `b`, the values are `(F, float)`, and the result is
  * `{a: (int, float), b: (float, float)}` with `a` before `b`.
  */
 module comprehension_field_order
 
 func pairEach(t: {a: int, b: float}): {a: (int, float), b: (float, float)} {
-    return { static for (n, F) in fields {a: int, b: float} => (t.[n], 0.5) }
+    return { static for n, F in fields {a: int, b: float} => (t.[n], 0.5) }
 }
 
 /** Declaration order is part of an anonymous struct type: `a` first, `b` second. */

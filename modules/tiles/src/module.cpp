@@ -26,7 +26,7 @@
 #include "modules/tensor/type.h"
 #include "tiles/device.h"
 #include "tiles/internal/capability.h"
-#include "tiles/internal/compiled_region.h"
+#include "tiles/internal/compiled_scope.h"
 #include "tiles/internal/graph_values.h"
 #include "tiles/internal/placement.h"
 #include "tiles/internal/profile_hooks.h"
@@ -38,6 +38,7 @@
 #include <mutex>
 #include <optional>
 #include <unordered_map>
+#include <utility>
 
 namespace camel::tiles {
 namespace {
@@ -46,7 +47,14 @@ using namespace core::context;
 using namespace core::module;
 namespace td = core::rtdata;
 
-template <class F> slot_t checked(F &&body) {
+// What a kernel asks the device for, so a miss can name the operator the user called and the
+// graph it was given. `unit` is that graph, when the ask was about one.
+struct Ask {
+    const char *oper;
+    std::string unit;
+};
+
+template <class F> slot_t checked(Ask ask, F &&body) {
     try {
         return body();
     } catch (const DeviceUnavailable &e) {
@@ -56,11 +64,32 @@ template <class F> slot_t checked(F &&body) {
             core::error::RuntimeDiag::DeviceUnavailable,
             std::to_string(e.ordinal()),
             e.what());
+    } catch (const UnsupportedComputation &e) {
+        // A capability miss is a dispatch decision, not a fault (tiles/internal/capability.h):
+        // the back end has no program for this graph, and whether a shape or the operator itself
+        // is missing is what the miss says. `RuntimeError` would tell the user the runtime broke.
+        // No `#gpu` scope is claimed here: the graph may be one no tag covers, or one segment of
+        // a scope the pass has cut. The diagnostic a scope's own promise gets at compile time is
+        // `GpuScopeNoDeviceProgram`.
+        core::error::throwRuntimeFault(
+            core::error::RuntimeDiag::GraphNoDeviceProgram,
+            ask.oper,
+            ask.unit.empty() ? std::string("this graph") : ask.unit,
+            e.what());
+    } catch (const BackendUnavailable &e) {
+        // Also a capability miss: this run has no device to serve the operator with. `--devices
+        // cpu` says so on purpose, and a run the driver refuses says why. `DeviceUnavailable` is
+        // the other shape of this: there the run named a device that must exist.
+        core::error::throwRuntimeFault(
+            core::error::RuntimeDiag::DeviceNotSelected, ask.oper, e.what());
     } catch (const std::exception &e) {
         core::error::throwRuntimeFault(
             core::error::RuntimeDiag::RuntimeError,
             std::string("tiles: ") + e.what());
     }
+}
+template <class F> slot_t checked(F &&body) {
+    return checked(Ask{"tiles", std::string{}}, std::forward<F>(body));
 }
 
 /// The startup check of `--devices` (GPU plan 5.3): every ordinal the run named must be one this
@@ -116,30 +145,99 @@ Program prepare(ArgsView &with, ArgsView &norm, Context &ctx, bool staticRegion 
     return prepareProgram(fn, args, ctx.facts(), staticRegion);
 }
 
+// A scope a pass has cut is a wrapper graph: its statements are the exec calls of
+// `regionSegments`, each carrying the graph of one segment. The wrapper is not a program of its
+// own (an operator with context arguments has no plan), so a report operator asked about such a
+// graph reports the segments: one plan each, which is the unit `tiles::compile` made.
+std::string jsonString(const std::string &text) {
+    std::string out = "\"";
+    for (const char c : text) {
+        if (c == '"' || c == '\\')
+            out += '\\';
+        out += c;
+    }
+    return out + '"';
+}
+std::string segmentEntry(const RegionSegment &segment, const std::string &field, Context &ctx) {
+    // The plan of a type-only template: `Deferred` reading, because the values its inputs take
+    // are the ones the call that runs the segment binds, and a report made before that call has
+    // none. Everything else is the plan the outline generated for the segment.
+    return "{\"call\":" + std::to_string(segment.call) + ",\"graph\":" +
+           jsonString(segment.graph->graph()->name()) + ",\"" + field + "\":" +
+           inspect(compileTypes(segment.graph, ctx.facts()), InputBindings::Deferred) + "}";
+}
+// What a segment report does not have: the values of the segment's inputs, which the call that
+// runs it binds while the scope runs. Saying it keeps the reading from being taken for a run.
+constexpr const char *unboundInputs =
+    "\"inputs\":\"unbound: the call that runs a segment binds its inputs\"";
+std::string segmentPlanReport(const std::vector<RegionSegment> &segments, Context &ctx) {
+    std::string text = std::string("{\"schema\":1,") + unboundInputs + ",\"segments\":[";
+    for (size_t i = 0; i < segments.size(); ++i)
+        text += (i ? "," : "") + segmentEntry(segments[i], "plan", ctx);
+    return text + "]}";
+}
+std::string segmentSourceReport(const std::vector<RegionSegment> &segments, Context &ctx) {
+    std::string text;
+    for (size_t i = 0; i < segments.size(); ++i) {
+        const auto program = compileTypes(segments[i].graph, ctx.facts());
+        text += "// segment " + std::to_string(i) + ": " + segments[i].graph->graph()->name() +
+                " (call " + std::to_string(segments[i].call) +
+                "), inputs unbound: the call that runs it binds them\n" + program.source + "\n";
+    }
+    return text;
+}
+std::string segmentBenchmarkReport(const std::vector<RegionSegment> &segments, Context &ctx) {
+    // What a segment can be timed on is its plan: the values its inputs take are bound by the
+    // call that runs it, while the scope runs, and a report made before that call has none. The
+    // samples of a plan with no inputs would measure values nothing wrote, so they are not taken.
+    std::string text = std::string("{\"schema\":1,") + unboundInputs +
+                       ",\"timing\":\"not measured: the call that runs a segment binds its "
+                       "inputs, and this report has none\",\"segments\":[";
+    for (size_t i = 0; i < segments.size(); ++i)
+        text += (i ? "," : "") + segmentEntry(segments[i], "plan", ctx);
+    return text + "]}";
+}
 slot_t regionsKernel(ArgsView &with, ArgsView &, Context &ctx) {
-    return checked([&] {
+    auto *fn = with.get<::Function *>(0);
+    return checked(Ask{"tiles:regions", std::string(fn->graph()->name())}, [&] {
         core::mm::NoCollectionScope noCollection;
         auto text = inspectRegions(
-            *with.get<::Function *>(0)->program(),
-            *with.get<::Function *>(0)->graph(),
-            ctx.facts());
+            *fn->program(), *fn->graph(), ctx.facts(), regionSegments(*fn->graph()));
         return td::toSlot(::String::from(text, core::mm::autoSpace()));
     });
 }
 
 slot_t sourceKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
-    return checked([&] {
+    auto *fn = with.get<::Function *>(0);
+    return checked(Ask{"tiles:source", std::string(fn->graph()->name())}, [&] {
+        core::mm::NoCollectionScope noCollection;
+        const auto segments = regionSegments(*fn->graph());
+        if (!segments.empty())
+            return td::toSlot(
+                ::String::from(segmentSourceReport(segments, ctx), core::mm::autoSpace()));
         auto program = prepare(with, norm, ctx);
         return td::toSlot(::String::from(program.source, core::mm::autoSpace()));
     });
 }
 slot_t inspectKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
-    return checked([&] {
+    auto *fn = with.get<::Function *>(0);
+    return checked(Ask{"tiles:inspect", std::string(fn->graph()->name())}, [&] {
+        core::mm::NoCollectionScope noCollection;
+        const auto segments = regionSegments(*fn->graph());
+        if (!segments.empty())
+            return td::toSlot(
+                ::String::from(segmentPlanReport(segments, ctx), core::mm::autoSpace()));
         return td::toSlot(::String::from(inspect(prepare(with, norm, ctx)), core::mm::autoSpace()));
     });
 }
 slot_t benchmarkKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
-    return checked([&] {
+    auto *fn = with.get<::Function *>(0);
+    return checked(Ask{"tiles:benchmark", std::string(fn->graph()->name())}, [&] {
+        core::mm::NoCollectionScope noCollection;
+        const auto segments = regionSegments(*fn->graph());
+        if (!segments.empty())
+            return td::toSlot(
+                ::String::from(segmentBenchmarkReport(segments, ctx), core::mm::autoSpace()));
         return td::toSlot(
             ::String::from(
                 benchmark(std::make_shared<const Program>(prepare(with, norm, ctx))),
@@ -191,7 +289,8 @@ slot_t runPrepared(ArgsView &with, std::shared_ptr<const Program> program) {
     return rebuild(rebuild, static_cast<FunctionType *>(with.type(0))->exitType());
 }
 slot_t runCompiledKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
-    return checked([&] {
+    auto *fn = with.get<::Function *>(0);
+    return checked(Ask{"tiles:run_compiled", std::string(fn->graph()->name())}, [&] {
         return runPrepared(with, std::make_shared<const Program>(prepare(with, norm, ctx, true)));
     });
 }
@@ -235,7 +334,8 @@ slot_t runResidentPrepared(ArgsView &with, std::shared_ptr<const Program> progra
 }
 slot_t runCompiledDeviceKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     std::shared_ptr<const Program> program;
-    checked([&] {
+    auto *fn = with.get<::Function *>(0);
+    checked(Ask{"tiles:run_compiled_device", std::string(fn->graph()->name())}, [&] {
         program = std::make_shared<const Program>(prepare(with, norm, ctx, true));
         return slot_t{};
     });
@@ -431,7 +531,8 @@ slot_t runPreferredResidentKernel(ArgsView &with, ArgsView &norm, Context &ctx) 
         }
     });
     if (device) {
-        checked([&] {
+        auto *segment = with.get<::Function *>(0);
+        checked(Ask{"tiles:run_preferred_resident", std::string(segment->graph()->name())}, [&] {
             try {
                 program = std::make_shared<Program>(prepare(with, norm, ctx, true));
             } catch (const UnsupportedComputation &) {
@@ -453,8 +554,8 @@ slot_t runPreferredResidentKernel(ArgsView &with, ArgsView &norm, Context &ctx) 
     if (!program) {
         // A `#gpu` graph is a device unit (GPU design 2.3): a run that cannot make its device
         // program must report it, not replay the graph on the host (GPU design 6.1). Outside a
-        // `#gpu` scope the host path stays for now; it is scheduled for deletion with the
-        // preference path itself.
+        // `#gpu` scope the host is this operator's own contract — the device when it can serve
+        // the graph, the host otherwise — and stays.
         auto *fn = with.get<::Function *>(0);
         if (device && bodyPlacementOf(*fn->graph()).placement == Placement::GpuRequired) {
             // A refusal with no operator names the class the compiler could not build, which is
@@ -665,7 +766,13 @@ class TilesModule final : public BuiltinModule {
              "tiles:retain_preferred",
              "tiles:run_preferred_resident",
              "tiles:download"});
-        exportType(Reference("Device"), DeviceType::get(tensor::TensorType::Default()));
+        // The exported `Device` is the name a program applies its own host type to
+        // (`Device<f32[3]>`), so the host type of the object the name is bound to is never a
+        // value's type: it is one tensor, and the spelling's argument replaces it.
+        exportType(
+            Reference("Device"),
+            DeviceType::get(camel::core::type::ArrayType::openRank(
+                camel::core::type::Type::create(camel::core::type::TypeCode::Float32))));
         // `#gpu` is a standard tag of the core (design principles 13.4); `tiles::compile` reads
         // it and refuses a scope the device cannot run (GPU design 6.1).
         // `available` and `device` are declared in stdlib/tiles.cml (handover H156): their
@@ -771,7 +878,7 @@ class TilesModule final : public BuiltinModule {
                 name,
                 {.pure = false, .callsGraphs = true, .readsGraphs = true});
         // What each touches (docs/design/op-semantics 8, 14.4): device memory is a foreign
-        // resource `tiles:device` (upload makes one; the compiled-region runners read the device
+        // resource `tiles:device` (upload makes one; the compiled-scope runners read the device
         // values among their inputs, the resident ones return new ones that may be inputs
         // again); the driver and the device are ambient state `tiles:driver`. Every operator is
         // an effect outside the program, as its traits say.

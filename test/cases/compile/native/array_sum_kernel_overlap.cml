@@ -1,6 +1,6 @@
 /**
  * The spelling the array reductions must not be written in, refused where the second declaration is
- * written (design principles 4.3, 4.4, 5.1; the language author's ruling of 2026-10-24 on the
+ * written (design principles 4.3, 4.4, 5.1; the rule on the
  * declaration arms, `docs/handover/reviews/questions-2026-10-23.md`): two same-named body-less
  * declarations whose `when` conditions are not mutually exclusive.
  *
@@ -10,19 +10,19 @@
  * the report names the type both conditions hold for and both declarations. The array module's own
  * declarations avoid it by naming an element type (`is_elem_i32::<T>()`, stdlib/array.cml), one
  * declaration per element type, which is what its executors take: a declaration conditioned on a
- * family would cover several executors at once, which is the run-time switch the ruling deletes.
+ * family would cover several executors at once, which is the run-time switch the rule deletes.
  */
 module array_sum_kernel_overlap
 
 import { is_integer, is_numeric } from types
 
-#op<':op/add_i'>
+#op(':op/add_i')
 func sum_kernel::<T>(xs: T[]): T when is_integer::<T>()
 
-#op<':op/add_l'>
+#op(':op/add_l')
 func sum_kernel::<T>(xs: T[]): T when is_numeric::<T>()
 
-#impl<sum_kernel>
+#impl(sum_kernel)
 func total::<T>(xs: T[]): T {
     return xs->reduce<(a, b) => a + b, 0>
 }

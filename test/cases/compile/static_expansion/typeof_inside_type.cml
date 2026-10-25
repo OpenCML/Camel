@@ -2,6 +2,6 @@
 module typeof_inside_type
 
 func main(): int sync {
-    static for (j, C) in fields typeof(1)[] => println(j)
+    static for j, C in fields typeof(1)[] => println(j)
     return 0
 }

@@ -230,6 +230,23 @@ inline bool collectConversionGaps(
         gaps.push_back({path, have, want});
         return true;
     }
+    if (want->code() == TypeCode::Array && have->code() == TypeCode::Array) {
+        // A tensor is an array (P4), so the conversion that refines one is an array's and not a
+        // module type's: the relation lives in ArrayType::castSafetyFrom, which is Unsafe exactly
+        // when the source leaves open what the target fixes (an unknown rank, extent or element
+        // type) and the program writes `as` to have it checked when the conversion runs
+        // (design principles 5.4: an array whose shape is unknown entering a position that
+        // declares one is converted explicitly; camel/core/type/composite/array.cpp). The gap is
+        // the whole value: one `as` reaches it, whatever is left open inside it. Without this
+        // branch a call like `f(t)` with `t: Tensor` and `b: Tensor<[3]>` was refused as
+        // "no matching function" with the overload list, which says less than the conversion to
+        // write (ruling 2026-10-24 evening, h450 item 2).
+        if (want->castSafetyFrom(have) != CastSafety::Unsafe) {
+            return false;
+        }
+        gaps.push_back({path, have, want});
+        return true;
+    }
     if (want->code() == TypeCode::Tuple && have->code() == TypeCode::Tuple) {
         auto *w = tt::as_ptr<TupleType>(want);
         auto *h = tt::as_ptr<TupleType>(have);
@@ -430,12 +447,41 @@ inline bool hasDirectDataDependency(node_handle_t lhs, node_handle_t rhs) {
 inline bool shouldAddSyncCtrlLink(node_handle_t from, node_handle_t to) {
     // Only the exact, local skip: the predecessor is already a direct data input of the target,
     // so the edge would say nothing new. This is not a count of control users and cannot be one.
-    // Whether a value is shared -- whether `:var/take` copies -- is answered at run time by the
-    // cell's own `holdsUnsharedArray` mark (`:op/assn_owned` sets it, `:var/get` and `:op/assn`
-    // clear it, `:var/peek` leaves it), and a control edge carries order, not a use (design
-    // principles 3.3, 3.4). The transitive reduction over such edges lives in `std::opt::order`;
-    // handover H95 measured that adding or removing one changes no copy.
+    // Whether a value is shared -- whether the storage of the value a variable holds may be
+    // reused by an update -- is decided by the execution plan from the graph itself: a read that
+    // keeps the value ends the proof (`:var/get`), a read that cannot (`:var/peek`) leaves it
+    // standing, and a control edge carries order, not a use (design principles 3.3, 3.4). The
+    // transitive reduction over such edges lives in `std::opt::order`; measured that adding or
+    // removing one changes no decision.
     return linkCheek(from, to) && !hasDirectDataDependency(from, to);
+}
+
+/// Whether `value` already reads what `producer` produced: the producer is a direct data input of
+/// the value, so the value is computed after it and a sync edge from the producer to the value
+/// would say nothing new. This is the one question the two ways of writing a body's value ask --
+/// the tail `return v` and a body whose last statement is `v` -- so that the two build one graph
+/// (docs/design/effects/edges.cn.md 5.3). Only the forward direction is asked: a value the producer
+/// *consumed* was computed before it, and an edge there would be a cycle.
+inline bool valueReadsThrough(node_handle_t value, node_handle_t producer) {
+    if (value == nullptr || producer == nullptr || nodeGraphOf(value) != nodeGraphOf(producer)) {
+        return false;
+    }
+    const draft_node_ref_t id = nodeIdOf(producer);
+    return std::ranges::find(normInputsOf(value), id) != normInputsOf(value).end() ||
+           std::ranges::find(withInputsOf(value), id) != withInputsOf(value).end();
+}
+
+/// Whether the statement a sync chain ends with has to reach the value the graph hands on by a sync
+/// edge: only when the value does not already read it. A value that came out of that statement (the
+/// `v` of `v = 2; v`) is ordered after it by its own data edge, so it takes no edge and no GATE
+/// (the language author's ruling of 2026-10-24; docs/design/effects/edges.cn.md 5.3); every other value is
+/// reached from that statement by a sync edge, carried by a GATE whose data port reads the value --
+/// when the value *is* that statement the GATE is what keeps the edge, and the chain it ends, able
+/// to reach the graph's exit at all. The tail `return v`, a body whose last statement is `v` and a
+/// block whose value is taken all ask this, so one value is reached by the same edges however it is
+/// written.
+inline bool valueNeedsSyncEdge(node_handle_t value, node_handle_t chainEnd) {
+    return chainEnd != nullptr && !valueReadsThrough(value, chainEnd);
 }
 
 /// A statement one `sync` block writes directly: the edge that joins it to the statement written
@@ -743,7 +789,7 @@ inline std::vector<std::string> formatPlaceholders(std::string_view pattern) {
 // ---- Whether two same-named declarations of one signature are told apart by their conditions ----
 
 /// How the applicability conditions of two same-named declarations relate (design principles
-/// 4.4; the language author's ruling of 2026-10-24 on `impl-declaration-arms`,
+///  4.4; the rule on `impl-declaration-arms`,
 /// `docs/handover/reviews/questions-2026-10-23.md`): "同名声明按 `when` 互斥分臂就是重载"
 /// -- declarations split by mutually exclusive conditions ARE overloads, so a same-named set of
 /// them may stand side by side, one family of types each.
@@ -757,7 +803,7 @@ enum class ConditionSeparation {
     Overlapping,
     /// A condition could not be answered for a registered type, or one of the two declarations
     /// writes no condition at all: nothing is known about the pair, and it is refused exactly as
-    /// it was before this check (the ruling: "求不出 ... 按今天的规则拒绝").
+    /// it was before this check ("求不出... 按今天的规则拒绝").
     NotComputable,
 };
 
@@ -766,7 +812,7 @@ enum class ConditionSeparation {
 /// `c128`, `bool`, `string`, `void`) -- and one sample of each shape a composite value has, so
 /// that a condition that tells shapes apart (`is_function::<T>()`) is asked about those too. A
 /// type a program declares (a struct, an enum, a module's own type) is not among them: the
-/// ruling's check is per registered type, and a pair whose conditions overlap only on such a type
+/// rule's check is per registered type, and a pair whose conditions overlap only on such a type
 /// is not caught here.
 ///
 /// `int` comes first: a pair whose conditions do not depend on the type at all (two ordinary
@@ -821,11 +867,11 @@ using WhenConditionAsker =
     std::function<WhenResult(const camel::core::type::type_bindings_t &bindings)>;
 
 /// Whether the conditions `left` and `right` exclude each other over `registeredWhenTypes()`
-/// (design principles 4.4, 5.1; the ruling of 2026-10-24 quoted above). `overlappingType` is set
+/// (design principles 4.4, 5.1). `overlappingType` is set
 /// to the type that satisfies both when the answer is `Overlapping`.
 ///
 /// The conditions are asked about every registered type, with the type bound to the type
-/// variables each one writes: a type both conditions hold for is the overlap the ruling reports.
+/// variables each one writes: a type both conditions hold for is the overlap the check is about.
 /// An answer that is neither true nor false (`a predicate with a part that has no compile-time
 /// value`, a name the declaration does not make visible, ...) is not an answer, so the pair is
 /// refused by the caller as it was before.

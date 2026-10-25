@@ -1,5 +1,5 @@
 /**
- * Names in every case are resolved, selected or not (H51 step 1 limitation): the `tuple`
+ * Names in every case are resolved, selected or not (step 1 limitation): the `tuple`
  * case is not selected when the function is instantiated with an `int`, but `nope` is still
  * reported.
  */

@@ -12,6 +12,7 @@
 #include "builder_support.h"
 
 #include "camel/compile/gir/static_function.h"
+#include "camel/core/data/composite/struct.h"
 #include "camel/core/numeric_convert.h"
 #include "camel/core/operator_names.h"
 #include "camel/core/rtdata/string.h"
@@ -163,7 +164,7 @@ node_handle_t Builder::visitDataNode(const GCT::node_ptr_t &gct) {
                 // an `int` and an `int?`; design principles 3.8, 5.1). An element that is not of
                 // it enters it, or is reported: an `int` value is not a `float`. A literal whose
                 // element type the position names is built with it already (`let xs: float[] =
-                // [n, m]`), so a nested literal never reads the type of an outer position (H24).
+                // [n, m]`), so a nested literal never reads the type of an outer position.
                 Type *targetElem = nullptr;
                 if (dataType->resolved()) {
                     Type *elemType = tt::as_ptr<ArrayType>(dataType)->elemType();
@@ -357,7 +358,7 @@ node_handle_t Builder::visitNRefNode(const GCT::node_ptr_t &gct) {
         LEAVE("NREF");
         return node;
     }
-    // `var x = e` binds x to a new variable holding the value of e; `let x = e` binds it to
+    // `var` x = e` binds x to a new variable holding the value of e; `let x = e` binds it to
     // that value.
     node_handle_t bound = isVar ? newVariable(node) : node;
     if (isVar) {
@@ -431,7 +432,7 @@ void Builder::recordWrite(node_handle_t variable, node_handle_t exit, bool throu
         uses.clear();
     }
     // A store is one of the cell's known users (collapseNonEscapingVariableReads): a user the builder
-    // did not record -- a :var/take, a call handed the `var` -- makes the cell escape.
+    // did not record -- a:var/take, a call handed the `var` -- makes the cell escape.
     knownCellUsers_.insert(exit);
     setModifier(variable, exit);
     if (!throughCallee) {
@@ -454,7 +455,7 @@ void Builder::orderAfterLastWriter(node_handle_t variable, node_handle_t node) {
     // from before it. The two uses of this helper are one link today, and telling them apart
     // needs that data edge. The read is a data edge from the nearest write and writes are
     // ordered by order edges -- docs/handover/reviews/questions-2026-10-23.md,
-    // "h242a-capture-order-edge".
+    // " -capture-order-edge".
     if (auto modifier = modifierOf(variable); modifier.has_value()) {
         if (sameGraph(*modifier, currGraph_) && shouldAddSyncCtrlLink(*modifier, node)) {
             linkNodes(LinkType::Ctrl, *modifier, node);
@@ -463,6 +464,24 @@ void Builder::orderAfterLastWriter(node_handle_t variable, node_handle_t node) {
 }
 
 std::any Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
+    std::any resolved = resolveDRefNode(gct);
+    // The name of a rule's binding function is not a function value: the rule is not a `Rule`
+    // until its `with` parameters are bound, and the name is what binds them (design principles
+    // 5.5). So a use of it as a value is the call `name()`, whatever it was written beside: the
+    // angled values of `name<value>` are taken here too (`boundWithArgs_`). Where the name is the
+    // callee of a call or of a binding, the visit is left alone: the call is made there, with the
+    // arguments it has.
+    if (ruleBindingCallee_ || resolved.type() != typeid(node_handle_t)) {
+        return resolved;
+    }
+    node_handle_t node = any_cast<node_handle_t>(resolved);
+    if (isRuleBindingTarget(node)) {
+        return ruleBindingValueOf(node, gct);
+    }
+    return resolved;
+}
+
+std::any Builder::resolveDRefNode(const GCT::node_ptr_t &gct) {
     if (const auto oper = tree_->operRefOf(gct); oper.has_value()) {
         // A DREF the compiler made for an operator it knows by id: the group is the built-in
         // module's, which registered it; no name of the program takes part.
@@ -669,10 +688,10 @@ std::any Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
     }
     if (module_ != nullptr) {
         // A body-less declaration of this module: the name stands for the operator group the
-        // declaration made, which is no graph (handover H19, step 1). A name the C++ module it
+        // declaration made, which is no graph (step 1). A name the C++ module it
         // declares brings (its constants among them) is this module's own too, and is looked up
         // here, before what an import brings under the same name (design principles 10.1;
-        // handover H94, ruling 1: the `.cml` and the `.cmo` are one module).
+        // rule 1: the `.cml` and the `.cmo` are one module).
         for (const std::string &candidate : {name, written}) {
             auto native = ownNativeEntity(Reference(candidate));
             if (!native.has_value()) {
@@ -894,7 +913,7 @@ bool Builder::valueNameExists(const std::string &written, const GCT::node_ptr_t 
     }
     if (module_ != nullptr) {
         // A body-less declaration of this module: a name the module itself declared for a
-        // native operator (handover H19, step 1). `visitDRefNode` looks it up here, before what
+        // native operator (step 1). `visitDRefNode` looks it up here, before what
         // an import brings under the same name; a name in a `case` that is not selected must
         // see the same names, or the case would resolve differently once it is selected.
         for (const std::string &candidate : {name, written}) {
@@ -1154,7 +1173,18 @@ node_handle_t Builder::readVariable(node_handle_t variable) {
 
 node_handle_t Builder::readVariableThrough(
     node_handle_t variable, camel::core::OperId oper) {
-    node_handle_t value = variableOperator(oper, variable);
+    // The version of the variable the last write made: that write's own value. A write never
+    // gives anything but the cell it wrote into, so the read may take its data port from the
+    // write. A writer whose value is not that cell -- a call the variable was passed to, a loop
+    // that wrote it -- only orders the read: the read keeps the cell as its data port, and the
+    // writer is a Ctrl edge. Before any write the version is the cell :var/new made.
+    node_handle_t version = variable;
+    if (auto modifier = modifierOf(variable);
+        modifier.has_value() && sameGraph(*modifier, currGraph_) &&
+        valueTypeOf(nodeTypeOf(*modifier)) != nodeTypeOf(*modifier)) {
+        version = *modifier;
+    }
+    node_handle_t value = variableOperator(oper, version);
     pendingUsesOf(variable).push_back({value, true});
     if (auto modifier = modifierOf(variable); modifier.has_value()) {
         if (sameGraph(*modifier, currGraph_) && linkCheek(*modifier, value)) {
@@ -1165,12 +1195,7 @@ node_handle_t Builder::readVariableThrough(
     // made it instead of from the cell, so the writer it belongs to is recorded here, while the
     // builder still knows it. The read node counts as one of the cell's known users.
     if (sameGraph(variable, currGraph_)) {
-        node_handle_t source = variable;
-        if (auto modifier = modifierOf(variable);
-            modifier.has_value() && sameGraph(*modifier, currGraph_)) {
-            source = *modifier;
-        }
-        variableReadSource_[value] = VariableRead{source, variable};
+        variableReadSource_[value] = VariableRead{version, variable};
         knownCellUsers_.insert(value);
     }
     // In a sync block a read happens where it is written, like a call.
@@ -1243,8 +1268,27 @@ void Builder::collapseNonEscapingVariableReads() {
             if (draft.header(readId) == nullptr) {
                 continue;
             }
-            const camel::runtime::gc_node_ref_t version =
-                source == cell ? (cellInputs.empty() ? cellId : cellInputs[0]) : nodeIdOf(source);
+            // A write gives the cell of this version; what a read wants is the value written, and
+            // a write holds it as its second operand. A writer that is not one of those -- the JOIN
+            // a branch's writes meet at, say -- gives a cell and no value of its own, so that read
+            // keeps its cell: the writer it takes its version from is still the one the design
+            // names, and reading it is what the design says a read does.
+            camel::runtime::gc_node_ref_t version = readId;
+            if (source == cell) {
+                if (cellInputs.empty()) {
+                    continue;
+                }
+                version = cellInputs[0];
+            } else {
+                if (nodeKindOf(source) != camel::runtime::GCNodeKind::Oper) {
+                    continue;
+                }
+                const auto written = draft.normInputsOf(nodeIdOf(source));
+                if (written.size() < 2) {
+                    continue;
+                }
+                version = written[1];
+            }
             if (version == cellId || draft.header(version) == nullptr) {
                 continue;
             }
@@ -1277,8 +1321,12 @@ node_handle_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
     genericCalleeAllowed_ =
         std::exchange(genericCalleeAllowed_, false) &&
         (gct->at(0)->type() == GCT::NodeKind::DREF || gct->at(0)->type() == GCT::NodeKind::TAPP);
-    any targetNodeRes     = visit(gct->at(0));
-    genericCalleeAllowed_ = false;
+    // The callee of a binding is a name: `name<value>` binds the parameters of `name`
+    // (visitDRefNode), it does not make the rule value that early.
+    const bool outerRuleBindingCallee = std::exchange(ruleBindingCallee_, true);
+    any targetNodeRes                 = visit(gct->at(0));
+    ruleBindingCallee_                = outerRuleBindingCallee;
+    genericCalleeAllowed_             = false;
     // As in visitLinkNode: a lambda written in place gives its graph.
     node_handle_t targetNode = valueNodeOf(targetNodeRes);
     // Whether the value bound here is the callee of the call being built (`withArgsOfCall_`).
@@ -1336,6 +1384,22 @@ node_handle_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
         }
         return written;
     };
+    const auto refuseNonConstant = [&](size_t slot, const Argument &argument) {
+        if (argumentSignature == nullptr || slot >= argumentSignature->withTypesCount() ||
+            !argumentSignature->withNeedsValueAt(slot)) {
+            return;
+        }
+        if (argument.node != nullptr && constantOfNode(argument.node) != nullptr) {
+            return;
+        }
+        const GCT::node_ptr_t &expr = argument.expr;
+        diags_->of(SemanticDiag::FactArgumentNotConstant)
+            .atOrigin(expr != nullptr && expr->origin() != 0 ? expr->origin() : gct->origin())
+            .commit(
+                std::string(argumentSignature->argNameAt(slot)),
+                argumentSignature->withTypeAt(slot)->toString());
+        throw BuildAbortException();
+    };
     for (size_t i = 1; i < gct->size(); i++) {
         const size_t slot = slotOf(i - 1);
         Type *wanted      = argumentSignature && slot < argumentSignature->withTypesCount()
@@ -1371,6 +1435,7 @@ node_handle_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
                 continue;
             }
             inputs.push_back({visitOperand(gct->at(i), gct), gct->at(i), name});
+            refuseNonConstant(slot, inputs.back());
             continue;
         }
         any res              = visit(gct->at(i));
@@ -1387,9 +1452,19 @@ node_handle_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
     boundWithCallee_.try_emplace(targetNode, gct->at(0));
     // The `f<w>` expression the binding was made by: a partial application is located there,
     // at the callee and the angled arguments together (design principles 5.1), not at the
-    // statement it is written in (H9 1.6). Its span is derived where the binding is used as a
+    // statement it is written in (1.6). Its span is derived where the binding is used as a
     // value (partialApplicationOf), so an ordinary `f<w>(x)` allocates nothing extra.
     boundWithOrigin_.try_emplace(targetNode, gct);
+    if (!ruleBindingCallee_ && isRuleBindingTarget(targetNode)) {
+        // `name<value>` where the name is the function a rule with `with` parameters is written
+        // as: the values bind the rule's parameters and the value is the `Rule` (design
+        // principles 5.5). What `f<w>` makes of a function -- a function value that has the
+        // parameters left -- is not what a rule's name stands for, so this is a call and not a
+        // partial application.
+        node_handle_t value = ruleBindingValueOf(targetNode, gct);
+        LEAVE("WITH");
+        return value;
+    }
     LEAVE("WITH");
     return targetNode;
 }
@@ -1476,6 +1551,28 @@ node_handle_t Builder::visitAccsNode(const GCT::node_ptr_t &gct) {
         ASSERT(false, "Unexpected target type in ACCS node.");
     }
 
+    // A member read of a compile-time struct value is that field's value, known here as well: the
+    // third name of `fields T` binds such a value (Builder::staticFieldTagsNode builds a field's
+    // tags as a compile-time struct), and `tags.width.w` has to be a compile-time constant -- it
+    // may be the key of a `t.[…]` or a type argument in turn. The read stays in the graph, because
+    // the printing pass spells it and recompiling has to give the same graph back; the value it
+    // reads is recorded where the compiler keeps one, as `std::opt` folds the same access. A field
+    // whose value has another type than the type declares keeps its read alone.
+    data_ptr_t readConstant = nullptr;
+    if (!gct->accessByIndex() && tgtType->code() == TypeCode::Struct) {
+        if (const data_ptr_t subject = constantOfNode(tgtNode);
+            subject != nullptr && subject->type() != nullptr &&
+            subject->type()->code() == TypeCode::Struct) {
+            if (const auto object = std::dynamic_pointer_cast<StructData>(subject);
+                object != nullptr && object->resolved()) {
+                if (const data_ptr_t field = object->get(gct->accessKey());
+                    field != nullptr && field->type() != nullptr && field->type() == elemType) {
+                    readConstant = field;
+                }
+            }
+        }
+    }
+
     node_handle_t accsNode{};
     if (gct->accessByIndex()) {
         accsNode = currGraph_->addAccsNode(elemType, static_cast<uint32_t>(gct->accessIndex()));
@@ -1484,6 +1581,9 @@ node_handle_t Builder::visitAccsNode(const GCT::node_ptr_t &gct) {
     }
     linkNodes(LinkType::Norm, tgtNode, accsNode);
     registerNodeOrigin(context_, accsNode, gct, "gir.accs");
+    if (readConstant != nullptr) {
+        rememberConstant(accsNode, readConstant);
+    }
     LEAVE("ACCS");
     return accsNode;
 }

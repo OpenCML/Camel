@@ -1,5 +1,5 @@
 /**
- * `fields` and `match type` are followed by a type position (H79 ruling 1): a `(` there is
+ * `fields` and `match type` are followed by a type position (rule 1): a `(` there is
  * always the start of a type, so `()` is the empty tuple type in both. No named alias such as
  * `type EmptyTuple = ()` is needed, and the empty tuple type prints and hashes exactly as the
  * one an alias would name.
@@ -21,13 +21,13 @@ func describeTuple(e: ()): string {
 
 /** A comprehension over the empty tuple type has no round: the result is the empty tuple. */
 func noElements(): () {
-    return ( static for (n, F) in fields () => 0 )
+    return ( static for n, F in fields () => 0 )
 }
 
 /** The statement form expands `fields ()` zero times. */
 func zeroFields(): int {
     var rounds = 0
-    static for (n, F) in fields () => {
+    static for n, F in fields () => {
         rounds = rounds + 1
     }
     return rounds

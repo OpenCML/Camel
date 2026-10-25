@@ -12,16 +12,16 @@ import { sgd, save_params } from nn
 import { export_model } from onnx
 import { get_env } from env
 
-type Mlp = { w1: Tensor, b1: Tensor, w2: Tensor, b2: Tensor }
+type Mlp = { w1: f32[..], b1: f32[..], w2: f32[..], b2: f32[..] }
 
 with <m: Mlp>
-func loss(x: Tensor): float {
+func loss(x: f32[..]): float {
     let h = relu(x @ m.w1 + m.b1)
     let y = h @ m.w2 + m.b2
     return sum(y * y) / float(shape(y)[0] * shape(y)[1])
 }
 
-func step(m: Mlp, x: Tensor): (float, Mlp) {
+func step(m: Mlp, x: f32[..]): (float, Mlp) {
     let vg = with_grad(loss)<m>(x)
     return (vg.0, sgd(m, vg.1, 0.01))
 }
@@ -33,7 +33,7 @@ func main(): int sync {
         w2: reshape([1.0, -1.0, 0.5] as f32[], [3, 1]),
         b2: reshape([0.2] as f32[], [1])
     }
-    let x = load_npy(get_env('X'))
+    let x = load_npy::<f32>(get_env('X'))
     let vg = step(m, x)
     'CAMEL loss={}'->format<vg.0>->println
     save_params(vg.1, get_env('DUMP'))

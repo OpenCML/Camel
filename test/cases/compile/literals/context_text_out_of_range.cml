@@ -1,5 +1,5 @@
 /**
- * Handover H15f: an integer text that is a number too large for int is out of range, which the
+ * Handover: an integer text that is a number too large for int is out of range, which the
  * message says, rather than text that is not a number.
  */
 module literal_context_text_out_of_range

@@ -1,6 +1,6 @@
 module shape_inference_plain_result_as
 import { Tensor, tanh, sum, ones } from tensor
-func g(x: Tensor<f32, [3]>): Tensor {
+func g(x: Tensor<f32, [3]>): Tensor<f32> {
     return tanh(x * 0.0) + 2.0
 }
 func h(a: Tensor<f32, [3]>): float {

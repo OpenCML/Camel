@@ -29,6 +29,7 @@
 #include "camel/core/rtdata/string.h"
 #include "camel/core/type.h"
 #include "camel/core/type/composite/array.h"
+#include "camel/profile/profile.h"
 #include "camel/utils/type.h"
 
 #include <algorithm>
@@ -64,7 +65,7 @@ template <typename T> bool numberLess(T a, T b) {
 // (keys: number[] | bool[] | string[]) => int[]: the positions of the keys in ascending order of
 // key. Equal keys keep their order (a stable sort), so sorting by one key and then by another
 // works. One executor per key element type: which one runs is fixed by the declaration the call
-// compiled through (`#op<'array:argsort_i'>` and its siblings, stdlib/array.cml), so nothing here
+// compiled through (`#op('array:argsort_i')` and its siblings, stdlib/array.cml), so nothing here
 // asks the array which element type it holds and an element type with no declaration is refused
 // where the call is written rather than here.
 
@@ -272,16 +273,20 @@ void mergeSortSlots(T *vals, size_t n, Compare comp, T *tmp) {
 //
 // The algorithm and the element type are template parameters, because both are fixed where the
 // executor is chosen: the declaration a call compiled through names its own element type
-// (`#op<'array:sort_i'>`, ...), and the algorithm is the name the call used. Nothing here reads
+// (`#op('array:sort_i')`, ...), and the algorithm is the name the call used. Nothing here reads
 // the element type code, so there is no run-time switch on it and no default arm that could
 // guess: an element type no declaration names never reaches an executor at all.
 template <SortAlgo Algo, typename T> Array *__doSortSlots__(Array *arr, const ArrayType *arrType, bool inPlace) {
     size_t n = arr->size();
     // The in-place form is only taken when the block is unshared and writable; a view or an
-    // imported (external) buffer means someone else sees the old order.
-    Array *target = (inPlace && arr->canWriteInPlace())
-                        ? arr
-                        : static_cast<Array *>(arr->clone(mm::autoSpace(), arrType));
+    // imported (external) buffer means someone else sees the old order. Where the memory plan
+    // could not prove the old value has no other observer, this is the answer of the array
+    // itself (docs/design/arrays-memory/README.cn.md 4.3.1).
+    const bool ownStorage = inPlace && arr->canWriteInPlace();
+    if (camel::profile::enabledInline() && inPlace) {
+        camel::profile::arrayCountAnswer(ownStorage);
+    }
+    Array *target = ownStorage ? arr : static_cast<Array *>(arr->clone(mm::autoSpace(), arrType));
     if (n <= 1) {
         return target;
     }
@@ -471,7 +476,7 @@ std::unordered_map<std::string, operator_t> getArrayOpsMap() {
     // names one of them with its `#op` tag and admits exactly that element type with its own
     // `when` (`Builder::declaredRuleApplies`), so the element type is known where the executor is
     // chosen and no executor asks an array what it holds. An element type no declaration admits
-    // has no executor and runs the Camel body (H228: one operator, per-type executors).
+    // has no executor and runs the Camel body (: one operator, per-type executors).
     for (const auto &[name, exec] :
          std::initializer_list<std::pair<const char *, operator_t>>{
              {"sum_i", __array_sum_i__},

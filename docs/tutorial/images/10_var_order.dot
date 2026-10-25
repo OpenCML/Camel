@@ -1,0 +1,48 @@
+digraph GraphIR {
+        subgraph cluster_F02 {
+            label="twice";
+            tooltip="() => int";
+            subgraph cluster_F03 {
+                label="bump";
+                tooltip="(var counter: int) => int";
+                F03 [label="ARGS", type="ARGS", style=dashed, shape=circle];
+                O03 [label="EXIT", type="EXIT", style=dashed, shape=circle];
+                N00 [label="counter", type="PORT", param_name="counter", param_kind="normal", param_index="0", value_type="var int", shape=circle, style=solid, tooltip="counter"];
+                N01 [label="1", type="DATA", shape=circle, style=solid, value_type="int", tooltip="1"];
+                N02 [label=":var\n/peek", type="OPER", shape=diamond, style=solid, value_type="int", tooltip=":var/peek"];
+                N03 [label=":op/\nadd_l", type="OPER", shape=diamond, style=solid, value_type="int", tooltip=":op/add_l"];
+                N04 [label=":op/a\nssn_l", type="OPER", shape=diamond, style=solid, value_type="var int", tooltip=":op/assn_l"];
+                N05 [label=":var\n/get", type="OPER", shape=diamond, style=solid, value_type="int", tooltip=":var/get"];
+                N06 [label="GATE", type="GATE", shape=diamond, style=dashed, value_type="int", tooltip="GATE"];
+                F03 -> N00 [label="0", type="NORM_PORT", style=solid];
+                N06 -> O03 [label="0", type="EXIT", style=solid];
+                N00 -> N02 [label="0|0", type="NORM"];
+                N02 -> N03 [label="0|0", type="NORM"];
+                N01 -> N03 [label="0|1", type="NORM"];
+                N00 -> N04 [label="1|0", type="NORM"];
+                N03 -> N04 [label="0|1", type="NORM"];
+                N04 -> N05 [label="0|0", type="NORM"];
+                N04 -> N05 [label="0|0", type="CTRL", style=dashed, arrowhead=empty];
+                N05 -> N06 [label="0|0", type="NORM"];
+                N05 -> N06 [label="0|0", type="CTRL", style=dashed, arrowhead=empty];
+            }
+            O02 [label="EXIT", type="EXIT", style=dashed, shape=circle];
+            N07 [label="0", type="DATA", shape=circle, style=solid, value_type="int", tooltip="0"];
+            N08 [label="COPY", type="COPY", shape=diamond, style=solid, value_type="int", tooltip="COPY"];
+            N09 [label=":var\n/new", type="OPER", shape=diamond, style=solid, value_type="var int", tooltip=":var/new"];
+            N0A [label="bump", type="FUNC", shape=Mdiamond, style=solid, width=1.1, height=1.1, value_type="int", tooltip="bump"];
+            N0B [label="bump", type="FUNC", shape=Mdiamond, style=solid, width=1.1, height=1.1, value_type="int", tooltip="bump"];
+            N0C [label=":var\n/get", type="OPER", shape=diamond, style=solid, value_type="int", tooltip=":var/get"];
+            N0D [label="GATE", type="GATE", shape=diamond, style=dashed, value_type="int", tooltip="GATE"];
+            N0D -> O02 [label="0", type="EXIT", style=solid];
+            N07 -> N08 [label="0|0", type="NORM"];
+            N08 -> N09 [label="0|0", type="NORM"];
+            N09 -> N0A [label="0|0", type="NORM"];
+            N09 -> N0B [label="1|0", type="NORM"];
+            N0A -> N0B [label="0|0", type="CTRL", style=dashed, arrowhead=empty];
+            N09 -> N0C [label="2|0", type="NORM"];
+            N0B -> N0C [label="0|0", type="CTRL", style=dashed, arrowhead=empty];
+            N0C -> N0D [label="0|0", type="NORM"];
+            N0C -> N0D [label="0|0", type="CTRL", style=dashed, arrowhead=empty];
+        }
+}

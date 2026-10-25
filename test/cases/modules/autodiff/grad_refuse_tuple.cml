@@ -1,0 +1,22 @@
+/**
+ * Refused: the first `with` parameter is a tuple, and one of its members has no gradient (9.9). The
+ * refusal names that member by its position -- "element 1", a `string` -- rather than saying only
+ * that the tuple has none, the way the struct case names its field (the author's ruling of
+ * 2026-10-25 on discrete-tuple-tangent-space-and-machinery-aggregates: "a tuple model with a
+ * `string` member is refused, and the diagnostic names that member, by position").
+ */
+module grad_refuse_tuple
+import { Tensor, reshape, sum } from tensor
+import { grad } from autodiff
+
+with <m: (f32[..], string)>
+func plain(): float {
+    let p = m.0
+    return sum(p)
+}
+
+func main(): int sync {
+    let x = reshape([1.0] as f32[], [1])
+    println(grad(plain)<(x, 'a')>())
+    return 0
+}

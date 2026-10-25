@@ -330,6 +330,49 @@ Array *slice(
     return out;
 }
 
+SubscriptSliceRange
+subscriptSliceRange(int64_t extent, int64_t start, int64_t end, int64_t step, int64_t written) {
+    const bool wroteEnd   = (written & 1) != 0;
+    const bool wroteStart = (written & 2) != 0;
+    SubscriptSliceRange range;
+    range.step = step;
+    if (step > 0) {
+        range.first = wroteStart ? start : 0;
+        const int64_t stop = wroteEnd ? end : extent;
+        range.stop  = stop;
+        range.inRange =
+            range.first >= 0 && range.first <= extent && stop >= 0 && stop <= extent;
+        range.count = range.first < stop ? (stop - range.first + step - 1) / step : 0;
+        return range;
+    }
+    range.first = wroteStart ? start : extent - 1;
+    const int64_t stop = wroteEnd ? end : -1;
+    range.stop = stop;
+    range.inRange = (!wroteStart || (range.first >= 0 && range.first < extent)) &&
+                    (!wroteEnd || (stop >= 0 && stop <= extent));
+    range.count = range.first > stop ? (range.first - stop + (-step) - 1) / (-step) : 0;
+    return range;
+}
+
+Array *subscriptSlice(
+    const Array *input, const SubscriptSliceRange &range, mm::IAllocator &allocator) {
+    if (input->rank() != 1) {
+        throw std::invalid_argument("a slice of a tensor of rank 1");
+    }
+    Shape outShape{range.count};
+    Array *out            = createTensor(input->dtype(), outShape, allocator, false);
+    const size_t itemSize = elementSize(input->dtype());
+    for (int64_t i = 0; i < range.count; ++i) {
+        const uint64_t srcIndex = static_cast<uint64_t>(range.first + i * range.step);
+        const uint64_t dstIndex = static_cast<uint64_t>(i);
+        std::memcpy(
+            out->rawData() + dstIndex * itemSize,
+            input->rawData() + srcIndex * itemSize,
+            itemSize);
+    }
+    return out;
+}
+
 Array *
 take(const Array *input, std::span<const int64_t> indices, mm::IAllocator &allocator) {
     if (input->rank() < 1) {
@@ -438,6 +481,83 @@ Array *takeGrad(
         default:
             throw std::invalid_argument("take_grad does not support this tensor dtype");
         }
+    }
+    return out;
+}
+
+Array *rowAddAt(
+    const Array *acc, int64_t index, const Array *row, mm::IAllocator &allocator) {
+    if (acc->rank() < 1) {
+        throw std::invalid_argument("row_add_at expects a tensor with at least one dimension");
+    }
+    if (row->rank() != acc->rank() - 1) {
+        throw ShapeError("row_add_at expects a row one dimension shorter than the tensor");
+    }
+    const int64_t extent = acc->dim(0);
+    if (index < 0 || index >= extent) {
+        throw std::out_of_range("row_add_at index out of range");
+    }
+    if (row->dtype() != acc->dtype()) {
+        refuseTensorElementType("row_add_at", row, {acc->dtype()});
+    }
+    const size_t rowBytes = acc->byteSize() / static_cast<size_t>(extent);
+    if (row->byteSize() != rowBytes) {
+        throw ShapeError("row_add_at expects a row of the tensor's own width");
+    }
+    // Like `take_grad`, the accumulation walks the tensor at its own element type and width: one
+    // row of the value's own dtype added where the index puts it, and the result has the tensor's
+    // own shape. What differs is only where the row goes -- a single index instead of a list of
+    // them -- and that the accumulator starts from `acc` rather than from zeros, so a loop's
+    // rounds accumulate into the same gradient.
+    Array *out = createTensor(acc->dtype(), acc->shapeSpan(), allocator, false);
+    std::memcpy(out->rawData(), acc->rawData(), acc->byteSize());
+    std::byte *dst      = out->rawData() + static_cast<size_t>(index) * rowBytes;
+    const std::byte *src = row->rawData();
+    const auto width     = static_cast<int64_t>(rowBytes / elementSize(acc->dtype()));
+    switch (acc->dtype()) {
+    case TypeCode::Float32: {
+        auto *to        = reinterpret_cast<float *>(dst);
+        const auto *from = reinterpret_cast<const float *>(src);
+        for (int64_t k = 0; k < width; ++k) {
+            to[k] += from[k];
+        }
+        break;
+    }
+    case TypeCode::Float64: {
+        auto *to        = reinterpret_cast<double *>(dst);
+        const auto *from = reinterpret_cast<const double *>(src);
+        for (int64_t k = 0; k < width; ++k) {
+            to[k] += from[k];
+        }
+        break;
+    }
+    case TypeCode::Int32: {
+        auto *to        = reinterpret_cast<int32_t *>(dst);
+        const auto *from = reinterpret_cast<const int32_t *>(src);
+        for (int64_t k = 0; k < width; ++k) {
+            to[k] = static_cast<int32_t>(to[k] + from[k]);
+        }
+        break;
+    }
+    case TypeCode::Int64: {
+        auto *to        = reinterpret_cast<int64_t *>(dst);
+        const auto *from = reinterpret_cast<const int64_t *>(src);
+        for (int64_t k = 0; k < width; ++k) {
+            to[k] += from[k];
+        }
+        break;
+    }
+    case TypeCode::Bool: {
+        // Boolean gradients are not meaningful; adding them keeps max/or semantics.
+        auto *to        = reinterpret_cast<uint8_t *>(dst);
+        const auto *from = reinterpret_cast<const uint8_t *>(src);
+        for (int64_t k = 0; k < width; ++k) {
+            to[k] = static_cast<uint8_t>(to[k] | from[k]);
+        }
+        break;
+    }
+    default:
+        throw std::invalid_argument("row_add_at does not support this tensor dtype");
     }
     return out;
 }

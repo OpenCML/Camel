@@ -103,7 +103,7 @@ reusable external verifier. Full field constraints and examples live in
 | Script | Description |
 |------|------|
 | `npm run test` | Main developer set: the **fast** layer of `smoke` and `feat/**`, in parallel |
-| `npm run test:all` | Full suite: every plan under `test/plans/`, fast and slow |
+| `npm run test:all` | Full suite: every plan under `test/plans/`, every layer but `debug` |
 | `npm run release-gate` | Release evidence: fast layer + the runnable slow plans by file + the static checks |
 | `npm run precommit:staged` | Format/update only files already staged for the current commit |
 
@@ -111,7 +111,10 @@ reusable external verifier. Full field constraints and examples live in
 
 `npm run release-gate` (`scripts/release-gate.mjs`) owns the release evidence a release decision
 needs, because `npm run test` is only the fast layer: a directory target drops every `tier =
-"slow"` test, and `gpu/**` / `perf/**` are in no gate target at all.
+"slow"` and every `tier = "milestone"` test, and `gpu/**` / `perf/**` are in no gate target at all.
+The layers and the plans the policy holds back for a milestone live in `scripts/plan-inventory.mjs`,
+which this gate imports: a `milestone` plan file is selected by `--tier milestone` and by nothing
+this gate runs.
 
 It runs, in order:
 
@@ -126,17 +129,20 @@ It runs, in order:
    `check-std-includes`;
 
 then exits non-zero when any phase failed. It does not build: build once first, and it checks the
-install it finds (`CAMEL_HOME`, else `out/latest`) against that build's stamp — the rule that a
-run must not measure another tree's binary — refusing (exit 2) when the stamp is missing or does
-not match this tree's sources.
+install it measures against that build's stamp — the rule that a run must not measure another
+tree's binary — refusing (exit 2) when the stamp is missing or does not match this tree's sources.
+The install is chosen once, by `--camel <path>` or by this tree's `out/latest` when none is named,
+and the same `--camel` goes to every layer: the fast and slow plan layers set each test child's
+`CAMEL_HOME` to that install's root, and every static check that reads an install receives it too.
+An exported `CAMEL_HOME` does not choose the install — it is the install location's convention for
+the `camel` binary and for an SDK user — and a stamp travels inside the install it describes, so an
+install built by another tree is refused by that stamp whatever path it sits at.
 
 The two standard-library checkers among those static checks (`stdlib-reference.mjs --verify-ops`,
 `stdlib-declarations.mjs --check`) apply the same rule themselves, before they read a registry: an
 install that is not this tree's build is refused (exit 2, naming the install and its stamp) instead
 of being reported as differences between this tree's declarations and another install's operators.
-`--camel <path>` names the install such a run measures, passing the same check. The gate passes
-the install it found down to the two of them (`--camel <the install it verified>`), so one run
-cannot stamp-check one binary and read another.
+`--camel <path>` names the install such a run measures, passing the same check.
 
 It also never runs the plan files `agents/test.md` forbids on a shared host (GC stress
 and poison, progen, the PyTorch comparisons, the benchmarks): it prints them by name with the
@@ -145,7 +151,8 @@ reason on every run, and refuses with a message naming the policy when asked for
 of them. A skipped plan is unknown, not green. The debug layer (`--tier debug`) is out of scope
 for the same reason: it is never part of a Release gate.
 
-`--jobs N` (default 8), `--only fast|slow|static` (a PARTIAL run, for re-checking one layer),
+`--jobs N` (default 8), `--camel <path>` (the install every layer measures; this tree's
+`out/latest` without it), `--only fast|slow|static` (a PARTIAL run, for re-checking one layer),
 and `--dry-run` (print the commands and the skip list) are the only options.
 
 The staged pre-commit script delegates file selection to `scripts/format.js` and
@@ -168,10 +175,11 @@ node test/tools/run-tests.mjs --update-golden test/plans/feat/parse/core.plan.to
 ```
 
 `--jobs N` sets the number of tests run at once (default: the processor count). `--tier
-fast|slow|all` selects a layer; the default is `fast` for a directory target and the whole tree.
-A plan **file** named as the target runs in full whatever `--tier` says. `--changed` selects the
-plans the working tree touches relative to `origin/develop` (override with `CAMEL_TEST_BASE`):
-directory rules in `test/plan-selection.json` first, file rules second.
+fast|slow|all` selects a layer, orthogonal to the target; the default is `fast` for a directory
+target and for the whole plan tree, which is the `all` target (`all`, `--all` or `test/plans`)
+and not `.`. A plan **file** named as the target runs in full whatever `--tier` says.
+`--changed` selects the plans the working tree touches relative to `origin/develop` (override
+with `CAMEL_TEST_BASE`): directory rules in `test/plan-selection.json` first, file rules second.
 
 ## Target Shorthand Examples
 
@@ -186,7 +194,10 @@ npm run test -- linear.collections_and_structs
 Dot targets resolve against `test/plans/`: `feat.trans.macro` maps to
 `test/plans/feat/trans/macro.plan.toml`, while `feat.trans` maps to the whole
 `test/plans/feat/trans/` directory. Feature-suite names may omit the `feat.`
-prefix when unambiguous, so `trans.macro` resolves to the same macro plan.
+prefix when unambiguous, so `trans.macro` resolves to the same macro plan. A
+bare `.` is the same rule with nothing left after the leading dots are stripped,
+and the empty name resolves to `feat`: `.` is `test/plans/feat`, feat only, never
+`smoke`. The whole plan tree is the `all` target (`all`, `--all` or `test/plans`).
 
 ## Performance Helper Scripts
 

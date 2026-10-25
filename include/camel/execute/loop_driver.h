@@ -24,6 +24,7 @@
 #pragma once
 
 #include "camel/core/context/frame.h"
+#include "camel/core/error/runtime.h"
 #include "camel/core/mm.h"
 #include "camel/core/rtdata/array.h"
 #include "camel/core/type/composite/tuple.h"
@@ -32,8 +33,36 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <span>
 
 namespace camel::execute {
+
+/// The array a `for` iterates, held to the first dimension it needs: a sequence whose declared
+/// type is an array but whose value has no dimension is refused where the loop reads it
+/// (docs/technical/39_loops.md 2a; docs/language/en/06_expressions.md, "A rank-0 array has no first
+/// dimension and is not a sequence").
+///
+/// Two values have no dimension and both arrive here. A value with no dimension is the element
+/// itself, not an array (the rank-zero ruling, docs/handover/reviews/questions-2026-10-23.md), so
+/// the slot of an array-typed position may hold no array at all (`array == nullptr`). And the round
+/// an array of open rank hands over is the array of no dimension holding its element
+/// (loopRoundValue), which is an array object of rank 0 whose first extent is absent as well.
+/// Neither has a first dimension to take elements from, so neither is a sequence: both are refused
+/// rather than taken as a loop of no round at all. `origin` is the LOOP node's source position, so
+/// the fault is reported at the `for` that reads the sequence and not at the node the interpreter
+/// happened to be at (a fault raised between two nodes has no position of its own).
+inline void requireFirstDimension(::Array *array, uint64_t origin = 0) {
+    if (array != nullptr && array->rank() != 0) {
+        return;
+    }
+    throw camel::core::error::RuntimeFault(
+        camel::core::error::RuntimeDiag::RuntimeError,
+        {"a value with no dimension has no first dimension to iterate over"},
+        "",
+        nullptr,
+        camel::core::error::ExecutionSiteHint{
+            .cachedOrigin = static_cast<camel::source::origin_id_t>(origin)});
+}
 
 /// What a loop does, as the interpreters need it.
 struct LoopShape {
@@ -84,6 +113,67 @@ inline void bindLoopRound(
     for (size_t c = 0; c < captureCount; ++c) {
         frame->set(target->node(with[c])->dataIndex, captureAt(c));
     }
+}
+
+/**
+ * The value one round of a `for` hands over, in the form the round's declared type says: what a
+ * value is at run time follows the type it is declared with, and a round's port is declared with
+ * what the first dimension gives.
+ *
+ * `Array::firstDimensionElement` is that declaration (design principles 5.4): the element itself
+ * for a rank-1 array, the row one dimension fewer above it, and — a rank nobody fixed leaving one
+ * dimension fewer an open rank too — the same open-rank array when the rank is open
+ * (ArrayType::firstDimensionElement). The declaration cannot depend on the runtime rank, so the
+ * readings differ for exactly one shape, deliberately:
+ *
+ *  - a rank-1 array (`f32[]`) declares the element, `f32`: "one dimension fewer" reaches the
+ *    element while the program is compiled, and a scalar is not a rank-0 array (the rank-zero
+ *    ruling, docs/handover/reviews/questions-2026-10-23.md);
+ *  - an array whose rank is open (`f32[..]`, the spelling a tensor parameter uses) declares that
+ *    array, so `for v in x` declares `v: f32[..]`; a round of a value whose rank turns out to be 1
+ *    is the array of no dimension holding the element — the sub-tensor one dimension fewer,
+ *    sharing the element's data as a row does (Array::view).
+ *
+ * A value with no dimension stays an array for a reader whose declared type says an array, as it
+ * does for a result read by one (the tensor module's wrap), and a reader of an array-typed slot
+ * takes a pointer there (tensorArg); handing the element itself over would leave the slot holding
+ * the element's bits where its declared type promises a pointer.
+ *
+ * The rounds are the same on every back end, so this rule lives here with the rest of the round's
+ * rules, and every executor asks it (loop_frame.h's loopTest, driveLoopRounds).
+ */
+inline slot_t loopRoundValue(
+    ::Array *array, uint64_t round, const camel::core::type::Type *elementType) {
+    const slot_t element = array->firstDimensionElement(round);
+    // An array whose elements are arrays (`f32[][]`, `f32[][..]`): what the first dimension gives
+    // is the inner array, which is already the array the round's declared type says.
+    const camel::core::type::Type *elementOfElement = array->elemType();
+    const bool elementIsAnArray =
+        elementOfElement != nullptr &&
+        elementOfElement->code() == camel::core::type::TypeCode::Array;
+    if (elementType == nullptr || elementType->code() != camel::core::type::TypeCode::Array ||
+        array->rank() > 1 || elementIsAnArray) {
+        // The declared type is the element itself (a rank-1 array's `f32`, an interval's integer),
+        // the first dimension gave the row of a higher-rank array (already an array), or the
+        // element is an array: the value the first dimension gives is the round's value.
+        return element;
+    }
+    if (array->isCompact()) {
+        // The sub-tensor one dimension fewer of a rank-1 array holds the same element, so it
+        // shares the data as a row does (arrays are immutable values, and a view is how a reader
+        // of the type reads one).
+        return camel::core::rtdata::toSlot(Array::view(array, std::span<const int64_t>(), round));
+    }
+    // An array of references: the round is a copy of the one element, as a row of such an array is
+    // a copy of its run of slots.
+    const camel::core::type::ArrayType *boxType =
+        elementOfElement != nullptr
+            ? camel::core::type::ArrayType::create(
+                  const_cast<camel::core::type::Type *>(elementOfElement))
+            : static_cast<const camel::core::type::ArrayType *>(elementType);
+    ::Array *box = ::Array::create(camel::core::mm::autoSpace(), boxType, std::span<const int64_t>());
+    box->setSlot(0, element, static_cast<const camel::core::type::ArrayType *>(elementType));
+    return camel::core::rtdata::toSlot(box);
 }
 
 namespace detail {
@@ -175,6 +265,8 @@ inline void takeLoopRound(const LoopShape &shape, Host &host, slot_t result) {
  *                                             state read through loopStateComponent from
  *                                             stateValue()); returns the graph's result
  *   Array *iterable()                         the array a `for` iterates, read at each round
+ *   const type::Type *elementType()           the declared type of the round's element port (what
+ *                                             the round hand over must have, loopRoundValue)
  */
 template <typename Host> inline void driveLoopRounds(const LoopShape &shape, Host &host) {
     startLoopState(shape, host);
@@ -189,10 +281,13 @@ template <typename Host> inline void driveLoopRounds(const LoopShape &shape, Hos
             slot_t element = NullSlot;
             if (shape.iterates) {
                 ::Array *array = host.iterable();
+                requireFirstDimension(array, shape.origin);
                 if (round >= array->size()) {
                     break;
                 }
-                element = array->getSlot(round);
+                // The round's value, along the first dimension and in the form its declared type
+                // says (loopRoundValue).
+                element = loopRoundValue(array, round, host.elementType());
             }
             takeLoopRound(
                 shape,

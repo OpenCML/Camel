@@ -41,9 +41,9 @@ namespace mm = camel::core::mm;
 namespace k  = camel::tensor::kernels;
 using camel::core::aggregateElement;
 using camel::core::aggregateSize;
+using camel::core::gradientElementIndex;
+using camel::core::gradientTypeOf;
 using camel::core::isAggregate;
-using camel::core::tangentElementIndex;
-using camel::core::tangentTypeOf;
 using camel::core::context::Context;
 using camel::core::error::RuntimeDiag;
 using camel::core::error::throwRuntimeFault;
@@ -101,6 +101,10 @@ void setElement(Type *type, slot_t aggregate, size_t index, slot_t value) {
     }
 }
 
+/// A trainable leaf that is a tensor, in whichever spelling its type uses (`Tensor`, `Tensor<f32,
+/// [4, 4]>`, `f32[4, 4]`, `f32[]`): a numeric array is one tensor, not an array of its elements.
+bool isTensorLeaf(Type *type) { return camel::tensor::isTensorType(type); }
+
 /// Rebuilds one array of a trainable tree, element by element and with the length the primal
 /// value has. An array is walked like a record: its tangent is the array of its elements'
 /// tangents (design principles 9.9), so `blocks.0.wq` and `blocks.1.wq` are separate leaves.
@@ -109,7 +113,7 @@ void walk(Type *type, std::span<const slot_t> in, std::span<slot_t> out, const L
 void walkArray(
     Type *type, std::span<const slot_t> in, std::span<slot_t> out, const LeafUpdate &leaf) {
     auto *arrayType     = tt::as_ptr<camel::core::type::ArrayType>(type);
-    Type *const tangent = tangentTypeOf(type);
+    Type *const tangent = gradientTypeOf(type);
     if (tangent == nullptr) {
         throw std::invalid_argument("the optimizer was given an array without a tangent");
     }
@@ -137,6 +141,18 @@ void walkArray(
 /// Walks a primal tree of type `type` together with tangent-shaped trees, rebuilding all of
 /// them with `leaf` applied to every trainable leaf.
 void walk(Type *type, std::span<const slot_t> in, std::span<slot_t> out, const LeafUpdate &leaf) {
+    // A tensor is one trainable leaf whichever spelling its type uses, and the test comes first:
+    // `Tensor` and `f32[m, n]` are both numeric arrays (`isTensorLeaf`), and the transitional
+    // `Tensor` carries the code of a native array too, so asking by code alone took a model's
+    // tensor for an array of tensors and walked the elements of the leaf as if each were a leaf.
+    // The parameter then came back as a length-1-extent array with no element type at all -- a
+    // `[null, null]` value whose next `matmul`/`to_bytes` refused -- because `walkArray` builds its
+    // result with `Array::create(mm::autoSpace(), length)`, the slot-array convenience that states
+    // no element type (see `saveLeaves` below, which asks this question in this order).
+    if (isTensorLeaf(type)) {
+        leaf(type, in, out);
+        return;
+    }
     if (type->code() == TypeCode::Array) {
         walkArray(type, in, out, leaf);
         return;
@@ -145,7 +161,7 @@ void walk(Type *type, std::span<const slot_t> in, std::span<slot_t> out, const L
         leaf(type, in, out);
         return;
     }
-    Type *tangent = tangentTypeOf(type);
+    Type *tangent = gradientTypeOf(type);
     out[0]        = toSlot<camel::core::rtdata::Object *>(newAggregate(type));
     for (size_t t = 1; t < out.size(); ++t) {
         out[t] = toSlot<camel::core::rtdata::Object *>(newAggregate(tangent));
@@ -153,7 +169,7 @@ void walk(Type *type, std::span<const slot_t> in, std::span<slot_t> out, const L
     std::vector<slot_t> childIn(in.size()), childOut(out.size());
     for (size_t i = 0; i < aggregateSize(type); ++i) {
         Type *elemType      = aggregateElement(type, i);
-        const auto position = tangentElementIndex(type, i);
+        const auto position = gradientElementIndex(type, i);
         if (!position) {
             setElement(type, out[0], i, elementOf(type, in[0], i)); // not trainable: kept
             continue;
@@ -171,8 +187,6 @@ void walk(Type *type, std::span<const slot_t> in, std::span<slot_t> out, const L
 }
 
 // ---------------------------------------------------------------- leaves
-
-bool isTensorLeaf(Type *type) { return camel::tensor::isTensorType(type); }
 
 /// The element type of a tensor leaf: the one its value has. It is read, never converted: a leaf
 /// whose type states an element type and its value always agree (the slot refuses a value of
@@ -375,7 +389,7 @@ slot_t sgdKernel(ArgsView &, ArgsView &norm, Context &) {
 
 /// Adam's trees: first and second moments, shaped like the gradient of `params`.
 TupleType *momentsType(Type *params) {
-    Type *tangent = tangentTypeOf(params);
+    Type *tangent = gradientTypeOf(params);
     return TupleType::create(std::vector<Type *>{tangent, tangent});
 }
 
@@ -496,7 +510,7 @@ bool isNumber(Type *t) {
 /// Whether `grads` can be the gradient of `params`. Static facts (e.g. tensor shapes inferred for
 /// a literal model) are ignored: the gradient is typed by the declared parameter types.
 bool gradientOf(Type *params, Type *grads) {
-    Type *tangent = tangentTypeOf(params);
+    Type *tangent = gradientTypeOf(params);
     return tangent != nullptr && tangent->widened()->equals(grads->widened());
 }
 
@@ -509,7 +523,7 @@ class OptimizerResolver final : public camel::core::type::FuncTypeResolver {
         const type_vec_t &with, const type_vec_t &norm,
         const ModifierSet &modifiers) const override {
         (void)modifiers;
-        if (!with.empty() || norm.empty() || tangentTypeOf(norm[0]) == nullptr) {
+        if (!with.empty() || norm.empty() || gradientTypeOf(norm[0]) == nullptr) {
             return std::nullopt;
         }
         Type *params = norm[0];

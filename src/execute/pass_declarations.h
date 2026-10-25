@@ -1,7 +1,7 @@
 // Copyright (c) the OpenCML Organization
 // SPDX-License-Identifier: MIT
 
-// The declarations a module makes of its passes (design principles 9.3, H233). A pass is a
+// The declarations a module makes of its passes (design principles 9.3). A pass is a
 // body-less function of the module's `.cml` file; the pipeline resolves a pass by the module it
 // belongs to and the name of that function, and looks up the kernel registered under the same
 // path. The core's declarations are `stdlib/std.cml`; a module's are its own `stdlib/<module>.cml`

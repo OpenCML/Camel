@@ -1,7 +1,7 @@
 /**
  * The declarations of `str` are what an importer sees: a with-parameter (`split<sep>`) and a
  * fallible result (`from_codepoints`) are read from `stdlib/str.cml`, and the calls reach the
- * operators the C++ module runs (handover H19, step 10).
+ * operators the C++ module runs (step 10).
  */
 module str_declaration_import
 

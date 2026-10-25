@@ -1,0 +1,28 @@
+/**
+ * A rule whose condition prints: the effect is written in the function the condition calls, and
+ * the condition is otherwise an ordinary predicate over the constant the rule matched.
+ */
+module condition_println
+
+import { Program, current } from graph
+import { rewrite } from rewrite
+
+/// The guard of the law, with a print in it: the coefficient is positive.
+func reports(c: float): bool {
+    sync { println('checking ', c) }
+    return c > 0.0
+}
+
+rule keep_positive(x: float, const c: float) when reports(c) { x * c => x }
+
+func redex(x: float): float {
+    return x * 3.0
+}
+
+func main(): int sync {
+    let p = current()
+    return match rewrite(p, [keep_positive]) {
+        case error e => sync { println('outer error value: ', e.kind); return 1 }
+        case q => sync { println('rewritten'); return 0 }
+    }
+}

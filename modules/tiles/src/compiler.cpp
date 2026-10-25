@@ -25,7 +25,7 @@
 #include "tiles/device.h"
 #include "tiles/internal/access.h"
 #include "tiles/internal/capability.h"
-#include "tiles/internal/compiled_region.h"
+#include "tiles/internal/compiled_scope.h"
 #include "tiles/internal/kernel_ir.h"
 #include "tiles/program.h"
 #include <algorithm>
@@ -109,6 +109,25 @@ void checkAttributeFates(const rt::GCGraph &g, rt::gc_node_ref_t id) {
     }
 }
 
+// The graph's operand types are the ones this call passes when they are the same type, which is
+// not the same question as whether they are the same object: type equality is structural
+// (camel/core/type/text.cpp), and a composite type is one object only while all of its
+// components are interned (camel/core/type/intern.h), so a type can have several objects and
+// still be one type. Both readers of a graph's operand types decide here, and the instance and
+// the shape a graph fact holds depend on the types, never on which object each of them is.
+static bool sameOperandTypes(
+    const rt::GCGraph &graph, rt::gc_node_ref_t node, const std::vector<Value> &args) {
+    const auto inputs = graph.normInputsOf(node);
+    if (inputs.size() != args.size())
+        return false;
+    for (size_t i = 0; i < args.size(); ++i) {
+        const ty::Type *graphType = graph.node(inputs[i])->dataType();
+        if (!graphType || !graphType->equals(args[i].type))
+            return false;
+    }
+    return true;
+}
+
 class Compiler {
   public:
     Program program;
@@ -179,16 +198,13 @@ class Compiler {
             node.dtype      = resident->dtype;
             node.resident   = std::move(resident);
             // A rank-0 f32 resident value is the f32 scalar of design principles 7.3 — the bytes
-            // the tensor path already carries — so the host type is the scalar one, unless the
-            // program asked for a rank-0 tensor at this boundary and keeps that type.
-            const auto *declared = asDeviceType(type);
-            ty::Type *rank0      = tensor::isTensorType(declared->hostType())
-                                       ? declared->hostType()
-                                       : ty::Type::Float32();
-            ty::Type *exact = node.dtype == DType::F64 ? ty::Type::Float64()
-                              : node.shape.empty()     ? rank0
-                                                       : tensor::TensorType::get(
-                                                             ty::TypeCode::Float32, node.shape);
+            // the tensor path already carries — so the host type is the scalar one. The flip
+            // line's `tensor::ops::tensorOf` already answers the element type itself for an empty
+            // shape (the rank-zero ruling), and `TensorType` is gone, so this side is taken.
+            ty::Type *exact = node.dtype == DType::F64
+                                  ? ty::Type::Float64()
+                                  : tensor::ops::tensorOf(
+                                        ty::TypeCode::Float32, tensor::knownShape(node.shape));
             return {.type = exact, .tensor = append(std::move(node))};
         }
         if (type->code() == ty::TypeCode::Tuple || type->code() == ty::TypeCode::Struct) {
@@ -211,6 +227,15 @@ class Compiler {
             }
             return value;
         }
+        // An integer array a captured value holds is a constant the region reads as one (an
+        // extent list, a loop's iterable) before it is anything else: a tensor is a numeric
+        // array now, so the tensor case below would otherwise take it, and the constant path is
+        // what an array took when a tensor had a type code of its own.
+        if (type->code() == ty::TypeCode::Array) {
+            if (auto array = tensor::ops::constArgOf(slot, type)) {
+                return {.type = type, .constant = std::move(array), .staticSlot = slot};
+            }
+        }
         if (tensor::isTensorType(type)) {
             const auto *t = td::fromSlot<tensor::Array *>(slot);
             if (!t || t->dtype() != ty::TypeCode::Float32)
@@ -222,7 +247,8 @@ class Compiler {
             const size_t n = elements(node.shape);
             if (n)
                 node.data.assign(t->dataAs<float>(), t->dataAs<float>() + n);
-            auto *exact = tensor::TensorType::get(ty::TypeCode::Float32, node.shape);
+            auto *exact =
+                tensor::ops::tensorOf(ty::TypeCode::Float32, tensor::knownShape(node.shape));
             return {.type = exact, .tensor = append(std::move(node))};
         }
         auto constant = tensor::ops::constArgOf(slot, type);
@@ -331,7 +357,7 @@ class Compiler {
             if (facts.dtype != ty::TypeCode::Float32 || !facts.isStaticShape())
                 throw UnsupportedComputation(
                     "loop values require f64 scalars or static f32 tensors");
-            node.shape = *facts.shape;
+            node.shape = tensor::extentsOf(*facts.shape);
         }
         return {.type = type, .tensor = append(std::move(node))};
     }
@@ -642,19 +668,17 @@ class Compiler {
                 const auto semantic   = contract(oper);
                 auto indexed          = graphInstance(*g, id, args);
                 ty::Type *knownResult = nullptr;
-                const auto inputRefs  = g->normInputsOf(id);
-                bool sameTypes        = inputRefs.size() == args.size();
-                for (size_t i = 0; sameTypes && i < args.size(); ++i)
-                    sameTypes = g->node(inputRefs[i])->dataType() == args[i].type;
+                const bool sameTypes  = sameOperandTypes(*g, id, args);
                 if (sameTypes) {
                     const rt::fact::Anchor anchor{runtimeProgram, g, id};
                     const auto shape = facts.obtain<rt::fact::TensorShape>(
                         rt::fact::coreKinds().shape,
                         {&anchor, 1});
                     if (shape && shape->dtype == ty::TypeCode::Float32 && shape->dims &&
-                        std::all_of(shape->dims->begin(), shape->dims->end(), [](auto extent) {
-                            return extent >= 0;
-                        }))
+                        std::all_of(
+                            shape->dims->begin(),
+                            shape->dims->end(),
+                            [](const std::optional<int64_t> &extent) { return extent.has_value(); }))
                         knownResult = node->dataType();
                 }
                 out = operation(oper, args, indexed, knownResult);
@@ -698,10 +722,7 @@ class Compiler {
 
     std::optional<core::sem::IndexedInstance> graphInstance(
         const rt::GCGraph &graph, rt::gc_node_ref_t node, const std::vector<Value> &args) {
-        const auto inputs = graph.normInputsOf(node);
-        bool sameTypes    = inputs.size() == args.size();
-        for (size_t i = 0; sameTypes && i < args.size(); ++i)
-            sameTypes = graph.node(inputs[i])->dataType() == args[i].type;
+        const bool sameTypes = sameOperandTypes(graph, node, args);
         if (sameTypes) {
             const rt::fact::Anchor anchor{runtimeProgram, &graph, node};
             const auto fact =
@@ -868,7 +889,7 @@ class Compiler {
                 "operator '" + uri() + "' needs a statically known f32 tensor result",
                 uri(),
                 UnsupportedComputation::Reason::Shape);
-        Node n{.op = std::string(def->name), .shape = *result.shape};
+        Node n{.op = std::string(def->name), .shape = tensor::extentsOf(*result.shape)};
         if (n.op == "sum_to") {
             n.inputs = {tensorValue(args.at(0))};
             if (program.nodes[n.inputs[0]].shape == n.shape)
@@ -1065,7 +1086,7 @@ static Program compileInputs(
                         "type-only compilation requires static f32 tensor shapes",
                         {},
                         UnsupportedComputation::Reason::Shape);
-                input.shape = *facts.shape;
+                input.shape = tensor::extentsOf(*facts.shape);
             }
             const auto node = c.append(std::move(input));
             c.program.parameterInputs.push_back(node);

@@ -1,0 +1,21 @@
+/**
+ * The argument of a fact is part of which fact this is, so the compiler must be able to compute it
+ * where the query is written: `y` is a parameter of the rule, a value of the run, and there is no
+ * fact to key by it.
+ */
+module fact_arg_not_constant
+import { Program, Node } from graph
+import { max } from math
+import { rewrite } from rewrite
+
+with <cap: int = 5>
+fact capped(v: int): int match v {
+    case const c => c
+    case _       => 0
+} join max
+
+rule bad_arg(x: int, y: int) when capped<y>(x) == 0 { x * y => x }
+
+func main(): int sync {
+    return 0
+}

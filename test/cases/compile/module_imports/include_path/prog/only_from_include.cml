@@ -1,4 +1,4 @@
-/// H129 case 1: `only_here` is neither next to this program nor installed with Camel; the
+/// case 1: `only_here` is neither next to this program nor installed with Camel; the
 /// import resolves only through the `-I` root (`../roots/one`, relative to this directory).
 module include_only
 

@@ -20,7 +20,7 @@ const PLANS_ROOT = path.join(TEST_ROOT, 'plans')
 const VARS_PATH = path.join(TEST_ROOT, 'vars.toml')
 // The wrapper a `cpu_budget_ms` test runs under: it reaps exactly that test's process tree and
 // reports the CPU time the kernel charged it on file descriptor 3 (its header has the why; the
-// ruling it implements is quoted where the reading is judged, in runOneTest).
+// rule it implements is quoted where the reading is judged, in runOneTest).
 const CHILD_CPU_TOOL = path.join(TOOLS_ROOT, 'child-cpu.mjs')
 // Whether this host's kernel can report the CPU time of a process tree at all: the reading
 // test/tools/child-cpu.mjs makes is `cutime` + `cstime` of /proc/self/stat, which no other platform
@@ -208,6 +208,18 @@ function camelHome(build) {
     return path.join(REPO_ROOT, 'out', BUILDS[build].dir)
 }
 
+// The install a run measures: `--camel <path>` names it, else `out/<build>`. One install for the
+// whole run -- `${camel}`, what `preflightBuild` checks, and the root every test child reads as
+// `CAMEL_HOME` are all this -- and the environment never chooses it: `CAMEL_HOME` is the install
+// location's convention for the binary and the SDK, not a switch over what a run measures.
+function camelBinary(options) {
+    return options.camel || toolExecutable('camel', options.build)
+}
+
+function camelInstall(options) {
+    return path.dirname(path.dirname(camelBinary(options)))
+}
+
 function toolExecutable(tool, build) {
     const ext = IS_WINDOWS ? '.exe' : ''
     if (tool === 'node') return process.execPath
@@ -316,14 +328,14 @@ const DEBUG_BUILD_TIMEOUT_SCALE = 4
 
 // How much room a test must leave under its `timeout_ms` to count as a real bound: the run fails
 // when a passing test used more than a quarter of it **of its own CPU time**. The quantity is the
-// work's, not the host's, and deliberately so (H368): judged on the wall clock, this rule failed
+// work's, not the host's, and deliberately so: judged on the wall clock, this rule failed
 // the plan runner's own self-test at random on the shared host -- 1 of 12 runs at a 60 s bound,
 // and twice in two agents' gates -- while every run inside it was green,
 // because a passing test's wall clock on a busy host is the neighbours' scheduling. Four machines'
 // worth of headroom is what keeps a bound a bound. A test that needs more time states it in a
 // comment next to the number (docs/test-plans.md). A test that declares `cpu_budget_ms` is judged
 // on that budget instead and does not read the wall clock as a bound at all: its timeout is a
-// liveness bound (see the ruling quoted where the reading is judged), so this rule has nothing to
+// liveness bound (see the rule quoted where the reading is judged), so this rule has nothing to
 // say about it.
 const TIMEOUT_MARGIN = 4
 
@@ -394,6 +406,14 @@ function isSerial(plan, test) {
 function runProcess(command, args, { cwd, env, timeoutMs, marks, cpuReport = false }) {
     return new Promise((resolve) => {
         const started = performance.now()
+        // A test must not write into the tree it is testing. A Python harness that imports a module
+        // beside it (`test/cases/perf/reduce_layout.py` imports `step_budget.py`) leaves a
+        // `__pycache__` behind, and one left in a checkout makes the case ledger's answer depend on
+        // which test ran first -- the ledger reads the filesystem, so it sees a cache written this
+        // run. The interpreter is told not to write bytecode; a test that needs its own value sets
+        // `PYTHONDONTWRITEBYTECODE` in its `envs`, and that wins because those are already in `env`.
+        const childEnv = { ...(env || process.env) }
+        if (!('PYTHONDONTWRITEBYTECODE' in childEnv)) childEnv.PYTHONDONTWRITEBYTECODE = '1'
         let stdout = ''
         let stderr = ''
         let cpuReportText = ''
@@ -423,7 +443,7 @@ function runProcess(command, args, { cwd, env, timeoutMs, marks, cpuReport = fal
         try {
             child = spawn(command, args, {
                 cwd,
-                env,
+                env: childEnv,
                 stdio: cpuReport ? ['ignore', 'pipe', 'pipe', 'pipe'] : ['ignore', 'pipe', 'pipe'],
                 windowsHide: true,
                 // On POSIX a process group lets the timeout take the whole tree down; on Windows
@@ -510,9 +530,15 @@ const DEFAULT_JOBS = (() => {
     return Math.max(1, count || 1)
 })()
 
+// The layers are `fast`, `slow`, `milestone` and `all`: one name per destination, so "the slow
+// layer" is only ever the release gate's slow layer (the plans named in SLOW_PLANS, run in full)
+// and never the unsampled copies of a sweep. `milestone` is what only runs at a milestone: the
+// unsampled copies of a sweep and the plans the policy holds back (benchmarks, soaks, fuzzing,
+// PyTorch comparisons, progen). `all` is everything but `debug`.
+//
 // `debug` is not a layer of an ordinary run: it selects the plans that exercise views, data
 // blocks and the executor on a Debug build, where the view-escape assertion exists at all.
-const TIERS = new Set(['fast', 'slow', 'all', 'debug'])
+const TIERS = new Set(['fast', 'slow', 'milestone', 'all', 'debug'])
 
 function positiveInteger(value, what) {
     const parsed = Number(value)
@@ -534,6 +560,10 @@ function parseArgs(argv) {
         // Which build the tests run against. `release` is out/latest; `debug` is out/debug.
         build: envBuild || 'release',
         buildExplicit: envBuild !== undefined,
+        // The install this run measures, named by `--camel <path>`. With none the build above
+        // decides (`out/<build>`); with one, it is this binary, its root is every child's
+        // `CAMEL_HOME`, and `--build` only still selects the layer the run addresses.
+        camel: null,
         // `--jobs` defaults to the processor count: one test per core, no more. `--jobs 1` gives
         // exactly the historical serial execution, which is how the runner's own self-test
         // compares parallel output with serial output.
@@ -570,6 +600,13 @@ function parseArgs(argv) {
             if (!Object.hasOwn(BUILDS, build)) throw new Error(`--build must be one of ${Object.keys(BUILDS).join(', ')}, got '${build}'`)
             options.build = build
             options.buildExplicit = true
+        } else if (arg === '--camel') {
+            if (i + 1 >= argv.length) throw new Error('--camel needs the path of the install to measure')
+            options.camel = path.resolve(process.cwd(), argv[++i])
+        } else if (arg.startsWith('--camel=')) {
+            const install = arg.slice('--camel='.length)
+            if (install === '') throw new Error('--camel needs the path of the install to measure')
+            options.camel = path.resolve(process.cwd(), install)
         } else if (arg === '--jobs' && i + 1 < argv.length) {
             options.jobs = positiveInteger(argv[++i], '--jobs')
         } else if (arg.startsWith('--jobs=')) {
@@ -591,24 +628,30 @@ function parseArgs(argv) {
 }
 
 /**
- * Refuse to run the debug layer against anything but a Debug binary. out/debug is written by
- * `collect-out.js debug` (the Debug build), and its absence is the common mistake; a binary left
- * there by another configuration is caught by its own --version line, which names the build.
+ * Refuse to run when the install this run measures is not built. `--camel <path>` names it; with
+ * none it is `out/<build>`, written by `collect-out.js <build>`. The debug layer additionally
+ * refuses anything but a Debug binary: a binary left there by another configuration is caught by
+ * its own --version line, which names the build.
  */
-function preflightBuild(build) {
-    const exe = toolExecutable('camel', build)
+function preflightBuild(options) {
+    const build = options.build
+    const exe = camelBinary(options)
     if (!fs.existsSync(exe)) {
         console.error(
             `${COLORS.red}[FAIL]${COLORS.reset} no ${BUILDS[build].label} binary at ${exe}`
         )
-        console.error(
-            `    Build it with the shared helper: pwsh -NoProfile -File ${path.join(path.dirname(REPO_ROOT), 'camel-build.ps1')} -Path ${REPO_ROOT} -Config ${BUILDS[build].label}`
-        )
-        console.error(`    The ${BUILDS[build].label} tier never falls back to out/latest.`)
+        if (options.camel) {
+            console.error('    --camel names the install this run measures; it must be a built install\'s bin/camel.')
+        } else {
+            console.error(
+                `    Build it with the shared helper: pwsh -NoProfile -File ${path.join(path.dirname(REPO_ROOT), 'camel-build.ps1')} -Path ${REPO_ROOT} -Config ${BUILDS[build].label}`
+            )
+            console.error(`    The ${BUILDS[build].label} tier never falls back to out/latest.`)
+        }
         process.exit(2)
     }
     if (build !== 'debug') return
-    const home = camelHome(build)
+    const home = camelInstall(options)
     const pathKey = IS_WINDOWS ? Object.keys(process.env).find((key) => key.toUpperCase() === 'PATH') || 'PATH' : 'PATH'
     const probe = spawnSync(exe, ['--version'], {
         cwd: REPO_ROOT,
@@ -642,13 +685,13 @@ function pythonExecutable() {
 }
 
 function loadVars(options) {
-    // Built-in variables; test/vars.toml may override them. `${camel}` is the compiler of the build
-    // under test, the same path the runner prints as `[INFO] camel executable` and records as
-    // `camel_exe` in summary.json: a plan that runs a program which starts a compiler names the
-    // install with `--camel ${camel}`, a command-line argument and never an environment switch.
+    // Built-in variables; test/vars.toml may override them. `${camel}` is the compiler of the run,
+    // the same path the runner prints as `[INFO] camel executable` and records as `camel_exe` in
+    // summary.json: a plan that runs a program which starts a compiler names the install with
+    // `--camel ${camel}`, a command-line argument and never an environment switch.
     const builtins = {
         python: pythonExecutable(),
-        camel: toolExecutable('camel', options.build),
+        camel: camelBinary(options),
     }
     if (!fs.existsSync(VARS_PATH)) return builtins
     return { ...builtins, ...parseTomlFile(VARS_PATH) }
@@ -661,15 +704,37 @@ function parseDiagnostics(text) {
     // program (a device named by --devices, for one) has no source position; the short format
     // writes `?` there. It is still a diagnostic: name and code can be asserted, and line and
     // column stay absent.
-    const pattern = /^(?:\([^)]+\))?(.*?):(\d+|\?):(\d+|\?): \[[^\]]+\]: .* \(name=([^,]+), code=(0x[0-9A-Fa-f]+)\)$/gm
+    //
+    // The message of one diagnostic may run onto further lines, and the short format closes the
+    // last of them with `(name=..., code=...)`: `SemanticDiag::NoMatchingFunction` writes the
+    // overload list of a call to a function of the program that way. So it is the header that
+    // starts a diagnostic and the block runs to the next header, where the suffix is read. A
+    // message read this way is read whole; the suffix of a wrapped message can no longer be
+    // taken for another diagnostic's, and one whose message stays on the header line reads
+    // exactly as before.
+    const header = /^(?:\([^)]+\))?(.*?):(\d+|\?):(\d+|\?): \[[^\]]+\]: /gm
+    const starts = []
     let match
-    while ((match = pattern.exec(clean)) !== null) {
-        diagnostics.push({
+    while ((match = header.exec(clean)) !== null) {
+        starts.push({
             path: match[1],
-            line: match[2] === '?' ? undefined : Number.parseInt(match[2], 10),
-            column: match[3] === '?' ? undefined : Number.parseInt(match[3], 10),
-            name: match[4],
-            code: match[5],
+            line: match[2],
+            column: match[3],
+            begin: match.index,
+            after: header.lastIndex,
+        })
+    }
+    const suffix = /\(name=([^,]+), code=(0x[0-9A-Fa-f]+)\)/
+    for (let i = 0; i < starts.length; ++i) {
+        const end = i + 1 < starts.length ? starts[i + 1].begin : clean.length
+        const closed = suffix.exec(clean.slice(starts[i].after, end))
+        if (closed === null) continue // a message with no name to assert (--error-format text)
+        diagnostics.push({
+            path: starts[i].path,
+            line: starts[i].line === '?' ? undefined : Number.parseInt(starts[i].line, 10),
+            column: starts[i].column === '?' ? undefined : Number.parseInt(starts[i].column, 10),
+            name: closed[1],
+            code: closed[2],
         })
     }
     return diagnostics
@@ -767,7 +832,7 @@ function formatMetric(result) {
         return `${reading} cpu of ${formatDurationMs(result.cpuBudgetMs)} budget, ` +
             `${formatDurationMs(result.wallMs)} wall`
     }
-    // A failed `--timeit` iteration reports the diagnosis, not a mean (H66): the failure is the
+    // A failed `--timeit` iteration reports the diagnosis, not a mean: the failure is the
     // test's result, so the status line carries no number.
     if (result.benchmark && Number.isFinite(result.benchmark.mean_ms)) {
         const samples = benchmarkSampleCount(result.benchmark)
@@ -1096,7 +1161,7 @@ async function runVerification(test, result) {
 
     const payloadPath = path.join(tempDir, 'input.json')
     // The documented payload fields are listed in docs/test-plans.md; every one of them must be
-    // present, and a missing key is silently dropped by `JSON.stringify` (H143: `case_path` was
+    // present, and a missing key is silently dropped by `JSON.stringify` (: `case_path` was
     // assembled from a result that did not carry it yet, so a script normalizing the absolute
     // source path out of its output could not, and its digest varied with the checkout).
     const payload = {
@@ -1351,7 +1416,7 @@ async function validateTest(test, result, context) {
         if (!result.benchmark) {
             failures.push('missing benchmark payload')
         } else if (result.benchmark.failed) {
-            // `--timeit` reports the iteration that failed, its diagnostics and no mean (H66).
+            // `--timeit` reports the iteration that failed, its diagnostics and no mean.
             // That is the test's result; it is reported here instead of the runner throwing on
             // the missing metric.
             const reasons = (result.benchmark.diagnostics || []).map(
@@ -1407,7 +1472,11 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
         return runnerErrorResult(casePath, test.__planError)
     }
     const toolName = test.tool || 'camel'
-    const toolExe = toolName === 'python' ? pythonExecutable() : toolExecutable(toolName, logContext.options.build)
+    const toolExe = toolName === 'python'
+        ? pythonExecutable()
+        : toolName === 'camel'
+            ? camelBinary(logContext.options)
+            : toolExecutable(toolName, logContext.options.build)
     if (!toolExe) {
         throw new Error(`unknown test tool: ${toolName}`)
     }
@@ -1442,7 +1511,10 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
         }
         env[text.slice(0, eq)] = text.slice(eq + 1)
     }
-    env.CAMEL_HOME = camelHome(logContext.options.build)
+    // Every test child reads the standard library and the runtime library of the install this run
+    // measures: `CAMEL_HOME` is set to that install's root here, whichever way the install was
+    // named.
+    env.CAMEL_HOME = camelInstall(logContext.options)
     // Windows commonly inherits `Path`; a second `PATH` key would hide the compiler paths.
     const pathKey = IS_WINDOWS ? Object.keys(env).find((key) => key.toUpperCase() === 'PATH') || 'PATH' : 'PATH'
     env[pathKey] = `${path.join(env.CAMEL_HOME, 'bin')}${path.delimiter}${env[pathKey] || ''}`
@@ -1507,7 +1579,7 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
         testTmp: scratch,
         testTmpRelative: scratchRelative,
         // Set before validation: the verify script payload carries this as `case_path`, and the
-        // script that normalizes a source path out of its output needs it (H143).
+        // script that normalizes a source path out of its output needs it.
         casePath,
         // The CPU cost judgement, if this test declared one: the figure the wrapper reported and
         // the budget it is read against, both recorded on the result (meta.json, the verify
@@ -1528,7 +1600,7 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
     // The verification reads this test's output: executePlans removes the scratch directory
     // only after this returns.
     const failures = await validateTest(test, result, { ...logContext, scope })
-    // The cost judgement of a test that declares `cpu_budget_ms`, in the unit the author's ruling
+    // The cost judgement of a test that declares `cpu_budget_ms`, in the unit
     // of 2026-10-23 asks for (docs/handover/reviews/questions-2026-10-23.md,
     // "declaration-cost-gate" (a)):
     //
@@ -1566,7 +1638,7 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
     // spare. The room is measured in the work's own currency -- the CPU time the kernel charged this
     // test's process tree -- and not in the wall clock, which on a shared host belongs to whoever
     // else is running. This is the same reading, from the same wrapper, that `cpu_budget_ms` is
-    // judged against, and the reason the wrapper runs for every test (H368).
+    // judged against, and the reason the wrapper runs for every test.
     //
     // What the rule cannot read it does not guess: on a host with no /proc/self/stat there is no
     // CPU figure for any test, so the wall clock is all there is and the run says so once at the
@@ -1703,7 +1775,12 @@ function expandBackends(test) {
     }))
 }
 
-function loadPlanTests(planPath) {
+/**
+ * The tests of one plan file, own and backend-expanded. Exported because the plan inventory
+ * (`scripts/plan-inventory.mjs`) must see the same tests this runner selects: two readings of a
+ * plan file drift, one of them silently.
+ */
+export function loadPlanTests(planPath) {
     const doc = parseTomlFile(planPath)
     validatePlanSchema(doc, planPath)
     const planId = doc.id || path.basename(planPath, '.plan.toml')
@@ -1753,7 +1830,7 @@ function invalidPlan(planPath, error) {
  * later. Benchmarks and differential tests are left out, and so is a test that sets
  * `sweep = false`.
  */
-function expandSweeps(doc, planPath) {
+export function expandSweeps(doc, planPath) {
     const out = []
     for (const sweep of doc.sweeps || []) {
         if (!sweep.name || !Array.isArray(sweep.plans)) {
@@ -1763,8 +1840,8 @@ function expandSweeps(doc, planPath) {
         const scale = Number.isFinite(sweep.timeout_scale) ? sweep.timeout_scale : 1
         const prefix = sweep.skip_env_prefix || null
         // `fast_sample = N` keeps N tests per source plan in the fast layer and puts the rest in
-        // the slow one: the default developer run still checks the property against every plan,
-        // and the full sweep (every eligible test) is `--tier all` away. The
+        // the milestone layer: the default developer run still checks the property against every
+        // plan, and the full sweep (every eligible test) is `--tier milestone` away. The
         // sample prefers a test that runs the program to completion, since that is the one that
         // exercises the most of the collector; a plan of negative tests still contributes one.
         //
@@ -1785,7 +1862,7 @@ function expandSweeps(doc, planPath) {
             const { doc: sourceDoc, tests: sourceTests } = loadPlanTests(source)
             // A copy is named after the sweep, its source plan and the source test. The source
             // plan is part of the name because two plans may both have a test called `shapes`
-            // (H120): without it the copies collide, and a back end waits for, and compares
+            // without it the copies collide, and a back end waits for, and compares
             // against, whichever copy of its reference ran last. `id` is the plan's stable
             // identifier, unique across the run; the fallback matches loadPlanTests.
             const sourceId = sourceDoc.id || path.basename(source, '.plan.toml')
@@ -1804,7 +1881,8 @@ function expandSweeps(doc, planPath) {
             const sampled = new Set()
             if (sampleCount > 0) {
                 const preferred = eligible.filter(
-                    (test) => (test.expect_exit === undefined || test.expect_exit === 0) && test.tier !== 'slow'
+                    (test) => (test.expect_exit === undefined || test.expect_exit === 0) &&
+                        test.tier !== 'slow' && test.tier !== 'milestone'
                 )
                 for (const test of [...preferred, ...eligible]) {
                     if (sampled.size >= sampleCount) break
@@ -1821,7 +1899,7 @@ function expandSweeps(doc, planPath) {
                     verify_timeout_ms: (test.verify_timeout_ms || 5000) * scale,
                     __backendReference: test.__backendReference ? rename(test.__backendReference) : null,
                     __sweep: sweep.name,
-                    ...(sampleCount > 0 ? { tier: sampled.has(test) ? 'fast' : 'slow' } : {}),
+                    ...(sampleCount > 0 ? { tier: sampled.has(test) ? 'fast' : 'milestone' } : {}),
                 })
             }
         }
@@ -1830,22 +1908,29 @@ function expandSweeps(doc, planPath) {
 }
 
 /**
- * A test's layer: `tier` on the test first, then its plan. Only `slow` is special; anything else
- * (the old `smoke`/`feat`/`benchmark` labels included) is the fast layer, so a plan written
- * before the split still runs by default. `debug` is a third layer selected only by
- * `--tier debug`: a test that aborts when an assertion fires, or that is only meaningful with
- * assertions compiled in, lives there and is never part of an ordinary or `all` run.
+ * A test's layer: `tier` on the test first, then its plan. Only `slow` and `milestone` are named
+ * destinations; anything else (the old `smoke`/`feat`/`benchmark` labels included) is the fast
+ * layer, so a plan written before the split still runs by default. `milestone` is the layer that
+ * only runs at a milestone, either because the plan file says so or because a sweep left the copy
+ * unsampled. `debug` is a further layer selected only by `--tier debug`: a test that aborts when
+ * an assertion fires, or that is only meaningful with assertions compiled in, lives there and is
+ * never part of an ordinary or `all` run.
+ *
+ * Exported because the plan inventory (`scripts/plan-inventory.mjs`) asks the same question when it
+ * decides whether a plan's slow tests have a layer: a second copy of this rule would drift from it.
  */
-function testTier(plan, test) {
+export function testTier(plan, test) {
     const tier = test.tier !== undefined
         ? test.tier
         : plan.tier === 'slow'
             ? 'slow'
-            : plan.tier === 'debug'
-                ? 'debug'
-                : 'fast'
-    if (tier !== 'fast' && tier !== 'slow' && tier !== 'debug') {
-        throw new Error(`test '${test.name}' of ${plan.id || plan.__planPath}: tier must be 'fast', 'slow' or 'debug'`)
+            : plan.tier === 'milestone'
+                ? 'milestone'
+                : plan.tier === 'debug'
+                    ? 'debug'
+                    : 'fast'
+    if (tier !== 'fast' && tier !== 'slow' && tier !== 'milestone' && tier !== 'debug') {
+        throw new Error(`test '${test.name}' of ${plan.id || plan.__planPath}: tier must be 'fast', 'slow', 'milestone' or 'debug'`)
     }
     return tier
 }
@@ -2627,7 +2712,7 @@ async function executePlans(plans, options, sharedVars, logDir) {
 
 async function main() {
     const options = parseArgs(process.argv.slice(2))
-    preflightBuild(options.build)
+    preflightBuild(options)
     // Writing golden files from several tests at once would make the content depend on which
     // test finished last; update-golden is a deliberate, serial maintenance run.
     if (options.updateGolden && options.jobs !== 1) {
@@ -2665,7 +2750,7 @@ async function main() {
     writeRunManifest(logDir, options, plans)
     const testCount = plans.reduce((count, plan) => count + plan.tests.length, 0)
 
-    console.log(`${COLORS.cyan}[INFO]${COLORS.reset} camel executable (${options.build}): ${toolExecutable('camel', options.build)}`)
+    console.log(`${COLORS.cyan}[INFO]${COLORS.reset} camel executable (${options.build}): ${camelBinary(options)}`)
     console.log(`${COLORS.cyan}[INFO]${COLORS.reset} discovered plans: ${plans.length}`)
     console.log(
         `${COLORS.cyan}[INFO]${COLORS.reset} tier: ${options.tier}, tests: ${testCount}, jobs: ${options.jobs}`
@@ -2727,7 +2812,7 @@ async function main() {
         JSON.stringify(
             {
                 generated_at: new Date().toISOString(),
-                camel_exe: toolExecutable('camel', options.build),
+                camel_exe: camelBinary(options),
                 build: options.build,
                 update_golden: options.updateGolden,
                 tier: options.tier,
@@ -2780,10 +2865,14 @@ async function main() {
     process.exit(exitCode)
 }
 
-main().catch((error) => {
-    console.error(error && error.stack ? error.stack : String(error))
-    if (fs.existsSync(TEST_SCRATCH_RUN)) {
-        console.error(`${COLORS.cyan}[INFO]${COLORS.reset} test scratch kept: ${TEST_SCRATCH_RUN}`)
-    }
-    process.exit(1)
-})
+// Only a command that names this file as its entry point starts a run: the plan inventory imports
+// `loadPlanTests` and `expandSweeps` from here, and importing a module must not run the tests.
+if (process.argv[1] && path.resolve(process.argv[1]) === __filename) {
+    main().catch((error) => {
+        console.error(error && error.stack ? error.stack : String(error))
+        if (fs.existsSync(TEST_SCRATCH_RUN)) {
+            console.error(`${COLORS.cyan}[INFO]${COLORS.reset} test scratch kept: ${TEST_SCRATCH_RUN}`)
+        }
+        process.exit(1)
+    })
+}

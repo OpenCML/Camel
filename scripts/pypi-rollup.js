@@ -81,62 +81,84 @@ function listToolBinaries(binDir) {
     return names.sort()
 }
 
-/** Windows: one .cmd per exe in Scripts/ → ..\\site-packages\\camel\\.cmlenv\\bin\\<same>.exe */
-function writeWindowsWrappers(wrapperDir, exeFileNames) {
-    for (const exeName of exeFileNames) {
-        const cmdName = `${path.parse(exeName).name}.cmd`
-        const lines = [
-            '@echo off',
-            'REM Delegates to camel-lang wheel bundled .cmlenv\\bin (standard venv / prefix layout).',
-            `"%~dp0..\\Lib\\site-packages\\camel\\.cmlenv\\bin\\${exeName}" %*`,
-            ''
-        ]
-        fs.writeFileSync(path.join(wrapperDir, cmdName), lines.join('\r\n'), 'utf-8')
+/** The commands the wheel promises, whatever `pyproject.toml` says (5.37 item 2). */
+const TOOLS_THE_WHEEL_PROMISES = ['camel', 'camel-ls', 'camel-db', 'camel-format']
+
+/**
+ * The `[project.scripts]` command names in `pyproject.toml`, in declaration order.
+ * @param {string} pyprojectPath
+ * @returns {string[]}
+ */
+function declaredEntryPoints(pyprojectPath) {
+    const text = fs.readFileSync(pyprojectPath, 'utf-8')
+    const after = text.split(/^\[project\.scripts\]\s*$/m)[1]
+    if (after === undefined) {
+        return []
     }
-}
-
-/** Shell-safe single-quoted literal for POSIX sh */
-function shSingleQuoted(s) {
-    return `'${String(s).replace(/'/g, `'\\''`)}'`
-}
-
-/** Unix: one sh launcher per tool in env bin/ → site-packages/camel/.cmlenv/bin/<name> */
-function writeUnixWrappers(wrapperDir, binaryNames) {
-    for (const binName of binaryNames) {
-        const q = shSingleQuoted(binName)
-        const script = `#!/usr/bin/env sh
-# Delegates to camel-lang wheel bundled .cmlenv/bin/${binName}
-_TARGET=${q}
-_BINDIR=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
-for _bin in "$_BINDIR"/../lib/python*/site-packages/camel/.cmlenv/bin/"$_TARGET"; do
-  if [ -f "$_bin" ] && [ -x "$_bin" ]; then
-    exec "$_bin" "$@"
-  fi
-done
-echo "camel-lang (${binName}): bundled binary not found. Set CAMEL_HOME to site-packages/camel/.cmlenv" >&2
-exit 1
-`
-        const shPath = path.join(wrapperDir, binName)
-        fs.writeFileSync(shPath, script, 'utf-8')
-        try {
-            fs.chmodSync(shPath, 0o755)
-        } catch {
-            /* non-Unix or permission noop */
+    const body = after.split(/^\[/m)[0]
+    const names = []
+    for (const line of body.split(/\r?\n/)) {
+        const m = line.match(/^([A-Za-z0-9_.-]+)\s*=\s*"[^"]+"/)
+        if (m) {
+            names.push(m[1])
         }
     }
+    return names
 }
 
 /**
- * PEP 425 tags for native code linked against the given interpreter (same rules as pip).
- * @param {string} pyExe - absolute path or `python` / `python3`
+ * Check that every command the wheel declares has its binary in the bundled install.
+ *
+ * Each `[project.scripts]` entry point is a Python function that execs
+ * `camel/.cmlenv/bin/<command>` (pypi/camel-lang/src/camel_cli.py), so a declared command whose
+ * binary the build did not collect installs a command that fails on first use. Failing here
+ * names the tool and the directory, rather than leaving it to the smoke test on one platform.
+ *
+ * Which mode those binaries carry in the wheel is set later, on the wheel itself
+ * (scripts/wheel_modes.py): setuptools records 0o644 for package data whatever the source
+ * mode is, so `chmod` before the build would not travel.
+ *
+ * @param {string} pyprojectBase - pypi/camel-lang, which holds pyproject.toml
+ * @param {string} bundledBin - camel/.cmlenv/bin inside the package being built
+ * @param {string[]} toolBinaries - the tool names copied there
  */
-function getWheelTagsFromPythonExe(pyExe) {
-    const snippet = `from packaging.tags import sys_tags
-_t = next(iter(sys_tags()))
-print(_t.interpreter)
-print(_t.abi)
-print(_t.platform)
-`
+function prepareBundledBinaries(pyprojectBase, bundledBin, toolBinaries) {
+    const declared = declaredEntryPoints(path.join(pyprojectBase, 'pyproject.toml'))
+    if (declared.length === 0) {
+        logFail(
+            `pypi/camel-lang/pyproject.toml declares no [project.scripts]: the wheel would install no command`
+        )
+        process.exit(1)
+    }
+
+    const missing = []
+    for (const tool of new Set([...declared, ...TOOLS_THE_WHEEL_PROMISES])) {
+        if (!fs.existsSync(path.join(bundledBin, tool + (isWin ? '.exe' : '')))) {
+            missing.push(tool)
+        }
+    }
+    if (missing.length > 0) {
+        const present = fs.existsSync(bundledBin)
+            ? fs.readdirSync(bundledBin).sort().join(', ') || '(empty)'
+            : '(no bin directory)'
+        logFail(
+            `No bundled binary for: ${missing.join(', ')}. Every [project.scripts] command runs ` +
+                `camel/.cmlenv/bin/<command>, so the build has to have collected it. ` +
+                `Found under ${bundledBin}: ${present}`
+        )
+        process.exit(1)
+    }
+    const entryPoints = [...declared].sort()
+    logStep(`Entry points ready: ${entryPoints.join(', ')} (collected: ${toolBinaries.join(', ')})`)
+}
+
+/**
+ * Run a tiny Python probe with the given interpreter and return its trimmed stdout.
+ * @param {string} pyExe - absolute path or `python` / `python3`
+ * @param {string} snippet
+ * @param {string} what - named in the failure, so the message says what was being asked
+ */
+function runPythonProbe(pyExe, snippet, what) {
     const shell = !path.isAbsolute(pyExe) && (pyExe === 'python' || pyExe === 'python3') && isWin
     const r = spawnSync(pyExe, ['-c', snippet], {
         encoding: 'utf-8',
@@ -145,20 +167,57 @@ print(_t.platform)
     })
     if (r.error || r.status !== 0) {
         logFail(
-            `Could not resolve wheel tags via packaging.tags (${pyExe}): ${r.stderr || r.error?.message || 'non-zero exit'}`
+            `Could not resolve ${what} (${pyExe}): ${r.stderr || r.error?.message || 'non-zero exit'}`
         )
         process.exit(1)
     }
-    const lines = r.stdout
-        .trim()
-        .split(/\r?\n/)
-        .map((l) => l.trim())
-        .filter(Boolean)
-    if (lines.length < 3) {
-        logFail(`Unexpected packaging.tags output:\n${r.stdout}`)
-        process.exit(1)
+    return r.stdout.trim()
+}
+
+/**
+ * The platform tag a wheel built by this interpreter on this machine may claim *before*
+ * `auditwheel repair` / `delocate-wheel` have looked at it.
+ *
+ * `sysconfig.get_platform()` is exactly that tag: `linux_x86_64`, `macosx_13_0_arm64`,
+ * `win_amd64`. It replaces the wheel tag the rollup used to read out of
+ * `packaging.tags.sys_tags()`: that returns a *list*, and which manylinux tag (if any) comes
+ * first depends on the `packaging` version -- 21.3 yields `manylinux_2_35_x86_64`, 26.3 yields
+ * `linux_x86_64` -- so taking its first entry made the tag a property of the machine's
+ * `packaging` rather than of the binaries. PyPI rejected the 0.2.31 upload for exactly that
+ * (`400 ... has an unsupported platform tag 'linux_x86_64'`, 5.37). Linux therefore claims
+ * `linux_<arch>` here and gets its publishable tag from `auditwheel repair`, which is the only
+ * thing that knows which glibc the bundled libraries actually need; `scripts/check_wheel_tags.py`
+ * fails the build if that repair did not happen.
+ *
+ * @param {string} pyExe
+ */
+function nativePlatformTag(pyExe) {
+    const forced = (process.env.CAMEL_PYPI_PLATFORM_TAG || '').trim()
+    if (forced) {
+        return forced
     }
-    return { pythonTag: lines[0], abiTag: lines[1], platformTag: lines[2] }
+    const platform = runPythonProbe(
+        pyExe,
+        'import sysconfig;print(sysconfig.get_platform())',
+        'sysconfig.get_platform()'
+    )
+    return platform.replace(/[-.]/g, '_')
+}
+
+/**
+ * PEP 425 tags for native code linked against the given interpreter.
+ * @param {string} pyExe - absolute path or `python` / `python3`
+ */
+function getWheelTagsFromPythonExe(pyExe) {
+    // `cp310`, from the interpreter that the extension is compiled and linked against. It is
+    // read from `sys.version_info` rather than from `packaging.tags` for the reason in
+    // `nativePlatformTag`.
+    const pythonTag = runPythonProbe(
+        pyExe,
+        'import sys;print("cp%d%d" % sys.version_info[:2])',
+        'the interpreter tag'
+    )
+    return { pythonTag, abiTag: pythonTag, platformTag: nativePlatformTag(pyExe) }
 }
 
 /**
@@ -233,22 +292,6 @@ function pyCmd(exe) {
     return `"${exe.replace(/"/g, '\\"')}"`
 }
 
-/**
- * Ensure the helper Python has packaging installed before querying wheel tags.
- * The CI Python image used by setup-python does not guarantee packaging is present.
- * @param {string} pyExe
- */
-function ensurePackagingInstalled(pyExe) {
-    const py = pyCmd(pyExe)
-    // Best effort: the CI image gets it from the index, and a host that has no egress and already
-    // has it (setuptools depends on it) is not made to wait for an index it cannot reach. A helper
-    // that genuinely lacks it fails at the tag query below, which names what it needs.
-    spawnSync(`${py} -m pip install -q --disable-pip-version-check packaging`, {
-        stdio: 'ignore',
-        shell: true
-    })
-}
-
 function envFlag(name) {
     const value = (process.env[name] || '').toLowerCase()
     return value === '1' || value === 'true' || value === 'yes'
@@ -310,11 +353,14 @@ function packageWheelBundle({
     logStep('Copying files to pypi directory')
     removeDir(CMLENV)
     copyDir(OUT_ROOT, CMLENV)
-    // The build collects every tool into out/; the ones the tests alone use stay out of the wheel.
+    // The build collects every tool into out/; the ones the tests alone use stay out of the wheel,
+    // and so does the link product `listToolBinaries` already refuses to call a tool -- shipping
+    // an object file beside the binaries would only put a non-executable file where the entry
+    // points look, and `scripts/wheel_modes.py` would set its executable bit.
     const bundledBin = path.join(CMLENV, 'bin')
     if (fs.existsSync(bundledBin)) {
         for (const f of fs.readdirSync(bundledBin)) {
-            if (isTestOnlyTool(f)) {
+            if (isTestOnlyTool(f) || /\.(o|a|obj|d|pdb)$/i.test(f)) {
                 fs.rmSync(path.join(bundledBin, f))
             }
         }
@@ -326,36 +372,15 @@ function packageWheelBundle({
         process.exit(1)
     }
 
-    const WRAPPER_DIR = path.join(PYPI_BASE, 'wrapper-dist')
+    prepareBundledBinaries(PYPI_BASE, bundledBin, toolBinaries)
+
     // A run that failed left its `build/` and `dist/` behind, and both are read below: the wheel
     // is copied out of `dist/`, so a stale one from an earlier run would be published beside the
     // new one. Start from neither.
     removeDir(path.join(PYPI_BASE, 'build'))
     removeDir(path.join(PYPI_BASE, 'dist'))
-    fs.mkdirSync(WRAPPER_DIR, { recursive: true })
-    if (isWin) {
-        writeWindowsWrappers(WRAPPER_DIR, toolBinaries)
-    } else {
-        writeUnixWrappers(WRAPPER_DIR, toolBinaries)
-    }
-
-    const scriptFiles = fs
-        .readdirSync(WRAPPER_DIR)
-        .sort()
-        .map((f) => `wrapper-dist/${f}`)
-        .filter((p) => fs.existsSync(path.join(PYPI_BASE, p)))
-    const pyprojectPath = path.join(PYPI_BASE, 'pyproject.toml')
-    const pyprojectOriginal = fs.readFileSync(pyprojectPath, 'utf-8')
-    const scriptFilesStr = scriptFiles.map((s) => `"${s.replace(/\\/g, '/')}"`).join(', ')
-    fs.writeFileSync(
-        pyprojectPath,
-        pyprojectOriginal.replace(/script-files = \[[^\]]*\]/, `script-files = [${scriptFilesStr}]`)
-    )
-    logStep(`Configured script-files: [${scriptFiles.join(', ')}]`)
 
     const py = pyCmd(buildPythonExe)
-    logStep('Building wheel (stub py3-none-any, then retag)')
-    process.chdir(PYPI_BASE)
     // The wheel is built with `build` where it is installable, and with the setuptools that pip can
     // already see where it is not; `wheel` is not needed at all, since scripts/wheel_retag.py does
     // the retag with the standard library. A host with no egress gets the same artifact.
@@ -370,47 +395,103 @@ function packageWheelBundle({
             stdio: 'ignore',
             shell: true
         }).status === 0
-    if (hasBuildModule) {
-        runCommand(`${py} -I -m build --wheel`)
-    } else {
-        logWarn(
-            'the `build` module is not installed and could not be fetched; ' +
-                'building the wheel with `pip wheel --no-build-isolation` instead'
-        )
-        runCommand(`${py} -m pip wheel --no-build-isolation --no-deps -w dist .`)
-    }
 
-    const distDir = path.join(PYPI_BASE, 'dist')
-    const anyWheels = fs.readdirSync(distDir).filter((f) => f.endsWith('-any.whl'))
-    if (anyWheels.length === 0) {
-        logFail(`No *-any.whl found in ${distDir} after build`)
-        process.exit(1)
-    }
-    logStep(`Retagging wheel(s): ${pythonTag}-${abiTag}-${platformTag}`)
-    // The retag is a rename plus the `Tag:` lines in `*.dist-info/WHEEL`, and wheel 0.45 removed
-    // the command line that used to do it, so the repository does it itself with `zipfile`
-    // (scripts/wheel_retag.py). A wheel whose name says `py3-none-any` would be installable on
-    // an interpreter and a machine it cannot run on, which is exactly what this prevents.
-    const retagger = path.join(BASEDIR, 'scripts', 'wheel_retag.py')
-    for (const w of anyWheels) {
-        const wheelPath = path.join('dist', w).split(path.sep).join('/')
-        runCommand(`${py} "${retagger}" "${wheelPath}" ${pythonTag} ${abiTag} ${platformTag}`)
-    }
-
+    process.chdir(PYPI_BASE)
+    // One native build per platform, two wheels off it (5.37 item 7): the interpreter cannot
+    // reach the binaries, so the wheel does not have to be rebuilt per Python version.
+    //   camel_lang-<ver>-<cp3XX>-<cp3XX>-<platform>.whl  the body *and* the interop extension;
+    //   camel_lang-<ver>-py3-none-<platform>.whl         the body only, any Python 3.
+    // `.cmlenv/python/` is the only part that is interpreter-specific, so the second wheel is
+    // the first one without it.
+    const BUNDLES = [
+        { pythonTag, abiTag, platformTag, withExtension: true },
+        { pythonTag: 'py3', abiTag: 'none', platformTag, withExtension: false }
+    ]
     ensureDirSync(pypiDist)
-    for (const f of fs.readdirSync(distDir)) {
-        if (f.endsWith('.whl')) {
-            fs.copyFileSync(path.join(distDir, f), path.join(pypiDist, f))
+    for (const bundle of BUNDLES) {
+        const extensionDir = path.join(CMLENV, 'python')
+        const stashedExtension = path.join(PYPI_BASE, 'python.stash')
+        removeDir(stashedExtension)
+        if (bundle.withExtension) {
+            if (!fs.existsSync(extensionDir)) {
+                logFail(
+                    `After copying out/${outTag}, the interop extension directory is missing: ` +
+                        `${extensionDir}. The interop wheel has to carry it; if the build stopped ` +
+                        `collecting out/${outTag}/python/, the two-wheel split is wrong.`
+                )
+                process.exit(1)
+            }
+        } else {
+            // Moved aside rather than deleted: the next bundle needs it back.
+            fs.renameSync(extensionDir, stashedExtension)
+        }
+
+        // Both `dist/` and `build/` are cleared before each bundle: setuptools stages the package
+        // data it will pack under `build/lib/...`, and `pip wheel --no-build-isolation` reuses
+        // that staging directory. Leaving it meant the body-only wheel was packed from the tree
+        // the *interop* bundle had staged, and so carried `.cmlenv/python/` -- with a `py3-none`
+        // name that promises it does not.
+        removeDir(path.join(PYPI_BASE, 'dist'))
+        removeDir(path.join(PYPI_BASE, 'build'))
+        logStep(`Building wheel (stub py3-none-any, then retag to ${bundle.pythonTag}-${bundle.abiTag}-${bundle.platformTag})`)
+        if (hasBuildModule) {
+            runCommand(`${py} -I -m build --wheel`)
+        } else {
+            logWarn(
+                'the `build` module is not installed and could not be fetched; ' +
+                    'building the wheel with `pip wheel --no-build-isolation` instead'
+            )
+            runCommand(`${py} -m pip wheel --no-build-isolation --no-deps -w dist .`)
+        }
+
+        const distDir = path.join(PYPI_BASE, 'dist')
+        const anyWheels = fs.readdirSync(distDir).filter((f) => f.endsWith('-any.whl'))
+        if (anyWheels.length === 0) {
+            logFail(`No *-any.whl found in ${distDir} after build`)
+            process.exit(1)
+        }
+        // The retag is a rename plus the `Tag:` lines in `*.dist-info/WHEEL`, and wheel 0.45
+        // removed the command line that used to do it, so the repository does it itself with
+        // `zipfile` (scripts/wheel_retag.py). A wheel whose name says `py3-none-any` would be
+        // installable on an interpreter and a machine it cannot run on, which is exactly what
+        // this prevents.
+        const retagger = path.join(BASEDIR, 'scripts', 'wheel_retag.py')
+        for (const w of anyWheels) {
+            const wheelPath = path.join('dist', w).split(path.sep).join('/')
+            runCommand(
+                `${py} "${retagger}" "${wheelPath}" ${bundle.pythonTag} ${bundle.abiTag} ${bundle.platformTag}`
+            )
+        }
+        // The retag rewrites the archive, so the modes are set after it: the console entry
+        // points exec these binaries and setuptools recorded 0o644 for all of them.
+        const modeFixer = path.join(BASEDIR, 'scripts', 'wheel_modes.py')
+        for (const f of fs.readdirSync(distDir).filter((f) => f.endsWith('.whl'))) {
+            const wheelPath = path.join('dist', f).split(path.sep).join('/')
+            runCommand(`${py} "${modeFixer}" "${wheelPath}"`)
+            runCommand(`${py} "${modeFixer}" --check "${wheelPath}"`)
+        }
+        for (const f of fs.readdirSync(distDir)) {
+            if (f.endsWith('.whl')) {
+                const target = path.join(pypiDist, f)
+                if (fs.existsSync(target)) {
+                    logFail(`Two bundles produced the same wheel name: ${f}`)
+                    process.exit(1)
+                }
+                fs.copyFileSync(path.join(distDir, f), target)
+            }
+        }
+
+        if (!bundle.withExtension) {
+            fs.renameSync(stashedExtension, extensionDir)
         }
     }
+    process.chdir(BASEDIR)
 
-    fs.writeFileSync(pyprojectPath, pyprojectOriginal)
     removeDir(path.join(PYPI_BASE, 'dist'))
     removeDir(path.join(PYPI_BASE, 'build'))
     removeDir(CMLENV)
-    removeDir(WRAPPER_DIR)
+    removeDir(path.join(PYPI_BASE, 'python.stash'))
     removeDir(path.join(PYPI_BASE, 'src', 'camel_lang.egg-info'))
-    process.chdir(BASEDIR)
 }
 
 function main() {
@@ -442,7 +523,6 @@ function main() {
                 logFail(e instanceof Error ? e.message : String(e))
                 process.exit(1)
             }
-            ensurePackagingInstalled(pyExe)
             const tags = getWheelTagsFromPythonExe(pyExe)
             runBuild({
                 rollupMm: sdk.mm,
@@ -488,7 +568,6 @@ function main() {
                 logFail(e instanceof Error ? e.message : String(e))
                 process.exit(1)
             }
-            ensurePackagingInstalled(pyExe)
             tags = getWheelTagsFromPythonExe(pyExe)
             runBuild({
                 rollupMm: sdk.mm,
@@ -517,7 +596,6 @@ function main() {
                 logFail(e instanceof Error ? e.message : String(e))
                 process.exit(1)
             }
-            ensurePackagingInstalled(pyExe)
             tags = getWheelTagsFromPythonExe(pyExe)
             runBuild({
                 rollupMm,
@@ -550,7 +628,6 @@ function main() {
     }
     const layout = findInterpreterDevelopmentLayout(compile.executable)
     let pyExe = compile.executable
-    ensurePackagingInstalled(pyExe)
     let tags = getWheelTagsFromPythonExe(pyExe)
     if (layout) {
         const rollupMm = rollupMmFromVersion(compile.major, compile.minor)
@@ -560,7 +637,6 @@ function main() {
             logFail(e instanceof Error ? e.message : String(e))
             process.exit(1)
         }
-        ensurePackagingInstalled(pyExe)
         tags = getWheelTagsFromPythonExe(pyExe)
             runBuild({
             rollupMm,

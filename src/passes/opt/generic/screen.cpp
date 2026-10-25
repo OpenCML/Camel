@@ -12,6 +12,7 @@
 
 #include "camel/core/operator_table.h"
 #include "camel/core/tags.h"
+#include "camel/core/type/intern.h"
 
 #include <algorithm>
 #include <map>
@@ -73,10 +74,12 @@ bool isConstantLike(const GCGraph &graph, gc_node_ref_t ref) {
     return value.known || value.maybe;
 }
 
+/// Whether a call of the operator is a value the pass may fold or drop. An operator that must run
+/// where the program writes it is not one, whatever its effect.
 bool isPureOperNode(const GCGraph &graph, gc_node_ref_t ref) {
     const GCNode *node = graph.node(ref);
     return node && node->kind == GCNodeKind::Oper && node->hasPayload() &&
-           OperatorTable::instance().isPure(graph.nodeBodyAs<GCOperBody>(ref)->oper);
+           OperatorTable::instance().mayBeRecomputed(graph.nodeBodyAs<GCOperBody>(ref)->oper);
 }
 
 } // namespace
@@ -140,10 +143,12 @@ bool mayMerge(const GCGraph &graph) {
         return true;
     }
     // Constants of equal type and bits are one value: a node with a known one is in the class of
-    // (type, bits). Expressions are compared by the classes of their inputs, because merging the
-    // constants is what makes expressions over separately written literals identical.
+    // (type, bits). The type enters as its canonical id, so two constants whose types are one type
+    // under `equals` are one class even when a rewrite built the two objects. Expressions are
+    // compared by the classes of their inputs, because merging the constants is what makes
+    // expressions over separately written literals identical.
     constexpr uint64_t kClass = uint64_t{1} << 40;
-    std::map<std::pair<const type::Type *, slot_t>, uint64_t> classes;
+    std::map<std::pair<type::TypeId, slot_t>, uint64_t> classes;
     std::vector<uint64_t> classOf(graph.nodeCount(), 0);
     for (auto it = graph.nodes().begin(); it != graph.nodes().end(); ++it) {
         const gc_node_ref_t ref = it.ref();
@@ -157,8 +162,9 @@ bool mayMerge(const GCGraph &graph) {
         if (!value.known || !value.type || type::isGCTraced(value.type->code())) {
             continue;
         }
-        const auto [at, inserted] =
-            classes.try_emplace({value.type, value.slot}, kClass + classes.size());
+        const auto [at, inserted] = classes.try_emplace(
+            {type::TypeTable::instance().canonicalId(value.type), value.slot},
+            kClass + classes.size());
         if (!inserted) {
             return true; // two nodes with the same constant
         }
@@ -172,7 +178,7 @@ bool mayMerge(const GCGraph &graph) {
         }
         std::vector<uint64_t> key{
             graph.nodeBodyAs<GCOperBody>(ref)->oper,
-            (*it)->typeId,
+            camel::core::type::TypeTable::instance().canonicalIdOf((*it)->typeId),
             camel::core::tag::permissionsOf(graph, ref)};
         for (auto inputs : {graph.normInputsOf(ref), graph.withInputsOf(ref)}) {
             key.push_back(~uint64_t{0});

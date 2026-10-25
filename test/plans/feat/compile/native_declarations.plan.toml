@@ -5,7 +5,7 @@ tags = ["feat", "compile", "modules", "native", "declaration", "generics"]
 desc = "A body-less `export func` in a `.cml` is the declaration of an operator of a C++ module: the declaration is the signature, a call checks against it and reaches the operator, and a generic declaration is instantiated by type (handover H19, step 1)"
 
 # Design principles 6.4 (a primitive is an operator written in C++, and its signature is written
-# once) and 6.2 (the tag that names the exception); handover H19, step 1.
+# once) and 6.2 (the tag that names the exception), step 1.
 #
 # The four cases the step has to prove: a declaration of a generic operator mixed with ordinary
 # functions of the module; a declaration whose operator is not loaded (a located diagnostic, not
@@ -88,7 +88,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "bytes_type.cml:8:23", "argument types: <> (int)", "<bytes:size>: (content: Bytes) => int"]
 
-# ---- The declarations of `str`: what an importer sees (handover H19, step 10) ----
+#  ---- The declarations of `str`: what an importer sees (step 10) ----
 
 [[tests]]
 name = "native.str_declaration_import"
@@ -117,7 +117,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "str_type.cml:11:17", "argument types: <> (int)", "<str:trim>: (s: string) => string"]
 
-# ---- The declarations of `io`: the terminal's signatures (handover H19, steps 4 and 10) ----
+#  ---- The declarations of `io`: the terminal's signatures (steps 4 and 10) ----
 
 [[tests]]
 name = "native.io_wrong_arity"
@@ -137,7 +137,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "io_type.cml:11:22", "argument types: <> (string)", "<io:get_chars>: (max: int) => string"]
 
-# ---- The declarations of `json`: the accessors as one rule per tagged form (handover H115) ----
+#  ---- The declarations of `json`: the accessors as one rule per tagged form ----
 
 [[tests]]
 name = "native.json_declaration_import"
@@ -165,7 +165,7 @@ case = "../../../cases/compile/native/json_type.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "json_type.cml:11:17", "argument types: <> (int)", "<json:kind>: (j: Json) => string"]
-# ---- The declarations of `math`: per-type overloads and computed signatures (handover H113) ----
+#  ---- The declarations of `math`: per-type overloads and computed signatures ----
 
 [[tests]]
 name = "native.math_declaration_import"
@@ -230,7 +230,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "math_sqrt_type.cml:11:17", "argument types: <> (string)", "<math:sqrt>: (x: i32) => f32"]
 
-# ---- The declarations of `random`: the generator and the keyed functions (handover H128) ----
+#  ---- The declarations of `random`: the generator and the keyed functions ----
 
 [[tests]]
 name = "native.random_declaration_import"
@@ -286,7 +286,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "random_sample_count_type.cml:11:27", "argument types: <> (int[], float)", "<rand:sample>: (xs: T[], n: int) => T[]"]
 
-# ---- The declarations of `array`: the native primitives, the sorts and `argsort` (H135, H202) ----
+#  ---- The declarations of `array`: the native primitives, the sorts and `argsort` ----
 
 [[tests]]
 name = "native.array_declaration_import"
@@ -333,7 +333,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "array_sort_type.cml:11:17", "argument types: <> (int)", "<array:sort_i>: (xs: i32[]) => i32[]"]
 
-# ---- The declarations of `statistics`: four element types per name (handover H135) ----
+#  ---- The declarations of `statistics`: four element types per name ----
 
 [[tests]]
 name = "native.statistics_declaration_import"
@@ -362,7 +362,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "statistics_type.cml:12:17", "argument types: <> (int)", "<statistics:mean>: (xs: i32[]) => float"]
 
-# ---- A declaration the module does not export is private (handover H94, ruling 3) ----
+#  ---- A declaration the module does not export is private ----
 
 [[tests]]
 name = "native.private_declaration"
@@ -384,7 +384,7 @@ expect_diagnostic_name = "SemanticDiag::ImportNameNotExported"
 expect_diagnostic_code = "0x03000015"
 expect_output_contains = ["private_import.cml:8", "Reference 'at'"]
 
-# ---- The entry module's declarations answer under its declared name (handover H94, ruling 4) ----
+#  ---- The entry module's declarations answer under its declared name ----
 
 [[tests]]
 name = "native.entry_uri_prefix"
@@ -395,11 +395,11 @@ args = ["${case}"]
 expect_exit = 0
 expect_stdout_exact = "3\n"
 
-# ---- A declaration may name only its own module's operator (handover H94, ruling 5) ----
+#  ---- A declaration may name only its own module's operator ----
 
 [[tests]]
 name = "native.foreign_operator_refused"
-desc = "`#op<'bytes:size'>` in a module other than `bytes` names another module's operator: refused at the declaration, in the file that wrote it, before any call."
+desc = "`#op('bytes:size')` in a module other than `bytes` names another module's operator: refused at the declaration, in the file that wrote it, before any call."
 kind = "negative"
 case = "../../../cases/compile/native/foreign_operator.cml"
 args = ["${case}"]
@@ -430,7 +430,7 @@ expect_exit = 0
 expect_stdout_contains = ["PASS"]
 timeout_ms = 120000
 
-# ---- The `.cml` and the `.cmo` are one module (handover H94, ruling 1) ----
+#  ---- The `.cml` and the `.cmo` are one module ----
 
 [[tests]]
 name = "native.one_module"
@@ -443,7 +443,7 @@ expect_exit = 0
 expect_stdout_contains = ["PASS"]
 timeout_ms = 120000
 
-# ---- Two generic declarations of a name: one call, one rule (handover H94, ruling 2) ----
+#  ---- Two generic declarations of a name: one call, one rule ----
 
 [[tests]]
 name = "native.generic_declaration_overlap"
@@ -459,7 +459,7 @@ expect_output_contains = ["overlap.cml:14", "Two declarations of 'pick'", "(xs: 
 
 # ---- Two same-named declarations whose conditions exclude each other are overloads ----
 #
-# The language author's ruling of 2026-10-24 on `impl-declaration-arms`
+# The rule on `impl-declaration-arms`
 # (`docs/handover/reviews/questions-2026-10-23.md`): declarations split by mutually exclusive
 # `when` conditions are overloads and may stand side by side, and the check is the same for every
 # same-named overload that writes `when`, not a special case of `#impl`. A type that satisfies both
@@ -544,7 +544,7 @@ verify_script = """
 
 # ---- Two candidates whose own `when` both hold are an ambiguity, not a choice ----
 #
-# The language author's ruling of 2026-10-23 on `two-when-conditions-hold`
+# The rule on `two-when-conditions-hold`
 # (`docs/handover/reviews/questions-2026-10-23.md`): "带 `when` 的候选都适用时，调用处报歧义，列出两
 # 条候选与各自成立的条件". "先写的赢" no longer exists for a candidate that writes `when`, because the
 # declaration-time check samples the registered types one at a time and the call site is what
@@ -597,7 +597,7 @@ timeout_ms = 8000
 # ---- A declaration cannot be parametric ----
 
 # `from_bytes::<T>` and a per-leaf `ckpt_get::<L>` ask for one name whose result type the call
-# names; the declaration mechanism has no such form (handover H103). The two cases below state
+# names; the declaration mechanism has no such form. The two cases below state
 # what is missing, not how the module happens to be written today.
 
 [[tests]]
@@ -634,7 +634,7 @@ args = ["${case}", "std::fvm"]
 expect_exit = 0
 expect_stdout_exact = "0\n"
 
-# ---- The declaration of `re`: the operator as one signature (handover H19, step 10) ----
+#  ---- The declaration of `re`: the operator as one signature (step 10) ----
 
 [[tests]]
 name = "native.re_declaration_import"
@@ -663,7 +663,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "re_type.cml:11:17", "argument types: <> (int, string)", "<re:test>: (pattern: string, text: string) => bool"]
 
-# ---- The declarations of `time`: the clock and its text forms (handover H133) ----
+#  ---- The declarations of `time`: the clock and its text forms ----
 
 [[tests]]
 name = "native.time_declaration_import"
@@ -692,7 +692,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "time_type.cml:11:21", "argument types: <> (int, string)", "<time:strptime>: (text: string, format: string) => float"]
 
-# ---- Retired names are unknown names, not aliases (handover H122; design principles 1) ----
+#  ---- Retired names are unknown names, not aliases (design principles 1) ----
 #
 # `str::bytes` and `str::from_bytes` were deleted, not renamed: `bytes::encode`/`bytes::decode` are
 # the one conversion. An old form is deleted outright, with no alias and no diagnostic pointing at
@@ -723,7 +723,7 @@ expect_diagnostic_code = "0x03000015"
 expect_diagnostic_line = 10
 expect_output_contains = ["retired_str_from_bytes.cml:10:13", "Reference 'from_bytes'", "not exported by its module"]
 
-# ---- The declarations of `fs`: effects and error values (handover H131) ----
+#  ---- The declarations of `fs`: effects and error values ----
 #
 # `fs` is the first module of this batch whose operators all have effects. The declarations carry
 # the signatures only; the purity, the resources and the effects stay in `modules/fs` and are
@@ -758,7 +758,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "fs_type.cml:11:19", "argument types: <> (int)", "<fs:exists>: (path: string) => bool"]
 
-# ---- The declarations of `para` (handover H146, H202) ----
+#  ---- The declarations of `para` ----
 #
 # `rendezvous` has a fixed signature and is declared; `unordered_foreach` and `unordered_reduce`
 # take the element type of their array argument, which a `( T)` declaration states, and
@@ -820,7 +820,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "para_unordered_reduce_callback_arity.cml:13:103", "argument types: <(acc: int, item: int, extra: int) => int, int> (int[])", "<:mark/unordered_reduce_arr>: <f: (acc: T, item: T) => T, initial: T> (xs: T[]) => T"]
 
-# ---- The declaration of `this` (handover H146) ----
+#  ---- The declaration of `this` ----
 
 [[tests]]
 name = "native.this_declaration_import"
@@ -849,7 +849,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "this_type.cml:13:16", "argument types: <> (int)", "<this:zen>: () => string"]
 
-# ---- The declarations of `tiles` (handover H156) ----
+#  ---- The declarations of `tiles` ----
 #
 # `tiles:available` and `tiles:device` have fixed signatures and are declared in stdlib/tiles.cml;
 # the module's other ten operators take their signature from an argument and stay computed in C++.
@@ -887,7 +887,7 @@ expect_diagnostic_code = "0x03000110"
 expect_diagnostic_line = 12
 expect_diagnostic_column = 5
 expect_output_contains = ["This value has type 'bool', which is not the declared type 'int'"]
-# ---- The declarations of `tensor` (handover H151) ----
+#  ---- The declarations of `tensor` ----
 #
 # `tensor` is the largest module of the batch: 64 public operators, of which only ten have a
 # signature a declaration can state (an extent, an element count, the binary form, a NumPy file,
@@ -915,61 +915,61 @@ kind = "negative"
 case = "../../../cases/compile/native/tensor_arity.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "tensor_arity.cml:12:18", "argument types: <> (Tensor<float32, [?, ?]>, int)", "<tensor:numel>: (t: Tensor) => int"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "tensor_arity.cml:12:18", "argument types: <> (f32[?, ?], int)", "<tensor:numel>: (t: T[..]) => int"]
 
 [[tests]]
 name = "native.tensor_wrong_type"
-desc = "A `string` where the declaration of `to_bytes` says `Tensor`: refused at the call against the declared parameter name, and the computed operators of the same module are untouched."
+desc = "A `string` where the declaration of `to_bytes` takes a numeric array: refused at the call against the declared parameter name, and the computed operators of the same module are untouched."
 kind = "negative"
 case = "../../../cases/compile/native/tensor_type.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "tensor_type.cml:11:21", "argument types: <> (string)", "<tensor:to_bytes>: (t: Tensor) => Bytes"]
-# ---- The declaration of `show` (handover H175) ----
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "tensor_type.cml:11:21", "argument types: <> (string)", "<tensor:to_bytes>: (t: T[..]) => Bytes"]
+#  ---- The declaration of `show` ----
 #
-# `show` is the last zero-syntax name of H168's inventory: its result is fixed `void`, and its
-# umbrella parameter (`TensorLike`: a tensor or any array) is two declarations, one per accepted
-# type. The C++ module keeps the kernel, the traits, the semantics and the resources; it no
-# longer exports the group, so the declaration is the module's signature for the name.
-# `show([])` is the boundary: the empty array binds the type variable, so the call is still
-# accepted and still faults in the kernel, exactly as before the migration.
+# `show` is the last zero-syntax name of the inventory: its result is fixed `void`, and its
+# umbrella parameter (`TensorLike`: a tensor or any array) is one declaration over `A[..]`, whose
+# element type the argument binds. The C++ module keeps the kernel, the traits, the semantics and
+# the resources; it no longer exports the group, so the declaration is the module's signature for
+# the name. `show([])` is the boundary: the empty array's element type binds no type variable, so
+# the call has no candidate and is refused at the call.
 
 [[tests]]
 name = "native.tensor_show_declaration_import"
-desc = "`show`'s two declarations are what an importer sees: the tensor rule and the array rule both type-check and both reach the C++ operator, printing in the module's layout; the marker line proves the program ran to the end."
+desc = "`show`'s declaration is what an importer sees: the tensor call and the array call both type-check against the one rule `func show::<A>(t: A[..])` and both reach the C++ operator, printing the array form (the single print form of the 2026-10-24 ruling: the value's own shape in brackets, each element in the shortest text of its own type); the marker line proves the program ran to the end."
 kind = "behavior"
 case = "../../../cases/compile/native/tensor_show_declaration_import.cml"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_exact = "tensor([[      1.,       2.]], dtype=float32)\ntensor([      3.,       4.], dtype=float32)\n7\n"
+expect_stdout_exact = "[[1.0, 2.0]]\n[3.0, 4.0]\n7\n"
 
 [[tests]]
 name = "native.tensor_show_wrong_arity"
-desc = "Both declarations of `tensor:show` take one ordinary argument: a second one is refused at the call, and the two overloads the message lists are the declarations' — `stdlib/tensor.cml`, not the C++ module."
+desc = "The declaration of `tensor:show` takes one ordinary argument: a second one is refused at the call, and the overload the message lists is the declaration's — `stdlib/tensor.cml`, not the C++ module."
 kind = "negative"
 case = "../../../cases/compile/native/tensor_show_arity.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "tensor_show_arity.cml:12:5", "argument types: <> (Tensor<float32, [?, ?]>, int)", "<tensor:show>: (t: Tensor) => void", "<tensor:show>: (t: A[]) => void"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "tensor_show_arity.cml:12:5", "argument types: <> (f32[?, ?], int)", "<tensor:show>: (t: A[..]) => void"]
 
 [[tests]]
 name = "native.tensor_show_wrong_type"
-desc = "A `string` where the declarations of `tensor:show` accept a tensor or an array: refused at the call against the declared types, and the listed overloads are the declaration's two rules."
+desc = "A `string` where the declaration of `tensor:show` accepts an array of any element type: refused at the call against the declared type, and the listed overload is the declaration's one rule."
 kind = "negative"
 case = "../../../cases/compile/native/tensor_show_type.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "tensor_show_type.cml:11:5", "argument types: <> (string)", "<tensor:show>: (t: Tensor) => void", "<tensor:show>: (t: A[]) => void"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "tensor_show_type.cml:11:5", "argument types: <> (string)", "<tensor:show>: (t: A[..]) => void"]
 
 [[tests]]
 name = "native.tensor_show_empty_array"
-desc = "The umbrella boundary: `show([])` binds the second rule's type variable to the empty array's element type, so the call is accepted as it was under the C++ `TensorLike` resolver, and the kernel faults with `Unsupported Tensor element type.` — the declaration narrows nothing (H175, docs/stdlib-conventions.cn.md 第 8 节)."
+desc = "The umbrella boundary: the empty array literal's element type is `void`, which binds the second rule's type variable to nothing, so no candidate applies and `show([])` is refused when the program is compiled, with the one candidate the declaration has. The C++ `TensorLike` resolver accepted the call and left it to the kernel to fault (docs/stdlib-conventions.cn.md 第 8 节)."
 kind = "negative"
 case = "../../../cases/compile/native/tensor_show_empty_array.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["RuntimeDiag::RuntimeError", "tensor_show_empty_array.cml:12:5", "show: Unsupported Tensor element type."]
-# ---- The declarations of `pyplot` (handover H166) ----
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "tensor_show_empty_array.cml:15:5", "argument types: <> (void[])", "<tensor:show>: (t: A[..]) => void"]
+#  ---- The declarations of `pyplot` ----
 #
 # `pyplot:plot` has a fixed signature: four element types and two arities. The C++ module never
 # declared its purity, so a body-less declaration was refused by the loader; the module now
@@ -1002,7 +1002,7 @@ case = "../../../cases/compile/native/pyplot_type.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "pyplot_type.cml:11:5", "argument types: <> (string)", "<pyplot:plot>: (data: float[]) => void"]
-# ---- The declarations of `python` (handover H166) ----
+#  ---- The declarations of `python` ----
 #
 # Six of the eleven operators have fixed signatures and are declared in stdlib/python.cml; the
 # two variadic pairs (`py_call` with two URIs, `py_print`/`py_println`) and `py_wrap`/`py_unwrap`
@@ -1036,7 +1036,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "python_type.cml:11:5", "argument types: <> (int)", "<python:py_import>: (module_name: string) => PyObject"]
 
-# ---- The declarations of `nn` and `autodiff` (handover H165) ----
+#  ---- The declarations of `nn` and `autodiff` ----
 #
 # `nn` exports nineteen names. `save_params` is the one with a fixed signature — any value and a
 # directory, returning nothing — so it is declared in `stdlib/nn.cml`; the fifteen tensor
@@ -1107,7 +1107,7 @@ expect_diagnostic_line = 12
 expect_diagnostic_column = 5
 expect_output_contains = ["This value has type 'float', which is not the declared type 'int'"]
 
-# ---- The declarations of `sim` and `onnx` (handover H179) ----
+#  ---- The declarations of `sim` and `onnx` ----
 #
 # `sim` exports two names and both have fixed signatures — two `int`s to an `int`, three to a
 # `float` — so both are declared in `stdlib/sim.cml` and the module needs no signature file.
@@ -1177,7 +1177,7 @@ expect_diagnostic_code = "0x03000110"
 expect_diagnostic_line = 12
 expect_diagnostic_column = 5
 expect_output_contains = ["This value has type 'string[]', which is not the declared type 'int'"]
-# H183/H226: the callable operators of `rewrite` are declarations now (`stdlib/rewrite.cml`):
+# the callable operators of `rewrite` are declarations now (`stdlib/rewrite.cml`):
 # the engines that take a `Program` and `Rule[]`, the rule readers that take a `Rule`, and the
 # run readers that take a `Run`.
 
@@ -1234,7 +1234,7 @@ args = ["check", "${case}"]
 expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "rule_reader_type.cml:11:24", "argument types: <> (int)", "<rewrite:consts>: (r: Rule) => int"]
 
-# H163: `env`, `process` and `hash` are declaration modules now (`stdlib/env.cml`,
+# `env`, `process` and `hash` are declaration modules now (`stdlib/env.cml`,
 # `stdlib/process.cml`, `stdlib/hash.cml`). `env` and `process` keep their resources and their
 # effects in C++; `hash` is pure, and `sha256` is two declarations with two `#op` URIs. Each
 # module has the three cases the migration adds: the importer sees the declared types, a wrong
@@ -1323,7 +1323,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "hash_type.cml:11:19", "argument types: <> (int)", "<hash:sha256_str>: (s: string) => string", "<hash:sha256_bytes>: (s: Bytes) => string"]
 
-# ---- The declarations of `graph`: `constant` per sample type (handover H141, H202) ----
+#  ---- The declarations of `graph`: `constant` per sample type ----
 #
 # `constant` and `add_constant` take the type of their sample, which a declaration cannot compute
 # from an argument; they are written out per sample type instead (six each). The four operators of
@@ -1355,6 +1355,42 @@ case = "../../../cases/compile/native/graph_constant_type.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "graph_constant_type.cml:11:21", "argument types: <> (int, int)", "<graph:constant>: (n: Node, sample: i32) => i32?"]
+
+# ---- The declarations of `graph` itself: the handles, their operators and `type_of` ----
+#
+# `graph_constant_*` above pins the per-sample-type declarations; these three pin what an importer
+# of `graph` reads for the rest of the module: the entry, the program handle and its comparison
+# declarations, the graph and node handles, `id`, and `type_of` with the type name of a node.
+# The two negative cases are the arity and the type of `graph:root`'s one ordinary argument, so
+# they also say that the message's overload is the declaration's own parameter name (`p`) rather
+# than the C++ operator's.
+
+[[tests]]
+name = "native.graph_declaration_import"
+desc = "The declarations of `graph` are what an importer sees: `Program`, `Graph` and `Node` come from the module's declaration file, the two comparisons are the operators of the handle types, and each call reaches the operator the C++ module runs. It locks the answers: an entry equals itself and differs from the other one, a graph's name is `__root__`, a graph has nodes, `id` is stable on a node, and `type_of` of a node of no type answers null so the type name printed is the function's signature `() => int`."
+kind = "behavior"
+case = "../../../cases/compile/native/graph_declaration_import.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "true\nfalse\n__root__\ntrue\ntrue\n() => int\n"
+
+[[tests]]
+name = "native.graph_wrong_arity"
+desc = "The declaration of `graph:root` takes one ordinary argument: a call with none is refused at the call, and the overload the message lists is the declaration's, parameter name included (`<graph:root>: (p: Program) => Graph`)."
+kind = "negative"
+case = "../../../cases/compile/native/graph_arity.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "graph_arity.cml:10:17", "argument types: <> ()", "<graph:root>: (p: Program) => Graph"]
+
+[[tests]]
+name = "native.graph_wrong_type"
+desc = "An integer where the declaration of `graph:root` says `Program`: the call is refused at the declaration's type, and the signature in the message carries the declaration's own parameter name (`p`) — the source is the declaration file, not the C++ module."
+kind = "negative"
+case = "../../../cases/compile/native/graph_type.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "graph_type.cml:11:17", "argument types: <> (int)", "<graph:root>: (p: Program) => Graph"]
 
 # ---- The declaration itself is checked: its URI and its result type ----
 

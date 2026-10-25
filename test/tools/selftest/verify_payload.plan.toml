@@ -1,6 +1,6 @@
 # Fixture of test/tools/selftest/run.mjs: the payload a `verify_script_path` receives carries the
 # fields docs/test-plans.md documents. `JSON.stringify` drops an `undefined` key, so a field the
-# runner assembles from a value it does not have is absent here rather than null (H143).
+# runner assembles from a value it does not have is absent here rather than null.
 id = "selftest.verify_payload"
 order = 9
 tier = "fast"

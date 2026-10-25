@@ -7,16 +7,19 @@
 #include "camel/core/operator_table.h"
 #include "camel/core/tags.h"
 #include "camel/core/type/composite/tuple.h"
+#include "camel/core/rtdata/func.h"
 #include "camel/runtime/control_regions.h"
 #include "camel/runtime/core_facts.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/loop.h"
 #include "modules/tensor/type.h"
+#include "tiles/device.h"
 #include "tiles/internal/kernel_ir.h"
 #include "tiles/internal/placement.h"
 #include "tiles/internal/regions.h"
 #include "tiles/program.h"
 #include <algorithm>
+#include <span>
 #include <sstream>
 #include <unordered_map>
 #include <utility>
@@ -34,7 +37,7 @@ std::optional<Shape> shape(ty::Type *type) {
     const tensor::TensorFacts facts = tensor::tensorFactsOf(type);
     if (facts.dtype != ty::TypeCode::Float32 || !facts.isStaticShape())
         return std::nullopt;
-    return *facts.shape;
+    return tensor::extentsOf(*facts.shape);
 }
 const std::unordered_map<core::OperId, std::string> &operations() {
     static const auto result = [] {
@@ -185,7 +188,7 @@ bool deviceCapable(core::OperId oper) {
            !table.hasExternalEffect(oper);
 }
 const char *
-gpuRefusal(const rt::GCGraph &graph, const RegionAnalysis &analysis, rt::gc_node_ref_t id) {
+gpuRefusal(const rt::GCGraph &graph, const SegmentAnalysis &analysis, rt::gc_node_ref_t id) {
     if (id >= analysis.exclusions.size())
         return "";
     const std::string &reason = analysis.exclusions[id];
@@ -217,7 +220,87 @@ gpuRefusal(const rt::GCGraph &graph, const RegionAnalysis &analysis, rt::gc_node
     // operator's business.
     return "";
 }
-RegionAnalysis analyzeRegions(
+// The reading the residency conclusion is fed with: the graph's placements, and the blocks its
+// signature declares. A parameter is the caller's value, and the signature says which value that
+// is: `Device<T>` asserts one that lives on the device already, an ordinary declaration asserts the
+// host's -- the runtime enforces the declaration when it checks the call, and a resident kernel
+// reads the value it is given by that type. The graph's own value is what its exit type declares,
+// in the same way: an ordinary exit type hands the caller an ordinary value, a `Device<T>` one
+// leaves the value on the device. A `#gpu` scope is not a declaration of its signature: the
+// operators of its body are declared over ordinary values, so its parameters arrive as the caller's
+// ordinary values and its value leaves as one, whatever block the body works in.
+//
+// A call that hands a value to an ordinary parameter is therefore a host boundary: the call writes
+// the value back, and the callee writes it to the device at its own entry. A call whose callee
+// declares device parameters is no boundary: the call travels with the block of its argument.
+//
+// The reading sits here, with the graph reader, because it asks the type table for the
+// declarations (`asDeviceType`), which only the module links.
+namespace {
+
+namespace rt = runtime;
+
+/// Whether a parameter of `graph` is declared as a device value.
+bool parameterIsDevice(const rt::GCGraph &graph, rt::gc_node_ref_t port) {
+    const rt::GCNode *node = graph.node(port);
+    return node != nullptr && asDeviceType(node->dataType()) != nullptr;
+}
+
+/// Whether a call node hands a value to a parameter the callee declares as an ordinary value. A
+/// callee only the run knows reaches no declaration, and is a host boundary too.
+bool passesOrdinaryArgument(
+    const rt::Program &program, const rt::GCGraph &caller, rt::gc_node_ref_t call) {
+    const rt::GCGraph *callee = calleeGraphOf(program, caller, call);
+    if (callee == nullptr)
+        return true;
+    for (auto port : callee->normPorts())
+        if (!parameterIsDevice(*callee, port))
+            return true;
+    return false;
+}
+
+/// Whether the host observes what the graph returns: its exit type declares an ordinary value, and
+/// the graph hands the caller one. A `Device<T>` exit type hands it a value that stays on the
+/// device.
+bool returnsToHost(const rt::GCGraph &graph) {
+    const auto *type = graph.funcType();
+    return type == nullptr || !type->hasExitType() || asDeviceType(type->exitType()) == nullptr;
+}
+
+/// Whether the node takes what it is given where it lies: a call whose callee declares device
+/// parameters travels with the argument's block, so the call writes nothing back.
+bool readsInPlace(
+    const rt::Program &program, const rt::GCGraph &graph, const rt::GCNode &node,
+    rt::gc_node_ref_t ref) {
+    if (node.kind != rt::GCNodeKind::Func && node.kind != rt::GCNodeKind::Call)
+        return false;
+    return !passesOrdinaryArgument(program, graph, ref);
+}
+
+} // namespace
+
+ResidencyPlan planResidency(
+    const rt::Program &program, const rt::GCGraph &graph, const std::vector<RegionNode> &nodes,
+    const std::vector<Segment> &regions) {
+    ResidencyFacts facts;
+    facts.values.resize(nodes.size());
+    facts.returnsToHost = returnsToHost(graph);
+    for (size_t ref = 0; ref < nodes.size(); ++ref) {
+        const auto id       = static_cast<rt::gc_node_ref_t>(ref);
+        const rt::GCNode *node = graph.node(id);
+        if (node == nullptr)
+            continue;
+        auto &value = facts.values[ref];
+        if (node->kind == rt::GCNodeKind::Port)
+            value.block.placement = parameterIsDevice(graph, id) ? Placement::Gpu : Placement::Host;
+        else
+            value.block = placementOf(graph, id);
+        value.readsInPlace = readsInPlace(program, graph, *node, id);
+    }
+    return planResidency(facts, nodes, regions);
+}
+
+SegmentAnalysis analyzeRegions(
     const rt::Program &graphs, const rt::GCGraph &graph, rt::fact::FactStore &facts,
     const GpuScopes *scopes) {
     std::vector<RegionNode> nodes(graph.nodeCount());
@@ -296,22 +379,33 @@ RegionAnalysis analyzeRegions(
             changed = true;
         }
     } while (changed);
-    auto regions   = partitionRegions(nodes);
-    auto transfers = planRegionTransfers(nodes, regions);
-    return {std::move(regions), std::move(reasons), std::move(transfers)};
+    auto regions = partitionRegions(nodes);
+    // The boundary answer comes from the residency conclusion, not from the partition: the
+    // partition says which nodes form a segment, and the conclusion says what crosses its boundary
+    // (`tiles/internal/residency.h`).
+    auto residency = planResidency(graphs, graph, nodes, regions);
+    return {std::move(regions), std::move(reasons), std::move(residency)};
 }
-std::string
-inspectRegions(const rt::Program &graphs, const rt::GCGraph &graph, rt::fact::FactStore &facts) {
-    // The table is the compiler's view of the program, so it says the same thing the pass would:
-    // code written in a `#gpu` scope's arm or loop is a segment of that region (docs/design/gpu/plan.cn.md 2.5).
-    const GpuScopes scopes(graphs);
-    const auto analysis = analyzeRegions(graphs, graph, facts, &scopes);
+namespace {
+// One graph's regions, the boundaries they extract and why the nodes in none are in none, as the
+// report writes them, as the members of the object the caller opened. `skip` names nodes the
+// reader is told about elsewhere: the wrapper of a cut scope reports its exec calls as segments,
+// and an analysis exclusion of them says nothing.
+void writeAnalysis(
+    std::ostringstream &out, const rt::Program &graphs, const rt::GCGraph &graph,
+    rt::fact::FactStore &facts, const GpuScopes *scopes,
+    std::span<const rt::gc_node_ref_t> skip = {}) {
+    const auto analysis = analyzeRegions(graphs, graph, facts, scopes);
     const auto &regions = analysis.regions;
     const auto &reasons = analysis.exclusions;
-    std::ostringstream out;
-    out << "{\"schema\":1,\"regions\":[";
+    // `residency` is keyed by the partition's region index, so the per-segment answer can sit with
+    // the segment it belongs to: what the segment uploads, what the host downloads from it, and
+    // what it takes from an earlier segment in place.
+    const auto &segments = analysis.residency.segments;
+    out << "\"regions\":[";
     bool first = true;
-    for (const auto &region : regions) {
+    for (size_t r = 0; r < regions.size(); ++r) {
+        const auto &region = regions[r];
         if (!first)
             out << ',';
         first = false;
@@ -326,6 +420,22 @@ inspectRegions(const rt::Program &graphs, const rt::GCGraph &graph, rt::fact::Fa
         ids(out, extracted.parameters);
         out << ",\"result_arity\":" << region.outputs.size();
         out << ",\"extracted_nodes\":" << extracted.graph->nodeCount();
+        const SegmentResidency empty;
+        const auto &segment = r < segments.size() ? segments[r] : empty;
+        out << ",\"uploads\":";
+        ids(out, segment.uploads);
+        out << ",\"downloads\":";
+        ids(out, segment.downloads);
+        out << ",\"resident\":[";
+        bool firstHandoff = true;
+        for (const auto &handoff : segment.resident) {
+            if (!firstHandoff)
+                out << ',';
+            firstHandoff = false;
+            out << "{\"value\":" << handoff.value << ",\"producer\":" << handoff.producer
+                << ",\"consumer\":" << handoff.consumer << '}';
+        }
+        out << ']';
         for (auto id : region.members) {
             const auto *copy       = extracted.graph->header(extracted.sourceToNode[id]);
             const auto permissions = camel::core::tag::effectivePermissions(
@@ -338,13 +448,14 @@ inspectRegions(const rt::Program &graphs, const rt::GCGraph &graph, rt::fact::Fa
         }
         out << '}';
     }
+    // Once for the whole graph: the same three answers, which is what writes transfer nodes.
     out << "],\"transfers\":{\"uploads\":";
-    ids(out, analysis.transfers.uploads);
+    ids(out, analysis.residency.uploads);
     out << ",\"downloads\":";
-    ids(out, analysis.transfers.downloads);
+    ids(out, analysis.residency.downloads);
     out << ",\"resident\":[";
     first = true;
-    for (const auto &edge : analysis.transfers.resident) {
+    for (const auto &edge : analysis.residency.resident) {
         if (!first)
             out << ',';
         first = false;
@@ -353,14 +464,49 @@ inspectRegions(const rt::Program &graphs, const rt::GCGraph &graph, rt::fact::Fa
     }
     out << "]},\"excluded\":[";
     first = true;
-    for (size_t id = 0; id < reasons.size(); ++id)
-        if (!reasons[id].empty()) {
-            if (!first)
-                out << ',';
-            first = false;
-            out << "{\"node\":" << id << ",\"reason\":\"" << reasons[id] << "\"}";
-        }
-    out << "]}";
+    for (size_t id = 0; id < reasons.size(); ++id) {
+        if (reasons[id].empty() ||
+            std::find(skip.begin(), skip.end(), static_cast<rt::gc_node_ref_t>(id)) != skip.end())
+            continue;
+        if (!first)
+            out << ',';
+        first = false;
+        out << "{\"node\":" << id << ",\"reason\":\"" << reasons[id] << "\"}";
+    }
+    out << ']';
+}
+} // namespace
+std::string inspectRegions(
+    const rt::Program &graphs, const rt::GCGraph &graph, rt::fact::FactStore &facts,
+    std::span<const RegionSegment> segments) {
+    // The table is the compiler's view of the program, so it says the same thing the pass would:
+    // code written in a `#gpu` scope's arm or loop is a segment of that region (docs/design/gpu/plan.cn.md 2.5).
+    const GpuScopes scopes(graphs);
+    std::ostringstream out;
+    out << "{\"schema\":1";
+    std::vector<rt::gc_node_ref_t> cut;
+    for (const auto &segment : segments)
+        cut.push_back(segment.call);
+    // A scope a pass has cut is a wrapper of exec calls: each call carries the graph of its
+    // segment, and the segment graphs are what the report is about. The wrapper's own exclusion
+    // of those calls (`context_arguments`) says nothing a reader asked for, so it is left out.
+    out << ",\"segments\":[";
+    bool first = true;
+    for (const auto &segment : segments) {
+        if (!first)
+            out << ',';
+        first = false;
+        out << "{\"call\":" << segment.call << ",\"graph\":\"" << segment.graph->graph()->name()
+            << "\",";
+        // The segment's own regions: the code the pass moved into it, cut as the graph it now is.
+        // No scope covers a segment's graphs; the analysis a graph with no scope takes is the one
+        // the report has always shown.
+        writeAnalysis(out, graphs, *segment.graph->graph(), facts, nullptr);
+        out << '}';
+    }
+    out << "],";
+    writeAnalysis(out, graphs, graph, facts, &scopes, cut);
+    out << '}';
     return out.str();
 }
 } // namespace camel::tiles

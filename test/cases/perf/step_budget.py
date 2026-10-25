@@ -253,8 +253,7 @@ def expected_products(cell: dict) -> dict:
 
 
 def camel_exe() -> str:
-    # The install this case measures: `--camel <path>` names it; without it `$CAMEL_HOME/bin/camel`,
-    # else this tree's `out/latest/bin/camel`. One rule, in one place: test/tools/camel_arg.py.
+    # The install this case measures: `--camel <path>` names it; without it this tree's `out/latest/bin/camel`. One rule, in one place: test/tools/camel_arg.py.
     return CAMEL
 
 
@@ -770,7 +769,7 @@ GELU_ONLY_PROGRAM = """module gelu_rate
 import {{ Tensor, random, seed, sum, gelu }} from tensor
 import {{ grad }} from autodiff
 
-with <x: Tensor>
+with <x: f32[..]>
 func loss(): float {{ return sum(gelu(x)) }}
 
 func main(bench: bool, init_dir: string, final_dir: string): int sync {{

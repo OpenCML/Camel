@@ -1,7 +1,7 @@
 /**
- * `#impl` on a generic function (ruling impl-kernel-site, 2026-10-23: "泛型函数可以带 `#impl`").
+ * `#impl` on a generic function ("泛型函数可以带 `#impl`").
  * The kernel is a body-less declaration of the same module, and which executor an instance gets
- * is decided when the instance is made (H228: one operator, per-type executors).
+ * is decided when the instance is made (: one operator, per-type executors).
  *
  * `at` declares its kernel with the function's own type parameters, so every instance of it has
  * an executor: `at([7, 8, 9], 0)` is one OPER of `:op/idx_arr`.
@@ -15,18 +15,18 @@
  */
 module impl_generic
 
-#op<':op/idx_arr'>
+#op(':op/idx_arr')
 func idx_kernel::<T>(xs: T[], i: int): T
 
-#impl<idx_kernel>
+#impl(idx_kernel)
 func at::<T>(xs: T[], i: int): T {
     return xs[i]
 }
 
-#op<':op/add_l'>
+#op(':op/add_l')
 func add_kernel(a: int, b: int): int
 
-#impl<add_kernel>
+#impl(add_kernel)
 func add::<T>(a: T, b: T): T {
     return a - (0 - b)
 }

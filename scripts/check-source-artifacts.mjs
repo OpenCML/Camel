@@ -2,7 +2,7 @@
 // Copyright (c) the OpenCML Organization
 // SPDX-License-Identifier: MIT
 
-// The source tree is not an install (handover H191). A `.cmo` is the binary of a C++ module and
+// The source tree is not an install. A `.cmo` is the binary of a C++ module and
 // comes out of a build; a `.so` / `.dll` / `.pdb` / `.o` beside the sources is build output that
 // belongs in `build/` or `out/<tag>/`. The module loader finds modules beside the executable and
 // under `CAMEL_HOME` (`include/camel/utils/install_layout.h`), and `collect-out` puts the
@@ -14,7 +14,7 @@
 //                                                        list the delete, remove nothing
 //   node scripts/check-source-artifacts.mjs --root <dir> check that checkout (default: this one)
 //
-// `--clean` delegates to `node scripts/clean.js --source` (H195): the guard and `npm run clean`
+// `--clean` delegates to `node scripts/clean.js --source`: the guard and `npm run clean`
 // share one implementation of the delete, and one is the place a new safety rule goes.
 //
 // What is checked: the directories the build reads (BUILD_INFO_ROOTS in scripts/common.js) for a
@@ -22,7 +22,7 @@
 // `.o`, `.obj`, `.a`, `.lib`, `.dylib`, `.exe`, `.ilk`) anywhere under them. Two directories hold
 // vendored binaries rather than build output and are skipped: `modules/python/sdks/` and
 // `modules/python/dlls/` (both git-ignored). The one tracked `.cmo` is
-// `test/cases/modules/pass_not_found/unloadable.cmo`: a 72-byte text fixture (H204), outside the
+// `test/cases/modules/pass_not_found/unloadable.cmo`: a 72-byte text fixture, outside the
 // roots above, which this check never reads; `feat/modules/pass_not_found` pins that it stays
 // text, so it is not a compiled object an audit should count.
 //
@@ -51,7 +51,7 @@ const LINKER_OUTPUT = new Set(['.so', '.dll', '.pdb', '.o', '.obj', '.a', '.lib'
 
 /**
  * Everything a build must not leave next to the sources, relative to `root`.
- * Exported for `scripts/clean.js`, which owns the delete (H195).
+ * Exported for `scripts/clean.js`, which owns the delete.
  * @param {string} root
  * @returns {{ artifacts: string[], scanned: number }}
  */

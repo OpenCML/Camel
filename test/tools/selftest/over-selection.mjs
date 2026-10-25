@@ -1,16 +1,17 @@
 // Copyright (c) the OpenCML Organization
 // SPDX-License-Identifier: MIT
 
-// The mirror image of H201's reachability check: a plan may be selected by a change, but that
-// must not cost more than the change can invalidate. A slow-cost plan selected for a fast case
+// The mirror image of the reachability check: a plan may be selected by a change, but that
+// must not cost more than the change can invalidate. A costly plan -- a `slow` one, which the
+// release gate runs, or a `milestone` one, which only a milestone runs -- selected for a fast case
 // path runs in full (a named plan file ignores `--tier`), so a one-line edit to a common case
-// directory would drag the whole slow plan into the developer loop. The facts are derived from
+// directory would drag the whole costly plan into the developer loop. The facts are derived from
 // the tree (tier, the tests' tiers and timeouts, the `case` paths the plans name, and the
 // selection `--changed` itself returns); no plan or path is written down here.
 //
-// A selected slow-cost plan is accepted only when it names the changed case and is the only owner
+// A selected costly plan is accepted only when it names the changed case and is the only owner
 // of it, or when `test/plan-selection.json` records the shared case in `slowCaseOwners` with a
-// reason. An exception that excuses nothing (the plan is not slow-cost, or it shares no case with
+// reason. An exception that excuses nothing (the plan is not costly, or it shares no case with
 // a fast plan) is a failure too, so the list cannot rot.
 //
 // Run directly (`node test/tools/selftest/over-selection.mjs`) to check only this property; the
@@ -42,17 +43,22 @@ function walkPlanFiles(dir, out = []) {
     return out
 }
 
-/** A plan's cost class, from the facts the plan states: its tier, its tests' tiers, timeouts. */
+/**
+ * A plan's cost class, from the facts the plan states: its tier, its tests' tiers, timeouts. The
+ * costly layers are `slow` (the release gate's batch) and `milestone` (what only runs at a
+ * milestone): a file target runs such a plan in full, which is what the mirror below is about.
+ */
 function planCost(planFile) {
     const doc = parseTomlFile(planFile)
-    const topTier = doc.tier === 'slow' ? 'slow' : doc.tier === 'debug' ? 'debug' : 'fast'
+    const costly = (tier) => tier === 'slow' || tier === 'milestone'
+    const topTier = costly(doc.tier) || doc.tier === 'debug' ? doc.tier : 'fast'
     const tests = (doc.tests || []).map((test) => ({ ...(doc.defaults || {}), ...test }))
     const testTier = (test) =>
-        test.tier === 'slow' || test.tier === 'debug' ? test.tier : topTier === 'slow' ? 'slow' : 'fast'
+        costly(test.tier) || test.tier === 'debug' ? test.tier : costly(topTier) ? topTier : 'fast'
     const maxTimeout = Math.max(10000, ...tests.map((test) => Number(test.timeout_ms) || 0))
     return {
         tier: topTier,
-        slow: topTier === 'slow' || tests.some((test) => testTier(test) === 'slow'),
+        slow: costly(topTier) || tests.some((test) => costly(testTier(test))),
         maxTimeout,
     }
 }
@@ -85,6 +91,8 @@ export function overSelectionProblems(repoRoot = defaultRepoRoot) {
     }
     const planFiles = walkPlanFiles(plansRoot)
     const planCosts = new Map(planFiles.map((file) => [relFromRepo(repoRoot, file), costOf(file)]))
+    // `slow` here names the cost class, not the tier: a `slow` test and a `milestone` test are
+    // both plans a developer change may not drag into the fast loop.
     const isSlowCost = (relative) => {
         const cost = planCosts.get(relative)
         return cost !== undefined && (cost.slow || cost.maxTimeout >= LONG_TIMEOUT_MS)
@@ -148,8 +156,8 @@ export function overSelectionProblems(repoRoot = defaultRepoRoot) {
     for (const file of casePaths) {
         const plans = owners.get(file)
         if (!plans || plans.size === 0) continue
-        // A "fast case path": at least one plan runs it as a fast test (a plan with a slow test is
-        // slow-cost, so this is the same fact as the plan's cost class, derived, not listed).
+        // A "fast case path": at least one plan runs it as a fast test (a plan with a slow or a milestone
+        // test is costly, so this is the same fact as the plan's cost class, derived, not listed).
         if (![...plans].some((plan) => !isSlowCost(plan))) continue
         const selection = plansForChanges([file])
         if (!selection) continue
@@ -167,18 +175,18 @@ export function overSelectionProblems(repoRoot = defaultRepoRoot) {
             const cost = planCosts.get(plan)
             const facts = `tier ${cost.tier}${cost.maxTimeout > 10000 ? `, longest timeout ${cost.maxTimeout} ms` : ''}`
             violations.push(
-                `${file} selects the slow-cost plan ${plan} (${facts}) and a file target runs in full: `
+                `${file} selects the costly plan ${plan} (${facts}) and a file target runs in full: `
                 + (owner
                     ? 'the plan runs the case but is not its only owner, so the fast plan already covers the change; '
                     : 'the plan does not run that case, so the change cannot invalidate it; ')
-                + 'name the slow plan only for the cases it runs (`ownCases`), or record the shared case in '
+                + 'name the costly plan only for the cases it runs (`ownCases`), or record the shared case in '
                 + "plan-selection.json's `slowCaseOwners` with a reason (H205)"
             )
         }
     }
     if (violations.length > 0) {
         problems.push(
-            `plan-selection: ${violations.length} case path(s) run a slow plan the change cannot invalidate:\n  `
+            `plan-selection: ${violations.length} case path(s) run a slow or milestone plan the change cannot invalidate:\n  `
             + [...new Set(violations)].join('\n  ')
         )
     }

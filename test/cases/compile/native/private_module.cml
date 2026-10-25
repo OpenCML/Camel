@@ -1,11 +1,11 @@
 /**
  * A body-less declaration the module does not export is a private operator of the module: its
  * own bodies call it, and an importer cannot see the name, not even as `module::name` (handover
- * H94, ruling 3).
+ * rule 3).
  */
 module native_private
 
-#op<':op/idx_arr'>
+#op(':op/idx_arr')
 func at::<T>(xs: T[], i: int): T
 
 /// The module's own wrapper around its private operator.

@@ -232,7 +232,7 @@ bool ParserImpl::expectListEnd(TK closer) {
     // A list whose text ends before its closer is reported and the list closes without one. The
     // terminal token is not taken: it belongs to the node that closes the Program, and taking it
     // here would leave it out of the tree or, when a caller took it for the closer, in it twice
-    // (H417).
+    // 
     unexpected({e(TK::Comma), e(closer)});
     return false;
 }
@@ -266,7 +266,7 @@ void ParserImpl::recover(bool inBlock, bool topLevel) {
                 break;
             }
             if (pos_ != start && tok().newlineBefore() &&
-                (topLevel ? startsDecl(cur_) || atRuleDecl(0) || atAnalysisDecl(0) : startsStmt(cur_))) {
+                (topLevel ? startsDecl(cur_) || atRuleDecl(0) || atFactDecl(0) : startsStmt(cur_))) {
                 break;
             }
             // A declaration keyword starts a declaration wherever it stands.
@@ -345,7 +345,7 @@ void ParserImpl::parseProgram() {
         if (cur_ == TK::Semi) {
             // One separator between declarations was taken already.
             error(SyntaxError::Kind::ExtraSemicolon, {}, pos_);
-        } else if (startsDecl(cur_) || atRuleDecl(0) || atAnalysisDecl(0)) {
+        } else if (startsDecl(cur_) || atRuleDecl(0) || atFactDecl(0)) {
             parseDecl();
             if (!panic_) {
                 eat(TK::Semi);
@@ -378,7 +378,7 @@ uint32_t ParserImpl::afterModifiers() const {
 }
 
 /// decl : moduleDecl | importDecl | exportDecl | namespaceDecl | usingNamespaceDecl
-///      | tagDecl | resourceDecl | dataDecl | funcDecl | typeDecl | ruleDecl
+///      | tagDecl | resourceDecl | dataDecl | funcDecl | typeDecl | ruleDecl | factDecl
 /// Decided on the first token; after `export` on the next one (`export let`, `export type`, ...).
 /// The word `tag` is not reserved: a declaration starts with it only when a tag name follows
 /// (`atTagDecl`), so a value called `tag` still reads as a value.
@@ -402,8 +402,8 @@ void ParserImpl::parseDecl() {
         return parseAnnotatedStmt();
     case TK::KwExport: {
         const TK next = peek(1);
-        if (atAnalysisDecl(1)) {
-            return parseAnalysisDecl();
+        if (atFactDecl(1)) {
+            return parseFactDecl();
         }
         if (atRuleDecl(1)) {
             return parseRuleDecl();
@@ -426,8 +426,8 @@ void ParserImpl::parseDecl() {
         if (atResourceDecl(0)) {
             return parseResourceDecl();
         }
-        if (atAnalysisDecl(0)) {
-            return parseAnalysisDecl();
+        if (atFactDecl(0)) {
+            return parseFactDecl();
         }
         if (atRuleDecl(0)) {
             return parseRuleDecl();
@@ -443,7 +443,7 @@ void ParserImpl::parseDecl() {
 ///   - `sync` is looked past to see what it is written on: `{` (a synchronous block),
 ///     anything else (a lambda or a function type, read as an expression);
 ///   - `{` is a struct literal when it is `{}`, `{ name: ...` or `{ ...`, a block otherwise.
-/// `static for` is a statement, not a value (H51 step 3): it parses here only, so writing it
+/// `static for` is a statement, not a value: it parses here only, so writing it
 /// where a value is needed is a syntax error rather than a silently dropped value.
 void ParserImpl::parseStmt() {
     Depth depth(*this);
@@ -553,7 +553,7 @@ void ParserImpl::parseStmtBlock() {
 
 /// blockExpr : stmtBlock | dataExpr
 /// The block is the first alternative: `{}` is the empty block here. `{ name: ...`, `{ ...` and
-/// `{ static for ...` are expressions: a struct literal or a struct comprehension (H51 step 4).
+/// `{ static for...` are expressions: a struct literal or a struct comprehension.
 void ParserImpl::parseBlockExpr() {
     if ((cur_ == TK::KwSync && peek(1) == TK::LBrace) ||
         (cur_ == TK::LBrace && !braceIsStruct(0))) {
@@ -589,10 +589,20 @@ void ParserImpl::parseModuleName() {
     close(m, NK::ModuleName);
 }
 
-/// moduleDecl : 'module' identDef
+/// moduleDecl : frontMatter? 'module' identDef
 void ParserImpl::parseModuleDecl() {
     const size_t m = mark();
-    bump();
+    parseFrontMatter();
+    parseModuleDeclRest(m);
+}
+
+/// The part of moduleDecl after the tags that may precede it; `m` marks where it began. A tag
+/// written before `module` (`#gpu module m`, design principles 13.4) is the fact of the module
+/// and reaches each of its top-level functions.
+void ParserImpl::parseModuleDeclRest(size_t m) {
+    if (!expect(TK::KwModule)) {
+        return close(m, NK::ModuleDecl);
+    }
     expectName(NK::IdentDef);
     close(m, NK::ModuleDecl);
 }
@@ -740,13 +750,16 @@ void ParserImpl::parseFuncAnno() {
 }
 
 /// A statement that starts with annotations or tag uses: a function declaration, a type
-/// declaration, a rule declaration (`#requires<...> rule f(...)`), or an annotated/tagged block
+/// declaration, a rule declaration (`#requires(...) rule f(...)`), a fact declaration
+/// (`#requires(...) fact f(...)`), a module declaration
+/// (`#gpu module m`, design principles 13.4), or an annotated/tagged block
 /// (blockStmt's second form; an `@name(args)` annotation, the removed spelling of the numeric
 /// permission annotation; `#tag { ... }` on
 /// a block, 6.2). They are read first; a block follows when the next token is '{' or `sync {`, a
-/// type declaration when it is 'type', a rule when the tags are followed by `rule`, anything else
-/// continues the function declaration. After a tag use '{' is always a block, never a struct
-/// literal.
+/// type declaration when it is 'type', a module declaration when it is `module`, a rule when the
+/// tags are followed by `rule`, a fact when they are followed by `fact`, anything else continues
+/// the function declaration. After a tag use
+/// '{' is always a block, never a struct literal.
 void ParserImpl::parseAnnotatedStmt() {
     const size_t m = mark();
     parseFrontMatter();
@@ -756,9 +769,15 @@ void ParserImpl::parseAnnotatedStmt() {
     if (atRuleDecl(0)) {
         return parseRuleDeclRest(m);
     }
+    if (atFactDecl(0)) {
+        return parseFactDeclRest(m);
+    }
     if (cur_ == TK::LBrace || (cur_ == TK::KwSync && peek(1) == TK::LBrace)) {
         parseStmtBlock();
         return close(m, NK::BlockStmt);
+    }
+    if (cur_ == TK::KwModule) {
+        return parseModuleDeclRest(m);
     }
     if (cur_ == TK::KwType) {
         return parseTypeDeclRest(m);
@@ -785,21 +804,31 @@ void ParserImpl::parseFrontMatter() {
 /// (design principles 6.4): it has no block, and what it declares is its signature. The
 /// `uses`/`pure` clause after the result type says which resources a call touches (design
 /// effects plan 3.1). The optional `when` after it is the applicability condition (design
-/// principles 5.13, handover H234).
+/// principles 5.13).
 void ParserImpl::parseFuncDecl() {
     const size_t m = mark();
     parseFrontMatter();
     parseFuncDeclRest(m);
 }
 
-/// tagDecl : 'export'? 'tag' identDef angledParams? 'on' tagPositions ('read_by' tagReaders)?
+/// tagDecl : 'export'? 'tag' identDef typeParams? parentParams? 'on' tagPositions
+///             ('read_by' tagReaders)? whenClause?
 ///         | 'export'? 'tag' identDef '=' bracketIdents
 ///
 /// A tag is a name in the namespace of functions and types (design principles 6.2): the
 /// positions after `on` say where it may be written, `read_by` names the passes that read it,
 /// and the second form makes it the group of the tags in the list (`tag finite_math = [no_nans,
 /// no_infs]`). `tag`, `on` and `read_by` are contextual: they are not reserved words, and a
-/// declaration starts with `tag` only when a name, `<` or `=` follows it.
+/// declaration starts with `tag` only when a name, `::`, `(`, `=` or the contextual `on`
+/// follows it.
+///
+/// A tag's parameters are its own -- they are what a use builds its fact from -- so they are
+/// written in parentheses, a name and a type each (`tag width(w: int) on field`). Its type
+/// parameters are declared `::<...>` after its name and its condition is a `when` clause, the
+/// same spelling a function, a rule and a pass use; a parameter that carries a function is
+/// therefore either a type parameter the condition holds for
+/// (`export tag vjp::<F>(rule: F) on func when is_function::<F>()`) or a concrete function type
+/// (`tag rule(f: (x: int) => int) on field`).
 void ParserImpl::parseTagDecl() {
     const size_t m = mark();
     eat(TK::KwExport);
@@ -807,13 +836,16 @@ void ParserImpl::parseTagDecl() {
     expectName(NK::IdentDef);
     if (eat(TK::Assign)) {
         // Same as parseResourceDecl: `tag finite =` with the text ending there must leave the
-        // terminal token to the Program node, not read it as the `[` of the group (H417).
+        // terminal token to the Program node, not read it as the `[` of the group.
         parseBracketedIdents(TK::RBracket, NK::BracketIdents);
         close(m, NK::TagDecl);
         return;
     }
-    if (cur_ == TK::Lt || cur_ == TK::LAngle) {
-        parseAngledParams();
+    if (cur_ == TK::ColonColon && (peek(1) == TK::Lt || peek(1) == TK::LAngle)) {
+        parseTypeParams();
+    }
+    if (cur_ == TK::LParen) {
+        parseParentParams();
     }
     if (!atWord(0, "on")) {
         unexpected({e(TK::Identifier)});
@@ -825,17 +857,21 @@ void ParserImpl::parseTagDecl() {
         bump();
         parseTagReaders();
     }
+    if (atWord(0, "when")) {
+        parseWhenClause();
+    }
     close(m, NK::TagDecl);
 }
 
-/// Whether a tag declaration starts at offset `n`: `tag` followed by a name and then `<`, `=`,
-/// or the contextual `on`. A `tag` followed by anything else is an ordinary name.
+/// Whether a tag declaration starts at offset `n`: `tag` followed by a name and then `::`, `(`,
+/// `=`, or the contextual `on`. A `tag` followed by anything else is an ordinary name.
 bool ParserImpl::atTagDecl(uint32_t n) const {
     if (!atWord(n, "tag") || peek(n + 1) != TK::Identifier) {
         return false;
     }
     const TK third = peek(n + 2);
-    return third == TK::Lt || third == TK::LAngle || third == TK::Assign || atWord(n + 2, "on");
+    return third == TK::ColonColon || third == TK::LParen || third == TK::Assign ||
+           atWord(n + 2, "on");
 }
 
 /// tagPositions : tagPositionName (',' tagPositionName)* ','?
@@ -886,8 +922,8 @@ void ParserImpl::parseTagReaders() {
 }
 
 /// tagUse : '#' (tagRef | '[' (tagRef (',' tagRef)* ','?)? ']')
-/// The `#` forms of design principles 6.2: `#name`, `#name<args>` and the group
-/// `#[a, b<v>]`. `#` used to start a comment; it is now always a tag (2.1).
+/// The `#` forms of design principles 6.2: `#name`, `#name(args)` and the group
+/// `#[a, b(v)]`. `#` used to start a comment; it is now always a tag (2.1).
 void ParserImpl::parseTagUse() {
     const size_t m = mark();
     bump(); // `#`
@@ -913,12 +949,16 @@ void ParserImpl::parseTagUse() {
     close(m, NK::TagUse);
 }
 
-/// tagRef : identRef angledValues?
+/// tagRef : identRef parentArgues?
+///
+/// A tag's arguments are its own, so they are written in parentheses (`#width(8)`). A tag is
+/// never written before an expression that starts with `(`, so an open parenthesis right after
+/// the name is the argument list and nothing else.
 void ParserImpl::parseTagRef() {
     const size_t m = mark();
     parseIdentRef(NK::IdentRef);
-    if (cur_ == TK::LAngle) {
-        parseAngledValues();
+    if (cur_ == TK::LParen) {
+        parseParentArgues();
     }
     close(m, NK::TagRef);
 }
@@ -944,6 +984,12 @@ void ParserImpl::parseFuncDeclRest(size_t m) {
         parseAngledParams();
     }
     eat(TK::KwExport);
+    // `with <...> rule ...` (`rule tile_matmul(...)`, design principles 5.5): a rule writes the
+    // same `with` parameters, in the same place, so the declaration is a rule from here on and
+    // the rest of it is read as one.
+    if (atRuleDecl(0)) {
+        return parseRuleDeclRest(m);
+    }
     if (!eat(TK::KwFunc)) {
         unexpected({e(TK::KwFunc)});
         return close(m, NK::FuncDecl);
@@ -967,7 +1013,7 @@ void ParserImpl::parseFuncDeclRest(size_t m) {
         parseWhenClause();
     }
     // A function written without a body is the declaration of an operator of a C++ module: the
-    // signature is the whole of it (design principles 6.4, handover H19 step 1). A block is
+    // signature is the whole of it (design principles 6.4 step 1). A block is
     // still what follows a signature in every other case, so the next token decides; `sync`
     // belongs to the block and is read with it (parseStmtBlock).
     const bool hasBlock =
@@ -996,7 +1042,7 @@ void ParserImpl::parseTypeParams() {
     bump(); // `<`
     {
         Scope scope(*this, false);
-        // `::<` at the end of the text: the name is reported, not read (H417).
+        // `::<` at the end of the text: the name is reported, not read.
         parseIdentDef();
         while (!panic_ && eat(TK::Comma) && cur_ == TK::Identifier) {
             parseIdentDef();
@@ -1155,7 +1201,7 @@ void ParserImpl::parseResourceDecl() {
     if (eat(TK::Assign)) {
         // The group of a resource is written in brackets, and the text may end right after the
         // `=`: `parseBracketedIdents` asks for the bracket and reports it when it is not there,
-        // rather than taking whatever token stands there (H417).
+        // rather than taking whatever token stands there.
         parseBracketedIdents(TK::RBracket, NK::BracketIdents);
     } else if (atWord(0, "unordered")) {
         bump();
@@ -1192,7 +1238,7 @@ void ParserImpl::parseModifiers() {
 /// Asking through `identDef` is what the parser does where a name is required but the text may end
 /// where the name should be. There, taking the token that stands at the end would fold the terminal
 /// token into the tree, and `parseProgram` closes the Program node with that same token, so the tree
-/// would hold one token twice and stop being lossless (H417).
+/// would hold one token twice and stop being lossless.
 void ParserImpl::parseIdentDef() { expectName(NK::IdentDef); }
 
 /// identRef : (IDENTIFIER '::')* IDENTIFIER
@@ -1247,7 +1293,7 @@ static TK openOf(TK closer) {
 /// The caller passes the opening token it decided on; the function asks for it, so a text that ends
 /// where the list opens is reported rather than read: taking the terminal token as the opener would
 /// fold it into the tree and leave the Program node without it (or with it twice), which is not
-/// lossless (H417). A name that is not there is reported by `parseIdentDef` in the same way.
+/// lossless. A name that is not there is reported by `parseIdentDef` in the same way.
 void ParserImpl::parseBracketedIdents(TK closer, NK kind) {
     const size_t m = mark();
     if (!expect(openOf(closer))) {

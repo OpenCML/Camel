@@ -9,8 +9,7 @@
  * type or shape follows their arguments — elementwise arithmetic, the reshaping operators, the
  * axis forms of a reduction — cannot be written as a declaration; they are implemented in
  * `modules/tensor` and listed in `stdlib/signatures/tensor.cml`, whose entries this page renders
- * under the same sections (design principles 6.4). `show`'s umbrella parameter
- * — a tensor, or any array — is written as one declaration per accepted type.
+ * under the same sections (design principles 6.4).
  */
 
 // The fixed signatures of the operators of `modules/tensor` (design principles 6.4).
@@ -21,33 +20,39 @@
 
 module tensor
 
-import { is_numeric } from types
+import { is_numeric, is_plain } from types
 
-// The shape of a signature (design principles 4.1 and 5.5; the language author's ruling of
-// 2026-10-24 on `bare-tensor-parameter-instantiation-measured`,
-// docs/handover/reviews/questions-2026-10-23.md): the element type of a tensor operand is an
-// explicit type variable of the head, written `func f::<T>(x: T[..]) when is_numeric::<T>()`, and
-// the call site's argument type instantiates it. That is the spelling P4's endpoint keeps: no
-// signature writes the bare `Tensor` name.
+// Every signature here writes the element type of its operand as an explicit type variable of
+// the head -- `func f::<T>(x: T[..]) when is_numeric::<T>()` -- and the call site's argument type
+// instantiates it (design principles 4.1 and 5.5): a tensor type always states its element type,
+// so no signature writes a name that leaves it out and no arm takes a value whose element type
+// nobody stated. The operators of this module answer with
+// a numeric array whose element type the operation fixes (`ones` and `zeros` an f32 one, an
+// elementwise operator the promoted element type of its operands), and a `T[..]` parameter binds
+// `T` from it.
 //
-// Two arms stand side by side here, and they take disjoint arguments, so neither shadows the
-// other and no call becomes ambiguous. Each function below therefore declares the array spelling
-// first (the target) and the module spelling second (the transition):
+// The condition on the head is what the operation asks of the element type, not a habit: the
+// arithmetic and the layout of a tensor ask `is_numeric::<T>()`, and an operation that moves the
+// elements' own bytes without computing on them asks `is_plain::<T>()`, the element types a tensor
+// holds as a run of bytes. `to_bytes` is such an operation, so a `bool` tensor has its bytes like
+// any other pure-data tensor, and `from_bytes::<bool>` reads them back.
 //
-//   * `t: T[..]` takes a native array of any rank and any numeric element type — `f32[3]`,
-//     `f32[2, 3]`, `f32[..]`, `int[3]` — and the body sees the element type the call bound.
-//   * `t: Tensor` (the bare module spelling) is what the operators of this module still return:
-//     `ones`, `zeros`, `new` and every elementwise operator produce the module's tensor type, and
-//     a `T[..]` parameter cannot bind `T` from it while `Tensor` is a type of its own rather than
-//     the array alias (`f32[..]`). Removing this arm is the rest of P4 — it needs the alias first;
-//     see docs/handover/reviews/questions-2026-10-24-evening.md §bare-tensor-signature-rewrite for
-//     the measurement.
+// A signature that returns a tensor of undeclared element type is gone as well: `load_npy`
+// declares the element type it expects, the call writes it (`load_npy::<f32>(p)`) or the type of
+// the position it stands in says it, and the runtime checks the file's dtype against it, reporting
+// a fault at the call when the two differ -- the same shape of answer as `json::decode_as`'s
+// decode by type. Its element type is the *result's*, and a declaration's parameters cannot mention
+// a type variable that only the result mentions, so its signature is computed rather than
+// declared: `loadNpyOperatorGroup` in `modules/tensor` is the source and
+// `stdlib/signatures/tensor.cml` the reference, exactly as for `from_bytes`, whose element type is
+// also the call's.
 //
-// `show` keeps the two arms it had. Its second arm is the umbrella parameter the C++ resolver had
-// (a tensor, or *any* array), and a test pins that it narrows nothing: `show([])` binds the empty
-// array's element type and the kernel faults at run time
-// (test/plans/feat/compile/native_declarations.plan.toml, tensor_show_empty_array.cml). A third
-// arm over `T[..]` would make every rank-1 numeric array ambiguous with that umbrella.
+// `show` takes one arm over an array of any rank and any element type -- `A[..]`, whose element
+// type variable the argument binds -- because the parameter is the operator's umbrella one and
+// nothing about the value narrows it. A rank-1 arm beside it would apply to the same numeric
+// arrays, so there is one arm; an array whose element type nobody stated (the empty array literal
+// `[]`, whose type is `Void[]`) binds no element type and has no candidate here
+// (test/plans/feat/compile/native_declarations.plan.toml, tensor_show_empty_array.cml).
 
 // ---- shape and reshaping ----
 
@@ -55,13 +60,11 @@ import { is_numeric } from types
 /// @pure
 /// @example shape(new([[1.0, 2.0], [3.0, 4.0]]))    // [2, 2]
 export func shape::<T>(t: T[..]): int[] when is_numeric::<T>()
-export func shape(t: Tensor): int[]
 
 /// The number of elements in a tensor: the product of its extents.
 /// @pure
 /// @example numel(zeros([2, 3]))    // 6
 export func numel::<T>(t: T[..]): int when is_numeric::<T>()
-export func numel(t: Tensor): int
 
 /// The extent of one axis; a negative axis counts from the last one (`-1` is the last axis).
 /// @pure
@@ -69,39 +72,29 @@ export func numel(t: Tensor): int
 /// @example dim(new([[1.0, 2.0], [3.0, 4.0]]), 1)    // 2
 export func dim::<T>(t: T[..], axis: int): int when is_numeric::<T>()
 export func dim::<T>(t: T[..], axis: i32): int when is_numeric::<T>()
-export func dim(t: Tensor, axis: int): int
-export func dim(t: Tensor, axis: i32): int
 
 // ---- binary form ----
 
 /// The elements of a tensor as little-endian bytes, in row-major order: the payload `from_bytes`
-/// reads back.
+/// reads back. The elements are the tensor's own bytes, so every pure-data element type has them:
+/// one byte an element for a `bool` tensor, four for an `f32` one and eight for an `f64` or `c64`
+/// one.
 /// @pure
 /// @example to_bytes(new([1.0, 2.0]))    // [0, 0, 128, 63, 0, 0, 0, 64]
-export func to_bytes::<T>(t: T[..]): Bytes when is_numeric::<T>()
-export func to_bytes(t: Tensor): Bytes
-
-/// The tensor a NumPy `.npy` file holds: its element type and extents are the file's, known when
-/// the program runs (check them with `as`, or read them with `shape`).
-/// @effect reads a file
-/// @fails fault `RuntimeError` when the file is missing, is not a NumPy file, or holds a storage type the module does not read
-/// @example load_npy('x.npy') as Tensor<f32, [2, 2]>
-export func load_npy(path: string): Tensor
+export func to_bytes::<T>(t: T[..]): Bytes when is_plain::<T>()
 
 /// Writes a tensor to a NumPy `.npy` file, replacing it.
 /// @effect writes a file
 /// @fails fault `RuntimeError` when the file cannot be written
 /// @example save_npy(zeros([2, 2]), 'x.npy')
 export func save_npy::<T>(t: T[..], path: string): void when is_numeric::<T>()
-export func save_npy(t: Tensor, path: string): void
 
 // ---- conversion and display ----
 
 /// Prints t to the console, in the module's layout.
 /// @effect writes the console
 /// @example show(new([[1.0, 2.0]]))
-export func show(t: Tensor): void
-export func show::<A>(t: A[]): void
+export func show::<A>(t: A[..]): void
 
 // ---- module state ----
 

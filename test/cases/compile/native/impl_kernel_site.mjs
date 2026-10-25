@@ -5,11 +5,11 @@
  * implements belong to the module that owns the operator). The standard library's kernels go beside
  * the functions they implement, which is what this case pins down:
  *
- *   A. `#op<'tensor:log_softmax'>` in a module that is not `tensor` is refused with
+ *   A. `#op('tensor:log_softmax')` in a module that is not `tensor` is refused with
  *      NativeDeclarationForeignOperator, and not with NativeDeclarationNotLoaded: the operator is
  *      registered and the module imports it, so what refuses the declaration is ownership. A module
  *      writes its own signature, and no other module's.
- *   B. The same for `#op<'nn:adam'>` (Adam's kernel is `nn`'s). The ownership rule is the only
+ *   B. The same for `#op('nn:adam')` (Adam's kernel is `nn`'s). The ownership rule is the only
  *      refusal: the shape of an Adam over a parameter tree is legal, and the kernel's presence on a
  *      generic function is not what refuses the declaration.
  *   C. The module that does own `tensor:log_softmax` is a declaration module (a `.cml` beside a
@@ -84,10 +84,10 @@ const a = run(
         'site_a.cml': `module kernel_site_a
 import { Tensor } from tensor
 
-#op<'tensor:log_softmax'>
+#op('tensor:log_softmax')
 func log_softmax_kernel(x: Tensor<f32>, axis: int): Tensor<f32>
 
-#impl<log_softmax_kernel>
+#impl(log_softmax_kernel)
 func log_softmax_here(x: Tensor<f32>, axis: int): Tensor<f32> {
     return x
 }
@@ -127,10 +127,10 @@ const b = run(
         'site_b.cml': `module kernel_site_b
 import nn
 
-#op<'nn:adam'>
+#op('nn:adam')
 func adam_kernel::<P>(params: P, grads: P): P
 
-#impl<adam_kernel>
+#impl(adam_kernel)
 func adam_here::<P>(params: P, grads: P): P {
     return params
 }
@@ -160,10 +160,10 @@ if (bFound) check('B. the refusal is the catalog code', bFound.code === '0x03000
 const cFiles = {
     'tensor.cml': `module tensor
 
-#op<'tensor:log_softmax'>
+#op('tensor:log_softmax')
 func log_softmax_kernel(x: Tensor<f32>, axis: int): Tensor<f32>
 
-#impl<log_softmax_kernel>
+#impl(log_softmax_kernel)
 export func log_softmax(x: Tensor<f32>, axis: int): Tensor<f32> {
     return x
 }

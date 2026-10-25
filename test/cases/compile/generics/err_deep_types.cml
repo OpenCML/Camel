@@ -1,0 +1,38 @@
+/**
+ * The bound of design principles 5.5, and nothing subtler: every arm of `churn` hands it a value
+ * of a different scalar type, so its instance keys are many and none of them is built out of
+ * another -- no type argument grows along the call cycle, which is refused on its own
+ * (GenericTypeArgumentGrows) -- and what stops the program is the count of instances of one
+ * function that may be built inside one another. The scalar types are leaves, so no arm's type
+ * argument contains an open instance's type argument.
+ */
+module err_deep_types
+
+func churn::<T>(x: T, k: int): int {
+    let anF32: f32 = 1.0
+    let anF64: f64 = 1.0
+    let anI32: i32 = 1
+    let anI64: i64 = 1
+    let aBf16: bf16 = 1.0
+    let aF16: f16 = 1.0
+    let aBool = true
+    let aString = 's'
+    let aC64: c64 = 1 - 2i
+    let aC128: c128 = 1 + 2i
+    return if k <= 0 then 0
+           else if k == 1 then churn(anF32, k - 1)
+           else if k == 2 then churn(anF64, k - 1)
+           else if k == 3 then churn(anI32, k - 1)
+           else if k == 4 then churn(anI64, k - 1)
+           else if k == 5 then churn(aBf16, k - 1)
+           else if k == 6 then churn(aF16, k - 1)
+           else if k == 7 then churn(aBool, k - 1)
+           else if k == 8 then churn(aString, k - 1)
+           else if k == 9 then churn(aC64, k - 1)
+           else churn(aC128, k - 1)
+}
+
+func main(): int sync {
+    println(churn(0, 3))
+    return 0
+}

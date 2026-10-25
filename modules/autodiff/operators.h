@@ -9,7 +9,7 @@
  *   stop_gradient(x)   x, through which no gradient flows
  *
  * A custom derivative rule is a declaration tag, not an operator of this module
- * (design principles 6.2, 8): `#vjp<rule>` before a function declaration attaches the
+ * (design principles 6.2, 8): `#vjp(rule)` before a function declaration attaches the
  * rule's graph to the function's graph (see rules.h).
  *
  * grad and with_grad differentiate the **first with parameter** of f (design

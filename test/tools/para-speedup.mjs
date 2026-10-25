@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 // The parallel-versus-serial speed-up of the cheap parallel workload, asserted as a property of one
-// run (the author's ruling of 2026-10-23, docs/handover/reviews/questions-2026-10-23.md,
+// run (docs/handover/reviews/questions-2026-10-23.md,
 // "perf-para-gate"):
 //
 //   "选 B：把已量过的便宜子集（monte_carlo_pi.prl，约 1.6 s）立成可进闸门的计划。度量取同一次运行里
@@ -10,7 +10,7 @@
 //
 // The measured quantity is therefore the ratio of the two sides **of the same run**, not a stored
 // baseline, and CPU time is recorded beside it. The expensive full `perf.para` stays where it is
-// (before a release); this tool prices the one case the ruling names, `monte_carlo_pi`.
+// (before a release); this tool prices one case, `monte_carlo_pi`.
 //
 //   node test/tools/para-speedup.mjs                  measure both sides and gate the property
 //   node test/tools/para-speedup.mjs --json           the numbers, without the gate
@@ -22,7 +22,7 @@
 // What it runs, exactly as `test/plans/perf/para.plan.toml` runs that case: the same program, timed
 // by `--timeit <pass>/1`, once on the plan's own serial side (`std::nvm`, the baseline NVM scheduler
 // that plan pairs with `std::prl`) and once on its parallel side (`std::prl`), with no `-t` on
-// either side, so the parallel side's width is the machine's core count -- the plan the ruling keeps
+// either side, so the parallel side's width is the machine's core count -- the plan the rule keeps
 // for a release passes none either. The pass window `--timeit` prints excludes the compile of both
 // sides, so the two walls are the same window over the same workload; the workload's own receipt
 // (`Running N times`, `Samples per simulation`, `Total hits`) is read too and must be identical on
@@ -32,14 +32,14 @@
 //
 //   * speed-up: the serial pass wall divided by the parallel pass wall, both measured in this run.
 //     The guard trusts this **ratio**, and only this ratio: the host's load hits both sides in the
-//     same window, which is why the ruling chose it over an absolute wall clock. It trusts neither
+//      same window, which is why the ratio is read instead of an absolute wall clock. It trusts neither
 //     wall as a work number and gates no absolute wall -- a millisecond read on a shared host is not
-//     evidence (the same ruling, "declaration-cost-gate" (a)). The floor is 1.5 rather than a quiet
+//      evidence (the same reason). The floor is 1.5 rather than a quiet
 //     host's reading: the ratio is the parallel side's average core count over the serial side's, so
 //     on a host with C cores the quiet reading is about C, and 1.5 is the point where "more than one
 //     core did the work" is beyond argument. Measured on the reference host (AMD EPYC 7343, 32
 //     threads) on 2026-10-23: 14.33 at load 58.6/72.1/79.3 and 16.18 at 94.5/80.6/80.0 -- the two
-//     readings differ by 13% where the load differs by 20%, which is the insensitivity the ruling
+//      readings differ by 13% where the load differs by 20%, which is the insensitivity
 //     bought. The noise of a single round is known too: the planted red ran the identical command
 //     twice (73,126.2 ms and 67,448.1 ms, both `--timeit std::nvm/1`, at load 87) and the ratio of
 //     two identical measurements came out 1.08, so one round carries about 8% of noise, against a
@@ -47,7 +47,7 @@
 //   * cores: the average number of cores each side really used, which is the child's CPU time
 //     (user + system) divided by its own process wall -- a number the host's load cannot inflate,
 //     only deflate. The parallel side must be above 1.5 and the serial side at or below 1.25: that
-//     is the ruling's "the parallel side must actually use more than one core while the serial side
+//      is the rule's "the parallel side must actually use more than one core while the serial side
 //     does not". Measured in the same runs: the parallel side 7.10 and 6.66, the serial side 0.50
 //     and 0.41 -- one thread getting half a core or less, with the host's load at 58-95 on 32 cores.
 //     The pair is what catches a parallel side that ran on one thread: the speed-up alone cannot,
@@ -56,8 +56,8 @@
 //     serial-only run reds both lines (speedup 1.08, cores 0.47), and the core line is the one that
 //     cannot be fooled by a faster single thread.
 //   * the CPU time of each side is **reported, not gated**. Child CPU time is the work number (the
-//     2026-10-23 ruling), but a ceiling on it would be a number taken from one quiet host's day,
-//     which is exactly the stored-baseline measurement the ruling replaced. Both sides cost the same
+//      2026-10-23 rule), but a ceiling on it would be a number taken from one quiet host's day,
+//      which is exactly the stored-baseline measurement. Both sides cost the same
 //     CPU time here (31,660.0 ms against 32,040.0 ms): that agreement is the evidence that the ratio
 //     compares the same work, and it is printed for a reader rather than asserted.
 //
@@ -124,7 +124,7 @@ const DEFAULT_ROUNDS = 1
 const CHILD_TIMEOUT_MS = 600000
 
 // The install this run measures: `--camel <path>` names it (main parses the argument), else
-// `$CAMEL_HOME/bin/camel`, else this tree's `out/latest/bin/camel`. One rule, in one place:
+// this tree's `out/latest/bin/camel`. One rule, in one place:
 // test/tools/camel-arg.mjs.
 function usage(message) {
     if (message) console.error(`para-speedup: ${message}`)

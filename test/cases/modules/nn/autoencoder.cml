@@ -10,14 +10,14 @@ import { Tensor, full, shape, sigmoid, sum, zeros } from tensor
 import { sgd } from nn
 
 type AutoEncoder = {
-    enc_w: Tensor,
-    enc_b: Tensor,
-    dec_w: Tensor,
-    dec_b: Tensor
+    enc_w: f32[..],
+    enc_b: f32[..],
+    dec_w: f32[..],
+    dec_b: f32[..]
 }
 
 with <model: AutoEncoder>
-func reconstruction_loss(x: Tensor, target: Tensor): float {
+func reconstruction_loss(x: f32[..], target: f32[..]): float {
     let hidden = sigmoid((x @ model.enc_w) + model.enc_b)
     let recon = sigmoid((hidden @ model.dec_w) + model.dec_b)
     let errors = recon - target
@@ -34,7 +34,7 @@ func init(): AutoEncoder {
     }
 }
 
-func train(model: AutoEncoder, x: Tensor, steps: int): AutoEncoder {
+func train(model: AutoEncoder, x: f32[..], steps: int): AutoEncoder {
     return if steps == 0 then model else train(sgd(model, grad(reconstruction_loss)<model>(x, x), 0.1), x, steps - 1)
 }
 

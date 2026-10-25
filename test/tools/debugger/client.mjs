@@ -228,7 +228,15 @@ export class DapClient {
         dap.proc.stdout.on('data', (d) => dap.#feed(d))
         dap.proc.stderr.on('data', (d) => (dap.output += d))
         dap.proc.stdin.on('error', () => {})
-        dap.exited = new Promise((resolve) => dap.proc.on('exit', (code, signal) => resolve({ code, signal })))
+        dap.exited = new Promise((resolve) =>
+            dap.proc.on('exit', (code, signal) => {
+                dap.processExit = { code, signal }
+                dap.#failWaitsThatCannotArrive()
+                resolve({ code, signal })
+            }),
+        )
+        dap.exitBody = null // the body of the DAP `exited` event, once the adapter reported it
+        dap.processExit = null // `{ code, signal }` once the adapter process is gone
         // Resolves when the `terminated` event arrives, whoever consumes that event.
         dap.ended = new Promise((resolve) => (dap.markEnded = resolve))
         return dap
@@ -277,6 +285,12 @@ export class DapClient {
         } else if (message.type === 'event') {
             this.events.push(message)
             this.#serveWaiters()
+            if (message.event === 'exited') {
+                // The debuggee is gone. A stop or a breakpoint cannot come any more, and a wait
+                // for one would sit out its whole timeout with the reason already in hand.
+                this.exitBody = message.body || {}
+                this.#failWaitsThatCannotArrive()
+            }
             if (message.event === 'terminated') {
                 this.markEnded('end')
             }
@@ -305,6 +319,52 @@ export class DapClient {
             }
             return true
         })
+    }
+
+    /** True when `name` cannot arrive any more: the adapter process is gone, or the debuggee is
+     *  gone and the only thing left for the adapter to report is its own end. The events already
+     *  received were consulted before this is asked, so a wait that could still be answered was
+     *  answered. */
+    #cannotArrive(name) {
+        if (this.processExit !== null) {
+            return true
+        }
+        return this.exitBody !== null && name !== 'exited' && name !== 'terminated'
+    }
+
+    /** Why a wait was given up on: what ended the session, and the last thing the adapter said
+     *  (its diagnostics are output events, and its standard error is kept as well). */
+    #endReason(name) {
+        const what = [`the debug session ended before '${name}' arrived`]
+        if (this.exitBody) {
+            what.push(`(the adapter reported exited with exitCode ${this.exitBody.exitCode})`)
+        }
+        if (this.processExit) {
+            const signal = this.processExit.signal ? `, signal ${this.processExit.signal}` : ''
+            what.push(`(the adapter process exited with ${this.processExit.code}${signal})`)
+        }
+        // The tail: an adapter that ran a program has said a great deal, and the reason is last.
+        const said = ['stdout', 'stderr', 'console'].map((c) => this.outputOf(c)).join('').trim()
+        if (said) {
+            what.push(`what it said:\n${said.slice(-4000)}`)
+        }
+        const stderr = this.output.trim()
+        if (stderr && !said.includes(stderr)) {
+            what.push(`its standard error:\n${stderr.slice(-4000)}`)
+        }
+        return what.join(' ')
+    }
+
+    /** Fails every wait that the session's end has made hopeless, at once and with the reason. */
+    #failWaitsThatCannotArrive() {
+        const hopeless = this.waiters.filter((w) => this.#cannotArrive(w.name))
+        if (hopeless.length === 0) {
+            return
+        }
+        this.waiters = this.waiters.filter((w) => !this.#cannotArrive(w.name))
+        for (const w of hopeless) {
+            w.reject(new Error(this.#endReason(w.name)))
+        }
     }
 
     /** Sends raw bytes: for what no well-behaved client sends. */
@@ -338,7 +398,9 @@ export class DapClient {
     }
 
     /** The next event `name` (that satisfies `predicate`) no earlier wait has returned; null
-     *  when none arrives in time. Events of one name are consumed in the order they were sent. */
+     *  when none arrives in time. Events of one name are consumed in the order they were sent.
+     *  A wait the session's end has made hopeless fails at once, saying why, instead of sitting
+     *  out the whole timeout: the timeout is for a session that is still there. */
     waitEvent(name, predicate, timeoutMs = WAIT_MS) {
         if (typeof predicate === 'number') {
             timeoutMs = predicate
@@ -348,8 +410,16 @@ export class DapClient {
         if (now) {
             return Promise.resolve(now)
         }
-        return new Promise((resolve) => {
-            const waiter = { name, predicate, resolve: (e) => (clearTimeout(timer), resolve(e)) }
+        if (this.#cannotArrive(name)) {
+            return Promise.reject(new Error(this.#endReason(name)))
+        }
+        return new Promise((resolve, reject) => {
+            const waiter = {
+                name,
+                predicate,
+                resolve: (e) => (clearTimeout(timer), resolve(e)),
+                reject: (e) => (clearTimeout(timer), reject(e)),
+            }
             const timer = setTimeout(() => {
                 this.waiters = this.waiters.filter((w) => w !== waiter)
                 resolve(null)
@@ -415,9 +485,11 @@ export class DapClient {
         }
     }
 
-    /** The next stop, or the string 'end' when the session terminates first. */
+    /** The next stop, or the string 'end' when the session terminates first. A stop that can no
+     *  longer arrive is the end of the session -- which is what this wait asks about -- so it
+     *  takes the session's end as the answer rather than failing on it. */
     waitStopOrEnd(timeoutMs = WAIT_MS) {
-        return Promise.race([this.waitStop(timeoutMs), this.ended])
+        return Promise.race([this.waitStop(timeoutMs).catch(() => this.ended), this.ended])
     }
 
     /** The variables of a scope of a frame as `{ name: { value, type, variablesReference } }`. */

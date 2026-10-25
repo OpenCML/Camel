@@ -1,0 +1,16 @@
+// A sync function body orders its own statements. What is written inside it -- an arm, a loop
+// body -- is ordered only if it says `sync` itself.
+// Run: camel docs/tutorial/examples/10_sync_block.cml
+module sync_block
+
+func report(second: bool): int sync {
+    println('the body is a sync block')
+    if second then { println('three'); println('four') }
+    if second then sync { println('five'); println('six') }
+    return 0
+}
+
+func main(): int sync {
+    println(report(true))
+    return 0
+}

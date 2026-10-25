@@ -293,6 +293,30 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
             },
         },
         {
+            RuntimeDiag::GraphNoDeviceProgram,
+            {
+                "GraphNoDeviceProgram",
+                "'{0}' has no device program for '{1}': {2}.",
+                "The device back end has no program for this graph, so the operator that asked for one cannot be served by it. Name a graph the device can serve, or let the host run it: outside a `#gpu` scope a graph the device cannot serve is the host's, and `--devices cpu` runs the whole program there.",
+            },
+        },
+        {
+            RuntimeDiag::DeviceNotSelected,
+            {
+                "DeviceNotSelected",
+                "No device to run '{0}' on: {1}.",
+                "Name a device this machine has (--devices <ordinal>), or drop the operator that needs one: a report operator on a scope a pass has cut needs no device, and `available()` says what this machine can serve.",
+            },
+        },
+        {
+            RuntimeDiag::GpuScopeMacroNotExpanded,
+            {
+                "GpuScopeMacroNotExpanded",
+                "`#gpu` scope '{0}': {1} is a macro operator no pass has expanded, so the derived graph does not exist when the scope is compiled; put the pass '{2}' before this one.",
+                "`grad` and `with_grad` build their derived graph ahead of time (`std::macro`), and only a graph that exists while the passes run is part of the scope's unit. Write the pass before `tiles::compile`, or move the call out of the `#gpu` scope.",
+            },
+        },
+        {
             RuntimeDiag::PassesNeverRun,
             {
                 "PassesNeverRun",

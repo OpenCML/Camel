@@ -115,7 +115,7 @@ enum Permission : uint16_t {
 };
 
 /// A set of permissions: 0 when none is granted. Two bytes since `nondeterministic` (review of
-/// H2b: the mask grows; there is no second column).
+/// the mask grows; there is no second column).
 using PermissionMask = uint16_t;
 
 inline constexpr PermissionMask kNoPermissions = 0;
@@ -239,7 +239,7 @@ struct NumericPolicy {
  *                      relative per step;
  *   finite_math        the check excludes the NaN, infinity, signed zero and subnormal samples
  *                      the assumptions rule out; the finite values keep the rounding bound;
- *   nondeterministic   no numeric bound exists, so the check cannot certify the rule;
+ *   nondeterministic   no numeric bound exists, so the check cannot certify 
  *   refine_accuracy    the two sides are compared by their error against a higher-precision
  *                      reference, not by bits: the rewrite holds when its error is not larger
  *                      on every sample (rewrite 8.10).
@@ -260,11 +260,11 @@ struct RewriteErrorBound {
  * (`RewriteErrorBound.ulps`; modules/rewrite/module.cpp compares two sides with it).
  *
  * Every element type has its own, and the two reduced-precision floating types are not f32 with
- * its number (design principles 7.3; the ruling of 2026-10-23 on `check-generic-instance-space`,
+ * its number (design principles 7.3; the rule on `check-generic-instance-space`,
  * 3, which opened the lane: "误差界里的 epsilon 取元素类型的（bf16 是 2^-8，f16 是 2^-10）"):
  *
  *   bf16   2^-8    8 significand bits (1 sign, 8 exponent, 7 stored)
- *   f16    2^-10   the ruling's number for the type
+ *    f16 2^-10 the number for the type
  *   f32    2^-24   24 significand bits
  *   f64    2^-53   53 significand bits
  *
@@ -475,6 +475,14 @@ struct OperatorSemantics {
     std::optional<ResourceSpec> resources;
     /// The definition graph (design section 9), nullopt when the operator has none.
     std::optional<Definition> definition;
+    /// Its calls may be evaluated ahead of time and their results kept as values: the compiler
+    /// and the passes may fold them, move them, merge them with an identical call and drop them
+    /// when nothing uses them. False for an operator that must run where the program writes it,
+    /// though running it has no effect: its result holds functions the collector does not trace
+    /// (a rule's sides), or installing it is what the declaration means (a `fact`). A
+    /// separate fact from the effect, because the two questions are different: whether running
+    /// the call changes anything outside the program, and whether a pass may answer it instead.
+    bool foldable = true;
 };
 
 } // namespace camel::core::sem

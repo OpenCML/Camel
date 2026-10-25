@@ -1,13 +1,13 @@
 /**
  * A `case` that is not selected for an instantiation must see the same names the selected case
  * does: here the leaf case calls a body-less declaration of the same module and is discarded for
- * a struct subject. It must not be reported as an unresolved reference (handover H103).
+ * a struct subject. It must not be reported as an unresolved reference.
  */
 module bytes
 
 import { from_array } from bytes
 
-#op<'bytes:size'>
+#op('bytes:size')
 export func size(content: Bytes): int
 
 type Box = { a: int }

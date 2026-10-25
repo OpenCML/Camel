@@ -1,27 +1,27 @@
 /**
- * Comprehensions (H51 step 4): a `static for` written where a value is needed. `{ ... }` builds a
+ *  Comprehensions.: a `static for` written where a value is needed. `{... }` builds a
  * struct with the fields of the type it walks, `( ... )` a tuple with its elements; the block of
  * a round keeps its value, and the empty struct has no round.
  */
 module parse_constructs_comprehensions
 
 func doubled(t: {a: int, b: int}): {a: int, b: int} {
-    return { static for (n, F) in fields {a: int, b: int} => t.[n] * 2 }
+    return { static for n, F in fields {a: int, b: int} => t.[n] * 2 }
 }
 
 func shifted(t: (int, int)): (int, int) {
-    return ( static for (n, F) in fields (int, int) => t.[n] + 1 )
+    return ( static for n, F in fields (int, int) => t.[n] + 1 )
 }
 
 func incremented(t: {a: int, b: int}): {a: int, b: int} {
-    return { static for (n, F) in fields {a: int, b: int} => {
+    return { static for n, F in fields {a: int, b: int} => {
         let v: F = t.[n]
         v + 1
     } }
 }
 
 func no_fields(): {} {
-    return { static for (n, F) in fields {} => 0 }
+    return { static for n, F in fields {} => 0 }
 }
 
 func main(): int sync {

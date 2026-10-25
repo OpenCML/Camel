@@ -15,15 +15,15 @@ import { now } from time
 import { weight, bench_input, run_benchmark, run_training, warm_count, step_count, log_step, log_final } from camel_bench
 
 type Gru = {
-    w_ir: Tensor, w_iz: Tensor, w_in: Tensor,
-    w_hr: Tensor, w_hz: Tensor, w_hn: Tensor,
-    b_ir: Tensor, b_iz: Tensor, b_in: Tensor,
-    b_hr: Tensor, b_hz: Tensor, b_hn: Tensor,
-    fc_w: Tensor, fc_b: Tensor
+    w_ir: f32[..], w_iz: f32[..], w_in: f32[..],
+    w_hr: f32[..], w_hz: f32[..], w_hn: f32[..],
+    b_ir: f32[..], b_iz: f32[..], b_in: f32[..],
+    b_hr: f32[..], b_hz: f32[..], b_hn: f32[..],
+    fc_w: f32[..], fc_b: f32[..]
 }
 
 with <m: Gru>
-func cell(xt: Tensor, h: Tensor): Tensor {
+func cell(xt: f32[..], h: f32[..]): f32[..] {
     let r = sigmoid(xt @ m.w_ir + m.b_ir + h @ m.w_hr + m.b_hr)
     let z = sigmoid(xt @ m.w_iz + m.b_iz + h @ m.w_hz + m.b_hz)
     let n = tanh(xt @ m.w_in + m.b_in + r * (h @ m.w_hn + m.b_hn))
@@ -31,34 +31,34 @@ func cell(xt: Tensor, h: Tensor): Tensor {
 }
 
 /// Runs the recurrence over time steps [t, steps).
-with <m: Gru, x: Tensor>
-func run(t: int, steps: int, h: Tensor): Tensor {
+with <m: Gru, x: f32[..]>
+func run(t: int, steps: int, h: f32[..]): f32[..] {
     let batch = shape(x)[0]
     let features = shape(x)[2]
     return if t >= steps then h else run<m, x>(t + 1, steps, cell<m>(reshape(slice(x, 1, t, t + 1), [batch, features]), h))
 }
 
 with <m: Gru>
-func forward(x: Tensor): Tensor {
+func forward(x: f32[..]): f32[..] {
     let h = run<m, x>(0, shape(x)[1], zeros([shape(x)[0], shape(m.w_hr)[0]]))
     return h @ m.fc_w + m.fc_b
 }
 
 // Training workload (train.py): loss mean(y^2), one SGD step with lr 0.01.
 with <m: Gru>
-func loss(x: Tensor): float {
+func loss(x: f32[..]): float {
     let y = forward<m>(x)
     return mean(y * y)
 }
 
-func train_step(m: Gru, x: Tensor): float sync {
+func train_step(m: Gru, x: f32[..]): float sync {
     let vg = with_grad(loss)<m>(x)
     let next = sgd(m, vg.1, 0.01)
     return vg.0
 }
 
 /// The training step as a function of the parameters: the loss and the updated parameters.
-func step(m: Gru, x: Tensor): (float, Gru) {
+func step(m: Gru, x: f32[..]): (float, Gru) {
     let vg = with_grad(loss)<m>(x)
     return (vg.0, sgd(m, vg.1, 0.01))
 }
@@ -69,14 +69,14 @@ func export_step(m: Gru, path: string): int sync {
     return 0
 }
 
-func dump_grads(m: Gru, x: Tensor, dir: string): int sync {
+func dump_grads(m: Gru, x: f32[..], dir: string): int sync {
     save_params(grad(loss)<m>(x), dir)
     return 0
 }
 
 /// The stateful training loop: step `i` starts from the parameters step `i - 1` produced.
 /// Returns the parameters after step `total - 1`.
-func train_loop(m: Gru, x: Tensor, i: int, warm: int, total: int, t0: float): Gru {
+func train_loop(m: Gru, x: f32[..], i: int, warm: int, total: int, t0: float): Gru {
     return if i >= total then m else sync {
         let start = now()
         let r = step(m, x)
@@ -93,7 +93,7 @@ func save_trained(m: Gru, dir: string): int sync {
 
 /// Runs the stateful loop and reports the loss at the final parameters; saves them when
 /// CAMEL_BENCH_PARAMS names a directory.
-func train_stateful(m: Gru, x: Tensor): int sync {
+func train_stateful(m: Gru, x: f32[..]): int sync {
     let trained = train_loop(m, x, 0, warm_count(), step_count(), now())
     let reported = log_final(loss<trained>(x))
     let dir = get_env('CAMEL_BENCH_PARAMS')
@@ -110,8 +110,8 @@ func main(): int sync {
     }
     let workload = get_env('CAMEL_BENCH_WORKLOAD')
     return if workload == 'train_export' then export_step(m, get_env('CAMEL_BENCH_EXPORT')) else if workload == 'train' then run_training(
-        (x: Tensor): float => { return train_step(m, x) },
-        (x: Tensor, dir: string): int => { return dump_grads(m, x, dir) },
-        (x: Tensor): int => { return train_stateful(m, x) }
-    ) else run_benchmark((x: Tensor): Tensor => forward<m>(x))
+        (x: f32[..]): float => { return train_step(m, x) },
+        (x: f32[..], dir: string): int => { return dump_grads(m, x, dir) },
+        (x: f32[..]): int => { return train_stateful(m, x) }
+    ) else run_benchmark((x: f32[..]): f32[..] => forward<m>(x))
 }

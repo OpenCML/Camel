@@ -2,7 +2,7 @@
  * The twin of `when_order_at_call_i32_first.cml`: the same program, with the two declarations of
  * `arms_kernel` written in the other order. The order of two same-named declarations whose `when`
  * conditions exclude each other says nothing about which one a call means (design principles 4.4;
- * the language author's ruling of 2026-10-24 on `impl-declaration-arms`,
+ * the rule on `impl-declaration-arms`,
  * `docs/handover/reviews/questions-2026-10-23.md`), so this file must print exactly what its twin
  * prints: the `i32` call is the subtraction and the `int` call is the addition.
  */
@@ -24,10 +24,10 @@ func is_arm_i32::<T>(): bool {
     }
 }
 
-#op<':op/add_l'>
+#op(':op/add_l')
 func arms_kernel::<T>(a: T, b: T): T when is_arm_int::<T>()
 
-#op<':op/sub_i'>
+#op(':op/sub_i')
 func arms_kernel::<T>(a: T, b: T): T when is_arm_i32::<T>()
 
 func main(): int sync {

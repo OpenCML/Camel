@@ -1618,10 +1618,10 @@ bool FunctionEmitter::lowerVariable(
     if (id == camel::core::oper::VarTake) {
         // `:var/take` hands the variable's own array to an in-place form. The generated
         // program moves it there (`std::move(cell)` in the form's lowering), so the take is
-        // the cell's value, not a copy of it.
-        const CppValue &cell = valueOf(frame, norm.front());
-        frame.values[ref] =
-            CppValue{cell.cell == CppValue::Cell::Local ? cell.text : cell.text + ".get()", false};
+        // the cell's value, not a copy of it: the node is the variable's cell, and a later
+        // read of it dereferences a shared cell the same way a read of the variable does.
+        const CppValue taken = valueOf(frame, norm.front());
+        frame.values[ref]    = CppValue{taken.text, false, taken.cell};
         return true;
     }
     if (uri == ":struct/append_arr_in_place") {
@@ -1638,7 +1638,11 @@ bool FunctionEmitter::lowerVariable(
         if (norm.size() == 2 && g->node(norm[1])->kind == GCNodeKind::Oper &&
             operatorUri(g, norm[1]) == ":struct/append_arr_in_place" &&
             lowerAppendInPlace(frame, norm[1], out)) {
-            frame.values[ref] = CppValue{valueOf(frame, norm[1]).text, false};
+            // The assignment stands for the variable's version, so it carries what the form left: the
+            // variable's cell with its marking, which is how a write leaves the variable too
+            // (`lowerVariable`'s assignment path).
+            const CppValue appended = valueOf(frame, norm[1]);
+            frame.values[ref]       = CppValue{appended.text, false, appended.cell};
             return true;
         }
         refuse(
@@ -1654,7 +1658,9 @@ bool FunctionEmitter::lowerVariable(
     const CppValue &cell   = valueOf(frame, norm.front());
     const bool local       = cell.cell == CppValue::Cell::Local;
     const std::string read = local ? cell.text : cell.text + ".get()";
-    const Type *type       = g->node(ref)->dataType();
+    // A write gives the cell of this version, so the node's declared type is the cell; the value
+    // it holds is what the compound operator (if one is left) and the stored value have.
+    const Type *type = camel::core::type::valueTypeOf(g->node(ref)->dataType());
     if (camel::core::oper::isVariableRead(id)) {
         // Read now: a later assignment must not change what this read gave. :var/peek is the
         // same read; what it tells the interpreter (the array may still be grown in place)
@@ -1693,8 +1699,13 @@ bool FunctionEmitter::lowerVariable(
     } else {
         out.push_back(Stmt::line(std::format("{}.set({});", cell.text, withoutParentheses(value))));
     }
-    // What the assignment gives: the value stored.
-    bind(frame, ref, read, false, out, "assigned");
+    // What the assignment gives is the version of the variable: the cell it wrote into. The value
+    // it wrote is its second operand, and the graph takes it from there where an assignment stands
+    // where a value is wanted (Builder::visitLinkNode); a later read of the variable reads this
+    // node, so it takes the cell.
+    const std::string written = cell.text;
+    const CppValue::Cell kind = cell.cell;
+    frame.values[ref]         = CppValue{written, false, kind};
     return true;
 }
 
@@ -1730,7 +1741,11 @@ bool FunctionEmitter::lowerAppendInPlace(Frame &frame, gc_node_ref_t ref, Block 
         local ? std::format("{0} = rt::append(std::move({0}), {1});", cell.text, item)
               : std::format("{0}.set(rt::append({0}.take(), {1}));", cell.text, item)));
     frame.consumed.insert(ref);
-    frame.values[ref] = CppValue{local ? cell.text : cell.text + ".get()", false};
+    // This node stands for the variable's own value, so it is the variable's cell with its
+    // marking, exactly as a write leaves the variable (`lowerVariable`'s assignment path): a
+    // non-escaping variable is a plain local and a later read of this node is that local, while
+    // an escaping one is an rt::Cell, and a read of this node dereferences it once.
+    frame.values[ref] = CppValue{cell.text, false, cell.cell};
     return true;
 }
 

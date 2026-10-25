@@ -19,6 +19,66 @@
 
 namespace camel::core::error {
 
+namespace {
+
+/// Whether two ranges are the same place. A diagnostic with no position is at no place, so it is
+/// not the same place as another: nothing says the two are one diagnostic. This is the identity
+/// part of "the same error at the same place with the same text is one error".
+bool sameRange(const SourceRange &a, const SourceRange &b) {
+    if (a.index() != b.index()) {
+        return false;
+    }
+    if (std::holds_alternative<CharRange>(a)) {
+        const CharRange &x = std::get<CharRange>(a), &y = std::get<CharRange>(b);
+        return x.start.line == y.start.line && x.start.character == y.start.character &&
+               x.end.line == y.end.line && x.end.character == y.end.character;
+    }
+    if (std::holds_alternative<TokenRange>(a)) {
+        return std::get<TokenRange>(a).start == std::get<TokenRange>(b).start &&
+               std::get<TokenRange>(a).end == std::get<TokenRange>(b).end;
+    }
+    if (std::holds_alternative<camel::source::span_id_t>(a)) {
+        return std::get<camel::source::span_id_t>(a) == std::get<camel::source::span_id_t>(b);
+    }
+    if (std::holds_alternative<camel::source::origin_id_t>(a)) {
+        return std::get<camel::source::origin_id_t>(a) == std::get<camel::source::origin_id_t>(b);
+    }
+    return false;
+}
+
+/// Whether two diagnostics are at the same place. A diagnostic is written in the form its range
+/// happens to have -- a token range as the construction-tree builder makes it, a span or an origin
+/// id from the later stages, character positions once a dump has resolved it -- and the same place
+/// written two ways is one place. Both are resolved when the two forms differ, which is what the
+/// reports do when they render them: a token range against the token stream of the file it was
+/// made in (`tokens`), a span or origin id against its own source context. The position that
+/// counts is where the range starts: an origin covers the whole statement it was made for while
+/// the span of the same failure covers the name in it, and the sentence the two carry is what says
+/// they are one diagnostic.
+bool sameRangePlace(const Diagnostic &a, const Diagnostic &b, const RangeConverter *tokens) {
+    if (sameRange(a.range, b.range)) {
+        return true;
+    }
+    const auto resolve = [tokens](const SourceRange &range, const Diagnostic &d,
+                                  const Diagnostic &other) -> std::optional<CharRange> {
+        if (std::holds_alternative<TokenRange>(range) && tokens != nullptr) {
+            return tokens->conv(std::get<TokenRange>(range));
+        }
+        // A token range is the one form the source context cannot resolve, so an unresolved one
+        // borrows the other diagnostic's context: the two are in the same file when the message
+        // and the code already say they are one diagnostic.
+        return resolveSourceRange(range, d.sourceContext ? d.sourceContext : other.sourceContext);
+    };
+    const auto x = resolve(a.range, a, b);
+    const auto y = resolve(b.range, b, a);
+    if (!x || !y) {
+        return false;
+    }
+    return x->start.line == y->start.line && x->start.character == y->start.character;
+}
+
+} // namespace
+
 std::string diagnosticPath(const Diagnostic &d) {
     if (!d.modulePath.empty()) {
         return d.modulePath;
@@ -57,6 +117,28 @@ resolveSourceRange(const SourceRange &range, const camel::source::source_context
         CAMEL_LOG_WARN_S("Diag", "TokenRange should be converted to CharRange before output");
     }
     return std::nullopt;
+}
+
+// ---- Exception classes ----
+DiagnosticsLimitExceededBaseException::DiagnosticsLimitExceededBaseException(const Diagnostic &d)
+    : diagnostic_(d) {
+    // One line: severity, the place, and what the diagnostic says. The name is included because it
+    // is what tells a reader which check refused, where a message that is prose may not.
+    text_ = to_string(diagnostic_.severity);
+    if (!diagnostic_.name.empty()) {
+        text_ += "[" + diagnostic_.name + "]";
+    }
+    const std::string path = diagnosticPath(diagnostic_);
+    if (const auto place = resolveSourceRange(diagnostic_.range, diagnostic_.sourceContext)) {
+        text_ += " at ";
+        text_ += path.empty() ? "<no file>" : path;
+        text_ += std::format(":{}:{}", place->start.line + 1, place->start.character + 1);
+    } else if (!path.empty()) {
+        text_ += " in " + path;
+    }
+    if (!diagnostic_.message.empty()) {
+        text_ += ": " + diagnostic_.message;
+    }
 }
 
 // ---- Warning policy ----
@@ -380,29 +462,6 @@ Diagnostic &Diagnostics::add(Diagnostic &&d) {
     // when one piece of source is checked more than once: the body of a generic function is
     // checked per instance, and what does not depend on the type variables fails in each.
     if (d.severity == Severity::Error) {
-        auto sameRange = [](const SourceRange &a, const SourceRange &b) {
-            if (a.index() != b.index()) {
-                return false;
-            }
-            if (std::holds_alternative<CharRange>(a)) {
-                const CharRange &x = std::get<CharRange>(a), &y = std::get<CharRange>(b);
-                return x.start.line == y.start.line && x.start.character == y.start.character &&
-                       x.end.line == y.end.line && x.end.character == y.end.character;
-            }
-            if (std::holds_alternative<TokenRange>(a)) {
-                return std::get<TokenRange>(a).start == std::get<TokenRange>(b).start &&
-                       std::get<TokenRange>(a).end == std::get<TokenRange>(b).end;
-            }
-            if (std::holds_alternative<camel::source::span_id_t>(a)) {
-                return std::get<camel::source::span_id_t>(a) ==
-                       std::get<camel::source::span_id_t>(b);
-            }
-            if (std::holds_alternative<camel::source::origin_id_t>(a)) {
-                return std::get<camel::source::origin_id_t>(a) ==
-                       std::get<camel::source::origin_id_t>(b);
-            }
-            return false; // no position: nothing says the two are one
-        };
         for (Diagnostic &known : storage_) {
             if (known.severity == Severity::Error && known.type == d.type &&
                 known.specific == d.specific && known.message == d.message &&
@@ -599,6 +658,18 @@ bool Diagnostics::hasErrors() const {
     return false;
 }
 
+bool Diagnostics::holds(const Diagnostic &d, const RangeConverter *tokens) const {
+    std::lock_guard<std::mutex> lk(mtx_);
+    for (const Diagnostic &known : storage_) {
+        if (known.severity == d.severity && known.type == d.type &&
+            known.specific == d.specific && known.message == d.message &&
+            sameRangePlace(known, d, tokens)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 // ---- Helper implementations ----
 void Diagnostics::checkLimits() {
     if (storage_.empty()) {
@@ -608,7 +679,7 @@ void Diagnostics::checkLimits() {
 
     // Total cap: after push, size must not exceed total_limit (when configured).
     if (config_.hasTotalLimit() && static_cast<int>(storage_.size()) > config_.total_limit) {
-        throw DiagnosticsTotalLimitExceededException(config_.total_limit);
+        throw DiagnosticsTotalLimitExceededException(config_.total_limit, ref);
     }
 
     // Per-severity cap: count already includes the diagnostic just pushed (no +1).
@@ -617,7 +688,7 @@ void Diagnostics::checkLimits() {
         const int limit = config_.getSeverityLimit(ref.severity);
         const size_t n  = countBySeverityInternal(ref.severity);
         if (static_cast<int>(n) > limit) {
-            throw DiagnosticsLimitExceededException(ref.severity, static_cast<size_t>(limit));
+            throw DiagnosticsLimitExceededException(ref.severity, static_cast<size_t>(limit), ref);
         }
     }
 }

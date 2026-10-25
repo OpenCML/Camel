@@ -11,7 +11,7 @@ namespace camel::core::type {
  * Immutable StreamType: `T..` (design principles 5.4), the elements of `T` that arrive one
  * after another — a sequence produced on demand, possibly endless.
  *
- * `T..` is a type of its own, not the open-rank array `T[..]` (the author's ruling of
+ * `T..` is a type of its own, not the open-rank array `T[..]` (the rule of
  * 2026-10-24 on the stream surface): `T[..]` is an array whose extents are a prefix, and all
  * its elements exist at once; `T..` is a stream. The suffix is read left to right, without a
  * case for each combination: `T?..` is `(T?)..`, `T!..` is `(T!)..`, `T[3]..` is the stream of

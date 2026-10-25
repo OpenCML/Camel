@@ -29,7 +29,7 @@ void declareArrayOperatorFacts();
 // stdlib/array.cml names one of them with its `#op` tag and admits exactly that element type with
 // its own `when` (`Builder::declaredRuleApplies`), so the element type is known where the executor
 // is chosen: an element type no declaration admits has no executor and runs the Camel body, and the
-// executor of an admitted type runs every call of that type (design principles 5.5, 10.4; H228: one
+// executor of an admitted type runs every call of that type (design principles 5.5, 10.4; one
 // operator, per-type executors).
 
 // `sum`, one per element type of `is_numeric` that has an executor:

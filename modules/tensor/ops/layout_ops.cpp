@@ -35,8 +35,8 @@ bool fullyKnown(const std::optional<StaticShape> &shape) {
     if (!shape) {
         return false;
     }
-    for (int64_t extent : *shape) {
-        if (extent == kUnknownDim) {
+    for (const std::optional<int64_t> &extent : *shape) {
+        if (!extent) {
             return false;
         }
     }
@@ -70,13 +70,13 @@ std::optional<Type *> shapeInfer(const InferContext &) {
 /// The shape as a constant when the type fixes every dimension.
 std::optional<slot_t> shapeFold(const InferContext &ctx, mm::IAllocator &allocator) {
     const auto shape = ctx.facts(0).shape;
-    if (!shape || std::ranges::any_of(*shape, [](int64_t d) { return d == kUnknownDim; })) {
+    if (!shape || std::ranges::any_of(*shape, [](const std::optional<int64_t> &d) { return !d; })) {
         return std::nullopt;
     }
     ::Array *array =
         ::Array::create(allocator, ArrayType::create(Type::Int64()), shape->size());
     for (size_t i = 0; i < shape->size(); ++i) {
-        array->set(i, static_cast<camel::core::rtdata::Int64>((*shape)[i]));
+        array->set(i, static_cast<camel::core::rtdata::Int64>(*(*shape)[i]));
     }
     return camel::core::rtdata::toSlot(array);
 }
@@ -85,7 +85,15 @@ std::optional<slot_t> shapeFold(const InferContext &ctx, mm::IAllocator &allocat
 slot_t reshapeKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("reshape", [&] {
         const std::vector<int64_t> target = parseIntArray(norm.get<::Array *>(1), norm.type(1));
-        return wrap(k::reshape(tensorArg(norm, 0, true), target, resultAllocator()));
+        Array *t = tensorArg(norm, 0, true);
+        if (target.empty()) {
+            // No dimension at all: the value with no dimension is the element it holds (the
+            // rank-zero ruling, docs/handover/reviews/questions-2026-10-23.md section
+            // rank-zero-tensor), and `resolveReshape` refuses a value that is not one element.
+            (void)k::resolveReshape(t->shapeSpan(), target);
+            return t->getSlot(0);
+        }
+        return wrap(norm.resultType(), k::reshape(t, target, resultAllocator()));
     });
 }
 
@@ -106,13 +114,14 @@ std::optional<Type *> reshapeInfer(const InferContext &ctx) {
         size_t open = 0;
         for (const auto &extent : *partial) {
             const bool known = extent && *extent >= 0;
-            shape.push_back(known ? *extent : kUnknownDim);
+            shape.push_back(known ? std::optional<int64_t>(*extent) : std::nullopt);
             probe.push_back(known ? *extent : -1);
             open += known ? 0 : 1;
         }
         if (open == 1 && fullyKnown(in.shape)) {
             try {
-                return tensorOf(in.dtype, k::resolveReshape(*in.shape, probe));
+                return tensorOf(
+                    in.dtype, knownShape(k::resolveReshape(kernelExtents(*in.shape), probe)));
             } catch (const std::exception &) {
                 // No value fits: left to reshape to report when it runs.
             }
@@ -120,10 +129,17 @@ std::optional<Type *> reshapeInfer(const InferContext &ctx) {
         return tensorOf(in.dtype, shape);
     }
     if (fullyKnown(in.shape)) {
-        return tensorOf(in.dtype, k::resolveReshape(*in.shape, *target));
+        return tensorOf(
+            in.dtype, knownShape(k::resolveReshape(kernelExtents(*in.shape), *target)));
     }
-    StaticShape shape(target->begin(), target->end());
-    return tensorOf(in.dtype, shape); // a remaining -1 stays unknown
+    StaticShape shape;
+    shape.reserve(target->size());
+    for (int64_t extent : *target) {
+        // A `-1` in a reshape target is that operator's "fill this extent in" (kernels::layout),
+        // which no value can be: the facts carry it as an unknown extent (plan section 5.3).
+        shape.push_back(extent < 0 ? std::nullopt : std::optional<int64_t>(extent));
+    }
+    return tensorOf(in.dtype, std::move(shape));
 }
 
 // flatten(t, axis = 1): [d0 * ... * d(axis-1), d(axis) * ... * dn]
@@ -143,7 +159,9 @@ slot_t flattenKernel(ArgsView &, ArgsView &norm, context::Context &) {
         if (axis < -static_cast<int64_t>(t->rank()) || axis > static_cast<int64_t>(t->rank())) {
             throw std::invalid_argument("flatten axis out of range");
         }
-        return wrap(k::reshape(t, flattenShape(t->shapeSpan(), axis), resultAllocator()));
+        return wrap(
+            norm.resultType(),
+            k::reshape(t, flattenShape(t->shapeSpan(), axis), resultAllocator()));
     });
 }
 
@@ -151,9 +169,10 @@ std::optional<Type *> flattenInfer(const InferContext &ctx) {
     const TensorFacts in = ctx.facts(0);
     const auto axis      = ctx.has(1) ? ctx.constInt(1) : std::optional<int64_t>(1);
     if (fullyKnown(in.shape) && axis) {
-        return tensorOf(in.dtype, flattenShape(*in.shape, *axis));
+        return tensorOf(
+            in.dtype, knownShape(flattenShape(kernelExtents(*in.shape), *axis)));
     }
-    return tensorOf(in.dtype, StaticShape{kUnknownDim, kUnknownDim});
+    return tensorOf(in.dtype, StaticShape{std::nullopt, std::nullopt});
 }
 
 // unsqueeze(t, axis)
@@ -163,7 +182,7 @@ slot_t unsqueezeKernel(ArgsView &, ArgsView &norm, context::Context &) {
         Shape shape     = t->shapeVector();
         const int64_t a = normalizeAxisOrThrow(intArg(norm, 1), shape.size() + 1);
         shape.insert(shape.begin() + a, 1);
-        return wrap(k::reshape(t, shape, resultAllocator()));
+        return wrap(norm.resultType(), k::reshape(t, shape, resultAllocator()));
     });
 }
 
@@ -175,7 +194,7 @@ std::optional<Type *> unsqueezeInfer(const InferContext &ctx) {
     }
     StaticShape shape = *in.shape;
     if (!axis) {
-        return tensorOf(in.dtype, StaticShape(shape.size() + 1, kUnknownDim));
+        return tensorOf(in.dtype, StaticShape(shape.size() + 1, std::nullopt));
     }
     shape.insert(shape.begin() + normalizeAxisOrThrow(*axis, shape.size() + 1), 1);
     return tensorOf(in.dtype, shape);
@@ -184,7 +203,7 @@ std::optional<Type *> unsqueezeInfer(const InferContext &ctx) {
 // transpose(t): swap the last two axes
 slot_t transposeKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("transpose", [&] {
-        return wrap(k::transposeLast2(tensorArg(norm, 0), resultAllocator()));
+        return wrap(norm.resultType(), k::transposeLast2(tensorArg(norm, 0), resultAllocator()));
     });
 }
 
@@ -205,7 +224,7 @@ std::optional<Type *> transposeInfer(const InferContext &ctx) {
 slot_t permuteKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("permute", [&] {
         const std::vector<int64_t> perm = parseIntArray(norm.get<::Array *>(1), norm.type(1));
-        return wrap(k::permute(tensorArg(norm, 0), perm, resultAllocator()));
+        return wrap(norm.resultType(), k::permute(tensorArg(norm, 0), perm, resultAllocator()));
     });
 }
 
@@ -213,18 +232,19 @@ std::optional<Type *> permuteInfer(const InferContext &ctx) {
     const TensorFacts in = ctx.facts(0);
     auto perm            = ctx.constInts(1);
     if (in.shape && perm) {
-        return tensorOf(in.dtype, k::permuteShape(*in.shape, *perm));
+        return tensorOf(
+            in.dtype, knownShape(k::permuteShape(kernelExtents(*in.shape), *perm)));
     }
     return tensorOf(
         in.dtype,
-        in.shape ? std::optional(StaticShape(in.shape->size(), kUnknownDim)) : std::nullopt);
+        in.shape ? std::optional(StaticShape(in.shape->size(), std::nullopt)) : std::nullopt);
 }
 
 // concat(a, b, axis)
 slot_t concatKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("concat", [&] {
         const Array *parts[] = {tensorArg(norm, 0, true), tensorArg(norm, 1, true)};
-        return wrap(k::concat(parts, intArg(norm, 2), resultAllocator()));
+        return wrap(norm.resultType(), k::concat(parts, intArg(norm, 2), resultAllocator()));
     });
 }
 
@@ -235,7 +255,7 @@ std::optional<Type *> concatInfer(const InferContext &ctx) {
     if (!a.shape || !b.shape || !axis) {
         return tensorOf(
             dtype,
-            a.shape ? std::optional(StaticShape(a.shape->size(), kUnknownDim)) : std::nullopt);
+            a.shape ? std::optional(StaticShape(a.shape->size(), std::nullopt)) : std::nullopt);
     }
     if (a.shape->size() != b.shape->size()) {
         throw ShapeError(std::format(
@@ -246,10 +266,10 @@ std::optional<Type *> concatInfer(const InferContext &ctx) {
     const auto ax = static_cast<size_t>(normalizeAxisOrThrow(*axis, a.shape->size()));
     StaticShape out(a.shape->size());
     for (size_t d = 0; d < out.size(); ++d) {
-        const int64_t x = (*a.shape)[d], y = (*b.shape)[d];
+        const std::optional<int64_t> x = (*a.shape)[d], y = (*b.shape)[d];
         if (d == ax) {
-            out[d] = (x == kUnknownDim || y == kUnknownDim) ? kUnknownDim : x + y;
-        } else if (x != kUnknownDim && y != kUnknownDim && x != y) {
+            out[d] = (!x || !y) ? std::nullopt : std::optional<int64_t>(*x + *y);
+        } else if (x && y && x != y) {
             throw ShapeError(std::format(
                 "concat along axis {}: {} and {} differ in dimension {}",
                 ax,
@@ -257,14 +277,16 @@ std::optional<Type *> concatInfer(const InferContext &ctx) {
                 formatShape(*b.shape),
                 d));
         } else {
-            out[d] = x != kUnknownDim ? x : y;
+            out[d] = x ? x : y;
         }
     }
     return tensorOf(dtype, out);
 }
 
-// slice(t, axis, start, end, step = 1)
-slot_t sliceKernel(ArgsView &, ArgsView &norm, context::Context &) {
+// slice(t, axis, start, end, step = 1): the function form of the slice, which takes any axis and
+// copies the slice out of it. The subscript spelling `t[a:b]` is the core's own slice node, for any
+// rank and any element type, and no longer reaches this module (the ruling of 2026-10-25, point 2).
+slot_t sliceFunctionKernel(ArgsView &, ArgsView &norm, context::Context &) {
     // Bounds outside the axis are a located fault, as for an array's slice (design principles
     // 3.9); checked before the kernel so the diagnostic is SliceOutOfRange, not a kernel error.
     // A malformed axis or step is left to the kernel.
@@ -286,31 +308,33 @@ slot_t sliceKernel(ArgsView &, ArgsView &norm, context::Context &) {
     }
     return runKernel("slice", [&] {
         const int64_t step = hasArg(norm, 4) ? intArg(norm, 4) : 1;
-        return wrap(k::slice(input, axisArg, start, end, step, resultAllocator()));
+        return wrap(
+            norm.resultType(),
+            k::slice(input, axisArg, start, end, step, resultAllocator()));
     });
 }
 
-std::optional<Type *> sliceInfer(const InferContext &ctx) {
+std::optional<Type *> sliceFunctionInfer(const InferContext &ctx) {
     TensorFacts in  = ctx.facts(0);
     const auto axis = ctx.constInt(1);
     if (!in.shape) {
         return tensorOf(in);
     }
     if (!axis) {
-        return tensorOf(in.dtype, StaticShape(in.shape->size(), kUnknownDim));
+        return tensorOf(in.dtype, StaticShape(in.shape->size(), std::nullopt));
     }
     const auto a     = static_cast<size_t>(normalizeAxisOrThrow(*axis, in.shape->size()));
     const auto start = ctx.constInt(2), end = ctx.constInt(3);
     const auto step   = ctx.has(4) ? ctx.constInt(4) : std::optional<int64_t>(1);
-    const int64_t ext = (*in.shape)[a];
-    if (ext == kUnknownDim || !start || !end || !step || *step <= 0) {
-        (*in.shape)[a] = kUnknownDim;
+    const std::optional<int64_t> ext = (*in.shape)[a];
+    if (!ext || !start || !end || !step || *step <= 0) {
+        (*in.shape)[a] = std::nullopt;
         return tensorOf(in);
     }
     // Extent and bounds are known at compile time: an interval that leaves the axis is an
     // error here (design principles 3.9). With an unknown extent or bounds the operator checks
     // at run time and faults with SliceOutOfRange (3.9).
-    const auto range = k::normalizeSliceBounds(ext, *start, *end);
+    const auto range = k::normalizeSliceBounds(*ext, *start, *end);
     if (!range) {
         throw ShapeError(
             std::format(
@@ -318,7 +342,7 @@ std::optional<Type *> sliceInfer(const InferContext &ctx) {
                 *start,
                 *end,
                 a,
-                ext));
+                *ext));
     }
     const int64_t s = range->start, e = range->end;
     (*in.shape)[a]  = e > s ? (e - s + *step - 1) / *step : 0;
@@ -353,7 +377,14 @@ std::vector<int64_t> intListArg(ArgsView &args, size_t index, std::string_view o
         if (array->size() == 0) {
             return {};
         }
-        if (!isIntegerType(type)) {
+        // The type may state no element type at all (its element is `Void`, the "a numeric scalar,
+        // which one is not fixed yet" marker of design
+        // principles 5.4) — the reading `isIntegerCode` already takes, which answers "yes" for
+        // an unstated dtype and leaves the refusal to the kernel. A type that does fix an
+        // element type is the exact one it says, so a concrete `f32[3]` is still refused here;
+        // an unstated one is read from the value, which is the only thing that has it.
+        if (!isIntegerType(type) && array->dtype() != TypeCode::Int32 &&
+            array->dtype() != TypeCode::Int64) {
             reportShapeError(op, "expects an integer array");
         }
         return parseIntArray(array, type);
@@ -372,86 +403,14 @@ std::vector<int64_t> intListArg(ArgsView &args, size_t index, std::string_view o
     return values;
 }
 
-// `t[a:b]`, `t[a:b:s]`, `t[:b]`, `t[a:]`, `t[:]` on a tensor: the slice of the first axis
-// (design principles 5.4), a view sharing the block. A slice of another axis, and a step other
-// than 1, are views with strides, which need the multidimensional array representation of H17:
-// the type rule rejects them at the call instead of a copy standing in for the view.
-slot_t sliceSubKernel(ArgsView &, ArgsView &norm, context::Context &) {
-    const Array *input  = tensorArg(norm, 0);
-    const int64_t start = intArg(norm, 1);
-    const int64_t step  = intArg(norm, 3);
-    const bool wroteEnd = (intArg(norm, 4) & 1) != 0;
-    if (input->rank() != 1) {
-        reportShapeError(
-            "[]",
-            "a slice of a tensor of rank 1; a slice of another dimension is a view with "
-            "strides, which needs the multidimensional array representation of H17");
-    }
-    const int64_t extent = input->dim(0);
-    const int64_t end    = wroteEnd ? intArg(norm, 2) : extent;
-    // Bounds outside the axis are a located fault, as for an array's slice (design principles
-    // 3.9); checked before the kernel so the diagnostic is SliceOutOfRange.
-    if (start < 0 || start > extent || end < 0 || end > extent) {
-        throwRuntimeFault(
-            RuntimeDiag::SliceOutOfRange, start, end, "axis 0 of a tensor", extent);
-    }
-    if (step != 1) {
-        throwRuntimeFault(
-            RuntimeDiag::InvalidArgument,
-            "[]",
-            "a slice step must be 1; a step other than 1 is a view with strides, which needs "
-            "the multidimensional array representation of H17");
-    }
-    const int64_t count = end > start ? end - start : 0;
-    return runKernel("slice_sub", [&] {
-        return wrap(viewTensor(
-            input, std::span<const int64_t>(&count, 1), resultAllocator(), start));
-    });
-}
-
-std::optional<Type *> sliceSubInfer(const InferContext &ctx) {
-    const TensorFacts in = ctx.facts(0);
-    if (!in.shape) {
-        return tensorOf(in); // rank unknown: nothing to check
-    }
-    if (in.shape->empty()) {
-        throw ShapeError("a tensor without dimensions has no first dimension to slice");
-    }
-    if (in.shape->size() > 1) {
-        throw ShapeError(
-            "a slice of the first dimension of a tensor of rank 2 or more is a view with "
-            "strides, which needs the multidimensional array representation of H17");
-    }
-    // The slice is a view sharing the block, which fixes the step: strides are H17's.
-    const auto step = ctx.constInt(3);
-    if (!step || *step != 1) {
-        throw ShapeError(
-            "a slice step other than the constant 1 is a view with strides, which needs the "
-            "multidimensional array representation of H17");
-    }
-    const int64_t extent = (*in.shape)[0];
-    const auto start     = ctx.constInt(1);
-    const auto end       = ctx.constInt(2);
-    const auto wroteEnd  = ctx.constInt(4);
-    if (extent == kUnknownDim || !start || !wroteEnd) {
-        return tensorOf(in.dtype, StaticShape{kUnknownDim});
-    }
-    const int64_t to = (*wroteEnd & 1) != 0 ? (end ? *end : kUnknownDim) : extent;
-    if (to == kUnknownDim) {
-        return tensorOf(in.dtype, StaticShape{kUnknownDim});
-    }
-    // Extent and bounds are known at compile time: an interval that leaves the axis is an
-    // error here (design principles 3.9).
-    if (*start < 0 || *start > extent || to < 0 || to > extent) {
-        throw ShapeError(
-            std::format(
-                "slice bounds {}..{} are outside the first dimension of extent {}",
-                *start,
-                to,
-                extent));
-    }
-    return tensorOf(in.dtype, StaticShape{to > *start ? to - *start : 0});
-}
+// The slice of the first axis on a tensor, a view sharing the block, was this module's own
+// subscript kernel and type rule (`t[a:b]`); both are gone, because a subscript is answered by the
+// core's one slice operator and its one adjoint rule for any rank and any element type (the
+// author's ruling of 2026-10-25, section discrete-gradient-and-rank-one-slice-ownership, point 2:
+// 两种 `[]` 都只由核心回答; `docs/design/arrays-memory/plan.cn.md` 5.1a: 模块副本与按类型分派的那段一起删掉). The function
+// form below stays: it answers any axis and any rank, and its reading of its arguments -- a
+// negative bound counts from the end, an axis is normalized -- is not the core's yet (see
+// docs/handover/questions/slice-function-form-and-what-the-core-answers.md).
 
 // take(t, indices): rows along the first axis, in the order the indices give.
 slot_t takeKernel(ArgsView &, ArgsView &norm, context::Context &) {
@@ -471,7 +430,7 @@ slot_t takeKernel(ArgsView &, ArgsView &norm, context::Context &) {
         }
     }
     return runKernel("take", [&] {
-        return wrap(k::take(input, indices, resultAllocator()));
+        return wrap(norm.resultType(), k::take(input, indices, resultAllocator()));
     });
 }
 
@@ -489,15 +448,15 @@ std::optional<Type *> takeInfer(const InferContext &ctx) {
     }
 
     StaticShape out;
-    const int64_t extent = input.shape ? (*input.shape)[0] : kUnknownDim;
+    const std::optional<int64_t> extent = input.shape ? (*input.shape)[0] : std::nullopt;
     if (const auto constant = ctx.constInts(1)) {
-        if (extent != kUnknownDim) {
+        if (extent.has_value()) {
             for (const int64_t index : *constant) {
-                if (index < 0 || index >= extent) {
+                if (index < 0 || index >= *extent) {
                     throw ShapeError(std::format(
                         "index {} is out of range for the first dimension of extent {}",
                         index,
-                        extent));
+                        *extent));
                 }
             }
         }
@@ -505,7 +464,7 @@ std::optional<Type *> takeInfer(const InferContext &ctx) {
     } else if (indices.shape) {
         out.push_back((*indices.shape)[0]);
     } else {
-        out.push_back(kUnknownDim);
+        out.push_back(std::nullopt);
     }
     if (input.shape) {
         out.insert(out.end(), input.shape->begin() + 1, input.shape->end());
@@ -548,11 +507,41 @@ slot_t takeGradKernel(ArgsView &, ArgsView &norm, context::Context &) {
     }
     const Array *dy = tensorArg(norm, 2);
     return runKernel("take_grad", [&] {
-        return wrap(k::takeGrad(input, indices, dy, resultAllocator()));
+        return wrap(norm.resultType(), k::takeGrad(input, indices, dy, resultAllocator()));
     });
 }
 
 std::optional<Type *> takeGradInfer(const InferContext &ctx) {
+    return tensorOf(ctx.facts(0).dtype, ctx.facts(0).shape);
+}
+
+// row_add_at(acc, index, row): `acc` with one row's gradient added where the index puts it. The
+// tangent space of a tensor states this as the operator that takes an element's tangent back into
+// a tangent of the whole value (`TangentSpace::scatterUri`), which is what a round of a loop over
+// the tensor needs: `for row in t` takes the row `index` of the first dimension (design principles
+// 5.4), so that round's gradient is a row gradient and it belongs at that row. `take_grad` is the
+// same scatter for a list of indices, built from zeros; a loop's rounds accumulate into one
+// gradient, so this one starts from the accumulator and takes a single index.
+slot_t rowAddAtKernel(ArgsView &, ArgsView &norm, context::Context &) {
+    const Array *acc = tensorArg(norm, 0);
+    if (acc->rank() < 1) {
+        reportShapeError("row_add_at", "expects a tensor with at least one dimension");
+    }
+    const int64_t index = intArg(norm, 1);
+    if (index < 0 || index >= acc->dim(0)) {
+        throwRuntimeFault(
+            RuntimeDiag::IndexOutOfRange,
+            index,
+            std::string("the first dimension of the tensor"),
+            acc->dim(0));
+    }
+    const Array *row = tensorArg(norm, 2);
+    return runKernel("row_add_at", [&] {
+        return wrap(norm.resultType(), k::rowAddAt(acc, index, row, resultAllocator()));
+    });
+}
+
+std::optional<Type *> rowAddAtInfer(const InferContext &ctx) {
     return tensorOf(ctx.facts(0).dtype, ctx.facts(0).shape);
 }
 
@@ -574,7 +563,7 @@ slot_t oneHotKernel(ArgsView &, ArgsView &norm, context::Context &) {
         }
     }
     return runKernel("one_hot", [&] {
-        return wrap(k::oneHot(labels, classes, resultAllocator()));
+        return wrap(norm.resultType(), k::oneHot(labels, classes, resultAllocator()));
     });
 }
 
@@ -598,9 +587,9 @@ std::optional<Type *> oneHotInfer(const InferContext &ctx) {
     } else if (labels.shape) {
         out.push_back((*labels.shape)[0]);
     } else {
-        out.push_back(kUnknownDim);
+        out.push_back(std::nullopt);
     }
-    out.push_back(classes.value_or(kUnknownDim));
+    out.push_back(classes);
     return tensorOf(TypeCode::Float32, out);
 }
 
@@ -615,26 +604,18 @@ void transposeVjp(VjpBuilder &b, const VjpCall &call) {
 }
 
 /// reshape, flatten, unsqueeze: the gradient takes the input's shape back. `reshape` also
-/// accepts a numeric array, and a float array is a continuous value with a tangent (design
-/// principles 9.9): its adjoint would be the elements of dy in order, which no operator of this
-/// module produces, so a gradient into an array that depends on a differentiated input is
-/// refused by name instead of being dropped (a constant array has no gradient and is skipped).
+/// accepts a numeric array, and a numeric array is a tensor here (a tensor is a numeric array:
+/// `isTensorType` is `isNumericArrayType`), so one rule answers for both spellings -- the array's
+/// adjoint is the input's shape and the tensor module has every operator for it (`tensor:shape`
+/// of the input, `tensor:reshape` of dy). A container it can reshape but cannot carry a gradient
+/// back into is refused by name while it depends on a differentiated parameter: `tensor:reshape`
+/// answers with a tensor, which is a flat numeric array, and the container the gradient has to
+/// return to holds its elements in another shape (`hasTensorAdjoint`).
 void reshapeLikeVjp(VjpBuilder &b, const VjpCall &call) {
-    if (!isTensorNode(b, call.inputs[0])) {
-        if (b.isActive(call.inputs[0])) {
-            refuseVjp(
-                call,
-                std::format(
-                    "its input is a numeric array of type '{}', not a tensor, and this module "
-                    "has no operator that carries a tensor's gradient back into an array; the "
-                    "array's gradient would be dropped silently. Build the tensor directly "
-                    "(a tensor parameter, a slice of one, or `new` of an array that does not "
-                    "depend on a differentiated value) instead of reshaping an array",
-                    b.nodeType(call.inputs[0])->toString()));
-        }
-        return;
-    }
     if (auto dy = b.gradientOf(call.output)) {
+        if (!hasTensorAdjoint(b, call, call.inputs[0], "its input")) {
+            return;
+        }
         const vjp_node_t shape = b.addOper(
             ArrayType::create(Type::Int64()),
             "tensor:shape",
@@ -652,12 +633,16 @@ void permuteVjp(VjpBuilder &b, const VjpCall &call) {
     }
 }
 
-// concat(a, b, axis): each part receives its slice of dy. A part may be a numeric array
-// instead of a tensor; a float array is continuous, and its adjoint (the elements of its slice
-// of dy) has no operator here, so an array part that depends on a differentiated input is
-// refused rather than dropped. A constant array part takes no gradient of its own and is
-// skipped — only that part: its length still places the tensor part's slice, and the tensor
-// part is accumulated whether or not the other part is an array.
+// concat(a, b, axis): each part receives its slice of dy. A part may be a numeric array instead
+// of a tensor, and a numeric array is a tensor here (a tensor is a numeric array: `isTensorType`
+// is `isNumericArrayType`), so a numeric array part's adjoint is the slice of dy its length
+// selects, the same slice a tensor part receives. A container that is not a numeric array (an
+// array of arrays, an array of records) is accepted where a tensor is -- the forward rule
+// flattens it -- but nothing carries a tensor's gradient back into it, so a part that depends on
+// a differentiated parameter is refused by name (`hasTensorAdjoint`), and a constant one takes no
+// gradient of its own and is skipped: only that part -- its length still places the other part's
+// slice, and that length is the container's own (`:struct/len_arr`), which a tensor extent cannot
+// answer for a value that holds its elements in another shape.
 void concatVjp(VjpBuilder &b, const VjpCall &call) {
     requireVjpInputs(call, 3, 3);
     auto dy = b.gradientOf(call.output);
@@ -665,89 +650,49 @@ void concatVjp(VjpBuilder &b, const VjpCall &call) {
         return;
     }
     const vjp_node_t lhs = call.inputs[0], rhs = call.inputs[1], axis = call.inputs[2];
-    for (const vjp_node_t part : {lhs, rhs}) {
-        if (!isTensorNode(b, part) && b.isActive(part)) {
-            refuseVjp(
-                call,
-                std::format(
-                    "a part of it is a numeric array of type '{}', not a tensor, and this "
-                    "module has no operator that carries a tensor's gradient back into an "
-                    "array; that part's gradient would be dropped silently. Concatenate "
-                    "tensors that come from a differentiable value instead",
-                    b.nodeType(part)->toString()));
-        }
-    }
-    const bool lhsTensor = isTensorNode(b, lhs), rhsTensor = isTensorNode(b, rhs);
+    const bool lhsTensor = hasTensorAdjoint(b, call, lhs, "a part of it");
+    const bool rhsTensor = hasTensorAdjoint(b, call, rhs, "a part of it");
     if (!lhsTensor && !rhsTensor) {
-        return; // every part is a constant numeric array: no part carries a gradient
+        return; // every part is a constant container: no part carries a gradient
     }
     // Where the second part starts along the axis: the first part's own length when it is a
-    // tensor, and the array's length (an int the array value answers with) when it is one.
-    const std::array<vjp_node_t, 1> arrayOnly{lhs};
+    // tensor, and the container's length (an int the container answers with) when it is one.
+    const std::array<vjp_node_t, 1> containerOnly{lhs};
     const std::array<vjp_node_t, 2> lhsAxis{lhs, axis};
-    const vjp_node_t split = lhsTensor
-                                 ? b.addOper(Type::Int64(), "tensor:dim", lhsAxis)
-                                 : b.addOper(Type::Int64(), ":struct/len_arr", arrayOnly);
+    const vjp_node_t split = lhsTensor ? b.addOper(Type::Int64(), "tensor:dim", lhsAxis)
+                                       : b.addOper(Type::Int64(), ":struct/len_arr", containerOnly);
     if (lhsTensor) {
         b.accumulateGradient(
-            lhs,
-            addTensorOper(b, "tensor:slice", {*dy, axis, staticInt(b, 0), split}));
+            lhs, addTensorOper(b, "tensor:slice", {*dy, axis, staticInt(b, 0), split}));
     }
     if (rhsTensor) {
         const std::array<vjp_node_t, 2> dyAxis{*dy, axis};
-        const vjp_node_t total = b.addOper(Type::Int64(), "tensor:dim", dyAxis);
+        const vjp_node_t total   = b.addOper(Type::Int64(), "tensor:dim", dyAxis);
         b.accumulateGradient(
             rhs, addTensorOper(b, "tensor:slice", {*dy, axis, split, total}));
     }
 }
 
-// slice(t, axis, start, end, step?)
+// The adjoint rule of the function form of the slice. A slice is a selection of indices along its
+// axis, so its adjoint
+// is the zero-padded scatter of dy back into the parent's shape at those same indices --
+// `tensor:slice_grad` is that scatter. The value handed back has the parent's own type:
+// `addTensorOperFor` types the gradient node from the primal's tangent, so a `f32[..]` parent gets
+// a gradient of its own element type and shape, never a value of another width.
+// `slice(t, axis, start, end, step?)`, the function form only: every argument the caller wrote is
+// the adjoint's argument too. The subscript spelling `t[a:b]` is the core's node and its adjoint is
+// the core's (`:op/slice_sub` -> `:tangent/scatter_slice_arr`), so the two-word mask branch this
+// rule had is gone with the module's subscript copy (the ruling of 2026-10-25, point 2).
 void sliceVjp(VjpBuilder &b, const VjpCall &call) {
     requireVjpInputs(call, 4, 5);
-    if (auto dy = b.gradientOf(call.output)) {
-        std::vector<vjp_node_t> inputs{*dy};
-        inputs.insert(inputs.end(), call.inputs.begin(), call.inputs.end());
-        b.accumulateGradient(
-            call.inputs[0],
-            b.addOper(vjpTensorType(), "tensor:slice_grad", inputs));
-    }
-}
-
-// slice_sub(t, start, end, step, written): `t[a:b]` on a tensor. A slice is a selection of
-// indices along the first axis, so its adjoint is the zero-padded scatter of dy back into the
-// parent's shape at those same indices — `slice_grad` is that scatter. The forward operator
-// states a step of 1 (any other is refused at the call, before a gradient is built), and the
-// rule passes the step through so the adjoint follows the forward if that ever widens.
-// `written` bit 0 says whether the end was written: when it was not, `t[a:]` ran to the extent,
-// which is `dim(t, 0)` here.
-void sliceSubVjp(VjpBuilder &b, const VjpCall &call) {
-    requireVjpInputs(call, 5, 5);
     auto dy = b.gradientOf(call.output);
     if (!dy) {
         return;
     }
-    const vjp_node_t parent = call.inputs[0], start = call.inputs[1], step = call.inputs[3];
-    const auto written = b.staticValueOf(call.inputs[4]);
-    if (!written) {
-        // The mask is a literal the compiler writes with the call (globals.cpp, `__slice__`):
-        // without it the end the forward used cannot be named, and guessing would return a
-        // gradient padded with zeros at the wrong places.
-        refuseVjp(
-            call,
-            "the bounds mask of the call is not a constant, so the end the slice ran to "
-            "cannot be recovered when the gradient is built");
-    }
-    vjp_node_t end = call.inputs[2];
-    if ((static_cast<int64_t>(*written) & 1) == 0) {
-        const std::array<vjp_node_t, 2> axisInputs{parent, staticInt(b, 0)};
-        end = b.addOper(Type::Int64(), "tensor:dim", axisInputs);
-    }
+    std::vector<vjp_node_t> inputs{*dy};
+    inputs.insert(inputs.end(), call.inputs.begin(), call.inputs.end());
     b.accumulateGradient(
-        parent,
-        addTensorOper(
-            b,
-            "tensor:slice_grad",
-            {*dy, parent, staticInt(b, 0), start, end, step}));
+        call.inputs[0], addTensorOperFor(b, call.inputs[0], "tensor:slice_grad", inputs));
 }
 
 // take(t, indices): rows are selected with repetition, so the reverse scatters dy back and
@@ -757,11 +702,25 @@ void takeVjp(VjpBuilder &b, const VjpCall &call) {
     if (auto dy = b.gradientOf(call.output)) {
         b.accumulateGradient(
             call.inputs[0],
-            addTensorOper(b, "tensor:take_grad", {call.inputs[0], call.inputs[1], *dy}));
+            addTensorOperFor(
+                b,
+                call.inputs[0],
+                "tensor:take_grad",
+                {call.inputs[0], call.inputs[1], *dy}));
     }
 }
 
 } // namespace
+
+// `t[idx]` with an int array over a rank-1 array of numbers is answered by the core's
+// `:op/idx_take` -- the element take -- and not by this module's `tensor:idx_take`, which the
+// row take of a tensor of any other rank (or of open rank) reaches. The adjoint of the element
+// take is the same one `take` has: `tensor:take_grad` scatters the gradient of each element
+// taken back into its own position, and for a rank-1 input that is the whole of it. Publishing
+// the rule for the core's URI keeps `xs[idx]` differentiable where the core answers it.
+void registerSubscriptTakeRule() {
+    camel::core::DerivativeRegistry::instance().setRule(":op/idx_take", &takeVjp);
+}
 
 std::vector<OpDef> layoutOps() {
     std::vector<OpDef> defs;
@@ -823,6 +782,9 @@ std::vector<OpDef> layoutOps() {
         .infer     = concatInfer,
         .kernel    = &concatKernel,
         .traits    = {}});
+    // The function form only: `slice(t, axis, start, end, step?)`. The subscript spelling
+    // (`t[a:b]`) is the core's operator and never reaches this module (the ruling of 2026-10-25,
+    // point 2, and `docs/design/arrays-memory/plan.cn.md` 5.1a; the module's own subscript kernel and type rule are deleted).
     defs.push_back(OpDef{
         .name    = "slice",
         .exports = {"slice"},
@@ -833,8 +795,8 @@ std::vector<OpDef> layoutOps() {
              {"end", ParamKind::Int},
              {"step", ParamKind::Int, true}},
         .resultDoc = "Tensor",
-        .infer     = sliceInfer,
-        .kernel    = &sliceKernel,
+        .infer     = sliceFunctionInfer,
+        .kernel    = &sliceFunctionKernel,
         .traits    = {}});
     defs.push_back(OpDef{
         .name      = "take",
@@ -845,20 +807,9 @@ std::vector<OpDef> layoutOps() {
         .kernel    = &takeKernel,
         .traits    = {}});
     // The subscript forms of design principles 5.4: `t[a:b]` and `t[idx]` on a tensor. They
-    // merge into the built-in module's `__slice__` and `__idx__` groups as overloads.
-    defs.push_back(OpDef{
-        .name    = "slice_sub",
-        .exports = {"__slice__"},
-        .params =
-            {{"t", ParamKind::Tensor},
-             {"start", ParamKind::Int},
-             {"end", ParamKind::Int},
-             {"step", ParamKind::Int},
-             {"endWritten", ParamKind::Int}},
-        .resultDoc = "Tensor",
-        .infer     = sliceSubInfer,
-        .kernel    = &sliceSubKernel,
-        .traits    = {}});
+    // merge into the built-in module's `__slice__` and `__idx__` groups as overloads. `t[a:b]`
+    // is the `slice` operator above, exported under `__slice__` as well; only the index form
+    // needs an operator of its own.
     defs.push_back(OpDef{
         .name      = "idx_take",
         .exports   = {"__idx__"},
@@ -878,6 +829,14 @@ std::vector<OpDef> layoutOps() {
         .kernel    = &takeGradKernel,
         .traits    = {}});
     defs.push_back(OpDef{
+        .name      = "row_add_at",
+        .exports   = {},
+        .params    = {{"acc", ParamKind::Tensor}, {"index", ParamKind::Int}, {"row", ParamKind::Tensor}},
+        .resultDoc = "Tensor",
+        .infer     = rowAddAtInfer,
+        .kernel    = &rowAddAtKernel,
+        .traits    = {}});
+    defs.push_back(OpDef{
         .name      = "one_hot",
         .exports   = {"one_hot"},
         .params    = {{"labels", ParamKind::TensorLike}, {"classes", ParamKind::Int}},
@@ -891,11 +850,10 @@ std::vector<OpDef> layoutOps() {
     setVjp(defs, "unsqueeze", &reshapeLikeVjp);
     setVjp(defs, "permute", &permuteVjp);
     setVjp(defs, "concat", &concatVjp);
+    // `t[a:b]` and `slice(t, 0, a, b)` are the same node and share this one adjoint rule; the
+    // `slice_sub` rule that used to answer the subscript beside it is gone with the operator.
     setVjp(defs, "slice", &sliceVjp);
     setVjp(defs, "take", &takeVjp);
-    // `t[a:b]` is `slice` along the first axis, and shares its adjoint: the zero-padded
-    // scatter of the slice_grad operator.
-    setVjp(defs, "slice_sub", &sliceSubVjp);
     setVjp(defs, "shape", &camel::core::noGradient);
     // The subscript forms are differentiated by the same rule as the calls they name: the
     // indices of `t[idx]` take no gradient, and t's receives the scatter-add (takeVjp).

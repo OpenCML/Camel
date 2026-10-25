@@ -1,0 +1,19 @@
+/**
+ * A cell whose element type is not numeric cannot be written by a `var Tensor` parameter: the
+ * declared `Tensor` only stands for numeric elements, so the widening that gives a cell its
+ * parameter's type leaves this one alone and the call is refused. Expected: a compile-time
+ * error at the argument.
+ */
+module var_argument_non_numeric
+import { Tensor, sum } from tensor
+
+func step(var t: f64[], d: float): float sync {
+    t = t + d
+    return sum(t)
+}
+
+func main(): int sync {
+    var xs = ['a', 'b']
+    println(step(xs, 0.5))
+    return 0
+}

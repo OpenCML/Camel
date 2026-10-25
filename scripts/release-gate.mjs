@@ -5,12 +5,12 @@
 // The release gate: one command that runs the layers a release decision needs, and says out
 // loud what it does not run.
 //
-// Why this exists (H154 §6, H147 §3.5): `npm run test` is `--tier fast`, and the tier filter
+// Why this exists: `npm run test` is `--tier fast`, and the tier filter
 // only applies to a directory target -- so the plan files it walks lose every `tier = "slow"`
 // test, and the slow plans under `feat/mm`, `feat/opt` and `feat/tools` never run at all.
 // `gpu/**` and `perf/**` are in no gate target either. A "green gate" therefore did not mean
-// "the tree is green"; it meant "the fast layer is green". H147 then recommended
-// `-Plan test/plans -Tier all` for the release, which would have started the 200 cases
+// "the tree is green"; it meant "the fast layer is green". An earlier audit then recommended
+// `-Plan test/plans -Tier all` for the release, which would have started the cases
 // `agents/test.md` reserves for a milestone on a quiet machine (GC stress and poison, progen,
 // the PyTorch comparisons, the benchmarks) on a shared host.
 //
@@ -18,23 +18,28 @@
 //
 //   1. fast layer   -- `smoke` + `feat/**` at `--tier fast` (what `npm run test` does), plus
 //                      `gpu/profile`, a fast-tier plan that no other gate target reaches;
-//   2. slow layer   -- the plan files H154 §3 proved runnable on the shared host, named one by
+//   2. slow layer   -- the plan files proved runnable on the shared host, named one by
 //                      one. Naming a file makes the runner run the whole plan, slow tests
 //                      included, whatever `--tier` says; that is the only honest way to reach
 //                      them, and a directory target would silently drop them again;
 //   3. static checks-- the seven tree/compiler checks a release has to pass;
-//   4. the policy  -- the plans in FORBIDDEN are never run. The gate prints them by name,
+//   4. the policy  -- the plans in FORBIDDEN are the milestone layer: each of their own files says
+//                      `tier = "milestone"`, so they are never run by an ordinary or a slow run and
+//                      `--tier milestone` is what selects them. The gate prints them by name,
 //                      with the reason and the policy, and refuses (exit 2) when a caller asks
 //                      for one (a positional target, `--include`, `--plan`, `--tier all`,
 //                      `--all`, or any directory that contains one).
 //
-// The gate does not build. It verifies the install it finds (`CAMEL_HOME`, else `out/latest`) -- both
-// that one exists and that its build stamp matches this tree's sources (H149) -- and refuses to
-// start otherwise, because a run against a missing or stale binary measures nothing. Build once
+// The gate does not build. It verifies the install it measures -- `--camel <path>`, else this
+// tree's `out/latest` -- both that one exists and that its build stamp matches this tree's sources,
+// and refuses to start otherwise, because a run against a missing or stale binary measures nothing.
+// The choice is made once, here, and handed to every layer as the same `--camel` argument, so no
+// layer resolves a default of its own and "checked A, measured B" cannot arise. Build once
 // (`npm run build`, or `camel-remote.ps1` without `-Plan`), then run:
 //
 //   npm run release-gate                     # every layer, the whole gate
 //   node scripts/release-gate.mjs --jobs 8
+//   node scripts/release-gate.mjs --camel out/debug/bin/camel --only static
 //   node scripts/release-gate.mjs --dry-run  # print the commands and the skip list, run nothing
 //   node scripts/release-gate.mjs --only slow # PARTIAL: one layer, for re-checking a phase
 //   node scripts/release-gate.mjs --include test/plans/feat/tools/lsp.plan.toml
@@ -43,12 +48,13 @@
 // is partial, because a gate that reports green while a layer did not run is the defect this
 // script exists to remove.
 //
-// A skipped plan is UNKNOWN, never green. This is the accounting H154 §6 and `agents/test.md`
+// A skipped plan is UNKNOWN, never green. This is the accounting `agents/test.md`
 // ask for, printed on every run:
 //
-//   * the 25 policy-forbidden plan files (21 whole plans + 4 plans whose forbidden tests are the
-//     slow ones) -- 200 slow cases today: the 193 H154 §2 measured across its 18 files, plus the
-//     seven the perf plans that landed afterwards add -- not run, not claimed;
+//   * the 25 policy-forbidden plan files (22 whole plans + 3 plans whose held-back entries are
+//     named one by one) -- the cases the milestone layer would run, counted below through the
+//     runner's own reading of those files and printed on every run -- not run by this gate, not
+//     claimed. They are the milestone layer, and `--tier milestone` is the layer that runs them;
 //   * the debug layer (`--tier debug`, a Debug build) -- never part of a Release gate.
 //
 // Exit codes: 0 every selected phase passed; 1 a phase failed; 2 refused or not runnable
@@ -58,16 +64,30 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { spawn, spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
-import { parseTomlFile } from '../test/tools/toml-lite.mjs'
-// The three fates and the check that every plan file has one live in `scripts/plan-inventory.mjs`,
+// The layers and the check that every plan file has one live in `scripts/plan-inventory.mjs`,
 // because the merge gate's fast layer runs the same check as a plan entry
 // (`test/plans/feat/gate/plan_inventory.plan.toml`); this script imports its tables instead of
 // keeping a second copy that could disagree with it.
-import { FAST_TARGETS, SLOW_PLANS, FORBIDDEN, planInventoryProblems, rel, walkPlans } from './plan-inventory.mjs'
+import {
+    FAST_TARGETS,
+    SLOW_PLANS,
+    FORBIDDEN,
+    caseLedgerProblems,
+    planInventoryProblems,
+    rel,
+    walkPlans,
+} from './plan-inventory.mjs'
+// The layer of a test, by the runner's own rule: the accounting below counts the cases the policy
+// holds back, and it must count the same tests the runner would run, from the same rule and the
+// same reading of a plan file.
+import { expandSweeps, loadPlanTests, testTier } from '../test/tools/run-tests.mjs'
+// The stamp rule the two stdlib checkers also apply, so the gate and a checker that reads the
+// install cannot disagree about what "this tree's build" means.
+import { refuseInstallNotOfThisTree } from './install-stamp.mjs'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
-// H147 and H154 both used 8. `-Jobs 12` makes `gpu_preference.no_device.*` hit spurious 10 s
+// Earlier audits used 8 too. `-Jobs 12` makes `gpu_preference.no_device.*` hit spurious 10 s
 // timeouts on the shared host; the gate does not expose a way to forget that.
 const DEFAULT_JOBS = 8
 
@@ -80,17 +100,16 @@ const POLICY =
 // the gate's criterion is that exit code, not the text of the last line.
 //
 // `camel: true` marks a check that reads the install: the gate appends `--camel <the install it
-// found>` to its command line, because a check left to resolve its own default reads `out/latest`
-// while the gate may have found `CAMEL_HOME`'s install -- one run measuring two binaries, the
-// defect this gate exists to catch (the 2026-10-25 ruling, "the compiler of a run is an argument
-// everywhere"). `--verify-doc` reads the tree only, so it takes no install and names none:
-// an argument it never reads would claim a measurement it does not take.
+// picked>` to its command line, because a check left to resolve its own default would read
+// `out/latest` while the gate measured another install -- one run measuring two binaries, the
+// defect this gate exists to catch. `--verify-doc` reads the tree only, so it takes no install and
+// names none: an argument it never reads would claim a measurement it does not take.
 const STATIC_CHECKS = [
     { name: 'stdlib reference: declarations agree with the registered operators', args: ['scripts/stdlib-reference.mjs', '--verify-ops'], camel: true },
     { name: 'stdlib reference: docs/stdlib-reference.md is up to date', args: ['scripts/stdlib-reference.mjs', '--verify-doc'] },
     { name: 'diagnostics registry: the declarations and the generated code tables agree', args: ['scripts/diagnostics-catalog.mjs', '--check'] },
     { name: 'document links: no broken relative link', args: ['scripts/check-doc-links.mjs', '--all'] },
-    { name: 'document snippets: Camel fences compile and print what the page says', args: ['scripts/check-doc-snippets.mjs'] },
+    { name: 'document snippets: Camel fences compile and print what the page says', args: ['scripts/check-doc-snippets.mjs'], camel: true },
     { name: 'stdlib declarations: a migrated module stays migrated', args: ['scripts/stdlib-declarations.mjs', '--check'], camel: true },
     { name: 'std includes: no header borrowed through another header', args: ['scripts/check-std-includes.mjs'] },
 ]
@@ -106,6 +125,10 @@ const LAYERS = ['fast', 'slow', 'static']
 function usage() {
     console.log(`Usage: node scripts/release-gate.mjs [options]
 
+  --camel PATH    the install every layer measures: its bin/camel (default: this tree's
+                  out/latest). The environment does not choose it -- a layer's children get
+                  CAMEL_HOME set to this install's root -- and an install that is not this tree's
+                  build is refused before anything runs
   --jobs N        parallel width for the plan runs (default ${DEFAULT_JOBS}; 12 is known to make
                   gpu_preference.no_device.* time out on the shared host)
   --only LIST     comma-separated subset of fast,slow,static. A PARTIAL run, not a gate result
@@ -124,7 +147,7 @@ function die(message, code = 2) {
 }
 
 function parseArgs(argv) {
-    const options = { jobs: DEFAULT_JOBS, only: null, include: [], dryRun: false }
+    const options = { jobs: DEFAULT_JOBS, only: null, include: [], dryRun: false, camel: null }
     for (let i = 0; i < argv.length; i++) {
         const arg = argv[i]
         if (arg === '-h' || arg === '--help') {
@@ -132,6 +155,14 @@ function parseArgs(argv) {
             process.exit(0)
         } else if (arg === '--dry-run' || arg === '--list') {
             options.dryRun = true
+        } else if (arg === '--camel') {
+            const value = argv[++i]
+            if (!value) die('--camel needs the path of the install to measure')
+            options.camel = path.resolve(value)
+        } else if (arg.startsWith('--camel=')) {
+            const value = arg.slice('--camel='.length)
+            if (!value) die('--camel needs the path of the install to measure')
+            options.camel = path.resolve(value)
         } else if (arg === '--jobs') {
             const value = argv[++i]
             if (!value || !/^[1-9][0-9]*$/.test(value)) die('--jobs needs a positive integer')
@@ -149,10 +180,10 @@ function parseArgs(argv) {
             if (!value) die(`${arg} needs a plan file or plan directory`)
             options.include.push(value)
         } else if (arg === '--tier' || arg === '--all' || arg.startsWith('--tier=') || arg === '--suite') {
-            // The exact command H147 §3.5 recommended and H154 §6 warned about. Refuse by name.
+            // The exact command an earlier audit recommended and a later one warned about. Refuse by name.
             die(
                 `REFUSED: '${arg}' selects plans by tier or by the whole tree, which would start ` +
-                    `the ${FORBIDDEN.length} plan files the policy forbids.\n[gate] ${POLICY}.\n` +
+                    `the ${FORBIDDEN.length} plan files the policy holds back for the milestone layer.\n[gate] ${POLICY}.\n` +
                     `[gate] The slow layer is an explicit plan file list (H154 §3); see --include for one file.`
             )
         } else if (arg.startsWith('-')) {
@@ -190,47 +221,26 @@ function checkIncludes(include) {
     return [...new Set(extra)]
 }
 
-function findCamel() {
-    const homes = [process.env.CAMEL_HOME, path.join(ROOT, 'out', 'latest')].filter(Boolean)
-    for (const home of homes) {
-        for (const name of ['camel', 'camel.exe']) {
-            const candidate = path.join(home, 'bin', name)
-            if (fs.existsSync(candidate)) return candidate
-        }
+// The one install this run measures: the binary `--camel <path>` names, else this tree's
+// `out/latest/bin/camel`. Picked once, here. The environment does not choose it: `CAMEL_HOME` is
+// the install location's convention -- what the binary and an SDK user read to find the runtime
+// library -- and letting it pick would make the measured install depend on the shell. What the
+// chosen install's children read as `CAMEL_HOME` is its own root, set by each layer.
+function findCamel(named) {
+    if (named) return fs.existsSync(named) ? named : null
+    for (const name of ['camel', 'camel.exe']) {
+        const candidate = path.join(ROOT, 'out', 'latest', 'bin', name)
+        if (fs.existsSync(candidate)) return candidate
     }
     return null
 }
 
-// The gate never builds, and it never runs against an install it cannot prove: H149 found
-// `-NoBuild` silently reusing another revision's `out/latest`, and a gate that measured that
-// binary would report a tree nobody tested. `scripts/build-info.js check` compares the stamp's
-// content fingerprint with this tree (docs/, test/, scripts/ and benchmarks/ do not move it, so
-// a docs-only commit still passes); exit 4 there is the refusal. An install outside `out/`
-// carries no stamp this script can find, and the gate says so instead of pretending.
-function checkInstallStamp(camel) {
-    const home = path.dirname(path.dirname(camel))
-    const relative = path.relative(path.join(ROOT, 'out'), home)
-    if (relative.startsWith('..') || path.isAbsolute(relative)) {
-        console.log('[gate] build stamp: the install is outside out/, so its stamp cannot be checked; the caller owns staleness')
-        return
-    }
-    const tag = relative.split(path.sep)[0]
-    const check = spawnSync(process.execPath, ['scripts/build-info.js', 'check', '--tag', tag], {
-        cwd: ROOT,
-        encoding: 'utf8',
-        windowsHide: true,
-    })
-    if (check.status === 0) {
-        console.log(`[gate] build stamp: out/${tag} was built from this tree's sources`)
-        return
-    }
-    const detail = `${check.stdout || ''}${check.stderr || ''}`.trim()
-    console.error(detail ? `[gate] ${detail.replace(/\n/g, '\n[gate] ')}` : '[gate] build-info check failed')
-    die(
-        `the install at out/${tag} was not built from this tree (build-info exit ${check.status}).\n` +
-            '[gate] build once (`npm run build`), then run the gate; it never builds and never assumes.'
-    )
-}
+// The gate never builds, and it never runs against an install it cannot prove: `-NoBuild` once
+// silently reused another revision's `out/latest`, and a gate that measured that binary would
+// report a tree nobody tested. The check is `refuseInstallNotOfThisTree`, the same rule the stdlib
+// checkers apply to an install they are pointed at: the stamp travels inside the install, so an
+// install outside this tree's `out/` is compared with this tree's sources and refused the same way
+// rather than exempted.
 
 function git(...args) {
     const proc = spawnSync('git', args, { cwd: ROOT, encoding: 'utf8', windowsHide: true })
@@ -291,27 +301,43 @@ function readSummary(text) {
     return summary
 }
 
-// The slow tests the skip list covers, from the plans themselves: the printed accounting follows
-// the tree, so a plan that grows a slow test is counted the day it lands (it used to print the
-// literal 200 H154 §2 measured).
-function forbiddenSlowTests() {
+// The cases the policy holds back, read through the runner's own loaders: the printed accounting
+// follows the tree, so a plan that grows a case is counted the day it lands, and no number is
+// written down here to go stale. A whole plan the policy forbids carries `tier = "milestone"` in its own
+// file, so all of its cases count; in the three files only some tests are held back, and those say
+// `tier = "milestone"` themselves. Counting the runner's tests, not the raw table rows, is what
+// makes the number the number of cases `--tier milestone` would run from these files.
+function forbiddenMilestoneTests() {
     let total = 0
     for (const entry of FORBIDDEN) {
         const file = path.join(ROOT, entry.file)
         if (!fs.existsSync(file)) continue
-        const plan = parseTomlFile(file)
-        const planTier = plan.tier ?? 'fast'
-        total += (plan.tests ?? []).filter((test) => (test.tier ?? planTier) === 'slow').length
+        let read
+        try {
+            read = loadPlanTests(file)
+        } catch {
+            // a plan the runner cannot read fails the inventory check above, by name
+            continue
+        }
+        const plan = { ...read.doc, __planPath: file }
+        for (const test of [...read.tests, ...expandSweeps(read.doc, file)]) {
+            try {
+                if (testTier(plan, test) === 'milestone') total += 1
+            } catch {
+                // a plan whose tier the runner does not know fails the inventory check above
+            }
+        }
     }
     return total
 }
 
 function printSkipList() {
-    console.log(`[gate] skipped by policy: ${FORBIDDEN.length} plan files, ${forbiddenSlowTests()} slow cases`)
+    console.log(`[gate] held by policy for the milestone layer: ${FORBIDDEN.length} plan files, ${forbiddenMilestoneTests()} cases`)
     console.log(`[gate]   ${POLICY}`)
     for (const entry of FORBIDDEN) console.log(`[gate]   ${entry.file} -- ${entry.reason}`)
     console.log('[gate]   These cases are UNKNOWN, not green. This gate never runs them; the names are printed')
     console.log('[gate]   so the next reader does not mistake the fast layer for the whole tree.')
+    console.log('[gate]   They are selected by `--tier milestone`, which a milestone run names on purpose.')
     console.log('[gate] not run here: the debug layer (`--tier debug`, a Debug build) -- never part of a Release gate')
 }
 
@@ -363,16 +389,18 @@ async function main() {
         if (FORBIDDEN_BY_REL.has(file)) die(`internal error: '${file}' is both gated and forbidden; refusing to run`, 1)
     }
     // Every problem at once, from the one implementation of the inventory: a stale list entry (a
-    // slow plan that does not exist, a forbidden one that does not) and every plan file that has
-    // no fate. Printing the first one and dying hid the rest: eight perf plans had no fate, and the
-    // run named one of them, so the reader fixed one file per run and the list stayed a moving
-    // target (H500).
-    const inventoryProblems = planInventoryProblems()
+    // slow plan that does not exist, a forbidden one that does not), every plan file that has no
+    // layer, and every file under test/cases that nothing reads. Printing the first one and dying
+    // hid the rest: eight perf plans had no layer, and the run named one of them, so the reader
+    // fixed one file per run and the list stayed a moving target.
+    const inventoryProblems = [...planInventoryProblems(), ...caseLedgerProblems()]
     if (inventoryProblems.length > 0) {
         for (const problem of inventoryProblems) console.error(`[gate] ${problem}`)
         die(
-            `the plan inventory has ${inventoryProblems.length} problem(s); every plan file must be reached by a ` +
-                'fast target, named in SLOW_PLANS, named in FORBIDDEN, or be a debug plan',
+            `the inventory has ${inventoryProblems.length} problem(s); every plan file must be reached by a ` +
+                'fast target, named in SLOW_PLANS, named in FORBIDDEN, or be a debug or milestone plan, and ' +
+                'every file under test/cases must be read by code (a plan, an import, a tool that opens it) ' +
+                'or recorded in CASE_EXCEPTIONS with the reason it is kept',
             1,
         )
     }
@@ -383,11 +411,16 @@ async function main() {
     console.log(`[gate] layers: ${layers.join(', ')}${partial ? ' -- PARTIAL RUN, not a gate result' : ''}`)
     if (partial) console.log('[gate] PARTIAL: a layer did not run; the missing results are unknown, not green.')
 
-    const fastArgv = [...FAST_TARGETS, '--tier', 'fast', '--jobs', String(options.jobs)]
-    // A caller may name a plan the H154 list already has; report it as extra only when it is new.
+    // The install is picked once, before any command line is built, and every layer gets the same
+    // `--camel` argument: the plan layers set each test child's CAMEL_HOME to this install's root,
+    // the static checks read it, and nothing resolves a second default behind the gate's back.
+    const camel = findCamel(options.camel)
+    const camelArg = camel ? ['--camel', camel] : []
+    const fastArgv = [...FAST_TARGETS, '--tier', 'fast', '--jobs', String(options.jobs), ...camelArg]
+    // A caller may name a plan the slow list already has; report it as extra only when it is new.
     const extra = extraSlow.filter((file) => !SLOW_PLANS.includes(file))
     const slowPlans = [...SLOW_PLANS, ...extra]
-    const slowArgv = [...slowPlans, '--jobs', String(options.jobs)]
+    const slowArgv = [...slowPlans, '--jobs', String(options.jobs), ...camelArg]
 
     console.log('\n[gate] coverage')
     console.log(`[gate]   fast: ${FAST_TARGETS.join(' ')} (--tier fast: slow tests of those directories are the slow layer's)`)
@@ -399,30 +432,32 @@ async function main() {
     if (options.dryRun) {
         console.log('\n[gate] dry run: the commands')
         if (layers.includes('fast')) console.log(`[gate] $ ${[process.execPath, 'scripts/test.js', ...fastArgv].join(' ')}`)
-        if (layers.includes('slow')) for (const plan of slowPlans) console.log(`[gate] $ ${[process.execPath, 'scripts/test.js', plan].join(' ')}`)
+        if (layers.includes('slow')) for (const plan of slowPlans) console.log(`[gate] $ ${[process.execPath, 'scripts/test.js', plan, ...camelArg].join(' ')}`)
         if (layers.includes('static')) {
             // The install is resolved at run time; a dry run has none, and says which checks wait
             // for one rather than printing a command line that differs from the one that runs.
-            const camel = findCamel()
             for (const check of STATIC_CHECKS) {
                 const argv = check.camel && camel ? staticCheckArgv(check, camel) : check.args
                 console.log(`[gate] $ ${[process.execPath, ...argv].join(' ')}`)
                 if (check.camel && !camel) console.log('[gate]   (+ `--camel <install>` at run time; no install found now)')
             }
         }
+        if (!camel) console.log('[gate]   (+ `--camel <install>` on the plan layers at run time; no install found now)')
         console.log('[gate] dry run: nothing ran')
         return 0
     }
 
-    const camel = findCamel()
     if (!camel) {
         die(
-            'no built Camel: the gate verifies an existing install and never builds.\n' +
-                '[gate] build once (`npm run build`, or camel-remote.ps1 without -Plan), then run the gate.'
+            options.camel
+                ? `no camel binary at ${options.camel}: --camel names the install every layer measures`
+                : 'no built Camel: the gate verifies an existing install and never builds.\n' +
+                  '[gate] build once (`npm run build`, or camel-remote.ps1 without -Plan), then run the gate.'
         )
     }
     console.log(`[gate] compiler: ${camel}`)
-    checkInstallStamp(camel)
+    refuseInstallNotOfThisTree(camel, ROOT, 'release-gate.mjs')
+    console.log(`[gate] build stamp: ${path.dirname(path.dirname(camel))} was built from this tree's sources`)
 
     const phases = []
     if (layers.includes('fast')) {
@@ -452,7 +487,7 @@ async function main() {
         }
         if (!phase.ok) failedPhases++
     }
-    console.log(`[gate] skipped   ${FORBIDDEN.length} plan files / ${forbiddenSlowTests()} slow cases (policy; UNKNOWN, not green)`)
+    console.log(`[gate] held back   ${FORBIDDEN.length} plan files / ${forbiddenMilestoneTests()} milestone cases (policy; UNKNOWN, not green)`)
     if (partial) console.log('[gate] PARTIAL   this run did not cover every layer; it is not a gate result')
     console.log(`[gate] GATE: ${failedPhases === 0 ? 'all selected phases passed' : `FAILED (${failedPhases} phase(s))`}`)
     if (failedPhases === 0 && !partial) {

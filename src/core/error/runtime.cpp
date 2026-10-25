@@ -153,7 +153,8 @@ RuntimeErrorReporter::describe(const RuntimeFault &fault, const ExecutionSite &s
     // which node was running, and for an operator that works on a whole function (a macro
     // such as grad) that is the call of the operator, not the place the fault is about.
     ExecutionSite located = site;
-    if (fault.hint().cachedOrigin != camel::source::kInvalidOriginId) {
+    const bool placed      = fault.hint().cachedOrigin != camel::source::kInvalidOriginId;
+    if (placed) {
         located.cachedOrigin = fault.hint().cachedOrigin;
     }
     auto resolved = resolver_.resolve(located);
@@ -162,6 +163,17 @@ RuntimeErrorReporter::describe(const RuntimeFault &fault, const ExecutionSite &s
     }
     if (!resolved.sourcePath.empty()) {
         d.modulePath = resolved.sourcePath;
+    }
+    // The place that asked for the work, when the fault asks for it to be shown (see
+    // ExecutionSiteHint::keepRaiseSite): resolved on its own, because a fault whose position is a
+    // construct of the program is still reported to the reader as the call that reached it.
+    if (placed && fault.hint().keepRaiseSite &&
+        site.cachedOrigin != camel::source::kInvalidOriginId &&
+        site.cachedOrigin != fault.hint().cachedOrigin) {
+        const ResolvedRuntimeLocation raised = resolver_.resolve(site);
+        if (raised.origin != camel::source::kInvalidOriginId) {
+            d.related.push_back(DiagLabel{raised.origin, "raised here", raised.sourcePath});
+        }
     }
     d.moduleName = defaultModuleName(site, resolved.sourcePath);
     return d;

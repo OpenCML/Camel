@@ -5,6 +5,7 @@
 
 #include "camel/core/operator_table.h"
 #include "camel/core/tags.h"
+#include "camel/core/type/intern.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/draft_writes.h"
 
@@ -164,7 +165,7 @@ std::string nodeText(const GraphDraft &draft, gc_node_ref_t id) {
 /// low 32 and a bool the low 8; the other bytes are no part of the value. They must not decide
 /// whether two constants are the same: the memory a slot came from can differ between a Debug and a
 /// Release build, and then two equal f32 constants would compare unequal and a law would fire in one
-/// build only (H99).
+/// build only.
 slot_t canonicalConstant(slot_t value, const camel::core::type::Type *type) {
     if (type == nullptr) {
         return value;
@@ -368,7 +369,10 @@ struct NodeKey {
     uint8_t kind     = 0;
     camel::core::sem::PermissionMask perms    = 0;
     uint32_t region  = 0;
-    const Type *type = nullptr;
+    /// The canonical id of the node's type (camel/core/type/intern.h), kNoTypeId when it has
+    /// none: one id per structure, so two nodes whose types were built in different places, or
+    /// whose types spell their dimensions differently, are the same key.
+    camel::core::type::TypeId typeId = camel::core::type::kNoTypeId;
     std::string payload;
     std::vector<gc_node_ref_t> norm;
     std::vector<gc_node_ref_t> with;
@@ -382,7 +386,7 @@ struct NodeKeyHash {
         mix(key.kind);
         mix(key.perms);
         mix(key.region);
-        mix(reinterpret_cast<uintptr_t>(key.type));
+        mix(key.typeId);
         for (gc_node_ref_t in : key.norm) {
             mix(in);
         }
@@ -393,6 +397,15 @@ struct NodeKeyHash {
         return h;
     }
 };
+
+/// The canonical id of `type` as a node key states it (see NodeKey::typeId).
+camel::core::type::TypeId canonicalTypeIdOf(const Type *type) {
+    return camel::core::type::TypeTable::instance().canonicalId(type);
+}
+
+/// Whether two nodes state the same type: one canonical id is one structure, whatever object
+/// carries it and whatever names its key spells (camel/core/type/text.h, sameCanonicalType).
+bool sameType(const Type *a, const Type *b) { return camel::core::type::sameCanonicalType(a, b); }
 
 } // namespace
 
@@ -435,9 +448,10 @@ bool readsVariable(
     return false;
 }
 
-/// Whether a node carries the program's order instead of being a pure value: a call runs a
-/// graph, a branch, join, sync or loop runs (or orders) what it holds, a gate waits for its
-/// control inputs, and an operator that is not pure has an effect (design principles 3.3).
+/// Whether a node carries the program's order instead of being a value a pass may compute for
+/// itself: a call runs a graph, a branch, join, sync or loop runs (or orders) what it holds, a
+/// gate waits for its control inputs, and an operator that has an effect, or that must run where
+/// the program writes it, is not one a pass may recompute (design principles 3.3).
 /// This is the rule the generic rewrite pass uses to decide what it may not reorder
 /// (`carriesOrdering` in src/passes/opt/generic/rewrite.cpp).
 bool carriesOrdering(const GraphDraft &draft, gc_node_ref_t node) {
@@ -458,7 +472,7 @@ bool carriesOrdering(const GraphDraft &draft, gc_node_ref_t node) {
     case GCNodeKind::Oper: {
         const std::span<const std::byte> payload = draft.payloadOf(node);
         return payload.size() < sizeof(GCOperBody) ||
-               !camel::core::OperatorTable::instance().isPure(
+               !camel::core::OperatorTable::instance().mayBeRecomputed(
                    reinterpret_cast<const GCOperBody *>(payload.data())->oper);
     }
     default:
@@ -468,7 +482,7 @@ bool carriesOrdering(const GraphDraft &draft, gc_node_ref_t node) {
 
 /// Whether a node of this shape computes its value from its data inputs alone, apart from the
 /// nodes it reads. A control input is not part of this question: it orders the node, it does not
-/// make the value different (design principles 3.3, 3.4; H95), so a pure computation with a
+/// make the value different (design principles 3.3, 3.4), so a pure computation with a
 /// control input is a pure computation still.
 bool shapeTakesPart(
     const GraphDraft &draft, GCNodeKind kind, gc_slot_idx_t dataIndex, const Type *type,
@@ -491,7 +505,7 @@ bool shapeTakesPart(
         return true;
     case GCNodeKind::Oper:
         return payload.size() >= sizeof(GCOperBody) &&
-               camel::core::OperatorTable::instance().isPure(
+               camel::core::OperatorTable::instance().mayBeRecomputed(
                    reinterpret_cast<const GCOperBody *>(payload.data())->oper);
     default:
         return false;
@@ -591,7 +605,7 @@ uint8_t DraftWritings::shapeOf(gc_node_ref_t node) {
                 [&](gc_node_ref_t in) { return writtenInPlace(in); });
         }
         // 1: takes part; 2: does not. The control inputs are not asked: they order the node and
-        // do not make the value different (H95), so they neither keep it out of a class of
+        // do not make the value different, so they neither keep it out of a class of
         // writings nor out of a rule's term. A rewrite that replaces a node with control inputs
         // carries them over to the writing that replaces it (`rewrite`), so the order the program
         // wrote survives the replacement.
@@ -614,15 +628,17 @@ NodeKey makeKey(
     key.kind   = static_cast<uint8_t>(kind);
     key.perms  = perms;
     key.region = region;
-    key.type   = type;
+    // The type the key states is the one the constant's bits are read with; the key itself
+    // records its canonical id (NodeKey::typeId).
+    const Type *keyType = type;
     switch (kind) {
     case GCNodeKind::Data: {
         const auto index = static_cast<size_t>(-dataIndex);
         const slot_t v   = draft.staticSlots()[index];
         if (const Type *ty = draft.staticSlotTypes()[index]) {
-            key.type = ty;
+            keyType = ty;
         }
-        key.payload = constantPayload(v, key.type);
+        key.payload = constantPayload(v, keyType);
         break;
     }
     case GCNodeKind::Oper: {
@@ -634,6 +650,7 @@ NodeKey makeKey(
         key.payload.assign(reinterpret_cast<const char *>(payload.data()), payload.size());
         break;
     }
+    key.typeId = canonicalTypeIdOf(keyType);
     for (gc_node_ref_t in : norm) {
         key.norm.push_back(canonOf(in));
     }
@@ -705,7 +722,7 @@ void DraftWritings::index(gc_node_ref_t node) {
                 const auto *ih = draft_.header(in);
                 if (associative && ih != nullptr && draft_.alive(in) &&
                     ih->kind == GCNodeKind::Oper && ih->permissions == h->permissions &&
-                    ih->dataType == h->dataType && takesPart(in) &&
+                    sameType(ih->dataType, h->dataType) && takesPart(in) &&
                     draft_.withInputsOf(in).empty() && !draft_.normInputsOf(in).empty() &&
                     reinterpret_cast<const GCOperBody *>(draft_.payloadOf(in).data())->oper ==
                         oper) {
@@ -773,7 +790,11 @@ bool DraftWritings::assertEqualDeferred(
     gc_node_ref_t a, gc_node_ref_t b, camel::core::sem::PermissionMask perms, uint16_t rule) {
     const auto *ha = draft_.header(a);
     const auto *hb = draft_.header(b);
-    if (ha == nullptr || hb == nullptr || ha->dataType != hb->dataType ||
+    // Two writings of one value have one type, compared by canonical id: the structural identity
+    // of the type, with the names in its key (a dimension name, a parameter name) erased, which
+    // is the relation `equals` uses. Comparing the objects would refuse two writings whose types
+    // were built in different places, which is what a rewrite does every time it re-encodes.
+    if (ha == nullptr || hb == nullptr || !sameType(ha->dataType, hb->dataType) ||
         draft_.nodeRegion(a) != draft_.nodeRegion(b) || ha->permissions != hb->permissions ||
         (perms & ~contextOf(a)) != 0) {
         throw std::logic_error(
@@ -1353,7 +1374,7 @@ gc_node_ref_t DraftWritings::constantNode(
     key.kind    = static_cast<uint8_t>(GCNodeKind::Data);
     key.perms   = perms;
     key.region  = region;
-    key.type    = type;
+    key.typeId  = canonicalTypeIdOf(type);
     key.payload = constantPayload(stored, type);
     auto &ix = *index_;
     if (auto found = ix.byKey.find(key); found != ix.byKey.end()) {
@@ -1599,7 +1620,7 @@ bool DraftWritings::matchFrom(
                 // mean a value the program does not have. Which term each pattern term takes is a
                 // search, not a walk over every permutation: a chain of two hundred calls must not
                 // be permuted to find out that not one of them is the zero a law asks for (the
-                // timeout of H118 was this explosion through saturation). So a pattern term that
+                // timeout of was this explosion through saturation). So a pattern term that
                 // can read no term of the chain ends the search at once, the pattern terms that
                 // could read the fewest terms are placed first, and terms that are one value are
                 // interchangeable -- the second of two equal terms says nothing the first did not.
@@ -1921,13 +1942,14 @@ RewriteStats DraftWritings::rewrite(
             key.kind             = static_cast<uint8_t>(GCNodeKind::Data);
             key.perms            = h->permissions;
             key.region           = draft_.nodeRegion(node);
-            key.type             = h->dataType;
             const auto slotIndex = static_cast<size_t>(-h->dataIndex);
             const slot_t value   = draft_.staticSlots()[slotIndex];
+            const Type *keyType  = h->dataType;
             if (const Type *ty = draft_.staticSlotTypes()[slotIndex]) {
-                key.type = ty;
+                keyType = ty;
             }
-            key.payload = constantPayload(value, key.type);
+            key.payload = constantPayload(value, keyType);
+            key.typeId  = canonicalTypeIdOf(keyType);
             ix.byKey.try_emplace(key, node);
             if (node >= ix.keyOf.size()) {
                 ix.keyOf.resize(draft_.nodeSlotCount());
@@ -2073,7 +2095,7 @@ RewriteStats DraftWritings::rewrite(
                 // those of the operator terms the law stops reading. A law over data inputs is
                 // sound whatever the node is ordered after, but the engine must not move the
                 // computation across an effect, so the writing that replaces it waits for all of
-                // them (design principles 3.3, 3.4; H95).
+                // them (design principles 3.3, 3.4).
                 const std::vector<gc_node_ref_t> waits = chosenWaits.value_or(std::vector<gc_node_ref_t>{});
                 // A node that already existed cannot be made to wait without risking a cycle.
                 if (!waits.empty() && made < before) {

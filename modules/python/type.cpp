@@ -3,10 +3,12 @@
 
 #include "type.h"
 #include "camel/core/mm.h"
+#include "camel/core/type/intern.h"
 #include "camel/core/type/other.h"
 #include "camel/utils/assert.h"
 
 #include <span>
+#include <vector>
 
 namespace mm = camel::core::mm;
 using namespace camel::core::type;
@@ -20,9 +22,14 @@ PyObjectType::PyObjectType(TypeCode code, size_t paramCount, Type **params)
     : OtherType(code, paramCount, params) {}
 
 PyObjectType *PyObjectType::create() {
-    void *mem = mm::permSpace().alloc(sizeof(PyObjectType), alignof(PyObjectType));
-    ASSERT(mem != nullptr, "Failed to allocate PyObjectType from permSpace");
-    return new (mem) PyObjectType(typeCode());
+    // One object for the bare `PyObject` code, from the type table (see intern.h); a
+    // `PyObject<...>` is another entry, keyed by the canonical ids of its arguments.
+    return static_cast<PyObjectType *>(TypeTable::instance().internOther(
+        typeCode(), std::span<const uintptr_t>(), [&]() -> Type * {
+            void *mem = mm::permSpace().alloc(sizeof(PyObjectType), alignof(PyObjectType));
+            ASSERT(mem != nullptr, "Failed to allocate PyObjectType from permSpace");
+            return new (mem) PyObjectType(typeCode());
+        }));
 }
 
 std::string PyObjectType::toString() const {
@@ -87,10 +94,20 @@ bool PyObjectType::assignableFrom(Type *sourceType) const {
 }
 
 OtherType *PyObjectType::cloneWithParams(std::span<Type *const> params) const {
-    Type **p  = OtherType::copyParams(params);
-    void *mem = mm::permSpace().alloc(sizeof(PyObjectType), alignof(PyObjectType));
-    ASSERT(mem != nullptr, "Failed to allocate PyObjectType from permSpace");
-    return new (mem) PyObjectType(code_, params.size(), p);
+    // One object per argument list, from the type table, as the bare type is: the arguments enter
+    // by canonical id, which is what `equals` compares.
+    std::vector<uintptr_t> parts;
+    parts.reserve(params.size());
+    for (Type *param : params) {
+        parts.push_back(typeKeyWord(TypeTable::instance().canonical(param)));
+    }
+    return static_cast<OtherType *>(TypeTable::instance().internOther(
+        code_, parts, [&]() -> Type * {
+            Type **p  = OtherType::copyParams(params);
+            void *mem = mm::permSpace().alloc(sizeof(PyObjectType), alignof(PyObjectType));
+            ASSERT(mem != nullptr, "Failed to allocate PyObjectType from permSpace");
+            return new (mem) PyObjectType(code_, params.size(), p);
+        }));
 }
 
 PyObjectType *getPyObjectType() {

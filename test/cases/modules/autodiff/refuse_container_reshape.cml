@@ -1,0 +1,33 @@
+/**
+ * A container that is not a numeric array has no adjoint, and the call that converts one is
+ * refused by name (design principles 9.9). `reshape` accepts an array of arrays (`f32[][]`) where
+ * it accepts a tensor: the forward rule flattens it, so the call itself is fine. Its adjoint is
+ * not: `tensor:reshape` of the upstream gradient answers with a tensor, which is a flat numeric
+ * array, while the value the gradient has to return to holds its elements in another shape
+ * (`f32[][]` holds arrays). Nothing in the tensor module carries a tensor's gradient back into
+ * such a container, so a container that depends on a differentiated parameter has no gradient
+ * channel at all: it is refused at the call, with the operator and the container's type named.
+ *
+ * A numeric array is a tensor here and is *not* refused: `adjoint_reshape_array.cml` asserts the
+ * adjoint this same rule builds for one. Removing the refusal for containers too is what the
+ * suite's first reading of it missed -- the condition `isTensorNode` is a tautology only for
+ * numeric arrays, and a container reached the rule (a temporary probe hit it with
+ * `type=float[][] active=1`), where the gradient nodes built for it killed the process instead of
+ * faulting. A constant container starts no gradient flow: it is converted by the forward rule and
+ * the call that converts it is never visited.
+ */
+module refuse_container_reshape
+
+import { reshape, sum } from tensor
+import { grad } from autodiff
+
+with <xs: float[][]>
+func loss(): float {
+    return sum(reshape(xs, [4]))
+}
+
+func main(): int sync {
+    let xs: float[][] = [[1.0, 2.0], [3.0, 4.0]]
+    println('refuse_container_reshape g={}'->format<grad(loss)<xs>()>)
+    return 0
+}

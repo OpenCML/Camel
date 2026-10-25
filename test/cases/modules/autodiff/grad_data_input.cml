@@ -1,5 +1,5 @@
 // A value that is an input of the differentiated computation, with nothing differentiable
-// upstream of it, is data: it may have a tangent type (every `Tensor` does) and can still be
+// upstream of it, is data: it may have a tangent type (every numeric array does) and can still be
 // converted to an integer without being refused. Only the first `with` parameter of `f` is
 // differentiated, so `scale` and `labels` carry no gradient to lose (design principles 9.9).
 import { grad } from autodiff
@@ -10,8 +10,8 @@ func scaled(scale: float): float {
     return w * float(int(scale))
 }
 
-with <w: Tensor>
-func weighted(labels: Tensor): float {
+with <w: f64[..]>
+func weighted(labels: i64[..]): float {
     let ids  = cast(labels, 'int64')
     let data = cast(ids, 'float64')
     return sum(data * w)
@@ -21,8 +21,8 @@ func main(): int sync {
     println(scaled<2.0>(3.0))
     println(grad(scaled)<2.0>(3.0))
 
-    let labels: Tensor = new([[0, 1, 0]])
-    let w: Tensor = new([[1.0, 2.0, 3.0]])
+    let labels: i64[..] = new([[0, 1, 0]])
+    let w: f64[..] = new([[1.0, 2.0, 3.0]])
     println(weighted<w>(labels))
     println(sum(grad(weighted)<w>(labels)))
     return 0

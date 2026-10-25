@@ -261,6 +261,130 @@ kind = "negative"
 case = "../../../../cases/compile/array_shape/err_return_shape.cml"
 args = ["${case}", "std::nvm"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ReturnTypeMismatch"
+expect_diagnostic_name = "SemanticDiag::ReturnNeedsConversion"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "literal_rank_two"
+desc = "A nested literal at a position that states a rank is one array of that shape (design principles 5.1, 5.4): the extent reads [2, 2] and the array holds four elements, not two rows."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/literal_rank_two.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["[2, 2]", "4"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "literal_rank_two_gir"
+desc = "The same literal in the GIR: one DATA node whose value type is the shape the position states, `f32[2, 2]`, not an `f32[]` of four elements."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/literal_rank_two.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+expect_stdout_contains = ["f32[2, 2]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "nested_rows"
+desc = "Without an annotation a nested literal stays an array of arrays: two rows of two, and rows that differ in length are two rows still (design principles 5.1, 5.4)."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/nested_rows.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["2\n2\n2\n2\n3.0\n3.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "nested_rows_gir"
+desc = "The type the compiler gives that literal: `float[][]`, one bracket per dimension, not one rank-2 shape."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/nested_rows.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+expect_stdout_contains = ["float[][]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "reshape_constant"
+desc = "A constant `reshape` folds to the array it names, and the folded constant is read for its own shape: the extent is [2, 2] and the element count is four."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/reshape_constant.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["[2, 2]", "4"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "err_literal_rank"
+desc = "A flat literal where a rank-2 shape is stated is refused at the literal: `[1.0, 2.0, 3.0, 4.0]` is an `f32[4]`, and nothing reshapes it into the `f32[2, 2]` the annotation states (design principles 5.1, 5.4)."
+kind = "negative"
+case = "../../../../cases/compile/array_shape/err_literal_rank.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::DimensionMismatch"
+expect_diagnostic_code = "0x03000143"
+expect_diagnostic_line = 6
+expect_diagnostic_column = 24
+expect_output_contains = ["The array literal written here has extent 4, but the position states the shape 'f32[2, 2]'."]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "err_literal_ragged"
+desc = "Rows of one rank-2 array are one length: a literal whose rows differ is refused at the literal, with the shape it writes against the shape the position states."
+kind = "negative"
+case = "../../../../cases/compile/array_shape/err_literal_ragged.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::DimensionMismatch"
+expect_diagnostic_code = "0x03000143"
+expect_diagnostic_line = 6
+expect_diagnostic_column = 24
+expect_output_contains = ["The array literal written here has extent 2, but the position states the shape 'f32[2, 2]'."]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "err_nonliteral_rank"
+desc = "A one-dimensional constant that is not written as a literal at the position is refused there: `one` is an `f32[4]` of four elements, and 2 * 2 being its element count does not make it the `f32[2, 2]` the annotation states (design principles 5.1, 5.4). Only a source whose own nesting already gives the shape -- a nested literal, a constant a folded `reshape` names -- is read as the shape the position states, so nothing is reshaped to fit."
+kind = "negative"
+case = "../../../../cases/compile/array_shape/err_nonliteral_rank.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::DeclaredTypeMismatch"
+expect_diagnostic_code = "0x03000110"
+expect_diagnostic_line = 11
+expect_diagnostic_column = 5
+expect_output_contains = ["This value has type 'f32[4]', which is not the declared type 'f32[2, 2]'."]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "named_dimension_makes_no_instance"
+desc = "A named dimension is not part of what an instance is keyed by (design principles 5.4): a function whose parameter is written `f32[n]` is not a generic function, and the graph of a program that calls it -- at a depth only the run knows -- holds the declaration itself and no instance of it, declared `(xs: f32[n], k: int) => f32`. The name is written once in the signature, so the compiler warns and the program still runs."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/grow_named_dimension.cml"
+args = ["${case}", "std::jgir"]
+envs = ["CAMEL_GROW_DEPTH=2"]
+expect_exit = 0
+expect_stderr_contains = ["DimensionNameUsedOnce"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const doc = JSON.parse(input.normalized.stdout)
+const names = doc.graphs.map((g) => g.name)
+assert(names.length === 3, `expected three graphs, got ${names.join(', ')}`)
+for (const name of names) {
+  assert(['__root__', 'main', 'grow'].includes(name), `unexpected graph '${name}'`)
+}
+const grow = doc.graphs.find((g) => g.name === 'grow')
+assert(grow && grow.signature === '(xs: f32[n], k: int) => f32', `grow is declared '${grow && grow.signature}'`)
+}
+"""
 timeout_ms = 8000

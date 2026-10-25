@@ -54,8 +54,8 @@ expect_output_not_contains = ["compile skipped", "Segmentation fault", "dumped c
 
 [[tests]]
 name = "framed.operators.gc_stress"
-# Slow layer: measured 14.5 s in the full serial run (handover note ⟨617198c⟩ (H10)).
-tier = "slow"
+# Slow layer: measured 14.5 s in the full serial run.
+tier = "milestone"
 desc = "The same with a collection at every seventh safepoint and the heap verified before and after: framed code keeps every reference in its pool frame, where the collector finds it."
 backends = ["fvm", "jit", "inline_jit"]
 envs = ["CAMEL_GC_STRESS_SAFEPOINT=7", "CAMEL_GC_VERIFY=1"]
@@ -165,8 +165,8 @@ expect_stdout_starts_with = "1988895\n600001\n13500\n1688895\ndone\n"
 
 [[tests]]
 name = "framed.loops.gc_stress"
-# Slow layer: measured 5.8 s in the full serial run (handover note ⟨617198c⟩ (H10)).
-tier = "slow"
+# Slow layer: measured 5.8 s in the full serial run.
+tier = "milestone"
 desc = "The allocating loops with a collection at every safepoint and the heap verified: the self tail call of compiled code polls the collector as the interpreter's does."
 case = "../../../cases/linear/jit/framed_loops.cml"
 backends = ["fvm", "jit", "inline_jit"]
@@ -210,7 +210,7 @@ sweep = false
 args = ["--gc", "mark-sweep", "-vv", "${case}", "std::jit hot_threshold=0"]
 envs = ["CAMEL_GC_ENABLE_YOUNG_COPYING=0", "CAMEL_GC_POISON=0"]
 expect_exit = 0
-expect_output_contains = ["compiled & cached graph 'countdown' as framed code; loop rounds: native rounds", "compiled & cached graph 'sum_to' as framed code; loop rounds: native rounds", "compiled & cached graph 'sum_squares' as framed code; loop rounds: helper: the round takes the next element of a sequence", "compiled & cached graph 'until_above' as framed code; loop rounds: helper: the round takes the next element of a sequence", "compiled & cached graph 'nested' as framed code; loop rounds: helper: the round takes the next element of a sequence (2 loops)", "compiled & cached graph 'collects' as framed code; loop rounds: helper: the round collects the values it produces", "compiled & cached graph 'ticks' as framed code; loop rounds: helper: the round makes the state tuple anew every round"]
+expect_output_contains = ["compiled & cached graph 'countdown' as framed code; loop rounds: native rounds", "compiled & cached graph 'sum_to' as framed code; loop rounds: native rounds", "compiled & cached graph 'sum_squares' as framed code; loop rounds: helper: the round takes the next element of a sequence", "compiled & cached graph 'until_above' as framed code; loop rounds: helper: the round takes the next element of a sequence", "compiled & cached graph 'nested' as framed code; loop rounds: helper: the round takes the next element of a sequence (2 loops)", "compiled & cached graph 'collects' as framed code; loop rounds: helper: the round collects the values it produces", "compiled & cached graph 'ticks' as framed code; loop rounds: helper: the round contains OPER at pc=16"]
 expect_output_not_contains = ["'countdown' as framed code; loop rounds: helper", "'sum_to' as framed code; loop rounds: helper", "'sum_squares' as framed code; loop rounds: native", "'until_above' as framed code; loop rounds: native", "'nested' as framed code; loop rounds: native", "'collects' as framed code; loop rounds: native", "'ticks' as framed code; loop rounds: native", "compile skipped", "Segmentation fault", "dumped core"]
 
 [[tests]]

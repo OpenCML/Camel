@@ -127,11 +127,12 @@ bool isEmptyArrayLiteral(node_handle_t node) {
 
 /// The type of the untyped empty array literal `[]`: an array whose element type nobody wrote.
 /// Its element type is the only thing it leaves open, so every position it stands in fixes it.
-/// (The numeric-unknown array is not one of these; isUntypedArrayType tells them apart.)
+/// (An array whose element type nobody stated is not one of these when its rank is open;
+/// isElementTypeOpenArray tells them apart.)
 bool isEmptyArrayLiteralType(const Type *type) { return isUntypedArrayType(type); }
 
 /// Whether a value of this type is a struct or tuple whose parts can be the components of a
-/// loop state (H71). A cell and the tagged forms are representations, not collections of values:
+/// loop state. A cell and the tagged forms are representations, not collections of values:
 /// their parts are not independent values of the programme.
 bool isSplittableAggregate(const Type *type) {
     if (type == nullptr) {
@@ -337,6 +338,95 @@ bool holdsStatedLength(const ArrayType *type, const ArrayData *array) {
     return !length.has_value() || static_cast<int64_t>(array->raw().size()) == *length;
 }
 
+/// One element of a nested literal, with what the GCT kept for it where it was written (its
+/// exact value and its position; nullptr for an element it kept nothing for).
+using LiteralLeaf = std::pair<data_ptr_t, const GCT::Tree::LiteralElement *>;
+
+/// The shape a nested array literal writes, one length per level, and its elements in the order
+/// the flattened value holds them (`[[a, b], [c, d]]` is [2, 2] over a b c d). False when a level
+/// is not one shape — a row beside an element, or rows of different lengths — which is no rank-N
+/// array (design principles 5.1, 5.4).
+bool flattenLiteral(
+    const GCT::Tree *tree, const data_ptr_t &data, std::vector<int64_t> &lengths,
+    std::vector<LiteralLeaf> &leaves) {
+    const auto array = std::dynamic_pointer_cast<ArrayData>(data);
+    if (array == nullptr) {
+        return false;
+    }
+    const auto &raw = array->raw();
+    lengths.push_back(static_cast<int64_t>(raw.size()));
+    if (raw.empty()) {
+        return true;
+    }
+    const auto *written = tree != nullptr ? tree->literalElementsOf(data) : nullptr;
+    const bool rows     = std::dynamic_pointer_cast<ArrayData>(raw.front()) != nullptr;
+    std::vector<int64_t> rowShape;
+    for (size_t index = 0; index < raw.size(); ++index) {
+        const bool isRow = std::dynamic_pointer_cast<ArrayData>(raw[index]) != nullptr;
+        if (isRow != rows) {
+            return false;
+        }
+        if (!rows) {
+            leaves.emplace_back(raw[index], literalElementAt(written, index));
+            continue;
+        }
+        std::vector<int64_t> sub;
+        std::vector<LiteralLeaf> subLeaves;
+        if (!flattenLiteral(tree, raw[index], sub, subLeaves)) {
+            return false;
+        }
+        if (index == 0) {
+            rowShape = sub;
+        } else if (sub != rowShape) {
+            return false;
+        }
+        // Every row's elements are elements of the one array, in row-major order: the walk keeps
+        // them all, not the ones of the first row (`[[a, b], [c, d]]` is a b c d).
+        leaves.insert(leaves.end(), subLeaves.begin(), subLeaves.end());
+    }
+    lengths.insert(lengths.end(), rowShape.begin(), rowShape.end());
+    return true;
+}
+
+/// Whether the array literal `data` writes the shape `type` states: a position that states a rank
+/// of its own (`f32[2, 2]`) takes one array written over that many levels, each level as long as
+/// the extent the position states (`?` leaves the length to the literal). A flat literal is not
+/// an `f32[2, 2]` — it is an `f32[4]` — and nothing reshapes it to fit (design principles 5.1,
+/// 5.4). A rank-1 position keeps the rule a literal's elements decide. `lengths` and `leaves` are
+/// the walk compositeDataInType builds the value from.
+bool arrayLiteralFitsShape(
+    const GCT::Tree *tree, const ArrayType *type, const data_ptr_t &data,
+    std::vector<int64_t> *lengths = nullptr, std::vector<LiteralLeaf> *leaves = nullptr) {
+    const auto array = std::dynamic_pointer_cast<ArrayData>(data);
+    if (array == nullptr) {
+        return false;
+    }
+    const std::span<const ExtentForm> extents = type->extents();
+    if (extents.size() < 2) {
+        return holdsStatedLength(type, array.get());
+    }
+    std::vector<int64_t> written;
+    std::vector<LiteralLeaf> flattened;
+    if (!flattenLiteral(tree, data, written, flattened)) {
+        return false;
+    }
+    if (written.size() != extents.size()) {
+        return false;
+    }
+    for (size_t level = 0; level < written.size(); ++level) {
+        if (extents[level].isConstant() && extents[level].constant() != written[level]) {
+            return false;
+        }
+    }
+    if (lengths != nullptr) {
+        *lengths = std::move(written);
+    }
+    if (leaves != nullptr) {
+        *leaves = std::move(flattened);
+    }
+    return true;
+}
+
 /// Whether the composite literal `data` can be given `type`: the walk of compositeDataInType,
 /// unchanged, for the positions a literal may enter (design principles 5.1). The two must agree;
 /// a literal this accepts is converted by compositeDataInType, which reports what does not fit.
@@ -354,7 +444,10 @@ bool compositeEntersIn(const data_ptr_t &data, Type *type, const GCT::node_ptr_t
         if (elemType == nullptr || array == nullptr) {
             return false;
         }
-        if (!holdsStatedLength(arrayType, array.get())) {
+        const GCT::Tree *tree = origin != nullptr ? GCT::Tree::of(origin) : nullptr;
+        std::vector<int64_t> lengths;
+        std::vector<LiteralLeaf> leaves;
+        if (!arrayLiteralFitsShape(tree, arrayType, data, &lengths, &leaves)) {
             return false;
         }
         if (array->raw().empty()) {
@@ -362,8 +455,17 @@ bool compositeEntersIn(const data_ptr_t &data, Type *type, const GCT::node_ptr_t
             // zero, took it — which the check above decided.
             return true;
         }
-        const auto *written =
-            origin != nullptr ? GCT::Tree::of(origin)->literalElementsOf(data) : nullptr;
+        if (arrayType->extents().size() >= 2) {
+            // The elements of the shape the literal writes, in the order the flattened value
+            // holds them (design principles 5.1, 5.4).
+            for (const LiteralLeaf &leaf : leaves) {
+                if (!elementEntersIn(leaf.first, elemType, origin, writtenValueOf(leaf.second))) {
+                    return false;
+                }
+            }
+            return true;
+        }
+        const auto *written = tree != nullptr ? tree->literalElementsOf(data) : nullptr;
         for (size_t index = 0; index < array->raw().size(); ++index) {
             if (!elementEntersIn(
                     array->raw()[index],
@@ -698,7 +800,10 @@ Builder::compositeDataInType(const data_ptr_t &data, Type *type, const GCT::node
         if (elemType == nullptr || array == nullptr) {
             return nullptr;
         }
-        if (!holdsStatedLength(arrayType, array.get())) {
+        const GCT::Tree *tree = origin != nullptr ? GCT::Tree::of(origin) : nullptr;
+        std::vector<int64_t> lengths;
+        std::vector<LiteralLeaf> leaves;
+        if (!arrayLiteralFitsShape(tree, arrayType, data, &lengths, &leaves)) {
             return nullptr;
         }
         // The exact value each element was written as, when the GCT kept them (a composite
@@ -709,9 +814,27 @@ Builder::compositeDataInType(const data_ptr_t &data, Type *type, const GCT::node
             // the empty array takes the element type of the position it stands in (design
             // principles 5.1, 5.2) — `[]` where an `int[]` is expected is the empty `int[]`,
             // whether the position is a declaration, a body's value or a loop state. A literal
-            // that has elements keeps their join (H24), so this branch only covers `[]`, and a
+            // that has elements keeps their join, so this branch only covers `[]`, and a
             // position that states a length other than zero did not take it (the check above).
             return ArrayData::create(elemType);
+        }
+        if (arrayType->extents().size() >= 2) {
+            // A position that states a rank of its own takes the nested literal as one array of
+            // the shape the literal writes, whose elements are the elements of that shape in
+            // row-major order (design principles 5.1, 5.4) — the array is one value, not an
+            // array of its rows.
+            ArrayDataFactory factory;
+            factory.setElemType(elemType);
+            factory.setExtents(lengths);
+            for (const LiteralLeaf &leaf : leaves) {
+                data_ptr_t converted =
+                    literalElementInType(leaf.first, elemType, origin, leaf.second);
+                if (converted == nullptr) {
+                    return nullptr;
+                }
+                factory.add(converted);
+            }
+            return factory.build();
         }
         const auto *written =
             origin != nullptr ? GCT::Tree::of(origin)->literalElementsOf(data) : nullptr;
@@ -759,9 +882,9 @@ Builder::compositeDataInType(const data_ptr_t &data, Type *type, const GCT::node
         return factory.buildAs(structType);
     }
     if (type->code() == TypeCode::Tuple && data->type()->code() == TypeCode::Tuple) {
-        // The missing branch of H15h's element walk: a tuple literal used as an argument had no
+        // The missing branch of the element walk: a tuple literal used as an argument had no
         // way into a tuple parameter, so a text element made the whole call a NoMatchingFunction
-        // instead of naming the element (H15i). Elements are converted in written order, which
+        // instead of naming the element. Elements are converted in written order, which
         // is a tuple's order.
         auto *tupleType   = tt::as_ptr<TupleType>(type);
         const auto object = std::dynamic_pointer_cast<TupleData>(data);
@@ -846,7 +969,8 @@ data_ptr_t Builder::compositeWithHolesInType(
         const auto array      = std::dynamic_pointer_cast<ArrayData>(data);
         Type *elemType        = arrayType != nullptr ? arrayType->elemType() : nullptr;
         if (array == nullptr || elemType == nullptr || elemType->code() == TypeCode::Void ||
-            !holdsStatedLength(arrayType, array.get())) {
+            !arrayLiteralFitsShape(
+                origin != nullptr ? GCT::Tree::of(origin) : nullptr, arrayType, data)) {
             return nullptr;
         }
         const std::vector<Type *> holeTypes = holeTypesByIndex();
@@ -985,7 +1109,7 @@ data_ptr_t Builder::literalElementInType(
         ownPosition ? written->origin : camel::source::kInvalidOriginId;
     if (data->type()->code() == TypeCode::String) {
         // A text where another type is expected is the element's own type mismatch, reported at
-        // the element (design principles 5.1; H15h). There is no text-to-number conversion.
+        // the element (design principles 5.1). There is no text-to-number conversion.
         rejectLiteralData(data, type, where, nullptr, writtenAt);
     }
     if (value == nullptr || !isNumericType(type) || !isNumericType(data->type())) {
@@ -1113,7 +1237,7 @@ node_handle_t Builder::adaptExitValue(const GCT::node_ptr_t &gct, node_handle_t 
     // unless the value already has it is the same rule checkValue applies everywhere else;
     // a value that fits neither way is left alone for checkDeclaredReturn to report. In a
     // branch arm the position is the arm's (a `return` there is not the function's return,
-    // handover H24).
+    // handover).
     Type *position = expectedExitTypeHere();
     if (position != nullptr && !position->equals(valueType)) {
         if (node_handle_t entered = coerceTo(value, position, gct->at(0))) {
@@ -1261,7 +1385,7 @@ node_handle_t Builder::visitTaggedBrchNode(const GCT::node_ptr_t &gct) {
     // same `T?` (design principles 3.8): neither is in the position the whole expression
     // stands at, so neither takes that position's type. The position's type applies to the
     // branch's value once, where the branch stands (`checkValue`); leaking it down here gave
-    // the subject's arms a `float?` and the right side the form of the whole result (H119).
+    // the subject's arms a `float?` and the right side the form of the whole result.
     node_handle_t subject = nullptr;
     {
         ExpectedValueScope subjectScope(expectedValueType_, nullptr);
@@ -1706,7 +1830,7 @@ node_handle_t Builder::visitConditionBrchNode(const GCT::node_ptr_t &gct) {
     // position the whole expression stands at: the condition and both sides are `bool`
     // whatever that position wants. The position's type applies to the branch's value once,
     // where the branch stands (`checkValue`); leaking it down here made a `bool?` operand out
-    // of the literal `false` in `let o: bool? = true || false` (H119).
+    // of the literal `false` in `let o: bool? = true || false`.
     Type *const operandType = logical ? Type::Bool() : expectedValueType_;
     ExpectedValueScope operandScope(expectedValueType_, operandType);
 
@@ -1887,7 +2011,7 @@ node_handle_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
     }
     // The condition of an `if` is a `bool` (design principles 3.7), and the value a `match`
     // selects on is of its own type: neither is in the position the branch stands at, so the
-    // position's type must not leak into what is built there (H119). The position applies to
+    // position's type must not leak into what is built there. The position applies to
     // the branch's value once, where the branch stands.
     const bool ifBranch = gct->size() > 1 && gct->at(1)->caseType() == GCT::CaseType::True;
     node_handle_t condNode{};
@@ -2215,6 +2339,18 @@ node_handle_t Builder::buildBranch(
                 setNodeType(joinNode, joinType);
             }
             if (unified == nullptr) {
+                // Two arrays whose element types do not unify have no common type either, and the
+                // element type of a value is part of its type (design principles 5.1): the join
+                // names the element type each arm gives, with the conversion that would make the
+                // two one, rather than only reporting that the arms disagree.
+                if (joinType->code() == TypeCode::Array && exitType->code() == TypeCode::Array) {
+                    diags_->of(SemanticDiag::BranchElementTypeMismatch)
+                        .atOrigin(gct->origin())
+                        .commit(
+                            tt::as_ptr<ArrayType>(joinType)->elemType()->toString(),
+                            tt::as_ptr<ArrayType>(exitType)->elemType()->toString());
+                    throw BuildAbortException();
+                }
                 diags_->of(SemanticDiag::BranchReturnTypeMismatch)
                     .atOrigin(gct->origin())
                     .commit(
@@ -2501,8 +2637,8 @@ void Builder::mergeArmVariables(
 node_handle_t Builder::intervalSequenceValue(
     node_handle_t from, node_handle_t to, const GCT::node_ptr_t &expr) {
     // The interval in the sequence position of a loop is the pair of its two bounds, not the
-    // array of its elements (design principles 4.2; the ruling of 2026-10-24 on
-    // `h248-generator-and-composition`): the pair stands where any other sequence stands — Norm
+    // array of its elements (design principles 4.2; the rule on
+    // ` -generator-and-composition`): the pair stands where any other sequence stands — Norm
     // input 0 of the LOOP node, one value — and a back end takes the element of the round from
     // the bounds and the round number, so nothing of the interval's size is ever made. The
     // interval is the `int[]` of `intervalValue` in every other position.
@@ -2649,20 +2785,40 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
     node_handle_t sequence = nullptr;
     Type *elementType      = nullptr;
     bool intervalIterates  = false;
-    // The element type of a sequence a loop iterates: an array gives its own element type, and a
-    // string, a map and a tensor give theirs through the `__iter__` operator their type declares
-    // (design principles 3.10, 11.1, 11.3): the code points of a string as one-character
-    // strings, the (key, value) pairs of a map in key order, and the sub-tensors of a tensor
-    // along its first dimension. The operator is resolved like any other, by the type of the
-    // sequence; the loop then iterates the array it gives, on every back end, with one driver.
+    // The element type of a sequence a loop iterates: an array gives its own elements along its
+    // first dimension, and a string and a map give theirs through the `__iter__` operator their
+    // type declares (design principles 3.10, 11.1, 11.3): the code points of a string as
+    // one-character strings, and the (key, value) pairs of a map in key order. The operator is
+    // resolved like any other, by the type of the sequence; the loop then iterates the array it
+    // gives, on every back end, with one driver.
+    //
+    // A `for` over an array of any rank is the core's, and no module takes part in it: `t[i]`
+    // takes the i-th along the first dimension (design principles 5.4), so the round of a rank-1
+    // array is its element and the round of a higher-rank one is the row one dimension shorter
+    // (ArrayType::firstDimensionElement). The tensor module used to declare `__iter__` for a
+    // numeric array (`tensor:iter`, sub-arrays along the first dimension), and asking it here
+    // made the iterable position an OPER node: that is what hid a constant array's row count
+    // from `core.loopDomain` (runtime/core_facts.cpp, constantLength). The author's ruling of
+    // 2026-10-24 (docs/handover/reviews/questions-2026-10-24-evening.md section
+    // loop-domain-through-the-tensor-iterator) states it once, in the core, for every array;
+    // the module's `iter` went with the P4 alias (one thing, one spelling).
+    //
+    // `__iter__` reaches a compilation unit only if it imports the module that declares it, and
+    // the standard library's own array code compiles without it.
     const auto iterableElementType =
         [&](node_handle_t &iterable, const GCT::node_ptr_t &expr) -> Type * {
         Type *type = valueTypeOf(nodeTypeOf(iterable));
-        if (type != nullptr && type->code() != TypeCode::Array) {
+        if (type == nullptr) {
+            diags_->of(SemanticDiag::LoopSequenceNotIterable)
+                .atOrigin(expr->origin())
+                .commit(sourceTextOf(expr), std::string("void"));
+            throw BuildAbortException();
+        }
+        if (type->code() != TypeCode::Array) {
             const std::vector<StaticArg> statics(1);
             std::optional<oper_idx_ptr_t> elements;
-            // `__iter__` is a group of several overloads (`:struct/iter_str`, `:coll/map_items`,
-            // one for a tensor), one per iterable type: no one OperId names it, so it is still
+            // `__iter__` is a group of several overloads (`:struct/iter_str`,
+            // `:coll/map_items`), one per iterable type: no one OperId names it, so it is still
             // looked up by the group's name.
             if (const auto group = importedEntity("__iter__");
                 group.has_value() && group->isOperGroup()) {
@@ -2684,20 +2840,14 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
                 type != nullptr && type->code() == TypeCode::Array,
                 "The elements of an iterable must be an array.");
         }
-        if (type == nullptr) {
-            diags_->of(SemanticDiag::LoopSequenceNotIterable)
-                .atOrigin(expr->origin())
-                .commit(sourceTextOf(expr), std::string("void"));
-            throw BuildAbortException();
-        }
-        return tt::as_ptr<ArrayType>(type)->elemType();
+        return tt::as_ptr<ArrayType>(type)->firstDimensionElement();
     };
-    // `for i in a..b` (design principles 4.2; the author's ruling of 2026-10-24 on
-    // `h248-generator-and-composition`: "`for i in 0..n` is fused by the compiler, without
+    // `for i in a..b` (design principles 4.2; the rule on
+    // ` -generator-and-composition`: "`for i in 0..n` is fused by the compiler, without
     // materialising an array"). The interval in the sequence position of a loop is the loop's own
     // form: its two bounds are the loop's iterable, and a round takes `from + round`
     // (camel::core::LoopIterableForm::Interval). In every other position `a..b` is still the
-    // `int[]` the ruling gives it, and the loop iterates that value like any other sequence.
+    // `int[]` the rule gives it, and the loop iterates that value like any other sequence.
     if (hasIterable && isIntervalExpr(gct->loopSequence())) {
         const auto &interval = gct->loopSequence();
         node_handle_t from   = argumentNodeOf(visit(interval->at(1)), interval->at(1));
@@ -2722,7 +2872,7 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
     Type *stateType =
         k == 1 ? stateTypes.front() : static_cast<Type *>(TupleType::create(stateTypes));
 
-    // The names of the state's components. They are the state's one name until H71 splits a
+    // The names of the state's components. They are the state's one name until splits a
     // struct state into its parts; then they are the paths of those parts (`s.inner.x`), which
     // is what the graph shows and the diagnostics name.
     std::vector<std::string> stateNames(k);
@@ -2823,7 +2973,7 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
         }
     }
 
-    // H71: a struct's fields are the loop state's components. When the state is one struct (or
+    // A struct's fields are the loop state's components. When the state is one struct (or
     // one tuple) and the whole value never escapes the loop's parts -- every use of the state,
     // in the body and in the condition, is a part access -- the parts of that value become the
     // state's components, as if the loop had declared one state per part. The body hands back a
@@ -3346,14 +3496,26 @@ node_handle_t Builder::visitExitNode(const GCT::node_ptr_t &gct) {
         pendingCtrlInputs.push_back(lastSyncedNode_);
     }
 
-    if (!pendingCtrlInputs.empty() && !nodeIsKind(resNode, runtime::GCNodeKind::Gate)) {
+    // The exit takes the value by a data edge, and the statement the chain ends with reaches it by
+    // a sync edge: the value's own node is what the graph hands on, and only a value that does not
+    // already read that statement needs the edge -- with it, a GATE to carry the order. A value
+    // that came out of that statement (the `v` of `v = 2; v`) is ordered after it already, so it
+    // takes no control edge and no GATE, and the tail `return v` and a body whose last statement
+    // is `v` ask this once and build one graph (docs/design/effects/edges.cn.md 5.3).
+    node_vec_t syncInputs;
+    for (node_handle_t ctrlInput : pendingCtrlInputs) {
+        if (!valueNeedsSyncEdge(resNode, ctrlInput)) {
+            continue;
+        }
+        syncInputs.push_back(ctrlInput);
+    }
+    if (!syncInputs.empty() && !nodeIsKind(resNode, runtime::GCNodeKind::Gate)) {
         node_handle_t gatedValue = currGraph_->addGateNode(nodeTypeOf(resNode));
         linkNodes(LinkType::Norm, resNode, gatedValue);
         outputAnchor = gatedValue;
     }
-    for (node_handle_t ctrlInput : pendingCtrlInputs) {
-        // A return GATE must retain a CTRL input even when its value already depends on it.
-        if (ctrlInput != nullptr && linkCheek(ctrlInput, outputAnchor) &&
+    for (node_handle_t ctrlInput : syncInputs) {
+        if (linkCheek(ctrlInput, outputAnchor) &&
             !runtime::hasControlDependency(
                 *nodeDraftOf(outputAnchor),
                 nodeIdOf(ctrlInput),
@@ -3372,7 +3534,7 @@ node_handle_t Builder::visitExitNode(const GCT::node_ptr_t &gct) {
         activeRestBody_->value    = outputAnchor;
         activeRestBody_->returned = true;
     } else if (ArmBuild *arm = activeArm()) {
-        // The value of the arm, not of the function (handover H24).
+        // The value of the arm, not of the function.
         arm->output = outputAnchor;
         arm->value  = resNode;
         arm->type   = isVoidGraphExitType(nodeTypeOf(resNode)) ? Type::Void() : nodeTypeOf(resNode);
@@ -3397,7 +3559,7 @@ node_handle_t Builder::visitBodyNode(const GCT::node_ptr_t &gct) {
     const node_handle_t outerLast = std::exchange(lastSyncedNode_, {});
     // The last statement of a body is the value the body hands on: a branch there (`if c then
     // … else …` as a function's whole body) stands in the position of that value, and so do
-    // the `return`s written in its arms (handover H24: an arm's `return` takes the type of the
+    // the `return`s written in its arms (handover an arm's `return` takes the type of the
     // position the arm is at, never the declared type of the function around it). The position
     // is passed to visitExecNode, which builds that statement through the same expected-type
     // channel every other position uses.
@@ -3610,7 +3772,7 @@ void Builder::markLoopStateInPlace(
     // also reads the state or ends in `return` -- keeps the copying `append`; the values are the
     // same either way, and only the allocation differs (10.5's in-place guarantee is about the
     // state's data block, not about a promise on the source).
-    // A state that H71 split out of a struct is a component of the states the loop's parts
+    // A state that was split out of a struct is a component of the states the loop's parts
     // declare, so the count is the initial values', not the LOOP node's names; its first value
     // is a projection of the struct (a value the loop does not own) and is copied once.
     const size_t stateCount = initial.size();
@@ -3681,7 +3843,7 @@ void Builder::markLoopStateInPlaceOne(
     }
     // The first value has to be a literal: a name, a call or a projection can name an array
     // that something else also reads, and the loop is about to make its first value private.
-    // A component split out of a struct state (H71) is such a projection, and it is copied
+    // A component split out of a struct state is such a projection, and it is copied
     // below because the struct it comes from is the program's, not the loop's.
     if (!initialIsPrivate && !nodeIsKind(initial[index], runtime::GCNodeKind::Data) &&
         !nodeIsKind(initial[index], runtime::GCNodeKind::Fill)) {

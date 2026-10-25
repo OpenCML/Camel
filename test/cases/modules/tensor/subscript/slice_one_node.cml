@@ -1,0 +1,28 @@
+/**
+ * The three slice spellings on a rank-1 value whose length is stated are one node, and the row
+ * form `x[i]` is the core's own take. The graph is what this case asserts: `std::gir` prints the
+ * operator of each node, and the case is written so that the print names them.
+ *
+ *   x[1:4]           the subscript, sliced
+ *   x[2:]            the same node with the end not written
+ *   slice(x, 0, 1, 4) the function form of the same node
+ *   x[[0, 2]]        `t[idx]`, the rows the indices name
+ *
+ * Red when: one of the three slice spellings lands on another operator (the tensor module's
+ * `tensor:slice` answered the function form and the subscript before), or the row form lands on
+ * the module's `tensor:idx_take`.
+ */
+module slice_one_node
+
+import { Tensor, reshape } from tensor
+
+func main(): int sync {
+    let x = reshape([1.0, 2.0, 3.0, 4.0] as f32[], [4])
+    let a = x[1:4]
+    let b = x[2:]
+    let c = slice(x, 0, 1, 4)
+    let rows = [0, 2] as int[]
+    let d = x[rows]
+    println(a, b, c, d)
+    return 0
+}

@@ -2,10 +2,11 @@
 // SPDX-License-Identifier: MIT
 
 /*
- * The productions of rule declarations (rewrite design 2): a rule is a pattern, what it becomes
- * and, optionally, a condition. `rule` and `when` are names that mean something only here
- * (`rule` at the start of a declaration, `when` between the parameters and the body), so a
- * program may still have a variable called `rule`.
+ * The productions of rule and fact declarations (rewrite design 2 and 7.5): a rule is a pattern,
+ * what it becomes and, optionally, a condition; a fact says what the compiler may rely on for a
+ * value, by reading how the value was built. `rule`, `when` and `fact` are names that mean
+ * something only here (`rule` and `fact` at the start of a declaration, `when` between the
+ * parameters and the body), so a program may still have a variable called `rule`.
  */
 
 #include "parser_impl.h"
@@ -35,14 +36,16 @@ bool ParserImpl::atRuleDecl(uint32_t n) const {
     return tree_.tokens_.text(i) == "rule";
 }
 
-/// ruleDecl : frontMatter? 'export'? IDENTIFIER identDef typeParams? ruleContext? parentParams
-///            whenClause? '{' ruleBody '}'
+/// ruleDecl : frontMatter? ('with' angledParams)? 'export'? IDENTIFIER identDef typeParams?
+///            ruleContext? parentParams whenClause? '{' ruleBody '}'
 /// The first IDENTIFIER is the name `rule`; the condition, when there is one, is the `whenClause`
 /// between the parameters and the body. The parameters are the pattern variables; `const x: T`
-/// only matches a constant. The tags before it are the rule's requirements (`#requires<reassociate>`,
-/// design principles 7.2); the AST reads them from the tree.
+/// only matches a constant. The tags before it are the rule's requirements (`#requires(reassociate)`,
+/// design principles 7.2); the AST reads them from the tree. The `with` parameters are written
+/// where a function writes its own, before `export` (design principles 4.4, 5.5): the rule's
+/// context parameters, with the same defaults a function's have.
 /// The condition is part of the signature, so it is written between the parameters and the body,
-/// in the one position the parser reads it in (design principles 4.4; the ruling of 2026-10-24,
+/// in the one position the parser reads it in (design principles 4.4; 
 /// `docs/handover/reviews/questions-2026-10-23.md`, 「复核：泛型规则族落地」): a `when` after
 /// the closing brace is not kept as a second spelling of the same thing, and is reported by name
 /// (`SyntaxDiag::WhenAfterBody`) rather than as a token that did not fit.
@@ -53,6 +56,9 @@ void ParserImpl::parseRuleDecl() {
 }
 
 void ParserImpl::parseRuleDeclRest(size_t m) {
+    if (eat(TK::KwWith)) {
+        parseAngledParams();
+    }
     eat(TK::KwExport);
     bump(); // `rule`
     parseIdentDef();
@@ -75,7 +81,7 @@ void ParserImpl::parseRuleDeclRest(size_t m) {
         }
         expect(TK::RBrace);
     }
-    // A `when` after the closing brace is the position the ruling of 2026-10-24 removed. It is
+    // A `when` after the closing brace is not read as a condition any more. It is
     // not read as a condition any more, and it is not reported as a token that did not fit: the
     // program is told where the condition belongs.
     if (!panic_ && cur_ == TK::Identifier && tree_.tokens_.text(pos_) == "when") {
@@ -119,17 +125,9 @@ void ParserImpl::parseRuleBody() {
     close(m, NK::RuleBody);
 }
 
-/// Whether the current token starts an analysis declaration: the name `analysis` followed by
-/// the name of the analysis, then its parameters or `:` (`analysis range: Interval`,
-/// `analysis pair(a, b): bool`). `n` is the offset of the `analysis` token (1 after `export`).
-bool ParserImpl::atAnalysisDecl(uint32_t n) const {
-    if (peek(n) != TK::Identifier || peek(n + 1) != TK::Identifier) {
-        return false;
-    }
-    const TK after = peek(n + 2);
-    if (after != TK::LParen && after != TK::Colon) {
-        return false;
-    }
+/// The index of the token at the offset `n` from the current position: the token `peek(n)` reads,
+/// trivia skipped. The lookaheads below walk the tokens themselves, and need the index they read.
+uint32_t ParserImpl::tokenIndexAt(uint32_t n) const {
     uint32_t i = pos_;
     for (uint32_t k = 0; k < n; ++k) {
         ++i;
@@ -137,75 +135,197 @@ bool ParserImpl::atAnalysisDecl(uint32_t n) const {
             ++i;
         }
     }
-    return tree_.tokens_.text(i) == "analysis";
+    return i;
 }
 
-/// analysisDecl : frontMatter? 'export'? IDENTIFIER identDef parentParams? ':' typeExpr
-///                '{' analysisClause* '}'
-/// The IDENTIFIER is the name `analysis`, which has a meaning only here: a program may use it
-/// as an ordinary name elsewhere. The parameters are pattern variables: a query within a rule's
-/// condition hands it the parts of the matched value (`analysis pair(a: Node, b: Node)` is read
-/// as `pair(x, y)`); a declaration without them is queried with the value itself.
-void ParserImpl::parseAnalysisDecl() {
+/// The offset just after the `<...>` whose `<` is at the offset `angle`, or kNone when the
+/// brackets do not close. A `with` parameter list is skipped textually: the declaration it
+/// belongs to is what decides whether it is read at all.
+uint32_t ParserImpl::afterAngledParams(uint32_t angle) const {
+    if (peek(angle) != TK::Lt && peek(angle) != TK::LAngle) {
+        return kNone;
+    }
+    uint32_t i = tokenIndexAt(angle);
+    int32_t depth = 0;
+    while (toks_[i].kind != TK::Eof) {
+        const TK kind = toks_[i].kind;
+        if (kind == TK::Lt || kind == TK::LAngle) {
+            ++depth;
+        } else if (kind == TK::Gt) {
+            if (--depth == 0) {
+                break;
+            }
+        }
+        ++i;
+        while (isTrivia(toks_[i].kind)) {
+            ++i;
+        }
+    }
+    if (toks_[i].kind == TK::Eof) {
+        return kNone;
+    }
+    uint32_t count = 0;
+    for (uint32_t j = pos_; j < i; ++count) {
+        ++j;
+        while (isTrivia(toks_[j].kind)) {
+            ++j;
+        }
+    }
+    return count + 1;
+}
+
+/// Whether a fact declaration starts at the offset `n`: the word `fact`, after the `with`
+/// parameters it may take and an optional `export`, followed by the fact's name and then its
+/// parameters, its `::<...>` or its type (`fact range(v: int): Interval`, `fact depth::<T>(v: T)`).
+/// `fact` is not reserved: a declaration starts with it only when a name and one of those
+/// follows, so a program may still call a value `fact`.
+bool ParserImpl::atFactDecl(uint32_t n) const {
+    uint32_t at = n;
+    if (peek(at) == TK::KwWith) {
+        at = afterAngledParams(at + 1);
+        if (at == kNone) {
+            return false;
+        }
+    }
+    if (peek(at) == TK::KwExport) {
+        ++at;
+    }
+    if (peek(at) != TK::Identifier || peek(at + 1) != TK::Identifier) {
+        return false;
+    }
+    const TK after = peek(at + 2);
+    if (after != TK::LParen && after != TK::Colon && after != TK::ColonColon) {
+        return false;
+    }
+    return tree_.tokens_.text(tokenIndexAt(at)) == "fact";
+}
+
+/// factDecl : frontMatter? ('with' angledParams)? 'export'? IDENTIFIER identDef typeParams?
+///            parentParams? ':' typeExpr factBody factClause*
+/// The IDENTIFIER is the name `fact`, which has a meaning only here: a program may use it as an
+/// ordinary name elsewhere. The head is the name of the fact, its parameters, and the type of the
+/// value the fact is about; the body says how the value was built, and the trailing clauses say
+/// how two facts are merged (`join`), how equivalent writings meet (`meet`), and how a loop is
+/// accelerated and tightened afterwards (`widen`, `narrow`).
+/// The `with` parameters are the ones the fact takes: they are written on the query
+/// (`range<5>(x)`), a fact with different arguments is a different fact, and an argument must be
+/// a value the compiler can compute.
+void ParserImpl::parseFactDecl() {
     const size_t m = mark();
     parseFrontMatter();
-    parseAnalysisDeclRest(m);
+    parseFactDeclRest(m);
 }
 
-void ParserImpl::parseAnalysisDeclRest(size_t m) {
+void ParserImpl::parseFactDeclRest(size_t m) {
+    if (eat(TK::KwWith)) {
+        parseAngledParams();
+    }
     eat(TK::KwExport);
-    bump(); // `analysis`
+    bump(); // `fact`
     parseIdentDef();
+    if (cur_ == TK::ColonColon && (peek(1) == TK::Lt || peek(1) == TK::LAngle)) {
+        parseTypeParams();
+    }
     if (cur_ == TK::LParen) {
         parseParentParams();
     }
     if (!panic_ && expect(TK::Colon)) {
         parseType();
     }
-    if (!panic_ && expect(TK::LBrace)) {
-        while (cur_ != TK::RBrace && cur_ != TK::Eof) {
-            parseAnalysisClause();
-            eat(TK::Semi);
-        }
-        expect(TK::RBrace);
+    if (!panic_) {
+        parseFactBody();
     }
-    close(m, NK::AnalysisDecl);
+    // The trailing clauses, in the order they were written: each word names one binary function,
+    // and each is read at most once.
+    static const std::string_view kClauses[] = {"join", "meet", "widen", "narrow"};
+    bool read[4] = {false, false, false, false};
+    while (!panic_ && cur_ == TK::Identifier) {
+        const std::string_view word = tree_.tokens_.text(pos_);
+        int which                   = -1;
+        for (int i = 0; i < 4; ++i) {
+            if (word == kClauses[i]) {
+                which = i;
+            }
+        }
+        if (which < 0 || read[which]) {
+            break;
+        }
+        read[which] = true;
+        parseFactClause();
+    }
+    close(m, NK::FactDecl);
 }
 
-/// analysisClause : IDENTIFIER '=>' dataExpr
-///                | IDENTIFIER '(' identList? ')' '=>' dataExpr
-///                | IDENTIFIER '(' ('const' identDef ':' typeExpr | dataExpr) ')' '=>' dataExpr
-/// The first IDENTIFIER is initial, join or widen; on starts the third form. The words
-/// are names that mean something only in a clause, so a program may still use them elsewhere.
-void ParserImpl::parseAnalysisClause() {
+/// factBody : 'match' logicalOrExpr '{' factCase* '}'
+/// The subject names the value the clauses decompose: it is the fact's own parameter, which the
+/// query hands over, so it is read rather than compiled.
+void ParserImpl::parseFactBody() {
     const size_t m = mark();
-    const std::string_view keyword = tree_.tokens_.text(pos_);
-    bump();
-    if (keyword == "join" || keyword == "widen") {
-        if (!panic_ && expect(TK::LParen)) {
-            if (cur_ != TK::RParen && cur_ != TK::Eof) {
-                parseIdentList();
-            }
-            expect(TK::RParen);
+    if (cur_ != TK::KwMatch) {
+        unexpected({e(TK::KwMatch)});
+        return close(m, NK::FactBody);
+    }
+    bump(); // `match`
+    parseLogicalOr();
+    if (panic_ || !expect(TK::LBrace)) {
+        return close(m, NK::FactBody);
+    }
+    {
+        Scope scope(*this, true);
+        if (cur_ != TK::KwCase) {
+            unexpected({e(TK::KwCase)});
         }
-    } else if (keyword == "on") {
-        if (!panic_ && expect(TK::LParen)) {
-            if (cur_ == TK::KwConst) {
-                bump();
-                parseIdentDef();
-                if (!panic_ && expect(TK::Colon)) {
-                    parseType();
-                }
-            } else if (cur_ != TK::RParen && cur_ != TK::Eof) {
-                parseExpr();
-            }
-            expect(TK::RParen);
+        while (cur_ == TK::KwCase && !panic_) {
+            parseFactCase();
+        }
+        if (!panic_ && cur_ != TK::RBrace) {
+            unexpected({e(TK::KwCase), e(TK::RBrace)});
         }
     }
+    eat(TK::RBrace);
+    close(m, NK::FactBody);
+}
+
+/// factCase : 'case' factPattern '=>' dataExpr
+/// The last case is `case _`: what the fact says of a value none of the other clauses matched.
+void ParserImpl::parseFactCase() {
+    const size_t m = mark();
+    bump(); // `case`
+    parseFactPattern();
     if (!panic_ && expect(TK::FatArrow)) {
         parseExpr();
     }
-    close(m, NK::AnalysisClause);
+    close(m, NK::FactCase);
+}
+
+/// factPattern : 'const' identDef (':' typeExpr)? | '_' | dataExpr
+/// `const c` matches a constant of the fact's type and binds it to `c`; `_` is the case that says
+/// what the fact is of a value no other case matched, and is written last; anything else is read
+/// the way a rule's pattern is, so `x + y` binds what the value was built from.
+void ParserImpl::parseFactPattern() {
+    const size_t m = mark();
+    if (cur_ == TK::KwConst) {
+        bump();
+        parseIdentDef();
+        if (!panic_ && eat(TK::Colon)) {
+            parseType();
+        }
+    } else if (cur_ == TK::Underscore) {
+        bump();
+    } else {
+        parseExpr();
+    }
+    close(m, NK::FactPattern);
+}
+
+/// factClause : IDENTIFIER dataExpr
+/// The IDENTIFIER is join, meet, widen or narrow: each clause names one binary function, and the
+/// words mean something only in this position.
+void ParserImpl::parseFactClause() {
+    const size_t m = mark();
+    bump(); // join / meet / widen / narrow
+    parseExpr();
+    close(m, NK::FactClause);
 }
 
 } // namespace camel::parse::syntax

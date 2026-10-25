@@ -32,7 +32,7 @@ class GraphIRPass {
     // extracts one writing per value before a pass that consumes the program (a back end, an
     // exporter), and refuses the others; a pass that declares it reads the state is given the
     // program with its equivalences instead, whether it consumes it (the dumps: `std::gir`,
-    // `std::rgir`, `std::jgir` draw the classes, H225) or rewrites it (the rules library).
+    // `std::rgir`, `std::jgir` draw the classes) or rewrites it (the rules library).
     virtual bool acceptsWritings() const { return false; }
 };
 

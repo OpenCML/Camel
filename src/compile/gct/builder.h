@@ -303,7 +303,6 @@ class Builder {
     /// the number of names it wrote, both for the message.
     void checkStaticHeadNames(const AST::node_ptr_t &ast, const std::string &shape, size_t named);
     node_ptr_t visitStaticAccess(const AST::node_ptr_t &ast);
-    node_ptr_t visitTryExpr(const AST::node_ptr_t &ast);
     node_ptr_t visitLiteral(const AST::node_ptr_t &ast);
     node_ptr_t visitArrayData(const AST::node_ptr_t &ast);
     /// `[e for x in xs if c]`: `xs->filter<(x) => c>->map<(x) => e>` (design principles
@@ -322,6 +321,13 @@ class Builder {
     /// element becomes the element type exactly; an element that is not a literal keeps its
     /// type (the GIR builder reports it if it does not fit).
     node_ptr_t visitArrayInto(const AST::node_ptr_t &ast, Type *arrayType, bool &entered);
+    /// A nested array literal at a position that states a rank of its own (`let b: f32[2, 2] =
+    /// [[1.0, 2.0], [3.0, 4.0]]`): the brackets the literal writes are the dimensions of one
+    /// array, so the value is a rank-N constant of that shape instead of an array of its rows
+    /// (design principles 5.1, 5.4). A literal whose written shape is not the shape the position
+    /// states — a flat `[1.0, 2.0, 3.0, 4.0]` is an `f32[4]`, not an `f32[2, 2]` — is reported
+    /// and refused here: nothing is reshaped to fit.
+    node_ptr_t visitRankedArrayInto(const AST::node_ptr_t &ast, Type *arrayType, bool &entered);
     /// The struct literal `ast` built with every field in the type its position gives it
     /// (`let p: P = { a: 1, b: 2.0 }`). Only when the literal writes exactly the fields of
     /// `structType`: any other shape is left to the ordinary build, which reports it.
@@ -337,7 +343,7 @@ class Builder {
     node_ptr_t literalNodeInType(const node_ptr_t &node, Type *type, const AST::node_ptr_t &at);
     /// A text element of the composite literal `data` where the type of its position expects
     /// something else, reported as the type mismatch it is (design principles 5.1) at the
-    /// element itself, as H27c reports an element whose value does not fit. Recurses through
+    /// element itself, as the same check reports an element whose value does not fit. Recurses through
     /// nested composites; false when there is no such element, and the caller reports the
     /// literal the way it did before. `where` is the position to use for an element whose own
     /// position was not kept.
@@ -354,7 +360,7 @@ class Builder {
     node_ptr_t visitTupleData(const AST::node_ptr_t &ast);
     /// `..e` (design principles 5.5): an SPRD holding the operand of the rest argument.
     node_ptr_t visitSpreadArg(const AST::node_ptr_t &ast);
-    /// `{ static for ... }` / `( static for ... )` (H51 step 4): an SCOMP holding the generator.
+    /// `{ static for... }` / `(static for...)`. an SCOMP holding the generator.
     /// The rounds are packed into a shape of the same fields in the graph builder.
     node_ptr_t visitStaticComprehension(const AST::node_ptr_t &ast, bool isStruct);
     /// `T { static for ... }`: an SCOMP holding the generator and the type node naming `T`.

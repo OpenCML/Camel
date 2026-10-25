@@ -106,7 +106,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "fields_and_access"
-desc = "`static for (n, F) in fields T` expands a struct and an ordinary tuple in declaration order, `F` is usable as a type, an empty struct/tuple (including `fields ()`) expands zero times, nesting works, and `t.[\"0\"]` is `t.[0]`."
+desc = "`static for n, F in fields T` expands a struct and an ordinary tuple in declaration order, `F` is usable as a type, an empty struct/tuple (including `fields ()`) expands zero times, nesting works, and `t.[\"0\"]` is `t.[0]`."
 kind = "behavior"
 case = "../../../cases/compile/static_expansion/fields_and_access.cml"
 args = ["${case}", "std::fvm"]
@@ -740,7 +740,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "static_loop_head_tags"
-desc = "The head names three things when the element has three: `fields T` gives the field's name, its type and its tags, so `for n, F, tags in fields T` walks (`tags` is a compile-time `string[]` of the tag names, so `len(tags)` folds and `typeof(tags)` is `string[]`), and naming fewer parts (`for n in fields T`) is legal."
+desc = "The head names three things when the element has three: `fields T` gives the field's name, its type and its tags, so `for n, F, tags in fields T` walks. `tags` is the field's tags as a compile-time struct (one field per tag, named by the tag, holding the record of that tag's arguments): `tags.width.w` reads the value of `#width(8)` and is a compile-time constant (it may be the key of a `t.[…]`), `fields typeof(tags)` has one field for the tagged field and none for the untagged one, a tag with no arguments is the empty record `{}`, and naming fewer parts (`for n in fields T`, `for n, F in fields T`) is legal."
 kind = "behavior"
 case = "../../../cases/compile/static_expansion/static_loop_head_tags.cml"
 args = ["${case}", "std::fvm"]
@@ -749,9 +749,12 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const want = [
-  "2",
+  "8",
   "1",
+  "1",
+  "9",
   "2",
+  "3",
 ].join(String.fromCharCode(10))
 assert(input.normalized.stdout.trim() === want, `the three names of a field head changed: ${input.normalized.stdout}`)
 }
@@ -982,7 +985,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "static_for_wildcard"
-desc = "`_` in the head of `static for`/`static loop` is the wildcard of `match`: `(n, _)` keeps the field name and drops the type name, `(_, F)` keeps the type name while the field name binds nothing, and each is walked once per field."
+desc = "`_` in the head of `static for`/`static loop` is the wildcard of `match`: `n, _` keeps the field name and drops the type name, `_, F` keeps the type name while the field name binds nothing, and each is walked once per field."
 kind = "behavior"
 case = "../../../cases/compile/static_expansion/static_for_wildcard.cml"
 args = ["${case}", "std::fvm"]

@@ -13,7 +13,7 @@ desc = "Build-time folding of a call to a pure function with constant arguments 
 
 [[tests]]
 name = "fold_calls.key"
-desc = "A call in a static access key is that constant: `first_of::<S>` reads `v.[first_field::<S>()]`, where `first_field` is an ordinary `func` returning `( static for (n, _) in fields S => n ).[0]`. The fold runs for a struct and for a tuple, and the access reads the first field (7, 1.5)."
+desc = "A call in a static access key is that constant: `first_of::<S>` reads `v.[first_field::<S>()]`, where `first_field` is an ordinary `func` returning `( static for n, _ in fields S => n ).[0]`. The fold runs for a struct and for a tuple, and the access reads the first field (7, 1.5)."
 kind = "behavior"
 case = "../../../cases/compile/fold_calls/key.cml"
 args = ["${case}", "${backend}"]

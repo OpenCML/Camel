@@ -1,6 +1,6 @@
 /**
  * A generic law: the rule value carries its template (rewrite design 2 (second version) 8.5; the
- * ruling of 2026-10-23 on generic-rule-instantiation). `add_zero` is written once and covers every
+ * rule on generic-rule-instantiation). `add_zero` is written once and covers every
  * integer type: applied to `generic_target.cml` it makes one instance for `int` and one for `i32`,
  * and `explain` names the instance each rewrite came from. `add_minus_zero` is float's own law --
  * signed zero is not an integer's -- so `x + -0.0` is not folded into `x + 0`.
@@ -77,7 +77,7 @@ export func why_i32(p: Program): Program! sync {
 /// The other half of the read-out: at a value of a type the float law cannot be written for, the
 /// answer is what was tried. A failed instantiation is silent where it happens -- nothing of it
 /// reaches the program, and the tuple is remembered as one that did not come about -- so this is
-/// the one place its reason is read (the ruling of 2026-10-23 on
+/// the one place its reason is read (the rule on
 /// `generic-rule-instantiation-set-and-predicate`, §3).
 export func why_no_instance(p: Program): Program! sync {
     return match p->run<[add_zero, add_minus_zero], explain: true> {

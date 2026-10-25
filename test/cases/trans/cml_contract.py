@@ -13,7 +13,8 @@ printed source must compile to a graph isomorphic to the original. This case pin
     the interval again), for
     closures (a lambda as a value, a block body, captured source names, a returned lambda, a
     closure over a cell), for `with` parameters (including one that also reads a module value),
-    and for a `var` parameter;
+    for a `var` parameter, and for a body whose value is a write's value (`write_value.cml`: the
+    tail `return v` and the implicit `v` are one graph, so each round trips);
   * execution: the printed program prints the same stdout and exits with the same status as the
     original;
   * determinism: printing the same program twice gives byte-identical source;
@@ -40,8 +41,7 @@ ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "test" / "tools"))
 from camel_arg import camel_from_argv  # noqa: E402
 
-# The install this case measures: `--camel <path>` names it; without it `$CAMEL_HOME/bin/camel`,
-# else this tree's `out/latest/bin/camel`. One rule, in one place: test/tools/camel_arg.py.
+# The install this case measures: `--camel <path>` names it; without it this tree's `out/latest/bin/camel`. One rule, in one place: test/tools/camel_arg.py.
 EXE, ARGV = camel_from_argv(ROOT)
 CHECKER = ROOT / "test/tools/cml_roundtrip.py"
 PYTHON = sys.executable
@@ -57,6 +57,7 @@ CORPUS = [
     CML / "closure.cml",
     CML / "with_param.cml",
     CML / "var_param.cml",
+    CML / "write_value.cml",
     CASES / "trans/jgir_duplicate.cml",
     CASES / "linear/nvm/hello.cml",
 ]
@@ -77,6 +78,7 @@ MARKERS = {
     "closure": ["=>", "sync", "offset", "base"],
     "with_param": ["with <", "scale", "clamp"],
     "var_param": ["var "],
+    "write_value": ["var "],
 }
 VERDICTS = 0
 

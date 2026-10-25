@@ -12,11 +12,11 @@ module arm_tail_gate
 
 import { Tensor, ones, zeros, shape } from tensor
 
-func run(t: int, steps: int, x: Tensor, h: Tensor): Tensor {
+func run(t: int, steps: int, x: f32[..], h: f32[..]): f32[..] {
     return if t >= steps then h else run(t + 1, steps, x, h + h)
 }
 
-func forward(x: Tensor): Tensor {
+func forward(x: f32[..]): f32[..] {
     let s = shape(x)
     return run(0, s[1], x, zeros([s[0]]) + 1.0)
 }

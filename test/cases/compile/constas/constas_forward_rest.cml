@@ -1,13 +1,13 @@
 /**
  * A `constas` value is handed on, together with the rest parameter, to a declaration that takes
- * both (H51 ruling, 2026-10-22): `columnOf("w", a, b)` is `column<"w">(a, b)`. This is the shape
+ * both (rule, 2026-10-22): `columnOf("w", a, b)` is `column<"w">(a, b)`. This is the shape
  * the design's `tree_map` uses to reach `column(n, ts)` -- a wrapper that forwards the field name
  * it was given and the trees it was given.
  */
 module constas_forward_rest
 
 func column(constas n: string, ..ts): (int, int) {
-    return ( static for (j) in indices ts => ts.[j].[n] )
+    return ( static for j in indices ts => ts.[j].[n] )
 }
 
 func columnOf(constas n: string, ..ts): (int, int) {

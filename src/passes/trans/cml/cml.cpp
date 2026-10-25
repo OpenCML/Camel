@@ -1442,6 +1442,24 @@ class CmlPrinter {
         return name;
     }
 
+    /// The cell a read of `ref` reads. A write's product is the version of the variable it wrote
+    /// (`:op/assn*` returns this version's cell, questions-2026-10-24-evening.md var-version-node):
+    /// the cell a write stores into is that same variable, so a read whose data port is a write
+    /// reads the variable itself and is written with the variable's own name. Every other data port
+    /// is the cell it names, and one that has no name yet is named by `cellName` as before.
+    gc_node_ref_t cellReadBy(gc_node_ref_t ref) const {
+        const camel::runtime::GCNode *node = graph_->node(ref);
+        if (node == nullptr || node->kind != camel::runtime::GCNodeKind::Oper) {
+            return ref;
+        }
+        const std::string_view uri = graph_->nodeBodyAs<camel::runtime::GCOperBody>(ref)->uri();
+        if (!uri.starts_with(":op/assn")) {
+            return ref;
+        }
+        const auto inputs = graph_->normInputsOf(ref);
+        return inputs.empty() ? ref : inputs.front();
+    }
+
     // ---- expressions ---------------------------------------------------------------------
 
     Expr expression(gc_node_ref_t ref) {
@@ -1968,7 +1986,7 @@ class CmlPrinter {
             if (inputs.size() != 1) {
                 fail(ref, "a variable read without a cell");
             }
-            return {cellName(inputs.front()), 100};
+            return {cellName(cellReadBy(inputs.front())), 100};
         }
         if (uri.starts_with(":var/")) {
             fail(ref, std::format("the operator '{}'", uri));
@@ -1998,7 +2016,7 @@ class CmlPrinter {
             if (inputs.size() == 3) {
                 // The stepped range `range(a, b, step)`: written back as the call it is, so the
                 // program the printer writes reads the way the program it prints did (the
-                // author's ruling of 2026-10-24 on `h426-interval-step-form`).
+                // rule on ` -interval-step-form`).
                 return {
                     std::format(
                         "range({}, {}, {})",

@@ -112,7 +112,7 @@ a gradient of the same type as `m`; the other parameters are data.  The example 
 
 ## Tests
 
-`test/plans/perf/showcase_c6.plan.toml` (`tier = "slow"`) runs `--profile small`: 1024 rows,
+`test/plans/perf/showcase_c6.plan.toml` (`tier = "milestone"`) runs `--profile small`: 1024 rows,
 200 steps, batch 32, about six seconds for the whole plan (mostly the two PyTorch imports).  It
 fails when a bound is exceeded.
 

@@ -49,6 +49,7 @@ OperatorTraits OperatorTable::traitsOf(const sem::OperatorSemantics &facts) {
         .callsGraphs = facts.callsGraphs || facts.elementCalls.has_value(),
         .readsGraphs = facts.readsGraphs,
         .macro       = facts.macro,
+        .foldable    = facts.foldable,
     };
 }
 
@@ -110,6 +111,7 @@ void OperatorTable::set(std::string_view uri, OperatorTraits traits) {
     facts.callsGraphs  = traits.callsGraphs;
     facts.readsGraphs  = traits.readsGraphs;
     facts.macro        = traits.macro;
+    facts.foldable     = traits.foldable;
     // "Never faults" is the empty list. Saying it may fault (the default) does not take back
     // a declared empty list; a declaration that does contradict it is refused when the
     // semantics are declared (checkSemantics).
@@ -130,6 +132,13 @@ void OperatorTable::declare(
     std::string_view protocol, std::initializer_list<std::pair<std::string_view, bool>> operators) {
     for (const auto &[name, pure] : operators) {
         set(std::string(protocol) + ":" + std::string(name), {.pure = pure});
+    }
+}
+
+void OperatorTable::declareUnfoldable(
+    std::string_view protocol, std::initializer_list<std::string_view> operators) {
+    for (std::string_view name : operators) {
+        set(std::string(protocol) + ":" + std::string(name), {.pure = true, .foldable = false});
     }
 }
 
@@ -156,6 +165,16 @@ bool OperatorTable::isPure(OperId id) const {
 bool OperatorTable::isPure(std::string_view uri) const {
     const auto id = lookup(uri);
     return id && isPure(*id);
+}
+
+bool OperatorTable::mayBeRecomputed(OperId id) const {
+    const sem::OperatorSemantics *facts = record(id);
+    return facts != nullptr && facts->effect == sem::Effect::Pure && facts->foldable;
+}
+
+bool OperatorTable::mayBeRecomputed(std::string_view uri) const {
+    const auto id = lookup(uri);
+    return id && mayBeRecomputed(*id);
 }
 
 bool OperatorTable::hasExternalEffect(OperId id) const {
@@ -262,6 +281,17 @@ std::vector<std::string> OperatorTable::groups() const {
     return names;
 }
 
+std::vector<std::string> OperatorTable::groupOperators(std::string_view group) const {
+    std::shared_lock lock(mutex_);
+    std::vector<std::string> uris;
+    for (const auto &[name, declared] : groups_) {
+        if (name == group) {
+            uris.insert(uris.end(), declared.begin(), declared.end());
+        }
+    }
+    return uris;
+}
+
 std::vector<type::Type *> OperatorTable::registeredTypes(std::string_view group) const {
     std::vector<std::string> uris;
     {
@@ -333,8 +363,10 @@ std::vector<type::Type *> OperatorTable::allRegisteredTypes() const {
 
 void OperatorTable::setInPlaceForm(std::string_view uri, std::string_view inPlaceUri) {
     std::unique_lock lock(mutex_);
+    const OperId plain                  = internLocked(uri);
     const OperId form                   = internLocked(inPlaceUri);
-    entries_[internLocked(uri)].inPlace = entries_[form].uri;
+    entries_[plain].inPlace             = entries_[form].uri;
+    entries_[form].plain                = entries_[plain].uri;
 }
 
 std::optional<std::string> OperatorTable::inPlaceForm(std::string_view uri) const {
@@ -348,6 +380,19 @@ std::optional<std::string> OperatorTable::inPlaceForm(std::string_view uri) cons
         return std::nullopt;
     }
     return std::string(symbolText(form));
+}
+
+std::optional<std::string_view> OperatorTable::plainForm(std::string_view uri) const {
+    const auto id = lookup(uri);
+    if (!id) {
+        return std::nullopt;
+    }
+    std::shared_lock lock(mutex_);
+    const SymId plain = entries_[*id].plain;
+    if (plain == kEmptySym) {
+        return std::nullopt;
+    }
+    return symbolText(plain);
 }
 
 void OperatorTable::declareReusesOperand(std::string_view uri, bool reuses) {

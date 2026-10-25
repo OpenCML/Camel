@@ -44,7 +44,7 @@ const DEFAULT_TARGETS = [
 ]
 
 // Options that take a value: the value belongs to the option, not to the target list.
-const VALUE_FLAGS = new Set(['--tier', '--jobs', '--build'])
+const VALUE_FLAGS = new Set(['--tier', '--jobs', '--build', '--camel'])
 
 function resolvePlanPathFromSegments(segments) {
     if (segments.length === 0) return null

@@ -1,6 +1,6 @@
 /**
  * Importing the module that declares another module's operator is enough: the error is located
- * at the declaration in `bytes_tag.cml`, before any call (handover H94, ruling 5).
+ * at the declaration in `bytes_tag.cml`, before any call.
  */
 import bytes
 import { size } from bytes_tag

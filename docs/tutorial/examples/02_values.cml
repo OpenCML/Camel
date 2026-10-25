@@ -1,6 +1,5 @@
 // Values, types, let and var.
 // Run: camel docs/tutorial/examples/02_values.cml
-module values
 
 type Point = { x: int, y: int }
 

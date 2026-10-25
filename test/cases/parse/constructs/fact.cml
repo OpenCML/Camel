@@ -1,0 +1,24 @@
+/**
+ * `fact` (rewrite design 7.5): a fact about values, declared with the type of the fact, the cases
+ * that say what it is, and the clauses that say how two facts are merged. Each case reads how a
+ * value was built: a constant, or a pattern whose parts the fact is computed from. `case _` is the
+ * last case and says what the fact is of a value no other case matched.
+ */
+module parse_constructs_fact
+import { max } from math
+import { rewrite } from rewrite
+
+fact sign: int match v {
+    case const c: int => c
+    case _       => 0
+} join max
+
+fact depth: int match v {
+    case const c: int => 1
+    case x + y   => max(depth(x), depth(y)) + 1
+    case _       => 0
+} join max
+
+func main(): int sync {
+    return 0
+}

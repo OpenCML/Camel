@@ -2,7 +2,7 @@ id = "compile.impl"
 order = 228
 tier = "fast"
 tags = ["feat", "compile", "tags", "native", "impl", "semantics"]
-desc = "`#impl<f>` (design principles 10.4): a function's Camel body is its semantics and the body-less declaration f of the same module is the operator that runs it. An ordinary call is one OPER of the kernel, the body is not inlined and is absent from the ordinary dump; the body graph stays the semantic function for what asks to look inside (Program::implBodies / test::impl). The agreement case compiles the same function twice in one program, once as a direct call (the kernel) and once through its function value (the body), and checks that both print the same values while a profile counts the two paths apart; a deliberately wrong kernel shows that the comparison can fail. Two production passes are taken through both paths: `std::opt` runs over a program whose tagged function is called both ways and both values stay 42 on every back end, and the reverse pass differentiates a direct call of a tagged function as the body the tag kept, a kernel whose registered rule differs from the body's derivative included. Fusion and the ONNX exporter have no case here for a reason that is a decision rather than effort: both need a kernel over tensors to say anything at all (the `rules::fusion` library's only tensor rule is the sigmoid chain; the exporter requires an exported function's arguments to be tensors, `modules/onnx/exporter.cpp#InputBinder::bind`), and a test module cannot declare a tensor kernel, because a module may declare only its own operator (SemanticDiag::NativeDeclarationForeignOperator). Seven refusals, one case each: the tag on a body-less declaration, a kernel no declaration brings, a kernel of another module, a kernel whose signature differs, a kernel that has a body, a generic function, whose instances carry no single signature, and the one the reverse pass adds, a kernel two of the program's bodies answer for, where a call site cannot say which body it means. Each refusal names the misuse and is pinned to its source line and column."
+desc = "`#impl(f)` (design principles 10.4): a function's Camel body is its semantics and the body-less declaration f of the same module is the operator that runs it. An ordinary call is one OPER of the kernel, the body is not inlined and is absent from the ordinary dump; the body graph stays the semantic function for what asks to look inside (Program::implBodies / test::impl). The agreement case compiles the same function twice in one program, once as a direct call (the kernel) and once through its function value (the body), and checks that both print the same values while a profile counts the two paths apart; a deliberately wrong kernel shows that the comparison can fail. Two production passes are taken through both paths: `std::opt` runs over a program whose tagged function is called both ways and both values stay 42 on every back end, and the reverse pass differentiates a direct call of a tagged function as the body the tag kept, a kernel whose registered rule differs from the body's derivative included. Fusion and the ONNX exporter have no case here for a reason that is a decision rather than effort: both need a kernel over tensors to say anything at all (the `rules::fusion` library's only tensor rule is the sigmoid chain; the exporter requires an exported function's arguments to be tensors, `modules/onnx/exporter.cpp#InputBinder::bind`), and a test module cannot declare a tensor kernel, because a module may declare only its own operator (SemanticDiag::NativeDeclarationForeignOperator). Seven refusals, one case each: the tag on a body-less declaration, a kernel no declaration brings, a kernel of another module, a kernel whose signature differs, a kernel that has a body, a generic function, whose instances carry no single signature, and the one the reverse pass adds, a kernel two of the program's bodies answer for, where a call site cannot say which body it means. Each refusal names the misuse and is pinned to its source line and column."
 
 [defaults]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -111,18 +111,18 @@ expect_stdout_exact = "kernel=42,2,0,1 body=42,2,0,1 diff=0,0,0,0\n"
 # beside the operators, or a test-scoped way to declare another module's operator; both are the
 # language author's call.
 #
-# The ruling of 2026-10-23 (`docs/handover/reviews/questions-2026-10-23.md`,
+# The rule (`docs/handover/reviews/questions-2026-10-23.md`,
 # 「## impl-kernel-site」) chose the first of the two, and removed both walls on the way
 # (`docs/handover/reviews/H141-H213.md`, Q2): 「选 (a)，而且取宽的那一种：声明模块可以有函数体，
 # `DeclarationModuleHasBody` 删除」 and 「泛型函数可以带 `#impl`」 — the kernel is a body-less
 # declaration with the function's own type parameters, the executor is chosen at instantiation
-# per H228, an instance whose type has no executor runs the body (the body is the semantics, so
+# per, an instance whose type has no executor runs the body (the body is the semantics, so
 # the result is the same), and `std::profile` says which path that instance took. So the
 # standard library gets its first `#impl` kernels: the tensor module's own `stdlib/tensor.cml`
 # declares the kernel beside the declaration and holds the Camel definition (its `.cmo` is the
-# same module, H94), and a generic function may carry one (Adam, once `optim` lands: H51 step
-# 14; the ruling kept `nn:adam` out of this batch). `impl.kernel_site` states what the two
-# ruling items can now be written as; `impl.generic_executor` is the generic rule itself.
+# same module), and a generic function may carry one (Adam, once `optim` lands: step
+#  14; the rule kept `nn:adam` out of this batch). `impl.kernel_site` states what the two
+# rule items can now be written as; `impl.generic_executor` is the generic rule itself.
 
 # ---- The optimizer: a direct call is not a call to inline ----
 
@@ -428,7 +428,7 @@ verify_script = """
 
 [[tests]]
 name = "impl.on_bodyless"
-desc = "`#impl<f>` written on the body-less declaration itself: a kernel has no Camel body to be the semantics of."
+desc = "`#impl(f)` written on the body-less declaration itself: a kernel has no Camel body to be the semantics of."
 kind = "negative"
 case = "../../../cases/compile/native/impl_on_bodyless.cml"
 args = ["${case}"]
@@ -437,11 +437,11 @@ expect_diagnostic_name = "SemanticDiag::ImplOnBodylessDeclaration"
 expect_diagnostic_code = "0x030001D8"
 expect_diagnostic_line = 8
 expect_diagnostic_column = 2
-expect_output_contains = ["The body-less declaration 'add_kernel' cannot carry '#impl<add_kernel>': it has no Camel body."]
+expect_output_contains = ["The body-less declaration 'add_kernel' cannot carry '#impl(add_kernel)': it has no Camel body."]
 
 [[tests]]
 name = "impl.unknown_kernel"
-desc = "`#impl<nope>`: no body-less declaration of this module and no import brings the kernel."
+desc = "`#impl(nope)`: no body-less declaration of this module and no import brings the kernel."
 kind = "negative"
 case = "../../../cases/compile/native/impl_unknown.cml"
 args = ["${case}"]
@@ -454,7 +454,7 @@ expect_output_contains = ["The '#impl' tag of 'add' names 'nope', which is no bo
 
 [[tests]]
 name = "impl.foreign_kernel"
-desc = "`#impl<at>`: `at` is a body-less declaration of another module; a kernel is declared in the module of the function that keeps it."
+desc = "`#impl(at)`: `at` is a body-less declaration of another module; a kernel is declared in the module of the function that keeps it."
 kind = "negative"
 case = "../../../cases/compile/native/impl_foreign.cml"
 args = ["${case}"]
@@ -467,7 +467,7 @@ expect_output_contains = ["The '#impl' tag of 'first' names 'at', which another 
 
 [[tests]]
 name = "impl.signature_mismatch"
-desc = "`#impl<add_kernel>` on a function of another type: `add_kernel` is `(int, int) => int`, the function is `(float, float) => float`."
+desc = "`#impl(add_kernel)` on a function of another type: `add_kernel` is `(int, int) => int`, the function is `(float, float) => float`."
 kind = "negative"
 case = "../../../cases/compile/native/impl_signature.cml"
 args = ["${case}"]
@@ -480,7 +480,7 @@ expect_output_contains = ["The kernel 'add_kernel' of the '#impl' function 'add'
 
 [[tests]]
 name = "impl.kernel_has_body"
-desc = "`#impl<helper>` where `helper` has a body: the function already is the semantics, so it cannot be a kernel."
+desc = "`#impl(helper)` where `helper` has a body: the function already is the semantics, so it cannot be a kernel."
 kind = "negative"
 case = "../../../cases/compile/native/impl_kernel_has_body.cml"
 args = ["${case}"]
@@ -661,7 +661,7 @@ timeout_ms = 60000
 
 [[tests]]
 name = "impl.kernel_site"
-desc = "Where a kernel can be declared (design principles 10.4: the module that owns an operator owns its kernel and its Camel definition): `#op<'tensor:log_softmax'>` outside the tensor module is refused as another module's operator, not as an operator no module implements, and `#op<'nn:adam'>` is refused the same way — a module writes its own signature and nobody else's; the tensor module's own `.cml` beside its `.cmo` declares the kernel and holds the definition's body, which is what `stdlib/tensor.cml` now does; and a generic function carries a kernel whose rules are adopted at instantiation."
+desc = "Where a kernel can be declared (design principles 10.4: the module that owns an operator owns its kernel and its Camel definition): `#op('tensor:log_softmax')` outside the tensor module is refused as another module's operator, not as an operator no module implements, and `#op('nn:adam')` is refused the same way — a module writes its own signature and nobody else's; the tensor module's own `.cml` beside its `.cmo` declares the kernel and holds the definition's body, which is what `stdlib/tensor.cml` now does; and a generic function carries a kernel whose rules are adopted at instantiation."
 kind = "behavior"
 tool = "node"
 case = "../../../cases/compile/native/impl_kernel_site.mjs"
@@ -672,7 +672,7 @@ timeout_ms = 300000
 
 [[tests]]
 name = "impl.syntax_arguments"
-desc = "`#impl<>` names no kernel: the form takes exactly one name, so the use is reported with the argument count before the tag is resolved."
+desc = "`#impl()` names no kernel: the form takes exactly one name, so the use is reported with the argument count before the tag is resolved."
 kind = "negative"
 case = "../../../cases/compile/native/impl_syntax_args.cml"
 args = ["${case}"]

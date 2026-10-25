@@ -30,8 +30,6 @@ std::string to_string(DataType type) {
         return "StaticLoop";
     case DataType::StaticAccess:
         return "StaticAccess";
-    case DataType::TryExpr:
-        return "TryExpr";
     case DataType::LoopExpr:
         return "LoopExpr";
     case DataType::Literal:
@@ -186,8 +184,6 @@ std::string to_string(ReservedDataOp op) {
         return "..";
     case ReservedDataOp::As:
         return "AS";
-    case ReservedDataOp::Is:
-        return "IS";
     default:
         ASSERT(false, "Unknown ReservedDataOp");
         return "UnknownReservedDataOp";
@@ -223,8 +219,6 @@ const std::string TypeCaseLoad::geneCode() const {
 const std::string TypeCaseLoad::toString() const {
     return "TypeCase(" + geneCode() + ")" + this->status();
 }
-
-const std::string TryExprLoad::geneCode() const { return "try"; }
 
 const std::string LiteralLoad::geneCode() const { return value_.toString(); }
 

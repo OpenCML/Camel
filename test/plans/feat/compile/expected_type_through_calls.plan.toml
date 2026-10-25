@@ -5,7 +5,7 @@ tags = ["feat", "compile", "literals", "generics"]
 desc = "The expected type of a call reaches the call through its type variables (design principles 5.1, 5.5): a literal argument's own type is only the default of its kind, so the callee's result type aligned with the type of the position the call stands in solves the variables before the literals bind them, and a literal argument whose parameter mentions a solved variable takes that type; a value argument keeps the type it has and is not converted. The same rule gives a composite literal argument with a computed element the parameter's type, and makes every composite literal round once into the type of its position."
 
 # The rule: the position solves the variables, the variables reach the literal arguments (the
-# ruling of 2026-10-23 on `expected-type-through-literals-and-calls`, item 1).
+# rule on `expected-type-through-literals-and-calls`, item 1).
 
 [[tests]]
 name = "expected.through_the_result_variable"

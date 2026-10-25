@@ -313,14 +313,21 @@ Value lowerPermute(const LowerContext &ctx) {
     return ctx.emit("Transpose", {ctx.input(0)}, {ints("perm", ctx.constInts(1))});
 }
 
-/// Operand name of an int[] argument (a shape) as a 1-D int64 tensor, and its known entries.
-std::pair<std::string, std::vector<int64_t>> shapeOperand(const LowerContext &ctx, size_t index) {
+/// Operand name of an int[] argument (a shape) as a 1-D int64 tensor, and its known entries (an
+/// entry nobody knows is absent: plan section 5.3's migration table).
+std::pair<std::string, std::vector<std::optional<int64_t>>>
+shapeOperand(const LowerContext &ctx, size_t index) {
     const Value &arg = ctx.arg(index);
     if (arg.isSymbolic() && arg.form == Value::Form::IntArray) {
         return {ctx.input(index, TypeCode::Int64), arg.elements};
     }
     const auto values = ctx.constInts(index);
-    return {ctx.emitter().int64s(values), values};
+    std::vector<std::optional<int64_t>> known;
+    known.reserve(values.size());
+    for (int64_t value : values) {
+        known.push_back(value);
+    }
+    return {ctx.emitter().int64s(values), std::move(known)};
 }
 
 Value lowerReshape(const LowerContext &ctx) {
@@ -332,8 +339,10 @@ Value lowerReshape(const LowerContext &ctx) {
     Value out = ctx.emit("Reshape", {ctx.input(0), shape}, std::move(attrs));
     if (!out.shape) {
         // Inference could not use a dynamic shape; its statically known entries still hold.
-        for (int64_t &d : known) {
-            d = d < 0 ? tensor::kUnknownDim : d;
+        for (std::optional<int64_t> &d : known) {
+            if (d && *d < 0) {
+                d = std::nullopt;
+            }
         }
         out.shape = known;
     }
@@ -355,9 +364,9 @@ Value lowerDim(const LowerContext &ctx) {
         throw ExportError(
             std::format("'tensor:dim': axis {} is out of range for rank {}", ctx.constInt(1), rank));
     }
-    const int64_t extent = (*facts.shape)[static_cast<size_t>(axis)];
-    if (extent != tensor::kUnknownDim) {
-        return Value::constant(rtdata::toSlot<rtdata::Int64>(extent), type::Type::Int64());
+    const std::optional<int64_t> extent = (*facts.shape)[static_cast<size_t>(axis)];
+    if (extent.has_value()) {
+        return Value::constant(rtdata::toSlot<rtdata::Int64>(*extent), type::Type::Int64());
     }
     Emitter &e = ctx.emitter();
     const std::string index =
@@ -372,10 +381,10 @@ Value lowerDim(const LowerContext &ctx) {
 Value lowerNumel(const LowerContext &ctx) {
     const auto facts = ctx.facts(0);
     if (facts.shape &&
-        std::ranges::none_of(*facts.shape, [](int64_t d) { return d == tensor::kUnknownDim; })) {
+        std::ranges::none_of(*facts.shape, [](const std::optional<int64_t> &d) { return !d; })) {
         int64_t count = 1;
-        for (int64_t d : *facts.shape) {
-            count *= d;
+        for (const std::optional<int64_t> &d : *facts.shape) {
+            count *= *d;
         }
         return Value::constant(rtdata::toSlot<rtdata::Int64>(count), type::Type::Int64());
     }
@@ -501,7 +510,7 @@ Value lowerSlice(const LowerContext &ctx) {
                 at,
                 rank));
     }
-    const int64_t extent              = (*facts.shape)[static_cast<size_t>(at)];
+    const std::optional<int64_t> extent = (*facts.shape)[static_cast<size_t>(at)];
     const core::sem::Param *stepParam = findParam(inst, core::sem::ParamSource::Static, 4);
     const int64_t step = stepParam != nullptr && stepParam->value ? *stepParam->value : 1;
     const core::sem::OperandCheck *startCheck = findCheck(inst, 2);
@@ -510,7 +519,7 @@ Value lowerSlice(const LowerContext &ctx) {
     // Proved in range from the static extent and the constants: a plain Slice.
     if (startCheck == nullptr && stopCheck == nullptr && ctx.arg(2).isConstant() &&
         ctx.arg(3).isConstant()) {
-        if (extent == tensor::kUnknownDim) {
+        if (!extent.has_value()) {
             throw ExportError(
                 "'tensor:slice': the index semantics declaration gives no check for constant "
                 "bounds whose axis extent is unknown, so the export cannot prove them in range");
@@ -543,8 +552,8 @@ Value lowerSlice(const LowerContext &ctx) {
     // The guards: zeros of length n + 1, n the extent (known now, or read from the shape).
     const int64_t zero[] = {0}, one[] = {1};
     std::string extentVec;
-    if (extent != tensor::kUnknownDim) {
-        const int64_t n[] = {extent};
+    if (extent.has_value()) {
+        const int64_t n[] = {*extent};
         extentVec         = e.int64s(n);
     } else {
         const int64_t axisIndex[] = {at};
@@ -609,7 +618,7 @@ Value lowerSlice(const LowerContext &ctx) {
     const std::string ends   = guarded(3);
     const int64_t axis[] = {at}, steps[] = {step};
     auto shape = ctx.result().shape.value_or(facts.shape.value_or(tensor::StaticShape{}));
-    shape[static_cast<size_t>(at)] = tensor::kUnknownDim;
+    shape[static_cast<size_t>(at)] = std::nullopt;
     return Value::symbolic(
         e.node("Slice", {ctx.input(0), starts, ends, e.int64s(axis), e.int64s(steps)}),
         facts.dtype,
@@ -760,14 +769,14 @@ Value lowerShape(const LowerContext &ctx) {
         throw ExportError("'tensor:shape' of a tensor of unknown rank is not supported");
     }
     const bool known =
-        std::ranges::none_of(*facts.shape, [](int64_t d) { return d == tensor::kUnknownDim; });
+        std::ranges::none_of(*facts.shape, [](const std::optional<int64_t> &d) { return !d; });
     if (!known) {
         return Value::symbolicIntArray(ctx.emitter().node("Shape", {ctx.input(0)}), *facts.shape);
     }
     static type::ArrayType *intArray = type::ArrayType::create(type::Type::Int64());
     auto *array = ::Array::create(core::mm::autoSpace(), intArray, facts.shape->size());
     for (size_t i = 0; i < facts.shape->size(); ++i) {
-        array->set(i, static_cast<rtdata::Int64>((*facts.shape)[i]));
+        array->set(i, static_cast<rtdata::Int64>(*(*facts.shape)[i]));
     }
     ctx.emitter().retain(array, intArray);
     return Value::constant(rtdata::toSlot(array), intArray);
@@ -794,23 +803,45 @@ LowerFn constantOfShapeOp(std::optional<double> fill) {
     };
 }
 
-/// arr[i] on an int[] that depends on the input (e.g. shape(x)[0] with a dynamic batch).
+/// arr[i] on an int[] that depends on the input (e.g. shape(x)[0] with a dynamic batch), and
+/// arr[i] reading one number out of a tensor that depends on the input: since the tensor flip a
+/// `Tensor` parameter is an array, so `t[0]` is this operator, and the read lowers the way the
+/// tensor index does (Gather along axis 0, one per index).
 Value lowerArrayIndex(const LowerContext &ctx) {
     const Value &array = ctx.arg(0);
     if (array.isSymbolic() && array.form == Value::Form::IntArray && ctx.arg(1).isConstant()) {
         const int64_t i = ctx.constInt(1);
         const auto n    = static_cast<int64_t>(array.elements.size());
         const int64_t k = i < 0 ? i + n : i;
-        if (k >= 0 && k < n && array.elements[k] != tensor::kUnknownDim) {
+        if (k >= 0 && k < n && array.elements[k].has_value()) {
             // A statically known dimension folds even though the whole shape is dynamic.
             return Value::constant(
-                rtdata::toSlot(static_cast<rtdata::Int64>(array.elements[k])),
+                rtdata::toSlot(static_cast<rtdata::Int64>(*array.elements[k])),
                 type::Type::Int64());
         }
     }
     if (!array.isSymbolic() || array.form != Value::Form::IntArray) {
-        throw ExportError(
-            "':op/idx_arr': only int arrays (shapes) can be indexed by the model input");
+        // A constant index reads one element of any element type: `Gather` takes them all, so
+        // `t[0]` on a tensor of the model is the same node the tensor index emitted before the
+        // flip (this operator is what the read became). An index the model input decides is
+        // lowered only for the shape numbers themselves — the read below, which casts them to
+        // int64 — because the element a symbolic index picks out of a numeric array has no type
+        // the export can state, and a Loop or a branch that reads it would be built on a guess.
+        if (!ctx.arg(1).isConstant()) {
+            throw ExportError(
+                std::format("'{}': reading an element of '{}' needs a constant index; an index "
+                            "the model input decides is only supported for an array of shapes "
+                            "(an int array)",
+                            ctx.uri(),
+                            ctx.arg(0).ty == nullptr ? std::string("a numeric array")
+                                                     : ctx.arg(0).ty->toString()));
+        }
+        std::string v = ctx.input(0, TypeCode::Float64);
+        for (size_t i = 1; i < ctx.size(); ++i) {
+            v = ctx.emitter().node(
+                "Gather", {v, ctx.input(i, TypeCode::Int64)}, {intAttr("axis", 0)});
+        }
+        return Value::symbolicScalar(v, type::Type::Float64());
     }
     return ctx.emitScalar(
         "Gather",
@@ -951,14 +982,14 @@ std::vector<int64_t> bnChannelShape(size_t rank, int64_t channels) {
 /// The channel count (gamma's extent); batch_norm parameters are rank-1 [C].
 int64_t bnChannelCount(const LowerContext &ctx, size_t index) {
     const auto facts = ctx.facts(index);
-    if (!facts.shape || facts.shape->size() != 1 || (*facts.shape)[0] == tensor::kUnknownDim) {
+    if (!facts.shape || facts.shape->size() != 1 || !(*facts.shape)[0].has_value()) {
         throw ExportError(
             std::format(
                 "'{}': the channel count (parameter {}'s extent) must be known statically",
                 ctx.uri(),
                 index));
     }
-    return (*facts.shape)[0];
+    return *(*facts.shape)[0];
 }
 
 /// momentum * M/(M-1), the running variance's batch-variance factor (the UNBIASED correction):
@@ -974,11 +1005,11 @@ std::string bnUnbiasedVarFactor(
             if (i == 1) {
                 continue;
             }
-            if ((*facts.shape)[i] == tensor::kUnknownDim) {
+            if (!(*facts.shape)[i].has_value()) {
                 known = false;
                 break;
             }
-            count *= static_cast<double>((*facts.shape)[i]);
+            count *= static_cast<double>(*(*facts.shape)[i]);
         }
     }
     if (known) {
@@ -1053,7 +1084,7 @@ Value lowerBatchNormTrain(const LowerContext &ctx) {
     type::Type *resultType = ctx.resultType();
     if (!resultType || resultType->code() != TypeCode::Tuple) {
         resultType = type::TupleType::create(
-            {tensor::TensorType::get(f), tensor::TensorType::get(f), tensor::TensorType::get(f)});
+            {tensor::ops::tensorOf(f, std::nullopt), tensor::ops::tensorOf(f, std::nullopt), tensor::ops::tensorOf(f, std::nullopt)});
     }
     return Value::aggregate(resultType, {std::move(yV), std::move(rmV), std::move(rvV)});
 }
@@ -1067,8 +1098,8 @@ Value lowerTake(const LowerContext &ctx) {
     if (ctx.arg(1).kind == Value::Kind::Constant) {
         const auto constantIndices = ctx.constInts(1);
         const auto input           = ctx.facts(0).shape;
-        if (input && !input->empty() && (*input)[0] != tensor::kUnknownDim) {
-            const int64_t extent = (*input)[0];
+        if (input && !input->empty() && (*input)[0].has_value()) {
+            const int64_t extent = *(*input)[0];
             for (const int64_t index : constantIndices) {
                 if (index < 0 || index >= extent) {
                     throw ExportError(std::format(
@@ -1116,8 +1147,8 @@ LoweringRegistry::LoweringRegistry() {
     add("tensor:le", compareOp("LessOrEqual", false));
     add("tensor:gt", compareOp("Greater", false));
     add("tensor:ge", compareOp("GreaterOrEqual", false));
-    add("tensor:eq", compareOp("Equal", false));
-    add("tensor:ne", compareOp("Equal", true));
+    add("tensor:strict_eq", compareOp("Equal", false));
+    add("tensor:strict_neq", compareOp("Equal", true));
 
     // Elementwise unary.
     add("tensor:neg", sameTypeOp("Neg", 1));

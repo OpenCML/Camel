@@ -9,7 +9,7 @@
  * them), so a law whose condition admits it has an instance there and that instance is reported.
  *
  * The row is `sampled` with `evidence none` and the reason names the parameter's own type, in the
- * reason column and not in the verdict or the evidence (the ruling of 2026-10-24 on
+ * reason column and not in the verdict or the evidence (the rule on
  * `verification-licence-to-precondition`, licence 3, option A: a `sampled` that sampled and a
  * `sampled` that could not are written apart). The same call carries the library's `float_add_self`,
  * whose `bf16` and `f16` instances are checked with 200 values each: the reason for one is no

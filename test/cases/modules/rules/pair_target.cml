@@ -4,7 +4,7 @@
  *
  * The rule is written once for two type parameters, so a site of it is a *pair* of types: the int
  * site is `(int, int)` and the small one `(i32, i32)`, and a law that is asked for one type per
- * parameter has no instance at either (the ruling of 2026-10-23 on generic-rule-instantiation
+ * parameter has no instance at either (the rule on generic-rule-instantiation
  * assumes one type per value).
  */
 module pair_target

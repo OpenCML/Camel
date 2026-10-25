@@ -19,6 +19,7 @@
 #include "camel/core/module/module.h"
 #include "camel/core/operator_table.h"
 #include "camel/core/operator_traits.h"
+#include "camel/core/rtdata/equality.h"
 #include "camel/execute/entry_args.h"
 #include "camel/execute/executor.h"
 #include "camel/runtime/node_roles.h"
@@ -28,6 +29,7 @@
 #include "kernels/parallel.h"
 #include "npy.h"
 #include "ops/binary_ops.h"
+#include "ops/catalog.h"
 #include "ops/registry.h"
 #include "passes/fuse.h"
 #include "tensor.h"
@@ -51,13 +53,16 @@ class TensorExecutor : public Executor {
 /// computed, is also exported under the type namespace (`Tensor.shape`): a declaration cannot
 /// write that alias, and the compiler points it at the declaration when the declaration
 /// replaces the module's entity for the name (Module::replaceTypeQualifiedAliases).
+/// `load_npy` is not among them: the element type of its result is the one the call declares
+/// (`load_npy::<f32>(p)`), and a declaration's parameters cannot mention a type variable that is
+/// the result's element type, so its signature is computed (`loadNpyOperatorGroup`, recorded in
+/// `stdlib/signatures/tensor.cml`, handover H466).
 constexpr std::string_view kDeclaredOperators[] = {
     "dim",
     "gemm_backend",
     "gemm_library",
     "gemm_library_threads",
     "gemm_threads",
-    "load_npy",
     "num_threads",
     "numel",
     "save_npy",
@@ -81,10 +86,18 @@ TensorModule::TensorModule(context_ptr_t ctx) : BuiltinModule("tensor", ctx) {
     camel::tensor::registerMulNegFusion();
     camel::tensor::ops::registerTensorOps();
     camel::tensor::passes::registerTensorPasses();
-    exportType(Reference("Tensor"), camel::tensor::TensorType::Default());
+    // `Tensor` is the array type's name for the open-rank array whose element type the spelling has
+    // to give, and the arguments of the spelling are read by the array type itself
+    // (docs/design/arrays-memory/plan.cn.md section 5.1a, ArrayType::applyArguments): one type
+    // with two spellings. The name is still exported so that a program which writes it is told to
+    // write the element type, and it is deleted once no program does.
+    exportType(Reference("Tensor"), camel::core::type::ArrayType::elementTypeOpen());
     const auto binary = camel::tensor::ops::fromBytesOperatorGroup();
     exportEntity(Reference("from_bytes"), binary);
     exportEntity(Reference(std::vector<std::string>{"Tensor"}, "from_bytes"), binary);
+    const auto npyLoad = camel::tensor::ops::loadNpyOperatorGroup();
+    exportEntity(Reference("load_npy"), npyLoad);
+    exportEntity(Reference(std::vector<std::string>{"Tensor"}, "load_npy"), npyLoad);
     for (const auto &group : OpRegistry::instance().operatorGroups("tensor")) {
         if (!isDeclaredOperator(group->name())) {
             exportEntity(group->name(), group);
@@ -115,28 +128,46 @@ bool TensorModule::load() {
         camel::core::ValueTypeRefinerRegistry::instance().add(
             [](slot_t value, camel::core::type::Type *type) -> camel::core::type::Type * {
                 namespace tensor = camel::tensor;
-                if (!tensor::asTensorType(type) || value == NullSlot) {
+                if (!tensor::isTensorType(type) || value == NullSlot) {
                     return nullptr;
                 }
                 const auto *t   = camel::core::rtdata::fromSlot<tensor::Array *>(value);
                 const auto dims = t->shapeSpan();
-                return tensor::TensorType::get(
-                    t->dtype(),
-                    tensor::StaticShape(dims.begin(), dims.end()));
+                camel::core::type::Type *elem = camel::core::type::Type::create(t->dtype());
+                if (dims.empty()) {
+                    // No dimension at all: the element type itself. The rank-zero ruling
+                    // (docs/handover/reviews/questions-2026-10-23.md, section rank-zero-tensor)
+                    // says a value with no dimension is the scalar it holds, not a rank-0 array.
+                    return elem;
+                }
+                return camel::core::type::ArrayType::create(elem, dims);
             });
         return true;
     }();
     (void)refinerAdded;
+    // A tensor is a numeric array: `==` compares two of them by shape and by element, as it does
+    // for any array (design principles 4.2), and the core reaches that comparison through the
+    // array type itself -- a tensor's element type is written, so nothing has to be registered
+    // for it. The transition period's registration of the module's own tensor type went with
+    // `TensorType`, which the array spelling replaced.
     // A Tensor parameter of `main` given on the command line is a .npy file (the extension
     // may be left out, as in the layout nn.save_params writes). The tensor is checked against
-    // the declared element type and shape, like `as`.
+    // the declared element type and shape, like `as`. A Tensor is a numeric array, so the
+    // loader answers for the array type: another array (`string[]`, an array of arrays) has no
+    // file to read and says so, rather than reading a .npy into it.
     static const bool loaderAdded = [] {
         camel::execute::registerEntryArgumentLoader(
-            camel::tensor::TensorType::typeCode(),
+            camel::core::type::TypeCode::Array,
             [](const std::string &text,
                camel::core::type::Type *declared,
                camel::core::type::Type *&valueType) -> slot_t {
                 namespace tensor = camel::tensor;
+                if (!tensor::isTensorType(declared)) {
+                    // The .npy format holds a numeric array. Another array — an array of arrays,
+                    // `string[]` — is not one, and this loader does not take it: the caller
+                    // reports it the way it reports any type no loader takes.
+                    return NullSlot;
+                }
                 std::filesystem::path path = camel::utils::pathFromUtf8(text);
                 if (!std::filesystem::exists(path) && path.extension() != ".npy") {
                     path += ".npy";
@@ -148,23 +179,35 @@ bool TensorModule::load() {
                 tensor::Array *t = tensor::loadNpy(path, camel::core::mm::autoSpace());
                 const slot_t value =
                     camel::core::rtdata::toSlot(static_cast<camel::core::rtdata::Object *>(t));
-                if (const auto *want = tensor::asTensorType(declared)) {
-                    (void)want->castSlotFrom(value, declared);
-                }
+                // The value the file holds is a numeric array whose dtype and shape the file
+                // names; the declared type is what it has to fit. The source type of the checked
+                // conversion states the declared element type with the rank left open, so the
+                // check reads the value's own dtype and shape and reports the fault at the call.
+                (void)declared->castSlotFrom(
+                    value,
+                    camel::core::type::ArrayType::openRank(
+                        camel::core::type::asArrayType(declared)->elemType()));
                 const auto dims = t->shapeSpan();
-                valueType       = tensor::TensorType::get(
-                    t->dtype(),
-                    tensor::StaticShape(dims.begin(), dims.end()));
+                camel::core::type::Type *elem = camel::core::type::Type::create(t->dtype());
+                valueType = dims.empty() ? elem : camel::core::type::ArrayType::create(elem, dims);
                 return value;
             });
         return true;
     }();
     (void)loaderAdded;
-    // The counterpart: a Tensor that `main` returns is written as a .npy file.
+    // The counterpart: a Tensor that `main` returns is written as a .npy file. As above, the
+    // saver answers for the array type and refuses an array a .npy file cannot hold.
     static const bool saverAdded = [] {
         camel::execute::registerEntryResultSaver(
-            camel::tensor::TensorType::typeCode(),
-            [](slot_t value, camel::core::type::Type *, const std::string &text) -> std::string {
+            camel::core::type::TypeCode::Array,
+            [](slot_t value,
+               camel::core::type::Type *type,
+               const std::string &text) -> std::string {
+                if (!camel::tensor::isTensorType(type)) {
+                    // As above: a .npy file holds a numeric array, and this saver does not write
+                    // the other arrays (`string[]`, an array of arrays).
+                    return std::string();
+                }
                 std::filesystem::path path = camel::utils::pathFromUtf8(text);
                 if (path.extension() != ".npy") {
                     path += ".npy";
@@ -189,7 +232,7 @@ bool TensorModule::load() {
                 return std::nullopt;
             }
             const auto isTensor = [](const camel::core::type::Type *t) {
-                return t && camel::tensor::asTensorType(t) != nullptr;
+                return t != nullptr && camel::tensor::isTensorType(t);
             };
             const auto isNumber = [](const camel::core::type::Type *t) {
                 return t && camel::tensor::isSupportedTensorScalar(t->code());

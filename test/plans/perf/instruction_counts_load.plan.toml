@@ -1,6 +1,6 @@
 id = "perf.instruction_counts_load"
 order = 426
-tier = "slow"
+tier = "milestone"
 tags = ["perf", "training", "instructions", "load"]
 
 # The same case as `instruction_counts.plan.toml`, run while a privileged container holds 96

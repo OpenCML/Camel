@@ -11,10 +11,10 @@ module var_array_append
 import { Tensor, reshape, sum } from tensor
 import { with_grad } from autodiff
 
-type P = { p0: Tensor }
+type P = { p0: f64[..] }
 
 with <m: P>
-func loss(x: Tensor): float sync {
+func loss(x: f64[..]): float sync {
     var parts: int[] = []
     parts = parts->append<1>
     parts = parts->append<2>

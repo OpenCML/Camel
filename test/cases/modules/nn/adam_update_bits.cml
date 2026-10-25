@@ -4,8 +4,8 @@
  * `adam` advances a tensor leaf with the fused pass in modules/tensor/kernels/update.cpp, which
  * keeps the arithmetic in double for every element and rounds once, on the store. The values below
  * are the ones the element-by-element double loop it replaced produced; they are printed with the
- * shortest decimal that names one float exactly (design principles 7.7), so the plan compares them
- * with `===`, that is, bit for bit.
+ * shortest decimal that names one float exactly (design principles 7.7), so the plan compares
+ * that text exactly.
  *
  * The model has both kinds of trainable leaf: two tensors and a float.
  */
@@ -15,8 +15,8 @@ import { Tensor, cast, range } from tensor
 import { adam, adam_state } from nn
 
 type Model = {
-    w: Tensor,
-    b: Tensor,
+    w: f32[..],
+    b: f32[..],
     scale: float
 }
 

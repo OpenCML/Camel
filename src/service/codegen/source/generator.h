@@ -42,7 +42,6 @@ class Generator {
     std::string generateReservedExprLoad(const AST::node_ptr_t &node);
     std::string generateIfExprLoad(const AST::node_ptr_t &node);
     std::string generateMatchExprLoad(const AST::node_ptr_t &node);
-    std::string generateTryExprLoad(const AST::node_ptr_t &node);
     std::string generateLiteralLoad(const AST::node_ptr_t &node);
     std::string generateListDataLoad(const AST::node_ptr_t &node);
     std::string generateDictDataLoad(const AST::node_ptr_t &node);

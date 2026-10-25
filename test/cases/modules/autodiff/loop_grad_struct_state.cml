@@ -1,11 +1,11 @@
 /**
- * Autodiff sees through a struct loop state (H71 item 2, design principles 9.9): the state is
+ * Autodiff sees through a struct loop state (item 2, design principles 9.9): the state is
  * one struct, the tape carries the same struct as its tangent, and the reverse pass reads the
  * fields it needs. Before this, the forward rewrite took the programme's own field read (`q.a`)
  * for the loop's state projection, and the graph crashed while being scheduled.
  *
  * The shapes: a struct state the body also uses as a whole (`sumP(q)`), so the state is not
- * split into its fields (H71 item 1); the same in a nested struct; a struct state with a field
+ * split into its fields (item 1); the same in a nested struct; a struct state with a field
  * that has no tangent (`{a: float, n: int}`, whose tangent is `{a: float}`); a one-field struct;
  * and a state whose struct part stays whole while its counter is a component of its own.
  *
@@ -100,7 +100,7 @@ func tupleRef(): float {
     return a
 }
 
-// A struct state whose array field is appended: the field is a state of its own (H71 item 1),
+// A struct state whose array field is appended: the field is a state of its own (item 1),
 // and the in-place append the builder chose falls back to the copying one so that the round can
 // be taped (design principles 9.9). `box` appends `w` three times, and the two values read after
 // the loop give 2. `boxRead` appends `xs[0] · 2` (a read of the state, so the copy form), and

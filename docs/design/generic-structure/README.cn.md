@@ -52,9 +52,9 @@
 新增的构造，共四样：
 
 1. `match type T { case struct => …; case tuple => …; case _ => … }`：按类型的**形状**在实例化时选一条分支，**没被选中的分支不建图、不做类型检查**（相当于 C++ 的 `if constexpr`）。`struct`、`tuple` 只匹配 R3 定义的内部节点，所以 `T?`、`T!`、单元格落在 `case _`。一个 case 也可以写类型名（`case int`、`case MyStruct`、`case T`），按类型的**身份**精确选一条分支（语言文档 6.8.3）。
-2. `static for (n, F) in fields T`：把字段表展开，每个字段一份函数体。`n` 是编译期常量（结构体是字段名，元组是下标的十进制字面，两者都能直接当路径的一段），`F` 是字段类型。`n`、`F` 的绑定写法就是位置本身（5.4、5.5），不引入新的绑定机制。
+2. `static for n, F in fields T`：把字段表展开，每个字段一份函数体。`n` 是编译期常量（结构体是字段名，元组是下标的十进制字面，两者都能直接当路径的一段），`F` 是字段类型。`n`、`F` 的绑定写法就是位置本身（5.4、5.5），不引入新的绑定机制。
 3. 编译期字段访问 `x.[n]`，以及"推导式"构造 `{ static for … => n: e }`（结构体）与 `( static for … => e )`（元组）：生成同形的新值，字段类型由 `e` 的类型得到。
-4. 变长参数 `..ts` 与展开调用 `f(t, ..ts)`：`ts` 是元数在编译期已知的元组，`static for (j) in indices ts` 遍历它。解决 R6。
+4. 变长参数 `..ts` 与展开调用 `f(t, ..ts)`：`ts` 是元数在编译期已知的元组，`static for j in indices ts` 遍历它。解决 R6。
 
 另外，带 `static` 构造的泛型函数**可以省略返回类型**，由实例化后的函数体推出（见 3.1.4）。
 
@@ -64,9 +64,9 @@
 // 回调 f 作为 with 参数；t 决定叶子边界；ts 是其余同形的树（元数可以是 0）
 export func tree_map::<T>(t: T, ..ts) {
     return match type T {
-        case struct => { static for (n, F) in fields T =>
+        case struct => { static for n, F in fields T =>
                              n: tree_map(t.[n], ..column(n, ts)) }
-        case tuple  => ( static for (n, F) in fields T =>
+        case tuple  => ( static for n, F in fields T =>
                              tree_map(t.[n], ..column(n, ts)) )
         case _      => f(t, ..ts)
     }
@@ -74,7 +74,7 @@ export func tree_map::<T>(t: T, ..ts) {
 
 // 取各棵树在字段 n 处的子树。找不到字段就是普通的"无此字段"错误
 func column(constas n, ts) {
-    return ( static for (j) in indices ts => ts.[j].[n] )
+    return ( static for j in indices ts => ts.[j].[n] )
 }
 ```
 
@@ -91,9 +91,9 @@ export func tree_paths::<T>(t: T) { return paths_at(t, "") }
 
 func paths_at::<T>(t: T, here: string) {
     return match type T {
-        case struct => { static for (n, F) in fields T =>
+        case struct => { static for n, F in fields T =>
                              n: paths_at(t.[n], join(here, n)) }
-        case tuple  => ( static for (n, F) in fields T =>
+        case tuple  => ( static for n, F in fields T =>
                              paths_at(t.[n], join(here, n)) )
         case _      => here
     }
@@ -133,8 +133,8 @@ export func load_tree::<T>(dir: string): T! {
 }
 func load_at::<T>(h: Ckpt, here: string): T {
     return match type T {
-        case struct => { static for (n, F) in fields T => n: load_at::<F>(h, join(here, n)) }
-        case tuple  => ( static for (n, F) in fields T => load_at::<F>(h, join(here, n)) )
+        case struct => { static for n, F in fields T => n: load_at::<F>(h, join(here, n)) }
+        case tuple  => ( static for n, F in fields T => load_at::<F>(h, join(here, n)) )
         case _      => ckpt_get::<T>(h, here)
     }
 }
@@ -240,8 +240,8 @@ derive Tree for struct, tuple                       // 谁来实现 derive？
 
 ```camel
 type Device<T> = match type T {
-    case struct => { static for (n, F) in fields T => n: Device<F> }
-    case tuple  => ( static for (n, F) in fields T => Device<F> )
+    case struct => { static for n, F in fields T => n: Device<F> }
+    case tuple  => ( static for n, F in fields T => Device<F> )
     case _      => DeviceLeaf<T>            // 叶子必须是 Device 支持的类型，否则 static error
 }
 ```
@@ -285,7 +285,7 @@ type Device<T> = match type T {
 
 ## 6. 已定（2026-10-20）
 
-第 6 节原有的 11 个问题已全部定下（设计原则 5.5、5.6，及长线风险 7.13 的 G1–G4）：方案 A；带静态构造的泛型函数可以省略返回类型；可变元数 `..ts` 与展开调用；`match type`、`t.[n]`、`[n]: e`、`static loop` 的拼写如本稿；`static for (n, F) in fields T`（位置即说明绑定的种类），需要字段标签时写 `(n, F, tags)`；用户自定义叶子用声明标签 `#leaf`（第二期）；以函数为 `with` 实参时函数身份进入实例键，作为普通实参且编译期已知时由编译器特化（设计原则 4.4）；含静态构造的实例自动内联；实例化链诊断加 `static error`，深度上限可调；路径为运行时字符串、由常量折叠；类型位置使用同一套构造（设计原则 5.6）；`load_tree` 在打开检查点时一次校验，之后逐叶读取不再返回错误。
+第 6 节原有的 11 个问题已全部定下（设计原则 5.5、5.6，及长线风险 7.13 的 G1–G4）：方案 A；带静态构造的泛型函数可以省略返回类型；可变元数 `..ts` 与展开调用；`match type`、`t.[n]`、`[n]: e`、`static loop` 的拼写如本稿；`static for n, F in fields T`（位置即说明绑定的种类），需要字段标签时写 `n, F, tags`；用户自定义叶子用声明标签 `#leaf`（第二期）；以函数为 `with` 实参时函数身份进入实例键，作为普通实参且编译期已知时由编译器特化（设计原则 4.4）；含静态构造的实例自动内联；实例化链诊断加 `static error`，深度上限可调；路径为运行时字符串、由常量折叠；类型位置使用同一套构造（设计原则 5.6）；`load_tree` 在打开检查点时一次校验，之后逐叶读取不再返回错误。
 
 <details><summary>原问题（存档）</summary>
 
@@ -301,7 +301,7 @@ type Device<T> = match type T {
 例：`tree_map<adam_leaf>(p, g, m, v)`。建议：变长，`..` 绑定一个元数在编译期已知的元组，元数 0 合法；不引入运行时变长。
 
 **4. 静态构造的拼写。**
-候选：`match type T { case struct => … }`；`static for (n, F) in fields T => …`；`static loop acc = init for (…) in fields T do …`；`t.[n]`；`{ … => n: e }`。
+候选：`match type T { case struct => … }`；`static for n, F in fields T => …`；`static loop acc = init for (…) in fields T do …`；`t.[n]`；`{ … => n: e }`。
 问：(a) `match type` 与 5.3 的值的 `match` 共用 `match` 再加 `type`，是否可接受；(b) 字段访问写 `t.[n]`、`t.(n)` 还是 `field(t, n)`；(c) 构造结构体时 `n: e` 的 `n` 是编译期名字，而平时 `n: e` 的 `n` 是字面的字段名，是否需要标记（如 `[n]: e`）。建议：沿用上面的写法，(c) 加方括号 `[n]: e` 更不易混淆。
 
 **5. 叶子怎么定义，用户能不能把自己的结构体声明成叶子？**
@@ -397,7 +397,7 @@ Camel 的风险：`tree_map<f>` 的回调 `f` 可能有效应（打印、写文�
 
 C++、Rust 的单态化使编译时间与产物膨胀；Rust 的跨 crate 重复实例化至今是编译慢的主因之一。
 
-Camel 已定：实例全程序共用、属于声明泛型的模块（设计原则 2.1 表格）。还需要：(1) 实例键是（模板、类型实参、编译期值实参）的稳定标识，能写进模块缓存 `.cmc`，这依赖图存储第 5 步的稳定图标识；(2) `camel inspect` 报告实例的数量与大小；(3) 强制内联（本稿第 7 问）只对含静态构造的实例，避免普通泛型被一律展开；(4) 单图节点上限 65,535（graph-model R4）在展开大参数树时可能触及，展开结果应保持按子树分图，由内联遍按需合并。
+Camel 已定：实例全程序共用、属于声明泛型的模块（设计原则 2.1 表格）。还需要：(1) 实例键是（模板、类型实参、编译期值实参）的稳定标识，能写进模块缓存 `.cmc`，这依赖图存储第 5 步的稳定图标识；(2) `camel inspect` 报告实例的数量与大小；(3) 强制内联（本稿第 7 问）只对含静态构造的实例，避免普通泛型被一律展开；(4) 展开大参数树会把图撑大，展开结果应保持按子树分图，由内联遍按需合并。
 
 ### 7.10 特化与重叠（Rust specialization 的教训）
 

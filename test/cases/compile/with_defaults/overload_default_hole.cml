@@ -2,7 +2,7 @@
  * A call of several declarations fills no default, and the rule is one rule for the two lists:
  * `rounds` has a default in both declarations of `show`, but a default is written by one
  * declaration, and `show<label: 'p'>` does not say which one it means (design principles 4.4,
- * handover H376).
+ * handover).
  */
 module with_overload_default_hole
 

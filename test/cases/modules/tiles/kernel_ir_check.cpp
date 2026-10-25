@@ -264,7 +264,7 @@ void checkMatrixContracts() {
     bad=p;bad.nodes[2].indexing->output.coords={n,m};rejected(bad,"direct matrix domain");
     // The mixed GEMM is the one computation the compiler moves to a lower precision on its own, so
     // its refusal names the permission the node is missing instead of saying "mixed GEMM
-    // permissions" -- the author's ruling of 2026-10-23 (docs/handover/reviews/questions-2026-10-23.md,
+    // permissions" -- the rule (docs/handover/reviews/questions-2026-10-23.md,
     // "precision-diagnostic-removal"): "`tiles` 拒绝"编译器引入的低精度"时，消息点名缺的是哪个许可
     // （`change_precision` 等），而不是笼统的 "mixed GEMM permissions"。"
     auto mixed=p;
@@ -459,24 +459,41 @@ void checkRegions() {
     regions=partitionRegions(detour);
     require(regions.size()==2 && regions[0].members==std::vector<size_t>{1} &&
             regions[1].members==std::vector<size_t>{3} && regions[1].inputs==std::vector<size_t>({1,2}));
-    auto transfers=planRegionTransfers(detour,regions);
-    require(transfers.uploads==std::vector<size_t>({0,2}) &&
-            transfers.downloads==std::vector<size_t>({1,3}) && transfers.resident.size()==1);
-    require(transfers.resident[0].value==1 && transfers.resident[0].producer==0 && transfers.resident[0].consumer==1);
-    auto invalidTransfers=[&](std::vector<Region> bad) {
-        try { (void)planRegionTransfers(detour,bad); }
+    // The boundary the residency conclusion answers: host inputs are written to the device side,
+    // observed outputs are written back for the host, and a value one segment hands to the next in
+    // the same block is no transfer at all. Nodes 1 and 3 are written in a `#gpu` scope, node 2 is
+    // host code reading node 1, and the graph returns to the host, so 1 and 3 are observed.
+    ResidencyFacts detourFacts;
+    detourFacts.values.resize(4);
+    detourFacts.values[1].block.placement=Placement::Gpu;
+    detourFacts.values[3].block.placement=Placement::Gpu;
+    auto residency=planResidency(detourFacts,detour,regions);
+    require(residency.uploads==std::vector<size_t>({0,2}) &&
+            residency.downloads==std::vector<size_t>({1,3}) && residency.resident.size()==1);
+    require(residency.resident[0].value==1 && residency.resident[0].producer==0 && residency.resident[0].consumer==1);
+    require(residency.segments.size()==2 && residency.segments[0].downloads==std::vector<size_t>({1}) &&
+            residency.segments[1].uploads==std::vector<size_t>({2}) &&
+            residency.segments[1].downloads==std::vector<size_t>({3}));
+    auto invalidTransfers=[&](std::vector<Segment> bad) {
+        try { (void)planResidency(detourFacts,detour,bad); }
         catch(const std::exception&) { return; }
         throw std::runtime_error("invalid transfer boundary accepted");
     };
     auto badRegions=regions; badRegions[0].outputs.clear(); invalidTransfers(badRegions);
     badRegions=regions; badRegions[1].members.push_back(1); invalidTransfers(badRegions);
-    // Multiple regions share one host input; unused CPU consumers must not trigger downloads.
+    // A device value a host consumer reads is a download, a device value only dead host code reads
+    // is not, and one host input shared by two regions is uploaded once.
     std::vector<RegionNode> split={{{},{},false,false},{{0},{},true,false},{{0,1},{},true,true},{{1},{},false,false}};
-    std::vector<Region> splitRegions={{{1},{0},{1}},{{2},{0,1},{2}}};
-    transfers=planRegionTransfers(split,splitRegions);
-    require(transfers.uploads==std::vector<size_t>{0} && transfers.downloads==std::vector<size_t>{2});
+    std::vector<Segment> splitRegions={{{1},{0},{1}},{{2},{0,1},{2}}};
+    ResidencyFacts splitFacts;
+    splitFacts.values.resize(3);
+    splitFacts.values[1].block.placement=Placement::Gpu;
+    splitFacts.values[2].block.placement=Placement::Gpu;
+    residency=planResidency(splitFacts,split,splitRegions);
+    require(residency.uploads==std::vector<size_t>{0} && residency.downloads==std::vector<size_t>{2});
+    require(residency.segments[1].resident.size()==1 && residency.segments[1].resident[0].value==1);
     split[0].embedded=true;
-    require(planRegionTransfers(split,splitRegions).uploads.empty());
+    require(planResidency(splitFacts,split,splitRegions).uploads.empty());
     // Shared intermediates exported to CPU remain exits even when the GPU chain fuses.
     std::vector<RegionNode> shared={{{},{},false,false},{{0},{},true,false},{{1},{},true,true},{{1},{},false,true}};
     regions=partitionRegions(shared);
@@ -492,7 +509,7 @@ void checkRegions() {
     std::vector<RegionNode> ordered={{{},{},true,false},{{},{0},true,true}};
     regions=partitionRegions(ordered);
     if(!(regions.size()==2 &&
-         std::any_of(regions.begin(),regions.end(),[](const Region &r){return r.members==std::vector<size_t>{0};})))
+         std::any_of(regions.begin(),regions.end(),[](const Segment &r){return r.members==std::vector<size_t>{0};})))
         throw std::runtime_error("an ordering edge did not keep its predecessor live");
     // Two control regions never contract into one, however eligible the nodes are.
     std::vector<RegionNode> arms={{{},{},true,false},{{0},{},true,true}};

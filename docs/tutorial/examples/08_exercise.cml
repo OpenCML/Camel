@@ -1,0 +1,21 @@
+// The answer to the exercise of chapter 8: the same tool, with the reading in one function.
+// Run: camel docs/tutorial/examples/08_exercise.cml --arg path=docs/tutorial/examples/08_words.txt
+
+import { read_text } from fs
+import { split, to_lower, trim } from str
+import { encode } from json
+
+func words_of(text: string): string[] {
+    return text->split<' '>->map<(w: string): string => to_lower(trim(w))>->filter<(w: string): bool => w != ''>
+}
+
+func tally(path: string): Map<string, int> {
+    let words = words_of(read_text(path))
+    return words->reduce<(acc: Map<string, int>, w: string): Map<string, int> => acc->put<w, (acc[w] ?? 0) + 1>, [] as Map<string, int>>
+}
+
+func main(path: string): int sync {
+    let counts = tally(path)
+    println(len(keys(counts)), counts['fox'] ?? 0, encode(counts))
+    return 0
+}

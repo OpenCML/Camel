@@ -6,6 +6,6 @@ module unknown_shape
 
 import { Tensor, tanh } from tensor
 
-func main(x: Tensor, w: Tensor<f32, [3, 4]>): Tensor {
+func main(x: f32[..], w: Tensor<f32, [3, 4]>): f32[..] {
     return tanh(x @ w)
 }

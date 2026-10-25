@@ -1,9 +1,9 @@
 /**
  * Refused: a tail recursion whose depth depends on the model input and whose carried state is a
- * struct with an `int[]` field. The ruling of 2026-10-23 keeps this refusal —
- * 「(b) ONNX 导出对带数组字段的携带状态保持拒绝，等原生多维数组（H17 第 2、4 项）把形状的说法定下来
- * 再处理定长数组。」 — so the diagnostic names the array field and says what is missing, and no
- * model file is written.
+ * struct with an `int[]` field the body appends to. A Loop's state input has one shape for all its
+ * rounds, and the ruling of 2026-10-24-evening (growable-array-vs-tensor-in-the-onnx-exporter) makes
+ * that the criterion: the body appends to this value, so its length changes from one round to the
+ * next — the diagnostic names the array field, an int array, and says so; no model file is written.
  */
 module export_loop_carried_array_field
 import { Tensor, reshape, sum } from tensor
@@ -12,7 +12,7 @@ import { get_env } from env
 
 type State = { xs: int[], k: int }
 
-func walk(x: Tensor, s: State): Tensor {
+func walk(x: float[..], s: State): float[..] {
     return if s.k >= 3 || sum(x * x) < 1.0 then x * 2.0
         else walk(x, { xs: s.xs->append<s.k>, k: s.k + 1 })
 }
@@ -20,7 +20,7 @@ func walk(x: Tensor, s: State): Tensor {
 func main(): int sync {
     let x = reshape([1.0, 2.0, 3.0, 4.0], [2, 2])
     println(len([0]))
-    export_model((x: Tensor): Tensor => walk(x, { xs: [0], k: 0 }), (x), get_env('ONNX_OUT'))
+    export_model((x: float[..]): float[..] => walk(x, { xs: [0], k: 0 }), (x), get_env('ONNX_OUT'))
     println('exported')
     return 0
 }

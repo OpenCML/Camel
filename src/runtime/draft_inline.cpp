@@ -22,6 +22,10 @@
 
 #include "camel/core/operator_table.h"
 #include "camel/core/rtdata/func.h"
+#include "camel/core/type/composite/array.h"
+#include "camel/core/type/intern.h"
+#include "camel/core/type/text.h"
+#include "camel/core/type/typevar.h"
 #include "camel/runtime/draft_clone.h"
 #include "camel/runtime/draft_types.h"
 #include "camel/runtime/draft_writes.h"
@@ -32,6 +36,7 @@
 #include <cstring>
 #include <format>
 #include <map>
+#include <stdexcept>
 #include <tuple>
 #include <unordered_set>
 #include <vector>
@@ -74,6 +79,90 @@ constexpr uint8_t kTypeBindingFlag = 0xFF;
 bool refinesType(camel::core::type::Type *actual, camel::core::type::Type *formal) {
     return actual && formal && actual != formal && formal->assignableFrom(actual) &&
            !actual->assignableFrom(formal);
+}
+
+/// The parameter type an instance of a declaration gets from one argument, as design principles
+/// 5.5 states it: the declaration with its type variables substituted, and with every extent the
+/// declaration leaves undetermined kept as declared. An extent that is not a constant asks
+/// nothing at a call (5.4), so an argument's exact length is a property of the value and never
+/// part of the instance — which is what lets a recursion that writes `int[]`, `T[?]` or a
+/// `Tensor` reach a fixed point instead of taking a new copy at every level (the ruling of
+/// 2026-10-24 evening, model-dependent-recursion-unrolls-after-the-flip, item 1).
+///
+/// A dimension name the declaration writes (`T[n]`) is bound from the argument. `relaxNames`
+/// widens it to an unknown extent instead of binding it, which is how a recursion that carries
+/// one name to a different value at every level (polymorphic recursion) stops making new
+/// instances (the same ruling, item 2).
+///
+/// A non-array type is returned as `actual`: what a declaration says about a tuple, a struct or
+/// a scalar is not a dimension, and refining those is what this helper must not change.
+camel::core::type::Type *instanceParameterType(
+    camel::core::type::Type *formal, camel::core::type::Type *actual, bool relaxNames) {
+    using namespace camel::core::type;
+    const auto *formalArray = asArrayType(formal);
+    if (formalArray == nullptr || actual == nullptr) {
+        return actual;
+    }
+    const auto *actualArray = asArrayType(actual);
+
+    // The element position is where a declaration's type variable sits, and where the element
+    // nobody wrote sits too (`[]`, whose element is `Void`).
+    // The shape is not a type variable, whatever the argument's own shape is.
+    Type *element = formalArray->elemType();
+    if (!relaxNames && (element == nullptr || containsTypeVar(element) ||
+                        element->code() == TypeCode::Void)) {
+        if (actualArray != nullptr && actualArray->elemType() != nullptr &&
+            actualArray->elemType()->code() != TypeCode::Void) {
+            element = actualArray->elemType();
+        }
+    }
+
+    std::vector<ExtentForm> extents(formalArray->extents().begin(), formalArray->extents().end());
+    for (size_t i = 0; i < extents.size(); ++i) {
+        if (!extents[i].hasNames()) {
+            continue; // a constant, or an extent the declaration leaves open: not the instance's
+        }
+        if (relaxNames || actualArray == nullptr || i >= actualArray->extents().size() ||
+            !actualArray->extents()[i].isConstant()) {
+            // Nothing binds the name: the argument leaves that dimension open too, or this is a
+            // lap past the first one and the name is widened instead of being bound.
+            if (relaxNames) {
+                extents[i] = ExtentForm::unknown();
+            }
+            continue;
+        }
+        extents[i] = actualArray->extents()[i];
+    }
+
+    bool anyRank   = formalArray->anyRank();
+    bool packBound = false;
+    if (anyRank && !relaxNames && !formalArray->packName().empty() && actualArray != nullptr &&
+        !actualArray->anyRank() &&
+        actualArray->extents().size() >= formalArray->extents().size()) {
+        // `T[n, ..rest]`: the pack is a dimension name the declaration writes, and the argument
+        // fixes it to the dimensions it had after the prefix. An open rank with no name (`T[..]`,
+        // `Tensor`) states no dimension to bind: the argument's rank is a property of its value.
+        extents.insert(
+            extents.end(),
+            actualArray->extents().begin() +
+                static_cast<std::ptrdiff_t>(formalArray->extents().size()),
+            actualArray->extents().end());
+        anyRank   = false;
+        packBound = true;
+    }
+
+    if (!packBound && element == formalArray->elemType() &&
+        extents.size() == formalArray->extents().size() &&
+        std::equal(extents.begin(), extents.end(), formalArray->extents().begin())) {
+        return formal;
+    }
+    if (anyRank) {
+        return ArrayType::openRank(element, extents);
+    }
+    if (extents.empty()) {
+        return element;
+    }
+    return ArrayType::create(element, extents);
 }
 
 gc_node_ref_t remapNodeRef(gc_node_ref_t sourceRef, const std::vector<gc_node_ref_t> &mapping) {
@@ -384,7 +473,8 @@ DraftStaticValue tryResolveStaticValue(const GraphDraft &draft, gc_node_ref_t no
             const auto normInputs = draft.normInputsOf(canonicalId);
             const DraftNodeHeader *source =
                 normInputs.empty() ? nullptr : draft.header(normInputs.front());
-            if (!source || !source->dataType || source->dataType != header->dataType) {
+            if (!source || !source->dataType ||
+                !camel::core::type::sameCanonicalType(source->dataType, header->dataType)) {
                 return resolved;
             }
             canonicalId = normInputs.front();
@@ -503,6 +593,19 @@ std::vector<DraftFormalBinding> collectDirectFuncSpecializations(
         return bindings;
     }
 
+    // A call of a function that is already one of this function's type instances is the second
+    // lap of a recursion: a dimension name it states binds no further value from there on.
+    // The lap that unrolls a recursion is the recursive call *inside* an instance: it names the
+    // function itself again with arguments of the instance's own types, and a new instance made
+    // from there is one level of that recursion per rewriting pass (H463). Both laps count as
+    // past the first.
+    const GraphId calleeRoot = calleeGraph->typeSpecializationRoot();
+    const GraphId callerRoot = draft.typeSpecializationRoot();
+    // Either lap is past the first: the callee is itself an instance of this declaration, or the
+    // call is written inside one (the caller's graph is an instance). Both bind no further
+    // dimension value, which is what keeps the total number of instances bounded.
+    const bool relaxNames = isValid(calleeRoot) || isValid(callerRoot);
+
     for (size_t i = 0; i < formals.size(); ++i) {
         DraftStaticValue staticValue = tryResolveStaticValue(draft, actualInputs[i]);
         // An argument whose value is not bound (dynamic, or an object, see below) may still have a
@@ -511,15 +614,21 @@ std::vector<DraftFormalBinding> collectDirectFuncSpecializations(
         const auto bindType = [&] {
             const auto *actualHeader = draft.header(actualInputs[i]);
             const auto *formalNode   = calleeGraph->node(formals[i].second);
-            if (actualHeader && formalNode &&
-                refinesType(actualHeader->dataType, formalNode->dataType())) {
+            if (!actualHeader || !formalNode) {
+                return;
+            }
+            // What the instance's parameter states, not what the argument's value happens to be:
+            // the extents the declaration leaves open stay open (see instanceParameterType).
+            camel::core::type::Type *instantiated =
+                instanceParameterType(formalNode->dataType(), actualHeader->dataType, relaxNames);
+            if (refinesType(instantiated, formalNode->dataType())) {
                 bindings.push_back(
                     DraftFormalBinding{
                         .kind         = formals[i].first,
                         .index        = i,
                         .formalNodeId = formals[i].second,
                         .staticValue  = {},
-                        .refinedType  = actualHeader->dataType,
+                        .refinedType  = instantiated,
                     });
             }
         };
@@ -622,13 +731,20 @@ RuntimeSpecializationKey makeRuntimeSpecializationKey(
                       .runtimeFlags = kTypeBindingFlag,
                   });
     }
+    // The order is part of the key, so both sides must place two bindings of one type the same
+    // way: a type is ordered by its canonical id (specializations.h) and not by the address of
+    // whichever object states it, or one instance would be two keys.
+    const auto orderOf = [](const RuntimeSpecializationBindingKey &binding) {
+        return std::tuple{
+            binding.kind,
+            binding.index,
+            camel::core::type::TypeTable::instance().canonicalId(binding.type),
+            binding.value,
+            binding.runtimeFlags};
+    };
     std::sort(
-        key.bindings.begin(),
-        key.bindings.end(),
-        [](const RuntimeSpecializationBindingKey &lhs, const RuntimeSpecializationBindingKey &rhs) {
-            return std::tie(lhs.kind, lhs.index, lhs.type, lhs.value, lhs.runtimeFlags) <
-                   std::tie(rhs.kind, rhs.index, rhs.type, rhs.value, rhs.runtimeFlags);
-        });
+        key.bindings.begin(), key.bindings.end(),
+        [&orderOf](const auto &lhs, const auto &rhs) { return orderOf(lhs) < orderOf(rhs); });
     return key;
 }
 
@@ -882,8 +998,40 @@ bool specializeDirectFuncInDraft(
         return false;
     }
 
-    // Type-only specialization of a recursive function is bounded (see
-    // kMaxTypeSpecializationsPerRecursiveFunction); a copy that already exists is reused freely.
+    // The recursive call inside a type instance of the function it names asks for an instance
+    // whose parameters are the ones that instance already states: the one it is in. Making a new
+    // copy there is what unrolled the recursion one level per rewriting pass — the same key again
+    // and again, because every rewrite of a call inside the base invalidates the entry that names
+    // the copy — until a count bound stopped it, and an export found no loop in the result (H463).
+    // Nothing is bound by the copy, so the types the instance states have to accept the arguments;
+    // when they do not, the call still specializes.
+    const GraphId instanceRoot = draft.typeSpecializationRoot();
+    if (std::ranges::none_of(
+            bindings, [](const DraftFormalBinding &b) { return b.bindsValue(); }) &&
+        isValid(instanceRoot) && instanceRoot == calleeGraph->id()) {
+        std::vector<gc_node_ref_t> ports(draft.normPorts().begin(), draft.normPorts().end());
+        const auto withPorts = draft.withPorts();
+        ports.insert(ports.end(), withPorts.begin(), withPorts.end());
+        const std::vector<gc_node_ref_t> actuals = orderedFuncActualInputs(draft, funcNodeId);
+        bool accepts = ports.size() == actuals.size();
+        for (size_t i = 0; accepts && i < ports.size(); ++i) {
+            const DraftNodeHeader *port   = draft.header(ports[i]);
+            const DraftNodeHeader *actual = draft.header(actuals[i]);
+            accepts = port && actual && port->dataType && actual->dataType &&
+                      port->dataType->assignableFrom(actual->dataType);
+        }
+        if (accepts) {
+            draft.setCalleeGraph(funcNodeId, draft.id());
+            return true;
+        }
+    }
+
+    // Type-only specialization on a call cycle has no shape bound any more. A call inside an
+    // instance of the function it names reuses that instance (above), and a call whose key
+    // differs is the polymorphic case the ruling widens to `?`; what is left here is a runaway
+    // guard, and passing it means the specialization did not reach a fixed point. That is a
+    // compiler error naming the function: the eight-copy count this replaces used to keep the
+    // current callee instead, which silently truncated the shape.
     const bool boundedTypeSpecialization =
         std::ranges::none_of(
             bindings,
@@ -895,15 +1043,19 @@ bool specializeDirectFuncInDraft(
         const GraphId root = isValid(calleeGraph->typeSpecializationRoot())
                                  ? calleeGraph->typeSpecializationRoot()
                                  : calleeGraph->id();
-        if (session.typeSpecializationCount(root) >= kMaxTypeSpecializationsPerRecursiveFunction) {
+        if (session.typeSpecializationCount(root) >= kTypeSpecializationFixedPointGuard) {
             CAMEL_LOG_INFO_S(
                 "DraftOpt",
-                "FUNC node {} keeps callee '{}': '{}' has {} type specializations.",
+                "FUNC node {} cannot specialize '{}': '{}' has {} type specializations.",
                 funcNodeId,
                 calleeGraph->name(),
                 toText(root),
-                kMaxTypeSpecializationsPerRecursiveFunction);
-            return false;
+                kTypeSpecializationFixedPointGuard);
+            throw std::runtime_error(std::format(
+                "the type specialization of '{}' did not reach a fixed point: {} instances, each "
+                "with a key the one before it did not have",
+                calleeGraph->name(),
+                kTypeSpecializationFixedPointGuard));
         }
         session.noteTypeSpecialization(root);
     }
@@ -1449,7 +1601,7 @@ DraftInlineResult inlineCallableInDraft(
     const uint32_t callBlockRegion = controlRegionOf(draft, funcNodeId);
     // The call is the whole of its arm, which already has its region: the body goes into it.
     // The region records the function this code is a copy of, which is what the inline history
-    // asks it (GraphDraft::inlinedCopyOf, H44c). A type specialization is that function with a
+    // asks it (GraphDraft::inlinedCopyOf). A type specialization is that function with a
     // more precise type, and the program the next round sees makes it again, under a new id, when
     // its copy of the specialization is gone: recording the specialization's id would leave a
     // record nothing resolves, the history would not recognize the call, and a recursion would

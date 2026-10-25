@@ -382,7 +382,7 @@ FusionGroupAction multiplyNegKernel(
         return FusionGroupAction::None;
     }
     Array *result = runPair(view, middle);
-    view.setValueOf(node, ops::wrap(result));
+    view.setValueOf(node, ops::wrap(view.typeOf(node), result));
     return FusionGroupAction::Ran;
 }
 
@@ -436,7 +436,7 @@ FusionGroupAction divideMulNegKernel(
     members.push_back(middle);
     group.tail = node;
     Array *result = runChain(view, head, middle, node);
-    view.setValueOf(node, ops::wrap(result));
+    view.setValueOf(node, ops::wrap(view.typeOf(node), result));
     return FusionGroupAction::Ran;
 }
 

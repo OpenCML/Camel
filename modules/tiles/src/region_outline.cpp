@@ -6,6 +6,7 @@
 #include "camel/core/context/context.h"
 #include "camel/core/error/diagnostics/messages/runtime.h"
 #include "camel/core/mm/gen.h"
+#include "camel/core/operator_table.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
@@ -73,7 +74,7 @@ runtime::gc_node_ref_t transferAggregate(
 
 const runtime::Program *outlineRegions(
     core::context::Context &context, const runtime::Program *program, runtime::GCGraph *root,
-    operator_t run, const std::string &uri, size_t &count, const RegionDeviceOps *device,
+    operator_t run, const std::string &uri, size_t &count, const SegmentDeviceOps *device,
     bool refuseGpuScopes) {
     namespace rt = runtime;
     if (device &&
@@ -95,7 +96,7 @@ const runtime::Program *outlineRegions(
     // covered graph is that region's segment, not a reason to fall back to the host (2.5), so the
     // scope map is built before the analysis and answers it.
     const GpuScopes scopes(*program);
-    std::unordered_map<rt::GCGraph *, RegionAnalysis> analyses;
+    std::unordered_map<rt::GCGraph *, SegmentAnalysis> analyses;
     for (auto *graph : graphs) {
         analyses.emplace(graph, analyzeRegions(*program, *graph, context.facts(), &scopes));
     }
@@ -109,7 +110,7 @@ const runtime::Program *outlineRegions(
         const auto *scope = scopes.scopeOf(graph);
         return std::string((scope == nullptr ? &graph : scope)->name());
     };
-    const auto regionInScope = [&](rt::GCGraph &graph, const Region &region) {
+    const auto regionInScope = [&](rt::GCGraph &graph, const Segment &region) {
         if (!refuseGpuScopes)
             return false;
         for (const auto member : region.members) {
@@ -134,6 +135,9 @@ const runtime::Program *outlineRegions(
         struct ScopeRefusals {
             std::vector<Refusal> unsupported;
             std::vector<Refusal> noProgram;
+            // A macro operator (`grad`, `with_grad`) no pass expanded: the defect is the pipeline,
+            // and its repair is a pass, so it is its own group and its own diagnostic.
+            std::vector<Refusal> notExpanded;
         };
         std::vector<std::pair<rt::GCGraph *, ScopeRefusals>> refusals;
         const auto groupOf = [&](rt::GCGraph &graph) -> ScopeRefusals & {
@@ -156,6 +160,41 @@ const runtime::Program *outlineRegions(
                 const std::string name(
                     core::OperatorTable::instance().uri(oper));
                 const auto origin = graph->nodeOrigin(id);
+                // A macro operator (`grad`, `with_grad`) is not an operator the device cannot
+                // run: it should not be in the graph at all. The derived graph has to exist while
+                // the passes run, and the pass that builds it is `std::macro` (design principles
+                // 8), so a scope that still holds one is refused before anything is asked of the
+                // device (docs/design/gpu/plan.cn.md 2.6).
+                if (graph->node(id)->isMacro()) {
+                    auto &group = groupOf(*graph);
+                    // The function is the operator's ordinary operand; a call reads its callee as
+                    // a `with` argument, so both are looked at. A function only the run produces
+                    // names no graph, and no pass can expand the call that reads it: that is the
+                    // scope's own defect, not a missing pass.
+                    const auto operandIsKnown = [&](const auto &operands) {
+                        return std::any_of(
+                            operands.begin(), operands.end(), [&](rt::gc_node_ref_t operand) {
+                                return holdsStaticFunction(*graph, operand);
+                            });
+                    };
+                    const auto normOperands = graph->normInputsOf(id);
+                    bool expandable         = operandIsKnown(normOperands);
+                    if (!expandable)
+                        expandable = operandIsKnown(graph->withInputsOf(id));
+                    (expandable ? group.notExpanded : group.unsupported)
+                        .push_back({name,
+                                    expandable
+                                        ? "a prerequisite pass is missing"
+                                        : "needs a function known at compile time",
+                                    origin});
+                    continue;
+                }
+                // A host effect (`print`, `save_npy`, a file write) is the boundary of a device
+                // scope, not an operator the device must run: the pass leaves it on the host and
+                // the value it observes is downloaded there (docs/design/gpu/plan.cn.md 2.4).
+                const auto &table = core::OperatorTable::instance();
+                if (!table.isPure(oper) || table.hasExternalEffect(oper))
+                    continue;
                 if (!deviceCapable(oper)) {
                     // A device answer on the node itself is the operator having no device
                     // implementation; an untagged graph the scope reaches adds this operator to a
@@ -224,6 +263,17 @@ const runtime::Program *outlineRegions(
             };
             report(scope.unsupported, core::error::RuntimeDiag::GpuScopeUnsupported, false);
             report(scope.noProgram, core::error::RuntimeDiag::GpuScopeNoDeviceProgram, true);
+            if (!scope.notExpanded.empty()) {
+                // The repair is a pass, so the message names it. Reported last: it is about the
+                // pipeline, and the operators the device refuses are about the program.
+                auto diag = context.rtmDiags()->of(
+                    core::error::RuntimeDiag::GpuScopeMacroNotExpanded);
+                const auto origin = scope.notExpanded.front().origin;
+                if (origin != camel::source::kInvalidOriginId)
+                    diag.atOrigin(origin);
+                diag.commit(
+                    scopeNameOf(*graph), list(scope.notExpanded, false).first, "std::macro");
+            }
         }
         if (!refusals.empty())
             return program;
@@ -239,7 +289,7 @@ const runtime::Program *outlineRegions(
         // Where a segment runs: the control region of its members (docs/design/gpu/plan.cn.md 2.5). An operator
         // written in an arm runs only when that arm is taken, so its call, its uploads and its
         // downloads are written there too; writing them in the body would run the untaken arm.
-        const auto whereOf = [&](const Region &region) {
+        const auto whereOf = [&](const Segment &region) {
             return region.members.empty()
                        ? 0u
                        : control.controlOf(static_cast<rt::gc_node_ref_t>(region.members.front()));
@@ -252,9 +302,9 @@ const runtime::Program *outlineRegions(
             const uint32_t where = whereOf(region);
             for (auto value : region.inputs) {
                 if (std::find(
-                        analysis.transfers.uploads.begin(),
-                        analysis.transfers.uploads.end(),
-                        value) == analysis.transfers.uploads.end())
+                        analysis.residency.uploads.begin(),
+                        analysis.residency.uploads.end(),
+                        value) == analysis.residency.uploads.end())
                     continue;
                 const auto found = uploadControl.find(value);
                 if (found == uploadControl.end()) {
@@ -268,7 +318,7 @@ const runtime::Program *outlineRegions(
             }
         }
         if (device) {
-            for (auto value : analysis.transfers.uploads) {
+            for (auto value : analysis.residency.uploads) {
                 const auto input  = static_cast<rt::gc_node_ref_t>(value);
                 const auto found  = uploadControl.find(value);
                 draft.setInsertRegion(found == uploadControl.end() ? 0 : found->second);
@@ -335,8 +385,14 @@ const runtime::Program *outlineRegions(
                 extracted.parameters.begin(),
                 extracted.parameters.end());
             if (device) {
-                for (auto &arg : args)
-                    arg = resident.at(arg);
+                // A parameter the conclusion wrote nothing for is already where the segment runs:
+                // it keeps the source value, and the segment reads it in place (a call between two
+                // graphs of one class moves nothing, `tiles/internal/residency.h`).
+                for (auto &arg : args) {
+                    const auto found = resident.find(arg);
+                    if (found != resident.end())
+                        arg = found->second;
+                }
                 if (region.outputs.size() == 1)
                     type = residentType(type);
                 else {
@@ -364,25 +420,64 @@ const runtime::Program *outlineRegions(
                 draft.setNormInputs(call, args);
             }
             draft.setWithInputs(call, std::span(&fnNode, 1));
+            // That context argument is the segment's own function constant, so this call is the
+            // segment's exec node and the template published above is its plan: a segment is an
+            // exec call carrying its graph, and the report operators read the graph, not the
+            // wrapper (the target form of the GPU design, docs/design/gpu/plan.cn.md 2.1-2.3).
             // The members were statements of a chain (an operator written in an arm, a loop
-            // written in the body). The call takes the place of the first of them that was the
-            // head of that chain, so the segment keeps its order against the host statements
-            // around it; erasing the members then closes the chain over it.
+            // written in the body). The call takes their place in it, so the host statements
+            // written around the segment keep their order against it; erasing the members then
+            // closes the chains over the call. What a replaced statement was ordered by, and what
+            // it ordered, goes to the call in every kind that carries that order: the sync kind and
+            // the order kind (takeStatementPlace), and the control kind that still names the same
+            // pair beside the sync one while it exists (docs/design/effects/edges.cn.md 4,
+            // src/runtime/draft.cpp closeChainOver). An effect written around the segment is
+            // ordered by this edge alone, so a kind left behind takes the effect with it: with no
+            // edge to the graph it is not executed, and the statement it observed is not
+            // transferred either.
+            const auto isMember = [&](rt::gc_node_ref_t ref) {
+                return std::find(
+                           region.members.begin(), region.members.end(),
+                           static_cast<size_t>(ref)) != region.members.end();
+            };
+            std::vector<rt::gc_node_ref_t> controls;
             for (auto member : region.members) {
-                const auto ref   = static_cast<rt::gc_node_ref_t>(member);
-                const auto preds = graph->ctrlInputsOf(ref);
-                if (preds.empty())
-                    continue;
-                const bool head = std::none_of(
-                    preds.begin(), preds.end(), [&](rt::gc_node_ref_t pred) {
-                        return std::find(
-                                   region.members.begin(), region.members.end(),
-                                   static_cast<size_t>(pred)) != region.members.end();
-                    });
-                if (head) {
-                    draft.takeStatementPlace(ref, call);
-                    break;
+                const auto ref = static_cast<rt::gc_node_ref_t>(member);
+                for (auto pred : graph->ctrlInputsOf(ref)) {
+                    if (isMember(pred) ||
+                        std::find(controls.begin(), controls.end(), pred) != controls.end())
+                        continue;
+                    controls.push_back(pred);
                 }
+                draft.takeStatementPlace(ref, call);
+                // What the replaced statement ordered follows the call. Only its own place moves:
+                // a user keeps every other reference it has to the node (the graph's exit, a
+                // region's value, a branch's join), which the outline moves below with the values.
+                const std::vector<rt::gc_node_ref_t> users(
+                    graph->ctrlOutputsOf(ref).begin(), graph->ctrlOutputsOf(ref).end());
+                for (auto user : users) {
+                    if (isMember(user) || !draft.alive(user))
+                        continue;
+                    std::vector<rt::gc_node_ref_t> ordered(
+                        draft.ctrlInputsOf(user).begin(), draft.ctrlInputsOf(user).end());
+                    bool moved = false;
+                    for (auto &input : ordered) {
+                        if (input != ref)
+                            continue;
+                        input = call;
+                        moved = true;
+                    }
+                    if (moved)
+                        draft.setCtrlInputs(user, ordered);
+                }
+            }
+            for (auto pred : controls) {
+                auto ctrl = draft.ctrlInputsOf(call);
+                if (std::find(ctrl.begin(), ctrl.end(), pred) != ctrl.end())
+                    continue;
+                std::vector<rt::gc_node_ref_t> grown(ctrl.begin(), ctrl.end());
+                grown.push_back(pred);
+                draft.setCtrlInputs(call, grown);
             }
             for (size_t i = 0; i < region.outputs.size(); ++i) {
                 const auto old   = static_cast<rt::gc_node_ref_t>(region.outputs[i]);
@@ -401,9 +496,9 @@ const runtime::Program *outlineRegions(
                 if (device) {
                     resident.emplace(old, replacement);
                     if (std::find(
-                            analysis.transfers.downloads.begin(),
-                            analysis.transfers.downloads.end(),
-                            old) != analysis.transfers.downloads.end()) {
+                            analysis.residency.downloads.begin(),
+                            analysis.residency.downloads.end(),
+                            old) != analysis.residency.downloads.end()) {
                         auto *hostType      = graph->node(old)->dataType();
                         const auto download = transferAggregate(
                             draft,
@@ -444,5 +539,43 @@ const runtime::Program *outlineRegions(
     if (regionRefused)
         return program;
     return count ? session.commit() : program;
+}
+bool isRegionExec(core::OperId oper) {
+    // An operator that calls the graph of the function value it receives is one this module
+    // writes for a segment (`SegmentDeviceOps::execute`, op-semantics 11.4). The module's own
+    // namespace is the guard: another module's graph-calling operator is not a segment of a
+    // Tiles scope.
+    const auto &table = core::OperatorTable::instance();
+    return table.callsGraphs(oper) && table.uri(oper).starts_with("tiles:");
+}
+std::vector<RegionSegment> regionSegments(const runtime::GCGraph &graph) {
+    namespace td = core::rtdata;
+    std::vector<RegionSegment> segments;
+    for (runtime::gc_node_ref_t id = 0; id < graph.nodeCount(); ++id) {
+        const auto *node = graph.node(id);
+        if (node->kind != runtime::GCNodeKind::Oper)
+            continue;
+        if (!isRegionExec(graph.nodeBodyAs<runtime::GCOperBody>(id)->oper))
+            continue;
+        // The pass writes exactly one context argument: the function value that owns the
+        // segment's graph. A call without one is not a segment call and is left to the caller.
+        const auto with = graph.withInputsOf(id);
+        if (with.size() != 1)
+            continue;
+        const auto *carried = graph.node(with.front());
+        if (carried->kind != runtime::GCNodeKind::Data || carried->dataIndex >= 0)
+            continue;
+        const auto slot = static_cast<size_t>(-carried->dataIndex);
+        if (slot >= graph.staticSlots().size())
+            continue;
+        auto *type = carried->dataType();
+        if (!type || type->code() != core::type::TypeCode::Function)
+            continue;
+        auto *function = td::fromSlot<::Function *>(graph.staticSlots()[slot]);
+        if (!function || !function->graph())
+            continue;
+        segments.push_back(RegionSegment{id, function});
+    }
+    return segments;
 }
 } // namespace camel::tiles

@@ -1,0 +1,14 @@
+// `load_npy`'s element type is the one type variable no parameter mentions: a call that neither
+// writes it nor stands where one is expected is not a use of the operator. Before H466 the call
+// loaded a tensor whose element type was whatever the file held; now it does not resolve, and the
+// candidates name the five element types a `.npy` file can hold (design principles 5.5; handover
+// H466).
+module tensor_dtype_npy_no_element_type
+
+import { load_npy } from tensor
+
+func main(): int sync {
+    let t = load_npy('test/cases/modules/tensor/shape_types/x3.npy')
+    println(t)
+    return 0
+}

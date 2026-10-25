@@ -63,6 +63,30 @@ Array *slice(
     const Array *input, int64_t axis, int64_t start, int64_t end, int64_t step,
     mm::IAllocator &allocator);
 
+/// The elements `t[a:b:s]` takes along the first axis of a tensor, by the rule an array's
+/// subscript slice follows (design principles 5.4, 3.9): a bound is a position from 0 to
+/// `extent`, the end one past the last element taken, and a negative bound is out of range
+/// rather than a count from the end. A positive step runs forwards from the start, which
+/// defaults to 0 and stops before the end, which defaults to `extent`; a negative step runs
+/// backwards from the start, which defaults to the last element, to the end, which defaults to
+/// the position before the first. `written` is the two-bit mask the call carries (bit 0 end,
+/// bit 1 start). `step` is not 0.
+struct SubscriptSliceRange {
+    bool inRange = false; // every bound the program wrote is inside [0, extent]
+    int64_t first = 0;    // the first position taken
+    int64_t stop = 0;     // the position the slice stops at, exclusive, in the step's direction
+    int64_t step = 1;     // the distance between two positions taken
+    int64_t count = 0;    // how many elements the slice has
+};
+SubscriptSliceRange
+subscriptSliceRange(int64_t extent, int64_t start, int64_t end, int64_t step, int64_t written);
+
+/// The elements the range names, in order: a copy, because the elements of a stepped slice are
+/// not contiguous in the input (design principles 5.4: the value is the same as the view's, and
+/// the view is an implementation of it). A step of 1 is `slice`'s view and does not come here.
+Array *subscriptSlice(
+    const Array *input, const SubscriptSliceRange &range, mm::IAllocator &allocator);
+
 /// Rows of `input` along its first axis, in the order `indices` gives: rank-1 `indices` select
 /// rows, and the result is [indices.size(), input.shape[1:]]. The rows are copied: an arbitrary
 /// row order is not a view of the input (design principles 5.4, 10.5).
@@ -74,6 +98,14 @@ take(const Array *input, std::span<const int64_t> indices, mm::IAllocator &alloc
 Array *takeGrad(
     const Array *input, std::span<const int64_t> indices, const Array *dy,
     mm::IAllocator &allocator);
+
+/// One row's gradient added back at the index it was taken from: `acc` with `row` added where
+/// `index` puts it, in the tensor's own shape and element type. This is `takeGrad` for a single
+/// index and an accumulator that is already a gradient, which is what a loop's rounds need: a
+/// round of `for row in t` takes the row `index` of the first dimension, so its gradient goes back
+/// to that row (design principles 5.4).
+Array *rowAddAt(
+    const Array *acc, int64_t index, const Array *row, mm::IAllocator &allocator);
 
 /// One-hot rows: a float32 tensor of shape [labels.size(), classes] with element
 /// [i, labels[i]] = 1 and every other element 0.

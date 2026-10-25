@@ -1,7 +1,7 @@
 /**
  * The second parameter of `nn:save_params` is the declaration's `string`: an `int` there is
  * refused at the call, against the declaration in `stdlib/nn.cml`, while the first parameter's
- * type variable still accepts the `string` argument (handover H19, step 10; H165).
+ * type variable still accepts the `string` argument (step 10).
  */
 module nn_type
 

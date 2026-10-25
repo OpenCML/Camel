@@ -176,8 +176,9 @@ struct Data {
 
 int64_t numelOf(const StaticShape &shape) {
     int64_t n = 1;
-    for (int64_t e : shape) {
-        n *= e;
+    for (const std::optional<int64_t> &e : shape) {
+        // The evaluator's own shapes are read off the arrays it holds: every extent is a value.
+        n *= *e;
     }
     return n;
 }
@@ -189,16 +190,16 @@ int64_t linearIndex(const StaticShape &shape, std::span<const int64_t> coords) {
     }
     int64_t index = 0;
     for (size_t a = 0; a < shape.size(); ++a) {
-        if (coords[a] < 0 || coords[a] >= shape[a]) {
+        if (coords[a] < 0 || coords[a] >= *shape[a]) {
             return -1;
         }
-        index = index * shape[a] + coords[a];
+        index = index * *shape[a] + coords[a];
     }
     return index;
 }
 
 Data dataOf(const Array *t) {
-    Data d{t->dtype(), t->shapeVector(), {}};
+    Data d{t->dtype(), knownShape(t->shapeVector()), {}};
     d.values.reserve(t->numel());
     for (uint64_t k = 0; k < t->numel(); ++k) {
         switch (t->dtype()) {
@@ -217,7 +218,7 @@ Data dataOf(const Array *t) {
 }
 
 Array *tensorOf(const Data &d) {
-    Array *t = createTensor(d.dtype, d.shape, mm::autoSpace());
+    Array *t = createTensor(d.dtype, extentsOf(d.shape), mm::autoSpace());
     for (size_t k = 0; k < d.values.size(); ++k) {
         switch (d.dtype) {
         case TypeCode::Float32:
@@ -309,7 +310,7 @@ StaticShape randomShape(Rng &rng, size_t rank, int64_t maxExtent = 4) {
 StaticShape broadcastFrom(Rng &rng, const StaticShape &out) {
     const size_t drop = out.empty() ? 0 : static_cast<size_t>(rng.range(0, static_cast<int64_t>(out.size())));
     StaticShape s(out.begin() + static_cast<int64_t>(rng.chance(50) ? drop : 0), out.end());
-    for (int64_t &e : s) {
+    for (std::optional<int64_t> &e : s) {
         if (rng.chance(30)) {
             e = 1;
         }
@@ -335,9 +336,13 @@ struct Arg {
     Type *type() const {
         switch (kind) {
         case Kind::Tensor:
-            return TensorType::get(data.dtype, data.shape);
+            return ops::tensorOf(data.dtype, data.shape);
         case Kind::Number:
-            return Type::Float64();
+            // A Camel float literal takes the element type of what it meets (design principles
+            // 5.1), and a tensor operator never sees one of another type: the tool hands the
+            // kernel and the declaration the same argument type, f32, so neither side reads the
+            // literal at a width the other does not have.
+            return Type::Float32();
         case Kind::Int:
             return Type::Int64();
         case Kind::Bool:
@@ -351,9 +356,13 @@ struct Arg {
     slot_t slot() const {
         switch (kind) {
         case Kind::Tensor:
-            return ops::wrap(tensorOf(data));
+            // The value is read by the type this same entry reports in `type()`: a rank-0 tensor
+            // argument is the element, and the kernel boxes it back (support.cpp's tensorArg).
+            return ops::wrap(type(), tensorOf(data));
         case Kind::Number:
-            return camel::core::rtdata::toSlot(number);
+            // One float width in the whole tool: the slot is an f32 value because `type()` says
+            // the argument is f32, and the kernel reads the slot by the type it is given.
+            return camel::core::rtdata::toSlot(static_cast<float>(number));
         case Kind::Int:
             return camel::core::rtdata::toSlot(integer);
         case Kind::Bool:
@@ -725,7 +734,18 @@ std::string compare(const Data &kernel, const Data &eval, const sem::OperatorSem
     }
     const bool bounded = s.numeric.cls == sem::NumericClass::Bounded;
     if (!bounded && !eval.values.empty() && kernel.dtype != eval.dtype) {
-        return "dtype differs";
+        // Name both element types: which side reads a scalar operand at which type is the whole
+        // question when this fires, and the line is the only place it is reported.
+        const auto name = [](TypeCode t) {
+            switch (t) {
+            case TypeCode::Float32: return "f32";
+            case TypeCode::Float64: return "f64";
+            case TypeCode::Int64: return "i64";
+            case TypeCode::Bool: return "bool";
+            default: return "other";
+            }
+        };
+        return std::format("dtype differs (kernel {}, declaration {})", name(kernel.dtype), name(eval.dtype));
     }
     for (size_t k = 0; k < kernel.values.size(); ++k) {
         const Num &a = kernel.values[k], &b = eval.values[k];
@@ -828,7 +848,7 @@ Generator sliceCases() {
         const size_t rank   = static_cast<size_t>(rng.range(1, 3));
         const StaticShape s = randomShape(rng, rank, 9);
         const int64_t axis  = rng.range(-static_cast<int64_t>(rank), static_cast<int64_t>(rank) - 1);
-        const int64_t n     = s[static_cast<size_t>(axis < 0 ? axis + static_cast<int64_t>(rank) : axis)];
+        const int64_t n     = *s[static_cast<size_t>(axis < 0 ? axis + static_cast<int64_t>(rank) : axis)];
         Case c{Arg::tensor(randomData(rng, pickDtype(rng), s)), Arg::integerArg(axis),
                Arg::integerArg(rng.range(-n - 2, n + 2)), Arg::integerArg(rng.range(-n - 2, n + 2))};
         if (rng.chance(60)) {
@@ -996,8 +1016,8 @@ Generator poolCases() {
         const int64_t kernel = rng.range(1, 3);
         const int64_t pad    = rng.range(0, kernel);
         StaticShape s = {rng.range(1, 2), rng.range(1, 2), rng.range(1, 6), rng.range(1, 6)};
-        s[2]          = std::max(s[2], kernel - 2 * pad);
-        s[3]          = std::max(s[3], kernel - 2 * pad);
+        s[2]          = std::max(*s[2], kernel - 2 * pad);
+        s[3]          = std::max(*s[3], kernel - 2 * pad);
         Case c{Arg::tensor(randomData(rng, TypeCode::Float32, s)), Arg::integerArg(kernel)};
         if (rng.chance(70)) {
             c.push_back(Arg::integerArg(rng.range(1, 3)));
@@ -1108,12 +1128,15 @@ void runOperator(
             continue;
         }
         // The result's shape: the kernel's, or when it faults the type rule's (the declaration
-        // must then fault too).
+        // must then fault too). A result of rank zero states its shape like any other: its type
+        // is the element type, so asking a type predicate for the array spelling is what left
+        // the declaration unasked. The facts answer for a rank-0 result as for a rank-2 one, and
+        // a scalar argument that is not such a result (sum and mean to a number) has the same
+        // empty shape it would fall back to.
         StaticShape outShape;
         if (kernelResult) {
             outShape = kernelResult->shape;
-        } else if (const TensorFacts facts = tensorFactsOf(resultType);
-                   isTensorType(resultType) && facts.isStaticShape()) {
+        } else if (const TensorFacts facts = tensorFactsOf(resultType); facts.isStaticShape()) {
             outShape = *facts.shape;
         } else if (!resultType || resultType->code() != TypeCode::Float64) {
             mismatch(c, "the kernel faults, the declaration gives an instance");
@@ -1181,45 +1204,50 @@ void query(
 
 void queries(std::ostream &os) {
     const auto T = [](std::optional<StaticShape> shape, TypeCode t = TypeCode::Float32) -> Type * {
-        return TensorType::get(t, std::move(shape));
+        return ops::tensorOf(t, std::move(shape));
     };
     Type *const integer = Type::Int64();
     Type *const ints    = camel::core::type::ArrayType::create(Type::Int64());
     // Q9: an extent that may or may not be 1 against another: no instance until specialized.
-    query(os, "broadcast_unknown_both", "tensor:add", {T(StaticShape{-1, 3}), T(StaticShape{-1, 3})}, {});
-    query(os, "broadcast_unknown_vs_known", "tensor:add", {T(StaticShape{-1, 3}), T(StaticShape{4, 3})}, {});
-    query(os, "show_broadcast_unknown_alone", "tensor:add", {T(StaticShape{-1, 3}), T(StaticShape{3})}, {});
-    query(os, "show_broadcast_unknown_vs_one", "tensor:add", {T(StaticShape{-1, 3}), T(StaticShape{1, 3})}, {});
+    query(os, "broadcast_unknown_both", "tensor:add", {T(StaticShape{std::nullopt, 3}), T(StaticShape{std::nullopt, 3})}, {});
+    query(os, "broadcast_unknown_vs_known", "tensor:add", {T(StaticShape{std::nullopt, 3}), T(StaticShape{4, 3})}, {});
+    query(os, "show_broadcast_unknown_alone", "tensor:add", {T(StaticShape{std::nullopt, 3}), T(StaticShape{3})}, {});
+    query(os, "show_broadcast_unknown_vs_one", "tensor:add", {T(StaticShape{std::nullopt, 3}), T(StaticShape{1, 3})}, {});
     query(os, "unknown_rank", "tensor:add", {T(std::nullopt), T(StaticShape{3})}, {});
-    query(os, "show_relu_unknown_extents", "tensor:relu", {T(StaticShape{-1, -1})}, {});
+    query(os, "show_relu_unknown_extents", "tensor:relu", {T(StaticShape{std::nullopt, std::nullopt})}, {});
     query(os, "sum_axis_axis_not_constant", "tensor:sum_axis", {T(StaticShape{2, 3}), integer}, {});
-    query(os, "show_sum_axis_unknown_extents", "tensor:sum_axis", {T(StaticShape{-1, -1, 4}), integer},
+    query(os, "show_sum_axis_unknown_extents", "tensor:sum_axis", {T(StaticShape{std::nullopt, std::nullopt, 4}), integer},
           {std::nullopt, Arg::integerArg(-2)});
     query(os, "permute_not_constant", "tensor:permute", {T(StaticShape{2, 3}), ints}, {});
-    query(os, "slice_unknown_extent", "tensor:slice", {T(StaticShape{-1, 3}), integer, integer, integer},
+    query(os, "slice_unknown_extent", "tensor:slice", {T(StaticShape{std::nullopt, 3}), integer, integer, integer},
           {std::nullopt, Arg::integerArg(0), Arg::integerArg(0), Arg::integerArg(2)});
     query(os, "slice_unknown_extent_negative", "tensor:slice",
-          {T(StaticShape{-1, 3}), integer, integer, integer},
+          {T(StaticShape{std::nullopt, 3}), integer, integer, integer},
           {std::nullopt, Arg::integerArg(0), Arg::integerArg(-1), Arg::integerArg(2)});
-    query(os, "show_slice", "tensor:slice", {T(StaticShape{-1, 7}), integer, integer, integer, integer},
+    query(os, "show_slice", "tensor:slice", {T(StaticShape{std::nullopt, 7}), integer, integer, integer, integer},
           {std::nullopt, Arg::integerArg(1), Arg::integerArg(1), Arg::integerArg(-1), Arg::integerArg(2)});
     query(os, "slice_out_of_range", "tensor:slice", {T(StaticShape{5}), integer, integer, integer},
           {std::nullopt, Arg::integerArg(0), Arg::integerArg(2), Arg::integerArg(6)});
     query(os, "slice_step_zero", "tensor:slice", {T(StaticShape{5}), integer, integer, integer, integer},
           {std::nullopt, Arg::integerArg(0), Arg::integerArg(0), Arg::integerArg(5), Arg::integerArg(0)});
-    query(os, "reshape_unknown_input", "tensor:reshape", {T(StaticShape{-1, 4}), ints},
+    query(os, "reshape_unknown_input", "tensor:reshape", {T(StaticShape{std::nullopt, 4}), ints},
           {std::nullopt, Arg::intsArg({4, -1})});
+    // The target is written out, so the result's shape is fixed while the input's first extent is
+    // open: the instance is the target's, and the element count the operator compares is stated as
+    // a read that is valid only where the input holds it, a fault elsewhere.
+    query(os, "show_reshape_open_first_extent", "tensor:reshape", {T(StaticShape{std::nullopt}), ints},
+          {std::nullopt, Arg::intsArg({1})});
     query(os, "show_reshape", "tensor:reshape", {T(StaticShape{2, 6}), ints}, {std::nullopt, Arg::intsArg({3, -1})});
     query(os, "show_reshape_unit_axes", "tensor:reshape", {T(StaticShape{2, 1, 6}), ints},
           {std::nullopt, Arg::intsArg({1, 2, 6})});
-    query(os, "show_matmul_batched", "tensor:matmul", {T(StaticShape{-1, 2, 3, 4}), T(StaticShape{4, -1})}, {});
-    query(os, "matmul_batch_q9", "tensor:matmul", {T(StaticShape{-1, 3, 4}), T(StaticShape{-1, 4, 5})}, {});
+    query(os, "show_matmul_batched", "tensor:matmul", {T(StaticShape{std::nullopt, 2, 3, 4}), T(StaticShape{4, std::nullopt})}, {});
+    query(os, "matmul_batch_q9", "tensor:matmul", {T(StaticShape{std::nullopt, 3, 4}), T(StaticShape{std::nullopt, 4, 5})}, {});
     query(os, "matmul_mixed_dtypes", "tensor:matmul", {T(StaticShape{3, 4}), T(StaticShape{4, 5}, TypeCode::Int64)}, {});
-    query(os, "show_transpose", "tensor:transpose", {T(StaticShape{-1, 3, 5})}, {});
+    query(os, "show_transpose", "tensor:transpose", {T(StaticShape{std::nullopt, 3, 5})}, {});
     query(os, "show_sum_to", "tensor:sum_to", {T(StaticShape{4, 2, 3}), T(StaticShape{2, 1})}, {});
     query(os, "show_max_pool2d", "nn:max_pool2d", {T(StaticShape{1, 2, 5, 5}), integer, integer, integer},
           {std::nullopt, Arg::integerArg(3), Arg::integerArg(2), Arg::integerArg(1)});
-    query(os, "show_avg_pool2d_unknown_extents", "nn:avg_pool2d", {T(StaticShape{1, 2, -1, -1}), integer},
+    query(os, "show_avg_pool2d_unknown_extents", "nn:avg_pool2d", {T(StaticShape{1, 2, std::nullopt, std::nullopt}), integer},
           {std::nullopt, Arg::integerArg(2)});
 }
 

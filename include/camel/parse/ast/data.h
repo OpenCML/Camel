@@ -20,13 +20,12 @@ enum class DataType {
     StaticFor,
     StaticLoop,
     StaticAccess,
-    TryExpr,
     LoopExpr,
     Literal,
     Array,
     Tuple,
     Struct,
-    // Comprehensions (H51 step 4): a `static for` in a value position whose rounds are packed
+    //  Comprehensions.: a `static for` in a value position whose rounds are packed
     // back into a struct (`StructComp`) or a tuple (`TupleComp`) of the same shape.
     TupleComp,
     StructComp,
@@ -100,8 +99,7 @@ enum class ReservedDataOp {
     Bind,
     Instantiate,
     Comp,
-    As,
-    Is
+    As
 };
 
 std::string to_string(DataType type);
@@ -244,7 +242,7 @@ class TypeCaseLoad : public DataLoad {
     std::vector<TypeCasePattern> patterns_;
 };
 
-/// `static for (n, F) in fields T => body` or `static for (j) in indices ts => body`:
+/// `static for n, F in fields T => body` or `static for j in indices ts => body`:
 /// children [0] the walked shape (a type for `fields`, a value for `indices`), [1] the body (a
 /// block). The load holds the names: for `fields`, `n` is the field name (a tuple's index in
 /// decimal), `F` the field type and `tags` the field's tags; for `indices`, only `j` (the
@@ -283,7 +281,7 @@ class StaticForLoad : public DataLoad {
 };
 
 /// `static loop s1 = a1, ..., sk = ak for i in <序列> do body` (`in fields T`, `in indices ts`,
-/// or a sequence the compiler works out — the ruling of 2026-10-24, H462, dropped the
+/// or a sequence the compiler works out —, dropped the
 /// parentheses the head used to carry): children [0] a Repeated Data of the first values, [1] the
 /// walked shape (a type for `fields`, a value for `indices` and for a sequence), [2] the body (a
 /// block). The load holds the names of the state and the generator's bindings; the rounds are the
@@ -353,14 +351,6 @@ class MatchCaseLoad : public DataLoad {
             camel::core::error::InternalDiag::UnknownInternalError)
             .commit("MatchCaseLoad::geneCode() not implemented");
     }
-};
-
-class TryExprLoad : public DataLoad {
-  public:
-    TryExprLoad() : DataLoad(DataType::TryExpr) {}
-
-    const std::string toString() const override { return "TryExpr" + this->status(); }
-    const std::string geneCode() const override;
 };
 
 /// loop S1 = INIT1, ..., Sk = INITk (for BINDER in SEQUENCE)? (while CONDITION)? do BODY
@@ -444,7 +434,7 @@ class TupleDataLoad : public DataLoad {
     const std::string geneCode() const override;
 };
 
-/// `( static for (n, F) in fields T => e )`: the generator is child 0. The elements come from
+/// `( static for n, F in fields T => e )`: the generator is child 0. The elements come from
 /// the rounds in declaration order; the type is `TupleType` of the rounds' value types.
 class TupleCompLoad : public DataLoad {
   public:
@@ -454,7 +444,7 @@ class TupleCompLoad : public DataLoad {
     const std::string geneCode() const override;
 };
 
-/// `{ static for (n, F) in fields T => e }`: the generator is child 0. The fields keep the names
+/// `{ static for n, F in fields T => e }`: the generator is child 0. The fields keep the names
 /// and order of `T`; the type is a `StructType` of the rounds' value types.
 class StructCompLoad : public DataLoad {
   public:
@@ -464,7 +454,7 @@ class StructCompLoad : public DataLoad {
     const std::string geneCode() const override;
 };
 
-/// `T { static for (n, F) in fields T => e }`: child 0 is the type `T`, child 1 the generator.
+/// `T { static for n, F in fields T => e }`: child 0 is the type `T`, child 1 the generator.
 /// The result has the field names and the kind of `T`, and the rounds' value types.
 class ShapeCompLoad : public DataLoad {
   public:
