@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-271 diagnostics: 254 errors, 17 warnings. 15 carry a machine-applicable edit, 256 say why they carry none.
+272 diagnostics: 255 errors, 17 warnings. 15 carry a machine-applicable edit, 257 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
