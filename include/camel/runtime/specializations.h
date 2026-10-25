@@ -36,6 +36,8 @@
 #pragma once
 
 #include "camel/core/slot.h"
+#include "camel/core/type/intern.h"
+#include "camel/core/type/text.h"
 #include "camel/runtime/graph_id.h"
 
 #include <cstddef>
@@ -64,11 +66,21 @@ struct RuntimeSpecializationBindingKey {
     RuntimeSpecializationBindingKind kind = RuntimeSpecializationBindingKind::Norm;
     size_t index                          = 0;
     /// The bound value; NullSlot for a binding that only refines the formal's type.
-    slot_t value                 = NullSlot;
+    slot_t value = NullSlot;
+    /// The instance's parameter type for a refinement, or the bound value's type. Compared and
+    /// hashed by its canonical id, never by the object: the parameter type is the declaration
+    /// with its type variables substituted and with the extents the declaration does not name
+    /// left as it declared them (src/runtime/draft_inline.cpp, instanceParameterType), and two
+    /// spellings of one instance are two objects -- comparing those would give a recursion a new
+    /// key, and a new copy of the callee, at every lap.
     camel::core::type::Type *type = nullptr;
     uint8_t runtimeFlags         = 0;
 
-    bool operator==(const RuntimeSpecializationBindingKey &other) const = default;
+    bool operator==(const RuntimeSpecializationBindingKey &other) const {
+        return kind == other.kind && index == other.index && value == other.value &&
+               runtimeFlags == other.runtimeFlags &&
+               camel::core::type::sameCanonicalType(type, other.type);
+    }
 };
 
 /// What an entry was made for: the callee graph by identity and content, and the bindings in the
@@ -87,8 +99,8 @@ struct ProgramSpecializationKeyHasher {
         seed ^= static_cast<size_t>(key.baseRevision) + 0x9e3779b97f4a7c15ull + (seed << 6) +
                 (seed >> 2);
         for (const RuntimeSpecializationBindingKey &binding : key.bindings) {
-            const size_t h =
-                std::hash<const void *>{}(static_cast<const void *>(binding.type));
+            const size_t h = std::hash<uint32_t>{}(
+                camel::core::type::TypeTable::instance().canonicalId(binding.type));
             seed ^= h + 0x9e3779b97f4a7c15ull + (seed << 6) + (seed >> 2);
             seed ^= std::hash<size_t>{}(binding.index) + 0x9e3779b97f4a7c15ull + (seed << 6) +
                     (seed >> 2);

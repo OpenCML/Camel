@@ -23,6 +23,8 @@
 #include "camel/core/operator_table.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/core/type/composite/array.h"
+#include "camel/core/type/intern.h"
+#include "camel/core/type/text.h"
 #include "camel/core/type/typevar.h"
 #include "camel/runtime/draft_clone.h"
 #include "camel/runtime/draft_types.h"
@@ -471,7 +473,8 @@ DraftStaticValue tryResolveStaticValue(const GraphDraft &draft, gc_node_ref_t no
             const auto normInputs = draft.normInputsOf(canonicalId);
             const DraftNodeHeader *source =
                 normInputs.empty() ? nullptr : draft.header(normInputs.front());
-            if (!source || !source->dataType || source->dataType != header->dataType) {
+            if (!source || !source->dataType ||
+                !camel::core::type::sameCanonicalType(source->dataType, header->dataType)) {
                 return resolved;
             }
             canonicalId = normInputs.front();
@@ -598,7 +601,10 @@ std::vector<DraftFormalBinding> collectDirectFuncSpecializations(
     // past the first.
     const GraphId calleeRoot = calleeGraph->typeSpecializationRoot();
     const GraphId callerRoot = draft.typeSpecializationRoot();
-    const bool relaxNames = isValid(calleeRoot);
+    // Either lap is past the first: the callee is itself an instance of this declaration, or the
+    // call is written inside one (the caller's graph is an instance). Both bind no further
+    // dimension value, which is what keeps the total number of instances bounded.
+    const bool relaxNames = isValid(calleeRoot) || isValid(callerRoot);
 
     for (size_t i = 0; i < formals.size(); ++i) {
         DraftStaticValue staticValue = tryResolveStaticValue(draft, actualInputs[i]);
@@ -725,13 +731,20 @@ RuntimeSpecializationKey makeRuntimeSpecializationKey(
                       .runtimeFlags = kTypeBindingFlag,
                   });
     }
+    // The order is part of the key, so both sides must place two bindings of one type the same
+    // way: a type is ordered by its canonical id (specializations.h) and not by the address of
+    // whichever object states it, or one instance would be two keys.
+    const auto orderOf = [](const RuntimeSpecializationBindingKey &binding) {
+        return std::tuple{
+            binding.kind,
+            binding.index,
+            camel::core::type::TypeTable::instance().canonicalId(binding.type),
+            binding.value,
+            binding.runtimeFlags};
+    };
     std::sort(
-        key.bindings.begin(),
-        key.bindings.end(),
-        [](const RuntimeSpecializationBindingKey &lhs, const RuntimeSpecializationBindingKey &rhs) {
-            return std::tie(lhs.kind, lhs.index, lhs.type, lhs.value, lhs.runtimeFlags) <
-                   std::tie(rhs.kind, rhs.index, rhs.type, rhs.value, rhs.runtimeFlags);
-        });
+        key.bindings.begin(), key.bindings.end(),
+        [&orderOf](const auto &lhs, const auto &rhs) { return orderOf(lhs) < orderOf(rhs); });
     return key;
 }
 
