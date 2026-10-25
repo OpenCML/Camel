@@ -333,7 +333,7 @@ enum class SemanticDiag : uint32_t {
     FoldCallNotEvaluable = 0x0001C9,
 
     // Defaults of ordinary parameters and ordinary arguments given by name (design principles
-    // 4.4, handover H276). 0x1CD and up, after the constant-folding codes of h271. The `with`
+    // 4.4). 0x1CD and up, after the constant-folding codes. The `with`
     // parameter's forms are 0x1B7-0x1BE.
     /// A name in a call's argument list names no parameter of the callee.
     ParamArgumentUnknown = 0x0001CD,
