@@ -53,6 +53,12 @@ desc = "Every example beside the tutorial runs as the file it is: what a tutoria
 # `timeout_ms` is 30 s for every entry: each is a chapter example whose run takes a fraction of a
 # second, which leaves a wide margin on a loaded host without hiding a program that hangs.
 
+#
+# Nineteen of the entries below name a file whose number is the first outline's, not this one: the
+# examples of the chapters that outline numbered 6 to 16, kept under the names they were written
+# with. Each one's `desc` opens with the chapter that teaches it today -- `06_sync_body.cml` is
+# chapter 10's example, `15_tensor.cml` is chapter 14's -- so a moved example can be told from a new
+# one at a glance, and the same is said of chapter 18's files at their own section below.
 [defaults]
 kind = "snapshot"
 snapshot_stream = "stdout"
@@ -209,7 +215,7 @@ golden = "golden/tutorial_examples/10_nullable.txt"
 
 [[tests]]
 name = "tutorial.examples.11_collections"
-desc = "Map, array and set operations on the same data: lookup with a default, insert, keys and values, and set union and difference."
+desc = "Chapter 6: map, array and set operations on the same data: lookup with a default, insert, keys and values, and set union and difference."
 case = "../../../docs/tutorial/examples/11_collections.cml"
 golden = "golden/tutorial_examples/11_collections.txt"
 
