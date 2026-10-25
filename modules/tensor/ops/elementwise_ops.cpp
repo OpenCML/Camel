@@ -122,13 +122,19 @@ operandType(const InferContext &ctx, const TensorFacts &lhs, const TensorFacts &
     if (!ctx.sourceLevel() || isConstantScalar(ctx, scalarIndex)) {
         return computed;
     }
+    // A refusal names the writing that fits either intent: the operand is converted to the
+    // element type, and a scalar the program meant to read out of the array is reduced to one. The
+    // second spelling is what a `for` round of an open-rank array needs -- the round is the array
+    // itself and not its element, so the conversion of the scalar operand alone would leave the
+    // program the author meant to write without a way to say it.
     throw std::invalid_argument(
         "the scalar operand has type '" + scalar->toString() + "', but the tensor's element "
         "type is '" +
         typeCodeToString(*tensor.dtype) +
         "': a tensor operator computes in its element type, and there "
         "is no implicit conversion between numeric types (write the conversion, " +
-        typeCodeToString(computed) + "(value))");
+        typeCodeToString(computed) +
+        "(value); a scalar read out of the array is written sum(v) or an explicit conversion)");
 }
 
 InferFn binaryInfer(bool producesFloat) {

@@ -259,6 +259,20 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
 [[tests]]
+name = "loops.open_rank_round_scalar_read"
+desc = "A round of an array whose rank is open is that array, not its element (`Tensor<f32>` is `f32[..]`), so the scalar reading of the round -- `s + v` where `s` is the state -- is refused when the program is compiled, with the position of the operator that cannot take the two operands. The report keeps the types of both operands and names a writing that fits either intent: the conversion of the scalar operand, and the reduction that reads a scalar out of the array, `sum(v)`, which is the reading this round needs."
+kind = "negative"
+case = "../../../cases/loops/open_rank_round_scalar_read.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
+expect_diagnostic_line = 11
+expect_diagnostic_column = 39
+expect_output_contains = ["Invalid call to '__add__' with argument types <> (float, f32[..])", "the scalar operand has type 'float', but the tensor's element type is 'f32'", "write the conversion, f32(value)", "a scalar read out of the array is written sum(v) or an explicit conversion"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
 name = "loops.iterate_string.macro"
 desc = "std::macro runs a macro function's loop over a string at compile time: the calls with '中a' and 'abc' fold to the constants 2 and 3."
 kind = "behavior"
