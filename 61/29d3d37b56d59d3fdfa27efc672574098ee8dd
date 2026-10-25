@@ -1,0 +1,33 @@
+tip=6129d3d37 H554 第四轮：入口名一族全绿（66 → 59，7 条转绿，新增红 0）
+
+数字
+- **66 → 59**（gate-18：`total: 6362, pass: 6275, fail: 59, skip: 12, known failures: 16`，RUN_EXIT=1）；与 gate-15 逐名对比 **fixed 7、new 0**。
+- 入口名一族：`generics`+`namespace_rules`+`modules_213`+`native_declarations` 四个 plan 合跑 `total: 230, pass: 230, fail: 0`（逐字），即裁定点名的 `explicit_type_arguments`、`ns.p18_self_module`、`ns.p30_using_own_nested`、`modules_213.self_entry`、`native.entry_declaration_names_the_program` 全部 `[PASS]`。
+- 中途曾一度 69（+10 新红）：那 10 条全是把旧名 `main` 钉在断言里的用例（`decl.tags`、`reads`、`read_by.absent`、`static_field_tags_*`、`float_argument`、`poison:compile.tags:decl.tags`、`render.sem_import_errors`、`tutorial.examples.shapes`、`run_compile_failure_counts_only_the_program_modules`），把钉值改成各用例自己的文件名后归零，未改语义、未弱化断言。
+
+① 入口模块按名可查：改前 → 改后
+- 定位（`-vv` 实测）：真正的入口构造不在 `src/service/semantic/analyze.cpp`，而在 **`tools/camel-cli/main.cpp:277`**（`make_shared<UserDefinedModule>("main", targetFile, …)`）；同族还有 `tools/camel-cli/timeit.cpp:262`、`tools/codegen/main.cpp:82`、`tools/debugger/src/compile.cpp:70`。证据：在 `analyze.cpp` 里加临时日志后跑 `camel -vv self_entry.cml`，只出现 `[INFO] <Module> Start compiling module 'main' from file '…/self_entry.cml'`，**没有**我那条日志——那条路径根本没跑。
+- 一处定义：`include/camel/core/module/module.h` 新增 `camel::core::module::moduleNameForPath(path)`（文件名的 stem），5 个入口构造点全部改读它（`analyze.cpp` 原来那段 `pathToUtf8(pathFromUtf8(path).stem())` 也并进来）。改后逐字：`Start compiling module 'self_entry' from file '…/self_entry.cml'`（改前 `'main'`）。
+- 按名可查：`include/camel/core/context/context.h:301` 的 `setMainModule` 由内联改为声明，`src/core/context/context.cpp:526` 定义——**入口模块就以「文件路径」登记进 `modulesByPath_`，和别的模块同一个入口**（`acceptModule` 用的是同一个缓存，只是入口不是被导入的，所以从前没进去）。这样自导入按名命中自己：`self_entry::twice`、`generic_explicit_types::id` 由 `Unresolved reference` 转为 `[PASS]`。
+- `mainModule_` 特判的去留：`context.cpp:397-400/519/877-881` 的 `mainModule_` 判读**保留**，但只是**显示/生命周期**用途（程序级导入的目录、不许二次加载、报告里不重复列诊断），不是命名用途——命名现在全走 `moduleNameForPath`；删不掉，因为入口确实没有导入者。
+
+② 编译单元里的模块名：`implicit_protocol.cml:7:1` 的 `main:exists` → 文件名前缀
+- `src/compile/gir/builder_modules.cpp:415-416` 用 `unit_->module->name()` 拼 `where + ":" + name`，**未改**（同一个规则一处定义：它读的就是模块自己的名字）。
+- 改后逐字：`(implicit_protocol)…/implicit_protocol.cml:7:1: [Error]: The declaration 'exists' names the operator 'implicit_protocol:exists', which no loaded module implements.`（改前 `main:exists`）；`native.entry_declaration_names_the_program` 的钉值 `implicit_protocol:exists` 随之 `[PASS]`。
+
+`main` 作入口占位名的残留（4 处，均非入口命名）
+- `src/compile/gir/builder.cpp:57-58`：入口**函数**名 `main`（与模块名两回事，语言要求程序有 `main`）。
+- `src/service/semantic/queries.cpp:1702`：函数 `main` 无返回类型时的特判。
+- `src/passes/trans/cpp/cpp_types.cpp:207`、`src/passes/trans/cpp/program_emitter.cpp:624`：C++ 保留字/文件名表。
+- `src/passes/test/facts.cpp`、`src/passes/trans/cml/cml.cpp:294`：测试与打印用的图名。
+
+你新加的三条（遍名按文件名解析、`PassNotProvidedByModule`、三条用例）：**未开始**——本轮全部预算用在把入口名一族做完并守住新增红 0；这一条要和 `docs/language` 9.4 示例、诊断编号分配（`scripts/diagnostics-catalog.mjs`）一起做，我下一轮从它开始，先给 `camel counts.cml counts::simplify` / `./counts.cml` / 绝对路径三种写法的改前→改后读数。
+
+五个检查器（逐字，全部 exit 0，改后重跑）
+- `diagnostics registry: 278 codes, every one with a name, a message and what it says about an edit (15 with one, 263 with a reason), no value used twice, and the emitted headers agree`
+- `docs/reference/camel-for-ai.md is what its sources produce: 4 generated region(s), 756 entries, 278 diagnostics, 34 diagnostic name(s) cited by the prose, 106375 characters (budget 112000)`
+- `no unverified citation: 413 of 413 symbol citation(s) verified, 1876 path citation(s) across 4802 file(s)`
+- `headers: every one of 1364 member files carries the two-line header (C/C++ 1086, Camel 44, scripts 234)`
+- `grammar: 130 productions, in step with the parser, the token table and the language reference`
+
+提交：`d19ac7909`（一处定义 + 入口按文件登记）、`84cd129d0`（tags/static_field_tags/modules/graph 的钉值）、`6129d3d37`（两个黄金 + 入口诊断钉值）。纪律：未推 origin；未碰 `docs/language/**` 散文（9.4 的 `./` 留给文档车道）；未碰其它工作树/分支；未在 Windows 构建。
