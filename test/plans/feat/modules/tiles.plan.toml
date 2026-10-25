@@ -922,7 +922,7 @@ timeout_ms = 60000
 
 [[tests]]
 name = "gpu_scope.host_effect_is_the_boundary"
-desc = "A host effect in a `#gpu` scope is the scope's boundary, not a refusal (plan 2.4, question 3): `println` written between two device operators stays on the host, and the scope is still one device unit around it. Before the ruling the same program stopped with 'cannot run on the device' on `:io/println`, and the effect could not be written at all. What the effect written *in the body* does when the pass has outlined the scope around it is recorded as an open question and is not pinned here."
+desc = "A host effect in a `#gpu` scope is the scope's boundary, not a refusal (plan 2.4, question 3): `println` written between two device operators stays on the host, and the scope is still one device unit around it. Before the ruling the same program stopped with 'cannot run on the device' on `:io/println`, and the effect could not be written at all. The effect in the body is part of the program: `--devices cpu` runs the whole scope on the host, writes no transfer at all, and still prints what the effect observes — nothing waits, so the run counts no synchronisation. Before the effect ran, the run printed `main`'s observation alone, and this entry is red on exactly that: the body's line is missing."
 kind = "behavior"
 case = "../../../cases/modules/tiles/gpu_scope_host_effect.cml"
 args = ["--devices", "cpu", "${case}", "tiles::compile", "std::nvm"]
@@ -934,7 +934,10 @@ const lines = input.normalized.stdout.split(String.fromCharCode(10)).filter(Bool
 const both = input.normalized.stdout + input.normalized.stderr
 assert(!both.includes('error['), both)
 assert(!both.includes('cannot run on the device'), both)
-assert(input.stdout.includes('result tensor([      3.,       5.,       7.], dtype=float32)'), input.stdout)
+const observed = lines.indexOf('12.0')
+const result = lines.findIndex((line) => line.includes('result tensor('))
+assert(observed >= 0, input.stdout)
+assert(result > observed, input.stdout)
 const row = lines.find((line) => line.startsWith('TILES_PLACEMENT ') && line.includes('"graph":"observed"'))
 assert(row, JSON.stringify(lines))
 const report = JSON.parse(row.slice('TILES_PLACEMENT '.length))
@@ -945,7 +948,7 @@ timeout_ms = 30000
 
 [[tests]]
 name = "gpu_scope.host_effect_synchronises"
-desc = "Where the host observes the scope's value, the value is downloaded there and `std::profile` counts the synchronisation (plan 3.2). The observation point in this program is `main`'s print of the scope's result, and the transfer is written because a device exists to write it for: a run without one runs the whole program on the host and counts nothing."
+desc = "Where the host reads a value the device holds, the pass writes an explicit `download` there and the run waits there: `std::profile` counts the waits in `device_work.syncs` (waits, not values — `downloads`/`transfers` count values). The observation point of this program is the effect in the scope's body, whose `println` reads the segment's value, and it is the transfer the scope's boundary alone does not need. The numbers are the back end's only configuration: one device, one stream, the public synchronous path, so every transfer batch is one wait. The run counts 3 — the argument's upload, the value the effect reads, and the value `main` reads — where the same program counted 2 while the body's effect was dropped. `--devices cpu` runs the segment on the host and counts none of them; `to_host_bytes` carries both readings the host makes."
 kind = "behavior"
 case = "../../../cases/modules/tiles/gpu_scope_host_effect.cml"
 args = ["--devices", "0", "${case}", 'std::profile json="${test_tmp}/profile.json"', "tiles::compile", "std::nvm"]
@@ -955,10 +958,14 @@ verify_script = """
 async ({ input, assert }) => {
 const fs = await import('node:fs')
 const report = JSON.parse(fs.readFileSync(input.test_tmp + '/profile.json', 'utf8'))
-assert(input.stdout.includes('result tensor([      3.,       5.,       7.], dtype=float32)'), input.stdout)
+const lines = input.normalized.stdout.split(String.fromCharCode(10)).filter(Boolean)
+const observed = lines.indexOf('12.0')
+const result = lines.findIndex((line) => line.includes('result tensor([      3.,       5.,       7.], dtype=float32)'))
+assert(observed >= 0, input.stdout)
+assert(result > observed, input.stdout)
 assert(report.device_work.kernels >= 1, JSON.stringify(report.device_work))
-assert(report.device_work.syncs >= 1, JSON.stringify(report.device_work))
-assert(report.device_work.to_host_bytes >= 12, JSON.stringify(report.device_work))
+assert(report.device_work.syncs === 3, JSON.stringify(report.device_work))
+assert(report.device_work.to_host_bytes === 20, JSON.stringify(report.device_work))
 }
 """
 timeout_ms = 60000

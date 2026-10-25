@@ -1,14 +1,20 @@
-/// A host effect inside a `#gpu` scope is its boundary, not a refusal (docs/design/gpu/plan.cn.md
-/// 2.4, the review's third ruling): `print` is not an operator the device must run, so it stays on
-/// the host and the value it observes is downloaded at the observation point. `std::profile`
-/// counts that synchronisation.
+/// A host effect inside a `#gpu` scope is the scope's boundary, not a refusal (docs/design/gpu/plan.cn.md
+/// 2.4): `print` is not an operator the device must run, so it stays on the host and the value it
+/// observes is downloaded at the observation point. `std::profile` counts that synchronisation.
 ///
-/// The two elementwise operators of `observed` are a device segment; the `println` written between
-/// them is on the host and reads the segment's result, which is why a download appears there. The
-/// print observes the device value, so it is a root of its own even though nothing depends on what
-/// it returns: a reading of the graph that followed values alone would drop it and the observation
-/// would neither run nor be transferred. Before the ruling the scope stopped with 'unsupported or
-/// effectful operator', so the program could not be compiled at all.
+/// The effect written in the body is a root of the graph it is written in, exactly as the graph's
+/// value and its exit are: what it prints is visible whether or not a value depends on what it
+/// returns, so nothing may drop it from the execution plan. The two elementwise operators of
+/// `observed` are a device segment and the `println` between them reads the segment's result, which
+/// is why a `tiles:download` stands there and the run waits there too. Both ways of running print it:
+/// with a card the observation point is a real transfer, and `--devices cpu` runs the segment on the
+/// host and writes no transfer at all.
+///
+/// The numbers are taken in the one configuration the back end has today: one device, one stream, the
+/// public synchronous path, so every transfer batch is one wait. `syncs` counts waits, where
+/// `downloads`/`transfers` count values; with a card this run counts 3 -- the argument's upload, the
+/// value the effect reads, and the value `main` reads -- and the same program without the effect in
+/// the body counts 2.
 ///
 /// Red when: the scope is refused for the effect, the effect does not run (nothing is printed), or
 /// the observation point is not transferred.
