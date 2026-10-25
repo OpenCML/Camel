@@ -121,22 +121,31 @@ jobs:
             exit 1
           fi
 
-      - name: Select Clang
+      - name: Select Clang, Conan and auditwheel
         run: |
           echo "CC=clang" >> "$GITHUB_ENV"
           echo "CXX=clang++" >> "$GITHUB_ENV"
           # auditwheel rewrites the RPATHs of the bundled libraries; the launcher's
           # `$ORIGIN/../libs` is what the wheel relies on.
           "$CAMEL_PYPI_PYTHON" -m pip install --upgrade pip conan auditwheel
-          "$CAMEL_PYPI_PYTHON" -m conan --version
+          # Conan 2.33 has no `conan.__main__` -- `python -m conan` ends with "No module named
+          # conan.__main__; 'conan' is a package and cannot be directly executed" -- so the
+          # console script is the only way in. And scripts/common.js reaches Conan as
+          # `execSync('conan install ...')`, i.e. through /bin/sh, while the manylinux image
+          # keeps /opt/python/<abi>/bin off PATH: without the directory on PATH the build step
+          # dies at `/bin/sh: conan: command not found` long after this step looked fine.
+          # $GITHUB_PATH carries it to the later steps; the export covers this one.
+          echo "$(dirname "$CAMEL_PYPI_PYTHON")" >> "$GITHUB_PATH"
+          export PATH="$(dirname "$CAMEL_PYPI_PYTHON"):$PATH"
+          conan --version
           "$CAMEL_PYPI_PYTHON" -m auditwheel --version
 
       - name: Conan default profile
         # The detected cppstd is 14 and taskflow 3.10.0 requires 17, so `conan install` would
         # end with "Current cppstd (14) is lower than the required C++ standard (17)".
         run: |
-          "$CAMEL_PYPI_PYTHON" -m conan profile detect --force
-          profile="$("$CAMEL_PYPI_PYTHON" -m conan profile path default)"
+          conan profile detect --force
+          profile="$(conan profile path default)"
           python3 - "$profile" <<'EOF'
           import re, sys
           path = sys.argv[1]
