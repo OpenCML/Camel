@@ -1333,7 +1333,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `LambdaParametersNeedParentheses` | E | A lambda's parameters need their parentheses: write '(x) => e', not 'x => e'. |
 | `ComparisonAcrossLines` | W | This '>' is read as a comparison with the next line, which starts with {0}: two statements may have been joined into one. |
 
-**Semantic** (`SemanticDiag`) — 204 (192 errors, 12 warnings)
+**Semantic** (`SemanticDiag`) — 207 (195 errors, 12 warnings)
 
 | `Redeclaration` | E | Redeclaration of reference: '{0}'. |
 | `ModuleNotFound` | E | Module '{0}' not found. {1} |
@@ -1436,6 +1436,8 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `RuleTagNotRequires` | E | A rule may be preceded only by '#requires<...>', not by the tag '{0}'. |
 | `TagParameterType` | E | The parameter '{0}' of the tag '{1}' is declared '{2}': a tag parameter is an int, a float, a bool, a string or a func. |
 | `TagShadowsPermission` | E | The tag '{0}' is declared with the name of a tag of the language. |
+| `TagFieldNameAmbiguous` | E | Two tags on this field are written '{0}': '{1}' and '{2}'. |
+| `TagFunctionArgumentNotReadable` | E | The tag '{0}' takes a function for its parameter '{1}', and a 'static' head cannot give a function value yet. |
 | `StaticMatchNotExhaustive` | E | No case of this 'match type' selects the type '{0}'. |
 | `StaticMatchUnreachableCase` | E | The case '{0}' selects every type the cases after it could select. |
 | `StaticTypeNotConcrete` | E | The type matched here is still '{0}' when the function is instantiated. |
@@ -1518,6 +1520,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `CompOperandGenericWithoutType` | E | '..' composes two functions, and its {0} operand, the generic function '{1}', has no instance here: write its type arguments ('{1}::<int>'), or give the whole expression an expected function type. |
 | `RangeTwoArgumentsRemoved` | E | The two-parameter 'range(a, b)' is gone; write the interval 'a..b'. |
 | `RangeStepZero` | E | The range 'range({0}, {1}, 0)' has a step of 0, so it is no sequence of integers. |
+| `SliceStepZero` | E | The slice 't[a:b:s]' has a step of 0, so it takes no element at all, whatever its bounds are. |
 | `IgnoredSideEffect` | W | {0} is not in a sync block, and {1}. |
 | `EffectNotExecuted` | W | {0} has side effects but is never executed: nothing depends on it and it is not in a sync block. |
 | `ExitInUnusedBranch` | W | This '{0}' gives the value of the '{1}' it is in, and nothing uses that value: it does not leave the function. |
@@ -1572,7 +1575,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `ConstantExpressionFaults` | W | This constant expression faults whenever it is evaluated ({0}); it is not folded. |
 | `TranslationLinksRuntime` | W | std::cpp has no standalone translation of {0}: the program it writes calls the Camel runtime there and is built with libcamel. |
 
-**Semantic** (`SemanticDiag`) — 204 (192 errors, 12 warnings)
+**Semantic** (`SemanticDiag`) — 207 (195 errors, 12 warnings)
 
 | `ReducedPrecisionUnsupported` | E | The call of '{0}' cannot take a value of the reduced-precision element type '{1}'. |
 | `ImplOnBodylessDeclaration` | E | The body-less declaration '{0}' cannot carry '#impl<{1}>': it has no Camel body. |

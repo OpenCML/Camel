@@ -141,7 +141,8 @@ calls a user function. A `<=>` rule gives two `Rule`s.
 
 `rewrite` and `saturate` leave the functions that are the sides of rules (`__lhs`, `__rhs`, and
 `__when`) alone. The result is `Program!`; the errors are `RuleInvalid`, `RuleTwoWay`,
-`NoCostModel`, `RewriteInvalid`. A pass is
+`NoCostModel` and `RewriteConflict` — the last one when a rule's condition commits, so the program
+the rewrite started from is replaced while it runs. A pass is
 a function `(p: Program) => Program!` (`camel prog.cml mod::pass std::nvm`):
 
 ```camel

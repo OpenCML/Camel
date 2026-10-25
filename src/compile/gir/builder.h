@@ -1792,8 +1792,26 @@ class Builder {
     /// with no arguments is the empty record, and so is a field with no tags at all. Empty for a
     /// type that is not a named struct and for a type declared by another module (the facts of a
     /// field live in the module that declares the type).
+    /// `head` is the `static` node the tags are read at: two tags of the field that are written
+    /// with the same name, and an argument the reading cannot give as a value, are reported there.
     node_handle_t staticFieldTagsNode(
-        Type *subject, size_t index, const GCT::node_ptr_t &where);
+        Type *subject, size_t index, const GCT::node_ptr_t &where, const GCT::node_ptr_t &head);
+    /// The record of a tag's arguments: one field per argument, named by the parameter it was
+    /// written for (`w` for `#width<8>` under `tag width<w: int>`). A tag with no arguments is the
+    /// empty record; several arguments were kept as a tuple and are separated here. `qualified` is
+    /// the tag's qualified name, for a report that has no declaration to read.
+    data_ptr_t tagArgumentsRecord(
+        const camel::core::tag::Decl *decl, const std::string &qualified,
+        camel::core::attr::AttrValueId id, const GCT::node_ptr_t &head);
+    /// One argument of a tag as the compile-time value the program reads it as: the type the tag's
+    /// declaration gives that parameter decides the kind, never the kind the fact is stored as
+    /// (`#width<true>` under `w: bool` reads back as a `bool`, not as the 1 the fact holds, and a
+    /// real under `f32` as an `f32`). A parameter declared `func` has no value the compiler can
+    /// give here yet: its fact is a graph reference, an internal number, so the reading is refused
+    /// at `head` instead of giving that number as a string.
+    data_ptr_t tagArgumentValue(
+        const camel::core::tag::Decl *decl, const std::string &qualified, size_t index,
+        camel::core::attr::AttrValueId id, const GCT::node_ptr_t &head);
     // functionValueOf, and FunctionNameAsValue when `name` has no single function value.
     node_handle_t
     namedValueOf(node_handle_t node, const std::string &name, const GCT::node_ptr_t &origin);
