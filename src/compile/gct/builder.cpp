@@ -1341,6 +1341,58 @@ Builder::resourceSignatureOf(const AST::node_ptr_t &funcTypeAst, const FunctionT
         throw BuildAbortException();
     }
     if (clause->pure()) {
+        // `pure` promises the empty set (design effects plan 4.3, step 5). A `var` parameter is a
+        // resource by itself: the cell is shared with the caller, so a call through the parameter
+        // reads and writes that cell wherever the body is written, and no body can bring the set
+        // back to empty. So a signature that writes `pure` and gives a parameter `var` is refused
+        // where it is written, and the note points at the parameter that breaks the promise (the
+        // author's ruling: the error is at the declaration's clause, the note at the first use the
+        // signature does not promise).
+        const auto varRangeOf =
+            [&](const std::string &name) -> std::optional<camel::core::error::TokenRange> {
+            for (size_t list = 0; list < 2; ++list) {
+                const auto &params = funcTypeAst->atAs<AST::RepeatedLoad>(list);
+                for (size_t pi = 0; pi < params->size(); ++pi) {
+                    const auto &pair = (*params)[pi];
+                    if (pair == nullptr) {
+                        continue;
+                    }
+                    const auto &load = pair->loadAs<AST::NamedPairLoad>();
+                    if (load->isVar() && load->getRef().ident() == name) {
+                        return load->tokenRange();
+                    }
+                }
+            }
+            return std::nullopt;
+        };
+        const auto varNameAt = [&](size_t index) -> std::string {
+            // The parameter numbering a call uses: `with` parameters first, ordinary ones after
+            // them (the same numbering resourceSignatureOf uses below).
+            const size_t withCount = built->withTypesCount();
+            if (index < withCount) {
+                return built->withIsVarAt(index) ? std::string(built->argNameAt(index))
+                                                 : std::string();
+            }
+            const size_t norm = index - withCount;
+            return built->normIsVarAt(norm) ? std::string(built->argNameAt(index)) : std::string();
+        };
+        for (size_t i = 0; i < built->withTypesCount() + built->normTypesCount(); ++i) {
+            const std::string name = varNameAt(i);
+            if (name.empty()) {
+                continue;
+            }
+            // The builder is kept by value: `of` hands out a temporary and the chain returns a
+            // reference to it, so a reference held across statements would outlive the builder.
+            auto diag = diags_->of(SemanticDiag::UsesPromiseViolated).at(clause->tokenRange());
+            if (const auto range = varRangeOf(name); range.has_value()) {
+                diag.related(
+                    *range,
+                    "this parameter is a resource: a call through it writes the caller's cell, so "
+                    "the call touches it wherever the body is written");
+            }
+            diag.commit(built->toString(), "the 'var' parameter '" + name + "'");
+            throw BuildAbortException();
+        }
         return signature;
     }
     // The parameters the clause may name, in the numbering a call uses: with parameters first,
@@ -5177,7 +5229,7 @@ node_ptr_t Builder::visitRefData(const AST::node_ptr_t &ast) {
 /*
 Type(TypeType type) :=
     StreamType | NullableType | TypeExpr | ArrayType | StructType | TupleType
-    | FuncType | SpecType | UnitType | InferType | DataType | RefType ;
+    | FuncType | SpecType | InferType | RefType | EnumType ;
 */
 Type *Builder::visitType(const AST::node_ptr_t &ast) {
     ENTER("Type");
@@ -5222,14 +5274,8 @@ Type *Builder::visitType(const AST::node_ptr_t &ast) {
     case AST::TypeType::Spec:
         res = visitSpecType(ast);
         break;
-    case AST::TypeType::Unit:
-        res = visitUnitType(ast);
-        break;
     case AST::TypeType::Infer:
         res = visitInferType(ast);
-        break;
-    case AST::TypeType::Data:
-        res = visitDataType(ast);
         break;
     case AST::TypeType::Ref:
         res = visitRefType(ast);
@@ -5326,14 +5372,11 @@ Type *Builder::visitNullableType(const AST::node_ptr_t &ast) {
 /*
 TypeExpr(TypeOp op) := Type lhs, Type rhs ;
 enum TypeOp {
-    Inter,
-    Diff,
-    KeyUnion,
-    KeyInter,
-    KeyDiff,
-    Specialize, // Type type, (Type | Data)* args
     TypeOf
 }
+The reserved type operators (`&`, `\`, `+`, `-`, `^`) and the older spelling of specialization were
+read as `TypeOp` codes and refused here; they are not in the language, so the parser refuses them
+first and `typeof` is the only operation a `TypeExpr` carries.
 */
 Type *Builder::visitTypeExpr(const AST::node_ptr_t &ast) {
     ENTER("TypeExpr");
@@ -5344,50 +5387,7 @@ Type *Builder::visitTypeExpr(const AST::node_ptr_t &ast) {
     const auto &typeExpr = ast->loadAs<AST::TypeExprLoad>();
     AST::TypeOp op       = typeExpr->op();
 
-    // Handle different type operations based on the TypeOp enumeration
     switch (op) {
-    case AST::TypeOp::Inter: {
-        diags_->of(SemanticDiag::FeatureNotSupported)
-            .at(ast->load()->tokenRange())
-            .commit("TypeOp::Inter");
-        throw BuildAbortException();
-    } break;
-
-    case AST::TypeOp::Diff: {
-        diags_->of(SemanticDiag::FeatureNotSupported)
-            .at(ast->load()->tokenRange())
-            .commit("TypeOp::Diff");
-        throw BuildAbortException();
-    } break;
-
-    case AST::TypeOp::KeyUnion: {
-        diags_->of(SemanticDiag::FeatureNotSupported)
-            .at(ast->load()->tokenRange())
-            .commit("TypeOp::KeyUnion");
-        throw BuildAbortException();
-    } break;
-
-    case AST::TypeOp::KeyInter: {
-        diags_->of(SemanticDiag::FeatureNotSupported)
-            .at(ast->load()->tokenRange())
-            .commit("TypeOp::KeyInter");
-        throw BuildAbortException();
-    } break;
-
-    case AST::TypeOp::KeyDiff: {
-        diags_->of(SemanticDiag::FeatureNotSupported)
-            .at(ast->load()->tokenRange())
-            .commit("TypeOp::KeyDiff");
-        throw BuildAbortException();
-    } break;
-
-    case AST::TypeOp::Specialize: {
-        diags_->of(SemanticDiag::FeatureNotSupported)
-            .at(ast->load()->tokenRange())
-            .commit("TypeOp::Specialize (a.k.a. Generics or T<U, V, ...>)");
-        throw BuildAbortException();
-    } break;
-
     case AST::TypeOp::TypeOf: {
         // `typeof e`: the type of the value `e` will have. The placeholder keeps the expression
         // node; the graph builder builds it where this type is used and replaces the
@@ -5397,9 +5397,6 @@ Type *Builder::visitTypeExpr(const AST::node_ptr_t &ast) {
         node_ptr_t expression = visitData(ast->at(0));
         res                   = TypeOfType::create(expression);
     } break;
-
-    default:
-        ASSERT(false, "Unknown TypeOp");
     }
 
     LEAVE("TypeExpr");
@@ -5840,17 +5837,6 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
 }
 
 /*
-UnitType(Ref ref) : Type type ;
-*/
-Type *Builder::visitUnitType(const AST::node_ptr_t &ast) {
-    ENTER("UnitType");
-    diags_->of(SemanticDiag::FeatureNotSupported).at(ast->load()->tokenRange()).commit("UnitType");
-    throw BuildAbortException();
-    LEAVE("UnitType");
-    return nullptr;
-}
-
-/*
 InferType(Ref ref) ;
 */
 Type *Builder::visitInferType(const AST::node_ptr_t &ast) {
@@ -5858,17 +5844,6 @@ Type *Builder::visitInferType(const AST::node_ptr_t &ast) {
     diags_->of(SemanticDiag::FeatureNotSupported).at(ast->load()->tokenRange()).commit("InferType");
     throw BuildAbortException();
     LEAVE("InferType");
-    return nullptr;
-}
-
-/*
-DataType() : Data data ;
-*/
-Type *Builder::visitDataType(const AST::node_ptr_t &ast) {
-    ENTER("DataType");
-    diags_->of(SemanticDiag::FeatureNotSupported).at(ast->load()->tokenRange()).commit("DataType");
-    throw BuildAbortException();
-    LEAVE("DataType");
     return nullptr;
 }
 
