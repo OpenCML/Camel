@@ -338,6 +338,14 @@ class Node {
         check(NodeKind::SFOR);
         return *payload_.names->items[1];
     }
+    /// SFOR: the name bound to the entry's tags in the body (`tags`, the third name of
+    /// `(n, F, tags)`); empty when the head names two things or one. The element of `fields T` is
+    /// the triple (name, type, tags); every other element gives one thing (`indices ts` the
+    /// position, a written sequence the element), which is the rule the head follows.
+    const std::string &staticForTagsName() const {
+        check(NodeKind::SFOR);
+        return *payload_.names->items[2];
+    }
     /// SFOR: the generator walks the positions of a tuple value (`indices ts`) rather than the
     /// fields of a type (`fields T`).
     bool staticForIndices() const {
@@ -392,7 +400,7 @@ class Node {
     /// SLOOP: the number of names of the state (k).
     size_t staticLoopStateCount() const {
         check(NodeKind::SLOOP);
-        return payload_.names->count - 2;
+        return payload_.names->count - 3;
     }
     /// SLOOP: the j-th name of the state.
     const std::string &staticLoopStateName(size_t j) const {
@@ -403,10 +411,17 @@ class Node {
     /// SLOOP: the name bound to the walked entry in the body (`n`, or `j` for `indices`).
     const std::string &staticLoopValueName() const {
         check(NodeKind::SLOOP);
+        return *payload_.names->items[payload_.names->count - 3];
+    }
+    /// SLOOP: the name bound to the entry's type in the body (`F`; empty for `indices` and for a
+    /// sequence).
+    const std::string &staticLoopTypeName() const {
+        check(NodeKind::SLOOP);
         return *payload_.names->items[payload_.names->count - 2];
     }
-    /// SLOOP: the name bound to the entry's type in the body (`F`; empty for `indices`).
-    const std::string &staticLoopTypeName() const {
+    /// SLOOP: the name bound to the entry's tags in the body (`tags`, the third name of
+    /// `(n, F, tags)`); empty when the head names two things or one. See `staticForTagsName`.
+    const std::string &staticLoopTagsName() const {
         check(NodeKind::SLOOP);
         return *payload_.names->items[payload_.names->count - 1];
     }

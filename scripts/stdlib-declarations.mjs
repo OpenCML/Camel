@@ -5,7 +5,7 @@
 // A module that has moved to a declaration module stays migrated (handover H137), and the
 // computed signatures a declaration cannot express have one recorded place (handover H180).
 //
-//   node scripts/stdlib-declarations.mjs --check
+//   node scripts/stdlib-declarations.mjs --check [--camel <path>]
 //
 // H19 moves a fixed-signature C++ module from `stdlib/signatures/<module>.cml` to
 // `stdlib/<module>.cml` and deletes the C++ `OperatorGroup` (H94, H104, H113, H115, H126,
@@ -103,11 +103,19 @@
 //
 // The output is one line per problem, each naming the file, the module and the operator, and a
 // final line starting `migrated modules stay migrated:`. Exit 1 when there is a problem.
+//
+// Check 3 needs a built compiler, and that install has to be this tree's build: the run refuses an
+// install whose `out/<tag>/build-info.json` does not match this tree (exit 2, naming the install
+// and its stamp) instead of reporting the differences between this tree's declarations and another
+// tree's registry -- the shape H149 guards, one rule with `scripts/release-gate.mjs`. `--camel
+// <path>` names the install to measure (this tree's `out/latest/bin/camel` without it); an explicit
+// path passes the same check, and `CAMEL_EXE` is gone (the author's ruling, 2026-10-25).
 
 import fs from 'node:fs'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
+import { defaultCamel, refuseInstallNotOfThisTree } from './install-stamp.mjs'
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const STDLIB_DIR = path.join(REPO_ROOT, 'stdlib')
@@ -995,9 +1003,12 @@ function staticChecks() {
 }
 
 // (3) Reused, not reimplemented: --verify-ops already checks both directions between the
-// declarations and the registered operators, their parameter counts and their purity.
-function verifyOps() {
-    const run = spawnSync(process.execPath, [REFERENCE, '--verify-ops'], {
+// declarations and the registered operators, their parameter counts and their purity. The child is
+// told which install to measure (`--camel`), so the install this script just proved belongs to this
+// tree is the one the comparison reads; a direct `--verify-ops` run applies the same stamp check
+// itself, so naming the path changes nothing but keeps the two runs in lockstep.
+function verifyOps(camel) {
+    const run = spawnSync(process.execPath, [REFERENCE, '--verify-ops', '--camel', camel], {
         encoding: 'utf8',
         maxBuffer: 1 << 26,
     })
@@ -1006,26 +1017,66 @@ function verifyOps() {
     }
     if (run.status !== 0) {
         const output = `${run.stdout || ''}${run.stderr || ''}`.trim()
-        const lines = output.split('\n').filter(Boolean).map((line) => `--verify-ops: ${line}`)
+        // Two things in the child's output are not problems, and counting them made one red run
+        // read "144 difference(s) between the declarations and the registered operators" and
+        // "145 problem(s) across 25 declaration module(s)" at the same time:
+        //
+        //   - a blank line. A child on Windows ends its lines with `\r\n`, so splitting on `\n`
+        //     leaves a lone `\r`, which `filter(Boolean)` keeps and this script then printed as a
+        //     `--verify-ops: ` problem of its own (it is how a stack trace became 13 problems);
+        //   - the child's own summary line. This script prints the same number in its own last
+        //     line, so the child's copy is a report, not a problem.
+        const lines = output
+            .split(/\r?\n/)
+            .map((line) => line.trimEnd())
+            .filter(Boolean)
+            .filter((line) => !/^\d+ difference\(s\) between the declarations and the registered operators$/.test(line))
+            .map((line) => `--verify-ops: ${line}`)
         return { ok: false, lines }
     }
     return { ok: true, summary: (run.stdout || '').trim().split('\n').filter(Boolean).pop() || '' }
 }
+
+const USAGE = 'usage: node scripts/stdlib-declarations.mjs --check [--camel <path>]'
+
 function main() {
     const args = process.argv.slice(2)
-    const mode = args[0] || '--check'
-    if (args.length > 1) {
-        console.log(`--check: unknown argument "${args[1]}"`)
-        console.log('usage: node scripts/stdlib-declarations.mjs --check')
+    let camelPath = null
+    const positional = []
+    for (let i = 0; i < args.length; i++) {
+        if (args[i] === '--camel') {
+            if (i + 1 >= args.length) {
+                console.log('--camel needs the path of the install to measure')
+                console.log(USAGE)
+                process.exit(2)
+            }
+            camelPath = path.resolve(args[++i])
+        } else if (args[i].startsWith('--camel=')) {
+            camelPath = path.resolve(args[i].slice('--camel='.length))
+        } else {
+            positional.push(args[i])
+        }
+    }
+    const mode = positional[0] || '--check'
+    if (positional.length > 1) {
+        console.log(`--check: unknown argument "${positional[1]}"`)
+        console.log(USAGE)
         process.exit(2)
     }
     if (mode !== '--check') {
-        console.log('usage: node scripts/stdlib-declarations.mjs --check')
+        console.log(USAGE)
         process.exit(2)
     }
 
+    // Before anything this run reads the registry: the install it would compare against has to be
+    // this tree's build (H149). The child applies the same rule; doing it here is what makes the
+    // refusal say `stdlib-declarations.mjs` and exit 2, instead of arriving as 144 lines of the
+    // child's differences and a problem count of this tree.
+    const camel = camelPath || defaultCamel(REPO_ROOT)
+    refuseInstallNotOfThisTree(camel, REPO_ROOT, 'stdlib-declarations.mjs --check')
+
     const { problems, modules, computedCount, excludedCount } = staticChecks()
-    const ops = verifyOps()
+    const ops = verifyOps(camel)
     if (!ops.ok) problems.push(...ops.lines)
     for (const problem of problems) console.log(problem)
 

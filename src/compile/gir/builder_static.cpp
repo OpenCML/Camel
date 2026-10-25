@@ -14,6 +14,7 @@
 
 #include "camel/core/data/base.h"
 #include "camel/core/data/composite/array.h"
+#include "camel/core/node_attrs.h"
 #include "camel/core/rtdata/struct.h"
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/type/composite/array.h"
@@ -587,6 +588,40 @@ struct StaticExpansionScope {
 
 } // namespace
 
+node_handle_t Builder::staticFieldTagsNode(
+    Type *subject, size_t index, const GCT::node_ptr_t &where) {
+    // The tags written on the field, as the names of the tags in the order the declaration wrote
+    // them: a compile-time `string[]`, the third thing `fields T` gives (`(n, F, tags)`). The
+    // facts of a field are kept by the module that declares the type (`tag::attachToField`), so
+    // this reads them there; a type declared elsewhere and a type that is not a struct (a tuple,
+    // whose positions are not fields) give no tags, and the list is empty.
+    std::vector<std::string> names;
+    if (subject != nullptr && subject->code() == TypeCode::Struct && module_ != nullptr) {
+        const StructDecl *decl = tt::as_ptr<StructType>(subject)->decl();
+        if (decl != nullptr && decl->moduleName() == module_->name()) {
+            camel::core::attr::AttrSetId tags =
+                module_->fieldTags(Reference(decl->name()), index);
+            if (tags == camel::core::attr::kNoAttrs && !decl->shortName().empty() &&
+                decl->shortName() != decl->name()) {
+                tags = module_->fieldTags(Reference(decl->shortName()), index);
+            }
+            for (const camel::core::attr::Attr &entry : camel::core::attr::entries(tags)) {
+                names.emplace_back(std::string(camel::core::attr::keyName(entry.key)));
+            }
+        }
+    }
+    data_vec_t elements;
+    elements.reserve(names.size());
+    for (const std::string &name : names) {
+        elements.push_back(tt::as_shared<Data>(std::make_shared<StringData>(name)));
+    }
+    const data_ptr_t tags = tt::as_shared<Data>(ArrayData::from(Type::String(), elements));
+    node_handle_t node    = currGraph_->addStaticDataNode(tags);
+    rememberConstant(node, tags);
+    registerNodeOrigin(context_, node, where, "gir.static.tags");
+    return node;
+}
+
 node_handle_t Builder::visitStaticForNode(
     const GCT::node_ptr_t &gct, std::vector<node_handle_t> *values, Type **shape) {
     ENTER("SFOR");
@@ -639,6 +674,7 @@ node_handle_t Builder::visitStaticForNode(
 
     const std::string valueName = gct->staticForValueName();
     const std::string typeName  = gct->staticForTypeName();
+    const std::string tagsName  = gct->staticForTagsName();
     const GCT::node_ptr_t body  = gct->staticForBody();
     const size_t count          = tree::arity(subject);
     node_handle_t lastEffect{};
@@ -660,11 +696,19 @@ node_handle_t Builder::visitStaticForNode(
             rememberConstant(indexNode, indexValue);
             registerNodeOrigin(context_, indexNode, body, "gir.static.index");
         }
+        // The third name of `(n, F, tags)`: the field's tags, a compile-time value like `n`.
+        node_handle_t tagsNode{};
+        if (!byIndices && tagsName != "_") {
+            tagsNode = staticFieldTagsNode(subject, i, body);
+        }
         staticValueScopes_.emplace_back();
         if (valueName != "_") {
             // `_` is a place that binds nothing (the wildcard of `match`): a use of it must not
             // find a value. Every other name of the head becomes a compile-time value here.
             staticValueScopes_.back().push_back({valueName, entryName, indexNode});
+        }
+        if (!byIndices && tagsName != "_") {
+            staticValueScopes_.back().push_back({tagsName, std::string{}, tagsNode});
         }
         enterBlockScope();
         const GCT::Node *outerUnused = std::exchange(unusedStatement_, body);
@@ -852,18 +896,22 @@ Builder::staticLoopSequenceOf(const GCT::node_ptr_t &subject) {
         }
         return walkIntegers(*from, *to, 1);
     }
-    // A compile-time tuple: `for x in ts` walks its positions and binds the type at each one
-    // (not the element's value -- the ordinary `loop` is the one that binds a value). `ts` is
-    // the rest parameter of the expansion being built; `indices ts` walks the same positions
-    // and binds them as integers, which is what 6.8.4/6.8.5 of the language reference describe.
+    // A compile-time tuple: `for x in ts` walks its positions and binds the element at each one
+    // -- `ts.[i]`, a value whose type is the type of that position (the ruling of 2026-10-25: the
+    // round's name is the element's value, "`x` 的类型随位置变"; the type at a position is read
+    // off it with `typeof x`, and `fields T` is the spelling that gives a name and a type). `ts`
+    // is the tuple of values the expansion was given, a rest parameter (`..ts`) included. `indices
+    // ts` walks the same positions and binds them as integers, which is what 6.8.4/6.8.5 of the
+    // language reference describe.
     if (subject->type() == GCT::NodeKind::DREF) {
         if (const RestBinding *rest = restBindingNamed(subject->name())) {
             Type *tupleType = boundType(rest->tuple.type);
             if (tupleType != nullptr && tupleType->code() == TypeCode::Tuple &&
                 tree::isInternal(tupleType)) {
                 StaticSequence sequence;
-                for (size_t i = 0; i < tree::arity(tupleType); ++i) {
-                    sequence.types.push_back(tree::childType(tupleType, i));
+                const size_t arity = tree::arity(tupleType);
+                for (size_t i = 0; i < arity && i < rest->tuple.elements.size(); ++i) {
+                    sequence.elements.push_back(rest->tuple.elements[i]);
                 }
                 return sequence;
             }
@@ -922,7 +970,7 @@ Builder::staticLoopSequenceOf(const GCT::node_ptr_t &subject) {
 std::optional<std::vector<int64_t>>
 Builder::staticLoopIntSequenceOf(const GCT::node_ptr_t &subject) {
     const std::optional<StaticSequence> sequence = staticLoopSequenceOf(subject);
-    if (!sequence.has_value() || sequence->byTypes()) {
+    if (!sequence.has_value() || sequence->byElements()) {
         return std::nullopt;
     }
     std::vector<int64_t> values;
@@ -1019,13 +1067,13 @@ node_handle_t Builder::visitStaticLoopNode(const GCT::node_ptr_t &gct) {
     const size_t k              = gct->staticLoopStateCount();
     const std::string valueName = gct->staticLoopValueName();
     const std::string typeName  = gct->staticLoopTypeName();
+    const std::string tagsName  = gct->staticLoopTagsName();
     const GCT::node_ptr_t body  = gct->staticLoopBody();
-    // Whether the round's name is bound to a type rather than to a value: `F` for `fields T`
-    // (which binds the field's name as a value too), and the single name of `for x in ts`, where
-    // the round binds the type at that position and no value at all.
-    const bool bindsRoundType =
-        byFields || (written.has_value() && written->byTypes());
-    const bool bindsRoundValue = !(bySequence && written.has_value() && written->byTypes());
+    // Whether the round's name is bound to a type rather than to a value: `F` for `fields T`,
+    // which binds the field's name as a value too. Every round name of a sequence is a value --
+    // for `for x in ts` the element at that position, whose type differs from round to round.
+    const bool bindsRoundType  = byFields;
+    const bool bindsRoundValue = true;
 
     // The names of the head are declared once, together (as for a run-time loop). The walked
     // entry's name `n` (`j`) is one of them for this purpose: `static loop n = ..., ... for
@@ -1069,15 +1117,12 @@ node_handle_t Builder::visitStaticLoopNode(const GCT::node_ptr_t &gct) {
     for (size_t i = 0; i < count; ++i) {
         // The name of the walked entry: for `fields` the field's name and for `indices` the
         // position, both as the text the compile-time value bindings carry; for a sequence of
-        // values the element itself, which is what `t.[i]` reads back as the key; for a
-        // compile-time tuple the type at that position, which is not a value at all.
+        // values the element itself, which is what `t.[i]` reads back as the key. A compile-time
+        // tuple's round binds the element `ts.[i]` as a value instead (the `else` below, in the
+        // block scope), so it needs no compile-time binding here.
         std::string entryName;
         node_handle_t indexNode{};
-        if (bySequence && written->byTypes()) {
-            if (valueName != "_") {
-                typeBindings_.insert(typeBindings_.begin(), {valueName, written->types[i]});
-            }
-        } else if (bySequence) {
+        if (bySequence && !written->byElements()) {
             const data_ptr_t elementValue = written->values[i];
             entryName = sequenceElementName(elementValue);
             indexNode = currGraph_->addStaticDataNode(elementValue);
@@ -1090,15 +1135,28 @@ node_handle_t Builder::visitStaticLoopNode(const GCT::node_ptr_t &gct) {
             indexNode = currGraph_->addStaticDataNode(indexValue);
             rememberConstant(indexNode, indexValue);
             registerNodeOrigin(context_, indexNode, body, "gir.static.index");
-        } else {
+        } else if (!bySequence) {
             entryName = tree::childName(subject, i);
             typeBindings_.insert(typeBindings_.begin(), {typeName, tree::childType(subject, i)});
         }
+        // The third name of `(n, F, tags)`: the field's tags, a compile-time value like `n`.
+        node_handle_t tagsNode{};
+        if (bindsRoundType && tagsName != "_") {
+            tagsNode = staticFieldTagsNode(subject, i, body);
+        }
         staticValueScopes_.emplace_back();
-        if (valueName != "_" && bindsRoundValue) {
+        if (valueName != "_" && bindsRoundValue && (indexNode != nullptr || byFields)) {
             staticValueScopes_.back().push_back({valueName, entryName, indexNode});
         }
+        if (bindsRoundType && tagsName != "_") {
+            staticValueScopes_.back().push_back({tagsName, std::string{}, tagsNode});
+        }
         enterBlockScope();
+        if (bySequence && written->byElements() && valueName != "_") {
+            // `for x in ts`: `x` is the element's value at this position, an ordinary node of
+            // this graph with the type that position has. `typeof x` reads it back as a type.
+            (void)insertNode(valueName, written->elements[i]);
+        }
         for (size_t j = 0; j < k; ++j) {
             // The state names read the previous round's value; each round has its own block
             // scope, so the same name is bound afresh (not a redeclaration).

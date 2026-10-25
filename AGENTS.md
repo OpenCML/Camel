@@ -73,7 +73,7 @@ $env:PATH = "$env:CAMEL_HOME\bin;$env:PATH"
   `test/plan-selection.json` first, file rules second; base `origin/develop`, override with
   `CAMEL_TEST_BASE`.
 - Prefer passing the target explicitly instead of adding new `npm run test:*` aliases.
-- Shorthand targets such as `smoke`, `feat`, `parse`, `compile`, `opt`, `trans`, `linear`, `para`, `modules`, and `perf` resolve to the matching plan directories.
+- Shorthand targets such as `smoke`, `feat`, `all`, `parse`, `compile`, `opt`, `trans`, `linear`, `para`, `modules`, and `perf` resolve to the matching plan directories. The whole plan tree is `all` (`--all`, or the `test/plans` directory itself); `.` is not the whole tree: the leading dots of a target are stripped, so `.` is the bare name `feat`, i.e. `test/plans/feat`.
 - Direct examples:
 ```powershell
 node scripts/test.js test\plans\smoke
