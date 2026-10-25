@@ -2513,8 +2513,8 @@ std::make_shared<StaticCheckedResolver>(
                         "(start: int, end: int, step: int) => int[]",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<Type *> {
-                            // `range(a, b)` is the interval of the integers from `a` to `b - 1`
-                            // and `range(a, b, step)` is the same sequence with a step, as the
+                            // The interval `a..b` is the integers from `a` to `b - 1`; the two-argument `range(a, b)` is
+                            // its deleted spelling, and `range(a, b, step)` is the same sequence with a step, as the
                             // language's `a..b` is the one without one (design principles 4.2;
                             // One rule for the two spellings:
                             // a second rule of the same URI would leave the table (which holds

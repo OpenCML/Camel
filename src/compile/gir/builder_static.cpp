@@ -973,9 +973,10 @@ Builder::staticLoopSequenceOf(const GCT::node_ptr_t &subject) {
     // step the program wrote -- the same path as `a..b`, read by the same reader and counted by
     // the same walk, because `range` is what the interval lowers to (`intervalValue`) and the
     // array it builds elsewhere is what these rounds are the elements of. The step has to be
-    // written -- a step of one is `a..b`, one thing one spelling -- so the two-argument call is
-    // refused here as it is where the call stands (`RangeTwoArgumentsRemoved`, which the call
-    // path reports after overload resolution), and a step of zero, which names no sequence at
+    // written -- a step of one is `a..b`, one thing one spelling -- so a two-argument call is
+    // not read here at all: it is left to the call path, which reports the ordinary no-match
+    // against the group's one signature (three parameters), as it does for any other call the
+    // set has no overload for. A step of zero, which names no sequence at
     // all, is `RangeStepZero` here as it is there (design principles 4.2; the rules of
     //  2026-10-24 on ` -generator-and-composition` and on ` -interval-step-form`).
     if (subject->type() == GCT::NodeKind::LINK && subject->size() >= 1) {
@@ -983,9 +984,14 @@ Builder::staticLoopSequenceOf(const GCT::node_ptr_t &subject) {
         const bool namedRange = callee != nullptr && callee->type() == GCT::NodeKind::DREF &&
                                 callee->name() == "range";
         if (namedRange && subject->size() - 1 == 2) {
-            const auto where = callee->origin() != 0 ? callee->origin() : subject->origin();
-            diags_->of(SemanticDiag::RangeTwoArgumentsRemoved).atOrigin(where).commit();
-            throw BuildAbortException();
+            // The two-argument spelling is the deleted one: it is not read here at all. The call
+            // is built like any other, so the call path refuses it against the group's one
+            // signature (three parameters) -- the same answer the spelling gets where it is
+            // written outside a `static loop`, one fault one answer. Building it leaves the node
+            // the general case below already reads, so a call that builds an array of constants is
+            // still read as a sequence, and a genuinely unknown sequence is still the caller's own
+            // diagnostic.
+            (void)visitLinkNode(subject);
         }
         if (namedRange && subject->size() - 1 == 3) {
             const GCT::node_ptr_t &stepNode = subject->at(subject->size() - 1);

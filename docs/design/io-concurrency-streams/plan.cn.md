@@ -114,7 +114,7 @@ pwsh -NoProfile -File D:\Projects\Camel-wt\camel-remote.ps1 `
 
 ### 1.9 `for x in s` 今天
 
-- 判据在 `src/compile/gir/builder_control.cpp#LoopSequenceNotIterable`：类型不是数组时，去 `src/builtin/modules/globals.cpp#__iter__` 这个算子组里按类型求一个重载；求不到就报错。消息把四类列全：数组、字符串（码点，每个是一个字符的字符串）、映射（按键序的 `(key, value)`）、张量（沿第一维的子张量），并主动提示 `range(a, b)`。**流不在其中。**
+- 判据在 `src/compile/gir/builder_control.cpp#LoopSequenceNotIterable`：类型不是数组时，去 `src/builtin/modules/globals.cpp#__iter__` 这个算子组里按类型求一个重载；求不到就报错。消息把三类列全：数组、字符串（码点，每个是一个字符的字符串）、映射（按键序的 `(key, value)`），并主动提示区间写法 `a..b`。**流不在其中。**
 - 扩展点是现成的：`__iter__` 的注释原文 *"A map adds its own overload (collection.cpp), and the tensor module adds one for tensors."*——流只要再加一个重载。
 - 循环本身是**区域形式**（`include/camel/runtime/loop.h#LoopView`：条件与体是同一张图的两个控制区域，共帧）：`Loop` 的 Norm 输入是 `xs`，体区域第一个形参是元素。所以「遍历流」在 IR 层不是新结点，是 `__iter__` 的一个新重载 + 「流结束后循环结束」的语义。
 - 收集槽（`collectionCount`）已经有模型与文档，但**没有源码形式**（`include/camel/runtime/loop.h#LoopView` 的注释：*"no source syntax exists for this yet; the H4d design"*）。任务书 3 说 `yield` 是「现有循环收集槽的惰性版本」——**这是 `yield` 状态机最接近的既有物**，但它是图生产者才能给的，源码写不出来。
@@ -327,7 +327,7 @@ G5/G7/G8 + GPU/H246 ── G11 ── G12
       return 0
   }
   ```
-  今天：`...:9:35: [Error]: 'for' takes the elements of an array, a string, a map or a tensor; 'n' has type 'int'. ... (name=SemanticDiag::LoopSequenceNotIterable, code=0x03000120)`，`RUN_EXIT=1`。
+  今天：`...:9:35: [Error]: 'for' takes the elements of an array, a string, a map; 'n' has type 'int'. ... (name=SemanticDiag::LoopSequenceNotIterable, code=0x03000120)`，`RUN_EXIT=1`。
 - 验收：`for x in s` 遍历流；**流结束时循环结束**；无限流上的 `for` 靠 `while` 条件停（`docs/design/io-concurrency-streams/README.cn.md` 3.2）；诊断文本新增「流」并有用例固定。
 
 ### 第 3 组（等 B、C）
@@ -519,7 +519,7 @@ H246 是「遍即函数」，与流的关系是两点：
 **t5 `t5_for_stream.cml`** —— `loop acc = 0 for x in n do acc + x`（`n: int`）：
 
 ```
-(h248_t5_for_stream)/.../t5_for_stream.cml:9:35: [Error]: 'for' takes the elements of an array, a string, a map or a tensor; 'n' has type 'int'. A loop's 'for x in xs' visits the elements of xs in order (design principles 3.10): the elements of an array; the code points of a string, each a one-character string; the (key, value) pairs of a map, in key order (11.3); and the sub-tensors of a tensor along its first dimension. 'range(a, b)' is the array of the integers from a to b. (name=SemanticDiag::LoopSequenceNotIterable, code=0x03000120)
+(h248_t5_for_stream)/.../t5_for_stream.cml:9:35: [Error]: 'for' takes the elements of an array, a string, a map; 'n' has type 'int'. A loop's 'for x in xs' visits the elements of xs in order (design principles 3.10): the elements of an array; the code points of a string, each a one-character string; the (key, value) pairs of a map, in key order (11.3); . 'a..b' is the array of the integers from 'a' to 'b - 1', left closed and right open, and a 'for' over it takes them in order without building the array (4.2). (name=SemanticDiag::LoopSequenceNotIterable, code=0x03000120)
 ```
 
 **t6 `t6_tee.cml`** —— `let (a, b) = tee(s, 8)`：

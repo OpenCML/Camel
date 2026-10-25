@@ -2958,19 +2958,53 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             }
             targetOperator = *res;
             // The interval of two integers is written `a..b` and nothing else: the two-parameter
-            // `range(a, b)` is deleted, one thing one spelling (design principles 4.2; the
-            // rule on ` -generator-and-composition`). The call the
-            // program writes is refused here, where it stands, with the spelling to write
-            // instead. The operation stays: it is what `a..b` becomes on the graph
-            // (`intervalValue`), and the compiler writes that call with the built-in callee name
-            // (`$builtin::range`), which no program writes and which this does not touch.
+            // `range(a, b)` is deleted, one thing one spelling (design principles 4.2; the rule on
+            // ` -generator-and-composition`). The operation stays -- it is what `a..b` becomes on
+            // the graph, and the compiler writes that call with the built-in callee name
+            // (`$builtin::range`), which no program writes -- so what is deleted is the spelling a
+            // program writes, and such a call is reported as what it is at the overload set: the
+            // group has one signature, three parameters, and a two-argument call does not match
+            // it. That is the ordinary report, built here the same way the path that fails to
+            // resolve builds it, because the registration's count cannot be narrowed to three
+            // without also refusing the interval's own call (the two names reach one resolver,
+            // which never sees the callee's name).
             if (targetOperator->uri() == ":struct/range" && normInputs.size() == 2 &&
                 withInputs.empty() && gct->size() >= 1 &&
                 gct->at(0)->type() == GCT::NodeKind::DREF && gct->at(0)->name() == "range") {
                 // The caret is under the name the program wrote, so the refused spelling is what
                 // the reader sees marked.
                 const auto where = gct->at(0)->origin() != 0 ? gct->at(0)->origin() : gct->origin();
-                diags_->of(SemanticDiag::RangeTwoArgumentsRemoved).atOrigin(where).commit();
+                std::string overloadsStr =
+                    "\n    " +
+                    strutil::join(
+                        ops->resolvers(),
+                        "\n    ",
+                        [](const std::pair<std::string, resolver_ptr_t> &p) {
+                            return "<" + p.first + ">: " + p.second->signature();
+                        }) +
+                    "\n";
+                // The overloads of the program are part of the set (design principles 10.2).
+                if (auto overloads = operatorOverloads_.find(targetNode);
+                    overloads != operatorOverloads_.end()) {
+                    for (const auto &graph : overloads->second.graphs) {
+                        overloadsStr += "    " + displayNameOf(graph->name()) + ": " +
+                                        graph->funcType()->toString() + "\n";
+                    }
+                    for (const auto &tmpl : overloads->second.templates) {
+                        overloadsStr += "    " + displayNameOf(tmpl->name) + ": " +
+                                        tmpl->funcType->toString() + "\n";
+                    }
+                }
+                diags_->of(SemanticDiag::NoMatchingFunction)
+                    .atOrigin(where)
+                    .commit(
+                        std::format(
+                            "<{}> ({})",
+                            strutil::join(
+                                withInputTypes, ", ", [](Type *t) { return t->toString(); }),
+                            strutil::join(
+                                normInputTypes, ", ", [](Type *t) { return t->toString(); })),
+                        overloadsStr);
                 throw BuildAbortException();
             }
             // `range(a, b, step)` is the integers `a`, `a + step`, ... below `b` (design

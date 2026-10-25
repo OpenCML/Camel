@@ -356,29 +356,29 @@ timeout_ms = 20000
 
 [[tests]]
 name = "stream.interval_own_range"
-desc = "The deletion is the built-in, not the identifier: a module's own `range(a, b)` keeps its name and is called as it declares (the tensor module's `range` is the standard case), so the diagnostic cannot misfire on one."
+desc = "The deletion is the built-in, not the identifier: a module's own `range(a, b)` keeps its name and is called as it declares (the tensor module's `range` is the standard case), so the ordinary no-match the built-in's two-argument spelling gets cannot misfire on one."
 kind = "behavior"
 case = "../../../cases/compile/stream/interval_own_range.cml"
 args = ["${case}", "std::nvm"]
 expect_exit = 0
 expect_stdout_starts_with = "[3, 0]\n"
-expect_output_not_contains = ["RangeTwoArgumentsRemoved", "UnknownInternalError", "[Error]"]
+expect_output_not_contains = ["No matching function found", "UnknownInternalError", "[Error]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
 
 [[tests]]
 name = "stream.range_two_arguments"
-desc = "The two-parameter `range(a, b)` is deleted: `a..b` is the one spelling, so the call is refused where it stands, under the name the program wrote, with the interval to write instead."
+desc = "The two-parameter `range(a, b)` is deleted: `a..b` is the one spelling, and the built-in group has one signature -- three parameters -- so the call is refused where it stands, under the name the program wrote, as any other call the overload set has no match for."
 kind = "negative"
 case = "../../../cases/compile/stream/range_two_arguments.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::RangeTwoArgumentsRemoved"
-expect_diagnostic_code = "0x030001E5"
+expect_diagnostic_name = "SemanticDiag::NoMatchingFunction"
+expect_diagnostic_code = "0x0300000F"
 expect_diagnostic_line = 7
 expect_diagnostic_column = 14
-expect_output_contains = ["The two-parameter 'range(a, b)' is gone; write the interval 'a..b'."]
+expect_output_contains = ["No matching function found for argument types"]
 expect_output_not_contains = ["UnknownInternalError", "Warning"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
@@ -480,16 +480,16 @@ timeout_ms = 10000
 
 [[tests]]
 name = "stream.range_two_arguments_builtin"
-desc = "A named import does not take the built-in out of the language: where the imported `range` has no rule for two arguments, the built-in still answers, and the two-parameter spelling is still the one that is gone (SemanticDiag::RangeTwoArgumentsRemoved), refused under the name the program wrote."
+desc = "A named import does not take the built-in out of the language: where the imported `range` has no rule for two arguments, the built-in still answers, and the two-parameter spelling is still the one that is gone (the ordinary no-match against the group's one signature, three parameters), refused under the name the program wrote."
 kind = "negative"
 case = "../../../cases/compile/stream/range_two_arguments_builtin.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::RangeTwoArgumentsRemoved"
-expect_diagnostic_code = "0x030001E5"
+expect_diagnostic_name = "SemanticDiag::NoMatchingFunction"
+expect_diagnostic_code = "0x0300000F"
 expect_diagnostic_line = 8
 expect_diagnostic_column = 13
-expect_output_contains = ["The two-parameter 'range(a, b)' is gone; write the interval 'a..b'."]
+expect_output_contains = ["No matching function found for argument types"]
 expect_output_not_contains = ["UnknownInternalError", "Warning"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
