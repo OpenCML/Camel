@@ -3,8 +3,9 @@
 
 // One rule, in one place: a script that reads the operator registry of a built `camel` measures
 // that install, and an install that is not **this** tree's build is refused before the reading
-// (handover H149; the author's ruling of 2026-10-25 on
-// `docs/handover/questions/stdlib-declaration-check-measures-a-foreign-install.md`).
+// (handover H149; the author's ruling of 2026-10-25 in the `stdlib-declaration-check-measures-a-
+// foreign-install` section of `docs/handover/reviews/questions-2026-10-24-evening.md`, which
+// answered the question file of that name and removed it).
 //
 // The rule is the one `scripts/release-gate.mjs` applies before it runs anything: an install lives
 // at `out/<tag>` under this tree, and `node scripts/build-info.js check --tag <tag>` compares the
