@@ -65,6 +65,15 @@ Type *TypeTable::find(Shape shape, std::span<const uintptr_t> words) {
     return it == byKey_.end() ? nullptr : it->second;
 }
 
+Type *TypeTable::internOther(
+    TypeCode code, std::span<const uintptr_t> parts, const std::function<Type *()> &make) {
+    std::vector<uintptr_t> words;
+    words.reserve(1 + parts.size());
+    words.push_back(static_cast<uintptr_t>(code));
+    words.insert(words.end(), parts.begin(), parts.end());
+    return intern(Shape::Other, words, make);
+}
+
 Type *TypeTable::intern(
     Shape shape, std::span<const uintptr_t> words, const std::function<Type *()> &make,
     const Canonical &canonical) {

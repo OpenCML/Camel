@@ -12,6 +12,7 @@
 #include "camel/core/rtdata/string.h"
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/type/composite/tuple.h"
+#include "camel/core/type/intern.h"
 #include "camel/utils/assert.h"
 
 #include <cstdint>
@@ -32,11 +33,13 @@ TypeCode JsonType::typeCode() {
 }
 
 JsonType *JsonType::get() {
-    static JsonType *type = [] {
-        void *mem = mm::permSpace().alloc(sizeof(JsonType), alignof(JsonType));
-        ASSERT(mem != nullptr, "Failed to allocate JsonType from permSpace");
-        return new (mem) JsonType();
-    }();
+    // One object for the one `Json` code, from the type table (see intern.h).
+    static JsonType *type = static_cast<JsonType *>(type::TypeTable::instance().internOther(
+        typeCode(), std::span<const uintptr_t>(), [&]() -> type::Type * {
+            void *mem = mm::permSpace().alloc(sizeof(JsonType), alignof(JsonType));
+            ASSERT(mem != nullptr, "Failed to allocate JsonType from permSpace");
+            return new (mem) JsonType();
+        }));
     return type;
 }
 

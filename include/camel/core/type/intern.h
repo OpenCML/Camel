@@ -149,6 +149,16 @@ class TypeTable {
     /// of a declaration before it can build the instance (StructType::get).
     Type *find(Shape shape, std::span<const uintptr_t> words);
 
+    /**
+     * Interns a module type: a type whose structure its own class states rather than the core's
+     * constructors (a `graph::Handle`, a json `Json`, a tiles `Device`, the python `PyObject`).
+     * `parts` are the ids of what that class's `equals` compares -- its type arguments, a handle
+     * kind -- and a module type that compares nothing but its own code passes none. One object per
+     * code and parts, so a module type a graph records has an id like any other.
+     */
+    Type *internOther(
+        TypeCode code, std::span<const uintptr_t> parts, const std::function<Type *()> &make);
+
     /// Whether the table handed out `id`. Every entry is on the interning path (`adopt` is gone),
     /// so this is the whole check that a type id a graph names came from the table.
     bool holds(TypeId id) const { return id != kNoTypeId && id < byId_.size(); }

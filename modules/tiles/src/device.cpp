@@ -8,9 +8,9 @@
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/core/type/tree.h"
+#include "camel/core/type/intern.h"
 #include "modules/tensor/type.h"
-#include <mutex>
-#include <unordered_map>
+#include <span>
 
 namespace camel::tiles {
 using namespace core::type;
@@ -36,15 +36,15 @@ DeviceType *DeviceType::get(Type *host) {
     if (!tensor::isTensorType(host) && !deviceScalarDType(host) &&
         host->code() != TypeCode::TypeVar)
         throw std::runtime_error("Device requires a tensor or a scalar type");
-    static std::mutex mutex;
-    static std::unordered_map<Type *, DeviceType *> types;
-    std::lock_guard lock(mutex);
-    if (auto it = types.find(host); it != types.end())
-        return it->second;
-    void *memory = core::mm::permSpace().alloc(sizeof(DeviceType), alignof(DeviceType));
-    auto *type   = new (memory) DeviceType(host);
-    types.emplace(host, type);
-    return type;
+    // One object per host type, from the type table (see intern.h): `equals` compares the host
+    // types, so the host enters by canonical id and `Device<f32[3]>` is one type wherever it is
+    // written, instead of one per host object.
+    const uintptr_t parts[1] = {typeKeyWord(TypeTable::instance().canonical(host))};
+    return static_cast<DeviceType *>(TypeTable::instance().internOther(
+        typeCode(), std::span<const uintptr_t>(parts, 1), [&]() -> Type * {
+            void *memory = core::mm::permSpace().alloc(sizeof(DeviceType), alignof(DeviceType));
+            return new (memory) DeviceType(host);
+        }));
 }
 Type *DeviceType::hostType() const { return params_[0]; }
 std::string DeviceType::toString() const { return "Device<" + hostType()->toString() + ">"; }
