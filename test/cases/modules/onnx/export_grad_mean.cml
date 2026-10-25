@@ -14,7 +14,7 @@ type P = { w: f32[..] }
 with <m: P>
 func loss(x: f32[..]): float {
     let rows = mean(m.w * x, 0)
-    return sum(rows * rows) + mean(m.w * x)
+    return float(sum(rows * rows)) + float(mean(m.w * x))
 }
 
 func step(w: f32[..], x: f32[..]): (f32[..], f32[..]) {

@@ -35,7 +35,7 @@ with <x: f32[..]>
 func loss(): float {
     let w = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[], [2, 3]) as Tensor<f32, [2, 3]>
     let y = (x * x) as Tensor<f32, [2, 3]>
-    return sum(y * w)
+    return float(sum(y * w))
 }
 
 func step(x: f32[..]): (float, f32[..]) {

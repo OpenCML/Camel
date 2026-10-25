@@ -21,7 +21,7 @@ func walk(h: f32[..], k: int): (f32[..], int) {
 with <m: P>
 func loss(x: f32[..]): float {
     let (h, k) = walk<m>(x, 0)
-    return sum(h * h) * (1.0 + 0.5 * float(k))
+    return float(sum(h * h)) * (1.0 + 0.5 * float(k))
 }
 
 func model(w: f32[..], x: f32[..]): (f32[..], int, float[..], f32[..]) {

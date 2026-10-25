@@ -37,7 +37,7 @@ type Leaves = {
 // of both leaves -- in the element type of the leaf it belongs to.
 with <m: Leaves>
 func total(): float {
-    return sum(m.wide) + sum(m.narrow)
+    return float(sum(m.wide)) + float(sum(m.narrow))
 }
 
 func main(): int sync {

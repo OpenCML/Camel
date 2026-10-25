@@ -1,7 +1,7 @@
 module shape_inference_as_fails
 import { Tensor, concat, reshape, sum, load_npy } from tensor
 func h(a: Tensor<f32, [4]>): float {
-    return sum(a)
+    return float(sum(a))
 }
 func main(): int sync {
     println('ran')

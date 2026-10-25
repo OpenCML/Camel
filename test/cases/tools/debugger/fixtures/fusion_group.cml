@@ -12,7 +12,7 @@ type Model = {
 
 with <m: Model>
 func loss(x: Tensor): float {
-    return sum(x / m.w)
+    return float(sum(x / m.w))
 }
 
 func main(): int sync {

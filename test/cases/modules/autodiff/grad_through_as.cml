@@ -14,7 +14,7 @@ func loss(): float {
     let w = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[], [2, 3]) as Tensor<f32, [2, 3]>
     let y = (x * x) as Tensor<f32, [2, 3]>
     let z = y as Tensor<f32, [?, 3]>
-    return sum(z * w)
+    return float(sum(z * w))
 }
 
 func report(name: string, g: Tensor<f32>, x: Tensor<f32>): int sync {

@@ -13,7 +13,7 @@ with <m: P>
 func loss(x: f64[..]): float sync {
     var t = m.p0 * x
     t = t * 2.0
-    return sum(t)
+    return float(sum(t))
 }
 
 func main(): int sync {

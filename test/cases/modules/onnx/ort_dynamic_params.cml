@@ -20,7 +20,7 @@ type P = { w: f32[..], b: f32[..] }
 with <m: P>
 func loss(x: f32[..]): float {
     let h = tanh(x @ transpose(m.w) + m.b)
-    return sum(mean(h * h, 0))
+    return float(sum(mean(h * h, 0)))
 }
 
 func step(w: f32[..], b: f32[..], x: f32[..]): (float[..], f32[..], f32[..]) {

@@ -28,13 +28,13 @@ type Model = {
 with <m: Model>
 func fused_loss(x: Tensor): float {
     let scaled = x / m.w
-    return sum(scaled @ m.u)
+    return float(sum(scaled @ m.u))
 }
 
 with <m: Model>
 func declined_loss(x: Tensor): float {
     let scaled = m.a / m.w
-    return sum(scaled @ m.u)
+    return float(sum(scaled @ m.u))
 }
 
 func main(steps: int, rows: int, d: int, lr: float, fused: int): int sync {

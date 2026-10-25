@@ -11,7 +11,7 @@ func initialize(): Model {
 // an ordinary function so that run_preferred_resident can hand it the device-resident tree.
 with <p: Model>
 func loss(): float {
-    let squared = tree_map<(x: Tensor<f32>): float => sum(x * x)>(p)
+    let squared = tree_map<(x: Tensor<f32>): float => float(sum(x * x))>(p)
     return tree_reduce<(a: float, b: float): float => a + b>(squared, 0.0)
 }
 func loss_with_grad(p: Model): (float, Model) { return with_grad(loss)<p>() }

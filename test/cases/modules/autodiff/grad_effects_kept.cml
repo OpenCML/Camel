@@ -18,10 +18,10 @@ func helper(s: float, p: f32[..]): f32[..] sync {
 with <p: f32[..]>
 func loss(): float sync {
     println('loss')
-    let s = sum(p)
+    let s = float(sum(p))
     let r = helper(s, p)
     println('loss: helper returned')
-    return sum(r)
+    return float(sum(r))
 }
 
 func main(): int sync {

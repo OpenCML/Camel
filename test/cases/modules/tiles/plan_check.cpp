@@ -684,7 +684,11 @@ int main() {
         schedule(scalarOps);
         if (scalarOps.launches.size() != 1 || scalarOps.storage.bytes != std::vector<size_t>{8})
             throw std::runtime_error("scalar chain did not fuse into one f64 result");
-        rejects(scalarOps, [](auto &x) { x.nodes[2].dtype = DType::F32; }, "scalar arithmetic type or arity");
+        // The device's widths are f32 and f64 and a scalar operation now takes either (the element
+        // type a whole-tensor reduction answers divides a gradient by a count), so what this
+        // mutation can still pin is the shape half of the rule: an operation that is not a scalar
+        // at all is refused, and so is one whose operands are at another width (below).
+        rejects(scalarOps, [](auto &x) { x.nodes[2].shape = {1}; }, "scalar arithmetic type or arity");
         rejects(scalarOps, [](auto &x) { x.nodes[2].inputs = {0}; }, "scalar arithmetic type or arity");
         rejects(scalarOps, [](auto &x) { x.nodes[0] = Node{.op="input", .data={1}}; }, "scalar operand type");
         std::cout << "tiles plan validation: 33 rejected mutations\n";

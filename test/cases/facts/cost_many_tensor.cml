@@ -14,7 +14,7 @@ func lp00(a: Tensor<f32>): Tensor<f32> {
 }
 
 func sm00(x: Tensor<f32, [2, 2]>): float {
-    return sum(x)
+    return float(sum(x))
 }
 
 func mm01(x: Tensor<f32, [2, 3]>, w: Tensor<f32, [3, 2]>): Tensor<f32, [2, 2]> {
@@ -26,7 +26,7 @@ func lp01(a: Tensor<f32>): Tensor<f32> {
 }
 
 func sm01(x: Tensor<f32, [2, 2]>): float {
-    return sum(x)
+    return float(sum(x))
 }
 
 func mm02(x: Tensor<f32, [2, 3]>, w: Tensor<f32, [3, 2]>): Tensor<f32, [2, 2]> {
@@ -38,7 +38,7 @@ func lp02(a: Tensor<f32>): Tensor<f32> {
 }
 
 func sm02(x: Tensor<f32, [2, 2]>): float {
-    return sum(x)
+    return float(sum(x))
 }
 
 func mm03(x: Tensor<f32, [2, 3]>, w: Tensor<f32, [3, 2]>): Tensor<f32, [2, 2]> {
@@ -50,7 +50,7 @@ func lp03(a: Tensor<f32>): Tensor<f32> {
 }
 
 func sm03(x: Tensor<f32, [2, 2]>): float {
-    return sum(x)
+    return float(sum(x))
 }
 
 func mm04(x: Tensor<f32, [2, 3]>, w: Tensor<f32, [3, 2]>): Tensor<f32, [2, 2]> {
@@ -62,7 +62,7 @@ func lp04(a: Tensor<f32>): Tensor<f32> {
 }
 
 func sm04(x: Tensor<f32, [2, 2]>): float {
-    return sum(x)
+    return float(sum(x))
 }
 
 func mm05(x: Tensor<f32, [2, 3]>, w: Tensor<f32, [3, 2]>): Tensor<f32, [2, 2]> {
@@ -74,7 +74,7 @@ func lp05(a: Tensor<f32>): Tensor<f32> {
 }
 
 func sm05(x: Tensor<f32, [2, 2]>): float {
-    return sum(x)
+    return float(sum(x))
 }
 
 func mm06(x: Tensor<f32, [2, 3]>, w: Tensor<f32, [3, 2]>): Tensor<f32, [2, 2]> {
@@ -86,7 +86,7 @@ func lp06(a: Tensor<f32>): Tensor<f32> {
 }
 
 func sm06(x: Tensor<f32, [2, 2]>): float {
-    return sum(x)
+    return float(sum(x))
 }
 
 func mm07(x: Tensor<f32, [2, 3]>, w: Tensor<f32, [3, 2]>): Tensor<f32, [2, 2]> {
@@ -98,7 +98,7 @@ func lp07(a: Tensor<f32>): Tensor<f32> {
 }
 
 func sm07(x: Tensor<f32, [2, 2]>): float {
-    return sum(x)
+    return float(sum(x))
 }
 
 func mm08(x: Tensor<f32, [2, 3]>, w: Tensor<f32, [3, 2]>): Tensor<f32, [2, 2]> {
@@ -110,7 +110,7 @@ func lp08(a: Tensor<f32>): Tensor<f32> {
 }
 
 func sm08(x: Tensor<f32, [2, 2]>): float {
-    return sum(x)
+    return float(sum(x))
 }
 
 func mm09(x: Tensor<f32, [2, 3]>, w: Tensor<f32, [3, 2]>): Tensor<f32, [2, 2]> {
@@ -122,7 +122,7 @@ func lp09(a: Tensor<f32>): Tensor<f32> {
 }
 
 func sm09(x: Tensor<f32, [2, 2]>): float {
-    return sum(x)
+    return float(sum(x))
 }
 
 func mm10(x: Tensor<f32, [2, 3]>, w: Tensor<f32, [3, 2]>): Tensor<f32, [2, 2]> {
@@ -134,7 +134,7 @@ func lp10(a: Tensor<f32>): Tensor<f32> {
 }
 
 func sm10(x: Tensor<f32, [2, 2]>): float {
-    return sum(x)
+    return float(sum(x))
 }
 
 func mm11(x: Tensor<f32, [2, 3]>, w: Tensor<f32, [3, 2]>): Tensor<f32, [2, 2]> {
@@ -146,7 +146,7 @@ func lp11(a: Tensor<f32>): Tensor<f32> {
 }
 
 func sm11(x: Tensor<f32, [2, 2]>): float {
-    return sum(x)
+    return float(sum(x))
 }
 
 func mm12(x: Tensor<f32, [2, 3]>, w: Tensor<f32, [3, 2]>): Tensor<f32, [2, 2]> {
@@ -158,7 +158,7 @@ func lp12(a: Tensor<f32>): Tensor<f32> {
 }
 
 func sm12(x: Tensor<f32, [2, 2]>): float {
-    return sum(x)
+    return float(sum(x))
 }
 
 func mm13(x: Tensor<f32, [2, 3]>, w: Tensor<f32, [3, 2]>): Tensor<f32, [2, 2]> {
@@ -170,7 +170,7 @@ func lp13(a: Tensor<f32>): Tensor<f32> {
 }
 
 func sm13(x: Tensor<f32, [2, 2]>): float {
-    return sum(x)
+    return float(sum(x))
 }
 
 func mm14(x: Tensor<f32, [2, 3]>, w: Tensor<f32, [3, 2]>): Tensor<f32, [2, 2]> {
@@ -182,7 +182,7 @@ func lp14(a: Tensor<f32>): Tensor<f32> {
 }
 
 func sm14(x: Tensor<f32, [2, 2]>): float {
-    return sum(x)
+    return float(sum(x))
 }
 
 func mm15(x: Tensor<f32, [2, 3]>, w: Tensor<f32, [3, 2]>): Tensor<f32, [2, 2]> {
@@ -194,7 +194,7 @@ func lp15(a: Tensor<f32>): Tensor<f32> {
 }
 
 func sm15(x: Tensor<f32, [2, 2]>): float {
-    return sum(x)
+    return float(sum(x))
 }
 
 func mm16(x: Tensor<f32, [2, 3]>, w: Tensor<f32, [3, 2]>): Tensor<f32, [2, 2]> {
@@ -206,7 +206,7 @@ func lp16(a: Tensor<f32>): Tensor<f32> {
 }
 
 func sm16(x: Tensor<f32, [2, 2]>): float {
-    return sum(x)
+    return float(sum(x))
 }
 
 func mm17(x: Tensor<f32, [2, 3]>, w: Tensor<f32, [3, 2]>): Tensor<f32, [2, 2]> {
@@ -218,7 +218,7 @@ func lp17(a: Tensor<f32>): Tensor<f32> {
 }
 
 func sm17(x: Tensor<f32, [2, 2]>): float {
-    return sum(x)
+    return float(sum(x))
 }
 
 func mm18(x: Tensor<f32, [2, 3]>, w: Tensor<f32, [3, 2]>): Tensor<f32, [2, 2]> {
@@ -230,7 +230,7 @@ func lp18(a: Tensor<f32>): Tensor<f32> {
 }
 
 func sm18(x: Tensor<f32, [2, 2]>): float {
-    return sum(x)
+    return float(sum(x))
 }
 
 func mm19(x: Tensor<f32, [2, 3]>, w: Tensor<f32, [3, 2]>): Tensor<f32, [2, 2]> {
@@ -242,7 +242,7 @@ func lp19(a: Tensor<f32>): Tensor<f32> {
 }
 
 func sm19(x: Tensor<f32, [2, 2]>): float {
-    return sum(x)
+    return float(sum(x))
 }
 
 func mm20(x: Tensor<f32, [2, 3]>, w: Tensor<f32, [3, 2]>): Tensor<f32, [2, 2]> {
@@ -254,7 +254,7 @@ func lp20(a: Tensor<f32>): Tensor<f32> {
 }
 
 func sm20(x: Tensor<f32, [2, 2]>): float {
-    return sum(x)
+    return float(sum(x))
 }
 
 func mm21(x: Tensor<f32, [2, 3]>, w: Tensor<f32, [3, 2]>): Tensor<f32, [2, 2]> {
@@ -266,7 +266,7 @@ func lp21(a: Tensor<f32>): Tensor<f32> {
 }
 
 func sm21(x: Tensor<f32, [2, 2]>): float {
-    return sum(x)
+    return float(sum(x))
 }
 
 func mm22(x: Tensor<f32, [2, 3]>, w: Tensor<f32, [3, 2]>): Tensor<f32, [2, 2]> {
@@ -278,7 +278,7 @@ func lp22(a: Tensor<f32>): Tensor<f32> {
 }
 
 func sm22(x: Tensor<f32, [2, 2]>): float {
-    return sum(x)
+    return float(sum(x))
 }
 
 func mm23(x: Tensor<f32, [2, 3]>, w: Tensor<f32, [3, 2]>): Tensor<f32, [2, 2]> {
@@ -290,7 +290,7 @@ func lp23(a: Tensor<f32>): Tensor<f32> {
 }
 
 func sm23(x: Tensor<f32, [2, 2]>): float {
-    return sum(x)
+    return float(sum(x))
 }
 
 func main(): int sync {

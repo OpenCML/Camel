@@ -3,7 +3,7 @@ import { Tensor, sum, ones } from tensor
 // The var parameter declared with the variable's type; the value is converted where it is read.
 func step(var s: f32[], x: f32[3]): float sync {
     s = (s as f32[3]) + x
-    return sum(s)
+    return float(sum(s))
 }
 func main(): int sync {
     var s = ones([3])

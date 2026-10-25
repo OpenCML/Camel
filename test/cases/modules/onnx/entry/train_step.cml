@@ -14,7 +14,7 @@ type Linear = { w: Tensor<f32, [3, 4]>, b: Tensor<f32, [4]> }
 with <p: Linear>
 func loss(x: f32[..], y: f32[..]): float {
     let d = tanh(x @ p.w + p.b) - y
-    return mean(d * d)
+    return float(mean(d * d))
 }
 
 with <p: Linear>

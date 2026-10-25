@@ -41,7 +41,7 @@ type M = {
 #gpu
 with <m: M>
 func loss(): float sync {
-    return sum(m.x * m.p0)
+    return float(sum(m.x * m.p0))
 }
 
 #gpu

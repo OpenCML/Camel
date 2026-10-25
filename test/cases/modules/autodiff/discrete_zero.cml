@@ -37,7 +37,7 @@ type Model = {
 with <m: Model>
 func label_rows(labels: i64[..]): float {
     let oh = one_hot(labels, 3)
-    return sum(m.weights * oh)
+    return float(sum(m.weights * oh))
 }
 
 with <m: Model>
@@ -48,24 +48,24 @@ func one_hot_loss(): float {
 with <m: Model>
 func argmax_loss(): float {
     let picked = argmax(m.weights, -1)
-    return sum(cast(picked, 'float32'))
+    return float(sum(cast(picked, 'float32')))
 }
 
 with <m: Model>
 func mask_loss(): float {
     let mask = m.weights > 0.0
-    return sum(cast(mask, 'float32'))
+    return float(sum(cast(mask, 'float32')))
 }
 
 with <m: Model>
 func where_loss(): float {
     let mask = m.weights > 0.0
-    return sum(where(mask, m.weights, 0.0))
+    return float(sum(where(mask, m.weights, 0.0)))
 }
 
 with <m: Model>
 func gather_loss(): float {
-    return sum(m.weights[m.labels])
+    return float(sum(m.weights[m.labels]))
 }
 
 func main(): int sync {

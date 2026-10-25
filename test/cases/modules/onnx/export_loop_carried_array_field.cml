@@ -13,7 +13,7 @@ import { get_env } from env
 type State = { xs: int[], k: int }
 
 func walk(x: float[..], s: State): float[..] {
-    return if s.k >= 3 || sum(x * x) < 1.0 then x * 2.0
+    return if s.k >= 3 || float(sum(x * x)) < 1.0 then x * 2.0
         else walk(x, { xs: s.xs->append<s.k>, k: s.k + 1 })
 }
 

@@ -30,7 +30,7 @@ func encode(x: f32[..]): f32[..] {
 
 func pair_loss(za: f32[..], zb: f32[..]): float {
     let diff = za - zb
-    return sum(diff * diff)
+    return float(sum(diff * diff))
 }
 
 with <model: Siamese>

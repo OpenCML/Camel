@@ -1,7 +1,7 @@
 module shape_as_checked
 import { Tensor, ones, sum, load_npy } from tensor
 func f(b: Tensor<f32, [3]>): float {
-    return sum(b)
+    return float(sum(b))
 }
 func main(): int sync {
     let t = load_npy::<f32>('test/cases/modules/tensor/shape_types/x3.npy')

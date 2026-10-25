@@ -56,10 +56,10 @@ func evaluate(m: Model, x: f32[..], y: f32[..], kind: int): (float, float) {
     let z = predict<m>(x)
     return if kind == 0 then {
         let errors = abs(z - y)
-        (mean(errors * errors), mean(errors))
+        (float(mean(errors * errors)), float(mean(errors)))
     } else {
         let correct = (z > 0.0) == (y > 0.5)
-        (mean(relu(z) - z * y + log(exp(-abs(z)) + 1.0)), mean(correct))
+        (float(mean(relu(z) - z * y + log(exp(-abs(z)) + 1.0))), float(mean(correct)))
     }
 }
 

@@ -3,7 +3,7 @@ import { Tensor, zeros, sum, abs } from tensor
 import { grad } from autodiff
 type Pair = { a: Tensor<f32>, b: Tensor<f32> }
 with <p: Pair>
-func loss(): float { return sum(p.a + p.b) }
+func loss(): float { return float(sum(p.a + p.b)) }
 func main(): int sync {
     let p = { a: zeros([2, 1, 3]), b: zeros([1, 4, 1]) }
     let g = grad(loss)<p>()

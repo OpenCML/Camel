@@ -63,7 +63,7 @@ func model_at(): Mlp {
 // not part of it, which is what the optimizers do with a leaf they cannot train; the loop below
 // checks it separately.
 func drift(a: Mlp, b: Mlp): float {
-    return sum(abs(a.l0.weight - b.l0.weight)) + sum(abs(a.l0.bias - b.l0.bias)) + sum(abs(a.l1.weight - b.l1.weight)) + sum(abs(a.l1.bias - b.l1.bias))
+    return float(sum(abs(a.l0.weight - b.l0.weight))) + float(sum(abs(a.l0.bias - b.l0.bias))) + float(sum(abs(a.l1.weight - b.l1.weight))) + float(sum(abs(a.l1.bias - b.l1.bias)))
 }
 
 func main(steps: int): int sync {

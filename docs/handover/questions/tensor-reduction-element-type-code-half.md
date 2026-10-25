@@ -5,6 +5,14 @@
 `sum`/`mean` 对 `Tensor<f32>` 是 `f32`、对 f64 是 `float`，累加在 f64 中、舍入一次，
 "现有程序里把结果交给 `float` 的地方改写显式转换（不计兼容）……**现在先按原则改正，不等 P4**"。
 
+> **2026-10-26 更新**：**代码那一半已经落了**（`handover/h579-reduction-element-type`）——
+> `sum`/`mean` 的整体形现在答元素类型，law 表、`stdlib/signatures/tensor.cml` 与 tiles 侧一起跟上；
+> 本文 §一 与 §二 记的是落地**前**的读数，§五 是那一轮的实测，都保留作历史。
+> 落地后剩下的 17 条新红（其中 16 条就是本文 §四 问题 2 那一条定义库的 `mean`）见同目录
+> `whole-reduction-element-type-residual-reds.md`；§四 问题 2 仍归作者裁定，
+> §四 问题 1（归哪条车道）已由本轮回答：归一条能动 `modules/tensor` 与 `test/cases/**` 的车道，
+> 本轮就是它。
+
 本 lane 的任务书把 `feat.modules.definitions` 的 10 条 `ReturnTypeMismatch` 报成"归约返回元素类型"这条。
 **实测下来那 10 条不是归约**（见 §二），所以这条裁定的代码那一半到本轮为止仍然没有人做。
 把它记在这里，免得它随"10 条已转绿"一起消失。

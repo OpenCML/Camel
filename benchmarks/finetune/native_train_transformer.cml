@@ -59,7 +59,7 @@ func forward(x: f32[..]): f32[..] {
 with <m: Block>
 func loss(x: f32[..]): float {
     let y = forward<m>(x)
-    return mean(y * y)
+    return float(mean(y * y))
 }
 
 /// One training step: the loss and the updated parameters (as exported to ONNX).

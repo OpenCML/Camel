@@ -1,8 +1,8 @@
 6b1cd17fb651d89f ok test/cases/parse/repeated_type_marks.cml
 98f75fa3bbd0d82c ok test/cases/parse/constructs/analysis.cml
 f257e6f8f05967ce ok test/cases/parse/constructs/comprehensions.cml
-797b713daaac6dd9 ok test/cases/parse/constructs/constas.cml
-4dfb24d23966aa96 ok test/cases/parse/constructs/constas_param.cml
+2067f3ec1cbbfc39 ok test/cases/parse/constructs/constas.cml
+91c0b3eeabaa4170 ok test/cases/parse/constructs/constas_param.cml
 394b0953c7a9de39 ok test/cases/parse/constructs/enum.cml
 43208d9d90200f52 ok test/cases/parse/constructs/fstring.cml
 b441dbe0dae31665 ok test/cases/parse/constructs/literals.cml

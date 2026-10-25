@@ -28,7 +28,7 @@ func loss_p(t: float): float {
     let b2 = reshape([0.2], [1])
     let x = reshape([1.0, 2.0], [1, 2])
     let y = fwd(w1, b1, w2, b2, x * t)
-    return mean(y * y)
+    return float(mean(y * y))
 }
 
 func dloss_p(t: float): float {

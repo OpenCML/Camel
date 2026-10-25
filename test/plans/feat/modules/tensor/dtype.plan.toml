@@ -28,7 +28,7 @@ args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
-expect_stdout = "2147483646.0\n16\n[255, 255, 255, 127, 1, 0, 0, 0, 254, 255, 255, 255, 0, 0, 0, 0]\n-4.0\n[254, 255, 255, 255, 2, 0, 0, 0, 252, 255, 255, 255, 0, 0, 0, 0]\n[255, 255, 255, 127, 1, 0, 0, 0]\n"
+expect_stdout = "2147483646\n16\n[255, 255, 255, 127, 1, 0, 0, 0, 254, 255, 255, 255, 0, 0, 0, 0]\n-4\n[254, 255, 255, 255, 2, 0, 0, 0, 252, 255, 255, 255, 0, 0, 0, 0]\n[255, 255, 255, 127, 1, 0, 0, 0]\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 

@@ -6,7 +6,7 @@ module constas_param
 import { Tensor, ones, sum } from tensor
 
 func total(constas n: int, x: Tensor<f32, [n]>): float {
-    return sum(x)
+    return float(sum(x))
 }
 
 func main(): int sync {

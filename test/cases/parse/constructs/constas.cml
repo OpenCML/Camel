@@ -10,7 +10,7 @@ func affine(
     a: Tensor<f32, [n]>,
     b: Tensor<f32, [n + 1]>
 ): float {
-    return sum(a) + sum(b)
+    return float(sum(a)) + float(sum(b))
 }
 
 func main(): int sync {

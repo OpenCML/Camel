@@ -22,12 +22,12 @@ func dcube(): float {
 
 with <x: f32[..]>
 func g(): float {
-    return sum(x * x * x)
+    return float(sum(x * x * x))
 }
 
 with <x: f32[..]>
 func h(): float {
-    return sum(grad(g)<x>())
+    return float(sum(grad(g)<x>()))
 }
 
 func main(): int sync {

@@ -16,11 +16,11 @@ func rule(x: Tensor<f32>, dy: Tensor<f32>): Tensor<f32> { return reshape(dy, [3,
 func mark(x: Tensor<f32>): Tensor<f32> { return x }
 with <x: Tensor<f32>>
 func loss(): float {
-    return sum(mark(sum(x, 1)) * weights)
+    return float(sum(mark(sum(x, 1)) * weights))
 }
 with <x: Tensor<f32>>
 func negative_loss(): float {
-    return sum(mark(sum(x, -2)) * weights)
+    return float(sum(mark(sum(x, -2)) * weights))
 }
 with <x: Tensor<f32>>
 func keep_loss(): float { return sum(sum(x, -2, true)) }

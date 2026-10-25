@@ -3,7 +3,7 @@ import { Tensor, ones, sum } from tensor
 // `constas n` binds the extent where it first appears in a parameter type; the second
 // parameter writes `n` and must have that same extent.
 func weighted(x: Tensor<f32, [n]>, w: Tensor<f32, [n]>): float {
-    return sum(x) + sum(w)
+    return float(sum(x)) + float(sum(w))
 }
 func main(): int sync {
     println(weighted(ones([3]), ones([3])))

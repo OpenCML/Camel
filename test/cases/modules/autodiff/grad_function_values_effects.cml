@@ -25,30 +25,30 @@ func apply(f: (t: f32[..]) => f32[..], p: f32[..]): f32[..] sync {
 with <p: f32[..]>
 func loss1(): float sync {
     println('loss1')
-    let s = sum(p)
+    let s = float(sum(p))
     let r = apply((t: f32[..]): f32[..] => tanh(t * f32(s)), p)
     println('loss1: applied')
-    return sum(r)
+    return float(sum(r))
 }
 
 // 2. a closure returned by a factory that prints, called twice
 with <p: f32[..]>
 func loss2(): float sync {
     println('loss2')
-    let g = make(sum(p))
+    let g = make(float(sum(p)))
     println('loss2: made')
-    return sum(g(p) * g(p * 0.5))
+    return float(sum(g(p) * g(p * 0.5)))
 }
 
 // 3. a closure called inside a second closure, built after a print
 with <p: f32[..]>
 func loss3(): float sync {
-    let s = sum(p)
+    let s = float(sum(p))
     let g = (t: f32[..]): f32[..] => tanh(t * f32(s))
     println('loss3')
     let h = (t: f32[..]): f32[..] => g(t) * 2.0 + g(t * 0.5)
     println('loss3: built')
-    return sum(h(p))
+    return float(sum(h(p)))
 }
 
 func main(): int sync {

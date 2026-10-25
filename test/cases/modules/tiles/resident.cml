@@ -4,7 +4,7 @@ import { Device, upload, download } from tiles
 func read(x: Device<Tensor<f32>>): Tensor<f32> { return download(x) }
 func churn(x: Tensor<f32>, count: int): float {
     return if count == 0 then 0.0 else
-        sum(abs(download(upload(x)) - x)) + churn(x + 1.0, count - 1)
+        float(sum(abs(download(upload(x)) - x))) + churn(x + 1.0, count - 1)
 }
 func main(): int sync {
     let x = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[], [2, 3])

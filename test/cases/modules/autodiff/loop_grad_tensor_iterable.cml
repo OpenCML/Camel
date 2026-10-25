@@ -40,11 +40,11 @@ import { grad } from autodiff
 
 with <w: Tensor<f32, [2, 3]>>
 func total(): float {
-    return loop acc = 0.0 for row in w do acc + sum(row)
+    return loop acc = 0.0 for row in w do acc + float(sum(row))
 }
 
 func totalOf(v: Tensor<f32, [2, 3]>): float {
-    return loop acc = 0.0 for row in v do acc + sum(row)
+    return loop acc = 0.0 for row in v do acc + float(sum(row))
 }
 
 func main(): int sync {
@@ -61,7 +61,7 @@ func main(): int sync {
          5.994140625] as f32[],
         [2, 3])
     let fd = (totalOf(plus) - totalOf(minus)) / (2.0 * e)
-    let dot = sum(d * v)
+    let dot = float(sum(d * v))
     let gap = if fd > dot then fd - dot else dot - fd
     let ok = gap < 0.001
     'loop_grad_tensor_iterable f={:.1f} d={} fd={:.6f} dot={:.6f} gap={:.6f} ok={}'

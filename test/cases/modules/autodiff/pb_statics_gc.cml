@@ -30,7 +30,7 @@ func scores(x: f32[..]): f32[..] {
 with <m: QK>
 func loss(x: f32[..]): float {
     let y = scores<m>(x)
-    return mean(y * y)
+    return float(mean(y * y))
 }
 
 func main(): int sync {

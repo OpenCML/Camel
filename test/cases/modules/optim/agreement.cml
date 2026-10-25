@@ -79,7 +79,7 @@ func model_at(): Model {
 // what `with_grad` answers for the parameters of this step.
 with <m: Model>
 func loss(x: Tensor): float {
-    return sum(tanh(m.l0.weight * x)) + sum(m.l1.weight * x) + sum(m.l0.bias * x) + sum(m.l1.bias * x)
+    return float(sum(tanh(m.l0.weight * x))) + float(sum(m.l1.weight * x)) + float(sum(m.l0.bias * x)) + float(sum(m.l1.bias * x))
 }
 
 // The starting parameters and the gradient of step `n` of the all-tensor tree.

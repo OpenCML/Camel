@@ -5,7 +5,7 @@ func g(x: Tensor<f32, [3]>): Tensor<f32> {
     return tanh(x)
 }
 func h(a: Tensor<f32, [3]>): float {
-    return sum(a)
+    return float(sum(a))
 }
 func main(): int sync {
     let t = g(ones([3]))

@@ -34,8 +34,8 @@ with <m: Mlp>
 func loss(x: float[..]): float {
     let h1 = relu(x @ m.w1 + m.b1)
     let h2 = relu(h1 @ m.w2 + m.b2)
-    let y = if mean(abs(h2)) > 0.5 then h2 @ m.we + m.be else relu(h2 @ m.w3 + m.b3) @ m.wo + m.bo
-    return mean(y * y)
+    let y = if float(mean(abs(h2))) > 0.5 then h2 @ m.we + m.be else relu(h2 @ m.w3 + m.b3) @ m.wo + m.bo
+    return float(mean(y * y))
 }
 
 func fwd(m: Mlp, x: float[..]): float {

@@ -21,14 +21,14 @@ type W = { w: Tensor }
 
 with <m: W>
 func fused_chain(x: Tensor): float {
-    return sum(x / m.w)
+    return float(sum(x / m.w))
 }
 
 type AB = { a: Tensor, w: Tensor }
 
 with <m: AB>
 func declined_chain(): float {
-    return sum(m.a / m.w)
+    return float(sum(m.a / m.w))
 }
 
 func main(steps: int, rows: int, d: int, fused: int): int sync {

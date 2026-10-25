@@ -28,7 +28,7 @@ type P = { w: f32[..], b: f32[..] }
 with <m: P>
 func loss(x: f32[..]): float {
     let h = hard_sign(x @ m.w + m.b)
-    return sum(tanh(h + x @ m.w) * h)
+    return float(sum(tanh(h + x @ m.w) * h))
 }
 
 func step(m: P, x: f32[..]): (float, P) {

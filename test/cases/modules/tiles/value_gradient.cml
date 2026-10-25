@@ -7,7 +7,7 @@ func loss(): float { return sum(x * x) }
 func total(x: Tensor<f32>): float { return sum(x) }
 func average(x: Tensor<f32>): float { return mean(x) }
 func normalize(x: Tensor<f32>): Tensor<f32> { return x / f32(sum(x)) }
-func mixed(x: Tensor<f32>): (float, Tensor<f32>, float) { return (sum(x), x + 1.0, 1.0000000000000002) }
+func mixed(x: Tensor<f32>): (float, Tensor<f32>, float) { return (float(sum(x)), x + 1.0, 1.0000000000000002) }
 func main(): int sync {
     let x = reshape([1.0, 2.0, 3.0] as f32[], [3])
     let vg = (v: Tensor<f32>): (float, Tensor<f32>) => with_grad(loss)<v>()

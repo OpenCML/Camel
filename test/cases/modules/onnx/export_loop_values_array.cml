@@ -11,7 +11,7 @@ import { export_model } from onnx
 import { get_env } from env
 
 func walk(h: float[..], k: int): (float[..], int[]) {
-    return if k >= 6 || sum(h * h) < 1.0 then (h, [k, k + 1]) else walk(tanh(h) * 0.3 + h * 0.6, k + 1)
+    return if k >= 6 || float(sum(h * h)) < 1.0 then (h, [k, k + 1]) else walk(tanh(h) * 0.3 + h * 0.6, k + 1)
 }
 
 func model(x: float[..]): (float[..], int) {

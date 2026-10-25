@@ -917,7 +917,7 @@ case = "../../../cases/modules/autodiff/pb_statics_gc.cml"
 args = ["${case}", "${run_nvm}"]
 envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
 expect_exit = 0
-expect_stdout_contains = ["loss=0.3579342999437358 gqw=0.19846567139029503 gkw=0.0764192040078342", "loss2=0.3579342999437358 gqw2=0.19846567139029503 gkw2=0.0764192040078342"]
+expect_stdout_contains = ["loss=0.35793429613113403 gqw=0.19846568 gkw=0.076419204", "loss2=0.35793429613113403 gqw2=0.19846568 gkw2=0.076419204"]
 timeout_ms = 20000
 
 [[tests]]
@@ -928,7 +928,7 @@ case = "../../../cases/modules/autodiff/pb_statics_gc.cml"
 args = ["${case}", "${run_fvm}"]
 envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
 expect_exit = 0
-expect_stdout_contains = ["loss=0.3579342999437358 gqw=0.19846567139029503 gkw=0.0764192040078342", "loss2=0.3579342999437358 gqw2=0.19846567139029503 gkw2=0.0764192040078342"]
+expect_stdout_contains = ["loss=0.35793429613113403 gqw=0.19846568 gkw=0.076419204", "loss2=0.35793429613113403 gqw2=0.19846568 gkw2=0.076419204"]
 timeout_ms = 20000
 
 [[tests]]
@@ -1578,7 +1578,8 @@ kind = "behavior"
 case = "../../../cases/modules/autodiff/loop_grad_record_tensor_fd.cml"
 args = ["${case}", "${run_nvm}"]
 expect_exit = 0
-expect_stdout_exact = "loop_grad_record_tensor_fd d=94.840000 fd=94.828963 gap=0.011036873\n"
+expect_stdout_exact = """loop_grad_record_tensor_fd d=94.840000 fd=94.833374 gap=0.006626129
+"""
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -1589,7 +1590,8 @@ kind = "behavior"
 case = "../../../cases/modules/autodiff/loop_grad_record_tensor_fd.cml"
 args = ["${case}", "${run_fvm}"]
 expect_exit = 0
-expect_stdout_exact = "loop_grad_record_tensor_fd d=94.840000 fd=94.828963 gap=0.011036873\n"
+expect_stdout_exact = """loop_grad_record_tensor_fd d=94.840000 fd=94.833374 gap=0.006626129
+"""
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -1794,7 +1796,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === 'loss | helper | helper: done | loss: helper returned | 0.557950884103775 | loss | helper | helper: done | loss: helper returned | [1.7692266, 1.7808359, 1.7770708] | loss | helper | helper: done | loss: helper returned | (0.557950884103775, [1.7692266, 1.7808359, 1.7770708])', `unexpected output: ${out}`)
+assert(out === 'loss | helper | helper: done | loss: helper returned | 0.5579508543014526 | loss | helper | helper: done | loss: helper returned | [1.7692266, 1.7808359, 1.7770708] | loss | helper | helper: done | loss: helper returned | (0.5579508543014526, [1.7692266, 1.7808359, 1.7770708])', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 12000
@@ -1810,7 +1812,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === 'loss | helper | helper: done | loss: helper returned | 0.557950884103775 | loss | helper | helper: done | loss: helper returned | [1.7692266, 1.7808359, 1.7770708] | loss | helper | helper: done | loss: helper returned | (0.557950884103775, [1.7692266, 1.7808359, 1.7770708])', `unexpected output: ${out}`)
+assert(out === 'loss | helper | helper: done | loss: helper returned | 0.5579508543014526 | loss | helper | helper: done | loss: helper returned | [1.7692266, 1.7808359, 1.7770708] | loss | helper | helper: done | loss: helper returned | (0.5579508543014526, [1.7692266, 1.7808359, 1.7770708])', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 12000
@@ -1826,7 +1828,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === 'loss | helper | helper: done | loss: helper returned | 0.557950884103775 | loss | helper | helper: done | loss: helper returned | [1.7692266, 1.7808359, 1.7770708] | loss | helper | helper: done | loss: helper returned | (0.557950884103775, [1.7692266, 1.7808359, 1.7770708])', `unexpected output: ${out}`)
+assert(out === 'loss | helper | helper: done | loss: helper returned | 0.5579508543014526 | loss | helper | helper: done | loss: helper returned | [1.7692266, 1.7808359, 1.7770708] | loss | helper | helper: done | loss: helper returned | (0.5579508543014526, [1.7692266, 1.7808359, 1.7770708])', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 12000
@@ -1842,7 +1844,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === 'loss | helper | helper: done | loss: helper returned | 0.557950884103775 | loss | helper | helper: done | loss: helper returned | [1.7692266, 1.7808359, 1.7770708] | loss | helper | helper: done | loss: helper returned | (0.557950884103775, [1.7692266, 1.7808359, 1.7770708])', `unexpected output: ${out}`)
+assert(out === 'loss | helper | helper: done | loss: helper returned | 0.5579508543014526 | loss | helper | helper: done | loss: helper returned | [1.7692266, 1.7808359, 1.7770708] | loss | helper | helper: done | loss: helper returned | (0.5579508543014526, [1.7692266, 1.7808359, 1.7770708])', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 12000
@@ -2028,8 +2030,8 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.output
-assert(text.includes('grad_function_value_static_branch.cml:11:16: [Error]'), 'the diagnostic is not located at the call (11:16): ' + text)
-assert(/[(]at [^ ]*grad_function_value_static_branch[.]cml:11:16[)]/.test(text), 'the message does not name the call: ' + text)
+assert(text.includes('grad_function_value_static_branch.cml:11:22: [Error]'), 'the diagnostic is not located at the call (11:22): ' + text)
+assert(/[(]at [^ ]*grad_function_value_static_branch[.]cml:11:22[)]/.test(text), 'the message does not name the call: ' + text)
 assert(text.split('[Error]').length === 2, 'expected one error: ' + text)
 assert(text.includes('which function it calls is not evident where it is called'), 'missing: which function it calls is not evident where it is called in: ' + text)
 assert(text.includes('the function is chosen by a branch at run time'), 'missing: the function is chosen by a branch at run time in: ' + text)
@@ -2048,8 +2050,8 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.output
-assert(text.includes('grad_function_value_static_branch.cml:11:16: [Error]'), 'the diagnostic is not located at the call (11:16): ' + text)
-assert(/[(]at [^ ]*grad_function_value_static_branch[.]cml:11:16[)]/.test(text), 'the message does not name the call: ' + text)
+assert(text.includes('grad_function_value_static_branch.cml:11:22: [Error]'), 'the diagnostic is not located at the call (11:22): ' + text)
+assert(/[(]at [^ ]*grad_function_value_static_branch[.]cml:11:22[)]/.test(text), 'the message does not name the call: ' + text)
 assert(text.split('[Error]').length === 2, 'expected one error: ' + text)
 assert(text.includes('which function it calls is not evident where it is called'), 'missing: which function it calls is not evident where it is called in: ' + text)
 assert(text.includes('the function is chosen by a branch at run time'), 'missing: the function is chosen by a branch at run time in: ' + text)
@@ -2110,8 +2112,8 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.output
-assert(text.includes('grad_function_value_container.cml:11:16: [Error]'), 'the diagnostic is not located at the call (11:16): ' + text)
-assert(/[(]at [^ ]*grad_function_value_container[.]cml:11:16[)]/.test(text), 'the message does not name the call: ' + text)
+assert(text.includes('grad_function_value_container.cml:11:22: [Error]'), 'the diagnostic is not located at the call (11:22): ' + text)
+assert(/[(]at [^ ]*grad_function_value_container[.]cml:11:22[)]/.test(text), 'the message does not name the call: ' + text)
 assert(text.split('[Error]').length === 2, 'expected one error: ' + text)
 assert(text.includes('the function is read from a tuple, a struct or an array'), 'missing: the function is read from a tuple, a struct or an array in: ' + text)
 }
@@ -2129,8 +2131,8 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.output
-assert(text.includes('grad_function_value_container.cml:11:16: [Error]'), 'the diagnostic is not located at the call (11:16): ' + text)
-assert(/[(]at [^ ]*grad_function_value_container[.]cml:11:16[)]/.test(text), 'the message does not name the call: ' + text)
+assert(text.includes('grad_function_value_container.cml:11:22: [Error]'), 'the diagnostic is not located at the call (11:22): ' + text)
+assert(/[(]at [^ ]*grad_function_value_container[.]cml:11:22[)]/.test(text), 'the message does not name the call: ' + text)
 assert(text.split('[Error]').length === 2, 'expected one error: ' + text)
 assert(text.includes('the function is read from a tuple, a struct or an array'), 'missing: the function is read from a tuple, a struct or an array in: ' + text)
 assert(text.includes('could not be evaluated by std::macro'), 'not a macro error: ' + text)

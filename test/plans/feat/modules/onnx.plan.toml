@@ -550,7 +550,7 @@ const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs'
 const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
 const file = path.join(input.test_tmp, 'export_gated_gru_forward.onnx')
 const model = readOnnxModel(file)
-assert(model.ops.join() === 'Slice,Reshape,Abs,Cast,ReduceMean,Greater,If,Slice,Reshape,Abs,Cast,ReduceMean,Greater,If,MatMul,Add,Mul,Cast,ReduceMean,Identity', `unexpected top-level ops ${model.ops}`)
+assert(model.ops.join() === 'Slice,Reshape,Abs,Cast,ReduceMean,Greater,If,Slice,Reshape,Abs,Cast,ReduceMean,Greater,If,MatMul,Add,Mul,Cast,ReduceMean,Cast,Identity', `unexpected top-level ops ${model.ops}`)
 assert(model.inputs.join() === 'w_ir,w_iz,w_in,w_hr,w_hz,w_hn,b_ir,b_iz,b_in,b_hr,b_hz,b_hn,fc_w,fc_b,input1', `unexpected inputs ${model.inputs}`)
 assert(model.outputs.join() === 'output', `unexpected outputs ${model.outputs}`)
 // One If per gate decision (three gates, four If nodes: the last cell's branch nests in one arm).

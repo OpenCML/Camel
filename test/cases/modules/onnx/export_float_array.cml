@@ -9,7 +9,7 @@ import { export_model } from onnx
 import { get_env } from env
 
 func pack(x: f32[..]): float[..] {
-    return reshape([sum(x * 2.0), 1.5, sum(x)], [3])
+    return reshape([float(sum(x * 2.0)), 1.5, float(sum(x))], [3])
 }
 
 func main(): int sync {

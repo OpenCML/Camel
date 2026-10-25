@@ -15,7 +15,7 @@ type P = { p0: f64[..] }
 with <m: P>
 func loss(x: f64[..], var cnt: int): float sync {
     cnt += 1
-    return sum(m.p0 * x) * float(cnt)
+    return float(sum(m.p0 * x)) * float(cnt)
 }
 
 func main(): int sync {

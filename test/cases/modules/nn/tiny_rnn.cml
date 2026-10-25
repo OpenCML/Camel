@@ -25,7 +25,7 @@ func rnn_loss(x0: f32[..], x1: f32[..], target: f32[..]): float {
     let pred = (h2 @ model.why) + model.by
     let errors = pred - target
     let squared = errors * errors
-    return sum(squared) / float(shape(pred)[0])
+    return float(sum(squared)) / float(shape(pred)[0])
 }
 
 func init(): TinyRnn {

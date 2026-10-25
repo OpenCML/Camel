@@ -19,7 +19,7 @@ type Model = {
 with <m: Model>
 func loss(x: f32[..]): float {
     let scaled = x * m.w
-    return sum(scaled * scaled)
+    return float(sum(scaled * scaled))
 }
 
 func main(steps: int): int sync {

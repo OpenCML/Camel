@@ -33,7 +33,7 @@
  ],
  "loops": [
   {
-   "operators_per_round": 15.0,
+   "operators_per_round": 17,
    "origin": "L0",
    "rounds": 3,
    "samples": 2
@@ -59,6 +59,26 @@
    "device": "cpu",
    "ns": 0,
    "uri": ":op/add_l"
+  },
+  {
+   "alloc_blocks": 0,
+   "alloc_bytes": 0,
+   "alloc_calls": 0,
+   "alloc_ns": 0,
+   "calls": 3,
+   "device": "cpu",
+   "ns": 0,
+   "uri": ":op/dtof"
+  },
+  {
+   "alloc_blocks": 0,
+   "alloc_bytes": 0,
+   "alloc_calls": 0,
+   "alloc_ns": 0,
+   "calls": 3,
+   "device": "cpu",
+   "ns": 0,
+   "uri": ":op/ftod"
   },
   {
    "alloc_blocks": 0,
@@ -162,7 +182,7 @@
   }
  ],
  "operators": {
-  "calls": 55,
+  "calls": 61,
   "ns": 0,
   "overhead_ns": 0,
   "untimed": 0
@@ -171,18 +191,18 @@
  "schema": 1,
  "step": {
   "allocations_per_round": {
-   "blocks": 0.0,
-   "bytes": 0.0,
-   "calls": 9.0,
+   "blocks": 0,
+   "bytes": 0,
+   "calls": 9,
    "ns": 0
   },
-  "kernels_per_round": 0.0,
-  "operators_per_round": 15.0,
+  "kernels_per_round": 0,
+  "operators_per_round": 17,
   "origin": "L0",
   "rounds": 3,
   "samples": 2,
-  "syncs_per_round": 0.0,
-  "transfers_per_round": 0.0,
+  "syncs_per_round": 0,
+  "transfers_per_round": 0,
   "wall_per_round_ns": 0
  }
 }

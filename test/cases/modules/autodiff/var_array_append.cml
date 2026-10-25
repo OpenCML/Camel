@@ -19,7 +19,7 @@ func loss(x: f64[..]): float sync {
     parts = parts->append<1>
     parts = parts->append<2>
     let n = len(parts)
-    return sum(m.p0 * x) + float(n)
+    return float(sum(m.p0 * x)) + float(n)
 }
 
 func main(): int sync {

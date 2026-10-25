@@ -5,7 +5,7 @@ func g(x: Tensor<f32, [3]>): (Tensor<f32>, Tensor<f32>) {
 }
 func f(x: Tensor<f32, [3]>): (Tensor<f32, [3]>, float, Tensor<f32, [3]>) {
     let (a, b) = g(x)
-    return (a as Tensor<f32, [3]>, sum(x), b as Tensor<f32, [3]>)
+    return (a as Tensor<f32, [3]>, float(sum(x)), b as Tensor<f32, [3]>)
 }
 func main(): int sync {
     let r = f(ones([3]))

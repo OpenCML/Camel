@@ -131,7 +131,7 @@ func loss(x: TokenStates, labels: Tensor<i64, [8, 16]>): float {
     // conversion written as a type (`f32(oh)` and `oh as f32[...]` are both refused), so this is
     // the typed form available today; no stringly `cast` is needed.
     let picked = sum(log(p) * oh, -1)
-    return -mean(picked)
+    return -float(mean(picked))
 }
 
 func init_block(std: float): Block {

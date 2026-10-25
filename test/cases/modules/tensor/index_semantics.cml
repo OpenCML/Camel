@@ -18,7 +18,7 @@ func layers(x: Tensor<f32, [2, 3]>, b: Tensor<f32, [3]>, w: Tensor<f32, [3, 4]>)
     let y = x + b
     let s = slice(transpose(y), 0, 1, 3)
     let p = permute(reshape(h, [4, 2]), [1, 0])
-    return sum(max(p, -1, true)) + sum(s)
+    return float(sum(max(p, -1, true))) + float(sum(s))
 }
 
 /// The first extent is open: a parameter without a value; the bias broadcasts on the other.
