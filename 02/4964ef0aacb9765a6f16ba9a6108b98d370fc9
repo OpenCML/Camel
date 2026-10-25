@@ -1,0 +1,18 @@
+h532 + h529 + h537 + fsh-dev 8 条（合入 024964ef0）
+
+h532（类型实参在调用环上增长）：新语义错误 `GenericTypeArgumentGrows`（手填 `0x1EC`，error），
+在**第一次出现增长的递归调用**报出并点出位置；`grow` 在 develop 上钉"0 个实例、签名就是声明"，
+`DimensionNameUsedOnce` 仍告警；计数守卫 `GenericInstantiationTooDeep`（`0x03000055`）保留为兜底并有独立控制用例。
+读数：闸门 `6196 / 6177 / fail 0`，红名单空；`growing_recursion` 在改动前基线上报的是旧码（同位置、等第 9 个键），是新码不吃实例数的控制证据。
+
+h529（核心取行）：`:op/idx_take` 对任意秩沿第 0 维取行（`[len(idx)] + shape(t)[1:]`），反向 `__tangent_scatter_take_arr__`
+按下标 scatter-add、重复下标累加；新增 `:op/idx_take` 与 `:tangent/scatter_take_arr` 两条反向规则。
+实测今天删模块副本会红 9 条（模块 `Tensor` 与核心数组还是两个类型），故把删除写成 P4 的删除步交接项。
+
+h537：比较注册表全树只有 1 处登记（模块自己的 `Tensor` 类型码），注释写明只为过渡期 `Tensor`、随标记删除；
+`plan.cn.md` 5.1a 依赖表那一行作者已加，未改。行为未变（probe 逐字相同）。
+
+作者 fsh-dev 8 条带来三条裁定：限额那条**维持只在本来不会印出来时才印、5 条期望不改**（但判据改为
+"让限额停下的那条诊断是否已在刚 dump 的内容里"、三处共用一个函数、JSON 模式补打的诊断也是 JSON 同数组）；
+**规则条件必须是纯的**（定义规则时检查条件及其调用链的效应，在规则定义处点出效应位置；嵌套提交的崩溃照样要修）；
+标签形参**只用 `func`**、删掉 `function` 别名。
