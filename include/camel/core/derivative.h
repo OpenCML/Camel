@@ -16,9 +16,12 @@
  *     tangents add, and what the zero tangent is.
  *
  * Composite types (structs, tuples, arrays) have no entry: tangentTypeOf
- * derives theirs from their element types, dropping elements without a
- * tangent (so the gradient of a model struct is a struct of the same shape
- * holding its trainable members). The builtin scalar
+ * derives theirs from their element types. A struct's gradient has the
+ * struct's own shape -- a discrete field (`i64[..]`, an integer scalar) is
+ * kept at its own type and its gradient is the zero of that shape and element
+ * type, so the parameter tree and the gradient tree pair structurally -- while
+ * a tuple drops its elements without a tangent (see `keepsInTangent` in
+ * src/core/derivative.cpp). The builtin scalar
  * operators and types register here from the builtin module; tensor, nn and
  * math register their own when loaded.
  */
@@ -203,8 +206,9 @@ type::Type *tangentTypeOf(type::Type *primal);
 bool isAggregate(const type::Type *t);
 size_t aggregateSize(type::Type *aggregate);
 type::Type *aggregateElement(type::Type *aggregate, size_t index);
-/// Position of element `index` of an aggregate in its tangent, or nullopt when the element has no
-/// tangent.
+/// Position of element `index` of an aggregate in its tangent, or nullopt when the tangent does
+/// not keep the element (a tuple's element with no tangent; a struct always keeps its fields, a
+/// discrete one at its own type -- see `keepsInTangent`).
 std::optional<size_t> tangentElementIndex(type::Type *aggregate, size_t index);
 
 } // namespace camel::core

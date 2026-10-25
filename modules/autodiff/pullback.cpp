@@ -1672,6 +1672,33 @@ gc_node_ref_t packState(
     return addAggregate(draft, TupleType::create(types), values);
 }
 
+/// The type a tangent of `primal` is declared with: its tangent type when it has one, and the
+/// value's own type for a discrete value. A struct keeps its discrete fields at their own type
+/// (see `keepsInTangent`, src/core/derivative.cpp), so the zero built for such a field is a value
+/// of the field's own shape and element type -- declaring it with anything else would have the
+/// next tensor kernel read a number of another width (design principles 9.9).
+Type *tangentNodeType(Type *primal) {
+    Type *tangent = tangentTypeOf(primal);
+    return tangent != nullptr ? tangent : primal;
+}
+
+/// The zero of a discrete scalar: an integer or a boolean has derivative zero by definition
+/// (design principles 9.9), and a gradient keeps it at its own type. A discrete value a module
+/// holds (an integer tensor) is not answered here: the tangent space of its kind gives the zero
+/// operator that builds a zero of the value's own shape and element type (`tensor:zeros_like`).
+std::optional<slot_t> discreteZeroSlot(Type *type) {
+    switch (type->code()) {
+    case TypeCode::Int32:
+        return toSlot<int32_t>(0);
+    case TypeCode::Int64:
+        return toSlot<int64_t>(0);
+    case TypeCode::Bool:
+        return toSlot<bool>(false);
+    default:
+        return std::nullopt;
+    }
+}
+
 /// The zero of `primal`'s tangent; `primalValue` is the primal value (a tensor's zero is taken
 /// from it).
 gc_node_ref_t addZeroTangent(GraphDraft &draft, Type *primal, gc_node_ref_t primalValue) {
@@ -1688,13 +1715,19 @@ gc_node_ref_t addZeroTangent(GraphDraft &draft, Type *primal, gc_node_ref_t prim
     }
     const TangentSpace *space = DerivativeRegistry::instance().findTangentSpace(primal);
     if (space == nullptr) {
+        // A discrete scalar has no tangent space: its zero is the constant of its own type, and
+        // it is here because the gradient of a struct keeps its discrete fields (see
+        // `keepsInTangent`).
+        if (const auto discrete = discreteZeroSlot(primal)) {
+            return draft.materializeStaticValue(*discrete, primal);
+        }
         fail(std::format("no zero gradient for type '{}'", primal->toString()));
     }
     if (space->zero) {
-        return draft.materializeStaticValue(*space->zero, tangentTypeOf(primal));
+        return draft.materializeStaticValue(*space->zero, tangentNodeType(primal));
     }
     const std::array<gc_node_ref_t, 1> input{primalValue};
-    return addOper(draft, tangentTypeOf(primal), space->zerosLikeUri, input);
+    return addOper(draft, tangentNodeType(primal), space->zerosLikeUri, input);
 }
 
 /// `lhs + rhs` of the tangents of `primal`, element-wise for an aggregate (a state or a captured
@@ -1719,10 +1752,15 @@ gc_node_ref_t addTangentSum(GraphDraft &draft, Type *primal, gc_node_ref_t lhs, 
     }
     const TangentSpace *space = DerivativeRegistry::instance().findTangentSpace(primal);
     if (space == nullptr || space->addUri.empty()) {
+        // A discrete scalar carries no gradient: two zeros add to the zero of its own type. It is
+        // here for the same reason as the zero above.
+        if (const auto discrete = discreteZeroSlot(primal)) {
+            return draft.materializeStaticValue(*discrete, primal);
+        }
         fail(std::format("cannot add gradients of type '{}'", primal->toString()));
     }
     const std::array<gc_node_ref_t, 2> inputs{lhs, rhs};
-    return addOper(draft, tangentTypeOf(primal), space->addUri, inputs);
+    return addOper(draft, tangentNodeType(primal), space->addUri, inputs);
 }
 
 /// Whether the reverse loop goes on: one more round while the index is not negative. The
@@ -2855,10 +2893,15 @@ void Backward::mergeInto(
 gc_node_ref_t Backward::add(Type *primalType, gc_node_ref_t lhs, gc_node_ref_t rhs) {
     const TangentSpace *space = DerivativeRegistry::instance().findTangentSpace(primalType);
     if (space == nullptr || space->addUri.empty()) {
+        if (const auto discrete = discreteZeroSlot(primalType)) {
+            // Two zeros of a discrete value add to the zero of its own type (design principles
+            // 9.9): it carries no gradient, and the gradient of a struct keeps its discrete fields.
+            return target_.materializeStaticValue(*discrete, primalType);
+        }
         fail(std::format("cannot add gradients of type '{}'", primalType->toString()));
     }
     const std::array<gc_node_ref_t, 2> inputs{lhs, rhs};
-    return autodiff::addOper(target_, tangentTypeOf(primalType), space->addUri, inputs);
+    return autodiff::addOper(target_, tangentNodeType(primalType), space->addUri, inputs);
 }
 
 gc_node_ref_t Backward::zero(Type *primalType, gc_node_ref_t primal) {
@@ -2868,15 +2911,20 @@ gc_node_ref_t Backward::zero(Type *primalType, gc_node_ref_t primal) {
     }
     const TangentSpace *space = DerivativeRegistry::instance().findTangentSpace(primalType);
     if (space == nullptr) {
+        if (const auto discrete = discreteZeroSlot(primalType)) {
+            // The zero of a discrete scalar, at its own type: the gradient of a struct keeps its
+            // discrete fields (see `keepsInTangent`, src/core/derivative.cpp).
+            return target_.materializeStaticValue(*discrete, primalType);
+        }
         fail(std::format("no zero gradient for type '{}'", primalType->toString()));
     }
     if (space->zero) {
-        return target_.materializeStaticValue(*space->zero, tangentTypeOf(primalType));
+        return target_.materializeStaticValue(*space->zero, tangentNodeType(primalType));
     }
     const gc_node_ref_t value = primal;
     return autodiff::addOper(
         target_,
-        tangentTypeOf(primalType),
+        tangentNodeType(primalType),
         space->zerosLikeUri,
         std::span<const gc_node_ref_t>(&value, 1));
 }

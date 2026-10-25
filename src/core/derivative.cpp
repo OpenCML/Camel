@@ -122,6 +122,31 @@ using type::TypeCode;
 
 namespace {
 
+/// The element at `index` of an aggregate: a struct's field, a tuple's element.
+Type *elementAt(Type *aggregate, size_t index) {
+    return aggregate->code() == TypeCode::Struct
+               ? tt::as_ptr<StructType>(aggregate)->typeAt(index)
+               : tt::as_ptr<TupleType>(aggregate)->typeAt(index);
+}
+
+/// Whether the tangent of `aggregate` keeps element `index`. Every element that has a tangent is
+/// kept, at that tangent type. A struct also keeps its discrete elements -- an integer, a
+/// boolean, or a tensor of them -- at the element's *own* type (the author's ruling of
+/// 2026-10-25: `with_grad(loss)<m>(x, y)` gives a gradient "of the same type as `m`", so
+/// `labels: i64[..]` is a field of the gradient too and its value is the zero of that shape and
+/// element type). An optimizer pairs the parameter tree and the gradient tree structurally and
+/// needs no special case for a discrete field. A tuple keeps only the elements with a tangent:
+/// it is the machinery's own aggregate (a loop's state, a call's ports), not a model, and the
+/// ruling is about the gradient of a model.
+bool keepsInTangent(Type *aggregate, size_t index) {
+    Type *elem = elementAt(aggregate, index);
+    if (tangentTypeOf(elem) != nullptr) {
+        return true;
+    }
+    return aggregate->code() == TypeCode::Struct &&
+           DerivativeRegistry::instance().isDiscrete(elem);
+}
+
 Type *computeTangentType(Type *primal) {
     switch (primal->code()) {
     case TypeCode::Struct: {
@@ -129,19 +154,28 @@ Type *computeTangentType(Type *primal) {
         StructTypeFactory factory;
         bool any = false;
         for (size_t i = 0; i < st->size(); ++i) {
-            if (Type *elem = tangentTypeOf(st->typeAt(i))) {
-                factory.add(std::string(st->fieldName(i)), elem);
-                any = true;
+            if (!keepsInTangent(primal, i)) {
+                continue;
             }
+            Type *field = st->typeAt(i);
+            Type *elem  = tangentTypeOf(field);
+            factory.add(std::string(st->fieldName(i)), elem != nullptr ? elem : field);
+            any = any || elem != nullptr;
         }
+        // A struct none of whose fields has a tangent is not differentiable at all: a gradient of
+        // it would be a struct of zeros, and `grad` refuses such a parameter (test/cases/modules/
+        // autodiff/grad_refuse_struct.cml, `Plain = {s: string, n: int}`) instead of handing back
+        // a gradient the program cannot have meant. The ruling of 2026-10-25 is about the
+        // gradient of a model that has one: its discrete fields are in the gradient too, at their
+        // own type, so the tangent tree pairs with the parameter tree.
         return any ? factory.build() : nullptr;
     }
     case TypeCode::Tuple: {
         auto *tuple = tt::as_ptr<TupleType>(primal);
         std::vector<Type *> elems;
-        for (Type *elem : tuple->types()) {
-            if (Type *tangent = tangentTypeOf(elem)) {
-                elems.push_back(tangent);
+        for (size_t i = 0; i < tuple->size(); ++i) {
+            if (keepsInTangent(primal, i)) {
+                elems.push_back(tangentTypeOf(tuple->typeAt(i)));
             }
         }
         return elems.empty() ? nullptr : TupleType::create(std::move(elems));
@@ -222,18 +256,15 @@ size_t aggregateSize(Type *aggregate) {
                                                  : tt::as_ptr<TupleType>(aggregate)->size();
 }
 
-Type *aggregateElement(Type *aggregate, size_t index) {
-    return aggregate->code() == TypeCode::Struct ? tt::as_ptr<StructType>(aggregate)->typeAt(index)
-                                                 : tt::as_ptr<TupleType>(aggregate)->typeAt(index);
-}
+Type *aggregateElement(Type *aggregate, size_t index) { return elementAt(aggregate, index); }
 
 std::optional<size_t> tangentElementIndex(Type *aggregate, size_t index) {
-    if (tangentTypeOf(aggregateElement(aggregate, index)) == nullptr) {
+    if (!keepsInTangent(aggregate, index)) {
         return std::nullopt;
     }
     size_t position = 0;
     for (size_t i = 0; i < index; ++i) {
-        if (tangentTypeOf(aggregateElement(aggregate, i)) != nullptr) {
+        if (keepsInTangent(aggregate, i)) {
             ++position;
         }
     }

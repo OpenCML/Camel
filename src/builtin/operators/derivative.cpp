@@ -222,13 +222,14 @@ void extendArrayVjp(VjpBuilder &b, const VjpCall &call) {
     const std::array<vjp_node_t, 1> upstream{*dy};
     const vjp_node_t end = b.addOper(Type::Int64(), ":struct/len_arr", upstream);
     // The mask of a slice: bit 0 the end, bit 1 the start. The prefix writes both bounds; the
-    // suffix starts at len(xs) and ends at the upstream gradient's own length.
-    const std::array<vjp_node_t, 5> prefix{
-        *dy, staticInt(b, 0), split, staticInt(b, 1), staticInt(b, 3)};
+    // suffix starts at len(xs) and ends at the upstream gradient's own length. A slice node's
+    // second argument is the axis, and both halves are rank-1: 0.
+    const std::array<vjp_node_t, 6> prefix{
+        *dy, staticInt(b, 0), staticInt(b, 0), split, staticInt(b, 1), staticInt(b, 3)};
     b.accumulateGradient(
         call.inputs[0], b.addOper(tangentType, ":op/slice_sub", prefix));
-    const std::array<vjp_node_t, 5> suffix{
-        *dy, split, end, staticInt(b, 1), staticInt(b, 2)};
+    const std::array<vjp_node_t, 6> suffix{
+        *dy, staticInt(b, 0), split, end, staticInt(b, 1), staticInt(b, 2)};
     b.accumulateGradient(
         call.withInputs[0], b.addOper(tangentType, ":op/slice_sub", suffix));
 }
@@ -277,10 +278,10 @@ void sliceArrayVjp(VjpBuilder &b, const VjpCall &call) {
         b, call, call.withInputs[0], call.withInputs[1], staticInt(b, 1), staticInt(b, 3));
 }
 
-// `xs[a:b:s]`: start, end, step and the mask are the call's last four norm inputs.
+// `xs[a:b:s]`: the two bounds, the step and the mask follow the value and the axis.
 void sliceSubArrayVjp(VjpBuilder &b, const VjpCall &call) {
-    requireInputs(call, 5);
-    scatterSliceArray(b, call, call.inputs[1], call.inputs[2], call.inputs[3], call.inputs[4]);
+    requireInputs(call, 6);
+    scatterSliceArray(b, call, call.inputs[2], call.inputs[3], call.inputs[4], call.inputs[5]);
 }
 
 // ---- the rules of a gradient graph: the second derivative of an array expression ----
@@ -339,8 +340,14 @@ void scatterSliceArrayVjp(VjpBuilder &b, const VjpCall &call) {
     requireInputs(call, 6);
     if (auto dy = b.gradientOf(call.output)) {
         if (b.isActive(call.inputs[0])) {
-            const std::array<vjp_node_t, 5> slice{
-                *dy, call.inputs[2], call.inputs[3], call.inputs[4], call.inputs[5]};
+            // A slice node's second argument is the axis, and this slice is of a rank-1 array: 0.
+            const std::array<vjp_node_t, 6> slice{
+                *dy,
+                staticInt(b, 0),
+                call.inputs[2],
+                call.inputs[3],
+                call.inputs[4],
+                call.inputs[5]};
             b.accumulateGradient(
                 call.inputs[0],
                 b.addOper(b.nodeType(call.inputs[0]), ":op/slice_sub", slice));
