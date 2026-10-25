@@ -1,0 +1,16 @@
+h538 教程改写第一步：提纲（合入 ac6c8f12b）
+
+交付：`docs/handover/questions/tutorial-rewrite-outline.md`（214 行），只交提纲、正文未动，送决策者审批。
+结构：序章 1 章 + 正文 20 章（四部分）+ 结语，一条主线 15 步（词频统计 → 拟合直线）。
+
+侦察到的硬事实（正文写作时要改）：没有任何一节教 `loop`（示例还写"递归就是循环"）；第 15/16 节仍 `import { Tensor }`；
+全文无 `===`、无维度名/多维数组、无按结构展开的泛型、无 `rule`/`saturate`/等价图、无"用 `graph` 写一个遍"；
+第 6 节把"按依赖求值与效应"放在读者还没有例子时讲。另两条今天就不对：第 13 节把 `std::gir`/`std::rgir` 说反；
+DOT 块说"去掉了 origin/span/srcfile"，而那正是 `std::rgir` 会打的（且这块今天没有任何检查配对）。
+
+风险（写进提纲）：根 `examples/` 里 `perf/fibs.cml`、`python/rules/rules.cml`、`models/naive-in-expert-out/accuracy.cml`
+**没有任何计划跑到**；教程旁边 27 个例子**从没被当文件跑过**；要用 `rules.cml` 必须先补计划。
+
+按作者新规改写（第二版）：全部章节**现在就写**（不是"落地后补齐"）；新增 12a 流章；第 10 章加资源推断；
+第 20 章 GPU 现在就写；第 17 章加 `fact`；写作纪律换成"按目标写、当作已实现、不加标注，
+跑不通的例子进 `scripts/check-doc-snippets.mjs` 的待实现名单（正文不加记号）、名单只减不增"。
