@@ -20,7 +20,7 @@
 #include "proof.h"
 #include "rule.h"
 
-#include "analysis.h"
+#include "fact.h"
 
 #include "../graph/handle.h"
 
@@ -3856,7 +3856,7 @@ class RewriteExecutor final : public Executor {
             {"check_reason", checkReasonKernel},
             {"check_coverage", checkCoverageKernel},
             {"check_coverage_table", coverageTableKernel},
-            {"fact", camel::rewritemod::analysisKernel},
+            {"fact", camel::rewritemod::factKernel},
         };
     }
 };
