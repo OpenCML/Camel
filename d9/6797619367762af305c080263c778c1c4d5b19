@@ -1,0 +1,25 @@
+tip=d96797619 H554 第十六轮：清 1 条（`check_command` 的 JSON 位置断言）；裁定两条路的读数已拿到，实现未动
+
+数字
+- 计划级：`check_command.plan.toml` `total: 12, pass: 12, fail: 0` → `check.lexical_limit_json` **已清**，27 → **26**；全量快层见文末（本轮只改测试侧，产品未动）。
+- `-Check all` 见文末。提交 `d96797619`。
+
+① `check.lexical_limit_json` **已清（测试侧陈旧）**：脚本断言逐字 `assert(errors.every(d => d.range.start.line === -1), 'source positions retained')`，而实测 JSON 是 `{"range":{"start":{"line":0,"character":14},"end":{"line":0,"character":15}},…}`，且该用例自己的 desc 写着"two **located** errors in JSON mode" → 断言与 desc 自相矛盾，改成 `d.range.start.line >= 0` 并在信息里打出 range。
+
+② 裁定的第一条读数：**两条路今天怎么分叉**（逐字 file:line）
+- **编译期那条（`std::macro` 展开）**：实现是 `src/execute/macro/**`；失败经 `src/execute/macro/eval.cpp:425` 抛 `RuntimeDiag::MacroEvaluationFailed`，模板在 `src/core/error/diagnostics/messages/runtime.cpp:83` `"'{0}' could not be evaluated by std::macro: {1}."`，语义说明在 `src/execute/macro/runtime.h:62`。**今天的行为：遇到第一个求值失败就抛，即"第一处停下、只报一条"。**
+- **运行期那条（导数图运行期建）**：`modules/autodiff/operators.cpp:134-137` 注册 `grad`/`with_grad` 的 resolver；拒绝在 `modules/autodiff/pullback.cpp:84` `throwRuntimeFault(RuntimeDiag::RuntimeError, "autodiff: " + message)`；消息逐调用拼（`Backward::refusalReason` `:3304`/`:994`、`whyNotEvident` `:3341`）。**今天的行为：同样是"第一处停下、只报一条"，与 `docs/cli.cn.md:107` 一致。**
+- **`f` 编译期可知的判据**：`std::macro` 只在前置输入都是静态时求值——`src/compile/gir/builder_calls.cpp:752`（"…the value is still one std::macro may evaluate ahead of time"）、`src/compile/gir/draft_graph_builder.cpp:336`（"passes run (std::macro evaluates a gradient) must name its rule too"）、`src/core/tags.cpp:169`；`src/core/error/diagnostics/messages/runtime.cpp:316` 明说 `grad`/`with_grad` 会在 `std::macro` 下提前建图。→ **分叉点＝"参数静态且流水线里有 `std::macro`"走编译期，"否则"走运行期。**
+
+③ 实现（**未动，逐条给落点**，本轮预算不足以在保持"新增红 0"的前提下落地）
+- 编译期那条：在 `src/execute/macro/eval.cpp` 的求值循环里，把"某个静态调用被拒"记下来而**不立即抛**，继续求值其余静态调用，最后一次性失败、**每条被拒调用一条诊断**；判定**复用自动微分自己的那套**（`pullback.cpp:3304` `refusalReason` + `:3341` `whyNotEvident`），不另写分析。**风险点：`modules/autodiff` 的判定要能被 `src/execute/macro` 调用（跨模块边界），这是这条改动的主要工作量。**
+- 运行期那条：维持现状（第一处停下、只报一条），`docs/cli.cn.md:107` 不用改。
+- 两条路都去掉消息里的 `(at …)`（`pullback.cpp:149-163` 的 `whereIs`，格式串 `:160`），位置进位置字段，"选出函数值的地方"作**关联位置**——builder 已经有 `related`/`relatedOrigin`/`relatedSpan`（`src/core/error/diagnostics/builder.cpp:35-57`），所以这一半是"接线"而不是新机制。
+- 12 条用例按裁定分开断言（macro 变体两条诊断两个位置；default 变体第一处那一条）；`docs/language/**` 自动微分一节加那一句（中英同步，只加一句）——**都等实现一起落**。
+
+④ 其余条目（本轮读数/进度）
+- `docs.snippets_compile`：4 处陈旧**已精确定位**——`17_teaching_a_law.en.md:61`、`:363`，`17_teaching_a_law.cn.md:59`、`:350`；并在主机上取到今天真实输出逐字（`sampled negate: … reason the condition selects the instances, so no sampled value was compared, … fired 64 of 64, coverage integer scalar int: (x * -1) = (0 - x), no premise yet`；`refuted abs_of_nonnegative: proposition equality, evidence none, reason the rule never fired on its own left side in 64 tries, … the operator 'math:abs_l' is not translated`）。注意：`check-doc-snippets.mjs` 的 pending 列表本来就描述这两处（"the tree reads 'no premise yet' where the page reads 'fired 8 of 8'"），所以重录＝把树今天的话写进页；`17_teaching_a_law.cn.md:69` 那句散文里也有"上面那行 `fired 8 of 8`"，重录时需同步一句。**下一轮做，只改这 4 行+那一句，不动结构。**
+- `fixes_apply`：`proof.mjs:211` `if (gone) covered.set(name, d.code)`——`gone` 为假所以表里没有 `LexicalDiag::InvalidNumberFormat`；实例行逐字 `    let a = 09`（`09` 在 0 基 12-14，与测试期望 `{line 9, char 12-14}` **一致**），所以不是期望错，是**fix 落地后错误未消失**或 `expectFix` 里更早的检查失败 → 下一轮在 `proof.mjs` 的 `expectFix` 里加逐项打印。
+- `failed_evaluation.error`、`pass_dump.py:86-88`、`debugger.http_gateway`（`1 of 33`）、LSP 三条、`compile_bench.smoke`、`fusion_group.profile.none`：读数同上一轮，未动。
+
+纪律：未推 origin；`docs/language/**` 未动；未碰其它工作树/分支；未在 Windows 构建。工作树干净，报告已附 `git notes --ref=handover`（HEAD）。
