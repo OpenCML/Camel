@@ -1217,3 +1217,15 @@ Linux 包在 manylinux 里构建，用 auditwheel 修正标签，并在构建时
 ## 2026-10-26-range-two-arguments-and-the-overload-table
 
 **做备选 1，用最简单的路**：`a..b` 的降低直接写出第三个实参 `1`，也就是 `$builtin::range(a, b, 1)`。这样编译器自己的调用也是三个实参，`range` 的变量表收窄成恰好 3 个，`range(a, b)` 自然落到普通的 `NoMatchingFunction`。不需要让解析层分清两个名字，也不留按名字的特判（`builder_operators.cpp` 与 `builder_static.cpp` 里的两处都删掉）。区间那种形态（`LoopIterableForm::Interval`）照旧按步长 1 识别。备选 2 那种临时做法不进 develop。
+
+## 2026-10-26-stdlib-pure-annotations-and-the-combine-mixed-guard-hole
+
+**`UsesPromiseViolated` 注册、`pure` 加 `var` 形参在声明处被拒、没人用的同步块里的效应改用准确的说法，收下。** 函数体推断出的资源与声明的比较，以及调用处"推断 ⊆ 要求"的匹配，是同一批的下一步；现在 `builder.cpp` 里报这条诊断的只有子句本身这一处。
+
+1. **两个选项都不对**：标准库函数和任何函数一样，都有推断出的资源集，不存在"自己不带足迹"的函数。调用方传进 `pure` 形参时，比较的就是这个推断结果。
+   - `/// @pure` 这类注释是同一个说法的另一种写法，而且没有检查，所以删掉，不升级成子句。导出的函数需不需要在签名里写 `pure` 作为对外的承诺、哪些形参要求回调是纯的（例如 `array.cml` 里那句 "must be pure"），由我重写各模块时逐个决定，写进签名；`stdlib-conventions` 里记下准则。
+   - 施工方现在不用动。我重写到哪个模块，就在哪个模块把注释清掉。
+2. **守卫不用改，是校验器没按规则的许可去判**：`float_combine_mixed` 写了 `#requires(reassociate, no_infs, no_signed_zeros)`。`no_infs` 的含义（设计原则 8.x 的许可表）就是假定任何值都不是无穷，包括中间结果。两个乘积溢出成无穷，正是这个假定排除掉的情形，所以那个反例不是这条律的反例。
+   - 修覆盖检查：规则带的每个许可都按它的含义收窄反例空间。`no_infs` 排除两边任何一步出现无穷的点；`no_signed_zeros` 下零不比较符号；`reassociate` 允许舍入差。
+   - 修好后 `knownRefuted` 两条一起撤。这个集合本身也删掉：一条被驳倒的律不能留在默认集合里，有反例就修律或修守卫，不登记。
+   - 由规则库那条车道做（H233 的范围）。
