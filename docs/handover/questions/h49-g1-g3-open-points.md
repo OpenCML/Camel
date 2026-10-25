@@ -27,7 +27,7 @@ G1–G3 的施工步骤写在 [GPU 计划](../../design/gpu/plan.cn.md) 的 §2.
 
 **证据**
 - `src/profile/profile.cpp` 的 `synchronise(std::string_view what)` 与 JSON 里的 `device_work.syncs`；`modules/tiles/src/cuda.cpp` 在每次传输后调用 `profile_hooks::synchronise("resident upload")` / `("resident download")`。
-- 今天的读数：`test/cases/modules/tiles/gpu_scope_host_effect.cml` 在 `tiles::compile` 下 `TILES_RESIDENCY` 记 `"downloads":0`，`println` 没有输出（[既有问题页](gpu-scope-in-body-host-effect.md)）。
+- 今天的读数：`test/cases/modules/tiles/gpu_scope_host_effect.cml` 在 `tiles::compile` 下 `TILES_RESIDENCY` 记 `"downloads":0`，`println` 没有输出（作者已裁定这是**错误、现在就修**，见 `docs/handover/reviews/questions-2026-10-24-evening.md` 的 `gpu-scope-in-body-host-effect` 一节；`handover/h556-gpu-effect` 在修）。
 - 复核对返工二的要求逐字为"`#gpu` 函数体里的 `println` 打印出来，`syncs` 计数为 1"。
 
 **选项 A（一个观察点一次等待）**：一值一次，读数最好核对；代价：同流上相邻的两次 `download` 记两次，即使硬件只等了一次。
