@@ -762,3 +762,7 @@ println(grow([1.0, 2.0], read_int()))
 ## 更正：标签的函数形参不写 `func`
 
 负责人 2026-10-25："func 是关键字，不适合做类型名。"本文件 `tag-parameter-kind-names` 一节"只用 `func` 一个名字"作废，上一节的返工随之变成：删掉标签形参列表对关键字 `func` 的放行，改为类型参数加条件 `tag vjp<rule: F> on func when is_function::<F>()`。设计原则 6.2、语言参考 7 章（中英文）已改；具体做法见交接说明 5.00"语法层收口"第 4 条。语言参考里那句"`@vjp<rule>` 报 `InvalidAnnotation`，应写 `#vjp<rule>`"是给旧写法指路的，一并删掉了。
+
+## 定稿：标签的函数形参（负责人 2026-10-25 讨论后）
+
+用到"任何函数"的地方，要表达的只是"这是一个函数"这一事实，`when is_function::<F>()` 已经能说，所以不设 `function` 之类的类型标记（它会是一个只限于函数的 `any`）。写法：`export tag vjp<rule: F> on func when is_function::<F>()`；签名固定时写具体的函数类型 `(x: T) => R`。设计原则 6.2、语言参考 7 章已按此写；施工见交接说明 5.00"语法层收口"第 4 条。

@@ -548,7 +548,7 @@ func main(): int {
 
 `on nodes` 的标签是**节点的属性**（`camel/core/node_attrs.h`）：写在前面的标签对那个函数体或块里写下的节点生效，与外面同名的标签按属性的合并规则累积，内层带参数的标签取内层的值。`on func`、`on type`、`on field` 的标签属于声明本身，C++ 模块用 `tag::factsOf` 一处读取（标签、许可、读者；`tag::ofDeclaration` / `tag::ofField` 仍在）；在 Camel 代码里读它们要等泛型的第一阶段。
 
-形参也可以是一个函数：声明成类型参数，加上条件 `when is_function::<F>()`，与遍的签名 `opt::<F>(f: F): F! when is_function::<F>()` 是同一种写法。实参是一个函数，标签的事实就是那个函数本身（还原成那个函数），不是它的名字，也不是任何内部记号；它的签名是否合用，由读这个标签的一方在贴的位置检查。自动微分模块就是这样声明 `export tag vjp<rule: F> on func when is_function::<F>()` 的：`#vjp<rule>` 写在函数声明之前，调用这个函数时用规则而不是函数体的导数（[26 自动微分](../technical/26_autodiff_as_graph_rewrite.md)）。
+形参也可以是一个函数：声明成类型参数，加上条件 `when is_function::<F>()`，与遍的签名 `opt::<F>(f: F): F! when is_function::<F>()` 是同一种写法；签名固定时直接写具体的函数类型 `(x: T) => R`。实参是一个函数，标签的事实就是那个函数本身（还原成那个函数），不是它的名字，也不是任何内部记号；它的签名是否合用，由读这个标签的一方在贴的位置检查。自动微分模块就是这样声明 `export tag vjp<rule: F> on func when is_function::<F>()` 的：`#vjp<rule>` 写在函数声明之前，调用这个函数时用规则而不是函数体的导数（[26 自动微分](../technical/26_autodiff_as_graph_rewrite.md)）。
 
 **`#impl<f>`：Camel 函数体是语义，原生内核是执行**（设计原则 10.4）。它写在带函数体的函数声明之前：
 
