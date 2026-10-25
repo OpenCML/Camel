@@ -333,8 +333,10 @@ std::vector<type::Type *> OperatorTable::allRegisteredTypes() const {
 
 void OperatorTable::setInPlaceForm(std::string_view uri, std::string_view inPlaceUri) {
     std::unique_lock lock(mutex_);
+    const OperId plain                  = internLocked(uri);
     const OperId form                   = internLocked(inPlaceUri);
-    entries_[internLocked(uri)].inPlace = entries_[form].uri;
+    entries_[plain].inPlace             = entries_[form].uri;
+    entries_[form].plain                = entries_[plain].uri;
 }
 
 std::optional<std::string> OperatorTable::inPlaceForm(std::string_view uri) const {
@@ -348,6 +350,19 @@ std::optional<std::string> OperatorTable::inPlaceForm(std::string_view uri) cons
         return std::nullopt;
     }
     return std::string(symbolText(form));
+}
+
+std::optional<std::string_view> OperatorTable::plainForm(std::string_view uri) const {
+    const auto id = lookup(uri);
+    if (!id) {
+        return std::nullopt;
+    }
+    std::shared_lock lock(mutex_);
+    const SymId plain = entries_[*id].plain;
+    if (plain == kEmptySym) {
+        return std::nullopt;
+    }
+    return symbolText(plain);
 }
 
 void OperatorTable::declareReusesOperand(std::string_view uri, bool reuses) {

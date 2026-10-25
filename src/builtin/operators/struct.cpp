@@ -10,6 +10,7 @@
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/execute/executor.h"
+#include "camel/profile/profile.h"
 #include "camel/utils/type.h"
 #include "camel/utils/utf8.h"
 #include "ops.h"
@@ -422,7 +423,12 @@ slot_t __append_owned_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Array *arr        = norm.get<Array *>(0);
     const slot_t elem = with.get<slot_t>(0);
     auto *arrType     = tt::as_ptr<ArrayType>(norm.type(0));
-    if (!arr->canWriteInPlace()) {
+    const bool ownStorage = arr->canWriteInPlace();
+    if (camel::profile::enabledInline()) {
+        // The array's own count answered, where the plan could not (docs/design/arrays-memory/README.cn.md 4.3.1).
+        camel::profile::arrayCountAnswer(ownStorage);
+    }
+    if (!ownStorage) {
         return __append_arr__(with, norm, ctx);
     }
     arr->append(elem, arrType);
