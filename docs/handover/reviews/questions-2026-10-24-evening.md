@@ -1229,3 +1229,10 @@ Linux 包在 manylinux 里构建，用 auditwheel 修正标签，并在构建时
    - 修覆盖检查：规则带的每个许可都按它的含义收窄反例空间。`no_infs` 排除两边任何一步出现无穷的点；`no_signed_zeros` 下零不比较符号；`reassociate` 允许舍入差。
    - 修好后 `knownRefuted` 两条一起撤。这个集合本身也删掉：一条被驳倒的律不能留在默认集合里，有反例就修律或修守卫，不登记。
    - 由规则库那条车道做（H233 的范围）。
+
+## 顺序边的读法：返工
+
+`8f6baa1b4`（改写引擎、`carriesOrdering`、链的遍历、ONNX 导出器的 `runsBefore` 都改成"控制边或同步边"）把两种边并存的过渡态带进了 develop，违反"过渡只在车道分支上"。按 `yield` 那次的处理，不回退，但 H242 车道接下来的第一步就是把它收掉：
+- 链改用同步边写出之后，控制边整个删除（`ctrlInputsOf` 以及它的各处读法、`SYNC` 节点），这些读法只读同步边和顺序边。这次加的 `|| syncInputsOf` 也就随之变成唯一的一种读法。
+- 注释只写现在的规则。"the kind it was written as until H242 moved the chain onto it"这类叙述历史的句子删掉。
+- **代码里不写任务编号**：仓库要公开（"提交不写任务编号"同样适用于注释）。现在 `src`、`include`、`modules` 里有 129 处 `H\d+`，最多的是 `modules/python/operators.cpp`（12）和 `modules/rewrite/module.cpp`（8）。逐处改成引用设计稿或设计原则的小节，或者直接删掉；以后的提交不再加。
