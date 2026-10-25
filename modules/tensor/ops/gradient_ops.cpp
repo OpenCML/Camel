@@ -250,17 +250,6 @@ OpDef internal(
 
 // ---------------------------------------------------------------- tangent space
 
-Type *tensorTangentType(Type *primal) {
-    if (!isTensorType(primal)) {
-        return nullptr;
-    }
-    if (auto dtype = tensorFactsOf(primal).dtype;
-        dtype && *dtype != TypeCode::Float32 && *dtype != TypeCode::Float64) {
-        return nullptr; // integer and boolean tensors have no gradient
-    }
-    return primal;
-}
-
 /// An integer or boolean tensor is discrete: its derivative is zero by definition (design
 /// principles 9.9). It has no tangent space, but a value computed from a parameter and held in
 /// one -- an argmax result, a comparison mask -- neither loses a gradient nor must be refused
@@ -510,14 +499,13 @@ void registerTensorTangentSpace() {
     // slot each: it sums through `get<slot_t>` and answers a slot array, which is not a numeric
     // tensor. A tensor gradient that came back as one left the next tensor operator reading a
     // value its type does not promise — expand_axis on the gradient of a mean_axis, which is the
-    // `export_grad_mean` crash. Only the numeric-unknown array — the alias `Tensor`, whose element
-    // type is not fixed yet — needs a tangent type stated here; every other array takes its
-    // tangent from its element type (derivative.cpp's computeTangentType). The space owns the
+    // `export_grad_mean` crash. The tangent type of an array is taken from its element type
+    // (derivative.cpp's computeTangentType), so nothing states one here: a tensor's element type
+    // is always in its type. The space owns the
     // tensors of the array code and not the arrays of values that share it — an array of
     // structs, tuples or arrays keeps the core's array space (`:tangent/add_arr`,
     // `:tangent/zeros_arr`), which answers for the values this one does not own.
     camel::core::TangentSpace space;
-    space.tangentType  = &tensorTangentType;
     space.owns         = &isTensorType;
     space.addUri       = "tensor:add";
     space.zerosLikeUri = "tensor:zeros_like";
@@ -528,8 +516,6 @@ void registerTensorTangentSpace() {
     space.scatterUri = "tensor:row_add_at";
     camel::core::DerivativeRegistry::instance().setTangentSpace(
         camel::core::type::TypeCode::Array, std::move(space));
-    camel::core::DerivativeRegistry::instance().setTangentType(
-        camel::core::type::TypeCode::Array, &tensorTangentType);
     camel::core::DerivativeRegistry::instance().setDiscretePredicate(
         camel::core::type::TypeCode::Array, &tensorIsDiscrete);
 }

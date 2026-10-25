@@ -5,10 +5,11 @@
  * What a tensor is, now that `Tensor` is an alias of the native array type
  * (docs/design/arrays-memory/plan.cn.md section 5).
  *
- * `Tensor` is exported as the numeric-unknown array (`ArrayType::numericUnknown()`), and a
- * numeric array a program writes (`f32[2, 3]`) is the same kind of type: one representation,
- * two spellings. There is no second tensor type and no second type code; what a tensor's type
- * says is read through one set of facts.
+ * `Tensor` is exported as the open-rank array whose element type is not stated
+ * (`ArrayType::elementTypeOpen()`), so that a program which still writes the name is told to write
+ * the element type; `Tensor<f32>` is `f32[..]`, and a numeric array a program writes
+ * (`f32[2, 3]`) is the same kind of type: one representation, two spellings. There is no second
+ * tensor type and no second type code; what a tensor's type says is read through one set of facts.
  *
  * A shape may name its extents (design principles 5.4): `Tensor<f32, [n, 3]>` keeps the linear
  * form of each named extent (`core/type/extent.h`) in the array type, so the caller can bind `n`

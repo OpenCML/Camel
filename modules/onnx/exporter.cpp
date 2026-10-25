@@ -1408,8 +1408,8 @@ void leafPaths(const Value &v,
 /// growable-array-vs-tensor-in-the-onnx-exporter), not what its type says.
 bool lengthIsOpen(const type::Type *ty) {
     const auto *array = type::asArrayType(ty);
-    return array != nullptr && !array->isNumericUnknown() && !array->anyRank() &&
-           array->extents().size() == 1 && array->extents()[0].isUnknown();
+    return array != nullptr && !array->anyRank() && array->extents().size() == 1 &&
+           array->extents()[0].isUnknown();
 }
 
 /// One leaf, spelled for a diagnostic: what it is, and where it sits in the carried value when

@@ -178,7 +178,7 @@ type::Type *tensorOf(const TensorFacts &facts) {
     // The type a value with these facts has: a numeric array of that element type and shape
     // (plan section 5.2). No dimension at all is the element type itself — the rank-zero ruling,
     // docs/handover/reviews/questions-2026-10-23.md, section rank-zero-tensor — and a rank
-    // nobody fixed is the open-rank array, which is what a bare `Tensor` is.
+    // nobody fixed is the open-rank array.
     std::vector<ExtentForm> forms;
     if (facts.shape) {
         forms.reserve(facts.shape->size());
@@ -187,12 +187,15 @@ type::Type *tensorOf(const TensorFacts &facts) {
                 extent < 0 ? ExtentForm::unknown() : ExtentForm::constant(extent));
         }
     }
-    if (facts.dtype && !isSupportedTensorScalar(*facts.dtype)) {
-        throw std::invalid_argument("Unsupported Tensor element type");
-    }
     if (!facts.dtype) {
-        return facts.shape ? ArrayType::numericUnknownFromForms(forms)
-                           : ArrayType::numericUnknown();
+        // Every array a value can have states its element type (design principles 5.1): an
+        // operator whose result element type follows from none of its inputs has no type to
+        // answer with, and the inference must say so rather than build an array whose element
+        // type nobody fixes.
+        throw std::invalid_argument("Tensor element type is not stated");
+    }
+    if (!isSupportedTensorScalar(*facts.dtype)) {
+        throw std::invalid_argument("Unsupported Tensor element type");
     }
     type::Type *elem = type::Type::create(*facts.dtype);
     if (!facts.shape) {

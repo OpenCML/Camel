@@ -44,23 +44,11 @@ TensorFacts tensorFactsOf(const Type *type) {
         }
         return {};
     }
-    if (array->isNumericUnknown()) {
-        // `Tensor`: no element type is fixed. A shape argument fixes the rank and its extents;
-        // a bare `Tensor` fixes neither.
-        TensorFacts facts;
-        if (!array->anyRank()) {
-            StaticShape shape;
-            shape.reserve(array->rank());
-            for (const ExtentForm &form : array->extents()) {
-                shape.push_back(form.isConstant() ? form.constant() : kUnknownDim);
-            }
-            facts.shape = std::move(shape);
-        }
-        return facts;
-    }
-    // A numeric array (`f32[2, 3]`, the alias's other spelling, and any numeric array a program
-    // writes): the element type is the dtype and the stated extents are the shape. An extent
-    // nobody wrote is unknown, and an array whose rank is open states no shape at all.
+    // A numeric array (`f32[2, 3]`, the spelling the alias hands out, and any numeric array a
+    // program writes): the element type is the dtype and the stated extents are the shape. An
+    // extent nobody wrote is unknown, and an array whose rank is open states no shape at all.
+    // Every array a value can have states its element type (design principles 5.1), so there is
+    // no dtype-less array to answer for.
     if (array->elemType() != nullptr && isSupportedTensorScalar(array->elemType()->code())) {
         TensorFacts facts;
         facts.dtype = array->elemType()->code();
