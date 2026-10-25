@@ -3,7 +3,7 @@ module tensor_forms
 // The element-wise tensor forms of the same laws. The deleted C++ law table applied its laws to
 // elementwise operators through the same `simplify<T>` (`elementwise` families in
 // `e8c290554:algebra.cpp`), and the rules library states the f32 element laws
-// (`tensor_f32_combine`, `tensor_f32_fold`, `tensor_f32_add_self`, the neutrals). What the library
+// (`tensor_combine`, `tensor_fold`, `tensor_add_self`, the neutrals). What the library
 // does not state is the `t * 0` family: an f32 zero tensor of the matched shape cannot be written
 // by a rule, and the deleted table had no tensor zero law either — `tensor_zero` is where the gap is
 // measured, and the difference is a language feature, not a missing rule.

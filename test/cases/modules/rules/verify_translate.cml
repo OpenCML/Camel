@@ -28,7 +28,7 @@
 module verify_translate
 
 import { check, check_text, check_row_count, check_coverage, check_coverage_table } from rewrite
-import { int_add_zero, float_add_minus_zero, tensor_f32_mul_one } from rules
+import { int_add_zero, float_add_minus_zero, tensor_mul_one } from rules
 
 /// A rule of the fragment: both sides are integer scalar terms.
 rule twice(x: int) { x + x => x * 2 }
@@ -55,7 +55,7 @@ func main(): int sync {
     // The library's own: a generic law whose declaration carries `when is_integer::<T>()`, so it has
     // one row per integer width and no premise yet, and a tensor law, whose property is over the
     // whole tensor at once.
-    let library = check([int_add_zero, tensor_f32_mul_one], 10, 7)
+    let library = check([int_add_zero, tensor_mul_one], 10, 7)
     println("rows", check_row_count(library))
     print(check_text(library))
     println("0", check_coverage(library, 0))
