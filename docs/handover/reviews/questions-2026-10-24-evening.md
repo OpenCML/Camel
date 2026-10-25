@@ -339,3 +339,101 @@ println(grow([1.0, 2.0], read_int()))
 1. **要拒绝**：直接跑的这两条脚本与 release gate 用同一条规则——取注册表之前跑 `build-info.js check`，安装不是本树的构建就拒绝（exit 2，消息说量的是哪个安装、它的戳是什么），不报 144 条"差异"。一条规则到处一样，不靠文档提醒。
 2. **覆盖开关不豁免**：显式指定的二进制同样要过戳检查——"量的不是本树"的错误与是怎么指定的无关。`CAMEL_EXE` 这类环境变量开关按项目约定不设，改成命令行参数（`--camel <path>`）；`CAMEL_HOME` 是安装位置的约定，照旧。
 3. 已提交的"报告量了哪个安装、一处问题算一条"保留——摘要行与孤立的 `\r` 不再算成 problem 是对的。
+
+## a-frozen-node-names-its-type-by-typeid
+
+根因找得准：类型有了**对象身份**，并且被写进了图。原则与函数值一样——**类型没有身份，只有结构**：同一个类型在任何地方是同一个 id。修在根上，不在读的那几处各自改成 `typeEquals`。
+
+1. **一个类型一个 id**：所有类型都经类型表构造（自底向上的 hash-consing：分量先驻留，复合类型按分量的 id 作键——今天 `intern()` 按分量地址作键，分量驻留之后这就是结构键）。开放签名、联合、类型变量也一样进表；类型变量的身份是它的绑定处（哪个声明的第几个），不是对象。`TypeTable::adopt` 删除——"给手上的对象发一个 id"正是身份泄漏的入口；绕过类型表构造类型的地方（`tensorOf` 返回非驻留对象之类）全部改走表。
+2. **名字不进身份**：plan 3.2 让包名、维度名进驻留键（打印与诊断要保留它们），而 `equals` 忽略它们。所以表里每个类型同时记下它的**规范 id**（擦掉名字后的那个类型的 id）。图的不变式、`nodeContentHash`、`contentHash`、`sameContent`、e-graph 的表达式类都用规范 id；打印与诊断用带名字的那个。这样不需要另写结构哈希——规范 id 就是结构哈希。
+3. 于是问题 2 的回答是"比 id"，但比的是规范 id；问题 3 的回答是"同一个类型的两份就是同一个内容"。`contentHash` 里混入的四个裸指针改成各自的规范 id。
+4. 验收：probe 3、4 那两处不必改成 `typeEquals`（改回比 id 也绿）；`export_fold` 不靠 probe 1、2 也回到亚秒；加一条检查——冻结图里出现的每个 type id 都来自表的驻留路径（调试构建断言）。
+
+## release-gate-inventory-eight-perf-plans-unclassified
+
+选 **B**（逐条定命运），外加机制上两处小改；不做目录通配——每个计划的命运单独写出理由，这是这份清单的用处。
+
+| 计划 | 命运 |
+|---|---|
+| `para_speedup` | `SLOW_PLANS`（照 perf-para-gate 选 B） |
+| `step_budget`、`reduce_layout` | **拆文件**：只断言计数与性质的守卫（`step.count`、`reduce_layout.count`）移到各自的计划文件进 `SLOW_PLANS`；测量那半留在原文件进 `FORBIDDEN`（发布前测量） |
+| `instruction_counts`、`instruction_counts_load` | `FORBIDDEN`：要特权容器与 `perf`，`_load` 还要人为诱导负载 |
+| `gemm_canonical_shapes`、`gemm_threads` | `FORBIDDEN`：速率曲线，只做发布前测量 |
+| `showcase_d4` | `FORBIDDEN`：与 Python 的逐行对比属于测量，与 showcase 同族一致 |
+
+机制：
+1. inventory 收集完所有问题再一起报（不在第一条就 `die`），一次看到全部未分类的计划。
+2. **inventory 检查进合并闸门的 fast 层**：新计划落地时如果没有归类，就在那次提交上变红，而不是等到有人跑 release gate。这就治住了"第 9 个计划又弄坏工具"。
+
+**返工**：`--camel <path>` 取代 `CAMEL_EXE` 只做了两条脚本。按"一类事一条规则"，`CAMEL_EXE` 在其余脚本里也一并删掉、改成 `--camel`（`camel-for-ai.mjs`、`check-doc-snippets.mjs`、`perf-gate.mjs`、`test/tools/check-doc-pass-forms.mjs`、`import-audit.mjs`、`para-speedup.mjs`、`jitcov.py`、`progen/README.md`）。另外 `stdlib-reference.mjs` 等处的注释"`CAMEL_EXE` is gone (the author's ruling …)"删掉——代码只描述现在怎么做，不记录已不存在的写法。
+
+## 返工：代码注释不引用裁定（camel-arg 合入后的抽查）
+
+`CAMEL_EXE` 已全部改为 `--camel`，两种语言各一个辅助函数（`test/tools/camel-arg.mjs`、`camel_arg.py`），`--camel` 不带值时报用法错误、不回退默认，`CAMEL_HOME` 照旧作为安装位置。这一批没有问题，收下。
+
+**返工**（在 H242 与 P4 的间隙做，不占这两块的子代理）：注释里写"the author's ruling of 2026-10-25"、"(the author's ruling…)"这类话的，删掉引用，只留规则本身。比如 `camel-arg.mjs` 开头一句改成"`CAMEL_HOME` is the install location's convention: an explicitly named install is a command-line argument, never an environment switch."。src、stdlib、scripts、test/tools、include 里这类引用一共约百处，一次扫完。
+
+**理由**：仓库将公开，代码只描述现在怎么做、为什么这样做；谁在哪天裁定的，记在 `docs/handover/reviews/`。引用裁定的注释读者核实不了，裁定被取代后也没人会去改它。
+
+## step-elementwise-not-named-by-the-perf-fates-ruling
+
+**裁定：按判据，就是 lane 的读法**。`step.count` 与 `step.elementwise` 都只断言计数，都进 `step_counts.plan.toml`（`SLOW_PLANS`）；`step.budget` 留在原文件（`FORBIDDEN`）。上一条裁定括号里的守卫名只是举例，起作用的是判据"只断言计数与性质、不断言时间"。照字面去做，会让一条计数守卫没有任何一层跑它，这和裁定的本意相反。已落地的那样就对，不用改。
+
+## release-gate-verifies-one-install-and-the-plan-layers-measure-another
+
+**裁定：一次运行只有一个安装，闸门选定它，再显式交给每一层。不选 A、B、C 中的任何一个**。
+
+1. **只选一次**：闸门用 `--camel <path>` 选安装，不给就用本树的 `out/latest`。查戳用的函数和 stdlib 检查器是同一个（`refuseInstallNotOfThisTree`）。"装在 `out/` 之外的安装查不了戳，由调用者负责"这条豁免删掉：安装自己带着戳，在哪儿都能查。发布闸门查的就是本树，别的树建出来的安装直接拒绝。
+2. **交给每一层**：
+   - `scripts/test.js` 与 `test/tools/run-tests.mjs` 加 `--camel`。给了它，每个计划测试子进程的 `CAMEL_HOME` 就设成这个安装的根目录，`preflightBuild` 也查这个二进制；不给就照旧用 `out/<build>`。
+   - `check-doc-snippets.mjs` 改用 `takeCamel`（上一条返工本来也点了它）。
+   - 闸门把选好的安装用 `--camel` 传给 fast、slow 两层和全部静态检查。这样就不存在"查的是 A、量的是 B"，读法 A 要拦的那种不一致根本无从产生，所以也不用新加一处拒绝。
+3. **默认值只有一个**：测试与检查工具挑安装时不读 `CAMEL_HOME`，没给 `--camel` 时一律用本树的 `out/latest`。`camel-arg.mjs` 的 `defaultCamel` 与 `install-stamp.mjs` 的那个合成一个函数，放在一处。这一条更正我上次那句"`CAMEL_HOME` 照旧"，它的意思是：`CAMEL_HOME` 是 `camel` 二进制和 SDK 用户找运行库的约定（`init.h`、`dll_path.h`、C++ 产物里的说明），工具不拿它来决定量哪个安装；工具只在启动子进程时把它设成选中安装的根目录。让环境变量决定量哪个二进制，就是另一种环境开关。
+
+**理由**：规则统一，一次运行的"被测安装"只有一个来源，每一层都从参数拿到它。现在三处各有各的默认值（闸门优先 `CAMEL_HOME`，计划两层用 `out/<build>`，检查器用 `out/latest`），读法 A、B、C 都是在三个默认之间打补丁。
+
+**返工追加**（并入上一条"代码注释不引用裁定"的返工，同一次扫完）：注释里的内部任务编号（如 `H185`、`H154 §3`）也删掉，只写规则和理由。src、stdlib、scripts、test/tools、include 里约 580 处，分布在 139 个文件。例如 `plan-inventory.mjs` 的 `SLOW_PLANS` 注释：只写"三个 perf 计划在慢层，因为它们只断言计数与性质"，不写哪天哪条裁定。仓库将公开，读者看不到这些编号。
+
+## specialize-growing-shape-graph-floor-reads-five
+
+**裁定：5 就是不动点，期望改为精确断言**：`stats.specializations === 1 && stats.graphs === 5`，打印的输出照旧。
+
+- **前提已核对**：特化前是 3 个图，特化出的唯一一个实例连同它调用的图是 2 个，合起来 5 个，而且不随数组长度增长。这正是"同一个键在调用环上复用已有实例"那条规则该有的结果。旧下界 `> 5` 能通过，是因为类型身份没修好时，同一个类型被当成两个，多出了副本。所以读数降到 5 是修复本身，不是特化出了毛病，不用退回去查。
+- **用精确值而不用上下界**：不动点是确定的，下界只能挡住"变少"，挡不住它重新变多。
+- **`desc` 重写**：只描述现在的事实，一个特化、5 个图、不随长度增长。删掉"99 graphs"、"no longer a bound"和引用裁定的话。
+- 由同一 lane 在实现类型身份的那批提交里改。
+
+## profile-allocation-counts-move-when-types-intern
+
+**裁定：按现在的树重新录，由引起变化的这个 lane 在同一批提交里录。报告照旧统计分配器调用次数，不改成只统计程序申请的内存块**。
+
+- **降下来是修复的效果**：每次执行算子少了两次分配器调用，正是"同一结构只有一个类型对象、查询走类型表"该有的结果。程序自己的分配（每轮一块 4096 字节、总共 9 块 36864 字节）和算子调用次数都没变。
+- **"调用次数"这一行留着**：这一行能看见运行时自己的开销。这次正是它显示出"每次查询都新建一个类型对象"，只统计内存块就看不到这件事。
+- **怎么录**：
+  - 重新录 `fusion_group_none` 的两份基准文件，并把文件里"录自某个基准提交"的说明改成录自本树，不写提交号；
+  - `profile_alloc.py` 的硬编码前缀改成现在的读数；
+  - 在报告里写一行：每次执行算子的分配器调用从 3 次降到 1 次，原因是类型对象由类型表复用。
+- **顺带的观察（不是返工）**：剩下那一次分配器调用，是不是每次执行都得做，可以留到算子按编译期绑定类型的时候再看。
+
+## var-cell-widening-and-the-bare-tensor-return
+
+**裁定：问题出在产生方，不在接收方。裸 `Tensor` 签名、`grad` 返回的过渡类型，都要改成具体类型。可赋值规则不放宽，格子也不写成裸 `Tensor`**。
+
+**前提**（已对照 `plan.cn.md` 5.1a 核对）：裸 `Tensor` 是迁移中的过渡类型。P4 的终点是"值的元素类型总在类型里"，签名里出现裸 `Tensor` 就是编译错误。所以 `assignableFrom(f32[?, ?], Tensor)` 为假是对的：元素类型已定的格子，不收元素类型未定的值。四条红用例都是这个过渡类型在终态树上露出来的地方，和 Q5 的同秩加宽是两件事。lane 指出计划 :323 的前提不完整，这一点说得对。
+
+1. **`static_types`**：不用 P7（把结果挪进自己的绑定），那样把要测的东西绕过去了。改成：
+   - `func grow(t: f32[?, ?]): f32[?, ?]`，`w = grow(w)` 照旧写；
+   - `pick` 同样写具体类型；
+   - `w = ones([5])` 按 Q5 改成另一个 `var`；
+   - 新增的 `g` 读数保留。
+2. **`lrit`、`mnist`（含 `nn.*` 两条）要改，并且要绿**。它们是教学示例，不是"本来就该报错"的负例。
+   - 签名里的裸 `Tensor` 全部改成具体元素类型：`predict(X: f32[?, ?]): f32[?, ?]`、`train(weights: f32[?, 1]): f32[?, 1]`、`mean_squared_error(...): float`、`update(var w: f32[?, 1])` 等，按各自实际的秩写；
+   - 只在函数确实对元素类型泛型时，才在头部写 `::<T>`；
+   - P6（格子写成 `Tensor`）依赖的是 P4 要删的过渡类型，否决。
+3. **`gc_training_peak`**：`grad(loss)<wf>` 的结果是 `grad of f32[?, 4]`，就该是 `f32[?, 4]`。
+   - `vjpTensorType()` 返回过渡类型，正是 5.1a 依赖表里的那一行，现在就改：由被微分值的切线类型给出具体类型；
+   - 这一条在 develop 上能跑，在翻转分支上是编译期拒绝，属于回退，**算 P4 合入的闸门**，和前面的垃圾梯度一样；
+   - `nn:sgd` 的 `grad of P` 不放宽去接受元素类型未定的梯度。
+4. **计划**：我已在 `plan.cn.md` 补上：
+   - :323 补一句，说明裸 `Tensor` 签名的返回值进不了元素类型已定的格子，这件事与加宽无关；
+   - :447 下加两条：一条是把签名里写裸 `Tensor` 的示例与用例（`lrit`、`mnist` 等）改写成具体类型；另一条是 `grad` 的结果取具体切线类型（`gc_training_peak` 依赖这一条）。

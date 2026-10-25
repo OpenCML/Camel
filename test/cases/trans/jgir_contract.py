@@ -2,9 +2,15 @@
 import json
 import os
 import subprocess
+import sys
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[3]
-EXE = os.environ.get("CAMEL_EXE", str(ROOT / "out/latest/bin" / ("camel.exe" if os.name == "nt" else "camel")))
+sys.path.insert(0, str(ROOT / "test" / "tools"))
+from camel_arg import camel_from_argv  # noqa: E402
+
+# The install this case measures: `--camel <path>` names it; without it `$CAMEL_HOME/bin/camel`,
+# else this tree's `out/latest/bin/camel`. One rule, in one place: test/tools/camel_arg.py.
+EXE, ARGV = camel_from_argv(ROOT)
 SOURCE = str(ROOT / "test/cases/loops/captures.cml")
 def export(name):
     p = subprocess.run([EXE, SOURCE, "std::" + name], cwd=ROOT, capture_output=True, text=True)

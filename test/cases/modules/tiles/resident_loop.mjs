@@ -12,11 +12,19 @@
 import { execFileSync } from 'node:child_process'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { takeCamel } from '../../../tools/camel-arg.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const root = path.resolve(here, '../../../..')
-const exe = process.env.CAMEL_EXE
-    || path.join(root, 'out/latest/bin', process.platform === 'win32' ? 'camel.exe' : 'camel')
+// The install this case measures: `--camel <path>` names it, `$CAMEL_HOME/bin/camel` without it,
+// else this tree's `out/latest/bin/camel`. One rule, in one place: test/tools/camel-arg.mjs.
+function usage(message) {
+    if (message) console.error(`resident_loop: ${message}`)
+    console.error('usage: node test/cases/modules/tiles/resident_loop.mjs [--camel PATH]')
+    process.exit(2)
+}
+
+const { camel: exe } = takeCamel(process.argv.slice(2), root, usage)
 const kase = path.join(here, 'resident_loop.cml')
 
 const stdout = execFileSync(exe, ['--devices', 'cpu', kase, 'tiles::compile', 'std::jgir'], {

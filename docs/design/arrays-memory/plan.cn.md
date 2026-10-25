@@ -320,7 +320,7 @@ Tensor<f32>               // f32[..]
 
 - 87 个用例文件含 `const [`；逐个按 `Tensor<T, const [d]>` → `Tensor<T, [d]>` 改写；其中 20 个含 `-1`，逐个改 `?`（`Tensor<f32, const [-1, 3]>` → `Tensor<f32, [?, 3]>`）。
 - 12 个用例含 `constas`：形状位置改写为首次出现的名字，其余引用；例如 `f<T>(x: T[constas n, 4])` → `f<T>(x: T[n, 4])`。
-- `test/cases/modules/tensor/static_types.cml`：`var w = zeros([2, 1]); w = grow(w) (Tensor any)` 依赖"任意秩加宽"；按 Q5 的结论（同秩加宽）改写成两次 `var` 或显式 `as`。
+- `test/cases/modules/tensor/static_types.cml`：`var w = zeros([2, 1]); w = grow(w) (Tensor any)` 依赖"任意秩加宽"；按 Q5 的结论（同秩加宽）改写成两次 `var` 或显式 `as`。另有一处与加宽无关：`grow(t: Tensor): Tensor` 的裸 `Tensor` 签名返回过渡类型，进不了元素类型已定的格子（`f32[?, ?]`）；改写签名为具体类型（`grow(t: f32[?, ?]): f32[?, ?]`）。
 - `test/cases/tools/grammar/keywords.cml` 的 `Tensor<f32, const [constas n, 4]>` 改写为 `Tensor<f32, [n, 4]>`，并重新生成 `test/plans/feat/tools/golden/grammar/keywords.scopes` 金标。
 - 新增 `test/cases/compile/array_shape/*`：语法、绑定、`?`、`..s`、线性、常量名、诊断、`T[]` 不变、`T[][]` 嵌套、`as` 检查；`test/plans/feat/compile/array_shape.plan.toml`。
 - AST/格式化/金样：新增语法进入 `feat/format` 的往返语料；`feat/compile` 的 AST 快照只对 smoke 语料，不改既有快照。
@@ -445,6 +445,8 @@ P4 的终点：
 
 - 464 处 `Tensor<`、87 个文件：P3 已把 `const [` 改写为 `[`；P4 再把仍然依赖"张量类型语义"的断言改写（打印、`as`、`var` 加宽、类型文本）。这一步与 P3 的改写分开提交，便于二分。
 - `test/cases/modules/tensor/static_types.cml`、`var_tensor_reference.cml`、`shape_inference/var_argument*.cml`：`var` 加宽与裸 `Tensor` 的用法按 Q5 调整。
+- 签名里写裸 `Tensor` 的示例与用例（`test/cases/modules/nn/lrit.cml`、`mnist.cml` 及其 `nn.*` 计划条目等）：P4 终点上裸 `Tensor` 签名是编译错误，按 5.1a 改写成具体元素类型（示例里用 `f32[?, 1]` 这类写法）或在头部声明的泛型；不放宽可赋值规则，也不把格子写成裸 `Tensor`。
+- `grad(f)` 的结果类型（`modules/tensor/ops/vjp.cpp#vjpTensorType`）：由被微分值的切线类型给出，`grad of f32[?, 4]` 就是 `f32[?, 4]`；不再返回过渡类型（`test/cases/feat/mm/gc/gc_training_peak.cml` 的 `sgd(wf, g, 0.5)` 依赖这一条）。
 - 新增 `test/cases/compile/array_alias/*`：`Tensor<f32>` ≡ `f32[..]`、`Tensor<f32, [2, 3]>` ≡ `f32[2, 3]`、裸 `Tensor` 接受 `int[3]` 拒绝 `string[3]`、`Tensor<string>` 报错、`Tensor<f32>` 的类型文本、`var` 加宽、`as` 的形状检查、四个后端一致。
 - `test/plans/feat/compile/array_alias.plan.toml`。
 

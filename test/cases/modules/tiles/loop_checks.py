@@ -3,10 +3,20 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 
 ROOT = Path(__file__).resolve().parents[4]
-EXE = os.environ.get('CAMEL_EXE', str(ROOT / 'out/latest/bin' / ('camel.exe' if os.name == 'nt' else 'camel')))
-ENV = dict(os.environ, CAMEL_HOME=str(ROOT / 'out/latest'),
+sys.path.insert(0, str(ROOT / 'test' / 'tools'))
+from camel_arg import camel_from_argv  # noqa: E402
+
+# `--camel <path>` names the install this case measures; without it the install is
+# `$CAMEL_HOME/bin/camel`, else this tree's `out/latest/bin/camel`. One rule, in one place:
+# test/tools/camel_arg.py. `ARGV` is this process's arguments without the `--camel` pair.
+EXE, ARGV = camel_from_argv(ROOT)
+# The install that binary lives in: the child is given it as CAMEL_HOME, so the compiler the case
+# runs and the standard library it reads are the same install whichever one `--camel` named.
+INSTALL = str(Path(EXE).resolve().parents[1])
+ENV = dict(os.environ, CAMEL_HOME=INSTALL,
            CAMEL_GC_VERIFY='both', CAMEL_GC_STRESS_SAFEPOINT='1', CAMEL_GC_STRESS_MODE='minor')
 
 def run(case, passes, env=ENV):
