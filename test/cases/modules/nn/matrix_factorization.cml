@@ -10,12 +10,12 @@ import { Tensor, full, reshape, sum } from tensor
 import { sgd } from nn
 
 type MatrixFactorization = {
-    user_table: Tensor,
-    item_table: Tensor
+    user_table: f32[..],
+    item_table: f32[..]
 }
 
 with <model: MatrixFactorization>
-func rating_loss(user_one_hot: Tensor, item_one_hot: Tensor, rating: float): float {
+func rating_loss(user_one_hot: f32[..], item_one_hot: f32[..], rating: float): float {
     let user_vec = user_one_hot @ model.user_table
     let item_vec = item_one_hot @ model.item_table
     let pred = sum(user_vec * item_vec)
@@ -30,7 +30,7 @@ func init(): MatrixFactorization {
     }
 }
 
-func train(model: MatrixFactorization, u: Tensor, i: Tensor, rating: float, steps: int): MatrixFactorization {
+func train(model: MatrixFactorization, u: f32[..], i: f32[..], rating: float, steps: int): MatrixFactorization {
     return if steps == 0 then model else train(sgd(model, grad(rating_loss)<model>(u, i, rating), 0.1), u, i, rating, steps - 1)
 }
 

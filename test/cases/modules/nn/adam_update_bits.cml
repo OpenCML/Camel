@@ -15,8 +15,8 @@ import { Tensor, cast, range } from tensor
 import { adam, adam_state } from nn
 
 type Model = {
-    w: Tensor,
-    b: Tensor,
+    w: f32[..],
+    b: f32[..],
     scale: float
 }
 
