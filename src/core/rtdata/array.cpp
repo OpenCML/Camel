@@ -1336,11 +1336,14 @@ void Array::printArray(
 std::string Array::formatTensorElement(uint64_t flatIndex) const {
     char buf[32];
     std::ostringstream oss;
+    // The element goes to the C library, so the NaN is made positive first: the library writes
+    // `-nan` for a NaN whose sign bit is set, and a NaN's text carries no sign (design principles
+    // 7.7; the language reference, 2.5.2; camel/utils/number_text.h, withoutNaNSign).
     switch (elemTypeCode_) {
     case TypeCode::Float32:
     case TypeCode::BFloat16:
     case TypeCode::Float16: {
-        const double value = getAsDouble(flatIndex);
+        const double value = camel::utils::withoutNaNSign(getAsDouble(flatIndex));
         if (value == std::floor(value) && std::abs(value) < 1e10) {
             (void)std::snprintf(buf, sizeof(buf), "% 7.0f.", value);
         } else {
@@ -1350,7 +1353,7 @@ std::string Array::formatTensorElement(uint64_t flatIndex) const {
         break;
     }
     case TypeCode::Float64: {
-        const double value = getAsDouble(flatIndex);
+        const double value = camel::utils::withoutNaNSign(getAsDouble(flatIndex));
         if (value == std::floor(value) && std::abs(value) < 1e10) {
             (void)std::snprintf(buf, sizeof(buf), "% 7.0f.", value);
         } else {

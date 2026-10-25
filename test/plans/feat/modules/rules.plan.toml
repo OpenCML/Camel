@@ -849,7 +849,7 @@ kind = "behavior"
 case = "../../../cases/modules/rules/tensor_boundary.cml"
 args = ["${case}", "tensor_boundary::apply", "std::nvm"]
 expect_exit = 0
-expect_stdout_contains = ["tensor([   -nan,    -nan,    -nan], dtype=float32) 0.0", "tensor([      0.,       0.,       0.], dtype=float32) 1e-30", "tensor([     -0.,       0.,      -0.], dtype=float32) 0.0"]
+expect_stdout_contains = ["tensor([    nan,     nan,     nan], dtype=float32) 0.0", "tensor([      0.,       0.,       0.], dtype=float32) 1e-30", "tensor([     -0.,       0.,      -0.], dtype=float32) 0.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
 
