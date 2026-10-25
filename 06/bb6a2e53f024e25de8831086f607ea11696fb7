@@ -1,0 +1,21 @@
+P4 落地（合并提交 06bb6a2e5，develop 46cbf75b2）
+
+数字
+- 整份 test/plans 快层（-Jobs 8）：total 6601 / pass 6591 / fail 0 / skip 2 / known failures 8，RUN_EXIT=0；
+  known_fail 从 develop 的 16 降到 8（P4 消掉的那 8 条），无新红、无新 skip。
+- -Check all：8 项全 exit 0（diagnostics-catalog / camel-for-ai / check-doc-links / headers / check-grammar /
+  stdlib-reference / export-matrix / model-generators）。
+- 合并冲突：翻转线 → develop 0 处；随后并 h598 教程分支 0 处。
+- 诊断 280 码；camel-for-ai 三行 52286/59000、28769/30500、28115/30000（翻转线带入）。
+
+内容
+- 翻转线（handover/h465-flip-integration @ 806df5d8d，386 提交）整体并入：tensor 别名变数组、模块的
+  slice 内核对与按谁的数组派发删除、stdlib 签名区按元素类型书写、梯度类型分用户与机器两族。
+- 教程侧：全章例子成为受检用例（36 条 + 33 份重出 golden）、编辑器两个依赖钉死 9.3.2 / 2.0.1 并全路 npm ci、
+  文法修复 func f::<T> 的 ::< 被读成比较运算符、05_map_order_prl 改断言形状而非"同一批数字"。
+- 生成物两处按合并后的树重出：keywords.scopes（::< 作用域，2 行）、docs/tutorial/images/10_var_order.{dot,svg}
+  （P4 后图里多出 :var/peek、节点编号后移）。
+
+未做/已知
+- perf/**、slow 层与 PyTorch 对照未跑（共享主机禁用），留给批次点。
+- fsh-dev 比我领先 1 笔（作者侧合并），下一轮例行取回。
