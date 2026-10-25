@@ -9,14 +9,14 @@ import { Tensor, reshape, sum, tanh } from tensor
 import { export_model } from onnx
 import { get_env } from env
 
-func walk(s: (Tensor, int)): (Tensor, int) {
+func walk(s: (float[..], int)): (float[..], int) {
     return if s.1 >= 6 || sum(s.0 * s.0) < 1.0 then s else walk((tanh(s.0) * 0.3 + s.0 * 0.6, s.1 + 1))
 }
 
 func main(): int sync {
     let x = reshape([1.0, 2.0, 3.0, 4.0], [2, 2])
     println(walk((x, 0)).1)
-    export_model((x: Tensor): (Tensor, int) => walk((x, 0)), (x), get_env('ONNX_OUT'))
+    export_model((x: float[..]): (float[..], int) => walk((x, 0)), (x), get_env('ONNX_OUT'))
     println('exported')
     return 0
 }

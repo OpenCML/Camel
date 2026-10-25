@@ -9,7 +9,7 @@ import { Tensor, reshape, sum } from tensor
 import { export_model } from onnx
 import { get_env } from env
 
-#strict func net(x: Tensor): Tensor {
+#strict func net(x: f32[..]): f32[..] {
     let w = reshape([0.5, -1.0, 2.0, 1.0, -0.5, 0.25] as f32[], [3, 2])
     return x @ w
 }
@@ -17,7 +17,7 @@ import { get_env } from env
 func main(): int sync {
     let x = reshape([1.0, -2.0, 3.0, 0.5, -1.5, 2.5] as f32[], [2, 3])
     println(sum(net(x)))
-    export_model((x: Tensor): Tensor => net(x), x, get_env('ONNX_OUT'))
+    export_model((x: f32[..]): f32[..] => net(x), x, get_env('ONNX_OUT'))
     println('model written')
     return 0
 }

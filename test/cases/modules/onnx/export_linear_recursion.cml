@@ -10,18 +10,18 @@ import { export_model } from onnx
 import { get_env } from env
 
 // The result of the call is added to.
-func pile(h: Tensor): Tensor {
+func pile(h: f32[..]): f32[..] {
     return if sum(h) < 1.0 then h else pile(h * 0.5) + h
 }
 
 // A right fold: the result is post-processed with values of the call that made it (a counter,
 // a state that changes, an argument that never changes).
-func fold(i: int, n: int, v: Tensor, w: Tensor): Tensor {
+func fold(i: int, n: int, v: f32[..], w: f32[..]): f32[..] {
     return if i >= n then v else tanh(fold(i + 1, n, v * 0.5, w) @ w) * float(i + 1) + v
 }
 
 // The arms the other way round, and a branch in what is done with the result.
-func fold2(v: Tensor, w: Tensor): Tensor {
+func fold2(v: f32[..], w: f32[..]): f32[..] {
     return if sum(v * v) > 0.3 then {
         let r = fold2(v * 0.6, w)
         if sum(v) > 0.0 then r @ w + v else r - v
@@ -32,7 +32,7 @@ func main(): int sync {
     let w = reshape([0.5, -0.25, 0.1, 0.3] as f32[], [2, 2])
     let x = reshape([1.0, 2.0, 0.5, -1.0] as f32[], [2, 2])
     export_model(
-        (x: Tensor, w: Tensor): (Tensor, Tensor, Tensor) =>
+        (x: f32[..], w: f32[..]): (f32[..], f32[..], f32[..]) =>
             (pile(x), fold(0, int(sum(x * x) * 0.5), x, w), fold2(x, w)),
         (x, w),
         get_env('ONNX_OUT')

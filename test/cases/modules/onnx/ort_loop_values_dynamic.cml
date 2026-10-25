@@ -11,21 +11,21 @@ import { with_grad } from autodiff
 import { export_model } from onnx
 import { get_env } from env
 
-type P = { w: Tensor }
+type P = { w: f32[..] }
 
 with <m: P>
-func walk(h: Tensor, k: int): (Tensor, int) {
+func walk(h: f32[..], k: int): (f32[..], int) {
     return if k >= 6 || sum(h * h) < 1.0 then (h, k) else walk<m>(tanh(h @ m.w) * 0.3 + h * 0.6, k + 1)
 }
 
 with <m: P>
-func loss(x: Tensor): float {
+func loss(x: f32[..]): float {
     let (h, k) = walk<m>(x, 0)
     return sum(h * h)
 }
 
 with <m: P>
-func step(x: Tensor): (Tensor, int, Tensor, Tensor) {
+func step(x: f32[..]): (f32[..], int, float[..], f32[..]) {
     let (h, k) = walk<m>(x, 0)
     let g = with_grad(loss)<m>(x)
     return (h, k, reshape([g.0], [1]), g.1.w)
@@ -40,7 +40,7 @@ func main(): int sync {
     save_npy(r.2, 'native_2.npy')
     save_npy(r.3, 'native_3.npy')
     let exported = if get_env('ONNX_OUT') != '' then sync {
-        export_model((x: Tensor): (Tensor, int, Tensor, Tensor) => step<m>(x), x, get_env('ONNX_OUT'), [0])
+        export_model((x: f32[..]): (f32[..], int, float[..], f32[..]) => step<m>(x), x, get_env('ONNX_OUT'), [0])
         1
     } else 0
     println(exported)
