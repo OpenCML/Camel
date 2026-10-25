@@ -880,6 +880,12 @@ slot_t rewriteKernel(ArgsView &, ArgsView &norm, Context &ctx) {
             16);
         return makeOk(
             toSlot(const_cast<camel::runtime::Program *>(application.program)), resultType);
+    } catch (const camel::runtime::GraphCommitConflict &e) {
+        // The program the rewrite started from was replaced while it ran: a rule's condition that
+        // commits -- through a rewrite or a graph transaction of its own -- does this. Which rules
+        // were given is the caller's decision, so the failure is theirs to see as an error value,
+        // and not the internal error of a pass that found a program it cannot handle.
+        return makeError("RewriteConflict", e.what(), "<rewrite::rewrite>");
     } catch (const camel::runtime::RuleCompileError &e) {
         return makeError("RuleInvalid", e.what(), "<rewrite::rewrite>");
     } catch (const std::invalid_argument &e) {
@@ -953,6 +959,10 @@ slot_t runKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
             run->set(7, makeSome(toSlot(proof), proofType));
         }
         return makeOk(toSlot(root.getAs<Struct>()), resultType);
+    } catch (const camel::runtime::GraphCommitConflict &e) {
+        // As in `rewrite`: a condition that commits replaces the program this run started from,
+        // and the caller's own rules are what did it.
+        return makeError("RewriteConflict", e.what(), "<rewrite::run>");
     } catch (const camel::runtime::RuleCompileError &e) {
         return makeError("RuleInvalid", e.what(), "<rewrite::run>");
     } catch (const std::invalid_argument &e) {
@@ -1447,6 +1457,10 @@ slot_t saturateKernel(ArgsView &, ArgsView &norm, Context &ctx) {
         }
         const camel::runtime::Program *committed = session.commitChecked();
         return makeOk(toSlot(const_cast<camel::runtime::Program *>(committed)), resultType);
+    } catch (const camel::runtime::GraphCommitConflict &e) {
+        // As in `rewrite`: a condition that commits replaces the program this saturation started
+        // from, and the caller's own rules are what did it.
+        return makeError("RewriteConflict", e.what(), "<rewrite::saturate>");
     } catch (const camel::runtime::RuleCompileError &e) {
         return makeError("RuleInvalid", e.what(), "<rewrite::saturate>");
     } catch (const mm::MemoryExhausted &) {
