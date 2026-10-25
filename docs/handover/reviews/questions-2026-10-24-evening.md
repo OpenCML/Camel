@@ -662,3 +662,12 @@ println(grow([1.0, 2.0], read_int()))
 **等 P4 合入后再做**：S5b `autodiff::expand`（自动微分正在 P4 里修数组循环的梯度）；S6 设备块即数组值，以及其后的 S7–S10。
 
 **冲突**：GPU 车道只改 `modules/tiles`、`stdlib/tiles.cml` 和标签机制。碰到 `modules/tensor` 时先跟 P4 车道对齐，再提交；同一处代码以 P4 为准。
+
+## 撤回：H49 计划 §2.6"需要 `autodiff::expand`"
+
+上一节"§2.6 `autodiff::expand`：需要"**撤回**，前提不成立。`grad`、`with_grad`、`vjp` 在 `modules/autodiff/operators.cpp` 里登记为 macro 算子（`.macro = true`），`f` 编译期可知时，流水线里的 `std::macro` 已经在编译期把它展开成导数图（`pullback.cpp` 的 `macroCallee`），后面的遍都看得见。教程第 16 节写的也是这个。计划 §2.6 "派生图只在运行期建、遍看不见"的读数已经过时。
+
+改为：
+- **不新增遍**。`#gpu` 作用域里的梯度，靠 `std::macro` 在 `tiles::compile` 之前展开。`tiles::compile` 在作用域里看到未展开的 `grad`/`with_grad` 时，报"缺少前置遍"并点名 `std::macro`。`f` 编译期不可知时，照计划报 `GpuScopeUnsupported`。
+- 派生图继承原函数的放置（§2.3），这一条照旧。
+- 这样 S5b 只剩"放置的继承"和"缺少前置遍"的诊断，不依赖 P4，**挪进现在就做的那一批**。计划 §2.6 按此改写。
