@@ -75,7 +75,7 @@ timeout_ms = 30000
 
 [[tests]]
 name = "grammar.scopes.operators"
-desc = "Scopes of every operator and punctuation token of the parser grammar, including ->, ?->, .., ..., ??, !!, the compound assignments and the type operators."
+desc = "Scopes of every operator and punctuation token of the parser grammar, including ->, ?->, .., ??, !!, the compound assignments and the type operators."
 kind = "snapshot"
 tool = "node"
 case = "../../../cases/tools/grammar/operators.cml"

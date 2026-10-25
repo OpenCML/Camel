@@ -636,7 +636,6 @@
     "operators": {
       "comment": "The operators and separators of include/camel/parse/syntax/token_kinds.def, longest first (checked by scripts/check-grammar.mjs).",
       "patterns": [
-        { "name": "keyword.operator.spread.camel", "match": "\\.\\.\\." },
         { "name": "keyword.operator.compose.camel", "match": "\\.\\." },
         { "name": "keyword.operator.pipe.camel", "match": "\\?->|->" },
         { "name": "keyword.operator.arrow.camel", "match": "<=>|=>" },
@@ -691,6 +690,7 @@
     },
     "punctuation": {
       "patterns": [
+        { "name": "punctuation.separator.module.relative.camel", "match": "\\.\\.\\." },
         { "name": "punctuation.separator.namespace.camel", "match": "::" },
         { "name": "punctuation.separator.colon.camel", "match": ":" },
         { "name": "punctuation.separator.comma.camel", "match": "," },
