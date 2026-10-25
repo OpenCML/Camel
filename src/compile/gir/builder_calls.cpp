@@ -645,30 +645,68 @@ node_handle_t Builder::ruleBindingValueOf(node_handle_t target, const GCT::node_
     if (const auto it = defaults_.find(graph.get()); it != defaults_.end() && !it->second.with.empty()) {
         withDefaults = &it->second.with;
     }
-    for (size_t i = bound.size(); i < calleeType->withTypesCount(); ++i) {
-        if (withDefaults == nullptr || i >= withDefaults->size() ||
-            !(*withDefaults)[i].has_value()) {
-            diags_->of(SemanticDiag::RuleWithParameterUnbound)
+    const std::string ruleName(declaration->names.front());
+    // What the rule is bound to: one value per `with` parameter, in the order the declaration
+    // writes them, written beside the name or given by the parameter's default. A rule value
+    // carries them, and they are the value half of the instance key the engine makes the rule's
+    // sides at, so each is a compile-time value of the parameter's type (design principles 5.4,
+    // 5.5).
+    std::vector<data_ptr_t> withValues;
+    withValues.reserve(calleeType->withTypesCount());
+    for (size_t i = 0; i < calleeType->withTypesCount(); ++i) {
+        Type *declared = calleeType->withTypeAt(i);
+        const std::string paramName(calleeType->argNameAt(i));
+        if (i < bound.size()) {
+            withValues.push_back(
+                ruleWithArgumentValue(bound[i], declared, ruleName, paramName, at));
+            continue;
+        }
+        const ParameterDefaultValue *fallback = nullptr;
+        if (withDefaults != nullptr && i < withDefaults->size() &&
+            (*withDefaults)[i].has_value()) {
+            fallback = &(*withDefaults)[i].value();
+        }
+        if (fallback == nullptr || fallback->data == nullptr) {
+            if (fallback == nullptr) {
+                diags_->of(SemanticDiag::RuleWithParameterUnbound)
+                    .atOrigin(at->origin())
+                    .commit(paramName, ruleName);
+                throw BuildAbortException();
+            }
+            diags_->of(SemanticDiag::RuleWithArgumentNotConstant)
                 .atOrigin(at->origin())
-                .commit(calleeType->argNameAt(i), declaration->names.front());
+                .commit(paramName, ruleName, declared != nullptr ? declared->toString() : "?");
             throw BuildAbortException();
         }
+        data_ptr_t value = fallback->data;
+        if (declared != nullptr && !declared->equals(value->type())) {
+            if (data_ptr_t converted = value->clone()->convertTo(declared); converted != nullptr) {
+                value = std::move(converted);
+            }
+        }
+        withValues.push_back(std::move(value));
     }
 
     const auto make = [&](GCT::node_ptr_t node) {
         node->setOrigin(at->origin());
         return node;
     };
-    const auto nameNode = [&](const std::string &name) { return make(tree_->makeDRef(name)); };
+    // The call is made with the values themselves, as the constants they are: the binding function
+    // hands them to the maker, which is what the instance key is read from, so no other writing of
+    // a value can stand in for them. A constant is a node of the graph being built, and the
+    // parameters are bound to it as any other argument.
     std::vector<std::string> boundNames;
-    for (Argument &arg : bound) {
-        arg.node = functionValueOf(arg.node, arg.expr);
-        boundNames.push_back(bindTemporary(valueOf(arg.node)));
+    boundNames.reserve(withValues.size());
+    for (const data_ptr_t &value : withValues) {
+        const node_handle_t constant = currGraph_->addStaticDataNode(value);
+        rememberConstant(constant, value);
+        registerNodeOrigin(context_, constant, at, "gir.rule.with");
+        boundNames.push_back(bindTemporary(valueOf(constant)));
     }
     GCT::node_ptr_t with = make(tree_->makeWith(boundNames.size()));
     *with << tree_->clone(calleeGct);
     for (const std::string &name : boundNames) {
-        *with << nameNode(name);
+        *with << make(tree_->makeDRef(name));
     }
     GCT::node_ptr_t call = make(tree_->makeLink(0));
     *call << with;

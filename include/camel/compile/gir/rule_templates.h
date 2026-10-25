@@ -20,6 +20,7 @@
 
 #include "types.h"
 
+#include "camel/core/data/base.h"
 #include "camel/core/source/ids.h"
 
 #include <cstdint>
@@ -41,12 +42,22 @@ class Program;
 
 namespace camel::compile::gir {
 
+/// The values a rule value was bound to, one per `with` parameter of the declaration, in the order
+/// the declaration writes them: what a rule that declares `with` parameters is specialised by. They
+/// are compile-time values, so they are part of the instance key, and the instance reads each from a
+/// static slot (design principles 5.4, 5.5).
+using RuleWithArguments = std::vector<camel::core::data::data_ptr_t>;
+
 /// What came of instantiating one generic rule at one type tuple.
 struct GenericRuleInstance {
     /// The tuple, in the order of the rule's type parameters.
     std::vector<camel::core::type::Type *> types;
     /// The tuple as the library writes it (`int`, `i32`, `Tensor<f32, [3]>`), for the reports.
     std::string typeText;
+    /// The `with` values this instance was made for, as the key they stand for, and as the library
+    /// writes them for the reports. Empty when the rule declares no `with` parameter.
+    std::string withKey;
+    std::string withText;
     /// False when no instance could be made, with `why` saying why. A failed instantiation is
     /// silent: nothing of what the compiler said about the types it was tried with is reported
     /// 
@@ -72,6 +83,10 @@ struct GenericRuleEntry {
     /// `<T, U>`): the arity of a tuple an instance is made at, and the names a condition's type
     /// arguments are bound to. Empty when the entry is not a generic rule's.
     std::vector<std::string> typeParams;
+    /// The `with` parameters of the rule's head, in the order they are written: the names of the
+    /// values a rule value carries, and the `constas` parameters every function of the declaration
+    /// takes. Empty when the rule declares none.
+    std::vector<std::string> withParams;
     /// The templates: `GenericTemplate`s of `name__lhs`, `name__rhs`, and `name__when` when the
     /// rule has a condition (null otherwise). Opaque here; the compile side owns their type.
     std::shared_ptr<void> lhs;
@@ -134,19 +149,21 @@ GenericRuleEntry *genericRuleEntry(camel::core::context::Context &context, uint6
 
 /// Registers the templates of one generic rule and answers the id its value keeps: ids start at 1,
 /// and 0 means "not a generic rule" everywhere. `owner` is the builder the templates belong to,
-/// and `typeParams` the type parameters of the rule's head.
+/// `typeParams` the type parameters of the rule's head, and `withParams` the names of its `with`
+/// parameters.
 uint64_t registerGenericRule(
     camel::core::context::Context &context, void *owner, std::string name,
-    std::vector<std::string> typeParams, const std::shared_ptr<void> &lhs,
-    const std::shared_ptr<void> &rhs, const std::shared_ptr<void> &when);
+    std::vector<std::string> typeParams, std::vector<std::string> withParams,
+    const std::shared_ptr<void> &lhs, const std::shared_ptr<void> &rhs,
+    const std::shared_ptr<void> &when);
 
-/// The place, in its rule's `instances`, of the instance of `ruleId` at `types`: the tuple is
-/// instantiated once and kept, and asking twice answers the same place. The attempt never reports
-/// a diagnostic — read the entry's instance for whether it was made and why not — so a type the
-/// rule cannot be written for costs nothing but the attempt. The entry's vector may grow during
-/// the call: read it from `genericRuleEntry` again.
+/// The place, in its rule's `instances`, of the instance of `ruleId` at `types` with the `with`
+/// values `with`: the pair is instantiated once and kept, and asking twice answers the same place.
+/// The attempt never reports a diagnostic — read the entry's instance for whether it was made and
+/// why not — so a type the rule cannot be written for costs nothing but the attempt. The entry's
+/// vector may grow during the call: read it from `genericRuleEntry` again.
 size_t genericRuleInstance(
     camel::core::context::Context &context, uint64_t ruleId,
-    const std::vector<camel::core::type::Type *> &types);
+    const std::vector<camel::core::type::Type *> &types, const RuleWithArguments &with);
 
 } // namespace camel::compile::gir

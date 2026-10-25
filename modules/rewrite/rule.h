@@ -9,14 +9,17 @@
  * rule value is what the engines of this module take (a list of them is an ordinary array). It
  * holds the two function values, so it keeps the programs they belong to alive.
  *
- * A rule whose head declares type parameters is the exception: it has no function values to hold,
- * and keeps the id of the templates it was registered under instead
- * (camel/compile/gir/rule_templates.h; the ruling of 2026-10-23 on generic-rule-instantiation).
- * Its sides and its condition are made where it matches, one instance per type tuple.
+ * A rule whose head declares type parameters or `with` parameters is the exception: it has no
+ * function values to hold, and keeps the id of the templates it was registered under instead
+ * (camel/compile/gir/rule_templates.h; the ruling of 2026-10-23 on generic-rule-instantiation, and
+ * the ruling of 2026-10-25 on the one instantiation channel). Its sides and its condition are made
+ * where it matches, one instance per type tuple and set of `with` values, and the `with` values it
+ * was bound to are what it carries beside the id.
  */
 
 #pragma once
 
+#include "camel/core/data/base.h"
 #include "camel/core/operator_semantics.h"
 #include "camel/core/rtdata/base.h"
 #include "camel/core/rtdata/func.h"
@@ -25,12 +28,14 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 namespace camel::rewritemod {
 
 namespace mm     = camel::core::mm;
 namespace rtdata = camel::core::rtdata;
 namespace type   = camel::core::type;
+namespace data   = camel::core::data;
 
 class RuleType final : public type::OtherType {
   public:
@@ -55,17 +60,22 @@ class RuleObject final : public rtdata::Object {
     RuleObject &operator=(const RuleObject &) = delete;
 
     /// `when` may be null (a rule without a condition). `ruleId` is 0 for an ordinary rule, whose
-    /// two sides are `lhs` and `rhs`, and the id its templates were registered under for a generic
-    /// one, which holds neither side and no condition.
+    /// two sides are `lhs` and `rhs`, and the id its templates were registered under for a rule
+    /// that is instantiated, which holds neither side and no condition. `withValues` are the values
+    /// its `with` parameters were bound to, in the order the declaration writes them; empty for a
+    /// rule that declares none.
     static RuleObject *create(
         camel::core::SymId name, bool twoWay, camel::core::sem::PermissionMask needs, uint64_t constParams,
         ::Function *lhs, ::Function *rhs, ::Function *when, mm::IAllocator &allocator,
-        uint64_t ruleId = 0);
+        uint64_t ruleId = 0, std::vector<data::data_ptr_t> withValues = {});
 
     std::string_view name() const { return camel::core::symbolText(name_); }
-    /// The templates of a generic rule, or 0: see the class comment. A rule value that keeps an id
-    /// has no `lhs`, `rhs` or `when` of its own.
+    /// The templates of a rule that is instantiated, or 0: see the class comment. A rule value that
+    /// keeps an id has no `lhs`, `rhs` or `when` of its own.
     uint64_t ruleId() const { return ruleId_; }
+    /// The values the rule's `with` parameters were bound to, in the order the declaration writes
+    /// them. Empty for a rule that declares none.
+    const std::vector<data::data_ptr_t> &withValues() const { return withValues_; }
     /// `<=>`: both sides are the same value.
     bool twoWay() const { return twoWay_; }
     /// The numeric permissions the rule needs (camel/core/operator_semantics.h).
@@ -87,9 +97,10 @@ class RuleObject final : public rtdata::Object {
   private:
     RuleObject(
         camel::core::SymId name, bool twoWay, camel::core::sem::PermissionMask needs, uint64_t constParams,
-        ::Function *lhs, ::Function *rhs, ::Function *when, uint64_t ruleId = 0)
+        ::Function *lhs, ::Function *rhs, ::Function *when, uint64_t ruleId = 0,
+        std::vector<data::data_ptr_t> withValues = {})
         : name_(name), twoWay_(twoWay), needs_(needs), constParams_(constParams), lhs_(lhs),
-          rhs_(rhs), when_(when), ruleId_(ruleId) {}
+          rhs_(rhs), when_(when), ruleId_(ruleId), withValues_(std::move(withValues)) {}
 
     camel::core::SymId name_;
     bool twoWay_;
@@ -100,6 +111,8 @@ class RuleObject final : public rtdata::Object {
     ::Function *when_;
     /// See ruleId(): 0 for an ordinary rule.
     uint64_t ruleId_ = 0;
+    /// See withValues(): the values the rule was bound to, which are the instance key's value half.
+    std::vector<data::data_ptr_t> withValues_;
 };
 
 } // namespace camel::rewritemod

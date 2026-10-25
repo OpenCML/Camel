@@ -185,8 +185,8 @@ struct OperatorTraits {
     bool macro = false;
     /// Its calls may be evaluated ahead of time and their results kept as values (the foldable
     /// fact of the record). False for an operator that must run where the program writes it,
-    /// though running it has no effect: a rule's value holds the functions of its sides, and an
-    /// `analysis` installs the facts of its declaration, and neither is a value a pass may
+    /// though running it has no effect: a rule's value holds the functions of its sides, and a
+    /// `fact` installs the fact of its declaration, and neither is a value a pass may
     /// compute, move, merge or drop.
     bool foldable = true;
 };
@@ -306,7 +306,7 @@ class OperatorTable {
     /// Declares the operators `protocol:name` that are pure and may not be folded: running one has
     /// no effect, and no pass may compute a call of it ahead of time, keep its result as a
     /// constant, move it, merge it with an identical call or drop it. `rewrite` declares its rule
-    /// makers and its `analysis` this way: what they make holds the functions of the rule's sides,
+    /// makers and its `fact` this way: what they make holds the functions of the rule's sides,
     /// which the collector does not trace, and installing the facts of a declaration is the
     /// declaration itself.
     void declareUnfoldable(

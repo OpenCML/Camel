@@ -299,8 +299,9 @@ class Builder {
     /// (rule_templates.cpp): the library was built long before, and an instance belongs to the
     /// builder that declared the rule.
     bool instantiateRuleTemplates(
-        const GenericRuleEntry &entry, const std::vector<Type *> &types, compile_graph_ptr_t &lhs,
-        compile_graph_ptr_t &rhs, compile_graph_ptr_t &when, std::string &why);
+        const GenericRuleEntry &entry, const std::vector<Type *> &types,
+        const RuleWithArguments &with, compile_graph_ptr_t &lhs, compile_graph_ptr_t &rhs,
+        compile_graph_ptr_t &when, std::string &why);
 
     /// What the condition of a generic rule says about one type tuple, at compile time (
     /// of 2026-10-24 on `generic-rule-check-surface-and-multi-parameter-instances`: `check`
@@ -1252,6 +1253,13 @@ class Builder {
     // its signature never writes (a predicate such as `is_plain::<T>()` matched in its body),
     // and those are bound by an explicit `::<...>` at the call all the same.
     bool isGenericHere(Type *type, const GCT::node_ptr_t &node) const {
+        if (node != nullptr && node->ruleBinding()) {
+            // The function a rule with `with` parameters is written as is not a template, even when
+            // the declaration's head writes type parameters: those belong to the rule's sides, and
+            // what the name stands for is the `Rule` calling it with values makes (design
+            // principles 5.4, 5.5). A template would leave the name with no `Rule` at all.
+            return false;
+        }
         if (node != nullptr &&
             camel::compile::gct::Tree::of(node)->headTypeParamsOf(node) != nullptr) {
             return true;
@@ -1868,6 +1876,14 @@ class Builder {
     /// and the parameters left over are filled from their defaults; a parameter that has none is
     /// `RuleWithParameterUnbound`, reported at `at`.
     node_handle_t ruleBindingValueOf(node_handle_t target, const GCT::node_ptr_t &at);
+    /// The compile-time value `argument` is, held to `declared`, the type of one `with` parameter of
+    /// the rule `ruleName` (`paramName` is the parameter's name). A rule value is bound to values
+    /// that are part of its instance key, so the value is a constant of a kind an instance can be
+    /// keyed by; one that is not is refused where it is written
+    /// (`RuleWithArgumentNotConstant`), and the attempt throws.
+    data_ptr_t ruleWithArgumentValue(
+        const Argument &argument, Type *declared, const std::string &ruleName,
+        const std::string &paramName, const GCT::node_ptr_t &at);
     /// `a op= b` is `a = a op b` (design principles 4.2): the new value is computed and the
     /// variable bound to it. One rule for every type, whoever declared it: `a op b` must be
     /// defined for these operands and must give `a`'s own type, and the rebinding applies only

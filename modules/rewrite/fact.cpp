@@ -37,7 +37,7 @@
  * 而不是遍失败——条件本来就是"适用与否"的判断"), and whoever evaluates the condition catches it.
  */
 
-#include "analysis.h"
+#include "fact.h"
 
 #include "../graph/handle.h"
 
@@ -119,15 +119,15 @@ std::unordered_map<std::string, std::shared_ptr<Definition>> descriptions;
 std::unordered_set<std::string> registeredKinds;
 std::unordered_map<std::string, camel::runtime::fact::KindId> factKindIds;
 
-/// The value of an analysis stored as a fact (design graph-store: a node-level fact).
-struct AnalysisFact {
+/// The value of a fact, stored in the context's fact store (design graph-store: a node-level fact).
+struct FactValue {
     uint64_t value = 0;
     uint8_t code   = 0;
 
-    bool operator==(const AnalysisFact &) const = default;
+    bool operator==(const FactValue &) const = default;
 };
 
-std::string factText(const AnalysisFact &fact) {
+std::string factText(const FactValue &fact) {
     switch (static_cast<type::TypeCode>(fact.code)) {
     case type::TypeCode::Int64:
         return std::to_string(rtdata::fromSlot<rtdata::Int64>(fact.value));
@@ -146,7 +146,7 @@ std::string factText(const AnalysisFact &fact) {
 
 namespace {
 
-/// Where the values of an analysis live: the draft being rewritten, or a frozen graph.
+/// Where the values of a fact live: the draft being rewritten, or a frozen graph.
 struct Source {
     const GraphDraft *draft = nullptr;
     const Program *program  = nullptr;
@@ -199,7 +199,7 @@ struct Source {
     }
 };
 
-/// One evaluation of an analysis over one source, with the values already computed.
+/// One evaluation of a fact over one source, with the values already computed.
 struct Frame {
     const Definition *definition = nullptr;
     Source source;
@@ -210,7 +210,7 @@ struct Frame {
 
     slot_t call(size_t functionIndex, std::span<const slot_t> args) {
         ::Function *fn = definition->roots[functionIndex]->getAs<::Function>();
-        // A clause is a function value of the module the analysis is declared in: what its body
+        // A clause is a function value of the module the fact is declared in: what its body
         // captured where it was written is in the closure the value was made with, and calling it
         // by its graph alone would leave those captures empty.
         return vm->callFunction(fn, args);
@@ -338,7 +338,7 @@ slot_t evaluate(Frame &frame, gc_node_ref_t ref) {
     }
     if (frame.active.contains(ref)) {
         // A value that is its own dependency: the first version has no widening, so the fact
-        // of the value is the initial one (the description says so in analysis.cpp's header).
+        // of the value is the initial one (the description says so in fact.cpp's header).
         return frame.initialValue();
     }
     frame.active.insert(ref);
@@ -369,7 +369,7 @@ slot_t evaluate(Frame &frame, gc_node_ref_t ref) {
                 mm::autoSpace(),
                 handle,
                 camel::graphmod::HandleType::get(camel::graphmod::HandleKind::Node),
-                "rewrite.analysisArg");
+                "rewrite.factArg");
         }
         std::vector<slot_t> args;
         args.reserve(variables);
@@ -481,7 +481,7 @@ slot_t evaluateQuery(
     for (gc_node_ref_t part : parts) {
         if (part == camel::runtime::kInvalidNodeRef) {
             throw err::FactQueryNoValue(std::format(
-                "the analysis '{}' is asked about a pattern variable the left side does not bind "
+                "the fact '{}' is asked about a pattern variable the left side does not bind "
                 "to a node",
                 frame.definition->key));
         }
@@ -499,7 +499,7 @@ slot_t evaluateQuery(
         }
     }
     throw err::FactQueryNoValue(std::format(
-        "the analysis '{}' has no value whose operands are these {} nodes",
+        "the fact '{}' has no value whose operands are these {} nodes",
         frame.definition->key,
         parts.size()));
 }
@@ -600,6 +600,7 @@ std::shared_ptr<Definition> buildDefinition(
             "fact",
             "the fact type of a fact must be a scalar (int, float or bool)");
     }
+
     for (size_t index = onBegin; index + 2 < count; index += 3) {
         ::Function *patternFn = norm.get<::Function *>(index);
         definition->roots.push_back(root(index));     // pattern
@@ -636,11 +637,11 @@ camel::runtime::fact::KindId factKindOf(const std::string &key) {
         return found->second;
     }
     const camel::runtime::fact::KindId kind =
-        camel::runtime::fact::registerKind(camel::runtime::fact::KindSpec<AnalysisFact>{
+        camel::runtime::fact::registerKind(camel::runtime::fact::KindSpec<FactValue>{
             .key        = "user.fact." + key,
             .owner      = "user",
             .dependency = camel::runtime::fact::Dependency::Node,
-            .print      = [](const AnalysisFact &fact) { return factText(fact); },
+            .print      = [](const FactValue &fact) { return factText(fact); },
         });
     factKindIds.emplace(key, kind);
     return kind;
@@ -671,7 +672,7 @@ std::string withArgText(const ArgsView &norm, size_t index) {
 
 } // namespace
 
-slot_t analysisKernel(ArgsView &, ArgsView &norm, camel::core::context::Context &ctx) {
+slot_t factKernel(ArgsView &, ArgsView &norm, camel::core::context::Context &ctx) {
     const std::string name(norm.get<String *>(0)->view());
     // What the query was written with: the number of `with` arguments, then the arguments
     // themselves. They are part of what the fact is, so they go into the key the description,
@@ -770,10 +771,10 @@ slot_t analysisKernel(ArgsView &, ArgsView &norm, camel::core::context::Context 
 
     if (!fromDraft) {
         const camel::runtime::fact::Anchor factAnchor{source.program, source.graph, anchor};
-        AnalysisFact stored{
+        FactValue stored{
             fact, static_cast<uint8_t>(definition->factType->code())};
         try {
-            ctx.facts().put<AnalysisFact>(kind, factAnchor, stored);
+            ctx.facts().put<FactValue>(kind, factAnchor, stored);
         } catch (const std::exception &) {
             // A kind registered by another module under the same name: the value is still
             // answered, it is just not stored.

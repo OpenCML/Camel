@@ -20,12 +20,13 @@
 #include "proof.h"
 #include "rule.h"
 
-#include "analysis.h"
+#include "fact.h"
 
 #include "../graph/handle.h"
 
 #include "camel/compile/gir/rule_templates.h"
 #include "camel/core/context/context.h"
+#include "camel/core/data/primary.h"
 #include "camel/core/mm.h"
 #include "camel/core/mm/root_handle.h"
 #include "camel/core/module/builtin.h"
@@ -100,6 +101,53 @@ namespace {
 
 namespace mm     = camel::core::mm;
 namespace rtdata = camel::core::rtdata;
+namespace data   = camel::core::data;
+
+/// The name one instance of a rule is written under, what the engines put in a step and what
+/// `explain` names: the rule, the type tuple it was made at, and -- for a rule that declares `with`
+/// parameters -- the values it was bound to. Both halves are the instance's key, so a reader of a
+/// report tells `add_tile<int>(tile = 3)` from `add_tile<int>(tile = 0)` by the name itself
+/// (design principles 5.4, 5.5).
+std::string instanceNameOf(
+    const RuleObject &rule, const camel::compile::gir::GenericRuleInstance &instance) {
+    if (instance.withText.empty()) {
+        return std::format("{}<{}>", rule.name(), instance.typeText);
+    }
+    return std::format("{}<{}>({})", rule.name(), instance.typeText, instance.withText);
+}
+
+/// The value of one `with` parameter a rule value was bound to, as the compile-time datum an
+/// instance is keyed by and reads from a static slot (design principles 5.4, 5.5): the kinds a
+/// compile-time constant has. The argument is a value of the parameter's own type, which the call
+/// that bound it held to it, so nothing is converted here. Null is returned for a type no instance
+/// can be keyed by; the call that binds a rule's `with` parameter refuses one where it is written
+/// (`RuleWithArgumentNotConstant`), so nothing reaches this.
+data::data_ptr_t dataOfRuleValue(ArgsView &norm, size_t index) {
+    type::Type *type = norm.type(index);
+    if (type == nullptr) {
+        return nullptr;
+    }
+    switch (type->code()) {
+    case TypeCode::Int32:
+        return std::make_shared<data::PrimaryData<int32_t>>(norm.get<int32_t>(index));
+    case TypeCode::Int64:
+        return std::make_shared<data::PrimaryData<int64_t>>(norm.get<int64_t>(index));
+    case TypeCode::Float32:
+        return std::make_shared<data::PrimaryData<float>>(norm.get<float>(index));
+    case TypeCode::Float64:
+        return std::make_shared<data::PrimaryData<double>>(norm.get<double>(index));
+    case TypeCode::Bool:
+        return std::make_shared<data::PrimaryData<bool>>(norm.get<rtdata::Bool>(index));
+    case TypeCode::String:
+        return std::make_shared<data::StringData>(std::string(norm.get<String *>(index)->view()));
+    case TypeCode::Float16:
+    case TypeCode::BFloat16:
+        return std::make_shared<data::HalfData>(
+            static_cast<uint16_t>(norm.get<rtdata::Int64>(index)), type);
+    default:
+        return nullptr;
+    }
+}
 
 slot_t ruleKernel(ArgsView &, ArgsView &norm, Context &) {
     const auto name = camel::core::internSymbol(norm.get<String *>(0)->view());
@@ -129,13 +177,20 @@ slot_t ruleWhenKernel(ArgsView &, ArgsView &norm, Context &) {
     return toSlot(object);
 }
 
-/// `__rule_generic('name', two_way, needs, consts, id)`: the maker of a rule whose head declares
-/// type parameters. What it is given is the id the rule's templates were registered under (the
-/// front end registers them while it builds this call): a generic rule has no function values to
-/// hold, so it keeps the id, and the engine makes its sides where it matches, one instance per
-/// type tuple (the ruling of 2026-10-23 on generic-rule-instantiation).
+/// `__rule_generic('name', two_way, needs, consts, id[, <the with values>])`: the maker of a rule
+/// that is instantiated -- one whose head declares type parameters or `with` parameters. What it is
+/// given is the id the rule's templates were registered under (the front end registers them while it
+/// builds this call) and the value of each `with` parameter, in the order the declaration writes
+/// them: such a rule has no function values to hold, so it keeps the id and the values, and the
+/// engine makes its sides where it matches, one instance per type tuple and set of values (the
+/// ruling of 2026-10-23 on generic-rule-instantiation, and the ruling of 2026-10-25 on the one
+/// instantiation channel).
 slot_t genericRuleKernel(ArgsView &, ArgsView &norm, Context &) {
     const auto name = camel::core::internSymbol(norm.get<String *>(0)->view());
+    std::vector<data::data_ptr_t> withValues;
+    for (size_t i = 5; i < norm.size(); ++i) {
+        withValues.push_back(dataOfRuleValue(norm, i));
+    }
     auto *object    = RuleObject::create(
         name,
         norm.get<rtdata::Bool>(1),
@@ -145,7 +200,8 @@ slot_t genericRuleKernel(ArgsView &, ArgsView &norm, Context &) {
         nullptr,
         nullptr,
         mm::autoSpace(),
-        static_cast<uint64_t>(norm.get<rtdata::Int64>(4)));
+        static_cast<uint64_t>(norm.get<rtdata::Int64>(4)),
+        std::move(withValues));
     return toSlot(object);
 }
 
@@ -404,7 +460,7 @@ camel::runtime::RuleSource instanceOf(
     const RuleObject &rule, uint16_t id, const GenericRuleInstance &instance,
     const std::shared_ptr<WhenCall> &call) {
     camel::runtime::RuleSource source;
-    source.name          = std::format("{}<{}>", rule.name(), instance.typeText);
+    source.name          = instanceNameOf(rule, instance);
     source.id            = id;
     source.needs         = rule.needs();
     source.bidirectional = rule.twoWay();
@@ -485,7 +541,10 @@ std::vector<std::vector<Type *>> tuplesOf(
     if (types.empty()) {
         return tuples;
     }
-    const size_t count = std::max<size_t>(1, arity);
+    // A rule of no type parameters has one instance per value it is bound to: the empty type tuple
+    // is the one tuple it is asked at, and the values are the rest of its key (design principles
+    // 5.4, 5.5).
+    const size_t count = arity;
     std::vector<size_t> at(count, 0);
     for (;;) {
         std::vector<Type *> tuple(count);
@@ -521,7 +580,12 @@ std::vector<std::vector<Type *>> tuplesOf(
 /// (`why_not`).
 std::vector<std::vector<Type *>> tuplesHolding(const Type *type, size_t arity) {
     std::vector<std::vector<Type *>> tuples;
-    if (arity <= 1) {
+    if (arity == 0) {
+        // A rule of no type parameters: the empty tuple is its one instance per value bound.
+        tuples.push_back({});
+        return tuples;
+    }
+    if (arity == 1) {
         tuples.push_back({const_cast<Type *>(type)});
         return tuples;
     }
@@ -584,7 +648,7 @@ const std::vector<camel::runtime::Rule> &instanceRules(
             call->own         = instance.lhs->normPorts().size();
             call->arity       = instance.whenArity;
             call->constParams = rule.constParams();
-            call->name        = std::format("{}<{}>", rule.name(), instance.typeText);
+            call->name        = instanceNameOf(rule, instance);
         }
         // The instance's own place in its rule is its id, so that the id a step records is the
         // same in every application. Ids are numbered within each rule, not across the rules of a
@@ -623,7 +687,8 @@ std::vector<camel::runtime::Rule> engineRules(
             GenericRuleEntry *entry = camel::compile::gir::genericRuleEntry(ctx, ruleId);
             const size_t arity      = entry != nullptr ? entry->typeParams.size() : 1;
             for (const std::vector<Type *> &types : tuplesOf(ctx, *base, ruleId, arity)) {
-                const size_t index = camel::compile::gir::genericRuleInstance(ctx, ruleId, types);
+                const size_t index = camel::compile::gir::genericRuleInstance(
+                    ctx, ruleId, types, rule->withValues());
                 // Making an instance builds a body and encodes graphs: the value is read again
                 // from the array, and the entry again from the context, after it.
                 entry = camel::compile::gir::genericRuleEntry(ctx, ruleId);
@@ -1322,9 +1387,9 @@ const uint64_t ruleId = ruleNow()->ruleId();
             // generic-rule-instantiation-set-and-predicate, §3: `why_not` is where the reason is
             // read).
             GenericRuleEntry *entry = camel::compile::gir::genericRuleEntry(ctx, ruleId);
-            const size_t arity = entry != nullptr && !entry->typeParams.empty()
-                                     ? entry->typeParams.size()
-                                     : 1;
+            // The rule's own number of type parameters: a rule that declares none is asked at the
+            // empty tuple, and the values it was bound to are the rest of its key.
+            const size_t arity = entry != nullptr ? entry->typeParams.size() : 0;
             std::string firstTuple;
             std::string firstWhy;
             size_t tried = 0;
@@ -1332,7 +1397,8 @@ const uint64_t ruleId = ruleNow()->ruleId();
                 tuplesHolding(type, arity);
             for (const std::vector<Type *> &tuple : candidates) {
                 ++tried;
-                const size_t index = camel::compile::gir::genericRuleInstance(ctx, ruleId, tuple);
+                const size_t index = camel::compile::gir::genericRuleInstance(
+                    ctx, ruleId, tuple, ruleNow()->withValues());
                 // Making an instance can collect: the rule value, the entry and the types are read
                 // from where they live, again.
                 entry = camel::compile::gir::genericRuleEntry(ctx, ruleId);
@@ -1342,6 +1408,8 @@ const uint64_t ruleId = ruleNow()->ruleId();
                 const GenericRuleInstance &instance = entry->instances[index];
                 if (!instance.made) {
                     if (firstWhy.empty()) {
+                        // The tuple, not the instance's whole name: the sentence says which type
+                        // tuple was tried first, and the values are not what it varies by.
                         firstTuple = instance.typeText;
                         firstWhy   = instance.why;
                     }
@@ -1349,12 +1417,12 @@ const uint64_t ruleId = ruleNow()->ruleId();
                 }
                 // The first tuple that was made is the instance the question is about: the answer
                 // names it and says why it did not fire at this value.
-                const std::string instanceText = instance.typeText;
+                const std::string instanceText = instanceNameOf(*ruleNow(), instance);
                 const std::vector<camel::runtime::Rule> &compiled =
                     instanceRules(ctx, *ruleNow(), *entry, index);
                 if (compiled.empty()) {
-                    return answer(std::format(
-                        "`{}<{}>` compiles to no rule", ruleNow()->name(), instanceText));
+                    return answer(
+                        std::format("`{}` compiles to no rule", instanceText));
                 }
                 camel::runtime::RuntimeGraphDraftSession session(ctx.shared_from_this(), programNow());
                 camel::runtime::GraphDraft &draft =
@@ -1364,8 +1432,7 @@ const uint64_t ruleId = ruleNow()->ruleId();
                                          : camel::core::sem::NumericPolicy::relaxed());
                 const camel::runtime::RuleMiss miss = writings.whyNot(compiled.front(), *draftNode);
                 return answer(std::format(
-                    "`{}<{}>` did not fire at {}: {}",
-                    ruleNow()->name(),
+                    "`{}` did not fire at {}: {}",
                     instanceText,
                     writings.textOf(*draftNode),
                     miss.detail));
@@ -3470,10 +3537,13 @@ void checkGenericRule(
         return;
     }
     const size_t arity = entry->typeParams.size();
-    if (arity == 0) {
+    if (arity == 0 && entry->withParams.empty()) {
         whole("its head declares no type parameter, so it has no instance to make");
         return;
     }
+    // A rule of no type parameters is instantiated at the empty tuple, once per value it was bound
+    // to: what its instances are made at is the pair (type tuple, values), and the values are the
+    // rule value's own (design principles 5.4, 5.5).
     // The types the operator groups registered, and then the types a program the call was given
     // has (the ruling of 2026-10-24 on `check-program-parameter`): a call that leaves the
     // parameter out reads its null and the candidate set is the registered types alone, which is
@@ -3549,7 +3619,8 @@ void checkGenericRule(
         rows.push_back(std::move(row));
     }
     for (const std::vector<Type *> &tuple : tuples) {
-        const size_t place = camel::compile::gir::genericRuleInstance(ctx, ruleId, tuple);
+        const size_t place =
+            camel::compile::gir::genericRuleInstance(ctx, ruleId, tuple, rule.withValues());
         // Making an instance builds a body and encodes graphs: the entry is read again, and the
         // rule object again from its root, after it.
         GenericRuleEntry *current = camel::compile::gir::genericRuleEntry(ctx, ruleId);
@@ -3785,7 +3856,7 @@ class RewriteExecutor final : public Executor {
             {"check_reason", checkReasonKernel},
             {"check_coverage", checkCoverageKernel},
             {"check_coverage_table", coverageTableKernel},
-            {"fact", camel::rewritemod::analysisKernel},
+            {"fact", camel::rewritemod::factKernel},
         };
     }
 };
@@ -3841,26 +3912,46 @@ class RewriteModule final : public BuiltinModule {
                               return std::nullopt;
                           return RuleType::get();
                       })}}));
-        // `__rule_generic`: the maker of a rule whose head declares type parameters. The front end
-        // writes it instead of `__rule` / `__rule_when` when the declaration has a `::<T>` head: the
-        // sides are generic functions, which have no value, so the maker is given the id of their
-        // templates after `consts` (the ruling of 2026-10-23 on generic-rule-instantiation).
+        // `__rule_generic`: the maker of a rule that is instantiated -- one whose head declares type
+        // parameters or `with` parameters. The front end writes it instead of `__rule` /
+        // `__rule_when`: the sides are generic functions (or functions of a `constas` parameter),
+        // which have no value, so the maker is given the id of their templates after `consts`, and
+        // then the value of each `with` parameter, one argument per parameter (the ruling of
+        // 2026-10-23 on generic-rule-instantiation, and the ruling of 2026-10-25 on the one
+        // instantiation channel).
         exportEntity(
             "__rule_generic",
             OperatorGroup::create(
                 "__rule_generic",
                 {{"rewrite:rule_generic",
                   DynamicFuncTypeResolver::create(
-                      {{0, {}}, {5, {false, false, false, false, false}}},
-                      "(name: string, two_way: bool, needs: int, consts: int, id: int) => Rule",
+                      {{0, {}}, {-1, {}}},
+                      "(name: string, two_way: bool, needs: int, consts: int, id: int, ...) => Rule",
                       [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
                           -> std::optional<Type *> {
-                          if (norm[0]->code() != TypeCode::String ||
+                          if (norm.size() < 5 || norm[0]->code() != TypeCode::String ||
                               norm[1]->code() != TypeCode::Bool ||
                               norm[2]->code() != TypeCode::Int64 ||
                               norm[3]->code() != TypeCode::Int64 ||
                               norm[4]->code() != TypeCode::Int64)
                               return std::nullopt;
+                          // The values after the id are the `with` values: each is a compile-time
+                          // value of the kind an instance can be keyed by.
+                          for (size_t i = 5; i < norm.size(); ++i) {
+                              switch (norm[i]->code()) {
+                              case TypeCode::Int32:
+                              case TypeCode::Int64:
+                              case TypeCode::Float32:
+                              case TypeCode::Float64:
+                              case TypeCode::Float16:
+                              case TypeCode::BFloat16:
+                              case TypeCode::Bool:
+                              case TypeCode::String:
+                                  break;
+                              default:
+                                  return std::nullopt;
+                              }
+                          }
                           return RuleType::get();
                       })}}));
         // `__fact` (rewrite design 7.5): the compiled form of a `fact` declaration. Its arity is

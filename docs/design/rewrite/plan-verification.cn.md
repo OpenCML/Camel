@@ -109,7 +109,7 @@ FAIL narrow_mul_div: the two sides differ at (-2147483648): 0 and -2147483648
 ### 1.5 `when` 与 `fact` 今天的位置
 
 - **`when`**：有实现，编译成第三个函数 `name__when(params)`（`docs/technical/46_rules.md` 第 6 节）。`check` 对它只有一个处置：值路径跳过，只跑引擎路径，报告 `ok name: the condition selects the instances, fired k of m`。**条件从不被当成前提**，因为采样值上无法求值。
-- **`fact`**：`modules/rewrite/analysis.cpp` 与 `modules/rewrite/module.cpp#analysisKernel`（注册名 `"analysis"`，引擎改名时一并改成 `fact`）实现的是设计稿第 7.5 节**之前**的形态；`src/parse/ast/builder.cpp` 里已经把它算出来的东西叫 `fact` 函数（`range__on0_fact`），声明面也已经叫 `fact`。两件第 8 节的事今天都没有：8.1 的"`fact` 的结论作为前提"，以及 8.6 的"没有函数体的 `fact` 是一张由规则填写的关系表"（`fact dominates(a, b): bool join (a: bool, b: bool) => a | b` 那种写法）。`test/plans/feat/modules/rules.plan.toml` 里的 `rules.analysis_reads_a_fact_in_when`、`rules.analysis_takes_the_parts_of_a_compound`、`rules.node_of_reaches_a_const_parameter` 三条覆盖的是这个旧名字下的行为，今天全绿。
+- **`fact`**：`modules/rewrite/fact.cpp` 与 `modules/rewrite/module.cpp#factKernel`（注册名 `"fact"`）实现的是设计稿第 7.5 节**之前**的形态；`src/parse/ast/builder.cpp` 里已经把它算出来的东西叫 `fact` 函数（`range__on0_fact`），声明面也已经叫 `fact`。两件第 8 节的事今天都没有：8.1 的"`fact` 的结论作为前提"，以及 8.6 的"没有函数体的 `fact` 是一张由规则填写的关系表"（`fact dominates(a, b): bool join (a: bool, b: bool) => a | b` 那种写法）。`test/plans/feat/modules/rules.plan.toml` 里的 `rules.fact_reads_a_fact_in_when`、`rules.fact_takes_the_parts_of_a_compound`、`rules.node_of_reaches_a_const_parameter` 三条覆盖的就是它的行为，今天全绿。
 
 ### 1.6 `explain` / `why_not` 的报告面
 

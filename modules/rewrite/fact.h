@@ -34,6 +34,6 @@ namespace camel::rewritemod {
 /// The kernel of the operator `__fact` (rewrite module). The symbol keeps the name a design page
 /// cites (`docs/design/rewrite/plan-verification.cn.md`, outside this change's pen); the operator,
 /// its URI and the fact kind it registers are all `fact` now.
-slot_t analysisKernel(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t factKernel(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 
 } // namespace camel::rewritemod

@@ -130,6 +130,29 @@ data_ptr_t dataOfStaticValue(Type *type, slot_t value) {
     }
 }
 
+/// True for a type whose compile-time values an instance can be keyed by: the kinds a value in a
+/// static slot has (an integer, a real, a bool or a string). A rule's `with` value is half of the
+/// key its instance is made under and is read from that slot, so a value of any other type has no
+/// instance to name (design principles 5.4, 5.5).
+bool ruleValueKind(Type *type) {
+    if (type == nullptr) {
+        return false;
+    }
+    switch (type->code()) {
+    case TypeCode::Int32:
+    case TypeCode::Int64:
+    case TypeCode::Float32:
+    case TypeCode::Float64:
+    case TypeCode::Float16:
+    case TypeCode::BFloat16:
+    case TypeCode::Bool:
+    case TypeCode::String:
+        return true;
+    default:
+        return false;
+    }
+}
+
 /// True when `part` is a proper part of `whole`: the type is built out of it -- an array's element
 /// type, a member of a tuple or of a struct, the type argument of a named type, a function's
 /// parameter or result -- and is not that same type. A recursive call that hands a generic
@@ -344,6 +367,31 @@ std::vector<std::string> Builder::typeParameterNames(const generic_template_ptr_
     return names;
 }
 
+/// The names of the `constas` parameters a template's functions declare, in the order the
+/// declaration writes them: a rule's `with` parameters are those, and every function the rule
+/// becomes takes one per parameter. Empty when the declaration does not declare `expected` of
+/// them, which is how the maker learns that the values it was given are not the ones the rule
+/// takes (design principles 5.4, 5.5).
+namespace {
+std::vector<std::string>
+constasParameterNames(const generic_template_ptr_t &tmpl, size_t expected) {
+    std::vector<std::string> names;
+    if (tmpl == nullptr || tmpl->funcType == nullptr) {
+        return names;
+    }
+    const size_t withCount = tmpl->funcType->withTypesCount();
+    for (size_t i = 0; i < tmpl->funcType->normTypesCount(); ++i) {
+        if (tmpl->funcType->normIsConstasAt(i)) {
+            names.emplace_back(tmpl->funcType->argNameAt(withCount + i));
+        }
+    }
+    if (names.size() != expected) {
+        names.clear();
+    }
+    return names;
+}
+} // namespace
+
 node_handle_t Builder::anonymousTemplateOf(const GCT::node_ptr_t &func) {
     Type *type             = func->at(0)->dataType();
     auto tmpl              = std::make_shared<GenericTemplate>();
@@ -504,24 +552,34 @@ compile_graph_ptr_t Builder::instantiateGenericAs(
 
 void Builder::settleGenericRuleMaker(
     std::vector<Argument> &normInputs, type_vec_t &normTypes, const GCT::node_ptr_t &call) {
-    // `__rule_generic(name, two_way, needs, consts, <the sides>)`, what the front end writes for a
-    // rule whose head declares type parameters. The sides are the rule's own generic functions
-    // (`name__lhs`, `name__rhs`, and `name__when` when it has a condition).
+    // `__rule_generic(name, two_way, needs, consts, <the sides>[, <the with values>])`, what the
+    // front end writes for a rule that is instantiated: one whose head declares type parameters,
+    // and one that declares `with` parameters. The sides are the rule's own generic functions
+    // (`name__lhs`, `name__rhs`, and `name__when` when it has a condition); each `with` parameter
+    // follows them as the value it is bound to, in the order the declaration writes them, so the
+    // rule value is a `Rule` of the values it was bound to and the instance is the one for the
+    // type arguments and those values together (design principles 5.4, 5.5).
     constexpr size_t kFixed = 4;
     if (normInputs.size() <= kFixed) {
         return;
     }
     std::vector<generic_template_ptr_t> sides;
-    for (size_t i = kFixed; i < normInputs.size(); ++i) {
-        const auto found = genericDrefs_.find(normInputs[i].node);
+    size_t firstValue = kFixed;
+    for (; firstValue < normInputs.size(); ++firstValue) {
+        const auto found = genericDrefs_.find(normInputs[firstValue].node);
         if (found == genericDrefs_.end()) {
-            // A side that is not a generic function is not what this maker is for: the maker's own
-            // resolution reports the call, as it would for any other argument it cannot take.
-            return;
+            break;
         }
         sides.push_back(found->second.one());
     }
     if (sides.size() < 2 || sides.size() > 3) {
+        return;
+    }
+    const size_t withCount                    = normInputs.size() - firstValue;
+    const std::vector<std::string> withParams = constasParameterNames(sides.front(), withCount);
+    if (withParams.size() != withCount) {
+        // The values the maker was given are not the ones the rule's functions declare: the
+        // resolution of the call reports the argument list, as it does for any other argument.
         return;
     }
     // The rule's name as a reader writes it: the sides are the qualified names of its functions.
@@ -534,7 +592,7 @@ void Builder::settleGenericRuleMaker(
     }
     const uint64_t ruleId = registerGenericRule(
         *context_, static_cast<void *>(this), std::move(name), typeParameterNames(sides[0]),
-        sides[0], sides[1], sides.size() == 3 ? sides[2] : nullptr);
+        withParams, sides[0], sides[1], sides.size() == 3 ? sides[2] : nullptr);
     if (GenericRuleEntry *entry = genericRuleEntry(*context_, ruleId); entry != nullptr) {
         // Where the rule is written: a report about its condition points here from wherever the
         // instance that revealed the effect is made.
@@ -545,19 +603,29 @@ void Builder::settleGenericRuleMaker(
     const node_handle_t idNode = currGraph_->addStaticDataNode(idValue);
     rememberConstant(idNode, idValue);
     registerNodeOrigin(context_, idNode, call, "gir.rule.generic");
-    // The rule value keeps the id of its templates, and the maker is called with it: what a generic
-    // rule holds is not a function of the program being built, so nothing of the declaration enters
-    // this graph but the id (design principles 5.5; the rule on
-    // generic-rule-instantiation).
-    normInputs.resize(kFixed + 1);
+    // The rule value keeps the id of its templates and the values it was bound to, and the maker is
+    // called with them: what a rule that is instantiated holds is not a function of the program
+    // being built, so nothing of the declaration enters this graph but those (design principles
+    // 5.5; the rule on generic-rule-instantiation).
+    std::vector<Argument> values(normInputs.begin() + static_cast<ptrdiff_t>(firstValue), normInputs.end());
+    std::vector<Type *> valueTypes(
+        normTypes.begin() + static_cast<ptrdiff_t>(firstValue), normTypes.end());
+    normInputs.resize(kFixed + 1 + values.size());
     normInputs[kFixed] = Argument{idNode, call, std::nullopt};
-    normTypes.resize(kFixed + 1);
+    for (size_t i = 0; i < values.size(); ++i) {
+        normInputs[kFixed + 1 + i] = values[i];
+    }
+    normTypes.resize(kFixed + 1 + valueTypes.size());
     normTypes[kFixed] = Type::Int64();
+    for (size_t i = 0; i < valueTypes.size(); ++i) {
+        normTypes[kFixed + 1 + i] = valueTypes[i];
+    }
 }
 
 bool Builder::instantiateRuleTemplates(
-    const GenericRuleEntry &entry, const std::vector<Type *> &types, compile_graph_ptr_t &lhs,
-    compile_graph_ptr_t &rhs, compile_graph_ptr_t &when, std::string &why) {
+    const GenericRuleEntry &entry, const std::vector<Type *> &types, const RuleWithArguments &with,
+    compile_graph_ptr_t &lhs, compile_graph_ptr_t &rhs, compile_graph_ptr_t &when,
+    std::string &why) {
     const auto lhsTemplate  = std::static_pointer_cast<GenericTemplate>(entry.lhs);
     const auto rhsTemplate  = std::static_pointer_cast<GenericTemplate>(entry.rhs);
     const auto whenTemplate = std::static_pointer_cast<GenericTemplate>(entry.when);
@@ -574,6 +642,42 @@ bool Builder::instantiateRuleTemplates(
     for (size_t i = 0; i < names.size(); ++i) {
         bindings.push_back({names[i], types[i]});
     }
+    // The values the rule value carries are the `constas` parameters of every function of the
+    // declaration -- one per `with` parameter, in the order the declaration writes them -- and the
+    // instance reads each from a static slot (design principles 5.4, 5.5). They are part of the
+    // instance key, and an integer one is an extent the declaration's types may use.
+    ConstasValues constas;
+    ExtentValues extents;
+    if (!entry.withParams.empty()) {
+        if (with.size() != entry.withParams.size()) {
+            why = std::format(
+                "it takes {} `with` parameter(s), and it was asked for {}",
+                entry.withParams.size(),
+                with.size());
+            return false;
+        }
+        FunctionType *signature = lhsTemplate->funcType;
+        size_t at               = 0;
+        for (size_t i = 0; i < signature->normTypesCount() && at < with.size(); ++i) {
+            if (!signature->normIsConstasAt(i)) {
+                continue;
+            }
+            const data_ptr_t bound = with[at];
+            ConstasValue value;
+            value.type      = signature->normTypeAt(i);
+            value.valueType = bound != nullptr ? bound->type() : nullptr;
+            // The declaration's own value stays as the rule value holds it: what the instance does
+            // with the constant -- putting it in its parameter's type -- is the instance's own.
+            value.data = bound != nullptr ? bound->clone() : nullptr;
+            constas[entry.withParams[at]] = std::move(value);
+            if (bound != nullptr) {
+                if (const auto extent = constasExtentOf(bound); extent.has_value()) {
+                    extents[entry.withParams[at]] = *extent;
+                }
+            }
+            ++at;
+        }
+    }
     // The instance is built where the rule was declared: the templates are the ones the declaring
     // builder holds, and its own scopes and module answer for the body. That builder's build
     // finished long ago -- the rule is instantiated where the rule is applied, which is a pass
@@ -585,10 +689,11 @@ bool Builder::instantiateRuleTemplates(
     const GCT::node_ptr_t origin = lhsTemplate->func;
     const bool inModule          = this->inModule(lhsTemplate->module, [&] {
         SpeculativeInstantiation quiet(*this);
-        lhs = instantiateGeneric(lhsTemplate, bindings, {}, {}, origin);
-        rhs = lhs != nullptr ? instantiateGeneric(rhsTemplate, bindings, {}, {}, origin) : nullptr;
+        lhs = instantiateGeneric(lhsTemplate, bindings, extents, constas, origin);
+        rhs = lhs != nullptr ? instantiateGeneric(rhsTemplate, bindings, extents, constas, origin)
+                             : nullptr;
         when = lhs != nullptr && rhs != nullptr && whenTemplate != nullptr
-                   ? instantiateGeneric(whenTemplate, bindings, {}, {}, origin)
+                   ? instantiateGeneric(whenTemplate, bindings, extents, constas, origin)
                    : nullptr;
         // What the bodies said, read while the scope still holds it: it is the reason the attempt
         // is remembered by, and nobody hears it where it was said.
@@ -865,6 +970,56 @@ void Builder::takeConstasValues(
     if (normTypes != nullptr) {
         *normTypes = std::move(runtimeTypes);
     }
+}
+
+/// The compile-time value one `with` argument of a rule binds is, held to the type of its
+/// parameter. The value is one the compiler knows while the program is compiled -- a literal, a
+/// constant, a `static for` counter, a `constas` forwarded, a pure call that reduces to one -- and
+/// it is of a kind an instance can be keyed by: what a rule is bound to is part of the key its
+/// instance is made under (design principles 5.4, 5.5). Anything else is refused where it is
+/// written, and the attempt throws.
+data_ptr_t Builder::ruleWithArgumentValue(
+    const Argument &argument, Type *declared, const std::string &ruleName,
+    const std::string &paramName, const GCT::node_ptr_t &at) {
+    const GCT::node_ptr_t &expr = argument.expr;
+    Type *valueType = argument.node != nullptr ? valueTypeOf(nodeTypeOf(argument.node)) : nullptr;
+    data_ptr_t data =
+        expr != nullptr && expr->type() == GCT::NodeKind::DATA ? expr->data() : nullptr;
+    if (data == nullptr && argument.node != nullptr) {
+        // A compile-time value handed on from another node: a name bound to a constant, the `n` of
+        // a `static for`, a `constas` value forwarded.
+        data = constantOfNode(argument.node);
+    }
+    if (data == nullptr && valueType != nullptr && argument.node != nullptr) {
+        if (const StaticArg constant = staticArgOf(argument.node); constant.value) {
+            data = dataOfStaticValue(valueType, *constant.value);
+        }
+    }
+    if (data == nullptr && expr != nullptr && expr->type() == GCT::NodeKind::LINK) {
+        // A call of a pure function with constant arguments is a constant (design principles 5.1,
+        // 6.5): one that does not reduce to a constant is refused here by name, not as a value
+        // without one.
+        const FoldedCall folded = foldConstantCall(expr);
+        if (folded.data != nullptr) {
+            data = folded.data;
+        } else if (folded.refusal != FoldRefusal::NotAProgramCall) {
+            reportFoldRefusal(folded, expr);
+        }
+    }
+    if (data != nullptr && declared != nullptr && !declared->equals(data->type())) {
+        // The value is what the instance is keyed by and what its static slot holds, so it is put
+        // in the type the parameter declares here, once, where the binding is written.
+        if (data_ptr_t converted = data->clone()->convertTo(declared); converted != nullptr) {
+            data = std::move(converted);
+        }
+    }
+    if (data == nullptr || !ruleValueKind(data->type())) {
+        diags_->of(SemanticDiag::RuleWithArgumentNotConstant)
+            .atOrigin(expr != nullptr && expr->origin() != 0 ? expr->origin() : at->origin())
+            .commit(paramName, ruleName, declared != nullptr ? declared->toString() : "?");
+        throw BuildAbortException();
+    }
+    return data;
 }
 
 std::vector<generic_template_ptr_t> Builder::genericOverloadsOf(node_handle_t node) const {
