@@ -76,16 +76,21 @@ numpy:         the array rules.identity returns points at 0x737a76e19d10 as well
 不同，而调用方那块缓冲区必须没被写过。
 
 "不拷贝"在时间上的形状是：**调用成本不随数组增长，拷贝成本随数组增长**。下面是同一个进程里
-一次次调用的最快均值（`memmove` 是这次调用省掉的那一次拷贝，同样在本进程、同样这些字节上测）：
+**单次调用的最小值**（抢占只会让单次调用变慢、不会变快，所以最小值是这件工作本身的成本，不随宿主
+的调度漂移；`memmove` 是这次调用省掉的那一次拷贝，同样在本进程、同样这些字节上测；1/4/16/64 MiB
+各取 200/60/20/10 次，使每一档的取样时长相近）：
 
 ```
 size          pass-through (the binding)   memmove (a copy of the same bytes)
-    1 MiB           13.0 us                   353.6 us
-    4 MiB           13.9 us                  1083.6 us
-   16 MiB           12.8 us                  2563.7 us
-   64 MiB           12.9 us                  4818.3 us
-therefore:    64 MiB by call 12.9 us, by copy 4818.3 us (13.9 GB/s), a factor of 374
+    1 MiB            9.4 us                   190.2 us
+    4 MiB           11.0 us                   159.2 us
+   16 MiB           11.6 us                   639.9 us
+   64 MiB           11.9 us                  6305.0 us
+therefore:    64 MiB by call 11.9 us, by copy 6305.0 us (10.6 GB/s), a factor of 530
 ```
+
+（1 MiB 那格比 4 MiB 还慢，是本机反复出现的、尺寸自身的效应，不是负载：旧的 23 份均值读表里也有
+7 份是同样的次序。推断与固定开销和大页/L3 驻留有关，未单独做实验。两次断言只看首尾两格。）
 
 内存上的形状：连续 8 次返回，`identity` 的结果指向**同一块**，`scale` 的结果是 8 块。
 
