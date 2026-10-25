@@ -445,7 +445,7 @@ P4 的终点：
 
 - 464 处 `Tensor<`、87 个文件：P3 已把 `const [` 改写为 `[`；P4 再把仍然依赖"张量类型语义"的断言改写（打印、`as`、`var` 加宽、类型文本）。这一步与 P3 的改写分开提交，便于二分。
 - `test/cases/modules/tensor/static_types.cml`、`var_tensor_reference.cml`、`shape_inference/var_argument*.cml`：`var` 加宽与裸 `Tensor` 的用法按 Q5 调整。
-- 签名里写裸 `Tensor` 的示例与用例（`test/cases/modules/nn/lrit.cml`、`mnist.cml` 及其 `nn.*` 计划条目等）：P4 终点上裸 `Tensor` 签名是编译错误，按 5.1a 改写成具体元素类型（示例里用 `f32[?, 1]` 这类写法）或在头部声明的泛型；不放宽可赋值规则，也不把格子写成裸 `Tensor`。
+- 签名里写裸 `Tensor` 的示例与用例（`test/cases/modules/nn/lrit.cml`、`mnist.cml` 及其 `nn.*` 计划条目等）：P4 终点上裸 `Tensor` 签名是编译错误，按 5.1a 改写成具体元素类型与秩（`var` 形参收的是同秩加宽后的格子类型，写 `f32[?, ?]`；非 `var` 形参可以写定 extent，如 `f32[?, 1]`）或在头部声明的泛型；不放宽可赋值规则，也不把格子写成裸 `Tensor`。
 - `grad(f)` 的结果类型（`modules/tensor/ops/vjp.cpp#vjpTensorType`）：由被微分值的切线类型给出，`grad of f32[?, 4]` 就是 `f32[?, 4]`；不再返回过渡类型（`test/cases/feat/mm/gc/gc_training_peak.cml` 的 `sgd(wf, g, 0.5)` 依赖这一条）。
 - 新增 `test/cases/compile/array_alias/*`：`Tensor<f32>` ≡ `f32[..]`、`Tensor<f32, [2, 3]>` ≡ `f32[2, 3]`、裸 `Tensor` 接受 `int[3]` 拒绝 `string[3]`、`Tensor<string>` 报错、`Tensor<f32>` 的类型文本、`var` 加宽、`as` 的形状检查、四个后端一致。
 - `test/plans/feat/compile/array_alias.plan.toml`。
