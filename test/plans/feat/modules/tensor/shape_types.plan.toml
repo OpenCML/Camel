@@ -63,7 +63,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "unshaped_argument"
-desc = "A tensor loaded at run time has the element type the load declared (`f32`) and an unknown shape, so it does not fit a parameter with a declared shape: the diagnostic names the argument, both types (`f32[..]` and `Tensor<[3]>`, the parameter's element type being open) and the conversion to write (`t as Tensor<[3]>`, see as_checked; `reshape` with a constant shape is the other checked way in, see reshape_gives_shape)."
+desc = "A tensor loaded at run time has the element type the load declared (`f32`) and an unknown shape, so it does not fit a parameter with a declared shape: the diagnostic names the argument, both types (`f32[..]` and `f32[3]`) and the conversion to write (`t as f32[3]`, see as_checked; `reshape` with a constant shape is the other checked way in, see reshape_gives_shape)."
 kind = "negative"
 case = "../../../../cases/modules/tensor/shape_types/unshaped_argument.cml"
 args = ["${case}"]
@@ -100,7 +100,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "ok"
-desc = "A parameter declared `Tensor<[3]>` accepts a [3] tensor."
+desc = "A parameter declared `f32[3]` accepts a [3] tensor."
 kind = "behavior"
 case = "../../../../cases/modules/tensor/shape_types/ok.cml"
 args = ["${case}"]
@@ -111,7 +111,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "unknown_extent"
-desc = "An extent written -1 is unknown: `Tensor<[?, 3]>` accepts batches of 5 and of 1, and the declared result shape `[-1, 2]` holds."
+desc = "An extent written -1 is unknown: `f32[?, 3]` accepts batches of 5 and of 1, and the declared result shape `[-1, 2]` holds."
 kind = "behavior"
 case = "../../../../cases/modules/tensor/shape_types/unknown_extent.cml"
 args = ["${case}"]
@@ -133,7 +133,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "reshape_gives_shape"
-desc = "A tensor loaded at run time gets a static shape from `reshape(t, [3])` and then fits a parameter declared `Tensor<[3]>`."
+desc = "A tensor loaded at run time gets a static shape from `reshape(t, [3])` and then fits a parameter declared `f32[3]`."
 kind = "behavior"
 case = "../../../../cases/modules/tensor/shape_types/reshape_gives_shape.cml"
 args = ["${case}"]
@@ -145,7 +145,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "as_checked"
-desc = "A tensor of unknown shape enters a shaped position through an explicit conversion: `t as Tensor<[3]>`; the shape is checked when the conversion runs."
+desc = "A tensor of unknown shape enters a shaped position through an explicit conversion: `t as f32[3]`; the shape is checked when the conversion runs."
 kind = "behavior"
 case = "../../../../cases/modules/tensor/shape_types/as_checked.cml"
 args = ["${case}"]
@@ -156,7 +156,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "as_runtime_mismatch"
-desc = "`t as Tensor<[4]>` on a tensor that turns out to have shape [3] is a run-time error at the conversion, naming both shapes."
+desc = "`t as f32[4]` on a tensor that turns out to have shape [3] is a run-time error at the conversion, naming both shapes."
 kind = "behavior"
 case = "../../../../cases/modules/tensor/shape_types/as_runtime_mismatch.cml"
 args = ["${case}"]
@@ -167,7 +167,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "as_static_mismatch"
-desc = "A conversion the static types already contradict (`ones([3]) as Tensor<[4]>`) is a compile-time error."
+desc = "A conversion the static types already contradict (`ones([3]) as f32[4]`) is a compile-time error."
 kind = "negative"
 case = "../../../../cases/modules/tensor/shape_types/as_static_mismatch.cml"
 args = ["${case}"]

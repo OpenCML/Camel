@@ -64,7 +64,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "si_plain_result"
-desc = "A result declared plain Tensor has no extents for its caller. Passing it to a shaped parameter names the argument, both types and the conversion to write."
+desc = "A result declared `Tensor<f32>`, whose rank nobody fixes, has no extents for its caller. Passing it to a shaped parameter names the argument, both types and the conversion to write."
 kind = "negative"
 case = "../../../../cases/modules/tensor/shape_inference/plain_result.cml"
 args = ["${case}"]
@@ -164,7 +164,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "si_tuple_return"
-desc = "A returned tuple whose elements came from a function declared (Tensor, Tensor): each element that is less exact than declared is named, with its own conversion."
+desc = "A returned tuple whose elements came from a function declared (Tensor<f32>, Tensor<f32>): each element that is less exact than declared is named, with its own conversion."
 kind = "negative"
 case = "../../../../cases/modules/tensor/shape_inference/tuple_return.cml"
 args = ["${case}"]
