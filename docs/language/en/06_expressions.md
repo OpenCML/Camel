@@ -25,7 +25,7 @@ An expression is a node on the graph, and its operands are its input edges. Whet
 - The elements of an array literal must have the same type. An element is **a position with an expected type** ([3.3.1](03_data_model.md#331-arrays)): with a context every element takes that type, so the elements of `let xs: float[] = [1, 2.0]` are `float`; with none, the number literals of one array take the widest kind (integer < decimal), so `[1, 2.0]` is a `float[]` (as Go's untyped constants do). The element type of the empty array `[]` comes from the context: `let xs: int[] = []`, `[] as Map<string, int>`.
 - The keys of a struct literal are identifiers. A field is such a position too: in `let p: P = { a: 1, b: 2.0 }` (`P = { a: float, b: float }`) the `1` is a `float`. A field written as a name is a variable, not converted: a type it does not fit is `SemanticDiag::DeclaredTypeMismatch`.
 - **A list comprehension** `[e for x in xs if c]` is `xs->filter<(x) => c>->map<(x) => e>`: `x` has the element type of `xs`, `if c` may be left out, and the result is an array of `e`. On the graph it is exactly what the two calls written out are (two operator nodes, each with the subgraph of its element function), so it has their properties: nothing is promised about the order of the elements (a parallel scheduler may compute them concurrently), and effects in `e` and `c` are treated as in the element functions of `map` and `filter` ([6.10](#610-higher-order-operators)). It nests, and it may stand wherever an expression may. A source that is not an array is `SemanticDiag::ComprehensionSourceRefused`.
-- The spread `...xs` is reserved and not implemented (`SemanticDiag::ConstructNotSupported`). Write `concat(xs, ys)`.
+- The spread `...xs` is `SemanticDiag::ConstructNotSupported`. Write `concat(xs, ys)`.
 
 ### 6.2.1 Formatted strings
 
@@ -96,8 +96,8 @@ func main(): int sync {
   - When only the first context parameters are given, the rest remain context parameters of the result: after `let above = clamp<0>`, write `above<5>(9)`. A function that has all of them cannot be given more (`g<2>` is an error).
   - `f` must be one function that these arguments determine. Among several functions of one name, the only one that takes these context arguments is meant; if several do, the function type of the position (a parameter) decides, and when nothing does it is `SemanticDiag::PartialApplicationRefused`.
   - On the graph it is a function value that carries the captured arguments, the shape a closure has: a subgraph of its own which the bound arguments enter through ports. No node kind is added.
-  - Not supported yet: functions with a `var` context parameter (`SemanticDiag::ConstructNotSupported`) and built-in operators whose type rule depends on their arguments (such as `len`; `SemanticDiag::FunctionNameAsValue`). Write the call in a lambda there.
-- Keyword arguments `f(a: 1)` are reserved, not implemented (`SemanticDiag::FeatureNotSupported`).
+  - Functions with a `var` context parameter (`SemanticDiag::ConstructNotSupported`) and built-in operators whose type rule depends on their arguments (such as `len`; `SemanticDiag::FunctionNameAsValue`). Write the call in a lambda there.
+- Keyword arguments `f(a: 1)` are `SemanticDiag::FeatureNotSupported`.
 - Two calls with angle brackets in one argument list (`f<a>(x), g<b>(y)`) are read as comparisons; a call with angle brackets followed by a pipe with angle brackets (`f<a>(x)->g<b>`) may be too. Write them as two statements.
 - A lambda written in parentheses can be called directly: `((x: int): int => x + 1)(3)`; it can also be written on the right of `->` and `?->`: `3->(x: int): int => x + 1`, `parse_int(s) ?-> (x: int): int => x * 2`.
 
@@ -121,7 +121,7 @@ total = 35
 ```
 
 - For `x ?-> f` see [6.6](#66-operators-for-null-and-errors).
-- `f..g` (function composition) and `?..` are reserved: they are not implemented and their meaning is not decided, and writing one is `SemanticDiag::ConstructNotSupported`. Use a lambda: `(x: int): int => g(f(x))`.
+- `f..g` (function composition) and `?..`: their meaning is not decided, and writing one is `SemanticDiag::ConstructNotSupported`. Use a lambda: `(x: int): int => g(f(x))`.
 
 ## 6.6 Operators for null and errors
 
@@ -233,7 +233,7 @@ false
 
 `as` never changes the type of a value unchecked. The result of `json::decode` is a `Json`, which does not convert to another type with `as`; JSON of a known shape is decoded with `json::decode_as(s, [0])`, which checks the shape while decoding and gives a `T!`.
 
-Conversions between numbers use functions such as `float(x)` ([3.2](03_data_model.md#32-numbers)). `e is T` is reserved, not implemented (there is no type information at run time; `SemanticDiag::ConstructNotSupported`). The postfix non-null assertion `x!` is likewise reserved and not implemented; use `x ?? default`.
+Conversions between numbers use functions such as `float(x)` ([3.2](03_data_model.md#32-numbers)). `e is T` is `SemanticDiag::ConstructNotSupported` (there is no type information at run time). The postfix non-null assertion `x!` is the same; use `x ?? default`.
 
 ## 6.8 `if` and `match`
 
@@ -379,11 +379,11 @@ func main(): int sync {
 
 A missing case, an extra case or a literal case mixed in is `SemanticDiag::TaggedMatchCases`.
 
-**Patterns on an `enum`.** When the matched value is an enum, a pattern names one of its variants ([3.5](03_data_model.md#35-enums)): `case Shape::Circle(r)`, `case Shape::Rect { w, h }`, `case Shape::Empty`, `case _`. A tuple variant gives every position; a struct variant writes the fields it binds (it may rename and abbreviate); a variant without data is written by its qualified name (`case Shape::Empty`; a bare name is a binding, and `case Empty` is `EnumPatternMismatch`). Naming every variant means no `case _` is needed; a missing variant without `case _` is `SemanticDiag::EnumMatchNotExhaustive`, whose diagnostic lists the missing variants; a variant written twice warns (`EnumVariantCaseRepeated`), a case after `case _` warns (`MatchCaseAfterWildcard`), and a `case _` written after every variant is already named warns (`MatchWildcardRedundant`). The first version has no nested patterns (a pattern in the position of a field) and says "not supported yet" (`ConstructNotSupported`).
+**Patterns on an `enum`.** When the matched value is an enum, a pattern names one of its variants ([3.5](03_data_model.md#35-enums)): `case Shape::Circle(r)`, `case Shape::Rect { w, h }`, `case Shape::Empty`, `case _`. A tuple variant gives every position; a struct variant writes the fields it binds (it may rename and abbreviate); a variant without data is written by its qualified name (`case Shape::Empty`; a bare name is a binding, and `case Empty` is `EnumPatternMismatch`). Naming every variant means no `case _` is needed; a missing variant without `case _` is `SemanticDiag::EnumMatchNotExhaustive`, whose diagnostic lists the missing variants; a variant written twice warns (`EnumVariantCaseRepeated`), a case after `case _` warns (`MatchCaseAfterWildcard`), and a `case _` written after every variant is already named warns (`MatchWildcardRedundant`). A pattern in the position of a field says "not supported yet" (`ConstructNotSupported`).
 
 **A `match` must have a default case.** A `match` without `case _` is the compile-time error `SemanticDiag::MatchWithoutDefault`, located at the `match`. Three shapes need none: a `match` on a `bool` that writes out both `case true` and `case false`, a `match` on a `T?` or `T!` with the fixed patterns above, and a `match` on an enum that names every variant. The compiler adds no arm the program does not write, so the arms on the graph correspond one to one to the `case`s in the source.
 
-Tuple patterns, struct patterns, and identifier patterns on values of ordinary types (`case n => ...`) are reserved, not implemented (`SemanticDiag::ConstructNotSupported`); use an `if` chain, or take the members first and then match. Tuple and struct patterns of enum variants are implemented, but a field position takes only a name or `_`.
+Tuple patterns, struct patterns, and identifier patterns on values of ordinary types (`case n => ...`) are `SemanticDiag::ConstructNotSupported`; use an `if` chain, or take the members first and then match. Tuple and struct patterns of enum variants are implemented, but a field position takes only a name or `_`.
 
 `try`/`catch`/`finally` is not part of Camel (it has no stable mapping onto the graph): writing it gives `SemanticDiag::TryCatchNotInLanguage`. An operation that may fail returns `T!`, handled with `!!`, `?->` and `case error e`.
 

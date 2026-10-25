@@ -204,7 +204,7 @@ const KEYWORD_GROUPS = [
     ['控制', 'Control'],
     ['类型与转换', 'Type and conversion'],
     ['字面量', 'Literal'],
-    ['保留，尚未实现', 'Reserved (accepted, not implemented — §13)'],
+    ['保留', 'Reserved'],
 ]
 
 function generateLexical(root) {

@@ -53,6 +53,6 @@ Hello, Camel!
 | [5 Modules](05_modules.md) | `module`, `import`, `export`, `namespace` |
 | [6 Expressions](06_expressions.md) | Literals, access, calls, pipes, operators, `if`, `match`, lambdas |
 | [7 Statements and declarations](07_statements.md) | `let`/`var`, `return`/`throw`, blocks, functions, generics, type declarations |
-| [8 Program and grammar](08_top_level_and_grammar.md) | Top-level structure, entry, grammar summary, constructs reserved but not implemented |
+| [8 Program and grammar](08_top_level_and_grammar.md) | Top-level structure, entry, grammar summary |
 
 **Loops.** Camel currently has no loop syntax: `for` and `while` cannot be used (`for` and `in` are reserved words). Repeated computation is written as recursion (tail recursion is not limited in depth) or with the higher-order operators `map`, `filter`, `reduce`, `foreach`.

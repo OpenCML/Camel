@@ -53,6 +53,6 @@ Hello, Camel!
 | [5 模块](05_modules.md) | `module`、`import`、`export`、`namespace` |
 | [6 表达式](06_expressions.md) | 字面量、访问、调用、管道、运算符、`if`、`match`、lambda |
 | [7 语句与声明](07_statements.md) | `let`/`var`、`return`/`throw`、块、函数、泛型、类型声明 |
-| [8 程序与文法](08_top_level_and_grammar.md) | 顶层结构、入口、文法概要、保留未实现的写法 |
+| [8 程序与文法](08_top_level_and_grammar.md) | 顶层结构、入口、文法概要 |
 
 **循环。** Camel 目前没有循环语法：`for`、`while` 不能用（`for`、`in` 是保留字）。重复的计算写成递归（尾递归不受深度限制）或高阶算子 `map`、`filter`、`reduce`、`foreach`。
