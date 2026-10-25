@@ -3212,3 +3212,19 @@ assert(text.includes('wp [16777217.0, 2.0, 16777217.0]'), `the wide sum did not 
 }
 """
 timeout_ms = 10000
+
+[[tests]]
+name = "f64_matmul_grad_width"
+desc = "The width the matmul gradient accumulates in: loss = sum(x @ w) with x an f64[2, 3] and w an f64[3, 1] gives d/dw = x^T @ dy (tensor:matmul_grad_rhs) and d/dx = dy @ w^T (tensor:matmul_grad_lhs), the only two gradient operators that add several products together. The narrow pair prints the hand-written column sums [5, 7, 9] and the row of w. The wide pair's x is [[2^24, 1, 0], [1, 0, 0]], so d/dw is [2^24 + 1, 1, 0] = [16777217.0, 1.0, 0.0]: 1 is below half an ulp of 2^24, so an f32 accumulation of the two rows answers 16777216.0 and its distance is 1.0 where the f64 one is 0.0. The operators used to declare f32 whatever the width of the value they are the gradient of, which is what made a sum_to of an f64 step a pair the signature refuses; the declaration follows the value's width now, and this pair is what pins that it is not a claim the arithmetic cannot keep."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/f64_matmul_grad_width.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const text = input.normalized.stdout
+assert(text.includes('f64_matmul_grad_width value=21.0 a_w=0.0 a_x=0.0 wa=0.0'), `unexpected distances: ${text}`)
+}
+"""
+timeout_ms = 10000
