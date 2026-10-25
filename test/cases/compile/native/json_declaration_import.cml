@@ -2,7 +2,7 @@
  * The declarations of `json` are what an importer sees: `decode` gives a `Json!`, `get<key>`
  * and `get<index>` are read from the declaration, and the accessors give a nullable result
  * (the two-layer `Json!?` for a document that had failed); every call reaches the C++ operator
- * (handover H19, step 10; H115).
+ * (step 10).
  */
 module json_declaration_import
 

@@ -1,5 +1,5 @@
 /**
- * The verdict table `check` answers (H247, slice S0; the rulings of 2026-10-24 on
+ * The verdict table `check` answers (slice S0; the rules on
  * `verification-verdict-surface` and on `verification-licence-to-precondition`).
  *
  * Three things this case measures, none of which the check could say before:
@@ -37,7 +37,7 @@ rule differ(x: int) { x * 2 => x + 2 }
 #requires<nondeterministic>
 rule anywhere(x: float, const c: float) { x * c => c * x }
 
-/// The assumptions the ruling names are written out: with `no_infs`, `no_nans` and
+/// The assumptions the rule names are written out: with `no_infs`, `no_nans` and
 /// `no_signed_zeros` asked for, the non-finite values whose behaviour the real model does not have
 /// are outside the domain, and the rule's two halves are the finite equality and the IEEE equality
 /// that is left.

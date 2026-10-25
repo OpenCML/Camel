@@ -132,7 +132,7 @@ desc = "Every Camel fence in a reader-facing page compiles; when the fence has a
 kind = "behavior"
 tool = "node"
 case = "../../../scripts/check-doc-snippets.mjs"
-# `${camel}` is the compiler of the build under test, named as an argument (the author's ruling of 2026-10-25).
+# `${camel}` is the compiler of the build under test, named as an argument.
 args = ["${case}", "--default-roots", "--camel", "${camel}"]
 expect_exit = 0
 expect_stdout_contains = ["no stale snippet in"]

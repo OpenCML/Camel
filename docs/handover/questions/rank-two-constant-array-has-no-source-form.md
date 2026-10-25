@@ -1,6 +1,6 @@
 # 秩 ≥2 的常量数组在源码里构不出来：`core.loopDomain.extent` 的秩 ≥2 分支没有读数（实测，2026-10-25，h453 lane）
 
-前提裁定：`docs/handover/reviews/questions-2026-10-24-evening.md` 的
+前提：`docs/handover/reviews/questions-2026-10-24-evening.md` 的
 `loop-domain-through-the-tensor-iterator`（`core.loopDomain` 的 `extent` 就是 `shape[0]`，秩 1 时等于
 元素个数，所有读者共用这一个事实），以及 `docs/technical/39_loops.md` §2a（`for x in xs` 对任何数组都
 沿第一维，由核心负责）。本 lane 按裁定把事实写进核心（`src/runtime/core_facts.cpp` 的
@@ -71,3 +71,8 @@
 5. 它给的代价结论（供作者判）：整体复活＝解一处冲突、fast 层红集合一字不动、它自己 7 条全绿，是**最低
    代价选项**；但整体复活等于在**没有用例钉着的空地上**把该读数落定为"拒绝"。若作者认为该走"按声明
    成形"，应只复活 `statedExtents()` 而重写 GCT/GIR 那三处拒绝与那 7 条用例。
+
+## 读数取自 `tip=6770eda25`
+
+本页的读数是原读数，未改，也没有重测；复活可行性一节以翻转线 `tip=6770eda25` 为对照基线。本页摘到
+develop 时，翻转线的 tip 已是 `tip=1ee7acab6`。

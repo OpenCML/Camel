@@ -226,7 +226,7 @@ desc = "A private chain in a three-round training step on std::nvm: the profile 
 kind = "behavior"
 tool = "python"
 case = "../../../cases/modules/tensor/fusion_group_profile.py"
-# `${camel}` is the compiler of the build under test, named as an argument (the author's ruling of 2026-10-25).
+# `${camel}` is the compiler of the build under test, named as an argument.
 args = ["${case}", "group", "--camel", "${camel}"]
 expect_exit = 0
 expect_stdout_contains = ["fusion group profile: PASS"]

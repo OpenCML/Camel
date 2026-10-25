@@ -54,7 +54,7 @@ slot_t __map_arr__(ArgsView &with, ArgsView &norm, camel::core::context::Context
     for (size_t i = 0; i < n; ++i) {
         const slot_t element = useViews ? arrayOf(norm)->getElementView(i, viewLayout) : arrayOf(norm)->getSlot(i);
         // The result goes straight into the output array, whose store copies the element bytes;
-        // a view here does not outlive the element (H29).
+        // a view here does not outlive the element.
         const slot_t value = invokeFunction(ctx, functionOf(with), {}, std::span(&element, 1));
         result.getAs<Array>()->set<slot_t>(i, value, type);
     }
@@ -76,7 +76,7 @@ slot_t __filter_arr__(ArgsView &with, ArgsView &norm, camel::core::context::Cont
     for (size_t i = 0; i < n; ++i) {
         const slot_t element = useViews ? arrayOf(norm)->getElementView(i, viewLayout) : arrayOf(norm)->getSlot(i);
         // The predicate result is a boolean and the kept element is copied by append: nothing
-        // here outlives the element read (H29).
+        // here outlives the element read.
         const slot_t answer = invokeFunction(ctx, functionOf(with), {}, std::span(&element, 1));
         if (fromSlot<bool>(answer)) {
             kept.getAs<Array>()->append(useViews ? arrayOf(norm)->getElementView(i, viewLayout) : arrayOf(norm)->getSlot(i), type);
@@ -106,7 +106,7 @@ slot_t __reduce_arr__(ArgsView &with, ArgsView &norm, camel::core::context::Cont
         const slot_t args[] = {cell.getAs<Array>()->get<slot_t>(0), useViews ? arrayOf(norm)->getElementView(i, viewLayout) : arrayOf(norm)->getSlot(i)};
         const slot_t raw    = invokeFunction(ctx, functionOf(with), {}, args);
         // The accumulator is the value the next round reads, so it is a value, not a view of the
-        // element this round read (H29). Materialise here, as the bytecode VM does; the store
+        // element this round read. Materialise here, as the bytecode VM does; the store
         // then asserts that no view reached it.
         const slot_t next = materializeCallResult(
             raw, functionOf(with)->graph()->funcType()->exitType());

@@ -1,7 +1,7 @@
 /**
  * The declarations of `tiles:available` and `tiles:device` are what an importer sees, read from
  * `stdlib/tiles.cml`: no parameters, a `bool` and a `string` result, and the call reaches the C++
- * operator (handover H19, step 10; H156). `available` runs here; `device` is only type-checked,
+ * operator (step 10). `available` runs here; `device` is only type-checked,
  * because asking for a device without one is a fault and this case has to run without a GPU.
  */
 module tiles_declaration_import

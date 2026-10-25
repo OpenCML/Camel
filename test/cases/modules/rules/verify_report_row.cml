@@ -1,6 +1,6 @@
 /**
  * Reading a column of a row the report does not have is a fault of the reader, and the report says
- * so (H247, slice S0; the ruling of 2026-10-24 on `verification-verdict-surface`, 2).
+ * so (slice S0; the rule on `verification-verdict-surface`, 2).
  *
  * A reader that asked for a row the table does not have used to have no way to be told: `check`
  * answered one string, and the columns were punctuation inside it. With the table a value, each

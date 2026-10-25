@@ -35,8 +35,7 @@ sys.path.insert(0, str(REPO_ROOT / "test" / "tools"))
 from camel_arg import camel_from_argv  # noqa: E402
 
 
-# The install this case measures: `--camel <path>` names it; without it `$CAMEL_HOME/bin/camel`,
-# else this tree's `out/latest/bin/camel`. One rule, in one place: test/tools/camel_arg.py.
+# The install this case measures: `--camel <path>` names it; without it this tree's `out/latest/bin/camel`. One rule, in one place: test/tools/camel_arg.py.
 # `ARGV` is this process's arguments without the `--camel` pair.
 CAMEL, ARGV = camel_from_argv(REPO_ROOT)
 

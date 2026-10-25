@@ -238,8 +238,8 @@ SliceRange sliceRange(Int64 size, Int64 startRaw, Int64 endRaw, Int64 step, Int6
 // writes (design principles 5.4). The bounds are read by `sliceRange` above.
 //
 // A step other than 1 is a view with strides, which needs the multidimensional array
-// representation of H17. Until it lands, a stepped slice is a copy: the elements are the same
-// and the program does not have to know, but the result does not share the array's block. H17
+// representation of. Until it lands, a stepped slice is a copy: the elements are the same
+// and the program does not have to know, but the result does not share the array's block.
 // records the deviation; step 1 still shares the block.
 slot_t __slice_sub__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Array *arr    = norm.get<Array *>(0);
@@ -251,7 +251,7 @@ slot_t __slice_sub__(ArgsView &with, ArgsView &norm, Context &ctx) {
         norm.get<Int64>(3),
         norm.get<Int64>(4));
     if (arr->rank() != 1) {
-        // A slice of a dimension other than the first is a view with strides (H17); the type
+        // A slice of a dimension other than the first is a view with strides; the type
         // system states rank 1, so this is a defect rather than something a program writes.
         throwRuntimeFault(
             RuntimeDiag::InvalidArgument,
@@ -266,7 +266,7 @@ slot_t __slice_sub__(ArgsView &with, ArgsView &norm, Context &ctx) {
             std::span<const int64_t>(&range.count, 1),
             static_cast<uint64_t>(range.start)));
     }
-    // A slot array has no block to share and is copied (H17 records that for slot arrays); so
+    // A slot array has no block to share and is copied (records that for slot arrays); so
     // is a stepped slice.
     Array *res = Array::create(mm::autoSpace(), arrType, static_cast<size_t>(range.count));
     for (Int64 i = 0; i < range.count; ++i) {

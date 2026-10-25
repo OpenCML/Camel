@@ -305,7 +305,7 @@ void reportLexicalErrors(const TokenBuffer &buffer, Diagnostics &diagnostics) {
         switch (error.kind) {
         case LexErrorKind::InvalidNumber: {
             // The whole written run (`09`, `077`, `0o8`), not one character of it: the text is
-            // what the reader has to change (H15i).
+            // what the reader has to change.
             const std::string text(buffer.source().substr(error.begin, error.end - error.begin));
             auto builder = diagnostics.of(LexicalDiag::InvalidNumberFormat)
                                .at(CharRange{{line, column}, {line, buffer.columnOf(error.end)}});
@@ -478,7 +478,7 @@ void reportSyntaxErrors(const Tree &tree, Diagnostics &diagnostics) {
         }
 
         // `x => e`. A lambda's parameters need their parentheses (design principles 5.9; the
-        // author's ruling of 2026-10-24 on `composition-expected-type-edges`, item 4): where a
+        // rule on `composition-expected-type-edges`, item 4): where a
         // name stands directly before an arrow that fits nothing, the writer wrote the one
         // spelling the language does not have. It is reported by name rather than as a token that
         // did not fit, and before the repairs below, because the same mistake reaches them as a
@@ -658,7 +658,7 @@ void reportSyntaxErrors(const Tree &tree, Diagnostics &diagnostics) {
         // 8. A '(' or '[' still open where a statement starts, a block ends or the file ends;
         // 6b. `x as int..5`: the interval reading of `..` written where a type stands. The type
         //     of an `as` ends at the stream mark, and what follows reads as the far end of an
-        //     interval (the author's ruling of 2026-10-24 on the stream surface, option (c)).
+        //      interval (the rule on the stream surface, option (c)).
         if (error.kind == SyntaxError::Kind::AsRightSideIsType) {
             if (once(SyntaxDiag::AsRightSideIsType, offending)) {
                 const Token &op = buffer[error.aux];

@@ -1,6 +1,6 @@
 6b1cd17fb651d89f ok test/cases/parse/repeated_type_marks.cml
 98f75fa3bbd0d82c ok test/cases/parse/constructs/analysis.cml
-d4a926a0e303904e ok test/cases/parse/constructs/comprehensions.cml
+f257e6f8f05967ce ok test/cases/parse/constructs/comprehensions.cml
 797b713daaac6dd9 ok test/cases/parse/constructs/constas.cml
 4dfb24d23966aa96 ok test/cases/parse/constructs/constas_param.cml
 394b0953c7a9de39 ok test/cases/parse/constructs/enum.cml
@@ -9,7 +9,7 @@ b441dbe0dae31665 ok test/cases/parse/constructs/literals.cml
 cd7c99fe2ec05bdc ok test/cases/parse/constructs/match_guard.cml
 a5e9896ce55676d8 ok test/cases/parse/constructs/operator_name.cml
 6b3b84a63e8e8e9a ok test/cases/parse/constructs/rest_signature.cml
-28bf5f62951274b6 ok test/cases/parse/constructs/static_loop.cml
+551b3ed8c1dc6b06 ok test/cases/parse/constructs/static_loop.cml
 17cd43b603695566 ok test/cases/parse/constructs/tags.cml
 8abbc9717bdde956 ok test/cases/parse/constructs/type_arguments.cml
 2fe3134d6fc3e87e no test/cases/parse/numbers/bad_octal_digit.cml

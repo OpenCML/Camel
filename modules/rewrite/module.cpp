@@ -167,9 +167,11 @@ slot_t constsKernel(ArgsView &, ArgsView &norm, Context &) {
 
 /// The state a condition closure needs: the rule object, rooted so that the closure can read the
 /// condition function from it after every safepoint, and the node VM the conditions of one engine
-/// call share. An instance of a generic rule has no rule object of its own to read: its parts are
-/// the graphs the context published for it, which do not move, and the fields after `vm` carry
-/// them (camel/compile/gir/rule_templates.h).
+/// call share. An instance of a generic rule has no rule object to read: its program and its
+/// condition graph belong to the context, which pins them for its own lifetime, and the fields
+/// after `vm` carry what the engine needs of the declaration the instance was made from -- how
+/// many parameters the rule has, which of them are `const`, how many the condition takes, and the
+/// name the messages use (camel/compile/gir/rule_templates.h).
 struct WhenCall {
     std::shared_ptr<mm::RootHandle> rule;
     std::shared_ptr<NodeVMSchedPass> vm;
@@ -188,16 +190,18 @@ struct WhenCall {
 /// parameter is the constant's value, of the type the parameter is declared with, so the guard is
 /// written on the value (`c > 0.0`) instead of reading it out of a node. Every other parameter is
 /// a Node handle of the draft being rewritten. The condition's last parameters are the hidden node
-/// parameters of the `const` ones, which `node_of(c)` was rewritten to at build time (the ruling
-/// of 2026-10-23 on `rule_when_const_node`); a `const` parameter reaches its node only through
-/// them. A parameter the left side does not use names no node and faults when it is read.
+/// parameters of the `const` ones -- one per `const` parameter, whether or not the condition writes
+/// `node_of` for it -- which is what `node_of(c)` was rewritten to at build time; a `const`
+/// parameter reaches its node only through them. A parameter the left side does not use names no
+/// node and faults when it is read.
 bool callWhen(const WhenCall &call, const camel::runtime::Match &match) {
     // The rule is read from the rooted handle, and the errors below read it again from there: a
     // condition is Camel code, so making the argument handles below collects, and a RuleObject the
     // engine held by address across one of those safepoints would be stale. The closure that calls
-    // this holds only the WhenCall, whose RootHandle the collector keeps up to date. An instance
-    // of a generic rule has no object at all: its parts are the context's and stay where they are,
-    // and they are read from the call description instead.
+    // this holds only the WhenCall, whose RootHandle the collector keeps up to date. An instance of
+    // a generic rule has no rule object: how many parameters the rule has and which are `const` was
+    // read from the declaration through its root when the instance was made, and the call
+    // description has carried those copies since.
     const RuleObject *rule = call.rule != nullptr ? call.rule->getAs<RuleObject>() : nullptr;
     const size_t arity =
         rule != nullptr
@@ -328,9 +332,9 @@ bool callWhen(const WhenCall &call, const camel::runtime::Match &match) {
                 whenProgram, const_cast<camel::runtime::GCGraph *>(whenGraph), args);
         } catch (const camel::core::error::FactQueryNoValue &) {
             // A fact query inside the condition named parts that are no value's operands: the
-            // condition is false -- this rule does not apply here -- and not a failure of the pass
-            // (the ruling of 2026-10-23 on `rule_when_const_node`: "条件里的事实查询找不到时，条件为假
-            // （这条规则在此不适用），而不是遍失败——条件本来就是"适用与否"的判断").
+            // condition is false -- this rule does not apply here -- and not a failure of the pass.
+            // A condition is a question of whether the rule applies, so a query that finds nothing
+            // answers no rather than ending the run.
             return toSlot<rtdata::Bool>(false);
         }
     }();
@@ -357,9 +361,8 @@ sourceOf(const RuleObject &rule, uint16_t id, const std::shared_ptr<WhenCall> &c
             static_cast<uint32_t>(rule.when()->graph()->funcType()->normTypesCount());
         // The parameters of the condition that are the rule's own are its first ones: it takes
         // them in the order the rule writes them and then one hidden node per `const` parameter,
-        // in the same order (the ruling of 2026-10-23 on `rule_when_const_node`). The hidden
-        // node parameters therefore begin where the sides' parameters end, whatever order the
-        // `const` ones stand in.
+        // in the same order. The hidden node parameters therefore begin where the sides' parameters
+        // end, whatever order the `const` ones stand in.
         source.whenNodesStart = static_cast<uint32_t>(rule.lhs()->graph()->normPorts().size());
         // The closure keeps the rooted rule (`call`), never its address: the engine holds it across
         // the safepoints of every condition the application evaluates, and the rule moves under it.
@@ -856,6 +859,9 @@ Application applyRewrite(
 /// the pass itself (design principles 7.4, 7.5): `strict` grants no permission, as
 /// `std::opt safe_fp=true` does, so only the laws that need none fire.
 /// An error value when a rule cannot be a rule, holds both ways, or the result is not a program.
+/// Only this module's own rule errors become error values. Anything else leaves by the exception
+/// it already is: a limit, a fault or a defect of another part of the compiler reported as a
+/// rule that is badly written would name the wrong cause and drop whatever the exception carried.
 slot_t rewriteKernel(ArgsView &, ArgsView &norm, Context &ctx) {
     const TupleType *resultType = TupleType::fallible(norm.type(0));
     const auto *base            = norm.get<const camel::runtime::Program *>(0);
@@ -875,8 +881,6 @@ slot_t rewriteKernel(ArgsView &, ArgsView &norm, Context &ctx) {
         return makeError("RuleTwoWay", e.what(), "<rewrite::rewrite>");
     } catch (const mm::MemoryExhausted &) {
         throw;
-    } catch (const std::exception &e) {
-        return makeError("RewriteInvalid", e.what(), "<rewrite::rewrite>");
     }
 }
 
@@ -892,6 +896,7 @@ slot_t rewriteKernel(ArgsView &, ArgsView &norm, Context &ctx) {
 /// `explain` opens the attribution record (rewrite design 8.7). Only then is a record kept and a
 /// `Proof` made and put in the struct; without it the field is null and no step was recorded, so a
 /// plain run pays nothing for a reader that never comes.
+/// Only this module's own rule errors become error values (see `rewriteKernel`).
 slot_t runKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     const auto *base     = norm.get<const camel::runtime::Program *>(0);
     const int64_t rounds = with.size() > 1 ? with.get<Int64>(1) : 16;
@@ -949,8 +954,6 @@ slot_t runKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
         return makeError("RuleTwoWay", e.what(), "<rewrite::run>");
     } catch (const mm::MemoryExhausted &) {
         throw;
-    } catch (const std::exception &e) {
-        return makeError("RewriteInvalid", e.what(), "<rewrite::run>");
     }
 }
 
@@ -1401,8 +1404,6 @@ const uint64_t ruleId = ruleNow()->ruleId();
         return makeError("RuleInvalid", e.what(), "<rewrite::why_not>");
     } catch (const mm::MemoryExhausted &) {
         throw;
-    } catch (const std::exception &e) {
-        return makeError("RewriteInvalid", e.what(), "<rewrite::why_not>");
     }
 }
 
@@ -1445,8 +1446,6 @@ slot_t saturateKernel(ArgsView &, ArgsView &norm, Context &ctx) {
         return makeError("RuleInvalid", e.what(), "<rewrite::saturate>");
     } catch (const mm::MemoryExhausted &) {
         throw;
-    } catch (const std::exception &e) {
-        return makeError("RewriteInvalid", e.what(), "<rewrite::saturate>");
     }
 }
 
@@ -1462,15 +1461,9 @@ slot_t extractKernel(ArgsView &, ArgsView &norm, Context &ctx) {
             "There is no cost model '" + cost + "'.",
             "<rewrite::extract>");
     }
-    try {
-        const camel::runtime::Program *extracted =
-            camel::runtime::extractWritings(ctx.shared_from_this(), base, *model);
-        return makeOk(toSlot(const_cast<camel::runtime::Program *>(extracted)), resultType);
-    } catch (const mm::MemoryExhausted &) {
-        throw;
-    } catch (const std::exception &e) {
-        return makeError("RewriteInvalid", e.what(), "<rewrite::extract>");
-    }
+    const camel::runtime::Program *extracted =
+        camel::runtime::extractWritings(ctx.shared_from_this(), base, *model);
+    return makeOk(toSlot(const_cast<camel::runtime::Program *>(extracted)), resultType);
 }
 
 // ---- the check of a rule (graph store decision 5) ----
@@ -3437,13 +3430,20 @@ void checkOneRule(
 void checkGenericRule(
     Context &ctx, RuleObject &rule, int64_t samples, uint64_t seed,
     const std::vector<Type *> &programTypes, std::vector<CheckRow> &rows) {
+    // The rule is a value of the program being checked, and the collector moves it: building an
+    // instance below collects. The id and the name are copied here, while the reference this
+    // function was given still names the object; every other read of the rule is made through the
+    // handle, which the collector keeps up to date.
     const uint64_t ruleId = rule.ruleId();
     const std::string name(rule.name());
+    auto root = std::make_shared<mm::RootHandle>(
+        mm::autoSpace(), &rule, RuleType::get(), "rewrite.checkGenericRule");
+    const auto live = [&]() { return root->getAs<RuleObject>(); };
     const auto whole = [&](const std::string &reason) {
         CheckRow row;
         row.rule        = name;
         row.verdict     = kVerdictSampled;
-        row.proposition = propositionOf(rule.needs());
+        row.proposition = propositionOf(live()->needs());
         row.evidence    = "none";
         row.reason      = reason;
         // No two sides were built, so there is nothing the translation layer could read.
@@ -3451,8 +3451,6 @@ void checkGenericRule(
             "the check did not build the rule's two sides: " + reason);
         rows.push_back(std::move(row));
     };
-    auto root = std::make_shared<mm::RootHandle>(
-        mm::autoSpace(), &rule, RuleType::get(), "rewrite.checkGenericRule");
     GenericRuleEntry *entry = camel::compile::gir::genericRuleEntry(ctx, ruleId);
     if (entry == nullptr) {
         whole("its templates are not in this context");
@@ -3530,7 +3528,7 @@ void checkGenericRule(
         CheckRow row;
         row.rule        = name;
         row.verdict     = kVerdictSampled;
-        row.proposition = propositionOf(rule.needs());
+        row.proposition = propositionOf(live()->needs());
         row.evidence    = "none";
         row.reason = std::format(
             "more type tuples than the check walks, so {} of {} were taken", tuples.size(), total);
@@ -3552,7 +3550,7 @@ void checkGenericRule(
         // The seed follows the instance's identity, not its place in the array the caller passed
         // (the ruling of 2026-10-24 on `accuracy-check-sampling`, 1).
         const uint64_t stream = sampleStreamOf(seed, instanceName);
-        Sampler probe(stream, rule.needs());
+        Sampler probe(stream, live()->needs());
         std::string cannot;
         for (size_t i = 0; i < lhsType->normTypesCount(); ++i) {
             const Type *parameter = lhsType->normTypeAt(i);
@@ -3571,10 +3569,10 @@ void checkGenericRule(
             call->graph       = instance.when;
             call->own         = instance.lhs->normPorts().size();
             call->arity       = instance.whenArity;
-            call->constParams = rule.constParams();
+            call->constParams = live()->constParams();
             call->name        = instanceName;
         }
-        const RuleObject &currentRule = *root->getAs<RuleObject>();
+        const RuleObject &currentRule = *live();
         const camel::runtime::RuleSource source = instanceOf(currentRule, 1, instance, call);
         if (!cannot.empty()) {
             CheckRow row;

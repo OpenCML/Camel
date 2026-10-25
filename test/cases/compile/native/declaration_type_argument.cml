@@ -4,7 +4,7 @@
  * declaration is read — the signature in the message below prints `L` for the head parameter,
  * `func ckpt_get::<L>` — but no call can
  * bind the variable: `::<T>` and the expected type never reach a declaration's resolver
- * (handover H103).
+ * 
  */
 module tensor
 

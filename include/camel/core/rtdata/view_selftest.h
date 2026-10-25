@@ -8,7 +8,7 @@
 namespace camel::core::rtdata {
 
 /**
- * Exercises the compact-element view boundary (H28 review item 1):
+ * Exercises the compact-element view boundary (review item 1):
  *
  *   normal   a view materialised before it is stored is not a view any more;
  *   escape   a view that is not materialised is still detected as one.
@@ -19,7 +19,7 @@ namespace camel::core::rtdata {
 std::string debugRunViewSelfTest();
 
 /**
- * The same escape, deliberately, to prove the debug guard actually aborts (H30). A compact
+ * The same escape, deliberately, to prove the debug guard actually aborts. A compact
  * element view is read and handed to the reduce accumulator store, which asserts in a debug
  * build: the process aborts with the assertion message instead of keeping a view that names the
  * next element. A release build compiles the assertion out, materialises the view in the store

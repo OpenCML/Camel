@@ -1,4 +1,4 @@
-// H158 measurement workload: N function graphs of built-in integer arithmetic, one loop each,
+// measurement workload: N function graphs of built-in integer arithmetic, one loop each,
 // in a module that imports nothing. No operator here comes from a module a lazy load could
 // declare, so the only declaration change in the measured pipeline is `std::opt`'s algebra
 // stage loading the rules library (and through it math and tensor). The function graphs are

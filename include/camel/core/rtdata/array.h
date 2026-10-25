@@ -432,7 +432,7 @@ class Array : public rtdata::Object {
     void setSlot(uint64_t flatIndex, slot_t value, const camel::core::type::ArrayType *arrayType = nullptr) {
         // `appendSlot` stores the new element at `numel_` before it increments the count, so the
         // bound is inclusive here; the capacity has already been grown for that write. The bound
-        // used to be exclusive, which aborted every compact append in a Debug build (H30).
+        // used to be exclusive, which aborted every compact append in a Debug build.
         if (isCompact() && slotShaped_ && value != NullSlot &&
             !camel::core::rtdata::isViewSlot(value, elemType_)) {
             ASSERT(flatIndex <= numel_, "Array flat index out of range");
@@ -696,7 +696,7 @@ class Array : public rtdata::Object {
 };
 
 /**
- * Stores the value a reduce keeps as its accumulator (H29): the one store after which the value
+ * Stores the value a reduce keeps as its accumulator: the one store after which the value
  * is read again in a later round, so it must be a value and not a view of the element that round
  * read. The caller materialises a view first (`materializeCallResult`), which is what the bytecode
  * VM already did; the assertion is the check that it did. In a release build the assertion is

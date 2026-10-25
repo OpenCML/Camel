@@ -26,18 +26,43 @@ using namespace camel::core::module;
 
 namespace debugger {
 
+namespace {
+
+/// How a compilation behaves while the debugger collects it. The debugger compiles the same
+/// sources the command line does, so it must collect the same errors and stop in the same place:
+/// what is compiled here includes modules compiled while the session runs (a pass library is
+/// compiled when a pass name is resolved), and a limit of its own would let the debugger stop on a
+/// diagnostic the command line records and goes on past.
+DiagsConfig compileDiagsConfig() {
+    return DiagsConfig{
+        .total_limit         = -1,
+        .per_severity_limits = {{Severity::Error, kDefaultMaxErrors - 1}},
+    };
+}
+
+/// A program's first run-time error is its last: the fault ends the run, as it does on the command
+/// line, whichever compile limit was asked for.
+DiagsConfig runtimeDiagsConfig() {
+    return DiagsConfig{.total_limit = -1, .per_severity_limits = {{Severity::Error, 0}}};
+}
+
+} // namespace
+
 CompilationState createCompilationStateForPath(const std::string &path) {
     fs::path entryPath(path);
     std::string entryDir = fs::absolute(entryPath).parent_path().string();
     auto searchPaths     = camel::utils::buildModuleSearchPaths(entryDir);
 
-    auto ctx = Context::create(
+    const DiagsConfig compileDiags = compileDiagsConfig();
+    auto ctx                       = Context::create(
         EntryConfig{.entryDir = entryDir, .entryFile = path, .searchPaths = std::move(searchPaths)},
-        DiagsConfig{.total_limit = -1, .per_severity_limits = {{Severity::Error, 0}}});
+        compileDiags);
+    // The compile sinks are the ones the command line compiles with; the run-time sink stops at
+    // its first error like the command line's.
+    ctx->runtimeDiagSink()->setConfig(runtimeDiagsConfig());
     GlobalConfig::SetInspectionMode(true);
     auto diagnostics = std::make_shared<Diagnostics>("main", path, ctx->sourceContext());
-    diagnostics->setConfig(
-        DiagsConfig{.total_limit = -1, .per_severity_limits = {{Severity::Error, 0}}});
+    diagnostics->setConfig(compileDiags);
     auto parser = std::make_shared<CamelParser>(diagnostics);
     parser->setSourceContext(ctx->sourceContext());
     auto mainModule = std::make_shared<UserDefinedModule>("main", path, ctx, parser);

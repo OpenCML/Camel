@@ -1,5 +1,5 @@
 /**
- * `fields` and `match type` are followed by a type position (H79 ruling 1): a `(` there is
+ * `fields` and `match type` are followed by a type position (rule 1): a `(` there is
  * always the start of a type, so `()` is the empty tuple type in both. No named alias such as
  * `type EmptyTuple = ()` is needed, and the empty tuple type prints and hashes exactly as the
  * one an alias would name.

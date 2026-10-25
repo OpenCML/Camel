@@ -20,7 +20,7 @@ const PLANS_ROOT = path.join(TEST_ROOT, 'plans')
 const VARS_PATH = path.join(TEST_ROOT, 'vars.toml')
 // The wrapper a `cpu_budget_ms` test runs under: it reaps exactly that test's process tree and
 // reports the CPU time the kernel charged it on file descriptor 3 (its header has the why; the
-// ruling it implements is quoted where the reading is judged, in runOneTest).
+// rule it implements is quoted where the reading is judged, in runOneTest).
 const CHILD_CPU_TOOL = path.join(TOOLS_ROOT, 'child-cpu.mjs')
 // Whether this host's kernel can report the CPU time of a process tree at all: the reading
 // test/tools/child-cpu.mjs makes is `cutime` + `cstime` of /proc/self/stat, which no other platform
@@ -208,6 +208,18 @@ function camelHome(build) {
     return path.join(REPO_ROOT, 'out', BUILDS[build].dir)
 }
 
+// The install a run measures: `--camel <path>` names it, else `out/<build>`. One install for the
+// whole run -- `${camel}`, what `preflightBuild` checks, and the root every test child reads as
+// `CAMEL_HOME` are all this -- and the environment never chooses it: `CAMEL_HOME` is the install
+// location's convention for the binary and the SDK, not a switch over what a run measures.
+function camelBinary(options) {
+    return options.camel || toolExecutable('camel', options.build)
+}
+
+function camelInstall(options) {
+    return path.dirname(path.dirname(camelBinary(options)))
+}
+
 function toolExecutable(tool, build) {
     const ext = IS_WINDOWS ? '.exe' : ''
     if (tool === 'node') return process.execPath
@@ -316,14 +328,14 @@ const DEBUG_BUILD_TIMEOUT_SCALE = 4
 
 // How much room a test must leave under its `timeout_ms` to count as a real bound: the run fails
 // when a passing test used more than a quarter of it **of its own CPU time**. The quantity is the
-// work's, not the host's, and deliberately so (H368): judged on the wall clock, this rule failed
+// work's, not the host's, and deliberately so: judged on the wall clock, this rule failed
 // the plan runner's own self-test at random on the shared host -- 1 of 12 runs at a 60 s bound,
 // and twice in two agents' gates -- while every run inside it was green,
 // because a passing test's wall clock on a busy host is the neighbours' scheduling. Four machines'
 // worth of headroom is what keeps a bound a bound. A test that needs more time states it in a
 // comment next to the number (docs/test-plans.md). A test that declares `cpu_budget_ms` is judged
 // on that budget instead and does not read the wall clock as a bound at all: its timeout is a
-// liveness bound (see the ruling quoted where the reading is judged), so this rule has nothing to
+// liveness bound (see the rule quoted where the reading is judged), so this rule has nothing to
 // say about it.
 const TIMEOUT_MARGIN = 4
 
@@ -534,6 +546,10 @@ function parseArgs(argv) {
         // Which build the tests run against. `release` is out/latest; `debug` is out/debug.
         build: envBuild || 'release',
         buildExplicit: envBuild !== undefined,
+        // The install this run measures, named by `--camel <path>`. With none the build above
+        // decides (`out/<build>`); with one, it is this binary, its root is every child's
+        // `CAMEL_HOME`, and `--build` only still selects the layer the run addresses.
+        camel: null,
         // `--jobs` defaults to the processor count: one test per core, no more. `--jobs 1` gives
         // exactly the historical serial execution, which is how the runner's own self-test
         // compares parallel output with serial output.
@@ -570,6 +586,13 @@ function parseArgs(argv) {
             if (!Object.hasOwn(BUILDS, build)) throw new Error(`--build must be one of ${Object.keys(BUILDS).join(', ')}, got '${build}'`)
             options.build = build
             options.buildExplicit = true
+        } else if (arg === '--camel') {
+            if (i + 1 >= argv.length) throw new Error('--camel needs the path of the install to measure')
+            options.camel = path.resolve(process.cwd(), argv[++i])
+        } else if (arg.startsWith('--camel=')) {
+            const install = arg.slice('--camel='.length)
+            if (install === '') throw new Error('--camel needs the path of the install to measure')
+            options.camel = path.resolve(process.cwd(), install)
         } else if (arg === '--jobs' && i + 1 < argv.length) {
             options.jobs = positiveInteger(argv[++i], '--jobs')
         } else if (arg.startsWith('--jobs=')) {
@@ -591,24 +614,30 @@ function parseArgs(argv) {
 }
 
 /**
- * Refuse to run the debug layer against anything but a Debug binary. out/debug is written by
- * `collect-out.js debug` (the Debug build), and its absence is the common mistake; a binary left
- * there by another configuration is caught by its own --version line, which names the build.
+ * Refuse to run when the install this run measures is not built. `--camel <path>` names it; with
+ * none it is `out/<build>`, written by `collect-out.js <build>`. The debug layer additionally
+ * refuses anything but a Debug binary: a binary left there by another configuration is caught by
+ * its own --version line, which names the build.
  */
-function preflightBuild(build) {
-    const exe = toolExecutable('camel', build)
+function preflightBuild(options) {
+    const build = options.build
+    const exe = camelBinary(options)
     if (!fs.existsSync(exe)) {
         console.error(
             `${COLORS.red}[FAIL]${COLORS.reset} no ${BUILDS[build].label} binary at ${exe}`
         )
-        console.error(
-            `    Build it with the shared helper: pwsh -NoProfile -File ${path.join(path.dirname(REPO_ROOT), 'camel-build.ps1')} -Path ${REPO_ROOT} -Config ${BUILDS[build].label}`
-        )
-        console.error(`    The ${BUILDS[build].label} tier never falls back to out/latest.`)
+        if (options.camel) {
+            console.error('    --camel names the install this run measures; it must be a built install\'s bin/camel.')
+        } else {
+            console.error(
+                `    Build it with the shared helper: pwsh -NoProfile -File ${path.join(path.dirname(REPO_ROOT), 'camel-build.ps1')} -Path ${REPO_ROOT} -Config ${BUILDS[build].label}`
+            )
+            console.error(`    The ${BUILDS[build].label} tier never falls back to out/latest.`)
+        }
         process.exit(2)
     }
     if (build !== 'debug') return
-    const home = camelHome(build)
+    const home = camelInstall(options)
     const pathKey = IS_WINDOWS ? Object.keys(process.env).find((key) => key.toUpperCase() === 'PATH') || 'PATH' : 'PATH'
     const probe = spawnSync(exe, ['--version'], {
         cwd: REPO_ROOT,
@@ -642,13 +671,13 @@ function pythonExecutable() {
 }
 
 function loadVars(options) {
-    // Built-in variables; test/vars.toml may override them. `${camel}` is the compiler of the build
-    // under test, the same path the runner prints as `[INFO] camel executable` and records as
-    // `camel_exe` in summary.json: a plan that runs a program which starts a compiler names the
-    // install with `--camel ${camel}`, a command-line argument and never an environment switch.
+    // Built-in variables; test/vars.toml may override them. `${camel}` is the compiler of the run,
+    // the same path the runner prints as `[INFO] camel executable` and records as `camel_exe` in
+    // summary.json: a plan that runs a program which starts a compiler names the install with
+    // `--camel ${camel}`, a command-line argument and never an environment switch.
     const builtins = {
         python: pythonExecutable(),
-        camel: toolExecutable('camel', options.build),
+        camel: camelBinary(options),
     }
     if (!fs.existsSync(VARS_PATH)) return builtins
     return { ...builtins, ...parseTomlFile(VARS_PATH) }
@@ -789,7 +818,7 @@ function formatMetric(result) {
         return `${reading} cpu of ${formatDurationMs(result.cpuBudgetMs)} budget, ` +
             `${formatDurationMs(result.wallMs)} wall`
     }
-    // A failed `--timeit` iteration reports the diagnosis, not a mean (H66): the failure is the
+    // A failed `--timeit` iteration reports the diagnosis, not a mean: the failure is the
     // test's result, so the status line carries no number.
     if (result.benchmark && Number.isFinite(result.benchmark.mean_ms)) {
         const samples = benchmarkSampleCount(result.benchmark)
@@ -1118,7 +1147,7 @@ async function runVerification(test, result) {
 
     const payloadPath = path.join(tempDir, 'input.json')
     // The documented payload fields are listed in docs/test-plans.md; every one of them must be
-    // present, and a missing key is silently dropped by `JSON.stringify` (H143: `case_path` was
+    // present, and a missing key is silently dropped by `JSON.stringify` (: `case_path` was
     // assembled from a result that did not carry it yet, so a script normalizing the absolute
     // source path out of its output could not, and its digest varied with the checkout).
     const payload = {
@@ -1373,7 +1402,7 @@ async function validateTest(test, result, context) {
         if (!result.benchmark) {
             failures.push('missing benchmark payload')
         } else if (result.benchmark.failed) {
-            // `--timeit` reports the iteration that failed, its diagnostics and no mean (H66).
+            // `--timeit` reports the iteration that failed, its diagnostics and no mean.
             // That is the test's result; it is reported here instead of the runner throwing on
             // the missing metric.
             const reasons = (result.benchmark.diagnostics || []).map(
@@ -1429,7 +1458,11 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
         return runnerErrorResult(casePath, test.__planError)
     }
     const toolName = test.tool || 'camel'
-    const toolExe = toolName === 'python' ? pythonExecutable() : toolExecutable(toolName, logContext.options.build)
+    const toolExe = toolName === 'python'
+        ? pythonExecutable()
+        : toolName === 'camel'
+            ? camelBinary(logContext.options)
+            : toolExecutable(toolName, logContext.options.build)
     if (!toolExe) {
         throw new Error(`unknown test tool: ${toolName}`)
     }
@@ -1464,7 +1497,10 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
         }
         env[text.slice(0, eq)] = text.slice(eq + 1)
     }
-    env.CAMEL_HOME = camelHome(logContext.options.build)
+    // Every test child reads the standard library and the runtime library of the install this run
+    // measures: `CAMEL_HOME` is set to that install's root here, whichever way the install was
+    // named.
+    env.CAMEL_HOME = camelInstall(logContext.options)
     // Windows commonly inherits `Path`; a second `PATH` key would hide the compiler paths.
     const pathKey = IS_WINDOWS ? Object.keys(env).find((key) => key.toUpperCase() === 'PATH') || 'PATH' : 'PATH'
     env[pathKey] = `${path.join(env.CAMEL_HOME, 'bin')}${path.delimiter}${env[pathKey] || ''}`
@@ -1529,7 +1565,7 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
         testTmp: scratch,
         testTmpRelative: scratchRelative,
         // Set before validation: the verify script payload carries this as `case_path`, and the
-        // script that normalizes a source path out of its output needs it (H143).
+        // script that normalizes a source path out of its output needs it.
         casePath,
         // The CPU cost judgement, if this test declared one: the figure the wrapper reported and
         // the budget it is read against, both recorded on the result (meta.json, the verify
@@ -1550,7 +1586,7 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
     // The verification reads this test's output: executePlans removes the scratch directory
     // only after this returns.
     const failures = await validateTest(test, result, { ...logContext, scope })
-    // The cost judgement of a test that declares `cpu_budget_ms`, in the unit the author's ruling
+    // The cost judgement of a test that declares `cpu_budget_ms`, in the unit
     // of 2026-10-23 asks for (docs/handover/reviews/questions-2026-10-23.md,
     // "declaration-cost-gate" (a)):
     //
@@ -1588,7 +1624,7 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
     // spare. The room is measured in the work's own currency -- the CPU time the kernel charged this
     // test's process tree -- and not in the wall clock, which on a shared host belongs to whoever
     // else is running. This is the same reading, from the same wrapper, that `cpu_budget_ms` is
-    // judged against, and the reason the wrapper runs for every test (H368).
+    // judged against, and the reason the wrapper runs for every test.
     //
     // What the rule cannot read it does not guess: on a host with no /proc/self/stat there is no
     // CPU figure for any test, so the wall clock is all there is and the run says so once at the
@@ -1807,7 +1843,7 @@ function expandSweeps(doc, planPath) {
             const { doc: sourceDoc, tests: sourceTests } = loadPlanTests(source)
             // A copy is named after the sweep, its source plan and the source test. The source
             // plan is part of the name because two plans may both have a test called `shapes`
-            // (H120): without it the copies collide, and a back end waits for, and compares
+            // without it the copies collide, and a back end waits for, and compares
             // against, whichever copy of its reference ran last. `id` is the plan's stable
             // identifier, unique across the run; the fallback matches loadPlanTests.
             const sourceId = sourceDoc.id || path.basename(source, '.plan.toml')
@@ -2649,7 +2685,7 @@ async function executePlans(plans, options, sharedVars, logDir) {
 
 async function main() {
     const options = parseArgs(process.argv.slice(2))
-    preflightBuild(options.build)
+    preflightBuild(options)
     // Writing golden files from several tests at once would make the content depend on which
     // test finished last; update-golden is a deliberate, serial maintenance run.
     if (options.updateGolden && options.jobs !== 1) {
@@ -2687,7 +2723,7 @@ async function main() {
     writeRunManifest(logDir, options, plans)
     const testCount = plans.reduce((count, plan) => count + plan.tests.length, 0)
 
-    console.log(`${COLORS.cyan}[INFO]${COLORS.reset} camel executable (${options.build}): ${toolExecutable('camel', options.build)}`)
+    console.log(`${COLORS.cyan}[INFO]${COLORS.reset} camel executable (${options.build}): ${camelBinary(options)}`)
     console.log(`${COLORS.cyan}[INFO]${COLORS.reset} discovered plans: ${plans.length}`)
     console.log(
         `${COLORS.cyan}[INFO]${COLORS.reset} tier: ${options.tier}, tests: ${testCount}, jobs: ${options.jobs}`
@@ -2749,7 +2785,7 @@ async function main() {
         JSON.stringify(
             {
                 generated_at: new Date().toISOString(),
-                camel_exe: toolExecutable('camel', options.build),
+                camel_exe: camelBinary(options),
                 build: options.build,
                 update_golden: options.updateGolden,
                 tier: options.tier,

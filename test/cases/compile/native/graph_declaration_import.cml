@@ -2,7 +2,7 @@
  * The declarations of `graph` are what an importer sees: `Program`, `Graph` and `Node` and the
  * result types of `current`, `root`, `nodes`, `id` and `type_of` come from `stdlib/graph.cml`,
  * the two comparison declarations are the operators of the handle types, and every call reaches
- * the operator the C++ module runs (handover H19, step 10; H141).
+ * the operator the C++ module runs (step 10).
  */
 module graph_declaration_import
 

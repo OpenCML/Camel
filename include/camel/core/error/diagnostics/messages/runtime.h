@@ -45,7 +45,7 @@ enum class RuntimeDiag : uint32_t {
     TimeFormatFailed            = 0x00003A,
     GradientElementTypeMismatch = 0x00003C,
     ValueWithNoDerivativeRule   = 0x0001A8,
-    // Faults and reports of the rulings of 2026-10-12 (design principles log 2.10).
+    // Faults and reports of design principles log 2.10.
     ConversionOutOfRange = 0x000050,
     UnhandledError       = 0x000051,
     SliceOutOfRange      = 0x000052,
@@ -57,7 +57,7 @@ enum class RuntimeDiag : uint32_t {
     // (graph store design 3.7); an extraction before it fixes the pipeline.
     PassNeedsExtraction = 0x000062,
     // A pass named as `<module>::<name>` whose module is there and compiles but provides no such
-    // pass (H130). The name is what is wrong, so the message names the module and the passes it
+    // pass. The name is what is wrong, so the message names the module and the passes it
     // does provide and says nothing else; a module that declares the function without exporting
     // it is a different mistake, with the hint that fixes it.
     PassNotProvidedByModule = 0x000186,

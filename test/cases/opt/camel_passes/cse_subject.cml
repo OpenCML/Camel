@@ -1,6 +1,6 @@
 module cse_subject
 
-// The corpus of the common-subexpression comparison (H227): the same value written twice, an
+// The corpus of the common-subexpression comparison: the same value written twice, an
 // expression over two separately written literals, a value read twice with a write between the
 // reads, and a function that shares nothing.
 //

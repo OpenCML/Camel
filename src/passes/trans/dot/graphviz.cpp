@@ -235,7 +235,7 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
 
     auto nodeIdent = [&](const camel::runtime::GCNode *record) { return pointerToIdent(record); };
 
-    // The classes of a graph whose values have several writings (H225): every class is drawn as a
+    // The classes of a graph whose values have several writings: every class is drawn as a
     // dashed cluster of its writings, the writing extraction would take is marked, and an input
     // edge of a writing leaves the class of the value it reads. A graph with one writing per
     // value (the executable state) has none of this and is dumped exactly as before.
@@ -311,7 +311,7 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
     }
     // The compact view prints the fact of each tagged region as a line of its own. A cluster is
     // a layout (`std::gir_regions` draws it); the fact is graph content and must be visible in
-    // the view used for review and goldens too (H49 review, ruling 4). A region without a fact
+    // the view used for review and goldens too (review, rule 4). A region without a fact
     // prints nothing, so existing output is unchanged.
     if (!config_.regions) {
         for (uint32_t region = 1; region < graph->regionCount(); ++region) {
@@ -351,7 +351,7 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
     }
 
     // Which cost model marks the writing extraction would take: the model the pipeline itself
-    // extracts by (H225). A graph with one writing per value prints nothing here.
+    // extracts by. A graph with one writing per value prints nothing here.
     if (!graphClasses.empty()) {
         res += std::format(
             "{}{}writings_cost=\"{}\";\n",
@@ -440,7 +440,7 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
 
     /// One node of the graph: its line, and the cluster of the region it is in. A node whose value
     /// has several writings carries the class it is a writing of, and the writing extraction would
-    /// take says so (H225).
+    /// take says so.
     const auto emitNode = [&](camel::runtime::gc_node_ref_t nodeRef,
                               const camel::runtime::GCNode *node) {
         string label   = recordLabel(*program_, graph, nodeRef, *node);
@@ -493,7 +493,7 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
         const size_t lineStart = res.size();
         // The class of the value this node is a writing of, when the value has several: the
         // writing names its class, and the one extraction would take is marked (a heavier border
-        // in the styled dump). H225.
+        // in the styled dump)..
         string classAttr;
         if (const auto *value = classOf(nodeRef); value != nullptr) {
             classAttr = std::format(", class=\"{}\"", classLabel(value->root));
@@ -712,7 +712,7 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
             ASSERT(input != nullptr, "Runtime with-input record is missing.");
             size_t outIdx = 0;
             // The input end names a value: a value with several writings is read through its
-            // class node, which has one output, so no output slot has to be found (H225).
+            // class node, which has one output, so no output slot has to be found.
             if (!readsAClass(inputIndex)) {
                 for (auto outIndex : graph->withOutputsOf(inputIndex)) {
                     if (outIndex == nodeIndex) {

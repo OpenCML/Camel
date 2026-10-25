@@ -63,7 +63,7 @@ class Tuple : public rtdata::Object {
 
     /// One field as the raw slot it is stored as, without the initialized check: a printer
     /// renders a value that may still be under construction (a collection a higher-order
-    /// operator is filling) and shows its unwritten elements instead of aborting (H31).
+    /// operator is filling) and shows its unwritten elements instead of aborting.
     slot_t slotAt(size_t index) const {
         ASSERT(index < size(), "Index out of range");
         if (isView()) {
@@ -128,7 +128,7 @@ class Tuple : public rtdata::Object {
     /// For a variable cell (TupleType::cell) only: whether the array in its slot is referred
     /// to by this cell and by nothing else, so that the variable may grow it in place (the
     /// rebinding `acc = acc->append<v>`, :op/assn_owned). Only the in-place assignment sets
-    /// it, after it stored an array made by :var/take and an in-place form; every read of the
+    /// it, after it stored an array made by:var/take and an in-place form; every read of the
     /// variable and every other write clears it (ops.cpp), because from then on another
     /// reference may exist. A new tuple, and a clone, start without it. Not part of the value:
     /// equals() and print() ignore it.

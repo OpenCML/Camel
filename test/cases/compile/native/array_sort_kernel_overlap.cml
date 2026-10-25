@@ -1,6 +1,6 @@
 /**
  * The spelling the sorting family must not be written in, refused where the second declaration is
- * written (design principles 4.3, 4.4, 5.1; the language author's ruling of 2026-10-24 on the
+ * written (design principles 4.3, 4.4, 5.1; the rule on the
  * declaration arms, `docs/handover/reviews/questions-2026-10-23.md`): two same-named body-less
  * declarations whose `when` conditions are not mutually exclusive.
  *

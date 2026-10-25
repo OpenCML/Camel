@@ -1,45 +1,76 @@
 /**
  * The head names three things when the element has three: the element of `fields T` is the triple
- * (name, type, tags), so `for n, F, tags in fields T` is the rule of the ruling of 2026-10-25
- * (H475 item 4), the same rule `static for` follows. `tags` is the field's tags -- a compile-time
- * `string[]` of the tag names the declaration wrote -- so `len(tags)` folds (`low` has one tag,
- * `high` none) and `typeof(tags)` is `string[]` where the type is wanted. Naming fewer of the
- * element's parts is legal too: `for n in fields T` takes the field's name alone.
+ * (name, type, tags), so `for n, F, tags in fields T` walks on the same rule `static for` follows.
+ * `tags` is the field's tags as a compile-time struct: one field per tag, named by the tag, whose
+ * value is the record of that tag's arguments. `#width<8>` on `low` therefore gives
+ * `{ width: { w: 8 } }` and the untagged `high` gives `{}`, so `tags.width.w` reads the 8 under
+ * the case whose type has that field, `fields typeof(tags)` has one field for `low` and none for
+ * `high`, and each round's `tags` has a type of its own. The value is a compile-time constant, so
+ * it may choose a field where only one may (`t.[…]`). Naming fewer of the element's parts is legal
+ * too: `for n in fields T` takes the field's name alone, `for n, F in fields T` the name and the
+ * type.
  */
 module static_loop_head_tags
 
 tag width<w: int> on field
+tag leaf on field
 
 type Box = {
     #width<8> low: int,
     high: int,
 }
 
-func tag_of::<T>(): int {
-    return match type T {
-        case string[] => 1
-        case _ => 0
-    }
+type Marked = { #leaf marked: int }
+
+/// The tag's value, read where the round's `tags` has that field: 8 for `low`, nothing for `high`.
+func width_of(b: Box): int {
+    return static loop acc = 0 for n, F, tags in fields Box do
+        acc + (match type typeof(tags) {
+            case { width: { w: int } } => tags.width.w
+            case _ => 0
+        })
 }
 
-/// Three names, the type of the third asked for: one round per field.
-func bound(b: Box): int {
-    return static loop acc = 0 for n, F, tags in fields Box do acc + tag_of::<typeof(tags)>()
+/// Each round's `tags` is its own type: how many fields it has is how many tags that field has.
+func tag_count(b: Box): int {
+    return static loop acc = 0 for n, F, tags in fields Box do
+        acc + (static loop c = 0 for k, _ in fields typeof(tags) do c + 1)
 }
 
-/// The tags themselves: `len(tags)` is the number of tags on that field, folded per round.
-func counted(b: Box): int {
-    return static loop acc = 0 for n, F, tags in fields Box do acc + len(tags)
+/// A tag with no arguments is the empty record `{}`.
+func leaf_is_empty(m: Marked): int {
+    return static loop acc = 0 for n, F, tags in fields Marked do
+        acc + (match type typeof(tags.leaf) {
+            case {} => 1
+            case _ => 0
+        })
 }
 
-/// Fewer names than the element has parts is legal: the field's name alone.
+/// The value is a compile-time constant, not a constant object read at run time: it chooses a
+/// field where only a compile-time constant may (`t.[…]`), the ninth of these.
+func width_key(b: Box): int {
+    return static loop acc = 0 for n, F, tags in fields Box do
+        acc + (match type typeof(tags) {
+            case { width: { w: int } } => (1, 2, 3, 4, 5, 6, 7, 8, 9).[tags.width.w]
+            case _ => 0
+        })
+}
+
+/// Fewer names than the element has parts is legal: the field's name alone, then name and type.
 func named(b: Box): int {
     return static loop acc = 0 for n in fields Box do acc + 1
 }
 
+func named_and_typed(b: Box): int {
+    return static loop acc = 0 for n, F in fields Box do acc + b.[n]
+}
+
 func main(): int sync {
-    println(bound({low: 1, high: 2}))
-    println(counted({low: 1, high: 2}))
+    println(width_of({low: 1, high: 2}))
+    println(tag_count({low: 1, high: 2}))
+    println(leaf_is_empty({marked: 5}))
+    println(width_key({low: 1, high: 2}))
     println(named({low: 1, high: 2}))
+    println(named_and_typed({low: 1, high: 2}))
     return 0
 }

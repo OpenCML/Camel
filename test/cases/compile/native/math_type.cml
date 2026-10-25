@@ -1,7 +1,7 @@
 /**
  * A string where the declarations of `abs` take a number: the call is refused at the
  * declarations' type, and the message prints their own parameter name (`x`) — the one source
- * is `stdlib/math.cml`, not the C++ module (handover H113).
+ * is `stdlib/math.cml`, not the C++ module.
  */
 module math_type
 

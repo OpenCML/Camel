@@ -1,4 +1,4 @@
-/// H220 trap 1: a library's `import lib` in `two/a` must take `a/lib.cml` (returns 1), and the
+/// trap 1: a library's `import lib` in `two/a` must take `a/lib.cml` (returns 1), and the
 /// one in `two/b` must take `b/lib.cml` (returns 2) — the same import name, two files.
 module lib_a
 

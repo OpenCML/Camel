@@ -4,7 +4,7 @@
  * signature, and both print as `int..` (std::gir prints value_type="int.." for both
  * parameters). That identity is what makes type comparison, overload selection, `#impl`
  * agreement and the printed forms of `std::gir` and the diagnostics agree with each other (the
- * author's ruling of 2026-10-24).
+ * rule).
  *
  * The same rule seen from the other side: `int`, `int..` and `int[]` are three types, so the
  * three overloads of `pick` are three different signatures (and the next case shows that two

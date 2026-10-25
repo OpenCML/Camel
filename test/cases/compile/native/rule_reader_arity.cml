@@ -1,7 +1,7 @@
 /**
  * The declaration of `rewrite:needs` takes exactly one ordinary argument: none is refused at the
  * call, and the overload the message lists is the declaration's `(r: Rule) => int` —
- * `stdlib/rewrite.cml`, not the C++ module (handover H183).
+ * `stdlib/rewrite.cml`, not the C++ module.
  */
 module rule_reader_arity
 

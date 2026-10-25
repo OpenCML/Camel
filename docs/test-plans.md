@@ -36,6 +36,10 @@ When adding a new feature or test case, manually run the case from the command l
   Layer"); it builds nothing and refuses to run without a Debug binary.
 - `--build release|debug` picks the build a run addresses: `release` is `out/latest` (the
   default), `debug` is `out/debug`. `CAMEL_TEST_BUILD` sets the same thing for a shell session.
+- `--camel <path>` names the install a run measures instead: the `camel` binary at that path is
+  `${camel}`, the binary `preflightBuild` checks, and the root every test child reads as
+  `CAMEL_HOME`. With none, the install is the `--build` one above. `CAMEL_HOME` never chooses it;
+  an exported `CAMEL_HOME` is only what a program outside the runner reads to find its runtime.
 - `--jobs N` sets how many tests run at once (default: the processor count). `--jobs 1` is the
   serial execution, useful to reproduce a failure or to compare output.
 - `node scripts/test.js --changed` selects the plans a change touches (see "Selecting plans from

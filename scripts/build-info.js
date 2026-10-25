@@ -10,10 +10,18 @@
  * with the tree the caller is about to verify.
  *
  *   node scripts/build-info.js check --tag latest [--allow-stale] [--root DIR]
+ *   node scripts/build-info.js check --install DIR [--root DIR]
  *   node scripts/build-info.js show  --tag latest [--root DIR]
+ *   node scripts/build-info.js show  --install DIR [--root DIR]
  *   node scripts/build-info.js stamp --tag TAG [--config Release] [--root DIR]
  *
- * `check` is what `camel-remote.ps1 -NoBuild` runs on the host before the plan (H149):
+ * `check` and `show` take `--install DIR` instead of `--tag`: they read `DIR/build-info.json` and
+ * compare it with `--root`'s sources exactly as `--tag` does. A stamp lives inside the install it
+ * describes, so an install outside this tree's `out/` is read by its own path rather than assumed
+ * uncomparable; the fingerprint then decides whether it is this tree's build. (`stamp` writes the
+ * file a build writes, so it names a tag and takes no `--install`.)
+ *
+ * `check` is what `camel-remote.ps1 -NoBuild` runs on the host before the plan:
  *
  *   * exit 0 -- the install was built from the same source content as this tree; say nothing;
  *   * exit 4 -- refuse: the stamp is missing, unusable, or names different sources. The message
@@ -52,12 +60,12 @@ function usage(message) {
     if (message) {
         console.error(`[build-info] ${message}`)
     }
-    console.error('usage: node scripts/build-info.js check|show|stamp [--tag latest|debug|<tag>] [--allow-stale] [--config Release] [--root DIR]')
+    console.error('usage: node scripts/build-info.js check|show|stamp [--tag latest|debug|<tag>] [--install DIR] [--allow-stale] [--config Release] [--root DIR]')
     process.exit(EXIT_USAGE)
 }
 
 function parseArgs(argv) {
-    const options = { command: null, tag: 'latest', allowStale: false, config: 'Release', root: BASEDIR }
+    const options = { command: null, tag: 'latest', allowStale: false, config: 'Release', root: BASEDIR, install: null }
     for (let i = 0; i < argv.length; i++) {
         const arg = argv[i]
         const next = () => {
@@ -70,6 +78,10 @@ function parseArgs(argv) {
             options.tag = next()
         } else if (arg.startsWith('--tag=')) {
             options.tag = arg.slice('--tag='.length)
+        } else if (arg === '--install') {
+            options.install = path.resolve(next())
+        } else if (arg.startsWith('--install=')) {
+            options.install = path.resolve(arg.slice('--install='.length))
         } else if (arg === '--config') {
             options.config = next()
         } else if (arg.startsWith('--config=')) {
@@ -149,17 +161,17 @@ function printChangedFiles(stampFingerprint, currentFingerprint) {
     }
 }
 
-function printMismatch(tag, stamp, current, allowStale) {
+function printMismatch(label, stamp, current, allowStale) {
     const stampGit = stamp.git === false
         ? { available: false }
         : { available: true, revision: stamp.revision, dirty: stamp.dirty, dirtyCount: stamp.dirtyCount }
-    console.log(`[camel-remote] -NoBuild refused: out/${tag} was built from different sources than this tree.`)
+    console.log(`[camel-remote] -NoBuild refused: ${label} was built from different sources than this tree.`)
     console.log(`  built from: ${revisionLabel(stampGit)}, at ${stamp.builtAt || 'unknown time'}`)
     console.log(`              fingerprint ${fingerprintLabel(stamp.fingerprint)}`)
     console.log(`  this tree:  ${revisionLabel(current.git)}`)
     console.log(`              fingerprint ${fingerprintLabel(current.fingerprint)}`)
     printChangedFiles(stamp.fingerprint, current.fingerprint)
-    console.log('  The plan would run the old binary and the old out/' + tag + '/stdlib, not this tree.')
+    console.log(`  The plan would run the old binary and the old ${label}/stdlib, not this tree.`)
     if (allowStale) {
         console.log('  -AllowStale was given: continuing anyway; this result does not describe this tree.')
     } else {
@@ -176,15 +188,30 @@ function refuse(message, allowStale) {
     process.exit(EXIT_STALE)
 }
 
+// Where the stamp of the install a command was asked about lives, and what to call that install in
+// the message: `out/<tag>` for a tag, the install's own path when `--install` named one. An install
+// under this tree's `out/<tag>` keeps its tag as the name, because that is the name its reader
+// knows.
+function stampTarget(options) {
+    if (!options.install) {
+        return { stampPath: buildInfoPath(options.tag, options.root), label: `out/${options.tag}` }
+    }
+    const relative = path.relative(path.join(options.root, 'out'), options.install)
+    const inside = relative !== '' && !relative.startsWith('..') && !path.isAbsolute(relative)
+    return {
+        stampPath: path.join(options.install, BUILD_INFO_FILE),
+        label: inside ? `out/${relative.split(path.sep)[0]}` : options.install,
+    }
+}
+
 function commandCheck(options) {
-    const { tag, root } = options
-    const stampPath = buildInfoPath(tag, root)
+    const { label, stampPath } = stampTarget(options)
     if (!fs.existsSync(stampPath)) {
         refuse(
-            `out/${tag} has no ${BUILD_INFO_FILE}.\n` +
+            `${label} has no ${BUILD_INFO_FILE}.\n` +
                 '  The install was never built, or it was collected by an older build that did not stamp.\n' +
                 '  Without the stamp there is no way to tell which sources produced it.\n' +
-                `  Run once without -NoBuild: it builds this tree and stamps out/${tag}.`,
+                `  Run once without -NoBuild: it builds this tree and stamps ${label}.`,
             options.allowStale
         )
         return
@@ -195,8 +222,8 @@ function commandCheck(options) {
         stamp = JSON.parse(fs.readFileSync(stampPath, 'utf-8'))
     } catch (error) {
         refuse(
-            `out/${tag}/${BUILD_INFO_FILE} is not readable JSON (${error.message}).\n` +
-                `  Run once without -NoBuild to rebuild and restamp out/${tag}.`,
+            `${label}/${BUILD_INFO_FILE} is not readable JSON (${error.message}).\n` +
+                `  Run once without -NoBuild to rebuild and restamp ${label}.`,
             options.allowStale
         )
         return
@@ -204,38 +231,37 @@ function commandCheck(options) {
     if (!stamp || stamp.schema !== BUILD_INFO_SCHEMA || !stamp.fingerprint ||
         stamp.fingerprint.version !== FINGERPRINT_VERSION) {
         refuse(
-            `out/${tag}/${BUILD_INFO_FILE} was written by a different form of this guard ` +
+            `${label}/${BUILD_INFO_FILE} was written by a different form of this guard ` +
                 `(schema ${stamp && stamp.schema}, fingerprint ${stamp && stamp.fingerprint && stamp.fingerprint.version}; ` +
                 `this build writes schema ${BUILD_INFO_SCHEMA}, fingerprint ${FINGERPRINT_VERSION}).\n` +
-                `  Run once without -NoBuild to rebuild and restamp out/${tag}.`,
+                `  Run once without -NoBuild to rebuild and restamp ${label}.`,
             options.allowStale
         )
         return
     }
 
-    const current = { git: gitState(root), fingerprint: sourceFingerprint(root) }
+    const current = { git: gitState(options.root), fingerprint: sourceFingerprint(options.root) }
     if (stamp.fingerprint.hash === current.fingerprint.hash) {
         return // The install matches these sources: no new noise on a correct run.
     }
 
-    printMismatch(tag, stamp, current, options.allowStale)
+    printMismatch(label, stamp, current, options.allowStale)
     if (!options.allowStale) {
         process.exit(EXIT_STALE)
     }
 }
 
 function commandShow(options) {
-    const { tag, root } = options
-    const stampPath = buildInfoPath(tag, root)
+    const { label, stampPath } = stampTarget(options)
     if (!fs.existsSync(stampPath)) {
-        console.error(`[build-info] no ${path.relative(root, stampPath)}`)
+        console.error(`[build-info] no ${path.relative(options.root, stampPath) || stampPath}`)
         process.exit(EXIT_STALE)
     }
     process.stdout.write(fs.readFileSync(stampPath, 'utf-8'))
     const stamp = JSON.parse(fs.readFileSync(stampPath, 'utf-8'))
-    const current = sourceFingerprint(root)
+    const current = sourceFingerprint(options.root)
     console.log(`current tree fingerprint: ${fingerprintLabel(current)}`)
-    console.log(stamp.fingerprint.hash === current.hash ? 'out/' + tag + ' matches this tree' : 'out/' + tag + ' does NOT match this tree')
+    console.log(stamp.fingerprint.hash === current.hash ? label + ' matches this tree' : label + ' does NOT match this tree')
 }
 
 function main() {

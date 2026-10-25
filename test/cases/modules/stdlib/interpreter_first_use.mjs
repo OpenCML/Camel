@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
- * `import` executes no code (design principles 3.1; the language author's ruling of 2026-10-22,
- * in answer to `docs/technical/50_pyplot_cpython_init.md`; handover H221): importing `pyplot` or
+ * `import` executes no code (design principles 3.1; 
+ * in answer to `docs/technical/50_pyplot_cpython_init.md`; handover): importing `pyplot` or
  * `python` must not create the embedded CPython, and the first operator call must create it.
  *
  * The strongest honest proof is the environment, not a clock. CPython cannot start with a
@@ -11,8 +11,8 @@
  *
  *   1. `import pyplot` and `import python`, alone, under that environment exit 0 and print
  *      nothing — reintroducing the initialisation at import makes these read exit 1 with CPython's
- *      path configuration, which is the H203 measurement's first observable (§3.1);
- *   2. `camel inspect --ops` on the import-only program exits 0 and lists `pyplot:plot`; H203
+ *       path configuration, which is the measurement's first observable (§3.1);
+ *    2. `camel inspect --ops` on the import-only program exits 0 and lists `pyplot:plot`;
  *      measured exit 1 and no listing;
  *   3. one `plot` / one `py_exec` under the same environment exits 1, and the diagnostic is a
  *      `RuntimeError` at that call's source position that names the first use — the failure moved,
@@ -21,7 +21,7 @@
  *      `python`, both work; a program that plots twice around a Python call works (one interpreter,
  *      not one per call); and a program that plots and then imports a C extension module (`_ssl`)
  *      succeeds — whichever module created the interpreter, libpython was promoted to the global
- *      namespace (H203 §3.2: `pyplot` first used to make `_ssl` fail). The `_ssl` legs are skipped,
+ *       namespace (: `pyplot` first used to make `_ssl` fail). The `_ssl` legs are skipped,
  *      with the reason printed, when a python-first program cannot import it in this environment.
  *
  * Usage: node interpreter_first_use.mjs
@@ -154,7 +154,7 @@ for (const name of ['import_pyplot', 'import_python']) {
     )
 }
 
-// 2. The tool's observable from H203 §3.1: the listing no longer depends on an interpreter.
+//  2. The tool's observable from: the listing no longer depends on an interpreter.
 {
     const r = camel(['inspect', '--ops', path.join(SCRATCH, 'import_pyplot.cml')], HOSTILE)
     check('`inspect --ops` on the import-only program exits 0', r.status === 0, `exit ${r.status}: ${r.stderr}`)

@@ -1,5 +1,5 @@
 /**
- * `static loop acc = 0 for n, F in fields T do body` (H51 step 5): the fields of T are
+ * `static loop acc = 0 for n, F in fields T do body`. the fields of T are
  * walked at instantiation and the body advances the state once per field. The loop leaves no
  * loop node and its value is the last state. The trip count is the arity of T, so a `T` that
  * comes from an enclosing generic gives a count known only at instantiation.

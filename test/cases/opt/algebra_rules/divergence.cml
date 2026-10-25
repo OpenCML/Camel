@@ -1,6 +1,6 @@
 module divergence
 
-// The forms the legacy C++ algebraic pass and the rule library do not answer the same way (H160).
+// The forms the legacy C++ algebraic pass and the rule library do not answer the same way.
 // Each one is a graph the measurement reports as a difference rather than normalises away: the two
 // sides are put through the same pass list and the tables are compared line by line.
 //

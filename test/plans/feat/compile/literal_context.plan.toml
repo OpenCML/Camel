@@ -98,7 +98,7 @@ expect_output_contains = ["'3000000000'", "type 'i32'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
-# The other positions with an expected type (handover H24): the elements of an array literal, the
+# The other positions with an expected type: the elements of an array literal, the
 # fields of a struct literal, the pattern of a `match` case, and a `return` written in an arm.
 
 [[tests]]
@@ -447,7 +447,7 @@ expect_exit = 1
 expect_output_contains = ["context_literal_operand_mismatch.cml:7:17: [Error]: No matching function found", "(name=SemanticDiag::NoMatchingFunction, code=0x0300000F)", "(int, float)", "operator '+' is not defined"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
-# A composite literal is a position with an expected type too (handover H27b, design principles
+# A composite literal is a position with an expected type too (design principles
 # 5.1): an array or struct literal argument enters its parameter's type, as a numeric literal
 # does, and its elements (fields) are converted once from the values written.
 
@@ -483,7 +483,7 @@ timeout_ms = 8000
 # A position that takes a value by putting it into the form (`T?`, `T!`) takes the value itself
 # and the payload, so it does not determine which of the two the value is (design principles 3.8,
 # 5.2): a call standing there keeps the type its own arguments give it, and the form is put on at
-# the position. Before H416 the position's `int?` solved the call's result type variable, the
+# the position. Before the position's `int?` solved the call's result type variable, the
 # deferred initial value of the reduction was given `int?` with it, and the call was refused as a
 # whole -- the 82 cells of `opt.progen` (seeds 19 and 23), and every position below.
 
@@ -564,8 +564,8 @@ expect_output_contains = ["context_struct_argument_shape.cml:13:17: [Error]: No 
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
-# Underflow (H15i): a nonzero real whose nearest value in the declared type is zero is refused
-# with that reason, not rounded to zero. H15h read the first as 0.0.
+# Underflow: a nonzero real whose nearest value in the declared type is zero is refused
+# with that reason, not rounded to zero. read the first as 0.0.
 
 [[tests]]
 name = "context.underflow_float"
@@ -597,7 +597,7 @@ expect_output_not_contains = ["out of range"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
-# A text where a field expects a number (H15h). The field is the position that cannot take the
+# A text where a field expects a number. The field is the position that cannot take the
 # value, so the mismatch is reported there in each shape a composite literal has: a struct field
 # by name, a positional tuple element, a field of a nested literal, a field of an argument, and a
 # field of a returned value.
@@ -692,7 +692,7 @@ expect_output_not_contains = ["ReturnTypeMismatch", "LiteralNotRepresentable"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
-# The other direction (H15h): a number where a text is declared is a type mismatch too, and the
+# The other direction: a number where a text is declared is a type mismatch too, and the
 # help names `string(n)`, the conversion that writes a number as text.
 
 [[tests]]
@@ -742,7 +742,7 @@ timeout_ms = 8000
 
 # The other operand of a binary operator may be a tensor: the value the operation is about is an
 # element of it, so the literal takes the tensor's element type (design principles 5.1). Before
-# H371 it kept its own type (f64 for a decimal form), which no device program can take, and the
+# it kept its own type (f64 for a decimal form), which no device program can take, and the
 # element type was applied by narrowing the value instead.
 
 [[tests]]
@@ -773,7 +773,7 @@ expect_output_contains = ["Invalid call to '__mul__'", "(f32[3], float)", "the s
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
-# The kind of a literal, not only its range. H371 gave the literal beside a tensor the element
+# The kind of a literal, not only its range. gave the literal beside a tensor the element
 # type; a value the element type has no form of then kept the type it was written with and was
 # narrowed into every element without a word, because a real literal beside an integer operand had
 # always been left to the operator. Beside an array or a tensor the operand gives its *element*
@@ -827,7 +827,7 @@ timeout_ms = 8000
 # array field of stated length, an array field of open rank and an array written inside a tuple
 # field take the declared field's element type, converted once from the value written. The element
 # just above the f32 midpoint prints 1.00000012 — not the 1.0 of a rounding through the double it
-# was lowered to, and not the 1.00000006 a float64 element would print (H412). A computed element
+# was lowered to, and not the 1.00000006 a float64 element would print. A computed element
 # is a value of its own type: a position the type it has does not enter is not taken, and the
 # mismatch is reported as it was.
 

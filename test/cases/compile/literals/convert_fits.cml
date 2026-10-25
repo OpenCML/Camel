@@ -3,7 +3,7 @@
 //
 // Each of these is a conversion whose `as` spelling is Unsafe and therefore has no CAST node
 // (`Type::castSafetyFrom`): the conversion functions narrow and truncate anyway, so the
-// compile-time literal check must apply their rule, not the CAST rule (H31).
+// compile-time literal check must apply their rule, not the CAST rule.
 func narrow(x: int): i32 { return i32(x) }
 
 func main(): int sync {

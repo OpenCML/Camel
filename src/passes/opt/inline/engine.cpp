@@ -5,10 +5,10 @@
  * Shared runtime rewrite engine for GCGraph-native optimization passes.
  *
  * This file hosts the actual multi-phase rewrite loop used by:
- * - `std::opt::inline`        : inline only
- * - `std::opt::devirtualize`  : static-call devirtualization only
- * - `std::opt::specialize`    : direct-call specialization only
- * - `std::opt`               : call-rewrite rounds of the integrated optimizer
+ * - `std::opt::inline`: inline only
+ * - `std::opt::devirtualize`: static-call devirtualization only
+ * - `std::opt::specialize`: direct-call specialization only
+ * - `std::opt`: call-rewrite rounds of the integrated optimizer
  *
  * Keeping the execution engine here avoids smuggling extra optimization phases
  * behind the `InlineRewritePass` wrapper and makes the pass surface explicit.
@@ -937,7 +937,7 @@ const camel::runtime::Program *applyRuntimeOptimizeRewrite(
                 // same function is the recursion of the copy, not another call. Inlining it there
                 // copies the function into itself, and the copy is what the next round inlines
                 // into again: a recurrent step would grow a layer per round and never reach its
-                // fixed point (H44c). The copy says where it came from (GCRegionKind::Inline,
+                // fixed point. The copy says where it came from (GCRegionKind::Inline,
                 // camel/runtime/graph.h); the same callee is inlined again outside its copies.
                 if (draft.inlinedCopyOf(id, calleeGraph)) {
                     decline(InlineDecline::InlinedCopy);

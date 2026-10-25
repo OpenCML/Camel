@@ -1,7 +1,7 @@
 /**
  * A function type (not a lambda) must write every parameter's type: the parser lets the type out
  * only in a lambda's own parameter list, and the position of the function type is where this is
- * reported (design principles 5.9; H92 item 2).
+ * reported (design principles 5.9; item 2).
  */
 module lambda_inference_func_type
 
