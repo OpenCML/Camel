@@ -44,7 +44,7 @@ func update(W: f32[?, ?]): f32[?, ?] {
     let probs = softmax(logits)
     let m = shape(X)[0]
     let grad = transpose(X) @ (probs - y_onehot)
-    return W - lr * (1.0 / float(m)) * grad
+    return W - f32(lr * (1.0 / float(m))) * grad
 }
 
 with <X: f32[?, ?], y_onehot: f32[?, ?], lr: float, its: int>

@@ -11,7 +11,7 @@ import {
     concat, ones, random, shape, show, sum, transpose, zeros
 } from tensor
 
-func mean_squared_error(y_pred: f32[?, ?], y_true: f32[?, 1]): float {
+func mean_squared_error(y_pred: f32[?, ?], y_true: f32[?, ?]): float {
     let residuals = y_pred - y_true
     let squared_residuals = residuals ^ 2.0
     let total_squared_error = sum(squared_residuals)
@@ -27,26 +27,26 @@ func predict(X: f32[?, ?]): f32[?, ?] {
     return X_with_bias @ weights
 }
 
-with <X: f32[?, ?], y: f32[?, 1], lr: float>
-func update(var w: f32[?, 1]): f32[?, 1] {
+with <X: f32[?, ?], y: f32[?, ?], lr: float>
+func update(var w: f32[?, ?]): f32[?, ?] {
     let pred = X @ w
     let errors = pred - y
     var dw = transpose(X) @ errors
     let m = shape(X)[0]
-    dw = 2.0 / float(m) * dw
-    w = w - lr * dw
+    dw = f32(2.0 / float(m)) * dw
+    w = w - f32(lr) * dw
     return w
 }
 
-with <X: f32[?, ?], y: f32[?, 1], lr: float, its: int>
-func train(weights: f32[?, 1]): f32[?, 1] {
+with <X: f32[?, ?], y: f32[?, ?], lr: float, its: int>
+func train(weights: f32[?, ?]): f32[?, ?] {
     let m = shape(X)[0]  // number of samples
     let n = shape(X)[1]  // number of features
 
     let ones_col = ones([m, 1])
     let X_bias = concat(X, ones_col, 1)  // axis=1
 
-    func train_step(i: int, w: f32[?, 1]): f32[?, 1] {
+    func train_step(i: int, w: f32[?, ?]): f32[?, ?] {
         return if i >= its then w else sync {
             var cur = w
             let nw = update<X_bias, y, lr>(cur)

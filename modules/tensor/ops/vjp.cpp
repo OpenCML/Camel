@@ -96,10 +96,6 @@ type::Type *gradientTypeFrom(const VjpBuilder &builder, std::span<const vjp_node
     return nullptr;
 }
 
-} // namespace
-
-namespace {
-
 /// Refuses a gradient node that no input gives an element type: the node's value would be declared
 /// at an element type no tensor kernel can read, so the rule is refused by name here, where the
 /// node was built, rather than left for a kernel to read the wrong way.
