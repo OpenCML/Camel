@@ -57,12 +57,17 @@ class NodeVMSchedPass : public RuntimeGraphSchedulePass {
     apply(const camel::runtime::Program *program, std::ostream &os) override;
 
     /// Runs `graph` of `program` once with `arguments` for its ordinary parameters, `withArguments`
-    /// for its `with` parameters, and returns its value. For a function written in Camel that a
-    /// native caller runs (a pass written in Camel); `program` must stay alive and rooted for the
-    /// call, and so must the arguments.
+    /// for its `with` parameters, `closure` for the values its body captured, and returns its
+    /// value. For a function written in Camel that a native caller runs (a pass written in Camel,
+    /// a rule's condition); `program` must stay alive and rooted for the call, and so must the
+    /// arguments. A body that captured values reads them from the closure nodes of its graph, which
+    /// only the caller can fill: a caller holding the function value passes `function->tuple()`
+    /// (what the indirect calls of the graph runtime do), and a caller that passes no closure
+    /// leaves them empty.
     slot_t callGraph(
         const camel::runtime::Program *program, camel::runtime::GCGraph *graph,
-        std::span<const slot_t> arguments, std::span<const slot_t> withArguments = {});
+        std::span<const slot_t> arguments, std::span<const slot_t> withArguments = {},
+        std::span<const slot_t> closure = {});
 
   private:
     __attribute__((noinline)) slot_t evalNativeOperator(

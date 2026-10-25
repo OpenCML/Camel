@@ -664,6 +664,7 @@ bool Builder::buildFrom(ModuleUnit &entry, bool callEntry) {
                 reportIgnoredCapturedWrites();
                 // Before the bodies are let go by reportDroppedEffectsOfBodies.
                 reportUnusedFallibleValues();
+                reportEffectfulConditions();
                 reportDroppedEffectsOfBodies();
                 if (unit->entry) {
                     // The top-level declarations run only as far as the call of `main`
