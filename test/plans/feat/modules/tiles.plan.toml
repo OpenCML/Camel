@@ -535,14 +535,14 @@ name = "gpu_probe.once_per_process"
 kind = "behavior"
 case = "../../../cases/modules/tiles/gpu_fallback.cml"
 # No device: available() probes once, and the four preferred calls take the host fallback from that
-# cached miss instead of constructing the back end again. Before H117 this run asked the driver
+# cached miss instead of constructing the back end again. Before this run asked the driver
 # seven times (one per preferred call). The count is asserted on the module's info log, the only
 # line the probe writes; `--devices cpu` never reaches it (see host_only_is_silent).
 #
 # The count is one only where a back end can be constructed at all: a build made without the CUDA
 # Toolkit headers (`tiles: source inspection only`) probes nothing, so the line is absent there
 # rather than doubled. That is a capability of the build and not of the machine, so the
-# precondition asks the build itself, and the assertion still stands whole wherever it runs (H407).
+# precondition asks the build itself, and the assertion still stands whole wherever it runs.
 args = ["-vv", "${case}", "std::nvm"]
 envs = ["CUDA_VISIBLE_DEVICES=-1"]
 skip_unless = ["node", "test/tools/have-cuda-build.mjs"]
@@ -746,7 +746,7 @@ name = "public_region_graph"
 kind = "behavior"
 tool = "python"
 case = "../../../cases/modules/tiles/public_pass_graph.py"
-# `${camel}` is the compiler of the build under test, named as an argument (the author's ruling of 2026-10-25).
+# `${camel}` is the compiler of the build under test, named as an argument.
 args = ["${case}", "--camel", "${camel}"]
 expect_exit = 0
 expect_stdout_contains = ["Public Tiles pass: module loading and deferred target selection PASS"]
@@ -771,7 +771,7 @@ expect_exit = 0
 expect_stdout_contains = ["placement hash differs:"]
 timeout_ms = 30000
 
-# H371: a literal operand beside a tensor takes the tensor's element type (design principles 5.1),
+# a literal operand beside a tensor takes the tensor's element type (design principles 5.1),
 # so `x * 2.0` leaves no f64 operand on the graph. Before this the graph carried one, and the
 # device program builder excluded the operator as a `scalar_tensor_operand` (no f64 scalar
 # lowering), so every `#gpu` scope that scaled by a constant was refused.

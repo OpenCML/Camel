@@ -221,7 +221,7 @@ def snapshot(update, patterns):
                 line = now.get(name, was.get(name))
                 if line is not None:
                     merged[name] = line
-            # A recorded line outside the corpus is kept while its file still exists; H188
+            # A recorded line outside the corpus is kept while its file still exists;
             # removed the old repository-wide lines, and a stale one is not kept.
             for path, line in was.items():
                 if path in merged or path in canonical:

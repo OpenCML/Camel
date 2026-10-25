@@ -1,5 +1,5 @@
 /**
- * `indices` and `static for` over a rest parameter's build-time tuple (H51 step 6): the trip
+ * `indices` and `static for` over a rest parameter's build-time tuple. the trip
  * count is the number of arguments left over, `j` is an ordinary int and a compile-time key,
  * `ts.[j]` reads the argument node itself, and an `indices` operand that is a tuple
  * comprehension keeps its elements separate (no FILL) as well.

@@ -1,5 +1,5 @@
 /**
- * `math::min`, `math::max` and `math::abs` over `bf16` and `f16` (ruling
+ * `math::min`, `math::max` and `math::abs` over `bf16` and `f16` (rule
  * docs/handover/reviews/reduced-precision.md item 2: "`math::min`/`max`/`abs` 等补 bf16/f16"), and
  * `array::min` / `array::max` over an array of either, which could not compute before: the fold
  * `xs->reduce<math::min, xs[0]>` had no overload to take, so the call site reported
@@ -20,7 +20,7 @@
  *     operand's own pattern (-0 becomes +0).
  *
  * So no accumulator and no accumulation width take part, and the f64 accumulation rule of design
- * principles 7.3 — which the same ruling states and which `array::sum` follows — is about a
+ * principles 7.3 — which the same rule states and which `array::sum` follows — is about a
  * reduction (an addition), not about combining two elements with an operation that never rounds.
  * The `sum` lines are the other half of that rule on the reduced-precision element types.
  *
@@ -137,7 +137,7 @@ func main(): int sync {
     let empty: bf16[] = []
     println(min(empty) == null, max(empty) == null, len(empty))
 
-    // ---- the other half of the same ruling: a floating reduction accumulates in f64 ----
+    //  ---- the other half of the same rule: a floating reduction accumulates in f64 ----
     // An f32 accumulator answers 0 for this one (2^24 + 1 rounds back to 2^24); the f64 one that
     // rounds once answers the bf16 1.0, whose bytes are 128 63.
     let cancelling: bf16[] = [16777216.0, 1.0, -16777216.0]
@@ -151,7 +151,7 @@ func main(): int sync {
     let carriedTotal = sum(carried)
     println(carriedTotal, carriedTotal == bf16(1.0078125), bitsOfBf16(carriedTotal)[0], bitsOfBf16(carriedTotal)[1])
 
-    // f32 is the type the rule was re-pointed at (the ruling's item (d)): this array is one the
+    // f32 is the type the rule was re-pointed at (the array reduction's rule): this array is one the
     // f32 accumulator answers 0 for, and the exact f64 sum rounds once to the f32 1.0.
     let wide: f32[] = [16777216.0, 1.0, -16777216.0]
     println(sum(wide))

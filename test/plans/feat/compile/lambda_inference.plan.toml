@@ -4,7 +4,7 @@ tier = "fast"
 tags = ["feat", "compile", "lambda", "function_types", "inference"]
 
 # A lambda's parameter types come from the function type of the position it stands in (design
-# principles 5.9; handover H92, item 2). The positions are those of the reference: an argument to
+# principles 5.9, item 2). The positions are those of the reference: an argument to
 # a parameter of function type (normal and `with`), a binding declared with a function type (and
 # an assignment back into it), and the result of a function whose result type is a function type.
 # A parameter the expected type does not determine is an error at that parameter, naming it.

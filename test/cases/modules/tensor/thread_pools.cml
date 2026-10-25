@@ -4,7 +4,7 @@
  * A run names its budget with `-t`. Every kernel thread in the process belongs to the tensor
  * pool, so the process's thread count (the caller included) is at most the budget. A second pool
  * — the library GEMM's own, or a second worker set — puts the count above the budget; before
- * H303 the library's pool alone was as wide as the machine, so `-t 1` had 32 threads on this
+ * the library's pool alone was as wide as the machine, so `-t 1` had 32 threads on this
  * host. The count is read from the operating system (`thread_count`), not timed, so the case
  * cannot pass by being slow or fail by being fast.
  *

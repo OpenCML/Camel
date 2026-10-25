@@ -42,7 +42,7 @@ bool ParserImpl::atRuleDecl(uint32_t n) const {
 /// only matches a constant. The tags before it are the rule's requirements (`#requires<reassociate>`,
 /// design principles 7.2); the AST reads them from the tree.
 /// The condition is part of the signature, so it is written between the parameters and the body,
-/// in the one position the parser reads it in (design principles 4.4; the ruling of 2026-10-24,
+/// in the one position the parser reads it in (design principles 4.4; 
 /// `docs/handover/reviews/questions-2026-10-23.md`, 「复核：泛型规则族落地」): a `when` after
 /// the closing brace is not kept as a second spelling of the same thing, and is reported by name
 /// (`SyntaxDiag::WhenAfterBody`) rather than as a token that did not fit.
@@ -75,7 +75,7 @@ void ParserImpl::parseRuleDeclRest(size_t m) {
         }
         expect(TK::RBrace);
     }
-    // A `when` after the closing brace is the position the ruling of 2026-10-24 removed. It is
+    // A `when` after the closing brace is not read as a condition any more. It is
     // not read as a condition any more, and it is not reported as a token that did not fit: the
     // program is told where the condition belongs.
     if (!panic_ && cur_ == TK::Identifier && tree_.tokens_.text(pos_) == "when") {

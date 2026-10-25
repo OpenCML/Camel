@@ -1,6 +1,6 @@
 /**
  * A module-level `let` whose initial value writes a flag file, for the dependent half of the
- * ruling (design principles 3.1: 被依赖才求值). The importing program `main.cml` names `wrote`,
+ * rule (design principles 3.1: 被依赖才求值). The importing program `main.cml` names `wrote`,
  * which is the dependency that evaluates it.
  */
 module use_let_writer

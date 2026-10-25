@@ -285,7 +285,7 @@ string logLevelArg;
 namespace Diag {
 string format               = "";
 string color                = "auto";
-int maxErrors               = 20;
+int maxErrors               = camel::core::error::kDefaultMaxErrors;
 int maxWarnings             = 1000;
 vector<string> warningSpecs = {};
 string explain              = "";

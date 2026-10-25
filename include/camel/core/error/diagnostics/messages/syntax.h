@@ -32,12 +32,12 @@ enum class SyntaxDiag : uint32_t {
     LineStartsWithOperator    = 0x00000E,
     EmptyInterpolation        = 0x00000F,
     // A declaration's applicability condition belongs before the body it guards (design principles
-    // 4.4; the ruling of 2026-10-24). The trailing position a rule used to accept is not read as a
+    //  4.4). The trailing position a rule used to accept is not read as a
     // condition, and saying so by name is what keeps the program from being told only that a token
     // did not fit.
     AsRightSideIsType = 0x000011,
     WhenAfterBody     = 0x000010,
-    // A lambda's parameters are written in parentheses (design principles 5.9): the author's ruling of
+    // A lambda's parameters are written in parentheses (design principles 5.9): the rule of
     // 2026-10-24 on `composition-expected-type-edges`, item 4. An unparenthesised `x => e` is not a
     // lambda at all -- inside a rule body the `=>` is the rule's own arrow -- so naming the
     // parentheses is what keeps the program from being told only that a token did not fit.

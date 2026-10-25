@@ -128,7 +128,7 @@ class HalfData : public Data {
 
     /// The float text of the value it holds, as every float of the language prints (11.5, 7.7):
     /// the shortest that reads back as the same element of its own type, not the text of the f32
-    /// it widens to (`0.1` for bf16 `0.1`, not `0.100097656`; ruling 2026-10-23,
+    /// it widens to (`0.1` for bf16 `0.1`, not `0.100097656`; rule 2026-10-23,
     /// "reduced-precision-text"). Every path that prints a constant -- `--inspect`, a tag
     /// argument's written form -- reads its text here.
     virtual const std::string toString() const override {
@@ -156,7 +156,7 @@ using Float16Data  = HalfData;
 
 // Whether the value of a literal can be held by the narrower primitive type `to`: an int64 in
 // an i32, a finite double in an f32. A double too large for an f32 would become an infinity
-// and one too small would become zero; neither is an f32 value, so neither fits (H15i).
+// and one too small would become zero; neither is an f32 value, so neither fits.
 template <typename T> bool primaryFitsType(T value, type::TypeCode to) {
     if constexpr (std::is_same_v<T, int64_t>) {
         if (to == type::TypeCode::Int32) {
@@ -241,7 +241,7 @@ class ComplexData : public Data {
 
 // Why a literal datum cannot be a value of `type`, as the reason clause of a diagnostic; empty
 // when there is no such case. An overflow says which range the type has; an underflow says that
-// the nearest value would be zero (H15i), which is not the same statement and is not written as
+// the nearest value would be zero, which is not the same statement and is not written as
 // a range.
 inline std::string literalNotFitReason(const data_ptr_t &data, type::Type *type) {
     if (!data || !type) {

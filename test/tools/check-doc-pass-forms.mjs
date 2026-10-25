@@ -6,7 +6,7 @@
  * Fails when a reader-facing page teaches a pass invocation the command line refuses.
  *
  * A pass parameter is a `key=value` word after the pass name (design principles 9.3). The
- * ruling that wrote that down deleted three other spellings at once: `std::opt(safe_fp=true)`,
+ * rule that wrote that down deleted three other spellings at once: `std::opt(safe_fp=true)`,
  * the colon spelling `safe_fp: true`, and positional parameters. A page that still shows one is
  * a defect by the same reasoning: the reader copies a spelling the tool refuses with
  * `RuntimeDiag::InvalidPassParameter`.
@@ -51,7 +51,7 @@
  *     unknown-name examples excepted, so it is not part of this guard.
  *   * The colon and positional spellings are reported on a `camel` command line, and the paren
  *     spelling anywhere; a page that teaches the colon spelling in prose alone is not caught.
- *     `safe_fp: true` is also how Camel source writes a named argument, which the ruling kept,
+ *      `safe_fp: true` is also how Camel source writes a named argument, which the rule kept,
  *     so away from a command line the two cannot be told apart.
  *   * A positional value that is not a bare literal (`std::opt model.onnx`) is not reported: a
  *     stray word cannot be told apart from a placeholder (`<file>`) or a redirection
@@ -61,7 +61,7 @@
  *     the run accepts it, because checking the name against every `module::pass` declaration
  *     needs the module search paths, which this guard does not read.
  *   * A specification written in Camel source (`f->std::opt<safe_fp: true>`) is the source
- *     spelling of a named argument, which the ruling kept; only the command line changed.
+ *      spelling of a named argument, which the rule kept; only the command line changed.
  *   * `changes.log` and the record directories are history: an entry states the release it
  *     belongs to, and `docs/handover/` quotes the old spelling to say what happened. They are not
  *     scanned, and every entry of that list is asserted to still be in the tree, so a class cannot
@@ -514,7 +514,7 @@ const PASS_NAMES = new Set()
 
 const BY_LENGTH = [...PASS_NAMES].sort((a, b) => b.length - a.length)
 const escape = (name) => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-// A known pass name immediately followed by `(`: the spelling the ruling deleted.
+// A known pass name immediately followed by `(`: the spelling the rule deleted.
 const PAREN_FORM = new RegExp(`(${BY_LENGTH.map(escape).join('|')})\\(`)
 // A word that can be a specification's name: a qualified pass name, the shape a module's pass
 // has whether or not this build registers it (`tiles::compile`, `mymod::report`).

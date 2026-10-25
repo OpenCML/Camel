@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 /*
- * Rest parameters (design principles 5.5, H51 step 6). A function with a rest parameter has no
+ * Rest parameters (design principles 5.5, step 6). A function with a rest parameter has no
  * runtime arity, so it is not given a graph and is not a value: each direct call expands its
  * body into the caller's graph (inlineRestCall). The fixed parameters are bound to the nodes of
  * the arguments, and the rest parameter is bound to the nodes the call leaves over, whether
@@ -126,7 +126,7 @@ node_handle_t Builder::inlineRestCall(
     // the expansion replaces the ordinary call.
     type_bindings_t bindings = tmpl->outerBindings;
     // A `with`-argument that names a generic function or a set of overloads is a compile-time
-    // callable, not a value: the instance is inlined (design principles 5.5, H51 Q1/Q3), so
+    // callable, not a value: the instance is inlined (design principles 5.5 Q1/Q3), so
     // the name stays a name and every call of the parameter in the body resolves it against
     // that call's argument types, one leaf at a time (`tree_map<twice>`). It has no type of
     // its own to bind the parameter's type variables with.

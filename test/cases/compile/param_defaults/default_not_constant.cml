@@ -1,6 +1,6 @@
 /**
  * A default is evaluated where the declaration is, not at a call, so it cannot read a
- * parameter of the same declaration (design principles 4.4, handover H276).
+ * parameter of the same declaration (design principles 4.4).
  */
 module param_default_not_constant
 

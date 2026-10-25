@@ -1,5 +1,5 @@
 /**
- * The Camel side of the Python binding test (H253): what a Python caller reaches through
+ * The Camel side of the Python binding test: what a Python caller reaches through
  * `camel.load`.
  *
  * Three kinds of result are here on purpose. `identity` gives the array it was handed back

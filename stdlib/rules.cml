@@ -30,7 +30,7 @@ import { is_float, is_integer } from types
 // head declares the type parameter (`rule int_add_zero::<T>`) and the condition names the family
 // (`when is_integer::<T>()`), so the maker makes one instance per integer element type --
 // `int_add_zero<int>` and `int_add_zero<i32>` -- and the engine fires the instance whose type the
-// matched node has (design principles 5.5; the ruling of 2026-10-23 on `generic-rule-instantiation`,
+// matched node has (design principles 5.5; the rule on `generic-rule-instantiation`,
 // whose acceptance of 2026-10-24 reads: one instance per type tuple, visible in `explain`). Before
 // the fold the two families were two blocks of thirteen rules, `int_*` and `int32_*`, and the second
 // block said the same facts again; the facts are the same because two's-complement wraparound is a
@@ -100,7 +100,7 @@ export rule int_distribute::<T>(a: T, b: T, c: T) when is_integer::<T>() { a * (
 // `bf16` and `f16` as well (stdlib/types.cml; design principles 7.3 gives them `f32`'s scalar
 // arithmetic, and every law here is an exact fact about that arithmetic too). An element type the
 // family names but whose instance cannot be built -- a pattern operator that type does not have --
-// simply has no instance: the attempt is quiet and costs nothing (the ruling of 2026-10-23 on
+// simply has no instance: the attempt is quiet and costs nothing (the rule on
 // `generic-rule-instantiation-set-and-predicate`, §3).
 
 export rule float_mul_one::<T>(x: T) when is_float::<T>() { x * 1.0 => x }
@@ -165,7 +165,7 @@ func foldCoefficients::<T>(c1: T, c2: T): bool {
 /// therefore needs no permission at all; the condition is what makes that true.
 ///
 /// This law stays two rules, one per float width: the bound is what the *type* decides (`2^52` at
-/// f64, `2^23` at f32), and a condition that differs by type is the case the ruling of 2026-10-23
+/// f64, `2^23` at f32), and a condition that differs by type is the case
 /// leaves alone ("except where conditions or permissions differ"). Everything else in the pair
 /// collapses, and the guard itself is the same function at each width -- `finiteValue(c)` is
 /// instantiated at the width the rule is written for.
@@ -251,7 +251,7 @@ export rule float32_double(x: f32, const c: f32) when exactDoubling32(c) {
 //    `f32` instance (`combineSameSign::<f32>`), whose arithmetic is the arithmetic the rule's
 //    kernel performs. The tensor family itself cannot collapse over the element type today: the
 //    maker binds a type parameter to the type of a whole matched node, and `Tensor<T>` is refused
-//    as a module type with a type-variable argument (measured 2026-10-24; the ruling's §6 asks for
+//     as a module type with a type-variable argument (measured 2026-10-24; the rule's §6 asks for
 //    the extent to be measured rather than assumed). So these twelve rules stay written per
 //    element type, and the element type they name is the one whose element laws the scalars got.
 //

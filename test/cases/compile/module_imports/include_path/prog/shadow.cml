@@ -1,4 +1,4 @@
-/// H129 case 2: the program's own directory is searched before any `-I` root.
+/// case 2: the program's own directory is searched before any `-I` root.
 module shadow
 
 export func value(): int {

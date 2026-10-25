@@ -223,7 +223,7 @@ expect_output_not_contains = ["hi 3"]
 normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths"]
 timeout_ms = 8000
 
-# One number grammar for the command line and the source (H15h): an entry argument is one whole
+# One number grammar for the command line and the source: an entry argument is one whole
 # number token of the language, read by the same parser a literal is. The integer tokens are
 # decimal, `0x` hexadecimal, `0b` binary and octal with a leading `0`; an integer token in a
 # float parameter is converted to that width, as a source literal in a float position is.

@@ -188,7 +188,7 @@ class Module : public std::enable_shared_from_this<Module> {
     /// Where each type this module declares was declared: the reference it was declared under in
     /// this module (see visitTypeDecl) to the origin of the declaration's name. The compiler
     /// fills it as it declares the types; the language server reads it to answer where a type
-    /// name's declaration is, including across modules (task H82).
+    /// name's declaration is, including across modules (task).
     std::unordered_map<std::string, camel::source::origin_id_t> typeDeclarationOrigins_;
 
     // Tags (design principles 6.2): the declarations this module makes, and the facts written
@@ -233,10 +233,10 @@ class Module : public std::enable_shared_from_this<Module> {
     virtual bool loaded() const { return loaded_; }
     /// The URI protocols the operators of this module answer on, that is the part before the
     /// colon of their URIs: its own name, unless the module registers its operators under another
-    /// name (`random` answers on `rand:`; design principles 6.4; handover H94 ruling 6). A
+    /// name (`random` answers on `rand:`; design principles 6.4; rule 6). A
     /// declaration may name an operator of this module with a `#op` tag whose prefix is one of
     /// these, or empty for an operator the compiler itself names (`:op/...`); naming another
-    /// module's operator is refused (NativeDeclarationForeignOperator; H202).
+    /// module's operator is refused (NativeDeclarationForeignOperator).
     virtual std::vector<std::string> operatorProtocols() const { return {name_}; }
     /// Makes the types the module exports readable (getExportedType). A module written in
     /// Camel declares them while its construction tree is built, so that modules importing
@@ -298,8 +298,8 @@ class Module : public std::enable_shared_from_this<Module> {
     /// exports is the program's, and is recorded by that program's ProgramExports.
     bool exportEntity(const Reference &ref, const entity &ent);
     /// The same, for a name that already has an entity: the later write wins. A `.cml` beside a
-    /// `.cmo` is the same module as that C++ module (design principles 6.4; handover H94,
-    /// ruling 1), so a declaration of an operator the C++ module exported too writes the
+    /// `.cmo` is the same module as that C++ module (design principles 6.4,
+    /// rule 1), so a declaration of an operator the C++ module exported too writes the
     /// module's signature, not a second entity beside it.
     bool replaceEntity(const Reference &ref, const entity &ent);
     /// The same, for the aliases a module publishes under a type namespace: a module may export
@@ -308,11 +308,11 @@ class Module : public std::enable_shared_from_this<Module> {
     /// becomes the module's signature for `ident`, every qualified entity whose identifier is
     /// `ident` and whose group answers for one of the same URIs resolves to that same entity: the
     /// alias is the declaration under another name, not a second entity beside it (design
-    /// principles 6.4; handover H19, H151). Returns how many aliases were replaced.
+    /// principles 6.4; handover). Returns how many aliases were replaced.
     size_t replaceTypeQualifiedAliases(const std::string &ident, const entity &ent);
     /// Adds every name `other` exports to this module's own tables: its types, its entities
     /// (operator groups, constants, tags) and the names it brings along. The two objects are one
-    /// module (design principles 6.4; handover H94, ruling 1): the C++ module implements, the
+    /// module (design principles 6.4; handover): the C++ module implements, the
     /// `.cml` declares, and both are read under the one name the import found.
     void inheritExportsFrom(const Module &other);
     /// Exports the constant `value` under `ref` (a C++ module's `math::pi`; design principles
@@ -441,7 +441,7 @@ class Module : public std::enable_shared_from_this<Module> {
 /// one program (its builder made the graphs), so it belongs here, not to the Module object —
 /// the same module may take part in several programs at once (design principles 10.1; a pass
 /// written in Camel is compiled as a program of its own over the modules the program being
-/// transformed loaded, task H42). Types are not here: a type declaration is the module's own
+/// transformed loaded, task). Types are not here: a type declaration is the module's own
 /// and is the same in every program (Module::exportedTypeNS).
 ///
 /// One table per program also means one imported-name cache per program: what a name imported

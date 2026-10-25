@@ -95,7 +95,7 @@ slot_t __format__(ArgsView &with, ArgsView &norm, Context &ctx) {
                 with.get<Float64>(i), camel::builtin::FloatTextFormat::Float64});
             break;
         case TypeCode::BFloat16:
-            // A bf16 or an f16 has one text of its own (7.7, ruling 2026-10-23), and this is the
+            // A bf16 or an f16 has one text of its own (7.7, rule 2026-10-23), and this is the
             // path `format` and string interpolation take: a plain `{}` writes that text.
             store.push_back(camel::builtin::LanguageFloat<Float32>{
                 rtdata::halfValueFloat(with.slot(i), type),

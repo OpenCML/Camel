@@ -4,8 +4,8 @@
  * and the module does not load. It does not for an instance -- the rule here is generic and
  * never applied.
  *
- * The silent half of the older ruling is untouched: a condition that names a type for which the
- * predicate has no instance is not an error (the ruling of 2026-10-23 on
+ * The silent half of the older rule is untouched: a condition that names a type for which the
+ * predicate has no instance is not an error (the rule on
  * `generic-rule-instantiation-set-and-predicate`); `generic_law.cml` covers it.
  */
 module err_when_unknown_name

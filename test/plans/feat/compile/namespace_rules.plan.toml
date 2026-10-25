@@ -6,7 +6,7 @@ desc = "Namespaces and imports by the rulings of 2026-10-14: lookup in namespace
 
 # Design principles 10.2 ("模块与命名空间"); docs/design/graph-model/README.cn.md section 8.
 # p01-p26 are the probes of the table in 8.1 (test/cases/compile/namespace_rules), one test per
-# row, with the outcome the rulings give; p27-p32 are new.
+# row, with the outcome the rules give; p27-p32 are new.
 
 [defaults]
 expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error", "Internal", "bad any_cast"]

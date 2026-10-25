@@ -1,5 +1,5 @@
 /**
- * H217: `\q` and the octal-looking forms are the same unknown escape, reported by the same code
+ * `\q` and the octal-looking forms are the same unknown escape, reported by the same code
  * with the same message shape; each keeps the text as written.
  */
 module escapes_unknown

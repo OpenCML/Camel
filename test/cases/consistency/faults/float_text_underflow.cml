@@ -1,7 +1,7 @@
 /**
  * float('1e-9999'): a number text too small for float is out of range (it used to be read as
  * zero on a platform whose float parser reports underflow only by the value), which the message
- * says, rather than not a number (H15f).
+ * says, rather than not a number.
  */
 module float_text_underflow
 

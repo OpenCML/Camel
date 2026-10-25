@@ -7,7 +7,7 @@
  * the node (its With inputs are the results of its regions and the round port, never a capture)
  * and the two lists: the captures (the default, no constants) and the constants that were read
  * but left out. The plan then pins that a constant is not a capture and that a loop-invariant
- * value is one (design principles 3.10; the H91 ruling "a constant is not a capture").
+ * value is one (design principles 3.10; the rule "a constant is not a capture").
  *
  *   LOOP_INPUTS graph=f loop=12 kind=for-while state=1 with=3 captures=1 constants=1
  *     input PORT constant=0 type=int

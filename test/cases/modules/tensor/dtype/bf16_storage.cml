@@ -1,6 +1,6 @@
 /**
  * `Tensor<bf16>` and `Tensor<f16>` store their own element type, two bytes per element, and are
- * not an f32 tensor with a label (handover H238, design principles 7.3):
+ * not an f32 tensor with a label (design principles 7.3):
  *
  *   - 0.1 rounds to bf16 0x3DCD (bytes [205, 61]) and to f16 0x2E66 (bytes [102, 46]);
  *   - reading either back into f32 is exact: bf16 0x3DCD widens to 0x3DCD0000 ([0, 0, 205, 61]),

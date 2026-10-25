@@ -1,5 +1,5 @@
 /**
- * The ruling docs/handover/reviews/reduced-precision.md gives the reduced-precision types the
+ * The rule docs/handover/reviews/reduced-precision.md gives the reduced-precision types the
  * scalar language of any other float, and this is the case that asked for it: it used to assert
  * the refusal. `bf16` and `f16` now have literals, written conversions, scalar arithmetic and
  * comparison (items (a) and (b)), `array::sum` accumulates in f64 and rounds once (item (d)), and
@@ -12,7 +12,7 @@
  *                         2^24 + 1 back to 2^24 and answers 0, so this is the pair that separates
  *                         the accumulator width. The answer is also compared with the f64 sum over
  *                         the same elements rounded once by hand, and with the tensor reduction,
- *                         which the ruling says agrees with the array reduction bit for bit.
+ *                          which the rule says agrees with the array reduction bit for bit.
  *   [1.0, 2^-8]           the exact sum is 1 + 2^-8, the halfway point between 1 and 1 + 2^-7:
  *                         ties to even gives 1.0. The property is that one rounding of the total
  *                         is what the answer is.

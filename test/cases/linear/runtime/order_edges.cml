@@ -3,7 +3,7 @@ module order_edges
 // The graph's edges are data, sync and order (docs/design/effects/edges.cn.md; design
 // principles 3.1). An order edge only orders: it does not make either end execute. So an
 // effect whose value nothing uses does not run, even when another effect on the same
-// resource is written after it (formal F2, H242 item 7).
+// resource is written after it (formal F2, item 7).
 
 // `println(x)` returns `x`, so `b`'s effect is used by `return b` and `a`'s is not.
 func first_dropped(): int {
@@ -18,10 +18,10 @@ func first_dropped(): int {
 // The other half -- `var x = println(1); x = println(2); return x`, where the initializer's
 // write is read by nothing and must not run -- is not asserted here yet: the cell (`:var/new`)
 // still takes the initializer's value as a data input, so the initializer's effect is reachable
-// from the read whatever the writes do. The ruling gives the cell no value input and gives the
+// from the read whatever the writes do. The rule gives the cell no value input and gives the
 // read a data edge from the nearest write --
-// docs/handover/reviews/questions-2026-10-23.md, "h242a-var-initializer-write" and
-// "h242a-capture-order-edge".
+// docs/handover/reviews/questions-2026-10-23.md, " -var-initializer-write" and
+// " -capture-order-edge".
 func write_used(): int {
     var x = 1
     x = println(2)

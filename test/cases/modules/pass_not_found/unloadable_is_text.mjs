@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * H204: `unloadable.cmo` is a fixture, not a compiled module.
+ * `unloadable.cmo` is a fixture, not a compiled module.
  *
  * The module plan needs a file the loader finds and refuses; a text file does that on every
  * platform (`dlopen`: invalid ELF header; `LoadLibraryW`: not a valid Win32 application), so the

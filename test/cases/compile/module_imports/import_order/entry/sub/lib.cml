@@ -1,4 +1,4 @@
-/// H220: sits beside `sub/helper.cml`, so the library's own `import lib` takes this file and not
+/// sits beside `sub/helper.cml`, so the library's own `import lib` takes this file and not
 /// the entry directory's `lib.cml` (design principles 10.2: the module's own directory first).
 module lib
 

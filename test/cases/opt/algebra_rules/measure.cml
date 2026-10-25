@@ -1,5 +1,5 @@
 /**
- * The H226 measurement's table: one line per graph of the program, with the graph's node count, its
+ * The measurement's table: one line per graph of the program, with the graph's node count, its
  * edge count and the count of every operator the algebraic corpora write.
  *
  * The same corpus goes through this pass on both sides of the comparison — the C++ algebraic pass

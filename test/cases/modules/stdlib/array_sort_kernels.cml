@@ -1,5 +1,5 @@
 /**
- * The sorting family of `array` after the per-element split (H393; the ruling
+ * The sorting family of `array` after the per-element split (
  * docs/handover/reviews/questions-2026-10-23.md, section 「复核：归约按元素类型分臂」: the sorts
  * still read the element type code, and become what the reductions became).
  *

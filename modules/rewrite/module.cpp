@@ -848,6 +848,9 @@ Application applyRewrite(
 /// the pass itself (design principles 7.4, 7.5): `strict` grants no permission, as
 /// `std::opt safe_fp=true` does, so only the laws that need none fire.
 /// An error value when a rule cannot be a rule, holds both ways, or the result is not a program.
+/// Only this module's own rule errors become error values. Anything else leaves by the exception
+/// it already is: a limit, a fault or a defect of another part of the compiler reported as a
+/// rule that is badly written would name the wrong cause and drop whatever the exception carried.
 slot_t rewriteKernel(ArgsView &, ArgsView &norm, Context &ctx) {
     const TupleType *resultType = TupleType::fallible(norm.type(0));
     const auto *base            = norm.get<const camel::runtime::Program *>(0);
@@ -867,8 +870,6 @@ slot_t rewriteKernel(ArgsView &, ArgsView &norm, Context &ctx) {
         return makeError("RuleTwoWay", e.what(), "<rewrite::rewrite>");
     } catch (const mm::MemoryExhausted &) {
         throw;
-    } catch (const std::exception &e) {
-        return makeError("RewriteInvalid", e.what(), "<rewrite::rewrite>");
     }
 }
 
@@ -884,6 +885,7 @@ slot_t rewriteKernel(ArgsView &, ArgsView &norm, Context &ctx) {
 /// `explain` opens the attribution record (rewrite design 8.7). Only then is a record kept and a
 /// `Proof` made and put in the struct; without it the field is null and no step was recorded, so a
 /// plain run pays nothing for a reader that never comes.
+/// Only this module's own rule errors become error values (see `rewriteKernel`).
 slot_t runKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     const auto *base     = norm.get<const camel::runtime::Program *>(0);
     const int64_t rounds = with.size() > 1 ? with.get<Int64>(1) : 16;
@@ -941,8 +943,6 @@ slot_t runKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
         return makeError("RuleTwoWay", e.what(), "<rewrite::run>");
     } catch (const mm::MemoryExhausted &) {
         throw;
-    } catch (const std::exception &e) {
-        return makeError("RewriteInvalid", e.what(), "<rewrite::run>");
     }
 }
 
@@ -1393,8 +1393,6 @@ const uint64_t ruleId = ruleNow()->ruleId();
         return makeError("RuleInvalid", e.what(), "<rewrite::why_not>");
     } catch (const mm::MemoryExhausted &) {
         throw;
-    } catch (const std::exception &e) {
-        return makeError("RewriteInvalid", e.what(), "<rewrite::why_not>");
     }
 }
 
@@ -1437,8 +1435,6 @@ slot_t saturateKernel(ArgsView &, ArgsView &norm, Context &ctx) {
         return makeError("RuleInvalid", e.what(), "<rewrite::saturate>");
     } catch (const mm::MemoryExhausted &) {
         throw;
-    } catch (const std::exception &e) {
-        return makeError("RewriteInvalid", e.what(), "<rewrite::saturate>");
     }
 }
 
@@ -1454,15 +1450,9 @@ slot_t extractKernel(ArgsView &, ArgsView &norm, Context &ctx) {
             "There is no cost model '" + cost + "'.",
             "<rewrite::extract>");
     }
-    try {
-        const camel::runtime::Program *extracted =
-            camel::runtime::extractWritings(ctx.shared_from_this(), base, *model);
-        return makeOk(toSlot(const_cast<camel::runtime::Program *>(extracted)), resultType);
-    } catch (const mm::MemoryExhausted &) {
-        throw;
-    } catch (const std::exception &e) {
-        return makeError("RewriteInvalid", e.what(), "<rewrite::extract>");
-    }
+    const camel::runtime::Program *extracted =
+        camel::runtime::extractWritings(ctx.shared_from_this(), base, *model);
+    return makeOk(toSlot(const_cast<camel::runtime::Program *>(extracted)), resultType);
 }
 
 // ---- the check of a rule (graph store decision 5) ----

@@ -83,7 +83,7 @@ name = "resident_graph_transfers"
 kind = "behavior"
 tool = "python"
 case = "../../cases/modules/tiles/resident_graph.py"
-# `${camel}` is the compiler of the build under test, named as an argument (the author's ruling of 2026-10-25).
+# `${camel}` is the compiler of the build under test, named as an argument.
 args = ["${case}", "--camel", "${camel}"]
 expect_exit = 0
 expect_stdout_contains = ["Resident graph transfers: PASS"]

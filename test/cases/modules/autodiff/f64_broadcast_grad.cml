@@ -6,7 +6,7 @@
  *
  *   'the gradient kernels' does not support a value of type 'Tensor<f64>'; it takes f32 tensors.
  *
- * H238's direction is to support f64 (and bf16 and f16) rather than refuse it, and the element
+ * the direction is to support f64 (and bf16 and f16) rather than refuse it, and the element
  * type of a value is always determined, so the missing arm is a hole and not a rule: a float
  * reduction returns its input's element type and accumulates in f64, rounding once
  * (docs/handover/reviews/reduced-precision.md section 4).

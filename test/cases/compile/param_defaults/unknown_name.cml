@@ -1,6 +1,6 @@
 /**
  * A named argument names a parameter of the callee: `z` is not one (design principles 4.4,
- * handover H276).
+ * handover).
  */
 module param_argument_unknown
 

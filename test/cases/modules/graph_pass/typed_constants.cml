@@ -1,7 +1,7 @@
 // Creates a value of each type `add_constant` accepts (int, f64, bool, string), lets the
 // transaction live across a safepoint (`churn` makes the collector run), commits, and counts
 // each value in the committed program. The draft's static slots are the roots that keep these
-// values alive while the transaction is open (task H36, item 3).
+// values alive while the transaction is open (item 3).
 module typed_constants
 import { flat_map } from array
 import {

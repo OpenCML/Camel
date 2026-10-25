@@ -53,7 +53,7 @@ namespace camel::runtime {
 ///
 /// **Ctrl** is the fourth entry and is not one of the design's three: it is the old "control
 /// edge", kept only for the read-use edges the design wants as data edges and cannot have yet
-/// (the rulings on the var initializer's write and on the capture order edge, in
+/// (the rules on the var initializer's write and on the capture order edge, in
 /// docs/handover/reviews/questions-2026-10-23.md). It
 /// carries "used" like a data port and orders like an order edge, which is exactly why it must
 /// go: no pass can treat it as either. Every remaining producer is named in the handover note of
@@ -732,7 +732,7 @@ class GraphDraft {
     /// of (an Inline region around it says the body came from that graph, at any depth). The
     /// inline source is the history the inliner reads: a call of a function inside an inlined copy
     /// of that function is not inlined again, or the copy would contain a copy of itself (design
-    /// 9.4, the H44c inline history). A type specialization counts as a version of the function it
+    ///  9.4, the inline history). A type specialization counts as a version of the function it
     /// refines the types of; a value specialization (a fixed-length unrolling, different
     /// constants) is a callee of its own.
     bool inlinedCopyOf(gc_node_ref_t id, const GCGraph *callee) const;

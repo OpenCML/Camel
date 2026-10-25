@@ -21,7 +21,7 @@
  * uncomparable; the fingerprint then decides whether it is this tree's build. (`stamp` writes the
  * file a build writes, so it names a tag and takes no `--install`.)
  *
- * `check` is what `camel-remote.ps1 -NoBuild` runs on the host before the plan (H149):
+ * `check` is what `camel-remote.ps1 -NoBuild` runs on the host before the plan:
  *
  *   * exit 0 -- the install was built from the same source content as this tree; say nothing;
  *   * exit 4 -- refuse: the stamp is missing, unusable, or names different sources. The message
