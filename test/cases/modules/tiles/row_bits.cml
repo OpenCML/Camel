@@ -1,13 +1,13 @@
 module tiles_row_bits
-import { Tensor, load_npy, save_npy, sum } from tensor
+import { load_npy, save_npy, sum } from tensor
 import { inspect, run_preferred_resident, download } from tiles
 import { get_env } from env
-func centered(x: Tensor<f32>): Tensor<f32> {
+func centered(x: f32[..]): f32[..] {
     return x * 1.0 - sum(x, 1, true)
 }
 func main(): int sync {
     let folder = get_env('TILES_TEST_OUT')
-    let x = load_npy::<f32>(folder + '/input.npy') as Tensor<f32>
+    let x = load_npy::<f32>(folder + '/input.npy') as f32[..]
     save_npy(centered(x), folder + '/cpu.npy')
     save_npy(download(run_preferred_resident<centered>(x)), folder + '/gpu.npy')
     println(inspect<centered>(x))

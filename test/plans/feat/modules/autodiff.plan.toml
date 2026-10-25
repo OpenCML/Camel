@@ -3194,7 +3194,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "f64_broadcast_grad"
-desc = "An f64 gradient through a broadcast: sum(x * p0) with x a Tensor<f64, [2, 3]> and p0 a Tensor<f64, [3]> multiplies by broadcasting p0 over the rows, and tensor:sum_to is the reduction of that broadcast, so this is where an f64 gradient was refused with \"'the gradient kernels' does not support a value of type 'Tensor<f64>'\". Both gradients are printed in the array form and both distances are 0.0 against the values written out by hand from the forward expression (d/dx is the row broadcast of p0, d/dp0 the column sum [5, 7, 9]). The wide pair sums 2^24 + 1 in the third column: 16777217.0 in f64 and 16777216.0 if the value is accumulated in f32, so its printed third coordinate and its distance (0.0 against 1.0) say which accumulator the arm uses."
+desc = "An f64 gradient through a broadcast: sum(x * p0) with x a f64[2, 3] and p0 a f64[3] multiplies by broadcasting p0 over the rows, and tensor:sum_to is the reduction of that broadcast, so this is where an f64 gradient was refused with \"'the gradient kernels' does not support a value of type 'f64[..]'\". Both gradients are printed in the array form and both distances are 0.0 against the values written out by hand from the forward expression (d/dx is the row broadcast of p0, d/dp0 the column sum [5, 7, 9]). The wide pair sums 2^24 + 1 in the third column: 16777217.0 in f64 and 16777216.0 if the value is accumulated in f32, so its printed third coordinate and its distance (0.0 against 1.0) say which accumulator the arm uses."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/f64_broadcast_grad.cml"
 args = ["${case}", "${run_nvm}"]

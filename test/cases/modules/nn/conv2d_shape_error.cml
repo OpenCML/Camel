@@ -6,9 +6,7 @@
  */
 module conv2d_shape_error
 
-import {
-    Tensor, reshape, sum
-} from tensor
+import { reshape, sum } from tensor
 
 import {
     conv2d

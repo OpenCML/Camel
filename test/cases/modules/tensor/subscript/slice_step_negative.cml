@@ -5,7 +5,7 @@
  * as "the same slice backwards", so no gradient is ever built from it.
  */
 module subscript_slice_step_negative
-import { Tensor, reshape, shape } from tensor
+import { reshape, shape } from tensor
 
 func main(): int sync {
     println('ran')

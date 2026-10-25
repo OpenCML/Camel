@@ -4,11 +4,11 @@
 /// a `#gpu` scope may not be refused for a shape it never had at compile time.
 module gpu_nofallback_shape_generic
 
-import { Tensor, reshape, sum } from tensor
+import { reshape, sum } from tensor
 import { run_preferred_resident, download } from tiles
 
 #gpu
-func square(x: Tensor<f32>): Tensor<f32> {
+func square(x: f32[..]): f32[..] {
     return x * x
 }
 

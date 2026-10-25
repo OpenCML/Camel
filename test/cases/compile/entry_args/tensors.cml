@@ -4,9 +4,9 @@
  */
 module tensors
 
-import { Tensor, tanh } from tensor
+import { tanh } from tensor
 
-func main(x: Tensor<f32, [2, 3]>, w: Tensor<f32, [3, 4]>): int sync {
+func main(x: f32[2, 3], w: f32[3, 4]): int sync {
     println(tanh(x @ w))
     return 0
 }

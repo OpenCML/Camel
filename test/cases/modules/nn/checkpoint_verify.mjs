@@ -94,7 +94,7 @@ try {
         const lines = saved.trim().split(/\r?\n/)
         assert.equal(lines.length, 9)
         assert.equal(lines[0], '3')
-        // new([float(s.gain), s.scale]) is a Tensor<f64> — float(...) and a float literal make the
+        // new([float(s.gain), s.scale]) is a f64[..] — float(...) and a float literal make the
         // array float64 — and the bytes are its two doubles, exactly as written (P4: a tensor
         // keeps the element type it is written with; it used to be normalized to f32 here).
         assert.equal(lines[8], '[0, 0, 0, 0, 0, 0, 0, 128, 0, 0, 0, 0, 0, 0, 0, 128]')

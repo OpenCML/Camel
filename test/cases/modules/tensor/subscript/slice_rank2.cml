@@ -4,7 +4,7 @@
  * (design principles 5.4). The call is refused at compile time, and says what is missing.
  */
 module subscript_slice_rank2
-import { Tensor, reshape, shape } from tensor
+import { reshape, shape } from tensor
 
 func main(): int sync {
     println('ran')

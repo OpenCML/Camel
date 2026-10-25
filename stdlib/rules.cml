@@ -21,7 +21,7 @@ module rules
 import { Program } from graph
 import { abs, exp as math_exp, expm1, log as math_log, log1p, trunc } from math
 import { Proof, Rule, Run, rewrite, saturate, extract, run } from rewrite
-import { Tensor, exp, log, log_softmax, sigmoid, softmax, sum } from tensor
+import { exp, log, log_softmax, sigmoid, softmax, sum } from tensor
 import { is_float, is_integer } from types
 
 // ---- Integers: wrapping arithmetic, every law is exact ----
@@ -239,9 +239,9 @@ export rule float32_double(x: f32, const c: f32) when exactDoubling32(c) {
 //
 // 1. **The operator id does not carry the element type.** `tensor:add` is addition for f32, i64
 //    and bool elements alike, so a rule must also say which type it is about. The pattern types
-//    are `Tensor<f32>`, and the matcher requires the type of a pattern term to accept the type of
-//    the node it matches (`acceptsType` in src/runtime/writings.cpp); a `Tensor<i64>` expression
-//    therefore never matches these rules, whose rounding argument is f32's. A `Tensor<f32, [3]>`
+//    are `f32[..]`, and the matcher requires the type of a pattern term to accept the type of
+//    the node it matches (`acceptsType` in src/runtime/writings.cpp); a `i64[..]` expression
+//    therefore never matches these rules, whose rounding argument is f32's. A `f32[3]`
 //    still matches: a less informed type is assignable from a more informed one.
 // 2. **The coefficient takes the element type.** A scalar beside a tensor is not an exception to
 //    the literal rule: a literal there takes the tensor's element type (design principles 5.1),
@@ -250,7 +250,7 @@ export rule float32_double(x: f32, const c: f32) when exactDoubling32(c) {
 //    matcher checks the constant against - and the guards are the element guards above at their
 //    `f32` instance (`combineSameSign::<f32>`), whose arithmetic is the arithmetic the rule's
 //    kernel performs. The tensor family itself cannot collapse over the element type today: the
-//    maker binds a type parameter to the type of a whole matched node, and `Tensor<T>` is refused
+//    maker binds a type parameter to the type of a whole matched node, and `T[..]` is refused
 //     as a module type with a type-variable argument (measured 2026-10-24; the rule's §6 asks for
 //    the extent to be measured rather than assumed). So these twelve rules stay written per
 //    element type, and the element type they name is the one whose element laws the scalars got.
@@ -264,31 +264,31 @@ export rule float32_double(x: f32, const c: f32) when exactDoubling32(c) {
 // right side that calls a Camel function -- `t * 0.0 => zeros_like(t)` -- where `zeros_like` reads
 // `t` for its shape, so the matched value is not dropped and the effect check is satisfied too.
 
-export rule tensor_f32_mul_one(x: Tensor<f32>) { x * 1.0 => x }
-export rule tensor_f32_add_minus_zero(x: Tensor<f32>) { x + -0.0 => x }
-export rule tensor_f32_sub_zero(x: Tensor<f32>) { x - 0.0 => x }
-export rule tensor_f32_div_one(x: Tensor<f32>) { x / 1.0 => x }
-export rule tensor_f32_neg_neg(x: Tensor<f32>) { -(-x) => x }
+export rule tensor_f32_mul_one(x: f32[..]) { x * 1.0 => x }
+export rule tensor_f32_add_minus_zero(x: f32[..]) { x + -0.0 => x }
+export rule tensor_f32_sub_zero(x: f32[..]) { x - 0.0 => x }
+export rule tensor_f32_div_one(x: f32[..]) { x / 1.0 => x }
+export rule tensor_f32_neg_neg(x: f32[..]) { -(-x) => x }
 
 /// `t + t => t * 2.0`: exactly the f32 doubling, elementwise.
-export rule tensor_f32_add_self(x: Tensor<f32>) { x + x => x * 2.0 }
+export rule tensor_f32_add_self(x: f32[..]) { x + x => x * 2.0 }
 
 #requires(reassociate)
-export rule tensor_f32_combine(x: Tensor<f32>, const c1: f32, const c2: f32) when combineSameSign::<f32>(c1, c2) {
+export rule tensor_f32_combine(x: f32[..], const c1: f32, const c2: f32) when combineSameSign::<f32>(c1, c2) {
     x * c1 + x * c2 => x * (c1 + c2)
 }
 
 #requires(reassociate, no_infs, no_signed_zeros)
-export rule tensor_f32_combine_mixed(x: Tensor<f32>, const c1: f32, const c2: f32) when combineMixedSign::<f32>(c1, c2) {
+export rule tensor_f32_combine_mixed(x: f32[..], const c1: f32, const c2: f32) when combineMixedSign::<f32>(c1, c2) {
     x * c1 + x * c2 => x * (c1 + c2)
 }
 
 #requires(reassociate, no_infs)
-export rule tensor_f32_fold(x: Tensor<f32>, const c1: f32, const c2: f32) when foldCoefficients::<f32>(c1, c2) {
+export rule tensor_f32_fold(x: f32[..], const c1: f32, const c2: f32) when foldCoefficients::<f32>(c1, c2) {
     (x * c1) * c2 => x * (c1 * c2)
 }
 
-export rule tensor_f32_double(x: Tensor<f32>, const c: f32) when exactDoubling32(c) {
+export rule tensor_f32_double(x: f32[..], const c: f32) when exactDoubling32(c) {
     x * c + x * c => x * (c + c)
 }
 
@@ -296,12 +296,12 @@ export rule tensor_f32_double(x: Tensor<f32>, const c: f32) when exactDoubling32
 /// `tensor_f32_combine`, with the coefficient 1 implicit (the element families' `*_combine_one`).
 /// One rule reads both orders of the sum.
 #requires(reassociate)
-export rule tensor_f32_combine_one(x: Tensor<f32>, const c: f32) when combineOneSameSign::<f32>(c) {
+export rule tensor_f32_combine_one(x: f32[..], const c: f32) when combineOneSameSign::<f32>(c) {
     x * c + x => x * (c + 1.0)
 }
 
 #requires(reassociate, no_infs, no_signed_zeros)
-export rule tensor_f32_combine_one_mixed(x: Tensor<f32>, const c: f32) when combineOneMixedSign::<f32>(c) {
+export rule tensor_f32_combine_one_mixed(x: f32[..], const c: f32) when combineOneMixedSign::<f32>(c) {
     x * c + x => x * (c + 1.0)
 }
 
@@ -313,7 +313,7 @@ export rule tensor_f32_combine_one_mixed(x: Tensor<f32>, const c: f32) when comb
 /// `inf + -inf`, a NaN). The element library has no float distribute either, for the same reason,
 /// and `algebra.cpp` has none at all.
 #requires(reassociate)
-export rule tensor_i64_distribute(a: Tensor<int>, b: Tensor<int>, c: Tensor<int>) {
+export rule tensor_i64_distribute(a: int[..], b: int[..], c: int[..]) {
     a * (b + c) <=> a * b + a * c
 }
 
@@ -586,7 +586,7 @@ func pair(r: Run<Program>, left: Rule[], right: Rule[], strict: bool): Run<Progr
 /// f32 becomes an absolute error in its log, and a probability that rounds to zero gives -inf where
 /// the true log-softmax is finite. `log_softmax` avoids both.
 #requires(refine_accuracy)
-export rule tensor_log_softmax_of_softmax(x: Tensor<f32>, const axis: int) {
+export rule tensor_log_softmax_of_softmax(x: f32[..], const axis: int) {
     log(softmax(x, axis)) => log_softmax(x, axis)
 }
 
@@ -666,7 +666,7 @@ export func accuracy(p: Program): Program! {
 /// and `sigmoid(x)` next to each other before the pass and the same text after it. What changes
 /// is the cost: neg, exp, add and divide are four kernels and four passes over the data; sigmoid
 /// is one kernel and one pass.
-export rule tensor_sigmoid_chain(x: Tensor<f32>) {
+export rule tensor_sigmoid_chain(x: f32[..]) {
     1.0 / (1.0 + exp(-x)) => sigmoid(x)
 }
 

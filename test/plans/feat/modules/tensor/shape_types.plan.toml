@@ -75,18 +75,6 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 10000
 
 [[tests]]
-name = "bad_argument"
-desc = "A constant argument that is not a shape is rejected by the Tensor type with a diagnostic at the type; it is not ignored."
-kind = "negative"
-case = "../../../../cases/modules/tensor/shape_types/bad_argument.cml"
-args = ["${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::InvalidTypeArgument"
-expect_output_contains = ["the constant argument of a Tensor type is its shape"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 10000
-
-[[tests]]
 name = "not_parameterised"
 desc = "A type that takes no arguments rejects a constant argument (`int<const 3>`); it used to be dropped silently."
 kind = "negative"

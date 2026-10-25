@@ -4,10 +4,10 @@
 /// from a diagnostic.
 module gpu_nofallback_cpu_escape
 
-import { Tensor, reshape, tanh, sum } from tensor
+import { reshape, tanh, sum } from tensor
 
 #gpu
-func step(x: Tensor<f32>): Tensor<f32> {
+func step(x: f32[..]): f32[..] {
     let y = x * 2.0
     #cpu {
         return tanh(y)

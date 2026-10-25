@@ -23,10 +23,7 @@
 // the program itself reads no environment variable.
 module naive_in_expert_out
 
-import {
-    Tensor, argmax, exp, gelu, log, mean, one_hot, permute, randn, reshape, seed, shape, slice,
-    sqrt as tensor_sqrt, sum, transpose
-} from tensor
+import { argmax, exp, gelu, log, mean, one_hot, permute, randn, reshape, seed, shape, slice, sqrt as tensor_sqrt, sum, transpose } from tensor
 import { sqrt as scalar_sqrt } from math
 import { with_grad } from autodiff
 import { adam, adam_state, save_params } from nn
@@ -48,23 +45,23 @@ let attention_scale = f32(scalar_sqrt(d_head))
 
 // The shapes the program works in.  A named alias keeps a signature short; the alias itself
 // shows every extent, so a reader never has to guess what `Tensor` means here.
-type TokenStates = Tensor<f32, [8, 16, 64]>
-type HeadStates = Tensor<f32, [8, 4, 16, 16]>
-type Scores = Tensor<f32, [8, 4, 16, 16]>
-type FeedForward = Tensor<f32, [8, 16, 128]>
-type Logits = Tensor<f32, [8, 16, 32]>
+type TokenStates = f32[8, 16, 64]
+type HeadStates = f32[8, 4, 16, 16]
+type Scores = f32[8, 4, 16, 16]
+type FeedForward = f32[8, 16, 128]
+type Logits = f32[8, 16, 32]
 
 type Block = {
-    norm1: Tensor<f32, [64]>,
-    wq: Tensor<f32, [64, 64]>,
-    wk: Tensor<f32, [64, 64]>,
-    wv: Tensor<f32, [64, 64]>,
-    wo: Tensor<f32, [64, 64]>,
-    norm2: Tensor<f32, [64]>,
-    w1: Tensor<f32, [64, 128]>,
-    b1: Tensor<f32, [128]>,
-    w2: Tensor<f32, [128, 64]>,
-    b2: Tensor<f32, [64]>
+    norm1: f32[64],
+    wq: f32[64, 64],
+    wk: f32[64, 64],
+    wv: f32[64, 64],
+    wo: f32[64, 64],
+    norm2: f32[64],
+    w1: f32[64, 128],
+    b1: f32[128],
+    w2: f32[128, 64],
+    b2: f32[64]
 }
 
 // The blocks are one value, not two fields: an array of blocks, walked by an ordinary `loop`.
@@ -73,12 +70,12 @@ type Block = {
 // (design principles 9.9); the optimizer and `save_params` walk the array element by element.
 type Model = {
     blocks: Block[],
-    norm_f: Tensor<f32, [64]>,
-    head: Tensor<f32, [64, 32]>
+    norm_f: f32[64],
+    head: f32[64, 32]
 }
 
 // RMSNorm over the last axis.  The epsilon is the usual one, not a numerical trick.
-func rmsnorm(x: TokenStates, gain: Tensor<f32, [64]>): TokenStates {
+func rmsnorm(x: TokenStates, gain: f32[64]): TokenStates {
     let scale = mean(x * x, -1, true)
     return x / tensor_sqrt(scale + 1e-6) * gain
 }
@@ -121,7 +118,7 @@ func logits(m: Model, x: TokenStates): Logits {
 // The textbook cross-entropy: normalise exp(logits), take log of the result, and read the true
 // class.  No log_softmax and no gather; the one-hot product does the reading.
 with <m: Model>
-func loss(x: TokenStates, labels: Tensor<i64, [8, 16]>): float {
+func loss(x: TokenStates, labels: i64[8, 16]): float {
     let z = logits(m, x)
     let p = exp(z) / sum(exp(z), -1, true)
     // one_hot reads a rank-1 index tensor, so flatten the labels and restore the position grid.
@@ -136,16 +133,16 @@ func loss(x: TokenStates, labels: Tensor<i64, [8, 16]>): float {
 
 func init_block(std: float): Block {
     return {
-        norm1: randn([d_model], 1.0, 0.0) as Tensor<f32, [64]>,
-        wq: randn([d_model, d_model], 0.0, std) as Tensor<f32, [64, 64]>,
-        wk: randn([d_model, d_model], 0.0, std) as Tensor<f32, [64, 64]>,
-        wv: randn([d_model, d_model], 0.0, std) as Tensor<f32, [64, 64]>,
-        wo: randn([d_model, d_model], 0.0, std) as Tensor<f32, [64, 64]>,
-        norm2: randn([d_model], 1.0, 0.0) as Tensor<f32, [64]>,
-        w1: randn([d_model, d_ff], 0.0, std) as Tensor<f32, [64, 128]>,
-        b1: randn([d_ff], 0.0, std) as Tensor<f32, [128]>,
-        w2: randn([d_ff, d_model], 0.0, std) as Tensor<f32, [128, 64]>,
-        b2: randn([d_model], 0.0, std) as Tensor<f32, [64]>
+        norm1: randn([d_model], 1.0, 0.0) as f32[64],
+        wq: randn([d_model, d_model], 0.0, std) as f32[64, 64],
+        wk: randn([d_model, d_model], 0.0, std) as f32[64, 64],
+        wv: randn([d_model, d_model], 0.0, std) as f32[64, 64],
+        wo: randn([d_model, d_model], 0.0, std) as f32[64, 64],
+        norm2: randn([d_model], 1.0, 0.0) as f32[64],
+        w1: randn([d_model, d_ff], 0.0, std) as f32[64, 128],
+        b1: randn([d_ff], 0.0, std) as f32[128],
+        w2: randn([d_ff, d_model], 0.0, std) as f32[128, 64],
+        b2: randn([d_model], 0.0, std) as f32[64]
     }
 }
 
@@ -153,8 +150,8 @@ func init_model(): Model {
     let std = 0.02
     return {
         blocks: [init_block(std), init_block(std)],
-        norm_f: randn([d_model], 1.0, 0.0) as Tensor<f32, [64]>,
-        head: randn([d_model, vocab], 0.0, std) as Tensor<f32, [64, 32]>
+        norm_f: randn([d_model], 1.0, 0.0) as f32[64],
+        head: randn([d_model, vocab], 0.0, std) as f32[64, 32]
     }
 }
 
@@ -179,7 +176,7 @@ func main(bench: bool, init_dir: string, final_dir: string): int sync {
     seed(42)
     let model = init_model()
     let x: TokenStates = randn([batch, sequence, d_model], 0.0, 1.0) as TokenStates
-    let labels: Tensor<i64, [8, 16]> = argmax(slice(x, 2, 0, vocab), -1)
+    let labels: i64[8, 16] = argmax(slice(x, 2, 0, vocab), -1)
 
     if init_dir != '' then {
         save_params({ model: model, x: x, labels: labels }, init_dir)

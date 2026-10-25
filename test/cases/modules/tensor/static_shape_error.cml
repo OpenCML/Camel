@@ -4,7 +4,7 @@
  */
 module static_shape_error
 
-import { Tensor, zeros, matmul } from tensor
+import { zeros, matmul } from tensor
 
 func main(): int sync {
     let a = zeros([2, 3])

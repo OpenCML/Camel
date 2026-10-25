@@ -8,9 +8,9 @@ module tensor_forms
 // by a rule, and the deleted table had no tensor zero law either — `tensor_zero` is where the gap is
 // measured, and the difference is a language feature, not a missing rule.
 
-import { Tensor, reshape } from tensor
+import { reshape } from tensor
 
-type Vec = Tensor<f32, [3]>
+type Vec = f32[3]
 
 func tensor_combine(x: Vec): Vec sync {
     let a = x * 3.0 + x * 5.0

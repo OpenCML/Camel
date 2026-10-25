@@ -681,7 +681,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "ConstasNotAllowed",
                 "The dimension name '{0}' is bound here, but only a parameter type can bind one.",
-                "A dimension name binds where it first appears in a parameter type, 'x: Tensor<f32, [n, 3]>'. Every later occurrence, including one in the return type, writes 'n'.",
+                "A dimension name binds where it first appears in a parameter type, 'x: f32[n, 3]'. Every later occurrence, including one in the return type, writes 'n'.",
             },
         },
         {
@@ -1586,14 +1586,6 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "NodeOfNotAParameter",
                 "'{0}' is not a const parameter of the rule '{1}', so node_of({0}) names no node.",
                 "node_of reaches the node of a const parameter, so that a condition can read a fact or a shape of the constant: write it over a name the rule declares const, as in the condition sign(node_of(c)) == 1 of the rule r(x: int, const c: float) whose sides are x * c and x. A parameter that is not const is a node of the draft already, so the condition names it directly, and a name that is not a parameter of this rule has no node here.",
-            },
-        },
-        {
-            SemanticDiag::TensorElementTypeRequired,
-            {
-                "TensorElementTypeRequired",
-                "The type '{0}' states no element type: a tensor's element type is part of its type, so this spelling is not a type of a value.",
-                "Every tensor type writes its element type: 'Tensor<f32>' (a rank nobody fixes yet), 'Tensor<f32, [2, 3]>', or the array type itself, 'f32[..]' and 'f32[2, 3]'. A signature that takes a tensor of any element type declares a type variable in its head and writes it as the element type -- 'func f::<T>(x: Tensor<T>)', which is the same type as 'func f::<T>(x: T[..])' -- and the call's argument fixes that type variable, so the body sees the element type the call bound. A shape written without an element type ('Tensor<[3]>') leaves the same question open.",
             },
         },
         {

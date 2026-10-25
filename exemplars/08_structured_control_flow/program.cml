@@ -10,7 +10,7 @@
  */
 module structured_control_flow
 
-import { Tensor, reshape, relu } from tensor
+import { reshape, relu } from tensor
 import { export_model } from onnx
 import { get_env } from env
 

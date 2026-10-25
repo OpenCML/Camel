@@ -2,7 +2,7 @@
  * The two comparisons of an array (design principles 4.2): `a === b` is the comparison of the
  * elements, an array of the same shape whose elements are `bool`; `a == b` is the whole
  * comparison, one `bool` that says the shapes are the same and the elements are equal
- * everywhere. Whether the element type is written in the type (`Tensor<f32>`) or left to the
+ * everywhere. Whether the element type is written in the type (`f32[..]`) or left to the
  * value (`Tensor`) does not change either result, and neither does the operator's element type
  * decide which one a program gets: `==` is whole and `===` is elementwise for every array.
  *
@@ -13,10 +13,10 @@
  */
 module comparison
 
-import { Tensor, new, cast, log, sum } from tensor
+import { new, cast, log, sum } from tensor
 
 func bareEq::<T>(a: T[..], b: T[..]): bool { return a == b }
-func writtenEq(a: Tensor<f32>, b: Tensor<f32>): bool { return a == b }
+func writtenEq(a: f32[..], b: f32[..]): bool { return a == b }
 
 func main(): int sync {
     // A scalar: `===` is `==`, and `!==` is `!=`.

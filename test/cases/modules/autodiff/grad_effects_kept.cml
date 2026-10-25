@@ -5,7 +5,7 @@
  * depended on that print).
  */
 module grad_effects_kept
-import { Tensor, reshape, sum, tanh } from tensor
+import { reshape, sum, tanh } from tensor
 import { grad, with_grad } from autodiff
 
 func helper(s: float, p: f32[..]): f32[..] sync {

@@ -86,26 +86,21 @@ TensorModule::TensorModule(context_ptr_t ctx) : BuiltinModule("tensor", ctx) {
     camel::tensor::registerMulNegFusion();
     camel::tensor::ops::registerTensorOps();
     camel::tensor::passes::registerTensorPasses();
-    // `Tensor` is the array type's name for the open-rank array whose element type the spelling has
-    // to give, and the arguments of the spelling are read by the array type itself
-    // (docs/design/arrays-memory/plan.cn.md section 5.1a, ArrayType::applyArguments): one type
-    // with two spellings. The name is still exported so that a program which writes it is told to
-    // write the element type, and it is deleted once no program does.
-    exportType(Reference("Tensor"), camel::core::type::ArrayType::elementTypeOpen());
+    // `Tensor` is no type name: a tensor's type is the array spelling that states its element type
+    // (`f32[..]`, `f32[2, 3]`, docs/design/arrays-memory/plan.cn.md section 5.1), and a program
+    // that writes the old name writes an unknown name. The name qualifies nothing either: the
+    // constructors and loaders this module exports stand under their own names (`ones`,
+    // `from_bytes`), as every module's exports do.
     const auto binary = camel::tensor::ops::fromBytesOperatorGroup();
     exportEntity(Reference("from_bytes"), binary);
-    exportEntity(Reference(std::vector<std::string>{"Tensor"}, "from_bytes"), binary);
     const auto npyLoad = camel::tensor::ops::loadNpyOperatorGroup();
     exportEntity(Reference("load_npy"), npyLoad);
-    exportEntity(Reference(std::vector<std::string>{"Tensor"}, "load_npy"), npyLoad);
     for (const auto &group : OpRegistry::instance().operatorGroups("tensor")) {
         if (!isDeclaredOperator(group->name())) {
             exportEntity(group->name(), group);
         }
         if (group->name().starts_with("__")) {
             exportDefaultImportRef(group->name());
-        } else {
-            exportEntity(Reference(std::vector<std::string>{"Tensor"}, group->name()), group);
         }
     }
 }

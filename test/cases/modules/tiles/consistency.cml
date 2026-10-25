@@ -1,14 +1,14 @@
 module tiles_consistency
-import { Tensor, random, seed, sum, max, abs, exp, reshape } from tensor
+import { random, seed, sum, max, abs, exp, reshape } from tensor
 import { run_preferred_resident, download } from tiles
 
-func product(a: Tensor<f32>, b: Tensor<f32>): Tensor<f32> { return a @ b }
-func normalize(x: Tensor<f32>): Tensor<f32> {
+func product(a: f32[..], b: f32[..]): f32[..] { return a @ b }
+func normalize(x: f32[..]): f32[..] {
     let e = exp(x - max(x, 1, true))
     return e / sum(e, 1, true)
 }
-func add(a: Tensor<f32>, b: Tensor<f32>): Tensor<f32> { return a + b }
-func flatten(x: Tensor<f32>): Tensor<f32> { return reshape(x, [6]) }
+func add(a: f32[..], b: f32[..]): f32[..] { return a + b }
+func flatten(x: f32[..]): f32[..] { return reshape(x, [6]) }
 func main(): int sync {
     seed(17)
     let a = random([17, 35], -1.0, 1.0)

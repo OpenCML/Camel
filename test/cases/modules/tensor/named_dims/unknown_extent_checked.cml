@@ -1,12 +1,12 @@
 module named_dims_unknown_extent_checked
-import { Tensor, ones, sum, load_npy } from tensor
-// The first argument's extent is not known statically (`Tensor<... [?]>`): the call is
+import { ones, sum, load_npy } from tensor
+// The first argument's extent is not known statically (`f32[?]`): the call is
 // accepted, and the extent the second argument binds is checked when the call runs.
-func fit(a: Tensor<f32, [n]>, b: Tensor<f32, [n]>): float {
+func fit(a: f32[n], b: f32[n]): float {
     return sum(a) + sum(b)
 }
 func main(): int sync {
-    let t = load_npy::<f32>('test/cases/modules/tensor/shape_types/x3.npy') as Tensor<f32, [?]>
+    let t = load_npy::<f32>('test/cases/modules/tensor/shape_types/x3.npy') as f32[?]
     println(fit(t, ones([3])))
     return 0
 }

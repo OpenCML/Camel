@@ -8,7 +8,7 @@
 module e10_second
 
 import { grad } from autodiff
-import { Tensor, relu, mean, reshape } from tensor
+import { relu, mean, reshape } from tensor
 
 func branchy(x: float): float {
     return if x > 0.0 then x * x * x else x * x

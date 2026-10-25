@@ -6,7 +6,7 @@
  */
 module growth_budget
 
-import { Tensor, reshape } from tensor
+import { reshape } from tensor
 import { export_model } from onnx
 
 func double(t: float[..]): float[..] {

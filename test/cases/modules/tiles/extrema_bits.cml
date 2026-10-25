@@ -1,16 +1,16 @@
 module tiles_extrema_bits
-import { Tensor, load_npy, save_npy, maximum, minimum, relu, max, reshape } from tensor
+import { load_npy, save_npy, maximum, minimum, relu, max, reshape } from tensor
 import { inspect, run_preferred_resident, download } from tiles
 import { get_env } from env
-func hi(a: Tensor<f32>, b: Tensor<f32>): Tensor<f32> { return maximum(a, b) }
-func lo(a: Tensor<f32>, b: Tensor<f32>): Tensor<f32> { return minimum(a, b) }
-func positive(a: Tensor<f32>): Tensor<f32> { return relu(a) }
-func fused(a: Tensor<f32>, b: Tensor<f32>): Tensor<f32> { return relu(minimum(maximum(a, b), b)) }
-func rows(a: Tensor<f32>): Tensor<f32> { return max(a, -1) }
+func hi(a: f32[..], b: f32[..]): f32[..] { return maximum(a, b) }
+func lo(a: f32[..], b: f32[..]): f32[..] { return minimum(a, b) }
+func positive(a: f32[..]): f32[..] { return relu(a) }
+func fused(a: f32[..], b: f32[..]): f32[..] { return relu(minimum(maximum(a, b), b)) }
+func rows(a: f32[..]): f32[..] { return max(a, -1) }
 func main(): int sync {
     let folder = get_env('TILES_TEST_OUT')
-    let a = load_npy::<f32>(folder + '/a.npy') as Tensor<f32>
-    let b = load_npy::<f32>(folder + '/b.npy') as Tensor<f32>
+    let a = load_npy::<f32>(folder + '/a.npy') as f32[..]
+    let b = load_npy::<f32>(folder + '/b.npy') as f32[..]
     save_npy(hi(a,b), folder + '/hi_cpu.npy')
     save_npy(download(run_preferred_resident<hi>((a,b))), folder + '/hi_gpu.npy')
     save_npy(download(run_preferred_resident<hi>((b,a))), folder + '/hi_rev.npy')
@@ -24,7 +24,7 @@ func main(): int sync {
     let single = reshape(a, [8, 1])
     save_npy(rows(single), folder + '/single_cpu.npy')
     save_npy(download(run_preferred_resident<rows>(single)), folder + '/single_gpu.npy')
-    let r = load_npy::<f32>(folder + '/rows.npy') as Tensor<f32>
+    let r = load_npy::<f32>(folder + '/rows.npy') as f32[..]
     save_npy(rows(r), folder + '/rows_cpu.npy')
     save_npy(download(run_preferred_resident<rows>(r)), folder + '/rows_gpu.npy')
     println(inspect<fused>((a,b)))

@@ -3,7 +3,7 @@
  * 5.4). On a tensor the step must be a constant, and anything but 1 is refused at compile time.
  */
 module subscript_slice_step
-import { Tensor, reshape, shape } from tensor
+import { reshape, shape } from tensor
 
 func main(): int sync {
     println('ran')

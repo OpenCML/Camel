@@ -5,7 +5,7 @@
  */
 module request_in_arm_and_target
 
-import { Tensor, zeros } from tensor
+import { zeros } from tensor
 import { export_model } from onnx
 import { get_env } from env
 

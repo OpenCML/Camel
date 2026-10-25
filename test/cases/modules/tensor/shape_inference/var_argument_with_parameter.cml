@@ -6,7 +6,7 @@
  * Expected output: 1.0 1.0
  */
 module var_argument_with_parameter
-import { Tensor, reshape, sum } from tensor
+import { reshape, sum } from tensor
 
 with <var acc: f64[]>
 func step(d: float): float sync {

@@ -6,7 +6,7 @@
  * the one both export entries are compared on (pass_export.py equiv).
  */
 module export_loop_values
-import { Tensor, reshape, sum, tanh } from tensor
+import { reshape, sum, tanh } from tensor
 import { with_grad } from autodiff
 import { export_model } from onnx
 import { get_env } from env

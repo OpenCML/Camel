@@ -2,10 +2,10 @@
 /// accepts it, the region runs on the device, and the value comes back unchanged.
 module gpu_nofallback_supported
 
-import { Tensor, reshape, sum } from tensor
+import { reshape, sum } from tensor
 
 #gpu
-func scale(x: Tensor<f32, [3]>): Tensor<f32, [3]> {
+func scale(x: f32[3]): f32[3] {
     return x * x
 }
 

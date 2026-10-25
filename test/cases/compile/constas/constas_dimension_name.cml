@@ -1,9 +1,10 @@
-/// The retired 'const constas n' spelling of a dimension name in a type argument.
+/// The retired `const constas n` spelling of a dimension name: a constant type argument cannot
+/// bind a dimension name, only a parameter type can bind one.
 module constas_dimension_name
 
-import { Tensor } from tensor
+type Vec<T> = { data: T }
 
-func f(x: Tensor<f32, const constas n>): int {
+func f(y: Vec<const constas n>): int {
     return 0
 }
 

@@ -12,7 +12,7 @@
  */
 module ort_loop_loaded_weights
 
-import { Tensor, load_npy, reshape, save_npy, sum, tanh } from tensor
+import { load_npy, reshape, save_npy, sum, tanh } from tensor
 import { with_grad } from autodiff
 import { export_model } from onnx
 import { get_env } from env

@@ -5,7 +5,7 @@
  * Expected: a compile-time error at the argument.
  */
 module var_argument_with_parameter_non_numeric
-import { Tensor, sum } from tensor
+import { sum } from tensor
 
 with <var acc: f64[]>
 func step(d: float): float sync {

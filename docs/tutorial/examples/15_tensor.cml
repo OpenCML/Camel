@@ -2,7 +2,7 @@
 // Run: camel docs/tutorial/examples/15_tensor.cml
 module tensor_demo
 
-import { Tensor, ones, zeros, shape, sum, transpose } from tensor
+import { ones, zeros, shape, sum, transpose } from tensor
 
 func main(): int sync {
     let a = ones([2, 3])

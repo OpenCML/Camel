@@ -3,7 +3,7 @@
 // line (handover 5.00 "格式化器", the ruling of 2026-10-25). The rule below it fits, so it stays
 // on one line however the source spaced it.
 #requires(reassociate)
-export rule tensor_f32_combine(x: Tensor<f32>, const c1: f32, const c2: f32)
+export rule tensor_f32_combine(x: f32[..], const c1: f32, const c2: f32)
     when combineSameSign::<f32>(c1, c2) { x * c1 + x * c2 => x * (c1 + c2) }
 
 rule add_zero::<T>(x: T) when is_integer::<T>() { x + 0 => x }

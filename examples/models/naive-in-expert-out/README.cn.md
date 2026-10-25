@@ -221,8 +221,8 @@ float64 中计算、存回 float32），与 `nn.adam` 一致；优化器不是�
   下标命名，旧检查点仍可加载。
 - **`f32[b, t, d]` 还进不了张量算子。** `exp`、`@`、`sum` 等接收的是 `Tensor`，不是核心数组
   类型；`let x: f32[2, 3] = randn(...)` 是 `DeclaredTypeMismatch`。示例用带形状的
-  `Tensor<f32, [8, 16, 64]>`（以及 `TokenStates`、`HeadStates` 等别名），每个形状都写全；
-  但 `Tensor<f32, [b, t, d]>` 里的维度名不绑定（检查器警告 `DimensionNameUsedOnce`），所以
+  `f32[8, 16, 64]`（以及 `TokenStates`、`HeadStates` 等别名），每个形状都写全；
+  但 `f32[b, t, d]` 里的维度名不绑定（检查器警告 `DimensionNameUsedOnce`），所以
   只写常量形状，由别名与顶部注释说明含义。
 - **没有写成类型的 dtype 转换。** `f32(oh)` 没有张量重载，`oh as f32[...]` 是
   `DynamicCastForbidden`；one-hot 乘积用数值提升（f32 * int64 得 f32）代替旧的
