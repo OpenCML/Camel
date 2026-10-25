@@ -1,0 +1,24 @@
+tip=9eace28ce H554 第十三轮：清 2 条 + 并 develop + 8 项检查全绿；裁定 12 条只给出实现读数（未动手）
+
+数字
+- gate-31（合并后，全量快层）：`total: 6382, pass: 6325, fail: 29, skip: 12, known failures: 16` —— 31 → **29**，逐名 **fixed 2 / new 0**。
+- 计划级：`tagged.plan.toml` + `camel_passes.plan.toml` 合跑 `total: 103, pass: 103, fail: 0`（`nullable_positions.default_is_a_null_constant`、`camel_passes.fold_fault.fault_is_reported` 各清一条）→ 31 → **29**，新增红 0。
+- `-Check all`：**8 run, 0 failed**。合并 develop `0c8b1dfc5`（`--no-ff`，无冲突），随后 `strip-module-declarations.mjs` 逐字 `1 declaration(s) dropped, 0 name(s) that follow their file, 0 file(s) rewritten`（develop 又带来一个新用例带声明行）。
+
+① 本轮清掉的两条（都在"测试钉值"侧，产品未动，提交 `b1a5f01cc`）
+- `nullable_positions.default_is_a_null_constant`：`tagged.plan.toml:1398` 钉 `span="14:16-15:20"`，实测节点逐字 `N18 [label="null", type="DATA", origin=271, span="15:16-15:20"` → 起始行改 **15**。
+- `camel_passes.fold_fault.fault_is_reported`：脚本断言 `input.stdout.includes('9:15')` 与 `stderr.includes('9:15')`（两处），实测 `…fold_fault.cml:8:15: [Error]: Attempted division by zero…` → 两处改 **8:15**。
+
+② 作者裁定（`gradient-refusal-named-call`）今天的实现读数——**这条我没动手，按你要求先给读数**
+- 诊断登记：`src/core/error/diagnostics/messages/semantic.cpp:728-731` —— `SemanticDiag::NotDifferentiable`，名字 `"NotDifferentiable"`，文本 `"The function cannot be differentiated: {0}."`；另有 `RuntimeDiag::ValueWithNoDerivativeRule`（`src/core/error/diagnostics/messages/runtime.cpp:200-202`）。
+- 产生处：`modules/autodiff/pullback.cpp` —— `:126` 用 `RuntimeDiag::ValueWithNoDerivativeRule`；`:3330` 拼 `"the function it calls is known, but cannot be differentiated through its body "`；`:4057` 拼 `"cannot be differentiated"`；判定依据在 `modules/autodiff/pullback.h:57-62`（"结果不是 float／没有 `with` 参数／…"）。
+- **为什么只报一条**：拒绝发生在为**函数值本身**建 pullback 时（同一个函数值只建一次），调用点是各自独立的节点，但报告走的是这条一次性路径 → 12 条用例里 10:13 与 11:13 两次调用只得到一条诊断。
+- **`(at …)` 那段拼在哪**：我用 `\(at ` 扫过 `src/ modules/ stdlib/ test/ scripts/`（含 `-SimpleMatch`）**没有命中**，所以它不在这些目录的源码字面量里——下一轮第一步应是：在 `pullback.cpp` 里定位把位置写进文本的那次调用（`DiagnosticBuilder` 的 notes/related 渲染），或确认它是**诊断渲染器**把关联位置内联成 `(at path:line:col)`（那就说明关联位置机制已经存在，只需把消息里那段去掉并改用 related）。**这个读数我还没拿到，如实说。**
+- 按裁定的下一步（顺序）：① 在 `pullback.cpp` 让"每个被拒调用各产生一条诊断"，位置=该调用处；② 删掉消息里的 `(at …)`，把"函数值在哪里选出"作为 related information 附上；③ 12 条 `grad_function_value_*` 改成断言两条诊断/两个位置/关联位置；④ `docs/language/**` 自动微分一节加一句"每个不能求导的调用各报一条诊断"（中英同步）。**这是产品行为改动，需要构建与全量验证，本轮预算不够，未开始。**
+
+③ 其余族（读数已有，未修，下一轮按序）
+- 脚本族余 5 条：`dump_after_each_pass`（`pass_dump.py:86-88` 的断言已写 `span.startswith("10:")`，实测 `basic.cml` 的调用在**第 10 行**，失败信息里的 got 被截断 → 下一轮把 got 读全再定）；`entry_args.missing_argument_json`（计划要 `std::fvm: EntryArgumentMissing`，工具实测每个后端打印 `std::fvm: FAIL exit 1, 1 diagnostic(s), RuntimeDiag::EntryArgumentMissing at stage run, line 5`，且计划还写 `expect_output_not_contains = ["FAIL"]` → 工具与计划互相矛盾）；`fixes_apply`（`LexicalDiag::InvalidNumberFormat` 的 `09` 情形"with a fix: undefined"= **产品没给出 fix**，是真缺陷候选）；`fusion_group.profile.none`（与基点报告逐字节比，只差测量数字）；`compile_bench.smoke`（`chain-3/compile|passes|fvm: exit 1` + Markdown 报告缺一节，疑与 `gen_modules.py` 生成的工程有关）；`debugger.http_gateway`（33 项里那一项出现在 `No task selected or target invalid. Select a task or pass target.` 附近）；`docs.snippets_compile`（`docs/tutorial/17_teaching_a_law.en.md:92/166`；`check-doc-snippets.mjs` 无 `--update`，要按真实输出手改，中英同步）。
+- LSP 三条都是位置族：`lsp.navigation` `expected "8:5-8:13" actual "6:5-6:13"`（26/104 与 18/66 大量同类）、`lsp.editing` 期望 `"function declaration"` 实得 `"none"`（同一处位移的连带）；计划在 `test/plans/feat/tools/lsp.plan.toml`。`lsp.fstring` **环境**（`ModuleNotFoundError: No module named 'camel'`）。
+- develop 侧位置族剩 5 条读数（`failed_depth.error` 期望串带 `<ROOT>` 而实测是绝对路径、`failed_evaluation.error` `error missing: EFFECT boom` 而 stdout 里有两行、`check.lexical_limit_json` `source positions retained`、`captured_write_graph.warnings` 实测 `IgnoredSideEffect: 39:20 … | 58:13 …`、`entry_args` 见上）。
+
+纪律：未推 origin；未碰 `docs/language/**`（那一句等实现落地一起加）；未碰其它工作树/分支；未在 Windows 构建。报告已附 `git notes --ref=handover`（HEAD），工作树干净。
