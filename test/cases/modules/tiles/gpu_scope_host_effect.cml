@@ -2,13 +2,17 @@
 /// 2.4): `print` is not an operator the device must run, so it stays on the host and the value it
 /// observes is downloaded at the observation point. `std::profile` counts that synchronisation.
 ///
-/// The effect written in the body is a root of the graph it is written in, exactly as the graph's
-/// value and its exit are: what it prints is visible whether or not a value depends on what it
-/// returns, so nothing may drop it from the execution plan. The two elementwise operators of
-/// `observed` are a device segment and the `println` between them reads the segment's result, which
-/// is why a `tiles:download` stands there and the run waits there too. Both ways of running print it:
-/// with a card the observation point is a real transfer, and `--devices cpu` runs the segment on the
-/// host and writes no transfer at all.
+/// The effect is not a root of the graph: it is a statement of the body's chain, and the pass cuts
+/// the body into segments beside it rather than around a list of observable nodes
+/// (docs/design/gpu/plan.cn.md 2.4). A statement a segment replaces hands its place, and everything
+/// that place carried, to the call that replaces it -- its inputs and those it ordered, in every
+/// kind the graph writes that ordering in (docs/design/effects/edges.cn.md 4) -- so the `println`
+/// stays in the executed graph between the two segments. The first segment is the two elementwise
+/// operators before it, and the `println` reads that segment's result, which is why a
+/// `tiles:download` stands there and the run waits there too; the operator of `return` is the second
+/// segment. Both ways of running print it: with a card
+/// the observation point is a real transfer, and `--devices cpu` runs the segments on the host and
+/// writes no transfer at all.
 ///
 /// The numbers are taken in the one configuration the back end has today: one device, one stream, the
 /// public synchronous path, so every transfer batch is one wait. `syncs` counts waits, where
