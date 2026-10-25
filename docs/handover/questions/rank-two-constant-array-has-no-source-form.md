@@ -1,8 +1,9 @@
-# 秩 ≥2 的常量数组在源码里构不出来：`core.loopDomain.extent` 的秩 ≥2 分支没有读数（实测，2026-10-25）
+# 秩 ≥2 的常量数组在源码里构不出来：`core.loopDomain.extent` 的秩 ≥2 分支没有读数（实测，2026-10-25，h453 lane）
 
-前提（`core.loopDomain` 的 `extent` 就是 `shape[0]`，秩 1 时等于
+前提：`docs/handover/reviews/questions-2026-10-24-evening.md` 的
+`loop-domain-through-the-tensor-iterator`（`core.loopDomain` 的 `extent` 就是 `shape[0]`，秩 1 时等于
 元素个数，所有读者共用这一个事实），以及 `docs/technical/39_loops.md` §2a（`for x in xs` 对任何数组都
-沿第一维，由核心负责）。本 lane 按此把事实写进核心（`src/runtime/core_facts.cpp` 的
+沿第一维，由核心负责）。本 lane 按裁定把事实写进核心（`src/runtime/core_facts.cpp` 的
 `constantLength` 只读常量 DATA 数组的 `size()`，即 `shape[0]`），**没有改语义**。
 
 ## 一、五种写法实测（`camel inspect --facts <case>` 的 `FACT` 行，逐字）
@@ -33,31 +34,31 @@
    看穿分支（不留未验证代码）。`core_facts.cpp` 今天只读常量 DATA 数组。
 
 本 lane 能给出的秩 ≥2 读数只有运行时那半：`test/cases/loops/iterate_tensor.cml`（`new([[1,2],[3,4],
-[5,6]])` 走 3 行、`zeros([0, 2])` 走 0 行、行内再循环，期望 `21 3 3 6 7 21 3`）与测量用的临时文件
-（已删）。
+[5,6]])` 走 3 行、`zeros([0, 2])` 走 0 行、行内再循环，期望 `21 3 3 6 7 21 3`）与
+`test/cases/loops/h453-*`（测量用临时文件，已删）。
 
 ## 附：另一棵树上的完整实现（事实，供"按声明成形 vs 按今天读数"定夺）
 
-另一条 handover 分支上有一份**可以整体复活**的完整实现：提交 `20e7a7713`（`+641/−36`），
+`handover/h469-literal-shape` 上有一份**可以整体复活**的完整实现：提交 `20e7a7713`（`+641/−36`），
 在 `src/compile/gct/builder.cpp` 加 228 行、`src/core/rtdata/conv.cpp` 加 64 行，其中 `statedExtents()`
 负责按注解给的形状把平铺字面量成形。本翻转线上**整个不存在**这份改动（今天仍是
-`Array::create(alloc, type, 0)` + `append`），`git grep` 在翻转线上对
-`literal_rank_two`/`err_literal_ragged`/`reshape_constant` 零命中。
+`Array::create(alloc, type, 0)` + `append`），`git grep` 在 `handover/h465-flip-integration` 里对
+`h469`/`literal_rank_two`/`err_literal_ragged`/`reshape_constant` 零命中。
 
 它的 5 条用例与 6 个 plan 段**钉的是"按声明成形"这个行为**，与本文件的实测读数方向相反：若维持今天的
 读数，那些用例与 plan 段**不要**补进树（补进来会让 `array_shape` 计划红）；若裁定按声明成形，则可以把
 `20e7a7713` 整条复活，不必重做。本文只记这个事实，不定语义。
 
-### 复活可行性的实测（事实，仍不写裁定）
+### 复活可行性的实测（h490，事实，仍不写裁定）
 
 1. 把 `20e7a7713` cherry-pick 到翻转线：21 个文件里 20 个自动合并，**唯一冲突**是
    `src/runtime/draft_session.cpp` 的 `cloneStaticSlot`——而翻转线上已有同一缺陷的**更大**修法
-   （compact 分支 + `Array::create(..., array->shapeSpan())` + `numel()` 走元素），那 12 行被完全
+   （compact 分支 + `Array::create(..., array->shapeSpan())` + `numel()` 走元素），h469 那 12 行被完全
    包含 ⇒ 取 HEAD。复活后整体 diff `+633/−32`。
 2. 三棵树同口径的红集合**两两逐字相同**：基线 `6770eda25` / 只复活代码 `daa56b6a7` / 代码加用例
    `451e830fd`，都是本 lane 当时的那 10 条，**新增红 0**；`array_shape` 计划多 **7** 段 `[[tests]]`
    （更正先前说的 6 段）且全 PASS。
-3. **今天没有任何用例钉住"平铺/嵌套字面量写进秩 ≥2 声明位"这个读数**——全文检索只有被复活的那 3 个
+3. **今天没有任何用例钉住"平铺/嵌套字面量写进秩 ≥2 声明位"这个读数**——全文检索只有 h469 自己那 3 个
    文件这么写。复活后 `err_literal_rank` 的 PASS 意味着 `let b: f32[2, 2] = [1.0, 2.0, 3.0, 4.0]` 从
    "能编译、读作 4 个元素"变成**编译拒绝**（`DimensionMismatch`），`reshape_constant` 的 PASS 意味着
    常量 `reshape` 折出的值是 `[2, 2]`/numel 4：这两件事今天**既不是红也不是绿**，是在空地上把读数落定。
