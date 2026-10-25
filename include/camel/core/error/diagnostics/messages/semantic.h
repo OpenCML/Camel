@@ -263,7 +263,8 @@ enum class SemanticDiag : uint32_t {
     /// A type query is asked about a type that is still open (a type variable).
     WhenTypeQueryNotConcrete = 0x0001AB,
     /// No candidate of a call applies: every condition that could take it is false.
-    WhenConditionUnmet = 0x0001AC,
+    WhenConditionUnmet    = 0x0001AC,
+    EffectInRuleCondition = 0x0001AD,
 
     // Defaults of `with` parameters and `with` arguments given by name (design principles 4.4,
     // handover). 0x1B7 to 0x1BE; 0x1BF and up belong to `when` predicate lookup.

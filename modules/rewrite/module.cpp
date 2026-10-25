@@ -323,13 +323,27 @@ bool callWhen(const WhenCall &call, const camel::runtime::Match &match) {
     ASSERT(
         whenProgram != nullptr && whenGraph != nullptr,
         "A condition is a function of a rule value or the graph of an instance.");
+    // The condition is a function *value*: what its body captured where the rule was written (a
+    // rule of the module, a value of the program) lives in the closure the value was made with,
+    // and the frame of the condition reads its captures from the closure nodes of its graph. A
+    // call that passes the arguments alone leaves them empty, and the condition then reads a
+    // captured value as null. An instance's condition is a graph the context published, with no
+    // function value behind it: what it captured was bound when the instance was made (`when` is
+    // null there).
+    std::vector<slot_t> closure;
+    if (const Tuple *captured = when != nullptr ? when->tuple() : nullptr; captured != nullptr) {
+        closure.reserve(captured->size());
+        for (size_t i = 0; i < captured->size(); ++i) {
+            closure.push_back(captured->get<slot_t>(i));
+        }
+    }
     const slot_t result = [&]() -> slot_t {
         try {
             // The graphs of a program are read and written by the node VM (its value slots), so it
             // takes them without `const`; an instance's condition graph is the context's, and no
             // other reader holds it.
             return call.vm->callGraph(
-                whenProgram, const_cast<camel::runtime::GCGraph *>(whenGraph), args);
+                whenProgram, const_cast<camel::runtime::GCGraph *>(whenGraph), args, {}, closure);
         } catch (const camel::core::error::FactQueryNoValue &) {
             // A fact query inside the condition named parts that are no value's operands: the
             // condition is false -- this rule does not apply here -- and not a failure of the pass.
@@ -880,12 +894,6 @@ slot_t rewriteKernel(ArgsView &, ArgsView &norm, Context &ctx) {
             16);
         return makeOk(
             toSlot(const_cast<camel::runtime::Program *>(application.program)), resultType);
-    } catch (const camel::runtime::GraphCommitConflict &e) {
-        // The program the rewrite started from was replaced while it ran: a rule's condition that
-        // commits -- through a rewrite or a graph transaction of its own -- does this. Which rules
-        // were given is the caller's decision, so the failure is theirs to see as an error value,
-        // and not the internal error of a pass that found a program it cannot handle.
-        return makeError("RewriteConflict", e.what(), "<rewrite::rewrite>");
     } catch (const camel::runtime::RuleCompileError &e) {
         return makeError("RuleInvalid", e.what(), "<rewrite::rewrite>");
     } catch (const std::invalid_argument &e) {
@@ -959,10 +967,6 @@ slot_t runKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
             run->set(7, makeSome(toSlot(proof), proofType));
         }
         return makeOk(toSlot(root.getAs<Struct>()), resultType);
-    } catch (const camel::runtime::GraphCommitConflict &e) {
-        // As in `rewrite`: a condition that commits replaces the program this run started from,
-        // and the caller's own rules are what did it.
-        return makeError("RewriteConflict", e.what(), "<rewrite::run>");
     } catch (const camel::runtime::RuleCompileError &e) {
         return makeError("RuleInvalid", e.what(), "<rewrite::run>");
     } catch (const std::invalid_argument &e) {
@@ -1457,10 +1461,6 @@ slot_t saturateKernel(ArgsView &, ArgsView &norm, Context &ctx) {
         }
         const camel::runtime::Program *committed = session.commitChecked();
         return makeOk(toSlot(const_cast<camel::runtime::Program *>(committed)), resultType);
-    } catch (const camel::runtime::GraphCommitConflict &e) {
-        // As in `rewrite`: a condition that commits replaces the program this saturation started
-        // from, and the caller's own rules are what did it.
-        return makeError("RewriteConflict", e.what(), "<rewrite::saturate>");
     } catch (const camel::runtime::RuleCompileError &e) {
         return makeError("RuleInvalid", e.what(), "<rewrite::saturate>");
     } catch (const mm::MemoryExhausted &) {

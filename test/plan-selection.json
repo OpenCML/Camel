@@ -326,6 +326,11 @@
             "plans": ["feat/exemplars.plan.toml"]
         },
         {
+            "comment": "The chapter examples beside the tutorial (docs/tutorial/examples/*.cml): the plan that runs each of them as a file and pins what it prints, plus the documentation check, because a page links to the file it shows and a rename or a deletion breaks that link. This rule is narrower than the general docs rule and comes before it, so a tutorial page itself still selects that rule.",
+            "paths": ["docs/tutorial/examples/"],
+            "plans": ["feat/tutorial_examples.plan.toml", "feat/docs_links.plan.toml"]
+        },
+        {
             "comment": "The generated stdlib reference: stdlib_registry.registry.reference_is_generated re-runs --verify-doc, so a hand edit fails there; docs_links is the ordinary documentation check.",
             "paths": ["docs/stdlib-reference.md"],
             "plans": ["feat/modules/stdlib_registry.plan.toml", "feat/docs_links.plan.toml"]

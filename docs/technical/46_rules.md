@@ -140,9 +140,10 @@ calls a user function. A `<=>` rule gives two `Rule`s.
 | `why_not(r, rule, v)` | why `rule` did not fire at the value `v` |
 
 `rewrite` and `saturate` leave the functions that are the sides of rules (`__lhs`, `__rhs`, and
-`__when`) alone. The result is `Program!`; the errors are `RuleInvalid`, `RuleTwoWay`,
-`NoCostModel` and `RewriteConflict` — the last one when a rule's condition commits, so the program
-the rewrite started from is replaced while it runs. A pass is
+`__when`) alone. The result is `Program!`; the errors are `RuleInvalid`, `RuleTwoWay` and
+`NoCostModel`. A rule's condition may not have an effect: a condition is evaluated while the engine
+holds a session on the program it is rewriting, so a rewrite or a commit there replaces the program
+the rewrite started from while it runs, and the rule is refused where it is written. A pass is
 a function `(p: Program) => Program!` (`camel prog.cml mod::pass std::nvm`):
 
 ```camel
