@@ -1,0 +1,50 @@
+// Step 5 of the word counter: the words of the text with their counts, carried by a `loop`.
+// Run: camel examples/wordcount/step5.cml
+module wordcount
+
+import { split, trim, to_lower, replace } from str
+import { any, flat_map, sort_by, take } from array
+
+// The words of one line: lower case, punctuation removed, empty pieces dropped.
+func words_of(line: string): string[] {
+    let plain = line->to_lower->replace<',', ' '>->replace<'.', ' '>
+    return plain->split<' '>->filter<(w: string): bool => len(w) > 0>
+}
+
+// `counts` with one more for `w`, adding `w` when it is new.
+func bump(counts: (string, int)[], w: string): (string, int)[] {
+    let seen = counts->any<(e: (string, int)): bool => e.0 == w>
+    let rows = if seen then counts else concat(counts, [(w, 0)])
+    return rows->map<(e: (string, int)): (string, int) => if e.0 == w then (e.0, e.1 + 1) else e>
+}
+
+func show(e: (string, int)): string {
+    return e.0 + ' ' + string(e.1)
+}
+
+func main(): int sync {
+    let text = '
+        The quick fox sees the lazy dog.
+        The dog sees the fox, and the fox runs.
+    '
+
+    // Cut the text into lines, and the lines into words.
+    let lines = text->split<'\n'>
+        ->map<(l: string): string => trim(l)>
+        ->filter<(l: string): bool => len(l) > 0>
+    let words = lines->flat_map<words_of>
+    println('lines:', len(lines), 'words:', len(words))
+
+    // A `loop` carries the counts from one round to the next.
+    let counts = loop acc = [] as (string, int)[] for w in words do bump(acc, w)
+    println('distinct:', len(counts))
+
+    // sort_by is stable: ordering by word first and by count second leaves the words of one count
+    // in alphabetical order. The negated count puts the largest first.
+    let ranked = counts
+        ->sort_by<(e: (string, int)): string => e.0>
+        ->sort_by<(e: (string, int)): int => 0 - e.1>
+    println('top 5:')
+    println(ranked->take<5>->map<show>->join<'\n'>)
+    return 0
+}

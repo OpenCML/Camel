@@ -10,6 +10,8 @@ camel examples/text/word_frequency.cml
 
 命令行先写程序文件，后面可以再写作用于其计算图的遍。不写遍时，程序在默认后端上运行；`camel x.cml std::prl` 用并行调度器运行同一个程序。每个示例在 `std::nvm`、`std::fvm`、`std::jit` 和 `std::prl` 上的输出都相同。
 
+下面的表格只列能够独立运行的程序：每个都可以直接运行，`test/plans/feat/examples.plan.toml` 会逐个运行它们。只作为一段更长构建中的一步才有意义的文件不列在这里。教程一步步搭起来的两条主线在这里以成品出现——词频统计线的 [`text/word_frequency.cml`](text/word_frequency.cml)，拟合线的 [`ml/train_linear.cml`](ml/train_linear.cml)——中间版本只出现在[教程](../docs/tutorial/tutorial.cn.md)里，紧挨着用到它的那一章。
+
 想循序渐进地学习这门语言，请读[教程](../docs/tutorial/tutorial.cn.md)；想查某个语法结构的细节，请看[语言参考](../docs/language/README.md)。示例调用的库函数（`str`、`array`、`math`、`statistics` 等）及其签名和例子，见[标准库参考](../docs/stdlib-reference.md)。
 
 ## 按任务分类的示例
@@ -86,7 +88,7 @@ camel examples/text/word_frequency.cml
 
 ## 其他目录
 
-- [`python/`](python/)：从 Python 里用 Camel。`python/rules/` 是一个 Python 项目，把定价规则写成 Camel 模块（`pip install camel-lang`，然后 `python examples/python/rules/basket.py`）；见 [`python/rules/README.cn.md`](python/rules/README.cn.md) 与 [技术文档 57](../docs/technical/57_python_bindings.md)。
+- [`python/`](python/)：从 Python 里用 Camel。`python/rules/` 是一个 Python 项目，把定价规则写成 Camel 模块（`pip install camel-lang`，然后 `python examples/python/rules/basket.py`）；见 [`python/rules/README.cn.md`](python/rules/README.cn.md) 与 [技术文档 57](../docs/technical/57_python_bindings.md)。装了该包时测试计划会运行 `basket.py`，没装则跳过。
 - [`perf/`](perf/)：`fibs.cml` 用 `perf.perfms` 给递归的斐波那契函数计时（`camel examples/perf/fibs.cml std::fvm`）；输出是测量结果，每次运行都不同。
 - [`tty/`](tty/)：`snake.cml` 是交互式的终端游戏，供手动体验（`camel examples/tty/snake.cml`）；见 [`tty/README.md`](tty/README.md)。
 
@@ -103,3 +105,5 @@ node scripts/test.js test/plans/feat/examples.plan.toml
 ```sh
 node test/tools/run-tests.mjs --update-golden test/plans/feat/examples.plan.toml
 ```
+
+教程旁边的章节示例（`docs/tutorial/examples/`）同样是文件，也在同样的四个后端上运行，输出记录在 `test/plans/feat/golden/tutorial_examples/` 下：教程页面上写出的输出，就是它点名的那个文件跑出来的输出。
