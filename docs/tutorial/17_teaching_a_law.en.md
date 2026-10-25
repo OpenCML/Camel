@@ -77,10 +77,16 @@ A `rule` has three parts: a **name**, a **pattern** (left of `=>`) and **what it
 - `check` decides by **sampling**: a counter-example proves the law wrong, but no counter-example only means none
   was found.
 
-## Making `std::opt` use it
+## Handing the law to the optimizer
 
-A law declared in your own module is what that module hands to the optimizer: `std::opt` puts the standard
-library's laws and yours together and applies them to your program. Here is the same file after `std::opt`:
+A `rule` is a **value** and does not enter any pass by itself: the rules written in a module are not collected
+([language reference 9.4](../language/en/09_rules_and_facts.md)). `std::opt` uses the standard library's laws
+(`stdlib/rules.cml`); to hand it your own, the rule set is passed **explicitly**: in Camel
+`f->std::opt<rules: [negate]>`, on the command line `std::opt rules=[law::negate]`. `std::opt` has no `rules`
+parameter yet (writing it gives `SemanticDiag::ParamArgumentUnknown`), so to make your own law take effect today
+write a pass of your own and hand that to the command line — `check([negate], …)` above is the example of
+handing it over explicitly. Given this file, `std::opt` leaves the `negated` half **unchanged**: `x * -1` stays
+as it is, because that law is yours and the optimizer does not know it.
 
 <!-- camel-snippet: graph-dump: the text block is one excerpt of std::opt std::gir's DOT, not the program's stdout -->
 
@@ -132,28 +138,28 @@ camel docs/tutorial/examples/17_rule.cml std::opt std::gir
 
 ```text
             label="negated";
-            F04 [label="ARGS", type="ARGS"];
-            O04 [label="EXIT", type="EXIT"];
-            N06 [label="x", type="PORT", param_name="x", param_kind="normal", param_index="0", value_type="int"];
-            N07 [label="0", type="DATA", value_type="int"];
-            N08 [label=":op/sub_l", type="OPER", origin=1930, span="10:13-10:14", srcfile="docs/tutorial/examples/17_rule.cml", value_type="int"];
-            F04 -> N06 [label="0", type="NORM_PORT"];
-            N08 -> O04 [label="0", type="EXIT"];
-            N07 -> N08 [label="0|0", type="NORM"];
-            N06 -> N08 [label="0|1", type="NORM"];
+            F0D [label="ARGS", type="ARGS"];
+            O0D [label="EXIT", type="EXIT"];
+            N33 [label="x", type="PORT", param_name="x", param_kind="normal", param_index="0", value_type="int"];
+            N34 [label="-1", type="DATA", origin=2078, span="10:15-10:17", srcfile="docs/tutorial/examples/17_rule.cml", value_type="int"];
+            N35 [label=":op/mul_l", type="OPER", origin=2079, span="10:13-10:14", srcfile="docs/tutorial/examples/17_rule.cml", value_type="int"];
+            F0D -> N33 [label="0", type="NORM_PORT"];
+            N35 -> O0D [label="0", type="EXIT"];
+            N33 -> N35 [label="0|0", type="NORM"];
+            N34 -> N35 [label="0|1", type="NORM"];
         }
 ```
 
-The source of `negated` says `x * -1`, and the graph now says `0 - x` (`N07` is the constant `0`, `N08` is the
-subtracting `:op/sub_l`): **your law has been used on your program**. The result does not change (`negated(7)` is
-still `-7`), which is the other half of chapter 1's sentence: a rewrite can come from a law you wrote.
+`negated` is still `x * -1` (`:op/mul_l`, the constant `-1`), and the result does not change (`negated(7)` is
+still `-7`): that is the reading of "the law did not go in by itself". To make it take effect on the graph, hand
+it over explicitly — `check` works that way, and so does a rule set for `std::opt` (`std::opt rules=[…]`).
 
 This law is used only where the fact holds: `x * -1` may be written `0 - x` when `x` is a count, so it is never
 negative. That fact is declared at the end of the file, and the next section is about it.
 
 ## The compiler's own laws
 
-Besides your law, `std::opt` holds the standard library's: a `x * 3 + x * 5` is a shape the library already knows.
+`std::opt` holds the standard library's laws and nothing else (the one you wrote is not among them): a `x * 3 + x * 5` is a shape the library already knows.
 In the same program, the
 `combined` part of `camel docs/tutorial/examples/17_rule.cml std::opt std::gir` reads (an excerpt):
 

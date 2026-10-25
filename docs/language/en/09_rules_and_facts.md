@@ -302,7 +302,7 @@ export func apply(p: Program): Program! {
 
 - **Different arguments are different facts**: the engine computes and caches by "fact + arguments", so `capped<3>` and `capped` each have a value of their own, and writing one argument does not change the fact read elsewhere.
 - **An argument must be a compile-time constant**: the value of a fact is decided by the program and by the arguments as written, so that every rule sees one answer. An argument that is not a constant is refused (`SemanticDiag::FactArgumentNotConstant`).
-- **A query is written where a value is matched**: a fact is queried like a function call, but in a rule's condition (`when`) or in the body of another fact ([9.5](#95-facts)) — that is where "how the value was built in the graph" is available. An ordinary function body has no such construction, and `capped(y)` written there is not a query (`SemanticDiag::NoMatchingFunction`).
+- **The argument of a query**: the head of design 7.5, `fact range::<T>(v: T)`, makes the parameter a **value**, so `range(y)` and a query inside a `when` are one spelling. Today's implementation signs the query `name: (v: Node) => fact type` (the parameter is a **node**), so a query is written where a node is at hand: a rule's condition (`when`), the body of another fact ([9.5](#95-facts)), or any function that has a `Node`; an ordinary function body with only a **value** (`capped(y)`, `y: int`) is not a query — `SemanticDiag::NoMatchingFunction`, whose help lists `capped: (v: Node) => int` (see [9.8](#98-forms-that-are-not-implemented)).
 
 Counter-example: the argument of the fact is the rule's parameter `y`, which is not a constant.
 
@@ -353,9 +353,13 @@ sampled fold_scales: proposition equality, evidence samples 100, fired 8 of 8, c
 - Readers: `rule_name`, `rule_two_way`, `rule_needs` and `rule_consts` read a `Rule`; the `Run` that `run<rules>` returns is read by `explain`, `explain_all` and `why_not` ([standard library reference](../../stdlib-reference.md)).
 - **Asserting "which rule fired" from a graph dump**: such an assertion compares `text` blocks of the dump, and before comparing it must **normalize the attributes that carry a position** — `origin`, `span`, `srcfile` and the like — and it compares an excerpt as a run of consecutive lines. Otherwise changing an unrelated line, or a temporary directory, turns the assertion red: even `origin` of one node differs before and after a rewrite.
 
-A small program that does nothing else shows how to read it: the `math:abs_l` node inside `distance` is gone after `fired::simplify`, and that is what "this rule fired" reads like. (Lines that do not carry a position are left out here, and the values of `origin` are exactly the kind of thing that changes.)
+A small program that does nothing else shows how to read it: the source of `distance` is `abs(a + b)`, and after
+`fired::simplify` its cluster has no `math:abs_l` node (`N05` is the `:op/add_l`, and its exit edge goes straight
+to the cluster's exit `O04`); that is what "this rule fired" reads like. The excerpt is one run of consecutive
+lines of the output, with the position-carrying ones left out (the values of `origin` are exactly the kind of
+thing that changes):
 
-<!-- camel-snippet: graph-dump: the text block is an excerpt of two std::gir dumps, not the program's stdout -->
+<!-- camel-snippet: graph-dump: the text block is one excerpt of the dump after the pass, not the program's stdout -->
 
 ```cml
 // fired.cml
@@ -375,24 +379,35 @@ export func simplify(p: Program): Program! {
 func distance(a: int, b: int): int {
     return abs(a + b)
 }
+
+func main(): int sync {
+    println(distance(1, -2))
+    return 0
+}
 ```
 
 ```bash
-camel ./fired.cml std::gir
 camel ./fired.cml fired::simplify std::gir
 ```
 
 ```text
-distance (camel ./fired.cml std::gir):
-    N0A [label=":op/add_l", type="OPER", origin=4150, span="15:17-15:18", srcfile="./fired.cml", value_type="int"];
-    N0B [label="math:abs_l", type="OPER", origin=4151, span="15:11-15:14", srcfile="./fired.cml", value_type="int"];
-    N0A -> N0B [label="0|0", type="NORM"];
-    N0B -> O04 [label="0", type="EXIT"];
-
-distance (camel ./fired.cml fired::simplify std::gir):
-    N0A [label=":op/add_l", type="OPER", origin=4269, span="15:17-15:18", srcfile="./fired.cml", value_type="int"];
-    N0A -> O04 [label="0", type="EXIT"];
+            label="distance";
+            F04 [label="ARGS", type="ARGS"];
+            O04 [label="EXIT", type="EXIT"];
+            N03 [label="a", type="PORT", param_name="a", param_kind="normal", param_index="0", value_type="int"];
+            N04 [label="b", type="PORT", param_name="b", param_kind="normal", param_index="1", value_type="int"];
+            N05 [label=":op/add_l", type="OPER", origin=4343, span="14:17-14:18", srcfile="./fired.cml", value_type="int"];
+            F04 -> N03 [label="0", type="NORM_PORT"];
+            F04 -> N04 [label="1", type="NORM_PORT"];
+            N05 -> O04 [label="0", type="EXIT"];
+            N03 -> N05 [label="0|0", type="NORM"];
+            N04 -> N05 [label="0|1", type="NORM"];
+        }
 ```
+
+Without the pass (`camel ./fired.cml std::gir`) the same cluster also holds `N06 [label="math:abs_l", …]`: its
+edges are `N05 -> N06` and `N06 -> O04`, and after the pass that `N06 -> O04` becomes `N05 -> O04` while the
+`math:abs_l` node is gone.
 
 ## 9.8 Forms that are not implemented
 
@@ -403,6 +418,7 @@ These forms are all ruled ([rules language v2](../../design/rewrite/v2.cn.md), s
 | the right side of a rule reading a `with` parameter | `SemanticDiag::RuleWithParameterOnASide`, whose message says "not implemented yet" |
 | type parameters and `with` parameters on one rule | `SemanticDiag::RuleWithParameterGenericHead` |
 | `std::opt rules=[law::negate]` on the command line, `f->std::opt<rules: [negate]>` in source | `SemanticDiag::ParamArgumentUnknown`; the name `std::opt` does not resolve in source today either |
+| the argument of a fact query is a **value** (`range(y)` with `y: T`, under the head `fact range::<T>(v: T)` of design 7.5) | today's query signature is `name: (v: Node) => fact type`; a value argument is `SemanticDiag::NoMatchingFunction` (whose help lists `(v: Node) => …`) |
 
 ## Related documents
 
