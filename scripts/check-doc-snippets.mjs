@@ -131,46 +131,6 @@ const PENDING = [
         reason: 'streams: `yield` and the stream return type are ruled, and this tree cannot compile them yet',
     },
     {
-        file: 'docs/language/07_statements.md',
-        key: '5a34326f9ff11662',
-        reason: 'tags: the ruled declaration spelling (a tag is declared as `tag name(...) on ...`, its type parameters with ::<F>) is not parsed yet',
-    },
-    {
-        file: 'docs/language/07_statements.md',
-        key: '9aa3336c2988ef4b',
-        reason: 'tags: the ruled use spelling takes its arguments in parentheses, where this tree still reads `#name(...)`',
-    },
-    {
-        file: 'docs/language/07_statements.md',
-        key: 'd04766d8f93bb26f',
-        reason: 'tags: a function parameter is a type parameter with is_function in the when clause, which this tree does not parse yet',
-    },
-    {
-        file: 'docs/language/07_statements.md',
-        key: 'b8a9c4e1131a0701',
-        reason: 'tags: a function parameter is a type parameter with is_function in the when clause, which this tree does not parse yet',
-    },
-    {
-        file: 'docs/language/en/07_statements.md',
-        key: 'cdcdd01da5bd7ff8',
-        reason: 'tags: the ruled declaration spelling (a tag is declared as `tag name(...) on ...`, its type parameters with ::<F>) is not parsed yet',
-    },
-    {
-        file: 'docs/language/en/07_statements.md',
-        key: '59575e3c0ed44920',
-        reason: 'tags: the ruled use spelling takes its arguments in parentheses, where this tree still reads `#name(...)`',
-    },
-    {
-        file: 'docs/language/en/07_statements.md',
-        key: 'bcc017e00d7d2c6b',
-        reason: 'tags: a function parameter is a type parameter with is_function in the when clause, which this tree does not parse yet',
-    },
-    {
-        file: 'docs/language/en/07_statements.md',
-        key: '116f78deae0a80aa',
-        reason: 'tags: a function parameter is a type parameter with is_function in the when clause, which this tree does not parse yet',
-    },
-    {
         file: 'docs/tutorial/17_teaching_a_law.cn.md',
         key: '22087797dae1e989',
         reason:
@@ -196,7 +156,7 @@ const PENDING = [
     },
 ]
 
-const PENDING_MAX = 13
+const PENDING_MAX = 5
 
 const OTHER_LANGUAGES = new Set([
     '', 'bash', 'c', 'cpp', 'c++', 'css', 'go', 'html', 'java', 'javascript', 'js', 'json',
