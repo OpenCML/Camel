@@ -7,7 +7,7 @@
 # (docs/handover/reviews/questions-2026-10-23.md, the section on the `Tensor` alias's transition)
 # makes a bare `Tensor` in a signature a compile error in P4's end state, with genericity declared
 # in the head (`Tensor<T>`) and the element type always in the type. That case is rewritten by the
-# deletion step the plan must name; see docs/handover/questions/tensor-alias-transition.md.
+# deletion step the plan must name.
 id = "compile.array_alias"
 order = 343
 tier = "fast"
