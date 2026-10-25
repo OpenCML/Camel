@@ -144,7 +144,7 @@ void appendArrayVjp(VjpBuilder &b, const VjpCall &call) {
         return;
     }
     Type *const arrayType   = b.nodeType(call.inputs[0]);
-    Type *const tangentType = camel::core::tangentTypeOf(arrayType);
+    Type *const tangentType = camel::core::machineryTangentTypeOf(arrayType);
     if (tangentType == nullptr) {
         return;
     }
@@ -176,7 +176,7 @@ void idxArrayVjp(VjpBuilder &b, const VjpCall &call) {
         return;
     }
     Type *const arrayType   = b.nodeType(call.inputs[0]);
-    Type *const tangentType = camel::core::tangentTypeOf(arrayType);
+    Type *const tangentType = camel::core::machineryTangentTypeOf(arrayType);
     if (tangentType == nullptr) {
         return; // an array whose elements have no tangent: the read has none either
     }
@@ -207,7 +207,7 @@ void extendArrayVjp(VjpBuilder &b, const VjpCall &call) {
         return;
     }
     Type *const arrayType   = b.nodeType(call.inputs[0]);
-    Type *const tangentType = camel::core::tangentTypeOf(arrayType);
+    Type *const tangentType = camel::core::machineryTangentTypeOf(arrayType);
     if (tangentType == nullptr) {
         return;
     }
@@ -251,7 +251,7 @@ void scatterSliceArray(
     vjp_node_t step,
     vjp_node_t written) {
     Type *const arrayType   = b.nodeType(call.inputs[0]);
-    Type *const tangentType = camel::core::tangentTypeOf(arrayType);
+    Type *const tangentType = camel::core::machineryTangentTypeOf(arrayType);
     if (tangentType == nullptr) {
         return; // an array whose elements have no tangent: the slice has none either
     }
