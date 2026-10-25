@@ -40,10 +40,11 @@
 // 'count' cannot be called with argument types (Tensor)" -- so the function waits for that
 // caller, and the report names it.
 //
-// The body test is the rule's evidence, not a guess: today's compiler instantiates a bare
-// `Tensor` parameter from the argument's element type at each call
-// (src/compile/gir/builder_operators.cpp#instantiatedTensorSignature), which is exactly one
-// generic parameter. The rewrite writes that generic parameter down. A body that reads the
+// The body test is the rule's evidence, not a guess: the deletion step refuses a bare `Tensor` in
+// a type position (src/core/error/diagnostics/messages/semantic.cpp#TensorElementTypeRequired),
+// so the rewrite's whole job is to write the element type down. Where the element type is the
+// call site's, writing it down is exactly one type parameter declared at the head of the
+// signature -- the spelling the hand migrations use for the same reason. A body that reads the
 // element type (`abs(t)`, `sum(t)`, `t * 3.0`) says the element type is not free, and the tool
 // leaves it to a person with a concrete element type.
 //
