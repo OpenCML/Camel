@@ -251,6 +251,7 @@ assert(plans[2].transfers.uploads.length === 2 && plans[2].transfers.downloads.l
 assert(!plans[2].transfers.uploads.includes(plans[2].transfers.resident[0].value), "resident edge must not upload again")
 assert(plans[5].transfers.uploads.length === 1, "embedded axis and keepdims must not upload")
 const [chain, dynamic, detour, ordered, sharedValues, constantAxis] = plans
+assert(detour.regions[0].uploads.length === 1 && detour.regions[0].downloads.length === 1 && detour.regions[1].uploads.length === 1 && detour.regions[1].downloads.length === 1 && detour.regions[1].resident.length === 1, "each segment must answer for its own boundary")
 assert(chain.regions.length === 1 && chain.regions[0].members.length === 2, "static pointwise chain must form one region")
 assert(chain.regions[0].inputs.length === 1 && chain.regions[0].outputs.length === 1, "region boundary must deduplicate inputs")
 assert(chain.regions[0].parameters.length === 1, "one external value must become one function parameter")
@@ -299,6 +300,7 @@ assert(plans[2].transfers.uploads.length === 2 && plans[2].transfers.downloads.l
 assert(!plans[2].transfers.uploads.includes(plans[2].transfers.resident[0].value), "resident edge must not upload again")
 assert(plans[5].transfers.uploads.length === 1, "embedded axis and keepdims must not upload")
 const [chain, dynamic, detour, ordered, sharedValues, constantAxis] = plans
+assert(detour.regions[0].uploads.length === 1 && detour.regions[0].downloads.length === 1 && detour.regions[1].uploads.length === 1 && detour.regions[1].downloads.length === 1 && detour.regions[1].resident.length === 1, "each segment must answer for its own boundary")
 assert(chain.regions.length === 1 && chain.regions[0].members.length === 2, "static pointwise chain must form one region")
 assert(chain.regions[0].inputs.length === 1 && chain.regions[0].outputs.length === 1, "region boundary must deduplicate inputs")
 assert(chain.regions[0].parameters.length === 1, "one external value must become one function parameter")
@@ -328,6 +330,7 @@ assert(plans[2].transfers.uploads.length === 2 && plans[2].transfers.downloads.l
 assert(!plans[2].transfers.uploads.includes(plans[2].transfers.resident[0].value), "resident edge must not upload again")
 assert(plans[5].transfers.uploads.length === 1, "embedded axis and keepdims must not upload")
 const [chain, dynamic, detour, ordered, sharedValues, constantAxis] = plans
+assert(detour.regions[0].uploads.length === 1 && detour.regions[0].downloads.length === 1 && detour.regions[1].uploads.length === 1 && detour.regions[1].downloads.length === 1 && detour.regions[1].resident.length === 1, "each segment must answer for its own boundary")
 assert(chain.regions.length === 1 && chain.regions[0].members.length === 2, "static pointwise chain must form one region")
 assert(chain.regions[0].inputs.length === 1 && chain.regions[0].outputs.length === 1, "region boundary must deduplicate inputs")
 assert(chain.regions[0].parameters.length === 1, "one external value must become one function parameter")
