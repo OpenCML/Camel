@@ -252,7 +252,7 @@ golden = "golden/tutorial_examples/15_model.txt"
 
 [[tests]]
 name = "tutorial.examples.15_tensor"
-desc = "Tensors and shapes: shape, a sum, a matrix product and a transposed shape, printed by the model."
+desc = "Chapter 14: tensors and shapes -- shape, a sum, a matrix product and a transposed shape, printed by the model."
 case = "../../../docs/tutorial/examples/15_tensor.cml"
 golden = "golden/tutorial_examples/15_tensor.txt"
 
