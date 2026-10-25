@@ -221,7 +221,8 @@ std::optional<std::string> staticIndexRejection(const type_vec_t &norm, static_a
 /// What stays the core's is the program's own array of values: rank 1 with no extent stated
 /// (`T[]`) -- the form an array literal has and the form the core's array operators build and take
 /// -- because the programs that subscript one without importing the tensor module must keep
-/// working (docs/handover/questions/subscript-operator-choice-and-the-rank-two-refusal.md §二: the
+/// working (docs/handover/reviews/questions-2026-10-24-evening.md, section
+/// subscript-operator-choice-and-the-rank-two-refusal: the
 /// same narrowing `t[idx]` already has on this line, where a rank-2 array is refused by the core
 /// and the module's `tensor:idx_take` answers another rank or an open rank).
 
