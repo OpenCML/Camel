@@ -1383,7 +1383,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `LambdaParametersNeedParentheses` | E | A lambda's parameters need their parentheses: write '(x) => e', not 'x => e'. |
 | `ComparisonAcrossLines` | W | This '>' is read as a comparison with the next line, which starts with {0}: two statements may have been joined into one. |
 
-**Semantic** (`SemanticDiag`) — 204 (192 errors, 12 warnings)
+**Semantic** (`SemanticDiag`) — 205 (193 errors, 12 warnings)
 
 | `Redeclaration` | E | Redeclaration of reference: '{0}'. |
 | `ModuleNotFound` | E | Module '{0}' not found. {1} |
@@ -1491,6 +1491,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `StaticTypeNotConcrete` | E | The type matched here is still '{0}' when the function is instantiated. |
 | `StaticMatchTooDeep` | E | The 'match type' bodies are nested {0} deep. |
 | `GenericInstantiationCycle` | E | The generic function '{0}' is instantiated with {1} while that same instance is being built, and its return type is not known yet. |
+| `GenericTypeArgumentGrows` | E | The recursive call makes the type argument '{0}' of the generic function '{1}' grow from '{2}' to '{3}': every instance's type argument would contain the one before it, so specialization never stops. |
 | `StaticForNotComposite` | E | The type '{0}' has no fields for a 'static for' to walk. |
 | `StaticAccessNotInternal` | E | A field cannot be taken from '{0}' by a compile-time key. |
 | `StaticAccessUnknownField` | E | The struct '{1}' has no field '{0}'. |
@@ -1622,7 +1623,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `ConstantExpressionFaults` | W | This constant expression faults whenever it is evaluated ({0}); it is not folded. |
 | `TranslationLinksRuntime` | W | std::cpp has no standalone translation of {0}: the program it writes calls the Camel runtime there and is built with libcamel. |
 
-**Semantic** (`SemanticDiag`) — 204 (192 errors, 12 warnings)
+**Semantic** (`SemanticDiag`) — 205 (193 errors, 12 warnings)
 
 | `ReducedPrecisionUnsupported` | E | The call of '{0}' cannot take a value of the reduced-precision element type '{1}'. |
 | `ImplOnBodylessDeclaration` | E | The body-less declaration '{0}' cannot carry '#impl<{1}>': it has no Camel body. |

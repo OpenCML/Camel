@@ -160,11 +160,16 @@ enum class SemanticDiag : uint32_t {
     TagParameterType       = 0x00016D,
     TagShadowsPermission   = 0x00016E,
     // Static expansion (design principles 5.5): 0x170 and up.
-    StaticMatchNotExhaustive       = 0x000170,
-    StaticMatchUnreachableCase     = 0x000171,
-    StaticTypeNotConcrete          = 0x000172,
-    StaticMatchTooDeep             = 0x000173,
-    GenericInstantiationCycle      = 0x000174,
+    StaticMatchNotExhaustive   = 0x000170,
+    StaticMatchUnreachableCase = 0x000171,
+    StaticTypeNotConcrete      = 0x000172,
+    StaticMatchTooDeep         = 0x000173,
+    GenericInstantiationCycle  = 0x000174,
+    // A recursive generic call whose type argument is built out of the type the caller already
+    // instantiated (design principles 5.5): 'f::<T>(x: T)' calling 'f([x])' asks for one instance
+    // per level, and no level's key ever repeats. The count of open instances is not what bounds
+    // this, so the call is refused where the growth first appears.
+    GenericTypeArgumentGrows       = 0x0001EC,
     StaticForNotComposite          = 0x000175,
     StaticAccessNotInternal        = 0x000176,
     StaticAccessUnknownField       = 0x000177,
