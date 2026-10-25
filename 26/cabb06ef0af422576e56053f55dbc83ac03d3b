@@ -1,0 +1,40 @@
+tip=26cabb06e H554 第二轮：并入 develop + 逐类清红（问题页已补成作者可直接答的形态）
+
+数字（红名单逐名对比，新增红每一步都是 0）
+- 合并前 97 → 合并后首量 115（develop 带来 131 个新测试，其中 19 条因新用例仍带 `module` 声明而红）→ 96 → 84 → **81**
+  （`[SUMMARY] total: 6362, pass: 6253, fail: 81, skip: 12, known failures: 16`，RUN_EXIT=1；基线 fail:0，仍未达绿）
+- 本轮清掉 34 条：19 条合并引入（develop 新用例行号/生成物）+ 15 条其它（见下逐类）
+- AST 重录：本轮 285 个文件全量重哈希（`parsecheck snapshot --update` → `285 files: 58 cases + 227 probes`），黄金只动 `ast_hashes.txt`（+34/−35 行）
+
+逐类 改前 → 改后（证据：命令 + 逐字读数）
+| 类 | 改前→改后 | 依据 |
+|---|---|---|
+| develop 新用例行号（rules.* 13、tutorial 4）与生成物（grammar/diagnostics/AST） | 19 → 0 | `check-grammar --write` 写 `docs/language/en/08…`；`diagnostics-catalog --write`（登记 278 码）；`snapshot --update` 285 文件 |
+| `stdlib.fault.zip_with.*` | 5 → 0 | 实测 `out/latest/stdlib/array.cml:299:12: [Error]: Invalid argument of 'zip'…`，plan 期望 298 → 299（develop 改了 `stdlib/array.cml`） |
+| `unused_fallible.statements.*` | 4 → 0 | 实测警告在 `unused.cml:11:5/12:13/16:24`，verify 里 `[':12:',':13:',':17:']` → `[':11:',':12:',':16:']` |
+| `tutorial.examples`（06_let_to_var、09_fault×4） | 5 → 0 | 实测 `06_let_to_var.cml:10:10`、`09_fault.cml:7:15` |
+| `native.entry_declaration_names_the_program` | 1 → 0 | 实测 `implicit_protocol.cml:7:1`（本轮前记录 5） |
+| `func_signature_mismatch` | 1 → 0 | 实测 `err_func_signature.cml:10:6`（develop 把检查挪到标签用法处） |
+| `load.value_cycle_modules` | 1 → 0 | 实测 `cycle_y.cml:4:8`（原 5:8） |
+| `gpu_scope.namespace_block_tag_propagates` | 1 → 0 | 用例补回 `import { Tensor, reshape, sum } from tensor`（原红是 `19:20 Unresolved type reference: 'Tensor'`） |
+| `native.clause_of_a_declaration_module` | 1 → 0 | 拒绝信息现在走 stdout：`FAIL B. …NativeResourceMismatch…` 改成两流合读 |
+| `block_tag_no_target`、`gpu_at_type` | 2 → 0 | 实测 `block_no_target.cml:5:2: [Error]: The tag 'gpu' may not be written at a type…`（期望写作 `'#gpu'`、6:1） |
+| `rules.generic_condition_effect_is_refused` | 1 → 0 | related 信息实测 `[the rule 'add_zero' is declared here at 11:1]`（原 12:1） |
+
+非本支 / 等裁定（一行证据，本轮未动）
+- 入口名 4 + poison 2：`explicit_type_arguments`、`ns.p18_self_module`、`ns.p30_using_own_nested`、`modules_213.self_entry`、`poison:compile.generics:explicit_type_arguments`、`poison:modules.rename_identity:rename.env_graph_identity` —— 已挂问题页。
+- `rename.env/hash/process_graph_identity` 3：`test/cases/modules/rename/identity.mjs:28 Error: the graph changed beyond the module name: normalized sha256 ab59ac7e…, expected c4fa5b6d…` —— 用例把「改名」实现成改**声明**，声明已删；要改成改**文件名**，本轮未做。
+- `grad_function_value_*` 12：`Error: the diagnostic is not located at the call (10:13)`，而实测诊断就在 `grad_function_value_branch.cml:10:13` —— 断言比的是范围而非位置，需读 verify 脚本，本轮未做。
+- 其余未判定：lsp 5（`lsp.code_and_related` 实测 related 在 `sem_generic_instance.cml:7`(0 基)）、export 5、fault.in_map_many 4、graph 3、dropped_effects 3、when_import 3、camel_pass_parameter 3、constant_fault 2、attempt 2 及单例（`01_scalar_boundary`、`02_branch_shape_contract`、`03_export_capability`、`04_staticness`、`05_effect_order`、`07_export_integrity`、`08_structured_control_flow`、`check.lexical_limit_json`、`json_data_of_a_pass_the_module_does_not_provide`、`debugger.http_gateway`、`compile_bench.smoke`、`docs.snippets_compile`、`python_binding.session` 等）。
+
+五个检查器（逐字，全部 exit 0）
+- `diagnostics registry: 278 codes, every one with a name, a message and what it says about an edit (15 with one, 263 with a reason), no value used twice, and the emitted headers agree`
+- `docs/reference/camel-for-ai.md is what its sources produce: 4 generated region(s), 756 entries, 278 diagnostics, 34 diagnostic name(s) cited by the prose, 106375 characters (budget 112000)`
+- `no unverified citation: 413 of 413 symbol citation(s) verified, 1876 path citation(s) across 4802 file(s)`
+- `headers: every one of 1364 member files carries the two-line header (C/C++ 1086, Camel 44, scripts 234)`
+- `grammar: 130 productions, in step with the parser, the token table and the language reference`
+
+问题页：`docs/handover/questions/entry-module-name-and-a-block-tag-before-a-type.md`（提问一入口名：4 条 plan 条目与逐字文档/代码/读数证据、两个选项与代价；提问二块前 `on field`：逐字裁定、`builder_tags.cpp:643/828/854` 证据、两个选项）。
+
+merge：`045b38453 Merge origin/develop into the removal of the module declaration`（先 `fetch`，只把 develop 并入本支；docs 冲突取 develop 的散文与模块表行、只去掉 `moduleDecl` 产生式；`analysis`/`declaration_*` 用例保持删除；消息写清整合内容）。本轮提交：`15044417b`、`fb4422749`、`26cabb06e`。
+纪律：未推 origin；未跑 `perf/**`、`feat/opt/progen`、PyTorch 对比；未在 Windows 构建；未改 `docs/language/**` 散文（只按 `check-grammar --write` 重出生成块 + `decl :` 一行）；未碰其它工作树/分支。
