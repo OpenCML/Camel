@@ -174,7 +174,7 @@ expect_output_contains = ["'k' is immutable and cannot be passed to a var parame
 
 [[tests]]
 name = "tutorial.examples.07_closures"
-desc = "Functions as values: a closure keeps what it captured, a counter keeps its own state, and a function value is passed and called."
+desc = "Chapter 11: functions as values -- a closure keeps what it captured, a counter keeps its own state, and a function value is passed and called."
 case = "../../../docs/tutorial/examples/07_closures.cml"
 golden = "golden/tutorial_examples/07_closures.txt"
 
