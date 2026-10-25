@@ -14,19 +14,19 @@ args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
-expect_stdout_exact = """scalar {} {} {} true true true
-a === b {} tensor([  true,   true,   true], dtype=bool)
-a !== b {} tensor([ false,  false,  false], dtype=bool)
-a === e {} tensor([  true,   true,  false], dtype=bool)
-a == b {} true
-a == e {} false
-a < e {} tensor([ false,  false,   true], dtype=bool)
-a == c {} false
-written {} {} true false
-bare {} {} true false
-nan == {} !== count {} false 1.0
-zero == {} === {} true tensor([  true], dtype=bool)
-f32[] == {} === {} false tensor([  true,  false], dtype=bool)
+expect_stdout_exact = """scalar true true true
+a === b tensor([  true,   true,   true], dtype=bool)
+a !== b tensor([ false,  false,  false], dtype=bool)
+a === e tensor([  true,   true,  false], dtype=bool)
+a == b true
+a == e false
+a < e tensor([ false,  false,   true], dtype=bool)
+a == c false
+written true false
+bare true false
+nan false 1.0
+zero true tensor([  true], dtype=bool)
+f32[] false tensor([  true,  false], dtype=bool)
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 30000
