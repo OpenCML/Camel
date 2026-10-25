@@ -12,51 +12,51 @@ module grad_function_values
 import { Tensor, reshape, sum, tanh } from tensor
 import { grad } from autodiff
 
-func make(s: float): (t: Tensor) => Tensor {
-    return (t: Tensor): Tensor => tanh(t * s)
+func make(s: float): (t: f32[..]) => f32[..] {
+    return (t: f32[..]): f32[..] => tanh(t * f32(s))
 }
 
-func make_affine(q: Tensor): (t: Tensor) => Tensor {
-    return (t: Tensor): Tensor => t * q + q
+func make_affine(q: f32[..]): (t: f32[..]) => f32[..] {
+    return (t: f32[..]): f32[..] => t * q + q
 }
 
-func apply(f: (t: Tensor) => Tensor, p: Tensor): Tensor {
+func apply(f: (t: f32[..]) => f32[..], p: f32[..]): f32[..] {
     return f(p) + f(p * 0.5)
 }
 
-func apply_outer(f: (t: Tensor) => Tensor, p: Tensor): Tensor {
+func apply_outer(f: (t: f32[..]) => f32[..], p: f32[..]): f32[..] {
     return apply(f, p * p) * 0.5
 }
 
-func square(t: Tensor): Tensor {
+func square(t: f32[..]): f32[..] {
     return t * t
 }
 
-func twice(f: (t: Tensor) => Tensor): (t: Tensor) => Tensor {
-    return (t: Tensor): Tensor => f(f(t))
+func twice(f: (t: f32[..]) => f32[..]): (t: f32[..]) => f32[..] {
+    return (t: f32[..]): f32[..] => f(f(t))
 }
 
 // 1. a closure called, twice, inside a second closure that captured it
-with <p: Tensor>
+with <p: f32[..]>
 func loss1(): float {
     let s = sum(p)
-    let g = (t: Tensor): Tensor => tanh(t * s)
-    let h = (t: Tensor): Tensor => g(t) * 2.0 + g(t * 0.5)
+    let g = (t: f32[..]): f32[..] => tanh(t * f32(s))
+    let h = (t: f32[..]): f32[..] => g(t) * 2.0 + g(t * 0.5)
     return sum(h(p))
 }
 
 // 2. the same, three closures deep, the innermost called once
-with <p: Tensor>
+with <p: f32[..]>
 func loss2(): float {
     let s = sum(p * p)
-    let g = (t: Tensor): Tensor => tanh(t * s)
-    let h = (t: Tensor): Tensor => g(t) * s
-    let k = (t: Tensor): Tensor => h(t + 1.0) + t
+    let g = (t: f32[..]): f32[..] => tanh(t * f32(s))
+    let h = (t: f32[..]): f32[..] => g(t) * f32(s)
+    let k = (t: f32[..]): f32[..] => h(t + 1.0) + t
     return sum(k(p))
 }
 
 // 3. a closure returned by a factory, called twice
-with <p: Tensor>
+with <p: f32[..]>
 func loss3(): float {
     let s = sum(p)
     let g = make(s)
@@ -64,52 +64,52 @@ func loss3(): float {
 }
 
 // 4. a factory whose closure captures a TENSOR that depends on the parameter
-with <p: Tensor>
+with <p: f32[..]>
 func loss4(): float {
     let g = make_affine(tanh(p) * 2.0)
     return sum(g(p * p))
 }
 
 // 5. a closure passed to a function that calls it twice
-with <p: Tensor>
+with <p: f32[..]>
 func loss5(): float {
     let s = sum(p)
-    return sum(apply((t: Tensor): Tensor => tanh(t * s), p))
+    return sum(apply((t: f32[..]): f32[..] => tanh(t * f32(s)), p))
 }
 
 // 6. a named function passed to a function that calls it
-with <p: Tensor>
+with <p: f32[..]>
 func loss6(): float {
     return sum(apply(square, p))
 }
 
 // 7. a closure passed on through two functions
-with <p: Tensor>
+with <p: f32[..]>
 func loss7(): float {
     let s = sum(p)
-    return sum(apply_outer((t: Tensor): Tensor => tanh(t * s), p))
+    return sum(apply_outer((t: f32[..]): f32[..] => tanh(t * f32(s)), p))
 }
 
 // 8. the closure of a factory passed to a function that calls it
-with <p: Tensor>
+with <p: f32[..]>
 func loss8(): float {
     return sum(apply(make(sum(p)), p))
 }
 
 // 9. a function that takes a closure and returns a closure capturing it
-with <p: Tensor>
+with <p: f32[..]>
 func loss9(): float {
     let s = sum(p)
-    let g = (t: Tensor): Tensor => tanh(t * s)
+    let g = (t: f32[..]): f32[..] => tanh(t * f32(s))
     let h = twice(g)
     return sum(h(p))
 }
 
 // 10. a lambda that returns a lambda
-with <p: Tensor>
+with <p: f32[..]>
 func loss10(): float {
     let s = sum(p)
-    let mk = (a: float) => (t: Tensor): Tensor => tanh(t * a) * s
+    let mk = (a: float) => (t: f32[..]): f32[..] => tanh(t * f32(a)) * f32(s)
     return sum(mk(s * 0.5)(p))
 }
 

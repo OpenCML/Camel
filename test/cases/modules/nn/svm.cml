@@ -8,14 +8,14 @@ import {
     sum, eye, transpose, show, pow, Tensor, shape, concat, range, reshape
 } from tensor
 
-func svm_train(X: Tensor, y: Tensor, learning_rate: float, epochs: int, lambda: float): Tensor sync {
+func svm_train(X: f32[..], y: f32[..], learning_rate: float, epochs: int, lambda: float): f32[..] sync {
     let m = shape(X)[0]
     let n = shape(X)[1]
     let X_bias = concat(X, ones([m, 1]), 1)
     let y_col = reshape(subtract(multiply(y, 2.0), 1.0), [m, 1])
     let w0 = zeros([n + 1, 1])
 
-    func svm_epoch(epoch: int, weights: Tensor): Tensor sync {
+    func svm_epoch(epoch: int, weights: f32[..]): f32[..] sync {
         if (epoch >= epochs) then {
             return weights
         } else sync {
@@ -23,9 +23,9 @@ func svm_train(X: Tensor, y: Tensor, learning_rate: float, epochs: int, lambda: 
             let margins = multiply(y_col, predictions)
             let active = (subtract(1.0, margins) > 0)
             let grad = transpose(X_bias) @ multiply(multiply(y_col, -1.0), active)
-            let reg = multiply(weights, lambda)
-            let step = multiply(add(grad, reg), 1.0 / float(m))
-            let new_weights = subtract(weights, multiply(step, learning_rate))
+            let reg = multiply(weights, f32(lambda))
+            let step = multiply(add(grad, reg), f32(1.0 / float(m)))
+            let new_weights = subtract(weights, multiply(step, f32(learning_rate)))
             return svm_epoch(epoch + 1, new_weights)
         }
     }
@@ -33,7 +33,7 @@ func svm_train(X: Tensor, y: Tensor, learning_rate: float, epochs: int, lambda: 
     return svm_epoch(0, w0)
 }
 
-func svm_predict(X: Tensor, model: Tensor): Tensor sync {
+func svm_predict(X: f32[..], model: f32[..]): f32[..] sync {
     let n = shape(X)[0]
     let X_bias = concat(X, ones([n, 1]), 1)
     let predictions = matmul(X_bias, model)

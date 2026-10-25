@@ -276,8 +276,8 @@
 #^^^^ meta.function.definition.camel storage.type.function.camel
 #     ^^^^^^^ meta.function.definition.camel entity.name.function.camel
 #            ^^ punctuation.separator.namespace.camel
-#              ^ keyword.operator.comparison.camel
-#                ^ keyword.operator.comparison.camel
+#              ^ meta.angle-arguments.camel punctuation.definition.angle-arguments.begin.camel
+#                ^ meta.angle-arguments.camel punctuation.definition.angle-arguments.end.camel
 #                 ^ meta.parens.camel punctuation.section.parens.begin.camel
 #                  ^ meta.parens.camel variable.parameter.camel
 #                   ^ meta.parens.camel punctuation.separator.colon.camel

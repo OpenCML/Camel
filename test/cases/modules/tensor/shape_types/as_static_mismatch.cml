@@ -3,7 +3,7 @@ import { Tensor, ones, sum, load_npy } from tensor
 func main(): int sync {
     println('ran')
     let t = ones([3])
-    let u = t as Tensor<[4]>
+    let u = t as Tensor<f32, [4]>
     println(sum(u))
     return 0
 }

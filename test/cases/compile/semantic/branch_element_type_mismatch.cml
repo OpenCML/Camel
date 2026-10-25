@@ -1,0 +1,16 @@
+/**
+ * The two arms of a branch are arrays of one rank and one set of extents but two element types:
+ * `int[3]` and `f32[3]` have no common type, because an array's element type is part of its type
+ * and a number of one element type does not become a number of another by itself. The report names
+ * the element type each arm gives and the conversion that would make the two one.
+ */
+module semantic_branch_element_type_mismatch
+
+func pick(flag: bool, whole: int[], real: f32[]): int[] {
+    return if flag then whole else real
+}
+
+func main(): int sync {
+    let picked = pick(true, new([1, 2, 3] as int[]), new([f32(1.0), f32(2.0), f32(3.0)]))
+    return if picked[0] > 0 then 0 else 1
+}

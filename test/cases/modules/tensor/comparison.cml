@@ -15,7 +15,7 @@ module comparison
 
 import { Tensor, new, cast, log, sum } from tensor
 
-func bareEq(a: Tensor, b: Tensor): bool { return a == b }
+func bareEq::<T>(a: T[..], b: T[..]): bool { return a == b }
 func writtenEq(a: Tensor<f32>, b: Tensor<f32>): bool { return a == b }
 
 func main(): int sync {

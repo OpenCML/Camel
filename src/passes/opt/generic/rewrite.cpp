@@ -12,7 +12,10 @@
 #include "camel/runtime/draft_session.h"
 #include "camel/utils/log.h"
 
+#include "camel/core/type/intern.h"
+
 #include <algorithm>
+#include <cstddef>
 #include <cstring>
 #include <format>
 #include <stdexcept>
@@ -243,7 +246,19 @@ uint64_t contentHash(const GCGraph &graph) {
     for (runtime::gc_cnt_t c = 0; c < native->chunkCount; ++c) {
         const runtime::GCNodeChunk &chunk = *native->chunks[c];
         const size_t nodes       = chunk.nodeCount;
-        bytes(chunk.nodes(), nodes * sizeof(runtime::GCNode));
+        // A node record's own typeId is hashed as its canonical id, field for field around it, so
+        // that every other byte of the record is hashed exactly as it is stored.
+        for (size_t i = 0; i < nodes; ++i) {
+            const runtime::GCNode &record = chunk.nodes()[i];
+            const auto *at = reinterpret_cast<const unsigned char *>(&record);
+            bytes(at, offsetof(runtime::GCNode, typeId));
+            mix(static_cast<uint64_t>(
+                camel::core::type::TypeTable::instance().canonicalIdOf(record.typeId)));
+            bytes(
+                at + offsetof(runtime::GCNode, typeId) + sizeof(record.typeId),
+                sizeof(runtime::GCNode) - offsetof(runtime::GCNode, typeId) -
+                    sizeof(record.typeId));
+        }
         bytes(chunk.origins, nodes * sizeof(*chunk.origins));
         bytes(chunk.permissions, chunk.permissions ? nodes * sizeof(*chunk.permissions) : 0);
         bytes(chunk.attrs, chunk.attrs ? nodes * sizeof(*chunk.attrs) : 0);
@@ -263,10 +278,17 @@ uint64_t contentHash(const GCGraph &graph) {
           uint64_t{native->outputNode},
           uint64_t{native->returnNode},
           static_cast<uint64_t>(native->returnKind),
-          reinterpret_cast<uint64_t>(graph.funcType()),
-          reinterpret_cast<uint64_t>(graph.runtimeDataType()),
-          reinterpret_cast<uint64_t>(graph.staticDataType()),
-          reinterpret_cast<uint64_t>(graph.closureType())}) {
+          // A type enters the hash as its canonical id (the id of the same structure with the
+          // names in its key erased), so two graphs that differ only in which object a type is,
+          // or in the dimension names one of them was written with, are one content.
+          static_cast<uint64_t>(
+              camel::core::type::TypeTable::instance().canonicalId(graph.funcType())),
+          static_cast<uint64_t>(
+              camel::core::type::TypeTable::instance().canonicalId(graph.runtimeDataType())),
+          static_cast<uint64_t>(
+              camel::core::type::TypeTable::instance().canonicalId(graph.staticDataType())),
+          static_cast<uint64_t>(
+              camel::core::type::TypeTable::instance().canonicalId(graph.closureType()))}) {
         mix(scalar);
     }
     const auto statics = graph.staticSlots();

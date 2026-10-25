@@ -1,6 +1,6 @@
 module return_tensor_shape
-import { Tensor, ones } from tensor
-func f(x: Tensor<[2, 3]>): Tensor<[3, 2]> {
+import { ones } from tensor
+func f(x: f32[2, 3]): f32[3, 2] {
     return x * 2.0
 }
 func main(): int sync {

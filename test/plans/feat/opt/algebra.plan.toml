@@ -818,7 +818,7 @@ args = ["${case}","std::opt::fold","std::opt::algebra","${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["stdout_normalized"]
 expect_exit = 0
-expect_stdout_contains = ["8.,      16.,      24.", "6.,      12.,      18.", "0.3,     0.6,     0.9"]
+expect_stdout_contains = ["[8.0, 16.0, 24.0]", "[6.0, 12.0, 18.0]", "[0.3, 0.6, 0.90000004]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -849,7 +849,7 @@ args = ["${case}","rules::simplify","${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["stdout_normalized"]
 expect_exit = 0
-expect_stdout_contains = ["8.,      16.,      24.", "6.,      12.,      18.", "0.3,     0.6,     0.9"]
+expect_stdout_contains = ["[8.0, 16.0, 24.0]", "[6.0, 12.0, 18.0]", "[0.3, 0.6, 0.90000004]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 

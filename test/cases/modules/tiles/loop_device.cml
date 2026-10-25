@@ -18,8 +18,8 @@ func rounding(a: Tensor<f32>, b: Tensor<f32>): Tensor<f32> {
 }
 func main(): int sync {
     let folder = get_env('TILES_TEST_OUT')
-    let a = load_npy(folder + '/a.npy') as Tensor<f32>
-    let b = load_npy(folder + '/b.npy') as Tensor<f32>
+    let a = load_npy::<f32>(folder + '/a.npy') as Tensor<f32>
+    let b = load_npy::<f32>(folder + '/b.npy') as Tensor<f32>
     println(scalar(1.0, 0.25), download(run_preferred_resident<scalar>((1.0, 0.25))))
     println(scalar(3.0, -2.0), download(run_preferred_resident<scalar>((3.0, -2.0))))
     println(scalar(1.0, 0.25), download(run_preferred_resident<scalar>((1.0, 0.25))))

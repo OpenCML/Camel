@@ -13,6 +13,7 @@
 #include "camel/core/type/composite/func.h"
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/enum.h"
+#include "camel/core/type/intern.h"
 #include "camel/core/type/storage.h"
 #include "camel/core/type/text.h"
 #include "camel/core/type/typevar.h"
@@ -262,28 +263,22 @@ Type *CollectionType::cloneWithArguments(
 
 namespace {
 
-/// One instance per pair of concrete types. A type that still holds a type variable is not
-/// interned: a binding occurrence (`K` in a signature) and a use (`K`) mangle alike and must stay
-/// distinct objects.
-template <typename T, typename Make> T *interned(std::span<Type *const> params, Make make) {
-    bool generic = false;
-    std::string key;
+/// One entry per kind and canonical type arguments, from the type table (see intern.h): a
+/// `Map<K, V>` compares its arguments with `equals` and its kind is its name, so the arguments
+/// enter the key by canonical id, exactly as a named struct's do. A type that still holds a type
+/// variable is one entry like any other: the variable is interned itself, so the declaration's
+/// parameter and a use of it stay the types they are.
+template <typename T, typename Make> T *interned(TypeCode code, std::span<Type *const> params, Make make) {
+    std::vector<uintptr_t> key;
+    key.reserve(1 + params.size());
+    key.push_back(static_cast<uintptr_t>(code));
     for (Type *param : params) {
-        generic |= containsTypeVar(param);
-        key += param->mangle() + "|";
+        key.push_back(typeKeyWord(TypeTable::instance().canonical(param)));
     }
-    if (generic) {
-        return make();
-    }
-    static std::mutex mutex;
-    static std::unordered_map<std::string, T *> instances;
-    std::lock_guard guard(mutex);
-    if (auto it = instances.find(key); it != instances.end()) {
-        return it->second;
-    }
-    T *created = make();
-    instances.emplace(std::move(key), created);
-    return created;
+    return static_cast<T *>(
+        TypeTable::instance().intern(TypeTable::Shape::Collection, key, [&]() -> Type * {
+            return make();
+        }));
 }
 
 } // namespace
@@ -312,18 +307,18 @@ MapType::MapType(std::span<Type *const> params) : CollectionType(typeCode(), tru
 MapType *MapType::get(Type *keyType, Type *valueType) {
     ASSERT(keyType != nullptr && valueType != nullptr, "Map needs a key and a value type.");
     Type *params[] = {keyType, valueType};
-    return interned<MapType>(std::span<Type *const>(params), [&] {
+    return interned<MapType>(typeCode(), std::span<Type *const>(params), [&] {
         void *mem = allocTypeStorage<MapType>(TypeStorageKind::Collection);
         return new (mem) MapType(std::span<Type *const>(params));
     });
 }
 
 MapType *MapType::prototype() {
-    static MapType *instance = [] {
+    // The prototype is one type too: no arguments, one id (its own canonical form).
+    return interned<MapType>(typeCode(), std::span<Type *const>(), [&] {
         void *mem = allocTypeStorage<MapType>(TypeStorageKind::Collection);
         return new (mem) MapType(std::span<Type *const>());
-    }();
-    return instance;
+    });
 }
 
 std::string MapType::toString() const { return typeToString(this); }
@@ -349,18 +344,17 @@ SetType::SetType(std::span<Type *const> params) : CollectionType(typeCode(), fal
 SetType *SetType::get(Type *elemType) {
     ASSERT(elemType != nullptr, "Set needs an element type.");
     Type *params[] = {elemType};
-    return interned<SetType>(std::span<Type *const>(params), [&] {
+    return interned<SetType>(typeCode(), std::span<Type *const>(params), [&] {
         void *mem = allocTypeStorage<SetType>(TypeStorageKind::Collection);
         return new (mem) SetType(std::span<Type *const>(params));
     });
 }
 
 SetType *SetType::prototype() {
-    static SetType *instance = [] {
+    return interned<SetType>(typeCode(), std::span<Type *const>(), [&] {
         void *mem = allocTypeStorage<SetType>(TypeStorageKind::Collection);
         return new (mem) SetType(std::span<Type *const>());
-    }();
-    return instance;
+    });
 }
 
 std::string SetType::toString() const { return typeToString(this); }

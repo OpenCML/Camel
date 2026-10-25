@@ -1077,3 +1077,90 @@ println(grow([1.0, 2.0], read_int()))
 `yield` 作为关键字、语句、AST 节点，编辑器文法与诊断目录同步，t9 是负向验收，这部分对。但合进 develop 的同时带着 `yield_lowering.cml` 那条"写了 `yield` 的函数体按名字拒绝，报 `FeatureNotSupported`（'generators'），等状态机落地"。上一节已经裁定不能这样合（时间上交错了，这批大概是在裁定之前合的），而且 `FeatureNotSupported` 本来就在语法收口第 5 条的删除名单里。
 
 **返工**：这条车道接着把生成器的状态机（H248 片 E，`plan.cn.md` 282–307 行）做完，语义按 2026-10-23 已定的 (a)–(i)。做完后，`yield_lowering.cml` 改成正向用例（`count(3)` 产出 0、1、2），那条拒绝和"until the generator state machine lands"的注释一起删掉。在那之前，这是 develop 上唯一一处"尚未实现"的拒绝，排在这条车道的第一位。
+
+## 样章五处、保留字、格式化器折行、语法快照：收下，两处收尾
+
+收下：第 1、9、17 章按评审改了（开头讲为什么、图由脚本从例子生成并接进检查、`sync` 带理由、第 17 章换成无条件的定律并显式交给 `std::opt`）；`is`、`of`、`keyof`、`try`、`catch`、`finally` 不再是关键字，`TryCatchNotInLanguage` 删了；格式化器的声明头超过 80 列时子句另起一行；编辑器语法快照不再永远跳过，开发依赖进了安装步骤。
+
+收尾两处：
+1. **`ConstructNotSupported`、`FeatureNotSupported` 还有约 30 个调用点**（`src/parse/ast/builder.cpp` 9 处、`src/compile/gct/builder.cpp` 17 处、`gir` 4 处）。语法收口第 5 条要的是逐个清掉：先列一张表（每个调用点拒绝的是什么写法），按三类处理：
+   - 已经裁定的写法，按裁定实现；
+   - 没有裁定、也不打算有的写法，变成普通的语法错误，或者在类型层报一条具体的诊断；
+   - 确实是一条语言规则的拒绝（比如"这个位置不能写类型推断占位"），换成说出规则本身的具名诊断。
+   
+   表写进报告。清完之后两条通用诊断从注册表删掉。
+2. **注册表里"`# 0x000074 was TryCatchNotInLanguage`"这类注释**（6 处）：记录已删诊断的名字，就是给删掉的东西留记录。空号只写"空号"不写原名，等最后诊断码重排时一并收掉。
+
+另外，这批有几条提交说明是中文。仓库的提交说明一直是英文（公开仓库以英文为主），保持一致；`agents/commit.md` 里原来没写这一条，已补上。（`refactor!` 是 Conventional Commits 标破坏性改动的写法，可以用。）
+
+## slice-call-parameter-count-and-declaration-defaults
+
+**选项 A：原生算子的声明要被编译，默认值在调用处补齐，节点永远六个词**。"`stdlib/signatures/*.cml` 只作参考、不编译"本来就是声明化之前留下的状态；目标是声明成为签名的唯一来源（`stdlib-conventions` 的"声明化"，以及 H233 第 6 条"内置的遍也是无体声明"）。切片是第一个用上"原生算子声明带默认值"的，就从它开通这条路：`#op` 声明进入编译，`defaultsOfCallee` 对原生算子组也取声明的默认值，`slice(t, axis, a, b)` 在调用处补成六个词。内核、静态检查、伴随规则里"按实参个数补默认值"的代码全部删掉，只读六个词。用例照问题页说的：一个带默认值的原生算子声明，四个词、五个词的调用都落成六个词的节点，正反向一致。
+
+## slice-of-another-axis-is-a-copy-not-a-view
+
+**这不是语义缺口**：数组是值语义，切片和原数组是否共用数据块，程序本来就观察不到。改了原数组，切片里看不见，反过来也一样，这正是值语义要求的，与拷贝还是视图无关。设计原则 5.4"切片是共用数据块的视图"说的是性能保证（零拷贝）。所以：
+- 语义上不用改，也不在 5.4 里写"限定成第一轴"；
+- 带步长、跨轴的视图（`Array` 的步长视图）作为性能项，排在 P4 合入之后，和原地更新、内存规划同一类工作做。到那时第一轴以外的切片也零拷贝。问题页里"写父数组不会在切片里看见，反之亦然"那句，换成"程序观察不到差别，只差一次拷贝"。
+
+## slice-result-type-states-no-extent
+
+**选项 A：结果类型要看得见静态实参**。切片结果保留没被切的轴的长度，被切的轴在界限是常量时写出切出来的长度。这是模块原来就有的推断，现在核心接管，不能退步。给动态签名的结果回调一条能拿到 `static_args_t` 的通路。`reshape`、`take` 等按常量实参定形状的算子以后都要用它，切片是第一个用户。用例：多轴切片，常量界与计算界各一条；`si_computed_slice` 那句"欠精确"的诊断照旧成立。
+
+## syntax-closure-item5-spread-patterns-and-the-two-codes
+
+1. **选项 B**：展开、结构体与数组解构、元组/结构体/标识符模式这几个拒绝点删掉，它们变成普通的语法错误；`...` 这个记号保留（变参 `...rest`、模块名在用）。8 条用例里第 5 条点名的 6 条改成断言语法错误，数组解构补一条反例；`operators.scopes` 快照重录。
+2. **剩下的调用点按三类逐个处理**（问题页已经列出了清单）：
+   - **已裁定并已实现、只剩一条旧拒绝的**：`wait`（已退役）、`===`、关键字实参、`f..g` 组合，拒绝直接删掉；
+   - **已裁定、还要实现的**：`rule<...>`、`fact` 两处，按已有的裁定实现（`fact` 的 `with` 实参进分支，见 `fact-and-with-parameters` 第 1 条）；
+   - **没有裁定的写法**：后缀 `!`、格式字符串当模式、嵌套模式、类型运算 `&`、`\` 一族、`UnitType`/`InferType`/`DataType` 这些文法里还没有含义的类型节点，从文法里拿掉，写了就是普通的语法错误；
+   - **真正的语言规则**：`constas`/rest 参数写错位置、自引用的类型别名，换成说出规则本身的具名诊断。
+   
+   全部做完，`ConstructNotSupported`、`FeatureNotSupported` 两条诊断从注册表删掉，编号空着，等最后的诊断码重排。
+
+## 2026-10-26-generator-state-machine-what-is-missing
+
+**路线二：在图里展平成步进函数**。问题页自己的判断是对的：只在 NodeVM 上做可恢复执行，四个后端会分歧，违反设计原则 9.10；状态机写在图里，图就是普通的图，四个后端一行不改，这才是图原生的做法。
+- **E 与 F 同一批**：最小的消费者（`loop … for x in <流>` 每轮拉一次、拉空就结束）、头部"必须写流类型"的具名诊断、`unfold`，和语法半批一起合入。
+- 计划里验收写的 `for p in pairs(3)` 改成 Camel 的写法 `loop n = 0 for p in pairs(3) do n + 1`（Camel 没有 `for` 语句），`plan.cn.md:296` 那条过期的读数一起改。
+- **做错不会崩、只会静默给错值，所以要有差分验收**：每个生成器用例都配一个"直接产出数组"的等价写法，把流收集成数组后逐元素比较，四个后端都跑。覆盖一轮多次 `yield`、`yield` 在嵌套循环里、在 `match` 臂和 `sync` 块里、在两个 `yield` 之间有效应的情况（检查效应的先后），以及空流。
+- `FeatureNotSupported` 不随这一批删，它在第 5 条那一批里删。
+
+## PyPI 发布链路：收下
+
+Linux 包在 manylinux 里构建，用 auditwheel 修正标签，并在构建时检查标签；重新打标签时把 `Tag` 写进 WHEEL 头；工作流读 PEP 639 的许可证声明；`camel` 改成 pip 的入口；删掉了 MacOS 分类（暂时没有 macOS 包）。收下。下一次打标签，看 PyPI 上实际出现的版本和文件列表，作为验收。macOS、arm64 两格和"本体 + 稳定 ABI 互操作"按 5.37 第 6、7 条接着做。
+
+## 教程第 10 章：收下，一处返工；红线 8 的检查缺了
+
+第 10 章（效应与顺序）写得好：没人要的结果不算、`sync` 不向内继承、`var` 的写入顺序、同一资源的效应自己有序、资源推断与 `uses`/`pure`，图也接进了检查。收下。
+
+但这一章有一句改成了"手写出来的是承诺，编译器检查它能查的那些"，后面列的三条诊断（`UnknownResource`、`PureAndUses`、`NativeResourceMismatch`）只管子句写得对不对，**没有一条检查函数体是否守住了承诺**：签名写 `uses db`，函数体却往 `stdout` 打印；签名写 `pure`，函数体却碰了资源。我核对了诊断注册表，这样的诊断不存在。设计原则第 1 节的红线 8 是"承诺（`pure`、`uses`）不被违反 —— 编译器检查"，所以这是红线缺了强制机制，不是可以写进教程的边界。
+1. **H7 车道把这条检查补上，排在它的第一位**：函数体推出的资源集合必须包含在签名写的 `uses` 里；写了 `pure` 的，推出的集合必须为空。违反时报一条具名诊断，点出签名写的资源和函数体多碰了的那个资源（以及碰它的那个调用）。递归按推断时的不动点处理。用例覆盖：多碰了一个模块资源、`pure` 函数里调用了打印、通过回调形参间接碰到资源。
+2. **第 10 章按目标写**：删掉"它能查的那些"，写成"手写的是承诺，函数体超出承诺就是编译错误"，配一个违反承诺的反例，在检查落地之前进待实现名单。
+3. 顺带：诊断注册表里"`0x1A7 is retired … The code is not reused`"、`CmlUnsupportedConstruct` 消息里的"(yet)"，按前面的裁定，空号不写原名，消息不写"暂时"。`std::cml` 往返是红线 5，它能打印的范围要按计划补全，不在消息里写"这一版还不行"。
+
+## P4 合入 develop
+
+张量并进数组合入了：`Tensor` 成为数组本身，模块的切片内核和"看是谁的数组再分派"的那段删了，标准库签名区写元素类型，梯度类型按"给用户的"与"机件内部的"拆开，所有生成物从合并后的树重新生成。按"过渡不进 develop"，合入时删除步已经做完。这是主线的一大步，收下。
+
+**随合并回到问题目录的十页旧问题**：`2026-10-25-in-place-decision-layer`、`after-the-tensor-deletion-four-open-points`、`dim-name-relaxation-and-element-type-change`、`discrete-gradient-and-rank-one-slice-ownership`、`grammar-snapshot-case-bare-tensor-golden`、`open-rank-round-type-and-the-value-a-round-hands-over`、`slice-function-form-and-what-the-core-answers`、`subscript-operator-choice-and-the-rank-two-refusal`、`tensor-gradient-structure-and-slice-adjoint`、`tensor-reduction-element-type-code-half`。这些是翻转线上的副本，随合并带了回来，本文件里同名的几节都已裁定。照原裁定执行，问题页删掉。
+
+## 2026-10-26-growing-shape-graph-count-after-the-merge
+
+**4 是对的**，并收下翻转线的说明：5 是删除元素类型开放的 `Tensor` 拼写之前的读数，多出的那个实例来自开放的元素类型被递归实参收窄，而且会随层数变化。删掉之后只剩声明本身和 `main` 调用的那一个实例，与层数无关。我在 `specialize-growing-shape-graph-floor-reads-five` 一节说"5 就是不动点"，那是对当时那棵树的读数，现在以 4 为准；`bounded.rgir` 与 `more_levels.bounded` 两条一起收。
+
+## plain-data-predicate-in-a-when-clause
+
+**修 `when` 的编译期求值，不把 `is_plain` 改成内建**：设计原则第 1 节的"只有一门语言"，以及 5.5 的"类型函数是在编译期运行的普通函数"。`when` 的求值发生在实例化时，类型实参已经是具体的；在这个时刻，调用一个只依赖类型实参和编译期常量的纯函数（包括里面的 `match type`、对字段的递归），就是把它按这些具体类型实例化再求值。泛型展开早就在做同样的事。现在求值器在"调用另一个用户函数"这一步停下，是求值器的缺口，不是语言的边界。
+- `is_plain` 留在 `stdlib/types.cml`，用 Camel 写。修好后 `to_bytes` 对纯数据的结构体、元组数组可以实例化，对其余类型给出干净的"没有适用的重载"。
+- `WhenConditionNotConstant` 只留给条件里真的读到运行期值的情况（比如读了一个非常量的实参）。
+- **`from_bytes` 用同一个谓词**：`from_bytes::<T>(b: Bytes, shape: int[]): T[..] when is_plain::<T>()` 一个声明，取代按元素类型注册的 7 个。它读的就是 `to_bytes` 写出的那种布局，也就是数据块里这个元素类型的布局，两个方向对称。`load_npy::<T>` 同理。
+
+## P4 删除步的残留：返工
+
+抽查合并后的树，删除步还差这几处（"过渡不进 develop"），由 P4 那条车道接着清：
+1. **`Tensor` 这个类型名还在**：`modules/tensor/module.cpp:94` 仍然 `exportType(Reference("Tensor"), ArrayType::elementTypeOpen())`。交接说明 5.30 是负责人的原话："`Tensor`/`Tensor<T, S>` 作为类型名删除，不留别名、不留'已退役'诊断"。删掉这个导出，写 `Tensor` 就是普通的未知名字；`TensorElementTypeRequired` 这条只为它存在的诊断一起删。仓库里还写着 `Tensor<…>`、`: Tensor` 的 `.cml` 与文档全部改成 `T[维度]`。
+2. **比较注册表**：`registerContentComparableType`（`equality.cpp`、`equality.h`）还在。它在 5.1a 依赖表里，标明随过渡类型删除。
+3. **模块的 `tensor:slice` 还有内部使用者**：`gradient_ops.cpp:338`、`layout_ops.cpp:666/672`（拼接的伴随用它切开梯度），以及 ONNX 的 `lowering.cpp:1177`。这些改用核心的切片节点，模块的切片算子随之整个删掉。ONNX 降低改认核心的切片。
+4. **规则库里 13 条 `tensor_f32_*`、`tensor_i64_*`**：5.1a 依赖表里列着，要随 P4 删除，标量那条律推广到数值数组。规则语言的泛型律已经能写，一起做。
+5. **提到过渡名字的注释**：`support.cpp:193`（`numericUnknown`）、`globals.cpp:226` 和 `layout_ops.cpp:716`（模块的 `tensor:idx_take`）。注释只写现在怎么做，提到已删东西的句子删掉。

@@ -1,0 +1,17 @@
+// `pure` in a function type is part of the requirement: `apply` accepts only a function whose own
+// signature says `pure`, and `twice` says it.
+// Run: camel docs/tutorial/examples/10_pure_callback.cml
+module pure_callback
+
+func apply(f: (x: int) => int pure, x: int): int {
+    return f(x)
+}
+
+func twice(x: int): int pure {
+    return x * 2
+}
+
+func main(): int sync {
+    println(apply(twice, 4))
+    return 0
+}

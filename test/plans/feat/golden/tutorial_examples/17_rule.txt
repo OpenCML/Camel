@@ -1,0 +1,3 @@
+sampled negate: proposition equality, evidence samples 100, fired 8 of 8, coverage integer scalar int: (x * -1) = (0 - x)
+
+-7 56 28

@@ -37,7 +37,8 @@ Camel 是图原生的通用编程语言：程序只表达计算意图——要�
 [7 缺失与失败](07_missing_and_failure.cn.md) ·
 [8 模块、标准库与一个小工具](08_modules_and_stdlib.cn.md) ·
 [9 按依赖求值](09_evaluation_by_dependency.cn.md) ·
-[17 教编译器一条定律](17_teaching_a_law.cn.md)
+[10 效应与顺序](10_effects_and_order.cn.md) ·
+[18 教编译器一条定律](17_teaching_a_law.cn.md)
 
 ---
 
@@ -1041,8 +1042,7 @@ func main(): int sync {
 
 ```text
 [2, 3] [2, 1]
-tensor([[      3.],
-        [      3.]], dtype=float32)
+[[3.0], [3.0]]
 18.0
 [3, 2]
 ```
@@ -1054,7 +1054,7 @@ module model
 
 import { Tensor, ones, relu, sum } from tensor
 
-func main(x: Tensor<f32, [2, 3]>): Tensor {
+func main(x: Tensor<f32, [2, 3]>): f32[..] {
     let w = ones([3, 1])
     return relu(x @ w)
 }
@@ -1069,8 +1069,7 @@ camel docs/tutorial/examples/15_model.cml --arg x=docs/tutorial/examples/x.npy
 ```
 
 ```text
-tensor([[      2.],
-        [      0.]], dtype=float32)
+[[2.0], [0.0]]
 ```
 
 **导出它**：同一份源码，换一组遍。程序里没有为导出写任何东西，连 `import onnx` 都不需要：

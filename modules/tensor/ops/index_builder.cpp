@@ -20,7 +20,7 @@ using Rel = Constraint::Rel;
 
 // ---- IndexBuilder ---------------------------------------------------------------------------
 
-ExprId IndexBuilder::extent(size_t operand, size_t axis, int64_t known) {
+ExprId IndexBuilder::extent(size_t operand, size_t axis, std::optional<int64_t> known) {
     auto &params = instance.domain.params;
     for (size_t i = 0; i < params.size(); ++i) {
         if (params[i].source == ParamSource::Extent && params[i].operand == operand &&
@@ -33,7 +33,7 @@ ExprId IndexBuilder::extent(size_t operand, size_t axis, int64_t known) {
         .source  = ParamSource::Extent,
         .operand = static_cast<uint8_t>(operand),
         .axis    = static_cast<uint8_t>(axis),
-        .value   = known >= 0 ? std::optional(known) : std::nullopt,
+        .value   = known,
     });
     return x().param(static_cast<uint32_t>(params.size() - 1));
 }
@@ -111,7 +111,7 @@ IndexBuilder::broadcast(std::span<const StaticShape> shapes, std::span<const siz
     for (size_t j = 0; j < rank; ++j) {
         // The operands that have this axis, and among them those whose extent may not be 1.
         std::optional<std::pair<size_t, size_t>> source; // (operand, its axis)
-        int64_t known      = -1;
+        std::optional<int64_t> known;
         size_t notOne      = 0;
         bool anyUnknown    = false;
         for (size_t i = 0; i < shapes.size(); ++i) {
@@ -119,19 +119,19 @@ IndexBuilder::broadcast(std::span<const StaticShape> shapes, std::span<const siz
             if (j < shift) {
                 continue;
             }
-            const int64_t e = shapes[i][j - shift];
+            const std::optional<int64_t> e = shapes[i][j - shift];
             if (e == 1) {
                 continue;
             }
             ++notOne;
-            anyUnknown |= e == kUnknownDim;
-            if (e != kUnknownDim) {
-                if (known >= 0 && known != e) {
+            anyUnknown |= !e.has_value();
+            if (e.has_value()) {
+                if (known && known != e) {
                     return std::nullopt; // conflicting extents: the call is rejected
                 }
                 known = e;
             }
-            if (!source || (shapes[source->first][source->second] == kUnknownDim && e != kUnknownDim)) {
+            if (!source || (shapes[source->first][source->second] == std::nullopt && e.has_value())) {
                 source = {i, j - shift};
             }
         }

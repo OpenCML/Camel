@@ -1,0 +1,15 @@
+digraph GraphIR {
+        subgraph cluster_F02 {
+            label="twice";
+            tooltip="(x: int) => int";
+            F02 [label="ARGS", type="ARGS", style=dashed, shape=circle];
+            O02 [label="EXIT", type="EXIT", style=dashed, shape=circle];
+            N00 [label="x", type="PORT", param_name="x", param_kind="normal", param_index="0", value_type="int", shape=circle, style=solid, tooltip="x"];
+            N01 [label="5", type="DATA", shape=circle, style=solid, value_type="int", tooltip="5"];
+            N02 [label=":op/\nmul_l", type="OPER", shape=diamond, style=solid, value_type="int", tooltip=":op/mul_l"];
+            F02 -> N00 [label="0", type="NORM_PORT", style=solid];
+            N02 -> O02 [label="0", type="EXIT", style=solid];
+            N00 -> N02 [label="0|0", type="NORM"];
+            N01 -> N02 [label="0|1", type="NORM"];
+        }
+}

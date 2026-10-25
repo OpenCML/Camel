@@ -9,11 +9,11 @@ module var_tensor_reference
 
 import { Tensor, zeros, sum } from tensor
 
-func step(var w: Tensor, d: float) {
+func step(var w: f32[?, ?], d: f32) {
     w = w + d
 }
 
-func twice(var w: Tensor): float sync {
+func twice(var w: f32[?, ?]): float sync {
     step(w, 1.0)
     step(w, 1.0)
     return sum(w)

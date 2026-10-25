@@ -1,18 +1,21 @@
-// A rank-0 tensor has no first dimension to iterate over. Here the shape reaches `reshape`
-// through a function parameter, so it is not a constant and the rank is unknown until the
-// loop takes the elements: the fault is reported at the loop's sequence, on the round-less
-// path that would otherwise give the initial state.
+// Reshaping a tensor to no dimension makes it the one element it holds — the rank-zero ruling,
+// docs/handover/reviews/questions-2026-10-23.md section rank-zero-tensor — so another element count
+// has no value to become, and the count is checked when the shape runs (the shape arrives through a
+// parameter). The loop below is never reached: `for` over a value with no dimension is refused
+// where it is written (loops.err_tensor_rank0), and rank 0 is decided at the instantiation, so the
+// parameter is written the final way, `T[..]` (the author's ruling of 2026-10-25 on
+// no-dimension-value-in-an-array-typed-slot).
 module tensor_rank0_runtime
 
-import { Tensor, zeros, reshape } from tensor
+import { zeros, reshape } from tensor
 
-func toShape(t: Tensor, s: int[]): Tensor {
+func toShape::<T>(t: T[..], s: int[]): T[..] {
     return reshape(t, s)
 }
 
 func main(): int sync {
     let no: int[] = []
-    let s  = toShape(zeros([1]), no)
+    let s  = toShape(zeros([2]), no)
     let n  = loop c = 0 for x in s do c + 1
     println(n)
     return 0

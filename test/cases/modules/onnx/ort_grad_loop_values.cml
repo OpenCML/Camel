@@ -13,44 +13,44 @@ import { with_grad } from autodiff
 import { export_model } from onnx
 import { get_env } from env
 
-type P = { w: Tensor }
+type P = { w: f32[..] }
 
 // A: (state, counter) as a tuple; the loss reads the state only.
 with <m: P>
-func walk(h: Tensor, k: int): (Tensor, int) {
+func walk(h: f32[..], k: int): (f32[..], int) {
     return if k >= 6 || sum(h * h) < 1.0 then (h, k) else walk<m>(tanh(h @ m.w) * 0.3 + h * 0.6, k + 1)
 }
 
 with <m: P>
-func loss_a(x: Tensor): float {
+func loss_a(x: f32[..]): float {
     let (h, k) = walk<m>(x, 0)
     return sum(h * h)
 }
 
 // B: the counter enters the loss as a number (it has no derivative).
 with <m: P>
-func loss_b(x: Tensor): float {
+func loss_b(x: f32[..]): float {
     let (h, k) = walk<m>(x, 0)
     return sum(h * h) * (1.0 + 0.5 * float(k))
 }
 
 // C: the same as a struct.
-type Run = { state: Tensor, steps: int }
+type Run = { state: f32[..], steps: int }
 
 with <m: P>
-func walk_c(h: Tensor, k: int): Run {
+func walk_c(h: f32[..], k: int): Run {
     return if k >= 6 || sum(h * h) < 1.0 then { state: h, steps: k } else walk_c<m>(tanh(h @ m.w) * 0.3 + h * 0.6, k + 1)
 }
 
 with <m: P>
-func loss_c(x: Tensor): float {
+func loss_c(x: f32[..]): float {
     let r = walk_c<m>(x, 0)
     return sum(r.state)
 }
 
 // D: four carried values, three of them differentiable (two tensors and a float).
 with <m: P>
-func walk_d(h: Tensor, k: int, acc: Tensor, e: float): (Tensor, int, Tensor, float) {
+func walk_d(h: f32[..], k: int, acc: f32[..], e: float): (f32[..], int, f32[..], float) {
     return if k >= 6 || sum(h * h) < 1.0 then (h, k, acc, e) else walk_d<m>(
         tanh(h @ m.w) * 0.3 + h * 0.6,
         k + 1,
@@ -60,13 +60,13 @@ func walk_d(h: Tensor, k: int, acc: Tensor, e: float): (Tensor, int, Tensor, flo
 }
 
 with <m: P>
-func loss_d(x: Tensor): float {
+func loss_d(x: f32[..]): float {
     let r = walk_d<m>(x, 0, x * 0.0, 0.25)
     return sum(r.0) + sum(r.2) * 0.1 + r.3 * 0.3
 }
 
 // The counter as an output of the model, next to the value and the gradient.
-func step(w: Tensor, x: Tensor): (Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, int) {
+func step(w: f32[..], x: f32[..]): (float[..], f32[..], float[..], f32[..], float[..], f32[..], float[..], f32[..], int) {
     let m = { w: w }
     let a = with_grad(loss_a)<m>(x)
     let b = with_grad(loss_b)<m>(x)
@@ -80,8 +80,8 @@ func step(w: Tensor, x: Tensor): (Tensor, Tensor, Tensor, Tensor, Tensor, Tensor
 }
 
 func main(): int sync {
-    let w = load_npy('w.npy')
-    let x = load_npy('x.npy')
+    let w = load_npy::<f32>('w.npy')
+    let x = load_npy::<f32>('x.npy')
     let r = step(w, x)
     save_npy(r.0, 'native_0.npy')
     save_npy(r.1, 'native_1.npy')
@@ -94,7 +94,7 @@ func main(): int sync {
     save_npy(reshape([r.8], [1]), 'native_8.npy')
     let exported = if get_env('ONNX_OUT') != '' then sync {
         export_model(
-            (w: Tensor, x: Tensor): (Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, int) => step(w, x),
+            (w: f32[..], x: f32[..]): (float[..], f32[..], float[..], f32[..], float[..], f32[..], float[..], f32[..], int) => step(w, x),
             (w, x),
             get_env('ONNX_OUT')
         )

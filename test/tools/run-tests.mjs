@@ -704,15 +704,37 @@ function parseDiagnostics(text) {
     // program (a device named by --devices, for one) has no source position; the short format
     // writes `?` there. It is still a diagnostic: name and code can be asserted, and line and
     // column stay absent.
-    const pattern = /^(?:\([^)]+\))?(.*?):(\d+|\?):(\d+|\?): \[[^\]]+\]: .* \(name=([^,]+), code=(0x[0-9A-Fa-f]+)\)$/gm
+    //
+    // The message of one diagnostic may run onto further lines, and the short format closes the
+    // last of them with `(name=..., code=...)`: `SemanticDiag::NoMatchingFunction` writes the
+    // overload list of a call to a function of the program that way. So it is the header that
+    // starts a diagnostic and the block runs to the next header, where the suffix is read. A
+    // message read this way is read whole; the suffix of a wrapped message can no longer be
+    // taken for another diagnostic's, and one whose message stays on the header line reads
+    // exactly as before.
+    const header = /^(?:\([^)]+\))?(.*?):(\d+|\?):(\d+|\?): \[[^\]]+\]: /gm
+    const starts = []
     let match
-    while ((match = pattern.exec(clean)) !== null) {
-        diagnostics.push({
+    while ((match = header.exec(clean)) !== null) {
+        starts.push({
             path: match[1],
-            line: match[2] === '?' ? undefined : Number.parseInt(match[2], 10),
-            column: match[3] === '?' ? undefined : Number.parseInt(match[3], 10),
-            name: match[4],
-            code: match[5],
+            line: match[2],
+            column: match[3],
+            begin: match.index,
+            after: header.lastIndex,
+        })
+    }
+    const suffix = /\(name=([^,]+), code=(0x[0-9A-Fa-f]+)\)/
+    for (let i = 0; i < starts.length; ++i) {
+        const end = i + 1 < starts.length ? starts[i + 1].begin : clean.length
+        const closed = suffix.exec(clean.slice(starts[i].after, end))
+        if (closed === null) continue // a message with no name to assert (--error-format text)
+        diagnostics.push({
+            path: starts[i].path,
+            line: starts[i].line === '?' ? undefined : Number.parseInt(starts[i].line, 10),
+            column: starts[i].column === '?' ? undefined : Number.parseInt(starts[i].column, 10),
+            name: closed[1],
+            code: closed[2],
         })
     }
     return diagnostics

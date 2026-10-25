@@ -22,12 +22,12 @@ import { Tensor, new, sum, where } from tensor
 import { with_grad } from autodiff
 
 with <x: f32>
-func multiply_loss(w: Tensor): f32 {
+func multiply_loss(w: f32[..]): f32 {
     return f32(sum(w * x))
 }
 
 with <x: f32>
-func where_loss(w: Tensor): f32 {
+func where_loss(w: f32[..]): f32 {
     return f32(sum(where(w > 0.0, w, x)))
 }
 

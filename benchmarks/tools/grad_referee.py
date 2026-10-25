@@ -129,7 +129,7 @@ def make_variant(model: str, activation: str, out_dir: Path) -> Path:
         text = re.sub(r"\brelu\(", "tanh(", text)
     elif activation == "softplus":
         text = re.sub(r"import \{ Tensor, relu,", "import { Tensor, exp, log,", text)
-        text = text.replace("\nfunc block(", "\nfunc softplus(x: Tensor): Tensor {\n    return log(exp(x) + 1.0)\n}\n\nfunc block(", 1)
+        text = text.replace("\nfunc block(", "\nfunc softplus(x: f32[..]): f32[..] {\n    return log(exp(x) + 1.0)\n}\n\nfunc block(", 1)
         text = re.sub(r"\brelu\(", "softplus(", text)
     out_dir.mkdir(parents=True, exist_ok=True)
     path = out_dir / "model.cml"

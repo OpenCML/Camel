@@ -11,7 +11,7 @@ import { Tensor, reshape } from tensor
 import { export_model } from onnx
 import { get_env } from env
 
-func double(t: Tensor): Tensor {
+func double(t: float[..]): float[..] {
     return t * 2.0
 }
 

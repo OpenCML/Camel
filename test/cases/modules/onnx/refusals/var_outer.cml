@@ -9,7 +9,7 @@ import { get_env } from env
 func main(): int sync {
     let x = reshape([1.0, -2.0, 3.0, 4.0], [2, 2])
     var state = reshape([10.0, 10.0, 10.0, 10.0], [2, 2])
-    export_model((x: Tensor): Tensor => x + state, x, get_env('ONNX_OUT'))
+    export_model((x: float[..]): float[..] => x + state, x, get_env('ONNX_OUT'))
     println('exported')
     return 0
 }

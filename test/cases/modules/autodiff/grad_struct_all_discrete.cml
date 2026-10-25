@@ -1,0 +1,31 @@
+/**
+ * A model whose every field is discrete gets a gradient of its own type, all zeros. The tangent
+ * space of a struct is taken field by field, and a number (an integer included) and a boolean
+ * each have one, which is the value's own type with the value zero (the author's ruling of
+ * 2026-10-25 on discrete-gradient-and-rank-one-slice-ownership: "numbers, integers included, and
+ * booleans have a tangent space, which is their own type, with the value zero"). There is no
+ * "at least one trainable field" exception, so `Plain = {n: int, flag: bool}` is differentiable
+ * and `grad` answers `{n: 0, flag: false}`.
+ *
+ * `let g: Plain = gradient` pins the other half: the gradient is the model's own type, not a
+ * struct of some other shape, and the value printed for each field is that field's zero.
+ */
+module grad_struct_all_discrete
+
+import { with_grad } from autodiff
+
+type Plain = { n: int, flag: bool }
+
+with <p: Plain>
+func loss(x: float): float {
+    return float(p.n) * (if p.flag then 2.0 else 1.0) * x
+}
+
+func main(): int sync {
+    let (value, gradient) = with_grad(loss)<{n: 3, flag: true}>(2.0)
+    let g: Plain = gradient
+    println(value)
+    println(g.n)
+    println(g.flag)
+    return 0
+}

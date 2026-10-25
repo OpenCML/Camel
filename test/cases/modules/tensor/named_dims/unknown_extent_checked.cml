@@ -6,7 +6,7 @@ func fit(a: Tensor<f32, [n]>, b: Tensor<f32, [n]>): float {
     return sum(a) + sum(b)
 }
 func main(): int sync {
-    let t = load_npy('test/cases/modules/tensor/shape_types/x3.npy') as Tensor<f32, [?]>
+    let t = load_npy::<f32>('test/cases/modules/tensor/shape_types/x3.npy') as Tensor<f32, [?]>
     println(fit(t, ones([3])))
     return 0
 }

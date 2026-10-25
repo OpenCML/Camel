@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-278 diagnostics: 261 errors, 17 warnings. 15 carry a machine-applicable edit, 263 say why they carry none.
+280 diagnostics: 263 errors, 17 warnings. 15 carry a machine-applicable edit, 265 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -243,6 +243,8 @@ prints one entry.
 | `0x030001EA` | [SemanticDiag::TagFieldNameAmbiguous](#tagfieldnameambiguous) | Error | no |
 | `0x030001EB` | [SemanticDiag::TagFunctionArgumentNotReadable](#tagfunctionargumentnotreadable) | Error | no |
 | `0x030001EC` | [SemanticDiag::GenericTypeArgumentGrows](#generictypeargumentgrows) | Error | no |
+| `0x030001ED` | [SemanticDiag::TensorElementTypeRequired](#tensorelementtyperequired) | Error | no |
+| `0x030001EE` | [SemanticDiag::BranchElementTypeMismatch](#branchelementtypemismatch) | Error | no |
 | `0x030001F0` | [SemanticDiag::RuleWithArgumentNotConstant](#rulewithargumentnotconstant) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn | no |
@@ -1523,31 +1525,22 @@ No matching function found for argument types: {0}.
 Check the number and types of arguments to ensure they match one of the available overloaded function signatures. Available overloads: {1}
 ```
 
-**Example** (`test/cases/modules/optim/unknown_optimizer.cml`, run as `camel test/cases/modules/optim/unknown_optimizer.cml`)
+**Example** (`test/cases/compile/array_alias/type_text.cml`, run as `camel test/cases/compile/array_alias/type_text.cml ${backend}`)
 
 ```camel
-module optim_unknown_optimizer
+// The printed form of each spelling: `Tensor<f32>` is `f32[..]` and `Tensor<f32, [2, 3]>` is
+// `f32[2, 3]`. The candidate list of a refused call is where the text is visible.
+module array_alias_type_text
 
-import { Tensor, full } from tensor
-import { init } from optim
+import { Tensor } from tensor
 
-type Unknown = { rate: float }
-
-type Model = { w: Tensor }
-
-func model_at(): Model {
-    return { w: full([4], f32(0.5)) }
-}
-
-func init_unknown(): int {
-    let opt: Unknown = { rate: 0.1 }
-    let state = init(opt, model_at())
-    return state.step
+func takes(a: Tensor<f32>, b: Tensor<f32, [2, 3]>): int {
+    return 0
 }
 
 func main(): int sync {
-    let steps = init_unknown()
-    'optim unknown optimizer init steps={}' ->format<steps> ->println
+    let s: string[] = ["a"]
+    println(takes(s, s))
     return 0
 }
 ```
@@ -1612,21 +1605,24 @@ Return type '{0}' does not match the function's declared return type '{1}'.
 Ensure that the value returned from the function matches the type specified in the function signature: {2}. No implicit conversion is applied: convert explicitly, for example float(x) for a number or 'x as T' for a module type.
 ```
 
-**Example** (`test/cases/compile/array_shape/err_return_shape.cml`, run as `camel test/cases/compile/array_shape/err_return_shape.cml std::nvm`)
+**Example** (`test/cases/compile/literals/context_composite_holes_mismatch.cml`, run as `camel -E short test/cases/compile/literals/context_composite_holes_mismatch.cml`)
 
 ```camel
-// A return type that states a shape promises it: the body must give a value of that shape. The
-// body here returns its parameter, whose extent is the name `n` and not the constant 2 the return
-// type declares, so the two shapes do not agree.
-module array_shape_err_return_shape
+module literal_context_composite_holes_mismatch
 
-func firstTwo(x: f32[n]): f32[2] {
-    return x
-}
+type MA = { n: int, t: (f32, f32) }
+type MB = { n: int, v: f32[2] }
 
-func main(): int sync {
-    let v: f32[3] = [1.0, 2.0, 3.0]
-    println(len(firstTwo(v)))
+// `n` is a float and the field is an int: the literal does not take MA, and the tuple of
+// literals beside it stays a `(float, float)` rather than becoming an `(f32, f32)`.
+func wrongSibling(n: float): MA { return { n: n, t: (1.0, 2.0) } }
+
+// `v` is a computed `f64[]` where the field is an `f32[2]`: no element is narrowed into it.
+func computedArray(v: f64[]): MB { return { n: 1, v: v } }
+
+func main(): int {
+    println(wrongSibling(1.0).n)
+    println(computedArray([1.0]).n)
     return 0
 }
 ```
@@ -2082,15 +2078,16 @@ The arguments of the type '{0}<...>' are not accepted: {1}.
 What a type takes between '<' and '>' is defined by the type itself (a type argument, or a constant written 'const <data>'). An argument a type does not accept is an error; it is never ignored.
 ```
 
-**Example** (`test/cases/compile/array_shape/err_const_shape.cml`, run as `camel test/cases/compile/array_shape/err_const_shape.cml`)
+**Example** (`test/cases/compile/array_alias/err_element_type.cml`, run as `camel test/cases/compile/array_alias/err_element_type.cml ${backend}`)
 
 ```camel
-// A shape argument is written without `const`; the old spelling is refused and the message
-// gives the new one.
-module array_shape_err_const
+// The element type of the alias is a numeric scalar (plan section 5.1): anything else is the
+// type's own refusal, and the message names the set it takes.
+module array_alias_err_element_type
+
 import { Tensor } from tensor
 
-func bad(x: Tensor<f32, const [3]>): int {
+func count(x: Tensor<string>): int {
     return 0
 }
 
@@ -2157,17 +2154,21 @@ The returned value needs an explicit conversion to the function's declared retur
 A type that leaves open what the declared return type fixes is never accepted implicitly, and nothing is checked on its behalf (function signature: {3}). Where the value is known to fit, write the conversion: {2}. A conversion written with 'as' is checked when it runs; a value that does not fit stops the program at that position.
 ```
 
-**Example** (`test/cases/modules/tensor/shape_inference/recursion_leaf.cml`, run as `camel test/cases/modules/tensor/shape_inference/recursion_leaf.cml`)
+**Example** (`test/cases/compile/array_shape/err_return_shape.cml`, run as `camel test/cases/compile/array_shape/err_return_shape.cml std::nvm`)
 
 ```camel
-module shape_inference_recursion_leaf
-import { Tensor, slice, reshape, sum } from tensor
-// That the vector has one element where the recursion ends is known when the program runs.
-func tree(x: Tensor<f32, [?]>, n: int): Tensor<f32, [1]> {
-    return if n <= 1 then x else tree(slice(x, 0, 0, n / 2), n / 2) + tree(slice(x, 0, n / 2, n), n - n / 2)
+// A return type that states a shape promises it: the body must give a value of that shape. The
+// body here returns its parameter, whose extent is the name `n` and not the constant 2 the return
+// type declares, so the two shapes do not agree.
+module array_shape_err_return_shape
+
+func firstTwo(x: f32[n]): f32[2] {
+    return x
 }
+
 func main(): int sync {
-    println(sum(tree(reshape([1.0, 2.0, 3.0, 4.0, 5.0], [5]), 5)))
+    let v: f32[3] = [1.0, 2.0, 3.0]
+    println(len(firstTwo(v)))
     return 0
 }
 ```
@@ -2338,7 +2339,7 @@ A type variable takes the type of the argument found at its first binding positi
 module constas_argument_shape
 import { Tensor, ones, sum } from tensor
 
-func total(constas n: int, x: Tensor<f32, [n]>): float {
+func total(constas n: int, x: f32[n]): float {
     return sum(x)
 }
 
@@ -3460,17 +3461,20 @@ This value has type '{0}', which is not the declared type '{1}'.
 A declaration written with a type takes a value of that type; nothing is converted on the way (a number does not become a float by itself, and a text does not become a number). Convert the value explicitly: 'float(n)' for a number of another type, 'int(s)' or 'parse_int(s)' for a text, 'string(n)' for a number written as text (the same for 'i32', 'f32', 'f64' and the complex types), 'v as T' for a module type; or change the declared type.
 ```
 
-**Example** (`test/cases/compile/literals/expected_type_typed_value_not_converted.cml`, run as `camel -E short test/cases/compile/literals/expected_type_typed_value_not_converted.cml`)
+**Example** (`test/cases/compile/array_shape/err_nonliteral_rank.cml`, run as `camel test/cases/compile/array_shape/err_nonliteral_rank.cml std::nvm`)
 
 ```camel
-module expected_type_typed_value_not_converted
-
-func keep::<T>(xs: T[], n: int): T[] { return xs }
+// A one-dimensional constant that is not written as a nested literal at the position: it is an
+// `f32[4]` of four elements where the annotation states `f32[2, 2]`. 2 * 2 is its element count,
+// and that alone does not make it one array of that shape (design principles 5.1, 5.4): only a
+// source whose own nesting already gives the shape -- a nested literal, a constant a folded
+// `reshape` names -- is read as the shape the position states. Nothing is reshaped to fit.
+module array_shape_err_nonliteral_rank
 
 func main(): int sync {
-    let v: float[] = [1.0, 2.0]
-    let xs: f32[] = keep(v, 2)
-    println(len(xs))
+    let flat: f32[] = [1.0, 2.0, 3.0, 4.0]
+    let one = flat as f32[4]
+    let b: f32[2, 2] = one
     return 0
 }
 ```
@@ -4130,13 +4134,13 @@ None: choice: the repair is a decision only the writer can make
 **Message**
 
 ```text
-Argument {0} has extent {1}, but the dimensions the earlier arguments bound do not allow it.
+{0} has extent {1}, but {2}.
 ```
 
 **Help**
 
 ```text
-The dimensions a signature names are one value for the whole call: every argument whose type writes the same name must have the extent the name was bound to.
+A shape is one value wherever it is stated. The dimensions a signature names are one value for the whole call: every argument whose type writes the same name must have the extent the name was bound to. A literal must write the shape the position it stands in states: a flat '[1.0, 2.0, 3.0, 4.0]' is an 'f32[4]', not an 'f32[2, 2]'. Nothing is reshaped to fit.
 ```
 
 **Example** (`test/cases/compile/array_shape/err_call_mismatch.cml`, run as `camel test/cases/compile/array_shape/err_call_mismatch.cml std::nvm`)
@@ -8107,6 +8111,87 @@ func main(): int sync {
 }
 ```
 
+### TensorElementTypeRequired
+
+`0x030001ED` · Error · `SemanticDiag::TensorElementTypeRequired`
+
+**Fix**
+
+None: choice: which element type the value has is the writer's to say, and the help names both spellings
+
+**Message**
+
+```text
+The type '{0}' states no element type: a tensor's element type is part of its type, so this spelling is not a type of a value.
+```
+
+**Help**
+
+```text
+Every tensor type writes its element type: 'Tensor<f32>' (a rank nobody fixes yet), 'Tensor<f32, [2, 3]>', or the array type itself, 'f32[..]' and 'f32[2, 3]'. A signature that takes a tensor of any element type declares a type variable in its head and writes it as the element type -- 'func f::<T>(x: Tensor<T>)', which is the same type as 'func f::<T>(x: T[..])' -- and the call's argument fixes that type variable, so the body sees the element type the call bound. A shape written without an element type ('Tensor<[3]>') leaves the same question open.
+```
+
+**Example** (`test/cases/compile/array_alias/bare_tensor.cml`, run as `camel test/cases/compile/array_alias/bare_tensor.cml ${backend}`)
+
+```camel
+// A tensor type states the element type of the values it describes, so a signature that writes
+// the tensor name alone is refused where it is written, and the report says which spellings state
+// one: `Tensor<f32>` (any rank), `Tensor<f32, [2, 3]>`, or the array type itself (`f32[..]`,
+// `f32[2, 3]`). A signature that takes a tensor of any element type declares a type variable in
+// its head -- `func count::<T>(t: Tensor<T>)`, which is `func count::<T>(t: T[..])` -- and the
+// call's argument fixes it. That positive spelling is test/cases/loops/iterate_tensor.cml.
+module array_alias_bare_tensor
+
+import { Tensor, ones } from tensor
+
+func count(t: Tensor): int {
+    return len(t)
+}
+
+func main(): int sync {
+    let ints: int[3] = [1, 2, 3]
+    let floats: f32[2, 3] = ones([2, 3])
+    println(count(ints))
+    println(count(floats))
+    return 0
+}
+```
+
+### BranchElementTypeMismatch
+
+`0x030001EE` · Error · `SemanticDiag::BranchElementTypeMismatch`
+
+**Fix**
+
+None: choice: which arm takes the conversion, and in which element type, is the writer's to say
+
+**Message**
+
+```text
+The two arms of the branch have different element types: '{0}' and '{1}'. An array's element type is part of its type, and a number of one element type does not become a number of another by itself.
+```
+
+**Help**
+
+```text
+Give the two arms one element type: write the conversion on the arm that needs it -- f32(v) for a value, cast(v, 'float32') for a name -- or build both arms at the element type the value is to have, which is the element type a declaration writes. An int[] and an f32[] have no common type, so the join picks neither of the two and invents no third.
+```
+
+**Example** (`test/cases/compile/semantic/branch_element_type_mismatch.cml`, run as `camel test/cases/compile/semantic/branch_element_type_mismatch.cml`)
+
+```camel
+module semantic_branch_element_type_mismatch
+
+func pick(flag: bool, whole: int[], real: f32[]): int[] {
+    return if flag then whole else real
+}
+
+func main(): int sync {
+    let picked = pick(true, new([1, 2, 3] as int[]), new([f32(1.0), f32(2.0), f32(3.0)]))
+    return if picked[0] > 0 then 0 else 1
+}
+```
+
 ### RuleWithArgumentNotConstant
 
 `0x030001F0` · Error · `SemanticDiag::RuleWithArgumentNotConstant`
@@ -8801,14 +8886,29 @@ Tensor shape mismatch in '{0}': {1}.
 Check the shapes of all operands involved in the operation and ensure they are compatible for broadcasting or direct computation.
 ```
 
-**Example** (`test/cases/modules/tensor/binary_length_error.cml`, run as `camel test/cases/modules/tensor/binary_length_error.cml std::fvm`)
+**Example** (`test/cases/loops/fault_tensor_rank0.cml`, run as `camel -E short test/cases/loops/fault_tensor_rank0.cml ${backend}`)
 
 ```camel
-module binary_length_error
-import { from_bytes, sum } from tensor
-import { from_array } from bytes
+// Reshaping a tensor to no dimension makes it the one element it holds — the rank-zero ruling,
+// docs/handover/reviews/questions-2026-10-23.md section rank-zero-tensor — so another element count
+// has no value to become, and the count is checked when the shape runs (the shape arrives through a
+// parameter). The loop below is never reached: `for` over a value with no dimension is refused
+// where it is written (loops.err_tensor_rank0), and rank 0 is decided at the instantiation, so the
+// parameter is written the final way, `T[..]` (the author's ruling of 2026-10-25 on
+// no-dimension-value-in-an-array-typed-slot).
+module tensor_rank0_runtime
+
+import { zeros, reshape } from tensor
+
+func toShape::<T>(t: T[..], s: int[]): T[..] {
+    return reshape(t, s)
+}
+
 func main(): int sync {
-    println(sum(from_bytes::<f32>(from_array([0, 0, 0]), [1])))
+    let no: int[] = []
+    let s  = toShape(zeros([2]), no)
+    let n  = loop c = 0 for x in s do c + 1
+    println(n)
     return 0
 }
 ```

@@ -396,8 +396,9 @@ const std::vector<oper_group_ptr_t> &getCollectionOperatorGroups() {
                   })}}),
         // The elements a `for` takes from a map: its (key, value) pairs in key order
         // (design principles 11.3). The loop builder converts a map to that array once; a
-        // program does not write `__iter__` itself. A string and a tensor add their own
-        // overloads (globals.cpp, the tensor module).
+        // program does not write `__iter__` itself. A string adds its own overload
+        // (globals.cpp); a tensor is a numeric array, which the core iterates itself, so no
+        // module adds one for it.
         OperatorGroup::create("__iter__", {{":coll/map_items", mapItems}}),
         // ======= Equality (DESIGN-QUESTION(map-equality-print)) =======
         OperatorGroup::create(

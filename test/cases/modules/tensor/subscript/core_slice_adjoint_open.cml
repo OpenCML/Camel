@@ -1,0 +1,31 @@
+/**
+ * The core's own slice adjoint on a rank-1 value whose length the type does not state: `x[1:4]`
+ * where x is `f32[]`. The core answers this subscript on the flip line too (`isTensorSubscript`
+ * sent only `f32[..]` and `Tensor<f32>` to the module), so this case measures the core's chain
+ * before and after the fix: the scatter kernel built its result with `Array::create(alloc, size)`
+ * -- an array of bare slots -- so the gradient carried no element type and `sum(g)` refused with
+ * `sum: Unsupported Tensor dtype` (exit 1). The adjoint now creates the value with the tangent's
+ * array type, so the gradient states the parent's element type.
+ *
+ *   x = [1,2,3,4,5,6];  sum(x[1:4]) = 2 + 3 + 4 = 9.0
+ *   d/dx = [0, 1, 1, 1, 0, 0];  sum of it = 3.0
+ *
+ * Red when: the gradient has no element type (`sum(g)` refuses, exit 1), the gradient is the zero
+ * of the wrong shape, or the value's element type is lost on the way back.
+ */
+module core_slice_adjoint_open
+
+import { Tensor, sum } from tensor
+import { grad } from autodiff
+
+with <x: f32[]>
+func probe(): float {
+    return sum(x[1:4])
+}
+
+func main(): int sync {
+    let x = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[]
+    let g = grad(probe)<x>()
+    'core_slice_adjoint_open value={:.1f} grad_sum={:.1f}'->format<probe<x>(), sum(g)>->println
+    return 0
+}

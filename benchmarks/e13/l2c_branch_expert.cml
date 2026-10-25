@@ -22,19 +22,19 @@ import { sgd, save_params } from nn
 import { get_env } from env
 import { export_model } from onnx
 
-type Moe = { wa1: Tensor, ba1: Tensor, wa2: Tensor, ba2: Tensor, wb: Tensor, bb: Tensor }
+type Moe = { wa1: float[..], ba1: float[..], wa2: float[..], ba2: float[..], wb: float[..], bb: float[..] }
 
 with <m: Moe>
-func loss(x: Tensor): float {
+func loss(x: float[..]): float {
     let y = if mean(x) > 0.0 then relu(x @ m.wa1 + m.ba1) @ m.wa2 + m.ba2 else x @ m.wb + m.bb
     return mean(y * y)
 }
 
-func fwd(m: Moe, x: Tensor): float {
+func fwd(m: Moe, x: float[..]): float {
     return loss<m>(x)
 }
 
-func step(m: Moe, x: Tensor): (float, Moe) {
+func step(m: Moe, x: float[..]): (float, Moe) {
     let vg = with_grad(loss)<m>(x)
     return (vg.0, sgd(m, vg.1, 0.01))
 }
@@ -50,7 +50,7 @@ func load(): Moe {
     }
 }
 
-func input_a(): Tensor {
+func input_a(): float[..] {
     return reshape([1.0, 2.0, -0.5, 0.5, 1.5, 0.0], [2, 3])
 }
 

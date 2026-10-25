@@ -18,7 +18,7 @@ case = "../../../cases/opt/generic/arm_tail_gate.cml"
 args = ["${case}", "test::regions", "std::nvm"]
 
 expect_exit = 0
-expect_output_contains = ["REGIONS count=5 in_inner=2 in_outer=1 result=ok ports=1 within=1", "REGIONS recommit same=1", "tensor("]
+expect_output_contains = ["REGIONS count=5 in_inner=2 in_outer=1 result=ok ports=1 within=1", "REGIONS recommit same=1", "[8.0, 8.0]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -30,7 +30,7 @@ case = "../../../cases/opt/generic/arm_tail_gate.cml"
 args = ["${case}", "test::regions", "std::opt", "std::nvm"]
 
 expect_exit = 0
-expect_output_contains = ["REGIONS count=5", "tensor("]
+expect_output_contains = ["REGIONS count=5", "[8.0, 8.0]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -52,7 +52,7 @@ kind = "behavior"
 case = "../../../cases/opt/generic/arm_tail_gate.cml"
 args = ["${case}", "std::opt::inline", "${run_fvm}"]
 expect_exit = 0
-expect_stdout_contains = ["tensor("]
+expect_stdout_contains = ["[8.0, 8.0]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 

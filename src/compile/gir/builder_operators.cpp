@@ -929,10 +929,12 @@ node_handle_t Builder::compoundAssignmentByRebinding(
     // `a op= b` is `a = a op b` (design principles 4.2): one rule for every type, whoever
     // declared it — a number's built-in `+`, a `+` the tensor module declares for a numeric
     // array, an `operator +` of the program. What the compound assignment follows is that
-    // operator, so the two things asked of it are the two things the rule states: that `a op b`
-    // be defined for these operands, and that what it gives be `a`'s own type. `int[]` has no
-    // `+`, and a `+` that answers with another type is not a `+=` either; both are refused
-    // here, and the call reports the compound assignment the program wrote.
+    // operator, so what is asked of it is what the ruling of 2026-10-24 says: that `a op b` be
+    // defined for these operands, and that `a = a op b` be a legal assignment — the value the
+    // operator gives fits `a`'s type where the assignment would put it (an addition broadcasts
+    // `f32[]` and `f32[2]` to `f32[2]`, which a `var` holding `f32[]` takes). `int[]` has no
+    // `+`, and a `+` whose value no assignment to `a` would accept is not a `+=` either; both
+    // are refused here, and the call reports the compound assignment the program wrote.
     const auto plainGroup = camel::core::plainGroupOfCompoundAssignment(group);
     if (!plainGroup || operands.size() != 2 || normTypes.size() != operands.size()) {
         return nullptr;
@@ -951,19 +953,52 @@ node_handle_t Builder::compoundAssignmentByRebinding(
         node->setOrigin(gct->origin());
         return node;
     };
+    // The value keeps the compound operator's own origin: what a fault of the operator is
+    // reported at is the `%=` as written (a `%=` by zero is a DivisionByZero at the `%=`,
+    // test/plans/feat/linear/operators.plan.toml). The write keeps the statement's, so the
+    // statement is still the whole assignment where something asks for it (the LSP's
+    // navigation, test/plans/feat/tools/lsp.plan.toml).
+    const auto makeOperator = [&](GCT::node_ptr_t node) {
+        node->setOrigin(gct->size() > 0 && gct->at(0) != nullptr ? gct->at(0)->origin()
+                                                                : gct->origin());
+        return node;
+    };
     // The right operand is evaluated once: it was built already, and is named here.
     const std::string right = bindTemporary(valueOf(operands[1].node));
-    GCT::node_ptr_t value   = make(tree_->makeLink(2));
-    *value << make(tree_->makeDRef(plainName)) << tree_->clone(operands[0].expr)
-           << make(tree_->makeDRef(right));
+    // The place is read through `:var/peek`: what the plain operator reads is the value this same
+    // assignment writes back, so the read must not take the place's array with it, and whether the
+    // store updates in place is the memory planner's question (design principles 6.11). The read
+    // is otherwise the read the place would get: it is the same `:var/peek` a place of an array is
+    // read with when the assignment is in place, and the same one a read inside a sync block is
+    // settled to when nothing after it needs the array. A place that is not a variable of the
+    // program is left to be built as written, so its own report is the one given.
+    node_handle_t placeCell = nullptr;
+    if (operands[0].expr != nullptr && operands[0].expr->type() == GCT::NodeKind::DREF) {
+        const std::string name = moduleLevelName(operands[0].expr->name());
+        if (nodeAt(name).has_value()) {
+            if (node_handle_t node = resolveNodeByRef(name); isVariable(node)) {
+                placeCell = node;
+            }
+        }
+    }
+    const std::string place =
+        placeCell != nullptr ? bindTemporary(peekVariable(placeCell)) : std::string();
+    GCT::node_ptr_t value = makeOperator(tree_->makeLink(2));
+    *value << makeOperator(tree_->makeDRef(plainName));
+    if (place.empty()) {
+        *value << tree_->clone(operands[0].expr);
+    } else {
+        *value << make(tree_->makeDRef(place));
+    }
+    *value << make(tree_->makeDRef(right));
     // The plain operator is resolved as one written by itself would be: this is where its
     // availability is settled for the arguments, and where its result type is known. A result
-    // of another type than the target's is not this assignment's meaning, so the rebinding
+    // the assignment to `a` would not take is not this assignment's meaning, so the rebinding
     // does not apply and the compound assignment is reported as undefined, exactly as for a
     // type that has no plain operator at all.
     const node_handle_t plain = visitLinkNode(value);
     Type *result             = valueTypeOf(nodeTypeOf(plain));
-    if (result == nullptr || !result->equals(target)) {
+    if (result == nullptr || !target->assignableFrom(result)) {
         return nullptr;
     }
     // The value the plain operator gave is named for the assignment, so that it is computed
@@ -1865,6 +1900,14 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             normInputTypes.push_back(valueTypeOf(callableValueType(input.node)));
         }
     }
+    // A variable passed to a `var` parameter is the variable's cell, and the callee's port holds
+    // `cell` of what the parameter declares. The cell is written through every reference to it
+    // (TupleType::assignableFrom), so its content type is the parameter's: the argument's value
+    // type is what the parameter has to take, and the ordinary report below refuses a call whose
+    // cell does not fit. The parameter's type is a type of its own (an array with its element type
+    // written, `T[..]` for a generic head), so there is no wider spelling of the same value to
+    // hand the cell here.
+
     // A `with` argument may be written by name, and a `with` parameter may have a default
     // (design principles 4.4). The binding puts the arguments in the declaration's order and
     // fills the parameters the call leaves out, so that from here on an index into
@@ -1971,6 +2014,11 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     for (const Argument &input : withInputs) {
         withInputTypes.push_back(valueTypeOf(nodeTypeOf(input.node)));
     }
+    // A `with` parameter declared `var` takes the caller's variable too (design principles 4.4,
+    // 3.5), and the reading above applies here as well: the cell is written through every
+    // reference to it, and the declared parameter type is the type of what the callee may store.
+    // A cell whose content the parameter cannot take is left alone: the ordinary report refuses
+    // the call.
 
     // An argument that is still a name without a single function value (several overloads, or
     // an operator whose signature is not one function type). Where the callee has one known
@@ -2225,7 +2273,9 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                     if (binding == ExtentBinding::Mismatch) {
                         diags_->of(SemanticDiag::DimensionMismatch)
                             .atOrigin(inputs[i].expr->origin())
-                            .commit(label, mismatch);
+                            .commit(
+                                "Argument " + label, mismatch,
+                                "the dimensions the earlier arguments bound do not allow it");
                         throw BuildAbortException();
                     }
                     namedArgs.push_back({&inputs[i], &types, i, param, types[i]});
@@ -2683,6 +2733,21 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             // 歧义，列出两条候选与各自成立的条件"). The declaration-time check asks about one type
             // at a time, so this is the first place the pair can be seen.
             std::vector<std::string> ambiguousConditions;
+            // `a op= b` is `a = a op b`: the plain operator is the value node, and the write
+            // stores it, so a compound assignment is rewritten before the group is asked for an
+            // overload of its own. Whether the store may update the place in memory is the memory
+            // planner's question, not a compound operator's (design principles 4.2). Rewriting
+            // here, before the resolution, is what gives the compound assignment a value node of
+            // the plain operator to hand out where a value is wanted; a compound the plain
+            // operator does not define falls through and is reported by the group as written.
+            if (withInputs.empty() &&
+                camel::core::plainGroupOfCompoundAssignment(ops->name()).has_value()) {
+                if (node_handle_t rebound =
+                        compoundAssignmentByRebinding(ops->name(), gct, normInputs, normInputTypes)) {
+                    LEAVE("LINK");
+                    return rebound;
+                }
+            }
             auto res = resolveGroupedCall(
                 ops,
                 explicitTypes,
@@ -2743,17 +2808,6 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                         nullComparison(ops->name(), gct, normInputs, normInputTypes)) {
                     LEAVE("LINK");
                     return test;
-                }
-            }
-            if (!res.has_value() && withInputs.empty()) {
-                // `a op= b` where the compound group of the operand's type has no rule for it:
-                // it is `a = a op b` when `a op b` is defined and gives `a`'s type, whatever
-                // declared the type (design principles 4.2). A tensor follows its module's `+`
-                // this way, and so does a type of the program; nothing is changed in place.
-                if (node_handle_t rebound =
-                        compoundAssignmentByRebinding(ops->name(), gct, normInputs, normInputTypes)) {
-                    LEAVE("LINK");
-                    return rebound;
                 }
             }
             if (!res.has_value()) {
@@ -2952,12 +3006,12 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             }
             // A subscript slice with a constant step of 0 takes no element at all: the same rule
             // as the step of a range, refused where the step is written (design principles 5.4
-            // for the slice, 4.2 for the range). The step is the fourth ordinary argument of
-            // `__slice__`; the fifth is the mask that says which of the two bounds were written,
-            // so it is not the step. A step that is not constant is a fault of the run instead
-            // (RuntimeDiag::InvalidArgument), and a tensor's own slice checks its step with the
-            // shape facts it holds.
-            if (targetOperator->uri() == ":op/slice_sub" && normInputs.size() == 5 &&
+            // for the slice, 4.2 for the range). The step is the fifth ordinary argument of
+            // `__slice__` -- the value, the axis, the two bounds, the step; the sixth is the mask
+            // that says which of the two bounds were written, so it is not the step. A step that
+            // is not constant is a fault of the run instead (RuntimeDiag::InvalidArgument), and a
+            // tensor's own slice checks its step with the shape facts it holds.
+            if (targetOperator->uri() == ":op/slice_sub" && normInputs.size() == 6 &&
                 withInputs.empty() && gct->size() >= 1 &&
                 gct->at(0)->type() == GCT::NodeKind::DREF && gct->at(0)->name() == "__slice__") {
                 const auto stepIsZero = [](const data_ptr_t &data) {
@@ -2968,10 +3022,10 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                     const auto integer = std::dynamic_pointer_cast<IntData>(data);
                     return integer != nullptr && integer->data() == 0;
                 };
-                if (stepIsZero(constantOfNode(normInputs[3].node))) {
+                if (stepIsZero(constantOfNode(normInputs[4].node))) {
                     // The caret is under the step, the argument that says why the slice can
                     // never be right.
-                    const GCT::node_ptr_t &stepExpr = normInputs[3].expr;
+                    const GCT::node_ptr_t &stepExpr = normInputs[4].expr;
                     const auto where = stepExpr != nullptr && stepExpr->origin() != 0
                                            ? stepExpr->origin()
                                            : gct->origin();
@@ -3408,6 +3462,37 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         node_handle_t negation = applyTagOperator("__not__", bindTemporary(targetNode), gct);
         LEAVE("LINK");
         return negation;
+    }
+    // What an assignment gives where a value is wanted is the value it wrote: the write's second
+    // operand, one data edge, and no `:var/get` (the ruling on the var version node: the value
+    // and the version are two, and the write itself gives the version -- the cell it writes
+    // into). Written as a statement, or where the position wants no value at all (the last
+    // statement of a `: void` body), the write stands for it: the write is what the statement
+    // does.
+    const bool assignment =
+        gct->size() == 3 && gct->at(0) != nullptr && gct->at(0)->type() == GCT::NodeKind::DREF &&
+        gct->at(0)->name().starts_with("__assn");
+    // Whether a value is wanted here: the statement's value is not dropped (`unusedStatement`),
+    // and the position is not a `void` one (a body declared `: void` takes its last statement's
+    // value in no position -- `visitExecNode` builds it and drops it). A position that declares no
+    // type still wants the value: a body whose exit type is inferred is one, and that is the whole
+    // reason its exit type can be inferred. `expectedResult` is the position's type as its caller
+    // passed it; `expectedValueType_` is nil for the whole of a call (`callScope`).
+    const bool valueWanted =
+        !unusedStatement &&
+        !(expectedResult != nullptr && isVoidGraphExitType(expectedResult));
+    if (assignment && valueWanted && normInputs.size() == 2) {
+        // What the position takes is the value the write wrote -- the write's second operand, one
+        // data edge, no read of the cell and no new anchor. The write is an effect of its own and
+        // the value is not it, and nothing else in the graph depends on the write here, so the
+        // value is handed on behind a gate whose other input is the write: that is what makes the
+        // write run where the write's version has no reader of its own.
+        node_handle_t value = valueOf(normInputs[1].node);
+        node_handle_t gate  = currGraph_->addGateNode(nodeTypeOf(value));
+        linkNodes(LinkType::Norm, value, gate);
+        linkNodes(LinkType::Ctrl, targetNode, gate);
+        LEAVE("LINK");
+        return gate;
     }
     LEAVE("LINK");
     return targetNode;

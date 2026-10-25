@@ -1,0 +1,33 @@
+/**
+ * The polymorphic recursion the ruling of 2026-10-24 evening asks for
+ * (dim-name-relaxation-has-no-readable-difference): the parameter's static extent changes at
+ * every level, and how deep the recursion goes is a runtime value, so no level's key is a
+ * constant the compiler could have folded away. The entry argument `[1.0, 2.0]` is `f32[2]`, and
+ * the recursive call passes `concat(xs, xs[0 .. 1])`, which is longer.
+ *
+ * The ruling predicts exactly two instances, `f32[2]` and `f32[?]`, whatever
+ * kMaxTypeSpecializationsPerRecursiveFunction is set to. Measured, std::opt::specialize makes no
+ * instance at all: a parameter written `f32[n]` is not a refinement at a call, so no instance key
+ * is built for the entry call either and the widening is never reached. The count, the graph and
+ * the isolation probes are recorded in the tests that name this file and in
+ * docs/handover/reviews/questions-2026-10-24-evening.md, section
+ * dim-name-relaxation-and-element-type-change.
+ *
+ * The author's sketch reads the depth from `read_int()`. The plan runner closes a test's standard
+ * input (`stdio: ['ignore', ...]`, test/tools/run-tests.mjs), so the depth is read from the
+ * environment, which is a runtime value of the same kind: `int(get_env(...))` is not a constant
+ * expression and is one the fold pass leaves alone.
+ */
+module specialize_dim_name_grow
+
+import { get_env } from env
+import { sum } from array
+
+func grow(xs: f32[n], k: int): f32 {
+    return if k <= 0 then sum(xs) else grow(concat(xs, xs[0 .. 1]), k - 1)
+}
+
+func main(): int sync {
+    println(grow([1.0, 2.0], int(get_env('H476_GROW_DEPTH'))))
+    return 0
+}

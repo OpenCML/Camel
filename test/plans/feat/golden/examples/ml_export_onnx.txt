@@ -1,3 +1,2 @@
-tensor([[ 0.3494],
-        [  0.475]], dtype=float32)
+[[0.3494301], [0.47501197]]
 model file written: true

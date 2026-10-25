@@ -25,15 +25,15 @@ import { get_env } from env
 import { export_model } from onnx
 
 type Gru = {
-    w_ir: Tensor, w_iz: Tensor, w_in: Tensor,
-    w_hr: Tensor, w_hz: Tensor, w_hn: Tensor,
-    b_ir: Tensor, b_iz: Tensor, b_in: Tensor,
-    b_hr: Tensor, b_hz: Tensor, b_hn: Tensor,
-    fc_w: Tensor, fc_b: Tensor
+    w_ir: f32[..], w_iz: f32[..], w_in: f32[..],
+    w_hr: f32[..], w_hz: f32[..], w_hn: f32[..],
+    b_ir: f32[..], b_iz: f32[..], b_in: f32[..],
+    b_hr: f32[..], b_hz: f32[..], b_hn: f32[..],
+    fc_w: f32[..], fc_b: f32[..]
 }
 
 with <m: Gru>
-func cell(xt: Tensor, h: Tensor): Tensor {
+func cell(xt: f32[..], h: f32[..]): f32[..] {
     let r = sigmoid(xt @ m.w_ir + m.b_ir + h @ m.w_hr + m.b_hr)
     let z = sigmoid(xt @ m.w_iz + m.b_iz + h @ m.w_hz + m.b_hz)
     let n = tanh(xt @ m.w_in + m.b_in + r * (h @ m.w_hn + m.b_hn))
@@ -41,34 +41,34 @@ func cell(xt: Tensor, h: Tensor): Tensor {
 }
 
 /// One time step: update the hidden state only when the step's input is large.
-with <m: Gru, x: Tensor>
-func gated(t: int, h: Tensor): Tensor {
+with <m: Gru, x: f32[..]>
+func gated(t: int, h: f32[..]): f32[..] {
     let xt = reshape(slice(x, 1, t, t + 1), [shape(x)[0], shape(x)[2]])
     return if mean(abs(xt)) > 0.5 then cell<m>(xt, h) else h
 }
 
-with <m: Gru, x: Tensor>
-func run(t: int, steps: int, h: Tensor): Tensor {
+with <m: Gru, x: f32[..]>
+func run(t: int, steps: int, h: f32[..]): f32[..] {
     return if t >= steps then h else run<m, x>(t + 1, steps, gated<m, x>(t, h))
 }
 
 with <m: Gru>
-func forward(x: Tensor): Tensor {
+func forward(x: f32[..]): f32[..] {
     let h = run<m, x>(0, shape(x)[1], zeros([shape(x)[0], shape(m.w_hr)[0]]))
     return h @ m.fc_w + m.fc_b
 }
 
 with <m: Gru>
-func loss(x: Tensor): float {
+func loss(x: f32[..]): float {
     let y = forward<m>(x)
     return mean(y * y)
 }
 
-func fwd(m: Gru, x: Tensor): float {
+func fwd(m: Gru, x: f32[..]): float {
     return loss<m>(x)
 }
 
-func step(m: Gru, x: Tensor): (float, Gru) {
+func step(m: Gru, x: f32[..]): (float, Gru) {
     let vg = with_grad(loss)<m>(x)
     return (vg.0, sgd(m, vg.1, 0.01))
 }
@@ -92,7 +92,7 @@ func load(): Gru {
     }
 }
 
-func input_a(): Tensor {
+func input_a(): f32[..] {
     return reshape(
         [1.0, -1.0, 0.25, -0.25, 0.75, 0.5, 0.5, -0.5, -0.25, 0.25, -0.5, 1.0],
         [2, 3, 2]

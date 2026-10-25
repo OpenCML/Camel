@@ -704,8 +704,8 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             SemanticDiag::DimensionMismatch,
             {
                 "DimensionMismatch",
-                "Argument {0} has extent {1}, but the dimensions the earlier arguments bound do not allow it.",
-                "The dimensions a signature names are one value for the whole call: every argument whose type writes the same name must have the extent the name was bound to.",
+                "{0} has extent {1}, but {2}.",
+                "A shape is one value wherever it is stated. The dimensions a signature names are one value for the whole call: every argument whose type writes the same name must have the extent the name was bound to. A literal must write the shape the position it stands in states: a flat '[1.0, 2.0, 3.0, 4.0]' is an 'f32[4]', not an 'f32[2, 2]'. Nothing is reshaped to fit.",
             },
         },
         {
@@ -1586,6 +1586,22 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "NodeOfNotAParameter",
                 "'{0}' is not a const parameter of the rule '{1}', so node_of({0}) names no node.",
                 "node_of reaches the node of a const parameter, so that a condition can read a fact or a shape of the constant: write it over a name the rule declares const, as in the condition sign(node_of(c)) == 1 of the rule r(x: int, const c: float) whose sides are x * c and x. A parameter that is not const is a node of the draft already, so the condition names it directly, and a name that is not a parameter of this rule has no node here.",
+            },
+        },
+        {
+            SemanticDiag::TensorElementTypeRequired,
+            {
+                "TensorElementTypeRequired",
+                "The type '{0}' states no element type: a tensor's element type is part of its type, so this spelling is not a type of a value.",
+                "Every tensor type writes its element type: 'Tensor<f32>' (a rank nobody fixes yet), 'Tensor<f32, [2, 3]>', or the array type itself, 'f32[..]' and 'f32[2, 3]'. A signature that takes a tensor of any element type declares a type variable in its head and writes it as the element type -- 'func f::<T>(x: Tensor<T>)', which is the same type as 'func f::<T>(x: T[..])' -- and the call's argument fixes that type variable, so the body sees the element type the call bound. A shape written without an element type ('Tensor<[3]>') leaves the same question open.",
+            },
+        },
+        {
+            SemanticDiag::BranchElementTypeMismatch,
+            {
+                "BranchElementTypeMismatch",
+                "The two arms of the branch have different element types: '{0}' and '{1}'. An array's element type is part of its type, and a number of one element type does not become a number of another by itself.",
+                "Give the two arms one element type: write the conversion on the arm that needs it -- f32(v) for a value, cast(v, 'float32') for a name -- or build both arms at the element type the value is to have, which is the element type a declaration writes. An int[] and an f32[] have no common type, so the join picks neither of the two and invents no third.",
             },
         },
         {

@@ -1,4 +1,4 @@
-// The answer to the exercise of chapter 17: a law written as a `rule`, and the verdict `check`
+// The answer to the exercise of chapter 18: a law written as a `rule`, and the verdict `check`
 // gives it.
 // Run: camel docs/tutorial/examples/17_exercise.cml
 module exercise

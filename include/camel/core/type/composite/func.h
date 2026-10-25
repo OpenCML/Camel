@@ -240,6 +240,9 @@ class FunctionType : public CompositeType {
     virtual std::string mangle() const override;
     /// The interned signature with the same parts, the components cloned when `deep`.
     virtual Type *clone(bool deep = false) const override;
+    /// This signature as a type: itself when it is interned, and for an open signature (the
+    /// object a compiler is still writing) the interned signature of its parts as they stand.
+    virtual Type *closed() const override;
     virtual bool equals(Type *type) const override;
     virtual CastSafety castSafetyFrom(Type *sourceType) const override;
     virtual bool assignableFrom(Type *sourceType) const override;

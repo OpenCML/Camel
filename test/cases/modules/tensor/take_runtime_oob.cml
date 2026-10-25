@@ -6,7 +6,7 @@ module take_runtime_oob
 
 import { Tensor, reshape, range, cast, take } from tensor
 
-func pick(t: Tensor, i: int): Tensor {
+func pick(t: i64[..], i: int): i64[..] {
     return take(t, cast([i], 'int64'))
 }
 

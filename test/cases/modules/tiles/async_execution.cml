@@ -14,7 +14,7 @@ func chain(x: Device<Tensor<f32>>, n: int): Device<Tensor<f32>> {
 }
 func main(): int sync {
     let folder = get_env('TILES_TEST_OUT')
-    let x = load_npy(folder + '/x.npy') as Tensor<f32>
+    let x = load_npy::<f32>(folder + '/x.npy') as Tensor<f32>
     let d = upload(x)
     let first = run_preferred_resident<step>(d)
     save_npy(download(chain(first, 3)), folder + '/chain.npy')

@@ -472,7 +472,7 @@ kind = "behavior"
 case = "../../../cases/compile/stream/range_using_wins.cml"
 args = ["${case}", "std::nvm"]
 expect_exit = 0
-expect_stdout_starts_with = "tensor([      0,       1,       2,       3,       4], dtype=int64)"
+expect_stdout_starts_with = "[0, 1, 2, 3, 4]"
 expect_output_not_contains = ["NoMatchingFunction", "UnknownInternalError", "[Error]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000

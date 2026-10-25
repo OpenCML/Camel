@@ -41,13 +41,13 @@ bool TypeTable::KeyEqual::operator()(const KeyView &a, const KeyView &b) const {
 }
 
 void TypeTable::assignId(Type *type) {
-    const TypeId id = byId_.append([&](Type *&entry) { entry = type; });
-    type->typeId_   = id;
+    const TypeId id     = byId_.append([&](Type *&entry) { entry = type; });
+    type->typeId_       = id;
+    type->canonicalId_  = id;
 }
 
-Type *TypeTable::intern(
+Type *TypeTable::findOrInsert(
     Shape shape, std::span<const uintptr_t> words, const std::function<Type *()> &make) {
-    std::lock_guard lock(mutex_);
     if (auto it = byKey_.find(KeyView{shape, words}); it != byKey_.end()) {
         ++hits_;
         return it->second;
@@ -59,11 +59,41 @@ Type *TypeTable::intern(
     return type;
 }
 
-void TypeTable::adopt(Type *type) {
+Type *TypeTable::find(Shape shape, std::span<const uintptr_t> words) {
     std::lock_guard lock(mutex_);
-    if (type->typeId_ == kNoTypeId) {
-        assignId(type);
+    auto it = byKey_.find(KeyView{shape, words});
+    return it == byKey_.end() ? nullptr : it->second;
+}
+
+Type *TypeTable::internOther(
+    TypeCode code, std::span<const uintptr_t> parts, const std::function<Type *()> &make) {
+    std::vector<uintptr_t> words;
+    words.reserve(1 + parts.size());
+    words.push_back(static_cast<uintptr_t>(code));
+    words.insert(words.end(), parts.begin(), parts.end());
+    return intern(Shape::Other, words, make);
+}
+
+Type *TypeTable::intern(
+    Shape shape, std::span<const uintptr_t> words, const std::function<Type *()> &make,
+    const Canonical &canonical) {
+    std::lock_guard lock(mutex_);
+    const bool named = !canonical.words.empty() &&
+                       (canonical.words.size() != words.size() ||
+                        !std::equal(words.begin(), words.end(), canonical.words.begin()));
+    Type *plain = nullptr;
+    if (named) {
+        ASSERT(canonical.make != nullptr, "A named key needs the constructor of its plain twin.");
+        // The twin may itself be a type registered as a named one (its key equals this one's
+        // name-erased key), in which case its own canonical id is the one that names no spelling
+        // at all: take that, so the relation is a function and not one step.
+        plain = findOrInsert(shape, canonical.words, canonical.make);
     }
+    Type *type = findOrInsert(shape, words, make);
+    if (named) {
+        type->canonicalId_ = plain->canonicalId_;
+    }
+    return type;
 }
 
 size_t TypeTable::hits() const {

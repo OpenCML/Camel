@@ -110,8 +110,8 @@ class OtherType : public Type {
     /// toString() is the default; a type whose printed form is not its source form overrides.
     virtual std::string spelling() const { return toString(); }
 
-    /// A module type states no extents of its own unless it overrides this (`TensorType`
-    /// does); the core array type carries its dimensions on `ArrayType`.
+    /// A module type states no extents of its own unless it overrides this; the core array type
+    /// carries its dimensions on `ArrayType`.
     bool extentForms(std::vector<ExtentForm> &out) const override {
         (void)out;
         return false;

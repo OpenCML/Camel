@@ -192,7 +192,7 @@ type::Type *inferenceTypeOf(const Value &value) {
     }
     if (value.isSymbolic() || constantTensor(value)) {
         const TensorFacts facts = factsOf(value);
-        return tensor::TensorType::get(facts.dtype, facts.shape);
+        return tensor::ops::tensorOf(facts.dtype, facts.shape);
     }
     return value.ty;
 }
@@ -448,7 +448,7 @@ std::string Emitter::constantOperand(const Value &value, std::optional<TypeCode>
         }
         TensorValue tv;
         tv.type = elemTypeOf(target);
-        tv.dims = *facts.shape;
+        tv.dims = tensor::kernelExtents(*facts.shape);
         if (t->dtype() == target) {
             tv.raw.assign(t->rawData(), t->rawData() + t->byteSize());
         } else {
@@ -460,11 +460,18 @@ std::string Emitter::constantOperand(const Value &value, std::optional<TypeCode>
     }
 
     if (value.ty->code() == TypeCode::Array) {
-        // Numeric (nested) arrays become tensors of their inferred dtype and shape.
+        // Numeric (nested) arrays become tensors of their inferred dtype and shape. The tensor
+        // states the dtype and the shape it holds: the array it was may be nested, so its own
+        // type is not the tensor's, and a rank-0 tensor is the element type itself (the rank-zero
+        // ruling).
         Array *t =
             tensor::tensorFromArray(value.slot, value.ty, tensor::ops::resultAllocator());
-        retain(t, tensor::TensorType::Default());
-        Value asTensor = Value::constant(rtdata::toSlot(t), tensor::TensorType::Default());
+        const auto dims    = t->shapeSpan();
+        type::Type *elem   = type::Type::create(t->dtype());
+        type::Type *tensorTy =
+            dims.empty() ? elem : type::ArrayType::create(elem, dims);
+        retain(t, tensorTy);
+        Value asTensor = Value::constant(rtdata::toSlot(t), tensorTy);
         asTensor.label = value.label;
         return constantOperand(asTensor, dtype);
     }

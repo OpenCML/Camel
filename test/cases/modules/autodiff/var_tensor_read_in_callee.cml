@@ -6,14 +6,14 @@ module var_tensor_read_in_callee
 import { Tensor, reshape, sum } from tensor
 import { with_grad } from autodiff
 
-type P = { p0: Tensor }
+type P = { p0: f64[..] }
 
-func peek(var acc: Tensor): Tensor {
+func peek(var acc: f64[]): f64[..] {
     return acc * 1.0
 }
 
 with <m: P>
-func loss(x: Tensor, var acc: Tensor): float sync {
+func loss(x: f64[..], var acc: f64[]): float sync {
     let b = peek(acc)
     return sum(m.p0 * x) + sum(b)
 }

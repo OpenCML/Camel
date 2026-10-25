@@ -23,17 +23,17 @@ module ort_struct_casts
 import { Tensor, reshape, sum, tanh } from tensor
 import { export_model } from onnx
 
-type Run = { state: Tensor, steps: int }
+type Run = { state: f32[..], steps: int }
 
-func identity(h: Tensor, k: int): Run {
+func identity(h: f32[..], k: int): Run {
     return { state: tanh(h) * 2.0, steps: k }
 }
 
-func reordered(h: Tensor, k: int): Run {
+func reordered(h: f32[..], k: int): Run {
     return { steps: k, state: tanh(h) * 2.0 }
 }
 
-func declared(h: Tensor, k: int): Run {
+func declared(h: f32[..], k: int): Run {
     let r: Run = { state: tanh(h) * 3.0, steps: k + 1 }
     return r
 }
@@ -42,27 +42,27 @@ func doubled(r: Run): int {
     return r.steps * 2
 }
 
-func argument(h: Tensor, k: int): (Run, int) {
+func argument(h: f32[..], k: int): (Run, int) {
     let r = { state: tanh(h), steps: k + 2 }
     return (r, doubled(r))
 }
 
-func done_reordered(h: Tensor, k: int): Run {
+func done_reordered(h: f32[..], k: int): Run {
     let r: Run = { steps: k, state: h }
     return r
 }
 
-func walk(h: Tensor, k: int): Run {
+func walk(h: f32[..], k: int): Run {
     return if k >= 3 || sum(h * h) < 1.0 then done_reordered(h, k) else walk(tanh(h) * 0.3 + h * 0.6, k + 1)
 }
 
 func main(): int sync {
     let ex = reshape([1.0, -2.0, 0.5, 1.5] as f32[], [2, 2])
-    export_model((x: Tensor): Run => identity(x, 1), ex, 'identity.onnx')
-    export_model((x: Tensor): Run => reordered(x, 1), ex, 'reordered.onnx')
-    export_model((x: Tensor): Run => declared(x, 1), ex, 'declared.onnx')
-    export_model((x: Tensor): (Run, int) => argument(x, 1), ex, 'argument.onnx')
-    export_model((x: Tensor): Run => walk(x, 0), ex, 'walk.onnx')
+    export_model((x: f32[..]): Run => identity(x, 1), ex, 'identity.onnx')
+    export_model((x: f32[..]): Run => reordered(x, 1), ex, 'reordered.onnx')
+    export_model((x: f32[..]): Run => declared(x, 1), ex, 'declared.onnx')
+    export_model((x: f32[..]): (Run, int) => argument(x, 1), ex, 'argument.onnx')
+    export_model((x: f32[..]): Run => walk(x, 0), ex, 'walk.onnx')
     println('exported')
     return 0
 }

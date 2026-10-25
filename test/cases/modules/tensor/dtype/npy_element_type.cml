@@ -1,0 +1,21 @@
+// `load_npy` declares the element type of the file it reads: the call writes it
+// (`load_npy::<f32>(p)`), or the type of the position the call stands in says it. The file's own
+// element type is the one the call declares -- a file of another element type is a fault, never a
+// conversion (design principles 5.1, 5.5; handover H466).
+//
+// The int64 array is the tree's only non-f32 `.npy`: the tensor a checkpoint's `odd` entry holds
+// (`test/cases/modules/nn/fixtures/checkpoint-v1/odd.npy`, element type int64, one extent of 2).
+module tensor_dtype_npy_element_type
+
+import { Tensor, load_npy, numel } from tensor
+
+func main(): int sync {
+    let x = load_npy::<f32>('test/cases/modules/tensor/shape_types/x3.npy')
+    println(numel(x))
+    let labels = load_npy::<i64>('test/cases/modules/nn/fixtures/checkpoint-v1/odd.npy')
+    println(numel(labels))
+    // No type argument at the call: the declared type of the position fixes the element type.
+    let typed: Tensor<f32> = load_npy('test/cases/modules/tensor/shape_types/x3.npy')
+    println(numel(typed))
+    return 0
+}

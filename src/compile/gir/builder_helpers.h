@@ -230,6 +230,23 @@ inline bool collectConversionGaps(
         gaps.push_back({path, have, want});
         return true;
     }
+    if (want->code() == TypeCode::Array && have->code() == TypeCode::Array) {
+        // A tensor is an array (P4), so the conversion that refines one is an array's and not a
+        // module type's: the relation lives in ArrayType::castSafetyFrom, which is Unsafe exactly
+        // when the source leaves open what the target fixes (an unknown rank, extent or element
+        // type) and the program writes `as` to have it checked when the conversion runs
+        // (design principles 5.4: an array whose shape is unknown entering a position that
+        // declares one is converted explicitly; camel/core/type/composite/array.cpp). The gap is
+        // the whole value: one `as` reaches it, whatever is left open inside it. Without this
+        // branch a call like `f(t)` with `t: Tensor` and `b: Tensor<[3]>` was refused as
+        // "no matching function" with the overload list, which says less than the conversion to
+        // write (ruling 2026-10-24 evening, h450 item 2).
+        if (want->castSafetyFrom(have) != CastSafety::Unsafe) {
+            return false;
+        }
+        gaps.push_back({path, have, want});
+        return true;
+    }
     if (want->code() == TypeCode::Tuple && have->code() == TypeCode::Tuple) {
         auto *w = tt::as_ptr<TupleType>(want);
         auto *h = tt::as_ptr<TupleType>(have);
@@ -437,6 +454,34 @@ inline bool shouldAddSyncCtrlLink(node_handle_t from, node_handle_t to) {
     // transitive reduction over such edges lives in `std::opt::order`; measured that adding or
     // removing one changes no decision.
     return linkCheek(from, to) && !hasDirectDataDependency(from, to);
+}
+
+/// Whether `value` already reads what `producer` produced: the producer is a direct data input of
+/// the value, so the value is computed after it and a sync edge from the producer to the value
+/// would say nothing new. This is the one question the two ways of writing a body's value ask --
+/// the tail `return v` and a body whose last statement is `v` -- so that the two build one graph
+/// (docs/design/effects/edges.cn.md 5.3). Only the forward direction is asked: a value the producer
+/// *consumed* was computed before it, and an edge there would be a cycle.
+inline bool valueReadsThrough(node_handle_t value, node_handle_t producer) {
+    if (value == nullptr || producer == nullptr || nodeGraphOf(value) != nodeGraphOf(producer)) {
+        return false;
+    }
+    const draft_node_ref_t id = nodeIdOf(producer);
+    return std::ranges::find(normInputsOf(value), id) != normInputsOf(value).end() ||
+           std::ranges::find(withInputsOf(value), id) != withInputsOf(value).end();
+}
+
+/// Whether the statement a sync chain ends with has to reach the value the graph hands on by a sync
+/// edge: only when the value does not already read it. A value that came out of that statement (the
+/// `v` of `v = 2; v`) is ordered after it by its own data edge, so it takes no edge and no GATE
+/// (the language author's ruling of 2026-10-24; docs/design/effects/edges.cn.md 5.3); every other value is
+/// reached from that statement by a sync edge, carried by a GATE whose data port reads the value --
+/// when the value *is* that statement the GATE is what keeps the edge, and the chain it ends, able
+/// to reach the graph's exit at all. The tail `return v`, a body whose last statement is `v` and a
+/// block whose value is taken all ask this, so one value is reached by the same edges however it is
+/// written.
+inline bool valueNeedsSyncEdge(node_handle_t value, node_handle_t chainEnd) {
+    return chainEnd != nullptr && !valueReadsThrough(value, chainEnd);
 }
 
 /// A statement one `sync` block writes directly: the edge that joins it to the statement written

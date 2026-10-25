@@ -1,0 +1,18 @@
+// A counter-example: `noisy` prints and its own signature does not say `pure`, so its type is not
+// what the requirement asks for. The error names the signature that would have matched.
+// Run: camel docs/tutorial/examples/10_pure_callback_wrong.cml
+module pure_callback_wrong
+
+func apply(f: (x: int) => int pure, x: int): int {
+    return f(x)
+}
+
+func noisy(x: int): int sync {
+    println(x)
+    return x * 2
+}
+
+func main(): int sync {
+    println(apply(noisy, 4))
+    return 0
+}

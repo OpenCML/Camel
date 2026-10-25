@@ -18,33 +18,33 @@
 /// boolean.
 /// @pure
 /// @example new([[1.0, 2.0], [3.0, 4.0]])
-export func new(values: Tensor | number[]): Tensor
+export func new(values: float[..] | number[]): float[..]
 
 /// A tensor of the given extents; the allocation is zeroed, so it reads as `zeros` of the same
 /// shape.
 /// @pure
 /// @example empty([2, 3])
-export func empty(shape: int[]): Tensor
+export func empty(shape: int[]): f32[..]
 
 /// A tensor of `f32` zeros with the given extents.
 /// @pure
 /// @example zeros([2, 3])
-export func zeros(shape: int[]): Tensor
+export func zeros(shape: int[]): f32[..]
 
 /// A tensor of `f32` ones with the given extents.
 /// @pure
 /// @example ones([2, 3])
-export func ones(shape: int[]): Tensor
+export func ones(shape: int[]): f32[..]
 
 /// A tensor of the given extents whose elements are all value; the element type is the value's.
 /// @pure
 /// @example full([2, 2], -1.0)
-export func full(shape: int[], value: number): Tensor
+export func full(shape: int[], value: number): float[..]
 
 /// The `f32` n by n identity matrix.
 /// @pure
 /// @example eye(2)
-export func eye(n: int): Tensor
+export func eye(n: int): f32[..]
 
 /// The integer sequence start, start + step, ... below stop, as a rank-1 `int64` tensor: one
 /// argument is stop with start 0, step is 1 by default, and a step of 0 is a fault.
@@ -63,13 +63,13 @@ export func range(start: int, stop?: int, step?: int): Tensor<int64>
 /// A tensor of `f32` values drawn uniformly from [low, high) with the given extents.
 /// @effect reads and advances the random generator
 /// @example random([2, 2], 0.0, 1.0)
-export func random(shape: int[], low: number, high: number): Tensor
+export func random(shape: int[], low: number, high: number): f32[..]
 
 /// A tensor of `f32` values drawn from the normal distribution with the given mean (0 by
 /// default) and standard deviation (1 by default), with the given extents.
 /// @effect reads and advances the random generator
 /// @example randn([2, 3])
-export func randn(shape: int[], mean?: number, std?: number): Tensor
+export func randn(shape: int[], mean?: number, std?: number): f32[..]
 
 // ---- elementwise ----
 
@@ -77,102 +77,112 @@ export func randn(shape: int[], mean?: number, std?: number): Tensor
 /// the element type is the wider of the two (a float with an integer gives `f32`).
 /// @pure
 /// @example add(new([1.0, 2.0]), 1.0)    // [2.0, 3.0]
-export func add(lhs: Tensor | number, rhs: Tensor | number): Tensor
+export func add(lhs: float[..] | number, rhs: float[..] | number): float[..]
 
 /// a - b per element, with NumPy broadcasting.
 /// @pure
 /// @example subtract(new([1.0, 2.0]), 0.5)    // [0.5, 1.5]
-export func subtract(lhs: Tensor | number, rhs: Tensor | number): Tensor
+export func subtract(lhs: float[..] | number, rhs: float[..] | number): float[..]
 
 /// a * b per element, with NumPy broadcasting.
 /// @pure
 /// @example multiply(new([1.0, 2.0]), new([3.0, 4.0]))    // [3.0, 8.0]
-export func multiply(lhs: Tensor | number, rhs: Tensor | number): Tensor
+export func multiply(lhs: float[..] | number, rhs: float[..] | number): float[..]
 
 /// a / b per element, with NumPy broadcasting; IEEE division: x / 0 is an infinity or NaN, not a
 /// fault.
 /// @pure
 /// @example divide(new([1.0, 2.0]), 2.0)    // [0.5, 1.0]
-export func divide(lhs: Tensor | number, rhs: Tensor | number): Tensor
+export func divide(lhs: float[..] | number, rhs: float[..] | number): float[..]
 
 /// a raised to b per element, with NumPy broadcasting.
 /// @pure
 /// @example pow(new([2.0, 3.0]), 2.0)    // [4.0, 9.0]
-export func pow(lhs: Tensor | number, rhs: Tensor | number): Tensor
+export func pow(lhs: float[..] | number, rhs: float[..] | number): float[..]
 
 /// IEEE 754-2019 maximum per element, with NumPy broadcasting: NaN on either side gives the
 /// canonical quiet NaN, and -0 is below +0.
 /// @pure
 /// @example maximum(new([1.0, -0.0]), 0.0)    // [1.0, 0.0]
-export func maximum(lhs: Tensor | number, rhs: Tensor | number): Tensor
+export func maximum(lhs: float[..] | number, rhs: float[..] | number): float[..]
 
 /// IEEE 754-2019 minimum per element, with NumPy broadcasting: NaN on either side gives the
 /// canonical quiet NaN, and -0 is below +0.
 /// @pure
 /// @example minimum(new([1.0, -0.0]), 0.0)    // [0.0, -0.0]
-export func minimum(lhs: Tensor | number, rhs: Tensor | number): Tensor
+export func minimum(lhs: float[..] | number, rhs: float[..] | number): float[..]
+
+/// a % b per element, with NumPy broadcasting: the language's remainder, the truncated one
+/// (`camel::utils::remainder`), so the result takes the sign of the left operand and nothing is
+/// floored — a negative a and a positive b give a negative result. On a floating element type it
+/// is `fmod`, in the element type's own precision: a bf16 or f16 array computes in f32 and rounds
+/// once when it is stored. A divisor of zero gives NaN for a floating element type, as IEEE
+/// division does; an integer element type has the integer remainder.
+/// @pure
+/// @example mod(new([7.5, -7.5]), 2.0)    // [1.5, -1.5]
+export func mod(lhs: float[..] | number, rhs: float[..] | number): float[..]
 
 /// lhs where cond holds, rhs elsewhere, broadcast to one shape; the element type is the wider of
 /// lhs and rhs.
 /// @pure
 /// @example where(new([true, false]), new([1.0, 2.0]), 0.0)    // [1.0, 0.0]
-export func where(cond: Tensor, lhs: Tensor | number, rhs: Tensor | number): Tensor
+export func where(cond: bool[..], lhs: float[..] | number, rhs: float[..] | number): float[..]
 
 /// -x per element: the sign flipped.
 /// @pure
 /// @example neg(new([1.0, -2.0]))    // [-1.0, 2.0]
-export func neg(t: Tensor): Tensor
+export func neg(t: float[..]): float[..]
 
 /// |x| per element: the sign cleared.
 /// @pure
 /// @example abs(new([-1.5, 2.0]))    // [1.5, 2.0]
-export func abs(t: Tensor): Tensor
+export func abs(t: float[..]): float[..]
 
 /// e^x per element, within 2 ulp, subnormal results included.
 /// @pure
 /// @example exp(new([0.0, 1.0]))    // [1.0, 2.7182817]
-export func exp(t: Tensor): Tensor
+export func exp(t: float[..]): float[..]
 
 /// ln x per element, within 2 ulp; NaN, +-inf, +-0 and negative x are exact (negative x gives
 /// NaN).
 /// @pure
 /// @example log(new([1.0, 2.7182817]))    // [0.0, 1.0]
-export func log(t: Tensor): Tensor
+export func log(t: float[..]): float[..]
 
 /// sqrt(x) per element, rounded once in `f32`.
 /// @pure
 /// @example sqrt(new([4.0, 9.0]))    // [2.0, 3.0]
-export func sqrt(t: Tensor): Tensor
+export func sqrt(t: float[..]): float[..]
 
 /// 1 / sqrt(x) per element: two steps, each rounded in `f32`.
 /// @pure
 /// @example rsqrt(new([4.0]))    // [0.5]
-export func rsqrt(t: Tensor): Tensor
+export func rsqrt(t: float[..]): float[..]
 
 /// The logistic function 1 / (1 + e^-x) per element.
 /// @pure
 /// @example sigmoid(new([0.0]))    // [0.5]
-export func sigmoid(t: Tensor): Tensor
+export func sigmoid(t: float[..]): float[..]
 
 /// The hyperbolic tangent per element.
 /// @pure
 /// @example tanh(new([0.0]))    // [0.0]
-export func tanh(t: Tensor): Tensor
+export func tanh(t: float[..]): float[..]
 
 /// maximum(x, +0) per element: NaN gives the canonical NaN, and -0 gives +0.
 /// @pure
 /// @example relu(new([-1.0, 2.0]))    // [0.0, 2.0]
-export func relu(t: Tensor): Tensor
+export func relu(t: float[..]): float[..]
 
 /// The Gaussian error linear unit per element, computed as its normative definition in Camel.
 /// @pure
 /// @example gelu(new([0.0]))    // [0.0]
-export func gelu(t: Tensor): Tensor
+export func gelu(t: float[..]): float[..]
 
 /// The Gauss error function per element.
 /// @pure
 /// @example erf(new([0.0]))    // [0.0]
-export func erf(t: Tensor): Tensor
+export func erf(t: float[..]): float[..]
 
 // ---- shape and reshaping ----
 
@@ -180,51 +190,51 @@ export func erf(t: Tensor): Tensor
 /// count fills.
 /// @pure
 /// @example reshape(new([1.0, 2.0, 3.0, 4.0]), [2, 2])
-export func reshape(t: Tensor | number[], shape: int[]): Tensor
+export func reshape(t: float[..] | number[], shape: int[]): float[..]
 
 /// The elements in row-major order in two axes: the extents before axis multiplied into the
 /// first, the rest into the second (axis 1 by default).
 /// @pure
 /// @example flatten(new([[1.0, 2.0], [3.0, 4.0]]))
-export func flatten(t: Tensor, axis?: int): Tensor
+export func flatten(t: float[..], axis?: int): float[..]
 
 /// The elements unchanged, with an axis of extent 1 added at axis.
 /// @pure
 /// @example unsqueeze(new([1.0, 2.0]), 0)    // shape [1, 2]
-export func unsqueeze(t: Tensor, axis: int): Tensor
+export func unsqueeze(t: float[..], axis: int): float[..]
 
 /// The last two axes swapped (a vector becomes a column, a matrix its transpose).
 /// @pure
 /// @example transpose(new([[1.0, 2.0], [3.0, 4.0]]))
-export func transpose(t: Tensor): Tensor
+export func transpose(t: float[..]): float[..]
 
 /// The axes reordered as perm lists them.
 /// @pure
 /// @example permute(new([[1.0, 2.0], [3.0, 4.0]]), [1, 0])
-export func permute(t: Tensor, perm: int[]): Tensor
+export func permute(t: float[..], perm: int[]): float[..]
 
 /// a and b joined along axis; every other extent must agree.
 /// @pure
 /// @example concat(new([[1.0]]), new([[2.0]]), 0)    // shape [2, 1]
-export func concat(a: Tensor | number[], b: Tensor | number[], axis: int): Tensor
+export func concat(a: float[..] | number[], b: float[..] | number[], axis: int): float[..]
 
 /// The elements start, start + step, ... of one axis before end; step is 1 by default.
 /// @pure
 /// @example slice(new([1.0, 2.0, 3.0, 4.0]), 0, 1, 3)    // [2.0, 3.0]
-export func slice(t: Tensor, axis: int, start: int, end: int, step?: int): Tensor
+export func slice(t: float[..], axis: int, start: int, end: int, step?: int): float[..]
 
 /// The entries of the first axis that indices name, in that order.
 /// @pure
 /// @fails fault `RuntimeError` when an index is outside the first axis
 /// @example take(new([[1.0], [2.0], [3.0]]), [2, 0])    // [[3.0], [1.0]]
-export func take(t: Tensor, indices: Tensor | number[]): Tensor
+export func take(t: float[..], indices: int64[..] | number[]): float[..]
 
 /// Each label (an integer below classes) expanded to a row of classes with a 1 at its position:
 /// an `int64` tensor of shape [labels, classes].
 /// @pure
 /// @fails fault `IndexOutOfRange` when a label is outside [0, classes), and fault `InvalidArgument` when classes is negative
 /// @example one_hot(new([0, 2]), 3)    // [[1, 0, 0], [0, 0, 1]]
-export func one_hot(labels: Tensor | number[], classes: int): Tensor
+export func one_hot(labels: int64[..] | number[], classes: int): int64[..]
 
 // ---- reduction ----
 
@@ -232,27 +242,27 @@ export func one_hot(labels: Tensor | number[], classes: int): Tensor
 /// elements are summed exactly in `int64` and converted once.
 /// @pure
 /// @example sum(new([[1.0, 2.0], [3.0, 4.0]]))    // 10.0
-export func sum(t: Tensor): float
+export func sum(t: float[..]): float
 
 /// The same sum over one axis, in an `f64` accumulator; keepdims keeps the axis with extent 1.
 /// @pure
 /// @fails fault `RuntimeError` when the axis is outside the rank
 /// @example sum(new([[1.0, 2.0], [3.0, 4.0]]), 0)    // [4.0, 6.0]
 #op('tensor:sum_axis')
-export func sum(t: Tensor, axis: int, keepdims?: bool): Tensor
+export func sum(t: float[..], axis: int, keepdims?: bool): float[..]
 
 /// The sum of `sum` divided by the element count in `f64`; an empty tensor is a fault.
 /// @pure
 /// @fails fault `DivisionByZero` when the tensor has no element
 /// @example mean(new([[1.0, 2.0], [3.0, 4.0]]))    // 2.5
-export func mean(t: Tensor): float
+export func mean(t: float[..]): float
 
 /// The same mean over one axis; keepdims keeps the axis with extent 1.
 /// @pure
 /// @fails fault `RuntimeError` when the axis is outside the rank, and fault `DivisionByZero` when the axis is empty
 /// @example mean(new([[1.0, 2.0], [3.0, 4.0]]), 1)    // [1.5, 3.5]
 #op('tensor:mean_axis')
-export func mean(t: Tensor, axis: int, keepdims?: bool): Tensor
+export func mean(t: float[..], axis: int, keepdims?: bool): float[..]
 
 /// IEEE 754-2019 maximum over the axis (exactly associative and commutative: any order gives
 /// the same bits); keepdims keeps the axis with extent 1.
@@ -260,7 +270,7 @@ export func mean(t: Tensor, axis: int, keepdims?: bool): Tensor
 /// @fails fault `RuntimeError` when the axis is outside the rank, and fault `RuntimeError` when the axis is empty
 /// @example max(new([[1.0, 2.0], [3.0, 4.0]]), 0)    // [3.0, 4.0]
 #op('tensor:max_axis')
-export func max(t: Tensor, axis: int, keepdims?: bool): Tensor
+export func max(t: float[..], axis: int, keepdims?: bool): float[..]
 
 /// IEEE 754-2019 minimum over the axis (exactly associative and commutative); keepdims keeps the
 /// axis with extent 1.
@@ -268,7 +278,7 @@ export func max(t: Tensor, axis: int, keepdims?: bool): Tensor
 /// @fails fault `RuntimeError` when the axis is outside the rank, and fault `RuntimeError` when the axis is empty
 /// @example min(new([[1.0, 2.0], [3.0, 4.0]]), 1)    // [1.0, 3.0]
 #op('tensor:min_axis')
-export func min(t: Tensor, axis: int, keepdims?: bool): Tensor
+export func min(t: float[..], axis: int, keepdims?: bool): float[..]
 
 /// The position (`int64`) of the first maximum over the axis by IEEE 754-2019 maximum: the first
 /// NaN if there is one, +0 above -0, the earlier position on a tie.
@@ -276,7 +286,7 @@ export func min(t: Tensor, axis: int, keepdims?: bool): Tensor
 /// @fails fault `RuntimeError` when the axis is outside the rank, and fault `RuntimeError` when the axis is empty
 /// @example argmax(new([[1.0, 2.0], [3.0, 4.0]]), 1)    // [1, 1]
 #op('tensor:argmax_axis')
-export func argmax(t: Tensor, axis: int, keepdims?: bool): Tensor
+export func argmax(t: float[..], axis: int, keepdims?: bool): int64[..]
 
 /// The position (`int64`) of the first minimum over the axis by IEEE 754-2019 minimum: the first
 /// NaN if there is one, -0 below +0, the earlier position on a tie.
@@ -284,34 +294,34 @@ export func argmax(t: Tensor, axis: int, keepdims?: bool): Tensor
 /// @fails fault `RuntimeError` when the axis is outside the rank, and fault `RuntimeError` when the axis is empty
 /// @example argmin(new([[1.0, 2.0], [3.0, 4.0]]), 0)    // [0, 0]
 #op('tensor:argmin_axis')
-export func argmin(t: Tensor, axis: int, keepdims?: bool): Tensor
+export func argmin(t: float[..], axis: int, keepdims?: bool): int64[..]
 
 /// The softmax over the axis (-1, the last axis, by default), computed as its normative
 /// definition in Camel, in `f32`.
 /// @pure
 /// @fails fault `RuntimeError` when the axis is outside the rank
 /// @example softmax(new([[1.0, 1.0]]))    // [[0.5, 0.5]]
-export func softmax(t: Tensor, axis?: int): Tensor
+export func softmax(t: f32[..], axis?: int): f32[..]
 
 /// The log of the softmax over the axis (-1 by default), computed as its normative definition in
 /// Camel, in `f32`.
 /// @pure
 /// @fails fault `RuntimeError` when the axis is outside the rank
 /// @example log_softmax(new([[1.0, 1.0]]))    // [[-0.6931472, -0.6931472]]
-export func log_softmax(t: Tensor, axis?: int): Tensor
+export func log_softmax(t: f32[..], axis?: int): f32[..]
 
 /// The gradient of the softmax of y with the incoming gradient dy, over the axis (-1 by default).
 /// @pure
 /// @fails fault `RuntimeError` when the axis is outside the rank
 /// @example softmax_grad(y, dy)
-export func softmax_grad(y: Tensor, dy: Tensor, axis?: int): Tensor
+export func softmax_grad(y: f32[..], dy: f32[..], axis?: int): f32[..]
 
 /// Layer normalization of x with gamma and beta, whose extents are the trailing ones of x, over
 /// the trailing axes; eps is 1e-5 by default. The result is `f32`.
 /// @pure
 /// @fails fault `TensorDimensionMismatch` when gamma or beta does not match the trailing extents of x
 /// @example layer_norm(x, gamma, beta)
-export func layer_norm(x: Tensor, gamma: Tensor, beta: Tensor, eps?: number): Tensor
+export func layer_norm(x: f32[..], gamma: f32[..], beta: f32[..], eps?: number): f32[..]
 
 // ---- linear algebra ----
 
@@ -320,26 +330,26 @@ export func layer_norm(x: Tensor, gamma: Tensor, beta: Tensor, eps?: number): Te
 /// @pure
 /// @fails fault `TensorDimensionMismatch` when the inner extents do not agree
 /// @example matmul(new([[1.0, 2.0]]), new([[3.0], [4.0]]))    // [[11.0]]
-export func matmul(lhs: Tensor, rhs: Tensor): Tensor
+export func matmul(lhs: float[..], rhs: float[..]): float[..]
 
 /// The affine transform of x by a rank-2 weight [in, out] whose rows are the features of x, plus
 /// a rank-1 bias [out] when given.
 /// @pure
 /// @fails fault `TensorDimensionMismatch` when the features of x are not the rows of weight, or bias is not rank 1 of the output extent
 /// @example linear(x, weight, bias)
-export func linear(x: Tensor, weight: Tensor, bias?: Tensor): Tensor
+export func linear(x: f32[..], weight: f32[..], bias?: f32[..]): f32[..]
 
 // ---- gradient ----
 
 /// A tensor of zeros shaped and typed like t.
 /// @pure
 /// @example zeros_like(new([[1.0, 2.0]]))
-export func zeros_like(t: Tensor): Tensor
+export func zeros_like(t: float[..]): float[..]
 
 /// A tensor of ones shaped and typed like t.
 /// @pure
 /// @example ones_like(new([[1.0, 2.0]]))
-export func ones_like(t: Tensor): Tensor
+export func ones_like(t: float[..]): float[..]
 
 // ---- conversion and display ----
 
@@ -354,10 +364,29 @@ export func ones_like(t: Tensor): Tensor
 /// @pure
 /// @fails fault `RuntimeError` when the name is not one of those
 /// @example cast(new([1.0, 2.0]), 'int64')    // [1, 2]
-export func cast(t: Tensor | number[], dtype: string): Tensor
+export func cast(t: float[..] | number[], dtype: string): int64[..]
 
 // `show` is declared: its result is fixed `void` and its umbrella parameter is two declarations
 // (a tensor, and any array). See `stdlib/tensor.cml`.
+
+// `load_npy` is computed: the element type of its result is the one the call declares, and a
+// declaration's parameters cannot mention a type variable that only the result mentions. Its
+// group is `loadNpyOperatorGroup` in `modules/tensor` (the `#op` tag below names its rules): one
+// per element type a `.npy` file can hold.
+
+/// The tensor a NumPy `.npy` file holds, as the element type the program declares: the extents are
+/// the file's (read them with `shape`, or check them with `as`), and the file's element type must
+/// be `T` -- a file of another element type is a fault, never a conversion (design principles 5.1,
+/// 5.5). `T` is `f32`, `f64`, `i32`, `i64` or `bool`, the element types the format's storage types
+/// (`'<f4'`, `'<f8'`, `'<i4'`, `'<i8'`, `'|b1'`) map to, exactly the type given. It is written at
+/// the call (`load_npy::<f32>(p)`) or taken from the type of the position the call stands in
+/// (`Tensor<f32, [3]>`, `f32[..]`); `T` is the one type variable no parameter mentions, so a call
+/// that says neither is not a use of this operator.
+/// @effect reads a file
+/// @fails fault `RuntimeError` when the file is missing, is not a NumPy file, holds a storage type the module does not read, or holds another element type than `T`
+/// @example load_npy::<f32>('x.npy')
+#op('tensor:load_npy_*')
+export func load_npy::<T>(path: string): T[..]
 
 // ---- binary form ----
 
@@ -370,4 +399,4 @@ export func cast(t: Tensor | number[], dtype: string): Tensor
 /// @fails fault `TensorDimensionMismatch` when the number of bytes does not fit the shape and the element type
 /// @example from_bytes::<f32>(to_bytes(new([1.0, 2.0])), [2])
 #op('tensor:from_bytes_*')
-export func from_bytes(bytes: Bytes, shape: int[]): Tensor
+export func from_bytes(bytes: Bytes, shape: int[]): f32[..]

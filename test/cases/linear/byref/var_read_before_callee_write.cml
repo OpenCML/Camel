@@ -9,12 +9,12 @@
 module var_read_before_callee_write
 import { Tensor, reshape, sum } from tensor
 
-func ignores(x: Tensor, var c: int): int sync {
+func ignores(x: f64[..], var c: int): int sync {
     c += 5
     return 1
 }
 
-func steps(i: int, n: int, x: Tensor, var c: int): Tensor sync {
+func steps(i: int, n: int, x: f64[..], var c: int): f64[..] sync {
     return if i >= n then x else sync {
         c += 1
         let fresh = reshape([0.5, 0.5], [2])

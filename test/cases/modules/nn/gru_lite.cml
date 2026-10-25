@@ -10,36 +10,36 @@ import { Tensor, full, ones, shape, sigmoid, sum, tanh, zeros } from tensor
 import { sgd } from nn
 
 type GruLite = {
-    wxz: Tensor,
-    whz: Tensor,
-    bz: Tensor,
-    wxn: Tensor,
-    whn: Tensor,
-    bn: Tensor,
-    why: Tensor,
-    by: Tensor
+    wxz: f32[..],
+    whz: f32[..],
+    bz: f32[..],
+    wxn: f32[..],
+    whn: f32[..],
+    bn: f32[..],
+    why: f32[..],
+    by: f32[..]
 }
 
 with <model: GruLite>
-func gru_cell(x: Tensor, h: Tensor): Tensor {
+func gru_cell(x: f32[..], h: f32[..]): f32[..] {
     let z = sigmoid((x @ model.wxz) + (h @ model.whz) + model.bz)
     let n = tanh((x @ model.wxn) + (h @ model.whn) + model.bn)
     return (z * n) + ((ones([1, 2]) - z) * h)
 }
 
 with <model: GruLite>
-func predict(h: Tensor): Tensor {
+func predict(h: f32[..]): f32[..] {
     return (h @ model.why) + model.by
 }
 
-func mse_loss(pred: Tensor, target: Tensor): float {
+func mse_loss(pred: f32[..], target: f32[..]): float {
     let diff = pred - target
     let squared = diff * diff
     return sum(squared) / float(shape(pred)[0])
 }
 
 with <model: GruLite>
-func sequence_loss(x0: Tensor, x1: Tensor, target: Tensor): float {
+func sequence_loss(x0: f32[..], x1: f32[..], target: f32[..]): float {
     let h0 = zeros([1, 2])
     let h1 = gru_cell<model>(x0, h0)
     let h2 = gru_cell<model>(x1, h1)
@@ -60,7 +60,7 @@ func init(): GruLite {
     }
 }
 
-func train(model: GruLite, x0: Tensor, x1: Tensor, target: Tensor, steps: int): GruLite {
+func train(model: GruLite, x0: f32[..], x1: f32[..], target: f32[..], steps: int): GruLite {
     return if steps == 0 then model else train(sgd(model, grad(sequence_loss)<model>(x0, x1, target), 0.05), x0, x1, target, steps - 1)
 }
 

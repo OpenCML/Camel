@@ -799,9 +799,12 @@ class EncodeSession {
         case TypeCode::Array: {
             auto *array     = fromSlot<::Array *>(slot);
             auto *arrayType = static_cast<ArrayType *>(type);
-            auto *cloned    = ::Array::create(camel::core::mm::autoSpace(), arrayType, array->size());
+            // As in draft_session's cloneStaticSlot: the copy is of the whole value's shape, which
+            // is part of the value (design principles 5.4), and holds every element.
+            auto *cloned = ::Array::create(
+                camel::core::mm::autoSpace(), arrayType, array->shapeSpan());
             objectCache.emplace(object, cloned);
-            for (size_t i = 0; i < array->size(); ++i) {
+            for (size_t i = 0; i < array->numel(); ++i) {
                 cloned->set<slot_t>(
                     i,
                     canonicalizeStaticSlot(
