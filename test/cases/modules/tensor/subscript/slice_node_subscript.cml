@@ -1,0 +1,15 @@
+/**
+ * One slice spelling, so that `std::gir` prints a graph small enough to read whole: `x = reshape(..,
+ * [4])` is `f32[4]` (rank 1, length stated) and `x[1:4]` is the slice of it. The graph is what the
+ * case asserts; see slice_one_node.cml for all three spellings in one graph.
+ */
+module slice_node_subscript
+
+import { Tensor, reshape } from tensor
+
+func main(): int sync {
+    let x = reshape([1.0, 2.0, 3.0, 4.0] as f32[], [4])
+    let a = x[1:4]
+    println(a)
+    return 0
+}

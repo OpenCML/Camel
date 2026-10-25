@@ -381,6 +381,16 @@ export func tail(xs: T[]): T[]
 with <start: int, end: int>
 export func slice(xs: T[]): T[]
 
+/// The slice of the first dimension of an array of values, written as a call: `slice(t, 0, a, b)`
+/// is the same node the subscript `t[a:b]` builds, with the axis written and the written mask left
+/// out. A negative bound is a fault here, as for the subscript; a slice of another axis, of a rank
+/// above 1, or with a step other than the constant 1 is a view with strides, which the core's slice
+/// does not answer (H17) and the module `tensor`'s `slice` does.
+/// @pure
+/// @example [1, 2, 3, 4]->slice(0, 1, 3)    // [2, 3]
+#op<':op/slice_sub'>
+export func slice(t: T[], axis: int, start: int, end: int, step?: int): T[]
+
 /// The elements of xs followed by those of ys, as a new array.
 /// @pure
 /// @example concat([1], [2, 3])    // [1, 2, 3]
