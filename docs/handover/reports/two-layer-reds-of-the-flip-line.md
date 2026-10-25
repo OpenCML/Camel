@@ -1,4 +1,4 @@
-# The flip line's reds, in both layers, from `tip=c5c506e44` to `tip=b4b7f960e`
+# The flip line's reds, in both layers, from `tip=c5c506e44` to `tip=0909710c9`
 
 Readings only; no expectation, golden, tier or `known_fail` was changed to produce this page. The
 fast layer is measured on this line; the slow layer was measured by the slow-layer measurement lane
@@ -35,29 +35,31 @@ Two of the previous tip's reds left without a new one: `export_fold` (10.03 s ti
 stdout before, `PASS 343.89 ms` here, its onnx model written and parsed by the plan's own verify
 script) and `rules.tensor_saturation_keeps_values` (`RewriteInvalid` before, `PASS 392.03 ms` here).
 
-## 2. Slow layer -- 11 at `c5c506e44`, 10 with the C++ fix, 2 of the account left at `b4b7f960e`
+## 2. Slow layer -- 11 at `c5c506e44`, 10 with the C++ fix, 1 of the account left at `0909710c9`
 
 Whole-tree slow measurement at `tip=c5c506e44` (measurement lane), plus every entry of that account
 re-run here by plan (a plan file runs in full whatever the tier says), twice each for the three
-entries that only this line had. The account has since shrunk twice: at `tip=511711e49` the three
-`poison:modules.rules` entries and the `gpu/tiles_transfer` entry are green, and at `tip=b4b7f960e`
-the two `gc_pacing` entries and the two `nn` entries of the family are green as well.
+entries that only this line had. The account has shrunk three times: at `tip=511711e49` the three
+`poison:modules.rules` entries and the `gpu/tiles_transfer` entry are green; at `tip=b4b7f960e` the
+two `gc_pacing` entries and the two `nn` entries are green; and at `tip=0909710c9`, after merging
+develop to `72d148822`, the debugger entry is green too.
 
-| # | test | state | evidence |
+| # | test | state at `0909710c9` | evidence |
 |---|---|---|---|
-| 1 | `debugger.dap_protocol` | **red on this line's tip**, but develop has fixed it | `test/plans/feat/tools/debugger.plan.toml` reads `13/14` with only this one failing at `511711e49`; on develop `c3b17207e` the entry is green (`1.60-1.77 s`) and the same plan reads `14/14`, so it clears when this line merges that develop |
+| 1 | `debugger.dap_protocol` | **green** | `test/plans/feat/tools/debugger.plan.toml` reads `14/14`; develop `72d148822` fixed it (`1.60-1.77 s`) and this line took that merge |
 | 2-4 | `poison:modules.rules:rules.library_verdicts_are_exactly_these`, `…reduced_element_type_instances_are_checked`, `…every_exported_rule_enters_the_check` | **green** | `test/plans/feat/modules/rules.plan.toml` reads `140/140` |
 | 5 | `gpu/tiles_transfer :: tree_expansion_autodiff_and_device_update` | **green** | `test/plans/gpu/tiles_transfer.plan.toml` reads `3/3` |
-| 6-7 | `poison:…nn:lrit`, `poison:…nn:mnist` | **green at `b4b7f960e`** | the plans that hold them, `test/plans/feat/modules/nn.plan.toml` and `test/plans/feat/opt/screens.plan.toml`, read `68/68` and `127/127` |
-| 8 | `poison:…index_semantics:declaration_evaluator` | **red**, waiting on a ruling | the entry behind it is the one row 5 of section 1 describes |
+| 6-7 | `poison:…nn:lrit`, `poison:…nn:mnist` | **green** | the plans that hold them, `test/plans/feat/modules/nn.plan.toml` and `test/plans/feat/opt/screens.plan.toml`, read `68/68` and `127/127` |
+| 8 | `poison:…index_semantics:declaration_evaluator` | **red**, waiting on a ruling | the entry behind it is row 5 of section 1 |
 | 9 | `feat/trans/cpp :: agree_with_fvm` | **green** | `test/plans/feat/trans/cpp.plan.toml` reads `11/11`; **only this line** had it, fixed here, section 3 |
-| 10-11 | `feat/mm/gc_pacing :: gc_pacing.training_400`, `.training_800` | **green at `b4b7f960e`** | `test/plans/feat/mm/gc_pacing.plan.toml` reads `15/15`; **only this line** had them |
+| 10-11 | `feat/mm/gc_pacing :: gc_pacing.training_400`, `.training_800` | **green** | `test/plans/feat/mm/gc_pacing.plan.toml` reads `15/15`; **only this line** had them |
 
-So the eleven-entry account now reads **2 red**, and one of the two is already green on develop. It
-was 11 entries because the flip integration changed the element type of every unstated tensor; each
-one of them has been answered, either by this line (the C++ cell marking, the family's typing) or by
-develop (the rules family, the debugger, the tiles fixture), and rows 5 and 8 are not that family at
-all -- they are two separate open questions, each with its own page.
+So the eleven-entry account now reads **1 red**, and it is not a defect: it is the `declaration
+evaluator` question, which wants a ruling before anything is changed. The account was 11 entries
+because the flip integration changed the element type of every unstated tensor; each one has been
+answered, either by this line (the C++ cell marking, the family's gradient typing) or by develop (the
+rules family, the debugger's protocol, the tiles fixture), and entries 5 and 8 were never that family
+at all -- they are two separate open questions, each with its own page.
 
 Two slow entries went green before this at `c5c506e44` without a new one: `feat/modules/onnx ::
 pass_export_equals_export_model` (two 120 s liveness kills and a cpu reading of 0 before;
@@ -95,8 +97,20 @@ The rule was exercised for real on the lane's second delivery: `handover/h506b-b
 throwaway worktree ran the whole fast gate at `6219 / 6198 / fail 2 / skip 11 / known failures: 8`
 with `declaration_evaluator` and `print_and_recompile` as the only reds -- four names fewer than this
 line's six and none added, so it was merged, and this line's tree after the merge is the rehearsal's
-tree (`d01288e3`). The rehearsal worktree (`h465-rehearsal`, its own branch and its own build on the
-host) stays in place for the next one.
+tree (`d01288e3`).
+
+It was exercised again on develop, which is the harder case because it conflicts: `origin/develop`
+`72d148822` (804 files, +2617/-2310) rehearsed to the same `6219 / 6198 / fail 2 / skip 11 /
+known failures: 8` with the same two reds, four conflicts resolved by content, and this line's tree
+after that merge is again the rehearsal's tree (`13123955`). The four conflicts were: a question page
+both sides added, taken from develop as the superset; three cases where this line had the substance
+(the `load_npy` element type, the Loop-carried array rationale) and develop's side was a citation
+cleanup -- this line's text kept, the cleanup applied on top, so no task-number citation is left in
+those files. The merge lands develop's answers retiring four pages this line was carrying, and brings
+`tags-struct-argument-record.md` in their place.
+
+The rehearsal worktree (`h465-rehearsal`, its own branch and its own build on the host) stays in
+place for the next one.
 
 Two habits follow from the same episode: after any amend, reset or re-merge on this line, the
 helper's staging branch (`handover/h465-flip-integration` in `camel-work/Camel.git` on the host) has
@@ -191,19 +205,20 @@ strings and numeric bounds that no run reached).
 The landing account stays "only fewer, never renamed, same targets": the fast layer went `fail 9`
 (`c5c506e44`) -> `fail 9` with the same names (the C++ fix) -> `fail 6` (`26bd1c6cc`: `origin/develop`
 `43a5c8066` and `handover/h499-type-identity` `26bd1c6cc`) -> `fail 2` (`b4b7f960e`: the bare-`Tensor`
-lane `39784865d`), and no reading ever gained a name. `skip 11` and `known failures: 8` never moved,
-and the test total grew by one because develop adds a test. Nothing was weakened, no `known_fail` was
-added or removed, no `tier` was moved, and `perf/**` and `feat/opt/progen` were not run. The
-expectations the other lanes landed -- the exact specialization count, the two re-recorded profiles,
-the `profile_alloc.py` prefix, the typed cases and the gradient tangent -- were merged as they are
-and not touched here.
+lane `39784865d`) -> `fail 2` with the same two names (`0909710c9`: `origin/develop` `72d148822`),
+and no reading ever gained a name. `skip 11` and `known failures: 8` never moved, and the test total
+grew by one because develop adds a test. Nothing was weakened, no `known_fail` was added or removed,
+no `tier` was moved, and `perf/**` and `feat/opt/progen` were not run. The expectations the other
+lanes landed -- the exact specialization count, the two re-recorded profiles, the
+`profile_alloc.py` prefix, the typed cases and the gradient tangent -- were merged as they are and
+not touched here.
 
 ## 5. The account's readings, and the endpoint
 
-| layer | before this batch | at `b4b7f960e` (measured) | the endpoint, written down |
+| layer | before this batch | at `0909710c9` (measured) | the endpoint, written down |
 |---|---|---|---|
-| fast | `fail 9` (`c5c506e44`: 6218/6190) | **`fail 2`** (6219/6198): `declaration_evaluator` `752.14 ms`, `print_and_recompile` `5.43 s` | **`fail 1`** = `declaration_evaluator` once `print_and_recompile`'s own lane lands; that lane's half is not this line's and its branch is not merged here |
-| slow | 11 (`c5c506e44`) | **2** of the eleven-entry account: `debugger.dap_protocol` (already green on develop `c3b17207e`, so it clears at the next develop merge) and `poison:…index_semantics:declaration_evaluator` | **`1`** = the `declaration_evaluator` entry, waiting on the ruling of `docs/handover/questions/declaration-evaluator-facts-vs-kernels.md`; the debugger entry goes green with develop |
+| fast | `fail 9` (`c5c506e44`: 6218/6190) | **`fail 2`** (6219/6198): `declaration_evaluator` `365.94 ms`, `print_and_recompile` `5.48 s` | **`fail 1`** = `declaration_evaluator` once `print_and_recompile`'s own lane lands; that lane's half is not this line's and its branch is not merged here |
+| slow | 11 (`c5c506e44`) | **1** of the eleven-entry account: `poison:…index_semantics:declaration_evaluator`, waiting on the ruling of `docs/handover/questions/declaration-evaluator-facts-vs-kernels.md` | **`1`** -- the same entry; nothing else of the account is red |
 
 Both of the fast layer's reds are therefore open questions with a page, not defects of the flip: one
 asks what the declaration evaluator's facts should say where they meet the kernels, the other is the
