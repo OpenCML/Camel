@@ -1155,3 +1155,12 @@ Linux 包在 manylinux 里构建，用 auditwheel 修正标签，并在构建时
 - `is_plain` 留在 `stdlib/types.cml`，用 Camel 写。修好后 `to_bytes` 对纯数据的结构体、元组数组可以实例化，对其余类型给出干净的"没有适用的重载"。
 - `WhenConditionNotConstant` 只留给条件里真的读到运行期值的情况（比如读了一个非常量的实参）。
 - **`from_bytes` 用同一个谓词**：`from_bytes::<T>(b: Bytes, shape: int[]): T[..] when is_plain::<T>()` 一个声明，取代按元素类型注册的 7 个。它读的就是 `to_bytes` 写出的那种布局，也就是数据块里这个元素类型的布局，两个方向对称。`load_npy::<T>` 同理。
+
+## P4 删除步的残留：返工
+
+抽查合并后的树，删除步还差这几处（"过渡不进 develop"），由 P4 那条车道接着清：
+1. **`Tensor` 这个类型名还在**：`modules/tensor/module.cpp:94` 仍然 `exportType(Reference("Tensor"), ArrayType::elementTypeOpen())`。交接说明 5.30 是负责人的原话："`Tensor`/`Tensor<T, S>` 作为类型名删除，不留别名、不留'已退役'诊断"。删掉这个导出，写 `Tensor` 就是普通的未知名字；`TensorElementTypeRequired` 这条只为它存在的诊断一起删。仓库里还写着 `Tensor<…>`、`: Tensor` 的 `.cml` 与文档全部改成 `T[维度]`。
+2. **比较注册表**：`registerContentComparableType`（`equality.cpp`、`equality.h`）还在。它在 5.1a 依赖表里，标明随过渡类型删除。
+3. **模块的 `tensor:slice` 还有内部使用者**：`gradient_ops.cpp:338`、`layout_ops.cpp:666/672`（拼接的伴随用它切开梯度），以及 ONNX 的 `lowering.cpp:1177`。这些改用核心的切片节点，模块的切片算子随之整个删掉。ONNX 降低改认核心的切片。
+4. **规则库里 13 条 `tensor_f32_*`、`tensor_i64_*`**：5.1a 依赖表里列着，要随 P4 删除，标量那条律推广到数值数组。规则语言的泛型律已经能写，一起做。
+5. **提到过渡名字的注释**：`support.cpp:193`（`numericUnknown`）、`globals.cpp:226` 和 `layout_ops.cpp:716`（模块的 `tensor:idx_take`）。注释只写现在怎么做，提到已删东西的句子删掉。
