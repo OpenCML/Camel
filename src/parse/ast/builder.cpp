@@ -983,30 +983,30 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
                 // argument, with the list of the permissions that can be named.
                 diags_->of(SemanticDiag::TagNotAPermission).at(at).commit(name);
             };
-            bool inAngles = false;
-            size_t argFrom = 0;
+            bool inArguments = false;
+            size_t argFrom   = 0;
             for (size_t i = begin; i <= end; ++i) {
                 if (syn::isTrivia(tokens[i].kind)) {
                     continue;
                 }
                 const std::string_view text = tokens.text(i);
-                if (!inAngles) {
-                    if (text == "<") {
-                        inAngles = true;
-                        argFrom  = i + 1;
+                if (!inArguments) {
+                    if (text == "(") {
+                        inArguments = true;
+                        argFrom     = i + 1;
                     }
                     continue;
                 }
-                if (text == ">") {
+                if (text == ")") {
                     resolve(argFrom, i == 0 ? 0 : i - 1);
-                    inAngles = false;
+                    inArguments = false;
                 } else if (text == ",") {
                     resolve(argFrom, i == 0 ? 0 : i - 1);
                     argFrom = i + 1;
                 }
             }
-            if (!inAngles && argCount == 0) {
-                // `#requires` without any `<...>` argument requires nothing, which is never
+            if (!inArguments && argCount == 0) {
+                // `#requires` without any argument requires nothing, which is never
                 // what was meant, so say how many arguments the form takes.
                 diags_->of(SemanticDiag::TagArgumentCount)
                     .at(rangeOf(tagRef->firstToken(), tagRef->lastToken()))
