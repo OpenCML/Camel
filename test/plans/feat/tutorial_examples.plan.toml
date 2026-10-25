@@ -245,7 +245,7 @@ golden = "golden/tutorial_examples/14_passes.txt"
 
 [[tests]]
 name = "tutorial.examples.15_model"
-desc = "A two-layer model run on the array the chapter loads from x.npy, with the argument the header and the page give."
+desc = "Chapter 16: a two-layer model run on the array the chapter loads from x.npy, with the argument the header and the page give."
 case = "../../../docs/tutorial/examples/15_model.cml"
 args = ["${case}", "--arg", "x=docs/tutorial/examples/x.npy", "${backend}"]
 golden = "golden/tutorial_examples/15_model.txt"
