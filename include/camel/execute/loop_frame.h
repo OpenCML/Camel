@@ -39,7 +39,9 @@ struct LoopFrameHost {
     slot_t stateValue() { return frame.get<slot_t>(loop.stateSlot); }
     /// The declared type of the round's element port: the body's first port when the loop iterates
     /// (ExecLoop::slots), which the builder gave the type of the round (ArrayType's
-    /// firstDimensionElement of the iterable, or an interval's integer).
+    /// firstDimensionElement of the iterable, or an interval's integer). A round hands over a value
+    /// of this type: what a value is at run time follows the type it is declared with
+    /// (loopRoundValue).
     const camel::core::type::Type *elementType() {
         return frame.typeAt<camel::core::type::Type>(
             loop.slots[loop.stateCount + (loop.hasCond ? loop.stateCount : 0)]);
@@ -181,19 +183,16 @@ inline bool loopTest(camel::core::context::Frame &frame, const camel::runtime::E
             // `Tensor` whose rank is not fixed, and such a value may turn out to have no
             // dimension: a value with no dimension is the element itself (the rank-zero ruling,
             // docs/handover/reviews/questions-2026-10-23.md), stored as the scalar it is rather
-            // than as an array. It has no first dimension to take elements from, so the rounds
-            // cannot start: reported here, where the loop reads its sequence, rather than taken
-            // as a loop of no round at all.
-            if (array == nullptr) {
-                camel::core::error::throwRuntimeFault(
-                    camel::core::error::RuntimeDiag::RuntimeError,
-                    "a value with no dimension has no first dimension to iterate over");
-            }
+            // than as an array, and the round an array of open rank hands over is the array of no
+            // dimension holding the element (loopRoundValue). Neither has a first dimension to
+            // take elements from, so neither is a sequence: refused here, where the loop reads its
+            // sequence, rather than taken as a loop of no round at all (requireFirstDimension).
+            requireFirstDimension(array, loop.origin);
             if (static_cast<size_t>(round) >= array->size()) {
                 stop = true;
             } else {
-                // The round's value, along the first dimension and in the form its declared type
-                // says: the element port is what the round must have the type of (loopRoundValue).
+                // The round's value: what a round hands over follows the type its port declares,
+                // and that port is the element port (loopRoundValue).
                 element = loopRoundValue(
                     array, static_cast<size_t>(round),
                     frame.typeAt<camel::core::type::Type>(loop.slots[first]));
