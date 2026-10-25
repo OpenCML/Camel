@@ -1,16 +1,15 @@
 /**
- * A tensor leaf whose element type the program does not write follows the element type of its
- * value, on both sides: a leaf built as `full([2], 0.1)` is an f64 tensor and is still f64 after
- * `nn:sgd` and after two `nn:adam` steps, in the bytes of two doubles, and one built as
+ * A tensor leaf of a written element type keeps it on both sides: a leaf written
+ * `Tensor<f64, [?]>` and built as `full([2], 0.1)` is still f64 after `nn:sgd` and after two
+ * `nn:adam` steps, in the bytes of two doubles, and one written `Tensor<f32, [?]>` and built as
  * `full([2], f32(0.25))` is f32 in the bytes of two floats.
  *
- * "Unstated" means the type does not say the element type, not that the value is f32
- * (docs/handover/reviews/questions-2026-10-23.md, section `f64-tensor-leaf`): the native path
- * converted every tensor leaf to f32 before it updated it (`floatTensor` and `newLike`,
- * modules/nn/optim.cpp), which narrowed the f64 value of such a leaf and handed an f32 array back
- * under a type that says nothing, and the Camel module's `case _` arms did the same. Both read the
- * element type of the value now, and this case pins it: eight bytes an element for the f64 leaf and
- * four for the f32 one, on both sides.
+ * The element type a leaf writes is the element type it is updated at, and it is the leaf's own
+ * type that says which writing of the formula the module takes -- nothing is asked of the value at
+ * run time. The native path converted every tensor leaf to f32 before it updated it
+ * (`floatTensor` and `newLike`, modules/nn/optim.cpp) and handed an f32 array back under an f64
+ * type; the Camel module narrowed the same way. Both keep the written element type now, and this
+ * case pins it: eight bytes an element for the f64 leaf and four for the f32 one, on both sides.
  *
  * The two sides are compared bit for bit as well, which is what the shared element type buys: the
  * `sgd` result and the parameter after two `adam` steps are the native result and the Camel one,
@@ -26,11 +25,12 @@ import { adam as native_adam, adam_state, sgd as native_sgd } from nn
 import { adam, constant, init, sgd, update } from optim
 import { with_grad } from autodiff
 
-// The element type is not written: both leaves are `Tensor`, so the element type of the value is
-// the only element type there is.
+// The element type is written and the extent is not: the two leaves are the two floating element
+// types, so which writing of the update each leaf takes is settled when the tree is expanded by
+// field.
 type Leaves = {
-    wide: Tensor,
-    narrow: Tensor
+    wide: Tensor<f64, [?]>,
+    narrow: Tensor<f32, [?]>
 }
 
 // The loss the gradient comes from: the sum of each leaf, so the gradient is one at every element
@@ -42,7 +42,7 @@ func total(): float {
 
 func main(): int sync {
     // `full` takes the element type of its value: 0.1 is an f64 number and `f32(0.25)` is an f32
-    // one, so the two leaves have the same type and different element types.
+    // one, so each leaf is built at the element type its own type writes.
     let model: Leaves = {
         wide: full([2], 0.1),
         narrow: full([2], f32(0.25))
@@ -51,7 +51,7 @@ func main(): int sync {
     let (value, gradient) = total_with_grad<model>()
     var failures = 0
 
-    // The gradient of an unstated leaf follows its value too: eight bytes an element for the f64
+    // The gradient of a written leaf has its element type too: eight bytes an element for the f64
     // leaf and four for the f32 one. A gradient read at the wrong width is not the derivative
     // (modules.tensor.dtype, `gather_grad_f64`), so the steps below are only meaningful with this
     // held.
