@@ -366,3 +366,51 @@ println(grow([1.0, 2.0], read_int()))
 2. **inventory 检查进合并闸门的 fast 层**：新计划落地时如果没有归类，就在那次提交上变红，而不是等到有人跑 release gate。这就治住了"第 9 个计划又弄坏工具"。
 
 **返工**：`--camel <path>` 取代 `CAMEL_EXE` 只做了两条脚本。按"一类事一条规则"，`CAMEL_EXE` 在其余脚本里也一并删掉、改成 `--camel`（`camel-for-ai.mjs`、`check-doc-snippets.mjs`、`perf-gate.mjs`、`test/tools/check-doc-pass-forms.mjs`、`import-audit.mjs`、`para-speedup.mjs`、`jitcov.py`、`progen/README.md`）。另外 `stdlib-reference.mjs` 等处的注释"`CAMEL_EXE` is gone (the author's ruling …)"删掉——代码只描述现在怎么做，不记录已不存在的写法。
+
+## 返工：代码注释不引用裁定（camel-arg 合入后的抽查）
+
+`CAMEL_EXE` 已全部改为 `--camel`，两种语言各一个辅助函数（`test/tools/camel-arg.mjs`、`camel_arg.py`），`--camel` 不带值时报用法错误、不回退默认，`CAMEL_HOME` 照旧作为安装位置。这一批没有问题，收下。
+
+**返工**（在 H242 与 P4 的间隙做，不占这两块的子代理）：注释里写"the author's ruling of 2026-10-25"、"(the author's ruling…)"这类话的，删掉引用，只留规则本身。比如 `camel-arg.mjs` 开头一句改成"`CAMEL_HOME` is the install location's convention: an explicitly named install is a command-line argument, never an environment switch."。src、stdlib、scripts、test/tools、include 里这类引用一共约百处，一次扫完。
+
+**理由**：仓库将公开，代码只描述现在怎么做、为什么这样做；谁在哪天裁定的，记在 `docs/handover/reviews/`。引用裁定的注释读者核实不了，裁定被取代后也没人会去改它。
+
+## step-elementwise-not-named-by-the-perf-fates-ruling
+
+**裁定：按判据，就是 lane 的读法**。`step.count` 与 `step.elementwise` 都只断言计数，都进 `step_counts.plan.toml`（`SLOW_PLANS`）；`step.budget` 留在原文件（`FORBIDDEN`）。上一条裁定括号里的守卫名只是举例，起作用的是判据"只断言计数与性质、不断言时间"。照字面去做，会让一条计数守卫没有任何一层跑它，这和裁定的本意相反。已落地的那样就对，不用改。
+
+## release-gate-verifies-one-install-and-the-plan-layers-measure-another
+
+**裁定：一次运行只有一个安装，闸门选定它，再显式交给每一层。不选 A、B、C 中的任何一个**。
+
+1. **只选一次**：闸门用 `--camel <path>` 选安装，不给就用本树的 `out/latest`。查戳用的函数和 stdlib 检查器是同一个（`refuseInstallNotOfThisTree`）。"装在 `out/` 之外的安装查不了戳，由调用者负责"这条豁免删掉：安装自己带着戳，在哪儿都能查。发布闸门查的就是本树，别的树建出来的安装直接拒绝。
+2. **交给每一层**：
+   - `scripts/test.js` 与 `test/tools/run-tests.mjs` 加 `--camel`。给了它，每个计划测试子进程的 `CAMEL_HOME` 就设成这个安装的根目录，`preflightBuild` 也查这个二进制；不给就照旧用 `out/<build>`。
+   - `check-doc-snippets.mjs` 改用 `takeCamel`（上一条返工本来也点了它）。
+   - 闸门把选好的安装用 `--camel` 传给 fast、slow 两层和全部静态检查。这样就不存在"查的是 A、量的是 B"，读法 A 要拦的那种不一致根本无从产生，所以也不用新加一处拒绝。
+3. **默认值只有一个**：测试与检查工具挑安装时不读 `CAMEL_HOME`，没给 `--camel` 时一律用本树的 `out/latest`。`camel-arg.mjs` 的 `defaultCamel` 与 `install-stamp.mjs` 的那个合成一个函数，放在一处。这一条更正我上次那句"`CAMEL_HOME` 照旧"，它的意思是：`CAMEL_HOME` 是 `camel` 二进制和 SDK 用户找运行库的约定（`init.h`、`dll_path.h`、C++ 产物里的说明），工具不拿它来决定量哪个安装；工具只在启动子进程时把它设成选中安装的根目录。让环境变量决定量哪个二进制，就是另一种环境开关。
+
+**理由**：规则统一，一次运行的"被测安装"只有一个来源，每一层都从参数拿到它。现在三处各有各的默认值（闸门优先 `CAMEL_HOME`，计划两层用 `out/<build>`，检查器用 `out/latest`），读法 A、B、C 都是在三个默认之间打补丁。
+
+**返工追加**（并入上一条"代码注释不引用裁定"的返工，同一次扫完）：注释里的内部任务编号（如 `H185`、`H154 §3`）也删掉，只写规则和理由。src、stdlib、scripts、test/tools、include 里约 580 处，分布在 139 个文件。例如 `plan-inventory.mjs` 的 `SLOW_PLANS` 注释：只写"三个 perf 计划在慢层，因为它们只断言计数与性质"，不写哪天哪条裁定。仓库将公开，读者看不到这些编号。
+
+## specialize-growing-shape-graph-floor-reads-five
+
+**裁定：5 就是不动点，期望改为精确断言**：`stats.specializations === 1 && stats.graphs === 5`，打印的输出照旧。
+
+- **前提已核对**：特化前是 3 个图，特化出的唯一一个实例连同它调用的图是 2 个，合起来 5 个，而且不随数组长度增长。这正是"同一个键在调用环上复用已有实例"那条规则该有的结果。旧下界 `> 5` 能通过，是因为类型身份没修好时，同一个类型被当成两个，多出了副本。所以读数降到 5 是修复本身，不是特化出了毛病，不用退回去查。
+- **用精确值而不用上下界**：不动点是确定的，下界只能挡住"变少"，挡不住它重新变多。
+- **`desc` 重写**：只描述现在的事实，一个特化、5 个图、不随长度增长。删掉"99 graphs"、"no longer a bound"和引用裁定的话。
+- 由同一 lane 在实现类型身份的那批提交里改。
+
+## profile-allocation-counts-move-when-types-intern
+
+**裁定：按现在的树重新录，由引起变化的这个 lane 在同一批提交里录。报告照旧统计分配器调用次数，不改成只统计程序申请的内存块**。
+
+- **降下来是修复的效果**：每次执行算子少了两次分配器调用，正是"同一结构只有一个类型对象、查询走类型表"该有的结果。程序自己的分配（每轮一块 4096 字节、总共 9 块 36864 字节）和算子调用次数都没变。
+- **"调用次数"这一行留着**：这一行能看见运行时自己的开销。这次正是它显示出"每次查询都新建一个类型对象"，只统计内存块就看不到这件事。
+- **怎么录**：
+  - 重新录 `fusion_group_none` 的两份基准文件，并把文件里"录自某个基准提交"的说明改成录自本树，不写提交号；
+  - `profile_alloc.py` 的硬编码前缀改成现在的读数；
+  - 在报告里写一行：每次执行算子的分配器调用从 3 次降到 1 次，原因是类型对象由类型表复用。
+- **顺带的观察（不是返工）**：剩下那一次分配器调用，是不是每次执行都得做，可以留到算子按编译期绑定类型的时候再看。
