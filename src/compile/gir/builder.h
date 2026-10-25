@@ -603,7 +603,6 @@ class Builder {
     camel::core::module::ProgramExports ownExports_;
     camel::core::module::ProgramExports *exports_;
 
-    bool waited_;
     bool synced_;
     bool varied_;
     // The numeric permissions in force where the builder is (design principles 7.5): those of
@@ -895,11 +894,11 @@ class Builder {
     // (`let`, a parameter without `var`).
     std::unordered_set<node_handle_t> variables_;
 
-    /// A ar that does not escape becomes SSA (docs/handover/reviews/questions-2026-10-24-evening.md,
+    /// A `var` that does not escape becomes SSA (docs/handover/reviews/questions-2026-10-24-evening.md,
     /// "var-version-node"): every read takes the value of the write that made it, and no read node is
-    /// left reading the cell. A ar that escapes -- captured by a closure, handed out as a ar
-    /// argument, or a ar parameter of this graph -- is a resource and keeps its cell.
-    /// ariableReadSource_ records, per read node, the writer it reads from (the cell itself when
+    /// left reading the cell. A `var` that escapes -- captured by a closure, handed out as a `var`
+    /// argument, or a `var` parameter of this graph -- is a resource and keeps its cell.
+    /// `variableReadSource_` records, per read node, the writer it reads from (the cell itself when
     /// nothing has written yet) and the cell it belongs to; knownCellUsers_ holds the users of a
     /// cell this builder recorded (its reads and its stores), so a cell with any other user
     /// (:var/take, a call, a capture port) is left as a cell.
@@ -1045,16 +1044,44 @@ class Builder {
     /// only retypes a constant -- `null` into a `T?` -- is the constant of the type it retypes it
     /// to, and carries it too.
     data_ptr_t constantOfNode(node_handle_t node) const;
-    /// The elements of the sequence a `static loop` walks when the head is written `for i in
-    /// <序列>` (H462, the ruling of 2026-10-24), or nothing when the compiler cannot work the
-    /// sequence out. Today the one sequence it knows is the constant interval `a..b`: the `int`
-    /// values `a`, `a + 1`, ... below `b`, which is the half-open reading `..` has everywhere
-    /// else (`loop ... for i in 0..5` iterates 0 ... 4). The two bounds are read as the compiler
-    /// knows them (a literal, an expression of literals, or a name bound to a constant), without
-    /// building the operand: an interval of no known size is reported by the caller, and its
-    /// refusal is `SemanticDiag::StaticLoopSequenceNotKnown`.
-    std::optional<std::vector<int64_t>>
-    staticLoopSequenceOf(const GCT::node_ptr_t &subject);
+    /// The sequence a `static loop` walks when its head writes one out (`for i in <序列>`; H462
+    /// and the ruling of 2026-10-25 on which `in` forms count, H475). One rule draws the line:
+    /// the expression after `in` is a sequence the compiler works out when it is built only from
+    /// compile-time constants -- literals, names bound to constants, the rounds of an enclosing
+    /// `static` expansion -- joined by operations that are pure and cannot fail (the predicate
+    /// design principles 3.4 names). Then it is evaluated and unrolled where it stands. The
+    /// rounds are values (`a..b`, `range(a, b, step)`, an array literal or a constant array), or
+    /// the elements of a compile-time tuple (`for x in ts`, where `ts` is the tuple of values the
+    /// expansion was given, a rest parameter included): there each round binds the element
+    /// `ts.[i]` itself, whose type is the type at that position -- which is exactly what tells a
+    /// `static loop` from an ordinary `loop` (the ordinary one binds an element of one type every
+    /// round).
+    struct StaticSequence {
+        /// The type every round's value has, when the rounds are compile-time constants.
+        Type *elementType = nullptr;
+        /// Each round's value, a compile-time constant. Empty when the rounds are elements of a
+        /// tuple value.
+        std::vector<data_ptr_t> values;
+        /// Each round's element, for a compile-time tuple: the value at that position (`ts.[i]`),
+        /// a node of the enclosing graph whose type is that position's type. Empty when the
+        /// rounds are compile-time constants.
+        std::vector<node_handle_t> elements;
+        bool byElements() const { return !elements.empty(); }
+        size_t rounds() const { return byElements() ? elements.size() : values.size(); }
+    };
+    /// The sequence of `for i in <序列>`, or nothing when the compiler cannot work it out. The
+    /// operand is read, never built: a run-time expression leaves the number of rounds open, and
+    /// the caller reports that (`SemanticDiag::StaticLoopSequenceNotKnown`). The two spellings
+    /// the language refuses on their own -- the deleted two-argument `range(a, b)` and a `range`
+    /// step of zero -- are reported here instead, where they are written.
+    std::optional<StaticSequence> staticLoopSequenceOf(const GCT::node_ptr_t &subject);
+    /// The same sequence where every round is an `int` value: what the build-time evaluator
+    /// reads (`EvalSequenceResolver`), which has no room for a type or for another element type.
+    std::optional<std::vector<int64_t>> staticLoopIntSequenceOf(const GCT::node_ptr_t &subject);
+    /// The value of `expression` when the build-time evaluator works it out, else nothing: the
+    /// evaluation the folding entry points use, with a refusal answered as "no value" rather than
+    /// with a diagnostic, because the caller decides whether the place needs one.
+    data_ptr_t constantValueOrNull(const GCT::node_ptr_t &expression);
     std::optional<std::string> staticValueNamed(const std::string &name) const {
         for (auto scope = staticValueScopes_.rbegin(); scope != staticValueScopes_.rend();
              ++scope) {
@@ -1120,7 +1147,7 @@ class Builder {
         node_handle_t origin;
         bool written;
     };
-    // An unwaited write of captured variables outside a sync block, reported once every body
+    // A write of captured variables outside a sync block, reported once every body
     // is built: while a recursive function's body is open its writes are only an upper bound.
     struct PendingIgnoredWrite {
         std::vector<DraftGraphBuilder *> graphs;
@@ -1755,6 +1782,14 @@ class Builder {
     // The value of the element `name` of the composite literal `literal`: a bound value, or
     // the value of the function of that name.
     node_handle_t elementNodeOf(const std::string &name, const GCT::node_ptr_t &literal);
+    /// The tags written on field `index` of the struct type `subject`, as a compile-time
+    /// `string[]`: the third thing the element of `fields T` gives, bound to the third name of
+    /// `(n, F, tags)`. Empty for a field with no tags, for a type that is not a named struct and
+    /// for a type declared by another module (the facts of a field live in the module that
+    /// declares the type, and reading a tag's value from Camel code waits for tag reflection --
+    /// design principles 6.2 and the handover's H51 Q5, which puts `(n, F, tags)` with it).
+    node_handle_t staticFieldTagsNode(
+        Type *subject, size_t index, const GCT::node_ptr_t &where);
     // functionValueOf, and FunctionNameAsValue when `name` has no single function value.
     node_handle_t
     namedValueOf(node_handle_t node, const std::string &name, const GCT::node_ptr_t &origin);
@@ -1843,16 +1878,13 @@ class Builder {
         const compile_graph_ptr_t &decoratedGraph, const GCT::node_ptr_t &origin);
     std::optional<node_handle_t> modifierOf(node_handle_t node) const;
     void setModifier(node_handle_t input, node_handle_t modifier);
-    // An operation writes `variable`: later reads and writers are ordered after it, and a
-    // waited one is ordered after the operations before it that used the variable's value. The
-    // operation starts at `entry` and is complete at `exit` (one node for a call; BRCH and
-    // JOIN for a branch). `throughCallee`: the write is one a called function or a branch makes
-    // to a variable, which the summaries already account for.
-    void recordWrite(
-        node_handle_t variable, node_handle_t entry, node_handle_t exit,
-        bool throughCallee = false);
+    // An operation writes `variable`: later reads and writers are ordered after it. The write is
+    // complete at `exit` (one node for a call; the JOIN of a branch). `throughCallee`: the write
+    // is one a called function or a branch makes to a variable, which the summaries already
+    // account for.
+    void recordWrite(node_handle_t variable, node_handle_t exit, bool throughCallee);
     void recordWrite(node_handle_t variable, node_handle_t writer) {
-        recordWrite(variable, writer, writer);
+        recordWrite(variable, writer, false);
     }
     // Orders `node` after the last writer of `variable` in the current graph.
     void orderAfterLastWriter(node_handle_t variable, node_handle_t node);
@@ -1863,7 +1895,7 @@ class Builder {
     // The captured variables of `callee` as nodes of the current graph, which becomes a
     // caller of `callee`.
     std::vector<CapturedUse> capturedUsesOf(const compile_graph_ptr_t &callee);
-    // Reports the unwaited writes of captured variables that turned out to be real.
+    // Reports the writes of captured variables that turned out to be real.
     void reportIgnoredCapturedWrites();
     // Whether running `node` of `graph` is an effect: an operator that is neither pure nor
     // state-only, a call of a function that declares effects (`sync` modifier, `var`
@@ -1942,7 +1974,6 @@ class Builder {
     std::any visitDRefNode(const GCT::node_ptr_t &gct);
     node_handle_t visitCastNode(const GCT::node_ptr_t &gct);
     node_handle_t visitVariNode(const GCT::node_ptr_t &gct);
-    node_handle_t visitWaitNode(const GCT::node_ptr_t &gct);
     node_handle_t visitLinkNode(const GCT::node_ptr_t &gct);
     /// `a..b` (the GCT link of `kCompositionCall`): the composition of two functions, or the
     /// interval of two integers, told apart by the types of the two operands (design principles
@@ -2134,7 +2165,7 @@ class Builder {
     void linkArmEntries(const std::vector<arm_ptr_t> &arms, node_handle_t brchNode);
     /// After the JOIN is there: the variables the arms changed are changed by the branch.
     void mergeArmVariables(
-        const std::vector<arm_ptr_t> &arms, node_handle_t joinNode, node_handle_t brchNode,
+        const std::vector<arm_ptr_t> &arms, node_handle_t joinNode,
         std::vector<node_handle_t> &written);
     /// The names of a block that is not a graph (an arm).
     void enterBlockScope();

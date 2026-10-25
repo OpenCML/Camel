@@ -1,0 +1,14 @@
+/**
+ * `range(a, b, step)` is the integers `a`, `a + step`, ... below `b` (design principles 4.2), so
+ * a step of 0 names no sequence at all. A constant step is known where it is written, so the
+ * call is refused there, pointing at the step.
+ */
+module static_loop_sequence_range_step_zero
+
+func sum(): int {
+    return static loop acc = 0 for i in range(0, 9, 0) do acc + i
+}
+
+func main(): int {
+    return sum()
+}

@@ -86,20 +86,15 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "test" / "tools"))
 import pipelines as pl  # noqa: E402
+from camel_arg import default_camel  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
 REPO_ROOT = Path(__file__).resolve().parents[2]
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
 NPY_FULL_VALUES = 4096
 TEXT_FILE_BYTES = 65536
-
-
-def default_camel() -> str:
-    override = os.environ.get("CAMEL_EXE")
-    if override:
-        return override
-    return str(REPO_ROOT / "out" / "latest" / "bin" / ("camel.exe" if os.name == "nt" else "camel"))
 
 
 def sha1_text(text: str) -> str:
@@ -544,7 +539,8 @@ def main(argv: Optional[List[str]] = None) -> int:
                     help="a run is killed at max(2 * limit, this), seconds")
     ap.add_argument("--ref-cap", type=float, default=300.0, help="the zero-pass run is killed after this")
     ap.add_argument("--jobs", type=int, default=4)
-    ap.add_argument("--camel", default="")
+    ap.add_argument("--camel", default="", help="the install to measure: the `camel` binary to run, "
+                                               "else $CAMEL_HOME/bin/camel, else <repo>/out/latest/bin/camel")
     ap.add_argument("--repo-root", default=os.environ.get("CAMEL_REPO_ROOT", ""),
                     help="repository root (default: two levels above this file, or $CAMEL_REPO_ROOT)")
     ap.add_argument("--bench-artifacts", default="", help="where the benchmark weights go (default <out>/bench-artifacts)")
@@ -556,7 +552,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     args = ap.parse_args(argv)
     if args.repo_root:
         REPO_ROOT = Path(args.repo_root).resolve()
-    camel = args.camel or default_camel()
+    camel = args.camel or default_camel(REPO_ROOT)
 
     programs: List[dict] = []
     if args.corpus:

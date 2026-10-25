@@ -921,7 +921,15 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "StaticLoopSequenceNotKnown",
                 "The sequence of a 'static loop' must be known when the function is compiled: '{0}' is not.",
-                "A 'static loop' is unrolled where it stands, so how many rounds it has must be known then: a constant interval 'a..b' (the half-open [a, b) that '..' is everywhere else, so '0..5' is 0, 1, 2, 3, 4), 'indices ts' for the positions of a compile-time tuple, or 'fields T' for the fields of a type. A run-time array or a run-time value leaves the number of rounds open.",
+                "A 'static loop' is unrolled where it stands, so how many rounds it has must be known then. Every sequence the compiler works out counts: an expression built only from compile-time constants (literals, names bound to constants, the rounds of an enclosing 'static' expansion) through operations that are pure and cannot fail. So 'a..b' (the half-open [a, b) that '..' is everywhere else, so '0..5' is 0, 1, 2, 3, 4), 'range(a, b, step)' with constant arguments, an array literal or a constant array, 'indices ts' for the positions of a compile-time tuple, 'fields T' for the fields of a type, and 'for x in ts' for the element at each position of a compile-time tuple, whose type is that position's type, all count. A run-time array or a run-time value leaves the number of rounds open.",
+            },
+        },
+        {
+            SemanticDiag::StaticHeadNameCount,
+            {
+                "StaticHeadNameCount",
+                "The head of this loop names {0} things; '{1}' gives {2} for each round.",
+                "A head names the parts of the element, in order, and may name fewer of them, never more: 'fields T' gives the field's name, its type and its tags, while 'indices ts' and a written sequence give the element itself and nothing else. Drop the names the element has no part for, or walk the fields of a type ('fields T') to get them.",
             },
         },
         {

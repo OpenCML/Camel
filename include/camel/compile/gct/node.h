@@ -38,7 +38,7 @@
  *                       the name of its type (empty for `indices`); flag A: `indices`
  *     SCOMP             tag: 0 for `{ ... }`, 1 for `( ... )`, 2 for `T { ... }` (then child 1
  *                       is the type node naming `T`)
- *     VARI, WAIT, ANNO, SACC  nothing
+ *     VARI, ANNO, SACC  nothing
  *
  * Ownership and lifetime. Nodes are made by a Tree (tree.h) in its arena and are never freed
  * one by one: a node, its child array, the names it points to and the constants it refers to
@@ -338,6 +338,14 @@ class Node {
         check(NodeKind::SFOR);
         return *payload_.names->items[1];
     }
+    /// SFOR: the name bound to the entry's tags in the body (`tags`, the third name of
+    /// `(n, F, tags)`); empty when the head names two things or one. The element of `fields T` is
+    /// the triple (name, type, tags); every other element gives one thing (`indices ts` the
+    /// position, a written sequence the element), which is the rule the head follows.
+    const std::string &staticForTagsName() const {
+        check(NodeKind::SFOR);
+        return *payload_.names->items[2];
+    }
     /// SFOR: the generator walks the positions of a tuple value (`indices ts`) rather than the
     /// fields of a type (`fields T`).
     bool staticForIndices() const {
@@ -392,7 +400,7 @@ class Node {
     /// SLOOP: the number of names of the state (k).
     size_t staticLoopStateCount() const {
         check(NodeKind::SLOOP);
-        return payload_.names->count - 2;
+        return payload_.names->count - 3;
     }
     /// SLOOP: the j-th name of the state.
     const std::string &staticLoopStateName(size_t j) const {
@@ -403,10 +411,17 @@ class Node {
     /// SLOOP: the name bound to the walked entry in the body (`n`, or `j` for `indices`).
     const std::string &staticLoopValueName() const {
         check(NodeKind::SLOOP);
+        return *payload_.names->items[payload_.names->count - 3];
+    }
+    /// SLOOP: the name bound to the entry's type in the body (`F`; empty for `indices` and for a
+    /// sequence).
+    const std::string &staticLoopTypeName() const {
+        check(NodeKind::SLOOP);
         return *payload_.names->items[payload_.names->count - 2];
     }
-    /// SLOOP: the name bound to the entry's type in the body (`F`; empty for `indices`).
-    const std::string &staticLoopTypeName() const {
+    /// SLOOP: the name bound to the entry's tags in the body (`tags`, the third name of
+    /// `(n, F, tags)`); empty when the head names two things or one. See `staticForTagsName`.
+    const std::string &staticLoopTagsName() const {
         check(NodeKind::SLOOP);
         return *payload_.names->items[payload_.names->count - 1];
     }
@@ -418,9 +433,13 @@ class Node {
     }
     /// SLOOP: the fold walks a sequence written after `in` (`for i in 0..5`), rather than the
     /// fields of a type or the positions of a tuple value. The sequence must be one the compiler
-    /// works out; the graph builder refuses it with `SemanticDiag::StaticLoopSequenceNotKnown`
-    /// when it is not (the ruling of 2026-10-24, H462). Never set together with
-    /// `staticLoopIndices`.
+    /// works out: an expression built only from compile-time constants through operations that
+    /// are pure and cannot fail (the ruling of 2026-10-24, H462, and the ruling of 2026-10-25,
+    /// H475, which draws the line by that one rule). Then it is evaluated and unrolled -- a
+    /// constant interval `a..b`, `range(a, b, step)` with constant arguments, an array literal
+    /// or a constant array give one value per round, and a compile-time tuple gives the type at
+    /// each position. The graph builder refuses anything else with
+    /// `SemanticDiag::StaticLoopSequenceNotKnown`. Never set together with `staticLoopIndices`.
     bool staticLoopSequence() const {
         check(NodeKind::SLOOP);
         return (flags_ & kFlagB) != 0;

@@ -294,6 +294,14 @@ class Builder {
     node_ptr_t visitMatchType(const AST::node_ptr_t &ast);
     node_ptr_t visitStaticFor(const AST::node_ptr_t &ast);
     node_ptr_t visitStaticLoop(const AST::node_ptr_t &ast);
+    /// How many things the head of a `static for` / `static loop` names, against how many the
+    /// walked element gives: `fields T` gives the triple (name, type, tags) and every other
+    /// element gives one thing (`indices ts` the position, a written sequence the element). A head
+    /// may name fewer of them, never more; a head that names more is
+    /// `SemanticDiag::StaticHeadNameCount`, read here because this is where the walked shape -- and
+    /// so the number of parts -- is known. `shape` is what the head wrote after `in` and `named`
+    /// the number of names it wrote, both for the message.
+    void checkStaticHeadNames(const AST::node_ptr_t &ast, const std::string &shape, size_t named);
     node_ptr_t visitStaticAccess(const AST::node_ptr_t &ast);
     node_ptr_t visitTryExpr(const AST::node_ptr_t &ast);
     node_ptr_t visitLiteral(const AST::node_ptr_t &ast);

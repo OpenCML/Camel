@@ -222,3 +222,147 @@ H254 的评测框架落地，对照组（15 道题的标准解）首稿 15/15 �
 - `staticSliceRejection` 里"步长必须是常量 1"这一条删掉——它把一个实现缺口写成了语言限制；按"第一维 extent 是否常量"划界也随之不需要。
 - `subscript/slice_step`、`slice_step_negative` 改为断言切片的**值**（`[2]`、`[3]` 之类按实际语义算出的结果），不再断言拒绝。这两条用例当初钉的是"尚未实现"，不是语言规则。
 - 静态越界检查照旧：常量下标或常量切片端点超出已知 extent 时编译期报错（上一条裁定）；步长为常量 0 时编译期报错（与 `range` 的步长同一条规则）。
+
+## h461-retired-syntax-leftovers
+
+改法对：靠 `wait` 建立顺序的地方改成同步函数体、核对输出不变，不改期望值。图上从"直接使用者"变成"相邻语句"的顺序，正是终态。
+
+1. **LSP 的 `sync` 修饰符改指同步函数体**：函数体写 `: T sync` 的函数，以及 `sync` lambda，在声明处发这个修饰符——它们是现在唯一的"同步"写法，编辑器标出来有用。清单不用动。
+2. **GCT/GIR 里 `wait` 的内部机器整套删除**（`WaitLoad` 下沉、`NodeKind::WAIT`、`waited()` 标志、两处死打印机），单独一轮做，golden 随之重推。用例文件名里的 `wait` 在同一轮改掉（`wait_direct_user` → `order_direct_user` 之类），plan 名、golden、poison 列表一起移。
+3. **文档只写现在的语言**：
+   - `docs/technical/00_language_reference.md` 整份删除，引用它的地方改指 `docs/language/**`（随文档重组 5.32）。
+   - `docs/language/04_execution_model.md` 的 §4.3.3、§4.4 标题按现在的内容改名，交叉引用一并改，不为锚点留旧标题；正文里"已退役"的说明删掉，只描述同步函数体与 `var` 的顺序规则。
+   - `docs/technical/18_*` 里"描述退役前的模型"那几节同样删掉或改写成现在的模型。`docs/technical/30_*:272` 的测量记录可以留。
+   - `docs/design/*`、`docs/handover/*`、`changes.log` 是记录，不改。
+4. `IgnoredSideEffect` 对 `func bump(var x: int)` 调用点的假阳性仍归 H242a。
+
+## h462-static-loop-sequence-boundaries
+
+1. **`a..b` 半开，确认**——与已有裁定（`a..b` 是半开的 `int[]`）一致。
+2. **"编译期能求出的序列"按一条规则画界**：`in` 后的表达式只由编译期常量（字面量、常量绑定、外层 `static` 的迭代变量）经过**可自由排布的运算**（纯、不会出错，3.4 那一个谓词）组成，编译器就把它求成值再展开。所以：
+   - `range(a, b, step)`（实参是常量）、数组字面量、常量数组：都行，按元素走；
+   - 编译期元组：`for x in ts` 按元素走，每一轮 `x` 是该位置的类型——这正是 `static loop` 区别于普通 `loop` 的地方；`indices ts` 走位置，`fields T` 走 (名字, 类型)；
+   - 区间只有 `int` 两端（`..` 只造 `int[]`），不另造浮点、字符区间；
+   - 多个名字只在序列的元素本身是成对的时候合法（`fields` 给出两个，`n, F, tags` 给出三个）。
+   不需要 `constas`/`#macro` 另开入口；求不出时仍报 `StaticLoopSequenceNotKnown`。
+3. **作者页**：设计原则与设计稿里的旧写法我已改（`static loop … for n, F in fields T`）。`docs/language/**` 按"文档随代码走"由改语法的车道一起改——这 6 个代码块请本 lane 补上，不必等我。文法生成块重推是对的。
+4. `for j, F in indices ts` 的诊断变化接受。
+5. （待负责人）`static for (n, F) in fields T => …` 仍带括号，与 `static loop` 的头不一致；是否一并去括号已提交负责人。
+
+## recursion-specialization-fixed-point-followups
+
+读法 E 就是我要的不动点，**采用 E**：
+
+1. **元素位置**：P4 之后裸 `Tensor` 形参写成 `::<T>` 加 `T[..]`，`T` 是类型变量，所以按元素代入、extent 不代入（读法 A 的键）是对的语义。A 下"同一个键反复造新实例"不是键的问题，是缓存的问题：E 的"调用要的实例就是调用者自己"把它修好了。读法 B（元素也不代入）丢精度，不用。
+2. **"第二圈"的判据**：沿当前调用环，若同一个函数以**相同的键**再次被实例化，就用环上已有的那个实例（E）。若键不同（多态递归），不同的位置里 extent 与维度名放宽为 `?`；若是**元素类型**不同，按 5.5 不能实例化出无穷多个具体类型，报编译错误（"递归调用改变了元素类型"）。
+3. **计数上限删掉**：`export_gated_gru_forward` 在 4096 下给出 plan 自己描述的形状（7 个 If），说明 8 只是截断。删除 `kMaxTypeSpecializationsPerRecursiveFunction`；若保留守卫，只能是一条内部断言——达到它就报"特化没有到达不动点"的错误，不能悄悄停在截断的形状上。期望按无上限的读数重推。
+4. **形状断言随裁定重推**：`export_gated_gru_forward` 的算子表、`fold_specialize.bounded` 的下界、`shape_unroll.simplify.rgir` 里被调用者的名字，都按新的读数改，本 lane 负责。前提是对应的 `ort_*` 数值用例保持绿——它们钉的是值。
+5. **`resident_loop_declares_its_blocks`**：图里出现 `tensor:iter` 说明有一处还在走张量迭代器，而 `for` 对数组已由核心负责（上一轮裁定）；查出是哪条路径生成它，修那条路径，不改放置期望。
+6. **`export_loop_carried_array` 的措辞**：断言按 P4 后的措辞（"int array"）更新，`valueKind()` 不改顺序。**返工**：这条拒绝的文本里写着"H17 items 2 and 4"——诊断面向用户，不能出现内部任务编号；而且按 `growable-array-vs-tensor` 的裁定，判据是"携带的数组各轮长度是否不变"，消息说这个事实即可（"argument 2 is an array whose length changes from one round to the next"），去掉"等原生多维数组落地"的说法。归 h449/h456。
+7. 维度名放宽的诊断：补一条形参写 `T[n]` 的多态递归用例（例如每层取一半的递归），取了读数再定措辞。
+
+## var-version-node（补二、补三）
+
+1. **逃逸判定在哪一步**：落地的做法——整个函数体建完之后（`leaveScope`，捕获与调用都已知）统一判定并把不逃逸的读改成 SSA——就是答案，不需要单遍预知。逃逸的定义也对：被闭包捕获、作为 `var` 实参交出、或本图的 `var` 形参。
+2. **图层面的原地判据已经有**，在 `docs/design/arrays-memory/README.cn.md` 4.3.1（原地更新的统一规则）：更新在旧值**之后没有别的观察者**时原地进行；第 1 层（编译期规划）的证明就是"图上这是旧值的最后一次使用；其他只读使用者由内存规划排在更新之前（加顺序边），排不开就拷贝"；第 2 层是运行时计数为 1；都证明不了就拷贝。决定只在内存规划阶段做、写进执行计划。补三拟的那句话与它一致，不另立；函数结果、捕获端口、导出端口都是"别的观察者"。
+3. 由此 `string_plus_assign`（`abab`）这一族：`:var/take` 把仍有观察者的数组交出去原地追加，违反 4.3.1，是缺陷——SSA 之后由内存规划按 4.3.1 判定，不在 `:var/take` 里各自判断。
+
+**返工（已由我顺手修掉）**：本批 4 个文件的注释里有 7 处 `` `var` `` 变成了垂直制表符加 `ar`（`\x0b`，PowerShell 双引号字符串里的 `` `v ``）。生成提交信息或源码文本时用单引号 here-string，或在提交前 `grep -P '\x0b'`。
+
+## dim-name-relaxation-has-no-readable-difference
+
+读数说明得对：`len(xs) / 2` 是运行时值，静态键始终不变，放宽那条路走不到。现在这条用例保留，它钉住的"实例签名就是声明、调用不造新实例、总数 1"是对的。
+
+要读到放宽，需要**静态 extent 每层都变、而递归深度取决于运行时值**的递归，例如：
+
+```camel
+func grow(xs: f32[n], k: int): f32 {
+    return if k <= 0 then sum(xs) else grow(concat(xs, xs[0 .. 1]), k - 1)
+}
+println(grow([1.0, 2.0], read_int()))
+```
+
+第一次实例化时 `n = 2`，递归调用的实参是 `f32[3]`，键不同，于是放宽成 `f32[?]`；`f32[?]` 的实例再调用自己时键相同，复用它。期望是：恰好两个实例（`f32[2]` 和 `f32[?]`），与计数上限无关。如果 `concat` 的结果 extent 今天推不出 `n + 1`（给出的是 `?`），那么键从第二层起就相同了，读数会和放宽之后一样——这时把读数如实写进用例说明，不为此补 extent 运算。
+
+元素类型变化的那条用例等另一条车道的读数。
+
+## load-npy-computed-signature-and-the-generic-wrapper
+
+判断确认。计算签名是过渡做法，与 `from_bytes` 同构，可以接受；P4 让 `Tensor<f32>` 与 `f32[..]` 成为同一个类型之后，`load_npy` 改回声明式的 `load_npy::<T>(path: string): T[..]`，`LoadNpyResolver` 那 5 条规则删除（`from_bytes` 同样处理）。泛型包装 `func f::<T>(p: string): T[..] { return load_npy::<T>(p) }` 在那之前不编译，这是已知的过渡损失；把它写成 P4 的一条验收用例（翻转后必须编译通过，并且读出正确的元素类型），而不是现在写成负例。不保留元素类型未定的版本。
+
+## static-loop-sequence-forms
+
+**按第 2 条补实现，不收窄措辞。** 文档只写今天认的三种是对的（文档随代码走），实现补齐后再改文档。补的范围就是第 2 条那一个判据：`in` 后的表达式由编译期常量经可自由排布的运算组成，就先求值再展开——
+
+- `[1, 2, 3]` 与常量数组：按元素走；
+- `range(a, b, step)`（实参是常量）：与 `a..b` 同一条路径，常量折叠求出 `int[]`；
+- 编译期元组 `ts`（含剩余参数）：按元素走，每轮 `x` 是该位置的类型。
+
+四个探针程序入库成用例（现在是负例的，补完后翻成正例）。求值复用常量折叠，不另写一个求值器。报错消息本身是完整的（`'[1, 2, 3]' is not.` 是"must be known … : '{0}' is not."的后半句），不用改。
+
+## tensor-iter-path-left-on-develop
+
+1. **确认**：develop 上这条路径保持现状，记为过渡；模块的 `iter` 注册随 P4 删除步一起删。不在别名落地前硬让核心接管 `Tensor<...>`。
+2. **集成树上 `loop_grad_refuse_tensor_iterable` 给出垃圾梯度，是阻断 P4 合入的缺陷**，不是断言过时：
+   - 一个求导结果是 `-6.7e15` 量级的程序**必须不能**静默跑通。规则：对一个运算，要么给出正确的导数，要么在编译期拒绝并点名这个运算；第三种（跑通、给出错值）不允许。
+   - `for` 对数组按第一维取元素现在是核心语义，autodiff 应当**支持**它，而不是拒绝：逐轮读取 `xs[t]` 的伴随是把每轮的梯度按 `t` 加回去（scatter-add），循环本身按已有的循环伴随处理——对照 JAX 的 `scan`。
+   - 所以这条用例从负例改为正例：断言梯度与有限差分在容差内一致；在支持落地之前，autodiff 遇到核心数组 `for` 必须拒绝（点名 `for` 的序列），不能落到无规则的路径上产生错值。
+   - 先查清垃圾值从哪来（哪一条伴随规则缺失却没有报错）——"缺规则却不报错"本身就是要修的那处，修好之后别的运算也不会再有同样的静默错误。归 autodiff 车道，列为 P4 合入的门。
+
+## static-loop-sequence-two-argument-range-and-the-tuple-reading
+
+1. **两参数 `range` 不接受**，判断对：序列位置与值位置同一条规则，`range(a, b)` 已删除，探针按 `0..3` 改写或保留为负例都可以。我裁定里写的就是三参数形式。
+2. **元组那一轮的 `x` 是元素的值**，不是类型——我写"每轮 `x` 是该位置的类型"有歧义，本意是"`x` 的类型随位置变"。`ts` 是值的元组（含剩余参数 `..ts`），`for x in ts` 每轮绑定 `ts.[i]` 这个值，其类型是第 i 个位置的类型；这正是它与普通 `loop` 的区别（普通循环每轮同一个类型）。按类型展开走 `fields T`（给出名字与类型）。所以 `probe_tuple.cml` 的 `acc + x` 应当是**正例**，当前实现把 `x` 当类型是错的，改过来；要在类型位置用它就写 `typeof x` 或从 `fields` 取。
+3. **折叠的边界**：实参走同一个读法、整数枚举走同一段 `walkIntegers`，没有第二个求值器——接受，不放开共享折叠的结果种类闸门。
+4. 三个名字：序列的元素是三元组时（`fields T` 带标签）允许 `for n, F, tags in fields T`，与 `static for` 同一规则；名字个数由序列元素决定，多了少了都报错。今天的语法错误改掉。
+
+## fields-third-name-tags-binding
+
+1. **`tags` 绑定标签的值，组成一个编译期结构体**：字段名是标签名，字段值是该标签的实参记录。`type Box = { #width<8> low: int, high: int }` 里，`low` 那一轮的 `tags` 是 `{ width: { w: 8 } }`，`high` 那一轮是 `{}`。于是
+   - 读值：`tags.width.w`（编译期常量）；
+   - 查有没有：`match type typeof(tags)` 或 `static for k, _ in fields typeof(tags)`——用已有的结构体与 `fields`，不另造标签反射的 API；
+   - 每一轮 `tags` 的类型不同，这在展开里本来就成立（与元组那一轮的 `x` 同理）。
+   只给名字的 `string[]` 丢掉了值（`#width<8>` 的 8），不够用；改 `staticFieldTagsNode` 一处即可。无参数的标签（`#leaf`）的值是空记录 `{}`。
+2. **名字可以只写前缀**：`fields T` 的元素是 (名字, 类型, 标签)，头部可以写 1、2 或 3 个名字，按位置取前缀；多写才报 `StaticHeadNameCount`。我上一条"少了也报错"收回——前缀写法与现有语料一致，也不产生歧义。
+3. `H51-plan.md` Q5 已标注被本条取代。
+
+## 2026-10-25-python-binding-host-copy-bandwidth-guard
+
+选 **(a)**，用例留在 fast 层。分析对：分母量到的是宿主调度延迟，放宽阈值治不了。
+
+- 两种拷贝和直通调用都改成**单次调用取最小值**（min-of-N）：抢占只会让单次变慢，不会变快，最小值就是"这件工作本身的成本"，与负载无关。N 按尺寸取，让每档总时长相近（例如 1 MiB 取 200 次，64 MiB 取 10 次）。这与 declaration-cost-gate 的"别量随负载漂移的墙钟"同向。
+- 护栏仍是"64 倍字节的拷贝明显更贵"，阈值按 min 的分布重定（第 4 节那 23 份读表按 min 重算一遍给出依据）；主张那条（"交出 64 MiB 比拷贝 1 MiB 还便宜"）不变。
+- (b) 让合并闸门失去零拷贝契约的覆盖，(c) 管不住同机的其他车道，都不选。
+
+## stdlib-declaration-check-measures-a-foreign-install
+
+1. **要拒绝**：直接跑的这两条脚本与 release gate 用同一条规则——取注册表之前跑 `build-info.js check`，安装不是本树的构建就拒绝（exit 2，消息说量的是哪个安装、它的戳是什么），不报 144 条"差异"。一条规则到处一样，不靠文档提醒。
+2. **覆盖开关不豁免**：显式指定的二进制同样要过戳检查——"量的不是本树"的错误与是怎么指定的无关。`CAMEL_EXE` 这类环境变量开关按项目约定不设，改成命令行参数（`--camel <path>`）；`CAMEL_HOME` 是安装位置的约定，照旧。
+3. 已提交的"报告量了哪个安装、一处问题算一条"保留——摘要行与孤立的 `\r` 不再算成 problem 是对的。
+
+## a-frozen-node-names-its-type-by-typeid
+
+根因找得准：类型有了**对象身份**，并且被写进了图。原则与函数值一样——**类型没有身份，只有结构**：同一个类型在任何地方是同一个 id。修在根上，不在读的那几处各自改成 `typeEquals`。
+
+1. **一个类型一个 id**：所有类型都经类型表构造（自底向上的 hash-consing：分量先驻留，复合类型按分量的 id 作键——今天 `intern()` 按分量地址作键，分量驻留之后这就是结构键）。开放签名、联合、类型变量也一样进表；类型变量的身份是它的绑定处（哪个声明的第几个），不是对象。`TypeTable::adopt` 删除——"给手上的对象发一个 id"正是身份泄漏的入口；绕过类型表构造类型的地方（`tensorOf` 返回非驻留对象之类）全部改走表。
+2. **名字不进身份**：plan 3.2 让包名、维度名进驻留键（打印与诊断要保留它们），而 `equals` 忽略它们。所以表里每个类型同时记下它的**规范 id**（擦掉名字后的那个类型的 id）。图的不变式、`nodeContentHash`、`contentHash`、`sameContent`、e-graph 的表达式类都用规范 id；打印与诊断用带名字的那个。这样不需要另写结构哈希——规范 id 就是结构哈希。
+3. 于是问题 2 的回答是"比 id"，但比的是规范 id；问题 3 的回答是"同一个类型的两份就是同一个内容"。`contentHash` 里混入的四个裸指针改成各自的规范 id。
+4. 验收：probe 3、4 那两处不必改成 `typeEquals`（改回比 id 也绿）；`export_fold` 不靠 probe 1、2 也回到亚秒；加一条检查——冻结图里出现的每个 type id 都来自表的驻留路径（调试构建断言）。
+
+## release-gate-inventory-eight-perf-plans-unclassified
+
+选 **B**（逐条定命运），外加机制上两处小改；不做目录通配——每个计划的命运单独写出理由，这是这份清单的用处。
+
+| 计划 | 命运 |
+|---|---|
+| `para_speedup` | `SLOW_PLANS`（照 perf-para-gate 选 B） |
+| `step_budget`、`reduce_layout` | **拆文件**：只断言计数与性质的守卫（`step.count`、`reduce_layout.count`）移到各自的计划文件进 `SLOW_PLANS`；测量那半留在原文件进 `FORBIDDEN`（发布前测量） |
+| `instruction_counts`、`instruction_counts_load` | `FORBIDDEN`：要特权容器与 `perf`，`_load` 还要人为诱导负载 |
+| `gemm_canonical_shapes`、`gemm_threads` | `FORBIDDEN`：速率曲线，只做发布前测量 |
+| `showcase_d4` | `FORBIDDEN`：与 Python 的逐行对比属于测量，与 showcase 同族一致 |
+
+机制：
+1. inventory 收集完所有问题再一起报（不在第一条就 `die`），一次看到全部未分类的计划。
+2. **inventory 检查进合并闸门的 fast 层**：新计划落地时如果没有归类，就在那次提交上变红，而不是等到有人跑 release gate。这就治住了"第 9 个计划又弄坏工具"。
+
+**返工**：`--camel <path>` 取代 `CAMEL_EXE` 只做了两条脚本。按"一类事一条规则"，`CAMEL_EXE` 在其余脚本里也一并删掉、改成 `--camel`（`camel-for-ai.mjs`、`check-doc-snippets.mjs`、`perf-gate.mjs`、`test/tools/check-doc-pass-forms.mjs`、`import-audit.mjs`、`para-speedup.mjs`、`jitcov.py`、`progen/README.md`）。另外 `stdlib-reference.mjs` 等处的注释"`CAMEL_EXE` is gone (the author's ruling …)"删掉——代码只描述现在怎么做，不记录已不存在的写法。

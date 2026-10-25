@@ -442,7 +442,8 @@ func main(): int sync {
   `xs[i].f = e`. A path assignment rebinds the whole variable, as if written
   `xs = set(xs, i, set(xs[i], f, e))`; the target must be a variable, and `f().x = 5` is
   `SemanticDiag::AssignmentTargetNotVariable`. Passing a value to a `var` parameter of a function is
-  how a callee can write back into the caller's variable (`wait` orders that write, §7).
+  how a callee can write back into the caller's variable (a write in a sync block is ordered by
+  where it is written, §7).
 - **Generics** are declared after the name: `func first::<T>(xs: T[]): T? { ... }`, called as
   `first::<int>(xs)` or `first(xs)` when the arguments fix `T`.
 - **`loop`** is the language's own iteration, and it yields its last state:
@@ -452,10 +453,11 @@ func main(): int sync {
   `for i in 0..5 { ... }`, which is `SyntaxDiag::UnexpectedToken`: a `for` on its own is not a
   statement.
 - **`static loop`** folds a compile-time sequence, and its head is written like `loop`'s, without
-  parentheses: `static loop acc = 0 for i in 0..3 do acc + t.[i]`. After `in` comes `indices ts`,
-  `fields T`, or a constant interval `a..b`, half-open as `..` is elsewhere; `i` is a compile-time
-  value and a `t.[i]` key at once. A sequence it cannot work out is
-  `SemanticDiag::StaticLoopSequenceNotKnown`.
+  parentheses: `static loop acc = 0 for i in 0..3 do acc + t.[i]`. What stands after `in` is one
+  criterion, not a list of spellings: what compile-time constants build through freely schedulable
+  operations is unrolled — a constant interval `a..b`, constant-argument `range(a, b, step)`, an
+  array literal or constant array, `indices ts`, `fields T`, or a compile-time tuple (each round
+  binds the element there). Otherwise `SemanticDiag::StaticLoopSequenceNotKnown`.
 - **`rule`** declares a rewrite an optimizer pass may apply:
   `rule name(<patterns>) when <condition> { <pattern> => <replacement> }` (`<=>` for a rewrite that
   reads both ways). The condition goes between the parameters and the body, the one position a `when`
@@ -695,7 +697,7 @@ run in the order given; a pass parameter is written `key=value` after the pass n
 - The language does not fix the pass order, and the order can change the result: passes modify the
   graph. A pass that consumes the graph (the schedulers and the translators) ends the pipeline;
   passes written after it do not run, with the warning `RuntimeDiag::PassesNeverRun`.
-- The compiler builds the graph from `var`/`let`, `wait` and `sync`; after that those rules no
+- The compiler builds the graph from `var`/`let` and `sync`; after that those rules no
   longer constrain the passes.
 - `std::gir` is the form to read a program's order from — the nodes and the edges between them are
   the program — and `std::rgir` is the same graph for Graphviz.
@@ -1394,7 +1396,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `LambdaParametersNeedParentheses` | E | A lambda's parameters need their parentheses: write '(x) => e', not 'x => e'. |
 | `ComparisonAcrossLines` | W | This '>' is read as a comparison with the next line, which starts with {0}: two statements may have been joined into one. |
 
-**Semantic** (`SemanticDiag`) — 202 (190 errors, 12 warnings)
+**Semantic** (`SemanticDiag`) — 203 (191 errors, 12 warnings)
 
 | `Redeclaration` | E | Redeclaration of reference: '{0}'. |
 | `ModuleNotFound` | E | Module '{0}' not found. {1} |
@@ -1510,6 +1512,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `StaticComprehensionVoidElement` | E | The block for the field '{0}' of '{1}' gives no value, so the comprehension has no element for it. |
 | `StaticIndicesNotTuple` | E | 'indices' walks the positions of a tuple, but '{0}' has type '{1}'. |
 | `StaticLoopSequenceNotKnown` | E | The sequence of a 'static loop' must be known when the function is compiled: '{0}' is not. |
+| `StaticHeadNameCount` | E | The head of this loop names {0} things; '{1}' gives {2} for each round. |
 | `RestParameterNotLast` | E | The rest parameter '..{0}' must be the last parameter. |
 | `RestParameterTypeNotSupported` | E | The rest parameter '..{0}' cannot write a type. |
 | `RestArgumentNotLast` | E | The rest argument '..{0}' must be the last positional argument. |
@@ -1632,7 +1635,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `ConstantExpressionFaults` | W | This constant expression faults whenever it is evaluated ({0}); it is not folded. |
 | `TranslationLinksRuntime` | W | std::cpp has no standalone translation of {0}: the program it writes calls the Camel runtime there and is built with libcamel. |
 
-**Semantic** (`SemanticDiag`) — 202 (190 errors, 12 warnings)
+**Semantic** (`SemanticDiag`) — 203 (191 errors, 12 warnings)
 
 | `ReducedPrecisionUnsupported` | E | The call of '{0}' cannot take a value of the reduced-precision element type '{1}'. |
 | `ImplOnBodylessDeclaration` | E | The body-less declaration '{0}' cannot carry '#impl<{1}>': it has no Camel body. |

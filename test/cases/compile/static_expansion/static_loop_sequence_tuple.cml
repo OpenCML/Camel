@@ -1,0 +1,28 @@
+/**
+ * `for x in ts` walks a compile-time tuple -- here the rest parameter of the expansion being
+ * built -- by element, and each round's `x` is the *value* at that position, `ts.[i]` (the ruling
+ * of 2026-10-25, H475): `acc + x` adds it. Its type is the type of that position, which varies
+ * from round to round, so it is stated where a type is needed as `typeof(x)`. That is what tells
+ * a `static loop` over a tuple from an ordinary `loop`, whose element type is one type for every
+ * round; `indices ts` walks the same positions and gives an ordinary `int` (6.8.4).
+ */
+module static_loop_sequence_tuple
+
+func tag::<T>(): int {
+    return match type T {
+        case int => 1
+        case float => 2
+        case string => 3
+        case _ => 0
+    }
+}
+
+func tags(..ts): int {
+    return static loop acc = 0 for x in ts do acc + tag::<typeof(x)>()
+}
+
+func main(): int sync {
+    println(tags(1, 2.5, "a"))
+    println(tags())
+    return 0
+}

@@ -1,0 +1,45 @@
+/**
+ * The head names three things when the element has three: the element of `fields T` is the triple
+ * (name, type, tags), so `for n, F, tags in fields T` is the rule of the ruling of 2026-10-25
+ * (H475 item 4), the same rule `static for` follows. `tags` is the field's tags -- a compile-time
+ * `string[]` of the tag names the declaration wrote -- so `len(tags)` folds (`low` has one tag,
+ * `high` none) and `typeof(tags)` is `string[]` where the type is wanted. Naming fewer of the
+ * element's parts is legal too: `for n in fields T` takes the field's name alone.
+ */
+module static_loop_head_tags
+
+tag width<w: int> on field
+
+type Box = {
+    #width<8> low: int,
+    high: int,
+}
+
+func tag_of::<T>(): int {
+    return match type T {
+        case string[] => 1
+        case _ => 0
+    }
+}
+
+/// Three names, the type of the third asked for: one round per field.
+func bound(b: Box): int {
+    return static loop acc = 0 for n, F, tags in fields Box do acc + tag_of::<typeof(tags)>()
+}
+
+/// The tags themselves: `len(tags)` is the number of tags on that field, folded per round.
+func counted(b: Box): int {
+    return static loop acc = 0 for n, F, tags in fields Box do acc + len(tags)
+}
+
+/// Fewer names than the element has parts is legal: the field's name alone.
+func named(b: Box): int {
+    return static loop acc = 0 for n in fields Box do acc + 1
+}
+
+func main(): int sync {
+    println(bound({low: 1, high: 2}))
+    println(counted({low: 1, high: 2}))
+    println(named({low: 1, high: 2}))
+    return 0
+}

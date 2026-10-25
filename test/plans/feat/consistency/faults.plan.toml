@@ -99,9 +99,9 @@ expect_diagnostic_column = 61
 expect_stdout_starts_with = "1437\n"
 
 [[tests]]
-name = "fault.in_wait"
-desc = "A fault in a waited call that has already written its var parameter."
-case = "../../../cases/consistency/faults/fault_in_wait.cml"
+name = "fault.in_sync_call"
+desc = "A fault in a sync call that has already written its var parameter."
+case = "../../../cases/consistency/faults/fault_in_sync_call.cml"
 expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
 expect_diagnostic_line = 8
 expect_diagnostic_column = 11

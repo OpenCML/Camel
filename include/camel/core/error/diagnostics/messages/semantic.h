@@ -176,10 +176,18 @@ enum class SemanticDiag : uint32_t {
     // this one takes the next free code after them.
     StaticIndicesNotTuple = 0x000182,
 
-    // The sequence of a `static loop` (the ruling of 2026-10-24; H462): the head lost the
-    // parentheses it carried and takes any sequence known when the function is compiled. One the
-    // compiler cannot work out is this.
+    // The sequence of a `static loop` (the rulings of 2026-10-24 and 2026-10-25; H462 and H475):
+    // the head lost the parentheses it carried and takes any sequence known when the function is
+    // compiled. One rule draws the line -- compile-time constants joined by operations that are
+    // pure and cannot fail -- so what counts is the interval, `range`, an array and a compile-time
+    // tuple, not a list of spellings. One the compiler cannot work out is this.
     StaticLoopSequenceNotKnown = 0x0001E7,
+
+    // The names of a `static for` / `static loop` head (the ruling of 2026-10-25 on
+    // `static-loop-sequence-two-argument-range-and-the-tuple-reading`, item 4): the number of names
+    // follows the element -- `fields T` gives the field's name, its type and its tags, every other
+    // element gives one thing -- and a head that names more than the element has parts is this.
+    StaticHeadNameCount = 0x000000,
 
     // Rest parameters (design principles 5.5, H51 step 6): 0x18A and up.
     /// A rest parameter is not the last of the ordinary parameters.

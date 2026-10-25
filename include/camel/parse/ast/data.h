@@ -111,8 +111,8 @@ std::string to_string(ReservedDataOp op);
 
 class DataLoad : public Load {
   public:
-    DataLoad(DataType type, bool notNull = false, bool waited = false)
-        : Load(LoadType::Data), dataType_(type), notNull_(notNull), waited_(waited) {}
+    DataLoad(DataType type, bool notNull = false)
+        : Load(LoadType::Data), dataType_(type), notNull_(notNull) {}
 
     const std::string toString() const override {
         std::string result = "DataLoad: " + to_string(dataType_) + this->status();
@@ -123,17 +123,11 @@ class DataLoad : public Load {
 
     const std::string status() const {
         std::string status;
-        if (waited_) {
-            status += " (waited)";
-        }
         if (notNull_) {
             status += " (non-null)";
         }
         return status;
     }
-
-    void wait() { waited_ = true; }
-    bool waited() const { return waited_; }
 
     void setNonNull(bool notNull) { notNull_ = notNull; }
     bool isNonNull() const { return notNull_; }
@@ -142,7 +136,6 @@ class DataLoad : public Load {
   private:
     DataType dataType_;
     bool notNull_;
-    bool waited_;
 };
 
 class UnaryExprLoad : public DataLoad {
@@ -254,16 +247,28 @@ class TypeCaseLoad : public DataLoad {
 /// `static for (n, F) in fields T => body` or `static for (j) in indices ts => body`:
 /// children [0] the walked shape (a type for `fields`, a value for `indices`), [1] the body (a
 /// block). The load holds the names: for `fields`, `n` is the field name (a tuple's index in
-/// decimal) and `F` the field type; for `indices`, only `j` (the position as an integer) is
-/// bound. Neither is a declaration of the enclosing scope: they live in the body only.
+/// decimal), `F` the field type and `tags` the field's tags; for `indices`, only `j` (the
+/// position as an integer) is bound. A head may name fewer of them than the element has parts,
+/// never more (`SemanticDiag::StaticHeadNameCount`); `_` at a position binds nothing. None is a
+/// declaration of the enclosing scope: they live in the body only.
 class StaticForLoad : public DataLoad {
   public:
-    StaticForLoad(std::string valueName, std::string typeName, bool byIndices = false)
+    StaticForLoad(
+        std::string valueName, std::string typeName, std::string tagsName = {},
+        bool byIndices = false, size_t nameCount = 0)
         : DataLoad(DataType::StaticFor), valueName_(std::move(valueName)),
-          typeName_(std::move(typeName)), byIndices_(byIndices) {}
+          typeName_(std::move(typeName)), tagsName_(std::move(tagsName)),
+          byIndices_(byIndices), nameCount_(nameCount) {}
 
     const std::string &valueName() const { return valueName_; }
     const std::string &typeName() const { return typeName_; }
+    /// The third name of `(n, F, tags)`: the field's tags. Empty when the head names two things
+    /// or one; also empty (written as `_`) when the position is the wildcard.
+    const std::string &tagsName() const { return tagsName_; }
+    /// How many names the head writes, in all: the count the element must have parts for
+    /// (`SemanticDiag::StaticHeadNameCount`). The three names above are the first three written;
+    /// a head may write more than three, and only the count says so.
+    size_t nameCount() const { return nameCount_; }
     /// `indices ts` walks the positions of a tuple value; `fields T` walks the fields of a type.
     bool byIndices() const { return byIndices_; }
     const std::string toString() const override { return "StaticFor" + this->status(); }
@@ -272,7 +277,9 @@ class StaticForLoad : public DataLoad {
   private:
     std::string valueName_;
     std::string typeName_;
-    bool byIndices_ = false;
+    std::string tagsName_;
+    bool byIndices_     = false;
+    size_t nameCount_   = 0;
 };
 
 /// `static loop s1 = a1, ..., sk = ak for i in <序列> do body` (`in fields T`, `in indices ts`,
@@ -286,14 +293,20 @@ class StaticLoopLoad : public DataLoad {
   public:
     StaticLoopLoad(
         std::vector<Reference> state, std::string valueName, std::string typeName,
-        bool byIndices = false, bool bySequence = false)
+        std::string tagsName = {}, bool byIndices = false, bool bySequence = false,
+        size_t nameCount = 0)
         : DataLoad(DataType::StaticLoop), state_(std::move(state)),
           valueName_(std::move(valueName)), typeName_(std::move(typeName)),
-          byIndices_(byIndices), bySequence_(bySequence) {}
+          tagsName_(std::move(tagsName)), byIndices_(byIndices), bySequence_(bySequence),
+          nameCount_(nameCount) {}
 
     const std::vector<Reference> &state() const { return state_; }
     const std::string &valueName() const { return valueName_; }
     const std::string &typeName() const { return typeName_; }
+    /// The third name of `(n, F, tags)`: see `StaticForLoad::tagsName`.
+    const std::string &tagsName() const { return tagsName_; }
+    /// How many names the head writes, in all: see `StaticForLoad::nameCount`.
+    size_t nameCount() const { return nameCount_; }
     bool byIndices() const { return byIndices_; }
     /// The head is `in <序列>`: the written sequence, whose elements the compiler must work out
     /// (a constant interval today). Only one name is bound, the element itself, not a position.
@@ -305,8 +318,10 @@ class StaticLoopLoad : public DataLoad {
     std::vector<Reference> state_;
     std::string valueName_;
     std::string typeName_;
+    std::string tagsName_;
     bool byIndices_  = false;
     bool bySequence_ = false;
+    size_t nameCount_ = 0;
 };
 
 /// `t.[key]`: children [0] the target, [1] the key expression. The key must be a compile-time

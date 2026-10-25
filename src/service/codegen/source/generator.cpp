@@ -833,10 +833,6 @@ string Generator::generateDataLoad(const AST::node_ptr_t &node) {
         break;
     }
 
-    if (dataLoad->waited() && !result.empty()) {
-        result = "wait " + result;
-    }
-
     return result;
 }
 

@@ -1,6 +1,8 @@
 /**
- * `indices` binds one name, the position; there is no second name for the element's type. The
- * header of `fields` has two, so a second name after `indices` is a syntax error.
+ * How many names a head may write is decided by the element of the sequence (the ruling of
+ * 2026-10-25, H475 item 4): the element of `indices ts` is the position, one thing, so a second
+ * name (`F`, the type name `fields` has) has nothing to be. It is refused by name, not as a
+ * syntax error.
  */
 module indices_two_names
 

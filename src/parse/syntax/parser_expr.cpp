@@ -1203,20 +1203,24 @@ void ParserImpl::parseStaticFor() {
     close(m, NK::StaticForExpr);
 }
 
-/// staticForHeader : 'for' '(' (identDef | '_') (',' (identDef | '_'))? ')' 'in'
+/// staticForHeader : 'for' '(' (identDef | '_') (',' (identDef | '_'))* ')' 'in'
 ///                                          ('fields' typeExpr | 'indices' dataExpr)
-/// `fields` walks the fields of a type and binds two names (`n`, `F`); `indices` walks the
-/// elements of an ordinary tuple and binds one name (`j`, the position as an integer). The
-/// names and the walked shape become children of the node being built (no node of their own, as
-/// the parser of `loop` reads its `loopState` nodes directly). `_` is the wildcard of `match`:
-/// that position binds nothing.
+/// `fields` walks the fields of a type and binds up to three names (`n`, `F`, `tags`); `indices`
+/// walks the elements of an ordinary tuple and binds one name (`j`, the position as an integer).
+/// The names and the walked shape become children of the node being built (no node of their own,
+/// as the parser of `loop` reads its `loopState` nodes directly). `_` is the wildcard of `match`:
+/// that position binds nothing. How many names the element gives is a semantic question -- `fields`
+/// gives the triple (name, type, tags), every other element gives one thing -- so any number of
+/// names is read here and the count is checked where the walked shape is known
+/// (`SemanticDiag::StaticHeadNameCount`).
 void ParserImpl::parseStaticForHeader() {
     if (!panic_ && expect(TK::KwFor)) {
-        uint32_t secondNameAt = kNone;
         if (!panic_ && expect(TK::LParen)) {
             parseStaticForName();
-            if (cur_ == TK::Comma && !panic_) {
-                secondNameAt = pos_;
+            // Any number of names: how many the element gives is a semantic question (`fields`
+            // gives three, everything else one), so a head that names more than that is
+            // `SemanticDiag::StaticHeadNameCount`, not a syntax error.
+            while (cur_ == TK::Comma && !panic_) {
                 bump();
                 parseStaticForName();
             }
@@ -1235,11 +1239,8 @@ void ParserImpl::parseStaticForHeader() {
                 parseType();
             } else if (atWord(0, "indices")) {
                 // `indices ts` walks a tuple value; `ts` is an ordinary expression, so this is
-                // not a type position and `TypeHeadScope` is not entered. It binds one name
-                // (`j`), so `(j, F) in indices ts` is rejected where the second name is.
-                if (secondNameAt != kNone) {
-                    error(SyntaxError::Kind::Unexpected, {e(TK::RParen)}, secondNameAt);
-                }
+                // not a type position and `TypeHeadScope` is not entered. Its element is one
+                // thing (`j`), so a second name is refused where the shape is known.
                 bump();
                 parseExpr();
             } else if (!panic_) {
@@ -1269,10 +1270,12 @@ void ParserImpl::parseStaticForName() {
 /// 元组）；头上的括号与 `static` 一起进来的遗留，已按“同一件事一种写法”去掉（H462），现在与
 /// 普通 `loop` 的 `for i in <序列>` 同形（头由下面的 `staticLoopHeader` 给出）。序列是
 /// `in fields T`（按结构体的字段）、`in indices ts`（按元组的位置），或任何编译期能求出的
-/// 序列——今天只认常量区间 `a..b`（半开，与 `..` 运算符同一个读法），节点的图 builder 判不出
-/// 时报 `SemanticDiag::StaticLoopSequenceNotKnown`。没有 `while`，也没有运行期序列的 `for`，
-/// 因为轮数必须在编译期确定。`do` 后面是循环体，它的值是下一轮的状态；展开后没有 LOOP 节点。
-/// 迭代变量是编译期常量：`acc + i` 和 `t.[i]` 都能写。
+/// 序列（裁定第 2 条画的那一条规则，见 `docs/handover/reviews/questions-2026-10-24-evening.md`
+/// 的 h462 与 2026-10-25 的 h475：只由编译期常量经可自由排布的运算组成就求值展开）：
+/// 常量区间 `a..b`、`range(a, b, step)`、数组字面量与常量数组、编译期元组 `ts`（那时每轮的
+/// 名字是该位置的类型）。节点的图 builder 判不出时报 `SemanticDiag::StaticLoopSequenceNotKnown`。
+/// 没有 `while`，也没有运行期序列的 `for`，因为轮数必须在编译期确定。`do` 后面是循环体，它的值
+/// 是下一轮的状态；展开后没有 LOOP 节点。迭代变量是编译期常量：`acc + i` 和 `t.[i]` 都能写。
 void ParserImpl::parseStaticLoop() {
     const size_t m = mark();
     bump(); // static
@@ -1299,22 +1302,25 @@ void ParserImpl::parseStaticLoop() {
     close(m, NK::StaticLoopExpr);
 }
 
-/// staticLoopHeader : 'for' (identDef | '_') (',' (identDef | '_'))? 'in'
+/// staticLoopHeader : 'for' (identDef | '_') (',' (identDef | '_'))* 'in'
 ///                    ('fields' typeExpr | 'indices' dataExpr | dataExpr)
 /// The head of a `static loop`, written without the parentheses `static for` still has: the
 /// ruling of 2026-10-24 unifies it with the ordinary `loop`'s `for i in <序列>` (one thing, one
 /// spelling). The subject after `in` is a type for `fields`, a value for `indices`, and in every
-/// other case a sequence the compiler must be able to work out (a constant interval today).
-/// A second name is legal only with `fields`: it names the field's type, and `indices` and a
-/// plain sequence have no type name to give (the same reading as `staticForHeader`'s).
+/// other case a sequence the compiler must be able to work out: one rule draws the line (the
+/// rulings of 2026-10-24 and 2026-10-25) -- an expression built only from compile-time constants
+/// through operations that are pure and cannot fail is evaluated and unrolled, so `a..b`,
+/// `range(a, b, step)` with constant arguments, an array literal, a constant array and a
+/// compile-time tuple all count, and anything else is refused by the graph builder.
+/// The head may name up to three things: `fields` gives the triple (name, type, tags) and every
+/// other element gives one thing, and a head that names more than the element has parts is
+/// `SemanticDiag::StaticHeadNameCount` (the same reading as `staticForHeader`'s).
 void ParserImpl::parseStaticLoopHeader() {
     if (panic_ || !expect(TK::KwFor)) {
         return;
     }
-    uint32_t secondNameAt = kNone;
     parseStaticForName();
-    if (cur_ == TK::Comma && !panic_) {
-        secondNameAt = pos_;
+    while (cur_ == TK::Comma && !panic_) {
         bump();
         parseStaticForName();
     }
@@ -1327,14 +1333,9 @@ void ParserImpl::parseStaticLoopHeader() {
         parseType();
         return;
     }
-    if (secondNameAt != kNone) {
-        // `in indices (j, F)` and `in 0..5 (v, F)`: only `fields` names a type, so the second
-        // name is the error and `in` is what stood where the head should have stopped.
-        error(SyntaxError::Kind::Unexpected, {e(TK::KwIn)}, secondNameAt);
-    }
     if (atWord(0, "indices")) {
         // `indices ts` walks a tuple value; `ts` is an ordinary expression, so this is not a
-        // type position and `TypeHeadScope` is not entered. It binds one name (`j`).
+        // type position and `TypeHeadScope` is not entered. Its element is one thing (`j`).
         bump();
     }
     if (!panic_) {

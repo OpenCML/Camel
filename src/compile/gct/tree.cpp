@@ -360,8 +360,6 @@ std::optional<OperId> Tree::operRefOf(const Node *node) const {
 
 node_ptr_t Tree::makeVari() { return makeNode(NodeKind::VARI); }
 
-node_ptr_t Tree::makeWait() { return makeNode(NodeKind::WAIT); }
-
 node_ptr_t Tree::makeLink(size_t argCount) {
     Node *node            = makeNode(NodeKind::LINK);
     node->payload_.number = argCount;
@@ -420,12 +418,14 @@ node_ptr_t Tree::makeTypeCase(uint16_t patterns, const std::vector<Type *> &type
 }
 
 node_ptr_t Tree::makeStaticFor(
-    const std::string &valueName, const std::string &typeName, bool byIndices) {
+    const std::string &valueName, const std::string &typeName, const std::string &tagsName,
+    bool byIndices) {
     Node *node = makeNode(NodeKind::SFOR);
-    auto *list = static_cast<Node::NameList *>(allocate(Node::NameList::bytesFor(2)));
-    list->count    = 2;
+    auto *list = static_cast<Node::NameList *>(allocate(Node::NameList::bytesFor(3)));
+    list->count    = 3;
     list->items[0] = intern(valueName);
     list->items[1] = intern(typeName);
+    list->items[2] = intern(tagsName);
     node->payload_.names = list;
     if (byIndices) {
         node->flags_ |= Node::kFlagA;
@@ -435,16 +435,17 @@ node_ptr_t Tree::makeStaticFor(
 
 node_ptr_t Tree::makeStaticLoop(
     const std::vector<std::string> &state, const std::string &valueName,
-    const std::string &typeName, bool byIndices, bool bySequence) {
+    const std::string &typeName, const std::string &tagsName, bool byIndices, bool bySequence) {
     Node *node = makeNode(NodeKind::SLOOP);
-    const size_t count = state.size() + 2;
+    const size_t count = state.size() + 3;
     auto *list = static_cast<Node::NameList *>(allocate(Node::NameList::bytesFor(count)));
     list->count = count;
     for (size_t i = 0; i < state.size(); ++i) {
         list->items[i] = intern(state[i]);
     }
-    list->items[count - 2] = intern(valueName);
-    list->items[count - 1] = intern(typeName);
+    list->items[count - 3] = intern(valueName);
+    list->items[count - 2] = intern(typeName);
+    list->items[count - 1] = intern(tagsName);
     node->payload_.names = list;
     if (byIndices) {
         node->flags_ |= Node::kFlagA;
@@ -755,8 +756,13 @@ std::string Node::toString() const {
         }
     case NodeKind::TMTCH:
         return "TMTCH";
-    case NodeKind::SFOR:
-        return "SFOR: " + staticForValueName() + ", " + staticForTypeName();
+    case NodeKind::SFOR: {
+        std::string text = "SFOR: " + staticForValueName() + ", " + staticForTypeName();
+        if (staticForTagsName() != "_" && !staticForTagsName().empty()) {
+            text += ", " + staticForTagsName();
+        }
+        return text;
+    }
     case NodeKind::SACC:
         return "SACC";
     case NodeKind::SPRD:
@@ -772,7 +778,11 @@ std::string Node::toString() const {
         for (size_t j = 0; j < staticLoopStateCount(); ++j) {
             text += (j == 0 ? "" : ", ") + staticLoopStateName(j);
         }
-        return text + " for (" + staticLoopValueName() + ", " + staticLoopTypeName() + ")";
+        text += " for (" + staticLoopValueName() + ", " + staticLoopTypeName();
+        if (staticLoopTagsName() != "_" && !staticLoopTagsName().empty()) {
+            text += ", " + staticLoopTagsName();
+        }
+        return text + ")";
     }
     case NodeKind::TCASE: {
         std::string text = "TCASE: (";
@@ -837,7 +847,7 @@ std::string Node::toString() const {
         return text + "]";
     }
     default:
-        return to_string(kind_); // VARI, WAIT, ANNO
+        return to_string(kind_); // VARI, ANNO
     }
 }
 

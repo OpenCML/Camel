@@ -9,7 +9,7 @@ checks that:
     at its call site, and the materialized constant as added;
   - the program's own output is unchanged by the option.
 
-Usage: python pass_dump.py   (needs only the standard library)
+Usage: python pass_dump.py [--camel PATH]   (needs only the standard library)
 """
 
 from __future__ import annotations
@@ -23,20 +23,26 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 REPO_ROOT = HERE.parents[3]
+
+sys.path.insert(0, str(REPO_ROOT / "test" / "tools"))
+from camel_arg import camel_from_argv  # noqa: E402
 PROGRAM = REPO_ROOT / "test" / "cases" / "trans" / "macro" / "basic.cml"
 GRAPH_DIFF = REPO_ROOT / "tools" / "graph-diff" / "graph_diff.py"
 
 
+# The install this case measures: `--camel <path>` names it; without it `$CAMEL_HOME/bin/camel`,
+# else this tree's `out/latest/bin/camel`. One rule, in one place: test/tools/camel_arg.py.
+# `ARGV` is this process's arguments without the `--camel` pair.
+CAMEL, ARGV = camel_from_argv(REPO_ROOT)
+
+
 def camel_exe() -> str:
-    override = os.environ.get("CAMEL_EXE")
-    if override:
-        return override
-    return str(REPO_ROOT / "out" / "latest" / "bin" / ("camel.exe" if os.name == "nt" else "camel"))
+    return CAMEL
 
 
 def main() -> int:
     env = dict(os.environ)
-    env.setdefault("CAMEL_HOME", str(REPO_ROOT / "out" / "latest"))
+    env.setdefault("CAMEL_HOME", str(Path(CAMEL).resolve().parents[1]))
     failures = []
 
     def check(cond: bool, what: str) -> None:

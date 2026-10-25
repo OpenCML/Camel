@@ -307,7 +307,7 @@ node_handle_t Builder::inlineRestCall(
         decorated_scope_ptr_t decoratedScope;
         template_scope_ptr_t templateScope;
         type_bindings_t bindings;
-        bool waited, synced, varied, declaresVariable, calleeAllowed;
+        bool synced, varied, declaresVariable, calleeAllowed;
         node_handle_t lastSynced;
         const GCT::Node *syncedOverride, *unused;
         std::pair<GCT::node_ptr_t, node_handle_t> lastBlock;
@@ -323,7 +323,7 @@ node_handle_t Builder::inlineRestCall(
         ExpansionState(Builder &b)
             : self(b), graph(b.currGraph_), nodeScope(b.nodeScope_), graphScope(b.graphScope_),
               decoratedScope(b.decoratedScope_), templateScope(b.templateScope_),
-              bindings(b.typeBindings_), waited(b.waited_), synced(b.synced_),
+              bindings(b.typeBindings_), synced(b.synced_),
               varied(b.varied_), declaresVariable(b.declaresVariable_),
               calleeAllowed(b.genericCalleeAllowed_), lastSynced(b.lastSyncedNode_),
               syncedOverride(b.syncedBlockOverride_),
@@ -344,7 +344,6 @@ node_handle_t Builder::inlineRestCall(
             self.decoratedScope_       = decoratedScope;
             self.templateScope_        = templateScope;
             self.typeBindings_         = std::move(bindings);
-            self.waited_               = waited;
             self.synced_               = synced;
             self.varied_               = varied;
             self.declaresVariable_     = declaresVariable;
@@ -376,7 +375,6 @@ node_handle_t Builder::inlineRestCall(
     templateScope_  = tmpl->templateScope;
     typeBindings_   = tmpl->outerBindings;
     typeBindings_.insert(typeBindings_.end(), bindings.begin(), bindings.end());
-    waited_               = false;
     synced_               = state.synced;
     varied_               = false;
     declaresVariable_     = false;

@@ -9,7 +9,8 @@ desc = "std::profile attributes allocations to the operator call that made them:
 kind = "behavior"
 tool = "python"
 case = "../../../cases/trans/profile/profile_alloc.py"
-args = ["${case}", "count"]
+# `${camel}` is the compiler of the build under test, named as an argument (the author's ruling of 2026-10-25).
+args = ["${case}", "count", "--camel", "${camel}"]
 expect_exit = 0
 expect_stdout_contains = ["profile allocations: PASS"]
 expect_output_not_contains = ["FAIL"]
@@ -22,7 +23,7 @@ desc = "the aggregate allocation row, the per-step row and the operator rows agr
 kind = "behavior"
 tool = "python"
 case = "../../../cases/trans/profile/profile_alloc.py"
-args = ["${case}", "step"]
+args = ["${case}", "step", "--camel", "${camel}"]
 expect_exit = 0
 expect_stdout_contains = ["profile allocations: PASS"]
 expect_output_not_contains = ["FAIL"]
@@ -35,7 +36,7 @@ desc = "without the pass, and with `std::profile report=false hints=false`, stdo
 kind = "behavior"
 tool = "python"
 case = "../../../cases/trans/profile/profile_alloc.py"
-args = ["${case}", "off"]
+args = ["${case}", "off", "--camel", "${camel}"]
 expect_exit = 0
 expect_stdout_contains = ["profile allocations: PASS"]
 expect_output_not_contains = ["FAIL"]

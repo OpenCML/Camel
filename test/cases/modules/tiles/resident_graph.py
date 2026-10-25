@@ -3,9 +3,16 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 
 ROOT = Path(__file__).resolve().parents[4]
-EXE = os.environ.get("CAMEL_EXE", str(ROOT / "out/latest/bin" / ("camel.exe" if os.name == "nt" else "camel")))
+sys.path.insert(0, str(ROOT / 'test' / 'tools'))
+from camel_arg import camel_from_argv  # noqa: E402
+
+# `--camel <path>` names the install this case measures; without it the install is
+# `$CAMEL_HOME/bin/camel`, else this tree's `out/latest/bin/camel`. One rule, in one place:
+# test/tools/camel_arg.py. `ARGV` is this process's arguments without the `--camel` pair.
+EXE, ARGV = camel_from_argv(ROOT)
 env = dict(os.environ)
 p = subprocess.run([EXE, str(Path(__file__).with_name("region_execution.cml")),
                     "tiles::test_outline_resident", "std::jgir"],

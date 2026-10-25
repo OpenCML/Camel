@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-265 diagnostics: 248 errors, 17 warnings. 15 carry a machine-applicable edit, 250 say why they carry none.
+266 diagnostics: 249 errors, 17 warnings. 15 carry a machine-applicable edit, 251 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -44,6 +44,7 @@ prints one entry.
 | `0x02000011` | [SyntaxDiag::AsRightSideIsType](#asrightsideistype) | Error | no |
 | `0x02000012` | [SyntaxDiag::LambdaParametersNeedParentheses](#lambdaparametersneedparentheses) | Error | yes |
 | `0x02100001` | [SyntaxDiag::ComparisonAcrossLines](#comparisonacrosslines) | Warn | no |
+| `0x03000000` | [SemanticDiag::StaticHeadNameCount](#staticheadnamecount) | Error | no |
 | `0x03000001` | [SemanticDiag::Redeclaration](#redeclaration) | Error | no |
 | `0x03000002` | [SemanticDiag::ModuleNotFound](#modulenotfound) | Error | no |
 | `0x03000003` | [SemanticDiag::ReservedIdentifier](#reservedidentifier) | Error | no |
@@ -1055,6 +1056,40 @@ func main(): int sync {
 ```
 
 ## Semantic (`SemanticDiag`)
+
+### StaticHeadNameCount
+
+`0x03000000` · Error · `SemanticDiag::StaticHeadNameCount`
+
+**Fix**
+
+None: choice: the number of names to drop is the writer's
+
+**Message**
+
+```text
+The head of this loop names {0} things; '{1}' gives {2} for each round.
+```
+
+**Help**
+
+```text
+A head names the parts of the element, in order, and may name fewer of them, never more: 'fields T' gives the field's name, its type and its tags, while 'indices ts' and a written sequence give the element itself and nothing else. Drop the names the element has no part for, or walk the fields of a type ('fields T') to get them.
+```
+
+**Example** (`test/cases/compile/static_expansion/indices_two_names.cml`, run as `camel test/cases/compile/static_expansion/indices_two_names.cml`)
+
+```camel
+module indices_two_names
+
+func bad(t: (int, int)): int {
+    return static loop acc = 0 for j, F in indices t do acc + t.[j]
+}
+
+func main(): int {
+    return bad((1, 2))
+}
+```
 
 ### Redeclaration
 
@@ -7624,18 +7659,17 @@ The two-parameter 'range(a, b)' is gone; write the interval 'a..b'.
 The language has one spelling for the integers from 'a' to 'b - 1' (design principles 4.2; the author's ruling of 2026-10-24 on `h248-generator-and-composition`): the interval 'a..b', left closed and right open, as the slice 't[a:b]' is, and the array of them. 'range(0, 10)' becomes '0..10'. A 'for' over an interval is fused by the compiler, so 'for i in 0..n' builds no array. The two-parameter 'range' is the only spelling deleted: a module's own interval-like function (a tensor's, say) is that module's own, reached by its qualified name or at another arity, while an unqualified two-argument 'range(a, b)' is this built-in.
 ```
 
-**Example** (`test/cases/compile/stream/range_two_arguments.cml`, run as `camel test/cases/compile/stream/range_two_arguments.cml`)
+**Example** (`test/cases/compile/static_expansion/static_loop_sequence_range_two.cml`, run as `camel test/cases/compile/static_expansion/static_loop_sequence_range_two.cml`)
 
 ```camel
-// The two-parameter `range(a, b)` is deleted: the interval `a..b` is the one spelling (design
-// principles 4.2, the ruling of 2026-10-24). The call is refused where it stands, with the
-// spelling to write instead.
-module h426_range_two_arguments
+module static_loop_sequence_range_two
 
-func main(): int sync {
-    let xs = range(0, 3)
-    println(xs)
-    return 0
+func sum(): int {
+    return static loop acc = 0 for i in range(0, 3) do acc + i
+}
+
+func main(): int {
+    return sum()
 }
 ```
 
@@ -7659,19 +7693,17 @@ The range 'range({0}, {1}, 0)' has a step of 0, so it is no sequence of integers
 The integers of `range(a, b, step)` are `a`, `a + step`, ... below `b`, so the step decides which integers the range holds: a step that does not move names no one sequence, whatever the bounds are (design principles 4.2; the author's ruling of 2026-10-24 on `h426-interval-step-form`). The step is a constant here, so the call can never be right and the refusal is at the call, where the step is written. Give a non-zero step, or write the interval `a..b` when the step is 1. A step that is not constant is a fault of the run instead (RuntimeDiag::InvalidArgument).
 ```
 
-**Example** (`test/cases/compile/stream/range_step_zero.cml`, run as `camel test/cases/compile/stream/range_step_zero.cml`)
+**Example** (`test/cases/compile/static_expansion/static_loop_sequence_range_step_zero.cml`, run as `camel test/cases/compile/static_expansion/static_loop_sequence_range_step_zero.cml`)
 
 ```camel
-// `range(a, b, 0)` names no sequence at all: the step never moves, so no integers are the
-// sequence and no sequence is the array (design principles 4.2; the author's ruling of
-// 2026-10-24 on `h426-interval-step-form`). The step is a constant here, so the refusal is at the
-// call, under the step the program wrote, and says both ways to write what it meant.
-module h426_range_step_zero
+module static_loop_sequence_range_step_zero
 
-func main(): int sync {
-    let xs = range(0, 10, 0)
-    println(xs)
-    return 0
+func sum(): int {
+    return static loop acc = 0 for i in range(0, 9, 0) do acc + i
+}
+
+func main(): int {
+    return sum()
 }
 ```
 
@@ -7692,7 +7724,7 @@ The sequence of a 'static loop' must be known when the function is compiled: '{0
 **Help**
 
 ```text
-A 'static loop' is unrolled where it stands, so how many rounds it has must be known then: a constant interval 'a..b' (the half-open [a, b) that '..' is everywhere else, so '0..5' is 0, 1, 2, 3, 4), 'indices ts' for the positions of a compile-time tuple, or 'fields T' for the fields of a type. A run-time array or a run-time value leaves the number of rounds open.
+A 'static loop' is unrolled where it stands, so how many rounds it has must be known then. Every sequence the compiler works out counts: an expression built only from compile-time constants (literals, names bound to constants, the rounds of an enclosing 'static' expansion) through operations that are pure and cannot fail. So 'a..b' (the half-open [a, b) that '..' is everywhere else, so '0..5' is 0, 1, 2, 3, 4), 'range(a, b, step)' with constant arguments, an array literal or a constant array, 'indices ts' for the positions of a compile-time tuple, 'fields T' for the fields of a type, and 'for x in ts' for the element at each position of a compile-time tuple, whose type is that position's type, all count. A run-time array or a run-time value leaves the number of rounds open.
 ```
 
 **Example** (`test/cases/compile/static_expansion/static_loop_sequence_unknown.cml`, run as `camel test/cases/compile/static_expansion/static_loop_sequence_unknown.cml`)
@@ -9439,10 +9471,10 @@ Pass '{0}' consumes the graph, so {1} written after it will not run.
 A scheduling pass executes the program and a translation pass translates it; neither hands a graph on, and the pipeline ends there. Remove the passes written after it, or move them before it.
 ```
 
-**Example** (`test/cases/linear/byref/wait_direct_user.cml`, run as `camel test/cases/linear/byref/wait_direct_user.cml std::nvm std::opt::inline std::fvm`)
+**Example** (`test/cases/linear/byref/order_direct_user.cml`, run as `camel test/cases/linear/byref/order_direct_user.cml std::nvm std::opt::inline std::fvm`)
 
 ```camel
-module wait_direct_user
+module order_direct_user
 
 func before(x: int): int {
     return x

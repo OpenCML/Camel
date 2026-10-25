@@ -17,7 +17,7 @@
 
 A guard that examines zero groups fails `group`: the first check is that the case has a group.
 
-Usage: python fusion_group_profile.py group|none   (needs only the standard library)
+Usage: python fusion_group_profile.py group|none [--camel PATH]   (needs only the standard library)
 """
 
 from __future__ import annotations
@@ -32,6 +32,10 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 REPO_ROOT = HERE.parents[3]
+
+sys.path.insert(0, str(REPO_ROOT / "test" / "tools"))
+from camel_arg import camel_from_argv  # noqa: E402
+
 STEP = HERE / "fusion_group_step.cml"
 NONE = HERE / "fusion_group_none.cml"
 GOLDEN_TEXT = HERE / "fusion_group_none.profile.golden.txt"
@@ -57,16 +61,18 @@ PERCENT = re.compile(r"\b\d+(?:\.\d+)?%")
 BYTES = re.compile(r"\b\d+(?:\.\d+)?\s?(?:KiB|MiB|GiB|B)\b")
 
 
+# The install this case measures: `--camel <path>` names it; without it `$CAMEL_HOME/bin/camel`,
+# else this tree's `out/latest/bin/camel`. One rule, in one place: test/tools/camel_arg.py.
+CAMEL, ARGV = camel_from_argv(REPO_ROOT)
+
+
 def camel_exe() -> str:
-    override = os.environ.get("CAMEL_EXE")
-    if override:
-        return override
-    return str(REPO_ROOT / "out" / "latest" / "bin" / ("camel.exe" if os.name == "nt" else "camel"))
+    return CAMEL
 
 
 def run(program: Path, passes: list[str], report: Path | None = None, args: list[str] | None = None):
     env = dict(os.environ)
-    env.setdefault("CAMEL_HOME", str(REPO_ROOT / "out" / "latest"))
+    env.setdefault("CAMEL_HOME", str(Path(camel_exe()).resolve().parents[1]))
     if report is not None and report.exists():
         report.unlink()
     # Relative to the repository: the profile prints the program's path (source position, hints),
@@ -192,7 +198,7 @@ def normalize_doc(doc: dict) -> dict:
 
 
 def main() -> int:
-    mode = sys.argv[1]
+    mode = ARGV[0]
     failures: list[str] = []
 
     def check(cond: bool, what: str) -> None:
