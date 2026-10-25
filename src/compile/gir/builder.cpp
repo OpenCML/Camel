@@ -1241,8 +1241,8 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct, Type *tailExpec
         // reachable from anything and the block's effects were dropped.
         const bool returned =
             gct->size() > 0 && gct->at(gct->size() - 1)->type() == GCT::NodeKind::EXIT;
-        if (synced_ && !returned && res != nullptr && lastSyncedNode_ != nullptr &&
-            lastSyncedNode_ != res && sameGraph(res, currGraph_)) {
+        if (synced_ && !returned && res != nullptr && sameGraph(res, currGraph_) &&
+            valueNeedsSyncEdge(res, lastSyncedNode_)) {
             node_handle_t gate = currGraph_->addGateNode(nodeTypeOf(res));
             linkNodes(LinkType::Norm, res, gate);
             linkNodes(LinkType::Ctrl, lastSyncedNode_, gate);

@@ -455,6 +455,34 @@ inline bool shouldAddSyncCtrlLink(node_handle_t from, node_handle_t to) {
     return linkCheek(from, to) && !hasDirectDataDependency(from, to);
 }
 
+/// Whether `value` already reads what `producer` produced: the producer is a direct data input of
+/// the value, so the value is computed after it and a sync edge from the producer to the value
+/// would say nothing new. This is the one question the two ways of writing a body's value ask --
+/// the tail `return v` and a body whose last statement is `v` -- so that the two build one graph
+/// (docs/design/effects/edges.cn.md 5.3). Only the forward direction is asked: a value the producer
+/// *consumed* was computed before it, and an edge there would be a cycle.
+inline bool valueReadsThrough(node_handle_t value, node_handle_t producer) {
+    if (value == nullptr || producer == nullptr || nodeGraphOf(value) != nodeGraphOf(producer)) {
+        return false;
+    }
+    const draft_node_ref_t id = nodeIdOf(producer);
+    return std::ranges::find(normInputsOf(value), id) != normInputsOf(value).end() ||
+           std::ranges::find(withInputsOf(value), id) != withInputsOf(value).end();
+}
+
+/// Whether the statement a sync chain ends with has to reach the value the graph hands on by a sync
+/// edge: only when the value does not already read it. A value that came out of that statement (the
+/// `v` of `v = 2; v`) is ordered after it by its own data edge, so it takes no edge and no GATE
+/// (the language author's ruling of 2026-10-24; docs/design/effects/edges.cn.md 5.3); every other value is
+/// reached from that statement by a sync edge, carried by a GATE whose data port reads the value --
+/// when the value *is* that statement the GATE is what keeps the edge, and the chain it ends, able
+/// to reach the graph's exit at all. The tail `return v`, a body whose last statement is `v` and a
+/// block whose value is taken all ask this, so one value is reached by the same edges however it is
+/// written.
+inline bool valueNeedsSyncEdge(node_handle_t value, node_handle_t chainEnd) {
+    return chainEnd != nullptr && !valueReadsThrough(value, chainEnd);
+}
+
 /// A statement one `sync` block writes directly: the edge that joins it to the statement written
 /// before it is a sync edge (docs/design/effects/edges.cn.md 1.5), and the builder records that fact
 /// on both ends so the seal check can read the graph back (src/runtime/graph_edges.cpp,
