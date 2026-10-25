@@ -51,6 +51,20 @@ find_package(GTest REQUIRED)
 find_package(nlohmann_json REQUIRED)
 find_package(Taskflow REQUIRED)
 
+# glibc before 2.34 keeps libpthread, libdl and librt apart from libc; a newer one carries them
+# inside it. Where they are apart, the link of a target that reaches pthread_join through
+# libstdc++ fails with "/lib64/libpthread.so.0: error adding symbols: DSO missing from command
+# line" and libcamel's own dlopen fails the same way through libdl -- exactly the two failures the
+# manylinux_2_28 wheel build meets (AlmaLinux 8, glibc 2.28). Both libraries therefore go on every
+# link line: Threads::Threads is the pthread library of the platform (nothing on Windows, and the
+# stub for it where glibc has merged it) and CMAKE_DL_LIBS is dl or the empty string (macOS).
+# Link-only: no compile flag, definition or source changes, so a platform that linked before
+# links the same libraries it did.
+if(UNIX AND NOT APPLE)
+    find_package(Threads REQUIRED)
+    link_libraries(Threads::Threads ${CMAKE_DL_LIBS})
+endif()
+
 add_definitions(-DNOMINMAX)
 
 # Every floating-point expression is rounded as written: no contraction of a * b + c into one
