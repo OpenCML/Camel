@@ -16,11 +16,11 @@ import { Tensor, reshape, relu, zeros, shape, load_npy, save_npy } from tensor
 import { export_model } from onnx
 import { get_env } from env
 
-func gate(t: Tensor<f32>): Tensor {
+func gate(t: Tensor<f32>): f32[..] {
     return if t[0] > 0.5 then relu(t) * 2.0 else t * (t[1] * 2.0) - 1.0
 }
 
-func forward(x: Tensor, w: Tensor): Tensor {
+func forward(x: f32[..], w: f32[..]): f32[..] {
     let n = shape(x)[0]
     let h = zeros([n, shape(w)[1]]) + x @ w
     return reshape(h, [n * shape(w)[1]])
@@ -37,7 +37,7 @@ let x = load_npy::<f32>(get_env('X'))
         export_model(gate, x, out)
         return 0
     } else sync {
-        export_model((t: Tensor): Tensor => forward(t, w), x, out, [0])
+        export_model((t: f32[..]): f32[..] => forward(t, w), x, out, [0])
         return 0
     }
 }

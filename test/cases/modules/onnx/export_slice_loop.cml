@@ -10,18 +10,18 @@ import { get_env } from env
 
 // A loop over the time axis that stops early: the number of steps depends on the data, so the
 // slice of step t has a start and an end that depend on the model input.
-func scan(t: int, steps: int, x: Tensor, h: Tensor): Tensor {
+func scan(t: int, steps: int, x: float[..], h: float[..]): float[..] {
     return if t >= steps then h else if sum(h) > 2.5 then h else scan(t + 1, steps, x, tanh(h + reshape(slice(x, 1, t, t + 1), [shape(x)[0], shape(x)[2]])))
 }
 
-func forward(x: Tensor): Tensor {
+func forward(x: float[..]): float[..] {
     return scan(0, shape(x)[1], x, zeros([shape(x)[0], shape(x)[2]]))
 }
 
 func main(): int sync {
     let x = reshape([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 0.2, 0.1, 0.4, 0.3, 0.6, 0.5, 0.8, 0.7, 1.0, 0.9, 1.2, 1.1], [2, 4, 3])
     println(forward(x))
-    export_model((x: Tensor): Tensor => forward(x), x, get_env('ONNX_OUT'))
+    export_model((x: float[..]): float[..] => forward(x), x, get_env('ONNX_OUT'))
     println('exported')
     return 0
 }

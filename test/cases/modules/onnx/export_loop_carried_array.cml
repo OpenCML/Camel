@@ -12,14 +12,14 @@ import { Tensor, reshape, sum } from tensor
 import { export_model } from onnx
 import { get_env } from env
 
-func walk(x: Tensor, xs: int[], k: int): Tensor {
+func walk(x: float[..], xs: int[], k: int): float[..] {
     return if k >= 3 || sum(x * x) < 1.0 then x * 2.0 else walk(x, [k], k + 1)
 }
 
 func main(): int sync {
     let x = reshape([1.0, 2.0, 3.0, 4.0], [2, 2])
     println(len([0]))
-    export_model((x: Tensor): Tensor => walk(x, [0], 0), (x), get_env('ONNX_OUT'))
+    export_model((x: float[..]): float[..] => walk(x, [0], 0), (x), get_env('ONNX_OUT'))
     println('exported')
     return 0
 }

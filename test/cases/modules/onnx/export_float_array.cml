@@ -8,14 +8,14 @@ import { Tensor, reshape, sum } from tensor
 import { export_model } from onnx
 import { get_env } from env
 
-func pack(x: Tensor): Tensor {
+func pack(x: f32[..]): float[..] {
     return reshape([sum(x * 2.0), 1.5, sum(x)], [3])
 }
 
 func main(): int sync {
     let x = reshape([1.0, -2.0, 3.0, 4.0] as f32[], [2, 2])
     println(pack(x))
-    export_model((x: Tensor): Tensor => pack(x), x, get_env('ONNX_OUT'))
+    export_model((x: f32[..]): float[..] => pack(x), x, get_env('ONNX_OUT'))
     println('exported')
     return 0
 }

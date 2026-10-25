@@ -10,16 +10,16 @@ import { with_grad } from autodiff
 import { OptimizerState, adam, adam_state, save_params } from nn
 import { get_env } from env
 
-type Mlp = { w1: Tensor, b1: Tensor, w2: Tensor, b2: Tensor }
+type Mlp = { w1: f32[..], b1: f32[..], w2: f32[..], b2: f32[..] }
 
 with <m: Mlp>
-func loss(x: Tensor): float {
+func loss(x: f32[..]): float {
     let h = relu(x @ m.w1 + m.b1)
     let y = h @ m.w2 + m.b2
     return mean(y * y)
 }
 
-func spin(m: Mlp, st: OptimizerState, x: Tensor, i: int, steps: int, dir: string): Mlp {
+func spin(m: Mlp, st: OptimizerState, x: f32[..], i: int, steps: int, dir: string): Mlp {
     return if i >= steps then m else sync {
         let vg = with_grad(loss)<m>(x)
         let next = adam(m, vg.1, st, 0.001)
