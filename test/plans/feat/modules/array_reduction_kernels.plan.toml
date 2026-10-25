@@ -66,8 +66,6 @@ kind = "behavior"
 case = "../../../cases/modules/stdlib/array_reduction_arms.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
-known_fail = ["fvm", "jit"]
-known_fail_note = "the complex call reaches :mark/reduce_arr with a c64 accumulator, which kills the two bytecode VMs (no output after the float line, no diagnostic). The same reduce crashes on their own, without any of the array module in the program: array_reduction_complex_reduce.cml, below. A defect of src/runtime (handover/h373-chain-splice's files), not of this plan's subject; the value itself is 4+6i on nvm and prl, which agree."
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
 expect_stdout_exact = "i32 {} 6\nfloat {} 4.0\ncomplex {} 4+6i\n"
@@ -76,13 +74,11 @@ timeout_ms = 20000
 
 [[tests]]
 name = "array_reduction_complex_reduce"
-desc = "The body's complex arm, written out with no array-module reduction in the program: `:mark/reduce_arr` with a `c64` accumulator over a `c64[]` gives `4+6i`. This is the record of the defect the acceptance case above runs into — the two bytecode VMs are killed by a signal at that reduce, while nvm and prl answer — and it keeps the reduce itself measured, so a fix in the VMs and a change that hides the path are told apart. A compiler that gave the complex instance a kernel does not reach this reduce at all."
+desc = "The body's complex arm, written out with no array-module reduction in the program: `:mark/reduce_arr` with a `c64` accumulator over a `c64[]` gives `4+6i` on every back end. The case is kept because it measures that reduce on its own: the two bytecode VMs used to die by signal at it — a loop asked whether a compact element is one slot by its width alone, read the eight bytes of `1 + 2i` as one slot, and handed the complex operator 0x400000003F800000 where a `Complex *` is due — and a fix in the VMs and a change that hides the path are still told apart here."
 kind = "behavior"
 case = "../../../cases/modules/stdlib/array_reduction_complex_reduce.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
-known_fail = ["fvm", "jit"]
-known_fail_note = "a defect of src/runtime: the fvm and jit bytecode VMs die by signal at :mark/reduce_arr with a c64 accumulator (stdout stops after `before`, no diagnostic). Not this lane's file; recorded here so it is measured rather than hidden. The nvm and prl values must be 4+6i."
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
 expect_stdout_exact = "before\nreduce {} 4+6i\n"
