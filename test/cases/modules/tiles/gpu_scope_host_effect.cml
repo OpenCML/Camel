@@ -1,0 +1,30 @@
+/// A host effect inside a `#gpu` scope is its boundary, not a refusal (docs/design/gpu/plan.cn.md
+/// 2.4, the review's third ruling): `print` is not an operator the device must run, so it stays on
+/// the host and the value it observes is downloaded at the observation point. `std::profile`
+/// counts that synchronisation.
+///
+/// The two elementwise operators of `observed` are a device segment; the `println` written between
+/// them is on the host and reads the segment's result, which is why a download appears there. The
+/// print observes the device value, so it is a root of its own even though nothing depends on what
+/// it returns: a reading of the graph that followed values alone would drop it and the observation
+/// would neither run nor be transferred. Before the ruling the scope stopped with 'unsupported or
+/// effectful operator', so the program could not be compiled at all.
+///
+/// Red when: the scope is refused for the effect, the effect does not run (nothing is printed), or
+/// the observation point is not transferred.
+module tiles_gpu_scope_host_effect
+
+import { Tensor, reshape, sum } from tensor
+
+#gpu
+func observed(x: Tensor<f32, [3]>): Tensor<f32, [3]> sync {
+    let y = x * 2.0
+    println(sum(y))
+    return y + 1.0
+}
+
+func main(): int sync {
+    let x = reshape([1.0, 2.0, 3.0] as f32[], [3])
+    println('result {}'->format<observed(x)>)
+    return 0
+}

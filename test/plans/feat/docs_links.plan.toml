@@ -17,9 +17,11 @@ desc = "The relative links of the reader-facing documents point at files and hea
 # with `camel <file> std::gir`, runs the fences that carry a command and a `text` block, and
 # compares stdout, the exit code and the diagnostic name. A fence that is deliberately a
 # fragment, a counter-example, a graph dump or compile-only carries an HTML comment marker
-# with a reason. Cost: 211 snippets in about 2 s on the Linux build host, with 8 workers; each
-# snippet runs in its own process because every fence can declare its own module and entry.
-# Task reports and dated reviews are records and are not scanned.
+# with a reason. A snippet that a page written against the target language shows before the tree
+# can compile it is registered in the script's pending list instead: the page carries no mark, the
+# run prints the entry and its reason, and the list only shrinks. Cost: 254 snippets in about 4 s
+# on the Linux build host, with 8 workers; each snippet runs in its own process because every fence
+# can declare its own module and entry. Task reports and dated reviews are records and are not scanned.
 #
 # scripts/check-doc-links.mjs --citations covers what a link checker cannot see: a `*.md` path
 # cited in a code comment, a `.cml` comment, a plan description or README prose is not a Markdown

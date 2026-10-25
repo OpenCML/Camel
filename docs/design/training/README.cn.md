@@ -4,7 +4,7 @@
 
 依据：对 [OpenCML/Camel-DDPM](https://github.com/OpenCML/Camel-DDPM)（0533d89）的评审，以及写它的 AI 给出的反馈；Camel 版本为 `develop` 合入 `fsh-dev` 后的 be0854ab。DDPM 仓库附带的 Camel 补丁（`sqrt` 的梯度、二进制文件写出、批量矩阵乘、cuBLAS BF16 矩阵乘）已被 `develop` 吸收（96967307、d14707d6），本稿不再重复。
 
-相关文档：[设计原则](../../design-principles.cn.md)（尤其第 7 节数值契约）、[Tiles 路线](../tiles-route/README.cn.md)、[多目标编译](../tiles-targets/README.md)、[算子语义](../op-semantics/README.cn.md)、[原生算子回调子图](../native-subgraph-call/README.md)、[自动微分作为图改写](../../technical/26_autodiff_as_graph_rewrite.md)。
+相关文档：[设计原则](../../design-principles.cn.md)（尤其第 7 节数值契约）、[Tiles 路线](../tiles-route/README.cn.md)、[多目标编译](../tiles-targets/README.md)、[算子语义](../op-semantics/README.cn.md)、[自动微分作为图改写](../../technical/26_autodiff_as_graph_rewrite.md)。
 
 ---
 

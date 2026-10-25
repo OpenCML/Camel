@@ -9,7 +9,7 @@
 // fast tests, a SLOW_PLANS entry runs it in full, FORBIDDEN names it as the milestone layer's --
 // a plan whose own file says `tier = "milestone"` -- or the debug layer is out of the release gate
 // and says so. A plan outside those would have tests that no layer runs and no line calls UNKNOWN;
-// the list would keep saying "200 cases skipped" while the tree grew. This used to be unchecked: a
+// the list would keep printing one number while the tree grew. This used to be unchecked: a
 // renamed FORBIDDEN file was printed as skipped, and a new slow plan under feat/ vanished from both
 // layers.
 //
@@ -71,9 +71,11 @@ export const SLOW_PLANS = [
 // whose milestone entries are excluded when only some of its tests are: the runner cannot select
 // a test by name, so naming such a file would start the excluded tests too (the ONNX row). The
 // gate skips the file entirely either way, which is why the list holds 25 entries (22 whole plans
-// and 3 plans with milestone entries) -- 200 cases when the list was last counted as raw table
-// rows, 225 by the runner's own reading of the same files (a `backends` row expands to one test
-// per back end), and the perf cases that landed after that measurement on top.
+// and 3 plans with milestone entries). How many cases that is, the gate counts through the runner's
+// own reading of these files (`loadPlanTests`, `expandSweeps` and `testTier`, in its
+// `forbiddenMilestoneTests`) and prints on every run; a count read off the table rows would be a
+// different number, because a row with `backends` is one case there and one test per back end to
+// the runner, and only the runner's number is the number of cases `--tier milestone` would run.
 export const FORBIDDEN = [
     // The benchmark/timeit plans: the machine's load is part of what they measure.
     { file: 'test/plans/perf/fib.plan.toml', reason: 'benchmark (`kind = "benchmark"`): measures the machine load' },

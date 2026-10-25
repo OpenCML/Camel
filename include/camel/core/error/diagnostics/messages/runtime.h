@@ -76,6 +76,11 @@ enum class RuntimeDiag : uint32_t {
     // runs everything it contains, and GPU design 6.1 makes that a compile-time error rather than
     // a host execution; unlike GpuScopeUnsupported this is about the use, not the operator.
     GpuScopeNoDeviceProgram = 0x0001A7,
+    // A `#gpu` scope that still holds a macro operator (`grad`, `with_grad`) when it is compiled: the
+    // derived graph has to exist while the passes run, and the pass that builds it is `std::macro`,
+    // which the pipeline does not contain. The defect is the pipeline, not the program, so the message
+    // names the pass to put before this one.
+    GpuScopeMacroNotExpanded = 0x0001A9,
     // Warnings (severity bits = Warn).
     PassesNeverRun           = 0x10000F,
     ConstantExpressionFaults = 0x100015,

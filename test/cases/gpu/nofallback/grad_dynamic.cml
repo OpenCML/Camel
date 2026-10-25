@@ -1,16 +1,19 @@
 /**
  * A gradient inside a `#gpu` scope whose function the run chooses is refused at compile time.
  *
- * `with_grad(body)` reads a function the caller passes in, so the derived graph cannot be built
- * while the program is compiled: the operator would have to build it at run time, inside the
- * scope, where no pass sees it and the device has no program for it
- * (docs/design/gpu/plan.cn.md 2.6). The expansion refuses the call site instead of letting the
- * scope reach the device with an operator it cannot run, and the diagnostic names the operator
- * and where the call is written.
+ * `with_grad(body)` reads a function the caller passes in, so no pass can build the derived graph
+ * while the program is compiled — not `std::macro`, which expands a macro operator only where its
+ * operand is a function of the program (docs/design/gpu/plan.cn.md 2.6). The call site stays in
+ * the scope as the operator that builds graphs at run time, where nothing the device can run
+ * exists. That is the scope's own defect and not a missing pass, so `tiles::compile` refuses it
+ * as an operator the device cannot run and says which one and where:
+ *
+ *   `#gpu` scope 'step': operator 'autodiff:with_grad' cannot run on the device (needs a
+ *   function known at compile time).
  *
  * Red when: the refusal is missing (the program compiles and the scope runs a gradient the device
- * cannot), or the refusal is the module's generic "no device program" for the operator instead of
- * the expansion's own reason (a gradient inside a scope needs a function known at compile time).
+ * cannot), or the refusal is the missing-prerequisite report instead (which would name a pass to
+ * add, and no pass can repair a function the run chooses).
  */
 module gpu_grad_dynamic
 
