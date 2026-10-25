@@ -957,7 +957,7 @@ Reference defaultImportNamespace(const std::string &path) {
 }
 
 /*
-DataDecl(bool isVar, UnpackType type, Ref[] refs) : Type* type, Data* value;
+DataDecl(bool isVar, Ref[] refs) : Type* type, Data* value;
 */
 node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
     ENTER("DataDecl");
@@ -976,126 +976,105 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
     // program: in a sync block the initializer keeps its place in the block's order.
     node_ptr_t res = makeExec(false, true);
 
-    // Handle different unpacking types
-    switch (dataDeclLoad->unpackType()) {
-    case AST::UnpackType::Struct: {
-        // Struct unpacking is not supported; log diagnostics and throw an exception
-        diags_->of(SemanticDiag::FeatureNotSupported)
-            .at(ast->load()->tokenRange())
-            .commit("Struct Unpacking");
-        throw BuildAbortException();
-    } break;
+    // The declaration binds one name, several names, or the elements of a tuple (the
+    // parenthesized carrier). A struct or an array carrier is not in the language: the
+    // parser refuses it, so no declaration reaches here with one.
+    if (refs.size() == dataNodes->size()) {
+        for (size_t i = 0; i < refs.size(); ++i) {
+            const auto &ref         = refs[i];
+            const auto &dataASTNode = dataNodes->atAs<AST::DataLoad>(i);
+            // The declared type first: an array literal takes the form of its elements
+            // from it (visitDataInto).
+            Type *declaredType = nullptr;
+            if (i < typeNodes->size()) {
+                declaredType = visitType(typeNodes->atAs<AST::TypeLoad>(i));
+            }
+            bool enteredLiteral = false;
+            node_ptr_t dataNode = declaredType != nullptr
+                                      ? visitDataInto(dataASTNode, declaredType, enteredLiteral)
+                                      : visitData(dataASTNode);
 
-    case AST::UnpackType::Array: {
-        // Array unpacking is not supported; log diagnostics and throw an exception
-        diags_->of(SemanticDiag::FeatureNotSupported)
-            .at(ast->load()->tokenRange())
-            .commit("Array Unpacking");
-        throw BuildAbortException();
-    } break;
+            // Validate the identifier
+            if (!validateIdent(ref.ident())) {
+                diags_->of(SemanticDiag::ReservedIdentifier)
+                    .at(dataDeclLoad->tokenRange())
+                    .commit();
+                throw BuildAbortException();
+            }
 
-    case AST::UnpackType::Tuple: {
-        if (refs.size() == dataNodes->size()) {
-            for (size_t i = 0; i < refs.size(); ++i) {
-                const auto &ref         = refs[i];
-                const auto &dataASTNode = dataNodes->atAs<AST::DataLoad>(i);
-                // The declared type first: an array literal takes the form of its elements
-                // from it (visitDataInto).
-                Type *declaredType = nullptr;
-                if (i < typeNodes->size()) {
-                    declaredType = visitType(typeNodes->atAs<AST::TypeLoad>(i));
+            if (i < typeNodes->size() && !enteredLiteral) {
+                dataNode = declaredValue(dataNode, declaredType, ast);
+            }
+
+            // Ensure the data node is of type Data
+            ASSERT(
+                dataASTNode->type() == AST::LoadType::Data,
+                "A declaration requires Data type nodes");
+            // Create a reference node and link the data node to it. A value of a
+            // namespace block is named with its namespaces (`Config::limit`).
+            node_ptr_t nRefNode = tree_->makeNRef(ref.toString());
+            *nRefNode << dataNode;
+            setOriginFromOrigin(
+                context_,
+                nRefNode,
+                findBindingOrigin(context_, ast, i),
+                camel::source::OriginKind::GctNode,
+                "gct.nref");
+            if (refs.size() == 1) {
+                res = nRefNode;
+            } else {
+                // `let a, b = 1, 2` binds every name: only the last one used to be kept.
+                *res << nRefNode;
+            }
+        }
+    } else {
+        if (dataNodes->size() == 1) {
+            // If there is only one data node, process it as a reference and access node
+            const auto &dataASTNode = dataNodes->atAs<AST::DataLoad>(0);
+            node_ptr_t dataNode     = visitData(dataASTNode);
+
+            if (typeNodes->size() > 0) {
+                const auto &typeASTNode = typeNodes->atAs<AST::TypeLoad>(0);
+                Type *type              = nullptr;
+                {
+                    type = visitType(typeASTNode);
                 }
-                bool enteredLiteral = false;
-                node_ptr_t dataNode = declaredType != nullptr
-                                          ? visitDataInto(dataASTNode, declaredType, enteredLiteral)
-                                          : visitData(dataASTNode);
+                dataNode = declaredValue(dataNode, type, ast);
+            }
 
-                // Validate the identifier
+            const string id     = std::to_string(idIndex_++);
+            node_ptr_t nRefNode = tree_->makeNRef(id);
+            node_ptr_t dRefNode = tree_->makeDRef(id);
+            *nRefNode << dataNode;
+            *res << nRefNode;
+            for (size_t i = 0; i < refs.size(); ++i) {
+                const auto &ref = refs[i];
                 if (!validateIdent(ref.ident())) {
                     diags_->of(SemanticDiag::ReservedIdentifier)
                         .at(dataDeclLoad->tokenRange())
                         .commit();
                     throw BuildAbortException();
                 }
-
-                if (i < typeNodes->size() && !enteredLiteral) {
-                    dataNode = declaredValue(dataNode, declaredType, ast);
-                }
-
-                // Ensure the data node is of type Data
-                ASSERT(
-                    dataASTNode->type() == AST::LoadType::Data,
-                    "Tuple unpacking requires Data type nodes");
-                // Create a reference node and link the data node to it. A value of a
-                // namespace block is named with its namespaces (`Config::limit`).
                 node_ptr_t nRefNode = tree_->makeNRef(ref.toString());
-                *nRefNode << dataNode;
+                node_ptr_t accsNode = tree_->makeAccs(i);
+                *accsNode << tree_->clone(dRefNode);
+                *nRefNode << accsNode;
                 setOriginFromOrigin(
                     context_,
                     nRefNode,
                     findBindingOrigin(context_, ast, i),
                     camel::source::OriginKind::GctNode,
                     "gct.nref");
-                if (refs.size() == 1) {
-                    res = nRefNode;
-                } else {
-                    // `let a, b = 1, 2` binds every name: only the last one used to be kept.
-                    *res << nRefNode;
-                }
+                *res << nRefNode;
             }
         } else {
-            if (dataNodes->size() == 1) {
-                // If there is only one data node, process it as a reference and access node
-                const auto &dataASTNode = dataNodes->atAs<AST::DataLoad>(0);
-                node_ptr_t dataNode     = visitData(dataASTNode);
-
-                if (typeNodes->size() > 0) {
-                    const auto &typeASTNode = typeNodes->atAs<AST::TypeLoad>(0);
-                    Type *type              = nullptr;
-                    {
-                        type = visitType(typeASTNode);
-                    }
-                    dataNode = declaredValue(dataNode, type, ast);
-                }
-
-                const string id     = std::to_string(idIndex_++);
-                node_ptr_t nRefNode = tree_->makeNRef(id);
-                node_ptr_t dRefNode = tree_->makeDRef(id);
-                *nRefNode << dataNode;
-                *res << nRefNode;
-                for (size_t i = 0; i < refs.size(); ++i) {
-                    const auto &ref = refs[i];
-                    if (!validateIdent(ref.ident())) {
-                        diags_->of(SemanticDiag::ReservedIdentifier)
-                            .at(dataDeclLoad->tokenRange())
-                            .commit();
-                        throw BuildAbortException();
-                    }
-                    node_ptr_t nRefNode = tree_->makeNRef(ref.toString());
-                    node_ptr_t accsNode = tree_->makeAccs(i);
-                    *accsNode << tree_->clone(dRefNode);
-                    *nRefNode << accsNode;
-                    setOriginFromOrigin(
-                        context_,
-                        nRefNode,
-                        findBindingOrigin(context_, ast, i),
-                        camel::source::OriginKind::GctNode,
-                        "gct.nref");
-                    *res << nRefNode;
-                }
-            } else {
-                // If the number of data nodes does not match, log diagnostics and throw an
-                // exception
-                diags_->of(SemanticDiag::TupleUnpackingCountMismatch)
-                    .at(ast->load()->tokenRange())
-                    .commit();
-                throw BuildAbortException();
-            }
+            // If the number of data nodes does not match, log diagnostics and throw an
+            // exception
+            diags_->of(SemanticDiag::TupleUnpackingCountMismatch)
+                .at(ast->load()->tokenRange())
+                .commit();
+            throw BuildAbortException();
         }
-    } break;
-    default:
-        // If the unpacking type is unknown, throw an exception
-        ASSERT(false, "Unknown unpack type in DataDecl");
     }
 
     // If it's a variable declaration, create a variable node and link the result node to it
@@ -1362,6 +1341,58 @@ Builder::resourceSignatureOf(const AST::node_ptr_t &funcTypeAst, const FunctionT
         throw BuildAbortException();
     }
     if (clause->pure()) {
+        // `pure` promises the empty set (design effects plan 4.3, step 5). A `var` parameter is a
+        // resource by itself: the cell is shared with the caller, so a call through the parameter
+        // reads and writes that cell wherever the body is written, and no body can bring the set
+        // back to empty. So a signature that writes `pure` and gives a parameter `var` is refused
+        // where it is written, and the note points at the parameter that breaks the promise (the
+        // author's ruling: the error is at the declaration's clause, the note at the first use the
+        // signature does not promise).
+        const auto varRangeOf =
+            [&](const std::string &name) -> std::optional<camel::core::error::TokenRange> {
+            for (size_t list = 0; list < 2; ++list) {
+                const auto &params = funcTypeAst->atAs<AST::RepeatedLoad>(list);
+                for (size_t pi = 0; pi < params->size(); ++pi) {
+                    const auto &pair = (*params)[pi];
+                    if (pair == nullptr) {
+                        continue;
+                    }
+                    const auto &load = pair->loadAs<AST::NamedPairLoad>();
+                    if (load->isVar() && load->getRef().ident() == name) {
+                        return load->tokenRange();
+                    }
+                }
+            }
+            return std::nullopt;
+        };
+        const auto varNameAt = [&](size_t index) -> std::string {
+            // The parameter numbering a call uses: `with` parameters first, ordinary ones after
+            // them (the same numbering resourceSignatureOf uses below).
+            const size_t withCount = built->withTypesCount();
+            if (index < withCount) {
+                return built->withIsVarAt(index) ? std::string(built->argNameAt(index))
+                                                 : std::string();
+            }
+            const size_t norm = index - withCount;
+            return built->normIsVarAt(norm) ? std::string(built->argNameAt(index)) : std::string();
+        };
+        for (size_t i = 0; i < built->withTypesCount() + built->normTypesCount(); ++i) {
+            const std::string name = varNameAt(i);
+            if (name.empty()) {
+                continue;
+            }
+            // The builder is kept by value: `of` hands out a temporary and the chain returns a
+            // reference to it, so a reference held across statements would outlive the builder.
+            auto diag = diags_->of(SemanticDiag::UsesPromiseViolated).at(clause->tokenRange());
+            if (const auto range = varRangeOf(name); range.has_value()) {
+                diag.related(
+                    *range,
+                    "this parameter is a resource: a call through it writes the caller's cell, so "
+                    "the call touches it wherever the body is written");
+            }
+            diag.commit(built->toString(), "the 'var' parameter '" + name + "'");
+            throw BuildAbortException();
+        }
         return signature;
     }
     // The parameters the clause may name, in the numbering a call uses: with parameters first,
@@ -2013,7 +2044,20 @@ node_ptr_t Builder::visitExitStmt(const AST::node_ptr_t &ast) {
 
     // Create an ExitLoad node to represent the exit statement. `throw` is an exit as well:
     // it returns the failed form of the function's declared `T!` (the graph builder checks).
-    const bool isThrow  = ast->loadAs<AST::ExitStmtLoad>()->exitType() == AST::ExitType::Throw;
+    const AST::ExitType astExit = ast->loadAs<AST::ExitStmtLoad>()->exitType();
+    if (astExit == AST::ExitType::Yield) {
+        // The syntax reads `yield` (design principles 5.4: a function whose body writes it
+        // produces a stream, and its head writes the stream type). What produces that stream is
+        // the generator state machine of docs/design/io-concurrency-streams/plan.cn.md slice E,
+        // which is not built yet; the ruling on what it means is
+        // docs/handover/reviews/questions-2026-10-23.md:394 (several `yield`s a round, any
+        // nesting, `match` arms and `sync` blocks, per-element faults, linear values). Refusing
+        // it by name here is what keeps a `yield` from running as a `return`: a wrong value
+        // would be worse than a named gap.
+        diags_->of(SemanticDiag::FeatureNotSupported).at(ast->load()->tokenRange()).commit("generators");
+        throw BuildAbortException();
+    }
+    const bool isThrow  = astExit == AST::ExitType::Throw;
     node_ptr_t exitNode = tree_->makeExit(isThrow ? ExitType::Throw : ExitType::Return);
     reportExitInUnusedArm(ast, isThrow);
 

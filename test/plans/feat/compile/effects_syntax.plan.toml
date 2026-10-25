@@ -99,6 +99,17 @@ expect_diagnostic_code = "0x030001A1"
 expect_output_contains = ["err_pure_and_uses.cml:", "'pure'", "'uses'"]
 
 [[tests]]
+name = "err.pure_var"
+desc = "`pure` with a `var` parameter: the parameter is a resource by itself, so the signature breaks its own promise and the note points at the parameter."
+kind = "negative"
+case = "../../../cases/effects/err_pure_var.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
+expect_diagnostic_code = "0x030001F1"
+expect_output_contains = ["err_pure_var.cml:", "'var' parameter 'c'"]
+
+[[tests]]
 name = "err.group_cycle"
 desc = "`a = [b]` and `b = [a]`: a group cannot be one of its own members, and the message shows the path."
 kind = "negative"

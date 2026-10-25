@@ -626,17 +626,11 @@ class Walker {
         const Range whole   = rangeOf(ctx);
         walk(ctx.get<cst::TypeList>());
         walk(ctx.get<cst::DataList>());
-        // carrier : identList | parentIdents | bracedIdents | bracketIdents
+        // carrier : identList | parentIdents
         cst::IdentList list = ctx.get<cst::IdentList>();
         const bool plain    = static_cast<bool>(list);
         if (!list) {
             list = ctx.get<cst::ParentIdents>().get<cst::IdentList>();
-        }
-        if (!list) {
-            list = ctx.get<cst::BracedIdents>().get<cst::IdentList>();
-        }
-        if (!list) {
-            list = ctx.get<cst::BracketIdents>().get<cst::IdentList>();
         }
         const auto names = list.all<cst::IdentDef>();
         const bool one   = plain && names.size() == 1;
@@ -798,8 +792,8 @@ class Walker {
                 const auto args = list ? list.node(NK::IndexValues) : syn::Node{};
                 if (args) {
                     for (const auto arg : args.nodes()) {
-                        if (arg.is(NK::SpreadValue))
-                            break; // Later parameter indices depend on the spread's arity.
+                        if (arg.is(NK::RestValue))
+                            break; // Later parameter indices depend on the rest argument's arity.
                         if (arg.isExpr() && !arg.empty())
                             call.positional.push_back(rangeOf(arg));
                     }

@@ -87,6 +87,18 @@ resolver_ptr_t withFixedSignature(resolver_ptr_t resolver, FunctionType *signatu
     return resolver;
 }
 
+/// The rule with a result callback that also reads the call's constants (`withStatics`: the path
+/// for an operator whose result type follows the values the program wrote). The rule's own
+/// callback stays and answers every caller that holds no constants.
+resolver_ptr_t withStaticResult(resolver_ptr_t resolver, ResolverWithStaticsFunc callback) {
+    auto *dynamic = dynamic_cast<DynamicFuncTypeResolver *>(resolver.get());
+    ASSERT(dynamic != nullptr, "Statics were given to a rule that is not dynamic.");
+    if (dynamic != nullptr) {
+        dynamic->withStatics(std::move(callback));
+    }
+    return resolver;
+}
+
 /// A rule of one ordinary parameter whose signature records the parameter's name: the name is
 /// what a named argument binds to (`len(x: xs)`), so a rule and the declaration it is written
 /// beside must give a position the same name (stdlib-conventions, "the same meaning at a position
@@ -226,49 +238,76 @@ std::optional<std::string> staticIndexRejection(const type_vec_t &norm, static_a
 /// same narrowing `t[idx]` already has on this line, where a rank-2 array is refused by the core
 /// and the module's `tensor:idx_take` answers another rank or an open rank).
 
-/// Why `t[a:b]` / `t[a:b:s]` cannot be this call: a constant bound leaves the statically known
-/// first extent, or the result would not be a view of a rank-1 array.
+/// The extent the type states for `axis` of `type`, when it states one: a negative axis counts
+/// from the end and `-1` is the last axis. `std::nullopt` when the type does not state the extent
+/// (an open rank, or an extent only the run knows), which is the kernel's to read.
+std::optional<int64_t> staticAxisExtent(Type *type, int64_t axis) {
+    const ArrayType *array = asArrayType(type);
+    if (array == nullptr || array->anyRank() || array->rank() == 0) {
+        return std::nullopt;
+    }
+    const auto rank = static_cast<int64_t>(array->rank());
+    const int64_t at = axis < 0 ? axis + rank : axis;
+    if (at < 0 || at >= rank) {
+        return std::nullopt;
+    }
+    const ExtentForm &form = array->extents()[static_cast<size_t>(at)];
+    return form.isConstant() ? std::optional<int64_t>(form.constant()) : std::nullopt;
+}
+
+/// Why a slice call cannot be this call: the constant 0 as the step, a constant negative bound, or
+/// a constant bound outside the extent the type states for the axis it names. One set of checks
+/// answers both spellings, because both are the same six-word node: the subscript's lowering
+/// writes the mask and the axis itself, and the function form's declaration defaults fill the two
+/// words a short call leaves out, so a call of either spelling meets this check with its six words
+/// and its constants where it wrote them.
+///
+/// A negative bound is a fault rather than a count from the end (design principles 5.4: "不支持
+/// 负数下标（负数是故障），最后一个元素用 last(t)"), and a bound the type does not give an extent
+/// for is read by the kernel, which faults the same way.
 std::optional<std::string> staticSliceRejection(const type_vec_t &norm, static_args_t statics) {
-    if (norm.size() != 6) {
+    if (norm.size() < 4 || norm.size() > 6) {
         return std::nullopt;
     }
     const ArrayType *array = asArrayType(norm[0]);
     if (array == nullptr) {
         return std::nullopt;
     }
-    if (!array->anyRank() && array->rank() >= 2) {
-        return std::string(
-            "a slice of the first dimension of a tensor of rank 2 or more is a view with "
-            "strides, which needs the multidimensional array representation of H17");
-    }
-    const std::optional<int64_t> extent = staticFirstExtent(norm[0]);
-    if (!extent) {
-        return std::nullopt; // `T[]`: the length is not in the type, and the kernel reads it
-    }
-    if (const std::optional<int64_t> step = constantArg(statics, 4); !step || *step != 1) {
-        return std::string(
-            "a slice step other than the constant 1 is a view with strides, which needs the "
-            "multidimensional array representation of H17");
-    }
-    // The bounds as the slice reads them: a bound the program did not write is 0 for the start and
-    // the end of the array for the end, which the two-bit mask the compiler writes with the call
-    // says (`globals.cpp`, `__slice__`).
-    const std::optional<int64_t> mask = constantArg(statics, 5);
+    // The constant 0 step is not refused here. The builder's own check refuses it with the named
+    // `SemanticDiag::SliceStepZero`, located at the step the program wrote
+    // (src/compile/gir/builder_operators.cpp), and a named diagnostic of the catalog outranks a
+    // message from this resolver: two answers to one constant would be two reports of one fault.
+    // The bounds as the slice reads them: a bound the program did not write stands for the start
+    // of the axis or its end, which the two-bit mask the lowering writes with the call says, and a
+    // call that left the mask out wrote both bounds (3).
+    const std::optional<int64_t> mask =
+        norm.size() >= 6 ? constantArg(statics, 5) : std::optional<int64_t>(3);
     if (!mask) {
         return std::nullopt;
     }
     const std::optional<int64_t> from =
         (*mask & 2) != 0 ? constantArg(statics, 2) : std::optional<int64_t>(0);
-    const std::optional<int64_t> to = (*mask & 1) != 0 ? constantArg(statics, 3) : extent;
-    if (!from || !to) {
-        return std::nullopt; // a bound the compiler does not know: the kernel reads it
-    }
-    if (*from < 0 || *from > *extent || *to < 0 || *to > *extent) {
+    const std::optional<int64_t> to =
+        (*mask & 1) != 0 ? constantArg(statics, 3) : std::optional<int64_t>(0);
+    if (from && *from < 0) {
         return std::format(
-            "slice bounds {}..{} are outside the first dimension of extent {}",
-            *from,
-            *to,
-            *extent);
+            "a slice bound must not be negative, and {} is; the last element is 'last(t)'", *from);
+    }
+    if (to && *to < 0) {
+        return std::format(
+            "a slice bound must not be negative, and {} is; the last element is 'last(t)'", *to);
+    }
+    const std::optional<int64_t> axis = constantArg(statics, 1);
+    if (!axis || !from || !to) {
+        return std::nullopt;
+    }
+    const std::optional<int64_t> extent = staticAxisExtent(norm[0], *axis);
+    if (!extent) {
+        return std::nullopt; // the length is not in the type, and the kernel reads it
+    }
+    if (*from > *extent || *to > *extent) {
+        return std::format(
+            "slice bounds {}..{} are outside axis {} of extent {}", *from, *to, *axis, *extent);
     }
     return std::nullopt;
 }
@@ -329,152 +368,193 @@ class StaticCheckedResolver final : public FuncTypeResolver {
     Check check_;
 };
 
-/// Whether `slice(t, axis, start, end, step?)` is a call the core's own slice operator answers:
-/// the value is a rank-1 array whose length the type states, the axis is the constant 0 -- the
-/// only axis a rank-1 array has -- the step is the constant 1 or not written, and both bounds are
-/// constants inside that length.
-///
-/// Everything else keeps the tensor module's function form: another axis, a higher or an open
-/// rank, a bound outside the length, a bound that counts from the end, or an axis, a bound or a
-/// step the compiler does not know. The two spellings are one node with one rule and one adjoint
-/// rule (the author's ruling of 2026-10-25, discrete-gradient-and-rank-one-slice-ownership, point
-/// 2: `t[a:b]` and `slice(t, 0, a, b)` are the same node), and this predicate is what the core
-/// can answer of it today: a rank-1 array, the axis it is sliced along, and bounds that are the
-/// positions they name. The function form's own reading of its arguments -- a negative bound
-/// counts from the end, an out-of-range one is refused by name -- is the tensor module's
-/// (`sliceFunctionKernel`, `sliceFunctionInfer`), and a call it answers stays there until the two
-/// readings are one; see the question page for the readings this leaves apart.
-bool isCoreSliceCall(const type_vec_t &norm, static_args_t statics) {
-    if (norm.size() < 4 || norm.size() > 5) {
-        return false;
+/// The length of the axis a slice cuts, when the call's constants and the value's type say it: the
+/// step and both bounds are constants, and the type states the axis' extent, which a bound the
+/// program did not write stands for (the start of the axis, or its end). `std::nullopt` when only
+/// the run knows the length -- a computed bound or step, or an extent the type does not state --
+/// and the type then says `?` for that axis. The arithmetic is the kernel's own
+/// (`src/builtin/operators/struct.cpp`, `sliceRange`): a positive step takes the positions from the
+/// start below the end, a negative one takes them backwards from the start down to the end.
+std::optional<int64_t> staticSliceLength(const type_vec_t &norm, static_args_t statics, int64_t axis) {
+    const std::optional<int64_t> extent = staticAxisExtent(norm[0], axis);
+    if (!extent) {
+        return std::nullopt;
     }
-    if (norm[0] == nullptr || norm[0]->code() != TypeCode::Array) {
-        return false;
+    const std::optional<int64_t> mask =
+        norm.size() >= 6 ? constantArg(statics, 5) : std::optional<int64_t>(3);
+    if (!mask) {
+        return std::nullopt;
     }
-    const ArrayType *array = tt::as_ptr<ArrayType>(norm[0]);
-    if (array->anyRank() || array->rank() != 1) {
-        return false;
-    }
-    if (array->elemType() == nullptr || array->elemType()->code() == TypeCode::Void) {
-        return false;
-    }
-    for (size_t i = 1; i < norm.size(); ++i) {
-        if (norm[i] == nullptr || norm[i]->code() != TypeCode::Int64) {
-            return false;
-        }
-    }
-    const std::optional<int64_t> extent = staticFirstExtent(norm[0]);
-    const std::optional<int64_t> axis   = constantArg(statics, 1);
-    const std::optional<int64_t> from   = constantArg(statics, 2);
-    const std::optional<int64_t> to     = constantArg(statics, 3);
     const std::optional<int64_t> step =
         norm.size() >= 5 ? constantArg(statics, 4) : std::optional<int64_t>(1);
-    if (!extent || !axis || *axis != 0 || !from || !to || !step || *step != 1) {
-        return false;
+    if (!step || *step == 0) {
+        return std::nullopt;
     }
-    return *from >= 0 && *to >= 0 && *from <= *extent && *to <= *extent;
+    // A bound the program did not write is not read from its word (the lowering writes a zero
+    // there): the mask says it was not written, and the step's direction says what it stands for.
+    const std::optional<int64_t> from =
+        (*mask & 2) != 0 ? constantArg(statics, 2)
+                         : std::optional<int64_t>(*step > 0 ? 0 : *extent - 1);
+    const std::optional<int64_t> to =
+        (*mask & 1) != 0 ? constantArg(statics, 3)
+                         : std::optional<int64_t>(*step > 0 ? *extent : -1);
+    if (!from || !to) {
+        return std::nullopt;
+    }
+    return *step > 0 ? (*from < *to ? (*to - *from + *step - 1) / *step : 0)
+                     : (*from > *to ? (*from - *to - *step - 1) / (-*step) : 0);
 }
 
-/// A rule of the core's own that answers only the calls a predicate accepts and says nothing about
-/// the rest. Unlike `StaticCheckedResolver` -- whose check is also the reason a call is reported
-/// with, because the call it refuses is one no other rule answers -- this one is one overload
-/// among several that answer the same name: the calls it leaves are the other overload's, and a
-/// rule that declined a call has no reason of its own to report for it. Reporting one would put
-/// the core's wording in front of the module's on a call the module refuses with its own.
-class PredicatedResolver final : public FuncTypeResolver {
-  public:
-    using Predicate = bool (*)(const type_vec_t &, static_args_t);
-
-    PredicatedResolver(resolver_ptr_t inner, Predicate accepts)
-        : inner_(std::move(inner)), accepts_(accepts) {}
-
-    static resolver_ptr_t create(resolver_ptr_t inner, Predicate accepts) {
-        return resolver_ptr_t(new PredicatedResolver(std::move(inner), accepts));
+/// The type a slice of `norm[0]` has: the value's element type and rank, every axis the slice does
+/// not cut at the length the value's type states, and the one axis it cuts at the length the
+/// call's constants give it when they give it (staticSliceLength). The subscript's lowering writes
+/// the axis and the mask itself and carries the bounds' constants where the program wrote
+/// constants; the function form names its axis and writes both of its bounds. A length only the
+/// run knows leaves that axis `?` -- the rank and every other axis are still stated -- and a call
+/// whose axis the compiler does not know may cut any axis, so no axis keeps a length of the
+/// value's own. An `f32[6, 3]` sliced along axis 1 from 0 to 2 is therefore an `f32[6, 2]`, and
+/// the rank-1 `T[]` sliced is another `T[]`. Every element type goes through the same rule, which
+/// is what the author's ruling asks of the core's one slice operator (any rank, any element type;
+/// the module's inference, which the core took over, wrote the same lengths when the bounds were
+/// constants).
+std::optional<Type *> sliceResultType(const type_vec_t &norm, static_args_t statics) {
+    // Four words are the least a slice node can be -- the value, the axis and the two bounds: a
+    // call that stops before the end is a call of the angle-bracket form written in the
+    // parentheses, and it is answered as the mismatch it is (`feat.compile.collections`,
+    // `callform_err_slice`), not as a slice whose end word is read past the call.
+    if (norm.size() < 4 || norm.size() > 6) {
+        return std::nullopt;
     }
-
-    std::optional<FunctionType *> resolve(
-        const type_vec_t &with, const type_vec_t &norm,
-        const ModifierSet &modifiers) const override {
-        // A path that carries no constant arguments cannot see the axis and the bounds the
-        // predicate reads: it answers nothing and leaves the call to the overloads that can.
-        if (!accepts_(norm, {})) {
-            return std::nullopt;
-        }
-        return inner_->resolve(with, norm, modifiers);
-    }
-
-    std::optional<FunctionType *> resolveWith(
-        const type_vec_t &with, const type_vec_t &norm, static_args_t normStatics,
-        const ModifierSet &modifiers) const override {
-        if (!accepts_(norm, normStatics)) {
-            return std::nullopt;
-        }
-        return inner_->resolveWith(with, norm, normStatics, modifiers);
-    }
-
-    std::optional<std::string> explainRejection(
-        const type_vec_t &with, const type_vec_t &norm, static_args_t normStatics,
-        const ModifierSet &modifiers) const override {
-        if (!accepts_(norm, normStatics)) {
-            return std::nullopt;
-        }
-        return inner_->explainRejection(with, norm, normStatics, modifiers);
-    }
-
-    std::string signature() const override { return inner_->signature(); }
-    FunctionType *fixedSignature() const override { return inner_->fixedSignature(); }
-    bool parameterNames(std::vector<std::string> &with, std::vector<std::string> &norm)
-        const override {
-        return inner_->parameterNames(with, norm);
-    }
-    bool varParameters(std::vector<bool> &with, std::vector<bool> &norm) const override {
-        return inner_->varParameters(with, norm);
-    }
-    std::optional<camel::core::error::SemanticDiag> rejectionDiag() const override {
-        return inner_->rejectionDiag();
-    }
-
-  private:
-    resolver_ptr_t inner_;
-    Predicate accepts_;
-};
-
-/// The type a slice of `norm[0]` has: an array of the value's element type, one dimension, whose
-/// length is not in the type. Which positions a slice takes is a value -- the length of the array
-/// it is taken from -- and the core's arrays are the rank-1 arrays whose extent the type does not
-/// state (`T[]`); a slice of one is another one. A tensor whose extent the type does state
-/// (`f32[6]`) is read the same way: the slice of what the type calls six elements is not a value
-/// the type can call an extent without reading the bounds.
-std::optional<Type *> sliceResultType(const type_vec_t &norm) {
     if (norm.empty() || norm[0] == nullptr || norm[0]->code() != TypeCode::Array) {
         return std::nullopt;
     }
-    Type *elem = tt::as_ptr<ArrayType>(norm[0])->elemType();
+    const ArrayType *array = tt::as_ptr<ArrayType>(norm[0]);
+    Type *elem             = array->elemType();
     if (elem == nullptr || elem->code() == TypeCode::Void) {
         return std::nullopt;
     }
-    return ArrayType::create(elem);
+    if (array->anyRank()) {
+        // An open rank states no axis, so the cut axis' length is not a length the value's own
+        // spelling keeps: the result is the open-rank array of the same element type.
+        return ArrayType::openRank(elem);
+    }
+    const auto rank = static_cast<int64_t>(array->rank());
+    const auto unknown = [&]() {
+        return ArrayType::create(
+            elem, std::vector<ExtentForm>(static_cast<size_t>(rank), ExtentForm::unknown()));
+    };
+    const std::optional<int64_t> axis = constantArg(statics, 1);
+    if (!axis) {
+        return unknown();
+    }
+    const int64_t at = *axis < 0 ? *axis + rank : *axis;
+    if (at < 0 || at >= rank) {
+        // The axis is not one the value has: the call faults at the axis it wrote (the kernel's
+        // own wording names the range), and the type it would have had is the value's own.
+        return ArrayType::create(elem, std::vector<ExtentForm>(array->extents().begin(),
+                                                              array->extents().end()));
+    }
+    std::vector<ExtentForm> extents(array->extents().begin(), array->extents().end());
+    const std::optional<int64_t> length = staticSliceLength(norm, statics, *axis);
+    extents[static_cast<size_t>(at)] =
+        length ? ExtentForm::constant(*length) : ExtentForm::unknown();
+    return ArrayType::create(elem, extents);
 }
 
-/// `slice(t, axis, start, end, step?)` -- the function form of the same slice node the subscript
-/// lowers to. The core answers the call it can: a rank-1 array of a stated element type, the axis
-/// 0, and constant bounds inside the length the type states (isCoreSliceCall). Every other call
-/// -- another axis, a higher or open rank, a negative or out-of-range bound, an axis or a bound
-/// the compiler does not know -- is the tensor module's function form, which answers any axis and
-/// any rank. So `x[1:4]` and `slice(x, 0, 1, 4)` are one node for a rank-1 value whose length is
-/// stated, which is what the ruling asks for, and the module keeps the readings the core does not
-/// have yet.
+/// The result of the slice node a subscript lowers to: the kinds its six words must have, then the
+/// same type rule as the function form, with the one difference the subscript has. One rule for
+/// both `[]` forms, for every rank and every element type (the author's ruling of 2026-10-25,
+/// section discrete-gradient-and-rank-one-slice-ownership, point 2: the two subscripts are
+/// answered by the core alone, and the module copy and the dispatch by "whose array is this" are
+/// the transition types' residue, deleted together with the module's own subscript kernel and type
+/// rule). An array whose element type nobody stated -- the bare `Tensor` spelling, whose element is
+/// `Void` -- has no element type to hand back and keeps the array type it has: a step-1 slice of a
+/// compact array is a view, so the element type the value carries at run time is the one it keeps.
+std::optional<Type *> coreSliceSubscriptResultType(const type_vec_t &norm, static_args_t statics) {
+    if (norm.empty() || norm[0] == nullptr || norm[0]->code() != TypeCode::Array) {
+        return std::nullopt;
+    }
+    for (size_t i = 1; i < norm.size() && i < 6; ++i) {
+        if (norm[i] == nullptr || norm[i]->code() != TypeCode::Int64) {
+            return std::nullopt;
+        }
+    }
+    Type *elem = tt::as_ptr<ArrayType>(norm[0])->elemType();
+    if (elem == nullptr || elem->code() == TypeCode::Void) {
+        return norm[0];
+    }
+    return sliceResultType(norm, statics);
+}
+
+/// The slice node's parameter table: the value, the axis, the two bounds, the step and the mask
+/// that says which of the bounds the program wrote (bit 0 the end, bit 1 the start --
+/// `src/builtin/operators/struct.cpp`). The subscript's lowering writes all six, and the function
+/// form writes them too: it names the axis itself and writes both of its bounds, so the mask it
+/// fills is 3, "both bounds written", which is what the lowering gives a subscript that writes
+/// both bounds (`src/compile/gct/builder.cpp`:
+/// `intConstant((written[1] ? 1 : 0) | (written[0] ? 2 : 0))` over the start and the end).
+///
+/// The declaration of the function form (`stdlib/signatures/globals.cml`) carries the two words a
+/// short call leaves out as its parameters' defaults -- the step 1, the mask 3 -- and a rule that
+/// fixes its signature is what the compiler looks for when it fills a native operator's defaults
+/// (`src/compile/gir/builder_calls.cpp`, `defaultsOfCallee`; the function form is generic
+/// (`t: T[]`), so its declaration's own signature is not one the compiler can close, and the
+/// fixed table here is the only fixed entry of the group). The table is declared either way; see
+/// the report for the one call the defaults do not reach today.
+FunctionType *sliceParameterTable() {
+    FunctionTypeFactory table;
+    table.addNormArg("t", ArrayType::create(typeParameter("T", true)), false);
+    table.addNormArg("axis", Type::Int64(), false);
+    table.addNormArg("start", Type::Int64(), false);
+    table.addNormArg("end", Type::Int64(), false);
+    table.addNormArg("step", Type::Int64(), false);
+    table.addNormArg("written", Type::Int64(), false);
+    table.setExitType(ArrayType::create(typeParameter("T", false)));
+    return table.buildOpen();
+}
+
+/// `slice(t, axis, start, end, step, written)` -- the function form of the same slice node the
+/// subscript lowers to, for every call (design principles 5.4; the author's ruling of 2026-10-25,
+/// section `slice-function-form-and-what-the-core-answers`, points 2-5). The two spellings are one
+/// node with one parameter table, one adjoint rule and one wording for what is out of range; the
+/// function form writes the axis it names and both of its bounds, so it fills the mask "both
+/// written" (3), and a call that leaves the step or the mask out is read as step 1 and mask 3 --
+/// the values the declaration defaults them to (sliceParameterTable).
+///
+/// The axis and the rank are the call's own: the kernel reads the axis, and the value's rank at
+/// run time. The constants the call writes are checked here, where the call is written
+/// (staticSliceRejection): the constant step 0, a constant negative bound, and a constant bound
+/// outside an extent the type states. A bound only the run knows is the kernel's to read, and it
+/// faults with the core's one wording. The result type reads those same constants: the axis this
+/// call names and the length its bounds and step give it, with every other axis at the length the
+/// value's type states (sliceResultType, reached through the rule's statics path).
 resolver_ptr_t coreSliceFunctionResolver() {
-    return PredicatedResolver::create(
-        DynamicFuncTypeResolver::create(
-            {{0, {}}, {-1, {}}},
-            "(t: T[], axis: int, start: int, end: int, step: int) => T[]",
-            [](const type_vec_t &with, const type_vec_t &norm,
+    return std::make_shared<StaticCheckedResolver>(
+        withStaticResult(
+            withFixedSignature(
+                DynamicFuncTypeResolver::create(
+                    // The parameter count stays unconstrained here, and the two words a short call
+                    // leaves out are filled by the declaration's defaults and read by the kernel as
+                    // they are when they are absent: the declaration's defaults do not reach a call
+                    // to a native operator today (defaultsOfCallee finds nothing for the group), so
+                    // a call of four or five words is still a call of four or five words. See the
+                    // report: the six-word table waits for that path, not for this rule.
+                    {{0, {}}, {-1, {}}},
+                    "(t: T[], axis: int, start: int, end: int, step: int, written: int) => T[]",
+                    [](const type_vec_t &with, const type_vec_t &norm,
+                       const ModifierSet &) -> optional<Type *> {
+                        (void)with;
+                        // A caller that holds no constants: the axis and the bounds are then the
+                        // run's, and only the rank and the element type are the call's own.
+                        return sliceResultType(norm, {});
+                    }),
+                sliceParameterTable()),
+            [](const type_vec_t &with, const type_vec_t &norm, static_args_t statics,
                const ModifierSet &) -> optional<Type *> {
                 (void)with;
-                return sliceResultType(norm);
+                return sliceResultType(norm, statics);
             }),
-        isCoreSliceCall);
+        staticSliceRejection);
 }
 
 } // namespace
@@ -2492,34 +2572,20 @@ std::make_shared<StaticCheckedResolver>(
                     // start was (`xs[:: -1]` starts at the last element). A fixed-shape array's
                     // subscript is checked here, where its constants are (staticSliceRejection).
                     std::make_shared<StaticCheckedResolver>(
-                        DynamicFuncTypeResolver::create(
-                            {{0, {}}, {6, {false, false, false, false, false, false}}},
-                            "(arr: T[], axis: int, start: int, end: int, step: int, written: int) "
-                            "=> T[]",
-                            [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
-                                -> optional<Type *> {
-                                if (norm[0]->code() != TypeCode::Array)
-                                    return nullopt;
-                                for (size_t i = 1; i < 6; ++i) {
-                                    if (norm[i]->code() != TypeCode::Int64)
-                                        return nullopt;
-                                }
-                                Type *elem = tt::as_ptr<ArrayType>(norm[0])->elemType();
-                                // One rule for both `[]` forms, for every rank and every element
-                                // type (the author's ruling of 2026-10-25, section
-                                // discrete-gradient-and-rank-one-slice-ownership, point 2: the two
-                                // subscripts are answered by the core alone, and the module copy
-                                // and the dispatch by "whose array is this" are the transition
-                                // types' residue, deleted together with the module's own
-                                // subscript kernel and type rule). An array whose element type
-                                // nobody stated -- the bare `Tensor` spelling, whose element is
-                                // `Void` -- has no element type to hand back, and keeps the array
-                                // type it has: a step-1 slice of a compact array is a view, so the
-                                // element type the value carries at run time is the one it keeps.
-                                if (elem == nullptr || elem->code() == TypeCode::Void) {
-                                    return norm[0];
-                                }
-                                return sliceResultType(norm);
+                        withStaticResult(
+                            DynamicFuncTypeResolver::create(
+                                {{0, {}}, {6, {false, false, false, false, false, false}}},
+                                "(arr: T[], axis: int, start: int, end: int, step: int, written: "
+                                "int) => T[]",
+                                [](const type_vec_t &, const type_vec_t &norm,
+                                   const ModifierSet &) -> optional<Type *> {
+                                    // A caller that holds no constants: the axis and the bounds are
+                                    // the run's, and only the rank and the element type are known.
+                                    return coreSliceSubscriptResultType(norm, {});
+                                }),
+                            [](const type_vec_t &, const type_vec_t &norm, static_args_t statics,
+                               const ModifierSet &) -> optional<Type *> {
+                                return coreSliceSubscriptResultType(norm, statics);
                             }),
                         staticSliceRejection),
                 },

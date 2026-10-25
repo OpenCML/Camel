@@ -1034,14 +1034,6 @@ any Formatter::visitModifiers(cst::Modifiers context) {
 }
 
 /*
-indexValue   : '...'? dataExpr ;
-The tree has a node for it only with the marker.
-*/
-any Formatter::visitSpreadValue(cst::SpreadValue context) {
-    return "..." + any_cast<string>(visitExpr(context->expr()));
-}
-
-/*
 indexValue   : '..' dataExpr ;
 The rest argument (`..(a, b)`, `..ts`), expanded at the call.
 */
@@ -2196,7 +2188,6 @@ any Formatter::dispatch(syn::Node context) {
         CAMEL_FORMAT(TypeList)
         CAMEL_FORMAT(IdentDef)
         CAMEL_FORMAT(IdentRef)
-        CAMEL_FORMAT(SpreadValue)
         CAMEL_FORMAT(RestValue)
         CAMEL_FORMAT(AssignExpr)
         CAMEL_FORMAT(LogicalOrExpr)

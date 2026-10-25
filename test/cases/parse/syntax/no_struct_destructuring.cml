@@ -1,0 +1,18 @@
+/**
+ * Destructuring a struct is not in the language: `let {x, y} = p` is refused at the `{`
+ * (line 11, column 9) as an ordinary syntax error. It was a `ConstructNotSupported` while the
+ * form was still in the grammar; before that it was a warning, and the function that used it was
+ * dropped while the rest of the program ran.
+ */
+module syntax_no_struct_destructuring
+
+func helper(): int {
+    let p = { x: 1, y: 2 }
+    let {x, y} = p
+    return x + y
+}
+
+func main(): int sync {
+    println('never printed')
+    return 0
+}

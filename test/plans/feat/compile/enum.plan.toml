@@ -261,20 +261,6 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
-name = "err_nested_pattern"
-desc = "A pattern binds a field by a name or `_`; a nested pattern is refused rather than half-understood, and the error says to match inside the arm."
-kind = "negative"
-case = "../../../cases/compile/enum/err_nested_pattern.cml"
-args = ["-E", "short", "${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ConstructNotSupported"
-expect_diagnostic_line = 8
-expect_diagnostic_column = 28
-expect_output_contains = ["a nested pattern is not supported; write a name or '_' for each field and match inside the arm"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 8000
-
-[[tests]]
 name = "warn_duplicate_case"
 desc = "A variant matched twice warns at the later case; the program runs and prints the first arm's value."
 kind = "behavior"

@@ -304,7 +304,7 @@ func area(s: Shape): float {
 - **穷尽**：列全了所有变体就不必写 `case _`；漏了变体又没有 `case _` 是编译期错误 `EnumMatchNotExhaustive`，诊断列出漏掉的变体名。已被前面的臂覆盖的变体再写一次给警告（`EnumVariantCaseRepeated`）；`case _` 之后的臂永远不执行，给警告（`MatchCaseAfterWildcard`）；列全所有变体之后还写 `case _`，这个通配符永远不会命中，给警告（`MatchWildcardRedundant`）。
 - 模式必须写现在匹配的类型的变体，前缀（`Shape::`）与变体名都要对：写错是 `EnumPatternMismatch`，诊断列出该类型声明的变体。
 - **模式里不带 `::` 的名字是绑定名**（`case v` 用于 `T?`／`T!`），不是变体：单元变体要写全限定名 `case Shape::Empty`。写成 `case Empty` 是 `EnumPatternMismatch`，诊断指出 `Empty` 是该枚举的变体、并给出 `case Shape::Empty`。
-- **嵌套模式**：`case Shape::Circle(0.0)` 这种把模式写在字段位置的写法给出"暂不支持"（`ConstructNotSupported`），要求为每个字段写名字或 `_`，在臂里再匹配。
+- **嵌套模式不在语言里**：字段位置只写名字或 `_`，所以 `case Shape::Circle(0.0)` 这种把模式写在字段位置的写法是**普通语法错误**（在写下的那个 `(` 或 `0.0` 处），为每个字段写名字或 `_`，在臂里再匹配。
 - `match` 的值可以是任意表达式，包括返回 `enum` 的调用；各臂结果类型的统一与现有的 `match` 相同（[6.8.2](06_expressions.md#682-match)）。
 
 **相等与打印。** 同一个 `enum` 实例类型的两个值可以 `==`、`!=`：先比变体，再按声明顺序逐字段比较；任一字段类型不能比较时，这个 `enum` 也不能比较（编译期错误）。打印与源码写法一致：`Shape::Circle(1.0)`、`Shape::Rect { w: 2.0, h: 3.0 }`、`Shape::Empty`；泛型实例不打印类型参数（`Option::Some(42)`，不是 `Option::Some<int>(42)`）。

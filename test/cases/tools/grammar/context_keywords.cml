@@ -1,0 +1,81 @@
+// Every contextual keyword of the language reference (2.4.1) in a position the parser reads it in,
+// and the same words as ordinary names at the bottom. A contextual keyword is not a reserved word:
+// outside the positions below it is a name like any other.
+module context_keywords
+
+export resource fs
+export resource tracer = [stdout, fs]
+resource net unordered
+
+export tag finite_math = [no_nans, no_infs]
+export tag leaf on type
+export tag fixed on field
+export tag reassociate on nodes
+export tag width(w: int) on param
+export tag vjp::<F>(rule: F) on func read_by std::opt when is_function::<F>()
+
+fact range::<T>(v: T): Interval match v {
+    case const n => n
+} join lo
+    meet hi
+    widen step
+    narrow tight
+
+rule add_zero::<T>(x: T) when is_integer::<T>() {
+    x + 0 => x
+}
+
+func writes(path: string): unit uses fs {
+    return null
+}
+
+func pure_only(x: int): int pure {
+    return x
+}
+
+func clamped(x: int): int uses fs when is_ready() {
+    return x
+}
+
+func operator +(a: int, b: int): int {
+    return a - (0 - b)
+}
+
+func pick(v: int!): int {
+    return match v {
+        case error e => 0
+        case _ => 1
+    }
+}
+
+type Shape = enum { Circle(float), Rect { w: float, h: float } }
+
+type Kind<T> = match type T {
+    case struct => 'struct'
+    case tuple => 'tuple'
+    case #leaf => 'leaf'
+}
+
+static for n, F in fields Shape {
+}
+static for j in indices (1, 2) {
+}
+
+// The same words as ordinary names: only the positions above make them keywords.
+let tag = 1
+let rule = 2
+let fact = 3
+let when = 4
+let uses = 5
+let pure = 6
+let on = 7
+let field = 8
+let nodes = 9
+let param = 10
+let struct = 11
+let tuple = 12
+let error = 13
+let leaf = 14
+let join = 15
+let operator = 16
+let unordered = 17
