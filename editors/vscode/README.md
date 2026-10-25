@@ -44,12 +44,17 @@ it.
 
 ```bash
 cd editors/vscode
-npm install
+npm ci
 npm run package            # checks, compiles, writes camel-lang-<version>.vsix
 code --install-extension camel-lang-0.1.0.vsix
 ```
 
-To try it without installing, open `editors/vscode` in VS Code, run `npm install` and
+`npm ci` installs exactly what `package-lock.json` records. The two packages that
+decide what the scope snapshots see (`vscode-textmate`, `vscode-oniguruma`) are
+pinned to an exact version in `package.json` as well, so no install of this
+directory can drift away from the recorded scopes.
+
+To try it without installing, open `editors/vscode` in VS Code, run `npm ci` and
 `npm run compile`, and press F5 ("Run Extension").
 
 ## Commands
@@ -117,7 +122,7 @@ node scripts/tokenize.mjs ../../examples/tty/snake.cml   # scopes of every token
 ```
 
 The same checks, and snapshots of the scopes of a set of programs, run with the repository's
-tests (from the repository root; the snapshot tests are skipped until `npm install` has been run
+tests (from the repository root; the snapshot tests are skipped until `npm ci` has been run
 here):
 
 ```bash

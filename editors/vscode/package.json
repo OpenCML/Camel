@@ -365,6 +365,7 @@
     "vscode:prepublish": "npm run compile",
     "package": "node scripts/package.mjs"
   },
+  "//": "vscode-textmate and vscode-oniguruma are pinned to an exact version: the scope snapshots under test/plans/feat/tools/golden/grammar/ record what these two produce, so with a caret range a checkout that installed in a different week would compare against scopes the tokeniser no longer produces and the tests' verdict would depend on when it was installed. The other dev dependencies cannot change a scope, so they keep their ranges. Install with `npm ci` (README.md, 'Development').",
   "dependencies": {
     "vscode-languageclient": "^9.0.1"
   },
@@ -373,7 +374,7 @@
     "@types/vscode": "~1.82.0",
     "@vscode/vsce": "^3.2.0",
     "typescript": "^5.4.0",
-    "vscode-oniguruma": "^2.0.1",
-    "vscode-textmate": "^9.1.0"
+    "vscode-oniguruma": "2.0.1",
+    "vscode-textmate": "9.3.2"
   }
 }
