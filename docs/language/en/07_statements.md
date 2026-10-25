@@ -507,16 +507,16 @@ A tag is declared at the top level of a module; after `on` come the positions it
 ```cml
 export tag kernel on nodes                  // before a block, function or type: the nodes in it
 export tag fast on func, nodes              // also the function's own declaration
-export tag width<w: int> on type, field     // with parameters, which are compile-time values
-export tag vjp<rule: F> on func when is_function::<F>()   // a function parameter: the argument is a function, and the fact restores to that function
+export tag width(w: int) on type, field     // with parameters, which are compile-time values
+export tag vjp::<F>(rule: F) on func when is_function::<F>()   // a function parameter: the argument is a function, and the fact restores to that function
 tag finite = [kernel, fast]                 // a group: its members apply together
 ```
 
-The positions are `func` (a function declaration), `type` (a type declaration), `field` (a struct field), `nodes` (the nodes written in the region) and `param` (reserved). `read_by` says which passes read the tag; when none of them is in the pipeline a warning is reported where the tag is written. Only a pass that declares itself a reader of tag facts counts: the core dump passes and `std::opt`, and module passes such as `tiles::compile` and `tensor::fuse`; a pass written in Camel can declare the tags it reads with `#reads<tag, ...>` on its function, which counts like `read_by`. A program may not declare a tag with the name of a core permission (nor `finite_math` or `strict`; `tag reassociate`, for one): that name always means the core's tag, so the declaration would never be read, and `SemanticDiag::TagShadowsPermission` refuses it at the declaration.
+The positions are `func` (a function declaration), `type` (a type declaration), `field` (a struct field), `nodes` (the nodes written in the region) and `param` (reserved). `read_by` says which passes read the tag; when none of them is in the pipeline a warning is reported where the tag is written. Only a pass that declares itself a reader of tag facts counts: the core dump passes and `std::opt`, and module passes such as `tiles::compile` and `tensor::fuse`; a pass written in Camel can declare the tags it reads with `#reads(tag, ...)` on its function, which counts like `read_by`. A program may not declare a tag with the name of a core permission (nor `finite_math` or `strict`; `tag reassociate`, for one): that name always means the core's tag, so the declaration would never be read, and `SemanticDiag::TagShadowsPermission` refuses it at the declaration.
 
 The core carries a set of **numeric permission tags** (design principles 7.2), written without an import and `on nodes`: `reassociate`, `contract`, `approx_math`, `change_precision`, `no_nans`, `no_infs`, `no_signed_zeros`, `flush_subnormals`, `nondeterministic` (allows results that vary with the schedule, such as floating-point atomics), and the group `finite_math` that holds the first four of those assumptions; `strict` (7.4) is a core tag too, written `on func, nodes`. `#contract` lands in the node's permission column (the `numeric="..."` of a dump) and `#strict` in its attribute set (`attrs="strict"`); readers get permissions through one query (`permissionsOf` / `effectivePermissions` in `camel/core/tags.h`), and `effectivePermissions` returns the empty set for `#strict`. The defaults are those of 7.3: `reassociate` and `contract` are allowed anyway, the others still have to be written.
 
-A rule declaration may be preceded by `#requires<permission, ...>`: the arguments are permission names, the core's group `finite_math`, or a group the module declares with `tag name = [permission, ...]` (members are expanded recursively, and the group name means the union of its permissions). The engine applies the rule only where the numeric policy of the nodes allows those permissions ([46 Rules](../../technical/46_rules.md)). A requirement that names an ordinary tag, an undeclared name, or `#requires` outside a rule is a located error, never a silent pass.
+A rule declaration may be preceded by `#requires(permission, ...)`: the arguments are permission names, the core's group `finite_math`, or a group the module declares with `tag name = [permission, ...]` (members are expanded recursively, and the group name means the union of its permissions). The engine applies the rule only where the numeric policy of the nodes allows those permissions ([46 Rules](../../technical/46_rules.md)). A requirement that names an ordinary tag, an undeclared name, or `#requires` outside a rule is a located error, never a silent pass.
 
 There are three forms of `#`, written before a function, a type declaration, a struct field or a block:
 
@@ -526,9 +526,9 @@ There are three forms of `#`, written before a function, a type declaration, a s
 #kernel
 func matmul(a: T, b: T): T { ... }
 
-#width<32>
+#width(32)
 type Packed = {
-    #width<8> a: int,
+    #width(8) a: int,
     b: int,
 }
 
@@ -541,25 +541,25 @@ func main(): int {
 }
 ```
 
-`#name`, `#name<arguments>` and `#[a, b<v>]` (a group). A tag's arguments are compile-time values: a literal, a top-level constant or a function name. Each argument must be a constant of the kind its parameter declares — `int`, `float`, `bool`, `string`, or a function for `func`; a real is carried as a real attribute by its bits and `1.5` prints as `1.5`. Writing a tag where its declaration does not list it is an error, located at the tag. So are a wrong number of arguments, an argument that is not a compile-time value, an argument whose kind is not the declared one (`SemanticDiag::TagArgumentType`), and a parameter of a kind a tag cannot carry yet (`SemanticDiag::TagParameterType`).
+`#name`, `#name(arguments)` and `#[a, b(v)]` (a group). A tag's arguments are compile-time values: a literal, a top-level constant or a function name. Each argument must be a constant of the kind its parameter declares — `int`, `float`, `bool`, `string`, or a function (a parameter that is a type parameter satisfying `is_function`, or a concrete function type); a real is carried as a real attribute by its bits and `1.5` prints as `1.5`. Writing a tag where its declaration does not list it is an error, located at the tag. So are a wrong number of arguments, an argument that is not a compile-time value, an argument whose kind is not the declared one (`SemanticDiag::TagArgumentType`), and a parameter of a kind a tag cannot carry yet (`SemanticDiag::TagParameterType`).
 
 A tag of `on nodes` is a **node attribute** (`camel/core/node_attrs.h`): a tag written before a function body or a block holds for the nodes written in it, it accumulates with same-name tags outside by the attribute's combine rule, and an inner same-name tag with a parameter takes the inner value. A tag of `on func`, `on type` and `on field` belongs to the declaration itself: a C++ module reads it in one query, `tag::factsOf` (tags, permissions and readers; `tag::ofDeclaration` / `tag::ofField` remain); reading it from Camel code waits for the first stage of generics.
 
-A parameter may also be a function: it is declared as a type parameter with the condition `when is_function::<F>()`, the same spelling as a pass's signature `opt::<F>(f: F): F! when is_function::<F>()`; when the signature is fixed, write the concrete function type `(x: T) => R`. Its argument is a function, and the tag's fact is that function itself (the argument restores to the function), not its name and not an internal handle; whether its signature fits is checked by the tag's reader where the tag is written. The autodiff module declares `export tag vjp<rule: F> on func when is_function::<F>()` this way: `#vjp<rule>` before a function declaration makes calls of that function use the rule instead of the derivative of its body ([26 Autodiff](../../technical/26_autodiff_as_graph_rewrite.md)).
+A parameter may also be a function: it is declared as a type parameter with the condition `when is_function::<F>()`, the same spelling as a pass's signature `opt::<F>(f: F): F! when is_function::<F>()`; when the signature is fixed, write the concrete function type `(x: T) => R`. Its argument is a function, and the tag's fact is that function itself (the argument restores to the function), not its name and not an internal handle; whether its signature fits is checked by the tag's reader where the tag is written. The autodiff module declares `export tag vjp::<F>(rule: F) on func when is_function::<F>()` this way: `#vjp(rule)` before a function declaration makes calls of that function use the rule instead of the derivative of its body ([26 Autodiff](../../technical/26_autodiff_as_graph_rewrite.md)).
 
-**`#impl<f>`: the Camel body is the semantics, the native kernel is the execution** (design principles 10.4). It is written before a function declaration that has a body:
+**`#impl(f)`: the Camel body is the semantics, the native kernel is the execution** (design principles 10.4). It is written before a function declaration that has a body:
 
 ```cml
-#op<':op/add_l'>
+#op(':op/add_l')
 func add_kernel(a: int, b: int): int          // a body-less declaration of this module, the kernel
 
-#impl<add_kernel>
+#impl(add_kernel)
 export func add(a: int, b: int): int {
     return a - (0 - b)                        // the semantics (the Camel definition)
 }
 ```
 
-- The syntax is `#impl<kernel name>`: one argument, a name rather than a value, because a body-less declaration has no function value to pass.
+- The syntax is `#impl(kernel name)`: one argument, a name rather than a value, because a body-less declaration has no function value to pass.
 - `f` must be a body-less declaration of **the same module**. By design it is a private declaration of that module (not exported: the kernel is an implementation detail, not part of the module interface), written beside the function. A declaration of another module (`SemanticDiag::ImplKernelForeign`), a name no declaration brings (`ImplKernelUnknown`), a function that has a body (`ImplKernelNotBodyless`), and `#impl` on the body-less declaration itself (`ImplOnBodylessDeclaration`) are all refused, and `#impl` cannot be written on a lambda, a type, a field or a block (tag-position error). A module that owns a `.cmo` (as `stdlib/tensor.cml` does for `tensor.cmo`) may declare its kernel and write the definition just the same: a `.cml` and a `.cmo` of the same name are **one module** (H94), and a declaration module may hold bodies (the language author's ruling of 2026-10-23, `docs/handover/reviews/questions-2026-10-23.md`, 「## impl-kernel-site」： 「选 (a)，而且取宽的那一种：声明模块可以有函数体，`DeclarationModuleHasBody` 删除」).
 - **A generic function may carry `#impl`**: the kernel is a body-less declaration with the function's own type parameters (`sum_kernel::<T>`), and by H228 ("one operator, per-type executors") the executor is chosen at instantiation — a fixed rule of the declaration matches by signature, and a rule declared with type parameters is solved with the instance's types. When a `T` has no executor, that instance runs the function body: the body is the semantics, so the result is the same, and `std::profile` shows which path it took (`docs/handover/reviews/questions-2026-10-23.md`, 「## impl-kernel-site」: 「泛型函数可以带 `#impl`」).
 - **The signatures must agree**: the same number of `with` and normal parameters, the same types and `var` marks, the same result type, and no `constas` parameter on the kernel; otherwise `ImplSignatureMismatch`.
@@ -573,10 +573,10 @@ export func add(a: int, b: int): int {
       }
   }
 
-  #op<':op/add_i'>
+  #op(':op/add_i')
   func add_kernel::<T>(a: T, b: T): T when is_armed::<T>()   // implements the i32 instances alone
 
-  #impl<add_kernel>
+  #impl(add_kernel)
   func add::<T>(a: T, b: T): T { return a - (0 - b) }        // an int instance has no executor: it runs the body
   ```
 
@@ -598,13 +598,13 @@ export func add(a: int, b: int): int {
       }
   }
 
-  #op<':op/add_i'>
+  #op(':op/add_i')
   func add_kernel::<T>(a: T, b: T): T when is_armed::<T>()   // an i32 instance takes :op/add_i
 
-  #op<':op/add_f'>
+  #op(':op/add_f')
   func add_kernel::<T>(a: T, b: T): T when is_f32::<T>()     // an f32 instance takes :op/add_f
 
-  #impl<add_kernel>
+  #impl(add_kernel)
   export func add::<T>(a: T, b: T): T {
       return a + b                                           // an instance outside both families runs this
   }
