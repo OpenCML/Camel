@@ -5,6 +5,7 @@
 
 #include "camel/core/operator_table.h"
 #include "camel/core/tags.h"
+#include "camel/core/type/intern.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/draft_writes.h"
 
@@ -773,7 +774,13 @@ bool DraftWritings::assertEqualDeferred(
     gc_node_ref_t a, gc_node_ref_t b, camel::core::sem::PermissionMask perms, uint16_t rule) {
     const auto *ha = draft_.header(a);
     const auto *hb = draft_.header(b);
-    if (ha == nullptr || hb == nullptr || ha->dataType != hb->dataType ||
+    // Two writings of one value have one type, compared by canonical id: the structural identity
+    // of the type, with the names in its key (a dimension name, a parameter name) erased, which
+    // is the relation `equals` uses. Comparing the objects would refuse two writings whose types
+    // were built in different places, which is what a rewrite does every time it re-encodes.
+    if (ha == nullptr || hb == nullptr ||
+        camel::core::type::TypeTable::instance().canonicalId(ha->dataType) !=
+            camel::core::type::TypeTable::instance().canonicalId(hb->dataType) ||
         draft_.nodeRegion(a) != draft_.nodeRegion(b) || ha->permissions != hb->permissions ||
         (perms & ~contextOf(a)) != 0) {
         throw std::logic_error(

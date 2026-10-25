@@ -22,6 +22,7 @@
 #include "camel/core/rtdata/struct.h"
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/type/composite/composite.h"
+#include "camel/core/type/intern.h"
 #include "camel/utils/log.h"
 #include "camel/utils/pointer_set.h"
 
@@ -661,14 +662,42 @@ bool sameContent(const GCGraph &before, const GCGraph &after) {
     const auto sameArray = [](const auto *x, const auto *y, size_t n) {
         return n == 0 || (x != nullptr && y != nullptr && std::memcmp(x, y, n * sizeof(*x)) == 0);
     };
+    // A node record's own typeId counts by its canonical id: two records whose types are one type
+    // under `equals` (the names in a type's key erased) are the same content, which is the whole
+    // point of a type having no identity but its structure.
+    const auto &table      = camel::core::type::TypeTable::instance();
+    const auto sameNodes = [&sameArray, &table](
+                               const GCNode *x, const GCNode *y, size_t n) {
+        if (n == 0) {
+            return true;
+        }
+        if (x == nullptr || y == nullptr) {
+            return false;
+        }
+        constexpr size_t kTypeAt    = offsetof(GCNode, typeId);
+        constexpr size_t kTypeBytes = sizeof(GCNode::typeId);
+        for (size_t i = 0; i < n; ++i) {
+            const auto *rx = reinterpret_cast<const unsigned char *>(&x[i]);
+            const auto *ry = reinterpret_cast<const unsigned char *>(&y[i]);
+            if (std::memcmp(rx, ry, kTypeAt) != 0 ||
+                table.canonicalIdOf(x[i].typeId) != table.canonicalIdOf(y[i].typeId) ||
+                std::memcmp(
+                    rx + kTypeAt + kTypeBytes, ry + kTypeAt + kTypeBytes,
+                    sizeof(GCNode) - kTypeAt - kTypeBytes) != 0) {
+                return false;
+            }
+        }
+        return true;
+    };
     if (a->nodeCount != b->nodeCount || a->edgeCount != b->edgeCount ||
         a->payloadWordCount != b->payloadWordCount || a->normPortCount != b->normPortCount ||
         a->withPortCount != b->withPortCount || a->closureCount != b->closureCount ||
         a->entryNode != b->entryNode ||
         a->exitNode != b->exitNode || a->outputNode != b->outputNode ||
         a->returnNode != b->returnNode || a->returnKind != b->returnKind ||
-        before.funcType() != after.funcType() || before.closureType() != after.closureType() ||
-        before.staticDataType() != after.staticDataType() ||
+        table.canonicalId(before.funcType()) != table.canonicalId(after.funcType()) ||
+        table.canonicalId(before.closureType()) != table.canonicalId(after.closureType()) ||
+        table.canonicalId(before.staticDataType()) != table.canonicalId(after.staticDataType()) ||
         before.hasNodePermissions() != after.hasNodePermissions() ||
         before.hasNodeAttrs() != after.hasNodeAttrs() || a->hasRegions != b->hasRegions) {
         return false;
@@ -681,7 +710,7 @@ bool sameContent(const GCGraph &before, const GCGraph &after) {
             continue;
         }
         if (x.nodeCount != y.nodeCount || x.edgeCount != y.edgeCount ||
-            !sameArray(x.nodes(), y.nodes(), x.nodeCount) ||
+            !sameNodes(x.nodes(), y.nodes(), x.nodeCount) ||
             !sameArray(x.edges, y.edges, x.edgeCount) ||
             (a->hasPermissions && !sameArray(x.permissions, y.permissions, x.nodeCount)) ||
             (a->hasAttrs && !sameArray(x.attrs, y.attrs, x.nodeCount)) ||
@@ -723,7 +752,8 @@ bool sameContent(const GCGraph &before, const GCGraph &after) {
         return false;
     }
     for (size_t i = 0; fa && i < fa->size(); ++i) {
-        if (fa->typeAt(i) != fb->typeAt(i)) {
+        // By canonical id: two frames whose slot types are one type are the same frame.
+        if (table.canonicalId(fa->typeAt(i)) != table.canonicalId(fb->typeAt(i))) {
             return false;
         }
     }

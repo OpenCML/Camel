@@ -540,88 +540,48 @@ bool Type::assignableFrom(Type *from) const {
 }
 
 Type *Type::create(TypeCode code) {
-    EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
-        "Type",
-        "Allocating Type: {}, size: {} bytes",
-        typeCodeToString(code),
-        sizeof(Type)));
-    void *mem = allocTypeStorage<Type>(TypeStorageKind::Primitive);
-    return new (mem) Type(code);
+    // One object per code, held by the type table (see the header): a dtype a module states, a
+    // primitive singleton and a clone of one are all the same type, with one id.
+    return TypeTable::instance().intern(
+        TypeTable::Shape::Primitive,
+        std::span<const uintptr_t>(reinterpret_cast<const uintptr_t *>(&code), 1),
+        [&]() -> Type * {
+            EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+                "Type",
+                "Allocating Type: {}, size: {} bytes",
+                typeCodeToString(code),
+                sizeof(Type)));
+            void *mem = allocTypeStorage<Type>(TypeStorageKind::Primitive);
+            return new (mem) Type(code);
+        });
 }
 
-namespace {
+Type *Type::Int32() { return Type::create(TypeCode::Int32); }
 
-/// The one object of a primitive type, registered with the type table so that it has a TypeId.
-Type *primitiveSingleton(TypeCode code) {
-    Type *type = Type::create(code);
-    TypeTable::instance().adopt(type);
-    return type;
-}
-
-} // namespace
-
-Type *Type::Int32() {
-    static Type *type = primitiveSingleton(TypeCode::Int32);
-    return type;
-}
-
-Type *Type::Int64() {
-    static Type *type = primitiveSingleton(TypeCode::Int64);
-    return type;
-}
+Type *Type::Int64() { return Type::create(TypeCode::Int64); }
 
 Type *Type::Int() { return Type::Int64(); }
 
-Type *Type::Float32() {
-    static Type *type = primitiveSingleton(TypeCode::Float32);
-    return type;
-}
+Type *Type::Float32() { return Type::create(TypeCode::Float32); }
 
-Type *Type::Float64() {
-    static Type *type = primitiveSingleton(TypeCode::Float64);
-    return type;
-}
+Type *Type::Float64() { return Type::create(TypeCode::Float64); }
 
 Type *Type::Float() { return Type::Float64(); }
 
-Type *Type::Bool() {
-    static Type *type = primitiveSingleton(TypeCode::Bool);
-    return type;
-}
+Type *Type::Bool() { return Type::create(TypeCode::Bool); }
 
-Type *Type::Void() {
-    static Type *type = primitiveSingleton(TypeCode::Void);
-    return type;
-}
+Type *Type::Void() { return Type::create(TypeCode::Void); }
 
-Type *Type::String() {
-    static Type *type = primitiveSingleton(TypeCode::String);
-    return type;
-}
+Type *Type::String() { return Type::create(TypeCode::String); }
 
-Type *Type::Complex64() {
-    static Type *type = primitiveSingleton(TypeCode::Complex64);
-    return type;
-}
+Type *Type::Complex64() { return Type::create(TypeCode::Complex64); }
 
-Type *Type::Complex128() {
-    static Type *type = primitiveSingleton(TypeCode::Complex128);
-    return type;
-}
+Type *Type::Complex128() { return Type::create(TypeCode::Complex128); }
 
-Type *Type::BFloat16() {
-    static Type *type = primitiveSingleton(TypeCode::BFloat16);
-    return type;
-}
+Type *Type::BFloat16() { return Type::create(TypeCode::BFloat16); }
 
-Type *Type::Float16() {
-    static Type *type = primitiveSingleton(TypeCode::Float16);
-    return type;
-}
+Type *Type::Float16() { return Type::create(TypeCode::Float16); }
 
-Type *Type::Ref() {
-    static Type *type = primitiveSingleton(TypeCode::Ref);
-    return type;
-}
+Type *Type::Ref() { return Type::create(TypeCode::Ref); }
 
 } // namespace camel::core::type

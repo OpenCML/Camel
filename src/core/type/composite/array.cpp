@@ -136,24 +136,59 @@ ArrayType *ArrayType::make(
         TypeTable::instance().internExtents(std::span<const ExtentForm>(extents));
     const std::string *packText =
         pack.empty() ? nullptr : TypeTable::instance().internText(pack);
-    uintptr_t words[4] = {
-        reinterpret_cast<uintptr_t>(elemType),
-        static_cast<uintptr_t>((anyRank ? 1u : 0u) | (numericUnknown ? 2u : 0u)),
+    // A dimension name and a pack name are in the key because a type prints them; `equals`
+    // ignores them (text.cpp: sameExtentConstraint), so the same shape with the names erased is
+    // the canonical form this type's canonical id names (see intern.h).
+    bool hasNames = packText != nullptr;
+    for (const ExtentForm &form : extents) {
+        hasNames = hasNames || form.hasNames();
+    }
+    const uintptr_t flags = static_cast<uintptr_t>((anyRank ? 1u : 0u) | (numericUnknown ? 2u : 0u));
+    // The element type is a component like any other, so it enters the key by id; the object
+    // holds the very object it was asked for, which is what a caller that prints the type sees.
+    const uintptr_t words[4] = {
+        typeKeyWord(elemType),
+        flags,
         reinterpret_cast<uintptr_t>(canonical),
         reinterpret_cast<uintptr_t>(packText),
     };
-    const auto createObject = [&]() -> Type * {
+    const auto createObject = [&](Type *element, const std::vector<ExtentForm> &forms,
+                                  const std::string *packName) -> Type * {
         EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
             "ArrayType",
             "Allocating ArrayType: {} , size: {} bytes",
-            typeCodeToString(elemType->code()),
+            typeCodeToString(element->code()),
             sizeof(ArrayType)));
         void *mem = allocTypeStorage<ArrayType>(TypeStorageKind::Array);
-        return new (mem) ArrayType(elemType, std::move(extents), anyRank, packText, numericUnknown);
+        return new (mem) ArrayType(element, forms, anyRank, packName, numericUnknown);
     };
-    Type *type = TypeTable::instance().intern(
-        TypeTable::Shape::Array, std::span<const uintptr_t>(words, 4), createObject);
-    return static_cast<ArrayType *>(type);
+    if (!hasNames) {
+        return static_cast<ArrayType *>(TypeTable::instance().intern(
+            TypeTable::Shape::Array, std::span<const uintptr_t>(words, 4),
+            [&]() -> Type * { return createObject(elemType, extents, packText); }));
+    }
+    // The name-erased twin: every extent that is not a constant is one unknown dimension, and the
+    // pack name is dropped, which is exactly what the shape's mangled name already erases.
+    std::vector<ExtentForm> plainForms;
+    plainForms.reserve(extents.size());
+    for (const ExtentForm &form : extents) {
+        plainForms.push_back(form.isConstant() ? form : ExtentForm::unknown());
+    }
+    const std::vector<ExtentForm> *plainShape =
+        TypeTable::instance().internExtents(std::span<const ExtentForm>(plainForms));
+    Type *plainElement        = TypeTable::instance().canonical(elemType);
+    const uintptr_t plain[4]  = {
+        typeKeyWord(plainElement),
+        flags,
+        reinterpret_cast<uintptr_t>(plainShape),
+        reinterpret_cast<uintptr_t>(nullptr),
+    };
+    return static_cast<ArrayType *>(TypeTable::instance().intern(
+        TypeTable::Shape::Array, std::span<const uintptr_t>(words, 4),
+        [&]() -> Type * { return createObject(elemType, extents, packText); },
+        TypeTable::Canonical{
+            std::span<const uintptr_t>(plain, 4),
+            [&]() -> Type * { return createObject(plainElement, plainForms, nullptr); }}));
 }
 
 ArrayType *ArrayType::create(Type *elemType) {

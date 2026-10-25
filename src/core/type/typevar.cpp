@@ -11,6 +11,7 @@
 #include "camel/core/type/composite/array.h"
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
+#include "camel/core/type/intern.h"
 #include "camel/core/type/other.h"
 #include "camel/core/type/storage.h"
 #include "camel/utils/assert.h"
@@ -25,8 +26,23 @@ TypeVarType::TypeVarType(const std::string &name, bool binder)
     : Type(TypeCode::TypeVar), name_(name), binder_(binder) {}
 
 TypeVarType *TypeVarType::create(const std::string &name, bool binder) {
-    void *mem = allocTypeStorage<TypeVarType>(TypeStorageKind::TypeVar);
-    return new (mem) TypeVarType(name, binder);
+    // One object per variable name and binding mark, from the type table (see intern.h): every
+    // occurrence of `T` is one type with one id, instead of a fresh object per occurrence.
+    // `equals` compares the name and ignores the mark (see below), so the mark-less occurrence is
+    // the canonical form: an occurrence that binds and a use of it are one type, which is what
+    // the compiler's name-keyed substitution already assumes.
+    const std::string *text        = TypeTable::instance().internText(name);
+    const uintptr_t words[2]       = {reinterpret_cast<uintptr_t>(text), binder ? 1u : 0u};
+    const uintptr_t plain[2]       = {reinterpret_cast<uintptr_t>(text), 0u};
+    const auto allocate            = [&](bool marked) -> Type * {
+        void *mem = allocTypeStorage<TypeVarType>(TypeStorageKind::TypeVar);
+        return new (mem) TypeVarType(name, marked);
+    };
+    return static_cast<TypeVarType *>(TypeTable::instance().intern(
+        TypeTable::Shape::TypeVar, std::span<const uintptr_t>(words, 2),
+        [&]() -> Type * { return allocate(binder); },
+        TypeTable::Canonical{
+            std::span<const uintptr_t>(plain, 2), [&]() -> Type * { return allocate(false); }}));
 }
 
 std::string TypeVarType::toString() const { return name_; }
@@ -56,8 +72,16 @@ CastSafety TypeVarType::castSafetyFrom(Type *sourceType) const {
 TypeOfType::TypeOfType(const void *expression) : Type(TypeCode::TypeOf), expression_(expression) {}
 
 TypeOfType *TypeOfType::create(const void *expression) {
-    void *mem = allocTypeStorage<TypeOfType>(TypeStorageKind::TypeVar);
-    return new (mem) TypeOfType(expression);
+    // One placeholder per expression (see intern.h): `typeof e` twice in one position is one
+    // type. Two of them are equal when they are the same object (see below), so the placeholder
+    // is its own canonical form and carries no name-erased twin: nothing compares it by
+    // structure, and the graph builder resolves it before any type check.
+    const uintptr_t words[1] = {reinterpret_cast<uintptr_t>(expression)};
+    return static_cast<TypeOfType *>(TypeTable::instance().intern(
+        TypeTable::Shape::TypeOf, std::span<const uintptr_t>(words, 1), [&]() -> Type * {
+            void *mem = allocTypeStorage<TypeOfType>(TypeStorageKind::TypeVar);
+            return new (mem) TypeOfType(expression);
+        }));
 }
 
 std::string TypeOfType::toString() const { return "typeof"; }
@@ -90,8 +114,21 @@ TypeFunctionType::TypeFunctionType(
 
 TypeFunctionType *
 TypeFunctionType::create(const std::string &name, std::vector<std::string> params, Type *body) {
-    void *mem = allocTypeStorage<TypeFunctionType>(TypeStorageKind::TypeVar);
-    return new (mem) TypeFunctionType(name, std::move(params), body);
+    // One object per declaration of a parameterised type (see intern.h): its name, its parameter
+    // names and its body. Two of them are equal when they are the same object (see below), so a
+    // type function is its own canonical form: nothing compares it by structure.
+    std::vector<uintptr_t> words;
+    words.reserve(2 + params.size());
+    words.push_back(reinterpret_cast<uintptr_t>(TypeTable::instance().internText(name)));
+    words.push_back(typeKeyWord(body));
+    for (const std::string &param : params) {
+        words.push_back(reinterpret_cast<uintptr_t>(TypeTable::instance().internText(param)));
+    }
+    return static_cast<TypeFunctionType *>(TypeTable::instance().intern(
+        TypeTable::Shape::TypeFunc, words, [&]() -> Type * {
+            void *mem = allocTypeStorage<TypeFunctionType>(TypeStorageKind::TypeVar);
+            return new (mem) TypeFunctionType(name, std::move(params), body);
+        }));
 }
 
 Type *TypeFunctionType::apply(const type_vec_t &arguments) const {

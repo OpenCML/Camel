@@ -83,26 +83,17 @@ StructType *StructTypeFactory::build() { return StructType::fromFactory(*this); 
 
 namespace {
 
-/// The interned named instances, keyed by declaration and arguments, as enum instances are: a
-/// type holding a type variable is not interned, because the declaration's parameter objects
-/// and a use's argument objects are different types even when they print the same.
-std::mutex structMutex;
-std::unordered_map<std::string, StructType *> &structInstances() {
-    static std::unordered_map<std::string, StructType *> instances;
-    return instances;
-}
-
-bool internable(std::span<Type *const> args) {
-    return std::all_of(args.begin(), args.end(), [](Type *arg) {
-        return arg != nullptr && !containsTypeVar(arg);
-    });
-}
-
-std::string instanceKey(const StructDecl *decl, std::span<Type *const> args) {
-    std::string key = std::to_string(decl->id()) + "|";
+/// The intern key of a named instance: its declaration and the **canonical** ids of its type
+/// arguments. The declaration decides which type it is (design principles 5.2), and a named type
+/// compares its arguments with `equals` (text.cpp: sameType), so the names in them are erased
+/// here exactly as they are there: the declaration's own parameter object and a use's argument
+/// object are one entry, which is how a forward declaration and its definition share it.
+std::vector<uintptr_t> declaredKey(const StructDecl *decl, std::span<Type *const> args) {
+    std::vector<uintptr_t> key;
+    key.reserve(1 + args.size());
+    key.push_back(reinterpret_cast<uintptr_t>(decl));
     for (Type *arg : args) {
-        key += arg->mangle();
-        key += '|';
+        key.push_back(typeKeyWord(TypeTable::instance().canonical(arg)));
     }
     return key;
 }
@@ -124,16 +115,14 @@ StructType *StructType::get(StructDecl *decl, std::span<Type *const> args) {
     ASSERT(
         args.size() == decl->params().size(),
         "StructType::get: one type argument per parameter of the declaration.");
-    // A declaration that names itself through an array is published while its own fields are
-    // still being read (declare()/completeFields()). While that is going on the instance is
-    // reachable through the declaration's name and must be answered here too, before the
-    // "defined" check below.
-    if (internable(args)) {
-        std::lock_guard<std::mutex> lock(structMutex);
-        auto &instances = structInstances();
-        if (auto it = instances.find(instanceKey(decl, args)); it != instances.end()) {
-            return it->second;
-        }
+    // The instance of a declaration is one table entry, keyed by the declaration and the canonical
+    // ids of the arguments. A declaration that names itself through an array is published while
+    // its own fields are still being read (declare()/completeFields()): that entry is answered
+    // here too, before the "defined" check below, because it is registered before its fields are
+    // known and its key does not depend on them.
+    const std::vector<uintptr_t> key = declaredKey(decl, args);
+    if (Type *known = TypeTable::instance().find(TypeTable::Shape::DeclaredStruct, key)) {
+        return static_cast<StructType *>(known);
     }
     ASSERT(decl->defined(), "A struct type is instantiated after its fields are read.");
     std::vector<std::pair<std::string, Type *>> fields;
@@ -152,18 +141,9 @@ StructType *StructType::get(StructDecl *decl, std::span<Type *const> args) {
     }
     std::vector<std::string> refs = refsOf(fields);
     std::vector<Type *> typeArgs(args.begin(), args.end());
-    if (!internable(args)) {
-        return allocate(fields, refs, decl, std::move(typeArgs));
-    }
-    std::lock_guard<std::mutex> lock(structMutex);
-    auto &instances       = structInstances();
-    const std::string key = instanceKey(decl, args);
-    if (auto it = instances.find(key); it != instances.end()) {
-        return it->second;
-    }
-    StructType *type = allocate(fields, refs, decl, std::move(typeArgs));
-    instances.emplace(key, type);
-    return type;
+    return static_cast<StructType *>(TypeTable::instance().intern(
+        TypeTable::Shape::DeclaredStruct, key,
+        [&]() -> Type * { return allocate(fields, refs, decl, std::move(typeArgs)); }));
 }
 
 StructType::StructType(
@@ -200,17 +180,27 @@ StructType *StructType::fromFactory(StructTypeFactory &factory) {
 StructType *StructType::fromFactoryData(
     const std::vector<std::pair<std::string, Type *>> &fields,
     const std::vector<std::string> &refs) {
-    // One object per sequence of (field name, field type object); see intern.h. `refs` names
-    // the fields whose type is Ref, which the fields already determine.
+    // One object per sequence of (field name, field type id); see intern.h. `refs` names
+    // the fields whose type is Ref, which the fields already determine. A field type that is
+    // itself a named type leaves the key as written, and the canonical id points at the struct of
+    // the same shape whose field types are name-erased: that is what `equals` compares.
     std::vector<uintptr_t> key;
+    std::vector<uintptr_t> plain;
+    std::vector<std::pair<std::string, Type *>> plainFields;
     key.reserve(fields.size() * 2);
+    plain.reserve(fields.size() * 2);
+    plainFields.reserve(fields.size());
     for (const auto &[name, type] : fields) {
+        Type *canonical = TypeTable::instance().canonical(type);
         key.push_back(camel::core::internSymbol(name));
-        key.push_back(reinterpret_cast<uintptr_t>(type));
+        key.push_back(typeKeyWord(type));
+        plain.push_back(camel::core::internSymbol(name));
+        plain.push_back(typeKeyWord(canonical));
+        plainFields.emplace_back(name, canonical);
     }
-    Type *interned = TypeTable::instance().intern(TypeTable::Shape::Struct, key, [&]() -> Type * {
-        return allocate(fields, refs);
-    });
+    Type *interned = TypeTable::instance().intern(
+        TypeTable::Shape::Struct, key, [&]() -> Type * { return allocate(fields, refs); },
+        TypeTable::Canonical{plain, [&]() -> Type * { return allocate(plainFields, refs); }});
     return static_cast<StructType *>(interned);
 }
 
@@ -289,7 +279,15 @@ StructType *StructType::declare(
         fields.emplace_back(name, nullptr);
     }
     std::vector<Type *> typeArgs(args.begin(), args.end());
-    return allocate(fields, {}, decl, std::move(typeArgs), fieldNames.size());
+    // The entry is registered now, under a key that does not depend on the fields, so that a
+    // declaration that names itself through an array resolves to this object while its fields are
+    // still being read. The object is therefore mutable until completeFields() runs, which the
+    // table allows for this one shape: the key is the declaration, not the fields.
+    const std::vector<uintptr_t> key = declaredKey(decl, args);
+    return static_cast<StructType *>(TypeTable::instance().intern(
+        TypeTable::Shape::DeclaredStruct, key, [&]() -> Type * {
+            return allocate(fields, {}, decl, std::move(typeArgs), fieldNames.size());
+        }));
 }
 
 void StructType::completeFields(const std::vector<std::pair<std::string, Type *>> &fields) {
@@ -309,19 +307,6 @@ void StructType::completeFields(const std::vector<std::pair<std::string, Type *>
         }
     }
     refCount_ = refCount;
-    // Publish the instance: from here on every use of the declaration's name is this object.
-    // While it was incomplete no one could observe it through the type table, so the table's
-    // rule that an interned type is immutable still holds.
-    if (!internable(typeArgs_)) {
-        return;
-    }
-    std::lock_guard<std::mutex> lock(structMutex);
-    auto &instances       = structInstances();
-    const std::string key = instanceKey(decl_, typeArgs_);
-    ASSERT(
-        instances.find(key) == instances.end(),
-        "A struct declaration publishes its own instance once.");
-    instances.emplace(key, this);
 }
 
 std::optional<size_t> StructType::findField(std::string_view name) const {
