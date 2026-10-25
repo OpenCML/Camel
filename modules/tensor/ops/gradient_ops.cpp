@@ -199,14 +199,21 @@ InferFn gradientLike(size_t index) {
 /// The signature of `sum_to` and `broadcast_like`: `::<T>(g: T[..], like: T[..])`. The result is
 /// argument `index`'s shape and element type, and the other argument is that same element type. A
 /// gradient is read at the width of the value it is the gradient of (design principles 9.9): an
-/// f32 fill read as f64 is 0.0078125, not the derivative. Two arguments whose element types
+/// f32 fill read as f64 is 0.0078125, not the derivative. Two *tensors* whose element types
 /// disagree match no arm -- there is no conversion between numeric types to reach one (design
 /// principles 5.1) -- so the call is refused by the signature, not narrowed into an arm.
+///
+/// A *number* on the other side is not such a pair: a number has no element type of its own and is
+/// read at the width of the tensor it meets, the same rule every elementwise operator follows
+/// (`x * 0.5` with an f32 `x` computes at f32), and `index_eval.cpp` reads it that way. The
+/// gradient of a broadcast is the case that needs it: `broadcast_like(0.5, y)` with an f32 `y`
+/// carries an f64 number, and the gradient that comes back must be read at y's width.
 InferFn gradientLikeTyped(size_t index) {
     return [index](const InferContext &ctx) -> std::optional<Type *> {
         const auto &like  = ctx.facts(index);
         const auto &other = ctx.facts(index == 0 ? 1 : 0);
-        if (like.dtype && other.dtype && *like.dtype != *other.dtype) {
+        const bool otherIsNumber = other.shape && other.shape->empty();
+        if (like.dtype && other.dtype && *like.dtype != *other.dtype && !otherIsNumber) {
             return std::nullopt;
         }
         return tensorOf(like.dtype, like.shape);
@@ -413,9 +420,10 @@ std::vector<OpDef> gradientOps() {
                 static_cast<camel::core::rtdata::Int64>(*(*shape)[static_cast<size_t>(axis)]));
         }});
 
-    // sum_to(g, like) is `::<T>(g: T[..], like: T[..])`: the gradient and the value it reduces
-    // onto are one element type, and its arms are the float widths its kernel carries -- f32 and
-    // f64 (indexing.cpp says which, and design principles 5.1: no conversion to reach an arm).
+    // sum_to(g, like) is `::<T>(g: T[..], like: T[..])`: two tensors of one element type, and its
+    // arms are the widths its kernel carries -- f32 and f64 (indexing.cpp says which, and design
+    // principles 5.1: no conversion to reach an arm). A number on the `g` side is read at `like`'s
+    // width (gradientLikeTyped above), which is what a broadcast's gradient passes.
     defs.push_back(internal(
         "sum_to",
         {{"g", ParamKind::Tensor}, {"like", ParamKind::Tensor}},
