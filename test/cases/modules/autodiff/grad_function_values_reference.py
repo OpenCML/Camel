@@ -3,18 +3,24 @@
 Each loss of the Camel cases is written again as a NumPy float64 function, independently of the
 compiler, and differentiated by central finite differences. Run it to print the references;
 with --check FILE it reads Camel's printed gradients (one `tensor([...])` line per loss, in
-order) and compares them (float32 against float64 finite differences).
+order) and compares them (float32 against float64 finite differences); with --check-camel CAMEL
+it runs grad_function_values.cml beside this file with that compiler and compares what it prints,
+so the gradients the plan pins are checked against an implementation that shares no code with it.
 
-Usage: python grad_function_values_reference.py [--check FILE]   (needs numpy)
+Usage: python grad_function_values_reference.py [--check FILE | --check-camel CAMEL]   (needs numpy)
 """
 
 from __future__ import annotations
 
+import os
 import re
+import subprocess
 import sys
+from pathlib import Path
 
 import numpy as np
 
+HERE = Path(__file__).resolve().parent
 X = np.array([0.5, 0.25, -0.35], dtype=np.float64)
 TOL = 2e-3  # relative to the largest element of the reference gradient
 
@@ -145,6 +151,21 @@ def fd(f, x, h=1e-6):
     return g
 
 
+def compare(rows: list[str], losses: list, refs: list) -> int:
+    if len(rows) != len(refs):
+        print(f"expected {len(refs)} gradients, found {len(rows)}")
+        return 1
+    bad = 0
+    for f, ref, row in zip(losses, refs, rows):
+        got = np.array([float(v) for v in row.split(",")])
+        err = np.max(np.abs(got - ref)) / max(np.max(np.abs(ref)), 1e-12)
+        ok = err <= TOL
+        bad += 0 if ok else 1
+        print(f"{f.__name__}: {'ok' if ok else 'MISMATCH'} rel_err={err:.2e} camel={got} fd={ref}")
+    print(f"{len(refs)} gradients checked, {bad} wrong")
+    return 1 if bad else 0
+
+
 def main() -> int:
     suite = "values"
     args = sys.argv[1:]
@@ -154,18 +175,17 @@ def main() -> int:
     refs = [fd(f, X) for f in losses]
     if len(args) == 2 and args[0] == "--check":
         text = open(args[1], encoding="utf-8").read()
-        rows = re.findall(r"tensor\(\[([^\]]*)\]", text)
-        if len(rows) != len(refs):
-            print(f"expected {len(refs)} gradients, found {len(rows)}")
+        return compare(re.findall(r"tensor\(\[([^\]]*)\]", text), losses, refs)
+    if len(args) == 2 and args[0] == "--check-camel":
+        env = {**os.environ}
+        env.setdefault("CAMEL_HOME", str(HERE.parents[3] / "out" / "latest"))
+        proc = subprocess.run(
+            [args[1], str(HERE / "grad_function_values.cml")], cwd=HERE, env=env, capture_output=True, text=True
+        )
+        if proc.returncode != 0:
+            print(f"camel failed: {(proc.stdout + proc.stderr)[-400:]}")
             return 1
-        bad = 0
-        for f, ref, row in zip(losses, refs, rows):
-            got = np.array([float(v) for v in row.split(",")])
-            err = np.max(np.abs(got - ref)) / max(np.max(np.abs(ref)), 1e-12)
-            ok = err <= TOL
-            bad += 0 if ok else 1
-            print(f"{f.__name__}: {'ok' if ok else 'MISMATCH'} rel_err={err:.2e} camel={got} fd={ref}")
-        return 1 if bad else 0
+        return compare(re.findall(r"tensor\(\[([^\]]*)\]", proc.stdout), losses, refs)
     for f, ref in zip(losses, refs):
         print(f.__name__, np.array2string(ref, precision=6))
     return 0
