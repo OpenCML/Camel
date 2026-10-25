@@ -1436,8 +1436,8 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `TagArgumentNamed` | A tag argument is positional: '{0}' is named. |
 | `TagArgumentType` | The parameter '{0}' of the tag '{1}' is declared '{2}', but the argument is '{3}' ({4}). |
 | `TagNotAPermission` | The tag '{0}' grants no numeric permission. |
-| `RuleTagNotRequires` | A rule may be preceded only by '#requires<...>', not by the tag '{0}'. |
-| `TagParameterType` | The parameter '{0}' of the tag '{1}' is declared '{2}': a tag parameter is an int, a float, a bool, a string or a func. |
+| `RuleTagNotRequires` | A rule may be preceded only by '#requires(...)', not by the tag '{0}'. |
+| `TagParameterType` | The parameter '{0}' of the tag '{1}' is declared '{2}': a tag parameter is an int, a float, a bool, a string, a concrete function type, or a type parameter the condition selects with is_function. |
 | `TagShadowsPermission` | The tag '{0}' is declared with the name of a tag of the language. |
 | `TagFieldNameAmbiguous` | Two tags on this field are written '{0}': '{1}' and '{2}'. |
 | `TagFunctionArgumentNotReadable` | The tag '{0}' takes a function for its parameter '{1}', and a 'static' head cannot give a function value yet. |
@@ -1526,7 +1526,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `RangeStepZero` | The range 'range({0}, {1}, 0)' has a step of 0, so it is no sequence of integers. |
 | `SliceStepZero` | The slice 't[a:b:s]' has a step of 0, so it takes no element at all, whatever its bounds are. |
 | `ReducedPrecisionUnsupported` | The call of '{0}' cannot take a value of the reduced-precision element type '{1}'. |
-| `ImplOnBodylessDeclaration` | The body-less declaration '{0}' cannot carry '#impl<{1}>': it has no Camel body. |
+| `ImplOnBodylessDeclaration` | The body-less declaration '{0}' cannot carry '#impl({1})': it has no Camel body. |
 | `ImplKernelUnknown` | The '#impl' tag of '{0}' names '{1}', which is no body-less declaration. |
 | `ImplKernelForeign` | The '#impl' tag of '{0}' names '{1}', which another module declares. |
 | `ImplSignatureMismatch` | The kernel '{0}' of the '#impl' function '{1}' has the signature {2}, but the function has {3}. |
