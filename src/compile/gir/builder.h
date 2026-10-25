@@ -1993,9 +1993,11 @@ class Builder {
     // Reports EffectInRuleCondition for the condition of one instance of a generic rule, when the
     // type arguments are what revealed the effect (a call whose candidate the types decide). The
     // report is about the rule, not about the attempt at one tuple, so it goes to the sink the
-    // user reads (`userSink`) and is made once for the rule.
+    // user reads (`userSink`) and is made once for the rule. `module` declares the rule: the report
+    // is named after it, which matters where the sink it reaches has no module of its own.
     void reportEffectInRuleInstance(
-        const GenericRuleEntry &entry, const compile_graph_ptr_t &condition);
+        const GenericRuleEntry &entry, const camel::core::module::module_ptr_t &module,
+        const compile_graph_ptr_t &condition);
     // The sink the user reads, whatever speculative scope the compiler is in: a verdict about the
     // program itself goes here, so that a scope holding what one attempt said cannot swallow it.
     camel::core::error::Diagnostics *userSink();

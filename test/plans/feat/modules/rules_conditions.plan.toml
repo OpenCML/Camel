@@ -92,13 +92,17 @@ timeout_ms = 10000
 
 [[tests]]
 name = "rules.generic_condition_effect_at_instantiation"
-desc = "A generic rule whose condition calls a generic function: which candidate the call takes is decided by the type arguments of the instance, so the effect is only known when the instance is made, and the rule's declaration has no effect written in it to find. The instance is checked, and the run reaches the program instead of ending in an internal error: before this check the same program died with `PassInternalError` while the engine held a session on the program."
+desc = "A generic rule whose condition calls a generic function: which candidate the call takes is decided by the type arguments of the instance, so the effect is only known when the instance is made, and the rule's declaration has no effect written in it to find. The instance is checked as it is made, and the verdict is about the rule rather than about the attempt at one type tuple, so it goes where the user reads it and not into the held sink. The engine makes instances while the program runs, where the module's own build is over and no longer holds a report: the verdict reaches the reader through the channel the run reports through, at the effect's own line and column, with the rule's definition as related information, and the run stops there -- the condition, and so the effect in it, is never evaluated. Before this check the same program died with `PassInternalError` while the engine held a session on the program."
 kind = "behavior"
 case = "../../../cases/modules/rules/condition_generic_print.cml"
 args = ["${case}", "std::nvm"]
-expect_exit = 0
-expect_stdout_contains = ["rewritten"]
-expect_output_not_contains = ["PassInternalError", "internal error", "RewriteConflict"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::EffectInRuleCondition"
+expect_diagnostic_code = "0x030001AD"
+expect_diagnostic_line = 14
+expect_diagnostic_column = 5
+expect_stdout_contains = ["The call of 'println' in the function 'announce<Node>' has an effect, and it is inside the condition of the rule 'add_zero'", "[the rule 'add_zero' is declared here at 11:1]"]
+expect_output_not_contains = ["PassInternalError", "internal error", "RewriteConflict", "announce  Node(2, 2)"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
