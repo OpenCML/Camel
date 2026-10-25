@@ -1,5 +1,5 @@
 module graph_facts
-import { Tensor, reshape } from tensor
+import { reshape } from tensor
 import { Node, Graph, current, graphs, name, nodes, effects, shape, permissions } from graph
 
 func quiet(x: int): int {

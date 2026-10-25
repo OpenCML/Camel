@@ -8,19 +8,19 @@
  */
 module loop_grad_iterable_tensors
 
-import { Tensor, abs, reshape, sum } from tensor
+import { abs, reshape, sum } from tensor
 import { grad } from autodiff
 
-type Block = { w: Tensor<f32, [4, 4]>, b: Tensor<f32, [4]> }
+type Block = { w: f32[4, 4], b: f32[4] }
 
 with <blocks: Block[]>
-func loss_array(x: Tensor<f32, [4, 4]>): float {
+func loss_array(x: f32[4, 4]): float {
     let h = loop h = x for block in blocks do h @ block.w + block.b
     return float(sum(h))
 }
 
 with <blocks: (Block, Block)>
-func loss_tuple(x: Tensor<f32, [4, 4]>): float {
+func loss_tuple(x: f32[4, 4]): float {
     let h = static loop h = x
         for i, B in fields (Block, Block) do h @ blocks.[i].w + blocks.[i].b
     return float(sum(h))
@@ -33,9 +33,9 @@ func main(): int sync {
     let w1 = reshape(
         [0.1, 0.0, 0.2, 0.0, 0.3, 0.1, 0.0, -0.1, 0.0, 0.2, 0.1, 0.0, 0.1, 0.0, 0.0, 0.3] as f32[],
         [4, 4])
-    let b0: Tensor<f32, [4]> = reshape([0.01, -0.02, 0.03, 0.0] as f32[], [4])
-    let b1: Tensor<f32, [4]> = reshape([0.0, 0.04, -0.01, 0.02] as f32[], [4])
-    let x: Tensor<f32, [4, 4]> = reshape(
+    let b0: f32[4] = reshape([0.01, -0.02, 0.03, 0.0] as f32[], [4])
+    let b1: f32[4] = reshape([0.0, 0.04, -0.01, 0.02] as f32[], [4])
+    let x: f32[4, 4] = reshape(
         [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0] as f32[],
         [4, 4])
     let blocks = [{ w: w0, b: b0 }, { w: w1, b: b1 }]

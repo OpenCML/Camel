@@ -14,7 +14,7 @@
  * every model are saved there, and the model named by MODEL is exported when ONNX_OUT is set.
  */
 module ort_struct_loop
-import { Tensor, load_npy, reshape, save_npy, sum, tanh } from tensor
+import { load_npy, reshape, save_npy, sum, tanh } from tensor
 import { export_model } from onnx
 import { get_env } from env
 

@@ -16,7 +16,7 @@
  */
 module loop_grad_refuse_slice_iterable
 
-import { Tensor, sum } from tensor
+import { sum } from tensor
 import { grad } from autodiff
 
 with <rows: f32[][]>

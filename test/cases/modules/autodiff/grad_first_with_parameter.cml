@@ -10,7 +10,7 @@
 module grad_first_with_parameter
 
 import { grad, with_grad } from autodiff
-import { Tensor, reshape, sum } from tensor
+import { reshape, sum } from tensor
 
 // d/dx (x*y + x) = y + 1.
 with <x: float>

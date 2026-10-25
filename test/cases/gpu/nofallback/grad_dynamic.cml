@@ -17,12 +17,12 @@
  */
 module gpu_grad_dynamic
 
-import { Tensor, reshape, sum } from tensor
+import { reshape, sum } from tensor
 import { with_grad } from autodiff
 
 type M = {
-    p0: Tensor<f32, [3]>,
-    x: Tensor<f32, [2, 3]>,
+    p0: f32[3],
+    x: f32[2, 3],
 }
 
 with <m: M>
@@ -31,7 +31,7 @@ func loss(): float sync {
 }
 
 #gpu
-func step(body: <m: M> () => float, m: M): Tensor<f32, [3]> sync {
+func step(body: <m: M> () => float, m: M): f32[3] sync {
     let vg = with_grad(body)<m>()
     return vg.1.p0
 }

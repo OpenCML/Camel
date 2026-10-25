@@ -1,7 +1,7 @@
 /**
  * A tensor leaf of a written element type keeps it on both sides: a leaf written
- * `Tensor<f64, [?]>` and built as `full([2], 0.1)` is still f64 after `nn:sgd` and after two
- * `nn:adam` steps, in the bytes of two doubles, and one written `Tensor<f32, [?]>` and built as
+ * `f64[?]` and built as `full([2], 0.1)` is still f64 after `nn:sgd` and after two
+ * `nn:adam` steps, in the bytes of two doubles, and one written `f32[?]` and built as
  * `full([2], f32(0.25))` is f32 in the bytes of two floats.
  *
  * The element type a leaf writes is the element type it is updated at, and it is the leaf's own
@@ -19,7 +19,7 @@
  */
 module optim_written_dtype_exact
 
-import { Tensor, full, numel, sum, to_bytes } from tensor
+import { full, numel, sum, to_bytes } from tensor
 import { size, to_array } from bytes
 import { adam as native_adam, adam_state, sgd as native_sgd } from nn
 import { adam, constant, init, sgd, update } from optim
@@ -29,8 +29,8 @@ import { with_grad } from autodiff
 // types, so which writing of the update each leaf takes is settled when the tree is expanded by
 // field.
 type Leaves = {
-    wide: Tensor<f64, [?]>,
-    narrow: Tensor<f32, [?]>
+    wide: f64[?],
+    narrow: f32[?]
 }
 
 // The loss the gradient comes from: the sum of each leaf, so the gradient is one at every element

@@ -6,7 +6,7 @@
  * agree (checked by hand, artifacts: b2/probes/p11_vjp_step.cml).
  */
 module export_train_step_vjp
-import { Tensor, reshape, sum, tanh, where } from tensor
+import { reshape, sum, tanh, where } from tensor
 import { with_grad } from autodiff
 import { sgd } from nn
 import { export_model } from onnx

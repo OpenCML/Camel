@@ -17,16 +17,16 @@
  */
 module compile_bf16_permission_gate
 
-import { Tensor, ones } from tensor
+import { ones } from tensor
 import { inspect } from tiles
 
 #[reassociate, change_precision, finite_math]
-func granted(a: Tensor<f32>, b: Tensor<f32>): Tensor<f32> { return a @ b }
+func granted(a: f32[..], b: f32[..]): f32[..] { return a @ b }
 
 #[strict, reassociate, change_precision, finite_math]
-func revoked(a: Tensor<f32>, b: Tensor<f32>): Tensor<f32> { return a @ b }
+func revoked(a: f32[..], b: f32[..]): f32[..] { return a @ b }
 
-func canonical(a: Tensor<f32>, b: Tensor<f32>): Tensor<f32> { return a @ b }
+func canonical(a: f32[..], b: f32[..]): f32[..] { return a @ b }
 
 func main(): int sync {
     let left = ones([8, 8]) * 1.00390625

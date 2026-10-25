@@ -8,7 +8,7 @@
  */
 module export_integrity
 
-import { Tensor, reshape, relu, mean, randn } from tensor
+import { reshape, relu, mean, randn } from tensor
 import { with_grad } from autodiff
 import { sgd } from nn
 import { export_model } from onnx

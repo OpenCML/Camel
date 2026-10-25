@@ -5,15 +5,15 @@
 /// returns, bit for bit.
 module gpu_nofallback_branch
 
-import { Tensor, reshape, sum } from tensor
+import { reshape, sum } from tensor
 import { regions } from tiles
 
 #gpu
-func choose(flag: bool, x: Tensor<f32, [3]>): Tensor<f32, [3]> {
+func choose(flag: bool, x: f32[3]): f32[3] {
     if flag then x * 2.0 else x + 1.0
 }
 
-func choose_host(flag: bool, x: Tensor<f32, [3]>): Tensor<f32, [3]> {
+func choose_host(flag: bool, x: f32[3]): f32[3] {
     if flag then x * 2.0 else x + 1.0
 }
 

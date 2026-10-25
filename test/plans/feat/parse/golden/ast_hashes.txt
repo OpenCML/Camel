@@ -1,6 +1,6 @@
 8964908a12661168 ok test/cases/parse/constructs/comprehensions.cml
-2067f3ec1cbbfc39 ok test/cases/parse/constructs/constas.cml
-91c0b3eeabaa4170 ok test/cases/parse/constructs/constas_param.cml
+394dac63d54e1369 ok test/cases/parse/constructs/constas.cml
+d9d098e434889eb7 ok test/cases/parse/constructs/constas_param.cml
 394b0953c7a9de39 ok test/cases/parse/constructs/enum.cml
 00333688365c1dd8 ok test/cases/parse/constructs/fact.cml
 43208d9d90200f52 ok test/cases/parse/constructs/fstring.cml
@@ -50,6 +50,7 @@ c42f5dc2baf3810c no test/cases/parse/syntax/comparison_needs_space.cml
 5a1b003eaf5c2cc5 no test/cases/parse/syntax/missing_then.cml
 3100adfccf3c242e no test/cases/parse/syntax/no_array_destructuring.cml
 f1bc58eac5fc5c4e no test/cases/parse/syntax/no_formatted_string_pattern.cml
+b622b3512d1b1594 no test/cases/parse/syntax/no_name_of_type.cml
 c3c68531f7c0811f no test/cases/parse/syntax/no_nested_pattern.cml
 d74327fc7547ca5d no test/cases/parse/syntax/no_postfix_bang.cml
 8278e62c0380c7b9 no test/cases/parse/syntax/no_spread_in_array_literal.cml
@@ -58,6 +59,9 @@ d74327fc7547ca5d no test/cases/parse/syntax/no_postfix_bang.cml
 a89cce1df0bedfef no test/cases/parse/syntax/no_struct_pattern.cml
 a89cce1df0bedfef no test/cases/parse/syntax/no_tuple_pattern.cml
 9123b13ded7eab36 no test/cases/parse/syntax/no_two_word_pattern.cml
+d0fa4b508e904c97 no test/cases/parse/syntax/no_type_diff.cml
+d05588513c014af1 no test/cases/parse/syntax/no_type_inter.cml
+d05588513c014af1 no test/cases/parse/syntax/no_type_key_ops.cml
 eeabc7a54345fed4 ok test/cases/parse/syntax/postfix_access.cml
 8d7af975de6654fa no test/cases/parse/syntax/resource_group_open.cml
 08f0b963a73a374f ok test/cases/parse/syntax/subscript_forms.cml
@@ -224,10 +228,10 @@ b5bc023e00a5b749 ok probes/probe_s118.cml
 89737d881260302e ok probes/probe_s123.cml
 c20994b38d40a63c ok probes/probe_s124.cml
 6c58410dd4905689 ok probes/probe_s125.cml
-b1fe0bea3c46096d ok probes/probe_s126.cml
-46fb231799348193 ok probes/probe_s127.cml
+84aebfe15d39c781 ok probes/probe_s126.cml
+85fd366c66ff3d21 ok probes/probe_s127.cml
 76fa5bc3177f1d14 ok probes/probe_s128.cml
-78f6603a692483fe ok probes/probe_s129.cml
+2694a1ec0e0e5b27 ok probes/probe_s129.cml
 e7fdf1d4cad9e791 ok probes/probe_s130.cml
 14ef7a78e693f5a8 ok probes/probe_s131.cml
 e9139cb99dd05522 ok probes/probe_s132.cml
@@ -260,8 +264,8 @@ e4a5766b046b5f29 ok probes/probe_s145.cml
 dce09341abc501a8 ok probes/probe_s159.cml
 9b78056272d5f385 ok probes/probe_s160.cml
 19dd7a5f601d0ea1 no probes/probe_s161.cml
-5851a74f2af2880b ok probes/probe_s162.cml
-ba77297a03f19597 ok probes/probe_s163.cml
+18668aa08d1fbfcf no probes/probe_s162.cml
+19dd7a5f601d0ea1 no probes/probe_s163.cml
 8dba2175af6bd4f1 ok probes/probe_s164.cml
 e53916f68ee41073 ok probes/probe_s165.cml
 5487a25cf8e3daca no probes/probe_s166.cml

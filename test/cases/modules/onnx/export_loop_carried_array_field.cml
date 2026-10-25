@@ -6,7 +6,7 @@
  * next — the diagnostic names the array field, an int array, and says so; no model file is written.
  */
 module export_loop_carried_array_field
-import { Tensor, reshape, sum } from tensor
+import { reshape, sum } from tensor
 import { export_model } from onnx
 import { get_env } from env
 

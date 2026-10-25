@@ -4,7 +4,7 @@
  */
 module runtime_shape_column
 
-import { Tensor, ones, reshape } from tensor
+import { ones, reshape } from tensor
 
 func f(a: f32[..], b: f32[..]): f32[..] {
     let c = a + a

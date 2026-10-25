@@ -60,7 +60,7 @@ module stdlib_reduced_minmax
 
 import { abs, max as math_max, min as math_min } from math
 import { max, min, sum } from array
-import { Tensor, new, to_bytes } from tensor
+import { new, to_bytes } from tensor
 import { to_array } from bytes
 
 /// The little-endian bytes of one element of a one-element tensor of T.

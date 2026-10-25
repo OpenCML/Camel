@@ -6,7 +6,7 @@
  * (design principles 5.4): it no longer waits for H17, and an empty range is the empty view.
  */
 module subscript_slice_rank2
-import { Tensor, reshape, shape, sum } from tensor
+import { reshape, shape, sum } from tensor
 
 func main(): int sync {
     println('ran')

@@ -7,7 +7,7 @@
  */
 module export_train_step_dynamic_mean
 
-import { Tensor, relu, mean, reshape } from tensor
+import { relu, mean, reshape } from tensor
 import { with_grad } from autodiff
 import { sgd } from nn
 import { export_model } from onnx

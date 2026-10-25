@@ -1,13 +1,13 @@
 module shape_inference_plain_result_as
-import { Tensor, tanh, sum, ones } from tensor
-func g(x: Tensor<f32, [3]>): Tensor<f32> {
+import { tanh, sum, ones } from tensor
+func g(x: f32[3]): f32[..] {
     return tanh(x * 0.0) + 2.0
 }
-func h(a: Tensor<f32, [3]>): float {
+func h(a: f32[3]): float {
     return float(sum(a))
 }
 func main(): int sync {
     let t = g(ones([3]))
-    println(h(t as Tensor<f32, [3]>))
+    println(h(t as f32[3]))
     return 0
 }

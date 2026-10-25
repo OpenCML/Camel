@@ -1,6 +1,6 @@
 /**
  * The adjoint of `cast` on a numeric array (design principles 9.9). `cast(xs, 'float32')`
- * accepts a numeric array (`Tensor | number[]`) and returns a tensor; an array's tangent is the
+ * accepts a numeric array (`f32[..] | number[]`) and returns a tensor; an array's tangent is the
  * array of its elements' tangents, so the adjoint is the tensor's gradient cast back to the
  * element type of the array. Until the flip this program was refused by name at the cast call,
  * and the rule before the refusal dropped the gradient and the pass materialized the array's

@@ -228,15 +228,13 @@ std::optional<std::string> staticIndexRejection(const type_vec_t &norm, static_a
 }
 
 /// Whether `t` is a tensor the module that owns tensors slices: a numeric array that is
-/// open-rank (`f32[..]`, the transition spelling of `Tensor`), of rank 2 or more, or rank 1 with a
-/// stated extent (`f32[6]`, what a tensor operator returns and what `Tensor<f32, [6]>` names).
-/// What stays the core's is the program's own array of values: rank 1 with no extent stated
-/// (`T[]`) -- the form an array literal has and the form the core's array operators build and take
-/// -- because the programs that subscript one without importing the tensor module must keep
-/// working (docs/handover/reviews/questions-2026-10-24-evening.md, section
-/// subscript-operator-choice-and-the-rank-two-refusal: the
-/// same narrowing `t[idx]` already has on this line, where a rank-2 array is refused by the core
-/// and the module's `tensor:idx_take` answers another rank or an open rank).
+/// open-rank (`f32[..]`), of rank 2 or more, or rank 1 with a stated extent (`f32[6]`, what a
+/// tensor operator returns). What stays the core's is the program's own array of values: rank 1
+/// with no extent stated (`T[]`) -- the form an array literal has and the form the core's array
+/// operators build and take -- because the programs that subscript one without importing the
+/// tensor module must keep working (docs/handover/reviews/questions-2026-10-24-evening.md, section
+/// subscript-operator-choice-and-the-rank-two-refusal: the same narrowing `t[idx]` already has on
+/// this line, where a rank-2 array is refused by the core).
 
 /// The extent the type states for `axis` of `type`, when it states one: a negative axis counts
 /// from the end and `-1` is the last axis. `std::nullopt` when the type does not state the extent
@@ -1535,9 +1533,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                             -> optional<Type *> {
                             // By content (design principles 4.2): both sides of one type,
                             // an array, a tuple or a struct, every part of which is itself
-                            // comparable (no function value), and a numeric array whose element
-                            // type its values carry (a tensor), which the module that declares
-                            // it registers as comparable. A primitive has its own entry above,
+                            // comparable (no function value). A primitive has its own entry above,
                             // so it is not this one's business; anything else has no overload,
                             // which is a located compile-time error.
                             const TypeCode code  = norm[0]->code();
@@ -1547,8 +1543,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                                                     !tt::as_ptr<TupleType>(norm[0])->isCell() &&
                                                     !tt::as_ptr<TupleType>(norm[0])->isTagged());
                             // An enum compares by its variant and then its fields.
-                            const bool comparable = composite || asEnumType(norm[0]) != nullptr ||
-                                                    isRegisteredContentComparableType(code);
+                            const bool comparable = composite || asEnumType(norm[0]) != nullptr;
                             if (!comparable || !norm[0]->equals(norm[1]) ||
                                 !isContentComparable(norm[0])) {
                                 return nullopt;
@@ -1626,9 +1621,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                             -> optional<Type *> {
                             // By content (design principles 4.2): both sides of one type,
                             // an array, a tuple or a struct, every part of which is itself
-                            // comparable (no function value), and a numeric array whose element
-                            // type its values carry (a tensor), which the module that declares
-                            // it registers as comparable. A primitive has its own entry above,
+                            // comparable (no function value). A primitive has its own entry above,
                             // so it is not this one's business; anything else has no overload,
                             // which is a located compile-time error.
                             const TypeCode code  = norm[0]->code();
@@ -1638,8 +1631,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                                                     !tt::as_ptr<TupleType>(norm[0])->isCell() &&
                                                     !tt::as_ptr<TupleType>(norm[0])->isTagged());
                             // An enum compares by its variant and then its fields.
-                            const bool comparable = composite || asEnumType(norm[0]) != nullptr ||
-                                                    isRegisteredContentComparableType(code);
+                            const bool comparable = composite || asEnumType(norm[0]) != nullptr;
                             if (!comparable || !norm[0]->equals(norm[1]) ||
                                 !isContentComparable(norm[0])) {
                                 return nullopt;

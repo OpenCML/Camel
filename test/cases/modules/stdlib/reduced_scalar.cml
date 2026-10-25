@@ -51,7 +51,7 @@
 module stdlib_reduced_scalar
 
 import { sum } from array
-import { Tensor, new, cast, to_bytes } from tensor
+import { new, cast, to_bytes } from tensor
 import { to_array } from bytes
 
 /// The little-endian bytes of one element of a one-element tensor of `T`. The helper is written
@@ -69,9 +69,9 @@ func bitsOfF16(value: f16): int[] {
 
 /// One rounding of an f32 tensor into bf16 or f16: the same elements the literal and the written
 /// conversion give, so the three spellings must agree element for element.
-func narrowed(x: Tensor<f32>): Tensor<bf16> { return cast(x, 'bf16') }
+func narrowed(x: f32[..]): bf16[..] { return cast(x, 'bf16') }
 
-func halved(x: Tensor<f32>): Tensor<f16> { return cast(x, 'f16') }
+func halved(x: f32[..]): f16[..] { return cast(x, 'f16') }
 
 /// The text of a bf16 read back as a bf16, which must be the value itself (design principles 7.7:
 /// the text is the shortest that reads back as the same element of its own type). `string(x)` and

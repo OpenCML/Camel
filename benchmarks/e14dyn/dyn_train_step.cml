@@ -16,7 +16,7 @@
  */
 module dyn_train_step
 
-import { Tensor, relu, mean, sum, reshape, shape, load_npy } from tensor
+import { relu, mean, sum, reshape, shape, load_npy } from tensor
 import { with_grad } from autodiff
 import { sgd, save_params } from nn
 import { export_model } from onnx

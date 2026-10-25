@@ -3,7 +3,7 @@
 module math_sqrt
 import { sqrt } from math
 import { grad, with_grad } from autodiff
-import { Tensor, reshape, sum } from tensor
+import { reshape, sum } from tensor
 
 with <x: float>
 func root(): float { return sqrt(x) }

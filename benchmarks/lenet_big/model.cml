@@ -5,7 +5,7 @@
  */
 module lenet_big
 
-import { Tensor, relu, flatten, mean } from tensor
+import { relu, flatten, mean } from tensor
 import { grad, with_grad } from autodiff
 import { conv2d, max_pool2d, sgd, save_params } from nn
 import { get_env } from env

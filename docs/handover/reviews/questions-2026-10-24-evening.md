@@ -1204,3 +1204,16 @@ Linux 包在 manylinux 里构建，用 auditwheel 修正标签，并在构建时
 **返工两处诊断**：
 - **`RangeTwoArgumentsRemoved`**（"The two-parameter 'range(a, b)' is gone; write the interval 'a..b'"）正是"不留指向新写法的诊断"要删的那一类。删掉，`range(a, b)` 就是普通的"没有适用的重载"（`range` 只有三个参数的那一种）。
 - **`LoopSequenceNotIterable`** 的消息还写着"an array, a string, a map or a tensor"。P4 之后张量就是数组，"tensor"删掉；流的 `for` 落地后补上"a stream"。
+
+## 2026-10-26-design-principles-type-operators-and-the-stream-round-source
+
+1. **类型运算**：我已改第 15 节（中英文，并记入裁定记录）：文法里没有类型运算，也不预留运算符；要不要有类型运算仍是开放问题，加的时候写法和含义一起定。文法删掉它们、`x as T + U` 读成 `(x as T) + U`，都对。
+2. **流的 `for` 不加驱动侧的轮次源，在图上展开成已有的 `while` 循环**：
+   - 驱动侧加一个"每轮调一次步进函数"，等于把一段语义藏进运行时，图上看不见：遍看不到步进调用，就没法内联、融合，也没法对它求导。路线二的要点正是"复用 LOOP/BRCH，不新增节点种类"，而 `LoopKind::While` 已经在。
+   - 写法：`loop acc = a0 for x in s do b`，其中 `s` 是流、`step` 是它的步进函数、返回 `(T, 状态)?`。编译器展开成状态为 `(next, acc)` 的 while 循环：初值 `(step(s0), a0)`；条件 `next != null`；循环体取出 `(x, st)`，算 `acc' = b`，交回 `(step(st), acc')`。`for … while c` 把 `c` 并进条件。
+   - `__iter__` 的流重载就按这个形状写（标准库里用 Camel 写）。生产者可见时的融合，就是把 `step` 内联进这个循环体，是一次普通的图重写。
+   - `loop_driver.h`、`runtime/loop.h` 不动，四个后端也不动。
+
+## 2026-10-26-range-two-arguments-and-the-overload-table
+
+**做备选 1，用最简单的路**：`a..b` 的降低直接写出第三个实参 `1`，也就是 `$builtin::range(a, b, 1)`。这样编译器自己的调用也是三个实参，`range` 的变量表收窄成恰好 3 个，`range(a, b)` 自然落到普通的 `NoMatchingFunction`。不需要让解析层分清两个名字，也不留按名字的特判（`builder_operators.cpp` 与 `builder_static.cpp` 里的两处都删掉）。区间那种形态（`LoopIterableForm::Interval`）照旧按步长 1 识别。备选 2 那种临时做法不进 develop。

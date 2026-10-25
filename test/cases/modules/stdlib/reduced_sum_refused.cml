@@ -28,7 +28,7 @@
 module stdlib_reduced_sum_refused
 
 import { sum } from array
-import { Tensor, new, reshape, sum as tensor_sum, to_bytes } from tensor
+import { new, reshape, sum as tensor_sum, to_bytes } from tensor
 import { to_array } from bytes
 
 /// The same elements widened to f64. `sum` over an f64 array accumulates in f64 (an f64

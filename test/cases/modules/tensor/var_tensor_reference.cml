@@ -7,7 +7,7 @@
  */
 module var_tensor_reference
 
-import { Tensor, zeros, sum } from tensor
+import { zeros, sum } from tensor
 
 func step(var w: f32[?, ?], d: f32) {
     w = w + d

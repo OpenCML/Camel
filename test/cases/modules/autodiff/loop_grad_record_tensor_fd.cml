@@ -12,11 +12,11 @@
  */
 module loop_grad_record_tensor_fd
 
-import { Tensor, reshape, sum } from tensor
+import { reshape, sum } from tensor
 import { abs } from math
 import { grad } from autodiff
 
-type Block = { w: Tensor<f32, [4, 4]> }
+type Block = { w: f32[4, 4] }
 
 with <s: float>
 func loss(): float {

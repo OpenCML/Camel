@@ -187,7 +187,7 @@ func greet(): int {
 | Type and conversion | `as` `const` `constas` `enum` `typeof` |
 | Literal | `null` `true` `false` |
 
-**Operators and separators** (55): `;` `,` `:` `::` `.` `..` `...` `(` `)` `[` `]` `{` `}` `<` `<` `>` `<=` `<=>` `>=` `==` `!=` `===` `!==` `=` `+=` `-=` `*=` `/=` `%=` `^=` `@=` `&=` `|=` `+` `-` `*` `/` `%` `^` `@` `#` `&` `|` `&&` `||` `!` `!!` `~` `?` `??` `->` `?->` `=>` `\\` `_`
+**Operators and separators** (54): `;` `,` `:` `::` `.` `..` `...` `(` `)` `[` `]` `{` `}` `<` `<` `>` `<=` `<=>` `>=` `==` `!=` `===` `!==` `=` `+=` `-=` `*=` `/=` `%=` `^=` `@=` `&=` `|=` `+` `-` `*` `/` `%` `^` `@` `#` `&` `|` `&&` `||` `!` `!!` `~` `?` `??` `->` `?->` `=>` `_`
 <!-- camel-for-ai end: lexical -->
 
 **Common errors.** `let if = 1` is `SyntaxDiag::KeywordAsIdentifier`; the name must be outside the
@@ -855,7 +855,7 @@ func f(x: Tensor): int {
 }
 ```
 
-**Write instead** — import the name and build values with the module's functions: `Tensor<f32, [2, 3]>`
+**Write instead** — import the name and build values with the module's functions: `f32[2, 3]`
 and `f32[2, 3]` write one type, so the tensor operators take either spelling. A bare `Tensor`
 parameter is on its way out (**target**, `docs/design-principles.cn.md` §5.4).
 

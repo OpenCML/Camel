@@ -4,7 +4,7 @@
  */
 module bad_path
 
-import { Tensor, reshape } from tensor
+import { reshape } from tensor
 import { export_model } from onnx
 
 func main(): int sync {

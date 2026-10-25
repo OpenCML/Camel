@@ -4,7 +4,7 @@
  * (artifacts: b2/probes/check_slice_loop.py).
  */
 module export_slice_loop
-import { Tensor, cast, reshape, slice, sum, shape, tanh, zeros } from tensor
+import { cast, reshape, slice, sum, shape, tanh, zeros } from tensor
 import { export_model } from onnx
 import { get_env } from env
 

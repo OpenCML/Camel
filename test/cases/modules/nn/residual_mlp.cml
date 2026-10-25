@@ -5,7 +5,7 @@
 module residual_mlp
 
 import { grad, with_grad } from autodiff
-import { Tensor, full, zeros, sum, tanh } from tensor
+import { full, zeros, sum, tanh } from tensor
 import { OptimizerState, sgd, adam, adam_state } from nn
 
 type Linear = {

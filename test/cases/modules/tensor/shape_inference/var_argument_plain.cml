@@ -1,5 +1,5 @@
 module shape_inference_var_argument_plain
-import { Tensor, sum, ones } from tensor
+import { sum, ones } from tensor
 // The var parameter declared with the variable's type; the value is converted where it is read.
 func step(var s: f32[], x: f32[3]): float sync {
     s = (s as f32[3]) + x

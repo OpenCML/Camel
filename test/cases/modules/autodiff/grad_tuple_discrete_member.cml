@@ -15,7 +15,7 @@
  */
 module grad_tuple_discrete_member
 
-import { Tensor, reshape, sum } from tensor
+import { reshape, sum } from tensor
 import { with_grad } from autodiff
 
 with <m: (f32[..], int)>

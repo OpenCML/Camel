@@ -5,7 +5,7 @@
  * appends as something else.
  */
 module export_var_append
-import { Tensor, reshape, sum } from tensor
+import { reshape, sum } from tensor
 import { export_model } from onnx
 import { get_env } from env
 

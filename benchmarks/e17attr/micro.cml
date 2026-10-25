@@ -13,7 +13,7 @@
  */
 module micro
 
-import { Tensor, load_npy, set_num_threads, mean } from tensor
+import { load_npy, set_num_threads, mean } from tensor
 import { with_grad } from autodiff
 import { conv2d, sgd } from nn
 import { get_env } from env

@@ -117,12 +117,13 @@ timeout_ms = 8000
 
 [[tests]]
 name = "err_const_shape"
-desc = "A shape argument is written without `const`; the old spelling reports the new one."
+desc = "A shape is written without `const`: the extents of an array type are expressions, and a `const` in front of one is refused by the parser."
 kind = "negative"
 case = "../../../../cases/compile/array_shape/err_const_shape.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::InvalidTypeArgument"
+expect_diagnostic_name = "SyntaxDiag::UnexpectedToken"
+expect_output_contains = ["Unexpected 'const'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 

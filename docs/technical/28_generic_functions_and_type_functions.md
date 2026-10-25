@@ -43,7 +43,7 @@ and the operations over them:
 | `TypeFunctionType::apply(arguments)` | the body with the parameters replaced |
 
 Binding and substitution descend through arrays, tuples, structs and function types.
-Substitution also rebuilds unions. Module types (`Tensor<...>`) are opaque: what their
+Substitution also rebuilds unions. Module types (`Device<f32>`) are opaque: what their
 arguments mean is defined by the type's C++ code, which sees concrete types only, so a type
 variable among the arguments of a module type is rejected where it is written. The exception
 is a type that declares its arguments to be plain types (`OtherType::typeArguments()`, the

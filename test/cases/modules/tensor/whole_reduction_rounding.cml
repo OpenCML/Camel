@@ -25,7 +25,7 @@
 module whole_reduction_rounding
 
 import { sum as array_sum } from array
-import { Tensor, new, sum, mean, cast, numel } from tensor
+import { new, sum, mean, cast, numel } from tensor
 
 /// The fold written with an f32 accumulator: the accumulator's type is f32, so every addition
 /// rounds — this is what "round after every step" means.

@@ -1054,7 +1054,7 @@ module model
 
 import { Tensor, ones, relu, sum } from tensor
 
-func main(x: Tensor<f32, [2, 3]>): f32[..] {
+func main(x: f32[2, 3]): f32[..] {
     let w = ones([3, 1])
     return relu(x @ w)
 }

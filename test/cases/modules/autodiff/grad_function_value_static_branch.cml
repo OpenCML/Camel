@@ -1,5 +1,5 @@
 module grad_function_value_static_branch
-import { Tensor, reshape, sum, tanh } from tensor
+import { reshape, sum, tanh } from tensor
 import { grad } from autodiff
 
 // Refused like any branch: the condition is a constant expression, but the graph grad sees

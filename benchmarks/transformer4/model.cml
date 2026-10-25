@@ -6,9 +6,7 @@
  */
 module transformer4
 
-import {
-    Tensor, layer_norm, softmax, gelu, reshape, permute, transpose, shape, mean
-} from tensor
+import { layer_norm, softmax, gelu, reshape, permute, transpose, shape, mean } from tensor
 import { sqrt } from math
 import { grad, with_grad } from autodiff
 import { sgd, save_params } from nn

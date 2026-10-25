@@ -11,7 +11,7 @@
 module c1_linear_logistic
 
 // == imports ==
-import { Tensor, abs, exp, load_npy, log, mean, numel, relu, set_num_threads, shape, slice } from tensor
+import { abs, exp, load_npy, log, mean, numel, relu, set_num_threads, shape, slice } from tensor
 import { with_grad } from autodiff
 import { sgd } from nn
 import { now } from time

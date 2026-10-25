@@ -6,7 +6,7 @@
 module embedding_mf
 
 import { grad, with_grad } from autodiff
-import { Tensor, full, reshape, sum } from tensor
+import { full, reshape, sum } from tensor
 import { embedding, sgd } from nn
 
 type EmbeddingMf = {

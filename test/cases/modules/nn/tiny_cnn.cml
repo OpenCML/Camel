@@ -6,7 +6,7 @@
 module tiny_cnn
 
 import { grad, with_grad } from autodiff
-import { Tensor, reshape, shape, sum, tanh } from tensor
+import { reshape, shape, sum, tanh } from tensor
 import { conv2d, sgd } from nn
 
 type TinyCnn = {

@@ -8,7 +8,7 @@
  */
 module export_train_step_dynamic
 
-import { Tensor, relu, sum, reshape, shape } from tensor
+import { relu, sum, reshape, shape } from tensor
 import { with_grad } from autodiff
 import { sgd } from nn
 import { export_model } from onnx

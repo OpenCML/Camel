@@ -1,9 +1,9 @@
 module tree_training
-import { Tensor, reshape, zeros, sum, abs } from tensor
+import { reshape, zeros, sum, abs } from tensor
 import { with_grad } from autodiff
 import { tree_map, tree_reduce, tree_unzip } from tree
 import { Device, upload, download, run_preferred_resident } from tiles
-type Model = { weight: Tensor<f32>, nested: (Tensor<f32>, Tensor<f32>) }
+type Model = { weight: f32[..], nested: (f32[..], f32[..]) }
 func initialize(): Model {
     return { weight: reshape([1.0, 2.0] as f32[], [2]), nested: (reshape([3.0] as f32[], [1]), zeros([0, 2])) }
 }
@@ -11,13 +11,13 @@ func initialize(): Model {
 // an ordinary function so that run_preferred_resident can hand it the device-resident tree.
 with <p: Model>
 func loss(): float {
-    let squared = tree_map<(x: Tensor<f32>): float => float(sum(x * x))>(p)
+    let squared = tree_map<(x: f32[..]): float => float(sum(x * x))>(p)
     return tree_reduce<(a: float, b: float): float => a + b>(squared, 0.0)
 }
 func loss_with_grad(p: Model): (float, Model) { return with_grad(loss)<p>() }
 func update_model(p: Model, g: Model): (Model, Model) { return update(p, g) }
 func update::<P>(p: P, g: P): (P, P) {
-    let r = tree_map<(a: Tensor<f32>, b: Tensor<f32>) => (a - b * 0.01, b * 0.1)>(p, g)
+    let r = tree_map<(a: f32[..], b: f32[..]) => (a - b * 0.01, b * 0.1)>(p, g)
     return tree_unzip(r, p)
 }
 func main(): int sync {

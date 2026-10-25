@@ -5,7 +5,7 @@
  */
 module spatial_ops
 
-import { Tensor, load_npy, sum, abs } from tensor
+import { load_npy, sum, abs } from tensor
 import {
     conv2d, conv2d_input_grad, conv2d_kernel_grad, conv2d_bias_grad,
     max_pool2d, max_pool2d_grad, avg_pool2d, avg_pool2d_grad, batch_norm

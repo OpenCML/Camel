@@ -236,7 +236,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.output
-assert(text.includes("Tensor shape mismatch in 'add': cannot broadcast [2, 3] with [4, 3]"), 'missing shape mismatch detail')
+assert(text.includes("Array shape mismatch in 'add': cannot broadcast [2, 3] with [4, 3]"), 'missing shape mismatch detail')
 assert(text.includes('RuntimeDiag::TensorDimensionMismatch'), 'missing TensorDimensionMismatch category')
 }
 """

@@ -12,14 +12,14 @@
  */
 module optim_dtype_exact
 
-import { Tensor, new, to_bytes } from tensor
+import { new, to_bytes } from tensor
 import { size } from bytes
 import { adam, constant, init, sgd, update } from optim
 
 // The element type is written, the extent is not (that is the only spelling a tensor expression
 // has here, and the one a type pattern takes): the leaf is a tensor and every element is f64.
 type Wide = {
-    w: Tensor<f64, [?]>
+    w: f64[?]
 }
 
 // A tree of one number, for the property below: the number path and the tensor path must agree.
@@ -71,7 +71,7 @@ func main(): int sync {
     // A tree of numbers and a tree of one-element tensors that hold the same numbers must land on
     // the same value: the leaf arithmetic is one implementation per leaf kind, and this pins the
     // number path (`adam_number`, `sgd`'s `float` arm) to the tensor path (`adam_wide`, its
-    // `Tensor<f64, [?]>` arm). A tree of one-element tensors of the same numbers, so every step is
+    // `f64[?]` arm). A tree of one-element tensors of the same numbers, so every step is
     // the same arithmetic twice.
     let one: f64[] = [16777217.0]
     let one_gradient: f64[] = [1.0]

@@ -3,10 +3,10 @@
 // with its loops lowered to tail recursion (std::fvm, std::jit, std::prl; op-semantics 11.4).
 // Source emission retains one device recurrence instead of unrolling its body on the host.
 module tiles_loop_source
-import { Tensor, reshape } from tensor
+import { reshape } from tensor
 import { source } from tiles
 
-func twice(a: Tensor<f32>): Tensor<f32> {
+func twice(a: f32[..]): f32[..] {
     return loop y = a for k in [1, 2] do y + a
 }
 

@@ -35,15 +35,15 @@
  */
 module loop_grad_tensor_iterable
 
-import { Tensor, reshape, sum } from tensor
+import { reshape, sum } from tensor
 import { grad } from autodiff
 
-with <w: Tensor<f32, [2, 3]>>
+with <w: f32[2, 3]>
 func total(): float {
     return loop acc = 0.0 for row in w do acc + float(sum(row))
 }
 
-func totalOf(v: Tensor<f32, [2, 3]>): float {
+func totalOf(v: f32[2, 3]): float {
     return loop acc = 0.0 for row in v do acc + float(sum(row))
 }
 

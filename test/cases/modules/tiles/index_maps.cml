@@ -1,20 +1,20 @@
 module tiles_index_maps
-import { Tensor, random, seed, sum, abs, transpose, permute, slice, dim, reshape, zeros } from tensor
+import { random, seed, sum, abs, transpose, permute, slice, dim, reshape, zeros } from tensor
 import { run_preferred_resident, download } from tiles
 
-func trans(x: Tensor<f32>): Tensor<f32> { return transpose(x) }
-func axes(x: Tensor<f32>): Tensor<f32> { return permute(x, [-1, 0, 1]) }
+func trans(x: f32[..]): f32[..] { return transpose(x) }
+func axes(x: f32[..]): f32[..] { return permute(x, [-1, 0, 1]) }
 // The last axis, from its seventh-from-last position up to its last, every second one: the count
 // from the end the ruling deletes (`slice(x, -1, -6, -1, 2)`), written with the positive positions
 // it stands for -- `dim(x, 2)` is the length of that axis (7 for the [2, 3, 7] input) and the end
 // of a slice is one past the last position taken.
-func crop(x: Tensor<f32>): Tensor<f32> {
+func crop(x: f32[..]): f32[..] {
     return slice(x, 2, dim(x, 2) - 6, dim(x, 2) - 1, 2)
 }
-func chain(x: Tensor<f32>): Tensor<f32> {
+func chain(x: f32[..]): f32[..] {
     return reshape(slice(permute(x, [2, 0, 1]), 0, 1, 6, 2), [6, 3]) + 2.0
 }
-func empty(x: Tensor<f32>): Tensor<f32> { return slice(x, 2, 7, 7) }
+func empty(x: f32[..]): f32[..] { return slice(x, 2, 7, 7) }
 func main(): int sync {
     seed(47)
     let x = random([2, 3, 7], -5.0, 5.0)

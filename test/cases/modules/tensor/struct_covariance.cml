@@ -5,7 +5,7 @@
  */
 module struct_covariance
 
-import { Tensor, reshape, sum } from tensor
+import { reshape, sum } from tensor
 
 type Layer = { w: f64[..], b: f64[..] }
 

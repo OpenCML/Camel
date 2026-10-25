@@ -1,7 +1,7 @@
 module gradient_broadcast
-import { Tensor, zeros, sum, abs } from tensor
+import { zeros, sum, abs } from tensor
 import { grad } from autodiff
-type Pair = { a: Tensor<f32>, b: Tensor<f32> }
+type Pair = { a: f32[..], b: f32[..] }
 with <p: Pair>
 func loss(): float { return float(sum(p.a + p.b)) }
 func main(): int sync {

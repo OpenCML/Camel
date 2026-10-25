@@ -96,7 +96,7 @@ expect_stdout_contains = ["(1, s)", "2.5", "1"]
 
 [[tests]]
 name = "constructs.constas"
-desc = "`constas n` in a type argument (`Tensor<f32, const [constas n]>`) with a linear form over the same name (`[n + 1]`), and the named field index `t.[n]` it enables."
+desc = "`constas n` in a type argument (`f32[constas n]`) with a linear form over the same name (`[n + 1]`), and the named field index `t.[n]` it enables."
 kind = "behavior"
 case = "../../../cases/parse/constructs/constas.cml"
 args = ["${case}"]

@@ -122,11 +122,7 @@ CAMEL_NODE(TupleData, Expr)            // '(' dataList? ','? ')'; with one eleme
 CAMEL_NODE(ShapeComp, Expr)            // typeExpr '{' staticForExpr '}'
 CAMEL_NODE(FuncData, Expr)             // modifiers? angledParams? parentParams (':' typeExpr)? '=>' blockExpr
 
-CAMEL_NODE(TypeExpr, Type)             // interType ('?' | '!' | '..')*
-CAMEL_NODE(InterType, Type)            // diffType ('&' diffType)*
-CAMEL_NODE(DiffType, Type)             // keyUnionDiffType ('\\' keyUnionDiffType)*
-CAMEL_NODE(KeyUnionDiffType, Type)     // keyInterType (('+' | '-') keyInterType)*
-CAMEL_NODE(KeyInterType, Type)         // typeUnit ('^' typeUnit)*
+CAMEL_NODE(TypeExpr, Type)             // arrayType ('?' | '!' | '..')*
 CAMEL_NODE(ArrayType, Type)            // specType arrayDim+
 CAMEL_NODE(ArrayDim, Type)             // '[' (']' | arrayDimItem (',' arrayDimItem)*) ']'
                                        //   arrayDimItem: '?' | '..' identDef? | dataExpr

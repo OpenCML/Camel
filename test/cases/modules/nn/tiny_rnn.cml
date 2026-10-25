@@ -6,7 +6,7 @@
 module tiny_rnn
 
 import { grad, with_grad } from autodiff
-import { Tensor, full, shape, sum, tanh, zeros } from tensor
+import { full, shape, sum, tanh, zeros } from tensor
 import { sgd } from nn
 
 type TinyRnn = {

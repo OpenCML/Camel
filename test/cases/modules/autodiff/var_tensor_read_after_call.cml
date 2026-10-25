@@ -3,7 +3,7 @@
  * and may write it (`push` stores a value that depends on the parameter).
  */
 module var_tensor_read_after_call
-import { Tensor, reshape, sum } from tensor
+import { reshape, sum } from tensor
 import { with_grad } from autodiff
 
 type P = { p0: f64[] }

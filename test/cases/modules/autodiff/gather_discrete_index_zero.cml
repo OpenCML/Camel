@@ -13,7 +13,7 @@
  */
 module gather_discrete_index_zero
 
-import { Tensor, cast, reshape, sum } from tensor
+import { cast, reshape, sum } from tensor
 import { with_grad } from autodiff
 
 type Model = {

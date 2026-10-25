@@ -575,7 +575,7 @@ golden = "golden/tutorial_examples/10_resources.txt"
 
 [[tests]]
 name = "tutorial.examples.10_pure_callback"
-desc = "`pure` in a function type is part of the requirement: `apply` accepts only a function that touches no resource, and `twice` says so in its signature."
+desc = "`pure` in a function type is part of the requirement: `apply` accepts only a function whose inferred resources fit the empty set the parameter asks for, and `twice` touches nothing."
 case = "../../../docs/tutorial/examples/10_pure_callback.cml"
 golden = "golden/tutorial_examples/10_pure_callback.txt"
 
@@ -600,7 +600,7 @@ expect_output_contains = ["10_pure_callback_wrong.cml:16:18: [Error]: No matchin
 
 [[tests]]
 name = "tutorial.examples.10_exercise"
-desc = "The answer to the exercise of chapter 10: a `var` written inside a sync block, and a callback whose signature says it is pure."
+desc = "The answer to the exercise of chapter 10: a `var` written inside a sync block, and a callback whose body touches no resource, passed where the pure requirement asks for one."
 case = "../../../docs/tutorial/examples/10_exercise.cml"
 golden = "golden/tutorial_examples/10_exercise.txt"
 

@@ -1,6 +1,6 @@
 module shape_rank_mismatch
-import { Tensor, zeros, ones, reshape, sum, tanh, load_npy } from tensor
-func f(b: Tensor<f32, [3]>): float {
+import { zeros, ones, reshape, sum, tanh, load_npy } from tensor
+func f(b: f32[3]): float {
     return float(sum(b))
 }
 func main(): int sync {

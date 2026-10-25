@@ -319,7 +319,7 @@ void Builder::initInnerTypes() {
     typeScope_->insert(Reference("c64"), Type::Complex64());
     typeScope_->insert(Reference("c128"), Type::Complex128());
     // Reduced-precision tensor element types (design principles 7.3). They are names a
-    // program writes only as an argument of `Tensor<...>` and of `from_bytes::<...>`; no
+    // program writes only as an argument of an array spelling and of `from_bytes::<...>`; no
     // literal or scalar operator produces a value of either.
     typeScope_->insert(Reference("bf16"), Type::BFloat16());
     typeScope_->insert(Reference("f16"), Type::Float16());
@@ -5229,7 +5229,7 @@ node_ptr_t Builder::visitRefData(const AST::node_ptr_t &ast) {
 /*
 Type(TypeType type) :=
     StreamType | NullableType | TypeExpr | ArrayType | StructType | TupleType
-    | FuncType | SpecType | UnitType | InferType | DataType | RefType ;
+    | FuncType | SpecType | InferType | RefType | EnumType ;
 */
 Type *Builder::visitType(const AST::node_ptr_t &ast) {
     ENTER("Type");
@@ -5274,14 +5274,8 @@ Type *Builder::visitType(const AST::node_ptr_t &ast) {
     case AST::TypeType::Spec:
         res = visitSpecType(ast);
         break;
-    case AST::TypeType::Unit:
-        res = visitUnitType(ast);
-        break;
     case AST::TypeType::Infer:
         res = visitInferType(ast);
-        break;
-    case AST::TypeType::Data:
-        res = visitDataType(ast);
         break;
     case AST::TypeType::Ref:
         res = visitRefType(ast);
@@ -5321,18 +5315,6 @@ Type *Builder::visitType(const AST::node_ptr_t &ast) {
                 std::format(
                     "it takes {} type argument(s) and is used without any",
                     typeFunc->params().size()));
-        throw BuildAbortException();
-    }
-
-    // A name that requires an element type (`Tensor`) stands for no type of a value on its own:
-    // the element type of a value is in its type (design principles 5.1). It is a type as the base
-    // of the spelling that gives it one (`Tensor<f32>`), and `visitSpecType` applies that
-    // argument; everywhere else the author is told to write one
-    // (docs/design/arrays-memory/plan.cn.md section 5.1a).
-    if (res != nullptr && !asTypeFunctionBase && isElementTypeOpenArray(res)) {
-        diags_->of(SemanticDiag::TensorElementTypeRequired)
-            .at(ast->load()->tokenRange())
-            .commit(res->toString());
         throw BuildAbortException();
     }
 
@@ -5378,14 +5360,11 @@ Type *Builder::visitNullableType(const AST::node_ptr_t &ast) {
 /*
 TypeExpr(TypeOp op) := Type lhs, Type rhs ;
 enum TypeOp {
-    Inter,
-    Diff,
-    KeyUnion,
-    KeyInter,
-    KeyDiff,
-    Specialize, // Type type, (Type | Data)* args
     TypeOf
 }
+The reserved type operators (`&`, `\`, `+`, `-`, `^`) and the older spelling of specialization were
+read as `TypeOp` codes and refused here; they are not in the language, so the parser refuses them
+first and `typeof` is the only operation a `TypeExpr` carries.
 */
 Type *Builder::visitTypeExpr(const AST::node_ptr_t &ast) {
     ENTER("TypeExpr");
@@ -5396,50 +5375,7 @@ Type *Builder::visitTypeExpr(const AST::node_ptr_t &ast) {
     const auto &typeExpr = ast->loadAs<AST::TypeExprLoad>();
     AST::TypeOp op       = typeExpr->op();
 
-    // Handle different type operations based on the TypeOp enumeration
     switch (op) {
-    case AST::TypeOp::Inter: {
-        diags_->of(SemanticDiag::FeatureNotSupported)
-            .at(ast->load()->tokenRange())
-            .commit("TypeOp::Inter");
-        throw BuildAbortException();
-    } break;
-
-    case AST::TypeOp::Diff: {
-        diags_->of(SemanticDiag::FeatureNotSupported)
-            .at(ast->load()->tokenRange())
-            .commit("TypeOp::Diff");
-        throw BuildAbortException();
-    } break;
-
-    case AST::TypeOp::KeyUnion: {
-        diags_->of(SemanticDiag::FeatureNotSupported)
-            .at(ast->load()->tokenRange())
-            .commit("TypeOp::KeyUnion");
-        throw BuildAbortException();
-    } break;
-
-    case AST::TypeOp::KeyInter: {
-        diags_->of(SemanticDiag::FeatureNotSupported)
-            .at(ast->load()->tokenRange())
-            .commit("TypeOp::KeyInter");
-        throw BuildAbortException();
-    } break;
-
-    case AST::TypeOp::KeyDiff: {
-        diags_->of(SemanticDiag::FeatureNotSupported)
-            .at(ast->load()->tokenRange())
-            .commit("TypeOp::KeyDiff");
-        throw BuildAbortException();
-    } break;
-
-    case AST::TypeOp::Specialize: {
-        diags_->of(SemanticDiag::FeatureNotSupported)
-            .at(ast->load()->tokenRange())
-            .commit("TypeOp::Specialize (a.k.a. Generics or T<U, V, ...>)");
-        throw BuildAbortException();
-    } break;
-
     case AST::TypeOp::TypeOf: {
         // `typeof e`: the type of the value `e` will have. The placeholder keeps the expression
         // node; the graph builder builds it where this type is used and replaces the
@@ -5449,9 +5385,6 @@ Type *Builder::visitTypeExpr(const AST::node_ptr_t &ast) {
         node_ptr_t expression = visitData(ast->at(0));
         res                   = TypeOfType::create(expression);
     } break;
-
-    default:
-        ASSERT(false, "Unknown TypeOp");
     }
 
     LEAVE("TypeExpr");
@@ -5892,17 +5825,6 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
 }
 
 /*
-UnitType(Ref ref) : Type type ;
-*/
-Type *Builder::visitUnitType(const AST::node_ptr_t &ast) {
-    ENTER("UnitType");
-    diags_->of(SemanticDiag::FeatureNotSupported).at(ast->load()->tokenRange()).commit("UnitType");
-    throw BuildAbortException();
-    LEAVE("UnitType");
-    return nullptr;
-}
-
-/*
 InferType(Ref ref) ;
 */
 Type *Builder::visitInferType(const AST::node_ptr_t &ast) {
@@ -5910,17 +5832,6 @@ Type *Builder::visitInferType(const AST::node_ptr_t &ast) {
     diags_->of(SemanticDiag::FeatureNotSupported).at(ast->load()->tokenRange()).commit("InferType");
     throw BuildAbortException();
     LEAVE("InferType");
-    return nullptr;
-}
-
-/*
-DataType() : Data data ;
-*/
-Type *Builder::visitDataType(const AST::node_ptr_t &ast) {
-    ENTER("DataType");
-    diags_->of(SemanticDiag::FeatureNotSupported).at(ast->load()->tokenRange()).commit("DataType");
-    throw BuildAbortException();
-    LEAVE("DataType");
     return nullptr;
 }
 
@@ -5968,17 +5879,6 @@ Type *Builder::visitSpecType(const AST::node_ptr_t &ast) {
     ASSERT(ast->size() >= 1, "SpecType must have base type");
     typeFunctionBase_ = ast->size() >= 2;
     Type *base        = visitType(ast->atAs<AST::TypeLoad>(0));
-    // A name that requires an element type (`Tensor`, which the tensor module exports as the open
-    // rank array whose element type nobody stated) reads that element type from the spelling's
-    // first argument: one that gives only a shape leaves the question the name exists to answer
-    // open, and the author is told which spellings answer it (docs/design/arrays-memory/plan.cn.md
-    // section 5.1a).
-    const auto refuseElementTypeOpen = [&]() {
-        diags_->of(SemanticDiag::TensorElementTypeRequired)
-            .at(ast->load()->tokenRange())
-            .commit(base->toString());
-        throw BuildAbortException();
-    };
     if (ast->size() < 2) {
         LEAVE("SpecType");
         return base;
@@ -5995,7 +5895,7 @@ Type *Builder::visitSpecType(const AST::node_ptr_t &ast) {
             // signature binds, not a runtime array constant (plan P3, 4.1).
             const AST::DimGroup &group = child->loadAs<AST::ArrayDimLoad>()->dim();
             if (group.pack != AST::DimPack::None) {
-                // `Tensor<f32, [..s]>` would make the element type's rank open; only an array
+                // `f32[..s]` would make the element type's rank open; only an array
                 // type takes a pack, and a shape argument is not a type.
                 diags_->of(SemanticDiag::InvalidTypeArgument)
                     .at(child->load()->tokenRange())
@@ -6014,21 +5914,6 @@ Type *Builder::visitSpecType(const AST::node_ptr_t &ast) {
         if (child->type() == AST::LoadType::Type) {
             arguments.push_back(TypeArgument{.type = visitType(child), .data = nullptr});
             continue;
-        }
-        if (child->type() == AST::LoadType::Data) {
-            const auto &dataLoad = child->loadAs<AST::DataLoad>();
-            if (dataLoad->dataType() == AST::DataType::Array && base->toString() == "Tensor") {
-                // `const [3]` is the spelling a shape had before the array type took shapes
-                // over; a shape argument is written without `const` (plan P3, 4.1).
-                diags_->of(SemanticDiag::InvalidTypeArgument)
-                    .at(child->load()->tokenRange())
-                    .commit(
-                        base->toString(),
-                        std::format(
-                            "a shape is written without 'const': '{}<f32, [3]>'",
-                            base->toString()));
-                throw BuildAbortException();
-            }
         }
         const data_ptr_t data = extractStaticDataFromNode(visitData(child));
         if (!data) {
@@ -6069,23 +5954,8 @@ Type *Builder::visitSpecType(const AST::node_ptr_t &ast) {
         return typeFunc->apply(types);
     }
     if (arguments.empty()) {
-        if (isElementTypeOpenArray(base)) {
-            // `Tensor<>`: no argument at all states no element type either.
-            refuseElementTypeOpen();
-        }
         LEAVE("SpecType");
         return base;
-    }
-    if (isElementTypeOpenArray(base)) {
-        // The first argument of `Tensor` is its element type; a spelling that gives only a shape
-        // (`Tensor<[3]>`) leaves the question the name exists to answer open.
-        bool statesElementType = false;
-        for (const TypeArgument &argument : arguments) {
-            statesElementType = statesElementType || argument.type != nullptr;
-        }
-        if (!statesElementType) {
-            refuseElementTypeOpen();
-        }
     }
     if (const CollectionType *coll = asCollectionTypeOrPrototype(base);
         coll != nullptr && !arguments.empty() && arguments.front().type != nullptr) {

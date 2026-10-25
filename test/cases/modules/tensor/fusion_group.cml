@@ -14,7 +14,7 @@
  */
 module fusion_group
 
-import { Tensor, reshape, sum, to_bytes } from tensor
+import { reshape, sum, to_bytes } from tensor
 import { with_grad } from autodiff
 import { to_array } from bytes
 

@@ -96,19 +96,16 @@
 #                  ^ meta.brackets.camel punctuation.section.brackets.end.camel
 #                   ^ meta.brackets.camel punctuation.section.brackets.begin.camel
 #                    ^ meta.brackets.camel punctuation.section.brackets.end.camel
->type Shape = Tensor<f32, [3, 4]>
+>type Shape = f32[3, 4]
 #^^^^ meta.type.definition.camel storage.type.type.camel
 #     ^^^^^ meta.type.definition.camel entity.name.type.camel
 #           ^ keyword.operator.assignment.camel
-#                   ^ meta.angle-arguments.camel punctuation.definition.angle-arguments.begin.camel
-#                    ^^^ meta.angle-arguments.camel support.type.primitive.camel
-#                       ^ meta.angle-arguments.camel punctuation.separator.comma.camel
-#                         ^ meta.angle-arguments.camel meta.brackets.camel punctuation.section.brackets.begin.camel
-#                          ^ meta.angle-arguments.camel meta.brackets.camel constant.numeric.integer.decimal.camel
-#                           ^ meta.angle-arguments.camel meta.brackets.camel punctuation.separator.comma.camel
-#                             ^ meta.angle-arguments.camel meta.brackets.camel constant.numeric.integer.decimal.camel
-#                              ^ meta.angle-arguments.camel meta.brackets.camel punctuation.section.brackets.end.camel
-#                               ^ meta.angle-arguments.camel punctuation.definition.angle-arguments.end.camel
+#             ^^^ support.type.primitive.camel
+#                ^ meta.brackets.camel punctuation.section.brackets.begin.camel
+#                 ^ meta.brackets.camel constant.numeric.integer.decimal.camel
+#                  ^ meta.brackets.camel punctuation.separator.comma.camel
+#                    ^ meta.brackets.camel constant.numeric.integer.decimal.camel
+#                     ^ meta.brackets.camel punctuation.section.brackets.end.camel
 >type Lookup = Map<string, Set<i64>>
 #^^^^ meta.type.definition.camel storage.type.type.camel
 #     ^^^^^^ meta.type.definition.camel entity.name.type.camel

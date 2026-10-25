@@ -2,41 +2,41 @@
 // The differentiated tensor is the first `with` parameter; the derivative wrappers keep the
 // ordinary signature that tiles::run and tiles::source specialize on.
 module tiles_core_views
-import { Tensor, load_npy, save_npy, reshape, permute, slice, sum, zeros } from tensor
+import { load_npy, save_npy, reshape, permute, slice, sum, zeros } from tensor
 import { grad } from autodiff
 import { source, inspect, run_preferred_resident, download } from tiles
 import { get_env } from env
 let weights = reshape([1.0, -2.0, 3.0, -4.0, 5.0, -6.0] as f32[], [2, 3])
-func chained(x: Tensor<f32>): Tensor<f32> { return slice(permute(x, [2, 0, 1]), 0, 1, 4, 2) }
-func fixed(x: Tensor<f32, [2, 3, 4]>): Tensor<f32> { return permute(x, [2, 0, 1]) }
+func chained(x: f32[..]): f32[..] { return slice(permute(x, [2, 0, 1]), 0, 1, 4, 2) }
+func fixed(x: f32[2, 3, 4]): f32[..] { return permute(x, [2, 0, 1]) }
 with <axes: int[]>
-func configured(x: Tensor<f32, [2, 3, 4]>): Tensor<f32> { return permute(x, axes) }
-func rule(x: Tensor<f32>, dy: Tensor<f32>): Tensor<f32> { return reshape(dy, [3, 2]) }
+func configured(x: f32[2, 3, 4]): f32[..] { return permute(x, axes) }
+func rule(x: f32[..], dy: f32[..]): f32[..] { return reshape(dy, [3, 2]) }
 #vjp(rule)
-func mark(x: Tensor<f32>): Tensor<f32> { return x }
-with <x: Tensor<f32>>
+func mark(x: f32[..]): f32[..] { return x }
+with <x: f32[..]>
 func loss(): float {
     return float(sum(mark(sum(x, 1)) * weights))
 }
-with <x: Tensor<f32>>
+with <x: f32[..]>
 func negative_loss(): float {
     return float(sum(mark(sum(x, -2)) * weights))
 }
-with <x: Tensor<f32>>
+with <x: f32[..]>
 func keep_loss(): float { return sum(sum(x, -2, true)) }
-func empty_rule(x: Tensor<f32>, dy: Tensor<f32>): Tensor<f32> { return reshape(dy, [3, 0]) }
+func empty_rule(x: f32[..], dy: f32[..]): f32[..] { return reshape(dy, [3, 0]) }
 #vjp(empty_rule)
-func empty_mark(x: Tensor<f32>): Tensor<f32> { return x }
-with <x: Tensor<f32>>
+func empty_mark(x: f32[..]): f32[..] { return x }
+with <x: f32[..]>
 func empty_loss(): float { return sum(empty_mark(sum(x, 1))) }
-func wide_rule(x: Tensor<f32>, dy: Tensor<f32>): Tensor<f32> { return reshape(dy, [4, 5, 2]) }
+func wide_rule(x: f32[..], dy: f32[..]): f32[..] { return reshape(dy, [4, 5, 2]) }
 #vjp(wide_rule)
-func wide_mark(x: Tensor<f32>): Tensor<f32> { return x }
-with <x: Tensor<f32>>
+func wide_mark(x: f32[..]): f32[..] { return x }
+with <x: f32[..]>
 func wide_loss(): float { return sum(wide_mark(sum(x, 1))) }
 func main(): int sync {
     let folder = get_env('TILES_TEST_OUT')
-    let x = load_npy::<f32>(folder + '/x.npy') as Tensor<f32, [2, 3, 4]>
+    let x = load_npy::<f32>(folder + '/x.npy') as f32[2, 3, 4]
     save_npy(chained(x), folder + '/chain_cpu.npy')
     save_npy(download(run_preferred_resident<chained>(x)), folder + '/chain_gpu.npy')
     save_npy(fixed(x), folder + '/fixed_cpu.npy')
@@ -54,9 +54,9 @@ func main(): int sync {
     let dl = grad(loss)
     let dn_grad = grad(negative_loss)
     let dk_grad = grad(keep_loss)
-    let df = (v: Tensor<f32>): Tensor<f32> => dl<v>()
-    let dn = (v: Tensor<f32>): Tensor<f32> => dn_grad<v>()
-    let dk = (v: Tensor<f32>): Tensor<f32> => dk_grad<v>()
+    let df = (v: f32[..]): f32[..] => dl<v>()
+    let dn = (v: f32[..]): f32[..] => dn_grad<v>()
+    let dk = (v: f32[..]): f32[..] => dk_grad<v>()
     save_npy(df(a), folder + '/expand_cpu.npy')
     save_npy(download(run_preferred_resident<df>(a)), folder + '/expand_gpu.npy')
     save_npy(dn(a), folder + '/negative_cpu.npy')
@@ -65,12 +65,12 @@ func main(): int sync {
     save_npy(download(run_preferred_resident<dk>(a)), folder + '/keep_gpu.npy')
     let e = zeros([0, 4, 2])
     let de_grad = grad(empty_loss)
-    let de = (v: Tensor<f32>): Tensor<f32> => de_grad<v>()
+    let de = (v: f32[..]): f32[..] => de_grad<v>()
     save_npy(de(e), folder + '/empty_cpu.npy')
     save_npy(download(run_preferred_resident<de>(e)), folder + '/empty_gpu.npy')
     let w = zeros([2, 3, 4, 5])
     let dw_grad = grad(wide_loss)
-    let dw = (v: Tensor<f32>): Tensor<f32> => dw_grad<v>()
+    let dw = (v: f32[..]): f32[..] => dw_grad<v>()
     save_npy(dw(w), folder + '/wide_cpu.npy')
     save_npy(download(run_preferred_resident<dw>(w)), folder + '/wide_gpu.npy')
     println('FIXED_INSPECT')

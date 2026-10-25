@@ -8,7 +8,7 @@
  *   pair: 3.0 2.0
  */
 module grad_tuple_read
-import { Tensor, reshape, sum } from tensor
+import { reshape, sum } from tensor
 import { with_grad } from autodiff
 
 type P = { p0: f64[] }

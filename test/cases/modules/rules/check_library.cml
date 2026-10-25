@@ -32,7 +32,7 @@ import {
         int_add_self, int_add_zero, int_combine, int_combine_one, int_distribute, int_div_one, int_fold, int_fold_add, int_mul_one, int_mul_zero, int_neg_neg, int_sub_self, int_sub_zero,
         float_add_minus_zero, float_add_self, float_combine, float_combine_mixed, float_combine_one, float_combine_one_mixed, float_div_one, float_double, float_fold, float_mul_one, float_neg_neg, float_sub_zero,
         float32_double,
-        tensor_f32_add_minus_zero, tensor_f32_add_self, tensor_f32_combine, tensor_f32_combine_mixed, tensor_f32_combine_one, tensor_f32_combine_one_mixed, tensor_f32_div_one, tensor_f32_double, tensor_f32_fold, tensor_f32_mul_one, tensor_f32_neg_neg, tensor_f32_sub_zero, tensor_i64_distribute
+        tensor_add_minus_zero, tensor_add_self, tensor_combine, tensor_combine_mixed, tensor_combine_one, tensor_combine_one_mixed, tensor_div_one, tensor_double, tensor_fold, tensor_mul_one, tensor_neg_neg, tensor_sub_zero, tensor_distribute
 } from rules
 
 func main(): int sync {
@@ -40,7 +40,7 @@ func main(): int sync {
         int_add_self, int_add_zero, int_combine, int_combine_one, int_distribute, int_div_one, int_fold, int_fold_add, int_mul_one, int_mul_zero, int_neg_neg, int_sub_self, int_sub_zero,
         float_add_minus_zero, float_add_self, float_combine, float_combine_mixed, float_combine_one, float_combine_one_mixed, float_div_one, float_double, float_fold, float_mul_one, float_neg_neg, float_sub_zero,
         float32_double,
-        tensor_f32_add_minus_zero, tensor_f32_add_self, tensor_f32_combine, tensor_f32_combine_mixed, tensor_f32_combine_one, tensor_f32_combine_one_mixed, tensor_f32_div_one, tensor_f32_double, tensor_f32_fold, tensor_f32_mul_one, tensor_f32_neg_neg, tensor_f32_sub_zero, tensor_i64_distribute
+        tensor_add_minus_zero, tensor_add_self, tensor_combine, tensor_combine_mixed, tensor_combine_one, tensor_combine_one_mixed, tensor_div_one, tensor_double, tensor_fold, tensor_mul_one, tensor_neg_neg, tensor_sub_zero, tensor_distribute
     ], 200, 7))
     return 0
 }

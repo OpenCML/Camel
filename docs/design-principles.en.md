@@ -788,7 +788,7 @@ These are all misreadings that have actually happened; check against them before
 
 When you meet any of the following, ask the language author:
 
-- The concrete content of the type-expression language: the meaning and fate of each of the reserved type operators `&`, `\`, `+`, `-`, `^` and `ident of T`.
+- Whether type expressions need type operators (intersection, difference, union and the like). The grammar has none today and reserves no operator for them; if they are added, their spelling and meaning are decided together.
 - The meaning of `typeof` applied to a constant value, and its use in generics.
 - How to handle a type function whose evaluation fails or does not terminate.
 - The behaviour when one mutable object is written through references in several places outside a synchronous block.

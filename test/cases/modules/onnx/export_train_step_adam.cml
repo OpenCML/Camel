@@ -8,7 +8,7 @@
  */
 module export_train_step_adam
 
-import { Tensor, relu, mean, reshape } from tensor
+import { relu, mean, reshape } from tensor
 import { with_grad } from autodiff
 import { OptimizerState, adam, adam_state } from nn
 import { export_model } from onnx

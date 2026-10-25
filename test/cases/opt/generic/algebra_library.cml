@@ -5,10 +5,10 @@
  * keeps no operator for the law that fired, while the printed values stay what the source says.
  */
 module algebra_library
+import tensor
 
-import { Tensor } from tensor
 
-type Vec = Tensor<f32, [3]>
+type Vec = f32[3]
 
 func int_zero(x: int): int {
     return x * 0

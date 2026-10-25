@@ -22,7 +22,7 @@
 module array_sum_rounding
 
 import { sum as array_sum } from array
-import { Tensor, new, reshape, sum as tensor_sum, to_bytes } from tensor
+import { new, reshape, sum as tensor_sum, to_bytes } from tensor
 import { to_array } from bytes
 
 /// The same elements widened to f64. `array_sum` over an f64 array accumulates in f64 (an f64

@@ -4,7 +4,7 @@
  * at the second recursive call instead of failing with an allocation error.
  */
 module export_tree_recursion
-import { Tensor, reshape, sum } from tensor
+import { reshape, sum } from tensor
 import { export_model } from onnx
 import { get_env } from env
 

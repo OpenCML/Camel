@@ -212,7 +212,7 @@ timeout_ms = 10000
 # is unchanged).
 [[tests]]
 name = "slice_axis_constant_bounds"
-desc = "A slice of `m: f32[3, 4]` along axis 1 with the constant bounds 1 and 3 is an `f32[3, 2]`: the axis the slice does not cut keeps its stated length and the axis it cuts states the two positions the bounds and the step give it, so `row(a: Tensor<f32, [3, 2]>)` takes it with no conversion (the author's ruling of 2026-10-25, point A)."
+desc = "A slice of `m: f32[3, 4]` along axis 1 with the constant bounds 1 and 3 is an `f32[3, 2]`: the axis the slice does not cut keeps its stated length and the axis it cuts states the two positions the bounds and the step give it, so `row(a: f32[3, 2])` takes it with no conversion (the author's ruling of 2026-10-25, point A)."
 kind = "behavior"
 case = "../../../../cases/modules/tensor/subscript/slice_axis_constant_bounds.cml"
 args = ["${case}"]
@@ -223,7 +223,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "slice_axis_computed_bounds"
-desc = "The same slice with a computed bound is an `f32[3, ?]`: the cut axis is `?` because only the run knows how long it is, and the axis the slice does not cut still keeps its stated length, so `row(a: Tensor<f32, [3, ?]>)` takes it with no conversion. The old rule said `f32[?, ?]`, which this call would be refused for as less exact."
+desc = "The same slice with a computed bound is an `f32[3, ?]`: the cut axis is `?` because only the run knows how long it is, and the axis the slice does not cut still keeps its stated length, so `row(a: f32[3, ?])` takes it with no conversion. The old rule said `f32[?, ?]`, which this call would be refused for as less exact."
 kind = "behavior"
 case = "../../../../cases/modules/tensor/subscript/slice_axis_computed_bounds.cml"
 args = ["${case}"]

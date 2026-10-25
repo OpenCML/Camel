@@ -1,11 +1,11 @@
 module tiles_resident_compute
-import { Tensor, reshape, sum, abs, zeros } from tensor
+import { reshape, sum, abs, zeros } from tensor
 import { upload, download, inspect, run_preferred_resident } from tiles
-func square(x: Tensor<f32>): Tensor<f32> { return x * x + 1.0 }
-func identity(x: Tensor<f32>): Tensor<f32> { return x }
-func pair(a: Tensor<f32>, b: Tensor<f32>): Tensor<f32> { return a + b }
-type Input = { a: Tensor<f32>, b: (Tensor<f32>, Tensor<f32>) }
-func aggregate(x: Input): Tensor<f32> { return x.a + x.b.0 * x.b.1 }
+func square(x: f32[..]): f32[..] { return x * x + 1.0 }
+func identity(x: f32[..]): f32[..] { return x }
+func pair(a: f32[..], b: f32[..]): f32[..] { return a + b }
+type Input = { a: f32[..], b: (f32[..], f32[..]) }
+func aggregate(x: Input): f32[..] { return x.a + x.b.0 * x.b.1 }
 func main(): int sync {
     let x = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[], [2, 3])
     let d = upload(x)

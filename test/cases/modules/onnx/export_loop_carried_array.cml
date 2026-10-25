@@ -8,7 +8,7 @@
  * growable-array-vs-tensor-in-the-onnx-exporter, replaced that proxy with the fact).
  */
 module export_loop_carried_array
-import { Tensor, reshape, sum } from tensor
+import { reshape, sum } from tensor
 import { export_model } from onnx
 import { get_env } from env
 

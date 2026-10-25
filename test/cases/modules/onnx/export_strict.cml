@@ -5,7 +5,7 @@
  * a model that is not the program's promise.
  */
 module export_strict
-import { Tensor, reshape, sum } from tensor
+import { reshape, sum } from tensor
 import { export_model } from onnx
 import { get_env } from env
 

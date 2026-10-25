@@ -6,7 +6,7 @@
  * "effects"), and every print must still happen once, in order, before the gradient is printed.
  */
 module grad_function_values_effects
-import { Tensor, reshape, sum, tanh } from tensor
+import { reshape, sum, tanh } from tensor
 import { grad } from autodiff
 
 func make(s: float): (t: f32[..]) => f32[..] sync {

@@ -82,7 +82,7 @@ std::string debugRunArrayTypeSelfTest() {
         "f32[] from an empty list is not f32[]");
     require(fromInts->rank() == 2 && !fromInts->anyRank(), "rank of f32[3, 4]");
     // The name that awaits its element type is one interned object, and it is not an array that
-    // states a shape: `Tensor` alone and `Tensor<[3]>` are different objects.
+    // states a shape: `Tensor` alone and `f32[3]` are different objects.
     require(
         ArrayType::elementTypeOpen() == ArrayType::elementTypeOpen(),
         "the name awaiting an element type is not interned");
@@ -111,11 +111,11 @@ std::string debugRunArrayTypeSelfTest() {
     require(
         ArrayType::openRank(f32)->toString() == "f32[..]", "a bare open rank prints as f32[..]");
     require(
-        ArrayType::elementTypeOpen()->toString() == "Tensor",
+        ArrayType::elementTypeOpen()->toString() == "number[..]",
         "the name awaiting its element type prints as '" + ArrayType::elementTypeOpen()->toString() +
             "'");
     require(
-        ArrayType::elementTypeOpen()->mangle() == "Tensor",
+        ArrayType::elementTypeOpen()->mangle() == "Array_open_any",
         "the mangle of the name awaiting its element type changed: " +
             ArrayType::elementTypeOpen()->mangle());
     // The element type nobody stated is `Void`, and it is not the type of an array literal: the
@@ -360,8 +360,8 @@ std::string debugRunArrayTypeSelfTest() {
             std::string::npos,
         "the check of a dimension from another argument says: " + laterCheck);
 
-    // ---- The name that awaits its element type: what `Tensor<dtype, [shape]>` denotes ---------
-    // `Tensor` is the open-rank array whose element type nobody stated, and its arguments are the
+    // ---- The array that awaits its element type: what a name that requires one denotes --------
+    // That array is the open-rank array whose element type nobody stated, and its arguments are the
     // array type's own: one element type, then one shape. Every spelling it accepts denotes the
     // interned array object the equivalent array spelling gives, and the element type is required
     // (docs/design/arrays-memory/plan.cn.md section 5.1a).
@@ -382,26 +382,26 @@ std::string debugRunArrayTypeSelfTest() {
                 .extents = std::make_shared<const std::vector<ExtentForm>>(constants(values))}};
         return alias->applyArguments(std::span<const TypeArgument>(arguments), argumentError);
     };
-    require(element(f32) == ArrayType::openRank(f32), "Tensor<f32> is not f32[..]");
+    require(element(f32) == ArrayType::openRank(f32), "f32[..] is not f32[..]");
     require(
         element(f32)->toString() == "f32[..]",
-        "Tensor<f32> prints as '" + element(f32)->toString() + "'");
-    require(element(i64) == ArrayType::openRank(i64), "Tensor<int> is not int[..]");
-    // A type variable is the element type a generic signature writes: `func f::<T>(x: Tensor<T>)`
+        "f32[..] prints as '" + element(f32)->toString() + "'");
+    require(element(i64) == ArrayType::openRank(i64), "int[..] is not int[..]");
+    // A type variable is the element type a generic signature writes: `func f::<T>(x: T[..])`
     // is `T[..]`, and the call's argument fixes `T` (design principles 5.5).
     require(element(TypeVarType::create("T", false)) == ArrayType::openRank(TypeVarType::create("T", false)),
-            "Tensor<T> is not T[..]");
+            "T[..] is not T[..]");
     require(
         both(f32, {2, 3}) == ArrayType::create(f32, shapeOf({2, 3})),
-        "Tensor<f32, [2, 3]> is not f32[2, 3]");
+        "f32[2, 3] is not f32[2, 3]");
     require(
         static_cast<const ArrayType *>(both(f32, {2, 3}))->rank() == 2,
-        "Tensor<f32, [2, 3]> did not keep its rank");
+        "f32[2, 3] did not keep its rank");
     // Every dimension removed: the type is its element type (the rank-zero rule in
-    // docs/handover/reviews/questions-2026-10-23.md, section rank-zero-tensor): `Tensor<f32, []>`
+    // docs/handover/reviews/questions-2026-10-23.md, section rank-zero-tensor): `f32`
     // is `f32`, and not a rank-zero array.
-    require(both(f32, {}) == f32, "Tensor<f32, []> is not f32");
-    require(!element(f32)->equals(f32), "Tensor<f32> with no shape is the scalar");
+    require(both(f32, {}) == f32, "f32 is not f32");
+    require(!element(f32)->equals(f32), "f32[..] with no shape is the scalar");
     // A shape written over dimension names keeps them, and they do not take part in equality.
     std::vector<TypeArgument> namedArguments{
         TypeArgument{.type = f32, .data = nullptr, .extents = nullptr},
@@ -417,11 +417,11 @@ std::string debugRunArrayTypeSelfTest() {
         namedTensor->rank() == 2 && namedTensor->extentForms(keptForms) &&
             keptForms.size() == 2 && keptForms[0].hasNames() &&
             keptForms[0].terms().front().first == "n" && keptForms[1].constant() == 784,
-        "Tensor<f32, [n, 784]> did not keep the dimension name");
+        "f32[n, 784] did not keep the dimension name");
     require(
         namedTensor->equals(ArrayType::create(
             f32, std::vector<ExtentForm>{ExtentForm::unknown(), ExtentForm::constant(784)})),
-        "a dimension name takes part in the equality of a Tensor");
+        "a dimension name takes part in the equality of an array");
     // A constant shape, the spelling the tensor shape had before the array type took shapes
     // over: an integer list, where a negative extent is the unknown dimension it always was.
     const std::shared_ptr<camel::core::data::ArrayData> constShapeData =
@@ -437,7 +437,7 @@ std::string debugRunArrayTypeSelfTest() {
             ArrayType::create(
                 f32,
                 std::vector<ExtentForm>{ExtentForm::constant(3), ExtentForm::unknown()}),
-        "Tensor<f32, const [3, -1]> is not f32[3, ?]");
+        "the constant shape [3, -1] is not f32[3, ?]");
 
     // What the name refuses: a spelling with no element type at all, an element type that is not
     // a numeric scalar, a second element type, a second shape, and an element after the shape.
@@ -449,10 +449,10 @@ std::string debugRunArrayTypeSelfTest() {
     };
     std::vector<TypeArgument> notNumeric{
         TypeArgument{.type = str, .data = nullptr, .extents = nullptr}};
-    refuses(notNumeric, "Tensor<string>");
+    refuses(notNumeric, "string[..]");
     require(
         argumentError.find("numeric scalar") != std::string::npos,
-        "the refusal of Tensor<string> says: " + argumentError);
+        "the refusal of string[..] says: " + argumentError);
     std::vector<TypeArgument> twoElements{
         TypeArgument{.type = f32, .data = nullptr, .extents = nullptr},
         TypeArgument{.type = f32, .data = nullptr, .extents = nullptr}};
@@ -484,12 +484,12 @@ std::string debugRunArrayTypeSelfTest() {
     refuses(shapeOnly, "a shape with no element type");
     require(
         argumentError.find("needs its element type") != std::string::npos,
-        "the refusal of Tensor<[3]> says: " + argumentError);
+        "the refusal of f32[3] says: " + argumentError);
     std::vector<TypeArgument> noElement;
     refuses(noElement, "no argument at all");
     require(
         argumentError.find("needs its element type") != std::string::npos,
-        "the refusal of Tensor<> says: " + argumentError);
+        "the refusal of no argument at all says: " + argumentError);
     // An array that states its element type reads no type arguments of its own: the arguments of
     // the name belong to the name, not to every array.
     argumentError.clear();

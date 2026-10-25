@@ -3,10 +3,7 @@
  */
 module linear_regression
 
-import {
-    Tensor,
-    concat, ones, random, shape, sum, transpose, zeros
-} from tensor
+import { concat, ones, random, shape, sum, transpose, zeros } from tensor
 
 func mean_squared_error(y_pred: f32[?, ?], y_true: f32[?, ?]): float {
     let residuals = y_pred - y_true

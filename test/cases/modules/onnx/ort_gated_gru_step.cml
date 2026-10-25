@@ -6,7 +6,7 @@
  */
 module ort_gated_gru_step
 
-import { Tensor, sigmoid, tanh, slice, reshape, shape, zeros, mean, abs, load_npy, save_npy } from tensor
+import { sigmoid, tanh, slice, reshape, shape, zeros, mean, abs, load_npy, save_npy } from tensor
 import { with_grad } from autodiff
 import { sgd, save_params } from nn
 import { get_env } from env

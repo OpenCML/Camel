@@ -6,7 +6,7 @@
 module autoencoder
 
 import { grad, with_grad } from autodiff
-import { Tensor, full, shape, sigmoid, sum, zeros } from tensor
+import { full, shape, sigmoid, sum, zeros } from tensor
 import { sgd } from nn
 
 type AutoEncoder = {

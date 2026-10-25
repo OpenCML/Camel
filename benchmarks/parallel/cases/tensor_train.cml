@@ -5,7 +5,7 @@
 // Needs std::macro before the scheduler (autodiff).
 module tensor_train
 
-import { Tensor, ones, relu, mean } from tensor
+import { ones, relu, mean } from tensor
 import { with_grad } from autodiff
 import { sgd } from nn
 

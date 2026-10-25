@@ -9,7 +9,7 @@
  */
 module bn_train_grad_sanity
 
-import { Tensor, reshape, mean, sum, abs, sqrt } from tensor
+import { reshape, mean, sum, abs, sqrt } from tensor
 import { grad } from autodiff
 import { batch_norm_train, batch_norm_train_grad } from nn
 

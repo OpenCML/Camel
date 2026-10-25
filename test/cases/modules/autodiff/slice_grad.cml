@@ -24,7 +24,7 @@
  */
 module slice_grad
 
-import { Tensor, abs, dim, numel, reshape, slice, sum, transpose, zeros } from tensor
+import { abs, dim, numel, reshape, slice, sum, transpose, zeros } from tensor
 import { grad, with_grad } from autodiff
 
 with <x: f32[..]>

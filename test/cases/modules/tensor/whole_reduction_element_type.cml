@@ -16,40 +16,40 @@
  */
 module whole_reduction_element_type
 
-import { Tensor, new, cast, sum, mean } from tensor
+import { new, cast, sum, mean } from tensor
 
 /// The probe: an f32 tensor's whole-tensor sum is an f32, so returning it as one type-checks.
-func total(x: Tensor<f32>): f32 {
+func total(x: f32[..]): f32 {
     return sum(x)
 }
 
 /// The same for the mean, whose one rounding is the whole reduction's.
-func meanOf(x: Tensor<f32>): f32 {
+func meanOf(x: f32[..]): f32 {
     return mean(x)
 }
 
 /// An f64 tensor keeps f64.
-func totalF64(x: Tensor<f64>): f64 {
+func totalF64(x: f64[..]): f64 {
     return sum(x)
 }
 
 /// A bf16 tensor's sum is a bf16 (the element type), never an f32 or a float.
-func totalBf16(x: Tensor<bf16>): bf16 {
+func totalBf16(x: bf16[..]): bf16 {
     return sum(x)
 }
 
 /// A bf16 tensor's mean is a bf16 too.
-func meanBf16(x: Tensor<bf16>): bf16 {
+func meanBf16(x: bf16[..]): bf16 {
     return mean(x)
 }
 
 /// An f16 tensor's sum is an f16.
-func totalF16(x: Tensor<f16>): f16 {
+func totalF16(x: f16[..]): f16 {
     return sum(x)
 }
 
 /// An f16 tensor's mean is an f16.
-func meanF16(x: Tensor<f16>): f16 {
+func meanF16(x: f16[..]): f16 {
     return mean(x)
 }
 

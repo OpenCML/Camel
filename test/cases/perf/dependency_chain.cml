@@ -12,7 +12,7 @@
 
 module perf_dependency_chain
 
-import { Tensor, relu, sum, zeros } from tensor
+import { relu, sum, zeros } from tensor
 import { now } from time
 
 func chain(x: f32[..], w: f32[..], b: f32[..]): f32[..] {

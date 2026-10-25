@@ -6,7 +6,7 @@
  */
 module resnet
 
-import { Tensor, relu, mean, flatten } from tensor
+import { relu, mean, flatten } from tensor
 import { grad, with_grad } from autodiff
 import { conv2d, sgd, save_params } from nn
 import { get_env } from env

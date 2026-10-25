@@ -12,11 +12,11 @@
 /// says the runtime broke where the run has no device.
 module tiles_gpu_scope_benchmark
 
-import { Tensor, reshape } from tensor
+import { reshape } from tensor
 import { benchmark } from tiles
 
 #gpu
-func pair(x: Tensor<f32, [3]>): Tensor<f32, [3]> {
+func pair(x: f32[3]): f32[3] {
     let y = x * 2.0
     let z = y + 3.0
     return z - 1.0

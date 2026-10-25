@@ -1,11 +1,11 @@
 module tiles_gpu_scope_cpu_escape
-import { Tensor, reshape, tanh, sum } from tensor
+import { reshape, tanh, sum } from tensor
 
 // `#cpu` says the code runs on the host. The same operator that a `#gpu` scope refuses is
 // therefore not a refusal here: the label is a fact about placement, not a promise about the
 // device.
 #cpu
-func activate(x: Tensor<f32>): Tensor<f32> { return tanh(x) }
+func activate(x: f32[..]): f32[..] { return tanh(x) }
 
 func main(): int sync {
     let x = reshape([1.0, 2.0, 3.0] as f32[], [3])

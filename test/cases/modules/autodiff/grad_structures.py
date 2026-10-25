@@ -157,7 +157,7 @@ def main() -> int:
                 kinds.append(kd)
             source = (
                 f"module grad_structures_{k}\n"
-                "import { Tensor, mean, reshape, save_npy, sigmoid, sum, tanh } from tensor\n"
+                "import { mean, reshape, save_npy, sigmoid, sum, tanh } from tensor\n"
                 "import { grad } from autodiff\n\n" + "\n".join(camel) + "\nfunc main(): int sync {\n"
                 "    let xs: f32[] = [0.3, -0.2, 0.7]\n" + "    let x = reshape(xs, [3])\n"
                 + "".join(f"    save_npy(grad(loss{j})<x>(), 'g{k}_{j}.npy')\n" for j in range(args.losses))

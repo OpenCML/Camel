@@ -6,7 +6,7 @@
 module e10_first
 
 import { grad } from autodiff
-import { Tensor, relu, mean, reshape } from tensor
+import { relu, mean, reshape } from tensor
 
 func fwd(w1: float[..], b1: float[..], w2: float[..], b2: float[..], x: float[..]): float[..] {
     let h = relu(x @ w1 + b1)

@@ -1,5 +1,5 @@
 module grad_function_value_parameter
-import { Tensor, reshape, sum, tanh } from tensor
+import { reshape, sum, tanh } from tensor
 import { grad } from autodiff
 
 // Refused: the function called is a parameter of the differentiated function itself, so no

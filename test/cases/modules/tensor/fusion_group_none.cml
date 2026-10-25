@@ -9,7 +9,7 @@
 
 module fusion_group_none
 
-import { Tensor, sum, zeros } from tensor
+import { sum, zeros } from tensor
 import { with_grad } from autodiff
 
 type Model = {

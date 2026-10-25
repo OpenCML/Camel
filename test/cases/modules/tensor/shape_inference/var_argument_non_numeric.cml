@@ -5,7 +5,7 @@
  * error at the argument.
  */
 module var_argument_non_numeric
-import { Tensor, sum } from tensor
+import { sum } from tensor
 
 func step(var t: f64[], d: float): float sync {
     t = t + d

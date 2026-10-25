@@ -7,7 +7,7 @@
  */
 module pb_statics_gc
 
-import { Tensor, new, reshape, permute, transpose, shape, mean, sum } from tensor
+import { new, reshape, permute, transpose, shape, mean, sum } from tensor
 import { with_grad } from autodiff
 
 type QK = {

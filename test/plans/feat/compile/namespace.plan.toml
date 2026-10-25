@@ -21,25 +21,6 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
 
 [[tests]]
-name = "type_namespace_builtins"
-desc = "Checks Tensor:: and Parameter:: constructor aliases resolve through imported built-in type namespaces."
-kind = "behavior"
-case = "../../../cases/compile/namespace/type_namespace_builtins.cml"
-args = ["${case}"]
-expect_exit = 0
-verify_script = """
-({ input, assert, match }) => {
-    assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
-    const found = match(/type_namespace_builtins shape=([0-9]+) ([0-9]+) ([0-9]+)/, input.normalized.stdout)
-    assert(Number(found[1]) === 2, `expected first tensor rank entry 2, got ${found[1]}`)
-    assert(Number(found[2]) === 2, `expected second tensor rank entry 2, got ${found[2]}`)
-    assert(Number(found[3]) === 2, `expected parameter value rank entry 2, got ${found[3]}`)
-}
-"""
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 10000
-
-[[tests]]
 name = "module_import_qualified"
 desc = "Checks bare module imports require module-qualified access."
 kind = "behavior"
@@ -139,7 +120,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "module_import_builtins"
-desc = "Checks built-in module imports expose Tensor and Parameter APIs through module-qualified refs."
+desc = "Checks built-in module imports expose the module`s exported operators and types through module-qualified refs."
 kind = "behavior"
 case = "../../../cases/compile/namespace/module_import_builtins.cml"
 args = ["${case}"]
@@ -158,7 +139,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "module_import_using_builtins"
-desc = "Checks using namespace over a built-in module import restores direct symbols and type namespaces."
+desc = "Checks using namespace over a built-in module import restores its exported symbols as direct names."
 kind = "behavior"
 case = "../../../cases/compile/namespace/module_import_using_builtins.cml"
 args = ["${case}"]

@@ -6,7 +6,7 @@
  */
 module second_order
 
-import { Tensor, reshape, sum } from tensor
+import { reshape, sum } from tensor
 import { grad } from autodiff
 import { get_env } from env
 
