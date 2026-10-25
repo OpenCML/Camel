@@ -349,8 +349,8 @@ camel docs/tutorial/examples/10_resources.cml
 ```
 
 三行都在说"这个调用会碰到什么"：`read_id` 碰它收到的那个句柄，`tick` 碰 `console` 这一组（展开成 `db` 与
-`stdout`），`bump` 碰调用方给它的那个格子。**这就是资源推断**：不必手写，图上看得到；手写出来的是承诺，编译器
-检查它能查的那些（下面几条）。
+`stdout`），`bump` 碰调用方给它的那个格子。**这就是资源推断**：不必手写，图上看得到；手写出来的是承诺，函数体
+超出就是编译错误（下面几条）。
 
 写错了会看到什么（都是编译错误）：
 
@@ -359,16 +359,20 @@ camel docs/tutorial/examples/10_resources.cml
   `uses` 说的是"碰这些"，两者只能写一个。
 - 没有函数体的声明（原生算子）写的子句与算子不符：`SemanticDiag::NativeResourceMismatch`——那种声明就是
   算子的全部签名，资源也在里面。
+- 函数体超出了它自己的 `pure`/`uses` 承诺：`SemanticDiag::UsesPromiseViolated`——`uses` 是上界，`pure` 是空集，
+  报在声明处，帮助指向第一个超出的使用点（`pure` 带 `var` 形参也在这里报：`var` 形参本身就是资源）。
 
 ## `pure`：一个资源都不碰
 
-`pure` 是"这个调用一个资源都不碰"的承诺。写在**函数类型**上时它是要求：谁要传函数进来，就得传一个满足它的；
-满足它的意思是**它自己的签名里写着 `pure`**。
+`pure` 是"这个调用一个资源都不碰"的承诺。写在**函数类型**上时它是要求：谁要传函数进来，就得传一个**推断出的资源集
+不超过它**的函数——资源少的函数可以用在要求资源多的地方，反之不行（[设计原则 3.3](../design-principles.cn.md#33-资源uses-与-pure)）。
+**手写的是承诺，函数体超出就是编译错误**：具名函数写了子句就照子句核对，写了 `pure` 就必须推成空集；匿名函数没有
+子句，它的资源是推出来的，所以一个不碰资源的 lambda、一个没写子句却不碰资源的具名函数，都能传给 `pure` 形参。
 [`examples/10_pure_callback.cml`](examples/10_pure_callback.cml) 里的 `apply` 只接受纯函数：
 
 ```cml
-// `pure` in a function type is part of the requirement: `apply` accepts only a function whose own
-// signature says `pure`, and `twice` says it.
+// `pure` in a function type is part of the requirement: what is compared is the resources the
+// argument's body infers against the empty set the parameter asks for, and `twice` touches nothing.
 // Run: camel docs/tutorial/examples/10_pure_callback.cml
 module pure_callback
 
@@ -394,13 +398,14 @@ camel docs/tutorial/examples/10_pure_callback.cml
 8
 ```
 
-把一个签名里没有 `pure` 的函数传进去，就不是"值不对"，而是**签名不匹配**——这类错误在调用处就挡住（[`examples/10_pure_callback_wrong.cml`](examples/10_pure_callback_wrong.cml)）：
+把一个碰资源的函数传进去，就不是"值不对"，而是**签名不匹配**——比较的是**实参推断出的资源 ⊆ 形参要求的资源**，
+这类错误在调用处就挡住（[`examples/10_pure_callback_wrong.cml`](examples/10_pure_callback_wrong.cml)）：
 
 <!-- camel-snippet: counter-example: 这个程序故意不编译：调用处就是不匹配，下面的 text 块是诊断，不是输出 -->
 
 ```cml
-// A counter-example: `noisy` prints and its own signature does not say `pure`, so its type is not
-// what the requirement asks for. The error names the signature that would have matched.
+// A counter-example: `noisy` prints, so the resources its body infers do not fit the empty set the
+// parameter asks for. The error names the signature that would have matched.
 // Run: camel docs/tutorial/examples/10_pure_callback_wrong.cml
 module pure_callback_wrong
 

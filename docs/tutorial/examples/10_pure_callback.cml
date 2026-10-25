@@ -1,5 +1,5 @@
-// `pure` in a function type is part of the requirement: `apply` accepts only a function whose own
-// signature says `pure`, and `twice` says it.
+// `pure` in a function type is part of the requirement: what is compared is the resources the
+// argument's body infers against the empty set the parameter asks for, and `twice` touches nothing.
 // Run: camel docs/tutorial/examples/10_pure_callback.cml
 module pure_callback
 
