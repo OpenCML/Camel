@@ -1,0 +1,34 @@
+tip=f734a81c3 H554：module 声明统一去掉（裁决 5a）+ 模块位标签删除（返工一）+ 命名空间块标签（H49 点 6）
+
+数字
+- 全量门禁：total 6231 / pass 6107 / fail 97 / skip 11 / known failures 16；RUN_EXIT=1。基线是 fail:0，所以**本支尚未达绿**，未完成的红见下。
+- 进展：373 → 110 → 97（本轮修 13、新增红 0，红名单只减不增）。
+- git grep 文件头 `module `：origin/develop 2770 → HEAD 0（stdlib/examples/showcase/test/exemplars/benchmarks/scripts/tools/editors/modules 及 doc 代码块全 0）；余 9 行是散文续行（以 “module” 开头的句子，如 docs/stdlib-reference.md:14、docs/technical/35_debugger.md:10），不是声明。
+- 关键字机件：`KwModule`、`tag::Module`、`Position::Module`、`TagPosition::Module`、`on` 列表里的 `Module` 全部 0 命中。
+- 黄金重录：AST 的 ast_hashes.txt 260 行（286 个文件重哈希：228 探针 + 58 用例）；其余黄金 75 个文件（diag_render、tok.txt、rgir.dot 等）。
+- 五个检查器全绿：diagnostics-catalog 272 码、camel-for-ai 4 区段 750 条目、check-doc-links 413 符号 + 1814 路径、headers 1364 文件、check-grammar 127 产生式。
+- 提交 8 个（英文、按主题）：d53895bcd 编译器（parser/AST/GCT/GIR/标签机件）、c7c6be7e9 stdlib+examples+showcase、e94202f62 生成器、48b37e384 测试与黄金、0d6313664 文档、0ae7d7c47 编辑器与工具、6aafe1202 exemplars+hello.cml、f734a81c3 生成器/笔记收尾。未推送。
+
+H49 点 6 四条（逐字）
+- 命名空间块上的标签：不加新位置，也不借用 `Nodes`。
+- 写在它前面的标签，作用于块里每一个能贴这个标签的声明（`#gpu` 能贴函数，就作用于块里的每个函数），内层自己写的胜出。
+- 块里一个能贴的声明都没有，就在标签处报错。
+- `Positions` 里的 `Module` 位随返工一删掉，`#gpu` 的 `on` 回到 `Func | Nodes`。
+
+实现与验收读数
+- 生效读数：test/plans/feat/modules/tiles.plan.toml 的 `gpu_scope.namespace_block_tag_propagates`（Device::scaled = gpu-required/gpu、Device::kept = host/cpu、Device::Host::plain = host/cpu，值 54.0）。
+- 报错读数：test/plans/feat/compile/tags.plan.toml 的 `block_tag_no_target` 在标签处报 TagNotAtPosition（0x03000161，复用）。
+- 内层胜出：块的事实先并入节点自身的事实（attr::unite 内层优先）。报错在静态判定，块里没有任何能贴该标签的位置时才报；惰性构造的模块可能漏报（只漏不误）。
+
+未答（问题页）
+- 入口模块的名字：入口在实现里仍是 `main`（analyze.cpp 的编译路径给出文件名，运行路径却按 `main` 装载，改不动），于是 `explicit_type_arguments`、`ns.p18_self_module`、`ns.p30_using_own_nested`、`modules_213.self_entry` 仍红。文档说模块可用自己的名字限定/导入自己（docs/language/05_modules.md:27,194），这与入口的 `main` 冲突：请裁决入口是否也按文件名，还是入口不算可导入名字。
+- `on field` 的标签写在块前，是否作用于块里类型的字段：实现只作用于块里直接写出的声明。
+
+仍红（97）分类
+- 入口名一类 4 个（上一节）。
+- origin/fsh-dev 的文档散文仍留 4 行 `^module `（docs/language/01_introduction.md 1 行、05_modules.md 3 行，en 同），合并后 docs.snippets_compile 可能转红（此文件属作者，本支未改其散文）。
+- lsp 9（syntax_index.cpp 仍读已删的 ModuleName CST 结点，`code_and_related` 报 no source range）、stdlib 5（fault.zip_with.* 期望 RuntimeDiag::InvalidArgument line 298）、grad_function_value_* 12、unused_fallible 4、fault.in_map_many 4、export_* 5、rename 3、poison 3、native 2、graph/grants 2、constant_fault_* 2、ns 2；其余各 1：collapse、attempt.bad_calls、unknown_pass_stage、pass_parameter_stage、dropped_effects*×3、captured_write_graph.warnings、nullable_positions.default_is_a_null_constant、partial_application_span、check.lexical_limit_json、failed_evaluation/failed_depth、not_static.note、body_error、err_key_enum_field、by_substitution、pass_export_refusals_json、frontend.ast_snapshot、fixes_apply、dump_after_each_pass、entry_args.missing_argument_json、macro_body_effect_stage。
+- 本轮由红转绿的 13 个来自生成器里残留的 `module` 行（lsp 各测试、native.one_module、import-audit、interpreter_first_use 等），已清。
+
+备注
+- 未跑 perf/**、feat/opt/progen、PyTorch 对比；未动 tag 语法（圆括号、`::<F>`、is_function、`func` 删除）与 docs/language 散文；未碰其它工作树/分支；未推送。
