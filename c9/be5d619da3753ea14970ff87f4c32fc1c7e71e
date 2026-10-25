@@ -1,0 +1,1 @@
+h585 并入翻转线（我替它提交的 2df92dac1）：核心切片伴随带上元素类型（scatter_slice_arr/scatter_add_arr 改用切片的数组类型）、__slice_sub__/sliceSubArrayVjp 读 4/5/6 词、isTensorSubscript 删除、模块的 __slice__ 导出与下标内核/词数分派/掩码分支全删（tensor:slice 只剩函数形式）、生成物脚本重出；9 条曾转绿仍全绿，三种切片写法同一个 :op/slice_sub 节点、t[idx] 是核心的 :op/idx_take。新红 1 条是 docs/reference/camel-for-ai.md 顶破 112000（+30），已立页。
