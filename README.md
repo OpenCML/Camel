@@ -70,8 +70,6 @@ These properties hold for every program where computation matters more than cont
 Fit a line by gradient descent. `grad(loss)` is not a library call evaluated step by step: it is a graph rewrite, and the derivative it builds is an ordinary graph the optimizer and the JIT see.
 
 ```camel
-module fit
-
 import { grad } from autodiff
 
 with <w: float>
@@ -143,8 +141,6 @@ Put `out/latest/bin` on your `PATH` and set `CAMEL_HOME` to `out/latest`. CI bui
 ### Hello, Camel
 
 ```camel
-module hello
-
 func main(): int sync {
     println('Hello, Camel!')
     return 0

@@ -2,17 +2,13 @@
 
 English | [中文](../05_modules.md)
 
-Every source file is a module. This chapter describes module declarations, imports, exports and namespaces.
+Every source file is a module. This chapter describes a module's name, imports, exports and namespaces.
 
 ---
 
-## 5.1 Module declaration
+## 5.1 A module's name
 
-```cml
-module shapes
-```
-
-`module <name>` is written at the beginning of the file and names the module. It can be omitted; when it is, the module name is taken from the file name. The name in parentheses in diagnostic messages is the module name.
+A file is a module, and the module's name is the file's name without its extension: `shapes.cml` is the module `shapes`, imported elsewhere with `import shapes`. The source declares no module name, so the file name is its one source. The name in parentheses in diagnostic messages is the module name.
 
 ## 5.2 Imports
 

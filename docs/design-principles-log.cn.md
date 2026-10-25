@@ -823,3 +823,4 @@ H15 的待决问题：分支臂里的 `return` 取臂位置的期望类型；数
 - （2026-10-25，负责人）ZEN 修订：删去原第 3 条（Imperative for operators, declarative for structure）与原第 5 条（Explicit dependencies, implicit parallelism）；新增"Every construct is a piece of the graph"（第 3 条）与"One language, all the way down"（第 7 条）；"Execution is polymorphic and multi-staged"移为第 5 条，说明改为"遍是函数，函数是图；编译、优化、执行都是对图的分阶段重写"（1）。
 - （2026-10-25，负责人）关键字不作类型名：标签的函数形参写成类型参数加条件 `tag vjp<rule: F> on func when is_function::<F>()`，与遍的签名同一种写法（6.2）。
 - （2026-10-25，负责人）模块不是标签的位置：要给一组函数贴同一个标签，贴在命名空间块上；不加 `on module`（6.2、13.4）。
+- （2026-10-25，负责人）删掉 `module` 声明：一个文件就是一个模块，模块名只来自文件名（10.x）。
