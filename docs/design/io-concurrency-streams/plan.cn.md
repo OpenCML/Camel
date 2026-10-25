@@ -294,8 +294,9 @@ G5/G7/G8 + GPU/H246 ── G11 ── G12
   }
   ```
   今天：`...:7:31: [Error]: Unexpected '..'; expected a declaration or the end of the file.  (code=0x0200000A)`——**注意错误停在 `..` 上，`yield` 本身从来没被读到过**；这正好说明 E 必须等 B。
+  <!-- camel-snippet: counter-example: 语法收口之后 `yield` 是关键字，这条程序是片 E 的负向验收：它必须是语法错误 -->
   ```camel
-  // t9：证明 `yield` 今天是普通标识符
+  // t9：反例——`yield` 成为关键字之后，这条程序必须是语法错误
   module h248_t9_yield_only
   func main(): int sync {
       let yield = 1
@@ -303,7 +304,7 @@ G5/G7/G8 + GPU/H246 ── G11 ── G12
       return 0
   }
   ```
-  今天：`RUN_EXIT=0`，stdout `1`。
+  今天：`...:4:9: [Error]: 'yield' is a keyword and cannot be used as a name. Choose another name, for example 'yield_'.  (name=SyntaxDiag::KeywordAsIdentifier, code=0x02000006)`，`RUN_EXIT=1`——关键字落地之前它是 `RUN_EXIT=0`、stdout `1`。
 - 验收：`for p in pairs(3)` 恰得 3 个元素；`yield` 成为关键字之后 t9 **必须**变成语法错误（这是「加了关键字」的负向验收）；生成器里的 `loop` 与 `if` 各 `yield` 一次的用例。
 
 #### 片 F：`for x in s`

@@ -1,0 +1,12 @@
+/**
+ * The formatter reads and re-emits `yield` like any other statement (the syntax closure's item 6:
+ * the new syntax must format). The exit node prints the word `yield`, so the messy spacing below
+ * comes back as the canonical form; nothing about the statement is special to `camel-format`,
+ * which reads the tree and needs no compiler.
+ */
+func pairs(n: int): (int, int).. {
+    loop i = 0 while i < n do {
+        yield    (i,i+1)
+        i+1
+    }
+}
