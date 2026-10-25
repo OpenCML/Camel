@@ -149,19 +149,21 @@ const PENDING = [
         file: 'docs/tutorial/17_teaching_a_law.cn.md',
         key: 'fb4bb02afc482ac0',
         reason:
-            'chapter 17: the `fact` compiles now; what `check` prints for a law whose premise is a ' +
-            'fact\'s conclusion (rewrite design 8.1) is not implemented, so the tree reads "no premise ' +
-            'yet" where the page reads "fired 8 of 8"; this text\'s other two dump excerpts differ only ' +
-            'in the ids their layout gives (`F05`/`F06` are not in today\'s dump)',
+            'chapter 17: the step this page teaches -- hand the rule set to `std::opt` ' +
+            '(`rules: Rule[]`, ruled in std-opt-and-module-rules) -- is not implemented, and what ' +
+            '`check` prints for a law whose premise is a fact\'s conclusion (rewrite design 8.1) is ' +
+            'not implemented either, so the tree reads "no premise yet" where the page reads ' +
+            '"fired 8 of 8"',
     },
     {
         file: 'docs/tutorial/17_teaching_a_law.en.md',
         key: 'fb4bb02afc482ac0',
         reason:
-            'chapter 17: the `fact` compiles now; what `check` prints for a law whose premise is a ' +
-            'fact\'s conclusion (rewrite design 8.1) is not implemented, so the tree reads "no premise ' +
-            'yet" where the page reads "fired 8 of 8"; this text\'s other two dump excerpts differ only ' +
-            'in the ids their layout gives (`F05`/`F06` are not in today\'s dump)',
+            'chapter 17: the step this page teaches -- hand the rule set to `std::opt` ' +
+            '(`rules: Rule[]`, ruled in std-opt-and-module-rules) -- is not implemented, and what ' +
+            '`check` prints for a law whose premise is a fact\'s conclusion (rewrite design 8.1) is ' +
+            'not implemented either, so the tree reads "no premise yet" where the page reads ' +
+            '"fired 8 of 8"',
     },
     {
         file: 'docs/tutorial/17_teaching_a_law.cn.md',
