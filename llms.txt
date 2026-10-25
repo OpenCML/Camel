@@ -4,9 +4,11 @@
 > the dependencies of its values, and effects and synchronization are written explicitly rather than
 > implied by statement order.
 
-- [Camel for AI](docs/reference/camel-for-ai.md): the whole language in one file — the rules, the
-  idioms, the errors a first draft makes with the diagnostic each one reports, and the generated
-  catalogue of every diagnostic and every standard-library signature.
+- [Camel for AI](docs/reference/camel-for-ai.md): the whole language in one page — the rules, the
+  idioms and the errors a first draft makes with the diagnostic each one reports. The two generated
+  catalogues are documents of their own, looked up rather than read:
+  [every diagnostic](docs/reference/camel-for-ai-diagnostics.md) and
+  [every standard-library signature](docs/reference/camel-for-ai-stdlib-signatures.md).
 
 ## More
 
