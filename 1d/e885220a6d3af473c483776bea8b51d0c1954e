@@ -1,0 +1,9 @@
+h535 诊断码重排工具（合入 1de885220）
+
+目的：把"合并中间态会撞码"从人肉核对待办变成一条命令。
+
+交付：`scripts/diagnostics-renumber.mjs`（默认只报告，`--write` 才改；`--base` 默认 `origin/develop`；
+清掉新声明的值后由目录脚本重新分配并重出生成物），并在 `docs/technical/30_diagnostics_reporting.md` 记下用法。
+
+依据：今天三次撞码都出现在**合并中间态**、从未出现在已提交的历史里——工具把这条结论变成可复算的检查。
+此后每次合并都跑它：`271 baseline declarations, 0 new in the tree; no value used twice`。
