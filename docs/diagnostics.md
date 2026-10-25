@@ -650,13 +650,11 @@ None: choice: a reserved word is not a name, and the name to use instead is the 
 Choose another name, for example '{0}_'.
 ```
 
-**Example** (`test/cases/compile/stream/yield_keyword.cml`, run as `camel test/cases/compile/stream/yield_keyword.cml`)
+**Example** (`test/cases/parse/rulings/loop_is_keyword.cml`, run as `camel -E short test/cases/parse/rulings/loop_is_keyword.cml`)
 
 ```camel
-func main(): int sync {
-    let yield = 1
-    println(yield)
-    return 0
+func loop(i: int): int {
+    return i
 }
 ```
 

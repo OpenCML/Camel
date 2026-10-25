@@ -85,14 +85,6 @@ func main(): int sync {
 error InvalidAge: age is negative
 ```
 
-### 7.3.1 `yield`
-
-- `yield e` gives **one element** of a stream, and is written in a function body only. The function that writes it produces a stream and not a value, so its head must write the return type as the stream type `T..` (design principles 5.4).
-- A round may `yield` several times, and the resume point is the position of the `yield`: a loop, a branch, a `match` arm or a `sync` block in the region may all write one, nested to any depth. There is no delegation: handing an inner stream out is written `for x in inner do yield x`.
-- Statements after a `yield` run only when the consumer pulls another element. The stream gives one element at a time and its values are linear; a generator function may be called several times, and each call gets its own stream. `return` ends the stream, without a value; a stream that produces no element at all is a legal empty stream.
-- A fault happens at the pull that produces that element (a fault is not a value), and elements already handed out are unaffected.
-- The syntax reads it (`yield` is a keyword and `retStmt` reads it, see [8.2](08_top_level_and_grammar.md)); **the generator state machine is not built yet** ([`../../design/io-concurrency-streams/plan.cn.md`](../../design/io-concurrency-streams/plan.cn.md), slice E): compiling a function body that writes `yield` reports `SemanticDiag::FeatureNotSupported` with `'generators'` in the message -- it does not run the `yield` as a `return`.
-
 ## 7.4 Functions
 
 ### 7.4.1 Declaration

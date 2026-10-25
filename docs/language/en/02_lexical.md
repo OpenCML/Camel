@@ -45,7 +45,7 @@ The following words are reserved and cannot be used as names (using one gives `S
 | Category | Keywords |
 |---|---|
 | Declarations | `let` `var` `func` `type` `with` `module` `import` `export` `from` `namespace` `using` |
-| Control | `if` `then` `else` `match` `case` `return` `throw` `yield` `sync` `loop` `while` `do` `for` `in` `static` |
+| Control | `if` `then` `else` `match` `case` `return` `throw` `sync` `loop` `while` `do` `for` `in` `static` |
 | Types and conversion | `as` `const` `constas` `enum` |
 | Literals | `null` `true` `false` |
 | Reserved | `is` `of` `try` `catch` `finally` `typeof` `keyof` |

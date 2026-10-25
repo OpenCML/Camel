@@ -183,7 +183,7 @@ func greet(): int {
 | Group | Words |
 |---|---|
 | Declaration | `let` `var` `func` `type` `with` `module` `import` `export` `from` `namespace` `using` |
-| Control | `if` `then` `else` `match` `case` `return` `throw` `yield` `sync` `loop` `while` `do` `for` `in` `static` |
+| Control | `if` `then` `else` `match` `case` `return` `throw` `sync` `loop` `while` `do` `for` `in` `static` |
 | Type and conversion | `as` `const` `constas` `enum` |
 | Literal | `null` `true` `false` |
 | Reserved | `is` `of` `try` `catch` `finally` `typeof` `keyof` |

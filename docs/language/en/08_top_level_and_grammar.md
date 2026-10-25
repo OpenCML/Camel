@@ -136,7 +136,7 @@ typeDecl           : frontMatter? 'type' identRef
                      ('=' | '<' identDef (',' identDef)* ','? ('>' '=' | '>='))
                      (typeExpr | STRING)
 resourceDecl       : 'export'? 'resource' identDef ('=' bracketIdents | 'unordered')?
-retStmt            : ('return' | 'throw' | 'yield') dataList
+retStmt            : ('return' | 'throw') dataList
 modifiers          : 'sync'+
 identDef           : IDENTIFIER
 identRef           : (IDENTIFIER '::')* IDENTIFIER
