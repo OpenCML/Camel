@@ -339,3 +339,26 @@ args = ["${case}", "std::macro", "std::opt", 'onnx::export out="${test_tmp}/mode
 expect_exit = 0
 expect_output_not_contains = []
 expect_stdout_contains = ["onnx::export: wrote ${test_tmp}/model.onnx"]
+
+# ---- The examples of the rewritten chapters ---------------------------------------------------
+#
+# Chapters 1-10 and 18 were rewritten with an example beside each page, and every one of them is
+# named here, one entry per file: an example nobody runs is a file a page can point at while it
+# stops being the program the page describes. The shape of an entry is the one above -- a case, a
+# golden, and a diagnostic where the file's lesson is a warning the page does not show; the two
+# files that read `08_words.txt`, the one that faults and the one the compiler refuses override
+# the defaults the way their siblings above do.
+
+# ---- Chapter 1 --------------------------------------------------------------------------------
+
+[[tests]]
+name = "tutorial.examples.01_rewrite"
+desc = "The first program again, with one expression that has more than one writing: the value it prints is unchanged by that."
+case = "../../../docs/tutorial/examples/01_rewrite.cml"
+golden = "golden/tutorial_examples/01_rewrite.txt"
+
+[[tests]]
+name = "tutorial.examples.01_exercise"
+desc = "The answer to the exercise of chapter 1: a function of two parameters, and the value it returns."
+case = "../../../docs/tutorial/examples/01_exercise.cml"
+golden = "golden/tutorial_examples/01_exercise.txt"
