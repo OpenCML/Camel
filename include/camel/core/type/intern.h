@@ -10,9 +10,8 @@
  * resolved operator call its own signature, and every re-encoding of a graph by a rewrite a
  * fresh copy of all of them.
  *
- * A type has no identity, only structure: the same type is one id everywhere (the author's
- * ruling of 2026-10-25, a-frozen-node-names-its-type-by-typeid). So a frozen node names its
- * type by a TypeId that came from this table, and nothing outside it hands out ids.
+ * A type has no identity, only structure: the same type is one id everywhere. So a frozen node
+ * names its type by a TypeId that came from this table, and nothing outside it hands out ids.
  *
  * What the table guarantees. A constructor that interns asks the table with a key made of the
  * shape (which constructor) and the words that determine the type: the **TypeIds** of its
