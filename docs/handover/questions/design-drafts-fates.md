@@ -51,12 +51,12 @@ ai-stack 0。
 
 | 被改的页 | 原文 | 改后 | 理由 |
 |---|---|---|---|
-| `docs/design-principles.cn.md` 1 | "当前的红线清单见 [重构总纲](design/blueprint/README.cn.md) 第 4 节" | 8 条红线逐条列出，每条带强制机制 | 结论并进规范，不留指向已删稿的链接 |
+| `docs/design-principles.cn.md` 1 | `当前的红线清单见 [重构总纲](design/blueprint/README.cn.md) 第 4 节` | 8 条红线逐条列出，每条带强制机制 | 结论并进规范，不留指向已删稿的链接 |
 | `docs/design-principles.en.md` 1 | 同上（英文） | 同上（英文） | 同上 |
-| `docs/design/arrays-memory/README.cn.md` 状态行 | "总览见 [重构总纲](../blueprint/README.cn.md)" | 删去该句 | 目标页已删 |
-| `docs/design/io-concurrency-streams/README.cn.md` 状态行 | "依据：…；[重构总纲](../blueprint/README.cn.md)" | 删去该句 | 同上 |
-| `docs/performance/graph-store-baseline.md` 首段 | "给图存储重构（[总纲](../design/blueprint/README.cn.md)）留一份当前的数字" | "给图存储重构留一份当前的数字" | 同上 |
-| `docs/roadmap.cn.md` 开头 | "> 下一轮大规模重构的总指南见 [下一轮重构总纲](design/blueprint/README.cn.md)。" | 删去该行（下一段已经把设计原则与 `docs/design/` 的定位写清楚） | 同上；这一页属另一条车道的改写范围，这里只做链接修正 |
+| `docs/design/arrays-memory/README.cn.md` 状态行 | `总览见 [重构总纲](../blueprint/README.cn.md)` | 删去该句 | 目标页已删 |
+| `docs/design/io-concurrency-streams/README.cn.md` 状态行 | `依据：…；[重构总纲](../blueprint/README.cn.md)` | 删去该句 | 同上 |
+| `docs/performance/graph-store-baseline.md` 首段 | `给图存储重构（[总纲](../design/blueprint/README.cn.md)）留一份当前的数字` | `给图存储重构留一份当前的数字` | 同上 |
+| `docs/roadmap.cn.md` 开头 | `> 下一轮大规模重构的总指南见 [下一轮重构总纲](design/blueprint/README.cn.md)。` | 删去该行（下一段已经把设计原则与 `docs/design/` 的定位写清楚） | 同上；这一页属另一条车道的改写范围，这里只做链接修正 |
 | `docs/design/training/README.cn.md` 相关文档 | 列表里有 `[原生算子回调子图](../native-subgraph-call/README.md)` | 删去该项 | 目标页已删；结论已进技术页 |
 | `docs/design/tiles-route/README.cn.md` 第 10 节 | 评审输入列表里有 `docs/design/native-subgraph-call` | 删去该项 | 同上 |
 | `test/cases/macro/hof_calls.cml` 注释 | "the function-call service … (docs/design/native-subgraph-call, item 7)" | "… (docs/technical/06_runtime_and_execution.md, the native operator callback service)" | 注释里的路径引用指向已删稿 |
