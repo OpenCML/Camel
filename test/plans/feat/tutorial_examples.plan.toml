@@ -404,3 +404,17 @@ name = "tutorial.examples.04_exercise"
 desc = "The answer to the exercise of chapter 4: an `if` is an expression, and a `match` on a string needs its default."
 case = "../../../docs/tutorial/examples/04_exercise.cml"
 golden = "golden/tutorial_examples/04_exercise.txt"
+
+# ---- Chapter 5 --------------------------------------------------------------------------------
+
+[[tests]]
+name = "tutorial.examples.05_loops"
+desc = "`loop` carries its state from one round to the next, and the body's value is the next state."
+case = "../../../docs/tutorial/examples/05_loops.cml"
+golden = "golden/tutorial_examples/05_loops.txt"
+
+[[tests]]
+name = "tutorial.examples.05_exercise"
+desc = "The answer to the exercise of chapter 5: a `loop` that adds the squares of the even numbers."
+case = "../../../docs/tutorial/examples/05_exercise.cml"
+golden = "golden/tutorial_examples/05_exercise.txt"
