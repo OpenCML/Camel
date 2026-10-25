@@ -18,7 +18,7 @@ decl    : moduleDecl | importDecl | exportDecl | namespaceDecl | usingNamespaceD
 
 | 声明 | 文法 | 章节 |
 |---|---|---|
-| 模块 | `module 名字` | [5.1](05_modules.md#51-模块声明) |
+| 模块 | 一个文件就是一个模块，名字来自文件名 | [5.1](05_modules.md#51-模块的名字) |
 | 导入 | `import (模块 \| (名字 \| { 名字 (as 新名)?, ... }) from 模块)` | [5.2](05_modules.md#52-导入) |
 | 导出 | `export (dataDecl \| typeDecl \| { 名字, ... })`；函数的 `export` 写在 `func` 前 | [5.3](05_modules.md#53-导出) |
 | 命名空间 | `namespace 限定名 { ... }` | [5.4](05_modules.md#54-命名空间) |
