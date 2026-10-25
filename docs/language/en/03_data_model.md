@@ -20,7 +20,7 @@ Every expression has a definite type at compile time; the graph contains only co
 | Array | `T[]`, `T[4]`, `T[n]`, `T[..]` | Elements of the same type; the brackets hold dimensions: a constant, the unknown `?`, or a trailing pack `..s`; `T[][]` is a nested array, rank 2 is written `T[m, n]` |
 | Tuple | `(T1, T2, ...)` | By position, accessed with `.0`, `.1` |
 | Struct | `{ x: T1, y: T2 }`, or the name a `type` declares | By name, accessed with `.x`; `type Name = { ... }` declares a named type, see 3.3.3 |
-| Function | `(x: T) => R`; any function: `function` | A concrete function type can be called; `function` only says "a function": its signature is not kept, and it cannot be called or compared. It is for a tag's argument, reading a function's graph and the like; see [6.9](06_expressions.md#69-lambdas-and-function-types) |
+| Function | `(x: T) => R` | See [6.9](06_expressions.md#69-lambdas-and-function-types) |
 | May be null | `T?` | See 3.4 |
 | May fail | `T!` | See 3.4 |
 | Map, set | `Map<K, V>`, `Set<T>` | See 3.6 |
