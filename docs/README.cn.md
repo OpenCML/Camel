@@ -70,8 +70,6 @@ Camel 让**程序本身就是图**。你写下的是计算的意图与依赖，�
 用梯度下降拟合一条直线。`grad(loss)` 不是逐步求值的库调用，而是一次图改写：它建出的导数是一张普通的图，优化器和 JIT 都看得见。
 
 ```camel
-module fit
-
 import { grad } from autodiff
 
 with <w: float>
@@ -143,8 +141,6 @@ npm run build        # Release 构建，产物在 out/latest
 ### Hello, Camel
 
 ```camel
-module hello
-
 func main(): int sync {
     println('Hello, Camel!')
     return 0
