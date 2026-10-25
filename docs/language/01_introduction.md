@@ -55,4 +55,4 @@ Hello, Camel!
 | [7 语句与声明](07_statements.md) | `let`/`var`、`return`/`throw`、块、函数、泛型、类型声明 |
 | [8 程序与文法](08_top_level_and_grammar.md) | 顶层结构、入口、文法概要 |
 
-**循环。** Camel 目前没有循环语法：`for`、`while` 不能用（`for`、`in` 是保留字）。重复的计算写成递归（尾递归不受深度限制）或高阶算子 `map`、`filter`、`reduce`、`foreach`。
+**循环。** `loop` 是带状态的表达式：状态写在循环头上，循环体的值是下一轮的状态，整个循环的值是最终状态。`loop acc = 0 for x in xs do acc + x` 每轮按顺序取序列的一个元素；`loop i = 1, acc = 0 while i <= n do (i + 1, acc + i)` 在条件成立时继续；两种写在一起时每轮先看条件、再取元素。没有 `break` 与 `continue`：提前结束写成 `while` 条件，跳过一轮的其余部分写成 `if`。循环不占调用深度，任意多轮都可以。精确规则见 [6.8.6](06_expressions.md#686-loop)。
