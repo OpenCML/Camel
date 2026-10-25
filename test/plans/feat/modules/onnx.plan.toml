@@ -1771,6 +1771,45 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 240000
 
 [[tests]]
+name = "export_core_slice"
+desc = "The core's own slice (`t[a:b]`, the node both `[]` forms build for any rank and any axis) exports as an ONNX Slice in a graph of its own: the subscript never reached the tensor module's lowering, so this is the path every subscript takes; the guard that reproduces a fault the ONNX Slice would clamp is a Gather whose index leaves its zeros, and the mask word the core keeps for the source text is not in the graph at all."
+kind = "behavior"
+case = "../../../cases/modules/onnx/ort_core_slice.cml"
+args = ["${case}"]
+envs = ["ONNX_OUT=${test_tmp}/export_core_slice.onnx"]
+expect_exit = 0
+expect_stdout_contains = ["exported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const path = await import('path')
+const fs = await import('fs')
+// The graph holds one Slice (op_type key 0x22, length 5) and at least one guard Gather.
+const buf = fs.readFileSync(path.join(input.test_tmp, 'export_core_slice.onnx'))
+const count = (mark) => { let n = 0, at = 0; while ((at = buf.indexOf(mark, at)) !== -1) { n += 1; at += 1 } return n }
+const slices = count(Buffer.from([0x22, 0x05, 0x53, 0x6c, 0x69, 0x63, 0x65]))
+const gathers = count(Buffer.from([0x22, 0x06, 0x47, 0x61, 0x74, 0x68, 0x65, 0x72]))
+assert(slices === 1, `one Slice expected, got ${slices}`)
+assert(gathers >= 1, `at least one guard Gather expected, got ${gathers}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "ort_core_slice"
+desc = "The core's own slice exported to ONNX and run on ONNX Runtime: in-range bounds give the NumPy slice and every bound Camel faults on makes the run fail instead of being clamped. The rows include an axis shorter than a constant bound on a data-dependent extent (the bound is guarded), a start the data makes negative (which a plain ONNX Slice would read from the end of the axis), an end that was not written (the mask says so and the end is the axis' own extent), a slice of a rank-2 value, and a step."
+kind = "behavior"
+tool = "python"
+case = "../../../cases/modules/onnx/ort_core_slice.py"
+args = ["${case}"]
+skip_unless = ["${python}", "-c", "import numpy, onnx, onnxruntime"]
+expect_exit = 0
+expect_stdout_contains = ["ort core slice: 0 failing", "PASS"]
+expect_output_not_contains = ["FAIL"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 120000
+
+[[tests]]
 name = "ort_slice_bounds"
 desc = "A slice whose end depends on the model input (x[0 : int(sum(x))]) exported alone and inside a branch on the data: on ONNX Runtime, ends within [-n, n] give the NumPy slice (negative ones counted from the end) and ends outside make the run fail, as Camel faults (design principles 3.9). The ONNX Slice alone clamps, so each bound the exporter cannot prove in range goes through a Gather guard; it used to return the clamped slice."
 kind = "behavior"

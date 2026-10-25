@@ -85,6 +85,14 @@ func main(): int sync {
 error InvalidAge: age is negative
 ```
 
+### 7.3.1 `yield`
+
+- `yield e` 给出流的**一个元素**，只写在函数体里。写它的函数产生一个流而不是一个值，所以函数头必须把返回类型写成流类型 `T..`（设计原则 5.4）。
+- 一轮里可以 `yield` 多次，恢复点就是 `yield` 所在的位置：区域里的循环、分支、`match` 的臂与 `sync` 块都可以写，任意层嵌套都可以。不做委托，把内层的流交出去写 `for x in inner do yield x`。
+- `yield` 之后的语句只在消费者再拉一个元素时执行。产出的流一次给出一个元素，值是线性的；同一个生成器函数可以调用多次，每次得到自己的流。`return` 结束流，不带值；一个元素都不产出是合法的空流。
+- 故障发生在产生那个元素的那次拉取处（故障不是值），之前已经交出的元素不受影响。
+- 语法读得下它（`yield` 是关键字，`retStmt` 读它，见 [8.2](08_top_level_and_grammar.md)）；**生成器状态机还没有**（[`../design/io-concurrency-streams/plan.cn.md`](../design/io-concurrency-streams/plan.cn.md) 的片 E）：编译一个含 `yield` 的函数体报 `SemanticDiag::FeatureNotSupported`，消息里写 `'generators'`——它不会把 `yield` 当成 `return` 悄悄执行。
+
 ## 7.4 函数
 
 ### 7.4.1 声明

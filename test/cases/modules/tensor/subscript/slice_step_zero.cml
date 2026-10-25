@@ -1,8 +1,7 @@
 /**
- * A subscript slice of a tensor whose first extent is stated and whose step is not the constant 1
- * is a view with strides, which needs the multidimensional array representation of H17: the step
- * is refused where it is written, the zero step included (design principles 5.4). Both `[]` forms
- * are answered by the core alone, so nothing falls back to the module that owns tensors.
+ * The constant 0 step is refused where it is written: a step is any non-zero value (the ruling of
+ * 2026-10-25), and 0 names no position, so the subscript that writes it is the compile-time
+ * `SemanticDiag::SliceStepZero` and the program after it does not run (design principles 3.9).
  */
 module subscript_slice_step_zero
 import { Tensor, reshape, shape } from tensor
