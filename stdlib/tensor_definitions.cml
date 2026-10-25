@@ -53,9 +53,19 @@ export func log_softmax(x: Tensor<f32>, axis: int): Tensor<f32> {
 /// tensor:mean of a whole tensor: the element type `T` is answered as
 /// T(sum(float(x)) / float(numel(x))) — the sum and the division both happen in f64 and their
 /// result is rounded into `T` once, never a sum rounded to the element type and divided again,
-/// which would round twice. A tensor without elements is a fault.
+/// which would round twice. The one rounding is the `match` on the element type below: a
+/// conversion to a type variable is not something the language writes, so each element type names
+/// its own conversion. A tensor without elements is a fault.
 export func mean::<T>(x: T[..]): T {
-    return T(sum(float(x)) / float(numel(x)))
+    let m = sum(float(x)) / float(numel(x))
+    return match type T {
+        case float => float(m)
+        case f32 => f32(m)
+        case bf16 => bf16(m)
+        case f16 => f16(m)
+        case int => int(m)
+        case i32 => i32(m)
+    }
 }
 
 /// tensor:relu: maximum(x, +0) (design principles 7.7): a NaN gives NaN, -0 gives +0.
