@@ -8491,7 +8491,7 @@ module tensor_rank0_runtime
 
 import { Tensor, zeros, reshape } from tensor
 
-func toShape(t: Tensor, s: int[]): Tensor {
+func toShape(t: f32[..], s: int[]): f32[..] {
     return reshape(t, s)
 }
 

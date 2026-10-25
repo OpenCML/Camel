@@ -16,20 +16,20 @@ import { adam, adam_state, softmax_cross_entropy } from nn
 import { now } from time
 
 type Mlp = {
-    w1: Tensor,
-    b1: Tensor,
-    w2: Tensor,
-    b2: Tensor
+    w1: f32[..],
+    b1: f32[..],
+    w2: f32[..],
+    b2: f32[..]
 }
 
 with <m: Mlp>
-func logits(x: Tensor): Tensor {
+func logits(x: f32[..]): f32[..] {
     let hidden = relu(x @ m.w1 + m.b1)
     return hidden @ m.w2 + m.b2
 }
 
 with <m: Mlp>
-func loss(x: Tensor, labels: Tensor): float {
+func loss(x: f32[..], labels: f32[..]): float {
     return softmax_cross_entropy(logits<m>(x), cast(labels, 'int64'))
 }
 
