@@ -14,7 +14,7 @@ DIR/results.md (default DIR: benchmarks/compile/out, which is not tracked).
 
 What is measured, and how:
 
-  * The phases of a run come from `camel --time-phases` (camel/utils/phase_timer.h): start-up,
+  * The phases of a run come from `camel --time-phases` (include/camel/utils/phase_timer.h): start-up,
     parse, GCT, GIR, the encoding of the runtime graph, each pass, teardown; one entry per
     module and per pass. Phases nest, so the tables show the *self* time of each kind of
     phase: its duration minus that of the phases inside it. `(process)` is what the phases

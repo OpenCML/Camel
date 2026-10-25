@@ -2,32 +2,40 @@ id = "docs.ai_reference"
 order = 926
 tier = "fast"
 tags = ["feat", "docs"]
-desc = "docs/reference/camel-for-ai.md is what its normative sources produce: the four generated regions (keywords, precedence, diagnostics, standard-library signatures) match what scripts/camel-for-ai.mjs reads from the token table, the parser's productions, the diagnostic registry and the generated standard-library page; every diagnostic the prose names is declared by the registry; and the file stays within the character budget it states"
+desc = "The pages for AI readers are what their normative sources produce: the four generated regions (keywords, precedence, diagnostics, standard-library signatures) match what scripts/camel-for-ai.mjs reads from the token table, the parser's productions, the diagnostic registry and the generated standard-library page; the two catalogues are documents of their own and are measured against their own budgets, not the page's; every diagnostic the prose names is declared by the registry; and each document stays within the character budget it states"
 
-# The page for AI readers is one file that must stay true to the tree without being read by hand
-# every time. Four regions of it are generated, and the check regenerates them: a diagnostic that
-# changes its message, a keyword that is added, an expression level that is inserted or a library
-# signature that changes is reported here instead of shipping in the page.
+# The pages for AI readers must stay true to the tree without being read by hand every time. Four
+# regions of them are generated, and the check regenerates them: a diagnostic that changes its
+# message, a keyword that is added, an expression level that is inserted or a library signature that
+# changes is reported here instead of shipping in the pages.
 #
-# The check also holds the prose to the two rules the page states for itself: a diagnostic is named
-# with its section (`SemanticDiag::UnresolvedReference`) and must be one the registry declares, so a
-# renamed or deleted diagnostic cannot stay in an error entry; and a `target` note names where its
-# subject is designed, as a `docs/...` path, so "not implemented yet" always points somewhere.
+# The page is the one document an AI reads whole, and the two catalogues it points at are files of
+# their own: a language that keeps gaining diagnostics and library names would otherwise push the
+# page past the size one read costs. So the layouts differ -- the page holds the keyword table and
+# the precedence levels, beside the rules they state, and the diagnostic catalogue and the signature
+# catalogue have a document each -- and the budget follows the layout: the page's budget counts the
+# page, and each catalogue is measured against its own.
+#
+# The check also holds the prose to the two rules the pages state for themselves: a diagnostic is
+# named with its section (`SemanticDiag::UnresolvedReference`) and must be one the registry declares,
+# so a renamed or deleted diagnostic cannot stay in an error entry; and a `target` note names where
+# its subject is designed, as a `docs/...` path, so "not implemented yet" always points somewhere.
 #
 # The proof cases run the same guard over test/plans/feat/docs_ai_reference/fixture, whose sources
-# are reduced copies of the four real ones, so each red condition is pinned without depending on the
-# language: a region that is not what its source produces, a missing region marker, a diagnostic
-# name the registry does not declare, and a task number in a public document.
+# are reduced copies of the four real ones and whose layout is the real three-file one, so each red
+# condition is pinned without depending on the language: a region that is not what its source
+# produces, a missing region marker, a diagnostic name the registry does not declare, and a task
+# number in a public document.
 
 [[tests]]
 name = "docs.ai_reference.current"
-desc = "The four generated regions of docs/reference/camel-for-ai.md are what their sources produce, every diagnostic the prose names exists, and the file is within its budget."
+desc = "Every generated region of the page and its two appendices is what its source produces, every diagnostic the prose names exists, and each document is within its own budget."
 kind = "behavior"
 tool = "node"
 case = "../../../scripts/camel-for-ai.mjs"
 args = ["${case}", "--check"]
 expect_exit = 0
-expect_stdout_contains = ["docs/reference/camel-for-ai.md is what its sources produce", "generated region(s)", "diagnostic name(s) cited by the prose", "characters (budget 112000)"]
+expect_stdout_contains = ["docs/reference/camel-for-ai.md is what its sources produce", "docs/reference/camel-for-ai-diagnostics.md is what its sources produce", "docs/reference/camel-for-ai-stdlib-signatures.md is what its sources produce", "generated region(s)", "diagnostic name(s) cited by the prose", "characters (budget 59000)", "characters (budget 30500)", "characters (budget 30000)"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 60000
 
@@ -47,19 +55,19 @@ timeout_ms = 180000
 
 [[tests]]
 name = "docs.ai_reference.fixture_consistent"
-desc = "The reduced document of the proof case is consistent with the reduced sources beside it: the guard is green on a small root, so the red cases below are red for their own reason."
+desc = "The reduced pages of the proof case are consistent with the reduced sources beside them, and the check reads them through the same three-file layout as the real tree: the guard is green on a small root, so the red cases below are red for their own reason."
 kind = "behavior"
 tool = "node"
 case = "../../../scripts/camel-for-ai.mjs"
 args = ["${case}", "--check", "--root", "test/plans/feat/docs_ai_reference/fixture"]
 expect_exit = 0
-expect_stdout_contains = ["is what its sources produce", "4 diagnostic"]
+expect_stdout_contains = ["docs/reference/camel-for-ai.md is what its sources produce", "docs/reference/camel-for-ai-diagnostics.md is what its sources produce", "docs/reference/camel-for-ai-stdlib-signatures.md is what its sources produce", "4 diagnostic"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 60000
 
 [[tests]]
 name = "docs.ai_reference.stale_region"
-desc = "A generated region that no longer matches its source fails, naming the region and the command that rewrites it."
+desc = "A generated region that no longer matches its source fails, naming the document, the region and the command that rewrites it."
 kind = "behavior"
 tool = "node"
 case = "../../../scripts/camel-for-ai.mjs"

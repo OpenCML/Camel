@@ -103,7 +103,7 @@ def main() -> None:
     assert rows[0][1] <= BOUND, "camel_native vs onnx_ort broke the A.2 artifact leg"
     assert rows[3][1] == 0.0, "our relax artifact differs from TVM's own ONNX import"
     assert all(r[1] <= 2e-6 for r in rows[4:]), "an executor drifted from the f64 reference"
-    print("E12 CHECK DONE (see NOTES.md for the pairwise accumulation-order analysis)")
+    print("E12 CHECK DONE (the module docstring explains the pairwise accumulation-order tolerance)")
 
 
 if __name__ == "__main__":
