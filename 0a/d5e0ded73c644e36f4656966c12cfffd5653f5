@@ -1,0 +1,33 @@
+tip=9c1f58938 H554 第十轮：位置/命名族清 1 条 + 一次自作自受的回退（36 → 35，新增红 0）
+
+数字
+- **36 → 35**（gate-28：`total: 6379, pass: 6316, fail: 35, skip: 12, known failures: 16`；逐名 **fixed 1 / new 0**）。
+- 中途一度到 **37**（gate-27）并**含 3 条新增红**：见 ②，已回退，现在 0 新增。
+
+① 位置/命名 4 条的定位与结果
+- `graph` **已清**：它在 `test/plans/feat/compile/numeric_permissions.plan.toml`（不在 `modules/graph.plan.toml`）。改前读数 `Error: no OPER node at line 10` → 该测试块内 7 行 span 钉值下移 1 → 绿。
+- `constant_fault_reached.simplify_fvm`：**未清，但已定位到行**。读数逐字 `…fold_constant_fault_reached.cml:10:15: [Warn]: This constant expression faults…`，而该测试的 warn 钉值现在写的是 `:12:15: [Warn]:`（我上一轮把 `:11:15` 改成 `12` 是猜的，错了）→ **下一轮改成 `:10:15: [Warn]:` 即绿**（同一测试的 error 钉值 `10:15` 已正确）。
+- `rules.generic_condition_effect_at_instantiation`：**未清，已定位**。读数逐字 `stdout does not contain '[the rule 'add_zero' is declared here at 11:1]'`，诊断本身在 `condition_generic_print.cml:13:5` → 该 note 的位置串要改成 `10:1`（用例少了一行）；我按块作用域的替换没匹配上（断言与 `name =` 不在同一行段），下一轮按行号改。
+- `gpu_scope.module_tag_propagates`：**属裁定范畴，给一行证据后停手**。verifier 要一个 `graph === 'scaled'` 的摆放行，实测行名是 `["__root__","Device::scaled","Device::kept","Device::Host::plain","main"]`——用例用的是命名空间块 `#gpu namespace Device { … }`（无 `module` 声明），编译器把块内函数的图名限定为 `Device::scaled`。**问题不在我这条线剥掉的那行**：该用例本来就没有 `module` 声明，`scripts/strip-module-declarations.mjs` 的 `--check` 也逐字报 0。要不要让 verifier 接受限定名、还是让块内图名不带限定，属未决 → 下一轮与 develop 侧那族一起立页。
+
+② 一次错误与回退（如实记）
+- 我按作者裁定给"模块不提供的遍"诊断也加了 `<pipeline>` 范围 → `diag_json.plan.toml` / `pass_not_found.plan.toml` 里 **3 条原本绿的**用例转红（`json_data_of_a_pass_the_module_does_not_provide`、`…does_not_export`、`json_data_of_the_reported_instance`），gate-27 因此 37 且新增 3。
+- 它们的断言是**两处**：`d.data.moduleName === '' && modulePath === ''` **和** `d.range.start.line === -1 …`（`pass_not_found.plan.toml:274-277`、`:297-299`、`:343-345`）。我在 `diag_json` 里改成 pipeline 的那两处**不是**这三个测试的（其中一处属 `passes_never_run_json`，按裁定必须保持无位置），所以按块替换后仍红，且把 `passes_never_run_json` 也弄红。
+- 处置：回退该 C++ 改动（提交 `9c1f58938`，说明写进提交信息：要让这三条跟着动才能改编译器），gate-28 回到 **35 / 新增 0**。下一轮正确顺序是"先改这三条测试的两处断言 → 再改编译器"。
+
+③ 脚本自身断言族（本轮只拿到读数，未修）
+- `compile_bench.smoke`（缺 `ok compile benchmark`）、`docs.snippets_compile`（缺 `no stale snippet in`）、`python_binding.session`（缺 `diagnostic:    camel.DiagnosticError name=SemanticDiag::UnresolvedReference code=0x0300000B`）、`debugger.http_gateway`（缺 `ok `）、`dump_after_each_pass`（缺 `pass dump: PASS`）、`fixes_apply`（缺 `diagnostic fixes proof: checks passed`）、`fusion_group.profile.none`（缺 `fusion group profile: PASS`）、`macro_body_effect_stage`（缺 `effect trace: PASS`）：都是 `expected exit 0, got 1` + 脚本自身断言失败，下一轮逐个读脚本判断"脚手架过时"还是"产品真缺"。
+- LSP 三条（`lsp.editing`/`navigation`/`code_and_related`，`stdout does not start with "ok "`）与 **`lsp.fstring` 环境类**（一行证据：`ModuleNotFoundError: No module named 'camel'`）。
+
+④ develop 侧那族的逐字读数（多数其实是我这条线的位置问题，未修）
+- `nullable_positions.default_is_a_null_constant`：`N18 [label="null", type="DATA", … span="15:16-…` → span 钉值。
+- `camel_passes.fold_fault.fault_is_reported`：`the run points at the expression: (fold_fault)/…fold_fault.cml:…` → 位置。
+- `captured_write_graph.warnings`：`IgnoredSideEffect: 39:20 The call of 'write_a…'` → 位置。
+- `failed_depth.error`：`error missing: (failed_depth)…failed_depth.cml:15:13: [Error]: 'count' could not be ev…`；`failed_evaluation.error`：`error missing: EFFECT boom`。
+- `check.lexical_limit_json`：`Error: source positions retained`。
+- `entry_args.missing_argument_json`：`stdout does not contain 'std::fvm: EntryArgumentMissing'`。
+- `json_data_of_a_pass_the_module_does_not_provide`：`a command-line diagnostic has no file: {…"moduleName":"pipeline","modulePath":"<pipeline>"…}` → **正是 ② 那族**（已回退，等测试先动）。
+
+⑤ 本轮按你的 4 写了页：`docs/handover/questions/gradient-refusal-named-call.md`（四段，含 `10:13` vs `11:13` 的逐字断言与读数、三个选项与代价、只卡这 12 条）。`<pipeline>` 保持原样未改。
+
+未做（如实）：`-Check all` 与合并 develop + 重剥（本轮预算全给了上面的定位与回退），下一轮开头做；`gpu_scope.module_tag_propagates` 与 develop 侧位置族的问题页也只差落笔。提交：`7eca05a9b`、`9c1f58938`。纪律：未推 origin；未碰 `docs/language/**` 散文；未碰其它工作树/分支；未在 Windows 构建。
