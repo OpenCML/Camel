@@ -1033,7 +1033,10 @@ class Builder {
     /// The `Data` behind a static data node, when the builder made the node from one. A
     /// compile-time value handed on from node to node (a `constas` value passed to another
     /// `constas`, the `n` of a `static for`) has no `Data` of its own any more: it was encoded
-    /// into a slot when its node was made, and the value is read back from here.
+    /// into a slot when its node was made, and the value is read back from here. A member read of
+    /// a value that is already known (`tags.width.w`, over the tags the third name of `fields T`
+    /// gives) carries the field's value here too: the read keeps its node, and what it reads is
+    /// known at compile time.
     std::unordered_map<node_handle_t, data_ptr_t> constantNodes_;
     void rememberConstant(node_handle_t node, const data_ptr_t &data) {
         if (node != nullptr && data != nullptr) {
@@ -1782,12 +1785,13 @@ class Builder {
     // The value of the element `name` of the composite literal `literal`: a bound value, or
     // the value of the function of that name.
     node_handle_t elementNodeOf(const std::string &name, const GCT::node_ptr_t &literal);
-    /// The tags written on field `index` of the struct type `subject`, as a compile-time
-    /// `string[]`: the third thing the element of `fields T` gives, bound to the third name of
-    /// `(n, F, tags)`. Empty for a field with no tags, for a type that is not a named struct and
-    /// for a type declared by another module (the facts of a field live in the module that
-    /// declares the type, and reading a tag's value from Camel code waits for tag reflection --
-    /// design principles 6.2, which puts `(n, F, tags)` with it).
+    /// The tags written on field `index` of the struct type `subject`, as a compile-time struct:
+    /// the third thing the element of `fields T` gives, bound to the third name of `(n, F, tags)`.
+    /// One field per tag, named by the tag (`width`), whose value is the record of that tag's
+    /// arguments, one field per declared parameter (`{ width: { w: 8 } }` for `#width<8>`); a tag
+    /// with no arguments is the empty record, and so is a field with no tags at all. Empty for a
+    /// type that is not a named struct and for a type declared by another module (the facts of a
+    /// field live in the module that declares the type).
     node_handle_t staticFieldTagsNode(
         Type *subject, size_t index, const GCT::node_ptr_t &where);
     // functionValueOf, and FunctionNameAsValue when `name` has no single function value.

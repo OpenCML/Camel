@@ -117,15 +117,34 @@ void setPipelineStage(std::string stage);
 std::string stageForDiagnostic(DiagType type);
 
 // ---- Exception classes ----
+/// A limit that stopped a diagnostic from being recorded. The exception carries the diagnostic it
+/// stopped on, and `what()` says it in one line (severity, place, message): the limit is control
+/// flow, and a handler that reports "a limit was reached" without saying which diagnostic reached
+/// it has thrown the information away.
+///
+/// The diagnostic is stored by value. It is the last one added to a container, and the container
+/// is not the exception's to keep: the handler may clear it, a module may be unloaded, or the
+/// container may be gone by the time `what()` is read. A copy lives exactly as long as the
+/// exception object travels, which is what a `what()` returning a pointer into it needs.
 class DiagnosticsLimitExceededBaseException : public std::exception {
   public:
-    DiagnosticsLimitExceededBaseException() {}
+    explicit DiagnosticsLimitExceededBaseException(const Diagnostic &diagnostic);
+
+    const char *what() const noexcept override { return text_.c_str(); }
+    /// The diagnostic the limit stopped on.
+    const Diagnostic &diagnostic() const { return diagnostic_; }
+
+  private:
+    Diagnostic diagnostic_;
+    /// Rendered once, where the diagnostic is still complete: `what()` must not resolve anything
+    /// later (its range may only resolve while the source context is alive).
+    std::string text_;
 };
 
 class DiagnosticsLimitExceededException : public DiagnosticsLimitExceededBaseException {
   public:
-    DiagnosticsLimitExceededException(Severity sev, size_t limit)
-        : DiagnosticsLimitExceededBaseException(), severity_(sev), limit_(limit) {}
+    DiagnosticsLimitExceededException(Severity sev, size_t limit, const Diagnostic &diagnostic)
+        : DiagnosticsLimitExceededBaseException(diagnostic), severity_(sev), limit_(limit) {}
 
     Severity severity() const { return severity_; }
     size_t limit() const { return limit_; }
@@ -137,8 +156,8 @@ class DiagnosticsLimitExceededException : public DiagnosticsLimitExceededBaseExc
 
 class DiagnosticsTotalLimitExceededException : public DiagnosticsLimitExceededBaseException {
   public:
-    DiagnosticsTotalLimitExceededException(size_t total)
-        : DiagnosticsLimitExceededBaseException(), total_limit_(total) {}
+    DiagnosticsTotalLimitExceededException(size_t total, const Diagnostic &diagnostic)
+        : DiagnosticsLimitExceededBaseException(diagnostic), total_limit_(total) {}
 
     size_t totalLimit() const { return total_limit_; }
 
@@ -147,6 +166,12 @@ class DiagnosticsTotalLimitExceededException : public DiagnosticsLimitExceededBa
 };
 
 // ---- Configuration ----
+/// How many errors one compilation collects before it gives up, when the caller names no other
+/// number. A tool that compiles sources itself (the command line, the debugger) uses this one
+/// number: the same program must not be reported differently by two of them, and a limit of its
+/// own would make one of them stop where the other records a diagnostic and goes on.
+inline constexpr int kDefaultMaxErrors = 20;
+
 struct DiagsConfig {
     int total_limit                                       = -1; // -1 means no limit
     std::unordered_map<Severity, int> per_severity_limits = {};

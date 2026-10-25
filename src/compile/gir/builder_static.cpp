@@ -14,6 +14,8 @@
 
 #include "camel/core/data/base.h"
 #include "camel/core/data/composite/array.h"
+#include "camel/core/data/composite/struct.h"
+#include "camel/core/data/primary.h"
 #include "camel/core/node_attrs.h"
 #include "camel/core/rtdata/struct.h"
 #include "camel/core/rtdata/tuple.h"
@@ -586,38 +588,103 @@ struct StaticExpansionScope {
     ~StaticExpansionScope() { --depth; }
 };
 
+/// The empty record: one object per build, interned by its (empty) field list, so every `{}` the
+/// third name of `fields T` gives is the same type.
+data_ptr_t emptyRecord() {
+    StructDataFactory empty;
+    return empty.build();
+}
+
+/// The tag a fact on a field belongs to: its attribute key is the tag's qualified name, and the
+/// declaration is where the name the program writes and the parameters its arguments were
+/// written for are read.
+const camel::core::tag::Decl *tagOf(camel::core::attr::AttrKey key) {
+    const auto id = camel::core::tag::find(std::string(camel::core::attr::keyName(key)));
+    return id.has_value() ? camel::core::tag::get(*id) : nullptr;
+}
+
+/// The name a tag is written under in the program (`width`), not the qualified name of its
+/// attribute key (`m::width`): this is the field name `tags.width` reads.
+std::string tagFieldName(camel::core::attr::AttrKey key, const camel::core::tag::Decl *decl) {
+    if (decl != nullptr) {
+        return decl->ident;
+    }
+    return std::string(camel::core::attr::keyName(key));
+}
+
+/// One argument of a tag as the compile-time value the program reads it as. The argument was
+/// checked against the kind its parameter declares when the tag was written, so the mapping back
+/// is by that kind: an integer as an `int`, a real as a `float`, a symbol or a graph reference as
+/// a `string`. A value of a kind no argument makes here (flags) is the empty record.
+data_ptr_t tagArgumentValue(const camel::core::attr::Value &value) {
+    switch (value.kind) {
+    case camel::core::attr::ValueKind::Int:
+        return std::make_shared<LongData>(value.integer);
+    case camel::core::attr::ValueKind::Float:
+        return std::make_shared<DoubleData>(value.real);
+    case camel::core::attr::ValueKind::Symbol:
+    case camel::core::attr::ValueKind::Graph:
+        return std::make_shared<StringData>(value.text);
+    default:
+        return emptyRecord();
+    }
+}
+
+/// The record of a tag's arguments: one field per argument, named by the parameter it was
+/// written for (`w` for `#width<8>` under `tag width<w: int>`). A tag with no arguments is the
+/// empty record; several arguments were kept as a tuple and are separated here. A tag whose
+/// arguments do not line up with its parameters one for one (a variadic one) names the extra
+/// ones by position.
+data_ptr_t tagArgumentsRecord(
+    const camel::core::tag::Decl *decl, camel::core::attr::AttrValueId id) {
+    const camel::core::attr::Value value = camel::core::attr::value(id);
+    std::vector<camel::core::attr::AttrValueId> items;
+    if (value.kind == camel::core::attr::ValueKind::Tuple) {
+        items = value.items;
+    } else if (value.kind != camel::core::attr::ValueKind::Unit) {
+        items.push_back(id);
+    }
+    StructDataFactory record;
+    for (size_t i = 0; i < items.size(); ++i) {
+        const std::string name =
+            decl != nullptr && i < decl->params.size() ? decl->params[i].name : std::to_string(i);
+        record.add(name, tagArgumentValue(camel::core::attr::value(items[i])));
+    }
+    return record.build();
+}
+
 } // namespace
 
 node_handle_t Builder::staticFieldTagsNode(
     Type *subject, size_t index, const GCT::node_ptr_t &where) {
-    // The tags written on the field, as the names of the tags in the order the declaration wrote
-    // them: a compile-time `string[]`, the third thing `fields T` gives (`(n, F, tags)`). The
-    // facts of a field are kept by the module that declares the type (`tag::attachToField`), so
-    // this reads them there; a type declared elsewhere and a type that is not a struct (a tuple,
-    // whose positions are not fields) give no tags, and the list is empty.
-    std::vector<std::string> names;
+    // The tags written on the field, as a compile-time struct: one field per tag, named by the
+    // tag, whose value is the record of that tag's arguments. A field of
+    // `type Box = { #width<8> low: int, high: int }` under `tag width<w: int>` gives
+    // `{ width: { w: 8 } }` for `low` and `{}` for `high`, so `tags.width.w` reads the value where
+    // the round's type has that field, `fields typeof(tags)` walks the names, and each round's
+    // `tags` has the type its own field's tags make. The facts of a field are kept by the module
+    // that declares the type (`tag::attachToField`), so this reads them there; a type declared
+    // elsewhere and a type that is not a struct (a tuple, whose positions are not fields) give no
+    // tags, and the record is empty.
+    StructDataFactory tags;
     if (subject != nullptr && subject->code() == TypeCode::Struct && module_ != nullptr) {
         const StructDecl *decl = tt::as_ptr<StructType>(subject)->decl();
         if (decl != nullptr && decl->moduleName() == module_->name()) {
-            camel::core::attr::AttrSetId tags =
+            camel::core::attr::AttrSetId facts =
                 module_->fieldTags(Reference(decl->name()), index);
-            if (tags == camel::core::attr::kNoAttrs && !decl->shortName().empty() &&
+            if (facts == camel::core::attr::kNoAttrs && !decl->shortName().empty() &&
                 decl->shortName() != decl->name()) {
-                tags = module_->fieldTags(Reference(decl->shortName()), index);
+                facts = module_->fieldTags(Reference(decl->shortName()), index);
             }
-            for (const camel::core::attr::Attr &entry : camel::core::attr::entries(tags)) {
-                names.emplace_back(std::string(camel::core::attr::keyName(entry.key)));
+            for (const camel::core::attr::Attr &entry : camel::core::attr::entries(facts)) {
+                const camel::core::tag::Decl *tagDecl = tagOf(entry.key);
+                tags.add(tagFieldName(entry.key, tagDecl), tagArgumentsRecord(tagDecl, entry.value));
             }
         }
     }
-    data_vec_t elements;
-    elements.reserve(names.size());
-    for (const std::string &name : names) {
-        elements.push_back(tt::as_shared<Data>(std::make_shared<StringData>(name)));
-    }
-    const data_ptr_t tags = tt::as_shared<Data>(ArrayData::from(Type::String(), elements));
-    node_handle_t node    = currGraph_->addStaticDataNode(tags);
-    rememberConstant(node, tags);
+    const data_ptr_t value = tags.build();
+    node_handle_t node     = currGraph_->addStaticDataNode(value);
+    rememberConstant(node, value);
     registerNodeOrigin(context_, node, where, "gir.static.tags");
     return node;
 }
