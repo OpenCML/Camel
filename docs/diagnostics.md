@@ -1451,7 +1451,7 @@ Invalid access index: '{0}'.
 Ensure the index is within bounds for arrays or refers to a valid field in structs.
 ```
 
-**Example** (`test/cases/consistency/faults/tuple_index_static.cml`, run as `camel `)
+**Example** (`test/cases/consistency/faults/tuple_index_static.cml`, run as `camel test/cases/consistency/faults/tuple_index_static.cml ${backend}`)
 
 ```camel
 module tuple_index_static
@@ -1517,23 +1517,31 @@ No matching function found for argument types: {0}.
 Check the number and types of arguments to ensure they match one of the available overloaded function signatures. Available overloads: {1}
 ```
 
-**Example** (`test/cases/compile/array_alias/type_text.cml`, run as `camel test/cases/compile/array_alias/type_text.cml ${backend}`)
+**Example** (`test/cases/modules/optim/unknown_optimizer.cml`, run as `camel test/cases/modules/optim/unknown_optimizer.cml`)
 
 ```camel
-// What the alias prints as (plan section 5.4): `Tensor<f32>` is `f32[..]`, `Tensor<[3]>` keeps
-// the `Tensor` spelling for an element nobody fixed, and `Tensor<f32, [2, 3]>` is `f32[2, 3]`.
-// The candidate list of a refused call is where the text is visible.
-module array_alias_type_text
+module optim_unknown_optimizer
 
-import { Tensor } from tensor
+import { Tensor, full } from tensor
+import { init } from optim
 
-func takes(a: Tensor<f32>, b: Tensor<[3]>, c: Tensor<f32, [2, 3]>): int {
-    return 0
+type Unknown = { rate: float }
+
+type Model = { w: Tensor }
+
+func model_at(): Model {
+    return { w: full([4], f32(0.5)) }
+}
+
+func init_unknown(): int {
+    let opt: Unknown = { rate: 0.1 }
+    let state = init(opt, model_at())
+    return state.step
 }
 
 func main(): int sync {
-    let s: string[] = ["a"]
-    println(takes(s, s, s))
+    let steps = init_unknown()
+    'optim unknown optimizer init steps={}' ->format<steps> ->println
     return 0
 }
 ```
@@ -2068,16 +2076,15 @@ The arguments of the type '{0}<...>' are not accepted: {1}.
 What a type takes between '<' and '>' is defined by the type itself (a type argument, or a constant written 'const <data>'). An argument a type does not accept is an error; it is never ignored.
 ```
 
-**Example** (`test/cases/compile/array_alias/err_element_type.cml`, run as `camel test/cases/compile/array_alias/err_element_type.cml ${backend}`)
+**Example** (`test/cases/compile/array_shape/err_const_shape.cml`, run as `camel test/cases/compile/array_shape/err_const_shape.cml`)
 
 ```camel
-// The element type of the alias is a numeric scalar (plan section 5.1): anything else is the
-// type's own refusal, and the message names the set it takes.
-module array_alias_err_element_type
-
+// A shape argument is written without `const`; the old spelling is refused and the message
+// gives the new one.
+module array_shape_err_const
 import { Tensor } from tensor
 
-func count(x: Tensor<string>): int {
+func bad(x: Tensor<f32, const [3]>): int {
     return 0
 }
 
@@ -8507,7 +8514,7 @@ Attempted division by zero.
 Ensure the denominator is not zero before performing division.
 ```
 
-**Example** (`test/cases/consistency/attempt/fault_outside.cml`, run as `camel `)
+**Example** (`test/cases/consistency/attempt/fault_outside.cml`, run as `camel test/cases/consistency/attempt/fault_outside.cml ${backend}`)
 
 ```camel
 module fault_outside
@@ -8581,23 +8588,21 @@ Maximum recursion depth ({1}) exceeded when evaluating graph '{0}'.
 Check for infinite recursion. A call in tail position takes no frame, so write a deep recursion as a tail call; or raise the limit with --max-recursion-depth <n> or CAMEL_MAX_RECURSION_DEPTH=<n>.
 ```
 
-**Example** (`test/cases/consistency/limits/depth_value.cml`, run as `N=50 camel `)
+**Example** (`test/cases/consistency/limits/depth_direct.cml`, run as `N=100 camel --max-recursion-depth 100 test/cases/consistency/limits/depth_direct.cml ${backend}`)
 
 ```camel
-module depth_value
+module depth_direct
 
 import { get_env } from env
 
-func via(f: (n: int) => int, n: int): int {
-    return if n == 0 then 0 else 1 + f(n - 1)
+func depth(n: int): int {
+    return if n == 0 then 0 else 1 + depth(n - 1)
 }
-
-func step(n: int): int { return 0 + via(step, n) }
 
 func main(): int sync {
     let n = int(get_env('N'))
     println('start')
-    println(step(n))
+    println(depth(n))
     println('done')
     return 0
 }
@@ -8941,7 +8946,7 @@ Cannot convert the string '{0}' to {1}.
 The whole string must be {2}: no blanks before or after it and nothing else. A conversion that fails is a fault and ends the program; parse_int and parse_float return an error value (T!) instead.
 ```
 
-**Example** (`test/cases/consistency/faults/int_text_trailing.cml`, run as `camel `)
+**Example** (`test/cases/consistency/faults/int_text_trailing.cml`, run as `camel test/cases/consistency/faults/int_text_trailing.cml ${backend}`)
 
 ```camel
 module int_text_trailing
@@ -9254,7 +9259,7 @@ Cannot convert {0} to {1}: {2}.
 A conversion whose value does not fit the target type is a fault (design principles 5.1): a float that is NaN, infinite or beyond the integer's range, an integer beyond the range of a narrower integer type, or a text that is a number the type cannot hold (out of range, which is not the same as text that is not a number: that is InvalidNumberText). Check the value before converting it, or clamp it (min, max) to the range of the target.
 ```
 
-**Example** (`test/cases/consistency/faults/float_to_int_range.cml`, run as `camel `)
+**Example** (`test/cases/consistency/faults/float_to_int_range.cml`, run as `camel test/cases/consistency/faults/float_to_int_range.cml ${backend}`)
 
 ```camel
 module float_to_int_range
@@ -9295,7 +9300,7 @@ An error value reached the exit of 'main' without being handled: {0}: {1}.
 A value of type T! that has failed must be opened before the program ends: give a replacement with '!!', pass it on with '?->', or take it apart with 'match ... case error e'. The position is where the error was made (the definition of 'main' when the error records none).
 ```
 
-**Example** (`test/cases/consistency/entry/error_thrown.cml`, run as `camel `)
+**Example** (`test/cases/consistency/entry/error_thrown.cml`, run as `camel test/cases/consistency/entry/error_thrown.cml ${backend}`)
 
 ```camel
 module error_thrown
@@ -9334,7 +9339,7 @@ The range {0} to {1} is out of range for {2} of length {3}.
 A bound of 'slice' is a position from 0 to the length; the end is one past the last element taken. A range that leaves the sequence is a fault, as an index out of range is. To take or leave out at most n elements, use 'take' and 'drop' of the module 'array', which cut by definition.
 ```
 
-**Example** (`test/cases/consistency/faults/slice_out_of_range.cml`, run as `camel `)
+**Example** (`test/cases/consistency/faults/slice_out_of_range.cml`, run as `camel test/cases/consistency/faults/slice_out_of_range.cml ${backend}`)
 
 ```camel
 module slice_out_of_range

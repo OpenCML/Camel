@@ -1301,7 +1301,10 @@ timeout_ms = 10000
 # since; to ask the array's own count when the cell is one this graph does not declare (a `var`
 # parameter, a captured cell) and every use the graph can see leaves the value alone; and to copy
 # otherwise -- after a read that may keep the value, on a value another party made, and for a
-# captured cell this graph reads, since the count cannot see a second name for one array.
+# captured cell this graph reads, whose count the runtime decides. The count counts the names of
+# the value: the operators that hand out a name make the storage counted
+# (Array::shareForSecondName, docs/technical/18_sync_control_semantics.md), so what the runtime
+# answers is what the plan would have answered had it seen the name.
 # `element_assigned_copy` and `path_assigned.allocs` show the copy that follows a read, counted
 # with `std::mem::blocks()`.
 [[tests]]
@@ -3859,3 +3862,52 @@ assert(cells > 0, `an escaping var keeps its cell, found ${cells} :var/new nodes
 }
 """
 timeout_ms = 8000
+
+# A value with two names is one storage both names can write: what a write in place may touch is
+# decided by the array's own count, so the count has to count the names. A name that appears for
+# a value -- a store into a `var` cell, a read that lets the value out of a variable -- makes the
+# storage counted, and a write through any of the names then needs the only one and copies
+# (docs/design-principles.cn.md 3.5, 6.11; docs/technical/18_sync_control_semantics.md).
+[[tests]]
+name = "var_alias_through_param"
+desc = "`var v = big` gives the array `big` is a second name, in the cell of `v`. A write through a `var` parameter of a callee (`xs[0] = 9`) reaches the cell of `v`, and the array's count sees the two names, so the write copies: `big` keeps the value it was read as."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_alias_through_param.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout = "big[0] = 1  v[0] = 9\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "var_alias_captured"
+desc = "A closure that reads the cell of `v`, and a `let` name of the same array: the closure reads whatever the cell holds at the call, and the write to `v[0]` copies because the cell is a second name of the array `big` is, so `big` keeps its value while the closure sees the write."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_alias_captured.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout = "big[0] = 1  v[0] = 9  f() = 9\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "var_alias_two_cells"
+desc = "One array in two `var` cells and a `let` name: three names for one storage, so the write to `a[0]` copies and `src` and `b` keep what they were read as."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_alias_two_cells.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout = "src[0] = 1  a[0] = 9  b[0] = 1\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "var_alias_read_then_param"
+desc = "`let kept = v` reads the value out of the cell (`:var/get`), so `kept` and the cell are two names; the write through the `var` parameter in the callee copies, and `kept` keeps the value it was read as."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_alias_read_then_param.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout = "kept[0] = 1  v[0] = 9\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000

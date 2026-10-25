@@ -10,7 +10,7 @@
 // test, and the slow plans under `feat/mm`, `feat/opt` and `feat/tools` never run at all.
 // `gpu/**` and `perf/**` are in no gate target either. A "green gate" therefore did not mean
 // "the tree is green"; it meant "the fast layer is green". An earlier audit then recommended
-// `-Plan test/plans -Tier all` for the release, which would have started the 200 cases
+// `-Plan test/plans -Tier all` for the release, which would have started the cases
 // `agents/test.md` reserves for a milestone on a quiet machine (GC stress and poison, progen,
 // the PyTorch comparisons, the benchmarks) on a shared host.
 //
@@ -51,10 +51,10 @@
 // A skipped plan is UNKNOWN, never green. This is the accounting `agents/test.md`
 // ask for, printed on every run:
 //
-//   * the 25 policy-forbidden plan files (21 whole plans + 4 plans whose forbidden tests are the
-//     slow ones) -- their milestone cases today: the 193 measured across its 18 files, plus the
-//     seven the perf plans that landed afterwards add -- not run by this gate, not claimed. They
-//     are the milestone layer, and `--tier milestone` is the layer that runs them;
+//   * the 25 policy-forbidden plan files (22 whole plans + 3 plans whose held-back entries are
+//     named one by one) -- the cases the milestone layer would run, counted below through the
+//     runner's own reading of those files and printed on every run -- not run by this gate, not
+//     claimed. They are the milestone layer, and `--tier milestone` is the layer that runs them;
 //   * the debug layer (`--tier debug`, a Debug build) -- never part of a Release gate.
 //
 // Exit codes: 0 every selected phase passed; 1 a phase failed; 2 refused or not runnable
@@ -302,8 +302,8 @@ function readSummary(text) {
 }
 
 // The cases the policy holds back, read through the runner's own loaders: the printed accounting
-// follows the tree, so a plan that grows a case is counted the day it lands (it used to print the
-// literal 200 measured). A whole plan the policy forbids carries `tier = "milestone"` in its own
+// follows the tree, so a plan that grows a case is counted the day it lands, and no number is
+// written down here to go stale. A whole plan the policy forbids carries `tier = "milestone"` in its own
 // file, so all of its cases count; in the three files only some tests are held back, and those say
 // `tier = "milestone"` themselves. Counting the runner's tests, not the raw table rows, is what
 // makes the number the number of cases `--tier milestone` would run from these files.

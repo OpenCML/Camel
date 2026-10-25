@@ -1,0 +1,24 @@
+/**
+ * One array in two `var` cells and a `let` name: `a` and `b` both took the array `src` is, so
+ * three names can read it. The write to `a[0]` copies, and the other two keep what they were
+ * read as (docs/design-principles.cn.md 3.5, 6.11).
+ */
+module var_alias_two_cells
+
+func make_array(): int[] {
+    return [
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    ]
+}
+
+func main(): int sync {
+    let src = make_array()
+    var a   = src
+    var b   = src
+    a[0] = 9
+    println("src[0] =", src[0], " a[0] =", a[0], " b[0] =", b[0])
+    return 0
+}

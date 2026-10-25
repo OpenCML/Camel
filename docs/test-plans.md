@@ -94,6 +94,15 @@ tests) or on one `[[tests]]` entry (an override), with the values `fast`, `slow`
   or it checks something a Release build removes. It runs only under `--tier debug`, never under
   `fast`, `slow`, `milestone` or `all`, because those four run the Release binary.
 
+A layer is defined by the rule above and not by how many tests are in it: the count moves with every
+case the tree gains, so a number written here would be a claim nobody re-measures. How many tests a
+run selected is what the run prints. `node scripts/test.js` ends with the runner's own count,
+`[SUMMARY] total: <n>, pass: <n>, fail: <n>`, with `, skip: <n>` when a `skip_unless` precondition
+held a test back and `, known failures: <n>` when a `known_fail` mark did; and
+`npm run release-gate` prints the batch it holds back for the milestone layer as
+`[gate] held by policy for the milestone layer: <n> plan files, <n> cases`, read from the same plan
+files through the runner's own loader.
+
 Rules for a new test:
 
 - It is fast by default: do not mark a test slow to make the default set look fast.
@@ -219,7 +228,7 @@ total without names is how the wrong thing gets optimized. `test_timings` is one
 with all of those intervals and its `at` marks relative to the start of the run. The run prints
 one `[SLOT]` line with the ratio and the totals.
 
-Measured on the `smoke` + `feat` fast layer at `-Jobs 8` (5,667 tests, a 32-core host shared with
+Measured on the `smoke` + `feat` fast layer at `-Jobs 8` (a 32-core host shared with
 other gates), eight runs before and eight after:
 
 | per run | before | after |
@@ -240,7 +249,7 @@ the final gate run summed 713 s of child time against 674-721 s in three of the 
 The two mechanisms the numbers rule out are worth naming: writing the log files blocks the runner's
 thread for 4-6 s over the run and is charged to the slots it blocks (`log_block_ms`), not to the
 hundreds of seconds above; and `validateTest`'s own JavaScript (resuming, normalizing, comparing)
-is 0.7 s over 5,667 tests. The irreducible part of what is left is `spawn` itself: 6.6-11 ms per
+is 0.7 s over the whole layer. The irreducible part of what is left is `spawn` itself: 6.6-11 ms per
 test, 37-62 s of synchronous work in the runner's thread for the run.
 
 Removing those 213-346 s from the slots does not remove them from the plan: the same work now runs
@@ -285,7 +294,7 @@ plan nor the case is copied into the record. The copy was written once per test 
 it back -- the guards that name `test/results` skip it, and the one reader is a person looking at the
 run they just made -- so a `smoke` + `feat` gate rewrote the same plan file once for every test in it.
 That copy, not the output, was most of what a run directory weighed: of the 43,898 entries and
-245.0 MB of a full `smoke` + `feat` fast layer run directory (5,691 tests, measured on the integration
+245.0 MB of a full `smoke` + `feat` fast layer run directory (measured on the integration
 checkout), the copy of the plan and of the case was 11,382 files and 214.2 MB -- 87% of the bytes and
 26% of the entries. What a test's record actually holds is its captured output and its `meta.json`:
 the same gate run on this branch wrote 32,461 entries and 31.0 MB (112 MB of disk blocks, at 4 KB a
@@ -517,7 +526,7 @@ Every `[[tests]]` entry may use these common fields:
   assertion, and it is rejected as soon as the case takes a quarter of it in its own CPU time. A
   test whose own CPU time exceeds its wall clock is multi-threaded work: the reading sums its
   threads, so a bound on its total work belongs in `cpu_budget_ms` (measured over the whole fast
-  layer on 2026-10-24: 21 of 5,873 tests, all ONNX-runtime, dlpack and fuzz cases).
+  layer on 2026-10-24: 21 tests, all ONNX-runtime, dlpack and fuzz cases).
 - `cpu_budget_ms`
   Optional. The test's cost bound in milliseconds of **CPU time** (user + system) of the test's own
   process tree, read by `test/tools/child-cpu.mjs`, which the runner runs the command under. A test
