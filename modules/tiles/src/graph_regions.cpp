@@ -7,6 +7,7 @@
 #include "camel/core/operator_table.h"
 #include "camel/core/tags.h"
 #include "camel/core/type/composite/tuple.h"
+#include "camel/core/rtdata/func.h"
 #include "camel/runtime/control_regions.h"
 #include "camel/runtime/core_facts.h"
 #include "camel/runtime/graph.h"
@@ -17,6 +18,7 @@
 #include "tiles/internal/regions.h"
 #include "tiles/program.h"
 #include <algorithm>
+#include <span>
 #include <sstream>
 #include <unordered_map>
 #include <utility>
@@ -300,16 +302,19 @@ RegionAnalysis analyzeRegions(
     auto transfers = planRegionTransfers(nodes, regions);
     return {std::move(regions), std::move(reasons), std::move(transfers)};
 }
-std::string
-inspectRegions(const rt::Program &graphs, const rt::GCGraph &graph, rt::fact::FactStore &facts) {
-    // The table is the compiler's view of the program, so it says the same thing the pass would:
-    // code written in a `#gpu` scope's arm or loop is a segment of that region (docs/design/gpu/plan.cn.md 2.5).
-    const GpuScopes scopes(graphs);
-    const auto analysis = analyzeRegions(graphs, graph, facts, &scopes);
+namespace {
+// One graph's regions, the boundaries they extract and why the nodes in none are in none, as the
+// report writes them, as the members of the object the caller opened. `skip` names nodes the
+// reader is told about elsewhere: the wrapper of a cut scope reports its exec calls as segments,
+// and an analysis exclusion of them says nothing.
+void writeAnalysis(
+    std::ostringstream &out, const rt::Program &graphs, const rt::GCGraph &graph,
+    rt::fact::FactStore &facts, const GpuScopes *scopes,
+    std::span<const rt::gc_node_ref_t> skip = {}) {
+    const auto analysis = analyzeRegions(graphs, graph, facts, scopes);
     const auto &regions = analysis.regions;
     const auto &reasons = analysis.exclusions;
-    std::ostringstream out;
-    out << "{\"schema\":1,\"regions\":[";
+    out << "\"regions\":[";
     bool first = true;
     for (const auto &region : regions) {
         if (!first)
@@ -353,14 +358,49 @@ inspectRegions(const rt::Program &graphs, const rt::GCGraph &graph, rt::fact::Fa
     }
     out << "]},\"excluded\":[";
     first = true;
-    for (size_t id = 0; id < reasons.size(); ++id)
-        if (!reasons[id].empty()) {
-            if (!first)
-                out << ',';
-            first = false;
-            out << "{\"node\":" << id << ",\"reason\":\"" << reasons[id] << "\"}";
-        }
-    out << "]}";
+    for (size_t id = 0; id < reasons.size(); ++id) {
+        if (reasons[id].empty() ||
+            std::find(skip.begin(), skip.end(), static_cast<rt::gc_node_ref_t>(id)) != skip.end())
+            continue;
+        if (!first)
+            out << ',';
+        first = false;
+        out << "{\"node\":" << id << ",\"reason\":\"" << reasons[id] << "\"}";
+    }
+    out << ']';
+}
+} // namespace
+std::string inspectRegions(
+    const rt::Program &graphs, const rt::GCGraph &graph, rt::fact::FactStore &facts,
+    std::span<const RegionSegment> segments) {
+    // The table is the compiler's view of the program, so it says the same thing the pass would:
+    // code written in a `#gpu` scope's arm or loop is a segment of that region (docs/design/gpu/plan.cn.md 2.5).
+    const GpuScopes scopes(graphs);
+    std::ostringstream out;
+    out << "{\"schema\":1";
+    std::vector<rt::gc_node_ref_t> cut;
+    for (const auto &segment : segments)
+        cut.push_back(segment.call);
+    // A scope a pass has cut is a wrapper of exec calls: each call carries the graph of its
+    // segment, and the segment graphs are what the report is about. The wrapper's own exclusion
+    // of those calls (`context_arguments`) says nothing a reader asked for, so it is left out.
+    out << ",\"segments\":[";
+    bool first = true;
+    for (const auto &segment : segments) {
+        if (!first)
+            out << ',';
+        first = false;
+        out << "{\"call\":" << segment.call << ",\"graph\":\"" << segment.graph->graph()->name()
+            << "\",";
+        // The segment's own regions: the code the pass moved into it, cut as the graph it now is.
+        // No scope covers a segment's graphs; the analysis a graph with no scope takes is the one
+        // the report has always shown.
+        writeAnalysis(out, graphs, *segment.graph->graph(), facts, nullptr);
+        out << '}';
+    }
+    out << "],";
+    writeAnalysis(out, graphs, graph, facts, &scopes, cut);
+    out << '}';
     return out.str();
 }
 } // namespace camel::tiles

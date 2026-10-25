@@ -56,15 +56,20 @@ every operator written in the scope — including the ones written in the functi
 must have a device program, and a scope the device cannot serve is a compile error, never a host
 run. The capability miss is `GpuScopeUnsupported`; an operator the device back end has a program
 for but not for this shape, or one whose module provides none, is `GpuScopeNoDeviceProgram`. Both
-are located at the operator, name the scope and say why. A `#cpu` block inside the scope is the
+are located at the operator, name the scope and say why. A report operator (`inspect`, `source`,
+`benchmark`, `regions`) asked about a function the device back end refuses names itself and the
+graph it was given (`RuntimeDiag::InvalidArgument`): the miss is a scheduling decision, so it is a
+diagnostic and not a fault. A `#cpu` block inside the scope is the
 explicit host escape and stays the host's. Without `tiles::compile` in the pipeline nothing reads
 the label, and the compiler warns that the tag has no reader (design principles 9.4). Outside a
-`#gpu` scope, a node the device cannot take is left on the host, as before; that host side of the
-preference path is scheduled for deletion.
+`#gpu` scope, a node the device cannot take is left on the host: that host side is this operator's
+own contract (`run_preferred_resident`, the GPU design's §6 item 3), not a defect to remove.
 
 For statically shaped eligible tensor regions, `tiles::compile` uses region extraction and resident
 transfers. Unsupported nodes stay on CPU while supported regions prefer GPU; captures and CPU
 effects are preserved. Partitioning happens once, when the pass rewrites the program.
+A scope the pass has cut is a wrapper of exec calls, one per segment, each carrying the graph of
+its segment; `inspect`, `source`, `benchmark` and `regions` read those segments, one plan each.
 Static regions now generate their launch plans and CUDA source from parameter types
 when outlined, without allocating placeholder input tensors or initializing CUDA.
 The core context's process-local `tiles.compiled_region` target fact associates the
@@ -218,6 +223,15 @@ This is not a persistent semantic fingerprint or a cache of graph compilation.
   `output_dtypes` distinguishes f32 tensor storage from f64 scalar storage.
   Scalar f64 outputs must match the reference exactly; f32 outputs retain the
   reported tolerance policy.
+- `regions<fn>()` reports the graph without CUDA: one entry per region the pass would
+  cut, the boundaries it extracts, its transfers and why each node outside them is in
+  none.
+- A scope a pass has cut is a wrapper of exec calls, one per segment, each carrying the
+  graph of its segment. `inspect`, `source`, `benchmark` and `regions` read those
+  segments -- one plan each, generated from the types its parameters carry -- and say
+  that a segment's inputs are unbound, because the call that runs the segment binds
+  them while the scope runs. `benchmark` reports the plan and not samples for that
+  reason. Without a cut scope the four read the whole graph, as before.
 - `available()` reports whether driver/NVRTC initialization succeeds. A successful
   result does not guarantee a subsequent compilation or memory allocation succeeds.
 - `device()` reports the selected GPU, or raises a diagnostic explaining failure.

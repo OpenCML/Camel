@@ -6,6 +6,7 @@
 #include "camel/core/context/context.h"
 #include "camel/core/error/diagnostics/messages/runtime.h"
 #include "camel/core/mm/gen.h"
+#include "camel/core/operator_table.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
@@ -413,6 +414,10 @@ const runtime::Program *outlineRegions(
                 draft.setNormInputs(call, args);
             }
             draft.setWithInputs(call, std::span(&fnNode, 1));
+            // That context argument is the segment's own function constant, so this call is the
+            // segment's exec node and the template published above is its plan: a segment is an
+            // exec call carrying its graph, and the report operators read the graph, not the
+            // wrapper (the target form of the GPU design, docs/design/gpu/plan.cn.md 2.1-2.3).
             // The members were statements of a chain (an operator written in an arm, a loop
             // written in the body). The call takes their place in it, so the host statements
             // written around the segment keep their order against it; erasing the members then
@@ -528,5 +533,43 @@ const runtime::Program *outlineRegions(
     if (regionRefused)
         return program;
     return count ? session.commit() : program;
+}
+bool isRegionExec(core::OperId oper) {
+    // An operator that calls the graph of the function value it receives is one this module
+    // writes for a segment (`RegionDeviceOps::execute`, op-semantics 11.4). The module's own
+    // namespace is the guard: another module's graph-calling operator is not a segment of a
+    // Tiles scope.
+    const auto &table = core::OperatorTable::instance();
+    return table.callsGraphs(oper) && table.uri(oper).starts_with("tiles:");
+}
+std::vector<RegionSegment> regionSegments(const runtime::GCGraph &graph) {
+    namespace td = core::rtdata;
+    std::vector<RegionSegment> segments;
+    for (runtime::gc_node_ref_t id = 0; id < graph.nodeCount(); ++id) {
+        const auto *node = graph.node(id);
+        if (node->kind != runtime::GCNodeKind::Oper)
+            continue;
+        if (!isRegionExec(graph.nodeBodyAs<runtime::GCOperBody>(id)->oper))
+            continue;
+        // The pass writes exactly one context argument: the function value that owns the
+        // segment's graph. A call without one is not a segment call and is left to the caller.
+        const auto with = graph.withInputsOf(id);
+        if (with.size() != 1)
+            continue;
+        const auto *carried = graph.node(with.front());
+        if (carried->kind != runtime::GCNodeKind::Data || carried->dataIndex >= 0)
+            continue;
+        const auto slot = static_cast<size_t>(-carried->dataIndex);
+        if (slot >= graph.staticSlots().size())
+            continue;
+        auto *type = carried->dataType();
+        if (!type || type->code() != core::type::TypeCode::Function)
+            continue;
+        auto *function = td::fromSlot<::Function *>(graph.staticSlots()[slot]);
+        if (!function || !function->graph())
+            continue;
+        segments.push_back(RegionSegment{id, function});
+    }
+    return segments;
 }
 } // namespace camel::tiles
