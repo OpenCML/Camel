@@ -33,6 +33,7 @@ Chapters already written to the new outline (Chinese and English together, each 
 [3 Functions and pipes](03_functions_and_pipes.en.md) ·
 [4 Branches and `match`](04_branches_and_match.en.md) ·
 [5 Arrays and loops](05_arrays_and_loops.en.md) ·
+[6 Structs, tuples, maps and sets](06_aggregates.en.md) ·
 [9 Evaluation by dependency](09_evaluation_by_dependency.en.md) ·
 [17 Teaching the compiler a law](17_teaching_a_law.en.md)
 
