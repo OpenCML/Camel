@@ -35,8 +35,8 @@ bool fullyKnown(const std::optional<StaticShape> &shape) {
     if (!shape) {
         return false;
     }
-    for (int64_t extent : *shape) {
-        if (extent == kUnknownDim) {
+    for (const std::optional<int64_t> &extent : *shape) {
+        if (!extent) {
             return false;
         }
     }
@@ -70,13 +70,13 @@ std::optional<Type *> shapeInfer(const InferContext &) {
 /// The shape as a constant when the type fixes every dimension.
 std::optional<slot_t> shapeFold(const InferContext &ctx, mm::IAllocator &allocator) {
     const auto shape = ctx.facts(0).shape;
-    if (!shape || std::ranges::any_of(*shape, [](int64_t d) { return d == kUnknownDim; })) {
+    if (!shape || std::ranges::any_of(*shape, [](const std::optional<int64_t> &d) { return !d; })) {
         return std::nullopt;
     }
     ::Array *array =
         ::Array::create(allocator, ArrayType::create(Type::Int64()), shape->size());
     for (size_t i = 0; i < shape->size(); ++i) {
-        array->set(i, static_cast<camel::core::rtdata::Int64>((*shape)[i]));
+        array->set(i, static_cast<camel::core::rtdata::Int64>(*(*shape)[i]));
     }
     return camel::core::rtdata::toSlot(array);
 }
@@ -114,13 +114,14 @@ std::optional<Type *> reshapeInfer(const InferContext &ctx) {
         size_t open = 0;
         for (const auto &extent : *partial) {
             const bool known = extent && *extent >= 0;
-            shape.push_back(known ? *extent : kUnknownDim);
+            shape.push_back(known ? std::optional<int64_t>(*extent) : std::nullopt);
             probe.push_back(known ? *extent : -1);
             open += known ? 0 : 1;
         }
         if (open == 1 && fullyKnown(in.shape)) {
             try {
-                return tensorOf(in.dtype, k::resolveReshape(*in.shape, probe));
+                return tensorOf(
+                    in.dtype, knownShape(k::resolveReshape(kernelExtents(*in.shape), probe)));
             } catch (const std::exception &) {
                 // No value fits: left to reshape to report when it runs.
             }
@@ -128,10 +129,17 @@ std::optional<Type *> reshapeInfer(const InferContext &ctx) {
         return tensorOf(in.dtype, shape);
     }
     if (fullyKnown(in.shape)) {
-        return tensorOf(in.dtype, k::resolveReshape(*in.shape, *target));
+        return tensorOf(
+            in.dtype, knownShape(k::resolveReshape(kernelExtents(*in.shape), *target)));
     }
-    StaticShape shape(target->begin(), target->end());
-    return tensorOf(in.dtype, shape); // a remaining -1 stays unknown
+    StaticShape shape;
+    shape.reserve(target->size());
+    for (int64_t extent : *target) {
+        // A `-1` in a reshape target is that operator's "fill this extent in" (kernels::layout),
+        // which no value can be: the facts carry it as an unknown extent (plan section 5.3).
+        shape.push_back(extent < 0 ? std::nullopt : std::optional<int64_t>(extent));
+    }
+    return tensorOf(in.dtype, std::move(shape));
 }
 
 // flatten(t, axis = 1): [d0 * ... * d(axis-1), d(axis) * ... * dn]
@@ -161,9 +169,10 @@ std::optional<Type *> flattenInfer(const InferContext &ctx) {
     const TensorFacts in = ctx.facts(0);
     const auto axis      = ctx.has(1) ? ctx.constInt(1) : std::optional<int64_t>(1);
     if (fullyKnown(in.shape) && axis) {
-        return tensorOf(in.dtype, flattenShape(*in.shape, *axis));
+        return tensorOf(
+            in.dtype, knownShape(flattenShape(kernelExtents(*in.shape), *axis)));
     }
-    return tensorOf(in.dtype, StaticShape{kUnknownDim, kUnknownDim});
+    return tensorOf(in.dtype, StaticShape{std::nullopt, std::nullopt});
 }
 
 // unsqueeze(t, axis)
@@ -185,7 +194,7 @@ std::optional<Type *> unsqueezeInfer(const InferContext &ctx) {
     }
     StaticShape shape = *in.shape;
     if (!axis) {
-        return tensorOf(in.dtype, StaticShape(shape.size() + 1, kUnknownDim));
+        return tensorOf(in.dtype, StaticShape(shape.size() + 1, std::nullopt));
     }
     shape.insert(shape.begin() + normalizeAxisOrThrow(*axis, shape.size() + 1), 1);
     return tensorOf(in.dtype, shape);
@@ -223,11 +232,12 @@ std::optional<Type *> permuteInfer(const InferContext &ctx) {
     const TensorFacts in = ctx.facts(0);
     auto perm            = ctx.constInts(1);
     if (in.shape && perm) {
-        return tensorOf(in.dtype, k::permuteShape(*in.shape, *perm));
+        return tensorOf(
+            in.dtype, knownShape(k::permuteShape(kernelExtents(*in.shape), *perm)));
     }
     return tensorOf(
         in.dtype,
-        in.shape ? std::optional(StaticShape(in.shape->size(), kUnknownDim)) : std::nullopt);
+        in.shape ? std::optional(StaticShape(in.shape->size(), std::nullopt)) : std::nullopt);
 }
 
 // concat(a, b, axis)
@@ -245,7 +255,7 @@ std::optional<Type *> concatInfer(const InferContext &ctx) {
     if (!a.shape || !b.shape || !axis) {
         return tensorOf(
             dtype,
-            a.shape ? std::optional(StaticShape(a.shape->size(), kUnknownDim)) : std::nullopt);
+            a.shape ? std::optional(StaticShape(a.shape->size(), std::nullopt)) : std::nullopt);
     }
     if (a.shape->size() != b.shape->size()) {
         throw ShapeError(std::format(
@@ -256,10 +266,10 @@ std::optional<Type *> concatInfer(const InferContext &ctx) {
     const auto ax = static_cast<size_t>(normalizeAxisOrThrow(*axis, a.shape->size()));
     StaticShape out(a.shape->size());
     for (size_t d = 0; d < out.size(); ++d) {
-        const int64_t x = (*a.shape)[d], y = (*b.shape)[d];
+        const std::optional<int64_t> x = (*a.shape)[d], y = (*b.shape)[d];
         if (d == ax) {
-            out[d] = (x == kUnknownDim || y == kUnknownDim) ? kUnknownDim : x + y;
-        } else if (x != kUnknownDim && y != kUnknownDim && x != y) {
+            out[d] = (!x || !y) ? std::nullopt : std::optional<int64_t>(*x + *y);
+        } else if (x && y && x != y) {
             throw ShapeError(std::format(
                 "concat along axis {}: {} and {} differ in dimension {}",
                 ax,
@@ -267,7 +277,7 @@ std::optional<Type *> concatInfer(const InferContext &ctx) {
                 formatShape(*b.shape),
                 d));
         } else {
-            out[d] = x != kUnknownDim ? x : y;
+            out[d] = x ? x : y;
         }
     }
     return tensorOf(dtype, out);
@@ -311,20 +321,20 @@ std::optional<Type *> sliceFunctionInfer(const InferContext &ctx) {
         return tensorOf(in);
     }
     if (!axis) {
-        return tensorOf(in.dtype, StaticShape(in.shape->size(), kUnknownDim));
+        return tensorOf(in.dtype, StaticShape(in.shape->size(), std::nullopt));
     }
     const auto a     = static_cast<size_t>(normalizeAxisOrThrow(*axis, in.shape->size()));
     const auto start = ctx.constInt(2), end = ctx.constInt(3);
     const auto step   = ctx.has(4) ? ctx.constInt(4) : std::optional<int64_t>(1);
-    const int64_t ext = (*in.shape)[a];
-    if (ext == kUnknownDim || !start || !end || !step || *step <= 0) {
-        (*in.shape)[a] = kUnknownDim;
+    const std::optional<int64_t> ext = (*in.shape)[a];
+    if (!ext || !start || !end || !step || *step <= 0) {
+        (*in.shape)[a] = std::nullopt;
         return tensorOf(in);
     }
     // Extent and bounds are known at compile time: an interval that leaves the axis is an
     // error here (design principles 3.9). With an unknown extent or bounds the operator checks
     // at run time and faults with SliceOutOfRange (3.9).
-    const auto range = k::normalizeSliceBounds(ext, *start, *end);
+    const auto range = k::normalizeSliceBounds(*ext, *start, *end);
     if (!range) {
         throw ShapeError(
             std::format(
@@ -332,7 +342,7 @@ std::optional<Type *> sliceFunctionInfer(const InferContext &ctx) {
                 *start,
                 *end,
                 a,
-                ext));
+                *ext));
     }
     const int64_t s = range->start, e = range->end;
     (*in.shape)[a]  = e > s ? (e - s + *step - 1) / *step : 0;
@@ -438,15 +448,15 @@ std::optional<Type *> takeInfer(const InferContext &ctx) {
     }
 
     StaticShape out;
-    const int64_t extent = input.shape ? (*input.shape)[0] : kUnknownDim;
+    const std::optional<int64_t> extent = input.shape ? (*input.shape)[0] : std::nullopt;
     if (const auto constant = ctx.constInts(1)) {
-        if (extent != kUnknownDim) {
+        if (extent.has_value()) {
             for (const int64_t index : *constant) {
-                if (index < 0 || index >= extent) {
+                if (index < 0 || index >= *extent) {
                     throw ShapeError(std::format(
                         "index {} is out of range for the first dimension of extent {}",
                         index,
-                        extent));
+                        *extent));
                 }
             }
         }
@@ -454,7 +464,7 @@ std::optional<Type *> takeInfer(const InferContext &ctx) {
     } else if (indices.shape) {
         out.push_back((*indices.shape)[0]);
     } else {
-        out.push_back(kUnknownDim);
+        out.push_back(std::nullopt);
     }
     if (input.shape) {
         out.insert(out.end(), input.shape->begin() + 1, input.shape->end());
@@ -577,9 +587,9 @@ std::optional<Type *> oneHotInfer(const InferContext &ctx) {
     } else if (labels.shape) {
         out.push_back((*labels.shape)[0]);
     } else {
-        out.push_back(kUnknownDim);
+        out.push_back(std::nullopt);
     }
-    out.push_back(classes.value_or(kUnknownDim));
+    out.push_back(classes);
     return tensorOf(TypeCode::Float32, out);
 }
 

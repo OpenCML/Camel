@@ -11,7 +11,7 @@
  * was there, this program printed uninitialized memory -- `d=[2.0769207e+34, 2.0768573e+34]`,
  * a different pair of garbage floats on every run, with `shape(d)` = `[2]` while the value is
  * `[2, 3]` -- because an array's tangent was built from its element's tangent and came out one rank
- * short (`src/core/derivative.cpp`, computeTangentType's Array case; `f32[2, 3]` came back as
+ * short (`src/core/derivative.cpp`, the Array case of `computeTangent`; `f32[2, 3]` came back as
  * `f32[]`). The author's ruling of 2026-10-25 refuses a program that runs and gives a wrong value;
  * `loop_grad_refuse_slice_iterable` pinned the refusal that stood in for the missing scatter, and
  * this case is that case turned back into the positive one it had to build: the readings below are

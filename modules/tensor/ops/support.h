@@ -77,7 +77,9 @@ template <typename Fn> slot_t runKernel(std::string_view op, Fn &&body) {
 
 /// Tensor type from facts.
 type::Type *tensorOf(const TensorFacts &facts);
-/// "[2, 3]", with "?" for unknown extents, for shape diagnostics.
+/// "[2, 3]", for shape diagnostics: an extent nobody stated prints as "?".
+std::string formatShape(std::span<const std::optional<int64_t>> shape);
+/// The same, for a shape whose every extent is a value (the index evaluator's run-time shapes).
 std::string formatShape(std::span<const int64_t> shape);
 type::Type *tensorOf(std::optional<type::TypeCode> dtype, std::optional<StaticShape> shape);
 

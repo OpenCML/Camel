@@ -542,7 +542,7 @@ slot_t zeroTangent(Context &ctx, Type *primalType, Type *tangentType, slot_t pri
         Struct *zero        = Struct::create(tangentStruct->size(), mm::autoSpace());
         size_t position     = 0;
         for (size_t i = 0; i < primalStruct->size(); ++i) {
-            Type *fieldTangent = camel::core::tangentTypeOf(primalStruct->typeAt(i));
+            Type *fieldTangent = camel::core::machineryTangentTypeOf(primalStruct->typeAt(i));
             if (fieldTangent == nullptr) {
                 continue;
             }
@@ -561,7 +561,7 @@ slot_t zeroTangent(Context &ctx, Type *primalType, Type *tangentType, slot_t pri
         Tuple *zero        = Tuple::create(tangentTuple->size(), mm::autoSpace());
         size_t position    = 0;
         for (size_t i = 0; i < primalTuple->size(); ++i) {
-            Type *elementTangent = camel::core::tangentTypeOf(primalTuple->typeAt(i));
+            Type *elementTangent = camel::core::machineryTangentTypeOf(primalTuple->typeAt(i));
             if (elementTangent == nullptr) {
                 continue;
             }
@@ -753,7 +753,7 @@ slot_t __tangent_zeros_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Type *primalType  = norm.type(0);
     Type *tangentType = norm.resultType();
     if (tangentType == nullptr) {
-        tangentType = camel::core::tangentTypeOf(primalType);
+        tangentType = camel::core::machineryTangentTypeOf(primalType);
     }
     if (tangentType == nullptr || primalType->code() != TypeCode::Array) {
         throwRuntimeFault(
@@ -811,7 +811,7 @@ slot_t __tangent_scatter_slice_arr__(ArgsView &with, ArgsView &norm, Context &ct
     Type *const primalType  = norm.type(1);
     Type *const tangentType = norm.resultType() != nullptr
                                   ? norm.resultType()
-                                  : camel::core::tangentTypeOf(primalType);
+                                  : camel::core::machineryTangentTypeOf(primalType);
     if (tangentType == nullptr || primalType->code() != TypeCode::Array ||
         tangentType->code() != TypeCode::Array) {
         throwRuntimeFault(

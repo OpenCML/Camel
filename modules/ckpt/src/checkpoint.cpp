@@ -208,7 +208,7 @@ NativeNode readNode(
             if (want.size() != shape.size())
                 mismatch(path, "tensor rank differs");
             for (size_t i = 0; i < want.size(); ++i)
-                if (want[i] != tensor::kUnknownDim && want[i] != shape[i])
+                if (want[i].has_value() && want[i] != shape[i])
                     mismatch(path, "tensor extent differs at axis " + std::to_string(i));
         }
     } else if (tag == "string" && invalidUtf8Offset(node.payload))

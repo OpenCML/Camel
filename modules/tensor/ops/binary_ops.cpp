@@ -21,13 +21,13 @@ Type *resultType(TypeCode dtype, const InferContext &ctx) {
             if (extent < 0)
                 throw ShapeError("binary tensor shape cannot contain negative extents");
         }
-        shape = *values;
+        shape = knownShape(*values);
     } else if (auto values = ctx.partialInts(1)) {
         shape = StaticShape{};
         for (const auto &value : *values) {
             if (value && *value < 0)
                 throw ShapeError("binary tensor shape cannot contain negative extents");
-            shape->push_back(value.value_or(kUnknownDim));
+            shape->push_back(value);
         }
     }
     return tensorOf(dtype, shape);

@@ -665,7 +665,7 @@ id
 - 实参只能是类型，个数必须与参数一致；不带实参使用是错误。
 - 右侧只能引用已经声明的类型，所以类型函数不能引用自身。
 - 可以 `export`，在别的模块里以 `模块::Pair<int>` 使用。
-- 模块类型的尖括号由该类型自己解释，实参可以是类型或 `const 数据`；数值数组的另一种拼写 `Tensor<f32, const [2, 3]>` 的尖括号由数组类型自己解释。
+- 模块类型的尖括号由该类型自己解释，实参可以是类型或 `const 数据`；数值数组的另一种拼写 `Tensor<f32, [2, 3]>` 的尖括号由数组类型自己解释（形状实参不写 `const`：`Tensor<f32, const [2, 3]>` 报 `SemanticDiag::InvalidTypeArgument`）。
 
 类型表达式里保留、尚未实现的部分：类型运算 `&`、`\`、`+`、`-`、`^`，以及 `keyof`、`名字 of T`（`SemanticDiag::FeatureNotSupported` 或语法错误），它们的含义尚未决定。`typeof e` 已实现：它是一个完整的类型，取表达式 `e` 的值的类型，在使用这个类型的位置由编译器展开；`typeof` 不能嵌在更大的类型里（`typeof(1)[]` 报 `SemanticDiag::TypeOfNotWholeType`），操作数没有值（`void`）时报 `SemanticDiag::TypeOfNotAValue`。
 
