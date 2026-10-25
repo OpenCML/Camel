@@ -662,15 +662,30 @@ void concatVjp(VjpBuilder &b, const VjpCall &call) {
     const std::array<vjp_node_t, 2> lhsAxis{lhs, axis};
     const vjp_node_t split = lhsTensor ? b.addOper(Type::Int64(), "tensor:dim", lhsAxis)
                                        : b.addOper(Type::Int64(), ":struct/len_arr", containerOnly);
+    // The core's own slice node, six words: the value, the axis, the two bounds, the step and the
+    // mask that says which bounds the program wrote. Both bounds are written here, so the mask is
+    // 3 (`src/compile/gct/builder.cpp`: `intConstant((written[1] ? 1 : 0) | (written[0] ? 2 : 0))`
+    // over the start and the end) and the step is the constant 1. The adjoint slices dy out with
+    // the one core operator, the same node the subscript builds, so concat's adjoint no longer
+    // means a slice of the module's own (the author's ruling of 2026-10-25: every call is the
+    // core's).
     if (lhsTensor) {
         b.accumulateGradient(
-            lhs, addTensorOper(b, "tensor:slice", {*dy, axis, staticInt(b, 0), split}));
+            lhs,
+            addTensorOper(
+                b,
+                ":op/slice_sub",
+                {*dy, axis, staticInt(b, 0), split, staticInt(b, 1), staticInt(b, 3)}));
     }
     if (rhsTensor) {
         const std::array<vjp_node_t, 2> dyAxis{*dy, axis};
         const vjp_node_t total   = b.addOper(Type::Int64(), "tensor:dim", dyAxis);
         b.accumulateGradient(
-            rhs, addTensorOper(b, "tensor:slice", {*dy, axis, split, total}));
+            rhs,
+            addTensorOper(
+                b,
+                ":op/slice_sub",
+                {*dy, axis, split, total, staticInt(b, 1), staticInt(b, 3)}));
     }
 }
 

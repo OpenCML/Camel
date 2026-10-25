@@ -1,13 +1,19 @@
 /**
- * A slice with a step other than 1 is a view with strides: it waits for (design principles
- * 5.4). On a tensor the step must be a constant, and anything but 1 is refused at compile time.
+ * A step other than 1 is the core's slice too (the author's ruling of 2026-10-25: any non-zero
+ * step is accepted, and only the constant 0 is refused where it is written). The positions are the
+ * ones the step names; the result is a copy -- the elements are the same and the program does not
+ * have to know, but it does not share the parent's block. That is the deviation the flip line
+ * records for a stepped slice, and the view with strides waits for H17.
  */
 module subscript_slice_step
-import { reshape, shape } from tensor
+import { reshape, shape, sum } from tensor
 
 func main(): int sync {
     println('ran')
     let b = reshape([1.0, 2.0, 3.0, 4.0], [4])
     println(shape(b[0:4:2]))
+    println(sum(b[0:4:2]))
+    println(shape(b[1:4:2]))
+    println(shape(b[0:4:1]))
     return 0
 }

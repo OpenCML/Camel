@@ -422,6 +422,13 @@ enum class SemanticDiag : uint32_t {
     // its condition are made at, so it is a value the compiler knows.
     RuleWithArgumentNotConstant = 0x0001F0,
 
+    // The resource clause's promise (design effects plan 4.3, step 5): the resources a body infers
+    // have to be within what its signature promises. The resource group above is 0x1A0-0x1A4, and
+    // 0x1A5-0x1A6 are `std::cml` and 0x1A7 is retired, so this one is appended at the end of the
+    // semantic space instead of being placed next to a group that has no room left.
+    /// The resources a body uses are not within what its `pure`/`uses` signature promises.
+    UsesPromiseViolated = 0x0001F1,
+
     // Warnings
     IgnoredSideEffect = 0x100002,
     EffectNotExecuted = 0x100004,

@@ -1621,6 +1621,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::UsesPromiseViolated,
+            {
+                "UsesPromiseViolated",
+                "'{0}' does not keep its resource promise: {1}.",
+                "A signature is a promise the compiler checks against the resources the function uses. 'uses' is an upper bound, so every resource the body uses must be named there, and 'pure' promises the empty set; a 'var' parameter is a resource by itself, and so is a capture. Change the body so that it no longer reaches for it, or change the signature to name it.",
+            },
+        },
+        {
             SemanticDiag::IgnoredSideEffect,
             {
                 "IgnoredSideEffect",
@@ -1632,8 +1640,8 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             SemanticDiag::EffectNotExecuted,
             {
                 "EffectNotExecuted",
-                "{0} has side effects but is never executed: nothing depends on it and it is not in a sync block.",
-                "Evaluation is driven by dependencies: outside a sync block an expression whose result (or the variable it writes) nothing needs does not run. This is legal. To run it, put it in a sync block ('sync {{ ... }}', or a function body 'func f(): T sync {{ ... }}'), or use its result.",
+                "{0} has side effects but is never executed: {1}.",
+                "Evaluation is driven by dependencies: an expression whose result (or the variable it writes) nothing needs does not run, and a sync block nothing needs does not run either, so the effects written directly in it do not run with it. This is legal. To run it, put it on a sync chain ('sync {{ ... }}' in a function body, or use the block's value), or use its result.",
             },
         },
         {

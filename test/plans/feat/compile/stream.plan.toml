@@ -493,3 +493,99 @@ expect_output_contains = ["The two-parameter 'range(a, b)' is gone; write the in
 expect_output_not_contains = ["UnknownInternalError", "Warning"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
+
+
+[[tests]]
+name = "stream.yield_keyword"
+desc = "`yield` is a control keyword: the token table lists it and `retStmt` reads it, so a program can no longer use it as a name. The H248 plan's negative acceptance for the generator slice (`docs/design/io-concurrency-streams/plan.cn.md:307`) is this program, its t9, which compiled and printed `1` while `yield` was an ordinary identifier."
+kind = "negative"
+case = "../../../cases/compile/stream/yield_keyword.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SyntaxDiag::KeywordAsIdentifier"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 9
+expect_output_contains = ["'yield' is a keyword and cannot be used as a name."]
+expect_output_not_contains = ["UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+
+[[tests]]
+name = "stream.yield_statement_is_read"
+desc = "The syntax of a generator: `yield` is the third alternative of `retStmt`, so `yield e` parses wherever a statement stands, in a `loop` and in an `if` (the two shapes the plan's acceptance names) and in a body whose head writes the stream type (design principles 5.4). It is read without compiling: what produces the stream is the state machine of the plan's slice E, which is not built yet."
+kind = "behavior"
+case = "../../../cases/compile/stream/yield_statement.cml"
+args = ["check", "-s", "${case}"]
+expect_exit = 0
+expect_output_not_contains = ["[Error]", "UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+
+[[tests]]
+name = "stream.yield_ast"
+desc = "The statement builds the exit node the AST has always had for it: `camel inspect --ast` shows `ExitStmt: yield` for the `yield` of a loop body and for the one of an `if` arm, and no `yield` is read as a name."
+kind = "behavior"
+case = "../../../cases/compile/stream/yield_statement.cml"
+args = ["${inspect_ast}", "${case}"]
+expect_exit = 0
+expect_stdout_contains = ["ExitStmt: yield"]
+expect_output_not_contains = ["IdentDef: yield", "RefData: yield", "UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+
+[[tests]]
+name = "stream.yield_formatting"
+desc = "The formatter re-emits `yield` like any other statement (the syntax closure's item 6: the new syntax must format): the messy spacing of the case comes back canonical, and the suffix of the head is kept as written. `camel-format` needs no compiler, so this covers the whole statement surface."
+kind = "behavior"
+tool = "camel-format"
+case = "../../../cases/compile/stream/yield_formatting.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["yield (i, i + 1)", "): (int, int).. {"]
+expect_output_not_contains = ["UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+
+[[tests]]
+name = "stream.yield_lowering_refused"
+desc = "A body that writes `yield` is refused by name until the generator state machine lands (the plan's slice E): the graph builder reports SemanticDiag::FeatureNotSupported with `'generators'`, at the `yield` itself, instead of running it as a `return` and giving a wrong value."
+kind = "negative"
+case = "../../../cases/compile/stream/yield_lowering.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::FeatureNotSupported"
+expect_diagnostic_code = "0x03000040"
+expect_diagnostic_line = 10
+expect_diagnostic_column = 9
+expect_output_contains = ["generators"]
+expect_output_not_contains = ["UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+[[tests]]
+name = "stream.cell_from_null_stays_void"
+desc = "A `var` whose first value is `null` does not take a type from a later assignment: it stays `void`, and reading it as a `T?` is refused. Measured while choosing how the generator lowering carries its state, and pinned so the constraint that choice rests on is a reading rather than a belief."
+kind = "behavior"
+case = "../../../cases/compile/stream/probe_var_null.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["has type 'void'"]
+expect_output_not_contains = ["UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "stream.non_null_assertion_not_implemented"
+desc = "The postfix `!` is not a spelling of the language -- it left the grammar, so `x!` is an ordinary syntax error -- and a value of a nullable type is therefore not unwrapped with it; `??` is the form the language has. Measured while choosing how a yielded element is delivered."
+kind = "behavior"
+case = "../../../cases/compile/stream/probe_unwrap_nullable.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SyntaxDiag::MissingComma"
+expect_output_contains = ["Expected ',' or ')' before '!'"]
+expect_output_not_contains = ["UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000

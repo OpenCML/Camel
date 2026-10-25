@@ -51,7 +51,7 @@ var count = 0
   let a, b = 1, 'x'
   ```
 
-  结构体解构 `let { x, y } = p` 与数组解构 `let [a, b] = xs` 报 `SemanticDiag::FeatureNotSupported`；用 `p.x`、`xs[0]`。
+  结构体解构 `let { x, y } = p` 与数组解构 `let [a, b] = xs` 不在语言里：名字位置上的 `{` 或 `[` 是普通语法错误。用 `p.x`、`xs[0]`。
 - **`let _ = e` 有意丢弃 `e` 的值。** `_` 不是名字：它不绑定任何东西，所以同一个块里可以写任意多次，也不能读它。表达式与任何 `let` 的初值一样求值（在同步块里按顺序）。这是表明有意忽略一个 `T!` 的写法（[7.1](#71-表达式语句)）。只有这一种写法：`var _`、在多个名字中间写 `_` 都是语法错误。
 - 模块顶层的 `let` 是全局常量，顶层的 `var` 可以被函数读写，包括被导入的函数读写它所在模块的（[5.3](05_modules.md#53-导出)）。**顶层的声明与书写顺序无关，只看依赖**：`let area = pi * r * r` 可以写在 `let pi` 之前；顶层的值之间成环是 `SemanticDiag::ModuleValueCycle`（[5.6](05_modules.md#56-模块的加载)）。函数体里的局部 `let` 仍是先声明后使用。
 
@@ -84,6 +84,14 @@ func main(): int sync {
 30 0
 error InvalidAge: age is negative
 ```
+
+### 7.3.1 `yield`
+
+- `yield e` 给出流的**一个元素**，只写在函数体里。写它的函数产生一个流而不是一个值，所以函数头必须把返回类型写成流类型 `T..`（设计原则 5.4）。
+- 一轮里可以 `yield` 多次，恢复点就是 `yield` 所在的位置：区域里的循环、分支、`match` 的臂与 `sync` 块都可以写，任意层嵌套都可以。不做委托，把内层的流交出去写 `for x in inner do yield x`。
+- `yield` 之后的语句只在消费者再拉一个元素时执行。产出的流一次给出一个元素，值是线性的；同一个生成器函数可以调用多次，每次得到自己的流。`return` 结束流，不带值；一个元素都不产出是合法的空流。
+- 故障发生在产生那个元素的那次拉取处（故障不是值），之前已经交出的元素不受影响。
+- 语法读得下它（`yield` 是关键字，`retStmt` 读它，见 [8.2](08_top_level_and_grammar.md)）；**生成器状态机还没有**（[`../design/io-concurrency-streams/plan.cn.md`](../design/io-concurrency-streams/plan.cn.md) 的片 E）：编译一个含 `yield` 的函数体报 `SemanticDiag::FeatureNotSupported`，消息里写 `'generators'`——它不会把 `yield` 当成 `return` 悄悄执行。
 
 ## 7.4 函数
 

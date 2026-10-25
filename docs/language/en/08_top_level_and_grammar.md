@@ -131,12 +131,12 @@ typeParams         : '::' '<' identDef (',' identDef)* ','? '>'
 operatorName       : IDENTIFIER (OPERATOR | '[' ']')
 dataDecl           : ('let' | 'var') carrier (':' typeList)? '=' dataList
                      | 'let' '_' (':' typeList)? '=' dataList
-carrier            : identList | parentIdents | bracedIdents | bracketIdents
+carrier            : identList | parentIdents
 typeDecl           : frontMatter? 'type' identRef
                      ('=' | '<' identDef (',' identDef)* ','? ('>' '=' | '>='))
                      (typeExpr | STRING)
 resourceDecl       : 'export'? 'resource' identDef ('=' bracketIdents | 'unordered')?
-retStmt            : ('return' | 'throw') dataList
+retStmt            : ('return' | 'throw' | 'yield') dataList
 modifiers          : 'sync'+
 identDef           : IDENTIFIER
 identRef           : (IDENTIFIER '::')* IDENTIFIER
@@ -171,7 +171,7 @@ linkExpr           : negExpr (('->' | '?->') compExpr)*
 negExpr            : ('-' | '!' | '~') negPower | compExpr
 negPower           : ('-' | '!' | '~') negPower | compExpr ('^' negPower)?
 compExpr           : annoExpr ('..' annoExpr)*
-annoExpr           : accessExpr (indices | parentArgues | structData | angledValues | typeArguments | '!'
+annoExpr           : accessExpr (indices | parentArgues | structData | angledValues | typeArguments
 memberAccess       : '.' (IDENTIFIER | INTEGER | REAL | '[' dataExpr ']')
 accessExpr         : primaryData ('.' (IDENTIFIER | INTEGER | REAL | '[' dataExpr ']'))*
 shapeComp          : typeExpr '{' staticForExpr '}'
@@ -180,8 +180,8 @@ primaryData        : identRef | constasData | literal | arrayData | structData |
 constasData        : 'constas' identDef
 literal            : ('+' | '-')? INTEGER | ('+' | '-')? REAL | STRING | MULTI_STR | FSTRING
                      | 'true' | 'false' | 'null'
-indexValue         : ('...' | '..')? dataExpr
-keyValuePair       : identDef ':' dataExpr | '...' dataExpr
+indexValue         : '..'? dataExpr
+keyValuePair       : identDef ':' dataExpr
 pairedValues       : keyValuePair (',' keyValuePair)*
 argumentValues     : (keyValuePair | indexValue) (',' (keyValuePair | indexValue))*
 dataList           : dataExpr (',' dataExpr)*
@@ -208,10 +208,13 @@ staticLoopHeader   : 'for' (identDef | '_') (',' (identDef | '_'))* 'in'
                      ('fields' typeExpr | 'indices' dataExpr | dataExpr)
 typeCasePattern    : 'struct' | 'tuple' | 'func' | '#' 'leaf' | '_' | typeExpr
 matchCase          : 'case' pattern ('|' pattern)* whenClause? '=>' blockExpr
-pattern            : identRef (identDef | enumTuplePattern | enumStructPattern)? | literal
-                     | '(' (dataList | identList)? ','? ')' | '{' (pairedValues | identList)? ','? '}' | '_'
-enumTuplePattern   : '(' (pattern (',' pattern)*)? ','? ')'
-enumStructPattern  : '{' (IDENTIFIER (':' pattern)? ','?)* '}'
+pattern            : 'error' identDef
+                     | identRef (enumTuplePattern | enumStructPattern)?
+                     | literal
+                     | '_'
+fieldPattern       : identRef | '_'
+enumTuplePattern   : '(' (fieldPattern (',' fieldPattern)*)? ','? ')'
+enumStructPattern  : '{' (IDENTIFIER (':' fieldPattern)? ','?)* '}'
 loopExpr           : 'loop' loopState (',' loopState)* loopFor? loopWhile? 'do' blockExpr
 loopState          : identDef '=' logicalOrExpr
 loopFor            : 'for' identDef 'in' logicalOrExpr
@@ -263,7 +266,7 @@ Where there is more than one reading, the following rules decide, each on a boun
 |---|---|
 | `(`: lambda, or tuple / parenthesized expression | a lambda for `(name:`, `(var`, for `(name)` or `(name, ...)` followed by `=>` or `:`, or for an empty list followed by `=>` or `:` |
 | `(` in a type | a function type for `(name:`, `(var`, an empty list followed by `=>`; `(T)` is the parenthesized type; anything else a tuple type |
-| `{`: struct or block | a struct for `{ name :` and `{ ...`; `{}` is the empty block as a branch arm or a lambda body and the empty struct as a statement |
+| `{`: struct or block | a struct for `{ name :`; `{}` is the empty block as a branch arm or a lambda body and the empty struct as a statement |
 | Arguments: positional or named | named from the first `name :` on |
 | `+` `-` `^` after a type | part of the type when a type can start after it (`x as T + U` casts to the type `T + U`) |
 | Unary `-` | always an operator; looser than `^` and `->`; applied directly to a number it gives the negative literal |

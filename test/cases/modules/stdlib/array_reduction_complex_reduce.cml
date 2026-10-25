@@ -1,6 +1,6 @@
 /**
  * The element type no declaration admits, reduced by the body's own `reduce` — the smallest
- * program that shows both the path and a defect of the bytecode VMs found here.
+ * program that shows the path, and the one that measured a defect of the bytecode VMs.
  *
  * `sum` over a complex array is the one instance with no kernel declaration to answer it (see
  * array_reduction_arms.cml), so it runs the Camel body, whose complex arm is
@@ -8,10 +8,13 @@
  * directly, with no part of the array module in the program, so what it measures is `reduce`
  * itself: `:mark/reduce_arr` with a `c64` accumulator over a `c64[]`.
  *
- *   - `std::nvm` and `std::prl` return 4 + 6i, the sum of the two elements.
- *   - `std::fvm` and `std::jit` print `before` and are killed by a signal at the reduce, with no
- *     diagnostic: a defect of the two bytecode VMs on a complex accumulator, in `src/runtime`
- *     rather than in this lane's files (the plan marks those two back ends `known_fail`).
+ *   - `std::nvm`, `std::fvm`, `std::jit` and `std::prl` all return 4 + 6i, the sum of the two
+ *     elements. The two bytecode VMs used to print `before` and die by a signal here: a loop
+ *     took the eight bytes of a compact `c64` element for one slot, because the element class
+ *     it hoists asked the element's width and not whether its bytes are a slot, so the
+ *     accumulator reached the complex operator as 0x400000003F800000 where a `Complex *` is
+ *     due. `Array::elementRead`/`elementWrite` now ask `isSlotResidentElement` as
+ *     `getSlot`/`setSlot` do, and a `c64` element goes through `getSlotSlow`/`setSlotSlow`.
  *
  * A compiler that gave the complex instance a kernel would not reach this reduce at all, and a
  * compiler that refused complex arrays with `is_numeric` would not reach it either; this case is

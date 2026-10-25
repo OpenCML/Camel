@@ -436,7 +436,10 @@ Kept as ANTLR read them, though a reader may expect otherwise (for the language 
 - `x as T? y`: the `?` is the nullable mark and `y` the next statement.
 - `{}` as a statement is an empty struct literal, as a branch arm or lambda body an empty block.
 - `xs[]` is `xs` and then the empty array `[]`, two statements.
-- `f(a, ...b, k: 1, ...c)`: `...b` is a positional spread, `...c` a named one.
+- `f(a, ...b, k: 1, ...c)`: ANTLR read `...b` as a positional spread and `...c` as a named one. Both
+  forms were only in the grammar, never implemented, and the closure of the item-5 work removed
+  them: `...` here is refused like any other token that fits nothing, and the rest argument is
+  written `..b` (design principles 5.5).
 
 A defect of the old front end found on the way: `import {} from a` and `export {}` crashed the
 ANTLR-based AST builder (a missing identifier list was dereferenced). They now build an import

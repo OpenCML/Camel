@@ -51,7 +51,7 @@ var count = 0
   let a, b = 1, 'x'
   ```
 
-  Struct destructuring `let { x, y } = p` and array destructuring `let [a, b] = xs` are `SemanticDiag::FeatureNotSupported`; use `p.x`, `xs[0]`.
+  Struct destructuring `let { x, y } = p` and array destructuring `let [a, b] = xs` are not in the language: a `{` or a `[` where a name stands is an ordinary syntax error. Use `p.x`, `xs[0]`.
 - **`let _ = e` drops the value of `e` on purpose.** `_` is not a name: nothing is bound, so it can be written any number of times in one block, and it cannot be read. The expression is evaluated like the initial value of any `let` (in a sync block, in order). It is the way to say that a `T!` is ignored deliberately ([7.1](#71-expression-statements)). Only this form exists: `var _`, and `_` among several names, are syntax errors.
 - A `let` at the module top level is a global constant; a top-level `var` can be read and written by functions, also by an imported function of the module that declares it ([5.3](05_modules.md#53-exports)). **The top-level declarations do not depend on the order they are written in, only on what they use**: `let area = pi * r * r` may come before `let pi`; top-level values that depend on each other are `SemanticDiag::ModuleValueCycle` ([5.6](05_modules.md#56-loading-modules)). A local `let` in a function body is still declared before it is used.
 
@@ -84,6 +84,14 @@ func main(): int sync {
 30 0
 error InvalidAge: age is negative
 ```
+
+### 7.3.1 `yield`
+
+- `yield e` gives **one element** of a stream, and is written in a function body only. The function that writes it produces a stream and not a value, so its head must write the return type as the stream type `T..` (design principles 5.4).
+- A round may `yield` several times, and the resume point is the position of the `yield`: a loop, a branch, a `match` arm or a `sync` block in the region may all write one, nested to any depth. There is no delegation: handing an inner stream out is written `for x in inner do yield x`.
+- Statements after a `yield` run only when the consumer pulls another element. The stream gives one element at a time and its values are linear; a generator function may be called several times, and each call gets its own stream. `return` ends the stream, without a value; a stream that produces no element at all is a legal empty stream.
+- A fault happens at the pull that produces that element (a fault is not a value), and elements already handed out are unaffected.
+- The syntax reads it (`yield` is a keyword and `retStmt` reads it, see [8.2](08_top_level_and_grammar.md)); **the generator state machine is not built yet** ([`../../design/io-concurrency-streams/plan.cn.md`](../../design/io-concurrency-streams/plan.cn.md), slice E): compiling a function body that writes `yield` reports `SemanticDiag::FeatureNotSupported` with `'generators'` in the message -- it does not run the `yield` as a `return`.
 
 ## 7.4 Functions
 
