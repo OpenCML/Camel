@@ -61,6 +61,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { takeCamel } from '../test/tools/camel-arg.mjs'
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const DEFAULT_BASELINE = path.join(REPO_ROOT, 'test', 'perf-baseline.json')
@@ -345,12 +346,13 @@ function timeit(camel, backend, inline) {
     return argv
 }
 
+// The install this run measures: `--camel <path>` names it (main parses the argument), else
+// `$CAMEL_HOME/bin/camel`, else this tree's `out/latest/bin/camel`. One rule, in one place:
+// test/tools/camel-arg.mjs.
+let CAMEL = null
+
 function camelExe() {
-    if (process.env.CAMEL_EXE) {
-        return process.env.CAMEL_EXE
-    }
-    const home = process.env.CAMEL_HOME || path.join(REPO_ROOT, 'out', 'latest')
-    return path.join(home, 'bin', process.platform === 'win32' ? 'camel.exe' : 'camel')
+    return CAMEL
 }
 
 function usage(message) {
@@ -359,7 +361,7 @@ function usage(message) {
     }
     console.error(
         'usage: node scripts/perf-gate.mjs [--list] [--plans perf.startup,perf.fib] [--reps N]\n' +
-            '       [--warmup N] [--update] [--baseline FILE] [--threshold PCT] [--json]'
+            '       [--warmup N] [--update] [--baseline FILE] [--threshold PCT] [--camel PATH] [--json]'
     )
     process.exit(2)
 }
@@ -1030,7 +1032,10 @@ function log(message) {
 }
 
 function main() {
-    const options = parseArgs(process.argv.slice(2))
+    const named = takeCamel(process.argv.slice(2), REPO_ROOT, usage)
+    CAMEL = named.camel
+    const camelNamed = named.named
+    const options = parseArgs(named.rest)
     const inventory = planInventory()
     if (reportInventoryProblems(inventory)) {
         return 2
@@ -1055,8 +1060,10 @@ function main() {
     }
     // The child finds its stdlib from its own directory; setting CAMEL_HOME to the install this
     // script measured keeps an exported CAMEL_HOME from pointing the child at a different build.
+    // A run that named its install (`--camel <path>`) keeps the environment it was given: the
+    // named path travels to every child as the argument it is, not as an exported variable.
     const env = { ...process.env }
-    if (!process.env.CAMEL_HOME && !process.env.CAMEL_EXE) {
+    if (!process.env.CAMEL_HOME && !camelNamed) {
         env.CAMEL_HOME = installDir(options.camel)
     }
     const revision = revisionInfo()

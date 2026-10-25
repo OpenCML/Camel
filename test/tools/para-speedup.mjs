@@ -92,6 +92,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { takeCamel } from './camel-arg.mjs'
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 const DEFAULT_CASE = path.join(REPO_ROOT, 'test', 'cases', 'para', 'core', 'monte_carlo_pi.cml')
@@ -122,12 +123,16 @@ const DEFAULT_ROUNDS = 1
 // own timeout (900 s) is the backstop behind this one, so the reason a reader sees is this message.
 const CHILD_TIMEOUT_MS = 600000
 
-function camelExe() {
-    if (process.env.CAMEL_EXE) {
-        return process.env.CAMEL_EXE
-    }
-    const home = process.env.CAMEL_HOME || path.join(REPO_ROOT, 'out', 'latest')
-    return path.join(home, 'bin', process.platform === 'win32' ? 'camel.exe' : 'camel')
+// The install this run measures: `--camel <path>` names it (main parses the argument), else
+// `$CAMEL_HOME/bin/camel`, else this tree's `out/latest/bin/camel`. One rule, in one place:
+// test/tools/camel-arg.mjs.
+function usage(message) {
+    if (message) console.error(`para-speedup: ${message}`)
+    console.error(
+        'usage: node test/tools/para-speedup.mjs [--json] [--require-cores] [--rounds N] ' +
+            '[--min-cores N] [--case FILE] [--camel PATH]'
+    )
+    process.exit(2)
 }
 
 // The cores this process may really use: `os.availableParallelism` follows the CPU affinity mask and
@@ -294,14 +299,14 @@ function side(argv, samples) {
     }
 }
 
-function parseArgs(args) {
+function parseArgs(args, camel) {
     const options = {
         json: false,
         requireCores: false,
         rounds: DEFAULT_ROUNDS,
         minCores: MIN_CORES,
         casePath: DEFAULT_CASE,
-        camel: camelExe(),
+        camel,
     }
     for (let i = 0; i < args.length; i++) {
         const at = args[i]
@@ -315,8 +320,6 @@ function parseArgs(args) {
             options.minCores = Number(args[++i])
         } else if (at === '--case') {
             options.casePath = path.resolve(args[++i])
-        } else if (at === '--camel') {
-            options.camel = path.resolve(args[++i])
         } else {
             throw new Error(`unknown argument ${at}`)
         }
@@ -379,8 +382,9 @@ function requireCores(options) {
 
 function main() {
     let options
+    const named = takeCamel(process.argv.slice(2), REPO_ROOT, usage)
     try {
-        options = parseArgs(process.argv.slice(2))
+        options = parseArgs(named.rest, named.camel)
     } catch (error) {
         console.error(`para-speedup: ${error.message}`)
         return 2

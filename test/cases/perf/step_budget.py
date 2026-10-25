@@ -62,6 +62,12 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent          # test/cases/perf
 REPO = HERE.parents[2]
+
+sys.path.insert(0, str(REPO / "test" / "tools"))
+from camel_arg import camel_from_argv  # noqa: E402
+
+# The install this case measures, and this process's arguments without the `--camel` pair.
+CAMEL, ARGV = camel_from_argv(REPO)
 EXAMPLE = REPO / "examples/models/naive-in-expert-out"
 TRAIN_STEP = EXAMPLE / "train_step.cml"
 
@@ -247,16 +253,14 @@ def expected_products(cell: dict) -> dict:
 
 
 def camel_exe() -> str:
-    override = os.environ.get("CAMEL_EXE")
-    if override:
-        return override
-    tag = "debug" if os.environ.get("CAMEL_TIER") == "debug" else "latest"
-    return str(REPO / "out" / tag / "bin" / ("camel.exe" if os.name == "nt" else "camel"))
+    # The install this case measures: `--camel <path>` names it; without it `$CAMEL_HOME/bin/camel`,
+    # else this tree's `out/latest/bin/camel`. One rule, in one place: test/tools/camel_arg.py.
+    return CAMEL
 
 
 def environment() -> dict:
     env = dict(os.environ)
-    env.setdefault("CAMEL_HOME", str(REPO / "out" / "latest"))
+    env.setdefault("CAMEL_HOME", str(Path(CAMEL).resolve().parents[1]))
     return env
 
 
@@ -1125,7 +1129,7 @@ def main() -> int:
     parser.add_argument("--warmup", type=int, default=3)
     parser.add_argument("--torch", action="store_true",
                         help="also measure the element-wise like-for-like against torch")
-    args = parser.parse_args()
+    args = parser.parse_args(ARGV)
     if args.mode == "count":
         return counts_mode()
     if args.mode == "elementwise":

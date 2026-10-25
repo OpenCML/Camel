@@ -1050,6 +1050,13 @@ wall clock is the host's, not the test's: `modules.autodiff/benchmark_gradients_
 - the implicit `${test_tmp}` variable, described under "Test scratch"
 - the built-in `${python}` variable: the active virtual environment's interpreter, else `python`
   on Windows and `python3` elsewhere (`test/vars.toml` may override it)
+- the built-in `${camel}` variable: the compiler of the build under test
+  (`out/<tag>/bin/camel[.exe]`, the path the runner prints and records in `summary.json`). A test
+  whose program starts a compiler names the install with `--camel ${camel}`: an explicitly named
+  install travels as a command-line argument, never as an environment switch (the author's ruling of
+  2026-10-25, `docs/handover/reviews/questions-2026-10-24-evening.md`,
+  "stdlib-declaration-check-measures-a-foreign-install"); `CAMEL_HOME` is the install location's
+  convention and stays
 
 Rules:
 

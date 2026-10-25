@@ -382,7 +382,8 @@ desc = "The guard's walk is a property, not a list of names: the recipe plants o
 kind = "behavior"
 tool = "node"
 case = "../../../../test/tools/check-doc-pass-forms.mjs"
-args = ["${case}", "--selftest"]
+# `${camel}` is the compiler of the build under test, named as an argument (the author's ruling of 2026-10-25).
+args = ["${case}", "--selftest", "--camel", "${camel}"]
 expect_exit = 0
 expect_stdout_contains = ["the walk counted 1 of the 2", "the planted tree is gone"]
 timeout_ms = 60000
@@ -393,7 +394,7 @@ desc = "The guard is not vacuous: a page the guard itself plants, carrying a spe
 kind = "behavior"
 tool = "node"
 case = "../../../../test/tools/check-doc-pass-forms.mjs"
-args = ["${case}"]
+args = ["${case}", "--camel", "${camel}"]
 envs = ["CAMEL_DOC_FORM_PLANT_PAGE=camel forward.cml std::opt(safe_fp=true)"]
 # The planted page is a file outside `${test_tmp}` that the other tests of this plan read:
 # `parallel = false` is the rule for sharing something outside the scratch, and without it a
@@ -409,7 +410,7 @@ desc = "The other side of the same mechanism: the same plant carrying a spelling
 kind = "behavior"
 tool = "node"
 case = "../../../../test/tools/check-doc-pass-forms.mjs"
-args = ["${case}"]
+args = ["${case}", "--camel", "${camel}"]
 envs = ["CAMEL_DOC_FORM_PLANT_PAGE=camel forward.cml std::fvm"]
 # Same reason as the test above: the plant is a file this plan's neighbours would read.
 parallel = false
@@ -423,7 +424,7 @@ desc = "The property, not a count: every pass invocation the documentation shows
 kind = "behavior"
 tool = "node"
 case = "../../../../test/tools/check-doc-pass-forms.mjs"
-args = ["${case}"]
+args = ["${case}", "--camel", "${camel}"]
 expect_exit = 0
 expect_stdout_contains = ["doc pass forms:", "pass invocation(s) in", "page(s),", "accepted by the real parser", "plan's own desc are reported and not counted", "excused", "parser invocation(s) for"]
 timeout_ms = 30000
