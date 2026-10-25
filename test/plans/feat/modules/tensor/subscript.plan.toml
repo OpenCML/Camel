@@ -33,20 +33,19 @@ case = "../../../../cases/modules/tensor/subscript/slice_const_bounds.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
-expect_output_contains = ["slice bounds 0..9 are outside the first dimension of extent 4"]
+expect_output_contains = ["slice bounds 0..9 are outside axis 0 of extent 4"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
 [[tests]]
 name = "slice_rank2"
-desc = "A slice of the first dimension of a tensor of rank 2 or more is a view with strides: it waits for H17 (design principles 5.4) and is refused at compile time, instead of being lowered to a copy that would not share the block."
-kind = "negative"
+desc = "A subscript slice of the first dimension of a tensor of rank 2 or more is the core's one slice (the author's ruling of 2026-10-25: every `slice(...)` call is the core's): the rows the range names, every element of the other dimensions taken at the coordinate it has. A step of 1 along the first dimension of a compact array is a run of the block, so the slice is a view sharing it (design principles 5.4); it no longer waits for H17."
+kind = "behavior"
 case = "../../../../cases/modules/tensor/subscript/slice_rank2.cml"
 args = ["${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
-expect_output_contains = ["rank 2 or more", "H17"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+expect_exit = 0
+expect_stdout_exact = "ran\n[1, 3]\n[2, 3]\n[1, 3]\n[0, 3]\n21.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
 
 [[tests]]
@@ -63,14 +62,13 @@ timeout_ms = 10000
 
 [[tests]]
 name = "slice_step"
-desc = "A subscript slice with a step other than the constant 1 is a view with strides: refused at compile time, naming H17 (design principles 5.4)."
-kind = "negative"
+desc = "A step other than 1 is the core's slice too (the author's ruling of 2026-10-25: any non-zero step is accepted, and only the constant 0 is refused where it is written): the positions the step names, as a copy that does not share the parent's block -- the deviation the flip line records for a stepped slice, the view with strides waiting for H17."
+kind = "behavior"
 case = "../../../../cases/modules/tensor/subscript/slice_step.cml"
 args = ["${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
-expect_output_contains = ["a slice step other than the constant 1", "H17"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+expect_exit = 0
+expect_stdout_exact = "ran\n[2]\n4.0\n[2]\n[4]\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
 
 [[tests]]
@@ -182,12 +180,11 @@ timeout_ms = 10000
 
 [[tests]]
 name = "slice_step_negative"
-desc = "A negative step is refused like a positive one on a tensor: `t[a:b:-1]` is still a view with strides (H17), refused at compile time rather than read as a backwards copy, so no gradient is ever built from an unsupported step (design principles 5.4)."
-kind = "negative"
+desc = "A negative step runs backwards on the core's one slice: `t[3:0:-1]` takes positions 3, 2 and 1 -- the end is where the walk stops -- and `t[3::-1]` takes all four, an end left out standing for the position before the first. A copy, not a view, as for any stepped slice; no gradient is built from a view with strides until H17."
+kind = "behavior"
 case = "../../../../cases/modules/tensor/subscript/slice_step_negative.cml"
 args = ["${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
-expect_output_contains = ["a slice step other than the constant 1", "H17"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+expect_exit = 0
+expect_stdout_exact = "ran\n[3]\n9.0\n[4]\n[3]\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
