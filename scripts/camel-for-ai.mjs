@@ -91,13 +91,20 @@ const LAYOUT = [
     { rel: SIGNATURES_REL, regions: ['stdlib-signatures'] },
 ]
 
-// What each document may cost, in characters. The document states these numbers itself, in its own
-// prose, and the check enforces them so it cannot grow past what one read holds.
+// What each document may cost, in characters. The page states its own number in its prose and the
+// check enforces it, so the page cannot grow past what one read holds.
 //
 // The page's budget is the cost of reading the page: its hand-written part and the two regions it
-// holds, and nothing else. The catalogues are not counted in it -- that is the point of their being
-// files -- and each has a budget of its own, so a name added to the library or a message changed in
-// the registry lands in an appendix against the appendix's budget instead of against the page's.
+// holds, and nothing else. It is small on purpose, because this page is what an AI reads before
+// writing rather than a rule book: why the language is what it is, the mental model, the idioms, how
+// to read the compiler, and where to look everything else up. A rule that does not fit belongs in
+// the language reference, which the page points at. The check therefore holds the page to one total
+// and to its examples compiling; it does not budget the page part by part, because how the prose is
+// divided is the writer's to decide and the total is the thing a reader pays.
+//
+// The catalogues are not counted in the page's budget -- that is the point of their being files --
+// and each has a budget of its own, so a name added to the library or a message changed in the
+// registry lands in an appendix against the appendix's budget instead of against the page's.
 //
 // The regions keep every entry of their source: a name left out is a name the reader has to look up
 // elsewhere, so they are not trimmed, and the pages that carry them are the ones that grow. The
@@ -110,7 +117,7 @@ const LAYOUT = [
 // Nothing in this check warns that the room is nearly gone. Over budget is a failure and the merge
 // gate reports it; a warning that is not a failure is a warning readers learn to scroll past.
 const BUDGET = {
-    [PAGE_REL]: { total: 59000, written: 52000 },
+    [PAGE_REL]: { total: 20000, written: 16300 },
     [DIAGNOSTICS_REL]: { total: 30500, written: 2000 },
     [SIGNATURES_REL]: { total: 30000, written: 2000 },
 }
@@ -121,49 +128,6 @@ const REGION_BUDGET = {
     precedence: 3000,
     diagnostics: 28500,
     'stdlib-signatures': 28000,
-}
-
-// Each chapter's own budget, read out of the table the document carries ("What each part costs"):
-// the number in the last cell of a row whose first cell starts with the chapter's number. The table
-// is therefore not a comment on the file, it is the file's promise about itself, and a chapter that
-// grows past its row is a problem. A row for a chapter the document does not have is a problem too.
-const BUDGET_ROW = /^\|\s*(\d{1,2}|Appendix [A-C])\.\s*(.+?)\s*\|[^|]*\|\s*([\d,]+)\s*\|$/
-
-function chapterBudgets(document) {
-    const rows = []
-    for (const line of document.split('\n')) {
-        const match = BUDGET_ROW.exec(line)
-        if (match) rows.push({ key: match[1], title: match[2], budget: Number(match[3].replace(/,/g, '')) })
-    }
-    return rows
-}
-
-function chapterSizes(document) {
-    const lines = document.split('\n')
-    const sizes = new Map()
-    let current = null
-    let chars = 0
-    const close = () => {
-        if (current) sizes.set(current, chars)
-    }
-    for (const line of lines) {
-        const heading = /^##\s+(\d{1,2}|Appendix [A-C])\./.exec(line)
-        if (heading) {
-            close()
-            current = heading[1]
-            chars = 0
-            continue
-        }
-        if (/^##\s/.test(line)) {
-            close()
-            current = null
-            chars = 0
-            continue
-        }
-        chars += line.length + 1
-    }
-    close()
-    return sizes
 }
 
 function budgetProblems(document, entry) {
@@ -188,21 +152,7 @@ function budgetProblems(document, entry) {
             problems.push(`${entry.rel}: the document is ${size} characters; its budget is ${budget.total}`)
         }
     }
-    // A document that carries a budget table is held to the rows of that table, wherever it is:
-    // the table is the document's promise about itself and is read out of the document, not here.
-    const sizes = chapterSizes(document)
-    const chapters = []
-    for (const row of chapterBudgets(document)) {
-        const chapterSize = sizes.get(row.key) ?? 0
-        chapters.push({ ...row, size: chapterSize })
-        if (chapterSize > row.budget) {
-            problems.push(
-                `${entry.rel}: the chapter '${row.key}. ${row.title}' is ${chapterSize} characters; ` +
-                    `the budget it states is ${row.budget}`,
-            )
-        }
-    }
-    return { problems, per, total, written, size, chapters, budget }
+    return { problems, per, total, written, size, budget }
 }
 
 const SECTIONS = [
@@ -806,11 +756,6 @@ if (mode === '--report') {
             console.log(
                 `${name.padEnd(14)} source entries: ` +
                     (region.text === null ? `none (${region.problem})` : region.count),
-            )
-        }
-        for (const chapter of budget.chapters) {
-            console.log(
-                `section ${String(chapter.key).padStart(2)}      ${String(chapter.size).padStart(7)}  budget ${chapter.budget}`,
             )
         }
         for (const problem of budget.problems) console.log(`OVER BUDGET: ${problem}`)

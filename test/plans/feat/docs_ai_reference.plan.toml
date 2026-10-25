@@ -35,7 +35,7 @@ tool = "node"
 case = "../../../scripts/camel-for-ai.mjs"
 args = ["${case}", "--check"]
 expect_exit = 0
-expect_stdout_contains = ["docs/reference/camel-for-ai.md is what its sources produce", "docs/reference/camel-for-ai-diagnostics.md is what its sources produce", "docs/reference/camel-for-ai-stdlib-signatures.md is what its sources produce", "generated region(s)", "diagnostic name(s) cited by the prose", "characters (budget 59000)", "characters (budget 30500)", "characters (budget 30000)"]
+expect_stdout_contains = ["docs/reference/camel-for-ai.md is what its sources produce", "docs/reference/camel-for-ai-diagnostics.md is what its sources produce", "docs/reference/camel-for-ai-stdlib-signatures.md is what its sources produce", "generated region(s)", "diagnostic name(s) cited by the prose", "characters (budget 20000)", "characters (budget 30500)", "characters (budget 30000)"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 60000
 
