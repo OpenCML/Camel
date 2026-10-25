@@ -298,7 +298,7 @@ G5/G7/G8 + GPU/H246 ── G11 ── G12
   'yield'.`（`SemanticDiag::UnresolvedReference`，`0x0300000B`）；语法收口之后、片 E 落地之前，同一个位置上是
   `FeatureNotSupported: 'generators'`（`0x03000040`，`test/plans/feat/compile/stream.plan.toml` 的
   `stream.yield_lowering_refused`）。片 E 要做的正是把这个按名字的拒绝换成状态机。
-  （逐字读数见 `docs/handover/questions/2026-10-26-generator-state-machine-what-is-missing.md` 的探针表。）
+  （逐字读数见 `docs/handover/reviews/questions-2026-10-24-evening.md` 的 `2026-10-26-generator-state-machine-what-is-missing` 一节与其中的探针表。）
   <!-- camel-snippet: counter-example: 语法收口之后 `yield` 是关键字，这条程序是片 E 的负向验收：它必须是语法错误 -->
   ```camel
   // t9：反例——`yield` 成为关键字之后，这条程序必须是语法错误
