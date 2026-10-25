@@ -193,13 +193,13 @@ const out = input.normalized.stdout
 assert(input.normalized.stderr.includes('EXPANDED tensor:mean 2\n'), input.normalized.stderr)
 assert(out.startsWith('0.0\n'), out)
 assert(out.includes('[Error]: Attempted division by zero.') && out.includes('(name=RuntimeDiag::DivisionByZero,'), out)
-assert(out.includes('tensor_definitions.cml:55:'), `located at the division of the definition: ${out}`)
+assert(out.includes('tensor_definitions.cml:63:'), `located at the division of the definition: ${out}`)
 }
 """
 
 [[tests]]
 name = "gradients_numel_shape"
-desc = "An element count is a shape, not data whose gradient is dropped: differentiating the definition graph of `tensor_definitions::mean` (`sum(x) / (numel(x) as float)`) uses `numel(x)` as a constant shape count, so the mean is 2.5 and the gradient of the mean is 1/n per element (sum 1.0). This is the definition-level form of the `tensor:numel` exemption (design principles 9.9, 5.4)."
+desc = "An element count is a shape, not data whose gradient is dropped: differentiating the definition graph of `tensor_definitions::mean` (the sum and the division in f64, one rounding into the element type) uses `numel(x)` as a constant shape count, so the mean is 2.5 and the gradient of the mean is 1/n per element (sum 1.0). This is the definition-level form of the `tensor:numel` exemption (design principles 9.9, 5.4)."
 kind = "behavior"
 case = "../../../cases/definitions/numel_shape.cml"
 args = ["${case}", "std::macro"]

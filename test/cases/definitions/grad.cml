@@ -25,7 +25,7 @@ func def_log_softmax(): float { return float(sum(tensor_definitions::log_softmax
 with <x: Tensor<f32>>
 func op_mean(): float { return float(mean(x * w())) }
 with <x: Tensor<f32>>
-func def_mean(): float { return tensor_definitions::mean(x * w()) }
+func def_mean(): float { return float(tensor_definitions::mean(x * w())) }
 with <x: Tensor<f32>>
 func op_relu(): float { return float(sum(relu(x) * w())) }
 with <x: Tensor<f32>>
