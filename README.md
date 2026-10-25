@@ -120,6 +120,14 @@ The rules behind this table are in the [design principles](docs/design-principle
 
 ## Quick start
 
+### Install
+
+```bash
+pip install camel-lang
+```
+
+This puts the `camel` command on your `PATH`, and `import camel` in Python (Linux x64 and Windows x64, Python 3.10–3.13).
+
 ### Build from source
 
 You need Clang 19+, CMake 3.25+, Ninja, Conan 2.10+ and Node.js 18+. [docs/setup.en.md](docs/setup.en.md) lists the toolchain per platform.
@@ -155,13 +163,16 @@ Hello, Camel!
 
 Install [OpenCML-Ext](https://marketplace.visualstudio.com/items?itemName=Kogler7.open-cml-extension) for VS Code: highlighting, language services, an interactive graph browser, and a debugger that can pause between passes. Point `opencmlLanguageServer.camelPath` at your `camel` executable. See the [extension README](https://github.com/OpenCML/OpenCML-Ext#readme) and the [debugging guide](docs/debugging.en.md).
 
-### Python
+### From Python
 
-```bash
-npm run pypi:rollup  # builds the camel-lang wheel from this tree
+```python
+import camel
+
+stats = camel.load("stats.cml")      # a Camel module
+y = stats.normalize(x)               # NumPy arrays cross without a copy
 ```
 
-See [docs/pypi-packaging.md](docs/pypi-packaging.md) and the [Python bindings](docs/technical/57_python_bindings.md).
+A failure arrives as a `camel.CamelError` carrying the diagnostic and its location.
 
 ## Documentation
 

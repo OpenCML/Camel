@@ -120,6 +120,14 @@ rule add_zero::<T>(x: T) when is_integer::<T>() { x + 0 => x }
 
 ## 快速开始
 
+### 安装
+
+```bash
+pip install camel-lang
+```
+
+装好后 `camel` 命令就在 `PATH` 上，Python 里也能 `import camel`（Linux x64 与 Windows x64，Python 3.10–3.13）。
+
 ### 从源码构建
 
 需要 Clang 19+、CMake 3.25+、Ninja、Conan 2.10+ 与 Node.js 18+。各平台的工具链见 [setup.cn.md](setup.cn.md)。
@@ -155,13 +163,16 @@ Hello, Camel!
 
 在 VS Code 安装 [OpenCML-Ext](https://marketplace.visualstudio.com/items?itemName=Kogler7.open-cml-extension)：高亮、语言服务、交互式的图浏览，以及能在遍之间暂停的调试器。把 `opencmlLanguageServer.camelPath` 指向你的 `camel`。见[插件说明](https://github.com/OpenCML/OpenCML-Ext#readme)与[调试指南](debugging.cn.md)。
 
-### Python
+### 在 Python 里用
 
-```bash
-npm run pypi:rollup  # 从本树构建 camel-lang wheel
+```python
+import camel
+
+stats = camel.load("stats.cml")      # 一个 Camel 模块
+y = stats.normalize(x)               # NumPy 数组零拷贝进出
 ```
 
-见 [pypi-packaging.md](pypi-packaging.md) 与 [Python 绑定](technical/57_python_bindings.md)。
+出错时抛 `camel.CamelError`，带着诊断与位置。
 
 ## 文档
 

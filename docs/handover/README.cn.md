@@ -605,6 +605,25 @@ CI 的触发不改（只在 `v*` 标签与手动触发时运行，不花 runner 
    - 以后不再写"能写但会被拒绝的写法一览"这类页面。
 5. **顺序**：第 4 条现在就做。第 3 条在第 1 条定稿后做，与 H251 合并（H251 的"一个文件写全语言"作废）。第 2 条与教程改写（5.35）、文档清理（5.00）一起做，按页落实。
 
+### 5.37 H257 `pip install camel-lang` 之后就能用（负责人 2026-10-25）
+
+负责人："普通用户想要使用 camel 最便捷的办法是直接 pip install camel-lang"；"查一下现在 pypi 发布脚本能不能让用户自然使用 camel"。README 的安装一节已经按目标写成 `pip install camel-lang`。决策者查到的现状（2026-10-25）：
+
+- **PyPI 上最新的还是 0.0.13**（2025-03，只有 Windows 一个包）。v0.2.28–v0.2.31 打标签后，`build-pypi.yml` 的 8 个 wheel 都构建成功，但"Publish to PyPI (trusted publishing)"这一步每次都失败。日志要仓库管理员权限才能看，决策者看不到原因；最可能是 PyPI 上 `camel-lang` 项目没有登记这个工作流为可信发布者（这一步只有项目所有者能做，见工作流文件开头的说明）。
+- **Linux 包的平台标签取自构建机**（`packaging.tags` 的第一项）。ubuntu-latest 上得到的是 `manylinux_2_39`，而且没有用 auditwheel 检查和修复，所以只有 glibc ≥ 2.39 的系统（Ubuntu 24.04 及以后）装得上；Ubuntu 22.04、Colab 这类 AI 用户最常见的环境都装不上。
+- **`camel` 命令靠 shell/cmd 包装脚本找二进制**，找法是"脚本目录的 `../lib/python*/site-packages`"，Debian 的 `dist-packages` 等布局下找不到，失败时还要用户去设 `CAMEL_HOME`。
+- **冒烟测试只做了 `import camel`**，没有跑 `camel` 命令，也没有跑一个程序。
+- 包里的杂项：`cpm` 是一个只打印"Hello! Camel Package Manager!"的占位命令；`__version__` 写死成 0.2.30（已经落后）；包描述还是"Next-Generation Language for AI and HPC"；分类里写了 MacOS（没有 macOS 包）和"Human Machine Interfaces"；没有 `requires-python`；包页面的 README 只有一句话。
+
+要做的：
+1. **Linux 包在 manylinux 容器里构建**（`manylinux_2_28`，AlmaLinux 8），构建后用 `auditwheel repair` 检查并打上正确的标签，让 Ubuntu 20.04/22.04、Colab 都能装。若依赖做不到 2_28，在报告里写明卡在哪个库、最低能做到多少。
+2. **`camel`、`camel-ls`、`camel-db`、`camel-format` 改成 `[project.scripts]` 入口**：一个很短的 Python 函数，按包自己的位置找到 `.cmlenv/bin/` 下的二进制并 `exec` 它（参数、退出码、信号原样传递）。删掉 `wrapper-dist` 那套 shell/cmd 包装脚本和"请设 `CAMEL_HOME`"的提示。二进制从自己的目录找标准库，不需要任何环境变量。
+3. **杂项**：删掉 `cpm`；`__version__` 从包的元数据读（`importlib.metadata`），不再写死；描述改成定位那句话（"A graph-native general-purpose programming language, with AI as its primary application"）；分类按实际平台写，开发阶段写 Alpha；加 `requires-python = ">=3.10"`；包页面的 README 用主 README 的"为什么""安装""从 Python 用"三节。
+4. **冒烟测试按用户的样子来**：在干净的环境里（Linux 用 `ubuntu:22.04` 与 `python:3.12-slim` 两个容器，Windows 用一个新的虚拟环境）只做 `pip install <wheel>`，然后跑 `camel --version`、`camel hello.cml`、`camel hello.cml std::jit`，以及一段 `import camel` 加 NumPy 调用一个模块函数。任何一步失败，工作流就失败。
+5. **发布**：可信发布者登记好之后（负责人那边的事），打一个标签走一遍完整发布，在报告里贴出 PyPI 页面上的版本和文件列表，以及在一台没有构建环境的机器上 `pip install camel-lang` 之后跑通 `hello.cml` 的记录。
+
+人手：单独一条小车道，不占 H242 与 P4。
+
 ### 5.0 调度
 
 任务之间的并行与先后由施工负责人自行安排（可同时调度多个子代理）；任务书只写依赖的硬前提。下文各任务中"某车道"的字样只是历史标记，不约束调度。
