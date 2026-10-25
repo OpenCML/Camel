@@ -211,14 +211,16 @@ false
 
 ### 6.7.3 Comparison
 
-- `==`, `!=`: numbers, `bool`, `string`, `Map`, `Set`, and arrays, tuples and structs, with the same type on both sides (anything else is the compile-time error `SemanticDiag::NoMatchingFunction`; nothing is converted).
+- `==`, `!=`: numbers, `bool`, `string`, `Map`, `Set`, and arrays, tuples, structs and tensors, with the same type on both sides (anything else is the compile-time error `SemanticDiag::NoMatchingFunction`; nothing is converted). The result is a `bool`.
   - **Arrays, tuples and structs compare by content**, element by element and recursively: `[1, 2] == [1, 2]`, `(1, 'a') == (1, 'a')` and two structs whose fields are equal are all `true`; arrays of different lengths are not equal.
-  - The element type must itself be comparable: numbers, `bool`, `string`, `Map`, `Set`, `T?`, `T!`, and arrays, tuples and structs of those. A value with a function in it (`[f] == [f]`) cannot be compared, which is a located compile-time error; tensors are not covered.
+  - **The whole comparison is the element-wise one, reduced to a `bool`**: `a == b` is "the shapes are the same and the elements are equal everywhere" (see [4.2](../design-principles.cn.md)). Numeric arrays (`f32[]` and `Tensor<f32>`) answer a `bool` the same way: neither writing the element type in the type nor the module that provides the operator changes the result.
+  - The element type must itself be comparable: numbers, `bool`, `string`, `Map`, `Set`, `T?`, `T!`, and arrays, tuples and structs of those. A value with a function in it (`[f] == [f]`) cannot be compared, which is a located compile-time error.
   - Float elements follow the rules of floats: an array that holds a `nan` does not equal itself, and `[0.0] == [-0.0]`.
   - A `T?` or `T!` by itself (not inside an array, tuple or struct) still has no `==`; open it first with `??`, `!!` or `match`.
+- **`===` and `!==` are the element-wise equality and inequality**: `a === b` compares two arrays element by element and gives a `bool` array of the same shape: `[1, 2, 3] === [1, 2, 4]` is `[true, true, false]`; `a !== b` is its element-wise negation. The shape rules are those of every element-wise operation (a shape that does not broadcast is a located run-time error). On a scalar `===` is `==` (`1 === 1`, `'a' === 'a'`).
+  - Like `<`, `>`, `<=` and `>=`, it is defined on numeric arrays: `f32[]`, `Tensor<f32>`, `int[]`, an array whose element type is a number. The whole comparison (the previous item) is defined on every array whose element type is comparable.
 - **`x == null` and `x != null`** are defined for an `x` of type `T?`, in either order, and give a `bool`: the test of the tag of `x`, not a comparison of two values (the same node `??` branches on). It is an ordinary expression: `let has = x != null`. A nullable function value is compared with `null` the same way. A value that is never null (an `int`, a `T!`, a name already narrowed to a `T`) may be compared with `null` too: the result is fixed (`==` is always `false`, `!=` always `true`), the compiler warns (`SemanticDiag::NullTestNeverNull`), and the value itself is not evaluated. Two `T?` values compared with each other stay `SemanticDiag::NoMatchingFunction`; two function values cannot be compared.
-- `<`, `>`, `<=`, `>=`: numbers and `string` (in code point order). Comparisons cannot be chained: `1 < 2 < 3` is a type error.
-- `===` and `!==` are not supported for now: the lexer knows the two tokens, and writing one is a located compile-time error, `SemanticDiag::ConstructNotSupported`. Compare values with `==` and `!=`.
+- `<`, `>`, `<=`, `>=`: numbers and `string` (in code point order); **on a numeric array they compare element by element**, and give a `bool` array of the same shape. Comparisons cannot be chained: `1 < 2 < 3` is a type error.
 
 ### 6.7.4 Type conversion `as`
 
@@ -721,7 +723,7 @@ From lowest to highest:
 | 4 | `&&` | Left-associative; a branch, the right side evaluated only when needed |
 | 4a | `\|` | Left-associative, both sides evaluated |
 | 4b | `&` | Left-associative, both sides evaluated |
-| 5 | `==` `!=` (`===` `!==` not supported for now) | |
+| 5 | `==` `!=` `===` `!==` | Whole and element-wise comparison (see [6.7.3](#673-comparison)) |
 | 6 | `<` `>` `<=` `>=` | |
 | 7 | `+` `-` | Left-associative |
 | 8 | `*` `/` `%` `@` | Left-associative |

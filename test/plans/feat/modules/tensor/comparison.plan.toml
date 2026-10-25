@@ -1,0 +1,45 @@
+id = "modules.tensor.comparison"
+order = 364
+tier = "fast"
+debug_tier = true # also selected by --tier debug (Debug build)
+tags = ["feat", "modules", "tensor", "comparison"]
+desc = "a === b is the elementwise comparison of two arrays and a == b is the whole one (design principles 4.2)"
+
+[[tests]]
+name = "tensor.comparison"
+desc = "Two arrays: === and !== give an array of bool of the same shape, == and != give one bool; the shape rules of === are the elementwise ones (a shape that does not broadcast is an error) while == answers false; a scalar === is ==; a native numeric array compares the same way; and whether the element type is written in the type or left to the value does not change the answer -- before, == on an array whose element type the type did not fix fell to the tensor module and gave an array of bool. The whole comparison follows the float rules: an array holding a NaN does not equal itself, the two zeros are equal. Alike on the two back ends."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/comparison.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = """scalar {} {} {} true true true
+a === b {} tensor([  true,   true,   true], dtype=bool)
+a !== b {} tensor([ false,  false,  false], dtype=bool)
+a === e {} tensor([  true,   true,  false], dtype=bool)
+a == b {} true
+a == e {} false
+a < e {} tensor([ false,  false,   true], dtype=bool)
+a == c {} false
+written {} {} true false
+bare {} {} true false
+nan == {} !== count {} false 1.0
+zero == {} === {} true tensor([  true], dtype=bool)
+f32[] == {} === {} false tensor([  true,  false], dtype=bool)
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 30000
+
+[[tests]]
+name = "tensor.comparison.shape_error"
+desc = "=== on two shapes that do not broadcast is the elementwise error, located at the operator, and names it."
+kind = "negative"
+case = "../../../../cases/modules/tensor/comparison_shape_error.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::TensorDimensionMismatch"
+expect_output_contains = ["cannot broadcast [3] with [2]", "'strict_eq'"]
+expect_output_not_contains = ["UnknownInternalError", "Segmentation fault", "dumped core"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 30000

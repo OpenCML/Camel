@@ -1,0 +1,16 @@
+/**
+ * `a === b` is the elementwise comparison, so its shape rule is the rule of every elementwise
+ * operation (design principles 4.2): two shapes that do not broadcast are a runtime error, and
+ * the error names the operator that could not broadcast them. `a == b` on the same two arrays
+ * is `false` instead, because different shapes are simply not equal.
+ */
+module comparison_shape_error
+
+import { new } from tensor
+
+func main(): int sync {
+    let a = new([1.0, 2.0, 3.0])
+    let c = new([1.0, 2.0])
+    println('{}', a === c)
+    return 0
+}
