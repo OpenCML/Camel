@@ -57,7 +57,7 @@ for (const l of [
   'RESOURCES node main 9 :op/assn_l: write variable (node 2); result same 0',
   'RESOURCES node main 10 FUNC bump: rmw variable (node 2); result unknown',
   'RESOURCES node main 12 FUNC countdown: rmw variable (node 5); result unknown',
-  'RESOURCES node main 15 CALL: rmw variable (node 2); result unknown',
+  'RESOURCES node main 15 CALL: rmw variable (node 2)',
   'RESOURCES node main 19 :var/take: rmw variable (node 18); result may_alias 0',
   'RESOURCES node main 20 array:sort_l_in_place: rmw object (node 19); result same 0',
   'RESOURCES node main 23 rand:seed: write ambient rng; external',
@@ -77,17 +77,15 @@ for (const l of [
 // per element type in it). The footprint is the fact this test is about, so it is named by what it
 // says: one graph, the captured cell, and the whole access to it. A pin on the number would fail
 // on any change to any module compiled before the closure, and would say nothing more than this.
-// The result part is gone, and that is the analysis's answer rather than a loosened pin: the
-// closure's body is `c += 1`, what a write gives is this version's cell (`:op/assn*` names operand
-// 0, the cell -- the ruling on the var version node; the value it wrote is its second operand),
-// and that cell is the closure's *capture*. A
-// footprint's result names a norm port or nothing (`ResultAlias` numbers the norm ports;
-// resources.cpp `Resolver::resultOf` answers Unknown for a port that is not one, and the footprint
-// "has no binding for a capture yet"), so what the closure hands back is Unknown and
-// `toString(GraphFootprint)` writes no result at all. It said `result fresh` while the write's
-// result was declared `may_alias 1` -- the very declaration that made two variables' cells one
-// resource. The `$` keeps the pin on the whole line, absence of a result included.
-const captured = out.split('\n').filter((l) => /^RESOURCES footprint \S+ rmw variable capture 0 whole$/.test(l))
+// The result part is `fresh`, and that is the analysis's answer rather than a loosened pin: the
+// closure's body is a compound assignment, which is its plain form (`c = c + 1`, the ruling on the
+// read of a write and the write-valued body), so the write is `:op/assn_l`, whose declaration says
+// its result is operand 0 -- this version's cell -- and the resolver answers `fresh` for a cell
+// reached through a capture: the write makes a new version of the caller's variable. While the
+// body still called `:op/assn_add_l`, whose result was declared `may_alias 1` -- the very
+// declaration that made two variables' cells one resource -- the resolver could not name the
+// capture at all and wrote no result part.
+const captured = out.split('\n').filter((l) => /^RESOURCES footprint \S+ rmw variable capture 0 whole; result fresh$/.test(l))
 assert(captured.length === 1, `the captured closure's footprint: ${JSON.stringify(captured)}`)
 // This test used to write `RESOURCES order main 23 24 external ordered by control`: a pair of
 // effects outside the program was a pair whatever they touched. A conflict is judged by resource
@@ -120,9 +118,10 @@ assert(!/RESOURCES order main (2|5|18) /.test(out), 'making a cell conflicts wit
 // with every other access to `c` and with nothing of `d`. A cell reached through a write whose
 // resource declaration does not name the cell is unknown instead, and then *every* variable of
 // the graph meets it; that over-approximation is what this pair used to be.
-// `inc()` (node 15) is the call that writes `c` through its capture, so its result is unknown too,
-// for the reason the closure's own footprint below gives: what the closure hands back is its
-// capture, and a footprint names a norm port or nothing.
+// `inc()` (node 15) is the call that writes `c` through its capture, so its footprint carries that
+// access of the captured cell -- and no result part: the call hands back the value its body
+// computed, not a version of a resource, and the closure's own footprint above already names the
+// version its write makes (`result fresh`).
 assert(!/RESOURCES order main 12 (8|9|10|15|32) /.test(out), 'the cells of c and d are different resources')
 assert(!out.includes(' unordered'), 'the program orders every conflicting pair')
 

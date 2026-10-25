@@ -3360,14 +3360,26 @@ node_handle_t Builder::visitExitNode(const GCT::node_ptr_t &gct) {
         pendingCtrlInputs.push_back(lastSyncedNode_);
     }
 
-    if (!pendingCtrlInputs.empty() && !nodeIsKind(resNode, runtime::GCNodeKind::Gate)) {
+    // The exit takes the value by a data edge, and the statement the chain ends with reaches it by
+    // a sync edge: the value's own node is what the graph hands on, and only a value that does not
+    // already read that statement needs the edge -- with it, a GATE to carry the order. A value
+    // that came out of that statement (the `v` of `v = 2; v`) is ordered after it already, so it
+    // takes no control edge and no GATE, and the tail `return v` and a body whose last statement
+    // is `v` ask this once and build one graph (docs/design/effects/edges.cn.md 5.3).
+    node_vec_t syncInputs;
+    for (node_handle_t ctrlInput : pendingCtrlInputs) {
+        if (!valueNeedsSyncEdge(resNode, ctrlInput)) {
+            continue;
+        }
+        syncInputs.push_back(ctrlInput);
+    }
+    if (!syncInputs.empty() && !nodeIsKind(resNode, runtime::GCNodeKind::Gate)) {
         node_handle_t gatedValue = currGraph_->addGateNode(nodeTypeOf(resNode));
         linkNodes(LinkType::Norm, resNode, gatedValue);
         outputAnchor = gatedValue;
     }
-    for (node_handle_t ctrlInput : pendingCtrlInputs) {
-        // A return GATE must retain a CTRL input even when its value already depends on it.
-        if (ctrlInput != nullptr && linkCheek(ctrlInput, outputAnchor) &&
+    for (node_handle_t ctrlInput : syncInputs) {
+        if (linkCheek(ctrlInput, outputAnchor) &&
             !runtime::hasControlDependency(
                 *nodeDraftOf(outputAnchor),
                 nodeIdOf(ctrlInput),

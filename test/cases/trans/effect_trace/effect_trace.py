@@ -158,7 +158,7 @@ def main() -> int:
                 code, out, lines = run(program, passes, trace)
                 uris = [l["uri"] for l in lines]
                 check(code == 0 and out == "3\n", f"{passes}: prints 3")
-                check(uris == [":op/assn_add_l", ":io/println"],
+                check(uris == [":op/assn_l", ":io/println"],
                       f"{passes}: the store and the println are traced, :var/new and :var/get "
                       f"are not (got {uris})")
         else:
