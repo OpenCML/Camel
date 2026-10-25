@@ -242,7 +242,7 @@ OpDef internal(
         .name      = name,
         .exports   = {},
         .params    = std::move(params),
-        .resultDoc = "Tensor",
+        .resultDoc = "float[..]",
         .infer     = std::move(infer),
         .kernel    = kernel,
         .traits    = {}};
@@ -348,7 +348,7 @@ std::vector<OpDef> gradientOps() {
         .name      = "zeros_like",
         .exports   = {"zeros_like"},
         .params    = {{"t", ParamKind::Tensor}},
-        .resultDoc = "Tensor",
+        .resultDoc = "float[..]",
         .infer     = sameAsFirst,
         .kernel    = &zerosLikeKernel,
         .traits    = {}});
@@ -356,7 +356,7 @@ std::vector<OpDef> gradientOps() {
         .name      = "ones_like",
         .exports   = {"ones_like"},
         .params    = {{"t", ParamKind::Tensor}},
-        .resultDoc = "Tensor",
+        .resultDoc = "float[..]",
         .infer     = sameAsFirst,
         .kernel    = &onesLikeKernel,
         .traits    = {}});

@@ -1,29 +1,29 @@
 module tiles_autodiff
-import { Tensor, reshape, sum, abs, zeros } from tensor
+import { reshape, sum, abs, zeros } from tensor
 import { grad } from autodiff
 import { run_preferred_resident, download } from tiles
 // The differentiated value is the first `with` parameter; the derivative wrappers are ordinary
 // functions so that tiles::run can hand them a device argument.
-with <x: Tensor<f32>>
+with <x: f32[..]>
 func square(): float { return sum(x * x) }
-with <x: Tensor<f32>>
+with <x: f32[..]>
 func rows(): float { let r = sum(x, 1); return sum(r * r) }
-type Dense = { x: Tensor<f32>, w: Tensor<f32>, b: Tensor<f32> }
+type Dense = { x: f32[..], w: f32[..], b: f32[..] }
 with <p: Dense>
 func dense(): float { let y = p.x @ p.w + p.b; return sum(y * y) }
-type Broadcast = { a: Tensor<f32>, b: Tensor<f32> }
+type Broadcast = { a: f32[..], b: f32[..] }
 with <p: Broadcast>
 func broadcast_loss(): float { return sum(p.a + p.b) }
 with <p: Broadcast>
 func weighted_loss(): float { return sum(p.a * p.b) }
 func main(): int sync {
     let x = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[], [2, 3])
-    let derivative = (v: Tensor<f32>): Tensor<f32> => grad(square)<v>()
+    let derivative = (v: f32[..]): f32[..] => grad(square)<v>()
     let cpu = derivative(x)
     let gpu = download(run_preferred_resident<derivative>(x))
     println(sum(abs(cpu - gpu)))
     println(sum(abs(gpu - x * 2.0)))
-    let row_grad = (v: Tensor<f32>): Tensor<f32> => grad(rows)<v>()
+    let row_grad = (v: f32[..]): f32[..] => grad(rows)<v>()
     println(sum(abs(download(run_preferred_resident<row_grad>(x)) - row_grad(x))))
     let p = { x: x, w: reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[], [3, 2]), b: zeros([1, 2]) }
     let dense_grad = (q: Dense): Dense => grad(dense)<q>()

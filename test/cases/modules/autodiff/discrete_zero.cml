@@ -23,7 +23,7 @@
  */
 module discrete_zero
 
-import { Tensor, argmax, cast, one_hot, reshape, sum, where } from tensor
+import { argmax, cast, one_hot, reshape, sum, where } from tensor
 import { with_grad } from autodiff
 
 type Model = {

@@ -1,13 +1,13 @@
 module named_dims_linear_forms
-import { Tensor, ones, sum } from tensor
+import { ones, sum } from tensor
 // Dimensions are linear forms: `n`, `n + 1`, `2 * n`, and `n + m` over two names. The names
 // bind in any parameter, and every occurrence is held to the same value.
 func affine(
-    a: Tensor<f32, [n]>,
-    b: Tensor<f32, [n + 1]>,
-    c: Tensor<f32, [2 * n]>,
-    d: Tensor<f32, [n + m]>,
-    e: Tensor<f32, [m]>
+    a: f32[n],
+    b: f32[n + 1],
+    c: f32[2 * n],
+    d: f32[n + m],
+    e: f32[m]
 ): float {
     return sum(a) + sum(b) + sum(c) + sum(d) + sum(e)
 }

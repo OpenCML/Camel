@@ -4,7 +4,7 @@
  */
 module transcendentals
 
-import { Tensor, reshape, exp, tanh, sigmoid, gelu, softmax } from tensor
+import { reshape, exp, tanh, sigmoid, gelu, softmax } from tensor
 
 func main(): int sync {
     let x = reshape([0.0, 1.0, -1.0, 0.5, 100.0, -100.0, 88.5, -87.0] as f32[], [8])

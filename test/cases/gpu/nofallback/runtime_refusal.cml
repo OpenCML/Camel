@@ -5,11 +5,11 @@
 /// shape the types do not fix may still compile with the actual arguments.
 module gpu_nofallback_runtime
 
-import { Tensor, reshape } from tensor
+import { reshape } from tensor
 import { run_preferred_resident, download } from tiles
 
 #gpu
-func product(a: Tensor<f32>, b: Tensor<f32>): Tensor<f32> {
+func product(a: f32[..], b: f32[..]): f32[..] {
     return a @ b
 }
 

@@ -1,7 +1,7 @@
 /**
  * The native optimizers keep the element type a tensor leaf was written with: a leaf written
- * `Tensor<f64, [?]>` is f64 after `nn:sgd` and after two `nn:adam` steps, and one written
- * `Tensor<f32, [?]>` is f32 with the f32 arithmetic it had.
+ * `f64[?]` is f64 after `nn:sgd` and after two `nn:adam` steps, and one written
+ * `f32[?]` is f32 with the f32 arithmetic it had.
  *
  * `16777217.0` is the smallest integer f32 cannot hold (`f32(16777217.0)` is `16777216.0`), so one
  * `sgd` step of it with a rate of 0.5 leaves `16777216.5`, a value no f32 can hold, in a leaf whose
@@ -25,7 +25,7 @@
  */
 module optim_native_dtype_exact
 
-import { Tensor, numel, new, sum, to_bytes } from tensor
+import { numel, new, sum, to_bytes } from tensor
 import { size, to_array } from bytes
 import { adam as native_adam, adam_state, sgd as native_sgd } from nn
 import { adam, constant, init, update } from optim
@@ -34,8 +34,8 @@ import { with_grad } from autodiff
 // The two leaves: the element type is written, the extent is not (the only spelling a tensor
 // expression has here, and the one the native walk reads).
 type Leaves = {
-    wide: Tensor<f64, [?]>,
-    narrow: Tensor<f32, [?]>
+    wide: f64[?],
+    narrow: f32[?]
 }
 
 // The loss the gradient comes from: the sum of each leaf, so the gradient is one at every element

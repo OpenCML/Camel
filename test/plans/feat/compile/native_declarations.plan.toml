@@ -609,7 +609,7 @@ args = ["${case}"]
 expect_exit = 1
 # The message spans two lines (it lists the declaration as the available overload), so the
 # short format the runner parses as one diagnostic line does not apply; check the text.
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "declaration_type_argument.cml:18:45", "<tensor:from_bytes_f32>: (encoded: Bytes, shape: int[]) => L"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "declaration_type_argument.cml:18:41", "<tensor:from_bytes_f32>: (encoded: Bytes, shape: int[]) => L"]
 
 [[tests]]
 name = "native.declaration_per_result_type"
@@ -897,7 +897,7 @@ expect_output_contains = ["This value has type 'bool', which is not the declared
 # a body-less `export func` can write; they stay in C++ and are recorded in
 # `stdlib/signatures/tensor.cml` as computed signatures. The cases below prove the declared
 # half: an importer reads it, a call checks against it, and a type-qualified alias
-# (`Tensor::numel`) is the same declaration, not a second signature.
+# (`tensor::numel`) is the same declaration, not a second signature.
 
 [[tests]]
 name = "native.tensor_declaration_import"

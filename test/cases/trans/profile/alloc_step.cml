@@ -3,7 +3,7 @@
 // line of the profile must agree with that, and the per-operator rows must add up to them.
 module profile_alloc_step
 
-import { Tensor, zeros } from tensor
+import { zeros } from tensor
 
 func main(): int sync {
     let start = zeros([1024])

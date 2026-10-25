@@ -5,7 +5,7 @@
 // `reshape` through a variable; the constant `[]` it holds is a legal target.
 module tensor_rank0
 
-import { Tensor, zeros, reshape } from tensor
+import { zeros, reshape } from tensor
 
 func main(): int sync {
     let no: int[] = []

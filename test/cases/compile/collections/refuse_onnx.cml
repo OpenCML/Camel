@@ -1,11 +1,11 @@
 module main
+import tensor
 
-import { Tensor } from tensor
 
 // The model's input goes through a map before it is returned: onnx::export has no node for
 // an operator over a collection and refuses the graph there.
 
-func main(x: Tensor<f32, [2]>): Tensor<f32, [2]> {
-    let m = [(1, x)] as Map<int, Tensor<f32, [2]>>
+func main(x: f32[2]): f32[2] {
+    let m = [(1, x)] as Map<int, f32[2]>
     return m->get_or<1, x>
 }

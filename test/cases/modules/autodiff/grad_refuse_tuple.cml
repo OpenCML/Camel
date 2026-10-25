@@ -6,7 +6,7 @@
  * `string` member is refused, and the diagnostic names that member, by position").
  */
 module grad_refuse_tuple
-import { Tensor, reshape, sum } from tensor
+import { reshape, sum } from tensor
 import { grad } from autodiff
 
 with <m: (f32[..], string)>

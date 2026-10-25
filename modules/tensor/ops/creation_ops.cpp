@@ -168,7 +168,7 @@ std::vector<OpDef> creationOps() {
         .name      = "new",
         .exports   = {"new"},
         .params    = {{"values", ParamKind::TensorLike}},
-        .resultDoc = "Tensor",
+        .resultDoc = "float[..]",
         .infer     = newInfer,
         .kernel    = &newKernel,
         .traits    = {}});
@@ -176,7 +176,7 @@ std::vector<OpDef> creationOps() {
         .name      = "empty",
         .exports   = {"empty"},
         .params    = kShapeParam,
-        .resultDoc = "Tensor",
+        .resultDoc = "float[..]",
         .infer     = shapedInfer(TypeCode::Float32),
         .kernel    = &zerosKernel,
         .traits    = {}});
@@ -184,7 +184,7 @@ std::vector<OpDef> creationOps() {
         .name      = "zeros",
         .exports   = {"zeros"},
         .params    = kShapeParam,
-        .resultDoc = "Tensor",
+        .resultDoc = "float[..]",
         .infer     = shapedInfer(TypeCode::Float32),
         .kernel    = &zerosKernel,
         .traits    = {}});
@@ -192,7 +192,7 @@ std::vector<OpDef> creationOps() {
         .name      = "ones",
         .exports   = {"ones"},
         .params    = kShapeParam,
-        .resultDoc = "Tensor",
+        .resultDoc = "float[..]",
         .infer     = shapedInfer(TypeCode::Float32),
         .kernel    = &onesKernel,
         .traits    = {}});
@@ -200,7 +200,7 @@ std::vector<OpDef> creationOps() {
         .name      = "full",
         .exports   = {"full"},
         .params    = {{"shape", ParamKind::IntArray}, {"value", ParamKind::Number}},
-        .resultDoc = "Tensor",
+        .resultDoc = "float[..]",
         .infer     = fullInfer,
         .kernel    = &fullKernel,
         .traits    = {}});
@@ -211,7 +211,7 @@ std::vector<OpDef> creationOps() {
             {{"shape", ParamKind::IntArray},
              {"low", ParamKind::Number},
              {"high", ParamKind::Number}},
-        .resultDoc = "Tensor",
+        .resultDoc = "float[..]",
         .infer     = shapedInfer(TypeCode::Float32),
         .kernel    = &randomKernel,
         .traits    = impure});
@@ -222,7 +222,7 @@ std::vector<OpDef> creationOps() {
             {{"shape", ParamKind::IntArray},
              {"mean", ParamKind::Number, true},
              {"std", ParamKind::Number, true}},
-        .resultDoc = "Tensor",
+        .resultDoc = "float[..]",
         .infer     = shapedInfer(TypeCode::Float32),
         .kernel    = &randnKernel,
         .traits    = impure});
@@ -233,7 +233,7 @@ std::vector<OpDef> creationOps() {
             {{"start", ParamKind::Int},
              {"stop", ParamKind::Int, true},
              {"step", ParamKind::Int, true}},
-        .resultDoc = "Tensor<int64>",
+        .resultDoc = "int64[..]",
         .infer     = rangeInfer,
         .kernel    = &rangeKernel,
         .traits    = {}});
@@ -241,7 +241,7 @@ std::vector<OpDef> creationOps() {
         .name      = "eye",
         .exports   = {"eye"},
         .params    = {{"n", ParamKind::Int}},
-        .resultDoc = "Tensor",
+        .resultDoc = "float[..]",
         .infer     = eyeInfer,
         .kernel    = &eyeKernel,
         .traits    = {}});

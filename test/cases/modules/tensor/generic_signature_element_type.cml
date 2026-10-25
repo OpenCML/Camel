@@ -14,7 +14,7 @@
 /// ranks a program can make today.)
 module tensor_generic_signature_element_type
 
-import { Tensor, ones, shape, numel, dim, to_bytes } from tensor
+import { ones, shape, numel, dim, to_bytes } from tensor
 import { is_numeric } from types
 import { size } from bytes
 

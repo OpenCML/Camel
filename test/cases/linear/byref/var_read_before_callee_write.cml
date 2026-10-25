@@ -7,7 +7,7 @@
  * final value of the variable).
  */
 module var_read_before_callee_write
-import { Tensor, reshape, sum } from tensor
+import { reshape, sum } from tensor
 
 func ignores(x: f64[..], var c: int): int sync {
     c += 5

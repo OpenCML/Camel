@@ -4,7 +4,7 @@
 // not, so the guard test asserts only the counts.
 module profile_alloc_count
 
-import { Tensor, zeros } from tensor
+import { zeros } from tensor
 
 func main(): int sync {
     let a = zeros([1024])

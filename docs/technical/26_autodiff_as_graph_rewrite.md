@@ -428,8 +428,7 @@ mutable parameter objects.
 The current exporter performs partial evaluation itself (folding, inlining,
 unrolling, branch selection, shape facts). These move to general passes:
 
-- **Shape specialization:** bind the example input types (`Tensor<float32,
-  [64, 784]>`, or with a dynamic batch dimension) to the function's ports and
+- **Shape specialization:** bind the example input types (`float32[64, 784]`, or with a dynamic batch dimension) to the function's ports and
   re-run operator inference, so shapes live in node types.
 - **Static simplification:** `std::opt::devirtualize` / `std::opt::specialize` /
   `std::opt::inline` / `std::opt::fold` / branch pruning / `dce` until a fixpoint.

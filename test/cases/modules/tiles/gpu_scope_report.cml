@@ -14,11 +14,11 @@
 /// `context_arguments` exclusion), or a segment's plan is not the plan of that segment.
 module tiles_gpu_scope_report
 
-import { Tensor, reshape, sum } from tensor
+import { reshape, sum } from tensor
 import { inspect, regions, source } from tiles
 
 #gpu
-func pair(x: Tensor<f32, [3]>): Tensor<f32, [3]> {
+func pair(x: f32[3]): f32[3] {
     let y = x * 2.0
     let z = y + 3.0
     return z - 1.0

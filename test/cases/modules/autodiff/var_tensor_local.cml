@@ -4,7 +4,7 @@
  * gradient.
  */
 module var_tensor_local
-import { Tensor, reshape, sum } from tensor
+import { reshape, sum } from tensor
 import { with_grad } from autodiff
 
 type P = { p0: f64[..] }

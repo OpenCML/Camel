@@ -29,8 +29,8 @@
 | --- | --- | --- |
 | `float` | `p - rate * g`，双精度，存一次 | 双精度公式，存一次 |
 | `f32` 数 | `f32(float(p) - rate * float(g))`：双精度算、存一次 f32 | 双精度公式，结果存一次 f32 |
-| 写明的 `Tensor<f32, …>` | `p - f32(rate) * g`，f32 算术 | 叶子内转 f64、在 f64 上算、结果存一次 f32 |
-| 写明的 `Tensor<f64, …>` | `p - rate * g`，仍是 f64 | 叶子内保持 f64、在 f64 上算、不降精度 |
+| 写明的 `f32[…]` | `p - f32(rate) * g`，f32 算术 | 叶子内转 f64、在 f64 上算、结果存一次 f32 |
+| 写明的 `f64[…]` | `p - rate * g`，仍是 f64 | 叶子内保持 f64、在 f64 上算、不降精度 |
 | 元素类型没写的张量 | 按**值的**元素类型走：f64 值算 `p - rate * g`（仍是 f64），f32 值算 `p - f32(rate) * g`（f32 算术） | f32 值：叶子内转 f64、在 f64 上算、结果存一次 f32；f64 值：保持 f64、不降精度 |
 
 - 张量的二元算子取两个元素类型里**更宽**的那个（`stdlib/signatures/tensor.cml` 的 `add` 一节），所以**写明的** f32 叶子与 `float` 学习率相乘会被抬成 f64：写明的元素类型要留住，就必须写成 `f32(rate)`。元素类型没写时算子的结果类型也不写，运行时按**张量值自己的**元素类型算、`float` 标量先被舍入到它（实测：元素类型没写、值是 f32 的张量乘 `0.5` 仍是 4 字节一元素），所以 `case _` 支直接写 `p - rate * g` 就与写明的 f32 支逐字节相同——`agreement.cml` 里 f32 值的叶子逐位为零就是这条的证据。这一条是移植里最容易踩的地方，`sgd_leaf` / `decay_leaf` 的每一支都按它写。
@@ -41,7 +41,7 @@
 
 ## 缺口即任务
 
-写明的元素类型这一条已经修好（`handover/h353-f64-leaf`，2026-10-23）：原生路径按叶子**写下的**元素类型取执行支与输出缓冲（`modules/nn/optim.cpp` 的 `leafElementType` / `leafTensor` / `newLike` / `zerosLeaf`；`floatTensor` 那个「不是 f32 就铸成 f32」的函数没有了），f64 叶子走 `modules/tensor/kernels/update.h` 的 `adaptiveUpdate64`，逐个元素走同一个 `adaptiveUpdateOne`，字节不经过任何 float；`Tensor<f32, …>` 叶子的字节与轨迹一点没变。守卫是用例 `test/cases/modules/optim/native_dtype_exact.cml`（`optim.native_tensor_leaf_keeps_its_element_type`，四个后端，按字节比较：f64 叶子 16 字节、值是 f32 装不下的 `16777216.5`，f32 叶子 8 字节；两步 `adam` 的 f64 叶子与 `adam_wide` 逐字节相同）。
+写明的元素类型这一条已经修好（`handover/h353-f64-leaf`，2026-10-23）：原生路径按叶子**写下的**元素类型取执行支与输出缓冲（`modules/nn/optim.cpp` 的 `leafElementType` / `leafTensor` / `newLike` / `zerosLeaf`；`floatTensor` 那个「不是 f32 就铸成 f32」的函数没有了），f64 叶子走 `modules/tensor/kernels/update.h` 的 `adaptiveUpdate64`，逐个元素走同一个 `adaptiveUpdateOne`，字节不经过任何 float；`f32[…]` 叶子的字节与轨迹一点没变。守卫是用例 `test/cases/modules/optim/native_dtype_exact.cml`（`optim.native_tensor_leaf_keeps_its_element_type`，四个后端，按字节比较：f64 叶子 16 字节、值是 f32 装不下的 `16777216.5`，f32 叶子 8 字节；两步 `adam` 的 f64 叶子与 `adam_wide` 逐字节相同）。
 
 元素类型**没写在类型里**那一半也已修好（`handover/h362-untyped-leaf`，2026-10-24，按 `docs/handover/reviews/questions-2026-10-23.md` 的「f64-tensor-leaf」裁定 A）：两侧都按**值的**元素类型走——原生 `leafElementType` 读值的元素类型、`leafTensor` 那个「不是写下的类型就铸过去」的转换没有了，本模块 `sgd_leaf` / `decay_leaf` / `adam_leaf` 的 `case _` 支不再转换参数——所以 `full([3, 2], 0.1)` 这样的叶子在两侧都是 f64，而 f32 值的叶子逐字节与改动前相同（`test/cases/modules/nn/mlp.cml` 与 `embedding_mf.cml` 那类程序没写下的参数现在在 f64 里训练；两个用例的断言是不等式与梯度检查，四个后端上都不用改就仍然通过）。守卫是用例 `test/cases/modules/optim/written_dtype_exact.cml`（`optim.written_dtype_leaves_agree_with_native`，四个后端，按字节比较：写下的元素类型是 f64、extent 敞开的叶子 8 字节一元素，写下 f32 的 4 字节，两侧 `sgd` 与两步 `adam` 的参数字节逐个相同，`adam` 的两棵矩也按参数的元素类型；两个元素类型各看 2 叶 4 元素，`adam` 看 4 叶 8 元素）。下面是还缺的。
 
@@ -59,5 +59,5 @@
 
 - `agreement.cml`：同一个参数树、同一个梯度、同一个学习率表下，Camel 的 `sgd` / `adam` / `adamw` 与 `nn` 的 `sgd` / `adam` 走多步，每一步把两棵树逐叶、逐元素相减求和：恰好为零才算一致，并且打印比较过的叶子数，跳过叶子的遍不能冒充一致。两种性质另立：`adamw` 的零衰减就是 `adam`；`adamw` 的轨迹等于“每一步先把参数按 `1 - lr * decay` 移动、再用普通 `adam`”。
 - `training.cml`：`showcase/c2-mlp-mnist/train.cml` 的训练循环缩到证明移植所需的部分（模型是 c2 那棵树的结构，只是去掉了 `int` 成员：本模块要求梯度与参数逐字段同形，见「缺口」第 1 条，而原生路径接受带 `depth: int` 的树）——`with_grad` 给梯度、`update` 消费它、循环收集损失曲线；原生 `nn:adam` 在同一条梯度、同一张表上走二十步，两步之间的参数漂移与最终漂移都必须恰好为零。
-- `dtype_exact.cml`：写明的 f64 张量叶子留在 f64：`16777217.0` 走一步 `sgd`（rate 0.5）得 `16777216.5`，一个 f32 装不下的数，叶子仍是 16 字节。同一个用例把数叶子那条路钉在张量叶子上：同样的数、同样的梯度、同样一步，`{ w: float }` 的结果必须与一个单元素 `Tensor<f64, [?]>` 的结果相等（`adam_number` 对 `adam_wide`）——把 `adam_number` 的偏差修正写错，只有这条会红。这是模块这一侧；原生那一侧是 `native_dtype_exact.cml`。
-- `native_dtype_exact.cml`：同一件事在**原生路径**上：一棵写着 `Tensor<f64, [?]>` 与 `Tensor<f32, [?]>` 两种叶子的树（梯度取自 `with_grad`，`nn` 要的是那种形状的梯度），一步 `nn:sgd` 后按 `to_bytes` 的字节比较——f64 叶子 16 字节、两个元素解出来是 `16777216.5` 与 `0.5`，f32 叶子 8 字节、是 f32 的 `16777216.0` 与 `0.5`；两步 `nn:adam` 后 f64 叶子的字节与 `adam_wide` 的逐字节相同（矩的元素类型就在这条性质里），f32 叶子同理。计划断言两侧各自看过的叶子数与元素数（sgd 4 叶 8 元素，adam 2 叶 4 元素），所以「一条都没看」不会冒充通过。改动前这条在四个后端全红（f64 叶子 8 字节、字节就是两个 f32，`failures=3`）。
+- `dtype_exact.cml`：写明的 f64 张量叶子留在 f64：`16777217.0` 走一步 `sgd`（rate 0.5）得 `16777216.5`，一个 f32 装不下的数，叶子仍是 16 字节。同一个用例把数叶子那条路钉在张量叶子上：同样的数、同样的梯度、同样一步，`{ w: float }` 的结果必须与一个单元素 `f64[?]` 的结果相等（`adam_number` 对 `adam_wide`）——把 `adam_number` 的偏差修正写错，只有这条会红。这是模块这一侧；原生那一侧是 `native_dtype_exact.cml`。
+- `native_dtype_exact.cml`：同一件事在**原生路径**上：一棵写着 `f64[?]` 与 `f32[?]` 两种叶子的树（梯度取自 `with_grad`，`nn` 要的是那种形状的梯度），一步 `nn:sgd` 后按 `to_bytes` 的字节比较——f64 叶子 16 字节、两个元素解出来是 `16777216.5` 与 `0.5`，f32 叶子 8 字节、是 f32 的 `16777216.0` 与 `0.5`；两步 `nn:adam` 后 f64 叶子的字节与 `adam_wide` 的逐字节相同（矩的元素类型就在这条性质里），f32 叶子同理。计划断言两侧各自看过的叶子数与元素数（sgd 4 叶 8 元素，adam 2 叶 4 元素），所以「一条都没看」不会冒充通过。改动前这条在四个后端全红（f64 叶子 8 字节、字节就是两个 f32，`failures=3`）。

@@ -122,7 +122,7 @@ class ArrayTypeLoad : public TypeLoad {
     std::vector<DimGroup> dims_;
 };
 
-/// A `[extent, ...]` written as a type argument (`Tensor<f32, [n, 4]>`): a shape, not a type.
+/// A `[extent, ...]` written as a type argument (`f32[n, 4]`): a shape, not a type.
 class ArrayDimLoad : public TypeLoad {
   public:
     explicit ArrayDimLoad(DimGroup dim) : TypeLoad(TypeType::ArrayDim), dim_(std::move(dim)) {}

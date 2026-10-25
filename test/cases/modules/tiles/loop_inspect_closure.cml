@@ -1,13 +1,13 @@
 // The same through a closure: the function value is built at run time (a FILL of the lambda's
 // graph and the captured `b`), and tiles.inspect still gets the lambda's graph with its LOOP.
 module tiles_loop_inspect_closure
-import { Tensor, reshape } from tensor
+import { reshape } from tensor
 import { inspect } from tiles
 
 func main(): int sync {
     let x = reshape([1.0, 2.0, 3.0] as f32[], [3])
     let b = reshape([0.5, 0.5, 0.5] as f32[], [3])
-    let f = (a: Tensor<f32>): Tensor<f32> => (loop y = a, n = 0 while n < 2 do (y + b, n + 1)).0
+    let f = (a: f32[..]): f32[..] => (loop y = a, n = 0 while n < 2 do (y + b, n + 1)).0
     println(inspect<f>(x))
     return 0
 }

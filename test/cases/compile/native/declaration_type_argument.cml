@@ -7,15 +7,15 @@
  * 
  */
 module tensor
+import tensor
 
-import { Tensor } from tensor
 import { from_array } from bytes
 
 #op('tensor:from_bytes_f32')
 export func leaf_decode::<L>(encoded: Bytes, shape: int[]): L
 
 func main(): int sync {
-    let decoded = leaf_decode::<Tensor<f32>>(from_array([0, 0, 128, 63]), [1])
+    let decoded = leaf_decode::<f32[..]>(from_array([0, 0, 128, 63]), [1])
     println(decoded)
     return 0
 }

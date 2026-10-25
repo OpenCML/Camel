@@ -7,12 +7,7 @@
 module tensor_grad_check
 
 import { grad } from autodiff
-import {
-    Tensor,
-    new, random, seed, sum, mean, max, min, exp, log, sqrt, rsqrt, sigmoid, tanh, relu, gelu,
-    erf, abs, neg, maximum, minimum, where, softmax, log_softmax, layer_norm, matmul, linear,
-    transpose, reshape, flatten, unsqueeze, permute, concat, slice, pow
-} from tensor
+import { new, random, seed, sum, mean, max, min, exp, log, sqrt, rsqrt, sigmoid, tanh, relu, gelu, erf, abs, neg, maximum, minimum, where, softmax, log_softmax, layer_norm, matmul, linear, transpose, reshape, flatten, unsqueeze, permute, concat, slice, pow } from tensor
 
 func check(name: string, f: <x: f32[..]> () => float, df: <x: f32[..]> () => f32[..], x: f32[..], v: f32[..]): int sync {
     let h = 0.001

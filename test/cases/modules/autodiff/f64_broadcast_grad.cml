@@ -1,10 +1,10 @@
 /**
- * An f64 gradient through a broadcast: `sum(x * p0)` with `x: Tensor<f64, [2, 3]>` and
- * `p0: Tensor<f64, [3]>`, the product broadcasting `p0` over the rows of `x`. The gradient
+ * An f64 gradient through a broadcast: `sum(x * p0)` with `x: f64[2, 3]` and
+ * `p0: f64[3]`, the product broadcasting `p0` over the rows of `x`. The gradient
  * reduction of a broadcast is `tensor:sum_to`, so this is where an f64 gradient met a gate that
  * said f32 only and was refused with:
  *
- *   'the gradient kernels' does not support a value of type 'Tensor<f64>'; it takes f32 tensors.
+ *   'the gradient kernels' does not support a value of type 'f64[..]'; it takes f32 tensors.
  *
  * the direction is to support f64 (and bf16 and f16) rather than refuse it, and the element
  * type of a value is always determined, so the missing arm is a hole and not a rule: a float
@@ -42,12 +42,12 @@
  */
 module f64_broadcast_grad
 
-import { Tensor, abs, reshape, sum } from tensor
+import { abs, reshape, sum } from tensor
 import { with_grad } from autodiff
 
 type M = {
-    p0: Tensor<f64, [3]>,
-    x: Tensor<f64, [2, 3]>,
+    p0: f64[3],
+    x: f64[2, 3],
 }
 
 with <m: M>

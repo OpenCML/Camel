@@ -2224,7 +2224,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     ExtentPacks dimPacks;
     const auto enterParameters = [&](FunctionType *funcType) {
         // The parameter types may write their extents over names the signature binds, e.g.
-        // `func f(x: Tensor<f32, const [constas n]>, y: Tensor<f32, const [n]>)`. Bind each name
+        // `func f(x: f32[n], y: f32[n])`. Bind each name
         // from every argument whose extent is statically known; what the arguments leave open is
         // checked when the call runs, by passing the argument through the checked conversion
         // (`as`) to the refined parameter type. Nothing here depends on the values at runtime,
@@ -3427,7 +3427,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     }
     if (targetOperator == nullptr && (!dimValues.empty() || !dimPacks.empty()) &&
         targetFuncType != nullptr && targetFuncType->hasExitType()) {
-        // The return type may speak about the names the parameters bound (`: Tensor<[n, k]>`).
+        // The return type may speak about the names the parameters bound (`: f32[n, k]`).
         // The function still has one graph: what varies with the call is only the static type,
         // and the value is passed through the checked conversion to it (the same check `as`
         // makes), so a body that breaks the relation is caught where the call runs.

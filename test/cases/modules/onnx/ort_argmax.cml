@@ -7,7 +7,7 @@
  * ort_argmax.py.
  */
 module ort_argmax
-import { Tensor, reshape, argmax } from tensor
+import { reshape, argmax } from tensor
 import { is_numeric } from types
 import { export_model } from onnx
 import { get_env } from env

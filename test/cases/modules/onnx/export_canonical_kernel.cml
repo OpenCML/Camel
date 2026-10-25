@@ -5,7 +5,7 @@
  * the recorded attribute and writes no model, instead of dropping the choice.
  */
 module export_canonical_kernel
-import { Tensor, reshape, sum } from tensor
+import { reshape, sum } from tensor
 import { export_model } from onnx
 import { get_env } from env
 

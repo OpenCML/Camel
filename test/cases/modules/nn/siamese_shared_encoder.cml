@@ -6,7 +6,7 @@
 module siamese_shared_encoder
 
 import { grad, with_grad } from autodiff
-import { Tensor, full, sum, tanh, zeros } from tensor
+import { full, sum, tanh, zeros } from tensor
 import { sgd } from nn
 
 type Encoder = {

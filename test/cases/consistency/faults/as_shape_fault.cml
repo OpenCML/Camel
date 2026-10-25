@@ -3,7 +3,7 @@
  */
 module as_shape_fault
 
-import { Tensor, reshape, zeros } from tensor
+import { reshape, zeros } from tensor
 
 func shaped(rows: int, cols: int): f32[..] {
     return zeros([rows, cols])
@@ -11,9 +11,9 @@ func shaped(rows: int, cols: int): f32[..] {
 
 func main(): int sync {
     println('before')
-    let a = shaped(2, 3) as Tensor<f32, [2, 3]>
+    let a = shaped(2, 3) as f32[2, 3]
     println(a)
-    let b = shaped(3, 2) as Tensor<f32, [2, 3]>
+    let b = shaped(3, 2) as f32[2, 3]
     println(b)
     println('not reached')
     return 0

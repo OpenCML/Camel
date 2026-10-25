@@ -1,8 +1,8 @@
 module named_dims_bind_and_reuse
-import { Tensor, ones, sum } from tensor
+import { ones, sum } from tensor
 // `constas n` binds the extent where it first appears in a parameter type; the second
 // parameter writes `n` and must have that same extent.
-func weighted(x: Tensor<f32, [n]>, w: Tensor<f32, [n]>): float {
+func weighted(x: f32[n], w: f32[n]): float {
     return sum(x) + sum(w)
 }
 func main(): int sync {

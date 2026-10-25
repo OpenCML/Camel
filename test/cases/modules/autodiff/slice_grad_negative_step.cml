@@ -5,7 +5,7 @@
  * step is statically known: the slice runs, and its value and its gradient are the slice's.
  */
 module autodiff_slice_grad_negative_step
-import { Tensor, reshape, sum } from tensor
+import { reshape, sum } from tensor
 import { grad } from autodiff
 
 with <x: f32[..]>
