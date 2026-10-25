@@ -508,6 +508,7 @@ A tag is declared at the top level of a module; after `on` come the positions it
 export tag kernel on nodes                  // before a block, function or type: the nodes in it
 export tag fast on func, nodes              // also the function's own declaration
 export tag width<w: int> on type, field     // with parameters, which are compile-time values
+export tag vjp<rule: func> on func          // a parameter of the kind func: the argument is a function, and the fact restores to that function
 tag finite = [kernel, fast]                 // a group: its members apply together
 ```
 
@@ -540,11 +541,11 @@ func main(): int {
 }
 ```
 
-`#name`, `#name<arguments>` and `#[a, b<v>]` (a group). A tag's arguments are compile-time values: a literal, a top-level constant or a function name. Each argument must be a constant of the kind its parameter declares — `int`, `float`, `bool`, `string`, or a function name for `func`; a real is carried as a real attribute by its bits and `1.5` prints as `1.5`. Writing a tag where its declaration does not list it is an error, located at the tag. So are a wrong number of arguments, an argument that is not a compile-time value, an argument whose kind is not the declared one (`SemanticDiag::TagArgumentType`), and a parameter of a kind a tag cannot carry yet (`SemanticDiag::TagParameterType`).
+`#name`, `#name<arguments>` and `#[a, b<v>]` (a group). A tag's arguments are compile-time values: a literal, a top-level constant or a function name. Each argument must be a constant of the kind its parameter declares — `int`, `float`, `bool`, `string`, or a function for `func`; a real is carried as a real attribute by its bits and `1.5` prints as `1.5`. Writing a tag where its declaration does not list it is an error, located at the tag. So are a wrong number of arguments, an argument that is not a compile-time value, an argument whose kind is not the declared one (`SemanticDiag::TagArgumentType`), and a parameter of a kind a tag cannot carry yet (`SemanticDiag::TagParameterType`).
 
 A tag of `on nodes` is a **node attribute** (`camel/core/node_attrs.h`): a tag written before a function body or a block holds for the nodes written in it, it accumulates with same-name tags outside by the attribute's combine rule, and an inner same-name tag with a parameter takes the inner value. A tag of `on func`, `on type` and `on field` belongs to the declaration itself: a C++ module reads it in one query, `tag::factsOf` (tags, permissions and readers; `tag::ofDeclaration` / `tag::ofField` remain); reading it from Camel code waits for the first stage of generics.
 
-A parameter may also be declared `func`: its argument is then a function name, and the tag's fact is the **graph reference** of that function (`attr::graphRef`), not a function value. The GIR builder keeps that graph in the reference table of the function's graph (`kGraphRefRule`), so the frozen graph names the function directly; it is not resolved by name again at run time and no closure captures it. A `func` argument is therefore a static function of the program, never a closure over the surrounding scope. The autodiff module declares `export tag vjp<rule: func> on func` this way: `#vjp<rule>` before a function declaration makes calls of that function use the rule instead of the derivative of its body ([26 Autodiff](../../technical/26_autodiff_as_graph_rewrite.md)). The old `@vjp<rule>` annotation is gone: it is reported at the annotation as `SemanticDiag::InvalidAnnotation`, naming `#vjp<rule>`.
+A parameter may also be declared `func`: its argument is a function, and the tag's fact is that function itself (the argument restores to the function), not its name and not an internal handle. The autodiff module declares `export tag vjp<rule: func> on func` this way: `#vjp<rule>` before a function declaration makes calls of that function use the rule instead of the derivative of its body ([26 Autodiff](../../technical/26_autodiff_as_graph_rewrite.md)). The old `@vjp<rule>` annotation is gone: it is reported at the annotation as `SemanticDiag::InvalidAnnotation`, naming `#vjp<rule>`.
 
 **`#impl<f>`: the Camel body is the semantics, the native kernel is the execution** (design principles 10.4). It is written before a function declaration that has a body:
 

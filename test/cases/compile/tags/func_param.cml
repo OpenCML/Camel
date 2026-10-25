@@ -1,0 +1,24 @@
+/// A tag parameter may be declared `func` (design principles 6.2: `tag vjp<rule: func> on func`):
+/// the keyword stands where the parameter's type stands, on a field tag and on a function tag
+/// alike, and the tag is written with the name of a function as its argument.
+module tags_func_param
+
+tag rule<f: func> on field
+tag vjp<rule: func> on func
+
+func twice(x: int): int { return x + x }
+func twice_rule(dy: int): int { return dy }
+
+type Box = {
+    #rule<twice> scaled: int,
+    plain: int,
+}
+
+#vjp<twice_rule>
+func label(x: int): int { return twice(x) }
+
+func main(): int sync {
+    println(label(21))
+    println({scaled: 3, plain: 5}.plain)
+    return 0
+}

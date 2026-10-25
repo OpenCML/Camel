@@ -211,6 +211,28 @@ expect_diagnostic_column = 2
 expect_output_contains = ["The parameter 'f' of the tag 'callback' is declared '(x: int) => int': a tag parameter is an int, a float, a bool, a string or a func."]
 
 [[tests]]
+name = "func_parameter"
+desc = "A tag parameter may be declared `func` (design principles 6.2: `tag vjp<rule: func> on func`): `func` stands where the parameter's type stands, the tag is written with the name of a function as its argument on a field and on a function, and the program runs as if the tags were not there."
+kind = "behavior"
+case = "../../../cases/compile/tags/func_param.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "42\n5\n"
+
+[[tests]]
+name = "function_is_not_a_parameter_kind"
+desc = "The one name of a tag parameter's function kind is `func`: a parameter declared `function` is a kind a tag cannot carry and the use is refused by name, so the old spelling cannot come back as a second name."
+kind = "negative"
+case = "../../../cases/compile/tags/err_function_alias.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::TagParameterType"
+expect_diagnostic_code = "0x0300016D"
+expect_diagnostic_line = 11
+expect_diagnostic_column = 6
+expect_output_contains = ["The parameter 'f' of the tag 'callback' is declared 'function': a tag parameter is an int, a float, a bool, a string or a func."]
+
+[[tests]]
 name = "old_annotation_form"
 desc = "The old `@name(...)` form of a tag gets a located diagnostic that points at `#name` / `#[...]`, not a syntax error."
 kind = "negative"
