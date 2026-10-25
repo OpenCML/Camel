@@ -115,9 +115,12 @@ def _missing_message() -> str:
     if (bundled / "bin").is_dir():
         return (
             "camel was installed without its Python interop extension: this wheel "
-            "(py3-none-<platform>) carries the `camel` command only, and calling Camel from "
-            "Python needs CPython 3.10 or newer. Install camel-lang with that interpreter and "
-            "pip picks the wheel that has the extension; `camel` itself works as it is."
+            "(py3-none-<platform>) carries the `camel` command only. Calling Camel from Python "
+            "needs the interop wheel this release published for your platform, and its file name "
+            "says which CPython it is for (cp311, cp313, ...): it is the interpreter the release "
+            "was built with, and there is one per platform rather than one for every version. "
+            "Install camel-lang with that interpreter and pip picks the wheel that has the "
+            "extension; `camel` itself works as it is."
         )
     return (
         "the Camel extension module (_camel) was not found. It is built with the rest of the "

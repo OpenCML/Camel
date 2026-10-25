@@ -381,6 +381,24 @@ function packageWheelBundle({
     removeDir(path.join(PYPI_BASE, 'dist'))
 
     const py = pyCmd(buildPythonExe)
+
+    // Every target that links libcamel carries the build machine in its RUNPATH: CMake adds the
+    // build tree's library directory (`...:$ORIGIN/../libs:/src/build/Release`), and the Conan
+    // packages the build linked against add their cache (`/root/.conan2/p/b/fmt.../p/lib`). Both
+    // are dead on the user's machine -- the install is `$ORIGIN`-relative, and `auditwheel
+    // lddtree` shows the only library anything in the wheel needs from outside itself is the
+    // system's -- and the build tree's entry is what `auditwheel repair` follows to find
+    // libcamel.so, which is how the wheel ended up carrying a second copy of it (H604). Dropped
+    // from the copy the wheel is packed from, so the build tree itself is untouched and stays
+    // runnable: on Linux only, because this edits the ELF dynamic string table, and the other
+    // platforms have no such entry (Windows has no RUNPATH; a macOS Mach-O is rewritten by
+    // delocate, which 5.37 item 6 has not written yet).
+    if (process.platform === 'linux') {
+        runCommand(`${py} "${path.join(BASEDIR, 'scripts', 'strip_build_rpath.py')}" "${CMLENV}"`)
+        runCommand(
+            `${py} "${path.join(BASEDIR, 'scripts', 'strip_build_rpath.py')}" --check "${CMLENV}"`
+        )
+    }
     // The wheel is built with `build` where it is installable, and with the setuptools that pip can
     // already see where it is not; `wheel` is not needed at all, since scripts/wheel_retag.py does
     // the retag with the standard library. A host with no egress gets the same artifact.
