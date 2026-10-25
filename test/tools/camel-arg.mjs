@@ -12,6 +12,12 @@
 // A `--camel` with no value is a usage error: the caller's own `usage` prints (each tool owns its
 // text) and the run exits 2. It never falls back to the default -- the run that was asked to
 // measure one install and measured another is the defect this rule exists against.
+//
+// The stamp rule of a checker that reads an install's operator registry is `scripts/install-stamp.mjs`
+// (`refuseInstallNotOfThisTree`), and it states its own default for the case it guards: this tree's
+// `out/latest`. The two defaults are not merged here on purpose -- `CAMEL_HOME` is the install
+// location's convention (the ruling keeps it), so a tool that honors it must not lose it to a
+// helper whose subject is the stamp.
 
 import path from 'node:path'
 
