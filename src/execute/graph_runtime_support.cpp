@@ -12,8 +12,6 @@
 #include "camel/execute/graph_runtime_support.h"
 
 #include "camel/core/context/context.h"
-#include "camel/core/operator_semantics.h"
-#include "camel/core/operator_table.h"
 #include "camel/runtime/control_regions.h"
 #include "camel/runtime/exec_plan.h"
 
@@ -136,31 +134,6 @@ std::string describeNode(const camel::runtime::GCGraph *graph, gc_node_ref_t ref
 
 } // namespace
 
-/// Whether the node observes something on its own: running it writes a resource outside the
-/// values the graph computes -- a stream, a file, a cell of the program's own state. What such a
-/// node does is visible even when no value depends on what it returns, so the execution plan
-/// starts from it as it starts from the graph's value and exit (design principles 3.1).
-///
-/// Only a declared effect counts. An operator nobody declared anything for is not one of these:
-/// the conservative "may be an effect" answer the resource checks use would make every undeclared
-/// operator a root, and the plan would lay out nodes the graph never runs, in arms no run takes.
-static bool observesOnItsOwn(const camel::runtime::GCGraph &graph, gc_node_ref_t ref) {
-    namespace sem = camel::core::sem;
-    const camel::runtime::GCNode *node = graph.node(ref);
-    if (node == nullptr || node->kind != camel::runtime::GCNodeKind::Oper) {
-        return false;
-    }
-    const sem::OperatorSemantics *facts = camel::core::OperatorTable::instance().semantics(
-        graph.nodeBodyAs<camel::runtime::GCOperBody>(ref)->oper);
-    if (facts == nullptr) {
-        return false;
-    }
-    if (facts->effect == sem::Effect::StateOnly || facts->effect == sem::Effect::Effectful) {
-        return true;
-    }
-    return facts->resources.has_value() && facts->resources->externalEffect;
-}
-
 std::vector<gc_node_ref_t> computeExecutionOrder(const camel::runtime::GCGraph *graph) {
     ASSERT(graph != nullptr, "Runtime graph is null in execution topo construction.");
     ASSERT(
@@ -174,31 +147,16 @@ std::vector<gc_node_ref_t> computeExecutionOrder(const camel::runtime::GCGraph *
     std::vector<gc_node_ref_t> stack;
     stack.reserve(graph->nodeCount());
 
-    // Only what a root depends on is laid out. A rewrite may leave nodes nothing uses (the
+    // Only what the exit depends on is laid out. A rewrite may leave nodes nothing uses (the
     // inner branch of an inlined callee whose result the caller's body ignores); they still
     // hang off live nodes as users. The branch handling below walks users, so it has to know
     // which of them are part of the execution.
     const gc_node_ref_t startRef = graph->exitNodeRef() != camel::runtime::kInvalidNodeRef
                                        ? graph->exitNodeRef()
                                        : graph->returnNodeRef();
-    // A node that observes on its own is a root exactly as the exit is (design principles 3.1):
-    // what it does is visible whether or not a value depends on what it returns, so no rewrite
-    // may drop it from the plan for want of a user. A rewrite that replaces the statements around
-    // an effect can leave it with no path to the exit -- the operators a `#gpu` scope holds are
-    // outlined into a segment whose call takes the place of the statement it replaced, and the
-    // effect written before that statement keeps no edge to the graph's value -- and following
-    // the exit alone would then neither run the effect nor transfer what it reads.
-    std::vector<gc_node_ref_t> observing;
-    for (gc_node_ref_t ref = 0; ref < graph->nodeCount(); ++ref) {
-        if (observesOnItsOwn(*graph, ref)) {
-            observing.push_back(ref);
-        }
-    }
-    std::vector<gc_node_ref_t> roots{startRef};
-    roots.insert(roots.end(), observing.begin(), observing.end());
     std::vector<uint8_t> live(graph->nodeCount(), 0);
     {
-        std::vector<gc_node_ref_t> work = std::move(roots);
+        std::vector<gc_node_ref_t> work{startRef};
         while (!work.empty()) {
             const gc_node_ref_t n = work.back();
             work.pop_back();
@@ -463,11 +421,6 @@ std::vector<gc_node_ref_t> computeExecutionOrder(const camel::runtime::GCGraph *
     // constant while silently skipping the observable work.
     if (startRef != camel::runtime::kInvalidNodeRef) {
         visit(startRef);
-    }
-    // Every root is laid out even when the exit does not reach it: a node that observes on its
-    // own is not a value anyone reads, so nothing else carries it into the order.
-    for (gc_node_ref_t ref : observing) {
-        visit(ref);
     }
     return order;
 }

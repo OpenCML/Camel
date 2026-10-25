@@ -905,3 +905,33 @@ println(grow([1.0, 2.0], read_int()))
 2. **类型参数和 `with` 参数同时出现，同一批做**：通道合并以后，它就是同一件事的两个键，设计稿第 1 节的 `tile_matmul::<T>` 例子要能编译并跑通，作为验收。
 3. 两条做完后，`RuleWithParameterOnASide`、`RuleWithParameterGenericHead` 两条诊断从注册表里删掉，编号留给最后的诊断码重排。develop 上现在这个中间态，由同一条车道接着补完，不回退。
 4. **语言参考补上规则与事实**：现在的语言参考里没有讲 `rule`、`fact` 的章节，只在第 8 章顺带提了一句。按目标写一节"规则与事实"（中英文）：声明、类型参数、`const` 参数、`with` 参数、条件、`#requires(...)`、规则是值与规则集、`fact` 的写法与子句，以及交给遍的方式（`f->std::opt<rules: [...]>`）。内容以设计原则 5.5 和规则语言设计稿为准，例子暂时跑不通的进待实现名单。
+
+## 重新提交到 develop 的六页旧问题
+
+`2026-10-25-in-place-decision-layer`、`dim-name-relaxation-and-element-type-change`、`held-back-instantiation-diagnostic-still-meets-the-limit`、`subscript-operator-choice-and-the-rank-two-refusal`、`tags-struct-argument-record`、`tensor-reduction-element-type-code-half`，这六页本文件里都已经有裁定，同名的几节就是。这次只是换成"一句话问题 + 选项"的格式重新提交，没有新的事实，所以照原裁定执行，问题页删掉。其中 in-place 那一页的后续，见 `in-place-write-through-a-var-alias` 一节（计数如实，由编译器插入加一和减一）。以后同一个问题不再重复提交；裁定有不清楚的地方，就在新的问题页里点名是哪一句。
+
+## after-the-tensor-deletion-four-open-points
+
+1. **`optim.cml` 的叶子：靠运行期读字节宽度来选写法，这本身就是错的**。设计原则 5.10 说"Camel 没有在运行时判断类型的能力"，这段代码等于用 `size(to_bytes(p)) == numel(p) * 8` 绕过这条原则去问元素类型。参数树按字段展开时，每个叶子的类型在编译期就已经确定，所以叶子写成泛型：`adam_value_leaf::<T>(p: T[..], ...) when is_float::<T>()`，f32 和 f64 各实例化一份。`unstated` 删掉，运行期的分支也删掉。这属于删除步的收尾，由施工方现在改；`optim` 整个模块以后由我按 H230 重写。
+2. **`show([])`：编译错误（选项 B）**。`[]` 没有元素类型，和"空数组作循环初值必须写类型"是同一条规则；上下文 `A[..]` 也给不出 `A`。用例改成反例，钉住 `NoMatchingFunction`，或者直接删掉。
+3. **`to_bytes` 接受哪些元素类型：用"纯数据"谓词（选项 A，但不是新加一个特例）**。设计原则 10.5 已经定义了"纯数据类型"：数字、布尔、复数，以及只由它们组成的结构体和元组，也就是能放进数据块、能零拷贝交出去的那一类。把它做成一个谓词（如 `is_plain::<T>()`），`to_bytes`、`from_bytes`、DLPack 交换、数据块的分配都用这同一个谓词。bool 数组因此能 `to_bytes`。
+4. **元素类型不同的两个数组不 join（选项 A）**：数值类型之间没有隐式转换（设计原则 5.1），`if c then xs else ys` 两支元素类型不同就是类型错误，要显式转换。`array_type_selftest.cpp` 钉的 `nullptr` 保持；补一条诊断，点出两支各是什么元素类型，并给出转换的写法。
+5. **ONNX 的四个用例**：按目标语言改写，在函数体里写明转换（`f32(...)`），或者让两边的元素类型一开始就一致。这是语言的规则，不是用例的折中。
+6. **递归拒绝的位置移到了 `main`：这是诊断质量的退步，要钉回去**。导出失败的原因是那个递归调用，主位置应当在递归调用处（12:47），再用关联位置指向 `main` 里 `export_model` 的调用。计划里的正则改成只认 12 这一行，不再用 `1[0-9]` 同时放过两种位置。
+
+## fact-and-with-parameters
+
+`fact` 取代 `analysis` 落地，"事实 + 实参"分别建键、分别缓存也做到了，收下。五处：
+1. **`with` 实参要能被 case 读到，这一批就做完（第 1 条路）**：引擎调用 case、`initial`、`join` 等函数时，把 `Definition` 里存下的实参作为 `with` 实参交给 `callGraph`；对象型的值用 `RootHandle` 挂住。生成出来的这些函数各自声明同样的 `with` 参数。这和函数的 `with` 参数是同一个机制，比包一层闭包干净，也不受模式函数"直接读图形状"的限制。做完后删掉那条 `ConstructNotSupported`，`46_rules.md` 里写的那条边界一起删掉。
+2. **通用头 `fact range::<T>(v: T)` 是目标，同一批做**：它需要"类型实参 → 函数实例"的入口，这正是上一节给规则定的那个统一实例化通道（类型实参与 `with` 实参都是实例的键）。规则和事实共用这一个通道，不各写一份。设计稿 7.5 的 `range` 例子要能编译并跑通，作为验收。
+3. **不加 `or`/`and`**：布尔的"或"已经有 `|`（两边都求值、可重载的普通逻辑运算，设计原则 4.2），再起名字就是同一件事两个名字。`||` 是转成分支的保留运算，不能当函数传。`join` 写 `(a: bool, b: bool) => a | b`；设计稿 8.6 和第 17 章的 `join or` 一并改。
+4. **待实现名单按"同一个键下每个片段都追上了才算过期"**：判据对。一个键对应一段程序，程序在页里出现几次，就要每一次都能通过。图转储改成比较文本以后（见 `std-opt-and-module-rules` 一节），后三段也会各自真正被比较。
+5. **剩下的 `analysis` 字面一并改掉，由这条车道直接落笔**，包括 `docs/design/` 与 `docs/language/` 里的这几处，这是机械改名，不算改写设计：
+   - `rewrite/README.cn.md`（第一版设计稿）、`graph-store/README.cn.md:131`、`plan-verification.cn.md` 里的 `analysis` 改成 `fact`；
+   - 引擎内部的符号同样改名，不留旧名：`analysisKernel` 改成 `factKernel`，`modules/rewrite/analysis.cpp|h` 改成 `fact.cpp|h`，`plan-verification.cn.md` 里的引用跟着改；
+   - 语言参考 8 章那句手写的记号说明，改成 `factDecl`、`factBody`、`factCase`、`factClause`。
+
+## tensor-gradient-structure-and-slice-adjoint
+
+1. **离散字段：梯度里照样有这个字段，值是零（选项 a）**。设计原则 9.9 写明 `with_grad(loss)<m>(x, y)` 得到"与 `m` 同型的梯度"，所以梯度结构体和模型同一个类型，`labels: i64[..]` 的梯度就是同形状、同元素类型的零。这样优化器拿参数树和梯度树按同一个结构配对，不需要为离散字段开特例。三条用例不用改。"元素没有切向量时数组也没有"那一条，说的是循环遍历、捕获的数组依赖被求导参数时要拒绝，和"梯度与模型同型"不冲突。
+2. **下标切片和函数形式的切片：只留一个算子、一条伴随规则（选项 c 的第一种）**。`t[a:b]` 降成和 `slice(t, 0, a, b)` 同一个切片节点（省略末端时，末端取那一维的长度），`sliceSubVjp` 删掉，只剩 `sliceVjp` 一条。两种写法本来就是同一件事，没有理由各走一条伴随规则，元素类型丢失的问题也随之消失。伴随交回的值，类型要和原值的切向量类型一致（元素类型、形状都写明）。按"下标由核心负责"的裁定，这个切片节点在 P4 之后属于核心。

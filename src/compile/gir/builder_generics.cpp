@@ -723,7 +723,7 @@ bool Builder::instantiateRuleTemplates(
     // The instance is made and nobody asked whether making it was allowed: a condition that writes
     // an effect is a mistake of the rule wherever it stands, and the type arguments are what
     // revealed this one (the effect of a call whose candidate the types decide).
-    reportEffectInRuleInstance(entry, when);
+    reportEffectInRuleInstance(entry, lhsTemplate->module, when);
     return true;
 }
 

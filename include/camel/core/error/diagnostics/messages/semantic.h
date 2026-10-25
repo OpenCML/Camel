@@ -330,6 +330,8 @@ enum class SemanticDiag : uint32_t {
     /// expression, an open type variable, a type written twice in one case, or a type that an
     /// earlier case already selects.
     StaticMatchPatternCannotMatch = 0x0001C2,
+    FactArgumentNotConstant       = 0x0001C3,
+    FactCaseDefaultMissing        = 0x0001C4,
     // Folding a call of a pure function with constant arguments. 0x1C5 and up.
     /// An argument of a call in a place that needs a constant is not one.
     FoldCallArgumentNotConstant = 0x0001C5,

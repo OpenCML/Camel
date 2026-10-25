@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-275 diagnostics: 258 errors, 17 warnings. 15 carry a machine-applicable edit, 260 say why they carry none.
+277 diagnostics: 260 errors, 17 warnings. 15 carry a machine-applicable edit, 262 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -206,6 +206,8 @@ prints one entry.
 | `0x030001C0` | [SemanticDiag::WhenPredicateNotCompileTime](#whenpredicatenotcompiletime) | Error | no |
 | `0x030001C1` | [SemanticDiag::WhenPredicateAmbiguous](#whenpredicateambiguous) | Error | no |
 | `0x030001C2` | [SemanticDiag::StaticMatchPatternCannotMatch](#staticmatchpatterncannotmatch) | Error | no |
+| `0x030001C3` | [SemanticDiag::FactArgumentNotConstant](#factargumentnotconstant) | Error | no |
+| `0x030001C4` | [SemanticDiag::FactCaseDefaultMissing](#factcasedefaultmissing) | Error | no |
 | `0x030001C5` | [SemanticDiag::FoldCallArgumentNotConstant](#foldcallargumentnotconstant) | Error | no |
 | `0x030001C6` | [SemanticDiag::FoldCallHasEffects](#foldcallhaseffects) | Error | no |
 | `0x030001C7` | [SemanticDiag::FoldCallTooDeep](#foldcalltoodeep) | Error | no |
@@ -6746,6 +6748,82 @@ func main(): int sync {
 }
 ```
 
+### FactArgumentNotConstant
+
+`0x030001C3` · Error · `SemanticDiag::FactArgumentNotConstant`
+
+**Fix**
+
+None: choice: the argument the fact is computed for is the writer's to write, so the message names both the parameter and its type
+
+**Message**
+
+```text
+The argument '{0}' of a fact is not a compile-time constant of type '{1}'.
+```
+
+**Help**
+
+```text
+A fact is computed once for the arguments it is queried with, and two different arguments are two different facts. An argument is therefore a value the compiler computes where the query is written: a literal, a name a constas or with parameter records, or the result of a pure call on those. Write a constant here, or query the fact from a place where the value is one.
+```
+
+**Example** (`test/cases/modules/rules/fact_arg_not_constant.cml`, run as `camel test/cases/modules/rules/fact_arg_not_constant.cml`)
+
+```camel
+module fact_arg_not_constant
+import { Program, Node } from graph
+import { max } from math
+import { rewrite } from rewrite
+
+with <cap: int = 5>
+fact capped(v: int): int match v {
+    case const c => c
+    case _       => 0
+} join max
+
+rule bad_arg(x: int, y: int) when capped<y>(x) == 0 { x * y => x }
+
+func main(): int sync {
+    return 0
+}
+```
+
+### FactCaseDefaultMissing
+
+`0x030001C4` · Error · `SemanticDiag::FactCaseDefaultMissing`
+
+**Fix**
+
+None: choice: what the fact says of a value none of its cases matched is the writer's to write
+
+**Message**
+
+```text
+The fact '{0}' has no 'case _', so nothing says what it is for a value no other case matched.
+```
+
+**Help**
+
+```text
+The cases read how a value was built, and every fact needs one case that takes whatever they do not: 'case _', written last. Its value is also what a value that depends on itself settles on.
+```
+
+**Example** (`test/cases/modules/rules/fact_no_default.cml`, run as `camel test/cases/modules/rules/fact_no_default.cml`)
+
+```camel
+module fact_no_default
+import { max } from math
+
+fact sign(v: int): int match v {
+    case const c => c
+} join max
+
+func main(): int sync {
+    return 0
+}
+```
+
 ### FoldCallArgumentNotConstant
 
 `0x030001C5` · Error · `SemanticDiag::FoldCallArgumentNotConstant`
@@ -8086,26 +8164,7 @@ The value bound to the `with` parameter '{0}' of the rule '{1}' is not a compile
 A rule's `with` value is part of what selects the instance the rule's sides and its condition are made at, so it is known while the program is compiled: write a literal, a constant, or a constant expression of an integer, real, bool or string type. A value the compiler cannot work out would need one instance for every value it could take.
 ```
 
-**Example** (`test/cases/modules/rules/err_rule_with_not_constant.cml`, run as `camel test/cases/modules/rules/err_rule_with_not_constant.cml std::nvm`)
-
-```camel
-module err_rule_with_not_constant
-
-import { Program, graphs } from graph
-import { rewrite } from rewrite
-
-with <tile: int>
-rule add_tile(x: int) when tile > 0 { x + tile => x }
-
-/// The factor is a parameter of the function, so it is not known while the program is compiled.
-func apply(p: Program, tile: int): Program! {
-    return rewrite(p, [add_tile<tile>])
-}
-
-func main(): int sync {
-    return 0
-}
-```
+*No example: no test small enough to show raises it.*
 
 ### IgnoredSideEffect
 

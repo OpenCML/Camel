@@ -258,3 +258,20 @@ expect_exit = 0
 expect_stdout = "gx tensor([[    0.1,     0.3,     0.7],\n        [    0.1,     0.3,     0.7]], dtype=float32)\ngp tensor([    1.1,     0.8,       1.], dtype=float32)\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
+
+# A scalar operand beside a reduced-precision tensor: the literal takes the element type the
+# operator declares (design principles 5.1), and the operand is read as the two-byte pattern of
+# that type, which is the same bytes an element of it occupies (camel/core/rtdata/half.h). Held in
+# a wider member of the operand's storage, every line below answers with the element 9.18e-40 (the
+# bf16 pattern 0x0001) or, on the addition side, with 10: the tensor's elements and the number the
+# program wrote met as two different values, and nothing was diagnosed.
+[[tests]]
+name = "reduced_scalar_operand"
+desc = "A literal and an f32 value beside a `Tensor<bf16>` or a `Tensor<f16>` are read in the element type: `sum(b * 2.0)` is 20, `sum(b + 2.0)` is 18, `sum(h * 2.0)` is 20, `sum(where(b > 2.0, b, 0.0))` is 7, and a tensor on the right reads by the same rule (`sum(2.0 - b)` is -2). Read through a wider member of the storage, the products were 9.18e-40 and the sums 10."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/dtype/reduced_scalar_operand.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout = "20.0 5.0 18.0 6.0 5.0\n20.0 5.0 18.0 6.0\n20.0 20.0\n7.0 7.0\n20.0 18.0 -2.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000

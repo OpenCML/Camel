@@ -528,7 +528,7 @@ std::string Builder::describeEffect(
         // function, and the report says which one so that the condition is still found.
         subject = std::format("{} in the function '{}'", subject, inside->name());
     }
-    return subject;
+return subject;
 }
 
 bool Builder::calleeIsGeneric(const std::string &name) const {
@@ -714,7 +714,8 @@ void Builder::reportEffectfulConditions() {
 }
 
 void Builder::reportEffectInRuleInstance(
-    const GenericRuleEntry &entry, const compile_graph_ptr_t &condition) {
+    const GenericRuleEntry &entry, const camel::core::module::module_ptr_t &module,
+    const compile_graph_ptr_t &condition) {
     if (condition == nullptr) {
         return;
     }
@@ -738,16 +739,44 @@ void Builder::reportEffectInRuleInstance(
         origin = sourceContext->debugMap().graphOrigin(inside->graphId());
     }
     templateConditionsReported_.insert(entry.when.get());
-    auto diagnostic = userSink()->of(SemanticDiag::EffectInRuleCondition).atOrigin(origin);
+    camel::core::error::Diagnostics *sink = userSink();
+    if (sink == nullptr) {
+        // Nothing holds reports for this declaration: a rule is written in a module, and a module
+        // holds its own, so this is a declaration no user wrote and no user reads a verdict about.
+        return;
+    }
+    auto diagnostic = sink->of(SemanticDiag::EffectInRuleCondition).atOrigin(origin);
     if (entry.where != camel::source::kInvalidOriginId) {
         diagnostic.relatedOrigin(
             entry.where, std::format("the rule '{}' is declared here", entry.name));
     }
-    diagnostic.commit(describeEffect(inside, effect, inside != condition), entry.name);
+    Diagnostic reported =
+        diagnostic.commit(describeEffect(inside, effect, inside != condition), entry.name);
+    if (module != nullptr) {
+        // A report made where the build is over goes to the run's channel, which is created
+        // without a module: name the module that declares the rule here, as the run does for a
+        // verdict about its own configuration.
+        reported.moduleName = module->name();
+        reported.modulePath = module->path();
+    }
 }
 
 camel::core::error::Diagnostics *Builder::userSink() {
-    return speculative_ != nullptr ? speculative_->sinkForTheProgram() : diags_.get();
+    if (speculative_ != nullptr) {
+        if (camel::core::error::Diagnostics *held = speculative_->sinkForTheProgram();
+            held != nullptr) {
+            return held;
+        }
+    }
+    if (diags_ != nullptr) {
+        return diags_.get();
+    }
+    // The build that wrote the module is over and keeps no sink of its own. What the module said
+    // is the module's, and it stays there: a library that does not compile is read by whoever
+    // asked for it, and its errors are not the run's. A rule is instantiated later than that --
+    // the engine makes instances while the program runs -- so a verdict about the rule is one the
+    // run reached, and it goes to the channel the run reports through.
+    return context_ != nullptr ? context_->rtmDiags().get() : nullptr;
 }
 
 void Builder::reportUnusedFallibleValues() {

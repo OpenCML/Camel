@@ -484,7 +484,8 @@ node_handle_t Builder::partialApplicationOf(
                    : std::format("{}{}", prefix, i);
     };
     for (size_t i = bound.size(); i < withCount; ++i) {
-        factory.addWithArg(nameAt(i, "__w", i), calleeType->withTypeAt(i), false);
+        factory.addWithArg(
+            nameAt(i, "__w", i), calleeType->withTypeAt(i), false, calleeType->withNeedsValueAt(i));
     }
     for (size_t i = 0; i < calleeType->normTypesCount(); ++i) {
         factory.addNormArg(

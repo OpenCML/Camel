@@ -1,0 +1,29 @@
+/**
+ * An effectful expression written outside a sync block whose result nothing uses does not run, and
+ * the compiler warns about each one (SemanticDiag::EffectNotExecuted, docs/design-principles.cn.md
+ * 3.1: evaluation is driven by dependencies, and this is the language's own reading of the rule,
+ * listed in section 14 as a reading that was once mistaken for a defect).
+ *
+ * That reading belongs to the program, not to the device: it holds whether or not the scope is cut
+ * into segments, so this program prints `main`'s line and nothing else with `tiles::compile` and
+ * without it. It is what pins the rule the segmentation obeys: the call that replaces a segment's
+ * statements takes the orderings those statements carried, and it does not put an effect that
+ * nothing depends on into the executed graph.
+ *
+ * Output: `12.0`, and the warning at the `println` in `scaled`'s body.
+ */
+module tiles_gpu_scope_unused_effect
+
+import { Tensor, reshape, sum } from tensor
+
+#gpu
+func scaled(x: Tensor<f32, [3]>): Tensor<f32, [3]> {
+    println('never') // DROPPED: outside a sync block, and nothing uses it
+    return x * 2.0
+}
+
+func main(): int sync {
+    let x = reshape([1.0, 2.0, 3.0] as f32[], [3])
+    println(sum(scaled(x)))
+    return 0
+}

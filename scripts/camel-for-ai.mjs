@@ -95,7 +95,7 @@ const BUDGET = {
     regions: {
         lexical: 4000,
         precedence: 3000,
-        diagnostics: 28000,
+        diagnostics: 28500,
         'stdlib-signatures': 28000,
     },
 }
