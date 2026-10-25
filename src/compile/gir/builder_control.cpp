@@ -131,7 +131,7 @@ bool isEmptyArrayLiteral(node_handle_t node) {
 bool isEmptyArrayLiteralType(const Type *type) { return isUntypedArrayType(type); }
 
 /// Whether a value of this type is a struct or tuple whose parts can be the components of a
-/// loop state (H71). A cell and the tagged forms are representations, not collections of values:
+/// loop state. A cell and the tagged forms are representations, not collections of values:
 /// their parts are not independent values of the programme.
 bool isSplittableAggregate(const Type *type) {
     if (type == nullptr) {
@@ -709,7 +709,7 @@ Builder::compositeDataInType(const data_ptr_t &data, Type *type, const GCT::node
             // the empty array takes the element type of the position it stands in (design
             // principles 5.1, 5.2) — `[]` where an `int[]` is expected is the empty `int[]`,
             // whether the position is a declaration, a body's value or a loop state. A literal
-            // that has elements keeps their join (H24), so this branch only covers `[]`, and a
+            // that has elements keeps their join, so this branch only covers `[]`, and a
             // position that states a length other than zero did not take it (the check above).
             return ArrayData::create(elemType);
         }
@@ -759,9 +759,9 @@ Builder::compositeDataInType(const data_ptr_t &data, Type *type, const GCT::node
         return factory.buildAs(structType);
     }
     if (type->code() == TypeCode::Tuple && data->type()->code() == TypeCode::Tuple) {
-        // The missing branch of H15h's element walk: a tuple literal used as an argument had no
+        // The missing branch of the element walk: a tuple literal used as an argument had no
         // way into a tuple parameter, so a text element made the whole call a NoMatchingFunction
-        // instead of naming the element (H15i). Elements are converted in written order, which
+        // instead of naming the element. Elements are converted in written order, which
         // is a tuple's order.
         auto *tupleType   = tt::as_ptr<TupleType>(type);
         const auto object = std::dynamic_pointer_cast<TupleData>(data);
@@ -985,7 +985,7 @@ data_ptr_t Builder::literalElementInType(
         ownPosition ? written->origin : camel::source::kInvalidOriginId;
     if (data->type()->code() == TypeCode::String) {
         // A text where another type is expected is the element's own type mismatch, reported at
-        // the element (design principles 5.1; H15h). There is no text-to-number conversion.
+        // the element (design principles 5.1). There is no text-to-number conversion.
         rejectLiteralData(data, type, where, nullptr, writtenAt);
     }
     if (value == nullptr || !isNumericType(type) || !isNumericType(data->type())) {
@@ -1113,7 +1113,7 @@ node_handle_t Builder::adaptExitValue(const GCT::node_ptr_t &gct, node_handle_t 
     // unless the value already has it is the same rule checkValue applies everywhere else;
     // a value that fits neither way is left alone for checkDeclaredReturn to report. In a
     // branch arm the position is the arm's (a `return` there is not the function's return,
-    // handover H24).
+    // handover).
     Type *position = expectedExitTypeHere();
     if (position != nullptr && !position->equals(valueType)) {
         if (node_handle_t entered = coerceTo(value, position, gct->at(0))) {
@@ -1261,7 +1261,7 @@ node_handle_t Builder::visitTaggedBrchNode(const GCT::node_ptr_t &gct) {
     // same `T?` (design principles 3.8): neither is in the position the whole expression
     // stands at, so neither takes that position's type. The position's type applies to the
     // branch's value once, where the branch stands (`checkValue`); leaking it down here gave
-    // the subject's arms a `float?` and the right side the form of the whole result (H119).
+    // the subject's arms a `float?` and the right side the form of the whole result.
     node_handle_t subject = nullptr;
     {
         ExpectedValueScope subjectScope(expectedValueType_, nullptr);
@@ -1706,7 +1706,7 @@ node_handle_t Builder::visitConditionBrchNode(const GCT::node_ptr_t &gct) {
     // position the whole expression stands at: the condition and both sides are `bool`
     // whatever that position wants. The position's type applies to the branch's value once,
     // where the branch stands (`checkValue`); leaking it down here made a `bool?` operand out
-    // of the literal `false` in `let o: bool? = true || false` (H119).
+    // of the literal `false` in `let o: bool? = true || false`.
     Type *const operandType = logical ? Type::Bool() : expectedValueType_;
     ExpectedValueScope operandScope(expectedValueType_, operandType);
 
@@ -1887,7 +1887,7 @@ node_handle_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
     }
     // The condition of an `if` is a `bool` (design principles 3.7), and the value a `match`
     // selects on is of its own type: neither is in the position the branch stands at, so the
-    // position's type must not leak into what is built there (H119). The position applies to
+    // position's type must not leak into what is built there. The position applies to
     // the branch's value once, where the branch stands.
     const bool ifBranch = gct->size() > 1 && gct->at(1)->caseType() == GCT::CaseType::True;
     node_handle_t condNode{};
@@ -2501,8 +2501,8 @@ void Builder::mergeArmVariables(
 node_handle_t Builder::intervalSequenceValue(
     node_handle_t from, node_handle_t to, const GCT::node_ptr_t &expr) {
     // The interval in the sequence position of a loop is the pair of its two bounds, not the
-    // array of its elements (design principles 4.2; the ruling of 2026-10-24 on
-    // `h248-generator-and-composition`): the pair stands where any other sequence stands — Norm
+    // array of its elements (design principles 4.2; the rule on
+    // ` -generator-and-composition`): the pair stands where any other sequence stands — Norm
     // input 0 of the LOOP node, one value — and a back end takes the element of the round from
     // the bounds and the round number, so nothing of the interval's size is ever made. The
     // interval is the `int[]` of `intervalValue` in every other position.
@@ -2692,12 +2692,12 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
         }
         return tt::as_ptr<ArrayType>(type)->elemType();
     };
-    // `for i in a..b` (design principles 4.2; the author's ruling of 2026-10-24 on
-    // `h248-generator-and-composition`: "`for i in 0..n` is fused by the compiler, without
+    // `for i in a..b` (design principles 4.2; the rule on
+    // ` -generator-and-composition`: "`for i in 0..n` is fused by the compiler, without
     // materialising an array"). The interval in the sequence position of a loop is the loop's own
     // form: its two bounds are the loop's iterable, and a round takes `from + round`
     // (camel::core::LoopIterableForm::Interval). In every other position `a..b` is still the
-    // `int[]` the ruling gives it, and the loop iterates that value like any other sequence.
+    // `int[]` the rule gives it, and the loop iterates that value like any other sequence.
     if (hasIterable && isIntervalExpr(gct->loopSequence())) {
         const auto &interval = gct->loopSequence();
         node_handle_t from   = argumentNodeOf(visit(interval->at(1)), interval->at(1));
@@ -2722,7 +2722,7 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
     Type *stateType =
         k == 1 ? stateTypes.front() : static_cast<Type *>(TupleType::create(stateTypes));
 
-    // The names of the state's components. They are the state's one name until H71 splits a
+    // The names of the state's components. They are the state's one name until splits a
     // struct state into its parts; then they are the paths of those parts (`s.inner.x`), which
     // is what the graph shows and the diagnostics name.
     std::vector<std::string> stateNames(k);
@@ -2823,7 +2823,7 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
         }
     }
 
-    // H71: a struct's fields are the loop state's components. When the state is one struct (or
+    // A struct's fields are the loop state's components. When the state is one struct (or
     // one tuple) and the whole value never escapes the loop's parts -- every use of the state,
     // in the body and in the condition, is a part access -- the parts of that value become the
     // state's components, as if the loop had declared one state per part. The body hands back a
@@ -3372,7 +3372,7 @@ node_handle_t Builder::visitExitNode(const GCT::node_ptr_t &gct) {
         activeRestBody_->value    = outputAnchor;
         activeRestBody_->returned = true;
     } else if (ArmBuild *arm = activeArm()) {
-        // The value of the arm, not of the function (handover H24).
+        // The value of the arm, not of the function.
         arm->output = outputAnchor;
         arm->value  = resNode;
         arm->type   = isVoidGraphExitType(nodeTypeOf(resNode)) ? Type::Void() : nodeTypeOf(resNode);
@@ -3397,7 +3397,7 @@ node_handle_t Builder::visitBodyNode(const GCT::node_ptr_t &gct) {
     const node_handle_t outerLast = std::exchange(lastSyncedNode_, {});
     // The last statement of a body is the value the body hands on: a branch there (`if c then
     // … else …` as a function's whole body) stands in the position of that value, and so do
-    // the `return`s written in its arms (handover H24: an arm's `return` takes the type of the
+    // the `return`s written in its arms (handover an arm's `return` takes the type of the
     // position the arm is at, never the declared type of the function around it). The position
     // is passed to visitExecNode, which builds that statement through the same expected-type
     // channel every other position uses.
@@ -3610,7 +3610,7 @@ void Builder::markLoopStateInPlace(
     // also reads the state or ends in `return` -- keeps the copying `append`; the values are the
     // same either way, and only the allocation differs (10.5's in-place guarantee is about the
     // state's data block, not about a promise on the source).
-    // A state that H71 split out of a struct is a component of the states the loop's parts
+    // A state that was split out of a struct is a component of the states the loop's parts
     // declare, so the count is the initial values', not the LOOP node's names; its first value
     // is a projection of the struct (a value the loop does not own) and is copied once.
     const size_t stateCount = initial.size();
@@ -3681,7 +3681,7 @@ void Builder::markLoopStateInPlaceOne(
     }
     // The first value has to be a literal: a name, a call or a projection can name an array
     // that something else also reads, and the loop is about to make its first value private.
-    // A component split out of a struct state (H71) is such a projection, and it is copied
+    // A component split out of a struct state is such a projection, and it is copied
     // below because the struct it comes from is the program's, not the loop's.
     if (!initialIsPrivate && !nodeIsKind(initial[index], runtime::GCNodeKind::Data) &&
         !nodeIsKind(initial[index], runtime::GCNodeKind::Fill)) {

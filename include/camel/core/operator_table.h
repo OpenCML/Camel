@@ -395,12 +395,12 @@ class OperatorTable {
     type::resolver_ptr_t resolver(OperId id) const;
     type::resolver_ptr_t resolver(std::string_view uri) const;
 
-    // ---- Groups, and the types a group registered (handover H401) ---------------------------
+    //  ---- Groups, and the types a group registered ---------------------------
 
     /// Declares the overloads of one operator group, at module load time: its name and the URI of
     /// each of its overloads. `OperatorGroup` declares itself here when it is created, so the
     /// table can answer which types a group was registered for -- what `check` takes the
-    /// instances of a generic rule from (the ruling of 2026-10-24 on
+    /// instances of a generic rule from (the rule on
     /// `generic-rule-check-surface-and-multi-parameter-instances`), and what a future `vmap` or
     /// a target's element-type extraction reads. Declaring the same group twice adds to it: the
     /// groups of one name a program sees are merged (OperatorGroup::merged).

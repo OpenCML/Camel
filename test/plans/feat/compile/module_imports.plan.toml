@@ -230,10 +230,10 @@ args = ["${case}", "std::cpp"]
 expect_exit = 0
 expect_stdout_contains = ["return static_cast<int>(main_(0, 10));"]
 
-# ---- H112/H124: whose directory an import resolves in ----
-# H112 put the importing module's own directory ahead of the global search roots, so that
+#  ---- whose directory an import resolves in ----
+# put the importing module's own directory ahead of the global search roots, so that
 # stdlib/rules.cml's `import graph` finds stdlib/graph.cmo and not a same-named program of the
-# entry directory. H124 pins both sides of that rule in one directory holding a graph.cml.
+# entry directory. pins both sides of that rule in one directory holding a graph.cml.
 
 [[tests]]
 name = "imports.entry_dir_wins"
@@ -253,8 +253,8 @@ args = ["-E", "short", "${case}", "std::opt", "std::nvm"]
 expect_exit = 0
 expect_stdout_exact = "42\n"
 
-# ---- H129: -I / --include adds module search roots ----
-# Documented order since H220 (design principles 10.2, docs/cli.md): a module's own directory,
+#  ---- -I / --include adds module search roots ----
+# Documented order since (design principles 10.2, docs/cli.md): a module's own directory,
 # then each -I directory in the order given, then CAMEL_PACKAGES, then CAMEL_MODULE_PATH, then
 # the standard library; the entry program follows the same rule, so the entry file's directory is
 # its own directory and is not a root for another module. `-I` paths are resolved against the
@@ -334,7 +334,7 @@ envs = ["CAMEL_PACKAGES=../packages"]
 expect_exit = 0
 expect_stdout_exact = "200\n"
 
-# ---- H220: the import order of design principles 10.2 ----
+#  ---- the import order of design principles 10.2 ----
 # A module's import looks in its own directory, then the module roots (-I in the order given,
 # CAMEL_PACKAGES, CAMEL_MODULE_PATH), then the standard library; the entry program follows the
 # same rule. The fixtures live under import_order/: before this change the entry file's directory
@@ -431,9 +431,9 @@ args = ["-E", "short", "${case}"]
 expect_exit = 1
 expect_output_contains = ["name=SyntaxDiag::UnexpectedToken", "Unexpected '/'", "expected a name"]
 
-# ---- H232: a relative spelling is a name, never a path ----
+#  ---- a relative spelling is a name, never a path ----
 # The grammar writes a relative module name as one to three leading dots before a dotted name
-# (`moduleName : ('.' | '..' | '...')? IDENTIFIER ('.' IDENTIFIER)*`), and the dots drop that many
+# (`moduleName: ('.' | '..' | '...')? IDENTIFIER ('.' IDENTIFIER)*`), and the dots drop that many
 # components from the importing module's own name (design principles 10.2). The resolved name is
 # looked up in the importing module's own directory and then the module roots; a spelling that
 # drops more components than the name has names nothing. Its spelling then reached the lookup as

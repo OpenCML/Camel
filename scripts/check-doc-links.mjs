@@ -218,7 +218,7 @@ function checkTechnicalIndex() {
 // the files listed above are read, and in code only a comment line is (a string literal that names
 // an output is not a citation). The records (docs/handover, docs/reviews, changes.log) are history
 // and are not scanned. EXTERNAL_CITATIONS names files of other repositories: TSE2027 is the paper
-// repository, ECOOP2027 is that same repository under the name its rulings file now lives in, and
+// repository, ECOOP2027 is that same repository under the name its rules file now lives in, and
 // docs/debugger-migration.md is in OpenCML-Ext.
 const RECORD_DIRS = new Set(['docs/handover', 'docs/reviews'])
 const C_LIKE = new Set(['.c', '.cc', '.cpp', '.h', '.hpp', '.cml', '.js', '.mjs', '.ts'])

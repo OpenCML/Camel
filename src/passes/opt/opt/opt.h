@@ -20,7 +20,7 @@ class OptimizeRewritePass : public RuntimeGraphRewritePass {
     OptimizeRewriteConfig config_{};
 };
 
-/// The rules library's saturation under the core's name (`std::opt::saturate`, H225): the
+/// The rules library's saturation under the core's name (`std::opt::saturate`): the
 /// standard rules of stdlib/rules.cml applied both ways to the writings of every value, for at
 /// most `rounds` rounds, with no extraction. The program it hands on has values with several
 /// writings; the whole point of the pass is to stop there, so the dumps that follow can draw the

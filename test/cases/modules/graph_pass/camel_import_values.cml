@@ -1,6 +1,6 @@
 // A pass whose module imports a library written in Camel: the imported function's graph is
 // declared and built by the pass program's builder, and its generic `flat_map` works there
-// (task H36, item 1).
+// (item 1).
 module camel_import_values
 import { Program } from graph
 import { flat_map } from array

@@ -187,7 +187,7 @@ using Bool    = bool;
 /// `halfText`): the shortest text that reads back as the same element of the type. The slot holds
 /// the type's 16-bit pattern in the low half; `code` says which of the two types it is. A path
 /// that has a slot and its type calls this rather than widening to f32 first, or the value would
-/// print by f32's rule (`0.100097656` for bf16 `0.1`; ruling 2026-10-23, "reduced-precision-text").
+/// print by f32's rule (`0.100097656` for bf16 `0.1`; rule 2026-10-23, "reduced-precision-text").
 inline std::string halfValueText(slot_t data, camel::core::type::TypeCode code) {
     const uint16_t bits = camel::core::rtdata::halfBitsOfSlot(data);
     return code == camel::core::type::TypeCode::BFloat16
@@ -259,7 +259,7 @@ void printValue(std::ostream &os, slot_t data, camel::core::type::Type *t);
 /// The text of a value with a bound on arrays: an array with more than `arrayLimit` elements
 /// prints as its type, address and length instead of its elements, at every depth of the value.
 /// The frame log uses it so that enabling the Frame category on a program that builds a large
-/// collection does not print that collection element by element on every read (H31).
+/// collection does not print that collection element by element on every read.
 void printSlotCapped(
     std::ostream &os, slot_t data, camel::core::type::Type *t, size_t arrayLimit);
 

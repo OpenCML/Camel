@@ -7,7 +7,7 @@ import { float_add_minus_zero, float_combine, float_combine_mixed, float_div_one
 /// The integer family's laws and nothing else. The family is one law per fact, so this pass covers
 /// every integer element type -- both `i32_c` and `i64_c` of the target -- and no floating one: what
 /// a pass can no longer be is *one width* of a family, because the library no longer writes a law
-/// per width (the fold; the ruling of 2026-10-23 on `generic-rule-instantiation`, §6).
+/// per width (the fold; the rule on `generic-rule-instantiation`, §6).
 export func apply_i32(p: Program): Program! {
     return rewrite(p, [int_add_zero, int_sub_zero, int_mul_one, int_mul_zero, int_div_one, int_neg_neg, int_sub_self, int_combine, int_fold, int_fold_add])
 }

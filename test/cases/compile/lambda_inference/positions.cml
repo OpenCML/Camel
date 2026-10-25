@@ -1,6 +1,6 @@
 /**
  * A lambda's parameter types come from the function type of the position it stands in (design
- * principles 5.9; handover H92, item 2). The positions are the three the reference lists: an
+ * principles 5.9, item 2). The positions are the three the reference lists: an
  * argument to a parameter of function type (a normal one and a `with` one), a binding declared
  * with a function type, and the result of a function whose result type is a function type. A
  * parameter that writes its type keeps it, and a lambda that writes no return type takes that

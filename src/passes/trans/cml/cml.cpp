@@ -1998,7 +1998,7 @@ class CmlPrinter {
             if (inputs.size() == 3) {
                 // The stepped range `range(a, b, step)`: written back as the call it is, so the
                 // program the printer writes reads the way the program it prints did (the
-                // author's ruling of 2026-10-24 on `h426-interval-step-form`).
+                // rule on ` -interval-step-form`).
                 return {
                     std::format(
                         "range({}, {}, {})",

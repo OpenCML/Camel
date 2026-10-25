@@ -4,7 +4,7 @@ tier = "fast"
 tags = ["feat", "compile", "params", "defaults", "named"]
 desc = "Defaults of ordinary parameters and ordinary arguments given by name (design principles 4.4, handover H276): one rule with the `with` parameters — a default is a compile-time constant evaluated where the declaration is, and a call gives the parameters by position, or by name after the positional ones, in the declaration's order. A callee that is several declarations names the parameter at each position the same way in all of them, and a name then means one position there (handover H376); a call of such a callee fills no default, since a default is written by one declaration."
 
-# The rule the `with` parameters got in H235 is the rule for every parameter. A default is the
+# The rule the `with` parameters got in is the rule for every parameter. A default is the
 # declaration's node, not something the call evaluates, so `2 + 3` is one constant, two calls
 # that leave the parameter out read the one node, and a function value carries no default. A name
 # selects its parameter by the declaration's order, so a call can skip the parameter in between.

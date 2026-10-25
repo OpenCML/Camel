@@ -1,4 +1,4 @@
-// The rounds of a loop that a back end lowers to native code (H55): the state components live in
+// The rounds of a loop that a back end lowers to native code: the state components live in
 // the body's own slots, the test is a compare and a branch, the back edge a jump, and the round
 // count is not kept, because nothing of such a round reads it (loop_frame.h). Every function here
 // is one of those shapes and the values are the interpreters'. The shapes that cannot be lowered

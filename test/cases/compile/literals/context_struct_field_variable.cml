@@ -1,5 +1,5 @@
 /**
- * Handover H24, item 2: the fields of a struct literal take the expected type, but a field
+ * Handover, item 2: the fields of a struct literal take the expected type, but a field
  * written as a name is a variable: it is not converted, and the declared type is not met.
  */
 module literal_context_struct_field_variable

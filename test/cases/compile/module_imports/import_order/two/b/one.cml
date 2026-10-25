@@ -1,4 +1,4 @@
-/// H220 trap 1: imports the `lib` beside it, which is `b/lib.cml` (value 2).
+/// trap 1: imports the `lib` beside it, which is `b/lib.cml` (value 2).
 module one_b_source
 
 import lib

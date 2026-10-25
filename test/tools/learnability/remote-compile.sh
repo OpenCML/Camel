@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# H254 learnability evaluation: compile one round of learned solutions where Camel is built.
+# Learnability evaluation: compile one round of learned solutions where Camel is built.
 #
 # The Windows checkout this harness is driven from never builds Camel, so the compiler lives on the
 # build host and this script is what the round is compiled with. It takes a directory of `<id>.cml`

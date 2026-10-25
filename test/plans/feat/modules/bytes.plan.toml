@@ -22,7 +22,7 @@ expect_output_contains = ["invalid UTF-8 at byte 0", "use read_bytes for binary 
 timeout_ms = 10000
 
 # The fault the retired `str::from_bytes` raised for a number outside 0..255 is `bytes::from_array`'s
-# (handover H122). What changed is the other half of the pair: malformed UTF-8 used to be a fault
+# What changed is the other half of the pair: malformed UTF-8 used to be a fault
 # in `str::from_bytes`; `bytes::decode` returns it as an error value (design principles 3.9).
 
 [[tests]]

@@ -5,11 +5,11 @@
 // The release gate: one command that runs the layers a release decision needs, and says out
 // loud what it does not run.
 //
-// Why this exists (H154 §6, H147 §3.5): `npm run test` is `--tier fast`, and the tier filter
+// Why this exists: `npm run test` is `--tier fast`, and the tier filter
 // only applies to a directory target -- so the plan files it walks lose every `tier = "slow"`
 // test, and the slow plans under `feat/mm`, `feat/opt` and `feat/tools` never run at all.
 // `gpu/**` and `perf/**` are in no gate target either. A "green gate" therefore did not mean
-// "the tree is green"; it meant "the fast layer is green". H147 then recommended
+// "the tree is green"; it meant "the fast layer is green". An earlier audit then recommended
 // `-Plan test/plans -Tier all` for the release, which would have started the 200 cases
 // `agents/test.md` reserves for a milestone on a quiet machine (GC stress and poison, progen,
 // the PyTorch comparisons, the benchmarks) on a shared host.
@@ -18,7 +18,7 @@
 //
 //   1. fast layer   -- `smoke` + `feat/**` at `--tier fast` (what `npm run test` does), plus
 //                      `gpu/profile`, a fast-tier plan that no other gate target reaches;
-//   2. slow layer   -- the plan files H154 §3 proved runnable on the shared host, named one by
+//   2. slow layer   -- the plan files proved runnable on the shared host, named one by
 //                      one. Naming a file makes the runner run the whole plan, slow tests
 //                      included, whatever `--tier` says; that is the only honest way to reach
 //                      them, and a directory target would silently drop them again;
@@ -46,11 +46,11 @@
 // is partial, because a gate that reports green while a layer did not run is the defect this
 // script exists to remove.
 //
-// A skipped plan is UNKNOWN, never green. This is the accounting H154 §6 and `agents/test.md`
+// A skipped plan is UNKNOWN, never green. This is the accounting `agents/test.md`
 // ask for, printed on every run:
 //
 //   * the 25 policy-forbidden plan files (21 whole plans + 4 plans whose forbidden tests are the
-//     slow ones) -- 200 slow cases today: the 193 H154 §2 measured across its 18 files, plus the
+//     slow ones) -- 200 slow cases today: the 193 measured across its 18 files, plus the
 //     seven the perf plans that landed afterwards add -- not run, not claimed;
 //   * the debug layer (`--tier debug`, a Debug build) -- never part of a Release gate.
 //
@@ -73,7 +73,7 @@ import { refuseInstallNotOfThisTree } from './install-stamp.mjs'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
-// H147 and H154 both used 8. `-Jobs 12` makes `gpu_preference.no_device.*` hit spurious 10 s
+// Earlier audits used 8 too. `-Jobs 12` makes `gpu_preference.no_device.*` hit spurious 10 s
 // timeouts on the shared host; the gate does not expose a way to forget that.
 const DEFAULT_JOBS = 8
 
@@ -166,7 +166,7 @@ function parseArgs(argv) {
             if (!value) die(`${arg} needs a plan file or plan directory`)
             options.include.push(value)
         } else if (arg === '--tier' || arg === '--all' || arg.startsWith('--tier=') || arg === '--suite') {
-            // The exact command H147 §3.5 recommended and H154 §6 warned about. Refuse by name.
+            // The exact command an earlier audit recommended and a later one warned about. Refuse by name.
             die(
                 `REFUSED: '${arg}' selects plans by tier or by the whole tree, which would start ` +
                     `the ${FORBIDDEN.length} plan files the policy forbids.\n[gate] ${POLICY}.\n` +
@@ -289,7 +289,7 @@ function readSummary(text) {
 
 // The slow tests the skip list covers, from the plans themselves: the printed accounting follows
 // the tree, so a plan that grows a slow test is counted the day it lands (it used to print the
-// literal 200 H154 §2 measured).
+// literal 200 measured).
 function forbiddenSlowTests() {
     let total = 0
     for (const entry of FORBIDDEN) {
@@ -362,7 +362,7 @@ async function main() {
     // slow plan that does not exist, a forbidden one that does not) and every plan file that has
     // no fate. Printing the first one and dying hid the rest: eight perf plans had no fate, and the
     // run named one of them, so the reader fixed one file per run and the list stayed a moving
-    // target (H500).
+    // target.
     const inventoryProblems = planInventoryProblems()
     if (inventoryProblems.length > 0) {
         for (const problem of inventoryProblems) console.error(`[gate] ${problem}`)
@@ -385,7 +385,7 @@ async function main() {
     const camel = findCamel(options.camel)
     const camelArg = camel ? ['--camel', camel] : []
     const fastArgv = [...FAST_TARGETS, '--tier', 'fast', '--jobs', String(options.jobs), ...camelArg]
-    // A caller may name a plan the H154 list already has; report it as extra only when it is new.
+    // A caller may name a plan the slow list already has; report it as extra only when it is new.
     const extra = extraSlow.filter((file) => !SLOW_PLANS.includes(file))
     const slowPlans = [...SLOW_PLANS, ...extra]
     const slowArgv = [...slowPlans, '--jobs', String(options.jobs), ...camelArg]

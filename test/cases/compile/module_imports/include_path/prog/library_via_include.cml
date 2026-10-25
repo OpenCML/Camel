@@ -1,4 +1,4 @@
-/// H129: the entry imports a library, and the library's own `import dep` resolves through the
+/// the entry imports a library, and the library's own `import dep` resolves through the
 /// same `-I` root.
 module include_library
 

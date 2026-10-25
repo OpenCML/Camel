@@ -1,4 +1,4 @@
-/// H220 trap 1: `b`'s `lib`, the second file the same import name resolves to in one program.
+/// trap 1: `b`'s `lib`, the second file the same import name resolves to in one program.
 module lib_b
 
 export func n(): int {

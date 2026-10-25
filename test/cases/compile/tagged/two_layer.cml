@@ -1,7 +1,7 @@
 /**
  * The two marks compose innermost first: `T?!` is fallible(nullable(T)) and `T!?` is
  * nullable(fallible(T)). A `match` opens the outer form only, so `case null` is exhaustive
- * over `int!?` and not over `int?!` (H123; design principles 3.9).
+ * over `int!?` and not over `int?!` (design principles 3.9).
  */
 module two_layer
 

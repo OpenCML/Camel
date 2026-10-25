@@ -1,5 +1,5 @@
 /**
- * A library that does not compile: the Python binding test reads its first diagnostic (H253).
+ * A library that does not compile: the Python binding test reads its first diagnostic.
  * Nothing here is ever run; the file exists so that a Python caller has a compile failure with a
  * position to turn into an exception.
  */

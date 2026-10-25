@@ -1,5 +1,5 @@
 /**
- * Comprehensions (H51 step 4): a `static for` written where a value is needed. `{ ... }` builds a
+ *  Comprehensions.: a `static for` written where a value is needed. `{... }` builds a
  * struct with the fields of the type it walks, `( ... )` a tuple with its elements; the block of
  * a round keeps its value, and the empty struct has no round.
  */

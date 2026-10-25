@@ -79,7 +79,7 @@ class Namespace : public std::enable_shared_from_this<Namespace<Key, Val>> {
 
     /// Inserts `v` under the reference, replacing a value already there: the later write wins
     /// (a `.cml` beside a `.cmo` writes the signature of an operator the C++ module exported
-    /// too; design principles 6.4, handover H94).
+    /// too; design principles 6.4).
     bool assign(const Reference &ref, const Val &v)
         requires std::is_same_v<Key, std::string>
     {
