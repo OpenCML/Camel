@@ -21,7 +21,7 @@
  */
 module tensor_definitions
 
-import { Tensor, max, sum, exp, log, maximum, numel } from tensor
+import { Tensor, max, sum, exp, log, maximum, numel, cast } from tensor
 
 /// tensor:softmax along `axis` (negative counts from the end), made stable by subtracting the
 /// maximum: m = max(x, axis) (IEEE maximum: a NaN gives NaN), e = exp(x - m) (an f32
