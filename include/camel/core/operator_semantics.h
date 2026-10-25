@@ -479,7 +479,7 @@ struct OperatorSemantics {
     /// and the passes may fold them, move them, merge them with an identical call and drop them
     /// when nothing uses them. False for an operator that must run where the program writes it,
     /// though running it has no effect: its result holds functions the collector does not trace
-    /// (a rule's sides), or installing it is what the declaration means (an `analysis`). A
+    /// (a rule's sides), or installing it is what the declaration means (a `fact`). A
     /// separate fact from the effect, because the two questions are different: whether running
     /// the call changes anything outside the program, and whether a pass may answer it instead.
     bool foldable = true;
