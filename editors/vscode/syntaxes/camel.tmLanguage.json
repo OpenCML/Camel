@@ -7,13 +7,18 @@
     "Kept in step with include/camel/parse/syntax/token_kinds.def (keywords, operators) and the grammar of the language reference (contexts).",
     "scripts/check-grammar.mjs checks the keyword, operator and built-in type tables against",
     "those files: the 'keywords', 'builtin-types', 'operators' and 'punctuation' rules below must",
-    "stay lists of plain 'match' patterns, keywords as \\b(?:a|b|c)\\b alternations."
+    "stay lists of plain 'match' patterns, keywords as \\b(?:a|b|c)\\b alternations.",
+    "The contextual keywords of the 'contextual-keywords' rule are the words of the one table of",
+    "scripts/context-keywords.mjs, which the language reference prints (02, 2.4.1); a word is added",
+    "or taken away in that table first, and editors/vscode/scripts/check-grammar.mjs checks this",
+    "rule against it."
   ],
   "patterns": [
     { "include": "#comments" },
     { "include": "#command" },
     { "include": "#strings" },
     { "include": "#decorator" },
+    { "include": "#contextual-keywords" },
     { "include": "#declarations" },
     { "include": "#keywords" },
     { "include": "#wildcard" },
@@ -185,6 +190,94 @@
         "2": { "patterns": [{ "include": "#namespace-path" }] },
         "3": { "name": "entity.name.function.decorator.camel" }
       }
+    },
+    "contextual-keywords": {
+      "comment": "The contextual keywords of scripts/context-keywords.mjs and of the table of the language reference (02, 2.4.1): a word that is a keyword in one position and an ordinary name everywhere else. Each pattern names its words after 'contextual keywords:' and scopes them only where the parser reads them (checked by scripts/check-grammar.mjs, pinned by test/cases/tools/grammar/context_keywords.cml).",
+      "patterns": [
+        {
+          "comment": "contextual keywords: 'tag', 'rule', 'fact', 'resource' — the head of a tag, rule, fact or resource declaration: the name after the word, then the token that makes it a declaration (tagDecl / ruleDecl / factDecl / resourceDecl, grammar 8.5).",
+          "match": "\\b(tag(?=\\s+[A-Za-z_][A-Za-z_0-9]*\\s*(?:\\(|::|<|=|on\\b))|rule(?=\\s+[A-Za-z_][A-Za-z_0-9]*\\s*(?:\\(|::|<|:))|fact(?=\\s+[A-Za-z_][A-Za-z_0-9]*\\s*(?:\\(|::|<|:))|resource(?=\\s+[A-Za-z_]))",
+          "captures": { "1": { "name": "storage.type.contextual-declaration.camel" } }
+        },
+        {
+          "comment": "contextual keywords: 'unordered' — a resource declaration whose effects keep no written order: `resource net unordered` ends there.",
+          "name": "storage.type.contextual-declaration.camel",
+          "match": "\\b(unordered)\\b(?=\\s*$)"
+        },
+        {
+          "comment": "contextual keywords: 'on' — the tag declaration's list of positions, which starts at the position name after it.",
+          "name": "keyword.other.contextual-clause.camel",
+          "match": "\\b(on)\\b(?=\\s+(?:func|type|field|nodes|param)\\b)"
+        },
+        {
+          "comment": "contextual keywords: 'read_by' — the passes that read a tag, after its positions.",
+          "name": "keyword.other.contextual-clause.camel",
+          "match": "\\b(read_by)\\b(?=\\s+[A-Za-z_])"
+        },
+        {
+          "comment": "contextual keywords: 'when' — a function's or a rule's condition (after the parameters and the return type) and a tag declaration's, before the body. The word is scoped only there, so `let when = 4` stays a name.",
+          "match": "(?<=[)A-Za-z_0-9])\\s+(when)\\b(?!\\s*[=,)\\]};:.])",
+          "captures": { "1": { "name": "keyword.other.contextual-clause.camel" } }
+        },
+        {
+          "comment": "contextual keywords: 'uses' — a resource clause names the resources a function touches, written after `uses`.",
+          "name": "keyword.other.contextual-clause.camel",
+          "match": "\\b(uses)\\b(?=\\s+[A-Za-z_])"
+        },
+        {
+          "comment": "contextual keywords: 'pure' — a resource clause promising no resource at all.",
+          "name": "keyword.other.contextual-clause.camel",
+          "match": "\\b(pure)\\b(?!\\s*[=,)\\]};:.])"
+        },
+        {
+          "comment": "contextual keywords: 'join', 'meet', 'widen', 'narrow' — the trailing clauses of a fact declaration: on the line that closes its body, or on a line of their own, as the formatter writes them. Each names the function that follows it.",
+          "match": "(?<=\\})\\s+(join|meet|widen|narrow)\\b(?=\\s+[A-Za-z_])",
+          "captures": { "1": { "name": "keyword.other.contextual-clause.camel" } }
+        },
+        {
+          "comment": "contextual keywords: 'join', 'meet', 'widen', 'narrow' — the same clauses on a line of their own.",
+          "match": "^(\\s*)(join|meet|widen|narrow)\\b(?=\\s+[A-Za-z_])",
+          "captures": { "2": { "name": "keyword.other.contextual-clause.camel" } }
+        },
+        {
+          "comment": "contextual keywords: 'operator' — directly after `func`, when the operator it defines follows. The match starts at `func`, so that it is tried before the function-declaration rule, which reads the same two words as a name; the declarations this pattern takes get the scopes that rule gives them.",
+          "match": "\\b(func)\\s+(operator)\\b(?=\\s*(?:[+\\-*/%^@<>=!&|~]|\\[\\s*\\]))",
+          "captures": {
+            "1": { "name": "meta.function.definition.camel storage.type.function.camel" },
+            "2": { "name": "meta.function.definition.camel keyword.other.contextual-clause.camel" }
+          }
+        },
+        {
+          "comment": "contextual keywords: 'struct', 'tuple' — in a `match type` case pattern they name a shape, not a type (typeCasePattern, grammar 8.5).",
+          "name": "keyword.other.contextual-position.camel",
+          "match": "(?<=case\\s)(struct|tuple)\\b"
+        },
+        {
+          "comment": "contextual keywords: 'error' — the pattern of a failed `T!` in a `case` is two words, `error e`.",
+          "name": "keyword.other.contextual-position.camel",
+          "match": "(?<=case\\s)(error)\\b"
+        },
+        {
+          "comment": "contextual keywords: 'leaf' — the shape of a value with no parts, written `#leaf` as the pattern of a `match type` case.",
+          "name": "keyword.other.contextual-position.camel",
+          "match": "(?<=case\\s#)(leaf)\\b"
+        },
+        {
+          "comment": "contextual keywords: 'fields' — the head of a `static for` or `static loop` walks the fields of the type written after it.",
+          "name": "keyword.other.contextual-position.camel",
+          "match": "(?<=\\bin\\s)(fields)\\b"
+        },
+        {
+          "comment": "contextual keywords: 'indices' — the same head walks the positions of the value written after it.",
+          "name": "keyword.other.contextual-position.camel",
+          "match": "(?<=\\bin\\s)(indices)\\b"
+        },
+        {
+          "comment": "contextual keywords: 'field', 'nodes', 'param' — the positions of a tag, named after `on` or after a comma of that list (`func` and `type` are reserved keywords listed by the 'keywords' rule).",
+          "name": "keyword.other.tag-position.camel",
+          "match": "(?<=\\bon\\s|,\\s)(field|nodes|param)\\b"
+        }
+      ]
     },
     "declarations": {
       "patterns": [
