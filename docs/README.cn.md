@@ -1,15 +1,31 @@
-# Camel：图原生的编程语言
+<div align="center">
 
-[English](../README.md) | 中文简体
+<img src="../assets/logo_text.png" alt="Camel" width="560">
 
-[![许可证：MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
-![WIP](https://img.shields.io/badge/status-WIP-yellow.svg)
+### 程序就是图。
 
-<p align="center">
-  <img src='https://www.github.com/OpenCML/ImagesHosting/raw/main/GetDefaultLogger()o_text.png' width=800>
-</p>
+**Camel** 是一门图原生的通用编程语言，AI 是它首要的应用场景。
 
-Camel 是一门图原生的通用编程语言，AI 是它首要的应用场景。
+[![CI](https://github.com/OpenCML/Camel/actions/workflows/ci.yml/badge.svg)](https://github.com/OpenCML/Camel/actions/workflows/ci.yml)
+[![版本](https://img.shields.io/github/v/tag/OpenCML/Camel?label=version&color=blue)](https://github.com/OpenCML/Camel/tags)
+[![许可证：MIT](https://img.shields.io/badge/license-MIT-green.svg)](../LICENSE)
+[![平台](https://img.shields.io/badge/platforms-Linux%20%7C%20Windows-lightgrey.svg)](setup.cn.md)
+[![VS Code](https://img.shields.io/visual-studio-marketplace/v/Kogler7.open-cml-extension?label=VS%20Code&logo=visualstudiocode)](https://marketplace.visualstudio.com/items?itemName=Kogler7.open-cml-extension)
+[![Stars](https://img.shields.io/github/stars/OpenCML/Camel?style=social)](https://github.com/OpenCML/Camel/stargazers)
+
+[为什么是 Camel](#为什么是-camel) ·
+[先睹为快](#先睹为快) ·
+[快速开始](#快速开始) ·
+[教程](tutorial/tutorial.cn.md) ·
+[文档](#文档) ·
+[路线图](../ROADMAP.md) ·
+[English](../README.md)
+
+</div>
+
+---
+
+## 为什么是 Camel
 
 大多数语言把程序写成给机器一步步执行的指令。可是编译器、并行运行时、自动微分、GPU 后端真正需要的是一张图：要算什么，谁依赖谁。于是图只能从代码里事后恢复，靠追踪、捕获、分析。恢复出来的图会断开，会漏掉副作用的含义，作用在它上面的变换也成了用户碰不到的黑箱。
 
@@ -20,7 +36,59 @@ Camel 让**程序本身就是图**。你写下的是计算的意图与依赖，�
 - **优化的知识可以写成代码并加以验证**：一条代数律就是一条规则，`check` 检查它对不对。
 - **一份程序，多种执行**：解释、JIT、GPU，或导出为 ONNX、C++，意思不变。
 
-这些性质对所有"计算比控制流更重要"的程序都成立。训练与部署模型是其中最迫切的一类，所以 AI 是 Camel 首要的应用场景，但不是唯一的。
+这些性质对所有"计算比控制流更重要"的程序都成立。训练与部署模型是其中最迫切的一类，所以 AI 是 Camel 首要的应用场景，但不是唯一的。详见[为什么是 Camel](why.cn.md)。
+
+## 亮点
+
+| | |
+|---|---|
+| 🧭 **图原生** | 每个语言构造对应图上固定的一块结构。求值跟着依赖走，互不依赖的计算不用你开口就能并行。 |
+| 🔁 **遍就是函数** | 优化、求导、导出、执行都是图到图的遍，在命令行上组合，也能用 Camel 自己写。 |
+| 📐 **可验证的规则** | 一条代数律只写一次、对所有满足条件的类型成立；改写引擎用上它，`check` 证明、反驳或抽样检验它。 |
+| ∂ **天生可微** | `grad(f)` 在编译期把 `f` 的图改写成导数的图，后面的每个遍都能接着优化它。 |
+| 🧮 **带形状的数组** | `f32[n, k]` 一种类型覆盖所有秩；维度名在调用两端核对；没有别人看得见时，内存原地更新。 |
+| 🚀 **多种后端** | 节点虚拟机、字节码虚拟机、JIT、并行调度、GPU 内核、ONNX、独立 C++——处处同一个意思。 |
+| 🐍 **与 Python 共处** | 从 Python 调用 Camel 模块，数组零拷贝；Camel 的诊断以带位置的 Python 异常到达。 |
+| 🛠️ **完整的工具** | 语言服务器、格式化器、能在遍之间单步的调试器，诊断附带可以自动应用的修改。 |
+
+## 先睹为快
+
+用梯度下降拟合一条直线。`grad(loss)` 不是逐步求值的库调用，而是一次图改写：它建出的导数是一张普通的图，优化器和 JIT 都看得见。
+
+```camel
+module fit
+
+import { grad } from autodiff
+
+with <w: float>
+func loss(x: float, y: float): float {
+    let e = w * x - y
+    return e * e
+}
+
+func main(): int sync {
+    let fitted = loop w = 0.0 for i in 0..100 do w - 0.01 * grad(loss)<w>(3.0, 6.0)
+    println(fitted)                  // 接近 2.0
+    return 0
+}
+```
+
+文件名后面的词是要依次运行的遍：
+
+```bash
+camel fit.cml                        # 在节点虚拟机上运行
+camel fit.cml std::gir               # 不运行，打印图（Graphviz DOT）
+camel fit.cml std::macro std::opt std::jit   # 展开 grad、优化、用 JIT 运行
+camel fit.cml std::opt::saturate std::gir    # 保留所有等价写法，并排画出来
+```
+
+优化同样用 Camel 写。一条定律只写一次，对所有满足条件的类型成立：
+
+<!-- camel-snippet: fragment: a rule declaration from the standard library's style, shown on its own -->
+
+```camel
+rule add_zero::<T>(x: T) when is_integer::<T>() { x + 0 => x }
+```
 
 ## 语言与图
 
@@ -28,86 +96,31 @@ Camel 让**程序本身就是图**。你写下的是计算的意图与依赖，�
 |---|---|---|
 | 表达式、算子调用 | 节点与数据边 | 按依赖求值；互不依赖的节点可以乱序或并行 |
 | 函数 | 子图；调用是一个节点 | 函数的行为由它自己决定 |
-| `sync` 块 | 它直接写着的相邻语句之间的控制边 | 这些语句按书写顺序执行（不向内继承） |
-| `if`、`match`、`a ?? b`、`a !! b` | 分支 | 错误与空值都是值，用分支处理 |
-| 泛型函数 | 子图模板，按每组具体类型实例化 | 图上只有具体类型 |
-| 遍 | 把一张图变成另一张图（或消费一张图）的程序 | 开放的流水线 |
+| `sync` 块 | 块内效应之间的先后 | 效应按书写顺序执行 |
+| `if`、`match`、`a ?? b`、`a !! b` | 分支 | 错误与空值都是值，由分支处理 |
+| `loop … do …` | 带状态的循环节点 | 迭代是一个表达式，值是最后的状态 |
+| 泛型函数 | 子图模板，按具体类型实例化 | 图上只有具体类型 |
+| 遍 | 从图到图的函数 | 开放的流水线 |
 
-这张表背后的规则见 [设计原则](design-principles.cn.md)。它是规范性的：与实现或其他文档冲突时以它为准。
+表格背后的规则见[设计原则](design-principles.cn.md)。
 
-## 先看一眼
+## 快速开始
 
-```camel
-module stats
+### 从源码构建
 
-func mean(xs: float[]): float {
-    return xs->reduce<(acc: float, x: float): float => acc + x, 0.0> / float(len(xs))
-}
-
-func parse_all(texts: string[]): int[] {
-    return texts->map<(t: string): int => parse_int(t) !! 0>   // 不是数字的文本记为 0
-}
-
-func main(): int sync {
-    let xs = parse_all(['3', '4', 'five', '6'])
-    println(xs)
-    println('mean = {:.2f}'->format<mean(xs->map<(x: int): float => float(x)>)>)
-    return 0
-}
-```
-
-```text
-[3, 4, 0, 6]
-mean = 3.25
-```
-
-- `->` 把一个值送进函数；传给 `map`、`reduce` 的函数写在尖括号里，因为它是对算子的配置，数组才是流过算子的数据。
-- `parse_int` 返回 `int!`：要么是一个 `int`，要么是一个错误；`!!` 给出替代值。没有异常。
-- `main` 的函数体是 `sync` 块，它直接写着的语句按书写顺序执行（写在里面的臂、循环体与嵌套块按各自的写法）。别处按依赖求值：在同步块之外，结果没有被使用的效应不执行（编译器会给出警告）。
-- 目前没有循环语法；重复的计算写成递归（尾调用不占栈）和高阶算子 `map`、`filter`、`reduce`、`foreach`。
-
-## 一份源码，不同的遍
-
-命令行上文件名之后写的，就是要依次运行的遍：
+需要 Clang 19+、CMake 3.25+、Ninja、Conan 2.10+ 与 Node.js 18+。各平台的工具链见 [setup.cn.md](setup.cn.md)。
 
 ```bash
-camel prog.cml                          # 在节点虚拟机上运行（默认）
-camel prog.cml std::fvm                 # 在字节码虚拟机上运行
-camel prog.cml std::jit                 # 带即时编译运行
-camel prog.cml std::prl                 # 并行调度
-camel prog.cml std::opt std::fvm        # 先优化，再运行
-camel prog.cml std::rgir                # 不运行，打印图（Graphviz DOT）
-camel prog.cml std::macro std::opt 'onnx::export out="model.onnx"'   # 把 `main` 导出为 ONNX 模型
+git clone https://github.com/OpenCML/Camel.git && cd Camel
+npm install          # npm 包与 C++ 依赖（需要联网）
+npm run build        # Release 构建，产物在 out/latest
 ```
 
-自动微分（`autodiff` 模块的 `grad`）与 ONNX 导出是建立在同一套遍机制之上的库。[入门教程](tutorial/tutorial.cn.md)会带你看图、换流水线、导出一个小模型、求一次梯度。
-
-## 入门
-
-> [!WARNING]
-> Camel 仍在开发中。语言与命令行还会变化，文法里有一部分写法保留而尚未实现；[语言参考](language/README.md)逐项写明了哪些是这样。
-
-### 构建
-
-Camel 从源码构建；各平台的工具链见 [setup.cn.md](setup.cn.md)。构建需要 Clang 19 或更高、CMake 3.25 或更高、Ninja、Conan 2.10 或更高，脚本还需要 Node.js 18 或更高。第一次构建会执行 `conan install` 下载 C++ 依赖，因此需要网络。
-
-```bash
-npm install          # 安装 npm 包，并执行 conan install
-npm run build        # Release 构建；可执行文件落在 out/latest/bin
-```
-
-Linux 与 macOS 上可执行文件是 `out/latest/bin/camel`，Windows 上是 `out/latest/bin/camel.exe`。把 `out/latest/bin` 加入 `PATH`，并把 `CAMEL_HOME` 设为 `out/latest`（包含 `bin/`、`libs/`、`include/` 与 `stdlib/` 的目录）。发布 CI 构建并测试 Linux x64 与 Windows x64；macOS arm64 是手动选择的试验任务，因此 macOS 未经 CI 验证。
-
-只有找到带开发头文件的 CPython 时才会构建 `python` 与 `pyplot` 模块；没有就跳过，`CAMEL_SKIP_PYTHON=1` 可显式跳过。同一棵源码树还可以用 `npm run pypi:rollup` 打出名为 `camel-lang` 的 Python wheel，见 [pypi-packaging.md](pypi-packaging.md)。
-
-### VS Code
-
-推荐安装 [OpenCML-Ext 插件](https://marketplace.visualstudio.com/items?itemName=Kogler7.open-cml-extension)，在 VS Code 中使用语法高亮、语言服务、交互式 GIR 浏览和调试。将 `opencmlLanguageServer.camelPath` 设为构建得到的 `camel` 可执行文件路径，插件会在同一目录查找 `camel-ls` 和 `camel-db`。较新的运行时还支持逐遍调试、查看暂停时的 GIR 和内存。配置方法见[插件 README](https://github.com/OpenCML/OpenCML-Ext#readme)，运行时能力见[调试指南](debugging.cn.md)。
+把 `out/latest/bin` 加进 `PATH`，`CAMEL_HOME` 设为 `out/latest`。CI 构建并测试 Linux x64 与 Windows x64。
 
 ### Hello, Camel
 
 ```camel
-// greeting.cml
 module hello
 
 func main(): int sync {
@@ -117,33 +130,47 @@ func main(): int sync {
 ```
 
 ```bash
-camel greeting.cml
+camel hello.cml
 ```
 
 ```text
 Hello, Camel!
 ```
 
-## 了解更多
+### 编辑器
 
-- [入门教程](tutorial/tutorial.cn.md)（[English](tutorial/tutorial.en.md)）：从第一个程序到看图、换遍、导出与求梯度，例子都可以运行
-- [示例集](../examples/README.cn.md)：按任务组织的短程序（JSON、文件、映射、排序、命令行工具、并行的 `map`、仿真、训练步）
-- [语言参考](language/README.md)（[English](language/en/README.md)）
-- [命令行](cli.cn.md)与[诊断目录](diagnostics.md)（`camel --explain <名字>`）
-- [设计原则](design-principles.cn.md)（[English](design-principles.en.md)）：Camel 是什么，为什么是这样
-- [技术文档](technical/README.md)：编译流水线、图的中间表示、运行时
-- [从源码构建](setup.cn.md)与 [CMake 构建选项](build-options.cn.md)
-- [Python 集成](../modules/python/README.md)：通过 `python` 模块嵌入 Python
-- [路线图](../ROADMAP.md)
+在 VS Code 安装 [OpenCML-Ext](https://marketplace.visualstudio.com/items?itemName=Kogler7.open-cml-extension)：高亮、语言服务、交互式的图浏览，以及能在遍之间暂停的调试器。把 `opencmlLanguageServer.camelPath` 指向你的 `camel`。见[插件说明](https://github.com/OpenCML/OpenCML-Ext#readme)与[调试指南](debugging.cn.md)。
 
-## 贡献
+### Python
 
-- [贡献指南](CONTRIBUTING.cn.md)
-- [行为准则](CODE_OF_CONDUCT.cn.md)
-- [安全政策](SECURITY.cn.md)
-- [问题追踪](https://github.com/OpenCML/Camel/issues)
+```bash
+npm run pypi:rollup  # 从本树构建 camel-lang wheel
+```
+
+见 [pypi-packaging.md](pypi-packaging.md) 与 [Python 绑定](technical/57_python_bindings.md)。
+
+## 文档
+
+| | |
+|---|---|
+| 📘 [教程](tutorial/tutorial.cn.md) | 从第一个程序到规则、遍、求梯度与导出 |
+| 💡 [为什么是 Camel](why.cn.md) | Camel 解决什么问题，程序为什么应该就是图 |
+| 📖 [语言参考](language/README.md) | 每个构造的精确规则 |
+| 📚 [标准库](stdlib-reference.md) | 每个模块、每个函数 |
+| 🧪 [示例](../examples/README.cn.md) | 按任务组织的短程序：文件、JSON、命令行工具、并行 `map`、训练一步 |
+| ⌨️ [命令行](cli.cn.md) · [诊断](diagnostics.md) | 选项、遍，以及 `camel --explain <名字>` |
+| 🤖 [给 AI 的 Camel](reference/camel-for-ai.md) · [`llms.txt`](../llms.txt) | 模型写 Camel 需要知道的 |
+| 🧱 [设计原则](design-principles.cn.md) | 语言建立在哪些规则上 |
+| ⚙️ [技术文档](technical/README.md) | 编译流水线、图 IR、运行时 |
+
+## 状态
+
+Camel 在积极开发中，尚未到 1.0。语言变化时不留兼容层：一种写法被取代，旧写法就直接没有了。发布说明见 [changes.log](../changes.log)，计划见[路线图](../ROADMAP.md)。
+
+## 参与贡献
+
+欢迎提 issue 与 pull request。先读[贡献指南](CONTRIBUTING.cn.md)，并遵守[行为准则](CODE_OF_CONDUCT.cn.md)。安全问题请按[安全策略](SECURITY.cn.md)报告。
 
 ## 许可证
 
-本项目贡献者编写的代码以 [MIT 许可证](../LICENSE)授权。
-
+Camel 以 [MIT 许可证](../LICENSE)发布。
