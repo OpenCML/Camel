@@ -571,10 +571,11 @@ class GraphDraft {
     /// splices the orderings that pass through it). While the control kind still exists the control
     /// edge naming the same pair is written beside the sync edge, because the graph has to carry
     /// the ordering in both kinds until the control edges go (src/runtime/graph_edges.cpp,
-    /// checkControlAndSyncAgree reads that back). A successor whose predecessor belongs to another
-    /// block heads its own block's chain instead: a sync edge never leaves the block it joins
-    /// (docs/design/effects/edges.cn.md 4.6). eraseNode calls this itself, so no erasure leaves a
-    /// hole; a rewrite that erases the node through its own path calls it before the edges go.
+    /// `checkSyncEdges` is what reads the sync edge back). A successor whose predecessor belongs to
+    /// another block heads its own block's chain instead: a sync edge never leaves the block it
+    /// joins (docs/design/effects/edges.cn.md 4.6). eraseNode calls this itself, so no erasure
+    /// leaves a hole; a rewrite that erases the node through its own path calls it before the edges
+    /// go.
     void closeChainOver(gc_node_ref_t id);
     /// The node `newId` takes the place `oldId` had in its block's chain: the statements written
     /// after `oldId` are written after `newId`, and `newId` is written after what `oldId` followed
