@@ -374,3 +374,22 @@ println(grow([1.0, 2.0], read_int()))
 **返工**（在 H242 与 P4 的间隙做，不占这两块的子代理）：注释里写"the author's ruling of 2026-10-25"、"(the author's ruling…)"这类话的，删掉引用，只留规则本身。比如 `camel-arg.mjs` 开头一句改成"`CAMEL_HOME` is the install location's convention: an explicitly named install is a command-line argument, never an environment switch."。src、stdlib、scripts、test/tools、include 里这类引用一共约百处，一次扫完。
 
 **理由**：仓库将公开，代码只描述现在怎么做、为什么这样做；谁在哪天裁定的，记在 `docs/handover/reviews/`。引用裁定的注释读者核实不了，裁定被取代后也没人会去改它。
+
+## step-elementwise-not-named-by-the-perf-fates-ruling
+
+**裁定：按判据，就是 lane 的读法**。`step.count` 与 `step.elementwise` 都只断言计数，都进 `step_counts.plan.toml`（`SLOW_PLANS`）；`step.budget` 留在原文件（`FORBIDDEN`）。上一条裁定括号里的守卫名只是举例，起作用的是判据"只断言计数与性质、不断言时间"。照字面去做，会让一条计数守卫没有任何一层跑它，这和裁定的本意相反。已落地的那样就对，不用改。
+
+## release-gate-verifies-one-install-and-the-plan-layers-measure-another
+
+**裁定：一次运行只有一个安装，闸门选定它，再显式交给每一层。不选 A、B、C 中的任何一个**。
+
+1. **只选一次**：闸门用 `--camel <path>` 选安装，不给就用本树的 `out/latest`。查戳用的函数和 stdlib 检查器是同一个（`refuseInstallNotOfThisTree`）。"装在 `out/` 之外的安装查不了戳，由调用者负责"这条豁免删掉：安装自己带着戳，在哪儿都能查。发布闸门查的就是本树，别的树建出来的安装直接拒绝。
+2. **交给每一层**：
+   - `scripts/test.js` 与 `test/tools/run-tests.mjs` 加 `--camel`。给了它，每个计划测试子进程的 `CAMEL_HOME` 就设成这个安装的根目录，`preflightBuild` 也查这个二进制；不给就照旧用 `out/<build>`。
+   - `check-doc-snippets.mjs` 改用 `takeCamel`（上一条返工本来也点了它）。
+   - 闸门把选好的安装用 `--camel` 传给 fast、slow 两层和全部静态检查。这样就不存在"查的是 A、量的是 B"，读法 A 要拦的那种不一致根本无从产生，所以也不用新加一处拒绝。
+3. **默认值只有一个**：测试与检查工具挑安装时不读 `CAMEL_HOME`，没给 `--camel` 时一律用本树的 `out/latest`。`camel-arg.mjs` 的 `defaultCamel` 与 `install-stamp.mjs` 的那个合成一个函数，放在一处。这一条更正我上次那句"`CAMEL_HOME` 照旧"，它的意思是：`CAMEL_HOME` 是 `camel` 二进制和 SDK 用户找运行库的约定（`init.h`、`dll_path.h`、C++ 产物里的说明），工具不拿它来决定量哪个安装；工具只在启动子进程时把它设成选中安装的根目录。让环境变量决定量哪个二进制，就是另一种环境开关。
+
+**理由**：规则统一，一次运行的"被测安装"只有一个来源，每一层都从参数拿到它。现在三处各有各的默认值（闸门优先 `CAMEL_HOME`，计划两层用 `out/<build>`，检查器用 `out/latest`），读法 A、B、C 都是在三个默认之间打补丁。
+
+**返工追加**（并入上一条"代码注释不引用裁定"的返工，同一次扫完）：注释里的内部任务编号（如 `H185`、`H154 §3`）也删掉，只写规则和理由。src、stdlib、scripts、test/tools、include 里约 580 处，分布在 139 个文件。例如 `plan-inventory.mjs` 的 `SLOW_PLANS` 注释：只写"三个 perf 计划在慢层，因为它们只断言计数与性质"，不写哪天哪条裁定。仓库将公开，读者看不到这些编号。
