@@ -11,7 +11,7 @@
  */
 module adam_update_bits
 
-import { Tensor, cast, range } from tensor
+import { cast, range } from tensor
 import { adam, adam_state } from nn
 
 type Model = {

@@ -1,16 +1,16 @@
 module tiles_value_gradient
-import { Tensor, reshape, sum, mean, abs, zeros } from tensor
+import { reshape, sum, mean, abs, zeros } from tensor
 import { with_grad } from autodiff
 import { inspect, benchmark, run_preferred_resident, download } from tiles
-with <x: Tensor<f32>>
+with <x: f32[..]>
 func loss(): float { return sum(x * x) }
-func total(x: Tensor<f32>): float { return sum(x) }
-func average(x: Tensor<f32>): float { return mean(x) }
-func normalize(x: Tensor<f32>): Tensor<f32> { return x / f32(sum(x)) }
-func mixed(x: Tensor<f32>): (float, Tensor<f32>, float) { return (sum(x), x + 1.0, 1.0000000000000002) }
+func total(x: f32[..]): float { return sum(x) }
+func average(x: f32[..]): float { return mean(x) }
+func normalize(x: f32[..]): f32[..] { return x / f32(sum(x)) }
+func mixed(x: f32[..]): (float, f32[..], float) { return (sum(x), x + 1.0, 1.0000000000000002) }
 func main(): int sync {
     let x = reshape([1.0, 2.0, 3.0] as f32[], [3])
-    let vg = (v: Tensor<f32>): (float, Tensor<f32>) => with_grad(loss)<v>()
+    let vg = (v: f32[..]): (float, f32[..]) => with_grad(loss)<v>()
     let cpu = vg(x)
     let gpu = download(run_preferred_resident<vg>(x))
     println(gpu.0 - cpu.0)

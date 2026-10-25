@@ -2,16 +2,14 @@
 // SPDX-License-Identifier: MIT
 
 /*
- * What a tensor is, now that `Tensor` is an alias of the native array type
+ * What a tensor is: a numeric array of the native array type
  * (docs/design/arrays-memory/plan.cn.md section 5).
  *
- * `Tensor` is exported as the open-rank array whose element type is not stated
- * (`ArrayType::elementTypeOpen()`), so that a program which still writes the name is told to write
- * the element type; `Tensor<f32>` is `f32[..]`, and a numeric array a program writes
- * (`f32[2, 3]`) is the same kind of type: one representation, two spellings. There is no second
- * tensor type and no second type code; what a tensor's type says is read through one set of facts.
+ * A tensor's type is the array spelling that states its element type: `f32[..]`, `f32[2, 3]`, or
+ * the element type a type variable stands for (`T[..]`). There is no second tensor type and no
+ * second type code; what a tensor's type says is read through one set of facts.
  *
- * A shape may name its extents (design principles 5.4): `Tensor<f32, [n, 3]>` keeps the linear
+ * A shape may name its extents (design principles 5.4): `f32[n, 3]` keeps the linear
  * form of each named extent (`core/type/extent.h`) in the array type, so the caller can bind `n`
  * and hold every occurrence of it to one value. The forms take part in interning (the signature
  * keeps the names) but not in `equals` / assignability / cast safety.

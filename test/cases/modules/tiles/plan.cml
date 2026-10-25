@@ -1,7 +1,7 @@
 module tiles_plan
-import { Tensor, reshape, exp, relu } from tensor
+import { reshape, exp, relu } from tensor
 import { inspect } from tiles
-func pipeline(x: Tensor<f32>): Tensor<f32> { return exp(relu(x + x)) }
+func pipeline(x: f32[..]): f32[..] { return exp(relu(x + x)) }
 func main(): int sync {
     let x = reshape([1.0, 2.0, 3.0] as f32[], [3])
     println(inspect<pipeline>(x))

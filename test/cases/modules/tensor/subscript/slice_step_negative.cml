@@ -6,7 +6,7 @@
  * the walk stops; an end left out stands for the position before the first.
  */
 module subscript_slice_step_negative
-import { Tensor, reshape, shape, sum } from tensor
+import { reshape, shape, sum } from tensor
 
 func main(): int sync {
     println('ran')

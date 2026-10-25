@@ -105,7 +105,10 @@ bool reaches(const GraphDraft &draft, gc_node_ref_t from, gc_node_ref_t to) {
 namespace {
 
 /// True for nodes that run in order with effects: calls, branches, effectful operators, and gates
-/// or joins that wait on something.
+/// or joins that wait on something -- on a control input, or on the sync edge the chain of a `sync`
+/// block is written as (docs/design/effects/edges.cn.md 5.3; H242). The rule is the one
+/// `src/runtime/writings.cpp` keeps for the rewrite engine, which asks the same question of a node
+/// it is about to replace.
 bool carriesOrdering(const GraphDraft &draft, gc_node_ref_t id) {
     const auto *h = draft.header(id);
     if (!h) {
@@ -120,7 +123,7 @@ bool carriesOrdering(const GraphDraft &draft, gc_node_ref_t id) {
     case camel::runtime::GCNodeKind::Loop: // runs its graphs, which may have effects
         return true;
     case camel::runtime::GCNodeKind::Gate:
-        return !draft.ctrlInputsOf(id).empty();
+        return !draft.ctrlInputsOf(id).empty() || !draft.syncInputsOf(id).empty();
     case camel::runtime::GCNodeKind::Oper:
         return !isPureOper(draft, id);
     default:
@@ -147,9 +150,12 @@ std::vector<gc_node_ref_t> orderedSources(const GraphDraft &draft, gc_node_ref_t
             sources.push_back(n);
             continue;
         }
-        // A pure node on a control chain (a statement after an effect) runs after its control
-        // predecessors as well.
-        for (auto inputs : {draft.normInputsOf(n), draft.withInputsOf(n), draft.ctrlInputsOf(n)}) {
+        // A pure node on a chain (a statement after an effect) runs after what its chain
+        // predecessor runs after as well: the control inputs of the chain as it was written, and
+        // the sync predecessor of the chain of a `sync` block (H242).
+        for (auto inputs :
+             {draft.normInputsOf(n), draft.withInputsOf(n), draft.ctrlInputsOf(n),
+              draft.syncInputsOf(n)}) {
             work.insert(work.end(), inputs.begin(), inputs.end());
         }
     }

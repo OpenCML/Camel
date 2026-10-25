@@ -5,7 +5,7 @@
  * the result in reverse order. None of them comes from autodiff.
  */
 module export_linear_recursion
-import { Tensor, reshape, sum, tanh } from tensor
+import { reshape, sum, tanh } from tensor
 import { export_model } from onnx
 import { get_env } from env
 

@@ -2359,7 +2359,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "pass_export_entry.unknown_shape"
-desc = "A parameter declared `Tensor` (no element type, no shape) cannot be a model input: the refusal is located at main and names the parameter. No file is written."
+desc = "A parameter whose shape nobody stated (`x: f32[..]`) cannot be a model input: the refusal is located at main and names the parameter. No file is written."
 kind = "negative"
 case = "../../../cases/modules/onnx/entry/unknown_shape.cml"
 args = ["${case}", "std::macro", "std::opt", 'onnx::export out="${test_tmp}/entry_unknown_shape.onnx"']

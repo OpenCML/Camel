@@ -13,7 +13,7 @@
 module grad_library
 
 import { grad } from autodiff
-import { Tensor, abs, linear, max, randn, seed, sum } from tensor
+import { abs, linear, max, randn, seed, sum } from tensor
 
 #strict
 with <w: f32[..]>

@@ -1388,10 +1388,47 @@ const std::string written = callee->at(0)->name();
                         return problem;
                     }
                 }
-                local.outcome = WhenOutcome::NotEvaluable;
-                local.subject = callee->name();
-                local.detail  = "only '!', '&&' and '||' can combine compile-time values";
-                return local;
+                // Any other call: a type function is an ordinary function that runs at compile
+                // time (design principles 5.5), so a condition evaluates a call the same way a
+                // folded body's own calls are evaluated -- an operator over constants, an
+                // ordinary function of this module or of one it imports, or a predicate this
+                // condition reaches through one of them. `evaluateCallInsideBody` is that path,
+                // and it refuses what is not a pure body over compile-time constants (a `sync`
+                // function, a `var`, a body reading a name other than its parameters), which is
+                // what keeps a condition that really reads a run-time value refused.
+                std::vector<data_ptr_t> callArguments;
+                for (size_t i = 1; i < node->size(); ++i) {
+                    const GCT::node_ptr_t &argument = soleValue(node->at(i));
+                    if (argument == nullptr || argument->type() != GCT::NodeKind::DATA ||
+                        argument->data() == nullptr) {
+                        local.outcome = WhenOutcome::NeedsWithValue;
+                        local.subject = written.empty() ? callee->name() : written;
+                        local.detail  = "the call gives a value that is not a compile-time "
+                                        "constant";
+                        return local;
+                    }
+                    callArguments.push_back(argument->data());
+                }
+                try {
+                    const data_ptr_t folded = evaluateCallInsideBody(
+                        node, callee, callArguments,
+                        [](const GCT::node_ptr_t &) -> data_ptr_t { return nullptr; }, bindings,
+                        0);
+                    std::optional<bool> value;
+                    if (folded != nullptr && boolOf(folded, value)) {
+                        local.outcome = *value ? WhenOutcome::Holds : WhenOutcome::Fails;
+                        return local;
+                    }
+                    local.outcome = WhenOutcome::NotBool;
+                    local.subject = written.empty() ? callee->name() : written;
+                    local.detail  = "the call's value is not a bool";
+                    return local;
+                } catch (const EvalFailure &failure) {
+                    local.outcome = WhenOutcome::NotEvaluable;
+                    local.subject = written.empty() ? callee->name() : written;
+                    local.detail  = failure.why;
+                    return local;
+                }
             }
             local.outcome = WhenOutcome::NotEvaluable;
             local.detail  = "the condition calls something that is not a compile-time query";

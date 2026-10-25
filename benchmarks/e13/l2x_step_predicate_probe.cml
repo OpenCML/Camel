@@ -13,7 +13,7 @@
  */
 module e13_l2x_predicate_probe
 
-import { Tensor, relu, mean, abs, reshape } from tensor
+import { relu, mean, abs, reshape } from tensor
 import { with_grad } from autodiff
 import { sgd } from nn
 import { get_env } from env

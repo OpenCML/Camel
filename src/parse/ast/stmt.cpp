@@ -63,22 +63,11 @@ const std::string DataDeclLoad::toString() const {
     if (refs_.size() == 1) {
         result += refs_[0].toString();
     } else {
+        // Several names in one declaration: `let a, b = 1, 2` and the parenthesized carrier
+        // `let (a, b) = t`, which the tree writes the same way.
         std::string refs =
             strutil::join(refs_, ", ", [](const Reference &ref) { return ref.toString(); });
-        switch (type_) {
-        case UnpackType::Struct:
-            result += "{" + refs + "}";
-            break;
-        case UnpackType::Array:
-            result += "[" + refs + "]";
-            break;
-        case UnpackType::Tuple:
-            result += "(" + refs + ")";
-            break;
-        default:
-            throw std::runtime_error(
-                "Unknown UnpackType in DataDeclLoad: " + std::to_string(static_cast<int>(type_)));
-        }
+        result += "(" + refs + ")";
     }
     return result + docSuffix();
 }
@@ -151,19 +140,7 @@ const std::string DataDeclLoad::geneCode() const {
     } else {
         std::string refs =
             strutil::join(refs_, ", ", [](const Reference &ref) { return ref.toString(); });
-        switch (type_) {
-        case UnpackType::Struct:
-            result += "{" + refs + "}";
-            break;
-        case UnpackType::Array:
-            result += "[" + refs + "]";
-            break;
-        case UnpackType::Tuple:
-            result += "(" + refs + ")";
-            break;
-        default:
-            result += "Unknown";
-        }
+        result += "(" + refs + ")";
     }
     return result;
 }

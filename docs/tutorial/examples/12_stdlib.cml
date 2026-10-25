@@ -1,6 +1,5 @@
 // The standard library: strings, arrays and numbers.
 // Run: camel docs/tutorial/examples/12_stdlib.cml
-module stdlib_demo
 
 import { split, trim, to_upper, replace, find } from str
 import { sort_by, take, sum, reverse, unique } from array

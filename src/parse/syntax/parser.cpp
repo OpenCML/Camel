@@ -1085,7 +1085,10 @@ void ParserImpl::parseOperatorName() {
 
 /// dataDecl : ('let' | 'var') carrier (':' typeList)? '=' dataList
 ///          | 'let' '_' (':' typeList)? '=' dataList
-/// carrier  : identList | parentIdents | bracedIdents | bracketIdents
+/// carrier  : identList | parentIdents
+/// A destructuring declaration binds the fields of a struct or the elements of an array, and
+/// neither is in the language: `let {x, y} = p` and `let [x, y] = xs` are syntax errors. A
+/// parenthesized carrier (`let (a, b) = t`) destructures a tuple, which the language has.
 void ParserImpl::parseDataDecl() {
     const size_t m   = mark();
     const bool isLet = cur_ == TK::KwLet;
@@ -1107,12 +1110,6 @@ void ParserImpl::parseDataDecl() {
     } break;
     case TK::LParen:
         parseBracketedIdents(TK::RParen, NK::ParentIdents);
-        break;
-    case TK::LBrace:
-        parseBracketedIdents(TK::RBrace, NK::BracedIdents);
-        break;
-    case TK::LBracket:
-        parseBracketedIdents(TK::RBracket, NK::BracketIdents);
         break;
     case TK::Identifier:
         parseIdentList();

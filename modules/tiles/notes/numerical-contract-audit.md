@@ -20,7 +20,7 @@ module tiles_exp_contract_audit
 import { Tensor, reshape, exp, sum } from tensor
 import { run_preferred_resident, download } from tiles
 
-func exponent(x: Tensor<f32>): Tensor<f32> { return exp(x) }
+func exponent(x: f32[..]): f32[..] { return exp(x) }
 
 func main(): int sync {
     let x = reshape([-90.0], [1])

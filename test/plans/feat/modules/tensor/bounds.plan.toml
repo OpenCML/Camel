@@ -30,7 +30,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "index_declared_shape"
-desc = "The extent may come from a declared parameter shape (`Tensor<const [3]>`)."
+desc = "The extent may come from a declared parameter shape (`f32[3]`)."
 kind = "negative"
 case = "../../../../cases/modules/tensor/bounds/index_declared_shape.cml"
 args = ["${case}"]

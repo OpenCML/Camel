@@ -6,10 +6,10 @@
  */
 module accuracy_logsoftmax_target
 
-import { Tensor, reshape, log, log_softmax, softmax, sum } from tensor
+import { reshape, log, log_softmax, softmax, sum } from tensor
 
 #[refine_accuracy]
-func composed(x: Tensor<f32>): Tensor<f32> {
+func composed(x: f32[..]): f32[..] {
     return log(softmax(x, -1))
 }
 

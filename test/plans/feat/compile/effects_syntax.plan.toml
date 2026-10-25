@@ -74,6 +74,20 @@ expect_diagnostic_name = "SemanticDiag::NativeResourceMismatch"
 expect_diagnostic_code = "0x030001A4"
 expect_output_contains = ["native_clause_wrong.cml:", "exists", "fs:exists", "pure", "uses fs"]
 
+# ---- Step 5, the other half: what a clause-less declaration publishes ----
+#
+# Not covered here yet. A declaration that wrote no clause has no promise to read, so the only
+# thing that could answer "does this function value fit this `pure` parameter" is what its body
+# touches. The body is measured (that is what the refusals below are checked against), but the
+# measurement is not written into the signature: a function type's resources take part in its
+# identity (core/type/text.cpp, "what a function promises about resources is part of its type"),
+# and the same function type is materialized more than once -- the declaration's own signature,
+# and the interned snapshot a function value is created with -- so completing one of them leaves
+# the others Generic and two spellings of one type stop comparing equal. Doing this soundly means
+# judging the conversion against the measurement of the graph the value names, after the bodies
+# are built, rather than against the type; until then a clause-less function value still meets a
+# `pure` parameter with NoMatchingFunction.
+
 # ---- Refusals ----
 
 [[tests]]
@@ -97,6 +111,50 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::PureAndUses"
 expect_diagnostic_code = "0x030001A1"
 expect_output_contains = ["err_pure_and_uses.cml:", "'pure'", "'uses'"]
+
+[[tests]]
+name = "err.pure_var"
+desc = "`pure` with a `var` parameter: the parameter is a resource by itself, so the signature breaks its own promise and the note points at the parameter."
+kind = "negative"
+case = "../../../cases/effects/err_pure_var.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
+expect_diagnostic_code = "0x030001F1"
+expect_output_contains = ["err_pure_var.cml:", "'var' parameter 'c'"]
+
+[[tests]]
+name = "err.pure_body"
+desc = "`pure` on a body that writes stdout: the signature promises the empty set and the body reaches past it, so the declaration is refused at its own clause and the resource it did not name is reported."
+kind = "negative"
+case = "../../../cases/effects/err_pure_body.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
+expect_diagnostic_code = "0x030001F1"
+expect_output_contains = ["err_pure_body.cml:7:", "pure", "stdout"]
+
+[[tests]]
+name = "err.pure_body2"
+desc = "The same refusal where the function is only passed as a value: the error is at the declaration whose body reaches past `pure`, not at the call site that reads the declaration. The two reports do not fight: the refusal names the broken promise, and the effect warning still names the dropped call."
+kind = "negative"
+case = "../../../cases/effects/err_pure_body2.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
+expect_diagnostic_code = "0x030001F1"
+expect_output_contains = ["err_pure_body2.cml:13:", "(x: int) => int pure", "stdout", "err_pure_body2.cml:14:"]
+
+[[tests]]
+name = "err.uses_live"
+desc = "`uses fs` with a body that writes stdout: `uses` is an upper bound, so the declaration is refused and the resource the clause left out is named."
+kind = "negative"
+case = "../../../cases/effects/err_uses_live.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
+expect_diagnostic_code = "0x030001F1"
+expect_output_contains = ["err_uses_live.cml:8:", "uses fs", "stdout"]
 
 [[tests]]
 name = "err.group_cycle"

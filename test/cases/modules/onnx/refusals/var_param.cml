@@ -6,7 +6,7 @@
  * covered by `var_outer.cml`, whose lambda reads a variable of the enclosing function.
  */
 module var_param
-import { Tensor, reshape } from tensor
+import { reshape } from tensor
 import { export_model } from onnx
 import { get_env } from env
 

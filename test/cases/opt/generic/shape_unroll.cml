@@ -6,7 +6,7 @@
  */
 module shape_unroll
 
-import { Tensor, ones, zeros, shape, reshape, slice } from tensor
+import { ones, zeros, shape, reshape, slice } from tensor
 
 func run(t: int, steps: int, x: f32[..], h: f32[..]): f32[..] {
     let batch = shape(x)[0]

@@ -1,0 +1,16 @@
+/**
+ * A cast ends at the type: `+` and `^` written after `as int` are the operators of the expression,
+ * not of the type. The type operators the grammar used to reserve (`A & B`, `A \ B`, `A + B`,
+ * `A ^ B`) are not in the language, so `a as int + 1` is `(a as int) + 1` and the values below say
+ * which reading the compiler took.
+ */
+module cast_ends_at_the_type
+
+func main(): int sync {
+    let a = 4
+    let sum = a as int + 1
+    let square = a as int ^ 2
+    println(sum)
+    println(square)
+    return 0
+}

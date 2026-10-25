@@ -2760,7 +2760,7 @@ bool agree(
 // contract that remains is the rule's own -- a rule whose syntax rounds (`x * (c1 + c2)` folds
 // `c1 + c2` in the element type, one rounding the permission covers) may differ by that rounding --
 // but the cancellation that inflates two element-type results is not part of the comparison any
-// more, which is the whole of the correction: at `x = 1e+30` the library's `tensor_f32_combine_mixed`
+// more, which is the whole of the correction: at `x = 1e+30` the library's `tensor_combine_mixed`
 // has two element-type results 27 ulps apart and one real value.
 //
 // The method needs the reference, so it applies to the element types the reference reads; a rule

@@ -1,7 +1,7 @@
 module tiles_upload_large
-import { Tensor, random, seed, sum, abs } from tensor
+import { random, seed, sum, abs } from tensor
 import { run_preferred_resident, download } from tiles
-func twice(x: Tensor<f32>): Tensor<f32> { return x + x }
+func twice(x: f32[..]): f32[..] { return x + x }
 func main(): int sync {
     seed(73)
     let x = random([8388736], -1.0, 1.0)

@@ -135,3 +135,47 @@ assert(out === want, `unexpected output: ${out}`)
 }
 """
 timeout_ms = 8000
+
+[[tests]]
+name = "cast_ends_at_the_type.nvm"
+desc = "A cast ends at the type: `+` and `^` written after `as int` are the operators of the expression, so `a as int + 1` is `(a as int) + 1` and the values are 5 and 16. The type operators the grammar reserved (`A & B`, `A \\ B`, `A + B`, `A ^ B`) are not in the language, so nothing else can be read there (nvm)"
+kind = "behavior"
+case = "../../../cases/compile/casts/cast_ends_at_the_type.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_contains = ["5\n16"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "cast_ends_at_the_type.fvm"
+desc = "A cast ends at the type: `+` and `^` written after `as int` are the operators of the expression, so `a as int + 1` is `(a as int) + 1` and the values are 5 and 16. The type operators the grammar reserved (`A & B`, `A \\ B`, `A + B`, `A ^ B`) are not in the language, so nothing else can be read there (fvm)"
+kind = "behavior"
+case = "../../../cases/compile/casts/cast_ends_at_the_type.cml"
+args = ["${case}", "${run_fvm}"]
+expect_exit = 0
+expect_stdout_contains = ["5\n16"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "cast_ends_at_the_type.jit"
+desc = "A cast ends at the type: `+` and `^` written after `as int` are the operators of the expression, so `a as int + 1` is `(a as int) + 1` and the values are 5 and 16. The type operators the grammar reserved (`A & B`, `A \\ B`, `A + B`, `A ^ B`) are not in the language, so nothing else can be read there (jit)"
+kind = "behavior"
+case = "../../../cases/compile/casts/cast_ends_at_the_type.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 0
+expect_stdout_contains = ["5\n16"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "cast_ends_at_the_type.prl"
+desc = "A cast ends at the type: `+` and `^` written after `as int` are the operators of the expression, so `a as int + 1` is `(a as int) + 1` and the values are 5 and 16. The type operators the grammar reserved (`A & B`, `A \\ B`, `A + B`, `A ^ B`) are not in the language, so nothing else can be read there (prl)"
+kind = "behavior"
+case = "../../../cases/compile/casts/cast_ends_at_the_type.cml"
+args = ["${case}", "${run_prl}"]
+expect_exit = 0
+expect_stdout_contains = ["5\n16"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000

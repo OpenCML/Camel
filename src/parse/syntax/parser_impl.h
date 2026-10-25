@@ -292,11 +292,11 @@ class ParserImpl {
         const uint32_t i = offsetOf(n);
         return toks_[i].kind == TK::Identifier && tree_.tokens_.text(i) == word;
     }
-    /// `{` at token offset `n` opens a struct literal: `{ name: ...`, `{ ...`, or a struct
+    /// `{` at token offset `n` opens a struct literal: `{ name: ...`, or a struct
     /// comprehension `{ static for...`. Anything else is a block.
     bool braceIsStruct(uint32_t n) const {
         const TK next = peek(n + 1);
-        return next == TK::Ellipsis || (next == TK::Identifier && peek(n + 2) == TK::Colon) ||
+        return (next == TK::Identifier && peek(n + 2) == TK::Colon) ||
                (next == TK::KwStatic && peek(n + 2) == TK::KwFor);
     }
 
@@ -360,7 +360,8 @@ class ParserImpl {
     void parseTypeCasePattern();
     void parseEnumTuplePattern();
     void parseEnumStructPattern();
-    void parsePattern();
+    /// `fieldPosition` reads a `fieldPattern` (`identRef | '_'`) instead of a whole `pattern`.
+    void parsePattern(bool fieldPosition = false);
     void parseLoop();
     void parseOr();
     void parseAnd();
@@ -397,11 +398,6 @@ class ParserImpl {
     // ---- Types (parser_type.cpp) ----
     bool typeStartsAt(uint32_t n) const;
     void parseType();
-    void parseInterType();
-    void parseDiffType();
-    void parseKeyUnionDiffType();
-    void parseKeyInterType();
-    void parseTypeUnit();
     void parseArrayType();
     void parseArrayDim();
     void parseSpecType();

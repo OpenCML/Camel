@@ -3,9 +3,9 @@
 // the kernels compute; run after test::expand_definitions, the definitions do: the two outputs
 // must be the same text, every element printed exactly (the shortest decimal that reads back to
 // the same float; a NaN prints without its sign or payload).
-import { Tensor, reshape, zeros, softmax, log_softmax, mean, relu, sigmoid, numel, random, seed } from tensor
+import { reshape, zeros, softmax, log_softmax, mean, relu, sigmoid, numel, random, seed } from tensor
 
-func elems(t: Tensor<f32>): float[] {
+func elems(t: f32[..]): float[] {
     let v = reshape(t, [numel(t)])
     // `v[i]` is the element itself, so its type is the array's element type `f32` (rank-zero-tensor,
     // docs/handover/reviews/questions-2026-10-23.md). The list is `float[]` -- one text per element,
@@ -13,7 +13,7 @@ func elems(t: Tensor<f32>): float[] {
     return 0..numel(t)->map<(i: int): float => float(v[i])>
 }
 
-func show(name: string, t: Tensor<f32>): int sync {
+func show(name: string, t: f32[..]): int sync {
     println(format<name, elems(t)>("{} {}"))
     return 0
 }

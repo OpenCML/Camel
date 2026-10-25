@@ -20,7 +20,7 @@
  */
 module lora_mlp
 
-import { Tensor, relu, mean, sum, neg, log_softmax, load_npy } from tensor
+import { relu, mean, sum, neg, log_softmax, load_npy } from tensor
 import { with_grad, stop_gradient } from autodiff
 import { OptimizerState, sgd, adam, adam_state, save_params } from nn
 import { get_env } from env

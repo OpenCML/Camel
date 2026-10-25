@@ -8,7 +8,7 @@
  * conversion is written, not assumed).
  */
 module export_var_compound
-import { Tensor, reshape, sum } from tensor
+import { reshape, sum } from tensor
 import { export_model } from onnx
 import { get_env } from env
 

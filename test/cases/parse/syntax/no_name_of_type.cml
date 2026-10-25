@@ -1,0 +1,18 @@
+/**
+ * `<name> of T` is not a type: `of` is not a keyword, so the name after the type is where the
+ * declaration expects its `=` and the form is an ordinary syntax error (line 10, column 14). The
+ * unit that carried the form (a pass-through by then) left the grammar with the type operators in
+ * the item-5 clearance, so nothing reads a second word inside a type any more.
+ */
+module no_name_of_type
+
+func f(x: int): int {
+    let a: k of T = x
+    return a
+}
+
+func main(): int sync {
+    println('never printed')
+    println(f(1))
+    return 0
+}

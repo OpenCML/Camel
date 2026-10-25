@@ -1,11 +1,11 @@
 module shape_inference_tuple_return_as
-import { Tensor, tanh, sum, ones } from tensor
-func g(x: Tensor<f32, [3]>): (Tensor<f32>, Tensor<f32>) {
+import { tanh, sum, ones } from tensor
+func g(x: f32[3]): (f32[..], f32[..]) {
     return (x, tanh(x))
 }
-func f(x: Tensor<f32, [3]>): (Tensor<f32, [3]>, float, Tensor<f32, [3]>) {
+func f(x: f32[3]): (f32[3], float, f32[3]) {
     let (a, b) = g(x)
-    return (a as Tensor<f32, [3]>, sum(x), b as Tensor<f32, [3]>)
+    return (a as f32[3], sum(x), b as f32[3])
 }
 func main(): int sync {
     let r = f(ones([3]))

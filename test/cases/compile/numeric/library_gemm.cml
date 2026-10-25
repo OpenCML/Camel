@@ -9,7 +9,7 @@
  */
 module library_gemm
 
-import { Tensor, reshape, sum } from tensor
+import { reshape, sum } from tensor
 import { is_numeric } from types
 
 func plain::<T>(x: T[..], w: T[..]): T[..] when is_numeric::<T>() {

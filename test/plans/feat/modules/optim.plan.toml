@@ -123,7 +123,7 @@ timeout_ms = 30000
 
 [[tests]]
 name = "optim.native_tensor_leaf_keeps_its_element_type"
-desc = "A tensor leaf keeps its own element type through the native optimizers: after one `nn:sgd` step of a `Tensor<f64, [?]>` leaf of 16777217.0 at a rate of 0.5 the leaf holds 16777216.5 (a value no f32 can hold) in 16 bytes, and its bytes decode as two f64 elements, while a `Tensor<f32, [?]>` leaf of the same number stays 8 bytes of f32. Two `nn:adam` steps later the f64 leaf is still 16 bytes and its bytes are those of the Camel module's f64 arm bit for bit, so the moments carry the leaf's element type too. The native path used to narrow every tensor leaf to f32 (`floatTensor`/`newLike`, modules/nn/optim.cpp) and hand back an f32 array under an f64 type, which design principles 7.4 forbids."
+desc = "A tensor leaf keeps its own element type through the native optimizers: after one `nn:sgd` step of a `f64[?]` leaf of 16777217.0 at a rate of 0.5 the leaf holds 16777216.5 (a value no f32 can hold) in 16 bytes, and its bytes decode as two f64 elements, while a `f32[?]` leaf of the same number stays 8 bytes of f32. Two `nn:adam` steps later the f64 leaf is still 16 bytes and its bytes are those of the Camel module's f64 arm bit for bit, so the moments carry the leaf's element type too. The native path used to narrow every tensor leaf to f32 (`floatTensor`/`newLike`, modules/nn/optim.cpp) and hand back an f32 array under an f64 type, which design principles 7.4 forbids."
 kind = "behavior"
 case = "../../../cases/modules/optim/native_dtype_exact.cml"
 args = ["${case}", "std::macro", "${backend}"]
@@ -179,7 +179,7 @@ timeout_ms = 30000
 
 [[tests]]
 name = "optim.written_dtype_leaves_agree_with_native"
-desc = "A tensor leaf of a written element type with an open extent keeps it on both sides: a `Tensor<f64, [?]>` leaf built from `0.1` stays f64 through `nn:sgd` and two `nn:adam` steps (eight bytes an element) and a `Tensor<f32, [?]>` one built from `f32(0.25)` stays f32 (four bytes an element), the Camel `optim` module lands on the same bytes as `nn` on both, and the Camel state's moments carry the parameter's element type. The byte width is the element type, and the plan decodes the bytes as f64 and as f32 rather than reading a printed number."
+desc = "A tensor leaf of a written element type with an open extent keeps it on both sides: a `f64[?]` leaf built from `0.1` stays f64 through `nn:sgd` and two `nn:adam` steps (eight bytes an element) and a `f32[?]` one built from `f32(0.25)` stays f32 (four bytes an element), the Camel `optim` module lands on the same bytes as `nn` on both, and the Camel state's moments carry the parameter's element type. The byte width is the element type, and the plan decodes the bytes as f64 and as f32 rather than reading a printed number."
 kind = "behavior"
 case = "../../../cases/modules/optim/written_dtype_exact.cml"
 args = ["${case}", "std::macro", "${backend}"]

@@ -655,6 +655,11 @@ bool Builder::buildFrom(ModuleUnit &entry, bool callEntry) {
     }
     if (ok) {
         settleEffectfulGraphs();
+        // A declaration's clause is a promise; the bodies measure what it actually touches, and
+        // the declaration is held to the promise (design effects plan, step 5). The measurement
+        // runs here, while the bodies are still in hand; the report runs per module below, with
+        // the other diagnostics of the module being reported.
+        measureInferredResources();
         // Before the graphs are encoded: the reads whose value cannot be kept leave the mark
         // that lets `acc = acc->append<v>` append in place (design principles 11.3).
         markNonRetainingReads();
@@ -665,6 +670,8 @@ bool Builder::buildFrom(ModuleUnit &entry, bool callEntry) {
                 // Before the bodies are let go by reportDroppedEffectsOfBodies.
                 reportUnusedFallibleValues();
                 reportEffectfulConditions();
+                // Before the bodies are let go, like reportDroppedEffectsOfBodies below.
+                checkInferredResources();
                 reportDroppedEffectsOfBodies();
                 if (unit->entry) {
                     // The top-level declarations run only as far as the call of `main`

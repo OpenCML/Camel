@@ -4,7 +4,7 @@
  * has no fused form to translate, so the ONNX graph is the same before and after the pass.
  */
 module export_fused_linear
-import { Tensor, reshape, relu, sum } from tensor
+import { reshape, relu, sum } from tensor
 import { export_model } from onnx
 import { get_env } from env
 

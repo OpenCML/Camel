@@ -1,6 +1,6 @@
 // argmax and argmin compare by IEEE 754-2019 maximum and minimum (design principles 7.7): with a
 // NaN the position of the first NaN; on a tie the position of the first extreme, +0 above -0.
-import { Tensor, reshape, argmax, argmin } from tensor
+import { reshape, argmax, argmin } from tensor
 
 func main(): int sync {
     let tie = reshape([1.0, 3.0, 3.0, -2.0, -2.0], [5])

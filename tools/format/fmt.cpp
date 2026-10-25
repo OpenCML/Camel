@@ -1034,14 +1034,6 @@ any Formatter::visitModifiers(cst::Modifiers context) {
 }
 
 /*
-indexValue   : '...'? dataExpr ;
-The tree has a node for it only with the marker.
-*/
-any Formatter::visitSpreadValue(cst::SpreadValue context) {
-    return "..." + any_cast<string>(visitExpr(context->expr()));
-}
-
-/*
 indexValue   : '..' dataExpr ;
 The rest argument (`..(a, b)`, `..ts`), expanded at the call.
 */
@@ -1796,7 +1788,7 @@ any Formatter::visitLiteral(cst::Literal context) {
 
 /*
 typeExpr
-    : interType ('?' | '!')*
+    : arrayType ('?' | '!' | '..')*
     ;
 */
 any Formatter::visitTypeExpr(cst::TypeExpr context) {
@@ -1812,38 +1804,6 @@ any Formatter::visitTypeExpr(cst::TypeExpr context) {
         result += mark;
     }
     return result;
-}
-
-/*
-interType
-    : diffType ('&' diffType)*
-    ;
-*/
-any Formatter::visitInterType(cst::InterType context) { return formatBiOpsList(context, true); }
-
-/*
-diffType
-    : keyUnionDiffType ('\\' keyUnionDiffType)*
-    ;
-*/
-any Formatter::visitDiffType(cst::DiffType context) { return formatBiOpsList(context, true); }
-
-/*
-keyUnionDiffType
-    : keyInterType (('+' | '-') keyInterType)*
-    ;
-*/
-any Formatter::visitKeyUnionDiffType(cst::KeyUnionDiffType context) {
-    return formatBiOpsList(context, true);
-}
-
-/*
-keyInterType
-    : typeUnit ('^' typeUnit)*
-    ;
-*/
-any Formatter::visitKeyInterType(cst::KeyInterType context) {
-    return formatBiOpsList(context, true);
 }
 
 /*
@@ -2196,7 +2156,6 @@ any Formatter::dispatch(syn::Node context) {
         CAMEL_FORMAT(TypeList)
         CAMEL_FORMAT(IdentDef)
         CAMEL_FORMAT(IdentRef)
-        CAMEL_FORMAT(SpreadValue)
         CAMEL_FORMAT(RestValue)
         CAMEL_FORMAT(AssignExpr)
         CAMEL_FORMAT(LogicalOrExpr)
@@ -2248,10 +2207,6 @@ any Formatter::dispatch(syn::Node context) {
         CAMEL_FORMAT(TupleData)
         CAMEL_FORMAT(FuncData)
         CAMEL_FORMAT(TypeExpr)
-        CAMEL_FORMAT(InterType)
-        CAMEL_FORMAT(DiffType)
-        CAMEL_FORMAT(KeyUnionDiffType)
-        CAMEL_FORMAT(KeyInterType)
         CAMEL_FORMAT(ArrayType)
         CAMEL_FORMAT(ArrayDim)
         CAMEL_FORMAT(SpecType)

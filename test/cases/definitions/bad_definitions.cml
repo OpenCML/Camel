@@ -2,25 +2,25 @@
 // definitions.h): each is declared there as the definition of a tensor operator.
 module bad_definitions
 
-import { Tensor, softmax, abs, pow } from tensor
+import { softmax, abs, pow } from tensor
 
 /// Declared for tensor:exp: softmax's definition uses exp, so the two form a cycle.
-export func exp_through_softmax(x: Tensor<f32>): Tensor<f32> {
+export func exp_through_softmax(x: f32[..]): f32[..] {
     return softmax(x, -1) + x
 }
 
 /// Declared for tensor:abs: reaches its own operator.
-export func abs_itself(x: Tensor<f32>): Tensor<f32> {
+export func abs_itself(x: f32[..]): f32[..] {
     return abs(x)
 }
 
 /// Declared for tensor:neg, which has one operand.
-export func two(x: Tensor<f32>, y: Tensor<f32>): Tensor<f32> {
+export func two(x: f32[..], y: f32[..]): f32[..] {
     return x + y
 }
 
 /// Declared for tensor:sqrt, which is pure: this prints.
-export func noisy(x: Tensor<f32>): Tensor<f32> sync {
+export func noisy(x: f32[..]): f32[..] sync {
     println(1)
     return x
 }
@@ -34,7 +34,7 @@ let first_axis = 1
 
 /// Declared for tensor:matmul: it reads a value of the module's top level, so its graph takes
 /// its parameter and a capture, not exactly the declared parameters (task).
-export func captured(x: Tensor<f32>): Tensor<f32> {
+export func captured(x: f32[..]): f32[..] {
     return softmax(x, first_axis - 1)
 }
 
@@ -47,6 +47,6 @@ func default_axis(): int {
 let call_axis = default_axis()
 
 /// Declared for tensor:pow: it reads a module-level value computed by a call.
-export func call_captured(x: Tensor<f32>, y: Tensor<f32>): Tensor<f32> {
+export func call_captured(x: f32[..], y: f32[..]): f32[..] {
     return pow(x, y) + softmax(x, call_axis - 1)
 }

@@ -91,7 +91,7 @@ Array（GC 对象，可移动）                    mm::Block（非 GC 对象，
 
 `modules/tensor/type.h/.cpp` 的 `TensorType : OtherType` 带可选 dtype 与可选形状，自己的驻留表、`kUnknownDim = -1`、`equals/unify/widened`、形状检查、`cloneWithParams/cloneWithArguments`（解析 `Tensor<f32, const [n, m]>`）。模块以此作为：
 
-- 导出的类型 `Tensor`（`modules/tensor/module.cpp#exportType` `exportType(Reference("Tensor"), TensorType::Default())`）；
+- 导出的类型 `Tensor`（已随 P4 的删除步走掉：`modules/tensor/module.cpp#exportEntity` 只导出算子实体，类型名不再导出；写 `Tensor` 现在是未知名字，过渡诊断 `TensorElementTypeRequired` 一起删除，见 5.1a）；
 - 所有算子推断的返回类型（`modules/tensor/ops/*`、`support.cpp` 的 `tensorOf`）；
 - 值类型细化器（常量数组 → dtype+形状）与 `.npy` 入口加载器的类型键；
 - `modules/nn`、`modules/onnx`、`modules/tiles`、`modules/ckpt`、`modules/autodiff` 识别"这是不是张量"的依据（`asTensorType`，25 个文件、51 处）。

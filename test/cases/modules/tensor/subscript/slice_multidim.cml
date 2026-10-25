@@ -5,7 +5,7 @@
  * copy that would not share the block a slice shares.
  */
 module subscript_multidim
-import { Tensor, reshape, shape } from tensor
+import { reshape, shape } from tensor
 
 func main(): int sync {
     println('ran')

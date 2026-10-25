@@ -7,12 +7,12 @@ import tensor
 import nn
 
 func main(): int sync {
-    let a = tensor::Tensor::ones([2, 2])
+    let a = tensor::ones([2, 2])
     let b = tensor::new([[1.0, 2.0], [3.0, 4.0]])
-    let v = nn::sgd(tensor::Tensor::zeros([2, 2]), tensor::Tensor::ones([2, 2]), 0.5)
+    let v = nn::sgd(tensor::zeros([2, 2]), tensor::ones([2, 2]), 0.5)
 
     let a0 = tensor::shape(a)[0]
-    let b1 = tensor::Tensor::shape(b)[1]
+    let b1 = tensor::shape(b)[1]
     let v0 = tensor::shape(v)[0]
     'module_import_builtins shape={} {} {}'->format<a0, b1, v0>->println
 

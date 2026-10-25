@@ -6,11 +6,11 @@
  */
 module as_unproven
 
-import { Tensor, reshape, tanh } from tensor
+import { reshape, tanh } from tensor
 import { export_model } from onnx
 
 func f(x: f32[..]): f32[..] {
-    let y = tanh(x) as Tensor<f32, [2, 3]>
+    let y = tanh(x) as f32[2, 3]
     return y * 2.0
 }
 

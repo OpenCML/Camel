@@ -136,7 +136,7 @@ Tokens at the start of a line, in full:
 | `&&` `\|\|` `==` `!=` `===` `!==` `<` `>` `<=` `>=` | `!` `~` |
 | `=` `+=` `-=` `*=` `/=` `%=` `^=` `@=` `&=` `\|=` | `(` `[` `{` |
 | `as` `is` | names, literals |
-| in a type: `\|` `&` `\` | in a type: `+` `-` `[` `?` `!` |
+| in a type: `\|` | in a type: `[` `?` `!` |
 
 Two entries need a word.
 
@@ -226,8 +226,9 @@ negations. `!` and `~` keep their place (they apply to the `->` chain after them
 `orExpr` (`|`) and `andExpr` (`&`) sit between `&&` and the comparisons, `&` the tighter. In
 the AST they are `BinaryDataOp::Or` and `And`, the ordinary operators that become calls of
 `__or__` and `__and__`; `||` and `&&` are `LogicalOr` and `LogicalAnd`, for the stage that will
-turn them into branches (the GCT builder compiles them as `|` and `&` until then). In a type
-`|` and `&` are parsed by the type functions and never meet these.
+turn them into branches (the GCT builder compiles them as `|` and `&` until then). No type
+function reads them: a type expression has no operators at all, so `&` and `|` between two types
+are the expression's operators, and `A & B` where a type is expected is a syntax error.
 
 ### The `loop` expression (provisional notation)
 
@@ -428,15 +429,21 @@ probes and the fuzzer could tell; what is left:
    parses. Here the first statement takes `acc + 1.0` and the `=` after it is an error.
 3. **`typeof a = b`** as a type: the operand of `typeof` now stops before an assignment, which
    is what ANTLR chose in `let v: typeof a = b` and not where an assignment was the only reading.
+4. **`x as T + U`, `x as T - U`, `x as T ^ U`**: the operator belongs to the expression, so
+   `x as T + U` is `(x as T) + U`. ANTLR kept the operator with the type when a type could follow
+   it; the type operators left the language in the item-5 clearance, so a type expression has no
+   operators at all and `A & B`, `A \ B`, `A + B`, `A ^ B` where a type is expected are syntax
+   errors.
 
 Kept as ANTLR read them, though a reader may expect otherwise (for the language author):
 
-- `x as T + U`, `x as T - U`, `x as T ^ U`: the operator belongs to the type when a type can
-  follow it.
 - `x as T? y`: the `?` is the nullable mark and `y` the next statement.
 - `{}` as a statement is an empty struct literal, as a branch arm or lambda body an empty block.
 - `xs[]` is `xs` and then the empty array `[]`, two statements.
-- `f(a, ...b, k: 1, ...c)`: `...b` is a positional spread, `...c` a named one.
+- `f(a, ...b, k: 1, ...c)`: ANTLR read `...b` as a positional spread and `...c` as a named one. Both
+  forms were only in the grammar, never implemented, and the closure of the item-5 work removed
+  them: `...` here is refused like any other token that fits nothing, and the rest argument is
+  written `..b` (design principles 5.5).
 
 A defect of the old front end found on the way: `import {} from a` and `export {}` crashed the
 ANTLR-based AST builder (a missing identifier list was dereferenced). They now build an import

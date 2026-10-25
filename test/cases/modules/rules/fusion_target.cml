@@ -7,21 +7,21 @@
  */
 module fusion_target
 
-import { Tensor, reshape, abs, exp, sigmoid, sum } from tensor
+import { reshape, abs, exp, sigmoid, sum } from tensor
 
-func chain(x: Tensor<f32>): Tensor<f32> {
+func chain(x: f32[..]): f32[..] {
     return 1.0 / (1.0 + exp(-x))
 }
 
-func doubled(x: Tensor<f32>): Tensor<f32> {
+func doubled(x: f32[..]): f32[..] {
     return 2.0 / (1.0 + exp(-x))
 }
 
-func positive(x: Tensor<f32>): Tensor<f32> {
+func positive(x: f32[..]): f32[..] {
     return 1.0 / (1.0 + exp(x))
 }
 
-func after_matmul(x: Tensor<f32>, w: Tensor<f32>): Tensor<f32> {
+func after_matmul(x: f32[..], w: f32[..]): f32[..] {
     return 1.0 / (1.0 + exp(-(x @ w)))
 }
 

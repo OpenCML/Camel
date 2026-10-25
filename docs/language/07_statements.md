@@ -51,7 +51,7 @@ var count = 0
   let a, b = 1, 'x'
   ```
 
-  结构体解构 `let { x, y } = p` 与数组解构 `let [a, b] = xs` 报 `SemanticDiag::FeatureNotSupported`；用 `p.x`、`xs[0]`。
+  结构体解构 `let { x, y } = p` 与数组解构 `let [a, b] = xs` 不在语言里：名字位置上的 `{` 或 `[` 是普通语法错误。用 `p.x`、`xs[0]`。
 - **`let _ = e` 有意丢弃 `e` 的值。** `_` 不是名字：它不绑定任何东西，所以同一个块里可以写任意多次，也不能读它。表达式与任何 `let` 的初值一样求值（在同步块里按顺序）。这是表明有意忽略一个 `T!` 的写法（[7.1](#71-表达式语句)）。只有这一种写法：`var _`、在多个名字中间写 `_` 都是语法错误。
 - 模块顶层的 `let` 是全局常量，顶层的 `var` 可以被函数读写，包括被导入的函数读写它所在模块的（[5.3](05_modules.md#53-导出)）。**顶层的声明与书写顺序无关，只看依赖**：`let area = pi * r * r` 可以写在 `let pi` 之前；顶层的值之间成环是 `SemanticDiag::ModuleValueCycle`（[5.6](05_modules.md#56-模块的加载)）。函数体里的局部 `let` 仍是先声明后使用。
 
@@ -672,9 +672,9 @@ id
 - 实参只能是类型，个数必须与参数一致；不带实参使用是错误。
 - 右侧只能引用已经声明的类型，所以类型函数不能引用自身。
 - 可以 `export`，在别的模块里以 `模块::Pair<int>` 使用。
-- 模块类型的尖括号由该类型自己解释，实参可以是类型或 `const 数据`；数值数组的另一种拼写 `Tensor<f32, [2, 3]>` 的尖括号由数组类型自己解释（形状实参不写 `const`：`Tensor<f32, const [2, 3]>` 报 `SemanticDiag::InvalidTypeArgument`）。
+- 模块类型的尖括号由该类型自己解释，实参可以是类型或 `const 数据`；数值数组的另一种拼写 `f32[2, 3]` 的尖括号由数组类型自己解释（形状实参不写 `const`：`f32[2, 3]` 报 `SemanticDiag::InvalidTypeArgument`）。
 
-类型表达式的类型运算 `&`、`\`、`+`、`-`、`^` 报 `SemanticDiag::FeatureNotSupported`，它们的含义尚未决定。`keyof` 与 `of` 不是关键字：`keyof T`、`名字 of T` 里的它们是普通的名字，写出来是语法错误。`typeof e` 是一个完整的类型，取表达式 `e` 的值的类型，在使用这个类型的位置由编译器展开；`typeof` 不能嵌在更大的类型里（`typeof(1)[]` 报 `SemanticDiag::TypeOfNotWholeType`），操作数没有值（`void`）时报 `SemanticDiag::TypeOfNotAValue`。
+类型表达式里没有类型运算：`A & B`、`A \ B`、`A + B`、`A ^ B` 这样的写法是普通的语法错误（`&`、`\`、`+`、`-`、`^` 在类型位置没有含义；它们是表达式里的运算符，所以 `x as T + U` 是 `(x as T) + U`）。`keyof` 与 `of` 不是关键字：`keyof T`、`名字 of T` 里的它们是普通的名字，写出来是语法错误。`typeof e` 是一个完整的类型，取表达式 `e` 的值的类型，在使用这个类型的位置由编译器展开；`typeof` 不能嵌在更大的类型里（`typeof(1)[]` 报 `SemanticDiag::TypeOfNotWholeType`），操作数没有值（`void`）时报 `SemanticDiag::TypeOfNotAValue`。
 
 ## 7.8 块
 

@@ -187,7 +187,7 @@ func greet(): int {
 | Type and conversion | `as` `const` `constas` `enum` `typeof` |
 | Literal | `null` `true` `false` |
 
-**Operators and separators** (55): `;` `,` `:` `::` `.` `..` `...` `(` `)` `[` `]` `{` `}` `<` `<` `>` `<=` `<=>` `>=` `==` `!=` `===` `!==` `=` `+=` `-=` `*=` `/=` `%=` `^=` `@=` `&=` `|=` `+` `-` `*` `/` `%` `^` `@` `#` `&` `|` `&&` `||` `!` `!!` `~` `?` `??` `->` `?->` `=>` `\\` `_`
+**Operators and separators** (54): `;` `,` `:` `::` `.` `..` `...` `(` `)` `[` `]` `{` `}` `<` `<` `>` `<=` `<=>` `>=` `==` `!=` `===` `!==` `=` `+=` `-=` `*=` `/=` `%=` `^=` `@=` `&=` `|=` `+` `-` `*` `/` `%` `^` `@` `#` `&` `|` `&&` `||` `!` `!!` `~` `?` `??` `->` `?->` `=>` `_`
 <!-- camel-for-ai end: lexical -->
 
 **Common errors.** `let if = 1` is `SyntaxDiag::KeywordAsIdentifier`; the name must be outside the
@@ -341,7 +341,7 @@ parallel, result in position order), `xs->reduce<f, init>` and `xs->foreach<f>` 
 16  negExpr             - ! ~                              prefix
 17  negPower            - ! ~ ^                            prefix, right
 18  compExpr            ..                                 repeat, left
-19  annoExpr            !                                  repeat, left
+19  annoExpr            -                                  repeat, left
 ```
 
 The production of each level, as `src/parse/syntax/parser_expr.cpp` writes it above the
@@ -366,7 +366,7 @@ linkExpr           : negExpr (('->' | '?->') compExpr)*
 negExpr            : ('-' | '!' | '~') negPower | compExpr
 negPower           : ('-' | '!' | '~') negPower | compExpr ('^' negPower)?
 compExpr           : annoExpr ('..' annoExpr)*
-annoExpr           : accessExpr (indices | parentArgues | structData | angledValues | typeArguments | '!' | memberAccess)*
+annoExpr           : accessExpr (indices | parentArgues | structData | angledValues | typeArguments | memberAccess)*
 ```
 <!-- camel-for-ai end: precedence -->
 
@@ -855,7 +855,7 @@ func f(x: Tensor): int {
 }
 ```
 
-**Write instead** — import the name and build values with the module's functions: `Tensor<f32, [2, 3]>`
+**Write instead** — import the name and build values with the module's functions: `f32[2, 3]`
 and `f32[2, 3]` write one type, so the tensor operators take either spelling. A bare `Tensor`
 parameter is on its way out (**target**, `docs/design-principles.cn.md` §5.4).
 

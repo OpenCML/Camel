@@ -25,9 +25,13 @@ namespace camel::core::type {
  * back from a graph. Equality, overload selection, `#impl` signature agreement and every
  * printed form follow from that one object.
  *
- * A value of this type does not exist yet: producing one (a generator, a source) is another
- * slice, and this type states only what the programs that will produce them are written
- * against.
+ * A stream is a value like any other: its value is its step function together with its state,
+ * the closure that answers the next element (the ruling of 2026-10-26 that keeps streams first
+ * class). So it is written in a signature, passed, returned and `tee`d, and it needs no runtime
+ * representation of its own for that, and no node kind of its own. What consumes it -- a `for`
+ * that calls the step function once per round and stops when it comes back empty -- reads the
+ * same whether the producer is fused into the consumer's loop (an optimisation, taken where
+ * producer and consumer are both visible) or reached through the value.
  */
 class StreamType : public CompositeType {
   public:

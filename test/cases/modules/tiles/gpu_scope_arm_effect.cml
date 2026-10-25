@@ -12,10 +12,10 @@
  */
 module tiles_gpu_scope_arm_effect
 
-import { Tensor, reshape, sum } from tensor
+import { reshape, sum } from tensor
 
 #gpu
-func choose(flag: bool, x: Tensor<f32, [3]>): Tensor<f32, [3]> sync {
+func choose(flag: bool, x: f32[3]): f32[3] sync {
     let y = x * 2.0
     if flag then sync {
         println('taken')

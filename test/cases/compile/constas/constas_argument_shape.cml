@@ -1,12 +1,12 @@
 module constas_argument_shape
-import { Tensor, ones, sum } from tensor
+import { ones, sum } from tensor
 
 func total(constas n: int, x: f32[n]): float {
     return sum(x)
 }
 
 func main(): int sync {
-    // The instance for n = 3 takes a Tensor<f32, [3]>; this argument has extent 4.
+    // The instance for n = 3 takes a f32[3]; this argument has extent 4.
     println(total(3, ones([4])))
     return 0
 }

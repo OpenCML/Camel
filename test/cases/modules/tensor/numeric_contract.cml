@@ -5,10 +5,7 @@
  */
 module numeric_contract
 
-import {
-    Tensor, cast, reshape, relu, maximum, minimum, max, min, sum, softmax, exp, ones, full, concat,
-    abs
-} from tensor
+import { cast, reshape, relu, maximum, minimum, max, min, sum, softmax, exp, ones, full, concat, abs } from tensor
 
 /// vals where mask is 1 and NaN where mask is 0 (0 / 0 is NaN for tensors).
 /// The arrays are float[]; cast is the explicit conversion to the f32 the tensor math runs in.
@@ -54,7 +51,7 @@ func main(): int sync {
     'softmax equal={}'->format<sum(abs(softmax(x, 1) - defined))>->println
     // A NaN anywhere in the axis makes the whole axis NaN (how a NaN prints depends on its sign).
     // Counting the NaNs would go through `s != s`, a bool[]: bool is not numeric, so `sum` refuses
-    // it (design principles 5.4), and `cast` takes a Tensor or a number[]. The axis itself is the
+    // it (design principles 5.4), and `cast` takes an array or a number[]. The axis itself is the
     // observable that says the same thing, so it is printed.
     let s = softmax(pick([1.0, 0.0, 1.0], [1.0, 2.0, 3.0]), 0)
     'softmax axis={}'->format<s>->println
