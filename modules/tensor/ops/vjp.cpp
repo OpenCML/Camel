@@ -20,8 +20,6 @@
 
 namespace camel::tensor::ops {
 
-type::Type *vjpTensorType() { return type::ArrayType::numericUnknown(); }
-
 namespace {
 
 /// True when `type` states the element type of a *tensor*: an array — at a rank, or with none
@@ -48,10 +46,35 @@ bool statesTensorElementType(const type::Type *type) {
     return elem != nullptr && isSupportedTensorScalar(elem->code());
 }
 
-/// The type a gradient node takes when the rule does not name the value it is the gradient of:
-/// the type of the first input that states one. A gradient is made of the element type of the
-/// value it is the gradient of (design principles 9.9), and a rule's first input is the output
-/// gradient or an operand of the forward node, which states the same one.
+/// The type a gradient node takes when the rule names the value the node is the gradient of: the
+/// tangent type of that value, which is the value's own type for anything a tensor kernel can read
+/// (an array states its element type already), and the element type the value's kind states when
+/// its own type leaves it out. A gradient is made of the element type of the value it is the
+/// gradient of (design principles 9.9), and the undetermined array states none: a node declared
+/// with it is specialized at an element type no kernel can read -- `tensor:subtract` on one answers
+/// "Unsupported Tensor dtype" at run time. `nullptr` means the value has no tensor tangent, and the
+/// caller falls back to the rule's other inputs.
+type::Type *vjpTensorType(const VjpBuilder &builder, vjp_node_t value) {
+    type::Type *type = builder.nodeType(value);
+    if (statesTensorElementType(type)) {
+        return type;
+    }
+    type::Type *tangent = camel::core::tangentTypeOf(type);
+    return statesTensorElementType(tangent) ? tangent : nullptr;
+}
+
+/// The type a gradient node takes when the rule does not name the value it is the gradient of: the
+/// type of the first input that states one. A gradient is made of the element type of the value it
+/// is the gradient of (design principles 9.9), and a rule's first input is the output gradient or
+/// an operand of the forward node, which states the same one.
+///
+/// Two fallbacks follow for a node whose inputs are not tensors. An array whose own type leaves its
+/// element type out (`Tensor`, the alias's transitional spelling) answers with its tangent type,
+/// which is where its element type is; it is an array, so a rule that also names a scalar operand
+/// still types its node from the value that is a tensor. Scalars alone answer with the first
+/// input's own tangent type: the rule built the node out of scalars (the exponent of a power
+/// lowered by one, a count), the node is that scalar, and the tangent of a scalar is a scalar of
+/// the same width. `nullptr` means no input answers at all.
 type::Type *gradientTypeFrom(const VjpBuilder &builder, std::span<const vjp_node_t> inputs) {
     for (vjp_node_t input : inputs) {
         type::Type *type = builder.nodeType(input);
@@ -59,7 +82,26 @@ type::Type *gradientTypeFrom(const VjpBuilder &builder, std::span<const vjp_node
             return type;
         }
     }
-    return vjpTensorType();
+    for (vjp_node_t input : inputs) {
+        if (type::Type *tangent = camel::core::tangentTypeOf(builder.nodeType(input));
+            tangent != nullptr && tangent->code() == type::TypeCode::Array) {
+            return tangent;
+        }
+    }
+    for (vjp_node_t input : inputs) {
+        if (type::Type *tangent = camel::core::tangentTypeOf(builder.nodeType(input))) {
+            return tangent;
+        }
+    }
+    return nullptr;
+}
+
+/// Refuses a gradient node that no input gives an element type: the node's value would be declared
+/// at an element type no tensor kernel can read, so the rule is refused by name here, where the
+/// node was built, rather than left for a kernel to read the wrong way.
+[[noreturn]] void refuseUntypedGradient(std::string_view uri) {
+    throw std::logic_error(
+        "vjp: the gradient node of '" + std::string(uri) + "' has no tensor element type");
 }
 
 } // namespace
@@ -103,20 +145,27 @@ vjp_node_t addTensorOper(
     std::initializer_list<vjp_node_t> inputs,
     attr::AttrSetId attrs) {
     const std::span<const vjp_node_t> span(inputs.begin(), inputs.size());
-    return builder.addOper(gradientTypeFrom(builder, span), uri, span, attrs);
+    type::Type *type = gradientTypeFrom(builder, span);
+    if (type == nullptr) {
+        refuseUntypedGradient(uri);
+    }
+    return builder.addOper(type, uri, span, attrs);
 }
 
 namespace {
 
-/// The type a gradient node that is the gradient *of* `primal` takes: that value's type when it
-/// states an element type, otherwise the first input that does (a node with no element type is one
-/// no tensor kernel can read), otherwise the transitional undetermined array.
+/// The type a gradient node that is the gradient *of* `primal` takes: that value's tangent type
+/// when it has a tensor one, otherwise the first input that states one, otherwise the tangent type
+/// of the first input that has one (a node built out of scalars is that scalar), otherwise nothing
+/// -- and the rule is refused by name rather than given a node no kernel can read.
 type::Type *gradientTypeFor(
     const VjpBuilder &builder,
     vjp_node_t primal,
     std::span<const vjp_node_t> inputs) {
-    type::Type *type = builder.nodeType(primal);
-    return statesTensorElementType(type) ? type : gradientTypeFrom(builder, inputs);
+    if (type::Type *type = vjpTensorType(builder, primal)) {
+        return type;
+    }
+    return gradientTypeFrom(builder, inputs);
 }
 
 } // namespace
@@ -128,7 +177,11 @@ vjp_node_t addTensorOperFor(
     std::initializer_list<vjp_node_t> inputs,
     attr::AttrSetId attrs) {
     const std::span<const vjp_node_t> span(inputs.begin(), inputs.size());
-    return builder.addOper(gradientTypeFor(builder, primal, span), uri, span, attrs);
+    type::Type *type = gradientTypeFor(builder, primal, span);
+    if (type == nullptr) {
+        refuseUntypedGradient(uri);
+    }
+    return builder.addOper(type, uri, span, attrs);
 }
 
 vjp_node_t addTensorOperFor(
@@ -137,7 +190,11 @@ vjp_node_t addTensorOperFor(
     std::string_view uri,
     std::span<const vjp_node_t> inputs,
     attr::AttrSetId attrs) {
-    return builder.addOper(gradientTypeFor(builder, primal, inputs), uri, inputs, attrs);
+    type::Type *type = gradientTypeFor(builder, primal, inputs);
+    if (type == nullptr) {
+        refuseUntypedGradient(uri);
+    }
+    return builder.addOper(type, uri, inputs, attrs);
 }
 
 vjp_node_t addFloatOper(

@@ -1,41 +1,34 @@
 /**
- * Refined tensor types: var bindings widen at the same rank, branch joins unify, and seeded
+ * Refined tensor types: a `var` binding widens at the same rank, branch joins unify, and seeded
  * random generation is reproducible.
  *
- * Two assignments of the original case need a word here, both of them readings of the terminal
- * state rather than choices of this case:
+ * The shapes this case pins, with the element type written down in every signature (a signature
+ * that leaves it out is a type in transition, and its values cannot enter a cell whose element type
+ * is known):
  *
- *  - `w = ones([5])` after `w` had widened to the rank-2 `f32[?, ?]` asked a `var` cell to change
- *    rank. Q5 of docs/design/arrays-memory/plan.cn.md keeps the rank when a cell widens, so that
- *    assignment is the diagnostic test/cases/compile/array_alias/err_var_rank.cml pins; the value
- *    keeps rank 2 and only its extents change. That plan states this cost for this very case, and
- *    lists it for rewriting as two `var`s or an explicit `as`.
- *  - a call whose declared result is the bare `Tensor` (open rank, unstated element type) cannot
- *    enter a cell whose element type is written down: that is a narrowing assignment and is
- *    refused (docs/handover/questions/var-cell-widening-and-the-bare-tensor-return.md). The
- *    result therefore has a binding of its own, which is the other half of that rewrite; its
- *    value is read out below, which the original case never did.
+ *  - a call whose result declares `f32[?, ?]` enters the cell `w`: the cell's element type is `f32`
+ *    and so is the value's, and the extents are what widen, at the same rank;
+ *  - the cell keeps its rank, so a value of another rank gets a binding of its own: `g` holds
+ *    `ones([5])`, and this case reads it.
  */
 module static_types
 
 import {
-    Tensor, zeros, ones, random, seed, sum, shape
+    zeros, ones, random, seed, sum, shape
 } from tensor
 
-func grow(t: Tensor): Tensor {
+func grow(t: f32[?, ?]): f32[?, ?] {
     return t + 1.0
 }
 
-func pick(flag: bool): Tensor {
+func pick(flag: bool): f32[?, ?] {
     return if flag then zeros([2, 2]) else ones([3, 2])
 }
 
 func main(): int sync {
-    // The cell widens to f32[?, ?]: same rank, extents forgotten (Q5).
     var w = zeros([2, 1])
-    w = ones([5, 1])
-    // A bare `Tensor` result has a binding of its own, and is read (sum 10.0).
-    var g = grow(w)
+    w = grow(w)
+    var g = ones([5])
     seed(7)
     let r1 = random([4], 0.0, 1.0)
     seed(7)
