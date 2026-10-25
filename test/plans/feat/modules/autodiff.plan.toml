@@ -2618,14 +2618,27 @@ timeout_ms = 8000
 
 [[tests]]
 name = "grad_refuse_struct"
-desc = "Refused at compile time with NotDifferentiable: the first `with` parameter is a struct whose members have no tangent."
+desc = "Refused at compile time with NotDifferentiable: the first `with` parameter is a struct with a field that has no tangent space, and the refusal names that field (`s`, a `string`) rather than saying only that the struct has none."
 kind = "negative"
 case = "../../../cases/modules/autodiff/grad_refuse_struct.cml"
 args = ["${case}", "std::macro"]
 expect_exit = 1
 expect_diagnostic_line = 13
-expect_output_contains = ["SemanticDiag::NotDifferentiable", "has type Plain, which has no gradient"]
+expect_output_contains = ["SemanticDiag::NotDifferentiable", "has type Plain, whose field `s` has type string, which has no gradient"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "grad_struct_all_discrete"
+desc = "A model whose every field is discrete is differentiable: the tangent space of a struct is taken field by field, and an integer and a boolean each have one -- their own type, with the value zero -- so the gradient is the model's own type, all zeros. There is no \"at least one trainable field\" exception (the author's ruling of 2026-10-25 on discrete-gradient-and-rank-one-slice-ownership)."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/grad_struct_all_discrete.cml"
+args = ["${case}", "std::macro", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "12.0\n0\nfalse\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
 [[tests]]

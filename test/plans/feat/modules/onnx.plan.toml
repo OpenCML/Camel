@@ -1667,7 +1667,7 @@ verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.output
 assert(text.includes('several branches decide whether a function calls itself outside tail position'), 'missing detail: ' + text)
-assert(/at [^ ]*export_nontail_recursion[.]cml:1[0-9]:[0-9]+[)]/.test(text), 'missing source position: ' + text)
+assert(/at [^ ]*export_nontail_recursion[.]cml:12:[0-9]+[)]/.test(text), 'missing source position: ' + text)
 assert(!text.split(String.fromCharCode(10)).includes('exported'), 'export must fail before the next statement')
 }
 """

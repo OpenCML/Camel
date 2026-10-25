@@ -1,0 +1,15 @@
+/**
+ * The function form of the slice, on the same rank-1 value whose length is stated, so that
+ * `std::gir` prints a graph small enough to read whole: `slice(x, 0, 1, 4)` is the same node
+ * `x[1:4]` builds (the author's ruling of 2026-10-25, point 2). See slice_one_node.cml.
+ */
+module slice_node_function
+
+import { Tensor, reshape } from tensor
+
+func main(): int sync {
+    let x = reshape([1.0, 2.0, 3.0, 4.0] as f32[], [4])
+    let c = slice(x, 0, 1, 4)
+    println(c)
+    return 0
+}

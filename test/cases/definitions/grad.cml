@@ -35,7 +35,7 @@ func op_sigmoid(): float { return float(sum(sigmoid(x) * w())) }
 with <x: Tensor<f32>>
 func def_sigmoid(): float { return float(sum(tensor_definitions::sigmoid(x) * w())) }
 
-func compare(name: string, da: <x: Tensor<f32>> () => Tensor, db: <x: Tensor<f32>> () => Tensor, x: Tensor<f32>): int sync {
+func compare(name: string, da: <x: Tensor<f32>> () => Tensor<f32>, db: <x: Tensor<f32>> () => Tensor<f32>, x: Tensor<f32>): int sync {
     let a = da<x>()
     let b = db<x>()
     let rel = sum(abs(a - b)) / sum(abs(a))

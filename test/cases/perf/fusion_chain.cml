@@ -17,14 +17,14 @@ import { Tensor, sum, zeros } from tensor
 import { with_grad } from autodiff
 import { now } from time
 
-type W = { w: Tensor }
+type W = { w: f32[..] }
 
 with <m: W>
-func fused_chain(x: Tensor): float {
+func fused_chain(x: f32[..]): float {
     return float(sum(x / m.w))
 }
 
-type AB = { a: Tensor, w: Tensor }
+type AB = { a: f32[..], w: f32[..] }
 
 with <m: AB>
 func declined_chain(): float {

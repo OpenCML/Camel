@@ -4483,6 +4483,62 @@ GCGraph *Engine::gradient(GCGraph *function, bool withValue) {
 
 } // namespace
 
+namespace {
+
+/// The member of `type` that has no tangent space, named by its path inside the value and with
+/// the type it has. A struct or a tuple has a tangent space exactly when every member has one
+/// (the author's ruling of 2026-10-25 on discrete-gradient-and-rank-one-slice-ownership), so the
+/// reason a whole value is refused is always one member: the refusal names that member --
+/// "field `s` has type string" -- and not only the value's own type.
+std::optional<std::pair<std::string, Type *>> memberWithoutTangent(
+    Type *type, const std::string &path) {
+    if (type == nullptr) {
+        return std::nullopt;
+    }
+    const auto hasTangent = [](Type *member) {
+        return tangentTypeOf(member) != nullptr || DerivativeRegistry::instance().isDiscrete(member);
+    };
+    if (type->code() == TypeCode::Struct) {
+        auto *st = tt::as_ptr<type::StructType>(type);
+        for (size_t i = 0; i < st->size(); ++i) {
+            Type *field = st->typeAt(i);
+            if (hasTangent(field)) {
+                continue;
+            }
+            std::string name = path.empty() ? std::string(st->fieldName(i))
+                                            : std::format("{}.{}", path, st->fieldName(i));
+            if (isAggregate(field)) {
+                if (auto inner = memberWithoutTangent(field, name)) {
+                    return inner;
+                }
+            }
+            return std::make_pair(name, field);
+        }
+        return std::nullopt;
+    }
+    if (type->code() == TypeCode::Tuple) {
+        auto *tuple = tt::as_ptr<type::TupleType>(type);
+        for (size_t i = 0; i < tuple->size(); ++i) {
+            Type *element = tuple->typeAt(i);
+            if (hasTangent(element)) {
+                continue;
+            }
+            std::string name =
+                path.empty() ? std::format("element {}", i) : std::format("{}.{}", path, i);
+            if (isAggregate(element)) {
+                if (auto inner = memberWithoutTangent(element, name)) {
+                    return inner;
+                }
+            }
+            return std::make_pair(name, element);
+        }
+        return std::nullopt;
+    }
+    return std::make_pair(path, type);
+}
+
+} // namespace
+
 std::string differentiationRefusal(FunctionType *function) {
     Type *valueType = function->exitType();
     if (valueType == nullptr ||
@@ -4505,6 +4561,19 @@ std::string differentiationRefusal(FunctionType *function) {
             first->toString());
     }
     if (tangentTypeOf(first) == nullptr) {
+        // Name the member that fails: a struct or a tuple has a tangent space exactly when every
+        // member has one, so the author is told which field has the type that has none (the
+        // ruling of 2026-10-25 on discrete-gradient-and-rank-one-slice-ownership: "the diagnostic
+        // names that field").
+        if (auto member = memberWithoutTangent(first, "")) {
+            return std::format(
+                "its first `with` parameter has type {}, whose {} has type {}, which has no "
+                "gradient (a float, a tensor, or a struct or tuple of them)",
+                first->toString(),
+                first->code() == TypeCode::Tuple ? std::format("element {}", member->first)
+                                                 : std::format("field `{}`", member->first),
+                member->second->toString());
+        }
         return std::format(
             "its first `with` parameter has type {}, which has no gradient (a float, a tensor, "
             "or a struct or tuple of them)",

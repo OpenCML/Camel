@@ -152,23 +152,22 @@ Type *computeTangentType(Type *primal) {
     case TypeCode::Struct: {
         auto *st = tt::as_ptr<StructType>(primal);
         StructTypeFactory factory;
-        bool any = false;
         for (size_t i = 0; i < st->size(); ++i) {
+            // A struct has a tangent space exactly when every field has one: the space is taken
+            // field by field (the author's ruling of 2026-10-25 on
+            // discrete-gradient-and-rank-one-slice-ownership). A model whose fields are all
+            // discrete therefore gets a gradient of the same type, all zeros -- there is no
+            // "at least one trainable field" exception; the discrete fields are kept at their own
+            // type, with the zero of it, so the tangent tree still pairs with the parameter tree.
+            // One field without a tangent space (`s: string`) makes the struct itself have none.
             if (!keepsInTangent(primal, i)) {
-                continue;
+                return nullptr;
             }
             Type *field = st->typeAt(i);
             Type *elem  = tangentTypeOf(field);
             factory.add(std::string(st->fieldName(i)), elem != nullptr ? elem : field);
-            any = any || elem != nullptr;
         }
-        // A struct none of whose fields has a tangent is not differentiable at all: a gradient of
-        // it would be a struct of zeros, and `grad` refuses such a parameter (test/cases/modules/
-        // autodiff/grad_refuse_struct.cml, `Plain = {s: string, n: int}`) instead of handing back
-        // a gradient the program cannot have meant. The ruling of 2026-10-25 is about the
-        // gradient of a model that has one: its discrete fields are in the gradient too, at their
-        // own type, so the tangent tree pairs with the parameter tree.
-        return any ? factory.build() : nullptr;
+        return st->size() == 0 ? nullptr : factory.build();
     }
     case TypeCode::Tuple: {
         auto *tuple = tt::as_ptr<TupleType>(primal);

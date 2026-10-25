@@ -399,6 +399,7 @@ enum class SemanticDiag : uint32_t {
     // type of a value answers. A signature that takes any element type declares a type variable in its
     // head and writes it as the element type.
     TensorElementTypeRequired = 0x0001ED,
+    BranchElementTypeMismatch = 0x0001EE,
 
     // Warnings
     IgnoredSideEffect = 0x100002,

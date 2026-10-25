@@ -239,21 +239,36 @@ SliceRange sliceRange(Int64 size, Int64 startRaw, Int64 endRaw, Int64 step, Int6
 // a subscript slices the first dimension), the two bounds, the step and the two-bit mask. The
 // bounds are read by `sliceRange` above.
 //
+// The function form `slice(t, 0, a, b, s?)` is the same node with the words a call has and a
+// subscript has not: it writes the axis itself and leaves out the mask, which for it is "both
+// bounds were written" (3). One operator, one rule, one adjoint rule for both spellings, and the
+// spelling is what the argument count says -- exactly as the tensor module's one `slice`
+// operator answered both before the ruling of 2026-10-25 (the author's
+// discrete-gradient-and-rank-one-slice-ownership, point 2: `t[a:b]` and `slice(t, 0, a, b)` are
+// the same node).
+//
 // A step other than 1 is a view with strides, which needs the multidimensional array
 // representation of. Until it lands, a stepped slice is a copy: the elements are the same
 // and the program does not have to know, but the result does not share the array's block.
 // records the deviation; step 1 still shares the block.
 slot_t __slice_sub__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    (void)with;
     Array *arr    = norm.get<Array *>(0);
     auto *arrType = tt::as_ptr<ArrayType>(norm.type(0));
-    // `norm.get<Int64>(1)` is the axis: the lowering writes the constant 0 for it, and an array
-    // of values is sliced along its only dimension, so it is read and not otherwise used.
+    // `norm.get<Int64>(1)` is the axis: a subscript writes the constant 0 for it, the function
+    // form writes the axis the program named (0 for a rank-1 array -- the only axis it has), and
+    // an array of values is sliced along its only dimension, so it is read and not otherwise
+    // used. The step and the mask follow the two bounds; a call that writes neither still says
+    // "step 1, both bounds written".
+    const size_t words  = norm.size();
+    const Int64 step    = words >= 5 ? norm.get<Int64>(4) : 1;
+    const Int64 written = words >= 6 ? norm.get<Int64>(5) : 3;
     const SliceRange range = sliceRange(
         static_cast<Int64>(arr->size()),
         norm.get<Int64>(2),
         norm.get<Int64>(3),
-        norm.get<Int64>(4),
-        norm.get<Int64>(5));
+        step,
+        written);
     if (arr->rank() != 1) {
         // A slice of a dimension other than the first is a view with strides; the type
         // system states rank 1, so this is a defect rather than something a program writes.
@@ -770,7 +785,10 @@ slot_t __tangent_scatter_add_arr__(ArgsView &with, ArgsView &norm, Context &ctx)
     if (index < 0 || static_cast<size_t>(index) >= base->size()) {
         throwRuntimeFault(RuntimeDiag::IndexOutOfRange, index, "an array", base->size());
     }
-    Array *result = Array::create(mm::autoSpace(), base->size());
+    // The gradient carries the element type of the array it is the gradient of: an array created
+    // without its type holds bare slots, and the next operator to read it finds no element type
+    // at all (the `sum: Unsupported Tensor dtype` of the flip line).
+    Array *result = Array::create(mm::autoSpace(), arrayType, base->size());
     for (size_t i = 0; i < base->size(); ++i) {
         result->set<slot_t>(i, base->get<slot_t>(i), arrayType);
     }
@@ -818,7 +836,11 @@ slot_t __tangent_scatter_slice_arr__(ArgsView &with, ArgsView &norm, Context &ct
                 dx->size(),
                 range.count));
     }
-    Array *result = Array::create(mm::autoSpace(), like->size());
+    // The result is the tangent of the parent, so it is created with that type: the value the
+    // adjoint hands back states the element type the forward value has (design principles 9.9),
+    // and a downstream operator reading a slice's gradient reads that type off the value. An
+    // array created without a type holds bare slots and names no element type at all.
+    Array *result = Array::create(mm::autoSpace(), tangentArray, like->size());
     // An array whose tangent's element type is `Void` has no element type to take a zero from;
     // its kind's own zero reads the element type the value actually has, and every position the
     // slice does not take holds that zero.

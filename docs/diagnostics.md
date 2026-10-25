@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-267 diagnostics: 250 errors, 17 warnings. 15 carry a machine-applicable edit, 252 say why they carry none.
+268 diagnostics: 251 errors, 17 warnings. 15 carry a machine-applicable edit, 253 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -236,6 +236,7 @@ prints one entry.
 | `0x030001E6` | [SemanticDiag::RangeStepZero](#rangestepzero) | Error | no |
 | `0x030001E7` | [SemanticDiag::StaticLoopSequenceNotKnown](#staticloopsequencenotknown) | Error | no |
 | `0x030001ED` | [SemanticDiag::TensorElementTypeRequired](#tensorelementtyperequired) | Error | no |
+| `0x030001EE` | [SemanticDiag::BranchElementTypeMismatch](#branchelementtypemismatch) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn | no |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn | no |
@@ -7786,6 +7787,41 @@ func main(): int sync {
 }
 ```
 
+### BranchElementTypeMismatch
+
+`0x030001EE` · Error · `SemanticDiag::BranchElementTypeMismatch`
+
+**Fix**
+
+None: choice: which arm takes the conversion, and in which element type, is the writer's to say
+
+**Message**
+
+```text
+The two arms of the branch have different element types: '{0}' and '{1}'. An array's element type is part of its type, and a number of one element type does not become a number of another by itself.
+```
+
+**Help**
+
+```text
+Give the two arms one element type: write the conversion on the arm that needs it -- f32(v) for a value, cast(v, 'float32') for a name -- or build both arms at the element type the value is to have, which is the element type a declaration writes. An int[] and an f32[] have no common type, so the join picks neither of the two and invents no third.
+```
+
+**Example** (`test/cases/compile/semantic/branch_element_type_mismatch.cml`, run as `camel test/cases/compile/semantic/branch_element_type_mismatch.cml`)
+
+```camel
+module semantic_branch_element_type_mismatch
+
+func pick(flag: bool, whole: int[], real: f32[]): int[] {
+    return if flag then whole else real
+}
+
+func main(): int sync {
+    let picked = pick(true, new([1, 2, 3] as int[]), new([f32(1.0), f32(2.0), f32(3.0)]))
+    return if picked[0] > 0 then 0 else 1
+}
+```
+
 ### IgnoredSideEffect
 
 `0x03100002` · Warn · `SemanticDiag::IgnoredSideEffect`
@@ -8448,14 +8484,14 @@ Check the shapes of all operands involved in the operation and ensure they are c
 // docs/handover/reviews/questions-2026-10-23.md section rank-zero-tensor — so another element count
 // has no value to become, and the count is checked when the shape runs (the shape arrives through a
 // parameter). The loop below is never reached: `for` over a value with no dimension is refused
-// where it is written (loops.err_tensor_rank0), and the transition period's bare `Tensor` is a gap
-// no mechanism is built for (the author's ruling of 2026-10-25 on
+// where it is written (loops.err_tensor_rank0), and rank 0 is decided at the instantiation, so the
+// parameter is written the final way, `T[..]` (the author's ruling of 2026-10-25 on
 // no-dimension-value-in-an-array-typed-slot).
 module tensor_rank0_runtime
 
-import { Tensor, zeros, reshape } from tensor
+import { zeros, reshape } from tensor
 
-func toShape(t: Tensor, s: int[]): Tensor {
+func toShape::<T>(t: T[..], s: int[]): T[..] {
     return reshape(t, s)
 }
 

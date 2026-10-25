@@ -11,19 +11,22 @@ import { get_env } from env
 
 // The result of the call is added to.
 func pile(h: f32[..]): f32[..] {
-    return if sum(h) < 1.0 then h else pile(h * 0.5) + h
+    return if sum(h) < 1.0 then h else pile(h * f32(0.5)) + h
 }
 
 // A right fold: the result is post-processed with values of the call that made it (a counter,
-// a state that changes, an argument that never changes).
+// a state that changes, an argument that never changes). The counter is an `int`, so the factor it
+// gives is converted to the tensor's element type where it meets a tensor: an f32 tensor takes an
+// f32 scalar, while a reduction gives a `float` and meets the float literals here as it is (design
+// principles 7.4: the element type is exact, and a conversion is written rather than assumed).
 func fold(i: int, n: int, v: f32[..], w: f32[..]): f32[..] {
-    return if i >= n then v else tanh(fold(i + 1, n, v * 0.5, w) @ w) * float(i + 1) + v
+    return if i >= n then v else tanh(fold(i + 1, n, v * f32(0.5), w) @ w) * f32(i + 1) + v
 }
 
 // The arms the other way round, and a branch in what is done with the result.
 func fold2(v: f32[..], w: f32[..]): f32[..] {
     return if sum(v * v) > 0.3 then {
-        let r = fold2(v * 0.6, w)
+        let r = fold2(v * f32(0.6), w)
         if sum(v) > 0.0 then r @ w + v else r - v
     } else v
 }

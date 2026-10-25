@@ -872,12 +872,12 @@ parameter is on its way out (**target**, `docs/design-principles.cn.md` §5.4).
 import tensor
 import { Tensor } from tensor
 
-func twice(x: Tensor): float {
+func twice(x: f32[..]): float {
     return tensor::sum(tensor::multiply(x, 2.0))
 }
 
 func main(): int sync {
-    println(twice(tensor::new([1.0, 2.0])))
+    println(twice(tensor::new([1.0, 2.0] as f32[])))
     return 0
 }
 ```
@@ -1396,7 +1396,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `LambdaParametersNeedParentheses` | E | A lambda's parameters need their parentheses: write '(x) => e', not 'x => e'. |
 | `ComparisonAcrossLines` | W | This '>' is read as a comparison with the next line, which starts with {0}: two statements may have been joined into one. |
 
-**Semantic** (`SemanticDiag`) — 204 (192 errors, 12 warnings)
+**Semantic** (`SemanticDiag`) — 205 (193 errors, 12 warnings)
 
 | `Redeclaration` | E | Redeclaration of reference: '{0}'. |
 | `ModuleNotFound` | E | Module '{0}' not found. {1} |
@@ -1635,7 +1635,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `ConstantExpressionFaults` | W | This constant expression faults whenever it is evaluated ({0}); it is not folded. |
 | `TranslationLinksRuntime` | W | std::cpp has no standalone translation of {0}: the program it writes calls the Camel runtime there and is built with libcamel. |
 
-**Semantic** (`SemanticDiag`) — 204 (192 errors, 12 warnings)
+**Semantic** (`SemanticDiag`) — 205 (193 errors, 12 warnings)
 
 | `ReducedPrecisionUnsupported` | E | The call of '{0}' cannot take a value of the reduced-precision element type '{1}'. |
 | `ImplOnBodylessDeclaration` | E | The body-less declaration '{0}' cannot carry '#impl<{1}>': it has no Camel body. |
@@ -1646,6 +1646,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `StreamInContainer` | E | '{0}' cannot be the element of {1}: a stream is consumed once, while the elements of a container are read more than once. |
 | `NodeOfNotAParameter` | E | '{0}' is not a const parameter of the rule '{1}', so node_of({0}) names no node. |
 | `TensorElementTypeRequired` | E | The type '{0}' states no element type: a tensor's element type is part of its type, so this spelling is not a type of a value. |
+| `BranchElementTypeMismatch` | E | The two arms of the branch have different element types: '{0}' and '{1}'. An array's element type is part of its type, and a number of one element type does not become a number of another by itself. |
 <!-- camel-for-ai end: diagnostics -->
 
 ## Appendix B. Standard library signatures (generated)
@@ -1665,7 +1666,7 @@ Source: `docs/stdlib-reference.md`, generated from the declarations in `stdlib/*
 `node scripts/stdlib-reference.mjs --write`.
 
 <!-- camel-for-ai region: stdlib-signatures (generated from docs/stdlib-reference.md; node scripts/camel-for-ai.mjs --write) -->
-**`Built-in functions`** — no import — 58 name(s)
+**`Built-in functions`** — no import — 59 name(s)
 
 ```text
 std::mem::blocks: () => { allocs: int, frees: int, live: int, bytes: int }
@@ -1754,6 +1755,7 @@ head: (xs: T[]) => T
 last: (xs: T[]) => T
 tail: (xs: T[]) => T[]
 slice: <start: int, end: int> (xs: T[]) => T[]
+slice: (t: T[], axis: int, start: int, end: int, step?: int) => T[]
 concat: (xs: T[], ys: T[]) => T[]
 contains: <value: T> (xs: T[]) => bool
 contains: <sub: string> (s: string) => bool
@@ -1900,7 +1902,7 @@ cast: (t: Tensor | number[], dtype: string) => Tensor
 load_npy: (path: string) => T[..]
 show: (t: A[..]) => void
 from_bytes: (bytes: Bytes, shape: int[]) => Tensor
-to_bytes: (t: T[..]) => Bytes when is_numeric::<T>()
+to_bytes: (t: T[..]) => Bytes when is_plain::<T>()
 save_npy: (t: T[..], path: string) => void when is_numeric::<T>()
 num_threads: () => int
 set_num_threads: (n: int) => void
@@ -1913,7 +1915,7 @@ seed: (seed: int) => void
 seed: (seed: i32) => void
 ```
 
-**`types`** — import { ... } from types — 8 name(s)
+**`types`** — import { ... } from types — 9 name(s)
 
 ```text
 is_integer: () => bool
@@ -1924,6 +1926,7 @@ is_ordered: () => bool
 is_function: () => bool
 is_string: () => bool
 is_bool: () => bool
+is_plain: () => bool
 ```
 
 **`array`** — import { ... } from array — 23 name(s)

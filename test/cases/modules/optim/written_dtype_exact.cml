@@ -1,16 +1,15 @@
 /**
- * A tensor leaf whose element type the program does not write follows the element type of its
- * value, on both sides: a leaf built as `full([2], 0.1)` is an f64 tensor and is still f64 after
- * `nn:sgd` and after two `nn:adam` steps, in the bytes of two doubles, and one built as
+ * A tensor leaf of a written element type keeps it on both sides: a leaf written
+ * `Tensor<f64, [?]>` and built as `full([2], 0.1)` is still f64 after `nn:sgd` and after two
+ * `nn:adam` steps, in the bytes of two doubles, and one written `Tensor<f32, [?]>` and built as
  * `full([2], f32(0.25))` is f32 in the bytes of two floats.
  *
- * "Unstated" means the type does not say the element type, not that the value is f32
- * (docs/handover/reviews/questions-2026-10-23.md, section `f64-tensor-leaf`): the native path
- * converted every tensor leaf to f32 before it updated it (`floatTensor` and `newLike`,
- * modules/nn/optim.cpp), which narrowed the f64 value of such a leaf and handed an f32 array back
- * under a type that says nothing, and the Camel module's `case _` arms did the same. Both read the
- * element type of the value now, and this case pins it: eight bytes an element for the f64 leaf and
- * four for the f32 one, on both sides.
+ * The element type a leaf writes is the element type it is updated at, and it is the leaf's own
+ * type that says which writing of the formula the module takes -- nothing is asked of the value at
+ * run time. The native path converted every tensor leaf to f32 before it updated it
+ * (`floatTensor` and `newLike`, modules/nn/optim.cpp) and handed an f32 array back under an f64
+ * type; the Camel module narrowed the same way. Both keep the written element type now, and this
+ * case pins it: eight bytes an element for the f64 leaf and four for the f32 one, on both sides.
  *
  * The two sides are compared bit for bit as well, which is what the shared element type buys: the
  * `sgd` result and the parameter after two `adam` steps are the native result and the Camel one,
@@ -18,7 +17,7 @@
  * and the counts printed with every check say how many leaves and elements it looked at, so a walk
  * that examined nothing cannot pass.
  */
-module optim_unstated_dtype_exact
+module optim_written_dtype_exact
 
 import { Tensor, full, numel, sum, to_bytes } from tensor
 import { size, to_array } from bytes
@@ -26,11 +25,12 @@ import { adam as native_adam, adam_state, sgd as native_sgd } from nn
 import { adam, constant, init, sgd, update } from optim
 import { with_grad } from autodiff
 
-// The element type is not written: both leaves are `Tensor`, so the element type of the value is
-// the only element type there is.
+// The element type is written and the extent is not: the two leaves are the two floating element
+// types, so which writing of the update each leaf takes is settled when the tree is expanded by
+// field.
 type Leaves = {
-    wide: Tensor,
-    narrow: Tensor
+    wide: Tensor<f64, [?]>,
+    narrow: Tensor<f32, [?]>
 }
 
 // The loss the gradient comes from: the sum of each leaf, so the gradient is one at every element
@@ -42,7 +42,7 @@ func total(): float {
 
 func main(): int sync {
     // `full` takes the element type of its value: 0.1 is an f64 number and `f32(0.25)` is an f32
-    // one, so the two leaves have the same type and different element types.
+    // one, so each leaf is built at the element type its own type writes.
     let model: Leaves = {
         wide: full([2], 0.1),
         narrow: full([2], f32(0.25))
@@ -51,13 +51,13 @@ func main(): int sync {
     let (value, gradient) = total_with_grad<model>()
     var failures = 0
 
-    // The gradient of an unstated leaf follows its value too: eight bytes an element for the f64
+    // The gradient of a written leaf has its element type too: eight bytes an element for the f64
     // leaf and four for the f32 one. A gradient read at the wrong width is not the derivative
     // (modules.tensor.dtype, `gather_grad_f64`), so the steps below are only meaningful with this
     // held.
     if size(to_bytes(gradient.wide)) != 8 * numel(gradient.wide) then failures = failures + 1
     if size(to_bytes(gradient.narrow)) != 4 * numel(gradient.narrow) then failures = failures + 1
-    'optim unstated_dtype_exact gradient leaves={} elements={} wide_bytes={} narrow_bytes={} total={}'
+    'optim written_dtype_exact gradient leaves={} elements={} wide_bytes={} narrow_bytes={} total={}'
     ->format<2, 4, size(to_bytes(gradient.wide)), size(to_bytes(gradient.narrow)), value>
     ->println
 
@@ -73,11 +73,11 @@ func main(): int sync {
     if size(to_bytes(stepped.narrow)) != 4 * numel(stepped.narrow) then failures = failures + 1
     if agrees_wide != 1 then failures = failures + 1
     if agrees_narrow != 1 then failures = failures + 1
-    'optim unstated_dtype_exact sgd leaves={} elements={} wide_bytes={} narrow_bytes={} agrees_wide={} agrees_narrow={}'
+    'optim written_dtype_exact sgd leaves={} elements={} wide_bytes={} narrow_bytes={} agrees_wide={} agrees_narrow={}'
     ->format<2, 4, size(to_bytes(stepped.wide)), size(to_bytes(stepped.narrow)), agrees_wide, agrees_narrow>
     ->println
-    'optim unstated_dtype_exact sgd wide={}'->format<wide>->println
-    'optim unstated_dtype_exact sgd narrow={}'->format<narrow>->println
+    'optim written_dtype_exact sgd wide={}'->format<wide>->println
+    'optim written_dtype_exact sgd narrow={}'->format<narrow>->println
 
     // ---- two `adam` steps: the parameters through both paths, and the Camel state's moments ----
     // A moment is a tensor of its parameter's element type, so the state would move the parameter
@@ -100,11 +100,11 @@ func main(): int sync {
     if size(to_bytes(camel_second.1.v.narrow)) != 4 * numel(camel_second.1.v.narrow) then failures = failures + 1
     if adam_wide != 1 then failures = failures + 1
     if adam_narrow != 1 then failures = failures + 1
-    'optim unstated_dtype_exact adam leaves={} elements={} wide_bytes={} narrow_bytes={} moment_wide={} moment_narrow={} agrees_wide={} agrees_narrow={}'
+    'optim written_dtype_exact adam leaves={} elements={} wide_bytes={} narrow_bytes={} moment_wide={} moment_narrow={} agrees_wide={} agrees_narrow={}'
     ->format<4, 8, size(to_bytes(second.0.wide)), size(to_bytes(second.0.narrow)), size(to_bytes(camel_second.1.m.wide)), size(to_bytes(camel_second.1.m.narrow)), adam_wide, adam_narrow>
     ->println
-    'optim unstated_dtype_exact adam wide={}'->format<to_array(to_bytes(second.0.wide))>->println
-    'optim unstated_dtype_exact adam narrow={}'->format<to_array(to_bytes(second.0.narrow))>->println
-    'optim unstated_dtype_exact failures={}'->format<failures>->println
+    'optim written_dtype_exact adam wide={}'->format<to_array(to_bytes(second.0.wide))>->println
+    'optim written_dtype_exact adam narrow={}'->format<to_array(to_bytes(second.0.narrow))>->println
+    'optim written_dtype_exact failures={}'->format<failures>->println
     return failures
 }

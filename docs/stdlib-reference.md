@@ -560,6 +560,21 @@ range is. `take` and `drop` of the module `array` cut to the array instead.
 - Pure.
 - Example: `[1, 2, 3, 4]->slice<1, 3>` gives `[2, 3]`
 
+#### `slice`
+
+```camel
+slice: (t: T[], axis: int, start: int, end: int, step?: int) => T[]
+```
+
+The slice of the first dimension of an array of values, written as a call: `slice(t, 0, a, b)`
+is the same node the subscript `t[a:b]` builds, with the axis written and the written mask left
+out. A negative bound is a fault here, as for the subscript; a slice of another axis, of a rank
+above 1, or with a step other than the constant 1 is a view with strides, which the core's slice
+does not answer (H17) and the module `tensor`'s `slice` does.
+
+- Pure.
+- Example: `[1, 2, 3, 4]->slice(0, 1, 3)` gives `[2, 3]`
+
 #### `concat`
 
 ```camel
@@ -2084,11 +2099,13 @@ passes the stored values through without rounding, so it needs no numeric permis
 #### `to_bytes`
 
 ```camel
-to_bytes: (t: T[..]) => Bytes when is_numeric::<T>()
+to_bytes: (t: T[..]) => Bytes when is_plain::<T>()
 ```
 
 The elements of a tensor as little-endian bytes, in row-major order: the payload `from_bytes`
-reads back.
+reads back. The elements are the tensor's own bytes, so every pure-data element type has them:
+one byte an element for a `bool` tensor, four for an `f32` one and eight for an `f64` or `c64`
+one.
 
 - Pure.
 - Example: `to_bytes(new([1.0, 2.0]))` gives `[0, 0, 128, 63, 0, 0, 0, 64]`
@@ -2315,6 +2332,32 @@ True when `T` is `bool`.
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `is_bool::<bool>()` gives `true`
 - Example: `is_bool::<int>()` gives `false`
+
+#### `is_plain`
+
+```camel
+is_plain: () => bool
+```
+
+True when `T` is pure data: a number, `bool`, or a struct or tuple whose fields are all pure
+data.
+
+Pure data is what a value can be stored as itself: the bytes contain the value and every read of
+them is the value again, because no field of the type is a reference. It is the element type an
+array is allocated and copied for, the element type `to_bytes` writes and `from_bytes` reads, and
+the element type the interchange with other frameworks names. A `string` holds a reference to
+its characters, an array holds a reference to its block, and a function, an enum and a tagged
+form hold something a copy of the bytes would not carry, so none of them is pure data.
+
+The families are asked here as everywhere else: a number is pure data because `is_numeric` says
+so, and a struct or tuple is asked field by field.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `is_plain::<float>()` gives `true`
+- Example: `is_plain::<bool>()` gives `true`
+- Example: `is_plain::<(x: int, y: f32)>()` gives `true`
+- Example: `is_plain::<string>()` gives `false`
+- Example: `is_plain::<int[]>()` gives `false`
 
 <a id="array"></a>
 
@@ -5670,9 +5713,9 @@ tuples whose leaves are numbers and tensors, and `grads` is the gradient of that
 `with_grad` or `grad` gives; a tree that merely has the same type as the parameters is refused.
 
 Every number is computed in double and rounded once, when it is stored. The arithmetic follows the
-element type the leaf's value has: a tensor leaf of `adam` is widened to f64 and updated there,
-and stored back at the element type the leaf has, so a trajectory written here is the trajectory
-`modules/tensor/kernels/update.h` defines, bit for bit.
+element type the leaf's own type writes: a tensor leaf of `adam` is widened to f64 and updated
+there, and stored back at the element type the leaf has, so a trajectory written here is the
+trajectory `modules/tensor/kernels/update.h` defines, bit for bit.
 
 #### `constant`
 

@@ -16,15 +16,15 @@
  * `with_grad` or `grad` gives; a tree that merely has the same type as the parameters is refused.
  *
  * Every number is computed in double and rounded once, when it is stored. The arithmetic follows the
- * element type the leaf's value has: a tensor leaf of `adam` is widened to f64 and updated there,
- * and stored back at the element type the leaf has, so a trajectory written here is the trajectory
- * `modules/tensor/kernels/update.h` defines, bit for bit.
+ * element type the leaf's own type writes: a tensor leaf of `adam` is widened to f64 and updated
+ * there, and stored back at the element type the leaf has, so a trajectory written here is the
+ * trajectory `modules/tensor/kernels/update.h` defines, bit for bit.
  */
 module optim
 
 import math
-import { Tensor, cast, numel, sqrt, to_bytes, zeros_like } from tensor
-import { size } from bytes
+import { Tensor, cast, sqrt, zeros_like } from tensor
+import { is_float } from types
 import { tree_unzip } from tree
 
 // A schedule is a function value `(step: int) => float`, written out at every signature: the rate
@@ -182,12 +182,12 @@ func zeros_tree::<P>(t: P) {
 }
 
 // A zero of the leaf's own type: an f32 number stays f32, and a tensor becomes a tensor of zeros of
-// the element type the leaf's value has -- `zeros_like` follows the value, so a leaf whose element
-// type the program does not write gets the moments its value asks for, which is what the native
-// `adam_state` builds (modules/nn/optim.cpp, `zerosLeaf` reads the value's element type). The
-// moments have to come back at the leaf's own element type: a state whose leaves changed type after
-// one update could not be a loop state (the state's type is the initial value's type,
-// docs/language/06_expressions.md, "状态").
+// the element type the leaf writes, at whatever rank the leaf has -- the two written floating
+// element types get their own arm, and any other leaf takes `zeros_like`, which follows the value's
+// element type, as the native `adam_state` builds a moment (modules/nn/optim.cpp, `zerosLeaf` reads
+// the value's element type). The moments have to come back at the leaf's own element type: a state
+// whose leaves changed type after one update could not be a loop state (the state's type is the
+// initial value's type, docs/language/06_expressions.md, "状态").
 func zero_leaf::<L>(x: L) {
     return match type L {
         case float => 0.0
@@ -207,20 +207,30 @@ func sgd_tree::<P, G>(p: P, g: G, rate: float) {
 }
 
 // One leaf of `sgd`. A number is updated in double and rounded once on the store, as the native
-// leaf does (`floatSlot`); a tensor leaf is updated at the element type its value has, with the
+// leaf does (`floatSlot`); a tensor leaf is updated at the element type its type writes, with the
 // rate rounded to it first, which is the arithmetic the native loop does (`pp[i] - float(lr) *
-// pg[i]` for an f32 leaf, `pp[i] - lr * pg[i]` for an f64 one). A leaf whose element type the
-// program does not write is not converted: `p - rate * g` takes the element type of `p`, and a
-// `float` rate does not widen a tensor (`floatTensor` in the native path converted both the
-// parameter and the gradient to f32 first, which narrowed an f64 value; design principles 7.4: the
-// element type is exact).
+// pg[i]` for an f32 leaf, `pp[i] - lr * pg[i]` for an f64 one). A tensor leaf of any other rank
+// takes the same per-element-type writing through `sgd_value_leaf`, because the element type, not
+// the rank, is what decides it; a leaf of another element type is not converted, because a `float`
+// rate does not widen a tensor (`floatTensor` in the native path converted both the parameter and
+// the gradient to f32 first, which narrowed an f64 value; design principles 7.4: the element type
+// is exact).
 func sgd_leaf::<P, G>(p: P, g: G, rate: float) {
     return match type P {
         case f32 => f32(float(p) - rate * float(g))
         case float => p - rate * g
         case Tensor<f32, [?]> => p - f32(rate) * g
         case Tensor<f64, [?]> => p - rate * g
-        case _ => p - rate * g
+        case _ => sgd_value_leaf(p, g, rate)
+    }
+}
+
+// One tensor leaf of `sgd`, one instance per element type: the rate is rounded to the element type
+// the leaf writes before it multiplies, which is `float(lr)` in the native kernel.
+func sgd_value_leaf::<T>(p: T[..], g: T[..], rate: float) when is_float::<T>() {
+    return match type T {
+        case float => p - rate * g
+        case _ => p - f32(rate) * g
     }
 }
 
@@ -249,19 +259,28 @@ func decay_tree::<P>(p: P, rate_decay: float) {
 }
 
 // One leaf of the decay: `p * (1 - rate * decay)`, the expression the reference AdamW computes
-// (`param.mul_(1 - lr * weight_decay)`), at the leaf's own element type: a tensor leaf keeps its
-// element type, because the rate is a `float` and a `float` does not widen a tensor, and the
-// factors are rounded to the leaf's element type as the native kernel rounds its rate (design
-// principles 7.4). A number written as f32 is computed in double and rounded once, like every other
-// f32 number here, and a leaf whose element type the program does not write is not converted: the
-// multiplication takes the element type of `x`.
+// (`param.mul_(1 - lr * weight_decay)`), at the leaf's own element type: a tensor leaf keeps the
+// element type its type writes, because the rate is a `float` and a `float` does not widen a
+// tensor, and the factors are rounded to the leaf's element type as the native kernel rounds its
+// rate (design principles 7.4). A number written as f32 is computed in double and rounded once, like
+// every other f32 number here, and a tensor leaf of any other rank takes the same per-element-type
+// writing through `decay_value_leaf`, because the element type, not the rank, is what decides it.
 func decay_leaf::<L>(x: L, rate_decay: float) {
     return match type L {
         case f32 => f32(float(x) * (1.0 - rate_decay))
         case float => x * (1.0 - rate_decay)
         case Tensor<f32, [?]> => x * f32(1.0 - rate_decay)
         case Tensor<f64, [?]> => x * (1.0 - rate_decay)
-        case _ => x * (1.0 - rate_decay)
+        case _ => decay_value_leaf(x, rate_decay)
+    }
+}
+
+// One tensor leaf of the decay, one instance per element type: the factor is rounded to the element
+// type the leaf writes, and a multiplication by a `float` would widen an f32 leaf to f64.
+func decay_value_leaf::<T>(x: T[..], rate_decay: float) when is_float::<T>() {
+    return match type T {
+        case float => x * (1.0 - rate_decay)
+        case _ => x * f32(1.0 - rate_decay)
     }
 }
 
@@ -275,12 +294,11 @@ func adam_tree::<P, G, M, V>(p: P, g: G, m: M, v: V, c: Rates) {
 }
 
 // One leaf of `adam`, as a triple of the new parameter and the two new moments. A number is
-// updated in double and stored once into its own type; a tensor leaf whose element type is written
-// as f64 stays f64; a tensor leaf whose element type is written as f32 keeps f32, computed in
-// double and stored once; and a leaf whose element type the program does not write is neither
-// narrowed nor widened -- it is updated as the leaf whose element type is the one its value has,
-// which is what the native leaf does for the same spelling (modules/nn/optim.cpp,
-// `leafElementType` reads the element type of the value).
+// updated in double and stored once into its own type; a tensor leaf keeps the element type its
+// type writes, which is the element type of every value of that leaf and of its two moments: an f64
+// leaf stays f64, and an f32 leaf keeps f32, computed in double and stored once. A tensor leaf the
+// two written cases above do not name (another rank, another floating element type) takes the same
+// per-element-type writing through `adam_value_leaf`.
 func adam_leaf::<P, G, M, V>(p: P, g: G, m: M, v: V, c: Rates) {
     return match type P {
         case f32 => narrow_numbers(adam_number(float(p), float(g), float(m), float(v), c))
@@ -291,25 +309,20 @@ func adam_leaf::<P, G, M, V>(p: P, g: G, m: M, v: V, c: Rates) {
     }
 }
 
-// One `adam` leaf whose element type the program does not write. The element type of the value
-// decides: "unstated" only means the type does not say it, so narrowing it would be an unlicensed
-// loss of precision. The two element types are two writings of the formula: an f32 leaf is computed
-// in double and rounded once on the store, which is the pass the fused kernel takes for it
-// (modules/tensor/kernels/update.h), and an f64 leaf keeps the double result. The type states no
-// element type, so there is no arm to dispatch on, and no operator names a tensor's element type at
-// run time; the value answers for itself, with the width of one element read from its own bytes.
-// (A tensor leaf of any other element type never reaches an optimizer -- it has no tangent,
-// `tensorTangentType` -- and the native leaf refuses it by name rather than converting it.)
-func adam_value_leaf::<P, G, M, V>(p: P, g: G, m: M, v: V, c: Rates) {
-    if size(to_bytes(p)) == numel(p) * 8 then unstated(adam_wide(p, g, m, v, c))
-    else unstated(narrow_tensors(adam_wide(p, g, m, v, c)))
-}
-
-// The same triple with the element type left out of the type, which is what the leaf's own type
-// states: the two writings above answer at different element types and the walk carries one type for
-// the leaf, so this is the seam between them. The values are handed on unchanged.
-func unstated::<A, B, C>(t: (A, B, C)): (Tensor, Tensor, Tensor) {
-    return (t.0, t.1, t.2)
+// One tensor leaf of `adam`, one instance per element type: the element type of a leaf is part of
+// the leaf's type and is settled when the parameter tree is expanded by field, so which writing of
+// the formula the leaf takes is a compile-time fact, and no value is asked what it holds at run
+// time (design principles 5.10: Camel has no run-time type test). An f64 leaf keeps the double
+// result of `adam_wide`; every other floating leaf is computed in double and rounded once on the
+// store, which is the pass the fused kernel takes for an f32 leaf
+// (modules/tensor/kernels/update.h). A leaf of any other element type never reaches an optimizer --
+// it has no tangent, `tensorTangentType` -- and the native leaf refuses it by name rather than
+// converting it, which is what the `when` condition says here.
+func adam_value_leaf::<T>(p: T[..], g: T[..], m: T[..], v: T[..], c: Rates) when is_float::<T>() {
+    return match type T {
+        case float => adam_wide(p, g, m, v, c)
+        case _ => narrow_tensors(adam_wide(p, g, m, v, c))
+    }
 }
 
 // The Adam formula of one number, in double, in the order the reference kernel writes it

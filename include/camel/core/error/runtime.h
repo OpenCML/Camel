@@ -49,6 +49,12 @@ struct ExecutionSiteHint {
     camel::runtime::GCGraph *runtimeGraph   = nullptr;
     size_t pc                               = 0;
     camel::source::origin_id_t cachedOrigin = camel::source::kInvalidOriginId;
+    /// Keep the site that raised the fault in the report as a related position, beside the
+    /// position the hint names. Off by default: a fault of a macro is reported where the macro
+    /// stands and the call that ran it adds nothing, and a kernel that reports a fault of the
+    /// program it was asked to translate wants both -- the construct the fault is about, and the
+    /// call that asked for the work, which is what tells two calls of the same kernel apart.
+    bool keepRaiseSite = false;
 };
 
 struct ExecutionSite {
