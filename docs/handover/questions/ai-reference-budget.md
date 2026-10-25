@@ -63,4 +63,4 @@
 
 - 全文 111,643 → 110,232（省 1,411），余量 357 → 1,768；手写 55,067 → 53,656；生成区 56,576 逐字不变；`--check` 退出 0；逐处删改见该分支的提交与合并说明。
 - `node scripts/check-doc-links.mjs --citations`：`no unverified citation: 413 of 413 symbol citation(s) verified, 1816 path citation(s) across 4741 file(s)`。
-- `node scripts/check-doc-links.mjs`：`no broken links in 38 document(s)`。
+- `node scripts/check-doc-links.mjs`：`no broken links in 38 document(s)`。默认范围是该脚本里的 `SCOPE`（38 份文档），不收 `docs/handover/`；`--citations` 也把 `docs/handover` 与 `docs/reviews` 当记录目录跳过，所以本页自己的链接不在那两条读数里。
