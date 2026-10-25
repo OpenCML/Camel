@@ -33,7 +33,7 @@ export func generic::<T>(x: T): T {
 let first_axis = 1
 
 /// Declared for tensor:matmul: it reads a value of the module's top level, so its graph takes
-/// its parameter and a capture, not exactly the declared parameters (task).
+///  its parameter and a capture, not exactly the declared parameters (task).
 export func captured(x: Tensor<f32>): Tensor<f32> {
     return softmax(x, first_axis - 1)
 }
@@ -42,7 +42,7 @@ func default_axis(): int {
     return 1
 }
 
-/// The same shape with a value computed by a call (task): the capture is a top-level node
+///  The same shape with a value computed by a call (task): the capture is a top-level node
 /// however the value is written, and a definition library has no root graph that could run it.
 let call_axis = default_axis()
 

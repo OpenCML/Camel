@@ -102,7 +102,7 @@ node_handle_t Builder::functionValueOf(node_handle_t node, const GCT::node_ptr_t
     if (boundWithArgs_.contains(node)) {
         // `f<w>` as a value is a partial application (design principles 4.4). The binding
         // used to be dropped here, without a word. It is located at `f<w>` itself, not at the
-        // statement the binding is written in (1.6).
+        //  statement the binding is written in (1.6).
         const auto withIt = boundWithOrigin_.find(node);
         const GCT::node_ptr_t at =
             withIt != boundWithOrigin_.end() ? withIt->second : origin;
@@ -282,7 +282,7 @@ node_handle_t Builder::partialApplicationOf(
         if (arg.name) {
             // A function value has no parameter names to bind a name to, and the binding it
             // would make is not the prefix of parameters a value carries: name a parameter
-            // only in a call (design principles 4.4).
+            //  only in a call (design principles 4.4).
             diags_->of(SemanticDiag::WithArgumentInValue)
                 .atOrigin(arg.expr != nullptr ? arg.expr->origin() : at)
                 .commit(*arg.name);
@@ -301,7 +301,7 @@ node_handle_t Builder::partialApplicationOf(
     // position says which function it wants, with the parameters that are left).
     //
     // A context argument chooses its overload exactly as an ordinary call does (design
-    // principles 4.4, 5.1; d): a function whose `with` parameters take the bound values
+    //  principles 4.4, 5.1): a function whose `with` parameters take the bound values
     // exactly is tried first, and only when no function takes them exactly may a literal
     // enter a parameter type. With `with <k: int>` and `with <k: f32>` both declared,
     // `scale<2>` is the `int` one; `half<2>` with only `with <k: f32>` still binds the
@@ -390,8 +390,8 @@ node_handle_t Builder::partialApplicationOf(
         candidates.push_back(tt::as_ptr<FunctionType>(type));
     }
     // Exact matches first; a literal enters a parameter type only when there is none. Several
-    // candidates in the pass that is used are an ambiguity (design principles 5.1, e): it is
-    // recorded here and reported when the binding is refused for good, because the position
+    //  candidates in the pass that is used are an ambiguity (design principles 5.1): it
+    // is recorded here and reported when the binding is refused for good, because the position
     // may still say which function is meant (a parameter of function type, overloadValueFor,
     // or the type of the call this value is passed to). Declaration order never chooses, and
     // `expected` settles the choice before either pass.
@@ -519,7 +519,7 @@ node_handle_t Builder::partialApplicationOf(
 
     compile_graph_ptr_t graph     = enterScope(type);
     // The graph is the value `f<w>`: it is located at that expression, so the function value
-    // made from it covers `f<w>` and not the statement it is written in (1.6).
+    //  made from it covers `f<w>` and not the statement it is written in (1.6).
     registerGraphOrigin(
         context_,
         graph,
@@ -758,7 +758,7 @@ void Builder::evaluateDefaults(
     // A default that reads a parameter of the same declaration is not a constant, and the
     // parameter is only a name where the declaration's own scope is in force. Elsewhere the
     // name is not looked up at all, so that a module-level value of the same name is not taken
-    // for it. Both kinds of parameter are checked (design principles 4.4).
+    //  for it. Both kinds of parameter are checked (design principles 4.4).
     const auto readsParameter = [&](const GCT::node_ptr_t &node, const auto &self) -> bool {
         if (node == nullptr) {
             return false;
@@ -936,12 +936,14 @@ std::optional<Builder::CalleeSet> Builder::declarationsOfCallee(node_handle_t ca
         if (std::holds_alternative<oper_group_ptr_t>(target)) {
             // The rules of an operator group are the declarations of its name (design principles
             // 6.4): whether a call can give an argument by name does not depend on whether the
-            // callee is a Camel declaration or a group of rules a C++ module registered. The
-            // name has to mark the same position in every rule, exactly as it has to in every
-            // declaration of a name, and a rule that cannot place a name (a signature that
-            // follows its arguments and spells none, a variadic list, a `rest` parameter) makes
-            // the whole call refuse one: the rule is one the name does not reach, and binding
-            // the others would bind a position this rule means another thing at.
+            // callee is a Camel declaration or a group of rules a C++ module registered (the
+            //  language rule, 2026-10-24, "named arguments reach operator groups";
+            // docs/handover/reviews/questions-2026-10-23.md). The name has to mark the same
+            // position in every rule, exactly as it has to in every declaration of a name, and a
+            // rule that cannot place a name (a signature that follows its arguments and spells
+            // none, a variadic list, a `rest` parameter) makes the whole call refuse one: the
+            // rule is one the name does not reach, and binding the others would bind a position
+            // this rule means another thing at.
             const auto &ops = std::get<oper_group_ptr_t>(target);
             for (const auto &[uri, resolver] : ops->resolvers()) {
                 CalleeDeclaration declaration;

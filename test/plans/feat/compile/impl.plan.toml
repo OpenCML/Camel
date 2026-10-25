@@ -92,29 +92,37 @@ expect_exit = 0
 expect_stdout_exact = "kernel=42,2,0,1 body=42,2,0,1 diff=0,0,0,0\n"
 
 
-# ---- The passes that can meet a tagged function ---- `impl_pass_optimizer.cml` takes both paths
-# of one tagged function through `std::opt` in one program: a direct call, which is one OPER of the
-# kernel, and a call through the function value, which is the body. The two cases below compare the
-# two paths and pin what the pass did to the graph. The other passes named in design principles
-# 10.4 have no case here, and the reason is a decision rather than effort. Fusion and export both
-# need a kernel over tensors to be exercised at all: the `rules::fusion` library's only tensor rule
-# is the `sigmoid` chain, and the ONNX exporter requires an exported function's arguments to be
-# tensors (`modules/onnx/exporter.cpp#InputBinder::bind`). A test module cannot declare a tensor
-# kernel, because `tensor:sum` and every other tensor operator belong to the tensor module and a
-# module may declare only its own operator (`SemanticDiag::NativeDeclarationForeignOperator`), so
-# the kernels of the cases here are the core's scalar operators. Closing fusion and export needs
-# either a stock `#impl` in `stdlib/` beside the operators, or a test-scoped way to declare another
-# module's operator; both are the language author's call. The rule (` `, 「## impl-kernel-site」)
-# chose the first of the two, and removed both walls on the way (` `, Q2): 「选
-# (a)，而且取宽的那一种：声明模块可以有函数体， `DeclarationModuleHasBody` 删除」 and 「泛型函数可以带 `#impl`」 — the kernel is a
-# body-less declaration with the function's own type parameters, the executor is chosen at
-# instantiation per, an instance whose type has no executor runs the body (the body is the
-# semantics, so the result is the same), and `std::profile` says which path that instance took. So
-# the standard library gets its first `#impl` kernels: the tensor module's own `stdlib/tensor.cml`
-# declares the kernel beside the declaration and holds the Camel definition (its `.cmo` is the same
-# module), and a generic function may carry one (Adam, once `optim` lands: step 14; the rule kept
-# `nn:adam` out of this batch). `impl.kernel_site` states what the two rule items can now be
-# written as; `impl.generic_executor` is the generic rule itself.
+# ---- The passes that can meet a tagged function ----
+#
+# `impl_pass_optimizer.cml` takes both paths of one tagged function through `std::opt` in one
+# program: a direct call, which is one OPER of the kernel, and a call through the function value,
+# which is the body. The two cases below compare the two paths and pin what the pass did to the
+# graph.
+#
+# The other passes named in design principles 10.4 have no case here, and the reason is a decision
+# rather than effort. Fusion and export both need a kernel over tensors to be exercised at all: the
+# `rules::fusion` library's only tensor rule is the `sigmoid` chain, and the ONNX exporter requires
+# an exported function's arguments to be tensors
+# (`modules/onnx/exporter.cpp#InputBinder::bind`). A test module
+# cannot declare a tensor kernel, because `tensor:sum` and every other tensor operator belong to
+# the tensor module and a module may declare only its own operator
+# (`SemanticDiag::NativeDeclarationForeignOperator`), so the kernels of the cases here are the
+# core's scalar operators. Closing fusion and export needs either a stock `#impl` in `stdlib/`
+# beside the operators, or a test-scoped way to declare another module's operator; both are the
+# language author's call.
+#
+#  The rule (`docs/handover/reviews/questions-2026-10-23.md`,
+# 「## impl-kernel-site」) chose the first of the two, and removed both walls on the way
+#  (`docs/handover/reviews/H141-H213.md`, Q2): 「选 (a)，而且取宽的那一种：声明模块可以有函数体，
+# `DeclarationModuleHasBody` 删除」 and 「泛型函数可以带 `#impl`」 — the kernel is a body-less
+# declaration with the function's own type parameters, the executor is chosen at instantiation
+#  per, an instance whose type has no executor runs the body (the body is the semantics, so
+# the result is the same), and `std::profile` says which path that instance took. So the
+# standard library gets its first `#impl` kernels: the tensor module's own `stdlib/tensor.cml`
+# declares the kernel beside the declaration and holds the Camel definition (its `.cmo` is the
+#  same module), and a generic function may carry one (Adam, once `optim` lands: step
+#  14; the rule kept `nn:adam` out of this batch). `impl.kernel_site` states what the two
+#  rule items can now be written as; `impl.generic_executor` is the generic rule itself.
 
 # ---- The optimizer: a direct call is not a call to inline ----
 

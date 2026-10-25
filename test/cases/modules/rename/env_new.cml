@@ -1,6 +1,6 @@
 /**
- * `env` is the module that reads the environment and the working directory (which renamed
- * `sys`); this proves the new name imports and its operators run.
+ *  `env` is the module that reads the environment and the working directory (
+ * which renamed `sys`); this proves the new name imports and its operators run.
  */
 module env_new
 

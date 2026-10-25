@@ -570,8 +570,8 @@ bool sameType(const Type *a, const Type *b) {
         }
         case TypeCode::Stream: {
             // `T..` is one type per element type: the element decides, and nothing else is
-            // part of it (`T..` and `T[..]` are different types, and the suffix is read left
-            // to right).
+            //  part of it (`T..` and `T[..]` are different
+            // types, and the suffix is read left to right).
             const auto *lhs = static_cast<const StreamType *>(left);
             const auto *rhs = static_cast<const StreamType *>(right);
             pending.emplace_back(lhs->elemType(), rhs->elemType());

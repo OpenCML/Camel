@@ -52,7 +52,7 @@ inline void initialize() {
         // library's API, but that runs after the constructor: the pool is already there, alive and
         // unused, and even `-t 1` still has it. Seed the count before anything can be loaded, so
         // the library starts with one thread and the tensor pool is the process's only pool
-        // (without this, 31 threads on a 32-thread host, on the canonical path too).
+        //  (without this, 31 threads on a 32-thread host, on the canonical path too).
         //
         // A value the user set is left alone. Setting either variable re-introduces the second
         // pool, so the single-pool promise is conditional on them being unset; a value above one

@@ -1,6 +1,6 @@
 /**
  * Imports every standard library module that declares a resource, so that `camel inspect --ops`
- * lists their operators and `modules.resources` can pin the resource set.
+ *  lists their operators and `modules.resources` can pin the resource set.
  */
 module resource_names
 

@@ -1,7 +1,7 @@
 /**
  * A lambda called where it stands: the callee of a call is not a position with a function type,
- * so nothing fixes the parameter's type and it is reported there (design principles 5.9; item
- * 2, the second example of the reference's list).
+ *  so nothing fixes the parameter's type and it is reported there (design principles 5.9;
+ * item 2, the second example of the reference's list).
  */
 module lambda_inference_call_in_place
 

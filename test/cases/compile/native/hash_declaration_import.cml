@@ -1,7 +1,7 @@
 /**
  * The declarations of `hash` are what an importer sees: `sha256` accepts a `string` and a `Bytes`
  * value (two operators, `hash:sha256_str` and `hash:sha256_bytes`), and `sha256_rounds` takes the
- * declared `string` and `int`. Every call reaches the C++ operator.
+ *  declared `string` and `int`. Every call reaches the C++ operator.
  */
 module hash_declaration_import
 

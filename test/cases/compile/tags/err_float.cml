@@ -1,4 +1,4 @@
-/// A tag argument of a type a tag cannot hold yet (b adds them).
+///  A tag argument of a type a tag cannot hold yet (adds them).
 module err_float
 
 export tag width<w: int> on type

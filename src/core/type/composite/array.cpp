@@ -333,7 +333,7 @@ ArrayType::applyArguments(std::span<const TypeArgument> arguments, std::string &
     }
     if (extents.empty()) {
         // Every dimension is removed, and a type with no dimension is its element type (the
-        // rank-zero rule, docs/handover/reviews/questions-2026-10-23.md): `Tensor<f32, []>`
+        //  rank-zero rule, docs/handover/reviews/questions-2026-10-23.md): `Tensor<f32, []>`
         // is `f32`, the scalar. A spelling that states no element type has nothing left to
         // denote, and says which two spellings do.
         if (elemType == nullptr) {

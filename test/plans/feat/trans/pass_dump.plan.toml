@@ -9,7 +9,7 @@ desc = "`--dump-after-each-pass` writes the input graph and one snapshot per gra
 kind = "behavior"
 tool = "python"
 case = "../../../cases/trans/pass_dump/pass_dump.py"
-# `${camel}` is the compiler of the build under test, named as an argument.
+#  `${camel}` is the compiler of the build under test, named as an argument.
 args = ["${case}", "--camel", "${camel}"]
 expect_exit = 0
 expect_stdout_contains = ["pass dump: PASS"]

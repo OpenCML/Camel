@@ -1,5 +1,5 @@
-// Second item through the C++ translation: the multi-state forms of the in-place write (the
-// shapes of test/cases/loops/state_in_place_multi.cml), 5 rounds. std::cpp translates the
+//  second item through the C++ translation: the multi-state forms of the in-place write
+// (the shapes of test/cases/loops/state_in_place_multi.cml), 5 rounds. std::cpp translates the
 // owned append to its copying `append` -- the standalone Array copies a block another holder
 // shares -- so the values are the interpreter's, which agree_with_fvm checks against std::fvm.
 func threeTyped(n: int): (int[], int, bool, float) {

@@ -1,7 +1,7 @@
 /**
  * Refused: a tail recursion whose depth depends on the model input and which carries an int
  * array that changes every call. A loop carries tensors and scalars, and tuples and structs of
- * them ('s outline); an array has no carried form, so the diagnostic names the argument.
+ *  them (the outline); an array has no carried form, so the diagnostic names the argument.
  */
 module export_loop_carried_array
 import { Tensor, reshape, sum } from tensor

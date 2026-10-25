@@ -226,7 +226,7 @@ class RuntimeGraphDraftSession {
     /// (optimistic concurrency, design 4.3.1). A session that cannot replace the context's
     /// program — one opened over a private program (the ONNX export's bound copy, a function
     /// value's program, a subgraph root) that the context did not install — has no version of
-    /// the context's program to compare: its conflicts are empty.
+    ///  the context's program to compare: its conflicts are empty.
     std::vector<GraphId> conflicts() const;
     /// conflicts() against `current`, which the caller names: the compare-and-swap of a commit
     /// that lost the race to another one re-checks against the program that is there now.

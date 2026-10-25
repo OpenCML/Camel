@@ -1,8 +1,8 @@
 /**
  * An array whose length is not fixed when the function is compiled leaves the number of rounds
- * open, so it is not a sequence a `static loop` can walk: the one rule of the rule asks for an
- * expression built only from compile-time constants, and a parameter is not one. The refusal
- * names the expression that was written.
+ *  open, so it is not a sequence a `static loop` can walk: the one rule of the rule of
+ * 2026-10-25 asks for an expression built only from compile-time constants, and a parameter is
+ * not one. The refusal names the expression that was written.
  */
 module static_loop_sequence_runtime_array
 

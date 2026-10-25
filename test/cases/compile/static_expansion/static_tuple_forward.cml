@@ -1,7 +1,7 @@
 /**
- * `..ts` forwards a rest parameter's build-time tuple (step 6): the elements are passed on as
- * they are, with no FILL for `ts` and no ACCS for an element. Both rest calls are expanded, so
- * `main` is the hand-written sum of the three arguments.
+ *  `..ts` forwards a rest parameter's build-time tuple.: the elements are passed on
+ * as they are, with no FILL for `ts` and no ACCS for an element. Both rest calls are expanded,
+ * so `main` is the hand-written sum of the three arguments.
  */
 module static_tuple_forward
 

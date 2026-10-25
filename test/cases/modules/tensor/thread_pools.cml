@@ -1,14 +1,18 @@
 /**
- * The process has no more threads than the run asked for: one kernel pool, not two. A run names
- * its budget with `-t`. Every kernel thread in the process belongs to the tensor pool, so the
- * process's thread count (the caller included) is at most the budget. A second pool — the
- * library GEMM's own, or a second worker set — puts the count above the budget; before the
- * library's pool alone was as wide as the machine, so `-t 1` had 32 threads on this host. The
- * count is read from the operating system (`thread_count`), not timed, so the case cannot pass
- * by being slow or fail by being fast. The whole-work product is the library path (one call,
- * `tensor::fuse`), and the batched product makes the tensor pool create its workers, so both
- * pools are live when the count is taken: if the library had a pool too, this is the moment it
- * shows. Exit 1 is more threads than the budget, 2 a `-t 1` run with more than the caller.
+ * The process has no more threads than the run asked for: one kernel pool, not two.
+ *
+ * A run names its budget with `-t`. Every kernel thread in the process belongs to the tensor
+ * pool, so the process's thread count (the caller included) is at most the budget. A second pool
+ * — the library GEMM's own, or a second worker set — puts the count above the budget; before
+ *  the library's pool alone was as wide as the machine, so `-t 1` had 32 threads on this
+ * host. The count is read from the operating system (`thread_count`), not timed, so the case
+ * cannot pass by being slow or fail by being fast.
+ *
+ * The whole-work product is the library path (one call, `tensor::fuse`), and the batched product
+ * makes the tensor pool create its workers, so both pools are live when the count is taken: if
+ * the library had a pool too, this is the moment it shows.
+ *
+ * Exit 1 is more threads than the budget, 2 a `-t 1` run with more than the caller.
  */
 module thread_pools
 

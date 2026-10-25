@@ -1,7 +1,7 @@
 module written_unknown_name
 
 // `any` is not a type: there is no such name in the type scope, so writing it is the
-// ordinary unknown-type error (design principles 5.10; deleted AnyNotAllowed). The
+//  ordinary unknown-type error (design principles 5.10; deleted AnyNotAllowed). The
 // annotation is in the body because a name first written in a parameter type binds a type
 // variable instead (design principles 5.5).
 func keep(x: int): int {

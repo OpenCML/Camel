@@ -1,6 +1,6 @@
 /**
  * Importing the module is enough: the declaration names an operator of a module nothing provides,
- * and the error is located in `missing_module.cml` (step 1).
+ *  and the error is located in `missing_module.cml` (step 1).
  */
 import { absent } from missing_module
 

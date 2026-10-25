@@ -1,5 +1,6 @@
 /**
- * Every rule the standard library exports, handed to `check` (rewrite design 5.2: a test that lists rules by name drifts, so the
+ *  Every rule the standard library exports, handed to `check` (rewrite design 5.2; the rule of
+ * 2026-10-24 on `verification-verdict-surface`, §4: a test that lists rules by name drifts, so the
  * question "is every rule of the library checked at all?" has to be asked of the library as a whole
  * and not of a hand-written list).
  *
@@ -16,12 +17,12 @@
  *   * `float_log1p` and `float_expm1` in a call of their own: they ask for `refine_accuracy`, and
  *     this case keeps the arrangement its verdicts were measured at rather than re-deriving it (the
  *     seed of a rule now follows the rule's identity, its name and its instance's type tuple, not
- *     its place in the array -- the rule on `accuracy-check-sampling`, 1, landed by
- *     's slice S0 and measured in the rule on `verification-report-surface-s0`,
+ *      its place in the array -- the rule on `accuracy-check-sampling`, 1, landed by
+ *      the slice S0 and measured in the rule on `verification-report-surface-s0`,
  *     in `docs/handover/reviews/questions-2026-10-23.md`);
  *   * `tensor_log_softmax_of_softmax` in a call of its own, over the 100 samples and the seed its
  *     verdict was measured at (`worst error ratio 1`, which the new 7.2 definition accepts: the
- *     right side is never worse and the bound holds -- the rule on
+ *      right side is never worse and the bound holds -- the rule on
  *     `verification-report-surface-s0`).
  *
  * A rule that no line of the report mentions is a rule this case did not reach, and the check in

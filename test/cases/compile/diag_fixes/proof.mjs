@@ -388,11 +388,11 @@ expectFix({
 // picks one is worse than a sentence.
 expectNoFix({ label: 'unresolved-reference', file: 'compile/semantic/unresolved_reference.cml', name: 'SemanticDiag::UnresolvedReference' })
 
-// A lambda's parameters need their parentheses: the one name that stands before the arrow is the
-// whole parameter list, so wrapping it is the whole repair and the program compiles. A list of
-// names gets no fix: `x, y => e` and the arguments of a call read the same way before the arrow
-// (`f(a, x => e)`), and wrapping the wrong range is a wrong change a tool would apply without
-// asking.
+//  A lambda's parameters need their parentheses : the one name
+// that stands before the arrow is the whole parameter list, so wrapping it is the whole repair and
+// the program compiles. A list of names gets no fix: `x, y => e` and the arguments of a call read
+// the same way before the arrow (`f(a, x => e)`), and wrapping the wrong range is a wrong change a
+// tool would apply without asking.
 expectFix({
     label: 'lambda-needs-parentheses',
     file: 'parse/rulings/lambda_without_parentheses.cml',

@@ -6,7 +6,7 @@ module registry_all
 
 import bytes
 // `hash` and `env` are declaration modules (`stdlib/hash.cml`, `stdlib/env.cml`): `hash` is pure,
-// and `env` keeps its `env` resource and its effects in C++.
+//  and `env` keeps its `env` resource and its effects in C++.
 import hash
 import env
 import fs
@@ -15,7 +15,7 @@ import io
 import json
 import math
 // `process` is a declaration module too (`stdlib/process.cml`); it keeps the `clock`/`env`
-// resources and its effects in C++, and `exit` stays the built-in operator.
+//  resources and its effects in C++, and `exit` stays the built-in operator.
 import process
 import para
 import random
@@ -29,32 +29,33 @@ import ckpt
 import tensor
 import array
 // `nn` and `autodiff` load without PyTorch, a GPU or a Python interpreter: `inspect --ops`
-// lists their operators, and the stdlib registry tests hold them to the modules'
-// declarations.
+// lists their operators, and the stdlib registry tests hold them to the modules' declarations
+// 
 import nn
 import autodiff
 // `tiles` needs no device to load: `inspect --ops` lists its operators, and the stdlib registry
-// tests hold them to the module's purity and signature declarations.
+//  tests hold them to the module's purity and signature declarations.
 import tiles
 // `pyplot` and `python` need no display, no external Python installation, no GPU — and now no
 // interpreter at all to be listed: `import` creates nothing and the embedded CPython is created at
-// the first operator call (design principles 3.1). Their operators' declarations are checked
-// against the registered ones.
+//  the first operator call (design principles 3.1; handover). Their operators' declarations are
+//  checked against the registered ones.
 import pyplot
 // `python` is the same interpreter, with the declarations of its six fixed operators; the
-// remaining five are computed signatures.
+//  remaining five are computed signatures.
 import python
 // `rewrite` is the native half of the rules library: its eight callable operators are declared
 // in `stdlib/rewrite.cml` (the three reserved groups the `rule`/`analysis` declarations compile
-// to have no callable name and stay exported by C++). Its only undeclared purity, `analysis`, is
-// declared effectful; before that this probe never listed it, so no check saw it.
+//  to have no callable name and stay exported by C++; handover). Its only undeclared purity,
+// `analysis`, is declared effectful; before that this probe never listed it, so no check saw it
+// 
 import rewrite
-// `onnx` loads without the ONNX runtime: `inspect --ops` lists its two operators, and the stdlib
-// registry tests hold them to the declaration and the computed signature.
+// `onnx` loads without the ONNX runtime: `inspect --ops` lists its two operators, and the
+//  stdlib registry tests hold them to the declaration and the computed signature.
 import onnx
-// `math`, `para` and `random` have no computed signature left, and `graph` keeps only the four
-// operators of a function value: the other names of those four modules are declared in
-// `stdlib/<m>.cml`, so `inspect --ops` lists the operators their declarations name.
+//  `math`, `para` and `random` have no computed signature left, and `graph` keeps
+// only the four operators of a function value: the other names of those four modules are
+// declared in `stdlib/<m>.cml`, so `inspect --ops` lists the operators their declarations name.
 
 func main(): int {
     return 0

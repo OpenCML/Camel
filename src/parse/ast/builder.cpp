@@ -844,9 +844,9 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
     const auto params = context->get<cst::ParentParams>();
     // The rule's applicability condition is part of its signature, so it is written between the
     // parameters and the body (`rule add_zero::<T>(x: T) when is_integer::<T>() { … }`, design
-    // principles 4.4). A trailing `when` is a syntax error and is reported by name
-    // (`SyntaxDiag::WhenAfterBody`); its expression is still read here, so the refusal that
-    // follows is about the placement and not about a missing condition.
+    //  principles 4.4). A trailing `when` is a syntax error and is
+    // reported by name (`SyntaxDiag::WhenAfterBody`); its expression is still read here, so the
+    // refusal that follows is about the placement and not about a missing condition.
     const auto whenClause = context->get<cst::WhenClause>();
     const auto when       = whenClause ? whenClause->expr() : context->expr();
     // A rule declares its type parameters the way a function does, after its name
@@ -1002,8 +1002,9 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
     // and needs neither `constant(node, sample)` nor the `match … case null` layers around it.
     node_ptr_t whenFunc;
     if (when) {
-        // The condition of this rule is being built: `node_of(c)` is read here and nowhere else,
-        // and the name of the rule is what a refusal names.
+        // The condition of this rule is being built: `node_of(c)` is read here and nowhere else
+        //  and the name of the rule is what
+        // a refusal names.
         ruleWhenName_ = name;
         const auto paired = params ? params->get<cst::PairedParams>() : cst::PairedParams();
         const auto constValueParam = [](cst::KeyParamPair pair) {
@@ -1032,12 +1033,12 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
             imports_.push_back(graphImport);
         }
         const Reference whenRef = qualifyRef(Reference(name + "__when"));
-        // The hidden node parameter of every `const` parameter (the condition takes one hidden
-        // node parameter per `const` parameter, which `node_of(c)` names at build time; no new
-        // type is introduced). The condition takes the rule's parameters first, in the order
-        // they are written, and then one node per `const` parameter, in the same order.
-        // `node_of(c)` becomes the name of that parameter, and the map is what refuses a name
-        // that is not one of this rule's own `const` parameters.
+        //  The hidden node parameter of every `const` parameter (the rule on
+        // `rule_when_const_node`: "条件函数按 `const` 形参追加隐藏的节点形参，构建期把
+        // `node_of(c)` 换成它；不引入新类型"). The condition takes the rule's parameters first,
+        // in the order they are written, and then one node per `const` parameter, in the same
+        // order. `node_of(c)` becomes the name of that parameter, and the map is what refuses a
+        // name that is not one of this rule's own `const` parameters.
         std::vector<std::string> whenNodeNames;
         if (params) {
             for (const auto pair : paired->all<cst::KeyParamPair>()) {
@@ -1126,8 +1127,9 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
     }
     // A rule whose head declares type parameters has no function values to give: its sides are
     // generic functions, and a generic function is instantiated where it is called. The value
-    // carries its templates instead, and the maker takes them under the id it registers them;
-    // the maker of such a rule is `__rule_generic`, whatever the arguments after `consts` are.
+    // carries its templates instead, and the maker takes them under the id it registers them
+    //  (the rule on generic-rule-instantiation); the maker of such a rule is
+    // `__rule_generic`, whatever the arguments after `consts` are.
     const bool genericHead = !typeParams.empty();
     if (genericHead) {
         makerName = "__rule_generic";
@@ -2257,8 +2259,8 @@ Value Builder::visitIndexValues(cst::IndexValues context) {
 
 /*
 pairedValues : keyValuePair (',' keyValuePair)* ;
-In a call's parentheses the list may also hold a positional argument written after a named one:
-it is a StrayPositional, and the call refuses it. The named arguments are all
+In a call's parentheses the list may also hold a positional argument written after a named one
+(handover H276): it is a StrayPositional, and the call refuses it. The named arguments are all
 this function returns.
 */
 Value Builder::visitPairedValues(cst::PairedValues context) {
@@ -2627,7 +2629,7 @@ staticForExpr
 staticForHeader
     : FOR '(' identDef (',' identDef)* ')' IN ('fields' typeExpr | 'indices' dataExpr)
     ;
-`indices` walks the positions of a tuple value; its operand is child 0 as an
+`indices` (H51 step 6) walks the positions of a tuple value; its operand is child 0 as an
 ordinary expression, where `fields` has a type there. The head may name up to three things --
 `fields`'s element is the triple (name, type, tags), every other element is one thing -- and
 whether the count fits is read from the element (`SemanticDiag::StaticHeadNameCount`).
@@ -2680,7 +2682,7 @@ staticLoopExpr
     ;
 The children of the node are described at StaticLoopLoad: a Repeated Data of the first values,
 the walked shape (a type for `fields`, a value for `indices` and for a sequence), and the body.
-The head's own production is `staticLoopHeader`: `for i in <序列>`, without the
+The head's own production (H462) is `staticLoopHeader`: `for i in <序列>`, without the
 parentheses `static for` still has.
 */
 Value Builder::visitStaticLoopExpr(cst::StaticLoopExpr context) {
@@ -3570,7 +3572,7 @@ Value Builder::visitLinkExpr(cst::LinkExpr context) {
             calleeNode    = rhsNode->at(0);
             namedDataList = rhsNode->at(2);
             // The merged call stands for the one on the right: a positional argument written
-            // after a name there is still the same refusal.
+            //  after a name there is still the same refusal.
             linkNode->loadAs<ReservedExprLoad>()->setPositionalAfterNamed(
                 rhsNode->loadAs<ReservedExprLoad>()->positionalAfterNamed());
             calleeNode->setParent(nullptr);
@@ -3668,12 +3670,13 @@ annoExpr
 */
 Value Builder::visitAnnoExpr(cst::AnnoExpr context) {
     ENTER("AnnoExpr");
-    // `node_of(c)` in a rule's condition: "条件函数按 `const` 形参追加隐藏的节点形参，构建期把 `node_of(c)`
-    // 换成它；不引入新类型" and "名字是 `node_of(c)`，只接受该规则（或 `fact` 的 `case`）自己的形参名". The call is read here,
-    // before the callee is built, and becomes the hidden node parameter the rule declaration
-    // appended for that `const` parameter. A name that is not a `const` parameter of this rule is
-    // refused here, by name, and `node_of` written where no such parameter exists is refused too,
-    // because the map is empty outside a rule condition.
+    //  `node_of(c)` in a rule's condition :
+    // "条件函数按 `const` 形参追加隐藏的节点形参，构建期把 `node_of(c)` 换成它；不引入新类型"
+    // and "名字是 `node_of(c)`，只接受该规则（或 `fact` 的 `case`）自己的形参名". The call is
+    // read here, before the callee is built, and becomes the hidden node parameter the rule
+    // declaration appended for that `const` parameter. A name that is not a `const` parameter of
+    // this rule is refused here, by name, and `node_of` written where no such parameter exists is
+    // refused too, because the map is empty outside a rule condition.
     if (context->expr().is(NK::RefData) && context->expr().text() == "node_of") {
         // The argument is read from the tree, not built: `node_of(c)` is not a call of a
         // function, and building `c` would put a node in the tree that nothing reads. It is one
@@ -3752,7 +3755,7 @@ Value Builder::visitAnnoExpr(cst::AnnoExpr context) {
                 node_ptr_t namedDataList = values.named;
                 if (values.positionalAfterNamed != nullptr) {
                     // `f(a: 1, 2)`: the call refuses it, at the argument out of place
-                    // (design principles 4.4).
+                    //  (design principles 4.4).
                     exprNode->loadAs<ReservedExprLoad>()->setPositionalAfterNamed(
                         nodeOrigin(values.positionalAfterNamed));
                 }
@@ -4029,7 +4032,7 @@ node_ptr_t Builder::makeStaticAccess(
 /*
 structData
     : '{' (pairedValues ','?)? '}' // no list comprehension because the struct is immutable
-    | '{' staticForExpr '}'        // a struct comprehension
+    | '{' staticForExpr '}'        // a struct comprehension (H51 step 4)
     ;
 */
 Value Builder::visitStructData(cst::StructData context) {
@@ -4104,7 +4107,7 @@ Value Builder::visitArrayData(cst::ArrayData context) {
 /*
 tupleData
     : '(' dataList? ','? ')'
-    | '(' staticForExpr ')'        // a tuple comprehension
+    | '(' staticForExpr ')'        // a tuple comprehension (H51 step 4)
     ;
 */
 Value Builder::visitTupleData(cst::TupleData context) {
@@ -4200,10 +4203,10 @@ std::string decodeFStringText(std::string_view text) {
     return out;
 }
 
-/// An interpolation is empty when it holds no token that is neither white space nor a comment (the
-/// author's criterion). White space is never a token, so this is: every token is Eof or a comment.
-/// `Command` (the ignored `#!` line) and `Error` are not comments, and either leaves the
-/// interpolation non-empty.
+/// An interpolation is empty when it holds no token that is neither white space nor a comment
+///  (the author's criterion). White space is never a token, so this is: every token
+/// is Eof or a comment. `Command` (the ignored `#!` line) and `Error` are not comments, and either
+/// leaves the interpolation non-empty.
 bool isEmptyInterpolation(const syn::TokenBuffer &tokens) {
     for (const syn::Token &token : tokens.tokens()) {
         switch (token.kind) {
@@ -4250,8 +4253,8 @@ size_t unicodeEscapeEnd(std::string_view text, size_t i) {
 
 /// The pattern text for `format`: the literal braces of a formatted string are doubled, so
 /// `format` prints them. A valid `\u{H…}` is a character escape, not format syntax: its braces are
-/// left alone for decodeEscapes, which doubles a brace the escape produces. An invalid one is kept
-/// as written, so its braces are format syntax and are doubled here.
+///  left alone for decodeEscapes, which doubles a brace the escape produces. An invalid one
+/// is kept as written, so its braces are format syntax and are doubled here.
 std::string escapeFormatBraces(std::string_view text) {
     std::string out;
     out.reserve(text.size());
@@ -4352,7 +4355,8 @@ Value Builder::visitFStringData(cst::Literal context) {
         syn::TokenBuffer tokens = syn::Lexer::tokenizeRange(source, part.exprBegin, part.exprEnd);
         // No token that is neither white space nor a comment is `${}`, `${ }`, `${:spec}` or
         // `${/*c*/}`: an interpolation without an expression is its own mistake, not a parse
-        // error inside an expression (item 1). `${/**/ 1}` has a token and is an expression.
+        //  error inside an expression (item 1). `${/**/ 1}` has a token and is
+        // an expression.
         if (isEmptyInterpolation(tokens)) {
             diags_->of(SyntaxDiag::EmptyInterpolation).at(interpolationRange(part)).commit();
             failed = true;
@@ -4367,7 +4371,7 @@ Value Builder::visitFStringData(cst::Literal context) {
         if (!sub.root() || sub.hasErrors()) {
             // The first ':' outside every bracket ends the expression. A lambda with a return
             // type has such a ':' at its top level, so its `=>` ended up in the specification
-            // and the expression is incomplete: say what the fix is (item 1).
+            //  and the expression is incomplete: say what the fix is (item 1).
             if (part.hasSpec) {
                 const std::string_view spec = whole.substr(
                     part.specBegin, static_cast<size_t>(part.specEnd) - part.specBegin);

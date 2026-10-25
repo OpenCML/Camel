@@ -6,13 +6,18 @@
  * (stdlib/array.cml declares them with `#op`, and each is the executor of the Camel function
  * beside it, which stays the semantics).
  *
- * A reduction sweeps the array and accumulates; a scalar binary combines two values. They
+ *  The rule docs/handover/reviews/questions-2026-10-23.md, section
+ * "array-kernel-executors（`array::sum`/`min`/`max` 的执行器）", chose exactly this and says what it
+ * is: "`array:sum`/`min`/`max` 是数组归约的实现原子，与 `math:min_bf` 一类标量二元运算不是同一个
+ * 东西——后者算两个数，前者沿一个数组做一遍归约（含 f64 累加、舍入一次，设计原则 7.7）。数组模块
+ * 自己的归约内核放在 `array` 的执行器组里，是 10.4 说的"热点定义带 `#impl` 内核"的标准形态，不是
+ * 重复。" A reduction sweeps the array and accumulates; a scalar binary combines two values. They
  * are different operations, and the executor of a reduction belongs to the module that declares it
- * (design principles 10.4). An `array` kernel does not name
- * `math`'s operator, and `sum` is not left without a kernel.
+ *  (design principles 10.4; the rule also refused the alternative of an `array` kernel naming
+ * `math`'s operator, and the alternative of leaving `sum` without a kernel).
  *
- * The comparison and the summation are written once: the `array:*` executors call the templates
- * already in `modules/math/minmax.h`, so
+ *  The comparison and the summation are written once, as the rule requires
+ * ("比较与求和的算式只写一份：`array:*` 的执行器调用 `modules/math/minmax.h` 里已有的模板"), so
  * "how to compare two bf16s" is stated in one place in C++ and the tensor kernels read the same
  * header.
  *
@@ -25,7 +30,7 @@
  * (`Builder::declaredRuleApplies`) and adopts the rule whose condition holds, so this file never
  * asks what an array's element type is. There is no `switch (elemTypeCode)` here and no default arm
  * to guess with: an element type no declaration's condition admits has no executor at all and keeps
- * the Camel body, which is the semantics (design principles 10.4: one operator, per-type
+ *  the Camel body, which is the semantics (design principles 10.4; one operator, per-type
  * executors). A `c64[]` sum is the case: no kernel declaration admits a complex element type, so
  * `sum` over it runs the body, whose complex arm is the only place that says what summing complex
  * numbers means.

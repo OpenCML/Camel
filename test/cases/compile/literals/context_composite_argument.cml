@@ -1,11 +1,11 @@
 /**
- * Handover : a composite literal written as an argument enters the parameter's type, as a
+ *  Handover : a composite literal written as an argument enters the parameter's type, as a
  * numeric literal does (design principles 5.1). `pick([1.0])` with `xs: f32[]` is an `f32[]`,
  * its elements converted once from the values written; a struct literal at a struct parameter,
  * an array of arrays, a method-style call (`x->f`), a `with` argument, an operator of the
  * program (generic included) and a generic parameter fixed by another argument are the same
  * rule. `[]` takes the element type too, as it does in a declaration. A tuple literal at a
- * tuple parameter is the same rule, element by element.
+ *  tuple parameter is the same rule, element by element.
  */
 module literal_context_composite_argument
 

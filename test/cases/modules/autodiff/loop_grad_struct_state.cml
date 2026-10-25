@@ -1,18 +1,21 @@
 /**
- * Autodiff sees through a struct loop state (item 2, design principles 9.9): the state is one
- * struct, the tape carries the same struct as its tangent, and the reverse pass reads the fields
- * it needs. Before this, the forward rewrite took the programme's own field read (`q.a`) for the
- * loop's state projection, and the graph crashed while being scheduled. The shapes: a struct
- * state the body also uses as a whole (`sumP(q)`), so the state is not split into its fields;
- * the same in a nested struct; a struct state with a field that has no tangent (`{a: float, n:
- * int}`, whose tangent is `{a: float}`); a one-field struct; and a state whose struct part stays
- * whole while its counter is a component of its own. Every gradient is 24.0: `a' = a·(1 + d)`
- * over d = 1, 2, 3 is `a·2·3·4`, and the tuple state `(a, b)` with the same computation gives
- * the same number (the reference). `mixedPart` adds `b·d` with `b = 1` each round, so its
- * gradient is 1. `box`/`boxRead` have an array field whose append is grown in place or copied
- * once the round must be taped, and give 2 and 6. `treeLoss` differentiates a struct parameter
- * tree (`{p: {a, b}, c}`), four rounds of `a' = a + d·sum(t)` over d = 1, 2: the gradient is
- * `{p: {a: 4, b: 4}, c: 4}`.
+ *  Autodiff sees through a struct loop state (item 2, design principles 9.9): the state is
+ * one struct, the tape carries the same struct as its tangent, and the reverse pass reads the
+ * fields it needs. Before this, the forward rewrite took the programme's own field read (`q.a`)
+ * for the loop's state projection, and the graph crashed while being scheduled.
+ *
+ * The shapes: a struct state the body also uses as a whole (`sumP(q)`), so the state is not
+ *  split into its fields (item 1); the same in a nested struct; a struct state with a field
+ * that has no tangent (`{a: float, n: int}`, whose tangent is `{a: float}`); a one-field struct;
+ * and a state whose struct part stays whole while its counter is a component of its own.
+ *
+ * Every gradient is 24.0: `a' = a·(1 + d)` over d = 1, 2, 3 is `a·2·3·4`, and the tuple state
+ * `(a, b)` with the same computation gives the same number (the reference). `mixedPart` adds
+ * `b·d` with `b = 1` each round, so its gradient is 1. `box`/`boxRead` have an array field
+ * whose append is grown in place or copied once the round must be taped, and give 2 and 6.
+ *
+ * `treeLoss` differentiates a struct parameter tree (`{p: {a, b}, c}`), four rounds of
+ * `a' = a + d·sum(t)` over d = 1, 2: the gradient is `{p: {a: 4, b: 4}, c: 4}`.
  */
 module loop_grad_struct_state
 
@@ -97,9 +100,9 @@ func tupleRef(): float {
     return a
 }
 
-// A struct state whose array field is appended: the field is a state of its own (item 1), and
-// the in-place append the builder chose falls back to the copying one so that the round can be
-// taped (design principles 9.9). `box` appends `w` three times, and the two values read after
+//  A struct state whose array field is appended: the field is a state of its own (item 1),
+// and the in-place append the builder chose falls back to the copying one so that the round can
+// be taped (design principles 9.9). `box` appends `w` three times, and the two values read after
 // the loop give 2. `boxRead` appends `xs[0] · 2` (a read of the state, so the copy form), and
 // the three appended 2s give 6.
 with <w: float>

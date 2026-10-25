@@ -1,16 +1,21 @@
 // Copyright (c) the OpenCML Organization
 // SPDX-License-Identifier: MIT
 
-// The cost of everything `camel` does before the program runs, read in each child's CPU time (user
-// + system) instead of the wall clock, and the cost of the declaration modules.
+//  The cost of everything `camel` does before the program runs, read in each child's
+// CPU time (user + system) instead of the wall clock, and the cost of the declaration modules
+// 
 //
-// The unit is CPU time, not the wall clock: a shared host's wall clock drifts with the load (which
-// is why walls of 40/45/100/90 ms read red at load 106-130), while a process's CPU time (user +
-// system) barely moves with it. So a crossed ceiling is a regression and never "the host was busy";
-// the 1/5/15-minute load average is printed beside the numbers as provenance, not as an excuse, and
-// the wall clock is not measured at all. The four ceilings are CPU-time ceilings: a quiet host's
-// median plus a margin, both recorded next to them with the samples they came from, and "red under
-// load is not a regression" needs no separate wording.
+//  The unit is the rule (docs/handover/reviews/questions-2026-10-23.md,
+// "declaration-cost-gate" (a)):
+//
+//   "改量 CPU 时间，不量墙钟。共享主机上的墙钟随负载漂移，这正是 40/45/100/90 ms 在负载 106–130
+//     下报红的原因；进程的 CPU 时间（用户态 + 内核态）基本不随负载变（该判定已经用 CPU 中位数）。
+//    四条命令的天花板改为按 CPU 时间、取安静主机中位数加余量；"负载下红不算回归"的口径因此不需要。"
+//
+// So a crossed ceiling is a regression and never "the host was busy"; the 1/5/15-minute load average
+// is printed beside the numbers as provenance, not as an excuse, and the wall clock is not measured
+// at all. The four ceilings are CPU-time ceilings: the quiet host's median plus a margin, both
+// recorded next to them with the samples they came from.
 //
 //   node test/tools/startup-cost.mjs                 measure and check the ceilings
 //   node test/tools/startup-cost.mjs --json          the numbers, without the gate
@@ -50,29 +55,29 @@
 //
 // The structural assertion is checked on every round: each (phase, module) among the pinned phases
 // appears exactly once, and a pair that appears twice names itself. The absolute total is the
-// declaration modules' parse + GCT + declare work of one run in milliseconds -- the number a gate
-// was proposed over once the share stopped moving with the declaration path. The 30%
+//  declaration modules' parse + GCT + declare work of one run in milliseconds -- the number
+//  ($5.3 of, which records the wall-clock ceilings and the 30% share this
+//  rule retired) proposed gating after the share stopped moving with the declaration path. The 30%
 // share of the compile work is deleted, not commented out: it was the load-invariant half of a pair
 // whose other half was the wall clock, and with CPU time there is nothing left for it to excuse.
 //
-// Why this measurement is CPU too, and not the wall time the report used to carry: the
-// wall clock of those same phases read 21 us per declaration on a quiet host and 75-104 us in
-// the windows of 2026-10-23 at load 106-112 -- three to five times the number for the same
-// declarations, because a wall clock follows whatever else the host is doing. A ceiling on it is
-// red on a busy day and green on a quiet one for the same binary, which is the wall-clock reading
-// that was retired; the CPU time of the same rounds read 27-29 us in every window measured at load
-// 68-112. So the compiler writes `cpu_ns` per phase beside `wall_ns` (src/utils/phase_timer.cpp),
-// and a platform with no process CPU clock makes this measurement report an error rather than fall
-// back to the wall clock.
+//  Why this measurement is CPU too, and not the wall time the report had carried since the wall
+//  clock of those same phases read 21 us per declaration on the quiet host and 75-104 us in the
+// windows of 2026-10-23 at load 106-112 -- three to five times the number for the same declarations,
+// because a wall clock follows whatever else the host is doing. A ceiling on it is red on a busy day
+//  and green on a quiet one for the same binary, which is the wall-clock reading that was retired; the CPU time
+// of the same rounds read 27-29 us in every window measured at load 68-112. So the compiler writes
+// `cpu_ns` per phase beside `wall_ns` (src/utils/phase_timer.cpp), and a platform with no process CPU
+// clock makes this measurement report an error rather than fall back to the wall clock.
 //
-// The declaration modules are read from the tree, not listed here: the nine of an earlier day were
-// pinned, thirteen more were migrated, and this tool kept pricing 182 declarations while this tree
+//  The declaration modules are read from the tree, not listed here: pinned the nine of
+// its day, thirteen more were migrated, and this tool kept pricing 182 declarations while this tree
 // compiled 291 -- and the share's denominator, which includes the modules the numerator no longer
 // covered, went on growing. The set comes from `scripts/stdlib-declarations.mjs`, which already
-// derives it from `stdlib/<module>.cml` + the C++ module's `BuiltinModule`; the next migration is
-// measured the day its `.cml` lands. The measurement also refuses to run when a derived module has
-// no phase in the report or no declaration in its `.cml`: those would price a subset and call it
-// the whole.
+//  derives it from `stdlib/<module>.cml` + the C++ module's `BuiltinModule`; the next
+// migration is measured the day its `.cml` lands. The measurement also refuses to run when a derived
+// module has no phase in the report or no declaration in its `.cml`: those would price a subset and
+// call it the whole.
 
 import { spawnSync } from 'child_process'
 import fs from 'fs'
@@ -92,7 +97,7 @@ const PINNED_PHASES = ['parse', 'gct', 'declare']
 
 // The modules whose `.cml` beside a C++ `.cmo` declares the operators of that module (design
 // principles 6.4): their declarations are the work `declaration.cost` measures. Derived from the
-// tree, so a new declaration module is counted without editing this tool.
+//  tree, so a new declaration module is counted without editing this tool.
 const DECLARATION_MODULES = declarationModules().map((module) => module.name)
 if (DECLARATION_MODULES.length === 0) {
     throw new Error('no declaration module under stdlib/: the measurement would price no declaration')
@@ -269,8 +274,8 @@ function pinnedPairs(report) {
 
 // Milliseconds of parse + GCT + declare per declaration and in total, from `rounds` runs of
 // `inspect --ops`: the compiler's own CPU accounting of the declaration modules, which the process
-// clock cannot resolve. The same rounds carry the same structural assertion, so a duplicate
-// compilation is named by the round that reported it.
+//  clock cannot resolve. The same rounds carry the structural assertion of the
+//  2026-10-23 rule, so a duplicate compilation is named by the round that reported it.
 function declarationCost(rounds) {
     const argv = [camelExe(), 'inspect', '--ops', REGISTRY_ALL]
     const env = { ...process.env, CAMEL_TIME_PHASES: '-' }
@@ -370,25 +375,24 @@ function declarationCost(rounds) {
 // reading is the median of the samples and the spread is min..max; a ceiling nobody can reproduce is
 // worse than none, so a crossed one has to be a regression a reader could reproduce on a quiet host.
 //
-// Measured on the Linux host (AMD EPYC 7343, 32 threads) on 2026-10-23, five samples of twelve
-// fresh processes each (sixty per command) in each of four windows (load 92.9, 75.2, 72.6 and
-// 68.7); the quiet column is the quiet window at load 21.4, which read the same CPU time:
+// Measured on the Linux host (AMD EPYC 7343, 32 threads) on 2026-10-23, five samples of twelve fresh
+// processes each (sixty per command) in each of four windows (load 92.9, 75.2, 72.6 and 68.7); the
+//  quiet column is the window at load 21.4, which read the same CPU time:
 //
 //   version          median 4.2-5.0 ms (samples 4.2-5.8)     quiet 4.89
 //   imports_nothing  median 7.5-10.0 ms (samples 7.5-10.8)    quiet 7.01
 //   inspect_ops      median 39.2-44.2 ms (samples 38.3-45.0)  quiet 37.97
 //   imports_all      median 40.8-42.5 ms (samples 37.5-43.3)  quiet 36.19
 //
-// CPU time is the unit: the wall clock drifts with a shared host's load, CPU time does not. The
-// wall-clock ceilings it replaces read 40/45/100/90 ms against the same work, and at load 106-130
-// they went red while `--version`, which compiles nothing, read 13.0 ms; the CPU median of that
-// same command moves between 4.2 and 5.4 ms from load 21 to load 215. Every ceiling here is about
-// two and a half times the quiet median of its command: enough for this host's sample spread and
-// for the ten to thirty percent that CPU time still moves with frequency and neighbours, and tight
-// enough that "the standard library is loaded before the program runs" -- the small commands' cost
-// jumping to the full-import cost, +30 ms -- crosses `version` and `imports_nothing` on the first
-// sample. It is a smoke alarm, not a percentage budget, exactly as the wall-clock ceilings it
-// replaces were.
+//  CPU time is the unit: the wall clock drifts with a shared host's load, CPU time does not. The wall-clock ceilings it replaces read
+// 40/45/100/90 ms against the same work, and at load 106-130 they went red while `--version`, which
+// compiles nothing, read 13.0 ms; the CPU median of that same command moves between 4.2 and 5.4 ms
+// from load 21 to load 215. Every ceiling here is about two and a half times the quiet median of its
+// command: enough for this host's sample spread and for the ten to thirty percent that CPU time still
+// moves with frequency and neighbours, and tight enough that "the standard library is loaded before
+// the program runs" -- the small commands' cost jumping to the full-import cost, +30 ms -- crosses
+// `version` and `imports_nothing` on the first sample. It is a smoke alarm, not a percentage budget,
+// exactly as the wall-clock ceilings it replaces were.
 const CASES = [
     {
         name: 'version',
@@ -412,19 +416,19 @@ const CASES = [
     },
 ]
 
-// Three times the ~20 us of one declaration: a smoke alarm for "a declaration now costs hundreds
-// of microseconds", not a percentage budget. The number does not move with the unit: it read
-// 27.5-28.5 us of CPU per declaration in every window measured at load 68-93, against 21.0 us of
-// wall on a quiet host, so it keeps the margin it was given.
+//  Three times the ~20 us of one declaration: a smoke alarm for "a declaration now costs
+// hundreds of microseconds", not a percentage budget. The number does not move with the unit the
+//  2026-10-23 rule changed: it read 27.5-28.5 us of CPU per declaration in every window measured at
+//  load 68-93, against 21.0 us of wall on a quiet host, so it keeps the margin it was given.
 const DECLARATION_CEILING_US = 60
-// The absolute total of the same work, which is the half of the pair that the per-declaration
+//  The absolute total of the same work, which is the half of the pair that the per-declaration
 // ceiling cannot see: 4.6 ms of declaration regression spread over this tree's 347 declarations is
-// only 13 us per declaration, far under 60, but it moves the total. The candidate was sized at 9 ms
-// against the 6.04 ms of a quiet window (1.5 times the quiet total, the regression named); this
-// tree's total read 9.6-9.9 ms in every window measured at load 68-93, and a quiet wall reading of
-// 21.0 us per declaration is 7.6 ms over 347 declarations, with this host's CPU readings some third
-// above a quiet wall reading. Twelve milliseconds is that calibration applied to this tree: the
-// quiet total plus the regression the line was chosen to name, 1.2 times the busiest median
+//  only 13 us per declaration, far under 60, but it moves the total. sized its candidate at 9 ms
+// against the 6.04 ms of its quiet window (1.5 times the quiet total, the regression named); this
+//  tree's total read 9.6-9.9 ms in every window measured at load 68-93, and the quiet wall reading
+// of 21.0 us per declaration is 7.6 ms over 347 declarations, with this host's CPU readings some
+// third above a quiet wall reading. Twelve milliseconds is that calibration applied to this tree:
+// the quiet total plus the regression the line was chosen to name, 1.2 times the busiest median
 // measured here and 1.6 times the quiet one. It prices this tree's declaration count, so it is
 // re-baselined when a module is migrated (the printed `declarations=` says by how much) -- the
 // per-declaration ceiling above is the one that does not move with the count.
@@ -523,8 +527,8 @@ function main() {
         )
         return 0
     }
-    // The host's load, in the same log as the medians, as provenance: CPU time barely moves with
-    // it, so it no longer has to separate a regression from a busy machine.
+    // The host's load, in the same log as the medians, as provenance: CPU time barely moves with it,
+    //  so it no longer has to separate a regression from a busy machine (the 2026-10-23 rule).
     console.log(
         `startup.cost metric=cpu_user_plus_system samples=${samples} runs_per_sample=${runsPerSample} ` +
             `host load=${os.loadavg().map((value) => value.toFixed(1)).join('/')}`

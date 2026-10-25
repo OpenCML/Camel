@@ -1,10 +1,10 @@
 /**
  * The stream mark `..` is a postfix mark of a type like `?` and `!`, read left to right with no
- * special case: `T..` is the stream of T, `T?..` the stream of a nullable T, `T!..` the stream
- * of a fallible T, `T..?` the possibly absent stream, `T[3]..` the stream of three-element
- * arrays and `T[..]..` the stream of open-rank arrays. `T[..]` keeps its own reading: an array
- * whose extents are a prefix, which is not a stream. An item of a tuple takes a stream; nothing
- * else is a special case.
+ *  special case : `T..` is the stream of T, `T?..` the stream
+ * of a nullable T, `T!..` the stream of a fallible T, `T..?` the possibly absent stream,
+ * `T[3]..` the stream of three-element arrays and `T[..]..` the stream of open-rank arrays.
+ * `T[..]` keeps its own reading: an array whose extents are a prefix, which is not a stream. An
+ * item of a tuple takes a stream; nothing else is a special case.
  */
 module stream_type_marks
 

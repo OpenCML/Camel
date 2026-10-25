@@ -1,6 +1,6 @@
 /**
  * The declaration of `abs` takes one ordinary argument: a second one is refused at the call,
- * and the overloads the message lists are the declarations'.
+ *  and the overloads the message lists are the declarations'.
  */
 module math_arity
 

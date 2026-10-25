@@ -1,5 +1,5 @@
 /**
- * A runtime tuple value is not a build-time tuple (step 6): its arity is not known when the
+ *  A runtime tuple value is not a build-time tuple.: its arity is not known when the
  * call is compiled, so `..t` is refused. Only a rest parameter's `ts`, a tuple comprehension or
  * a tuple literal can be spread.
  */

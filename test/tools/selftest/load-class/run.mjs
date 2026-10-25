@@ -11,15 +11,15 @@
 //     eight workers burning to a 400 ms deadline against a 1600 ms bound) and pass the same work
 //     with room (margin/room.plan.toml: the same work against 120 s, which no amount of load on a
 //     working machine turns into 30 s of the test's own CPU time). The reading is the work's, not
-//     the host's; a fixture that waited instead of burning would be a test with no work
+//      the host's; a fixture that waited instead of burning would be a test with no work
 //     against a bound with room, and would stop proving anything the moment the rule stopped
 //     reading the wall clock. A fixture that burned that work on one thread would be killed by its
 //     own liveness bound on a busy host before this rule could speak -- measured at 970-1040 ms of
 //     wall for 400 ms of CPU inside a -Jobs 8 gate against a 1000 ms bound -- so burn_parallel.mjs
 //     stops every worker at a deadline and the wall cannot decide this fixture;
 //   * a test that declares `cpu_budget_ms` is judged on its own CPU time instead of the wall
-//     clock (CPU time is the work's, not the host's): the same waiting that margin/tight.plan.toml
-//     fails passes when the
+//      clock (quoted in run-tests.mjs and
+//     docs/test-plans.md): the same waiting that margin/tight.plan.toml fails passes when the
 //     bound is CPU (cpu-budget/room.plan.toml), CPU work over the budget is failed and named
 //     (cpu-budget/over.plan.toml), and a test that stops working is still killed by its
 //     liveness bound (cpu-budget/liveness.plan.toml). A CPU budget with nothing on the other

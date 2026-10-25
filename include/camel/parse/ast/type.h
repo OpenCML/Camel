@@ -59,7 +59,8 @@ class NullableTypeLoad : public TypeLoad {
 
 /// The stream suffix `T..` (design principles 5.4): the elements of `T` that arrive one after
 /// another. One mark among the postfix marks, read left to right with `?` and `!`: `T?..` is
-/// the stream of `T?`, `T..?` is the possibly absent stream.
+///  the stream of `T?`, `T..?` is the possibly absent stream (the rule of
+/// 2026-10-24).
 class StreamTypeLoad : public TypeLoad {
   public:
     StreamTypeLoad() : TypeLoad(TypeType::Stream) {}

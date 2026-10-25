@@ -1,6 +1,6 @@
 /**
  * The declaration of `rand:randint` takes two ordinary arguments: a second one is missing, and
- * the overload the message lists is the declaration's (step 10).
+ *  the overload the message lists is the declaration's (step 10).
  */
 module random_arity
 

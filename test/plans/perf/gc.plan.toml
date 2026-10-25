@@ -51,7 +51,8 @@ assert(field('moved') > 0, `the moving collector moved nothing: ${line[0]}`)
 }
 """
 # The cost bound is this test's own CPU time (user + system), and the timeout below is its liveness
-# bound (docs/handover/reviews/questions-2026-10-23.md, "declaration-cost-gate" (a)):
+#  bound, by the rule (docs/handover/reviews/questions-2026-10-23.md,
+# "declaration-cost-gate" (a)):
 #
 #   "改量 CPU 时间，不量墙钟。共享主机上的墙钟随负载漂移 ... 进程的 CPU 时间（用户态 + 内核态）基本
 #    不随负载变"
@@ -108,7 +109,8 @@ assert(field('major') >= 10, `mark-sweep did not collect in every cycle: ${line[
 }
 """
 # 1.63x the 4.87 s CPU read above (the higher of 4.87 s and 4.77 s) rounded up: 1.64x the busiest.
-# The timeout below stays it is the liveness bound only.
+#  The timeout below stays; by the rule quoted on gc_timeit_cycles.generational it is the
+# liveness bound only.
 cpu_budget_ms = 8000
 timeout_ms = 300000
 
@@ -138,7 +140,7 @@ assert(field('minor_pause_max_ms') <= 200, `no long stop: ${line[0]}`)
 }
 """
 # 1.63x the 42.36 s CPU read above (the higher of 42.17 s and 42.36 s) rounded up: 1.65x the
-# busiest reading seen. The timeout below stays as the liveness bound (the rule quoted on
+#  busiest reading seen. The timeout below stays as the liveness bound (the rule quoted on
 # gc_timeit_cycles.generational above).
 cpu_budget_ms = 70000
 timeout_ms = 900000
@@ -167,9 +169,9 @@ assert(field('major') >= 200, `major collections ran throughout: ${line[0]}`)
 }
 """
 # 1.63x the 104.56 s CPU read above (the higher of 104.46 s and 104.56 s) rounded up: 1.64x the
-# busiest reading seen. This is the entry the wall clock reddened: see the table above. The
-# timeout below stays as the liveness bound (the rule quoted on gc_timeit_cycles.generational
-# above).
+# busiest reading seen. This is the entry the wall clock reddened: see the table above.
+#  The timeout below stays as the liveness bound (the rule quoted on
+# gc_timeit_cycles.generational above).
 cpu_budget_ms = 171000
 timeout_ms = 900000
 
@@ -201,8 +203,8 @@ assert(field('elder_live_mb') >= 1200 && field('elder_reserved_mb') <= 2304, `el
 }
 """
 # 1.63x the 5.44 s CPU read above (the higher of 5.44 s and 4.93 s) rounded up: 1.65x the busiest.
-# The timeout below stays as the liveness bound (the rule quoted on gc_timeit_cycles.generational
-# above).
+#  The timeout below stays as the liveness bound (the rule quoted on
+# gc_timeit_cycles.generational above).
 cpu_budget_ms = 9000
 timeout_ms = 900000
 
@@ -229,7 +231,7 @@ assert(field('elder_live_mb') >= 1400 && field('elder_reserved_mb') <= 2304, `el
 }
 """
 # 1.63x the 7.90 s CPU read above (the higher of 7.90 s and 7.22 s) rounded up: 1.65x the busiest.
-# The timeout below stays as the liveness bound (the rule quoted on gc_timeit_cycles.generational
-# above).
+#  The timeout below stays as the liveness bound (the rule quoted on
+# gc_timeit_cycles.generational above).
 cpu_budget_ms = 13000
 timeout_ms = 900000

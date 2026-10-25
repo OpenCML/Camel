@@ -1,10 +1,11 @@
 /**
- * The measurement's table: one line per graph of the program, with the graph's node count, its edge
- * count and the count of every operator the algebraic corpora write. The same corpus goes through
- * this pass on both sides of the comparison — the C++ algebraic pass (`std::opt::algebra
- * neutral_only=true`) and the rule library (`rules::simplify`) — so the two tables are the
- * measurement: a line that differs is a difference, and the line carries the nodes, the edges and
- * the operators of that graph on each side.
+ *  The measurement's table: one line per graph of the program, with the graph's node count, its
+ * edge count and the count of every operator the algebraic corpora write.
+ *
+ * The same corpus goes through this pass on both sides of the comparison — the C++ algebraic pass
+ * (`std::opt::algebra neutral_only=true`) and the rule library (`rules::simplify`) — so the two
+ * tables are the measurement: a line that differs is a difference, and the line carries the nodes,
+ * the edges and the operators of that graph on each side.
  */
 module measure
 

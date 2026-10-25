@@ -1,5 +1,5 @@
 /**
- * 3 manual probe: keyed random is pure and deterministic.
+ *  3 manual probe: keyed random is pure and deterministic.
  */
 module keyed_random
 

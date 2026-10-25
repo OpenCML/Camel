@@ -1,8 +1,8 @@
 /**
  * The result type of `tiles:available` is the declaration's `bool`, not a type the C++ resolver
  * decides per call: binding it to an `int` is refused with the value's type taken from the
- * declaration (step 10). With no ordinary parameter this is the type case a zero-argument
- * declaration can have.
+ *  declaration (step 10). With no ordinary parameter this is the type case a
+ * zero-argument declaration can have.
  */
 module tiles_result_type
 

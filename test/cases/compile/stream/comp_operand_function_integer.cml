@@ -1,6 +1,7 @@
 // `..` has two readings - two functions, or two integers - and a function with an integer is
 // neither, so the construct is refused with the reading it does not have as its own diagnostic:
-// the operands are named by their types, and neither of them is generic or unsettled (the
+//  the operands are named by their types, and neither of them is generic or unsettled (
+// is docs/handover/reviews/questions-2026-10-23.md, section generic-operands-of-composition: the
 // refusal for anything else than two functions or two integers stays CompOperandMismatch).
 module h428_comp_operand_function_integer
 

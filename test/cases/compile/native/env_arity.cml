@@ -1,6 +1,6 @@
 /**
  * The declaration of `env:get_env` takes one ordinary argument: a second one is refused at the
- * call, and the overload the message lists is the declaration's.
+ *  call, and the overload the message lists is the declaration's.
  */
 module env_arity
 

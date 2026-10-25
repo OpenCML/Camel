@@ -1,7 +1,8 @@
 /**
  * `onnx`'s declaration is what an importer sees: `supported_operators` takes no ordinary
  * argument and answers `string[]`, read from `stdlib/onnx.cml`, and the call reaches the C++
- * operator. The case is checked, not run: the onnx declaration cases are compile-only.
+ * operator. The case is checked, not run: the onnx declaration cases are compile-only (handover
+ * 
  */
 module onnx_declaration_import
 

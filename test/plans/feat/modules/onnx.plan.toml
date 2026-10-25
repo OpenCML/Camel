@@ -556,7 +556,7 @@ assert(model.outputs.join() === 'output', `unexpected outputs ${model.outputs}`)
 // One If per gate decision (three gates, four If nodes: the last cell's branch nests in one arm).
 // The exporter keeps the continuation after a branch instead of copying it into both arms when
 // the next gate's condition depends only on the model input, which is what it does now that the
-// specialization the optimizer made is not pinned in the program (H44c, the cache is not an
+//  specialization the optimizer made is not pinned in the program (the cache is not an
 // owner): the first branch is decided before the second, so the second If sits after it.
 const buf = fs.readFileSync(file)
 const mark = Buffer.from([0x22, 0x02, 0x49, 0x66])
@@ -643,7 +643,7 @@ timeout_ms = 60000
 
 [[tests]]
 name = "ort_train_step_adam"
-# Slow layer: measured 5.8 s in the full serial run.
+#  Slow layer: measured 5.8 s in the full serial run.
 tier = "slow"
 desc = "T3: the exported Adam step runs on ONNX Runtime with the optimizer state fed back; five steps match torch.optim.Adam and Camel's native nn:adam on the loss and every updated parameter (<= 1e-5)."
 kind = "behavior"
@@ -658,7 +658,7 @@ timeout_ms = 120000
 
 [[tests]]
 name = "resnetbn_train_step_export"
-# Slow layer: measured 9.2 s in the full serial run.
+#  Slow layer: measured 9.2 s in the full serial run.
 tier = "slow"
 desc = "T4: the literal ResNet-18 training step (20 training-mode batch_norms, running statistics as graph I/O) exports, passes onnx.checker(full_check), and matches Camel native execution on every one of the 123 outputs on ONNX Runtime (benchmarks/train.py --check-onnx)."
 kind = "behavior"
@@ -669,12 +669,13 @@ skip_unless = ["${python}", "-c", "import numpy, onnx, onnxruntime, psutil, torc
 expect_exit = 0
 expect_stdout_contains = ["onnx.checker ok", "onnx training-step check: PASS"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-# The cost bound is this case's own CPU time (user + system) and the timeout is its liveness bound
-# (docs/handover/reviews/questions-2026-10-23.md, "declaration-cost-gate" (a)), quoted in full on
-# resnet_gradient_smooth_vs_torch64 in test/plans/feat/modules/autodiff.plan.toml. The case is
-# Python driving 123 ONNX Runtime runs, so the reading sums ~5.8 threads and the test's own CPU
-# exceeds its wall clock -- the shape test/tools/run-tests.mjs names when it says such a test
-# "states its cost as a `cpu_budget_ms` if its total work is what it wants bounded".
+# The cost bound is this case's own CPU time (user + system) and the timeout is its liveness bound,
+#  by the rule (docs/handover/reviews/questions-2026-10-23.md,
+# "declaration-cost-gate" (a)), quoted in full on resnet_gradient_smooth_vs_torch64 in
+# test/plans/feat/modules/autodiff.plan.toml. The case is Python driving 123 ONNX Runtime runs, so
+# the reading sums ~5.8 threads and the test's own CPU exceeds its wall clock -- the shape
+# test/tools/run-tests.mjs names when it says such a test "states its cost as a `cpu_budget_ms` if
+# its total work is what it wants bounded".
 #
 # Measured with that reading, this plan in full at -Jobs 8 (the 1-minute load on this 32-thread host
 # read 120-129 across the window):
@@ -686,7 +687,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 #
 # An 8.8% spread in the CPU figure against the wall clock, which is the neighbours'. The budget is
 # 199 s: 1.63x the higher of the two readings it was set from (121.81 s), rounded up, the same
-# headroom as the four autodiff budgets taken by this rule, and 1.63x the busiest reading of the
+#  headroom as the four autodiff budgets taken by this rule, and 1.63x the busiest reading of the
 # three as well. It still fails a run whose work has grown by two thirds.
 #
 # What failed here was never the work: the 2026-10-24 05:22 run exited 0 with `exported in 2.55 s:
@@ -813,7 +814,7 @@ timeout_ms = 60000
 
 [[tests]]
 name = "pass_export_equals_export_model"
-# Slow layer: measured 15.9 s in the full serial run.
+#  Slow layer: measured 15.9 s in the full serial run.
 tier = "slow"
 desc = "For twenty-six programs (forward, training steps with sgd/Adam/batch-norm/conv/frozen parameters, an If, dynamic axes, and since the pass finishes simplification with the example shapes: the four branched training steps, the gated GRU forward and its training step, the dynamic-batch mean step, a local variable, a float array literal, gradients through mean and vector matmul, a loop that returns its state with a counter and the gradient of a loss over it) the model written by `std::macro std::opt onnx::export` and the one written by export_model both pass onnx.checker(full_check) and give bit-identical ONNX Runtime outputs on the same inputs (numpy array_equal)."
 kind = "behavior"
@@ -825,7 +826,7 @@ expect_exit = 0
 expect_stdout_contains = ["export_fold.cml: pass: onnx.checker full_check ok", "export_train_step.cml: pass: onnx.checker full_check ok", "onnx::export equiv: PASS"]
 expect_output_not_contains = ["array_equal False"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-# CPU time, by the same rule and for the same reason as resnetbn_train_step_export above: this
+#  CPU time, by the same rule and for the same reason as resnetbn_train_step_export above: this
 # case exports twenty-six programs and runs each on ONNX Runtime, so its CPU figure (user + system,
 # summed over its threads) is the work and the wall clock is the host's. Measured this plan in full
 # at -Jobs 8:
@@ -1674,7 +1675,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "export_tree_recursion"
-# Slow layer: measured 32.7 s in the full serial run.
+#  Slow layer: measured 32.7 s in the full serial run.
 tier = "slow"
 desc = "A function that calls itself twice on one path with a depth that depends on the model input (tree recursion) is refused by export_model with a diagnostic that names the two calls outside tail position, located at the second one. The refusal is a shape test now rather than a budget running out: export turns recursion into loops only for a linear recursion, so the case fails immediately instead of unrolling until the doubling graph outgrows one runtime graph."
 kind = "behavior"

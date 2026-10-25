@@ -1,6 +1,7 @@
 /**
  * A body-less declaration the module does not export is a private operator of the module: its
- * own bodies call it, and an importer cannot see the name, not even as `module::name`.
+ * own bodies call it, and an importer cannot see the name, not even as `module::name` (handover
+ *  rule 3).
  */
 module native_private
 

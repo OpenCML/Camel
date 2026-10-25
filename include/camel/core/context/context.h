@@ -98,7 +98,7 @@ class Context : public std::enable_shared_from_this<Context> {
     /// The modules loaded from a file, by the canonical path of that file. A module's import
     /// resolves in its own directory first (design principles 10.2), so two modules in different
     /// directories that import the same name are two different modules: the cache is keyed by
-    /// the file a name resolved to, not by the name.
+    ///  the file a name resolved to, not by the name.
     std::unordered_map<std::string, module_ptr_t> modulesByPath_;
     /// Every module loaded so far, in load order, once each: the iteration order of
     /// `allUserModules` and `importedModules` cannot lose one of two same-named modules.
@@ -181,11 +181,11 @@ class Context : public std::enable_shared_from_this<Context> {
     std::pair<std::string, bool>
     resolveModulePath(const std::string &moduleName, const std::string &importerDir);
     /** `findModuleUnder` for one search root: `base/<name>.cmo` or `base/<name>.*`, then the
-     * Same inside `base/<name>/`. Used for the directory of the importing module, before the
-     * global search paths. `moduleName` is a resolved module name (`IDENT ('.' IDENT)*`), not an
-     * import spelling and not a path: a spelling with an empty component (the relative prefix of
-     * `..lib`) names no file here, because dots become separators and a leading dot would mean
-     * the filesystem root. */
+     * same inside `base/<name>/`. Used for the directory of the importing module, before the
+     *  global search paths. `moduleName` is a resolved module name (`IDENT ('.' IDENT)*`),
+     * not an import spelling and not a path: a spelling with an empty component (the relative
+     * prefix of `..lib`) names no file here, because dots become separators and a leading dot
+     * would mean the filesystem root. */
     std::pair<std::string, bool>
     findModuleUnder(const std::string &baseDir, const std::string &moduleName);
     /// The directory of the importing module: the directory of the file it was loaded from, or
@@ -194,7 +194,7 @@ class Context : public std::enable_shared_from_this<Context> {
     std::string importerDirectory(const module::Module *importer) const;
     /// The module already loaded from the file `path`, if any: the import cache is keyed by the
     /// file a name resolved to, so two modules that resolved to different files are two modules
-    /// even when they have the same name.
+    ///  even when they have the same name.
     module_ptr_t moduleAtPath(const std::string &path) const;
     /// Register the module a name resolved to and finish loading it (a `.cmo` as a dynamic
     /// library). Null when there is none. `resolvedPath` is the file the lookup found, which for
@@ -425,17 +425,19 @@ class Context : public std::enable_shared_from_this<Context> {
     /**
      * The templates of the generic rules this context has compiled, and the instances made from
      * them: one table per context, indexed by the id a rule value keeps (`ruleId - 1`), so that a
-     * rule value holds an id rather than a pointer and an instance is made once. Opaque here: the
-     * table's type belongs to camel/compile/gir/rule_templates.h, which creates it on first use.
+     *  rule value holds an id rather than a pointer and an instance is made once (the rule of
+     * 2026-10-23 on `generic-rule-instantiation`). Opaque here: the table's type belongs to
+     * camel/compile/gir/rule_templates.h, which creates it on first use.
      */
     std::shared_ptr<void> &genericRuleTemplates() { return genericRuleTemplates_; }
 
     /**
      * The exported entities of the program compiled on this context: the names each module
      * declares for this program, with the graphs this program built (design principles 10.1;
-     * one table per program). The graph builder of the context's program shares this
+     *  one table per program, task). The graph builder of the context's program shares this
      * table; a program of its own (a pass compiled by compileAsProgram) has one of its own, so
      * the same module can be declared in both without either seeing the other's graphs.
+     *
      * Created on first use. Readers that are not the graph builder (the semantic analysis, an
      * operator's definition lookup) read it here.
      */
@@ -453,7 +455,7 @@ class Context : public std::enable_shared_from_this<Context> {
         const std::string &rawModuleName, const module::Module *importer = nullptr);
     /// Whether a file for the module is found on the search paths, whether or not it can be
     /// loaded: what tells a name with no module behind it from a module that is there and cannot
-    /// be used.
+    ///  be used.
     bool moduleFileExists(const std::string &moduleName);
 
   private:

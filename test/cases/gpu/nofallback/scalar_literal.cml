@@ -1,7 +1,7 @@
-/// A literal operand beside a tensor takes the tensor's element type (design principles 5.1),
-/// so `x * 2.0` is the f32 product and no f64 operand stays on the graph. A `#gpu` scope that
-/// scales, shifts or divides by a constant therefore compiles: the operator becomes a segment
-/// of the device program instead of being excluded as a `scalar_tensor_operand`.
+///  a literal operand beside a tensor takes the tensor's element type (design principles
+/// 5.1), so `x * 2.0` is the f32 product and no f64 operand stays on the graph. A `#gpu` scope
+/// that scales, shifts or divides by a constant therefore compiles: the operator becomes a
+/// segment of the device program instead of being excluded as a `scalar_tensor_operand`.
 module gpu_nofallback_scalar_literal
 
 import { Tensor, reshape, sum } from tensor

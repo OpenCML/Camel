@@ -1,7 +1,7 @@
 /**
- * A `constas` value need not be read by a type: the body may read it as a value. `n` is a
- * compile-time constant, so nothing differs at run time between the two instances `tag<3>`
- * and `tag<4>` except the constant the body reads.
+ *  A `constas` value need not be read by a type: the body may read it as a value (rule,
+ * 2026-10-22). `n` is a compile-time constant, so nothing differs at run time between the two
+ * instances `tag<3>` and `tag<4>` except the constant the body reads.
  */
 module constas_unused
 

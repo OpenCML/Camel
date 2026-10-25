@@ -2,14 +2,18 @@
 // SPDX-License-Identifier: MIT
 
 /*
- * The templates of a generic rule, and the instances made from them. A rule whose head declares
- * type parameters (`rule add_zero::<T>(x: T) { x + 0 => x }`) has no function values to put into a
- * rule: its sides are generic functions, and a generic function is instantiated where it is
- * called, not given a value (design principles 5.5). Such a rule carries its templates instead,
- * and the engine instantiates them where the rule matches: one instance per type tuple, kept for
- * the life of the context, so a second application at the same types reuses the first. This header
- * is the compile side's record of that. The rewrite module reads it through the context, which
- * holds the table opaquely; what a template is stays private to `src/compile/gir/builder.h`.
+ * The templates of a generic rule, and the instances made from them.
+ *
+ * A rule whose head declares type parameters (`rule add_zero::<T>(x: T) { x + 0 => x }`) has no
+ * function values to put into a rule: its sides are generic functions, and a generic function is
+ * instantiated where it is called, not given a value (design principles 5.5). Such a rule carries
+ * its templates instead, and the engine instantiates them where the rule matches: one instance per
+ * type tuple, kept for the life of the context, so a second application at the same types reuses
+ *  the first.
+ *
+ * This header is the compile side's record of that. The rewrite module reads it through the
+ * context, which holds the table opaquely; what a template is stays private to
+ * `src/compile/gir/builder.h`.
  */
 
 #pragma once
@@ -42,8 +46,8 @@ struct GenericRuleInstance {
     /// The tuple as the library writes it (`int`, `i32`, `Tensor<f32, [3]>`), for the reports.
     std::string typeText;
     /// False when no instance could be made, with `why` saying why. A failed instantiation is
-    /// silent: nothing of what the compiler said about the types it was tried with is
-    /// reported.
+    /// silent: nothing of what the compiler said about the types it was tried with is reported
+    /// 
     bool made = false;
     std::string why;
     /// The instance itself, when it was made: its two sides and its condition, in one program of
@@ -81,7 +85,7 @@ struct GenericRuleEntry {
     std::shared_ptr<void> compiled;
 };
 
-/// What a rule's condition says about one type tuple at compile time.
+///  What a rule's condition says about one type tuple at compile time.
 enum class RuleConditionAt {
     /// The condition holds for the tuple, whatever the values are: the tuple is an instance of
     /// the law. A condition that reads only types (`is_float::<T>()`) answers this.

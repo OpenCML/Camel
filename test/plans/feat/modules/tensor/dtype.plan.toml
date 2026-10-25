@@ -48,8 +48,8 @@ expect_stdout = "total=1.0 grad_sum=6.0\ngather=1.0 grad_sum=6.0 row0=3.0 row1=3
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
-# Bf16 and f16 are stored element types of their own: two bytes, and every kernel computes in f32
-# and rounds once. A conversion into them is written by the program, so it needs no numeric
+#  bf16 and f16 are stored element types of their own: two bytes, and every kernel computes
+# in f32 and rounds once. A conversion into them is written by the program, so it needs no numeric
 # permission: `change_precision` governs a computation the compiler moves to lower precision
 # (design principles 7.2-7.3).
 

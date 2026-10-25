@@ -1,5 +1,5 @@
-/// The entry imports a library, and the library's own `import dep` resolves through the same
-/// `-I` root.
+///  the entry imports a library, and the library's own `import dep` resolves through the
+/// same `-I` root.
 module include_library
 
 import lib_uses_include

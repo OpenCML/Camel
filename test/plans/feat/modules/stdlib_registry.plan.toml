@@ -39,7 +39,7 @@ for (const uri of notPure) {
 const pure = ['str:split', 'str:codepoints', 'math:sin_d', 'math:shl', 'statistics:median',
   're:test', 'json:encode', 'json:decode', 'hash:sha256_str', 'hash:sha256_bytes', 'this:zen', ':op/add_l', ':op/idx_str', ':struct/slice_arr', ':str/format',
   // They return a new array and leave their argument unchanged (design principles 11.3), one
-  // operator per element type (H393): the name carries the element type it takes.
+  //  operator per element type: the name carries the element type it takes.
   ':struct/append_arr', ':struct/extend_arr', 'array:sort_i', 'array:sort_l', 'array:sort_f', 'array:sort_d',
   'array:quick_sort_i', 'array:quick_sort_l', 'array:quick_sort_f', 'array:quick_sort_d',
   'array:insert_sort_i', 'array:insert_sort_l', 'array:insert_sort_f', 'array:insert_sort_d',
@@ -83,7 +83,7 @@ desc = "The declaration files (stdlib/*.cml and stdlib/signatures/*.cml) list ex
 kind = "behavior"
 tool = "node"
 case = "../../../../scripts/stdlib-reference.mjs"
-# `${camel}` is the compiler of the build under test, named as an argument.
+#  `${camel}` is the compiler of the build under test, named as an argument.
 args = ["${case}", "--verify-ops", "--camel", "${camel}"]
 expect_exit = 0
 expect_stdout_contains = ["the declarations agree with the"]
@@ -174,13 +174,13 @@ expect_stdout_contains = ["migrated modules stay migrated"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 60000
 
-# ---- A declaration file that failed to load is an error, not a shorter list ----
+#  ---- A declaration file that failed to load is an error, not a shorter list ----
 
 # `inspect --ops` is the tool people use to check what the modules register. A declaration module
-# that exists and does not load leaves its operators out of the listing; before the tool printed
-# the rest and exited 0 (that is how found its seven names only by counting them). The case makes
-# the declaration module in its scratch directory out of a real `.cmo` and points `CAMEL_STD_LIB`
-# at it.
+#  that exists and does not load leaves its operators out of the listing; before the tool
+#  printed the rest and exited 0 (that is how found its seven names only by counting them).
+# The case makes the declaration module in its scratch directory out of a real `.cmo` and points
+# `CAMEL_STD_LIB` at it.
 
 [[tests]]
 name = "registry.declaration_load_failure_is_an_error"

@@ -7,7 +7,7 @@ module effects_outside_sync
 
 // A statement whose result is unused, in a function whose body is not a `sync` block: the call
 // is not connected to the function's exit and is not in the graph. A `wait` on the call and a
-// prefix `sync func` used to be recorded beside this case; both are retired (item 5), and a
+//  prefix `sync func` used to be recorded beside this case; both are retired (item 5), and a
 // body that is not a sync block is what is left.
 func plain(x: int): int {
     println('DROPPED plain')

@@ -1,7 +1,7 @@
 /**
  * An integer where the declaration says `string`: the call is refused at the declaration's
  * type, and the message prints the declaration's own parameter name (`s`) — the one source is
- * `stdlib/str.cml`, not the C++ module (step 10).
+ *  `stdlib/str.cml`, not the C++ module (step 10).
  */
 module str_type
 

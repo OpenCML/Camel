@@ -91,9 +91,9 @@ await withServer(async (ls) => {
     m = edit(MAIN.replace('    let first = pair.0', '    let first = [sum][2:/*c*/]'))
     check(labels(await complete(m, 'c')).includes('sum'), 'completion after the colon of a slice')
 
-    // ---- completion: members of a module after `::` ---- A migrated module's names are
-    // declared in `stdlib/<m>.cml`; the signatures C++ computes stay in C++ (/). Both are
-    // exports of the one module, and both are offered.
+    // ---- completion: members of a module after `::` ----
+    // A migrated module's names are declared in `stdlib/<m>.cml`; the signatures C++ computes
+    //  stay in C++. Both are exports of the one module, and both are offered.
     const membersOf = async (imports, expr) => {
         m = edit(MAIN.replace('import { now } from time', `import { now } from time\n${imports}`)
             .replace('    return 0\n}', `    let r = ${expr}::/*c*/\n    return 0\n}`))
@@ -105,7 +105,7 @@ await withServer(async (ls) => {
         'with their signatures', items.find((i) => i.label === 'program_of'))
     // The two shapes side by side: `program_of` is computed in C++ (the type of a function value,
     // which a declaration cannot state), and `constant` is declared in graph.cml per sample type.
-    // `sqrt` was the computed half until turned all of `math` into declarations.
+    //  `sqrt` was the computed half until turned all of `math` into declarations.
     const programOf = items.find((i) => i.label === 'program_of')
     check(programOf !== undefined && programOf.detail.startsWith('(f: F)'),
         'a computed member keeps the signature C++ computes', programOf)

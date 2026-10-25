@@ -1,5 +1,5 @@
-/// A module that is not the entry. Its `import dep` is not next to it; `dep` lives only in
-/// the `-I` root, so the root has to join the global search for a library's imports too.
+///  a module that is not the entry. Its `import dep` is not next to it; `dep` lives only
+/// in the `-I` root, so the root has to join the global search for a library's imports too.
 module lib_uses_include
 
 import dep

@@ -1,7 +1,7 @@
 // `range(a, b, 0)` names no sequence at all: the step never moves, so no integers are the
-// sequence and no sequence is the array (design principles 4.2). The step is a constant here, so
-// the refusal is at the call, under the step the program wrote, and says both ways to write what
-// it meant.
+//  sequence and no sequence is the array (design principles 4.2; the rule of
+//  2026-10-24 on ` -interval-step-form`). The step is a constant here, so the refusal is at the
+// call, under the step the program wrote, and says both ways to write what it meant.
 module h426_range_step_zero
 
 func main(): int sync {

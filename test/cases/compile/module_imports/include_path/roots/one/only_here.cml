@@ -1,5 +1,5 @@
-/// Reachable only through `-I.../roots/one`; the entry directory has no such module and no
-/// module of this name is installed with Camel.
+///  reachable only through `-I.../roots/one`; the entry directory has no such module
+/// and no module of this name is installed with Camel.
 module only_here
 
 export func value(): int {

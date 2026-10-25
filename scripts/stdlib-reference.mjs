@@ -18,7 +18,7 @@
 // A run that renders no entry or compares no registered operator is refused (exit 1): agreement
 // over nothing is not a pass. A mode that needs a compiler is refused earlier (exit 2) when the
 // install it would measure is not this tree's build: the message names the install and its stamp,
-// and the run reads no operator from it (`scripts/install-stamp.mjs` holds the rule that
+//  and the run reads no operator from it (`scripts/install-stamp.mjs` holds the rule that
 // `scripts/release-gate.mjs` applies too). `--camel <path>` names the compiler of a run.
 //
 // stdlib/signatures/<module>.cml declares the operators a C++ module exports (globals.cml: the
@@ -35,8 +35,8 @@
 //   export func name(x: X): R                       overloads that differ by type)
 //
 // A declaration never carries a body. The old form wrote the URI in one — `func name(...): R {
-// return '<uri>' }` — and it is gone: a `func` with a body is an ordinary function, and
-// --verify-ops refuses a signature file whose entry still has one.
+//  return '<uri>' }` — and it is gone: a `func` with a body is an ordinary function,
+// and --verify-ops refuses a signature file whose entry still has one.
 //
 // A value a module exports (`math::pi`; design principles 10.1) needs neither @pure nor a URI
 // (it is not an operator). A declaration module cannot write it — a `let` needs an initializer —
@@ -54,9 +54,9 @@
 //
 // When a declaration cannot express an operator — its result type comes from a type rule, or
 // from a type argument — that operator stays in the C++ resolver and keeps its entry in
-// stdlib/signatures/<module>.cml, for reference only (json: `encode`, `decode_as`). The
-// module's `computed` field names that file; the reference reads the declaration file and
-// the computed entries together, and --verify-ops checks both.
+// stdlib/signatures/<module>.cml, for reference only (json: `encode`, `decode_as`; handover
+//  The module's `computed` field names that file; the reference reads the declaration
+// file and the computed entries together, and --verify-ops checks both.
 //
 // --verify-ops runs `camel inspect --ops` on a program that imports every module and compares,
 // per module: every registered operator (name, parameter counts) has a declaration whose URI
@@ -91,7 +91,7 @@ const MODULES = [
         name: 'str',
         title: '`str`: strings',
         kind: 'cpp',
-        // The declarations, not a signature file: they are what the module compiles.
+        //  The declarations, not a signature file: they are what the module compiles.
         source: 'str.cml',
         declaration: true,
     },
@@ -99,7 +99,7 @@ const MODULES = [
         name: 'bytes',
         title: '`bytes`: immutable binary values and UTF-8 conversion',
         kind: 'cpp',
-        // The declarations, not a signature file: they are what the module compiles.
+        //  The declarations, not a signature file: they are what the module compiles.
         source: 'bytes.cml',
         declaration: true,
     },
@@ -117,7 +117,7 @@ const MODULES = [
         title: '`tensor`: multi-dimensional numeric arrays',
         kind: 'cpp',
         // The fixed signatures are declared; the ones whose element type or shape follows an
-        // argument stay in C++ and are recorded as computed.
+        //  argument stay in C++ and are recorded as computed.
         source: 'tensor.cml',
         declaration: true,
         computed: 'signatures/tensor.cml',
@@ -143,7 +143,7 @@ const MODULES = [
         title: '`math`: numbers and bits',
         kind: 'cpp',
         // The declarations only: the three names whose result type C++ computed from their
-        // argument (sqrt; the mixed-integer shifts) are written out per spelling.
+        //  argument (sqrt; the mixed-integer shifts) are written out per spelling.
         source: 'math.cml',
         declaration: true,
     },
@@ -151,7 +151,7 @@ const MODULES = [
         name: 'statistics',
         title: '`statistics`',
         kind: 'cpp',
-        // The declarations, not a signature file: they are what the module compiles.
+        //  The declarations, not a signature file: they are what the module compiles.
         source: 'statistics.cml',
         declaration: true,
     },
@@ -159,9 +159,9 @@ const MODULES = [
         name: 'random',
         title: '`random`',
         kind: 'cpp',
-        // The declarations, not a signature file: they are what the module compiles. The three
-        // operators whose result type comes from their array argument are generic declarations
-        // too.
+        //  The declarations, not a signature file: they are what the module compiles. The
+        // three operators whose result type comes from their array argument are generic
+        //  declarations too.
         source: 'random.cml',
         declaration: true,
     },
@@ -169,7 +169,7 @@ const MODULES = [
         name: 'time',
         title: '`time`',
         kind: 'cpp',
-        // The declarations, not a signature file: they are what the module compiles.
+        //  The declarations, not a signature file: they are what the module compiles.
         source: 'time.cml',
         declaration: true,
     },
@@ -177,7 +177,7 @@ const MODULES = [
         name: 'fs',
         title: '`fs`: files',
         kind: 'cpp',
-        // The declarations, not a signature file: they are what the module compiles.
+        //  The declarations, not a signature file: they are what the module compiles.
         source: 'fs.cml',
         declaration: true,
     },
@@ -185,7 +185,7 @@ const MODULES = [
         name: 'io',
         title: '`io`: terminal input',
         kind: 'cpp',
-        // The declarations, not a signature file: they are what the module compiles.
+        //  The declarations, not a signature file: they are what the module compiles.
         source: 'io.cml',
         declaration: true,
     },
@@ -193,8 +193,8 @@ const MODULES = [
         name: 'process',
         title: '`process`: the process and the machine',
         kind: 'cpp',
-        // The declarations, not a signature file: they are what the module compiles.
-        // `exit` is not a group of this module and is not declared here.
+        //  The declarations, not a signature file: they are what the module compiles (
+        //  `exit` is not a group of this module and is not declared here.
         source: 'process.cml',
         declaration: true,
     },
@@ -202,7 +202,8 @@ const MODULES = [
         name: 'env',
         title: '`env`: environment',
         kind: 'cpp',
-        // The declarations, not a signature file: they are what the module compiles.
+        //  The declarations, not a signature file: they are what the module compiles (
+        // 
         source: 'env.cml',
         declaration: true,
     },
@@ -213,8 +214,8 @@ const MODULES = [
         // The declarations, in stdlib/json.cml. `encode` and `decode_as` are computed
         // signatures — the value's type must have a JSON form, and the result type is the type
         // of the shape argument — so a declaration cannot express them; their entries, and the
-        // check against the registered operators, come from the signature file that names
-        // them.
+        // check against the registered operators, come from the signature file that names them
+        // 
         source: 'json.cml',
         declaration: true,
         computed: 'signatures/json.cml',
@@ -223,8 +224,8 @@ const MODULES = [
         name: 'hash',
         title: '`hash`',
         kind: 'cpp',
-        // The declarations, not a signature file: they are what the module compiles.
-        // `sha256` is two declarations with two `#op` URIs.
+        //  The declarations, not a signature file: they are what the module compiles (
+        //  `sha256` is two declarations with two `#op` URIs.
         source: 'hash.cml',
         declaration: true,
     },
@@ -232,7 +233,7 @@ const MODULES = [
         name: 're',
         title: '`re`: regular expressions',
         kind: 'cpp',
-        // The declarations, not a signature file: they are what the module compiles.
+        //  The declarations, not a signature file: they are what the module compiles.
         source: 're.cml',
         declaration: true,
     },
@@ -241,7 +242,7 @@ const MODULES = [
         title: '`para`: unordered iteration',
         kind: 'cpp',
         // The declarations of `rendezvous` and of the two names that take the element type of
-        // their array argument.
+        //  their array argument.
         source: 'para.cml',
         declaration: true,
     },
@@ -249,7 +250,7 @@ const MODULES = [
         name: 'this',
         title: '`this`',
         kind: 'cpp',
-        // The declaration, not a signature file: it is what the module compiles.
+        //  The declaration, not a signature file: it is what the module compiles.
         source: 'this.cml',
         declaration: true,
     },
@@ -259,8 +260,8 @@ const MODULES = [
         kind: 'cpp',
         // The declarations, and, in the signature file, the reference entries of the four
         // operators whose type C++ computes (a function value's type). `constant` and
-        // `add_constant` take the type of their sample and are written out per sample
-        // type.
+        // `add_constant` take the type of their sample and are written out per sample type
+        // 
         source: 'graph.cml',
         declaration: true,
         computed: 'signatures/graph.cml',
@@ -269,9 +270,9 @@ const MODULES = [
         name: 'rewrite',
         title: '`rewrite`: rules applied to a program',
         kind: 'cpp',
-        // The declarations, not a signature file: they are what the module compiles. The three
-        // reserved groups the `rule`/`analysis` declarations compile to have no callable Camel
-        // name, so they are neither declared nor listed.
+        // The declarations, not a signature file: they are what the module compiles (handover
+        //  The three reserved groups the `rule`/`analysis` declarations compile to have no
+        // callable Camel name, so they are neither declared nor listed.
         source: 'rewrite.cml',
         declaration: true,
     },
@@ -282,7 +283,7 @@ const MODULES = [
         // `available` and `device` are declared in stdlib/tiles.cml; the ten operators whose
         // signature C++ computes from an argument (the function value's parameter list and result,
         // or the leaves a transfer wraps in `Device<...>`) keep their reference entries in the
-        // signature file named by `computed:`.
+        //  signature file named by `computed:`.
         source: 'tiles.cml',
         declaration: true,
         computed: 'signatures/tiles.cml',
@@ -293,7 +294,7 @@ const MODULES = [
         kind: 'cpp',
         // The one operator is declared in stdlib/pyplot.cml; the four element types and the two
         // arities are written out because a declaration cannot say "an array of one of four
-        // numeric types" and cannot write an optional parameter.
+        //  numeric types" and cannot write an optional parameter.
         source: 'pyplot.cml',
         declaration: true,
     },
@@ -304,7 +305,7 @@ const MODULES = [
         // Six fixed signatures are declared in stdlib/python.cml; `py_call` (two URIs),
         // `py_print`/`py_println` are variadic and `py_wrap`/`py_unwrap` move a type through the
         // module type `PyObject<T>`, so their reference entries live in the signature file named
-        // by `computed:`.
+        //  by `computed:`.
         source: 'python.cml',
         declaration: true,
         computed: 'signatures/python.cml',
@@ -316,7 +317,7 @@ const MODULES = [
         // `save_params` is declared in stdlib/nn.cml; the eighteen operators whose signature C++
         // computes from the tensors they receive (the convolution, pooling, batch-normalization,
         // embedding and loss operators, and the three optimizers) keep their reference entries in
-        // the signature file named by `computed:`.
+        //  the signature file named by `computed:`.
         source: 'nn.cml',
         declaration: true,
         computed: 'signatures/nn.cml',
@@ -335,7 +336,7 @@ const MODULES = [
         kind: 'cpp',
         // `stop_gradient` is declared in stdlib/autodiff.cml; `grad` and `with_grad` answer a
         // function built from their argument's type, so their entries are in the signature file
-        // named by `computed:`.
+        //  named by `computed:`.
         source: 'autodiff.cml',
         declaration: true,
         computed: 'signatures/autodiff.cml',
@@ -345,7 +346,7 @@ const MODULES = [
         title: '`sim`: Monte Carlo simulation',
         kind: 'cpp',
         // Both operators have fixed signatures and are declared in stdlib/sim.cml; nothing is
-        // computed, so the module has no signature file.
+        //  computed, so the module has no signature file.
         source: 'sim.cml',
         declaration: true,
     },
@@ -355,7 +356,7 @@ const MODULES = [
         kind: 'cpp',
         // `supported_operators` is declared in stdlib/onnx.cml; `export_model` takes a function
         // of any parameter list and an example that must be its parameter tree, so its reference
-        // entry is in the signature file named by `computed:`.
+        //  entry is in the signature file named by `computed:`.
         source: 'onnx.cml',
         declaration: true,
         computed: 'signatures/onnx.cml',
@@ -401,7 +402,7 @@ function splitParams(text) {
 // -1 for a list with a variadic parameter, as `camel inspect --ops` reports it. A parameter can
 // be variadic without being spelled `...name`: an optional parameter collected into a variadic
 // tuple, `args?: (...PyObject) | PyObject[]` (`py_call`'s keyword URI), accepts any number of
-// arguments too, and the C++ resolver reports its count as -1.
+//  arguments too, and the C++ resolver reports its count as -1.
 function countParams(params) {
     return params.some((p) => p.startsWith('...') || /\(\s*\.\.\./.test(p)) ? -1 : params.length
 }
@@ -497,7 +498,7 @@ function declarationBody(rest, lines, lineIndex) {
 
 // The guard: a signature file is reference material for declarations, so none of its entries may
 // carry a body. Without this check the parser would silently ignore the body and the reference
-// page would still agree with the registered operators.
+//  page would still agree with the registered operators.
 function signatureBodyProblems() {
     const problems = []
     for (const name of fs.readdirSync(SIGNATURE_DIR).sort()) {
@@ -560,9 +561,9 @@ function readDeclarations(file, module) {
             continue
         }
         // An operator whose result type C++ computes from its arguments cannot be a declaration
-        // (a `DynamicFuncTypeResolver` stays the one source of its type). The declaration file
-        // records its reference entry in a comment, with the doc comment above it, so the
-        // reference page still documents it without inventing a declaration.
+        //  (a `DynamicFuncTypeResolver` stays the one source of its type; handover). The
+        // declaration file records its reference entry in a comment, with the doc comment above
+        // it, so the reference page still documents it without inventing a declaration.
         const dynamicMatch =
             module.kind === 'cpp' && trimmed.match(/^\/\/ dynamic func (\w+)\(/)
         if (dynamicMatch) {
@@ -603,8 +604,8 @@ function readDeclarations(file, module) {
         }
         // A C++ module's value has no declaration to write: the declaration file records its
         // reference entry in a comment, and the C++ module stays the one source of the value
-        // (math's pi, e, inf and nan). It carries the same doc comment as an operator, above
-        // the `// value` line.
+        //  (math's pi, e, inf and nan; handover). It carries the same doc comment as an
+        // operator, above the `// value` line.
         const docValue = module.kind === 'cpp' && trimmed.match(/^\/\/ value (\w+)\s*:\s*(.+)$/)
         if (docValue) {
             const entry = {
@@ -673,8 +674,8 @@ function readDeclarations(file, module) {
         // builder does too (it reads the comment above the declaration's first token, and the tag
         // is that token: src/parse/ast/builder.cpp, docOf). A `#op<'module:function'>` names the
         // operator a C++ declaration implements when it does not follow the convention (design
-        // principles 6.4; step 1). This used to end the comment for a module written in Camel,
-        // which lost the description of every such declaration from the page.
+        //  principles 6.4, step 1). This used to end the comment for a module written
+        // in Camel, which lost the description of every such declaration from the page.
         if (trimmed.startsWith('#')) {
             const tagged = trimmed.match(/^#\[?op<['"]([^'"]+)['"]>/)
             if (tagged) {
@@ -690,7 +691,7 @@ function readDeclarations(file, module) {
     // Camel name to list: `inspect --ops` hides those names, `--verify-ops` filters them out, and
     // the page introduces the operators of a type in the module's text. Reading the declaration as
     // an entry called `operator ==` would ask --verify-ops for an operator of that name, which
-    // does not exist.
+    //  does not exist.
     if (/^export\s+func\s+operator\b/.test(trimmed)) {
         doc = []
         withText = ''
@@ -904,10 +905,11 @@ out.push('Not in this reference: the profiler (`perf`).')
         }
         // Entries are grouped by section, in the order the `// ---- name ----` lines declare, and
         // a section may be written in both files of the module (its computed signatures and its
-        // declarations): `tensor` writes `binary form` in both, and the two read as one section.
-        // Ordering by the declarations rather than by the first entry lets a computed file keep
-        // the module's order even when only a few of its sections hold a computed name. Within a
-        // section, overloads written one after another under one comment are one entry.
+        // declarations): `tensor` writes `binary form` in both, and the two read as one section
+        //  Ordering by the declarations rather than by the first entry lets a
+        // computed file keep the module's order even when only a few of its sections hold a
+        //  computed name. Within a section, overloads written one after another
+        // under one comment are one entry.
         const sectionOrder = []
         const seenSections = new Set()
         const pushSection = (key) => {
@@ -1427,8 +1429,8 @@ function countsAgree(declared, registered) {
 //
 // The name at the head of a parameter (`key: K`, `...rest: U...`, `args?: (...)`, `var n: int`) is
 // what a named argument binds to, so the names on the two sides have to be the same ones at the
-// same positions -- the counts alone agree while the names drift (`--verify-ops` compares the
-// whole signature, not only the number of parameters).
+//  same positions -- the counts alone agree while the names drift (
+// 2026-10-24: `--verify-ops` compares the whole signature, not only the number of parameters).
 
 const BRACKETS = { '(': ')', '[': ']', '{': '}', '<': '>' }
 
@@ -1597,7 +1599,7 @@ function verifyOps() {
         }
         // The module that declares its signatures one by one and publishes them under a type
         // namespace publishes every declared name there: `Tensor.shape` is not a second
-        // signature, so it costs nothing to require it.
+        //  signature, so it costs nothing to require it.
         if (module.declaration && aliases.length > 0) {
             for (const name of declaredNames) {
                 if (!aliases.some((alias) => alias.name.split('::').pop() === name)) {
@@ -1758,9 +1760,9 @@ if (mode === '--write' || mode === '--verify-doc') {
         console.log('docs/stdlib-reference.md is up to date')
     }
 } else if (mode === '--audit') {
-    // What each module's documentation has, and what it does not: the table this reference is
-    // about, from the same parser the reference is generated with. `--compile` also compiles
-    // every example (needs a built compiler).
+    //  What each module's documentation has, and what it does not: the table the task asks
+    // for, from the same parser the reference is generated with. `--compile` also compiles every
+    // example (needs a built compiler).
     const compile = flags.includes('--compile')
     const rows = []
     let totals = { names: 0, entries: 0, noDoc: 0, noExample: 0, examples: 0, fragments: 0, compileBroken: 0 }

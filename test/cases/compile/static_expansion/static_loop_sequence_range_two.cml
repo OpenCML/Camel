@@ -1,8 +1,8 @@
 /**
- * The two-argument `range(a, b)` is deleted (design principles 4.2): a step of one is written
- * `a..b` and nothing else, one thing one spelling. The sequence of a `static loop` is no
- * exception -- the call is refused where it is written, pointing at the name, before the
- * sequence is worked out.
+ *  The two-argument `range(a, b)` is deleted (design principles 4.2; the rule on
+ *  ` -generator-and-composition`): a step of one is written `a..b` and nothing else, one thing
+ * one spelling. The sequence of a `static loop` is no exception -- the call is refused where it
+ * is written, pointing at the name, before the sequence is worked out.
  */
 module static_loop_sequence_range_two
 

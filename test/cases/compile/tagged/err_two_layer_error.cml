@@ -1,6 +1,6 @@
 /**
  * `int!?` is nullable(fallible(int)): the outer form is the null, so `case error e` is not a
- * case of this `match` (design principles 3.9).
+ *  case of this `match` (design principles 3.9).
  */
 module err_two_layer_error
 

@@ -128,12 +128,12 @@ class Tree {
     node_ptr_t makeStaticFor(
         const std::string &valueName, const std::string &typeName, const std::string &tagsName,
         bool byIndices = false);
-    /// `static loop s1 = a1,..., sk = ak for i in <序列> do body`: `in fields T` (children: TYPE,
-    /// the k first values, body), `in indices ts` (children: the operand value, the k first
+    /// `static loop s1 = a1, ..., sk = ak for i in <序列> do body`: `in fields T` (children:
+    /// TYPE, the k first values, body), `in indices ts` (children: the operand value, the k first
     /// values, body), or a written sequence (the same children as `indices`; `bySequence`).
     /// `state` are the names of the state; `valueName` is `n`, `j` or the element's name,
     /// `typeName` is `F` and `tagsName` is the third name of `(n, F, tags)`, all bound only while
-    /// the body is built. `byIndices` and `bySequence` are never both true.
+    ///  the body is built. `byIndices` and `bySequence` are never both true.
     node_ptr_t makeStaticLoop(
         const std::vector<std::string> &state, const std::string &valueName,
         const std::string &typeName, const std::string &tagsName, bool byIndices = false,
@@ -143,7 +143,7 @@ class Tree {
     /// `..e` (child: the operand): the elements of the compile-time tuple are the arguments.
     node_ptr_t makeSpreadArg();
     /// A comprehension (child: the `static for` that generates it): `isStruct` for
-    /// `{ static for... }`, false for `( static for... )` (step 4).
+    ///  `{ static for... }`, false for `(static for...)`.
     node_ptr_t makeComprehension(bool isStruct);
     /// `T { static for ... }` (children: the generator, then the type node naming `T`): the
     /// rounds give the fields' values, `T` gives their names and the kind.
@@ -260,12 +260,12 @@ class Tree {
     void setHeadTypeParams(const Node *func, std::vector<std::string> names);
     const std::vector<std::string> *headTypeParamsOf(const Node *func) const;
 
-    /// The default of a parameter (design principles 4.4, /), as written: the lowered default
-    /// expression and where it is written. A default is not a child of the FUNC and is not part
-    /// of the function's type: it is evaluated once, where the declaration is, and the value is
-    /// filled into each call that leaves the parameter out. Null `expr` stands for a parameter
-    /// without a default; the vector is aligned with the parameters it belongs to, `with`
-    /// parameters or ordinary ones.
+    ///  The default of a parameter (design principles 4.4), as written: the
+    /// lowered default expression and where it is written. A default is not a child of the FUNC
+    /// and is not part of the function's type: it is evaluated once, where the declaration is,
+    /// and the value is filled into each call that leaves the parameter out. Null `expr` stands
+    /// for a parameter without a default; the vector is aligned with the parameters it belongs
+    /// to, `with` parameters or ordinary ones.
     struct ParameterDefault {
         node_ptr_t expr                   = nullptr;
         camel::source::origin_id_t origin = camel::source::kInvalidOriginId;

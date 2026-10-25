@@ -1,6 +1,6 @@
 /**
- * The verdict table `check` answers (slice S0 of the verdict-surface rule, and of the
- * licence-to-precondition rule).
+ *  The verdict table `check` answers (slice S0; the rules on
+ * `verification-verdict-surface` and on `verification-licence-to-precondition`).
  *
  * Three things this case measures, none of which the check could say before:
  *
@@ -37,9 +37,10 @@ rule differ(x: int) { x * 2 => x + 2 }
 #requires<nondeterministic>
 rule anywhere(x: float, const c: float) { x * c => c * x }
 
-/// The assumptions the rule names are written out: with `no_infs`, `no_nans` and `no_signed_zeros`
-/// asked for, the non-finite values whose behaviour the real model does not have are outside the
-/// domain, and the rule's two halves are the finite equality and the IEEE equality that is left.
+///  The assumptions the rule names are written out: with `no_infs`, `no_nans` and
+/// `no_signed_zeros` asked for, the non-finite values whose behaviour the real model does not have
+/// are outside the domain, and the rule's two halves are the finite equality and the IEEE equality
+/// that is left.
 #requires<reassociate, no_infs, no_nans, no_signed_zeros>
 rule fold(x: float, const c1: float, const c2: float) { x * c1 + x * c2 => x * (c1 + c2) }
 

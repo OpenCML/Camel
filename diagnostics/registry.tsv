@@ -24,13 +24,13 @@ syntax	AngleCloseAfterSpace	0x00000D	error	This '>' follows a space and is read 
 syntax	LineStartsWithOperator	0x00000E	error	A statement cannot start with '{0}': the line break before it ended the statement of the line above.	A line break ends a statement unless the line is visibly unfinished. To continue an expression on the next line, end the line with the operator ('a +', then 'b'). An operator that can only be binary ('*', '->', '&&', '==', ...) also continues the expression when it starts the next line.	edit
 syntax	EmptyInterpolation	0x00000F	error	An interpolation has no expression to format.	Write an expression between '${{' and '}}': ${{value}}. For a literal '${{' write '\${{'.	none: choice: the text to write instead is the writer's
 # A declaration's applicability condition belongs before the body it guards (design principles
-# 4.4). The trailing position a rule used to accept is not read as a
+#  4.4). The trailing position a rule used to accept is not read as a
 # condition, and saying so by name is what keeps the program from being told only that a token
 # did not fit.
 syntax	AsRightSideIsType	0x000011	error	The right side of '{0}' is a type; write the interval as '(a..b)'.	'T..' is the stream type (design principles 5.4): the elements of 'T' that arrive one after another. An interval is an expression, and it is written in parentheses: (1..5).	none: choice: the right side of an 'as' is a type, and whether an interval belongs in parentheses here is the writer's to write
 syntax	WhenAfterBody	0x000010	error	A 'when' condition comes before what it guards, so {0} cannot follow it.	Write it between the parameters and the body: rule add_zero::<T>(x: T) when is_integer::<T>() {{ x + 0 => x }}, or between the patterns of a match case and its arm: case n when n > 0 => n. The trailing form is not read as a condition.	edit
-# A lambda's parameters are written in parentheses (design principles 5.9), and item 4 of the
-# `composition-expected-type-edges` rule. An unparenthesised `x => e` is not a
+#  A lambda's parameters are written in parentheses (design principles 5.9): the rule of
+# 2026-10-24 on `composition-expected-type-edges`, item 4. An unparenthesised `x => e` is not a
 # lambda at all -- inside a rule body the `=>` is the rule's own arrow -- so naming the
 # parentheses is what keeps the program from being told only that a token did not fit.
 syntax	LambdaParametersNeedParentheses	0x000012	error	A lambda's parameters need their parentheses: write '(x) => e', not 'x => e'.	A lambda's parameters are written in parentheses, and a parameter list destructured as a tuple is written '((a, b)) => e' (design principles 5.9). An unparenthesised 'x => e' is not a lambda: inside a rule body the '=>' is the rule's own arrow (rule r(x: int) {{ x => x }}), so the two readings would collide and no unparenthesised spelling is added (the author's ruling of 2026-10-24). What is written here is an expression followed by an arrow that fits nothing; if a rewrite was meant, it is declared with 'rule'.	edit
@@ -60,7 +60,7 @@ semantic	CallingIncompleteFunction	0x000013	error	Cannot call function '{0}' wit
 semantic	ImportNameNotExported	0x000015	error	Reference '{0}' is declared as imported but is not exported by its module.	Check that the module exports the name '{0}' or remove the import declaration.	none: choice: the imported module does not export the name; either the name or the export is the writer's
 # A literal the type it is given cannot hold: out of range, truncated (a decimal literal
 # in an integer type), or not a value of that type at all (a text that is not a number).
-# One diagnostic for all of them (handover H24): it says which literal, which type, and
+#  One diagnostic for all of them: it says which literal, which type, and
 # why.
 semantic	LiteralNotRepresentable	0x000016	error	The literal '{0}' cannot be represented as type '{1}': {2}.	A literal the type cannot hold is not wrapped around or cut off, and a value is never cut to fit a type. Write a value the type holds, or give the literal a wider type.	none: choice: the literal has to be narrowed or the type widened, and which of the two is the writer's
 semantic	DynamicCastForbidden	0x000017	error	Dynamic cast from '{0}' to '{1}' is not allowed.	Use types that allow safe conversion, or ensure the conversion is valid. Nothing is converted implicitly: a text becomes a number with 'int(s)' or 'parse_int(s)' ('float(s)', 'parse_float(s)' for a float), a number of another type with 'float(n)', and a module type with 'v as T'.	none: choice: the cast has to be written as a static one, which needs the type the writer meant
@@ -107,13 +107,13 @@ semantic	ImportedModuleHasErrors	0x000080	error	Cannot import module '{0}': it h
 # Map and Set (design principles 11.3; docs/technical/31_map_and_set.md).
 semantic	CollectionKeyNotAllowed	0x0000A0	error	The type '{0}' cannot be a key of '{1}': {2}.	A key of a Map and an element of a Set must have an order and an equality that cannot change: 'int', 'i32', 'bool', 'string', tuples of those, and an enum every field of which is one of those. The value type of a Map is not restricted.	none: choice: the element cannot be a key of this collection, and what to use instead is the design
 semantic	DuplicateCollectionKey	0x0000A1	error	The key '{0}' is written twice in this literal converted to '{1}'.	A map holds one value per key. In an array computed when the program runs the later entry replaces the earlier one; in a literal a repeated key is taken for a mistake. Remove one of the two entries.	none: choice: the repair is a decision only the writer can make
-# Rulings of 2026-10-12 (design principles log 2.10): 0xB0 and up.
+#  Design principles log 2.10: 0xB0 and up.
 semantic	MatchWithoutDefault	0x0000B0	error	This 'match' on a value of type '{0}' has no 'case _'.	A 'match' must have a default case: add 'case _ => ...' for the values the cases do not list. A 'match' on a bool that has both 'case true' and 'case false' is complete, and so is one over 'T?' or 'T!' with its two fixed patterns.	none: choice: the repair is a decision only the writer can make
 semantic	IfWithoutElseAsValue	0x0000B1	error	This 'if' has no 'else' and is used as a value.	An 'if' without 'else' has no value: its arm may be of any type and what the arm gives is dropped. It can only stand as a statement. Where a value is wanted, add an 'else' arm of the same type ('if c then 1 else 0'), or make the result nullable ('if c then 1 else null').	none: choice: the conditional is used as a value, so an 'else' has to be written, and what it yields is the intent
 semantic	EmptyArrayWithoutType	0x0000B2	error	'{0}' is bound to an empty array '[]' that has no element type.	The empty array literal takes its element type from where it stands: a declared type, a parameter, the other arm of a branch, an 'as'. Here there is none. Write the type: 'let {0}: int[] = []'.	none: choice: the repair is a decision only the writer can make
 semantic	PartialApplicationRefused	0x0000B3	error	The context arguments <{0}> cannot be bound to '{1}' as a value: {2}.	'f<w>' used as a value is a partial application: a function that already has its context ('with') arguments, 'let g = inc<1>' then 'g(2)'. It needs 'f' to be one function that takes these arguments. Called in place, 'f<w>(x)', the arguments of the call choose the function.	none: choice: the repair is a decision only the writer can make
 semantic	ComprehensionSourceRefused	0x0000B4	error	The source of this list comprehension has type '{0}', which has no elements to take.	A list comprehension '[e for x in xs if c]' is 'xs->filter<(x) => c>->map<(x) => e>': 'xs' must be an array (or another value 'map' and 'filter' accept), and 'x' has the type of its elements.	none: choice: the repair is a decision only the writer can make
-# Rulings of 2026-10-13 (design principles log 2.11): 0xC0 and up.
+#  Design principles log 2.11: 0xC0 and up.
 semantic	LogicalOperandNotBool	0x0000C0	error	The {1} side of '{0}' has type '{2}', not 'bool'.	'&&' and '||' are branches on a 'bool': 'a && b' is 'if a then b else false', 'a || b' is 'if a then true else b'. The right side is evaluated only when the left side does not decide, both sides are 'bool', and neither operator can be overloaded. For logic that evaluates both sides (element-wise logic on tensors, an operator of a type of your own) use '&' and '|'.	none: choice: the operand has to be a condition; the comparison that was meant is the writer's
 # Modules and namespaces (design principles 10.1, 10.2): 0xD0 and up.
 semantic	ExportedVariable	0x0000D0	error	The variable '{0}' cannot be exported.	A 'var' of the top level of a module is read and written only by the module's own functions: export the functions that read and write it ('export func bump(): int sync {{ cnt += 1; return cnt }}'). A 'let' can be exported.	none: choice: the repair is a decision only the writer can make
@@ -126,7 +126,7 @@ semantic	AmbiguousName	0x0000D3	error	The name '{0}' is ambiguous here: {1}.	Two
 # The condition and the cases of a branch (found with the `any` cases above).
 semantic	ConditionNotBool	0x0000E3	error	The condition of this 'if' has type '{0}'; a condition is a 'bool'.	There is no truth-value conversion: compare explicitly ('n != 0', 'len(s) > 0', 'x != null').	none: choice: the repair is a decision only the writer can make
 semantic	MatchCaseTypeMismatch	0x0000E4	error	This case of a 'match' on a value of type '{0}' is a value of type '{1}'.	A case is compared with the value matched, so the type of that value must accept it. Write the case as a value of that type, or convert the value matched first.	none: choice: the repair is a decision only the writer can make
-# Rulings of 2026-10-14 (design principles log 2.12) on operators and on collections that
+#  Rules (design principles log 2.12) on operators and on collections that
 # are not changed in place: 0xF0 and up.
 semantic	UnusedPureResult	0x0000F0	error	The result of '{0}' is not used, and '{0}' changes nothing: it returns a new value{1}.	The operations of the standard library return new values and leave their arguments as they were: after 'let ys = xs->append<5>', 'xs' is unchanged. To change a variable, bind it to the result, 'xs = xs->append<5>', as 'x = x + 1' does for a number.	none: choice: a value that is computed and dropped can be removed or used, and which one is the intent
 semantic	OperatorNotOverloadable	0x0000F1	error	'{0}' cannot be overloaded: {1}.	The operators that can be overloaded are the binary '+', '-', '*', '/', '%', '^', '@', '==', '<', '<=', '>', '>=', '&', '|', indexing '[]', and the unary '-', '!', '~'; '!=' follows '=='. '&&', '||', '??', '!!', '->', '?->', '..', 'as', assignment and compound assignment are constructs of the language.	none: context: the operator cannot be overloaded at all, so the expression has to be written another way
@@ -137,7 +137,7 @@ semantic	OperatorOverloadConflict	0x0000F3	error	Operator '{0}' is already defin
 # settled by declaration order (design principles 5.1). Renamed from
 # AmbiguousOperatorCall when it became the report for every call; the code is unchanged.
 semantic	AmbiguousCall	0x0000F4	error	The call to '{0}' with ({1}) fits more than one overload.	More than one function takes these arguments; make the choice explicit: annotate the literal with its type (for example '2 as f32') or convert an argument with 'as'. The overloads that take them: {2}	none: choice: the call has to name the overload it means, and which one is the intent
-# Rulings of 2026-10-15 (design principles log 2.13) and the defects found with them: 0x110
+#  Design principles log 2.13 and the defects found with it: 0x110
 # and up.
 semantic	DeclaredTypeMismatch	0x000110	error	This value has type '{0}', which is not the declared type '{1}'.	A declaration written with a type takes a value of that type; nothing is converted on the way (a number does not become a float by itself, and a text does not become a number). Convert the value explicitly: 'float(n)' for a number of another type, 'int(s)' or 'parse_int(s)' for a text, 'string(n)' for a number written as text (the same for 'i32', 'f32', 'f64' and the complex types), 'v as T' for a module type; or change the declared type.	none: choice: either the declared type or the value has to change, and which one is the intent
 semantic	ModuleTypeCycle	0x000111	error	The type '{0}' is part of a cycle of types: {1}.	Each of these types needs the next one to be declared first, and the last needs the first: none of them can be. Remove one of the references that close the cycle. A type may contain itself only through an array, a map, a set or an enum (design principles 5.2).	none: choice: the repair is a decision only the writer can make
@@ -148,7 +148,7 @@ semantic	LoopStateWithoutType	0x000122	error	The first value of the loop state '
 semantic	LoopConditionNotBool	0x000123	error	The condition after 'while' has type '{0}'; a condition is a 'bool'.	There is no truth-value conversion: compare explicitly ('n != 0', 'len(s) > 0', 'x != null').	none: choice: the repair is a decision only the writer can make
 semantic	LoopNameRepeated	0x000124	error	The name '{0}' is declared twice in this loop head.	The names of a loop's state and the name 'for' binds to the element are declared together, for the condition and the body; each is given once.	none: choice: the repair is a decision only the writer can make
 semantic	LoopSequenceNotIterable	0x000120	error	'for' takes the elements of an array, a string, a map or a tensor; '{0}' has type '{1}'.	A loop's 'for x in xs' visits the elements of xs in order (design principles 3.10): the elements of an array; the code points of a string, each a one-character string; the (key, value) pairs of a map, in key order (11.3); and the sub-tensors of a tensor along its first dimension. 'a..b' is the array of the integers from 'a' to 'b - 1', left closed and right open, and a 'for' over it takes them in order without building the array (4.2).	none: choice: what to iterate instead is the writer's to write
-# Rulings of 2026-10-19 (design principles log 2.13): the nominal enum, 0x130 and up.
+#  Design principles log 2.13: the nominal enum, 0x130 and up.
 semantic	DuplicateEnumVariant	0x000130	error	The variant '{0}' is declared twice in enum '{1}'.	A variant is one of the values of its enum and is written by its name; each name occurs once.	none: choice: the repair is a decision only the writer can make
 semantic	DuplicateEnumField	0x000131	error	The field '{0}' is declared twice in variant '{1}' of enum '{2}'.	A field of a struct variant is written by its name; each name occurs once.	none: choice: the repair is a decision only the writer can make
 semantic	EnumVariantFieldCount	0x000133	error	The variant '{0}' of enum '{1}' takes {2} field(s), but {3} were given.	The fields of a variant are those its declaration writes: as many, and in the same order for a variant written with '(...)'.	none: choice: the repair is a decision only the writer can make
@@ -180,7 +180,7 @@ semantic	TagNotAPermission	0x00016B	error	The tag '{0}' grants no numeric permis
 semantic	RuleTagNotRequires	0x00016C	error	A rule may be preceded only by '#requires<...>', not by the tag '{0}'.	State the permissions the rule needs as tag arguments: '#requires<reassociate>' (design principles 7.2).	none: choice: the repair is a decision only the writer can make
 semantic	TagParameterType	0x00016D	error	The parameter '{0}' of the tag '{1}' is declared '{2}': a tag parameter is an int, a float, a bool, a string or a func.	Declare the parameter with the kind of the argument the tag is written with: 'tag {1}<{0}: int> on ...'; a 'func' parameter is written with the name of a function ('#vjp<rule>').	none: choice: the repair is a decision only the writer can make
 semantic	TagShadowsPermission	0x00016E	error	The tag '{0}' is declared with the name of a tag of the language.	A numeric permission (design principles 7.2) and its group and `strict` (7.4) are tags of the core, and a program may not declare a tag of that name: the core's tag would still be what '#{0}' means, and the declaration would never be read. Rename the tag.	none: choice: the repair is a decision only the writer can make
-# Static expansion (design principles 5.5, handover H51): 0x170 and up.
+#  Static expansion (design principles 5.5): 0x170 and up.
 semantic	StaticMatchNotExhaustive	0x000170	error	No case of this 'match type' selects the type '{0}'.	The cases name shapes: 'struct', 'tuple', 'func', '#leaf' (every type that is not a structure or an ordinary tuple, including 'T?' and 'T!'), '_' for every type, and a type's identity ('int', 'MyStruct', T). Add the case for this type, or end with '#leaf' or '_'.	none: choice: the repair is a decision only the writer can make
 semantic	StaticMatchUnreachableCase	0x000171	error	The case '{0}' selects every type the cases after it could select.	'#leaf' and '_' select every type, so they must be the last case of a 'match type'. An identity pattern that repeats a type an earlier case already selects is the same kind of dead case.	none: context: a case of the static match can never hold, so it has to be removed and what remains re-decided
 semantic	StaticTypeNotConcrete	0x000172	error	The type matched here is still '{0}' when the function is instantiated.	'match type' needs a concrete type. Bind every type variable of the subject, or use it in a generic function whose call gives them.	none: choice: the repair is a decision only the writer can make
@@ -193,24 +193,24 @@ semantic	StaticAccessIndexOutOfRange	0x000178	error	The key '{0}' is not an elem
 semantic	StaticAccessNotConstant	0x000179	error	The key '{0}' of a 't.[...]' access is not known when the function is compiled.	The key is a string or integer literal, the 'n' of an enclosing 'static for', or an expression whose value is known at compile time, such as a 'let' bound once to such a value. A run-time value (a 'var', a parameter) cannot choose a field, because only the selected field is built into the graph.	none: choice: the repair is a decision only the writer can make
 semantic	StaticComprehensionVoidElement	0x00017A	error	The block for the field '{0}' of '{1}' gives no value, so the comprehension has no element for it.	The block is the value of one field: its last statement must have a value. A call that returns nothing, or a block that ends in a declaration, gives no element; the statement form 'static for' is the one that drops values.	none: choice: the repair is a decision only the writer can make
 #
-# `indices` (H51 step 6). 0x17B-0x17D are the body-less declaration diagnostics below, so
+#  `indices`. 0x17B-0x17D are the body-less declaration diagnostics below, so
 # this one takes the next free code after them.
 semantic	StaticIndicesNotTuple	0x000182	error	'indices' walks the positions of a tuple, but '{0}' has type '{1}'.	'indices ts' walks the positions of an ordinary tuple: it needs a value of tuple type (a tuple variable or a tuple literal). A struct has named fields; walk it with 'fields T'. A 'T?' or 'T!' and a mutable cell are leaves (design principles 13.5).	none: choice: the repair is a decision only the writer can make
 #
-# The sequence of a `static loop` (the two rules that gave it its head and its step):
+#  The sequence of a `static loop` (and):
 # the head lost the parentheses it carried and takes any sequence known when the function is
 # compiled. One rule draws the line -- compile-time constants joined by operations that are
 # pure and cannot fail -- so what counts is the interval, `range`, an array and a compile-time
 # tuple, not a list of spellings. One the compiler cannot work out is this.
 semantic	StaticLoopSequenceNotKnown	0x0001E7	error	The sequence of a 'static loop' must be known when the function is compiled: '{0}' is not.	A 'static loop' is unrolled where it stands, so how many rounds it has must be known then. Every sequence the compiler works out counts: an expression built only from compile-time constants (literals, names bound to constants, the rounds of an enclosing 'static' expansion) through operations that are pure and cannot fail. So 'a..b' (the half-open [a, b) that '..' is everywhere else, so '0..5' is 0, 1, 2, 3, 4), 'range(a, b, step)' with constant arguments, an array literal or a constant array, 'indices ts' for the positions of a compile-time tuple, 'fields T' for the fields of a type, and 'for x in ts' for the element at each position of a compile-time tuple, whose type is that position's type, all count. A run-time array or a run-time value leaves the number of rounds open.	none: choice: the repair is a decision only the writer can make
 #
-# The names of a `static for` / `static loop` head (the rule on the two-argument range and the
-# tuple reading, item 4): the number of names
+#  The names of a `static for` / `static loop` head (the rule on
+# `static-loop-sequence-two-argument-range-and-the-tuple-reading`, item 4): the number of names
 # follows the element -- `fields T` gives the field's name, its type and its tags, every other
 # element gives one thing -- and a head that names more than the element has parts is this.
 semantic	StaticHeadNameCount	0x000000	error	The head of this loop names {0} things; '{1}' gives {2} for each round.	A head names the parts of the element, in order, and may name fewer of them, never more: 'fields T' gives the field's name, its type and its tags, while 'indices ts' and a written sequence give the element itself and nothing else. Drop the names the element has no part for, or walk the fields of a type ('fields T') to get them.	none: choice: the number of names to drop is the writer's
 #
-# Rest parameters (design principles 5.5, H51 step 6): 0x18A and up.
+#  Rest parameters (design principles 5.5, step 6): 0x18A and up.
 #/ A rest parameter is not the last of the ordinary parameters.
 semantic	RestParameterNotLast	0x00018A	error	The rest parameter '..{0}' must be the last parameter.	A rest parameter stands for every argument left over, so no parameter can follow it. Move '..{0}' after the other parameters.	none: choice: the repair is a decision only the writer can make
 #/ A type was written after `..`: a rest parameter is untyped.
@@ -255,7 +255,7 @@ semantic	HandleTypeNotNominal	0x0001A3	error	'{0}' is not a nominal type declara
 #/ A body-less declaration's clause differs from the operator's declared resources.
 semantic	NativeResourceMismatch	0x0001A4	error	The declaration '{0}' says '{1}', but the operator '{2}' declares '{3}'.	A body-less declaration is the whole signature of a C++ operator, its resources included: write the clause the operator declares, or remove the clause and let the operator's declaration be the one the module publishes.	none: choice: the repair is a decision only the writer can make
 #
-# `std::cml`, the source printer (handover H240, step S1). 0x1A5 and up.
+#  `std::cml`, the source printer (step S1). 0x1A5 and up.
 #/ A graph holds a construct the printer does not turn into source (yet).
 semantic	CmlUnsupportedConstruct	0x0001A5	error	std::cml cannot print {0}: {1}.	This version prints expressions, `let` and `var`, branches, loops, closures, `with` and `var` parameters, and `sync` blocks (handover H240). Tags, named types, generic instances and the other region kinds are refused.	none: choice: the repair is a decision only the writer can make
 #/ A constant is larger than the printer's max_literal_bytes.
@@ -265,7 +265,7 @@ semantic	CmlBigConstant	0x0001A6	error	std::cml refused the constant '{0}' of ty
 # tensor keeps the element type it is written with, so nothing rewrites it and there is no
 # such diagnostic. The code is not reused.
 #
-# Applicability conditions (`when`, design principles 5.13; handover H234). 0x1A8 and up.
+#  Applicability conditions (`when`, design principles 5.13; handover). 0x1A8 and up.
 #/ The condition's value is not a bool.
 semantic	WhenConditionNotBool	0x0001A8	error	The 'when' condition of '{0}' is not a bool (it is '{1}').	A 'when' is a compile-time predicate over the declaration's type parameters and 'with' parameters: call a generic function this module declares that reduces to a constant over its type arguments ('is_numeric::<T>()' is one, written in the standard module 'types'), possibly combined with '!', '&&' and '||'. It is not a runtime value.	none: choice: the repair is a decision only the writer can make
 #/ The condition is not a compile-time predicate the compiler can evaluate.
@@ -278,7 +278,7 @@ semantic	WhenTypeQueryNotConcrete	0x0001AB	error	The type query '{0}' cannot be 
 semantic	WhenConditionUnmet	0x0001AC	error	No candidate of '{0}' applies to ({1}): every candidate's 'when' condition is false. Candidates: {2}	A 'when' that is false makes its declaration inapplicable, not erroneous, and the call goes on to the other candidates. Pass an argument or a type that satisfies a condition, or write another overload for this call.	none: choice: the repair is a decision only the writer can make
 #
 # Defaults of `with` parameters and `with` arguments given by name (design principles 4.4,
-# handover H235). 0x1B7 to 0x1BE; 0x1BF and up belong to `when` predicate lookup.
+#  handover). 0x1B7 to 0x1BE; 0x1BF and up belong to `when` predicate lookup.
 #/ A named `with` argument does not name a `with` parameter of the callee.
 semantic	WithArgumentUnknown	0x0001B7	error	'{0}' is not a 'with' parameter of '{1}'.	A name in a 'with' argument is written as in a struct literal, 'name: value', and must be one of the callee's 'with' parameters.	none: choice: the repair is a decision only the writer can make
 #/ A `with` parameter is given twice, once by position and once by name.
@@ -305,20 +305,20 @@ semantic	WhenPredicateNotCompileTime	0x0001C0	error	'{1}' is not a compile-time 
 semantic	WhenPredicateAmbiguous	0x0001C1	error	The 'when' condition of '{0}' calls '{1}', and that name is ambiguous: it is imported from {2}.	Two imports that bring one name do not choose between them. Import the predicate by another name ('import {{ p as q }} from m') or qualify it with the module it comes from ('m::p').	none: choice: the repair is a decision only the writer can make
 #
 # Body-less declarations, the declarations of a C++ module's operators (design principles
-# 6.4; handover H19, step 1). 0x17B and up.
+#  6.4, step 1). 0x17B and up.
 semantic	NativeDeclarationIncomplete	0x00017B	error	The body-less declaration '{0}' is incomplete: it has no result type.	A body-less declaration is the whole signature of a C++ operator, result included; write the result type (`: T`).	none: choice: the repair is a decision only the writer can make
 semantic	NativeDeclarationNotLoaded	0x00017C	error	The declaration '{0}' names the operator '{1}', which no loaded module implements.	A body-less declaration stands for an operator of a loaded C++ module. Import the module that implements it, and check that the URI names its function; a declaration whose implementation is not loaded is not a function.	none: context: the native module that declares it was not loaded; the repair is in how the module is reached, not in this text
-# Body-less declarations: 0x17E and up.
-#/ Two generic declarations of one name can take the same call (rule 2).
+#  Body-less declarations: 0x17E and up.
+#/  Two generic declarations of one name can take the same call (rule 2).
 semantic	NativeDeclarationOverlap	0x000180	error	Two declarations of '{0}' can take the same call: '{1}' and '{2}'.	An operator has one meaning for one call: which rule applies must be decided by the types of the arguments, never by the order the declarations are written in. Give the declarations parameter types that cannot both accept one argument list, or keep one of them.	none: choice: the repair is a decision only the writer can make
-# The rule on same-named `#impl` declarations split by their
-# conditions: two
+#  The rule on same-named `#impl` declarations split by their
+# conditions (`docs/handover/reviews/questions-2026-10-23.md`, "impl-declaration-arms"): two
 # same-named declarations whose `when` conditions are mutually exclusive are overloads and may
 # stand side by side; a type that satisfies both is this overlap. The conditions are asked about
 # every type the compiler registers, and a condition it cannot answer leaves the pair refused by
 # the older code above.
 semantic	WhenDeclarationOverlap	0x0001E0	error	Two declarations of '{0}' both apply to the type '{1}': '{2}' and '{3}'.	A 'when' condition is what makes two declarations of one signature different overloads (design principles 4.4): each must cover the types the other does not. Narrow the conditions so that no type satisfies both, or give the declarations parameter types that cannot both accept one call.	none: context: two declarations of a generic accept the same program; narrowing a condition is the design
-#/ A declaration names an operator of another module (rule 5).
+#/  A declaration names an operator of another module (rule 5).
 semantic	NativeDeclarationForeignOperator	0x000181	error	The declaration '{0}' names the operator '{1}', which another module declares.	A module declares only the operators it implements: a body-less declaration stands for an operator of the module it is written in, and declares no other module's operator. Write the declaration beside the implementation, or call the operator through the module that declares it.	none: choice: the repair is a decision only the writer can make
 #
 # A lambda's parameter that writes no type and that the function type of its position does
@@ -341,7 +341,7 @@ semantic	SameShapeComprehensionMismatch	0x0001B6	error	The shape {0} is filled f
 #/ expression, an open type variable, a type written twice in one case, or a type that an
 #/ earlier case already selects.
 semantic	StaticMatchPatternCannotMatch	0x0001C2	error	The identity pattern '{0}' cannot select a type here: {1}.	An identity pattern is exact: it selects only the type it names, after the declaration's type variables are bound. Name a concrete type, do not write the same type twice in one case, and put a pattern an earlier case already selects before that case or remove it.	none: choice: the repair is a decision only the writer can make
-# Folding a call of a pure function with constant arguments (handover H271). 0x1C5 and up.
+#  Folding a call of a pure function with constant arguments. 0x1C5 and up.
 #/ An argument of a call in a place that needs a constant is not one.
 semantic	FoldCallArgumentNotConstant	0x0001C5	error	The call of '{0}' cannot be evaluated at build time: {1}.	A call in a place that needs a compile-time constant is evaluated only when every argument is a constant itself: a literal, the 'n' of a 'static for', a 'constas' value, or an expression the compiler can evaluate. Make the argument a constant, or move the call to a place where a runtime value is accepted.	none: choice: the repair is a decision only the writer can make
 #/ The call has effects: it is `sync`, writes a `var`, or uses a resource.
@@ -354,7 +354,7 @@ semantic	FoldCallResultNotConstant	0x0001C8	error	The call of '{0}' cannot be us
 semantic	FoldCallNotEvaluable	0x0001C9	error	The call of '{0}' cannot be evaluated at build time: {1}.	The body of a folded call is read from the same constructs a 'when' condition reads: data, names, blocks, 'match type', 'static for'/'static loop', branches, fields, arithmetic and comparisons, and calls of other pure functions. Rewrite the body with those, or move the call to a place where a runtime value is accepted.	none: choice: the repair is a decision only the writer can make
 #
 # Defaults of ordinary parameters and ordinary arguments given by name (design principles
-# 4.4). 0x1CD and up, after the constant-folding codes. The `with`
+#  4.4). 0x1CD and up, after the constant-folding codes. The `with`
 # parameter's forms are 0x1B7-0x1BE.
 #/ A name in a call's argument list names no parameter of the callee.
 semantic	ParamArgumentUnknown	0x0001CD	error	'{0}' is not a parameter of '{1}'.	A named argument is written as in a struct literal, 'name: value', and must be one of the parameters the callee declares.	none: choice: an argument names a parameter the pass does not declare; the name is the writer's
@@ -380,19 +380,19 @@ semantic	ParamAfterDefault	0x0001D4	error	The parameter '{0}' has no default and
 #/ An argument at a call has a type the parameter it fills does not take.
 semantic	ParamArgumentWrongType	0x0001D6	error	The argument '{0}' of '{1}' has type '{2}', not '{3}'.	Write a value of the parameter's type; an integer may be given where a float is declared.	none: choice: the argument has to be written as the type the parameter declares
 #
-# Composition and the interval (`..`, design principles 4.2; the generator-and-composition rule).
-# 0x1D7 and up.
+#  Composition and the interval (`..`, design principles 4.2
+#  on ` -generator-and-composition`). 0x1D7 and up.
 #/ Neither reading of `..` takes these operands: they are not two functions and not two integers.
 semantic	CompOperandMismatch	0x0001E1	error	'..' takes two functions or two integers; the left operand is '{0}' and the right one '{1}'.	'..' has two readings (design principles 4.2). Between two functions it is the composition `f..g`, the lambda `(x) => g(f(x))`: 'f' is unary and 'g' takes what 'f' returns, so a call of `f..g` is a call of that lambda and nothing more. Between two integers it is the interval `a..b`: the integers from 'a' to 'b - 1' as the array 'int[]', left closed and right open, as the slice 't[a:b]' is. Nothing else is composed.	none: choice: the repair is a decision only the writer can make
 #/ The left operand of `..` is a function that takes more or fewer than one parameter.
 semantic	CompOperandNotUnary	0x0001E2	error	'..' composes a unary function on the left; '{0}' takes {1} parameters.	The composition `f..g` is the lambda `(x) => g(f(x))` (design principles 4.2): 'f' takes the one argument the composed function takes, and 'g' takes the result of 'f'. Write the lambda with the parameters you mean.	none: choice: the repair is a decision only the writer can make
-#/ An operand of `..` is the name of a generic function, and nothing at this position says which instance it stands for. The refusal names the operand and both ways to settle it.
+#/  An operand of `..` is the name of a generic function, and nothing at this position says which instance it stands for. The refusal names the operand and both ways to settle it (section generic-operands-of-composition of docs/handover/reviews/questions-2026-10-23.md).
 semantic	CompOperandGenericWithoutType	0x0001E4	error	'..' composes two functions, and its {0} operand, the generic function '{1}', has no instance here: write its type arguments ('{1}::<int>'), or give the whole expression an expected function type.	The name of a generic function stands for no one function until a position fixes its types (design principles 5.5). The composition `f..g` is the lambda `(x) => g(f(x))` (design principles 4.2), and the type the whole expression is expected to have is what gives that lambda its parameter type and instantiates what it calls: `let h: (x: int) => int = ident..ident` composes `ident::<int>`, as `(x) => ident(ident(x))` does under the same type. With no expected function type, write the instance each operand is: `ident::<int>..ident::<int>`. Only a name that is generic is refused here; an operand of a type `..` cannot take stays CompOperandMismatch.	none: choice: which instance the operand stands for is the writer's to say, and the help names both ways to settle it
 #/ The interval of two integers is written `a..b` and nothing else: the two-parameter `range(a, b)`
-#/ the language used to have is gone (design principles 4.2; the rule).
+#/  the language used to have is gone (design principles 4.2).
 semantic	RangeTwoArgumentsRemoved	0x0001E5	error	The two-parameter 'range(a, b)' is gone; write the interval 'a..b'.	The language has one spelling for the integers from 'a' to 'b - 1' (design principles 4.2; the author's ruling of 2026-10-24 on `h248-generator-and-composition`): the interval 'a..b', left closed and right open, as the slice 't[a:b]' is, and the array of them. 'range(0, 10)' becomes '0..10'. A 'for' over an interval is fused by the compiler, so 'for i in 0..n' builds no array. The two-parameter 'range' is the only spelling deleted: a module's own interval-like function (a tensor's, say) is that module's own, reached by its qualified name or at another arity, while an unqualified two-argument 'range(a, b)' is this built-in.	none: internal: the interval this refusal asks for is a text the compiler could write itself, and it does not offer that edit yet
 #/ `range(a, b, 0)` is no sequence at all: the step never moves (design principles 4.2; the
-#/ interval-step-form rule, which makes a step of 0 a fault
+#/  rule on ` -interval-step-form`, which makes a step of 0 a fault
 #/ and a constant one a compile-time error).
 semantic	RangeStepZero	0x0001E6	error	The range 'range({0}, {1}, 0)' has a step of 0, so it is no sequence of integers.	The integers of `range(a, b, step)` are `a`, `a + step`, ... below `b`, so the step decides which integers the range holds: a step that does not move names no one sequence, whatever the bounds are (design principles 4.2; the author's ruling of 2026-10-24 on `h426-interval-step-form`). The step is a constant here, so the call can never be right and the refusal is at the call, where the step is written. Give a non-zero step, or write the interval `a..b` when the step is 1. A step that is not constant is a fault of the run instead (RuntimeDiag::InvalidArgument).	none: choice: which step the range takes is the writer's to say, and the message names both a stepped range and the interval
 #
@@ -401,12 +401,12 @@ semantic	IgnoredSideEffect	0x100002	warn	{0} is not in a sync block, and {1}.	Pu
 semantic	EffectNotExecuted	0x100004	warn	{0} has side effects but is never executed: nothing depends on it and it is not in a sync block.	Evaluation is driven by dependencies: outside a sync block an expression whose result (or the variable it writes) nothing needs does not run. This is legal. To run it, put it in a sync block ('sync {{ ... }}', or a function body 'func f(): T sync {{ ... }}'), or use its result.	none: context: an effect reachable only from a branch that never runs; the repair moves or removes the call, and where belongs to the design
 # 0x90 and up, clear of what other work adds after EffectNotExecuted.
 semantic	ExitInUnusedBranch	0x100090	warn	This '{0}' gives the value of the '{1}' it is in, and nothing uses that value: it does not leave the function.	An arm of an 'if' or 'match' is a graph of its own: '{0}' in an arm ends the arm and gives the value of the branch, as it does in any block. Here the branch is a statement whose value nothing takes, so the '{0}' has no effect and the function goes on with the next statement. To return from the function through a branch, make the '{1}' the last expression of the function body, or write 'return' in front of it ('return if ... then ... else ...').	none: context: the branch that leaves the program is not reachable; the repair moves or removes it and where belongs to the design
-# Rulings of 2026-10-13 (design principles log 2.11): 0xC0 and up.
+#  Design principles log 2.11: 0xC0 and up.
 semantic	UnusedFallibleValue	0x1000C0	warn	This value has type '{0}' and nothing uses it: an error it holds is lost{1}.	A function that returns a 'T!' reports its failure through that value. Take the value apart with '!!', '?->' or 'match', return it from a function that declares a 'T!', or drop it on purpose with 'let _ = ...'.	none: choice: the error value has to be handled, returned or dropped explicitly, and which one is the intent
-# Rulings of 2026-10-15 (design principles log 2.13): 0x110 and up.
+#  Design principles log 2.13: 0x110 and up.
 semantic	NullTestNeverNull	0x100110	warn	{0} has type '{1}', which is never null: this test is always {2}.	Only a value of type 'T?' can be null. In the arm of 'if x != null' the name 'x' is already a 'T'. Remove the test, or test a value that may be null.	none: choice: the repair is a decision only the writer can make
 semantic	KnownNotNull	0x100111	warn	'{0}' is known not to be null here (it has type '{1}'): the null case of '{2}' is never taken.	An 'if' around this narrowed the name: in the arm where it is not null it is a 'T'. Use the name directly.	none: choice: the repair is a decision only the writer can make
-# Rulings of 2026-10-19 (design principles log 2.13): the enum, 0x130 and up.
+#  Design principles log 2.13: the enum, 0x130 and up.
 semantic	EnumVariantCaseRepeated	0x100130	warn	The variant '{0}' is matched more than once; the later case is never taken.	A branch takes the first case that matches. Remove the later case, or the earlier one.	none: choice: the repair is a decision only the writer can make
 semantic	MatchCaseAfterWildcard	0x100131	warn	This case follows 'case _': it is never taken.	'case _' matches every value, so nothing after it can. Remove it, or move it before the wildcard.	none: choice: the case after the wildcard is unreachable; which of the two was meant is the intent
 # `case _` after every variant is matched: the wildcard can never be taken.
@@ -451,7 +451,7 @@ runtime	RegexInvalid	0x000039	error	'{0}': '{1}' is not a valid regular expressi
 runtime	TimeFormatFailed	0x00003A	error	'{0}' failed: {1}.	Check the format string against the strftime conversion specifiers (%Y, %m, %d, %H, %M, %S, ...).	none: runtime: the fault is raised while the program runs, and the repair is in the program's logic
 runtime	GradientElementTypeMismatch	0x00003C	error	The gradient of a value of type '{0}' has element type '{1}': {2}. A gradient must have the element type of the value it is the gradient of (design principles 9.9); accumulated as it is, the value would be read at the wrong width and answer with a number that is not the derivative.	A derivative rule returns a gradient of the parameter's element type. Convert the gradient in the rule instead of relying on the accumulator to reinterpret it.	none: runtime: the fault is raised while the program runs, and the repair is in the program's logic
 runtime	ValueWithNoDerivativeRule	0x0001A8	error	The operator '{0}' takes a differentiable value through its with parameter {1} (counting from 1), of type '{2}', but {3}.	A value that depends on a differentiated parameter must not lose its gradient (design principles 9.9). A derivative rule for '{0}' has to accumulate the value's gradient into that with parameter; a with parameter that is configuration takes no gradient, so a value is passed there only when its gradient can be returned.	none: runtime: the fault is raised while the program runs, and the repair is in the program's logic
-# Faults and reports of design principles log 2.10.
+#  Faults and reports of design principles log 2.10.
 runtime	ConversionOutOfRange	0x000050	error	Cannot convert {0} to {1}: {2}.	A conversion whose value does not fit the target type is a fault (design principles 5.1): a float that is NaN, infinite or beyond the integer's range, an integer beyond the range of a narrower integer type, or a text that is a number the type cannot hold (out of range, which is not the same as text that is not a number: that is InvalidNumberText). Check the value before converting it, or clamp it (min, max) to the range of the target.	none: runtime: the value does not fit the conversion at run time, and the repair is in the program's logic
 runtime	UnhandledError	0x000051	error	An error value reached the exit of 'main' without being handled: {0}: {1}.	A value of type T! that has failed must be opened before the program ends: give a replacement with '!!', pass it on with '?->', or take it apart with 'match ... case error e'. The position is where the error was made (the definition of 'main' when the error records none).	none: runtime: an error value was never handled; where to handle it is the program's logic
 runtime	SliceOutOfRange	0x000052	error	The range {0} to {1} is out of range for {2} of length {3}.	A bound of 'slice' is a position from 0 to the length; the end is one past the last element taken. A range that leaves the sequence is a fault, as an index out of range is. To take or leave out at most n elements, use 'take' and 'drop' of the module 'array', which cut by definition.	none: runtime: the bounds are computed at run time, and the repair is in the program's logic
@@ -463,7 +463,7 @@ runtime	GraphPassFailed	0x000061	error	Pass '{0}' failed: {1}.	A pass written in
 # (graph store design 3.7); an extraction before it fixes the pipeline.
 runtime	PassNeedsExtraction	0x000062	error	Pass '{0}' cannot take the program: some values of it have several writings.	An earlier pass (a saturation) left values with several writings, which only the passes that work on them and the passes that run or translate the program accept. Put 'std::opt::extract' before '{0}': it chooses one writing for every value by a cost model (its parameter 'cost', 'weighted' by default).	none: runtime: the fault is raised while the program runs, and the repair is in the program's logic
 # A pass named as `<module>::<name>` whose module is there and compiles but provides no such
-# pass (H130). The name is what is wrong, so the message names the module and the passes it
+#  pass. The name is what is wrong, so the message names the module and the passes it
 # does provide and says nothing else; a module that declares the function without exporting
 # it is a different mistake, with the hint that fixes it.
 runtime	PassNotProvidedByModule	0x000186	error	Module '{0}' provides no pass '{1}'; it provides {2}.	A pass of a module is one of the passes its `.cml` file declares — `export func {1}::<F>(f: F): F! when is_function::<F>()`; check the name. The module named here is the one the pass name resolved to: a file of the entry directory with that name shadows the library one.	none: runtime: the fault is raised while the program runs, and the repair is in the program's logic
@@ -496,12 +496,12 @@ semantic	ImplKernelForeign	0x0001DA	error	The '#impl' tag of '{0}' names '{1}', 
 semantic	ImplSignatureMismatch	0x0001DB	error	The kernel '{0}' of the '#impl' function '{1}' has the signature {2}, but the function has {3}.	The kernel is another implementation of the very same function: same 'with' and normal parameters (types and 'var' marks), same result type, and no 'constas' parameter (a body-less declaration cannot carry one).	none: choice: the repair is a decision only the writer can make
 semantic	ImplKernelNotBodyless	0x0001DC	error	The '#impl' tag of '{0}' names '{1}', which has a body.	The kernel is the body-less declaration of the C++ operator that runs the function's semantics. A function that already has a body is the semantics itself, so there is nothing for the tag to do: name a body-less declaration, or remove the tag.	none: choice: the repair is a decision only the writer can make
 # The node of a `const` parameter inside a rule's condition (rewrite design 2 (second version)
-# 1): the surface name is `node_of(c)`,
+#  1; the rule on `rule_when_const_node`): the surface name is `node_of(c)`,
 # it takes the name of one of the rule's own `const` parameters, and it is written in the
 # condition. Nothing else reaches a node there.
 # A stream is linear (design principles 5.4): it is read one element at a time and is finished
 # when it ends, so a container whose elements can be read more than once cannot hold one. The
-# rule names arrays, maps and sets; a tuple
+#  rule (-stream-type-surface) names arrays, maps and sets; a tuple
 # is not a container in that sense - its items are taken apart once - and a function signature
 # may take and give a stream.
 semantic	StreamInContainer	0x0001E3	error	'{0}' cannot be the element of {1}: a stream is consumed once, while the elements of a container are read more than once.	A stream is read one element at a time and is done when it ends. Write the stream where it is consumed once: a parameter or the result of a function, an item of a tuple, or the subject of an operator that reads it to its end. What needs the elements of a container to be readable again takes an array filled from the stream.	none: choice: a stream is consumed once, so where it is read and what the container holds instead are the writer's to write

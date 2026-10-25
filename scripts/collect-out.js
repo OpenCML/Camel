@@ -5,7 +5,7 @@
  * 将 build/debug/profile 构建产物收集到 out/<目录>/{bin,include,libs,stdlib}
  * 所有 tools 下的可执行文件放到 bin/，libcamel 共享库放到 libs/（exe 会从 ./libs 查找）
  *
- * 输出策略：Release 写入 out/latest/，Debug 写入 out/debug/（两种配置可以同时存在，
+ *  输出策略：Release 写入 out/latest/，Debug 写入 out/debug/（ ：两种配置可以同时存在，
  * 测试运行器的 --build debug 层读取 out/debug，绝不会读到 Release 的二进制）。profile 仍写
  * out/latest/。Release 构建后若当前 HEAD 带有 git tag，则把整棵 out/latest/ 再镜像一份到
  * out/<每个 tag>/（与 latest 内容相同）。
@@ -277,7 +277,7 @@ function collect(config, tag) {
         }
     }
 
-    // The Python binding: the CPython extension module, next to libs/ so the runpath
+    //  The Python binding: the CPython extension module, next to libs/ so the runpath
     // `$ORIGIN/../libs` the build wrote finds libcamel in both layouts. Absent whenever the
     // configure found no Python development files, which is not a warning: the rest of the
     // install is complete without it.
@@ -303,7 +303,7 @@ function collect(config, tag) {
     if (fs.existsSync(stdlibSrc)) {
         fs.cpSync(stdlibSrc, stdlibDir, { recursive: true })
     }
-    // The `.cmo` files this configure builds, from CMake's manifest. Never scan
+    //  The `.cmo` files this configure builds, from CMake's manifest. Never scan
     // build/{libs,modules} for them: a module that was renamed or removed leaves its artifact
     // behind, and copying that forward is how a retired name kept resolving.
     const moduleFiles = moduleCmoFiles(config)

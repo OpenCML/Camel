@@ -1,8 +1,8 @@
 /**
  * A default is evaluated once, where the declaration is; a call does not evaluate it again.
  * The two calls below both leave `label` out, and the graph of `main` holds one constant node
- * for the string, which both calls read (design principles 4.4). `std::gir` prints the graph
- * instead of running it.
+ *  for the string, which both calls read (design principles 4.4).
+ * `std::gir` prints the graph instead of running it.
  */
 module param_default_one_constant
 

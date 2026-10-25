@@ -1,7 +1,7 @@
 /**
  * The declaration of `onnx:supported_operators` takes no ordinary argument: an extra one is
- * refused at the call, and the overload the message lists is the declaration's ` => string[]` —
- * `stdlib/onnx.cml`, not the C++ module.
+ * refused at the call, and the overload the message lists is the declaration's `() => string[]`
+ *  — `stdlib/onnx.cml`, not the C++ module.
  */
 module onnx_arity
 

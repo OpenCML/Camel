@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * A pass is a function of the standard library (design principles 9.3): its name,
+ *  A pass is a function of the standard library (design principles 9.3): its name,
  * documentation and parameters are one body-less declaration in the module's `.cml` file, and
  * the pipeline resolves it by module and name. This guard is what keeps the second declaration
  * from coming back:
@@ -16,8 +16,8 @@
  *   * every pass declared in `stdlib/std.cml` has exactly one kernel registered with
  *     `registerCoreKernel`, and every kernel is declared: a bijection, stated as such rather than
  *     as a count. A count moves with every pass the language gains while the property it was
- *     meant to guard does not, so the relation is asked for and not the number; what the two sets
- *     must not be is empty, and that lower
+ *      meant to guard does not, which is why the rule that wrote the declarations down asks for
+ *     the relation and not the number; what the two sets must not be is empty, and that lower
  *     bound is asserted so a run that examined nothing fails here instead of passing.
  *   * every pass a module contributes is a pass-shaped declaration in `stdlib/<module>.cml`
  *     (`when is_function::<F>()`), and every declaration has a registration — the same relation
@@ -279,7 +279,7 @@ const isTestOnly = (path) => {
     const funcName = path.slice(separator + 2)
     return path.slice(0, separator) === 'test' || funcName.startsWith('test_')
 }
-// The module-level bijection, stated once as a relation and not as a count:
+//  The module-level bijection, stated once as the relation the rule asks for and not as a count:
 // every registered pass is a pass-shaped declaration of its module's `.cml` and every such
 // declaration is registered. What must not happen is a side that came out empty — a walk that
 // stopped matching would satisfy "every X is a Y" and a bijection between two empty sets, and the

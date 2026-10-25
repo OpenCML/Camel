@@ -2,10 +2,10 @@
 // reference entry of the plan recorded as a golden.
 //
 // `compareGirDotIsomorphic` (test/tools/gir-dot.mjs) is the comparison the snapshot tests use for a
-// `.dot` dump, and the one used here: a node is its kind, its type, its shape and its in/out
-// degree, and an edge is the kinds of its two endpoints, its link type and its label. That is what
-// makes the two graphs the same graph. The two dumps cannot be compared as text: the rule engine's
-// commit leaves the port without the span the C++ replacement copies onto it (section 4), so the
+// `.dot` dump, and the one used here: a node is its kind, its type, its shape and its in/out degree,
+// and an edge is the kinds of its two endpoints, its link type and its label. That is what makes the
+// two graphs the same graph. The two dumps cannot be compared as text: the rule engine's commit
+//  leaves the port without the span the C++ replacement copies onto it (section 4), so the
 // normalizers this plan lists — paths and origin ids — are applied to the golden and the comparison
 // stops at the structure, exactly as the Camel-pass differential does.
 

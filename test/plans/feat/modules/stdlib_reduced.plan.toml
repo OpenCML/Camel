@@ -19,7 +19,7 @@ expect_stdout = "float\nfloat\nnumeric\nnumeric\nordered\nordered\n0\n0\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 6000
 
-# The language half of the rule: literals, the written conversion, the arithmetic and the
+#  The language half of the rule: literals, the written conversion, the arithmetic and the
 # comparison of the two types, each pinned by a value or by the bytes of the stored element.
 
 [[tests]]
@@ -35,7 +35,7 @@ expect_stdout = "1.0 1.0 128 63\n0 60\n[205, 61]\n[102, 46]\n0.1 205 61 0.1\n205
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
 
-# The reduction the rule re-pointed: the refusal this case asserted became a computation.
+#  The reduction the rule re-pointed: the refusal this case asserted became a computation.
 
 [[tests]]
 name = "reduced_sum_refused"
@@ -110,7 +110,7 @@ expect_output_contains = ["f32", "bf16"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
-# The rule's item 2, the three per-element operations it names: `min`, `max` and `abs` over the
+#  The rule's item 2, the three per-element operations it names: `min`, `max` and `abs` over the
 # two reduced-precision types, and the two array folds over them that could not compute without
 # them. Every line is a byte pair, so a wrong reading moves one.
 

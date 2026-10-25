@@ -5,7 +5,7 @@
 
 `--camel <path>` (or `--camel=<path>`) names the install a run measures; with none it is
 `$CAMEL_HOME/bin/camel`, else this tree's `out/latest/bin/camel`. `CAMEL_HOME` is the install
-location's convention: an explicitly named install is a
+location's convention (the author's ruling of 2026-10-25): an explicitly named install is a
 command-line argument, never an environment switch.
 
 A `--camel` with no value is a usage error and exits 2; it never falls back to the default -- the

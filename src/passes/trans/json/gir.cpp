@@ -80,7 +80,7 @@ std::string egraphClassId(const std::string &graphId, gc_node_ref_t root) {
     return std::format("{}c{}", graphId, root);
 }
 
-/// The document `egraph-serialize` reads (§5.04 item 3): `nodes` maps every writing to its
+///  The document `egraph-serialize` reads (§5.04 item 3): `nodes` maps every writing to its
 /// operator, to the classes of the values it reads and to the class it is a writing of;
 /// `root_eclasses` names the value each graph returns; `class_data` says what the cost model
 /// makes of computing a value. The shape is the crate's and nothing else is added to it: a tool
@@ -243,8 +243,8 @@ std::string dumpJsonRuntimeGraph(
             }
             graph["regions"] = std::move(regions);
         }
-        // The values with several writings: their classes, the writings of each and the one
-        // extraction would take by the cost model the pipeline itself uses. A graph with one
+        //  The values with several writings: their classes, the writings of each and the
+        // one extraction would take by the cost model the pipeline itself uses. A graph with one
         // writing per value prints no `classes` key, so every existing reader keeps its bytes.
         if (!g->executable()) {
             std::shared_ptr<const CostModel> model = findCostModel(kWritingsCostModel);

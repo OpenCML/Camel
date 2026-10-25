@@ -1,7 +1,7 @@
-// Item 4 through the C++ translation: a loop whose state is appended in place translates to the
-// standalone Array, where `append` copies a block another holder shares and moves one it does
-// not, so the private copy the rewrite puts before the loop has nothing to do and the values
-// are those of the interpreter. The multi-state forms translate the same way.
+//  item 4 through the C++ translation: a loop whose state is appended in place translates
+// to the standalone Array, where `append` copies a block another holder shares and moves one it
+// does not, so the private copy the rewrite puts before the loop has nothing to do and the
+// values are those of the interpreter. The multi-state forms translate the same way.
 func grow(n: int): int[] {
     return loop xs = [0] while len(xs) < n do xs->append<7>
 }

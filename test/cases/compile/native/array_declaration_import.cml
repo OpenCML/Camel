@@ -3,7 +3,7 @@
  * element types and gives `int[]`; each sort name and `merge_sorted_arrays` has one declaration
  * per element type, each naming its own operator and taking that element type; and `flatten` and
  * `unique` are generic declarations of `stdlib/array.cml`. Every call reaches the built-in
- * operator (step 10).
+ *  operator (step 10).
  */
 module array_declaration_import
 

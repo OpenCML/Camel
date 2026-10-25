@@ -1,8 +1,8 @@
 /**
- * Rest parameters (design principles 5.5, step 6): `..ts` is the last parameter of a signature
- * and takes every argument left over. The call is expanded where it is written: the fixed
- * parameters take their arguments and `ts` is the tuple of the rest, so `indices ts` sees a
- * tuple whose arity is known, and `..(a, b)` passes the elements of a tuple literal.
+ *  Rest parameters (design principles 5.5, step 6): `..ts` is the last parameter of a
+ * signature and takes every argument left over. The call is expanded where it is written: the
+ * fixed parameters take their arguments and `ts` is the tuple of the rest, so `indices ts` sees
+ * a tuple whose arity is known, and `..(a, b)` passes the elements of a tuple literal.
  */
 module rest_params
 

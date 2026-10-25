@@ -1,4 +1,4 @@
-/// Imports `short`, whose `import..lib` cannot be formed against its one-component name.
+///  imports `short`, whose `import..lib` cannot be formed against its one-component name.
 module main_short
 
 import short

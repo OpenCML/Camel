@@ -1,12 +1,15 @@
 /**
  * Two declarations of one kernel name whose `when` conditions are not mutually exclusive, refused
- * where the second one is written (design principles 4.3, 4.4, 5.1): "对已登记的类型逐个求两条 `when`，有类型同时
- * 满足两条即报重叠（诊断指出那个类型与两条声明）". `is_small_int` covers `i32`; `is_number` covers `int`, `i32`, `float`
- * and `f32`. The pair is therefore separable for `int` (only the second condition holds there) but
- * not for `i32`, and no order of the declarations could decide a call with `i32` arguments. The
- * report names the type both conditions hold for and both declarations, each by its signature and
- * its condition: the type it names is the one that satisfies both, not the first type the compiler
- * asks about.
+ *  where the second one is written (design principles 4.3, 4.4, 5.1; the rule of
+ * 2026-10-24 on `impl-declaration-arms`,
+ * `docs/handover/reviews/questions-2026-10-23.md`): "对已登记的类型逐个求两条 `when`，有类型同时
+ * 满足两条即报重叠（诊断指出那个类型与两条声明）".
+ *
+ * `is_small_int` covers `i32`; `is_number` covers `int`, `i32`, `float` and `f32`. The pair is
+ * therefore separable for `int` (only the second condition holds there) but not for `i32`, and no
+ * order of the declarations could decide a call with `i32` arguments. The report names the type both
+ * conditions hold for and both declarations, each by its signature and its condition: the type it
+ * names is the one that satisfies both, not the first type the compiler asks about.
  */
 module when_arms_overlap
 

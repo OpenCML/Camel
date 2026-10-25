@@ -1,7 +1,8 @@
 /**
  * The second parameter of `rewrite:extract` is the declaration's `string`: an `int` there is
- * refused at the call, and the overload the message lists is the declaration's `(p: Program,
- * cost: string) => Program!` — `stdlib/rewrite.cml`, not the C++ module.
+ * refused at the call, and the overload the message lists is the declaration's
+ * `(p: Program, cost: string) => Program!` — `stdlib/rewrite.cml`, not the C++ module (handover
+ * 
  */
 module rewrite_type
 

@@ -63,8 +63,8 @@ class GraphVizDumpPass : public RuntimeGraphTranslatePass {
     apply(const camel::runtime::Program *program, std::ostream &os) override;
 
     /// A graph with values that have several writings is drawn as it is: every class is a dashed
-    /// cluster of its writings, and the writing extraction would choose is marked, rather than
-    /// the driver picking one writing per value first.
+    ///  cluster of its writings, and the writing extraction would choose is marked, rather
+    /// than the driver picking one writing per value first.
     bool acceptsWritings() const override { return true; }
 };
 

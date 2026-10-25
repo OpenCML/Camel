@@ -153,7 +153,7 @@ inline std::vector<std::string> buildModuleSearchPaths(
     // The entry file's directory is *not* one of the roots: it is the entry program's own
     // directory, and a module's own directory comes before these roots (design principles
     // 10.2). Baking it in here made it a root for every library too, so a library's import
-    // resolved differently depending on who imported it. The context puts the importing
+    //  resolved differently depending on who imported it. The context puts the importing
     // module's directory in front of this list.
     //
     // `-I` / `--include`: the module roots, in command-line order, before every root that comes

@@ -1,7 +1,8 @@
 /**
- * How many names a head may write is decided by the element of the sequence: the element of
- * `indices ts` is the position, one thing, so a second name (`F`, the type name `fields` has)
- * has nothing to be. It is refused by name, not as a syntax error.
+ *  How many names a head may write is decided by the element of the sequence (the rule of
+ *  2026-10-25, item 4): the element of `indices ts` is the position, one thing, so a second
+ * name (`F`, the type name `fields` has) has nothing to be. It is refused by name, not as a
+ * syntax error.
  */
 module indices_two_names
 

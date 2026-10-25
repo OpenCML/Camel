@@ -1,7 +1,7 @@
 /**
  * An integer where the declarations of `hash:sha256` say `string` or `Bytes`: the call is refused
  * against both declarations, whose parameter name (`s`) comes from `stdlib/hash.cml`, not the C++
- * module.
+ *  module.
  */
 module hash_type
 

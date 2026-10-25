@@ -1,7 +1,7 @@
 /**
  * The declaration of `numel` takes one ordinary argument: a second one is refused at the call,
  * and the overload the message lists is the declaration's — the one source is
- * `stdlib/tensor.cml`, not the C++ module.
+ *  `stdlib/tensor.cml`, not the C++ module.
  */
 module tensor_arity
 

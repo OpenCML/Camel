@@ -1,6 +1,6 @@
 /**
- * The build-time tuple of a rest parameter (step 6): `ts` is not a value, so `indices ts` reads
- * only its type and `ts.[j]` reads the argument node directly. The graph of `main` is the
+ *  The build-time tuple of a rest parameter.: `ts` is not a value, so `indices ts`
+ * reads only its type and `ts.[j]` reads the argument node directly. The graph of `main` is the
  * hand-written sum of the three arguments: no FILL for `ts` and no ACCS for its elements.
  */
 module static_tuple_graph

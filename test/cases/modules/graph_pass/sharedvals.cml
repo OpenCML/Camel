@@ -1,7 +1,7 @@
 // A module that is both the pass the pipeline runs and a library the program being transformed
 // imports. The pass program and the program have builders of their own, and neither may read the
-// other's entities (task, item 1; review, question 2). `twice` is a generic function, so both
-// builders also make an instance of it for the same type.
+//  other's entities (item 1; review, question 2). `twice` is a generic function, so
+// both builders also make an instance of it for the same type.
 module sharedvals
 import { Program } from graph
 

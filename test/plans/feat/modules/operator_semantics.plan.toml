@@ -179,7 +179,7 @@ for (const name of ['pow', 'hypot']) {
 for (const name of ['abs', 'round', 'ceil', 'floor', 'trunc', 'min', 'max', 'clamp', 'sign',
                     'is_nan', 'is_inf']) both(name, 'exact', FINITE)
 // The two reduced-precision floating types take abs, min and max and nothing else of this module
-// (the ruling docs/handover/reviews/reduced-precision.md item 2: "`math::min`/`max`/`abs` 等补
+//  (the rule docs/handover/reviews/reduced-precision.md item 2: "`math::min`/`max`/`abs` 等补
 // bf16/f16"). Each is the exact operation on the value the operand widens to, so `compute` is the
 // element type's own width and not a wider working type: nothing is computed in f32 and rounded
 // back, which is why these do not read as `compute: 'f32'`.
@@ -230,7 +230,7 @@ for (const op of mathOps) {
   assert(typeof s.algorithm === 'string' && s.algorithm.length > 0, `${uri}: no algorithm`)
 }
 // A declaration writes one row per spelling, so one URI may be listed several times (math:sqrt
-// and the two shifts have four each; handover H202): count distinct URIs, and every row of a URI
+//  and the two shifts have four each; handover): count distinct URIs, and every row of a URI
 // is held to the same declaration by the loop above.
 const listed = new Set(mathOps.map((o) => o.uri))
 assert(listed.size === expected.size, `${listed.size} math operators listed (${mathOps.length} rows), ${expected.size} expected`)

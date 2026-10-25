@@ -1,6 +1,7 @@
 /**
  * The declarations of `statistics:mean` take one array argument: a second one is refused at the
- * call, and the overloads the message lists are the declarations' (step 10).
+ *  call, and the overloads the message lists are the declarations' (step 10;
+ * 
  */
 module statistics_arity
 

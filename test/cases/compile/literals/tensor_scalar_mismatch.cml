@@ -1,7 +1,7 @@
-/// A scalar whose type is its own is not converted to the tensor's element type. `x * a` with `x:
-/// Tensor<f32>` and `a: float` is an error that names the conversion to write, the same rule as
-/// `f32 * f64` between two scalars (design principles 5.1); `x * 2.0` is not one, because the
-/// literal takes the element type.
+///  a scalar whose type is its own is not converted to the tensor's element type. `x * a`
+/// with `x: Tensor<f32>` and `a: float` is an error that names the conversion to write, the same
+/// rule as `f32 * f64` between two scalars (design principles 5.1); `x * 2.0` is not one, because
+/// the literal takes the element type.
 module tensor_scalar_mismatch
 
 import { Tensor, reshape, sum } from tensor

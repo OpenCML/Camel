@@ -2,11 +2,12 @@
 // SPDX-License-Identifier: MIT
 
 /*
- * The memory operator the language exposes for diagnostics: `std::mem::blocks()`. It reads the
- * block counters and returns them as a struct, so a program can assert between two
- * operations how many buffers an operation allocated (design principles 10.5; the
- * per-operation allocation tests). A self-test pass could only report once, at the
- * end; a callable function is read where the question is asked.
+ * The memory operator the language exposes for diagnostics: `std::mem::blocks()`.
+ *
+ * It reads the block counters and returns them as a struct, so a program can assert between
+ * two operations how many buffers an operation allocated (design principles 10.5; the
+ *  per-operation allocation tests of step 9). A self-test pass could only report once, at
+ * the end; a callable function is read where the question is asked.
  */
 
 #pragma once

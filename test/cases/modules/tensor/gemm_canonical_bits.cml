@@ -1,12 +1,13 @@
 /**
  * The canonical GEMM's bits at the shapes the d=256 step issues, over the paths the band-major
- * packing change of touched: a column band reused by several row tiles, edge row tiles (M = 300
- * leaves a 12-row tile), edge column panels (N = 130 leaves a 2-column panel), and more than one
- * K block (K = 600, three blocks through the carry buffer). Each product is reduced to the
- * sha256 of its storage bits, so one changed bit anywhere in the product changes the printed
- * digest. The digests below are the kernel's bits before the change; the plan pins them, so a
- * later rewriting that re-associates a chain is visible even when the error is small.
- * `gemm_canonical.cml` and `gemm_consistency.cml` remain the numeric cases.
+ *  packing change of touched: a column band reused by several row tiles, edge row tiles
+ * (M = 300 leaves a 12-row tile), edge column panels (N = 130 leaves a 2-column panel), and more
+ * than one K block (K = 600, three blocks through the carry buffer).
+ *
+ * Each product is reduced to the sha256 of its storage bits, so one changed bit anywhere in the
+ * product changes the printed digest. The digests below are the kernel's bits before the change;
+ * the plan pins them, so a later rewriting that re-associates a chain is visible even when the
+ * error is small. `gemm_canonical.cml` and `gemm_consistency.cml` remain the numeric cases.
  */
 module gemm_canonical_bits
 

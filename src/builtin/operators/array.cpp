@@ -471,7 +471,7 @@ std::unordered_map<std::string, operator_t> getArrayOpsMap() {
     // names one of them with its `#op` tag and admits exactly that element type with its own
     // `when` (`Builder::declaredRuleApplies`), so the element type is known where the executor is
     // chosen and no executor asks an array what it holds. An element type no declaration admits
-    // has no executor and runs the Camel body (: one operator, per-type executors).
+    //  has no executor and runs the Camel body (: one operator, per-type executors).
     for (const auto &[name, exec] :
          std::initializer_list<std::pair<const char *, operator_t>>{
              {"sum_i", __array_sum_i__},

@@ -42,7 +42,7 @@ slot_t makeSlotFromPrimitiveData(const data_ptr_t &data) {
         // An f32 uses the low four bytes of the slot. The rest is not part of the value, and a
         // rule compiles a constant from a slot: if this half were left as it was on the stack, two
         // readings of the same f32 constant could compare unequal, and whether they did would
-        // depend on the build. Zero it, as toSlot does for every value narrower than a slot.
+        //  depend on the build. Zero it, as toSlot does for every value narrower than a slot.
         slot_t result{};
         std::memcpy(&result, &f, sizeof(float));
         return result;

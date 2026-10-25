@@ -2,7 +2,7 @@
  * The declarations of `fs` are what an importer sees: `try_read_text` returns `string!`, the
  * reads give `Bytes`, the removals `void!`, and the arguments are the declaration's (a path, then
  * the content). Every call reaches the operator the C++ module runs; `stdlib/fs.cml` is the one
- * source of the signatures.
+ *  source of the signatures.
  */
 module fs_declaration_import
 

@@ -1,6 +1,7 @@
 /**
  * The declaration of `bytes:size` is the signature a call is checked against: two arguments are
- * refused at the call, where the overload is written as the declaration wrote it (step 1).
+ *  refused at the call, where the overload is written as the declaration wrote it (
+ * step 1).
  */
 import bytes
 

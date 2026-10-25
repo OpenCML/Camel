@@ -1,4 +1,4 @@
-/// Case 5: `order` exists in the `-I` root (`../roots/one`, value 100) and in the
+///  case 5: `order` exists in the `-I` root (`../roots/one`, value 100) and in the
 /// `CAMEL_PACKAGES` root (`../packages`, value 200). `-I` is searched first, so with both
 /// given this prints 100; with only `CAMEL_PACKAGES` it prints 200.
 module include_packages_order

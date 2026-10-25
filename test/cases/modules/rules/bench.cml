@@ -1,9 +1,10 @@
 /**
- * Measures one whole application of a rule set on `bench_target.cml`: the rewrites, the rounds,
- * the nodes visited, the nodes erased, whether it reached a fixpoint and the wall time, for the
- * application that rewrites and for a second one that finds the fixpoint at once. The pass is
- * `sync` and so are the callbacks it hands to `?->`: printing is part of the pass's execution,
- * not a value left unapplied (`SemanticDiag::EffectNotExecuted`).
+ *  Measures one whole application of a rule set on `bench_target.cml`: the rewrites, the
+ * rounds, the nodes visited, the nodes erased, whether it reached a fixpoint and the wall time,
+ * for the application that rewrites and for a second one that finds the fixpoint at once.
+ *
+ * The pass is `sync` and so are the callbacks it hands to `?->`: printing is part of the pass's
+ * execution, not a value left unapplied (`SemanticDiag::EffectNotExecuted`).
  */
 module bench
 

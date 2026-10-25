@@ -1,6 +1,6 @@
 /**
  * Tail recursions whose depth depends on the model input and which CARRY a struct or tuple
- * between calls ( 's outline item 3): the argument is flattened into one ONNX Loop state
+ *  between calls (the outline, item 3): the argument is flattened into one ONNX Loop state
  * per leaf, in the order of its fields, the body entry rebuilds the struct from those leaves,
  * and the Loop's outputs are rebuilt into the struct the recursion returned.
  *

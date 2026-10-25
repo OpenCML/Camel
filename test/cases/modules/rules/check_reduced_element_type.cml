@@ -8,7 +8,7 @@
  *
  *   the check cannot make a value of type 'bf16'
  *
- * (the rule on `check-generic-instance-space`, 3, opened this lane for exactly
+ *  (the rule on `check-generic-instance-space`, 3, opened this lane for exactly
  * that: "bf16/f16 单开一条车道：它们的元素类型 epsilon 是 2^-8 / 2^-10 ... 把这两个元素类型做出
  * 来，让相关法则能在它们上面被检验"). The sampler now draws a `bf16` and an `f16` as it draws an
  * f32 -- the drawn value is rounded once into the element type, the slot holds the element's own
@@ -18,7 +18,7 @@
  *
  * The case reads three things:
  *
- *   * the rule's own law, `float_add_minus_zero`, at `float`, `f32`, `bf16` and `f16`: the row
+ *    * the rule's own law, `float_add_minus_zero`, at `float`, `f32`, `bf16` and `f16`: the row
  *     of each reduced-precision instance says `evidence samples 200` where it used to say
  *     `evidence none`, and the whole report no longer contains the reason above;
  *   * `float_combine`, a law that asks for `reassociate` and whose two sides therefore differ by

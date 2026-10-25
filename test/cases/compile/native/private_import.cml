@@ -1,6 +1,6 @@
 /**
  * The private operator is no entity of its module: naming it through the import is refused, rather
- * than reaching a rule only the module's own code may mean.
+ *  than reaching a rule only the module's own code may mean.
  */
 import { at } from private_module
 

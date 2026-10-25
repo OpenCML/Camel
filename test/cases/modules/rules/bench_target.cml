@@ -1,8 +1,8 @@
 /**
- * A benchmark graph for 200 functions that each hold one `x + 0`, so one application of the
- * zero law rewrites 200 nodes in one round. `bench::measure` prints the cost the engine kept:
- * the rewrites, the rounds, the nodes visited and the wall time (the seconds are not pinned
- * by the plan).
+ *  A benchmark graph for 200 functions that each hold one `x + 0`, so one application of
+ * the zero law rewrites 200 nodes in one round. `bench::measure` prints the cost the engine
+ * kept: the rewrites, the rounds, the nodes visited and the wall time (the seconds are not
+ * pinned by the plan).
  */
 module bench_target
 

@@ -1,6 +1,6 @@
 /**
- * A tuple comprehension returned by a function (step 6) is a value: it is materialized by one
- * FILL at the `return`, so the caller sees an ordinary tuple. The build-time tuple does not
+ *  A tuple comprehension returned by a function. is a value: it is materialized by
+ * one FILL at the `return`, so the caller sees an ordinary tuple. The build-time tuple does not
  * cross the call; a runtime tuple is still not a rest argument.
  */
 module static_tuple_function

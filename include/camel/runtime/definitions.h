@@ -111,7 +111,7 @@ class DefinitionStore {
     };
     /// What a lookup found besides the function: whether the library is there, whether the name
     /// is absent from it, and the module itself so that a caller can say what it does provide
-    /// (: a pass named `module::name` whose module is there and provides no such pass).
+    ///  (: a pass named `module::name` whose module is there and provides no such pass).
     struct LibraryLookup {
         /// The library is there as a module written in Camel; it may still fail to load or
         /// compile (that reason is in `problem`, not here).
@@ -127,15 +127,16 @@ class DefinitionStore {
         /// The module, when it could be imported: its export list says what it provides.
         std::shared_ptr<camel::core::module::UserDefinedModule> module;
     };
-    /// The function `function` exported by the library module `module`, compiled and encoded the
-    /// first time it is asked for. It must be one non-generic function. Returns nothing when it
-    /// cannot be had, and then `problem` says why; the answer is remembered. `lookup`, when
-    /// given, receives what the answer says about the module itself: the library not being
+    /// The function `function` exported by the library module `module`, compiled and encoded
+    /// the first time it is asked for. It must be one non-generic function. Returns nothing
+    /// when it cannot be had, and then `problem` says why; the answer is remembered. `lookup`,
+    /// when given, receives what the answer says about the module itself: the library not being
     /// there, the name being absent from it, and the module, so that the caller can list what it
-    /// does export. `errorLocation`, when given, receives the library's first error as a
-    /// secondary location: its file, range and text (the same sentence the diagnostic table
-    /// gives it). It is empty when the library could not be loaded, or when its first error has
-    /// no position; the reason then stays in `problem`.
+    ///  does export.
+    /// `errorLocation`, when given, receives the library's first error as a secondary location:
+    /// its file, range and text (the same sentence the diagnostic table gives it). It is empty
+    /// when the library could not be loaded, or when its first error has no position; the
+    /// reason then stays in `problem`.
     std::optional<LibraryFunction> libraryFunction(
         const std::string &module, const std::string &function, std::string &problem,
         std::optional<camel::core::error::DiagLabel> *errorLocation = nullptr,
@@ -190,7 +191,7 @@ class DefinitionStore {
         bool absent = false;
         /// The library's first error, when it has one with a position (see libraryFunction).
         std::optional<camel::core::error::DiagLabel> errorLocation;
-        /// What the lookup said about the module.
+        ///  What the lookup said about the module.
         LibraryLookup lookup;
     };
     std::map<std::string, FunctionEntry> functions_;

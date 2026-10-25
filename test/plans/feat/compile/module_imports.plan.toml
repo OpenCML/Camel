@@ -230,10 +230,10 @@ args = ["${case}", "std::cpp"]
 expect_exit = 0
 expect_stdout_contains = ["return static_cast<int>(main_(0, 10));"]
 
-# ---- / : whose directory an import resolves in ---- put the importing module's own directory
-# ahead of the global search roots, so that stdlib/rules.cml's `import graph` finds
-# stdlib/graph.cmo and not a same-named program of the entry directory. pins both sides of
-# that rule in one directory holding a graph.cml.
+#  ---- whose directory an import resolves in ----
+#  put the importing module's own directory ahead of the global search roots, so that
+# stdlib/rules.cml's `import graph` finds stdlib/graph.cmo and not a same-named program of the
+#  entry directory. pins both sides of that rule in one directory holding a graph.cml.
 
 [[tests]]
 name = "imports.entry_dir_wins"
@@ -253,12 +253,12 @@ args = ["-E", "short", "${case}", "std::opt", "std::nvm"]
 expect_exit = 0
 expect_stdout_exact = "42\n"
 
-# ---- : -I / --include adds module search roots ---- Documented order since (design principles
-# 10.2, docs/cli.md): a module's own directory, then each -I directory in the order given, then
-# CAMEL_PACKAGES, then CAMEL_MODULE_PATH, then the standard library; the entry program follows
-# the same rule, so the entry file's directory is its own directory and is not a root for another
-# module. `-I` paths are resolved against the entry file's directory, like CAMEL_PACKAGES, hence
-# the `../roots/...` paths here.
+#  ---- -I / --include adds module search roots ----
+#  Documented order since (design principles 10.2, docs/cli.md): a module's own directory,
+# then each -I directory in the order given, then CAMEL_PACKAGES, then CAMEL_MODULE_PATH, then
+# the standard library; the entry program follows the same rule, so the entry file's directory is
+# its own directory and is not a root for another module. `-I` paths are resolved against the
+# entry file's directory, like CAMEL_PACKAGES, hence the `../roots/...` paths here.
 
 [[tests]]
 name = "imports.include_root_only"
@@ -334,12 +334,12 @@ envs = ["CAMEL_PACKAGES=../packages"]
 expect_exit = 0
 expect_stdout_exact = "200\n"
 
-# ---- the import order of design principles 10.2 ---- A module's import looks in its own
-# directory, then the module roots (-I in the order given, CAMEL_PACKAGES, CAMEL_MODULE_PATH),
-# then the standard library; the entry program follows the same rule. The fixtures live under
-# import_order/: before this change the entry file's directory was the first global root, so a
-# library's import fell back to it (`helper+root` where the module root said `root1`) and the
-# import cache was keyed by name (two `lib`s printed `1 1`).
+#  ---- the import order of design principles 10.2 ----
+# A module's import looks in its own directory, then the module roots (-I in the order given,
+# CAMEL_PACKAGES, CAMEL_MODULE_PATH), then the standard library; the entry program follows the
+# same rule. The fixtures live under import_order/: before this change the entry file's directory
+# was the first global root, so a library's import fell back to it (`helper+root` where the
+# module root said `root1`) and the import cache was keyed by name (two `lib`s printed `1 1`).
 
 [[tests]]
 name = "imports.order_library_own_dir"
@@ -431,19 +431,20 @@ args = ["-E", "short", "${case}"]
 expect_exit = 1
 expect_output_contains = ["name=SyntaxDiag::UnexpectedToken", "Unexpected '/'", "expected a name"]
 
-# ---- a relative spelling is a name, never a path ---- The grammar writes a relative module name
-# as one to three leading dots before a dotted name (`moduleName: ('.' | '..' | '...')? IDENTIFIER
-# ('.' IDENTIFIER)*`), and the dots drop that many components from the importing module's own name
-# (design principles 10.2). The resolved name is looked up in the importing module's own directory
-# and then the module roots; a spelling that drops more components than the name has names
-# nothing. Its spelling then reached the lookup as a path: `..lib` became `//lib`, so the
-# diagnostic reported `/` and `/lib` among the directories it tried (and omitted `/` once a lib.*
-# could be found there), and `moduleFileExists` could see a file at the root. Measured with a
-# module placed at `/lib.cml`: the import still failed and loaded nothing, because an unresolved
-# spelling produced no candidate at all. The pins below therefore assert that the diagnostic never
-# names those paths; the file at `/` was used for the measurement only and is not a fixture.
-# Fixtures live under import_order/relative_name/; the `lib.cml` beside the programs makes the
-# difference between "no such name" and "found beside the importer" visible.
+#  ---- a relative spelling is a name, never a path ----
+# The grammar writes a relative module name as one to three leading dots before a dotted name
+# (`moduleName : ('.' | '..' | '...')? IDENTIFIER ('.' IDENTIFIER)*`), and the dots drop that many
+# components from the importing module's own name (design principles 10.2). The resolved name is
+# looked up in the importing module's own directory and then the module roots; a spelling that
+# drops more components than the name has names nothing. Its spelling then reached the lookup as
+# a path: `..lib` became `//lib`, so the diagnostic reported `/` and `/lib` among the directories
+# it tried (and omitted `/` once a lib.* could be found there), and `moduleFileExists` could see a
+# file at the root. Measured with a module placed at `/lib.cml`: the import still failed and
+# loaded nothing, because an unresolved spelling produced no candidate at all. The pins below
+# therefore assert that the diagnostic never names those paths; the file at `/` was used for the
+# measurement only and is not a fixture. Fixtures
+# live under import_order/relative_name/; the `lib.cml` beside the programs makes the difference
+# between "no such name" and "found beside the importer" visible.
 
 [[tests]]
 name = "imports.relative_name_too_deep_is_not_a_path"

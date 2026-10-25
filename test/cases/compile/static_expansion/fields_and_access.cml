@@ -1,9 +1,9 @@
 /**
  * `static for (n, F) in fields T` expands the fields of a concrete struct or ordinary tuple at
- * instantiation (step 3): one copy of the body per field, in declaration order, with no graph
- * node of its own. `t.[n]` picks the field whose key is a compile-time constant (step 4). `n`
- * is the field name (a tuple's decimal index) and `F` is the field type, visible in `let v: F`
- * and in a head declaration of `F`.
+ *  instantiation.: one copy of the body per field, in declaration order, with no
+ *  graph node of its own. `t.[n]` picks the field whose key is a compile-time constant (
+ * step 4). `n` is the field name (a tuple's decimal index) and `F` is the field type, visible
+ * in `let v: F` and in a head declaration of `F`.
  */
 module fields_and_access
 
@@ -45,7 +45,7 @@ func emptyStruct(t: {}): int {
     return count
 }
 
-/* * `fields` is followed by a type position, so `` is the empty tuple type (rule 1). */
+/** `fields` is followed by a type position, so `` is the empty tuple type (rule 1). */
 func emptyTuple(): int {
     var count = 0
     static for (n, F) in fields () => {

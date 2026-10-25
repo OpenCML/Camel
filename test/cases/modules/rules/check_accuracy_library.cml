@@ -2,19 +2,23 @@
  * The rules of `rules::accuracy`, checked by `check` (rewrite design 2 (second version) 8.10): each
  * side is evaluated against a higher-precision reference over the sampled domain, including the
  * near-zero log, overflow, underflow and denormal regions, and the worst error ratio is reported.
- * `float_log1p` and `float_expm1` are one law each for the whole floating family since the fold,
- * and `check` now walks the instances of a generic law: each of the two is checked at `float` and
- * `f32`, under its own name, over the 100 samples and the seed this case has always pinned. Their
- * `bf16`/`f16` instances are absent from the report rather than reported: `math:log1p` and
- * `math:expm1` are registered for `f32`/`f64` only, so no instance of either law can be made for
- * those types at all, and a failed instantiation says nothing where it happened (§3 -- `why_not` is
- * where that reason is read). `tensor_log_softmax_of_softmax` is measured at the first entry of its
- * own call, and the verdict is sample-dependent: `check` seeds each entry with `seed * 1000003 +
- * index`, and draws with large magnitudes make the rule fail (measured 2026-10-24: FAIL at seeds 3,
- * 7 and 17 over 100 samples, and at 1000 samples with seed 11, on samples such as `{inf, 2.955, -2,
- * 906.555, -0, -1}` and `{3.4e+38, 2, 377.894}`). Recorded in
- * `docs/handover/reviews/questions-2026-10-23.md` §accuracy-check-sampling`: the rule is not this
- * lane's, and neither is the measure.
+ *
+ * `float_log1p` and `float_expm1` are one law each for the whole floating family since the fold, and
+ *  `check` now walks the instances of a generic law (the rule on
+ * `generic-rule-check-surface-and-multi-parameter-instances`, §1): each of the two is checked at
+ * `float` and `f32`, under its own name, over the 100 samples and the seed this case has always
+ * pinned. Their `bf16`/`f16` instances are absent from the report rather than reported: `math:log1p`
+ * and `math:expm1` are registered for `f32`/`f64` only, so no instance of either law can be made
+ *  for those types at all, and a failed instantiation says nothing where it happened (the rule of
+ * 2026-10-23 on `generic-rule-instantiation-set-and-predicate`, §3 -- `why_not` is where that
+ * reason is read).
+ *
+ * `tensor_log_softmax_of_softmax` is measured at the first entry of its own call, and the verdict
+ * is sample-dependent: `check` seeds each entry with `seed * 1000003 + index`, and draws with large
+ * magnitudes make the rule fail (measured 2026-10-24: FAIL at seeds 3, 7 and 17 over 100 samples,
+ * and at 1000 samples with seed 11, on samples such as `{inf, 2.955, -2, 906.555, -0, -1}` and
+ * `{3.4e+38, 2, 377.894}`). Recorded in `docs/handover/reviews/questions-2026-10-23.md` §accuracy-check-sampling`: the
+ * rule is not this lane's, and neither is the measure.
  */
 module check_accuracy_library
 

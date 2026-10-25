@@ -1,6 +1,6 @@
 /**
  * The default is a value of the parameter's type, as an argument at the call would be
- * (design principles 4.4).
+ *  (design principles 4.4).
  */
 module param_default_wrong_type
 

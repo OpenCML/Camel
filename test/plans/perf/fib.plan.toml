@@ -1,17 +1,19 @@
-# Recursive Fibonacci, timed with `--timeit` on each back end and after `std::opt::inline`. No
-# `perf_budget_mean_ms` here: the means are recorded, not gated. The budgets this plan used to
+# Recursive Fibonacci, timed with `--timeit` on each back end and after `std::opt::inline`.
+#
+# No `perf_budget_mean_ms` here: the means are recorded, not gated. The budgets this plan used to
 # carry (200/200/65/50/80/3 ms, 2026-05-04) were recorded on a developer machine and cannot be met
 # on another one. docs/performance/graph-store-baseline.md measured the same case with the same
 # `--timeit` on the 28-core i7-14700K (2026-10-20): nvm 219.0 ms -- 1 ms under its 220 ms ceiling
 # -- fvm 55.8 ms, jit 84.7 ms. The Linux host runs this workload about twice as slowly per core,
 # so nvm and fvm fail there on a quiet machine, and on the shared host the same command spreads
 # from 432 ms to 960 ms between runs (load average 26 to 54), which no percentage tolerance makes
-# a signal. `std::nvm` has no budget: it is the node-at-a-time reference, the performance is
-# `std::fvm`'s and `std::jit`'s to carry. The jit numbers also moved after the pool change
-# (84.7 ms on the i7, 5.3 ms on the host), so the old inline_jit budget of 3 ms -- below the plain
-# jit budget of 80 ms -- was never a comparison. The runner still prints mean, n and the 95 %
-# interval; compare a change against a run of the same build on the same machine, as the baseline
-# page says.
+#  a signal. `std::nvm` has no budget by the rule: it is the node-at-a-time reference,
+#  the performance is `std::fvm`'s and `std::jit`'s to carry (quoting item 7). The jit
+#  numbers also moved after (84.7 ms on the i7, 5.3 ms on the host), so the old inline_jit
+# budget of 3 ms -- below the plain jit budget of 80 ms -- was never a comparison.
+#
+# The runner still prints mean, n and the 95 % interval; compare a change against a run of the
+# same build on the same machine, as the baseline page says.
 id = "perf.fib"
 order = 400
 tier = "slow"
@@ -27,7 +29,8 @@ expect_exit = 0
 snapshot_stream = "stdout"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 # The cost bound is this test's own CPU time (user + system), and the timeout below is its liveness
-# bound (docs/handover/reviews/questions-2026-10-23.md, "declaration-cost-gate" (a)):
+#  bound, by the rule (docs/handover/reviews/questions-2026-10-23.md,
+# "declaration-cost-gate" (a)):
 #
 #   "改量 CPU 时间，不量墙钟。共享主机上的墙钟随负载漂移 ... 进程的 CPU 时间（用户态 + 内核态）基本
 #    不随负载变"
@@ -50,9 +53,9 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 # the neighbours of a CPU-bound entry.
 cpu_budget_ms = 9000
 # Ten timed iterations. On the host one iteration is 0.41-0.43 s quiet and up to 0.96 s at load
-# 26-54; at load 108 the inlined pair measured 1.14 s, so ten iterations is 11-16 s and the old
-# 15 s guard killed the plain run. 60 s is five times the busiest measured total and still
-# catches a hang, which takes minutes.
+#  26-54; at load 108 the inlined pair measured 1.14 s, so ten iterations is 11-16 s and the
+#  old 15 s guard killed the plain run. 60 s is five times the busiest measured total and
+# still catches a hang, which takes minutes.
 timeout_ms = 60000
 
 [[tests]]
@@ -64,16 +67,16 @@ args = ["${timeit_inline_nvm_10}", "${case}", "${run_inline_nvm}"]
 expect_exit = 0
 snapshot_stream = "stdout"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-# CPU time above; measured with it on 2026-10-24 at the same two run lengths and the same
-# 1-minute loads:
+#  CPU time, by the rule quoted on nvm_timeit above; measured with it on 2026-10-24 at the
+# same two run lengths and the same 1-minute loads:
 #
 #   5.09 s of CPU / 13.90 s wall   (nine perf plans in one run at -Jobs 8, 32 tests)
 #   5.12 s of CPU / 11.91 s wall   (those plans beside feat/mm/gc and two gpu plans)
 #
 # The budget is 9 s: the same headroom as nvm_timeit above (1.63x the higher reading is 8.35 s,
 # rounded up to 9000 ms) over the same ten iterations, and 1.76x the busiest reading seen.
-# Inlining is one extra pass over the program, not more iterations of it. The timeout below
-# stays; it is only the liveness bound.
+# Inlining is one extra pass over the program, not more iterations of it.
+#  The timeout below stays; it is only the liveness bound.
 cpu_budget_ms = 9000
 # The same ten iterations as nvm_timeit, with the same guard; see the note there.
 timeout_ms = 60000

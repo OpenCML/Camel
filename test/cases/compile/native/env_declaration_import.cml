@@ -1,7 +1,7 @@
 /**
  * The declarations of `env` are what an importer sees: `get_env` takes a variable name and
  * `get_cwd` takes nothing, and both answer the declared `string`. Every call reaches the C++
- * operator, and an unset variable is the declared empty string.
+ *  operator, and an unset variable is the declared empty string.
  */
 module env_declaration_import
 

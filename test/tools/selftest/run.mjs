@@ -3,38 +3,40 @@
 
 // Self-test of the plan runner. It covers:
 //
-// * the back-end matrix (`backends`, `backends_agree`, `known_fail`, the `[defaults]` table):
-// matrix.plan.toml, whose tests pass and fail on purpose;
-// * the plan schema: a misspelled key or a known key of the wrong type fails its own plan with
-// the file, the test and the key named, while a valid plan in the same directory still runs;
-// `expect_stdout_exact` (and its legacy name `expect_stdout`) compares the whole output;
-// * the payload a `verify_script_path` receives: the resolved case path under `case_path` and
-// the other fields docs/test-plans.md documents;
-// * the per-test scratch directory: scratch.plan.toml is run twice, and a test must not see
-// another test's (or an earlier run's) files in its `${test_tmp}` directory; the scratch
-// directory must lie under this run's `tmp/test/run-<pid>`; a file another run keeps under
-// tmp/test survives, and the run root is removed on success and kept on failure;
-// * parallel execution, the serial mark and the tier filter: parallel.plan.toml must print the
-// same status lines in the same order with `--jobs 4` as with `--jobs 1`, and its tests must
-// overlap; the tests of serial.plan.toml marked `parallel = false` must overlap nothing;
-// tier.plan.toml must be selected test by test by `--tier fast|slow|all` when its DIRECTORY is
-// the target, and run in full when its FILE is the target;
-// * the risk-based fast sample of a `[[sweeps]]` entry: three copies for a plan tagged
-// collections, one for the rest, every copy under `--tier all`;
-// * the identity of a sweep copy: two source plans that both have a test named `shapes` keep
-// four distinct names, and one source test reused under two sweeps keeps two;
-// * a benchmark whose timed pass fails: `--timeit` then reports the failed iteration with no
-// mean, and the runner reports that failure instead of throwing on the missing metric;
-// * the `--changed` mapping: the directory rule and the file rules together (the mirrored plan
-// plus the plans outside that tree that catch the same change), the layered plans that follow
-// `--tier`, the forbidden perf/GC-stress/progen boundary, the base branch and its
-// CAMEL_TEST_BASE override;
-// * every tracked file is selected by a rule or names an allowed rule-less class: a new kind of
-// file (a new extension under a new path) cannot be dropped from `--changed` silently;
-// * every plan file under test/plans/ is selected by at least one case path it names, and a
-// target may omit the `.plan.toml` suffix of a plan file;
-// * the mirror image: no fast case path selects a slow-cost plan in full unless that plan is the
-// only plan that runs the case, or the selection file records the shared case with a reason.
+//   * the back-end matrix (`backends`, `backends_agree`, `known_fail`, the `[defaults]` table):
+//     matrix.plan.toml, whose tests pass and fail on purpose;
+//   * the plan schema: a misspelled key or a known key of the wrong type fails its own plan with
+//     the file, the test and the key named, while a valid plan in the same directory still runs;
+//     `expect_stdout_exact` (and its legacy name `expect_stdout`) compares the whole output;
+//   * the payload a `verify_script_path` receives: the resolved case path under `case_path` and
+//      the other fields docs/test-plans.md documents;
+//   * the per-test scratch directory: scratch.plan.toml is run twice, and a test must not see
+//     another test's (or an earlier run's) files in its `${test_tmp}` directory; the scratch
+//     directory must lie under this run's `tmp/test/run-<pid>`; a file another run keeps under
+//     tmp/test survives, and the run root is removed on success and kept on failure;
+//   * parallel execution, the serial mark and the tier filter: parallel.plan.toml must print the
+//     same status lines in the same order with `--jobs 4` as with `--jobs 1`, and its tests must
+//     overlap; the tests of serial.plan.toml marked `parallel = false` must overlap nothing;
+//     tier.plan.toml must be selected test by test by `--tier fast|slow|all` when its DIRECTORY
+//     is the target, and run in full when its FILE is the target;
+//   * the risk-based fast sample of a `[[sweeps]]` entry: three copies for a plan tagged
+//     collections, one for the rest, every copy under `--tier all`;
+//   * the identity of a sweep copy: two source plans that both have a test named `shapes` keep
+//      four distinct names, and one source test reused under two sweeps keeps two;
+//   * a benchmark whose timed pass fails: `--timeit` then reports the failed iteration with no
+//      mean, and the runner reports that failure instead of throwing on the missing metric;
+//   * the `--changed` mapping: the directory rule and the file rules together (the mirrored
+//     plan plus the plans outside that tree that catch the same change), the layered plans that
+//     follow `--tier`, the forbidden perf/GC-stress/progen boundary, the base branch and its
+//     CAMEL_TEST_BASE override;
+//   * every tracked file is selected by a rule or names an allowed rule-less class: a new kind
+//     of file (a new extension under a new path) cannot be dropped from `--changed` silently
+//     
+//   * every plan file under test/plans/ is selected by at least one case path it names, and a
+//      target may omit the `.plan.toml` suffix of a plan file;
+//   * the mirror image: no fast case path selects a slow-cost plan in full unless that plan is
+//     the only plan that runs the case, or the selection file records the shared case with a
+//      reason.
 import fs from 'fs'
 import path from 'path'
 import { execFileSync, spawnSync } from 'child_process'
@@ -65,7 +67,7 @@ function runRunner(args, extraEnv = {}) {
 
 // `test/runner.mjs` is the command `node scripts/test.js` runs: target resolution, `--changed`
 // and `--list` live there, above the plan runner. A check of a target shorthand has to go
-// through it, not through run-tests.mjs, or it would test a different parser.
+//  through it, not through run-tests.mjs, or it would test a different parser.
 function runTestCli(args, extraEnv = {}) {
     const proc = spawnSync(process.execPath, [path.join(repoRoot, 'test', 'runner.mjs'), ...args], {
         encoding: 'utf8',
@@ -190,8 +192,8 @@ if (!strict.output.includes(`[INFO] test scratch kept: ${strictRoot}`)) {
 }
 fs.rmSync(strictRoot, { recursive: true, force: true })
 
-// --- the verify payload ---------------------------------------------------------------- The
-// fixture's script asserts that `case_path` is the resolved case path and that the other
+//  --- the verify payload ----------------------------------------------------------------
+// The fixture's script asserts that `case_path` is the resolved case path and that the other
 // documented fields are present. Before the fix `case_path` was undefined here, so this plan
 // failed with `undefined !== <path>`.
 const payloadPlan = path.join(here, 'verify_payload.plan.toml')
@@ -351,8 +353,8 @@ for (const [label, run] of [
         problems.push(`named plan (${label}): the run did not say the named plan runs in full`)
     }
 }
-// `--changed`'s `layer: true` rule: the plan file stays a named target but follows the tier,
-// so a fast plan's slow test is filtered instead of run in full.
+//  `--changed`'s `layer: true` rule: the plan file stays a named target but follows the
+// tier, so a fast plan's slow test is filtered instead of run in full.
 const tierLayered = runRunner(['--tier', 'fast', '--selection-layer', tierPlan, tierPlan])
 if (!tierLayered.output.includes('[SUMMARY] total: 2, pass: 2, fail: 0')) {
     problems.push(`layered named plan: unexpected summary (${summaryLine(tierLayered.output)})`)
@@ -391,14 +393,14 @@ if (statusLines(sweepAll.output).filter((line) => line.includes('poison:')).leng
     problems.push('sweep --tier all did not keep every copy')
 }
 
-// --- a sweep copy's identity carries its source plan ------------------------------------ Two
-// source plans both have a test named `shapes`. A copy is named `<sweep>:<source plan id>:<source
-// test>`; the source plan is what keeps the two apart. Before it was part of the name both plans'
-// copies were called `poison:shapes.*`, and a back end waited for, and compared against,
-// whichever `poison:shapes.nvm` ran last: the run reported a false failure (`differs from
-// poison:shapes.nvm` or `reference back end did not run`) although every test had run. The
-// fixture's two `shapes` print different words, so a reference that resolved to the other plan
-// fails on `stdout_normalized` instead of passing by accident.
+//  --- a sweep copy's identity carries its source plan ------------------------------------
+// Two source plans both have a test named `shapes`. A copy is named
+// `<sweep>:<source plan id>:<source test>`; the source plan is what keeps the two apart. Before
+// it was part of the name both plans' copies were called `poison:shapes.*`, and a back end waited
+// for, and compared against, whichever `poison:shapes.nvm` ran last: the run reported a false
+// failure (`differs from poison:shapes.nvm` or `reference back end did not run`) although every
+// test had run. The fixture's two `shapes` print different words, so a reference that resolved
+// to the other plan fails on `stdout_normalized` instead of passing by accident.
 const collisionPlan = path.join(here, 'sweep_names', 'collision.plan.toml')
 const collision = runRunner([collisionPlan])
 if (collision.status !== 0) problems.push(`sweep collision: runner exit ${collision.status}, expected 0`)
@@ -454,8 +456,8 @@ if (!hasPlan(docs, 'feat/docs_links.plan.toml')) {
     problems.push(`--changed: docs/ selected ${docs ? docs.names.join(', ') : 'nothing'}`)
 }
 // A directory rule names the plan that mirrors the path, and the file rule adds the plans
-// outside that tree that the same change can break: tensor keeps its own plans and adds the
-// autodiff plan, which is layered so its slow PyTorch comparisons stay out of --tier fast.
+//  outside that tree that the same change can break: tensor keeps its own plans and adds
+// the autodiff plan, which is layered so its slow PyTorch comparisons stay out of --tier fast.
 const tensor = plansForChanges(['modules/tensor/ops/matmul.cpp'])
 if (!hasTarget(tensor, 'test/plans/feat/modules/tensor')) {
     problems.push(
@@ -571,7 +573,7 @@ for (const rule of selectionDoc.rules || []) {
         }
     }
 }
-// --- a rule-less file class cannot appear silently -------------------------------------
+//  --- a rule-less file class cannot appear silently -------------------------------------
 // `--changed` applies the rules per file. A file no rule matches is dropped from the union, and
 // when another file in the same change does match, there is no fallback to notice it: the class
 // runs nothing. That is how stdlib/signatures, the doc guards, the golden files and the debugger
@@ -680,25 +682,25 @@ for (const entry of RULELESS_ALLOWED) {
     }
 }
 
-// --- every plan file of the branch is reachable from a case path ------------------------
+//  --- every plan file of the branch is reachable from a case path ------------------------
 // `--changed` selects plans through files, never through a plan's existence. A plan that no case
-// path selects is a plan the change that breaks its cases never runs, and the per-file check
+//  path selects is a plan the change that breaks its cases never runs, and the per-file check
 // cannot see it: the case files themselves are covered, they just select another plan. Both sides
 // are derived from the tree (no count is written down): the plan files under test/plans/, the
 // `case` entries each one names (resolved the way the runner resolves them), and the selection
 // `plansForChanges` returns for every case path and its directory. A plan is selected when the
 // selection resolves to its file, or to a directory that contains it.
 //
-// The verdict is about the **branch**, so the population is the plan files git has in its index. A
-// plan file that is only in the working tree -- an agent's scratch plan, written to try a case out
-// and deleted again -- is not one of the branch's plans, and the live tree is shared with whoever
-// is working in it: two gates of another task went red on this check, naming an untracked draft
-// that had nothing to do with the branch under test, and passed again once the draft was removed.
-// Such a file is named as a note instead, so the hole is still visible to the agent that wrote it,
-// and the same file committed makes this check red for real -- which is the gate that matters,
-// because nothing reaches develop uncommitted. The walk itself stays over the directory (a plan
-// file's absence from git is a fact about git, not about the runner), and the per-file check keeps
-// its own untracked files on purpose: a new class that is not committed yet must still be caught.
+// The verdict is about the **branch**, so the population is the plan files git has in its index
+//  A plan file that is only in the working tree -- an agent's scratch plan, written to try a
+// case out and deleted again -- is not one of the branch's plans, and the live tree is shared with
+// whoever is working in it: two gates of another task went red on this check, naming an untracked
+// draft that had nothing to do with the branch under test, and passed again once the draft was
+// removed. Such a file is named as a note instead, so the hole is still visible to the agent that
+// wrote it, and the same file committed makes this check red for real -- which is the gate that
+// matters, because nothing reaches develop uncommitted. The walk itself stays over the directory
+//  (a plan file's absence from git is a fact about git, not about the runner), and keeps its
+// own untracked files on purpose: a new class that is not committed yet must still be caught.
 const SELFTEST_PLANS_ROOT = path.join(repoRoot, 'test', 'plans')
 function walkPlanFiles(dir, out = []) {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -812,7 +814,7 @@ if (unreachablePlans.length > 0) {
     )
 }
 
-// --- no fast case path selects a slow-cost plan in full (H205) --------------------------------
+//  --- no fast case path selects a slow-cost plan in full --------------------------------
 // The mirror of the check above. A plan file target runs in full whatever `--tier` says, so a
 // directory rule that resolves a fast case directory to a slow plan makes every edit in that
 // directory pay for the whole plan. The check derives the cost class from the tree (the plan's
@@ -822,7 +824,7 @@ if (unreachablePlans.length > 0) {
 // a fast plan, so an exception that excuses nothing fails too.
 problems.push(...overSelectionProblems(repoRoot))
 
-// --- a plan target may omit its `.plan.toml` suffix (H201) ------------------------------------
+//  --- a plan target may omit its `.plan.toml` suffix ------------------------------------
 // `node scripts/test.js test/plans/feat/exemplars` used to resolve to a directory that does not
 // exist and exit ENOENT, although the plan file next to it does; two agents lost time on it in
 // one day. A target that is neither a directory nor a file resolves to `<target>.plan.toml`, and
@@ -856,7 +858,7 @@ if (savedBase === undefined) delete process.env.CAMEL_TEST_BASE
 else process.env.CAMEL_TEST_BASE = savedBase
 
 // --- a benchmark whose timed pass fails --------------------------------------------------------
-// H66 gives the `--timeit` failure payload no `mean_ms`; before the runner learnt to read it, the
+//  gives the `--timeit` failure payload no `mean_ms`; before the runner learnt to read it, the
 // payload crashed the runner while it formatted the metric. The test must fail, with the
 // diagnostic, and the summary must still be printed.
 const benchPlan = path.join(here, 'benchmark_failure.plan.toml')

@@ -39,7 +39,7 @@ enum class SemanticDiag : uint32_t {
     ImportNameNotExported = 0x000015,
     // A literal the type it is given cannot hold: out of range, truncated (a decimal literal
     // in an integer type), or not a value of that type at all (a text that is not a number).
-    // One diagnostic for all of them (handover H24): it says which literal, which type, and
+    //  One diagnostic for all of them: it says which literal, which type, and
     // why.
     LiteralNotRepresentable     = 0x000016,
     DynamicCastForbidden        = 0x000017,
@@ -86,13 +86,13 @@ enum class SemanticDiag : uint32_t {
     // Map and Set (design principles 11.3; docs/technical/31_map_and_set.md).
     CollectionKeyNotAllowed = 0x0000A0,
     DuplicateCollectionKey  = 0x0000A1,
-    // Rulings of 2026-10-12 (design principles log 2.10): 0xB0 and up.
+    //  Design principles log 2.10: 0xB0 and up.
     MatchWithoutDefault        = 0x0000B0,
     IfWithoutElseAsValue       = 0x0000B1,
     EmptyArrayWithoutType      = 0x0000B2,
     PartialApplicationRefused  = 0x0000B3,
     ComprehensionSourceRefused = 0x0000B4,
-    // Rulings of 2026-10-13 (design principles log 2.11): 0xC0 and up.
+    //  Design principles log 2.11: 0xC0 and up.
     LogicalOperandNotBool = 0x0000C0,
     // Modules and namespaces (design principles 10.1, 10.2): 0xD0 and up.
     ExportedVariable          = 0x0000D0,
@@ -105,7 +105,7 @@ enum class SemanticDiag : uint32_t {
     // The condition and the cases of a branch (found with the `any` cases above).
     ConditionNotBool      = 0x0000E3,
     MatchCaseTypeMismatch = 0x0000E4,
-    // Rulings of 2026-10-14 (design principles log 2.12) on operators and on collections that
+    //  Rules (design principles log 2.12) on operators and on collections that
     // are not changed in place: 0xF0 and up.
     UnusedPureResult         = 0x0000F0,
     OperatorNotOverloadable  = 0x0000F1,
@@ -116,7 +116,7 @@ enum class SemanticDiag : uint32_t {
     // settled by declaration order (design principles 5.1). Renamed from
     // AmbiguousOperatorCall when it became the report for every call; the code is unchanged.
     AmbiguousCall = 0x0000F4,
-    // Rulings of 2026-10-15 (design principles log 2.13) and the defects found with them: 0x110
+    //  Design principles log 2.13 and the defects found with it: 0x110
     // and up.
     DeclaredTypeMismatch = 0x000110,
     ModuleTypeCycle      = 0x000111,
@@ -127,7 +127,7 @@ enum class SemanticDiag : uint32_t {
     LoopConditionNotBool    = 0x000123,
     LoopNameRepeated        = 0x000124,
     LoopSequenceNotIterable = 0x000120,
-    // Rulings of 2026-10-19 (design principles log 2.13): the nominal enum, 0x130 and up.
+    //  Design principles log 2.13: the nominal enum, 0x130 and up.
     DuplicateEnumVariant   = 0x000130,
     DuplicateEnumField     = 0x000131,
     EnumVariantFieldCount  = 0x000133,
@@ -159,7 +159,7 @@ enum class SemanticDiag : uint32_t {
     RuleTagNotRequires     = 0x00016C,
     TagParameterType       = 0x00016D,
     TagShadowsPermission   = 0x00016E,
-    // Static expansion (design principles 5.5, handover H51): 0x170 and up.
+    //  Static expansion (design principles 5.5): 0x170 and up.
     StaticMatchNotExhaustive       = 0x000170,
     StaticMatchUnreachableCase     = 0x000171,
     StaticTypeNotConcrete          = 0x000172,
@@ -172,24 +172,24 @@ enum class SemanticDiag : uint32_t {
     StaticAccessNotConstant        = 0x000179,
     StaticComprehensionVoidElement = 0x00017A,
 
-    // `indices` (H51 step 6). 0x17B-0x17D are the body-less declaration diagnostics below, so
+    //  `indices`. 0x17B-0x17D are the body-less declaration diagnostics below, so
     // this one takes the next free code after them.
     StaticIndicesNotTuple = 0x000182,
 
-    // The sequence of a `static loop` (the two rules that gave it its head and its step):
+    //  The sequence of a `static loop` (and):
     // the head lost the parentheses it carried and takes any sequence known when the function is
     // compiled. One rule draws the line -- compile-time constants joined by operations that are
     // pure and cannot fail -- so what counts is the interval, `range`, an array and a compile-time
     // tuple, not a list of spellings. One the compiler cannot work out is this.
     StaticLoopSequenceNotKnown = 0x0001E7,
 
-    // The names of a `static for` / `static loop` head (the rule on the two-argument range and the
-    // tuple reading, item 4): the number of names
+    //  The names of a `static for` / `static loop` head (the rule on
+    // `static-loop-sequence-two-argument-range-and-the-tuple-reading`, item 4): the number of names
     // follows the element -- `fields T` gives the field's name, its type and its tags, every other
     // element gives one thing -- and a head that names more than the element has parts is this.
     StaticHeadNameCount = 0x000000,
 
-    // Rest parameters (design principles 5.5, H51 step 6): 0x18A and up.
+    //  Rest parameters (design principles 5.5, step 6): 0x18A and up.
     /// A rest parameter is not the last of the ordinary parameters.
     RestParameterNotLast = 0x00018A,
     /// A type was written after `..`: a rest parameter is untyped.
@@ -234,7 +234,7 @@ enum class SemanticDiag : uint32_t {
     /// A body-less declaration's clause differs from the operator's declared resources.
     NativeResourceMismatch = 0x0001A4,
 
-    // `std::cml`, the source printer (handover H240, step S1). 0x1A5 and up.
+    //  `std::cml`, the source printer (step S1). 0x1A5 and up.
     /// A graph holds a construct the printer does not turn into source (yet).
     CmlUnsupportedConstruct = 0x0001A5,
     /// A constant is larger than the printer's max_literal_bytes.
@@ -244,7 +244,7 @@ enum class SemanticDiag : uint32_t {
     // tensor keeps the element type it is written with, so nothing rewrites it and there is no
     // such diagnostic. The code is not reused.
 
-    // Applicability conditions (`when`, design principles 5.13; handover H234). 0x1A8 and up.
+    //  Applicability conditions (`when`, design principles 5.13; handover). 0x1A8 and up.
     /// The condition's value is not a bool.
     WhenConditionNotBool = 0x0001A8,
     /// The condition is not a compile-time predicate the compiler can evaluate.
@@ -257,7 +257,7 @@ enum class SemanticDiag : uint32_t {
     WhenConditionUnmet = 0x0001AC,
 
     // Defaults of `with` parameters and `with` arguments given by name (design principles 4.4,
-    // handover H235). 0x1B7 to 0x1BE; 0x1BF and up belong to `when` predicate lookup.
+    //  handover). 0x1B7 to 0x1BE; 0x1BF and up belong to `when` predicate lookup.
     /// A named `with` argument does not name a `with` parameter of the callee.
     WithArgumentUnknown = 0x0001B7,
     /// A `with` parameter is given twice, once by position and once by name.
@@ -284,20 +284,20 @@ enum class SemanticDiag : uint32_t {
     WhenPredicateAmbiguous = 0x0001C1,
 
     // Body-less declarations, the declarations of a C++ module's operators (design principles
-    // 6.4; handover H19, step 1). 0x17B and up.
+    //  6.4, step 1). 0x17B and up.
     NativeDeclarationIncomplete = 0x00017B,
     NativeDeclarationNotLoaded  = 0x00017C,
-    // Body-less declarations: 0x17E and up.
-    /// Two generic declarations of one name can take the same call (rule 2).
+    //  Body-less declarations: 0x17E and up.
+    ///  Two generic declarations of one name can take the same call (rule 2).
     NativeDeclarationOverlap = 0x000180,
-    // The rule on same-named `#impl` declarations split by their
-    // conditions: two
+    //  The rule on same-named `#impl` declarations split by their
+    // conditions (`docs/handover/reviews/questions-2026-10-23.md`, "impl-declaration-arms"): two
     // same-named declarations whose `when` conditions are mutually exclusive are overloads and may
     // stand side by side; a type that satisfies both is this overlap. The conditions are asked about
     // every type the compiler registers, and a condition it cannot answer leaves the pair refused by
     // the older code above.
     WhenDeclarationOverlap = 0x0001E0,
-    /// A declaration names an operator of another module (rule 5).
+    ///  A declaration names an operator of another module (rule 5).
     NativeDeclarationForeignOperator = 0x000181,
 
     // A lambda's parameter that writes no type and that the function type of its position does
@@ -320,7 +320,7 @@ enum class SemanticDiag : uint32_t {
     /// expression, an open type variable, a type written twice in one case, or a type that an
     /// earlier case already selects.
     StaticMatchPatternCannotMatch = 0x0001C2,
-    // Folding a call of a pure function with constant arguments (handover H271). 0x1C5 and up.
+    //  Folding a call of a pure function with constant arguments. 0x1C5 and up.
     /// An argument of a call in a place that needs a constant is not one.
     FoldCallArgumentNotConstant = 0x0001C5,
     /// The call has effects: it is `sync`, writes a `var`, or uses a resource.
@@ -333,7 +333,7 @@ enum class SemanticDiag : uint32_t {
     FoldCallNotEvaluable = 0x0001C9,
 
     // Defaults of ordinary parameters and ordinary arguments given by name (design principles
-    // 4.4). 0x1CD and up, after the constant-folding codes. The `with`
+    //  4.4). 0x1CD and up, after the constant-folding codes. The `with`
     // parameter's forms are 0x1B7-0x1BE.
     /// A name in a call's argument list names no parameter of the callee.
     ParamArgumentUnknown = 0x0001CD,
@@ -359,19 +359,19 @@ enum class SemanticDiag : uint32_t {
     /// An argument at a call has a type the parameter it fills does not take.
     ParamArgumentWrongType = 0x0001D6,
 
-    // Composition and the interval (`..`, design principles 4.2; the generator-and-composition rule).
-    // 0x1D7 and up.
+    //  Composition and the interval (`..`, design principles 4.2
+    //  on ` -generator-and-composition`). 0x1D7 and up.
     /// Neither reading of `..` takes these operands: they are not two functions and not two integers.
     CompOperandMismatch = 0x0001E1,
     /// The left operand of `..` is a function that takes more or fewer than one parameter.
     CompOperandNotUnary = 0x0001E2,
-    /// An operand of `..` is the name of a generic function, and nothing at this position says which instance it stands for. The refusal names the operand and both ways to settle it.
+    ///  An operand of `..` is the name of a generic function, and nothing at this position says which instance it stands for. The refusal names the operand and both ways to settle it (section generic-operands-of-composition of docs/handover/reviews/questions-2026-10-23.md).
     CompOperandGenericWithoutType = 0x0001E4,
     /// The interval of two integers is written `a..b` and nothing else: the two-parameter `range(a, b)`
-    /// the language used to have is gone (design principles 4.2; the rule).
+    ///  the language used to have is gone (design principles 4.2).
     RangeTwoArgumentsRemoved = 0x0001E5,
     /// `range(a, b, 0)` is no sequence at all: the step never moves (design principles 4.2; the
-    /// interval-step-form rule, which makes a step of 0 a fault
+    ///  rule on ` -interval-step-form`, which makes a step of 0 a fault
     /// and a constant one a compile-time error).
     RangeStepZero               = 0x0001E6,
     ReducedPrecisionUnsupported = 0x0001D7,
@@ -384,12 +384,12 @@ enum class SemanticDiag : uint32_t {
     ImplSignatureMismatch     = 0x0001DB,
     ImplKernelNotBodyless     = 0x0001DC,
     // The node of a `const` parameter inside a rule's condition (rewrite design 2 (second version)
-    // 1): the surface name is `node_of(c)`,
+    //  1; the rule on `rule_when_const_node`): the surface name is `node_of(c)`,
     // it takes the name of one of the rule's own `const` parameters, and it is written in the
     // condition. Nothing else reaches a node there.
     // A stream is linear (design principles 5.4): it is read one element at a time and is finished
     // when it ends, so a container whose elements can be read more than once cannot hold one. The
-    // rule names arrays, maps and sets; a tuple
+    //  rule (-stream-type-surface) names arrays, maps and sets; a tuple
     // is not a container in that sense - its items are taken apart once - and a function signature
     // may take and give a stream.
     StreamInContainer   = 0x0001E3,
@@ -400,12 +400,12 @@ enum class SemanticDiag : uint32_t {
     EffectNotExecuted = 0x100004,
     // 0x90 and up, clear of what other work adds after EffectNotExecuted.
     ExitInUnusedBranch = 0x100090,
-    // Rulings of 2026-10-13 (design principles log 2.11): 0xC0 and up.
+    //  Design principles log 2.11: 0xC0 and up.
     UnusedFallibleValue = 0x1000C0,
-    // Rulings of 2026-10-15 (design principles log 2.13): 0x110 and up.
+    //  Design principles log 2.13: 0x110 and up.
     NullTestNeverNull = 0x100110,
     KnownNotNull      = 0x100111,
-    // Rulings of 2026-10-19 (design principles log 2.13): the enum, 0x130 and up.
+    //  Design principles log 2.13: the enum, 0x130 and up.
     EnumVariantCaseRepeated = 0x100130,
     MatchCaseAfterWildcard  = 0x100131,
     // `case _` after every variant is matched: the wildcard can never be taken.

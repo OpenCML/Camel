@@ -1,8 +1,9 @@
 // A chain `f..g..h` is the lambda `(x) => h(g(f(x)))`, and the expected type reaches every link:
 // the composition's input types `f`, what `f` returns types `g`, what `g` returns types `h`, and
 // the result the position expects is what `h` gives. Each operand here takes a different
-// instance, so a distribution that handed all three the same type could not build this (the rule
-// is generic-operands-of-composition).
+// instance, so a distribution that handed all three the same type could not build this
+//  (the rule is docs/handover/reviews/questions-2026-10-23.md, section
+// generic-operands-of-composition).
 module h428_comp_chain
 
 func wrap::<T>(x: T): T[] {

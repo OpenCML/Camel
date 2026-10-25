@@ -1,7 +1,7 @@
 /**
- * A module found through CAMEL_PACKAGES, whose root has a name outside the process code page:
- * the search path comes from the environment as UTF-8. It also prints CAMEL_HOME, so the test
- * can check that the installation root it was started from is the one it sees.
+ * A module found through CAMEL_PACKAGES, whose root has a name outside the process code page
+ *  (item 3): the search path comes from the environment as UTF-8. It also prints CAMEL_HOME,
+ * so the test can check that the installation root it was started from is the one it sees.
  */
 module package_user
 

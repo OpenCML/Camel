@@ -1,8 +1,8 @@
 /**
- * A comprehension (step 4) is a `static for` written where a value is needed: `{... }` builds
- * a struct with the fields of the type it walks, `(... )` a tuple with its elements, both in
- * declaration order, each from one round's value. A block in a comprehension keeps its value
- * (unlike the statement form) and the empty struct gives an empty value.
+ *  A comprehension. is a `static for` written where a value is needed: `{... }`
+ * builds a struct with the fields of the type it walks, `( ... )` a tuple with its elements,
+ * both in declaration order, each from one round's value. A block in a comprehension keeps its
+ * value (unlike the statement form) and the empty struct gives an empty value.
  */
 module comprehensions
 
@@ -29,7 +29,7 @@ func noFields(): {} {
 }
 
 /** An empty tuple has no round either: the value is the empty tuple. `fields` is followed by a
- * Type position, so `` there is the empty tuple type. */
+ *  type position, so `` there is the empty tuple type (rule 1). */
 func noElements(): () {
     return ( static for (n, F) in fields () => 0 )
 }

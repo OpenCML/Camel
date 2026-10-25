@@ -38,7 +38,7 @@ struct LoopFrameHost {
     slot_t stateValue() { return frame.get<slot_t>(loop.stateSlot); }
     void setStateValue(slot_t value) {
         // The next round reads this value: it is a value, not a view of the element of this
-        // round.
+        //  round.
         frame.set(
             loop.stateSlot,
             camel::core::rtdata::materializeCallResult(

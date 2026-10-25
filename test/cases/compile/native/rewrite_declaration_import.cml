@@ -2,8 +2,8 @@
  * `rewrite`'s declarations are what an importer sees: the engines take a `Program` and an array
  * of `Rule` values, the two arities of `rewrite` and `saturate` both resolve, `extract` answers
  * `Program!`, and `check` answers the verdict table `CheckReport` from `stdlib/rewrite.cml`
- * (slice S0, is what moved `check` from `string` to the table). Checked, not run: the engines
- * need a compiled program, and the rules plans run them.
+ *  (slice S0, is what moved `check` from `string` to the table).
+ * Checked, not run: the engines need a compiled program, and the rules plans run them.
  */
 module rewrite_declaration_import
 

@@ -1,10 +1,10 @@
 /**
  * The head names three things when the element has three: the element of `fields T` is the triple
- * (name, type, tags), so `for n, F, tags in fields T` is the rule of the rule ( item 4), the same
- * rule `static for` follows. `tags` is the field's tags -- a compile-time `string[]` of the tag
- * names the declaration wrote -- so `len(tags)` folds (`low` has one tag, `high` none) and
- * `typeof(tags)` is `string[]` where the type is wanted. Naming fewer of the element's parts is
- * legal too: `for n in fields T` takes the field's name alone.
+ *  (name, type, tags), so `for n, F, tags in fields T` is
+ *  (item 4), the same rule `static for` follows. `tags` is the field's tags -- a compile-time
+ * `string[]` of the tag names the declaration wrote -- so `len(tags)` folds (`low` has one tag,
+ * `high` none) and `typeof(tags)` is `string[]` where the type is wanted. Naming fewer of the
+ * element's parts is legal too: `for n in fields T` takes the field's name alone.
  */
 module static_loop_head_tags
 

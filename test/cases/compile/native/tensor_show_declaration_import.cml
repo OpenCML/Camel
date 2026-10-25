@@ -2,7 +2,7 @@
  * The two declarations of `tensor:show` are what an importer sees: `show` accepts a tensor and,
  * as the second rule, any array (the umbrella parameter of the C++ operator, written as one
  * declaration per accepted type). Both calls reach the C++ operator and print in the module's
- * layout; the marker line proves the program ran to the end.
+ *  layout; the marker line proves the program ran to the end.
  */
 module tensor_show_declaration_import
 

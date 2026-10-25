@@ -1,5 +1,5 @@
-/// The same as `..lib` with three dots: still a relative prefix that drops more components than
-/// the importing module's name has, so still a name that names nothing and never a path.
+///  the same as `..lib` with three dots: still a relative prefix that drops more components
+/// than the importing module's name has, so still a name that names nothing and never a path.
 module main_3dot
 
 import ...lib

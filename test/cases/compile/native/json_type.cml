@@ -1,7 +1,7 @@
 /**
  * An integer where the declaration says `Json`: the call is refused at the declaration's type,
  * and the message prints the declaration's own parameter name (`j`) — the one source is
- * `stdlib/json.cml`, not the C++ module (step 10).
+ *  `stdlib/json.cml`, not the C++ module (step 10).
  */
 module json_type
 

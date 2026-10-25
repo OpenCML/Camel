@@ -1,16 +1,20 @@
 # `import` executes no code: `pyplot` and `python` must not create the embedded CPython at import
-# (design principles 3.1). The rule is a property of the language, not of one module, so it is
-# pinned from the outside: under `CAMEL_PYTHON_INHERIT_HOST_ENV=1` with `PYTHONHOME` pointing at an
-# empty directory, CPython cannot start at all (it prints its path configuration and pybind11
-# throws). A program that only imports `pyplot` or `python` must therefore exit 0 and print
-# nothing: putting the initialisation back into `load()` makes that program exit 1, which is how
-# measured the cost and the error code at import. The same environment then pins the other half:
-# the first `plot` or `py_exec` exits 1 with a `RuntimeError` at that call's source position, so
-# the failure moved rather than disappeared. With a healthy environment the case pins both orders
-# (`python` then `pyplot`, and the reverse) and that one interpreter, created by whichever got
-# there first, serves both. This is a behavioural guard, not a wall-clock one: no ceiling in
-# milliseconds could tell an initialisation that happened at import from one that happened at the
-# first call in a program that calls immediately. The before/after numbers are the record of
+#  (design principles 3.1, in answer to
+#  docs/technical/50_pyplot_cpython_init.md; handover).
+#
+# The rule is a property of the language, not of one module, so it is pinned from the outside:
+# under `CAMEL_PYTHON_INHERIT_HOST_ENV=1` with `PYTHONHOME` pointing at an empty directory, CPython
+# cannot start at all (it prints its path configuration and pybind11 throws). A program that only
+# imports `pyplot` or `python` must therefore exit 0 and print nothing: putting the initialisation
+#  back into `load` makes that program exit 1, which is how measured the cost and the error
+# code at import. The same environment then pins the other half: the first `plot` or `py_exec`
+# exits 1 with a `RuntimeError` at that call's source position, so the failure moved rather than
+# disappeared. With a healthy environment the case pins both orders (`python` then `pyplot`, and
+# the reverse) and that one interpreter, created by whichever got there first, serves both.
+#
+# This is a behavioural guard, not a wall-clock one: no ceiling in milliseconds could tell an
+# initialisation that happened at import from one that happened at the first call in a program
+# that calls immediately. The before/after numbers are the record of
 # docs/technical/50_pyplot_cpython_init.md, not a gate here.
 id = "modules.interpreter_first_use"
 order = 372

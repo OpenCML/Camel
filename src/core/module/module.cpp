@@ -241,7 +241,7 @@ Module::importedBindingsForRef(const Reference &ref, ImportLayer layer) const {
         // remote prefix, so a `using namespace m` would otherwise reach the built-in of a name
         // through layer 4 -- where the language's rule puts the prelude below every layer the
         // program wrote, and a `using namespace` brings the module's own names, not the prelude
-        // again (design principles 6.x).
+        //  again (design principles 6.x).
         if (binding.mod != nullptr && binding.mod->name().empty() &&
             binding.remotePrefixParts.empty()) {
             continue;
@@ -401,7 +401,8 @@ void Module::inheritExportsFrom(const Module &other) {
     // export the same operator under a type-qualified alias too (`Tensor.shape` beside
     // `shape`), and an alias that just arrived with those exports would otherwise be the last
     // write, pointing at the C++ group the declaration replaced. Whichever of the two names is
-    // written last, the declaration is the one signature (design principles 6.4).
+    // written last, the declaration is the one signature (design principles 6.4; handover
+    // 
     std::vector<std::string> plainGroups;
     nativeEntityNS_->forEach([&](const Reference &ref, const entity &ent) {
         if (ref.plain() && ent.isOperGroup() && ent.operGroup() != nullptr) {
@@ -472,7 +473,7 @@ Module::importedSource(const Reference &ref, ImportLayer layer) const {
     return std::make_pair(bindings.front().mod, bindings.front().remoteRef);
 }
 
-// ---- ProgramExports (task) -------------------------------------------------------------
+//  ---- ProgramExports (task) -------------------------------------------------------------
 //
 // An exported entity of a module written in Camel — a function's graph, a generic template, a
 // top-level value's node, a tag — is made by the builder of one program. The module object is

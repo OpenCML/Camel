@@ -97,7 +97,7 @@ template <typename T> T parseDecimalReal(const std::string &text, size_t begin) 
     }
     if (outOfRange) {
         // A literal too large for T, or a nonzero one too small to tell from zero, is an error
-        // (i): a pass parameter is a literal too, and no reader turns a nonzero text into
+        //  a pass parameter is a literal too, and no reader turns a nonzero text into
         // zero.
         if (anyNonZero) {
             throw std::overflow_error("Number out of range");
@@ -113,7 +113,7 @@ template <typename T> T parseDecimalReal(const std::string &text, size_t begin) 
 // optional exponent (`12`, `1e6`, `15e-1`), or `0x` / `0b` / `0o` (octal) and digits. The
 // arithmetic is exact. A negative exponent divides and drops the fraction (`15e-1` is 1), which
 // `inexact` records. `-9223372036854775808` is in range although its digits alone are not. A
-// leading-zero decimal is not a source token (i): the lexer refuses it and octal is `0o77`.
+//  leading-zero decimal is not a source token: the lexer refuses it and octal is `0o77`.
 enum class IntegerLiteralStatus { Ok, OutOfRange, Invalid };
 
 struct IntegerLiteral {

@@ -343,11 +343,12 @@ parallel, result in position order), `xs->reduce<f, init>` and `xs->foreach<f>` 
 11  multiplicativeExpr  * / @ %                            repeat, left
 12  powerExpr           ^                                  right, one
 13  nullableExpr        ?? !!                              right (a whole expression on the right)
-14  linkExpr            -> ?->                             repeat, left
-15  negExpr             - ! ~                              prefix
-16  negPower            - ! ~ ^                            prefix, right
-17  compExpr            ..                                 repeat, left
-18  annoExpr            !                                  repeat, left
+14  unaryExpr           as is                              one
+15  linkExpr            -> ?->                             repeat, left
+16  negExpr             - ! ~                              prefix
+17  negPower            - ! ~ ^                            prefix, right
+18  compExpr            ..                                 repeat, left
+19  annoExpr            !                                  repeat, left
 ```
 
 The production of each level, as `src/parse/syntax/parser_expr.cpp` writes it above the
@@ -367,6 +368,7 @@ additiveExpr       : multiplicativeExpr (('+' | '-') multiplicativeExpr)*
 multiplicativeExpr : powerExpr (('*' | '/' | '@' | '%') powerExpr)*
 powerExpr          : nullableExpr ('^' powerExpr)?
 nullableExpr       : unaryExpr (('??' | '!!') dataExpr)?
+unaryExpr          : linkExpr (('as' | 'is') typeExpr)?
 linkExpr           : negExpr (('->' | '?->') compExpr)*
 negExpr            : ('-' | '!' | '~') negPower | compExpr
 negPower           : ('-' | '!' | '~') negPower | compExpr ('^' negPower)?

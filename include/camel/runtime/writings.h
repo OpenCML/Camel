@@ -168,9 +168,9 @@ Pattern patCompute(
 class DraftWritings;
 
 /// The classes of a graph in the state with several writings, and the writing extraction would
-/// take for each of them: what a dump draws. Everything here is read, never written: the classes
-/// come from a decoded copy of the graph, which is dropped again, and the choice comes from the
-/// one cost fixed point `extract` applies, so a dump never guesses what extraction does.
+///  take for each of them: what a dump draws. Everything here is read, never written: the
+/// classes come from a decoded copy of the graph, which is dropped again, and the choice comes
+/// from the one cost fixed point `extract` applies, so a dump never guesses what extraction does.
 struct GraphWritings {
     /// One entry per value that has more than one writing, by ascending smallest writing.
     struct Value {
@@ -209,7 +209,7 @@ GraphWritings graphWritings(
 /// fixed point `extract` applies — the cost of a writing is its own plus the cost of the values it
 /// reads, repeated until nothing gets cheaper, the smallest node winning a tie — so what
 /// extraction would choose is read from one place, never guessed a second time (a dump that marks
-/// the chosen writing).
+///  the chosen writing).
 struct WritingChoice {
     /// Per node slot, the root of the class the node is a writing of (kInvalidNodeRef: no such
     /// node alive).
@@ -375,7 +375,7 @@ const Program *extractWritings(
 /// Only a node that is a pure function of its inputs takes part: a constant, a conversion, an
 /// access, a pure operator, not written in place and not reading a variable. Every other node is
 /// alone in its class. A control input does not keep a node out: it orders the computation, it
-/// does not make the value different (design principles 3.3, 3.4), and extraction gives the
+///  does not make the value different (design principles 3.3, 3.4), and extraction gives the
 /// writing that stays the control inputs of every writing of its value. Two nodes are congruent
 /// only in the same region and with the same numeric permissions (design principles 7.5,
 /// op-semantics 6.4).
@@ -454,8 +454,8 @@ class DraftWritings : private WritingObserver {
     ExtractStats extract(const CostModel &model, camel::core::context::Context *context = nullptr);
     /// The classes of the draft and the writing the cost model would choose for every value: the
     /// same fixed point `extract` picks its writings by, read without changing anything (a dump
-    /// marks the writing extraction would take). The classes are closed over congruence first,
-    /// so this counts on the store being up to date.
+    ///  marks the writing extraction would take). The classes are closed over congruence
+    /// first, so this counts on the store being up to date.
     WritingChoice
     choiceByCost(const CostModel &model, camel::core::context::Context *context = nullptr);
     /// How many merges congruence closure made.
@@ -465,7 +465,7 @@ class DraftWritings : private WritingObserver {
     struct Index;
     /// 1: the node takes part in congruence and in every match — it computes its value from its
     /// data inputs; 2: it does not. A control input takes no part in this question: it orders the
-    /// node, it does not make the value different (design principles 3.3, 3.4).
+    ///  node, it does not make the value different (design principles 3.3, 3.4).
     uint8_t shapeOf(gc_node_ref_t node);
     bool writtenInPlace(gc_node_ref_t node);
     bool takesPart(gc_node_ref_t node);
@@ -495,12 +495,12 @@ class DraftWritings : private WritingObserver {
     /// not declare it is never commuted, since a law is about values and the matcher may not
     /// guess (design principles 9.5).
     ///
-    /// `commuted` says whether that fallback may run for this rule. A `<=>` rule already states
-    /// both directions, and a saturation applies its reverse as a rule of its own; the fallback is
-    /// what a law that wrote only one order needs, so a two-way rule passes false. (Trying it as
-    /// well only doubled the matches of the rearranging laws: `rules::saturate_all` went from about
-    /// half a second to past the 20 s timeout,.) A one-way rule (`=>`) has no reverse and passes
-    /// true.
+    /// `commuted` says whether that fallback may run for this rule. A `<=>` rule already states both
+    /// directions, and a saturation applies its reverse as a rule of its own; the fallback is what
+    /// a law that wrote only one order needs, so a two-way rule passes false. (Trying it as well
+    /// only doubled the matches of the rearranging laws: `rules::saturate_all` went from about
+    ///  half a second to past the 20 s timeout.) A one-way rule (`=>`) has no reverse and
+    /// passes true.
     ///
     /// An operator whose own declaration says exchanging its operands and regrouping its chain
     /// give the same value (`BinaryLaw.commutative` and `exactAssociative`, per element type) is

@@ -1,19 +1,20 @@
 /**
- * Handover a position that takes a value by putting it into the form (`T?`, `T!`) takes the value
- * itself and the payload put into the form, so it does not determine which of the two the value
- * is (design principles 3.8, 5.2, `entersImplicitly`). A call standing in such a position has the
- * type its own arguments give it, and the form is put on at the position: `let v: int? = [1,
- * 2]->reduce<(a: int, b: int): int => a + b, 0>` is a reduction whose accumulator is an `int`, as
- * the written lambda and the initial value both say. Before this, the call's result type variable
- * was solved from the `int?` of the position, the deferred initial value was given the type
- * `int?` with it, and the call was refused as a whole with `SemanticDiag::NoMatchingFunction`
- * ("argument types: <(a: int, b: int) => int, int?> (int[])"). The generator's seeds 19 and 23
- * hit it in 82 cells of `opt.progen` (`reduce` over `string[]` and over `int[]`, in the arm of an
- * `if … else null` under a declared `T?` return). Every position a value enters by the form is
- * here: a declaration, the arm of an `if` under a declared `T?` return, a struct field, an
- * ordinary parameter of type `int?`; beside them the `with` parameter whose own type is the
- * concrete `int?` (there the position does give the type) and the literal `5` in an `int?`
- * declaration, which still takes the form.
+ *  Handover a position that takes a value by putting it into the form (`T?`, `T!`) takes
+ * the value itself and the payload put into the form, so it does not determine which of the two
+ * the value is (design principles 3.8, 5.2, `entersImplicitly`). A call standing in such a
+ * position has the type its own arguments give it, and the form is put on at the position:
+ * `let v: int? = [1, 2]->reduce<(a: int, b: int): int => a + b, 0>` is a reduction whose
+ * accumulator is an `int`, as the written lambda and the initial value both say. Before this,
+ * the call's result type variable was solved from the `int?` of the position, the deferred
+ * initial value was given the type `int?` with it, and the call was refused as a whole with
+ * `SemanticDiag::NoMatchingFunction` ("argument types: <(a: int, b: int) => int, int?> (int[])").
+ * The generator's seeds 19 and 23 hit it in 82 cells of `opt.progen` (`reduce` over `string[]`
+ * and over `int[]`, in the arm of an `if … else null` under a declared `T?` return).
+ *
+ * Every position a value enters by the form is here: a declaration, the arm of an `if` under a
+ * declared `T?` return, a struct field, an ordinary parameter of type `int?`; beside them the
+ * `with` parameter whose own type is the concrete `int?` (there the position does give the type)
+ * and the literal `5` in an `int?` declaration, which still takes the form.
  */
 module literal_context_boxed_position
 

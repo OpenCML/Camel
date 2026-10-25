@@ -1,17 +1,21 @@
 /**
  * Two declarations of one kernel name whose `when` conditions exclude each other (design
- * principles 4.4): "同名声明按 `when` 互斥分臂就是重载" -- two same-named declarations split by mutually
- * exclusive conditions are overloads, each the executor of its own family of instances (: one
- * operator, per-type executors). `arms_kernel` is declared twice, with the same generic signature
- * and different element types: `is_arm_i32` covers `i32` and `is_arm_int` covers `int`. Both
- * rules are of the one kernel the function `combine` tags with `#impl`, and each instance picks
- * the rule whose condition holds for its element type (adoptImplKernel). `float` satisfies
- * neither condition, so that instance has no executor and runs the body, which is the semantics
- * (10.4). Each of the three values can only come from one of the three code paths: the kernels
- * subtract (`19 - 23 = -4`) and add (`19 + 23 = 42`), and the body multiplies (`19 * 23 = 437`),
- * so the numbers say which executor each instance chose -- the `float` line is the body's answer
- * alone. A compiler that refused the pair would print nothing; one that bound the kernel by name
- * alone could not tell the two arms apart and would print one arm's answer twice.
+ *  principles 4.4; the rule on `impl-declaration-arms`,
+ * `docs/handover/reviews/questions-2026-10-23.md`): "同名声明按 `when` 互斥分臂就是重载" -- two
+ * same-named declarations split by mutually exclusive conditions are overloads, each the executor
+ *  of its own family of instances (: one operator, per-type executors).
+ *
+ * `arms_kernel` is declared twice, with the same generic signature and different element types:
+ * `is_arm_i32` covers `i32` and `is_arm_int` covers `int`. Both rules are of the one kernel the
+ * function `combine` tags with `#impl`, and each instance picks the rule whose condition holds
+ * for its element type (adoptImplKernel). `float` satisfies neither condition, so that instance
+ * has no executor and runs the body, which is the semantics (10.4).
+ *
+ * Each of the three values can only come from one of the three code paths: the kernels subtract
+ * (`19 - 23 = -4`) and add (`19 + 23 = 42`), and the body multiplies (`19 * 23 = 437`), so the
+ * numbers say which executor each instance chose -- the `float` line is the body's answer alone.
+ * A compiler that refused the pair would print nothing; one that bound the kernel by name alone
+ * could not tell the two arms apart and would print one arm's answer twice.
  */
 module when_arms_disjoint
 

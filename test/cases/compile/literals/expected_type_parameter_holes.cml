@@ -1,10 +1,10 @@
 /**
  * A composite literal with a computed element takes the type of its position for the elements it
- * did write, in a parameter position as in a return position (design principles 5.1). The value
- * written just above the f32 midpoint prints 1.00000012 in every line: converted once from the
- * value written, not 1.0 from the double the element was lowered to. Every element of a literal
- * with a computed sibling used to be dropped, in a parameter position and in a return position
- * alike.
+ *  did write, in a parameter position as in a return position (design principles 5.1
+ * of 2026-10-23 on `expected-type-through-literals-and-calls`, item 3). The value written just
+ * above the f32 midpoint prints 1.00000012 in every line: converted once from the value written,
+ * not 1.0 from the double the element was lowered to. Every element of a literal with a computed
+ * sibling used to be dropped, in a parameter position and in a return position alike.
  */
 module expected_type_parameter_holes
 

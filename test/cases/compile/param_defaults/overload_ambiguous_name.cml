@@ -1,7 +1,7 @@
 /**
  * Two declarations give the same name to two parameters: in one, `a` is the first parameter and in
- * the other it is the second, so `a` names no one parameter of `f` and the call is refused (design
- * principles 4.4).
+ * the other it is the second, so `a` names no one parameter of `f` and the call is refused
+ *  (design principles 4.4).
  */
 module param_overload_ambiguous_name
 

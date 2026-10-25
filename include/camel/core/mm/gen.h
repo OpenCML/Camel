@@ -308,9 +308,9 @@ class GenerationalAllocatorWithGC : public IAllocator {
     void *alloc(size_t payloadSize, size_t align = alignof(slot_t)) override;
 
     /// Accounts for `bytes` a core Block is about to take from the Block space. The bytes are
-    /// live values (the review of the plan requires them to pace the collector and to count
-    /// against CAMEL_GC_HEAP_LIMIT_MB), but they are allocated outside this allocator, so the
-    /// array layer calls this before taking them.
+    ///  live values (the review of the plan requires them to pace the collector and to
+    /// count against CAMEL_GC_HEAP_LIMIT_MB), but they are allocated outside this allocator, so
+    /// the array layer calls this before taking them.
     void checkBlockBytes(size_t bytes);
 
     void free(void *ptr) override;

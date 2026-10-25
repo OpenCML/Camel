@@ -20,7 +20,7 @@ const PLANS_ROOT = path.join(TEST_ROOT, 'plans')
 const VARS_PATH = path.join(TEST_ROOT, 'vars.toml')
 // The wrapper a `cpu_budget_ms` test runs under: it reaps exactly that test's process tree and
 // reports the CPU time the kernel charged it on file descriptor 3 (its header has the why; the
-// reading is judged in runOneTest).
+//  rule it implements is quoted where the reading is judged, in runOneTest).
 const CHILD_CPU_TOOL = path.join(TOOLS_ROOT, 'child-cpu.mjs')
 // Whether this host's kernel can report the CPU time of a process tree at all: the reading
 // test/tools/child-cpu.mjs makes is `cutime` + `cstime` of /proc/self/stat, which no other platform
@@ -316,14 +316,15 @@ const DEBUG_BUILD_TIMEOUT_SCALE = 4
 
 // How much room a test must leave under its `timeout_ms` to count as a real bound: the run fails
 // when a passing test used more than a quarter of it **of its own CPU time**. The quantity is the
-// work's, not the host's, and deliberately so: judged on the wall clock, this rule failed the
-// plan runner's own self-test at random on the shared host -- 1 of 12 runs at a 60 s bound, and
-// twice in two agents' gates -- while every run inside it was green, because a passing test's
-// wall clock on a busy host is the neighbours' scheduling. Four machines' worth of headroom is
-// what keeps a bound a bound. A test that needs more time states it in a comment next to the
-// number (docs/test-plans.md). A test that declares `cpu_budget_ms` is judged on that budget
-// instead and does not read the wall clock as a bound at all: its timeout is a liveness bound, so
-// this rule has nothing to say about it.
+//  work's, not the host's, and deliberately so: judged on the wall clock, this rule failed
+// the plan runner's own self-test at random on the shared host -- 1 of 12 runs at a 60 s bound,
+// and twice in two agents' gates -- while every run inside it was green,
+// because a passing test's wall clock on a busy host is the neighbours' scheduling. Four machines'
+// worth of headroom is what keeps a bound a bound. A test that needs more time states it in a
+// comment next to the number (docs/test-plans.md). A test that declares `cpu_budget_ms` is judged
+// on that budget instead and does not read the wall clock as a bound at all: its timeout is a
+//  liveness bound (see the rule quoted where the reading is judged), so this rule has nothing to
+// say about it.
 const TIMEOUT_MARGIN = 4
 
 /**
@@ -766,7 +767,7 @@ function formatMetric(result) {
         return `${reading} cpu of ${formatDurationMs(result.cpuBudgetMs)} budget, ` +
             `${formatDurationMs(result.wallMs)} wall`
     }
-    // A failed `--timeit` iteration reports the diagnosis, not a mean: the failure is the
+    //  A failed `--timeit` iteration reports the diagnosis, not a mean: the failure is the
     // test's result, so the status line carries no number.
     if (result.benchmark && Number.isFinite(result.benchmark.mean_ms)) {
         const samples = benchmarkSampleCount(result.benchmark)
@@ -1095,7 +1096,7 @@ async function runVerification(test, result) {
 
     const payloadPath = path.join(tempDir, 'input.json')
     // The documented payload fields are listed in docs/test-plans.md; every one of them must be
-    // present, and a missing key is silently dropped by `JSON.stringify` (H143: `case_path` was
+    //  present, and a missing key is silently dropped by `JSON.stringify` (: `case_path` was
     // assembled from a result that did not carry it yet, so a script normalizing the absolute
     // source path out of its output could not, and its digest varied with the checkout).
     const payload = {
@@ -1350,7 +1351,7 @@ async function validateTest(test, result, context) {
         if (!result.benchmark) {
             failures.push('missing benchmark payload')
         } else if (result.benchmark.failed) {
-            // `--timeit` reports the iteration that failed, its diagnostics and no mean (H66).
+            //  `--timeit` reports the iteration that failed, its diagnostics and no mean.
             // That is the test's result; it is reported here instead of the runner throwing on
             // the missing metric.
             const reasons = (result.benchmark.diagnostics || []).map(
@@ -1506,7 +1507,7 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
         testTmp: scratch,
         testTmpRelative: scratchRelative,
         // Set before validation: the verify script payload carries this as `case_path`, and the
-        // script that normalizes a source path out of its output needs it (H143).
+        //  script that normalizes a source path out of its output needs it.
         casePath,
         // The CPU cost judgement, if this test declared one: the figure the wrapper reported and
         // the budget it is read against, both recorded on the result (meta.json, the verify
@@ -1527,9 +1528,12 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
     // The verification reads this test's output: executePlans removes the scratch directory
     // only after this returns.
     const failures = await validateTest(test, result, { ...logContext, scope })
-    // The cost judgement of a test that declares `cpu_budget_ms` is in CPU time, not the wall clock:
-    // a shared host's wall clock drifts with the load, a process's CPU time (user + system) does
-    // not.
+    //  The cost judgement of a test that declares `cpu_budget_ms`, in the unit
+    // of 2026-10-23 asks for (docs/handover/reviews/questions-2026-10-23.md,
+    // "declaration-cost-gate" (a)):
+    //
+    //   "改量 CPU 时间，不量墙钟。共享主机上的墙钟随负载漂移 ... 进程的 CPU 时间（用户态 + 内核态）
+    //    基本不随负载变"
     //
     // So the figure judged here is the CPU time (user + system) the kernel charged the test's own
     // process tree, and a crossed budget is the test's work growing -- never "the host was busy".
@@ -1559,10 +1563,10 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
         }
     }
     // A timeout is a pass condition, so it is only a real bound when the test finishes with room to
-    // spare. The room is measured in the work's own currency -- the CPU time the kernel charged
-    // this test's process tree -- and not in the wall clock, which on a shared host belongs to
-    // whoever else is running. This is the same reading, from the same wrapper, that
-    // `cpu_budget_ms` is judged against, and the reason the wrapper runs for every test.
+    // spare. The room is measured in the work's own currency -- the CPU time the kernel charged this
+    // test's process tree -- and not in the wall clock, which on a shared host belongs to whoever
+    // else is running. This is the same reading, from the same wrapper, that `cpu_budget_ms` is
+    //  judged against, and the reason the wrapper runs for every test.
     //
     // What the rule cannot read it does not guess: on a host with no /proc/self/stat there is no
     // CPU figure for any test, so the wall clock is all there is and the run says so once at the
@@ -1780,10 +1784,10 @@ function expandSweeps(doc, planPath) {
         for (const source of sources) {
             const { doc: sourceDoc, tests: sourceTests } = loadPlanTests(source)
             // A copy is named after the sweep, its source plan and the source test. The source
-            // plan is part of the name because two plans may both have a test called `shapes`:
-            // without it the copies collide, and a back end waits for, and compares against,
-            // whichever copy of its reference ran last. `id` is the plan's stable identifier,
-            // unique across the run; the fallback matches loadPlanTests.
+            // plan is part of the name because two plans may both have a test called `shapes`
+            //  without it the copies collide, and a back end waits for, and compares
+            // against, whichever copy of its reference ran last. `id` is the plan's stable
+            // identifier, unique across the run; the fallback matches loadPlanTests.
             const sourceId = sourceDoc.id || path.basename(source, '.plan.toml')
             const rename = (name) => `${sweep.name}:${sourceId}:${name}`
             const risky = (sourceDoc.tags || []).some((tag) => riskTags.has(String(tag)))

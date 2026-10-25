@@ -1,18 +1,22 @@
 /**
  * The thread counts a matrix multiplication actually used: the pool that split it, and the
- * library threads each of its calls got. `-t` names one number of threads for the run (or the
- * hardware concurrency without it), and the tensor pool spends it. The library's own pool is one
- * thread: a whole-work product splits its output rows over the tensor pool, one library call per
- * chunk, so `plain` is the run's number; a product inside a batch region takes one library thread
- * per call because the batch loop already spreads the budget over the pool.
- * `gemm_library_threads()` reports 1 while a library call is what ran, and 0 on a build without a
- * CBLAS, where the library path forwards to the canonical kernel. The batched product is four
- * 1024x1024 matrices: each call is at the 2^30 shape threshold, so a CBLAS build would run the
- * library four times over — once per chunk — if each call also took the whole budget. Without a
- * library both products run the canonical kernel, which splits over the same pool and runs
- * serially inside a region. Exit 1 is a pool that does not report the run's number, 2 a
- * whole-work product whose library calls did not all get one thread, 3 a batched product whose
- * calls took more than one thread.
+ * library threads each of its calls got.
+ *
+ * `-t` names one number of threads for the run (or the hardware concurrency without it), and the
+ *  tensor pool spends it. The library's own pool is one thread: a whole-work product splits
+ * its output rows over the tensor pool, one library call per chunk, so `plain` is the run's
+ * number; a product inside a batch region takes one library thread per call because the batch
+ * loop already spreads the budget over the pool. `gemm_library_threads()` reports 1 while a
+ * library call is what ran, and 0 on a build without a CBLAS, where the library path forwards to
+ * the canonical kernel.
+ *
+ * The batched product is four 1024x1024 matrices: each call is at the 2^30 shape threshold, so a
+ * CBLAS build would run the library four times over — once per chunk — if each call also took the
+ * whole budget. Without a library both products run the canonical kernel, which splits over the
+ * same pool and runs serially inside a region.
+ *
+ * Exit 1 is a pool that does not report the run's number, 2 a whole-work product whose library
+ * calls did not all get one thread, 3 a batched product whose calls took more than one thread.
  */
 module gemm_threads
 

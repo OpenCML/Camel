@@ -1,6 +1,6 @@
 /**
  * `bf16` and `f16` are floating types of the language, on par with `f32` (design principles 7.3;
- * rule items (a) and (b)): a literal has one, the
+ *  rule docs/handover/reviews/reduced-precision.md items (a) and (b)): a literal has one, the
  * nearest value rounds to nearest with ties to even once, `bf16(x)` / `f16(x)` are written
  * conversions and need no numeric permission, the scalar arithmetic and comparison compute in
  * f32 and round once into the element type, and reading such a value as a wider number is exact.
@@ -9,7 +9,7 @@
  * rule gives.
  *
  * The text of one of these values is the shortest that reads back as the same element of its own
- * type (design principles 7.7; rule,
+ *  type (design principles 7.7; rule docs/handover/reviews/questions-2026-10-23.md,
  * "reduced-precision-text"), so the last section asserts that of every value it prints by reading
  * the text back through `bf16(s)` / `f16(s)` rather than by pinning the digits a second time.
  *
@@ -158,25 +158,28 @@ func main(): int sync {
     println(to_array(to_bytes(narrowed(new(rows)))))
     println(to_array(to_bytes(halved(new(tenth)))))
 
-    // ---- the text of one of these values, read back as the same element ---- Design principles
-    // 7.7: a float becomes text as the shortest text that reads back as the same value. A bf16 or
-    // an f16 is a value of its own type, so "the same value" is an element of that type, and the
-    // text is the shortest that reads back as it (rule, "reduced-precision-text"). Each value
-    // below is printed and read back by the language's own conversion, whose result is compared
-    // with the value itself, so the property lines pin no digit count and no spelling: they
-    // assert that the text names the element it came from, for every value of either type, which
-    // is what a text rule has to keep true. The digits themselves are pinned where every other
-    // line of this case pins them, by the plan's `expect_stdout`, and that is the line that
-    // catches today's defect: `0.1 as bf16` printed `0.100097656` (the f32 text of the bf16), and
-    // `0.1` is the text of the rule. A round-tripping property alone cannot catch it -- the f32
-    // text does read back as the same bf16, it is simply not the shortest text of that bf16 -- so
-    // the two belong together: `expect_stdout` holds the digits, these lines hold the round trip.
+    // ---- the text of one of these values, read back as the same element ----
+    //
+    // Design principles 7.7: a float becomes text as the shortest text that reads back as the
+    // same value. A bf16 or an f16 is a value of its own type, so "the same value" is an element
+    //  of that type, and the text is the shortest that reads back as it (rule
+    // docs/handover/reviews/questions-2026-10-23.md, "reduced-precision-text"). Each value below
+    // is printed and read back by the language's own conversion, whose result is compared with
+    // the value itself, so the property lines pin no digit count and no spelling: they assert
+    // that the text names the element it came from, for every value of either type, which is what
+    // a text rule has to keep true. The digits themselves are pinned where every other line of
+    // this case pins them, by the plan's `expect_stdout`, and that is the line that catches
+    // today's defect: `0.1 as bf16` printed `0.100097656` (the f32 text of the bf16), and `0.1`
+    //  is the text of the rule. A round-tripping property alone cannot catch it -- the f32 text
+    // does read back as the same bf16, it is simply not the shortest text of that bf16 -- so the
+    // two belong together: `expect_stdout` holds the digits, these lines hold the round trip.
     // What they do catch on their own is a text that names a different element, and printing an
-    // array element by another rule than the scalar (below). The pair that shows the rule: the
-    // bf16 of 0.1 and the f32 of 0.1 are different numbers, and both print `0.1`, because each
-    // prints the shortest text that reads back as itself. Widening the bf16 to f32 first would
-    // print `0.100097656`, which is the f32 rule applied to a bf16 (the defect this section
-    // replaces).
+    // array element by another rule than the scalar (below).
+    //
+    // The pair that shows the rule: the bf16 of 0.1 and the f32 of 0.1 are different numbers, and
+    // both print `0.1`, because each prints the shortest text that reads back as itself. Widening
+    // the bf16 to f32 first would print `0.100097656`, which is the f32 rule applied to a bf16
+    // (the defect this section replaces).
 
     // The widest value each type holds, the least positive normal value, a subnormal, a third,
     // and the two zeros with their signs -- one line per property of the digits. A bf16 or an f16

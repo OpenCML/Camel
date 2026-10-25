@@ -1,7 +1,8 @@
 /**
  * Two generic declarations of one name that a single call could enter are refused where the
  * second one is written: which rule a call means must come from the types of its arguments,
- * never from the order the declarations are written in (design principles 4.3, 5.1).
+ * never from the order the declarations are written in (design principles 4.3, 5.1; handover
+ *  rule 2).
  */
 module native_overlap
 

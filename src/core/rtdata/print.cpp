@@ -135,9 +135,9 @@ void printScalar(std::ostream &os, slot_t data, const Type *type) {
     case TypeCode::BFloat16:
         // A bf16 or an f16 prints by the one float text rule of design principles 7.7, measured
         // against its own type's rounding: `0.1 as bf16` is `0.1`, not the text of the f32 it
-        // widens to. The slot holds the type's own pattern, which names the value
-        // (camel/core/rtdata/half.h), and reading the text back as the type gives the same
-        // element.
+        //  widens to (`0.100097656`; rule 2026-10-23, "reduced-precision-text"). The slot holds
+        // the type's own pattern, which names the value (camel/core/rtdata/half.h), and reading
+        // the text back as the type gives the same element.
     case TypeCode::Float16:
         os << halfValueText(data, type->code());
         break;
@@ -246,7 +246,7 @@ void printValueImpl(std::ostream &os, slot_t data, Type *type, size_t arrayLimit
             }
             if (array->numel() > arrayLimit) {
                 // Type, address and length: enough to identify the collection without the
-                // element-by-element text a log line must not pay for.
+                //  element-by-element text a log line must not pay for.
                 os << "<" << t->toString() << " at 0x" << std::hex << static_cast<uint64_t>(v)
                    << std::dec << ", " << array->numel() << " elements>";
                 continue;

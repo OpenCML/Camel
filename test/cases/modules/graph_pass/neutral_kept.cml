@@ -2,7 +2,7 @@ module neutral_kept
 
 // The mode applies only the five neutral elements. The rules library has four more exact integer
 // laws over the same names (`x * 0`, `x - x`, `x / 1`, `-(-x)`); `neutral_only=true` must leave
-// them, which is why the C++ reference is not the library's `simplify`.
+//  them, which is why the C++ reference is not the library's `simplify`.
 
 func keep(v: int): int {
     return v

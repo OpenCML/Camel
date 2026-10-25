@@ -2,19 +2,24 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * Signatures of the built-in functions: they need no import. The operators behind the language's
- * own operators (`+`, `==`, `[]`, `??`, assignment, ...) are registered under reserved names
- * (`__add__`, ...) and are not listed here. For reference only: these declarations are not
- * compiled. They are checked against the operators the module registers, and
- * docs/stdlib-reference.md is generated from them (scripts/stdlib-reference.mjs). The parameter
- * names written here are the names a call binds to by name (`len(x: xs)`), and they are the ones
- * the reference page prints: `--verify-ops` compares them with the names of the registered rules,
- * position by position, in both the `with` list and the ordinary one. Until a built-in's signature
- * has one source -- the declaration, with C++ registering the implementation ("a built-in's
- * signature has one source", to be done before the public repository is reorganised) -- the two
- * spellings have to stay equal, and a difference is a test failure rather than a silent drift. The
- * names here are the ones to keep: the reference page is generated from them, and a position a
- * call names is the position this file names (stdlib-conventions.cn.md, section 4).
+ * Signatures of the built-in functions: they need no import.
+ *
+ * The operators behind the language's own operators (`+`, `==`, `[]`, `??`, assignment, ...) are
+ * registered under reserved names (`__add__`, ...) and are not listed here.
+ *
+ * For reference only: these declarations are not compiled. They are checked against the
+ * operators the module registers, and docs/stdlib-reference.md is generated from them
+ * (scripts/stdlib-reference.mjs).
+ *
+ * The parameter names written here are the names a call binds to by name (`len(x: xs)`), and they
+ * are the ones the reference page prints: `--verify-ops` compares them with the names of the
+ * registered rules, position by position, in both the `with` list and the ordinary one. Until a
+ * built-in's signature has one source -- the declaration, with C++ registering the implementation
+ *  (2026-10-24: "a built-in's signature has one source", to be done
+ * before the public repository is reorganised) -- the two spellings have to stay equal, and a
+ * difference is a test failure rather than a silent drift. The names here are the ones to keep:
+ * the reference page is generated from them, and a position a call names is the position this file
+ * names (stdlib-conventions.cn.md, section 4).
  */
 
 // ---- memory ----

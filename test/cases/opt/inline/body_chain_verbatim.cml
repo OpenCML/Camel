@@ -1,10 +1,10 @@
 module body_chain_verbatim
 
-// The corpus of 5.7 (docs/design/effects/edges.cn.md): the body of an inlined `sync` function
-// brings a chain of its own, and those statements are the statements of the body's own block, not
-// of the caller's. The caller prints 1, the body prints 101 and 102, the caller prints the result
-// the body returned (4) and then 2, and every one of those effects must run in that order whether
-// or not the call was inlined.
+//  The corpus of 5.7 (docs/design/effects/edges.cn.md): the body of an inlined `sync`
+// function brings a chain of its own, and those statements are the statements of the body's own
+// block, not of the caller's. The caller prints 1, the body prints 101 and 102, the caller prints
+// the result the body returned (4) and then 2, and every one of those effects must run in that
+// order whether or not the call was inlined.
 //
 // Beside the chain the splice writes 5.7's order edges: each effect (and may-fault) node of the
 // body is ordered after the statement written before the call and before the one written after it.

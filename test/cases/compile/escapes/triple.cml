@@ -1,7 +1,8 @@
 /**
- * Probes: the escape table of a triple-quoted string ('''...'''). The triple-quoted form is
- * the one that takes no escaped quote, but it still shares the one escape table: every probe
- * of plain.cml is written here again.
+ *  probes: the escape table of a triple-quoted string ('''...''').
+ *
+ * The triple-quoted form is the one that takes no escaped quote, but it still shares the one
+ * escape table: every probe of plain.cml is written here again.
  */
 module escapes_triple
 

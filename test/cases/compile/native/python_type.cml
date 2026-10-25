@@ -1,7 +1,7 @@
 /**
  * The declaration of `python:py_import` takes one ordinary argument, a `string`: an `int` is
  * refused at the call, and the message lists the declaration from `stdlib/python.cml`, not the
- * C++ module's dynamic signature.
+ *  C++ module's dynamic signature.
  */
 module python_type
 

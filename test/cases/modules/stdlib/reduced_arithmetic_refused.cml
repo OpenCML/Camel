@@ -3,14 +3,16 @@
  * precision: `%` is refused on every floating type, f32 included (see
  * test/cases/compile/operators/float_mod_assign.cml), so `__mod__` is registered for the integer
  * types only and a call that meets a bf16 value there has no candidate. That is the case
- * SemanticDiag::ReducedPrecisionUnsupported is about (design principles 7.3): it is located at the
- * operator, names it and the element type, rather than listing overloads the call could never
- * match. The refusal is part of compiling the program, so the empty array is never read at run
- * time. The arithmetic and comparison a bf16 value does have -- `+`, `-`, `*`, `/`, `**`, `==`,
- * `<`... (the rule item (b)) -- are not refused, and test/cases/modules/stdlib/reduced_scalar.cml
- * pins what they compute. This case used to assert the refusal of `+`, which was true before that
- * item; it is re-pointed at the operation that is genuinely refused rather than deleted, so the
- * diagnostic keeps a case that exercises it.
+ *  SemanticDiag::ReducedPrecisionUnsupported is about (design principles 7.3): it is located
+ * at the operator, names it and the element type, rather than listing overloads the call could
+ * never match. The refusal is part of compiling the program, so the empty array is never read at
+ * run time.
+ *
+ * The arithmetic and comparison a bf16 value does have -- `+`, `-`, `*`, `/`, `**`, `==`, `<`, ...
+ *  (the rule docs/handover/reviews/reduced-precision.md item (b)) -- are not refused, and
+ * test/cases/modules/stdlib/reduced_scalar.cml pins what they compute. This case used to assert
+ * the refusal of `+`, which was true before that item; it is re-pointed at the operation that is
+ * genuinely refused rather than deleted, so the diagnostic keeps a case that exercises it.
  */
 module stdlib_reduced_arithmetic_refused
 

@@ -1,5 +1,5 @@
 // `?..` is gone: the lexer no longer knows the token, so `inc?..dbl` is a syntax error at the
-// `?`, and nothing compiles it as `..` (the rule removed the writing).
+//  `?`, and nothing compiles it as `..` (the rule removed the writing).
 module optional_comp_removed
 
 func inc(x: int): int { return x + 1 }

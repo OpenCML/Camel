@@ -2,14 +2,17 @@
 // SPDX-License-Identifier: MIT
 
 // One rule, in one place: a script that reads the operator registry of a built `camel` measures
-// that install, and an install that is not **this** tree's build is refused before the reading.
+// that install, and an install that is not **this** tree's build is refused before the reading
+//  (the rule in the `stdlib-declaration-check-measures-a-
+// foreign-install` section of `docs/handover/reviews/questions-2026-10-24-evening.md`, which
+// answered the question file of that name and removed it).
 //
 // The rule is the one `scripts/release-gate.mjs` applies before it runs anything: an install lives
 // at `out/<tag>` under this tree, and `node scripts/build-info.js check --tag <tag>` compares the
 // content fingerprint the build stamped there with the sources of this tree. Exit 0 is the only
 // pass; the stamp's own refusal code is 4. `--camel <path>` is a parameter naming which install a
 // run measures, never an exemption from the check: an install outside this tree's `out/` carries no
-// stamp this rule can compare, and the same refusal applies -- what a run measured must be
+//  stamp this rule can compare, and the same refusal applies -- what a run measured must be
 // provable, whichever way the binary was named.
 //
 // The refusal is exit 2. It used to be exit 1 with one problem per line of the child's output

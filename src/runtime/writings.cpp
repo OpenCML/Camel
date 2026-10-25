@@ -163,8 +163,8 @@ std::string nodeText(const GraphDraft &draft, gc_node_ref_t id) {
 /// The bits of a constant that are its value. A slot is 64 bits, but an f32 or an i32 occupies the
 /// low 32 and a bool the low 8; the other bytes are no part of the value. They must not decide
 /// whether two constants are the same: the memory a slot came from can differ between a Debug and a
-/// Release build, and then two equal f32 constants would compare unequal and a law would fire in
-/// one build only.
+/// Release build, and then two equal f32 constants would compare unequal and a law would fire in one
+///  build only.
 slot_t canonicalConstant(slot_t value, const camel::core::type::Type *type) {
     if (type == nullptr) {
         return value;
@@ -468,8 +468,8 @@ bool carriesOrdering(const GraphDraft &draft, gc_node_ref_t node) {
 
 /// Whether a node of this shape computes its value from its data inputs alone, apart from the
 /// nodes it reads. A control input is not part of this question: it orders the node, it does not
-/// make the value different (design principles 3.3, 3.4), so a pure computation with a control
-/// input is a pure computation still.
+///  make the value different (design principles 3.3, 3.4), so a pure computation with a
+/// control input is a pure computation still.
 bool shapeTakesPart(
     const GraphDraft &draft, GCNodeKind kind, gc_slot_idx_t dataIndex, const Type *type,
     std::span<const std::byte> payload) {
@@ -591,10 +591,10 @@ uint8_t DraftWritings::shapeOf(gc_node_ref_t node) {
                 [&](gc_node_ref_t in) { return writtenInPlace(in); });
         }
         // 1: takes part; 2: does not. The control inputs are not asked: they order the node and
-        // do not make the value different, so they neither keep it out of a class of writings nor
-        // out of a rule's term. A rewrite that replaces a node with control inputs carries them
-        // over to the writing that replaces it (`rewrite`), so the order the program wrote
-        // survives the replacement.
+        //  do not make the value different, so they neither keep it out of a class of
+        // writings nor out of a rule's term. A rewrite that replaces a node with control inputs
+        // carries them over to the writing that replaces it (`rewrite`), so the order the program
+        // wrote survives the replacement.
         takes[node] = yes ? 1 : 2;
     }
     return takes[node];
@@ -1595,13 +1595,13 @@ bool DraftWritings::matchFrom(
                     }
                 }
                 // The terms the pattern's own terms take, and the ones the rest variable takes:
-                // every term of the chain goes to exactly one of them, or the left side would mean
-                // a value the program does not have. Which term each pattern term takes is a
+                // every term of the chain goes to exactly one of them, or the left side would
+                // mean a value the program does not have. Which term each pattern term takes is a
                 // search, not a walk over every permutation: a chain of two hundred calls must not
                 // be permuted to find out that not one of them is the zero a law asks for (the
-                // timeout of was this explosion through saturation). So a pattern term that can
-                // read no term of the chain ends the search at once, the pattern terms that could
-                // read the fewest terms are placed first, and terms that are one value are
+                //  timeout of was this explosion through saturation). So a pattern term that
+                // can read no term of the chain ends the search at once, the pattern terms that
+                // could read the fewest terms are placed first, and terms that are one value are
                 // interchangeable -- the second of two equal terms says nothing the first did not.
                 const size_t named = restIndex == pterms.size() ? pterms.size() : pterms.size() - 1;
                 std::vector<size_t> namedIndex;
@@ -2073,7 +2073,7 @@ RewriteStats DraftWritings::rewrite(
                 // those of the operator terms the law stops reading. A law over data inputs is
                 // sound whatever the node is ordered after, but the engine must not move the
                 // computation across an effect, so the writing that replaces it waits for all of
-                // them (design principles 3.3, 3.4).
+                //  them (design principles 3.3, 3.4).
                 const std::vector<gc_node_ref_t> waits = chosenWaits.value_or(std::vector<gc_node_ref_t>{});
                 // A node that already existed cannot be made to wait without risking a cycle.
                 if (!waits.empty() && made < before) {

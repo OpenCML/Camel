@@ -1,8 +1,8 @@
 /**
- * `eprintln` is in the prelude: a program writes it without an import. It has the same
- * declaration shape as `println` — it takes any arguments, writes them separated by spaces and
- * a line end, and gives back its first one — and it writes the standard error stream, where
- * diagnostics go, not standard output.
+ *  `eprintln` is in the prelude (the rule on question 2): a program writes it
+ * without an import. It has the same declaration shape as `println` — it takes any arguments,
+ * writes them separated by spaces and a line end, and gives back its first one — and it writes
+ * the standard error stream, where diagnostics go, not standard output.
  */
 module main
 

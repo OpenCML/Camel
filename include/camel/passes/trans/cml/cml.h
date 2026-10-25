@@ -1,7 +1,7 @@
 // Copyright (c) the OpenCML Organization
 // SPDX-License-Identifier: MIT
 
-// `std::cml`: print a runtime program as Camel source (step S1).
+//  `std::cml`: print a runtime program as Camel source (step S1).
 
 #pragma once
 
@@ -13,7 +13,7 @@
 
 struct CmlOptions {
     /// The largest constant, in bytes of its storage, the printer writes as a literal. A larger
-    /// one is refused and reported by name (the big-constant limit).
+    ///  one is refused and reported by name (the big-constant limit).
     size_t maxLiteralBytes = 64 * 1024;
 };
 

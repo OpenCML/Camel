@@ -1,13 +1,19 @@
 /**
  * Names in a generic body that only the instantiation can resolve are not asked about where the
  * declaration is written: an operator on a type parameter, a field of a parameter, whether a call
- * fits. The names that are names of the declaration's own scope are resolved there (the rule on
- * `generic-rule-condition-unresolved-name`, -- including the awkward ones, which this program is
- * made of: - a `with` parameter, and a generic function calling one that is declared after it; -
- * an imported predicate in a generic function's `when`; - a parameter destructured as a tuple
- * (`((a, b)) =>...`); - a loop's state name and its element; - a generic function declared inside
- * a generic function; - a name a top-level `let` gives later in the source than the declaration
- * that reads it. All of them resolve, so the program loads and runs.
+ *  fits. The names that are names of the declaration's own scope are resolved there (the rule of
+ * 2026-10-24 on `generic-rule-condition-unresolved-name`,
+ * docs/handover/reviews/questions-2026-10-23.md) -- including the awkward ones, which this program
+ * is made of:
+ *
+ * - a `with` parameter, and a generic function calling one that is declared after it;
+ * - an imported predicate in a generic function's `when`;
+ * - a parameter destructured as a tuple (`((a, b)) => ...`);
+ * - a loop's state name and its element;
+ * - a generic function declared inside a generic function;
+ * - a name a top-level `let` gives later in the source than the declaration that reads it.
+ *
+ * All of them resolve, so the program loads and runs.
  */
 module dependent_names
 

@@ -1,6 +1,6 @@
 // A program whose import is a module that does not parse. The import is a dependency of the
-// program, so the program fails at the compile step with that module's parse diagnostic — not
-// later, and not with a pass diagnostic: nothing asked for a pass of it.
+//  program, so the program fails at the compile step with that module's parse diagnostic —
+// not later, and not with a pass diagnostic: nothing asked for a pass of it.
 module imports_unparsable
 import unparsable_pass
 

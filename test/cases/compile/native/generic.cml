@@ -1,6 +1,6 @@
 /**
  * The generic declaration is instantiated by the type of the arguments: `at` on `int[]` gives an
- * `int`, on `string[]` a `string`, and the same declaration serves both (step 1).
+ *  `int`, on `string[]` a `string`, and the same declaration serves both (step 1).
  */
 import { at, second } from generic_module
 

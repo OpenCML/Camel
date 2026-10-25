@@ -1,4 +1,4 @@
-/// A module root reached with `-I` (relative to the entry file's directory, here
+///  a module root reached with `-I` (relative to the entry file's directory, here
 /// `entry/`). `deep/helper.cml` imports `lib` and finds this one.
 module lib
 

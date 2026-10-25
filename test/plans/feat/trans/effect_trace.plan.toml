@@ -9,7 +9,7 @@ desc = "std::profile effect_trace="<file>": the effect-order exemplar yields the
 kind = "behavior"
 tool = "python"
 case = "../../../cases/trans/effect_trace/effect_trace.py"
-# `${camel}` is the compiler of the build under test, named as an argument.
+#  `${camel}` is the compiler of the build under test, named as an argument.
 args = ["${case}", "order", "--camel", "${camel}"]
 expect_exit = 0
 expect_stdout_contains = ["effect trace: PASS"]

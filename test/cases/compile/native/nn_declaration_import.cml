@@ -1,8 +1,8 @@
 /**
  * The declaration of `nn:save_params` is what an importer sees: the first parameter is a type
- * variable (any value), the second is the declaration's `string` directory, and the result is
- * `void`. Every call reaches the C++ operator, which writes each tensor leaf of the tree as a
- * `.npy` file (step 10).
+ * variable (any value), the second is the declaration's `string` directory, and the
+ * result is `void`. Every call reaches the C++ operator, which writes each tensor leaf of the
+ *  tree as a `.npy` file (step 10).
  */
 module nn_declaration_import
 

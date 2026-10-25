@@ -4,7 +4,7 @@ tier = "fast"
 tags = ["feat", "tools", "cli", "inspect", "timeit"]
 desc = "Every camel command that compiles or loads the program reports the diagnostics it caused and exits 1: inspect --gct no longer prints a partial tree, and a failed --timeit run reports no time"
 
-# Fixed `inspect --ops`, one branch that rendered something and then exited 0 without asking
+#  fixed `inspect --ops`, one branch that rendered something and then exited 0 without asking
 # whether anything failed. The same shape lived in `inspect --gct` (a partial construction tree,
 # exit 0) and in three command-line refusals that printed a reason and exited 0. These cases hold
 # the fixed paths and pin the ones that were already right, all through one shared decision

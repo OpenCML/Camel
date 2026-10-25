@@ -2,19 +2,23 @@
 // SPDX-License-Identifier: MIT
 
 /*
- * A float as an argument of `format` (and of `print` / `println` with a format string). A float
- * has one text (design principles 7.7): the shortest that reads back as the same number,
- * camel::utils::floatText. A placeholder without a format specification, `{}`, writes that text,
- * so that `format`, `string` and `println` agree; a placeholder with one (`{:.2f}`, `{:>8}`,
- * `{:e}`) asks for something else and is formatted by fmt as before. A bf16 or an f16 is a float
- * type of its own, so `the same number` is an element of that type and its text is the shortest
- * that reads back as that element (camel/core/rtdata/half.h, `halfText`): the value is carried
- * as the f32 it widens to, exactly, and the format says whose text to write, so the one rule
- * reaches `format` and string interpolation as it reaches `println`. The sign of a NaN is not
- * part of the text, with or without a specification (2.5.2 of the language reference): fmt
- * writes `-nan` for a NaN whose sign bit is set, so the value is made positive before it is
- * handed over (camel::utils::withoutNaNSign). The plain path needs none: floatText never writes
- * the sign.
+ * A float as an argument of `format` (and of `print` / `println` with a format string).
+ *
+ * A float has one text (design principles 7.7): the shortest that reads back as the same number,
+ * camel::utils::floatText. A placeholder without a format specification, `{}`, writes
+ * that text, so that `format`, `string` and `println` agree; a placeholder with one
+ * (`{:.2f}`, `{:>8}`, `{:e}`) asks for something else and is formatted by fmt as before.
+ *
+ * A bf16 or an f16 is a float type of its own, so `the same number` is an element of that type
+ * and its text is the shortest that reads back as that element (camel/core/rtdata/half.h,
+ *  `halfText`; rule 2026-10-23, "reduced-precision-text"): the value is carried as the f32 it
+ * widens to, exactly, and the format says whose text to write, so the one rule reaches `format`
+ * and string interpolation as it reaches `println`.
+ *
+ * The sign of a NaN is not part of the text, with or without a specification (2.5.2 of the
+ * language reference): fmt writes `-nan` for a NaN whose sign bit is set, so the value is made
+ * positive before it is handed over (camel::utils::withoutNaNSign). The plain path needs none:
+ * floatText never writes the sign.
  */
 
 #pragma once

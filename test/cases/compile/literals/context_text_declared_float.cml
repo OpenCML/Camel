@@ -1,5 +1,5 @@
 /**
- * Handover, item 2, neighbour: a text where a float is declared is the same type mismatch
+ *  Handover, item 2, neighbour: a text where a float is declared is the same type mismatch
  * (design principles 5.1, no implicit text-to-number conversion).
  */
 module literal_context_text_float

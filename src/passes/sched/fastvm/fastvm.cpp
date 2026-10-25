@@ -465,7 +465,7 @@ slot_t FastVMSchedPass::callElement(const HigherOrderCallSite &site, Frame *fram
     --nestedCalls_;
     // The result is handed straight to its store: `map` copies the element bytes into the output
     // array, `filter` reads a boolean, `foreach` drops it. A view is therefore harmless here; the
-    // stores where a value outlives the element materialise it.
+    //  stores where a value outlives the element materialise it.
     return result;
 }
 
@@ -730,7 +730,7 @@ void FastVMSchedPass::evalMarkedOperator_reduce_arr(
     slot_t init          = currFrame.get<slot_t>(wargs[1]);
 
     // The accumulator type, resolved once: a value stored into the accumulator outlives the
-    // element read that produced it, so the store materialises it.
+    //  element read that produced it, so the store materialises it.
     const type::Type *accumulatorType = nullptr;
     if (Function *fn = currFrame.get<Function *>(wargs[0]); fn != nullptr) {
         accumulatorType = fn->graph() != nullptr && fn->graph()->funcType() != nullptr
@@ -757,8 +757,8 @@ void FastVMSchedPass::evalMarkedOperator_reduce_arr(
             Frame *frame = framePool_.acquire(site.runtimeGraph);
             populateMarkedCallFrame(frame, func, std::span<const slot_t>(args, 2));
 
-            // The accumulator is the value the next round reads, so it is a value, not a view of
-            // the element this round read. The store is the boundary: materialise here.
+            // The accumulator is the value the next round reads, so it is a value, not a view of the
+            //  element this round read. The store is the boundary: materialise here.
             const slot_t next = camel::core::rtdata::materializeCallResult(
                 callElement(site, frame), accumulatorType);
             CAMEL_ASSERT_NOT_VIEW(next, accumulatorType, "the reduce accumulator");

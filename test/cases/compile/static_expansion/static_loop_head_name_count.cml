@@ -1,8 +1,8 @@
 /**
  * The element of `fields T` has three parts (name, type, tags), so a head may name three; a
- * fourth name has nothing to be and is refused by name. Any number of names is read by the
- * parser: how many fit is a question about the element, so the count is checked where the walked
- * shape is known.
+ *  fourth name has nothing to be and is refused by name (item 4).
+ * Any number of names is read by the parser: how many fit is a question about the element, so the
+ * count is checked where the walked shape is known.
  */
 module static_loop_head_name_count
 

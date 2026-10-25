@@ -23,7 +23,7 @@ class FrameView;
 /// The frame log prints at most this many elements of an array; above the limit the line
 /// carries the array's type, address and length. Arrays a diagnostic deals with are small (the
 /// test plans' largest printed array has 40 elements), while the collections whose element-wise
-/// logging made a Debug run quadratic are thousands (: 5,000 and 10,000 elements). 64 keeps
+///  logging made a Debug run quadratic are thousands (: 5,000 and 10,000 elements). 64 keeps
 /// every small array whole and still bounds one line to 64 elements.
 inline constexpr size_t kFrameLogArrayLimit = 64;
 
@@ -158,7 +158,7 @@ class Frame : public rtdata::Object {
             // map re-reads its own result slot every round to write through the relocated
             // pointer), and printing a large array at every round is what turned a 10,000
             // element map into a quadratic Debug run. Arrays above kFrameLogArrayLimit
-            // therefore print as their type, address and length.
+            //  therefore print as their type, address and length.
             if (::Logger::ShouldEmit(::LogLevel::Info, "Frame")) {
                 std::ostringstream oss;
                 rtdata::printSlotCapped(
@@ -222,8 +222,8 @@ class Frame : public rtdata::Object {
             // which the next element read of the same loop overwrites, and it is not an
             // allocated object (the verifier reports it as "outside managed object regions").
             // The store is the boundary, as it is in Tuple::set and Struct::set; a higher-order
-            // operator hands an element of a compact array to its callback through this path. A
-            // scalar slot pays one code comparison, a real aggregate two loads.
+            // operator hands an element of a compact array to its callback through this path
+            //  A scalar slot pays one code comparison, a real aggregate two loads.
             const type::TypeCode code = dynamicAreaType_->codes()[idx];
             if ((code == type::TypeCode::Struct || code == type::TypeCode::Tuple) &&
                 rtdata::isViewValue(slot, code)) {

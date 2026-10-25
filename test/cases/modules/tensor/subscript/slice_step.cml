@@ -1,5 +1,5 @@
 /**
- * A slice with a step other than 1 is a view with strides: it waits for (design principles
+ *  A slice with a step other than 1 is a view with strides: it waits for (design principles
  * 5.4). On a tensor the step must be a constant, and anything but 1 is refused at compile time.
  */
 module subscript_slice_step

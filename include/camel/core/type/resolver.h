@@ -296,7 +296,7 @@ class DynamicFuncTypeResolver : public FuncTypeResolver {
 
 /**
  * The rule of a body-less declaration: the signature written in a Camel module is the signature
- * the operator has (design principles 6.4). The declared type is the one
+ *  the operator has (design principles 6.4, step 1). The declared type is the one
  * source of the parameters and the result, so the resolver accepts exactly what the declaration
  * says and nothing else:
  *

@@ -1,6 +1,6 @@
-/// Case 2, the other side: this directory has no `shadow.cml`, so the same `-I` root supplies
-/// `shadow` and the program prints 2. Together with `prog/local_wins.cml` this proves the
-/// order: the entry directory first, the `-I` root after it.
+///  case 2, the other side: this directory has no `shadow.cml`, so the same `-I` root
+/// supplies `shadow` and the program prints 2. Together with `prog/local_wins.cml` this proves
+/// the order: the entry directory first, the `-I` root after it.
 module include_root_wins
 
 import shadow

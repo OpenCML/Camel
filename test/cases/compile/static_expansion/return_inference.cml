@@ -1,6 +1,6 @@
 /**
  * A generic function without a return annotation gets one per instance from the selected
- * branch (step 2). The three instances below have three different result types.
+ *  branch. The three instances below have three different result types.
  */
 module return_inference
 

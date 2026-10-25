@@ -1,11 +1,13 @@
 /**
- * The other direction of the same rule: naming the module's top-level `let` is a dependency, and
- * the value is evaluated (design principles 3.1: a module-level `let` is a root-graph node,
+ *  The other direction of the same rule: naming the module's top-level `let` is a dependency,
+ * and the value is evaluated (design principles 3.1: a module-level `let` is a root-graph node,
  * evaluated when depended on). The flag file is not asserted *before* the use — a root-graph node
  * has no ordering against the importing function's first effects (3.3 orders effects within one
  * function body; a value crossing the call is not an effect pair), so only the state after the
- * value is named is the contract.. The module it imports is `../lazy_let/lazy_let_writer.cml`; a
- * copy named for this case keeps the two programs independent.
+ *  value is named is the contract..
+ *
+ * The module it imports is `../lazy_let/lazy_let_writer.cml`; a copy named for this case keeps the
+ * two programs independent.
  */
 module use_let_main
 

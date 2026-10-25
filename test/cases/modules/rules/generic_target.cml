@@ -23,7 +23,8 @@ func f64_minus_zero(x: float): float {
 }
 
 /// The wide addend cancels: the site a generic law whose literal is `3000000000` can be written
-/// for, since `int` holds it and `i32` does not. No law but that one matches it.
+///  for, since `int` holds it and `i32` does not (the rule on
+/// `literal-inside-a-generic-body`). No law but that one matches it.
 func i64_wide(x: int): int {
     return x + 3000000000 - 3000000000
 }

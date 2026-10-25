@@ -5,7 +5,7 @@ tags = ["feat", "compile", "modules", "native", "declaration", "generics"]
 desc = "A body-less `export func` in a `.cml` is the declaration of an operator of a C++ module: the declaration is the signature, a call checks against it and reaches the operator, and a generic declaration is instantiated by type (handover H19, step 1)"
 
 # Design principles 6.4 (a primitive is an operator written in C++, and its signature is written
-# once) and 6.2 (the tag that names the exception), step 1.
+#  once) and 6.2 (the tag that names the exception), step 1.
 #
 # The four cases the step has to prove: a declaration of a generic operator mixed with ordinary
 # functions of the module; a declaration whose operator is not loaded (a located diagnostic, not
@@ -88,7 +88,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "bytes_type.cml:8:23", "argument types: <> (int)", "<bytes:size>: (content: Bytes) => int"]
 
-# ---- The declarations of `str`: what an importer sees (step 10) ----
+#  ---- The declarations of `str`: what an importer sees (step 10) ----
 
 [[tests]]
 name = "native.str_declaration_import"
@@ -117,7 +117,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "str_type.cml:11:17", "argument types: <> (int)", "<str:trim>: (s: string) => string"]
 
-# ---- The declarations of `io`: the terminal's signatures (steps 4 and 10) ----
+#  ---- The declarations of `io`: the terminal's signatures (steps 4 and 10) ----
 
 [[tests]]
 name = "native.io_wrong_arity"
@@ -137,7 +137,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "io_type.cml:11:22", "argument types: <> (string)", "<io:get_chars>: (max: int) => string"]
 
-# ---- The declarations of `json`: the accessors as one rule per tagged form ----
+#  ---- The declarations of `json`: the accessors as one rule per tagged form ----
 
 [[tests]]
 name = "native.json_declaration_import"
@@ -165,7 +165,7 @@ case = "../../../cases/compile/native/json_type.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "json_type.cml:11:17", "argument types: <> (int)", "<json:kind>: (j: Json) => string"]
-# ---- The declarations of `math`: per-type overloads and computed signatures ----
+#  ---- The declarations of `math`: per-type overloads and computed signatures ----
 
 [[tests]]
 name = "native.math_declaration_import"
@@ -230,7 +230,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "math_sqrt_type.cml:11:17", "argument types: <> (string)", "<math:sqrt>: (x: i32) => f32"]
 
-# ---- The declarations of `random`: the generator and the keyed functions ----
+#  ---- The declarations of `random`: the generator and the keyed functions ----
 
 [[tests]]
 name = "native.random_declaration_import"
@@ -286,7 +286,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "random_sample_count_type.cml:11:27", "argument types: <> (int[], float)", "<rand:sample>: (xs: T[], n: int) => T[]"]
 
-# ---- The declarations of `array`: the native primitives, the sorts and `argsort` ----
+#  ---- The declarations of `array`: the native primitives, the sorts and `argsort` ----
 
 [[tests]]
 name = "native.array_declaration_import"
@@ -333,7 +333,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "array_sort_type.cml:11:17", "argument types: <> (int)", "<array:sort_i>: (xs: i32[]) => i32[]"]
 
-# ---- The declarations of `statistics`: four element types per name ----
+#  ---- The declarations of `statistics`: four element types per name ----
 
 [[tests]]
 name = "native.statistics_declaration_import"
@@ -362,7 +362,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "statistics_type.cml:12:17", "argument types: <> (int)", "<statistics:mean>: (xs: i32[]) => float"]
 
-# ---- A declaration the module does not export is private ----
+#  ---- A declaration the module does not export is private ----
 
 [[tests]]
 name = "native.private_declaration"
@@ -384,7 +384,7 @@ expect_diagnostic_name = "SemanticDiag::ImportNameNotExported"
 expect_diagnostic_code = "0x03000015"
 expect_output_contains = ["private_import.cml:8", "Reference 'at'"]
 
-# ---- The entry module's declarations answer under its declared name ----
+#  ---- The entry module's declarations answer under its declared name ----
 
 [[tests]]
 name = "native.entry_uri_prefix"
@@ -395,7 +395,7 @@ args = ["${case}"]
 expect_exit = 0
 expect_stdout_exact = "3\n"
 
-# ---- A declaration may name only its own module's operator ----
+#  ---- A declaration may name only its own module's operator ----
 
 [[tests]]
 name = "native.foreign_operator_refused"
@@ -430,7 +430,7 @@ expect_exit = 0
 expect_stdout_contains = ["PASS"]
 timeout_ms = 120000
 
-# ---- The `.cml` and the `.cmo` are one module ----
+#  ---- The `.cml` and the `.cmo` are one module ----
 
 [[tests]]
 name = "native.one_module"
@@ -443,7 +443,7 @@ expect_exit = 0
 expect_stdout_contains = ["PASS"]
 timeout_ms = 120000
 
-# ---- Two generic declarations of a name: one call, one rule ----
+#  ---- Two generic declarations of a name: one call, one rule ----
 
 [[tests]]
 name = "native.generic_declaration_overlap"
@@ -459,9 +459,11 @@ expect_output_contains = ["overlap.cml:14", "Two declarations of 'pick'", "(xs: 
 
 # ---- Two same-named declarations whose conditions exclude each other are overloads ----
 #
-# Declarations split by mutually exclusive `when` conditions are overloads and may stand side by
-# side, and the check is the same for every same-named overload that writes `when`, not a special
-# case of `#impl`. A type that satisfies both conditions is reported with the two declarations.
+#  The rule on `impl-declaration-arms`
+# (`docs/handover/reviews/questions-2026-10-23.md`): declarations split by mutually exclusive
+# `when` conditions are overloads and may stand side by side, and the check is the same for every
+# same-named overload that writes `when`, not a special case of `#impl`. A type that satisfies both
+# conditions is reported with the two declarations.
 
 [[tests]]
 name = "native.when_declaration_overlap"
@@ -540,23 +542,28 @@ verify_script = """
 """
 
 
-# ---- Two candidates whose own `when` both hold are an ambiguity, not a choice ---- The rule on
-# `two-when-conditions-hold` (` `): "带 `when` 的候选都适用时，调用处报歧义，列出两 条候选与各自成立的条件". "先写的赢" no longer
-# exists for a candidate that writes `when`, because the declaration-time check samples the
-# registered types one at a time and the call site is what decides, so the fallback has to be a
-# report and not an order. The pair below is exactly what that sampling cannot see: the first arm's
-# condition is about `T` alone and the second's about `U` alone, so every registered type satisfies
-# at most one of them (the pair is admitted) while a call writes two different types and satisfies
-# both. The two files hold one program with the two declarations in the two orders; both must report
-# one and the same diagnostic, word for word, with the candidates listed each with the condition it
-# wrote. The diagnostic's name and code are asserted through the rendered text
-# (`expect_output_contains`) rather than through `expect_diagnostic_name` / `expect_diagnostic_code`
-# on purpose: the diagnostics reference (`docs/diagnostics.md`, generated by
-# scripts/diagnostics-catalog.mjs) prints as each code's example the first small test that names it
-# exactly (`exampleFor`), and this file sorts before `overloads.plan.toml`, so the two entries would
-# displace the literal-ambiguity example that `AmbiguousCall`'s help text ("annotate the literal
-# with its type... or convert an argument with 'as'") is written for. The name and the code are
-# pinned here all the same, and the line and column pin the report to the call.
+# ---- Two candidates whose own `when` both hold are an ambiguity, not a choice ----
+#
+#  The rule on `two-when-conditions-hold`
+# (`docs/handover/reviews/questions-2026-10-23.md`): "带 `when` 的候选都适用时，调用处报歧义，列出两
+# 条候选与各自成立的条件". "先写的赢" no longer exists for a candidate that writes `when`, because the
+# declaration-time check samples the registered types one at a time and the call site is what
+# decides, so the fallback has to be a report and not an order.
+#
+# The pair below is exactly what that sampling cannot see: the first arm's condition is about `T`
+# alone and the second's about `U` alone, so every registered type satisfies at most one of them
+# (the pair is admitted) while a call writes two different types and satisfies both. The two files
+# hold one program with the two declarations in the two orders; both must report one and the same
+# diagnostic, word for word, with the candidates listed each with the condition it wrote.
+#
+# The diagnostic's name and code are asserted through the rendered text (`expect_output_contains`)
+# rather than through `expect_diagnostic_name` / `expect_diagnostic_code` on purpose: the
+# diagnostics reference (`docs/diagnostics.md`, generated by scripts/diagnostics-catalog.mjs) prints
+# as each code's example the first small test that names it exactly (`exampleFor`), and this file
+# sorts before `overloads.plan.toml`, so the two entries would displace the literal-ambiguity
+# example that `AmbiguousCall`'s help text ("annotate the literal with its type ... or convert an
+# argument with 'as'") is written for. The name and the code are pinned here all the same, and the
+# line and column pin the report to the call.
 
 [[tests]]
 name = "native.when_both_hold.i32_first"
@@ -590,8 +597,8 @@ timeout_ms = 8000
 # ---- A declaration cannot be parametric ----
 
 # `from_bytes::<T>` and a per-leaf `ckpt_get::<L>` ask for one name whose result type the call
-# names; the declaration mechanism has no such form. The two cases below state what is
-# missing, not how the module happens to be written today.
+#  names; the declaration mechanism has no such form. The two cases below state
+# what is missing, not how the module happens to be written today.
 
 [[tests]]
 name = "native.declaration_type_argument"
@@ -627,7 +634,7 @@ args = ["${case}", "std::fvm"]
 expect_exit = 0
 expect_stdout_exact = "0\n"
 
-# ---- The declaration of `re`: the operator as one signature (step 10) ----
+#  ---- The declaration of `re`: the operator as one signature (step 10) ----
 
 [[tests]]
 name = "native.re_declaration_import"
@@ -656,7 +663,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "re_type.cml:11:17", "argument types: <> (int, string)", "<re:test>: (pattern: string, text: string) => bool"]
 
-# ---- The declarations of `time`: the clock and its text forms ----
+#  ---- The declarations of `time`: the clock and its text forms ----
 
 [[tests]]
 name = "native.time_declaration_import"
@@ -685,7 +692,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "time_type.cml:11:21", "argument types: <> (int, string)", "<time:strptime>: (text: string, format: string) => float"]
 
-# ---- Retired names are unknown names, not aliases (design principles 1) ----
+#  ---- Retired names are unknown names, not aliases (design principles 1) ----
 #
 # `str::bytes` and `str::from_bytes` were deleted, not renamed: `bytes::encode`/`bytes::decode` are
 # the one conversion. An old form is deleted outright, with no alias and no diagnostic pointing at
@@ -716,7 +723,7 @@ expect_diagnostic_code = "0x03000015"
 expect_diagnostic_line = 10
 expect_output_contains = ["retired_str_from_bytes.cml:10:13", "Reference 'from_bytes'", "not exported by its module"]
 
-# ---- The declarations of `fs`: effects and error values ----
+#  ---- The declarations of `fs`: effects and error values ----
 #
 # `fs` is the first module of this batch whose operators all have effects. The declarations carry
 # the signatures only; the purity, the resources and the effects stay in `modules/fs` and are
@@ -751,7 +758,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "fs_type.cml:11:19", "argument types: <> (int)", "<fs:exists>: (path: string) => bool"]
 
-# ---- The declarations of `para` ----
+#  ---- The declarations of `para` ----
 #
 # `rendezvous` has a fixed signature and is declared; `unordered_foreach` and `unordered_reduce`
 # take the element type of their array argument, which a `( T)` declaration states, and
@@ -813,7 +820,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "para_unordered_reduce_callback_arity.cml:13:103", "argument types: <(acc: int, item: int, extra: int) => int, int> (int[])", "<:mark/unordered_reduce_arr>: <f: (acc: T, item: T) => T, initial: T> (xs: T[]) => T"]
 
-# ---- The declaration of `this` ----
+#  ---- The declaration of `this` ----
 
 [[tests]]
 name = "native.this_declaration_import"
@@ -842,7 +849,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "this_type.cml:13:16", "argument types: <> (int)", "<this:zen>: () => string"]
 
-# ---- The declarations of `tiles` ----
+#  ---- The declarations of `tiles` ----
 #
 # `tiles:available` and `tiles:device` have fixed signatures and are declared in stdlib/tiles.cml;
 # the module's other ten operators take their signature from an argument and stay computed in C++.
@@ -880,7 +887,7 @@ expect_diagnostic_code = "0x03000110"
 expect_diagnostic_line = 12
 expect_diagnostic_column = 5
 expect_output_contains = ["This value has type 'bool', which is not the declared type 'int'"]
-# ---- The declarations of `tensor` ----
+#  ---- The declarations of `tensor` ----
 #
 # `tensor` is the largest module of the batch: 64 public operators, of which only ten have a
 # signature a declaration can state (an extent, an element count, the binary form, a NumPy file,
@@ -918,13 +925,14 @@ case = "../../../cases/compile/native/tensor_type.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "tensor_type.cml:11:21", "argument types: <> (string)", "<tensor:to_bytes>: (t: Tensor) => Bytes"]
-# ---- The declaration of `show` ---- `show` is the last zero-syntax name of 's inventory: its
-# result is fixed `void`, and its umbrella parameter (`TensorLike`: a tensor or any array) is
-# two declarations, one per accepted type. The C++ module keeps the kernel, the traits, the
-# semantics and the resources; it no longer exports the group, so the declaration is the
-# module's signature for the name. `show([])` is the boundary: the empty array binds the type
-# variable, so the call is still accepted and still faults in the kernel, exactly as before the
-# migration.
+#  ---- The declaration of `show` ----
+#
+#  `show` is the last zero-syntax name of the inventory: its result is fixed `void`, and its
+# umbrella parameter (`TensorLike`: a tensor or any array) is two declarations, one per accepted
+# type. The C++ module keeps the kernel, the traits, the semantics and the resources; it no
+# longer exports the group, so the declaration is the module's signature for the name.
+# `show([])` is the boundary: the empty array binds the type variable, so the call is still
+# accepted and still faults in the kernel, exactly as before the migration.
 
 [[tests]]
 name = "native.tensor_show_declaration_import"
@@ -961,7 +969,7 @@ case = "../../../cases/compile/native/tensor_show_empty_array.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["RuntimeDiag::RuntimeError", "tensor_show_empty_array.cml:12:5", "show: Unsupported Tensor element type."]
-# ---- The declarations of `pyplot` ----
+#  ---- The declarations of `pyplot` ----
 #
 # `pyplot:plot` has a fixed signature: four element types and two arities. The C++ module never
 # declared its purity, so a body-less declaration was refused by the loader; the module now
@@ -994,7 +1002,7 @@ case = "../../../cases/compile/native/pyplot_type.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "pyplot_type.cml:11:5", "argument types: <> (string)", "<pyplot:plot>: (data: float[]) => void"]
-# ---- The declarations of `python` ----
+#  ---- The declarations of `python` ----
 #
 # Six of the eleven operators have fixed signatures and are declared in stdlib/python.cml; the
 # two variadic pairs (`py_call` with two URIs, `py_print`/`py_println`) and `py_wrap`/`py_unwrap`
@@ -1028,7 +1036,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "python_type.cml:11:5", "argument types: <> (int)", "<python:py_import>: (module_name: string) => PyObject"]
 
-# ---- The declarations of `nn` and `autodiff` ----
+#  ---- The declarations of `nn` and `autodiff` ----
 #
 # `nn` exports nineteen names. `save_params` is the one with a fixed signature — any value and a
 # directory, returning nothing — so it is declared in `stdlib/nn.cml`; the fifteen tensor
@@ -1099,7 +1107,7 @@ expect_diagnostic_line = 12
 expect_diagnostic_column = 5
 expect_output_contains = ["This value has type 'float', which is not the declared type 'int'"]
 
-# ---- The declarations of `sim` and `onnx` ----
+#  ---- The declarations of `sim` and `onnx` ----
 #
 # `sim` exports two names and both have fixed signatures — two `int`s to an `int`, three to a
 # `float` — so both are declared in `stdlib/sim.cml` and the module needs no signature file.
@@ -1169,9 +1177,9 @@ expect_diagnostic_code = "0x03000110"
 expect_diagnostic_line = 12
 expect_diagnostic_column = 5
 expect_output_contains = ["This value has type 'string[]', which is not the declared type 'int'"]
-# The callable operators of `rewrite` are declarations now (`stdlib/rewrite.cml`): the engines
-# that take a `Program` and `Rule[]`, the rule readers that take a `Rule`, and the run readers
-# that take a `Run`.
+#  the callable operators of `rewrite` are declarations now (`stdlib/rewrite.cml`):
+# the engines that take a `Program` and `Rule[]`, the rule readers that take a `Rule`, and the
+# run readers that take a `Run`.
 
 [[tests]]
 name = "native.rewrite_declaration_import"
@@ -1226,7 +1234,7 @@ args = ["check", "${case}"]
 expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "rule_reader_type.cml:11:24", "argument types: <> (int)", "<rewrite:consts>: (r: Rule) => int"]
 
-# `env`, `process` and `hash` are declaration modules now (`stdlib/env.cml`,
+#  `env`, `process` and `hash` are declaration modules now (`stdlib/env.cml`,
 # `stdlib/process.cml`, `stdlib/hash.cml`). `env` and `process` keep their resources and their
 # effects in C++; `hash` is pure, and `sha256` is two declarations with two `#op` URIs. Each
 # module has the three cases the migration adds: the importer sees the declared types, a wrong
@@ -1315,7 +1323,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "hash_type.cml:11:19", "argument types: <> (int)", "<hash:sha256_str>: (s: string) => string", "<hash:sha256_bytes>: (s: Bytes) => string"]
 
-# ---- The declarations of `graph`: `constant` per sample type ----
+#  ---- The declarations of `graph`: `constant` per sample type ----
 #
 # `constant` and `add_constant` take the type of their sample, which a declaration cannot compute
 # from an argument; they are written out per sample type instead (six each). The four operators of

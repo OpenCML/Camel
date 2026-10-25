@@ -1,7 +1,7 @@
 /**
  * An integer where the declaration says `Program`: the call is refused at the declaration's
  * type, and the message prints the declaration's own parameter name (`p`) — the one source is
- * `stdlib/graph.cml`, not the C++ module (step 10).
+ *  `stdlib/graph.cml`, not the C++ module (step 10).
  */
 module graph_type
 

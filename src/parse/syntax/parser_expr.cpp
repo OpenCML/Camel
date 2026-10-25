@@ -92,7 +92,7 @@ void ParserImpl::parseExpr() {
     case TK::KwLoop:
         return parseLoop();
     case TK::KwStatic:
-        // `static for` is a statement (step 3): only `static loop` is an expression, so a
+        //  `static for` is a statement.: only `static loop` is an expression, so a
         // `static for` here keeps its old reading (the token is unexpected below).
         if (peek(1) == TK::KwLoop) {
             return parseStaticLoop();
@@ -297,11 +297,12 @@ void ParserImpl::parseNullable() {
     }
 }
 
-/// UnaryExpr: linkExpr (('as' | 'is') typeExpr)? (The prefix operators `-`, `!` and `~` are
-/// taken by negExpr, under `->`.) The right side is always a type, and the type reads its own
-/// marks: `x as int..` is a conversion to the stream type. A number or a name written directly
-/// after the `..` is not a type, though — `x as int..5` is the interval reading of `..` written
-/// where a type stands — and it is reported as such rather than as a stray token.
+/// unaryExpr : linkExpr (('as' | 'is') typeExpr)?
+/// (The prefix operators `-`, `!` and `~` are taken by negExpr, under `->`.)
+///  The right side is always a type, and the type reads its
+/// own marks: `x as int..` is a conversion to the stream type. A number or a name written
+/// directly after the `..` is not a type, though — `x as int..5` is the interval reading of `..`
+/// written where a type stands — and it is reported as such rather than as a stray token.
 void ParserImpl::parseUnary() {
     const size_t m = mark();
     parseLink();
@@ -467,9 +468,9 @@ void ParserImpl::parseAnno() {
     }
 }
 
-/// AccessExpr: primaryData ('.' (IDENTIFIER | INTEGER | REAL | '[' dataExpr ']'))* `t.0.1`
-/// arrives as `t`, `.`, and the REAL `0.1`: the AST builder splits it. `t.[n]` names a field
-/// or an element by a compile-time key instead of a literal name (step 4).
+/// accessExpr : primaryData ('.' (IDENTIFIER | INTEGER | REAL | '[' dataExpr ']'))*
+/// `t.0.1` arrives as `t`, `.`, and the REAL `0.1`: the AST builder splits it. `t.[n]` names a
+///  field or an element by a compile-time key instead of a literal name.
 void ParserImpl::parseAccess() {
     const size_t m = mark();
     parsePrimary();
@@ -748,10 +749,10 @@ void ParserImpl::parsePairedValues(TK closer) {
     close(m, NK::PairedValues);
 }
 
-/// ArgumentValues: (keyValuePair | indexValue) (',' (keyValuePair | indexValue))* The named
-/// arguments of a call come first; a positional one after them is kept as its own
+/// argumentValues : (keyValuePair | indexValue) (',' (keyValuePair | indexValue))*
+/// The named arguments of a call come first; a positional one after them is kept as its own
 /// `StrayPositional`, so that the call reports it where it is written instead of the parser
-/// failing on a name that is not there (design principles 4.4).
+///  failing on a name that is not there (design principles 4.4).
 void ParserImpl::parseArgumentValues(TK closer) {
     const size_t m = mark();
     if (pairStartsAt(0)) {
@@ -1002,10 +1003,11 @@ void ParserImpl::parseArrayData() {
     close(m, NK::ArrayData);
 }
 
-/// StructData: '{' (pairedValues ','?)? '}' | '{' staticForExpr '}' The second form is a struct
-/// comprehension (step 4): `{ static for (n, F) in fields T => e }` builds a struct with the fields
-/// of `T`, in declaration order, each holding one round's value. It is written where a value is
-/// needed; the `static for` node itself is the one a statement uses, only here its value is taken.
+/// structData : '{' (pairedValues ','?)? '}' | '{' staticForExpr '}'
+///  The second form is a struct comprehension.: `{ static for (n, F) in fields T => e }`
+/// builds a struct with the fields of `T`, in declaration order, each holding one round's value.
+/// It is written where a value is needed; the `static for` node itself is the one a statement
+/// uses, only here its value is taken.
 void ParserImpl::parseStructData() {
     const size_t m = mark();
     bump();
@@ -1030,10 +1032,10 @@ void ParserImpl::parseStructData() {
     close(m, NK::StructData);
 }
 
-/// TupleData: '(' dataList? ','? ')' | '(' staticForExpr ')' Also the parenthesized expression:
-/// one element and no comma. The second form is a tuple comprehension (step 4): `( static for
-/// (n, F) in fields T => e )` has the elements of `T` in declaration order, each one round's
-/// value.
+/// tupleData : '(' dataList? ','? ')' | '(' staticForExpr ')'
+/// Also the parenthesized expression: one element and no comma. The second form is a tuple
+///  comprehension.: `(static for (n, F) in fields T => e)` has the elements of `T`
+/// in declaration order, each one round's value.
 void ParserImpl::parseTupleData() {
     const size_t m = mark();
     bump();
@@ -1140,9 +1142,9 @@ void ParserImpl::parseMatch() {
     close(m, NK::MatchExpr);
 }
 
-/// MatchTypeExpr: 'match' 'type' typeExpr '{' typeCase* '}' The type after `match type` is a
-/// type position: a `(` there always opens a type, so `match type () {... }` is a match on
-/// the empty tuple type.
+/// matchTypeExpr : 'match' 'type' typeExpr '{' typeCase* '}'
+///  The type after `match type` is a type position (rule 1): a `(` there always opens a
+/// type, so `match type () { ... }` is a match on the empty tuple type.
 void ParserImpl::parseMatchType() {
     const size_t m = mark();
     bump(); // match
@@ -1182,12 +1184,15 @@ void ParserImpl::parseTypeCase() {
     close(m, NK::TypeCase);
 }
 
-/// StaticForExpr: 'static' staticForHeader '=>' blockExpr `static for (n, F) in fields T =>
-/// 块`：把结构体或元组的字段表在实例化时展开， 每个字段一份块。`n` 是字段名（元组是十进制下标），`F` 是字段类型；两者都只在块内可见。 `static for (j) in
-/// indices ts => 块`：把元组 `ts` 的每个位置展开一次，`j` 是这一轮的位置（编译期整数）。两种头共用一个解析函数，只有 `in` 后面的写法不同。
-/// 这是展开机制，不是运行期循环：块里没有 SFOR/LOOP 节点，展开出的代码直接在当前图里。 The header is shared with `static loop`:
-/// the same `for... in...` says what is walked, and only what follows it differs (`=> 块` or
-/// `do 表达式`). `fields` 后面是类型位置：`(` 一律按类型读，`fields ` 是空元组类型。
+/// staticForExpr : 'static' staticForHeader '=>' blockExpr
+///  `static for (n, F) in fields T => 块`：把结构体或元组的字段表在实例化时展开，
+/// 每个字段一份块。`n` 是字段名（元组是十进制下标），`F` 是字段类型；两者都只在块内可见。
+///  `static for (j) in indices ts => 块`：把元组 `ts` 的每个位置展开一次，`j`
+/// 是这一轮的位置（编译期整数）。两种头共用一个解析函数，只有 `in` 后面的写法不同。
+/// 这是展开机制，不是运行期循环：块里没有 SFOR/LOOP 节点，展开出的代码直接在当前图里。
+/// The header is shared with `static loop`: the same `for ... in ...` says what is walked, and
+/// only what follows it differs (`=> 块` or `do 表达式`).
+///  `fields` 后面是类型位置：`(` 一律按类型读，`fields ` 是空元组类型。
 void ParserImpl::parseStaticFor() {
     const size_t m = mark();
     bump(); // static
@@ -1226,9 +1231,10 @@ void ParserImpl::parseStaticForHeader() {
         if (!panic_ && expect(TK::KwIn)) {
             if (atWord(0, "fields")) {
                 bump();
-                // `fields` is followed by a type position: the `(` there is always a type, so
-                // `fields ()` is the empty tuple. `static for` and `static loop` share this
-                // header, so the reading is enforced here rather than at either caller.
+                //  `fields` is followed by a type position (rule 1): the `(` there is
+                // always a type, so `fields ()` is the empty tuple. `static for` and
+                // `static loop` share this header, so the reading is enforced here rather than
+                // at either caller.
                 TypeHeadScope typeHead(*this);
                 parseType();
             } else if (atWord(0, "indices")) {
@@ -1257,14 +1263,19 @@ void ParserImpl::parseStaticForName() {
     parseIdentDef();
 }
 
-/// StaticLoopExpr: 'static' 'loop' loopState (',' loopState)* staticLoopHeader 'do' blockExpr
-/// `static loop acc = 0 for i in 0..5 do 表达式`：在 实例化时展开的折叠。状态头与普通的 `loop`
-/// 相同（一个名字时结果就是这个值，多个名字时是 元组）；头上的括号与 `static` 一起进来的遗留，已按“同一件事一种写法”去掉，现在与 普通 `loop` 的 `for i in
-/// <序列>` 同形（头由下面的 `staticLoopHeader` 给出）。序列是 `in fields T`（按结构体的字段）、`in indices
-/// ts`（按元组的位置），或任何编译期能求出的 序列： 常量区间 `a..b`、`range(a, b, step)`、数组字面量与常量数组、编译期元组 `ts`（那时每轮的
-/// 名字是该位置的类型）。节点的图 builder 判不出时报 `SemanticDiag::StaticLoopSequenceNotKnown`。 没有
-/// `while`，也没有运行期序列的 `for`，因为轮数必须在编译期确定。`do` 后面是循环体，它的值 是下一轮的状态；展开后没有 LOOP 节点。迭代变量是编译期常量：`acc
-/// + i` 和 `t.[i]` 都能写。
+/// staticLoopExpr : 'static' 'loop' loopState (',' loopState)* staticLoopHeader 'do' blockExpr
+///  `static loop acc = 0 for i in 0..5 do 表达式`（ 步骤 5；作者的裁决 2026-10-24，见
+/// docs/handover/reviews/questions-2026-10-24-evening.md 的 loop-for-and-static-loop）：在
+/// 实例化时展开的折叠。状态头与普通的 `loop` 相同（一个名字时结果就是这个值，多个名字时是
+///  元组）；头上的括号与 `static` 一起进来的遗留，已按“同一件事一种写法”去掉，现在与
+/// 普通 `loop` 的 `for i in <序列>` 同形（头由下面的 `staticLoopHeader` 给出）。序列是
+/// `in fields T`（按结构体的字段）、`in indices ts`（按元组的位置），或任何编译期能求出的
+///  序列（规则第 2 条画的那一条规则，见 `docs/handover/reviews/questions-2026-10-24-evening.md`
+///  的 与 2026-10-25 的 ：只由编译期常量经可自由排布的运算组成就求值展开）：
+/// 常量区间 `a..b`、`range(a, b, step)`、数组字面量与常量数组、编译期元组 `ts`（那时每轮的
+/// 名字是该位置的类型）。节点的图 builder 判不出时报 `SemanticDiag::StaticLoopSequenceNotKnown`。
+/// 没有 `while`，也没有运行期序列的 `for`，因为轮数必须在编译期确定。`do` 后面是循环体，它的值
+/// 是下一轮的状态；展开后没有 LOOP 节点。迭代变量是编译期常量：`acc + i` 和 `t.[i]` 都能写。
 void ParserImpl::parseStaticLoop() {
     const size_t m = mark();
     bump(); // static
@@ -1293,13 +1304,14 @@ void ParserImpl::parseStaticLoop() {
 
 /// staticLoopHeader : 'for' (identDef | '_') (',' (identDef | '_'))* 'in'
 ///                    ('fields' typeExpr | 'indices' dataExpr | dataExpr)
-/// The head of a `static loop`, written without the parentheses `static for` still has: it is
-/// written like the ordinary `loop`'s `for i in <序列>` (one thing, one spelling). The subject
-/// after `in` is a type for `fields`, a value for `indices`, and in every other case a sequence the
-/// compiler must be able to work out: one rule draws the line -- an expression built only from
-/// compile-time constants through operations that are pure and cannot fail is evaluated and
-/// unrolled, so `a..b`, `range(a, b, step)` with constant arguments, an array literal, a constant
-/// array and a compile-time tuple all count, and anything else is refused by the graph builder.
+/// The head of a `static loop`, written without the parentheses `static for` still has: the
+///  rule unifies it with the ordinary `loop`'s `for i in <序列>` (one thing, one
+/// spelling). The subject after `in` is a type for `fields`, a value for `indices`, and in every
+/// other case a sequence the compiler must be able to work out: one rule draws the line (the
+///  rules) -- an expression built only from compile-time constants
+/// through operations that are pure and cannot fail is evaluated and unrolled, so `a..b`,
+/// `range(a, b, step)` with constant arguments, an array literal, a constant array and a
+/// compile-time tuple all count, and anything else is refused by the graph builder.
 /// The head may name up to three things: `fields` gives the triple (name, type, tags) and every
 /// other element gives one thing, and a head that names more than the element has parts is
 /// `SemanticDiag::StaticHeadNameCount` (the same reading as `staticForHeader`'s).

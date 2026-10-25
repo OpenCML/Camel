@@ -162,7 +162,8 @@ size_t genericRuleInstance(
         instance.why = "the builder that declared it is gone";
     } else if (!owner->instantiateRuleTemplates(entry, types, lhs, rhs, when, instance.why)) {
         // The attempt is remembered as one that did not come about, and nothing of what the
-        // compiler said about it is reported.
+        //  compiler said about it is reported (the rule on
+        // generic-rule-instantiation-set-and-predicate).
     } else {
         publish(context, lhs, rhs, when, instance);
         instance.made = instance.lhs != nullptr && instance.rhs != nullptr;

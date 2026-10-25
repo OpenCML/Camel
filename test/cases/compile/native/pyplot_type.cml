@@ -1,7 +1,7 @@
 /**
  * The first parameter of `pyplot:plot` is an array of numbers, as `stdlib/pyplot.cml` says: a
  * `string` is refused at the call, and the message lists the declarations' `i32[]`, `int[]`,
- * `f32[]` and `float[]` forms.
+ *  `f32[]` and `float[]` forms.
  */
 module pyplot_type
 

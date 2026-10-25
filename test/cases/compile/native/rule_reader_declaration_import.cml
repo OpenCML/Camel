@@ -1,7 +1,7 @@
 /**
  * The four rule readers are declarations in `stdlib/rewrite.cml`: they take a `Rule` (the value a
  * rule declaration makes) and answer the name, the direction, the rewrites it needs and the
- * constants it adds. The calls reach the C++ kernels with the declared types.
+ *  constants it adds. The calls reach the C++ kernels with the declared types.
  */
 module rule_reader_declaration_import
 

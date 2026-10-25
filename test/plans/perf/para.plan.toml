@@ -13,7 +13,8 @@ expect_exit = 0
 snapshot_stream = "stdout"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 # The cost bound is this test's own CPU time (user + system), and the timeout below is its liveness
-# bound (docs/handover/reviews/questions-2026-10-23.md, "declaration-cost-gate" (a)):
+#  bound, by the rule (docs/handover/reviews/questions-2026-10-23.md,
+# "declaration-cost-gate" (a)):
 #
 #   "改量 CPU 时间，不量墙钟。共享主机上的墙钟随负载漂移 ... 进程的 CPU 时间（用户态 + 内核态）基本
 #    不随负载变"
@@ -51,9 +52,9 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 # the Monte Carlo estimator on std::nvm against the 30 s of its 120 s timeout -- while the CPU
 # figure of each of those entries moved by at most 3.7 % between the same two runs.
 cpu_budget_ms = 115000
-# One timed iteration. The nvm run measured 140.78 s on the host at load 108, against the 120 s
-# guard it had; 's run at load 26-54 passed, so the quiet run is under 120 s. 300 s is twice the
-# busiest measurement and still catches a hang.
+#  One timed iteration. The nvm run measured 140.78 s on the host at load 108, against the
+#  120 s guard it had; the run at load 26-54 passed, so the quiet run is under 120 s. 300 s is
+# twice the busiest measurement and still catches a hang.
 timeout_ms = 300000
 
 [[tests]]
@@ -66,7 +67,7 @@ expect_exit = 0
 snapshot_stream = "stdout"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 # 1.63x the 70.24 s CPU read above (the higher of 70.12 s and 70.24 s) rounded up: 1.64x the
-# busiest. The timeout below stays as the liveness bound (the rule quoted on
+#  busiest. The timeout below stays as the liveness bound (the rule quoted on
 # asian_option_mc.nvm_timeit above).
 cpu_budget_ms = 115000
 timeout_ms = 120000
@@ -88,7 +89,7 @@ expect_exit = 0
 snapshot_stream = "stdout"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 # 1.63x the 53.07 s CPU read above (the higher of 51.12 s and 53.07 s) rounded up: 1.64x the
-# busiest. The timeout below stays as the liveness bound (the rule quoted on
+#  busiest. The timeout below stays as the liveness bound (the rule quoted on
 # asian_option_mc.nvm_timeit above); this entry was one of the four the wall bound reddened.
 cpu_budget_ms = 87000
 timeout_ms = 180000
@@ -103,7 +104,7 @@ expect_exit = 0
 snapshot_stream = "stdout"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 # 1.63x the 69.90 s CPU read above (the higher of 69.90 s and 61.85 s) rounded up: 1.65x the
-# busiest. The timeout below stays as the liveness bound (the rule quoted on
+#  busiest. The timeout below stays as the liveness bound (the rule quoted on
 # asian_option_mc.nvm_timeit above); this entry was one of the four the wall bound reddened.
 cpu_budget_ms = 115000
 timeout_ms = 180000
@@ -118,7 +119,7 @@ expect_exit = 0
 snapshot_stream = "stdout"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 # 1.63x the 31.51 s CPU read above (the higher of 31.37 s and 31.51 s) rounded up: 1.65x the
-# busiest. The timeout below stays as the liveness bound (the rule quoted on
+#  busiest. The timeout below stays as the liveness bound (the rule quoted on
 # asian_option_mc.nvm_timeit above); this entry was one of the four the wall bound reddened.
 cpu_budget_ms = 52000
 timeout_ms = 120000
@@ -133,7 +134,7 @@ expect_exit = 0
 snapshot_stream = "stdout"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 # 1.63x the 32.16 s CPU read above (the highest of 31.63 s, 31.69 s and 32.16 s) rounded up: 1.65x
-# the busiest. The timeout below stays as the liveness bound (the rule quoted on
+#  the busiest. The timeout below stays as the liveness bound (the rule quoted on
 # asian_option_mc.nvm_timeit above).
 cpu_budget_ms = 53000
 timeout_ms = 120000

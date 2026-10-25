@@ -2,8 +2,8 @@
 /**
  * `camel inspect --ops` must not print an operator inventory it cannot vouch for. A declaration
  * module whose `.cml` exists and fails to load leaves its operators out of the listing; before
- * the tool printed the shorter list and exited 0, which is how the `pyplot`/`python`
- * registration gap survived until someone counted those seven names by hand.
+ *  the tool printed the shorter list and exited 0, which is how the `pyplot`/`python`
+ *  registration gap survived until someone counted those seven names by hand.
  *
  * The declaration module is made in the test's scratch directory beside a copy of the real
  * `math` module's `.cmo`, and found through `CAMEL_STD_LIB` (the plan runner's `${test_tmp}` is

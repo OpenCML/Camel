@@ -1,7 +1,9 @@
 /**
- * `is_function::<F>`: a pass-shaped declaration applies only where its function parameter F
- * really is a function (/). The predicate is a user predicate written with `match type`; `case
- * func` is the shape of every function type.
+ * `is_function::<F>()`: a pass-shaped declaration applies only where its function parameter F
+ *  really is a function.
+ *
+ * The predicate is a user predicate written with `match type`; `case func` is the shape of every
+ * function type.
  */
 module when_function
 

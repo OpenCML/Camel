@@ -1,5 +1,5 @@
 /**
- * The check of rules with a condition: the samples cannot be used to compare the two sides,
+ *  The check of rules with a condition: the samples cannot be used to compare the two sides,
  * because the tool cannot ask a condition about sampled values, so a conditional rule is checked
  * by firing it on its own left side: the rule must fire (the condition holds there) and the
  * rewritten left side must agree with the original one.

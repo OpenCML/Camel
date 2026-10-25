@@ -1,11 +1,13 @@
 /**
- * A literal inside a generic rule's body takes its type where the body is instantiated, and a type
- * it does not fit is refused there: `3000000000` fits `int` and not `i32`, so `cancel_wide_addend`
- * is instantiated for `int` and has no instance for `i32`, though `is_integer::<i32>` is true and
- * `i32` has `+` and `-`. The two questions below are the two halves of that: at the parameter of
- * `i64_zero` the answer names the instance that was made, and at the parameter of `i32_zero` it
- * repeats what the body said when it was tried -- which is the only place a failed instantiation
- * is ever read, since one reports nothing where it happens.
+ *  A literal inside a generic rule's body takes its type where the body is instantiated (
+ * of 2026-10-23 on `literal-inside-a-generic-body`), and a type it does not fit is refused there:
+ * `3000000000` fits `int` and not `i32`, so `cancel_wide_addend` is instantiated for `int` and has
+ * no instance for `i32`, though `is_integer::<i32>()` is true and `i32` has `+` and `-`. The two
+ * questions below are the two halves of that: at the parameter of `i64_zero` the answer names the
+ * instance that was made, and at the parameter of `i32_zero` it repeats what the body said when it
+ * was tried -- which is the only place a failed instantiation is ever read, since one reports
+ *  nothing where it happens (the rule on
+ * `generic-rule-instantiation-set-and-predicate`, §3).
  */
 module generic_literal_witness
 

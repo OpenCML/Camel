@@ -9,7 +9,7 @@ desc = "std::cml prints a runtime program as Camel source: module values, functi
 kind = "behavior"
 tool = "python"
 case = "../../../cases/trans/cml_contract.py"
-# `${camel}` is the compiler of the build under test, named as an argument.
+#  `${camel}` is the compiler of the build under test, named as an argument.
 args = ["${case}", "--camel", "${camel}"]
 expect_exit = 0
 expect_stdout_contains = ["cml round trip: PASS"]

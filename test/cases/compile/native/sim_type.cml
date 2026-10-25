@@ -1,7 +1,7 @@
 /**
  * The first parameter of `sim:pi_hits` is the declaration's `int`: a `float` there is refused at
- * the call, and the overload the message lists is the declaration's `(samples: int, seed: int)
- * => int` — `stdlib/sim.cml`, not the C++ module.
+ * the call, and the overload the message lists is the declaration's
+ *  `(samples: int, seed: int) => int` — `stdlib/sim.cml`, not the C++ module.
  */
 module sim_type
 

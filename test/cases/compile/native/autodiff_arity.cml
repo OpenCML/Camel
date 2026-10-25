@@ -1,7 +1,7 @@
 /**
  * The declaration of `autodiff:stop_gradient` takes one ordinary argument: a second one is
  * refused at the call, and the overload the message lists is the declaration's —
- * `stdlib/autodiff.cml`, not the C++ module (step 10).
+ *  `stdlib/autodiff.cml`, not the C++ module (step 10).
  */
 module autodiff_arity
 
