@@ -167,7 +167,8 @@ void checkInvalidation(::Function *function, core::context::Context &context) {
         std::fill_n(tensor->dataAs<float>(), elements(node.shape), 0.0f);
         args.push_back(
             {core::rtdata::toSlot(tensor),
-             tensor::ops::tensorOf(core::type::TypeCode::Float32, node.shape)});
+             tensor::ops::tensorOf(
+                 core::type::TypeCode::Float32, tensor::knownShape(node.shape))});
     }
     const auto before = compilationExtractions();
     context.facts().invalidateGraph(function->graph());

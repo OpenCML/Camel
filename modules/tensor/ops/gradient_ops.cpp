@@ -224,7 +224,7 @@ std::optional<Type *> permuteInverseInfer(const InferContext &ctx) {
     if (!shape || !perm || perm->size() != shape->size()) {
         return tensorOf(TypeCode::Float32, std::nullopt);
     }
-    StaticShape result(shape->size(), kUnknownDim);
+    StaticShape result(shape->size(), std::nullopt);
     const auto rank = static_cast<int64_t>(perm->size());
     for (size_t i = 0; i < perm->size(); ++i) {
         const int64_t p = (*perm)[i] < 0 ? (*perm)[i] + rank : (*perm)[i];
@@ -374,11 +374,11 @@ std::vector<OpDef> gradientOps() {
                 return std::nullopt;
             }
             int64_t count = 1;
-            for (int64_t d : *shape) {
-                if (d == kUnknownDim) {
+            for (const std::optional<int64_t> &d : *shape) {
+                if (!d) {
                     return std::nullopt;
                 }
-                count *= d;
+                count *= *d;
             }
             return camel::core::rtdata::toSlot(static_cast<camel::core::rtdata::Int64>(count));
         }});
@@ -398,11 +398,11 @@ std::vector<OpDef> gradientOps() {
             }
             const auto rank = static_cast<int64_t>(shape->size());
             const int64_t axis = *axisArg < 0 ? *axisArg + rank : *axisArg;
-            if (axis < 0 || axis >= rank || (*shape)[static_cast<size_t>(axis)] == kUnknownDim) {
+            if (axis < 0 || axis >= rank || !(*shape)[static_cast<size_t>(axis)].has_value()) {
                 return std::nullopt;
             }
             return camel::core::rtdata::toSlot(
-                static_cast<camel::core::rtdata::Int64>((*shape)[static_cast<size_t>(axis)]));
+                static_cast<camel::core::rtdata::Int64>(*(*shape)[static_cast<size_t>(axis)]));
         }});
 
     defs.push_back(internal(
@@ -500,7 +500,7 @@ void registerTensorTangentSpace() {
     // tensor. A tensor gradient that came back as one left the next tensor operator reading a
     // value its type does not promise — expand_axis on the gradient of a mean_axis, which is the
     // `export_grad_mean` crash. The tangent type of an array is taken from its element type
-    // (derivative.cpp's computeTangentType), so nothing states one here: a tensor's element type
+    // (derivative.cpp's `computeTangent`), so nothing states one here: a tensor's element type
     // is always in its type. The space owns the
     // tensors of the array code and not the arrays of values that share it — an array of
     // structs, tuples or arrays keeps the core's array space (`:tangent/add_arr`,

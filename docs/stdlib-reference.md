@@ -560,6 +560,21 @@ range is. `take` and `drop` of the module `array` cut to the array instead.
 - Pure.
 - Example: `[1, 2, 3, 4]->slice<1, 3>` gives `[2, 3]`
 
+#### `slice`
+
+```camel
+slice: (t: T[], axis: int, start: int, end: int, step?: int) => T[]
+```
+
+The slice of the first dimension of an array of values, written as a call: `slice(t, 0, a, b)`
+is the same node the subscript `t[a:b]` builds, with the axis written and the written mask left
+out. A negative bound is a fault here, as for the subscript; a slice of another axis, of a rank
+above 1, or with a step other than the constant 1 is a view with strides, which the core's slice
+does not answer (H17) and the module `tensor`'s `slice` does.
+
+- Pure.
+- Example: `[1, 2, 3, 4]->slice(0, 1, 3)` gives `[2, 3]`
+
 #### `concat`
 
 ```camel
@@ -1311,7 +1326,7 @@ under the same sections (design principles 6.4).
 #### `new`
 
 ```camel
-new: (values: Tensor | number[]) => Tensor
+new: (values: float[..] | number[]) => float[..]
 ```
 
 A tensor made of a nested number array (or of a tensor, copied into contiguous row-major
@@ -1325,7 +1340,7 @@ boolean.
 #### `empty`
 
 ```camel
-empty: (shape: int[]) => Tensor
+empty: (shape: int[]) => f32[..]
 ```
 
 A tensor of the given extents; the allocation is zeroed, so it reads as `zeros` of the same
@@ -1337,7 +1352,7 @@ shape.
 #### `zeros`
 
 ```camel
-zeros: (shape: int[]) => Tensor
+zeros: (shape: int[]) => f32[..]
 ```
 
 A tensor of `f32` zeros with the given extents.
@@ -1348,7 +1363,7 @@ A tensor of `f32` zeros with the given extents.
 #### `ones`
 
 ```camel
-ones: (shape: int[]) => Tensor
+ones: (shape: int[]) => f32[..]
 ```
 
 A tensor of `f32` ones with the given extents.
@@ -1359,7 +1374,7 @@ A tensor of `f32` ones with the given extents.
 #### `full`
 
 ```camel
-full: (shape: int[], value: number) => Tensor
+full: (shape: int[], value: number) => float[..]
 ```
 
 A tensor of the given extents whose elements are all value; the element type is the value's.
@@ -1370,7 +1385,7 @@ A tensor of the given extents whose elements are all value; the element type is 
 #### `eye`
 
 ```camel
-eye: (n: int) => Tensor
+eye: (n: int) => f32[..]
 ```
 
 The `f32` n by n identity matrix.
@@ -1401,7 +1416,7 @@ argument, for three, or by the qualified name `tensor::range(...)`.
 #### `random`
 
 ```camel
-random: (shape: int[], low: number, high: number) => Tensor
+random: (shape: int[], low: number, high: number) => f32[..]
 ```
 
 A tensor of `f32` values drawn uniformly from [low, high) with the given extents.
@@ -1412,7 +1427,7 @@ A tensor of `f32` values drawn uniformly from [low, high) with the given extents
 #### `randn`
 
 ```camel
-randn: (shape: int[], mean?: number, std?: number) => Tensor
+randn: (shape: int[], mean?: number, std?: number) => f32[..]
 ```
 
 A tensor of `f32` values drawn from the normal distribution with the given mean (0 by
@@ -1426,7 +1441,7 @@ default) and standard deviation (1 by default), with the given extents.
 #### `add`
 
 ```camel
-add: (lhs: Tensor | number, rhs: Tensor | number) => Tensor
+add: (lhs: float[..] | number, rhs: float[..] | number) => float[..]
 ```
 
 a + b per element, with NumPy broadcasting: a scalar operand applies to every element, and
@@ -1438,7 +1453,7 @@ the element type is the wider of the two (a float with an integer gives `f32`).
 #### `subtract`
 
 ```camel
-subtract: (lhs: Tensor | number, rhs: Tensor | number) => Tensor
+subtract: (lhs: float[..] | number, rhs: float[..] | number) => float[..]
 ```
 
 a - b per element, with NumPy broadcasting.
@@ -1449,7 +1464,7 @@ a - b per element, with NumPy broadcasting.
 #### `multiply`
 
 ```camel
-multiply: (lhs: Tensor | number, rhs: Tensor | number) => Tensor
+multiply: (lhs: float[..] | number, rhs: float[..] | number) => float[..]
 ```
 
 a * b per element, with NumPy broadcasting.
@@ -1460,7 +1475,7 @@ a * b per element, with NumPy broadcasting.
 #### `divide`
 
 ```camel
-divide: (lhs: Tensor | number, rhs: Tensor | number) => Tensor
+divide: (lhs: float[..] | number, rhs: float[..] | number) => float[..]
 ```
 
 a / b per element, with NumPy broadcasting; IEEE division: x / 0 is an infinity or NaN, not a
@@ -1472,7 +1487,7 @@ fault.
 #### `pow`
 
 ```camel
-pow: (lhs: Tensor | number, rhs: Tensor | number) => Tensor
+pow: (lhs: float[..] | number, rhs: float[..] | number) => float[..]
 ```
 
 a raised to b per element, with NumPy broadcasting.
@@ -1483,7 +1498,7 @@ a raised to b per element, with NumPy broadcasting.
 #### `maximum`
 
 ```camel
-maximum: (lhs: Tensor | number, rhs: Tensor | number) => Tensor
+maximum: (lhs: float[..] | number, rhs: float[..] | number) => float[..]
 ```
 
 IEEE 754-2019 maximum per element, with NumPy broadcasting: NaN on either side gives the
@@ -1495,7 +1510,7 @@ canonical quiet NaN, and -0 is below +0.
 #### `minimum`
 
 ```camel
-minimum: (lhs: Tensor | number, rhs: Tensor | number) => Tensor
+minimum: (lhs: float[..] | number, rhs: float[..] | number) => float[..]
 ```
 
 IEEE 754-2019 minimum per element, with NumPy broadcasting: NaN on either side gives the
@@ -1507,7 +1522,7 @@ canonical quiet NaN, and -0 is below +0.
 #### `mod`
 
 ```camel
-mod: (lhs: Tensor | number, rhs: Tensor | number) => Tensor
+mod: (lhs: float[..] | number, rhs: float[..] | number) => float[..]
 ```
 
 a % b per element, with NumPy broadcasting: the language's remainder, the truncated one
@@ -1523,7 +1538,7 @@ division does; an integer element type has the integer remainder.
 #### `where`
 
 ```camel
-where: (cond: Tensor, lhs: Tensor | number, rhs: Tensor | number) => Tensor
+where: (cond: bool[..], lhs: float[..] | number, rhs: float[..] | number) => float[..]
 ```
 
 lhs where cond holds, rhs elsewhere, broadcast to one shape; the element type is the wider of
@@ -1535,7 +1550,7 @@ lhs and rhs.
 #### `neg`
 
 ```camel
-neg: (t: Tensor) => Tensor
+neg: (t: float[..]) => float[..]
 ```
 
 -x per element: the sign flipped.
@@ -1546,7 +1561,7 @@ neg: (t: Tensor) => Tensor
 #### `abs`
 
 ```camel
-abs: (t: Tensor) => Tensor
+abs: (t: float[..]) => float[..]
 ```
 
 |x| per element: the sign cleared.
@@ -1557,7 +1572,7 @@ abs: (t: Tensor) => Tensor
 #### `exp`
 
 ```camel
-exp: (t: Tensor) => Tensor
+exp: (t: float[..]) => float[..]
 ```
 
 e^x per element, within 2 ulp, subnormal results included.
@@ -1568,7 +1583,7 @@ e^x per element, within 2 ulp, subnormal results included.
 #### `log`
 
 ```camel
-log: (t: Tensor) => Tensor
+log: (t: float[..]) => float[..]
 ```
 
 ln x per element, within 2 ulp; NaN, +-inf, +-0 and negative x are exact (negative x gives
@@ -1580,7 +1595,7 @@ NaN).
 #### `sqrt`
 
 ```camel
-sqrt: (t: Tensor) => Tensor
+sqrt: (t: float[..]) => float[..]
 ```
 
 sqrt(x) per element, rounded once in `f32`.
@@ -1591,7 +1606,7 @@ sqrt(x) per element, rounded once in `f32`.
 #### `rsqrt`
 
 ```camel
-rsqrt: (t: Tensor) => Tensor
+rsqrt: (t: float[..]) => float[..]
 ```
 
 1 / sqrt(x) per element: two steps, each rounded in `f32`.
@@ -1602,7 +1617,7 @@ rsqrt: (t: Tensor) => Tensor
 #### `sigmoid`
 
 ```camel
-sigmoid: (t: Tensor) => Tensor
+sigmoid: (t: float[..]) => float[..]
 ```
 
 The logistic function 1 / (1 + e^-x) per element.
@@ -1613,7 +1628,7 @@ The logistic function 1 / (1 + e^-x) per element.
 #### `tanh`
 
 ```camel
-tanh: (t: Tensor) => Tensor
+tanh: (t: float[..]) => float[..]
 ```
 
 The hyperbolic tangent per element.
@@ -1624,7 +1639,7 @@ The hyperbolic tangent per element.
 #### `relu`
 
 ```camel
-relu: (t: Tensor) => Tensor
+relu: (t: float[..]) => float[..]
 ```
 
 maximum(x, +0) per element: NaN gives the canonical NaN, and -0 gives +0.
@@ -1635,7 +1650,7 @@ maximum(x, +0) per element: NaN gives the canonical NaN, and -0 gives +0.
 #### `gelu`
 
 ```camel
-gelu: (t: Tensor) => Tensor
+gelu: (t: float[..]) => float[..]
 ```
 
 The Gaussian error linear unit per element, computed as its normative definition in Camel.
@@ -1646,7 +1661,7 @@ The Gaussian error linear unit per element, computed as its normative definition
 #### `erf`
 
 ```camel
-erf: (t: Tensor) => Tensor
+erf: (t: float[..]) => float[..]
 ```
 
 The Gauss error function per element.
@@ -1659,7 +1674,7 @@ The Gauss error function per element.
 #### `reshape`
 
 ```camel
-reshape: (t: Tensor | number[], shape: int[]) => Tensor
+reshape: (t: float[..] | number[], shape: int[]) => float[..]
 ```
 
 The elements in row-major order, in a new shape; one extent may be -1, which the element
@@ -1671,7 +1686,7 @@ count fills.
 #### `flatten`
 
 ```camel
-flatten: (t: Tensor, axis?: int) => Tensor
+flatten: (t: float[..], axis?: int) => float[..]
 ```
 
 The elements in row-major order in two axes: the extents before axis multiplied into the
@@ -1683,7 +1698,7 @@ first, the rest into the second (axis 1 by default).
 #### `unsqueeze`
 
 ```camel
-unsqueeze: (t: Tensor, axis: int) => Tensor
+unsqueeze: (t: float[..], axis: int) => float[..]
 ```
 
 The elements unchanged, with an axis of extent 1 added at axis.
@@ -1694,7 +1709,7 @@ The elements unchanged, with an axis of extent 1 added at axis.
 #### `transpose`
 
 ```camel
-transpose: (t: Tensor) => Tensor
+transpose: (t: float[..]) => float[..]
 ```
 
 The last two axes swapped (a vector becomes a column, a matrix its transpose).
@@ -1705,7 +1720,7 @@ The last two axes swapped (a vector becomes a column, a matrix its transpose).
 #### `permute`
 
 ```camel
-permute: (t: Tensor, perm: int[]) => Tensor
+permute: (t: float[..], perm: int[]) => float[..]
 ```
 
 The axes reordered as perm lists them.
@@ -1716,7 +1731,7 @@ The axes reordered as perm lists them.
 #### `concat`
 
 ```camel
-concat: (a: Tensor | number[], b: Tensor | number[], axis: int) => Tensor
+concat: (a: float[..] | number[], b: float[..] | number[], axis: int) => float[..]
 ```
 
 a and b joined along axis; every other extent must agree.
@@ -1727,7 +1742,7 @@ a and b joined along axis; every other extent must agree.
 #### `slice`
 
 ```camel
-slice: (t: Tensor, axis: int, start: int, end: int, step?: int) => Tensor
+slice: (t: float[..], axis: int, start: int, end: int, step?: int) => float[..]
 ```
 
 The elements start, start + step, ... of one axis before end; step is 1 by default.
@@ -1738,7 +1753,7 @@ The elements start, start + step, ... of one axis before end; step is 1 by defau
 #### `take`
 
 ```camel
-take: (t: Tensor, indices: Tensor | number[]) => Tensor
+take: (t: float[..], indices: int64[..] | number[]) => float[..]
 ```
 
 The entries of the first axis that indices name, in that order.
@@ -1750,7 +1765,7 @@ The entries of the first axis that indices name, in that order.
 #### `one_hot`
 
 ```camel
-one_hot: (labels: Tensor | number[], classes: int) => Tensor
+one_hot: (labels: int64[..] | number[], classes: int) => int64[..]
 ```
 
 Each label (an integer below classes) expanded to a row of classes with a 1 at its position:
@@ -1800,7 +1815,7 @@ The extent of one axis; a negative axis counts from the last one (`-1` is the la
 #### `sum`
 
 ```camel
-sum: (t: Tensor) => float
+sum: (t: float[..]) => float
 ```
 
 Every element converted to `f64` and summed in row-major order from +0; `int64` and `bool`
@@ -1812,7 +1827,7 @@ elements are summed exactly in `int64` and converted once.
 #### `sum`
 
 ```camel
-sum: (t: Tensor, axis: int, keepdims?: bool) => Tensor
+sum: (t: float[..], axis: int, keepdims?: bool) => float[..]
 ```
 
 The same sum over one axis, in an `f64` accumulator; keepdims keeps the axis with extent 1.
@@ -1824,7 +1839,7 @@ The same sum over one axis, in an `f64` accumulator; keepdims keeps the axis wit
 #### `mean`
 
 ```camel
-mean: (t: Tensor) => float
+mean: (t: float[..]) => float
 ```
 
 The sum of `sum` divided by the element count in `f64`; an empty tensor is a fault.
@@ -1836,7 +1851,7 @@ The sum of `sum` divided by the element count in `f64`; an empty tensor is a fau
 #### `mean`
 
 ```camel
-mean: (t: Tensor, axis: int, keepdims?: bool) => Tensor
+mean: (t: float[..], axis: int, keepdims?: bool) => float[..]
 ```
 
 The same mean over one axis; keepdims keeps the axis with extent 1.
@@ -1848,7 +1863,7 @@ The same mean over one axis; keepdims keeps the axis with extent 1.
 #### `max`
 
 ```camel
-max: (t: Tensor, axis: int, keepdims?: bool) => Tensor
+max: (t: float[..], axis: int, keepdims?: bool) => float[..]
 ```
 
 IEEE 754-2019 maximum over the axis (exactly associative and commutative: any order gives
@@ -1861,7 +1876,7 @@ the same bits); keepdims keeps the axis with extent 1.
 #### `min`
 
 ```camel
-min: (t: Tensor, axis: int, keepdims?: bool) => Tensor
+min: (t: float[..], axis: int, keepdims?: bool) => float[..]
 ```
 
 IEEE 754-2019 minimum over the axis (exactly associative and commutative); keepdims keeps the
@@ -1874,7 +1889,7 @@ axis with extent 1.
 #### `argmax`
 
 ```camel
-argmax: (t: Tensor, axis: int, keepdims?: bool) => Tensor
+argmax: (t: float[..], axis: int, keepdims?: bool) => int64[..]
 ```
 
 The position (`int64`) of the first maximum over the axis by IEEE 754-2019 maximum: the first
@@ -1887,7 +1902,7 @@ NaN if there is one, +0 above -0, the earlier position on a tie.
 #### `argmin`
 
 ```camel
-argmin: (t: Tensor, axis: int, keepdims?: bool) => Tensor
+argmin: (t: float[..], axis: int, keepdims?: bool) => int64[..]
 ```
 
 The position (`int64`) of the first minimum over the axis by IEEE 754-2019 minimum: the first
@@ -1900,7 +1915,7 @@ NaN if there is one, -0 below +0, the earlier position on a tie.
 #### `softmax`
 
 ```camel
-softmax: (t: Tensor, axis?: int) => Tensor
+softmax: (t: f32[..], axis?: int) => f32[..]
 ```
 
 The softmax over the axis (-1, the last axis, by default), computed as its normative
@@ -1913,7 +1928,7 @@ definition in Camel, in `f32`.
 #### `log_softmax`
 
 ```camel
-log_softmax: (t: Tensor, axis?: int) => Tensor
+log_softmax: (t: f32[..], axis?: int) => f32[..]
 ```
 
 The log of the softmax over the axis (-1 by default), computed as its normative definition in
@@ -1926,7 +1941,7 @@ Camel, in `f32`.
 #### `softmax_grad`
 
 ```camel
-softmax_grad: (y: Tensor, dy: Tensor, axis?: int) => Tensor
+softmax_grad: (y: f32[..], dy: f32[..], axis?: int) => f32[..]
 ```
 
 The gradient of the softmax of y with the incoming gradient dy, over the axis (-1 by default).
@@ -1938,7 +1953,7 @@ The gradient of the softmax of y with the incoming gradient dy, over the axis (-
 #### `layer_norm`
 
 ```camel
-layer_norm: (x: Tensor, gamma: Tensor, beta: Tensor, eps?: number) => Tensor
+layer_norm: (x: f32[..], gamma: f32[..], beta: f32[..], eps?: number) => f32[..]
 ```
 
 Layer normalization of x with gamma and beta, whose extents are the trailing ones of x, over
@@ -1953,7 +1968,7 @@ the trailing axes; eps is 1e-5 by default. The result is `f32`.
 #### `matmul`
 
 ```camel
-matmul: (lhs: Tensor, rhs: Tensor) => Tensor
+matmul: (lhs: float[..], rhs: float[..]) => float[..]
 ```
 
 The matrix product of lhs and rhs: per output element acc = +0, then acc = fma(a[i][k],
@@ -1966,7 +1981,7 @@ b[k][j], acc) for k ascending, every fused multiply-add rounded once in `f32`.
 #### `linear`
 
 ```camel
-linear: (x: Tensor, weight: Tensor, bias?: Tensor) => Tensor
+linear: (x: f32[..], weight: f32[..], bias?: f32[..]) => f32[..]
 ```
 
 The affine transform of x by a rank-2 weight [in, out] whose rows are the features of x, plus
@@ -1981,7 +1996,7 @@ a rank-1 bias [out] when given.
 #### `zeros_like`
 
 ```camel
-zeros_like: (t: Tensor) => Tensor
+zeros_like: (t: float[..]) => float[..]
 ```
 
 A tensor of zeros shaped and typed like t.
@@ -1992,7 +2007,7 @@ A tensor of zeros shaped and typed like t.
 #### `ones_like`
 
 ```camel
-ones_like: (t: Tensor) => Tensor
+ones_like: (t: float[..]) => float[..]
 ```
 
 A tensor of ones shaped and typed like t.
@@ -2005,7 +2020,7 @@ A tensor of ones shaped and typed like t.
 #### `cast`
 
 ```camel
-cast: (t: Tensor | number[], dtype: string) => Tensor
+cast: (t: float[..] | number[], dtype: string) => int64[..]
 ```
 
 t converted to the element type the name gives: "float32", "float", "double" or "float64"
@@ -2056,7 +2071,7 @@ Prints t to the console, in the module's layout.
 #### `from_bytes`
 
 ```camel
-from_bytes: (bytes: Bytes, shape: int[]) => Tensor
+from_bytes: (bytes: Bytes, shape: int[]) => f32[..]
 ```
 
 A tensor of the given shape made of little-endian elements. The element type is the explicit
@@ -2328,7 +2343,7 @@ so, and a struct or tuple is asked field by field.
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `is_plain::<float>()` gives `true`
 - Example: `is_plain::<bool>()` gives `true`
-- Example: `is_plain::<(x: int, y: f32)>()` gives `true`
+- Example: `is_plain::<{ x: int, y: f32 }>()` gives `true`
 - Example: `is_plain::<string>()` gives `false`
 - Example: `is_plain::<int[]>()` gives `false`
 
@@ -5415,7 +5430,7 @@ optimizers, and the checkpoint writer for a parameter tree. The operators work o
 #### `conv2d`
 
 ```camel
-conv2d: (input: Tensor, kernel: Tensor, bias: Tensor, stride?: int, padding?: int) => Tensor
+conv2d: (input: f32[..], kernel: f32[..], bias: f32[..], stride?: int, padding?: int) => f32[..]
 ```
 
 2-D convolution: `input` is `[N, C, H, W]` f32, `kernel` is `[O, C, KH, KW]` f32 and `bias` is
@@ -5429,7 +5444,7 @@ rank 4, or a window that does not fit, is refused when the call is compiled.
 #### `conv2d_input_grad`
 
 ```camel
-conv2d_input_grad: (input: Tensor, kernel: Tensor, dy: Tensor, stride?: int, padding?: int) => Tensor
+conv2d_input_grad: (input: f32[..], kernel: f32[..], dy: f32[..], stride?: int, padding?: int) => f32[..]
 ```
 
 The gradient of `conv2d` with respect to its input, given the upstream gradient `dy` shaped
@@ -5441,7 +5456,7 @@ like the convolution's result; the result is shaped like `input`.
 #### `conv2d_kernel_grad`
 
 ```camel
-conv2d_kernel_grad: (input: Tensor, kernel: Tensor, dy: Tensor, stride?: int, padding?: int) => Tensor
+conv2d_kernel_grad: (input: f32[..], kernel: f32[..], dy: f32[..], stride?: int, padding?: int) => f32[..]
 ```
 
 The gradient of `conv2d` with respect to its kernel, given `dy` shaped like the convolution's
@@ -5453,7 +5468,7 @@ result; the result is shaped like `kernel`.
 #### `conv2d_bias_grad`
 
 ```camel
-conv2d_bias_grad: (bias: Tensor, dy: Tensor) => Tensor
+conv2d_bias_grad: (bias: f32[..], dy: f32[..]) => f32[..]
 ```
 
 The gradient of `conv2d` with respect to its bias: the sum of `dy` over the batch and the
@@ -5467,7 +5482,7 @@ spatial axes, shaped like `bias`.
 #### `max_pool2d`
 
 ```camel
-max_pool2d: (input: Tensor, kernel: int, stride?: int, padding?: int) => Tensor
+max_pool2d: (input: f32[..], kernel: int, stride?: int, padding?: int) => f32[..]
 ```
 
 Max pooling over a square window of `kernel` on `input` `[N, C, H, W]` f32. `stride` defaults
@@ -5480,7 +5495,7 @@ the padding contributes -inf (the identity of the maximum).
 #### `avg_pool2d`
 
 ```camel
-avg_pool2d: (input: Tensor, kernel: int, stride?: int, padding?: int) => Tensor
+avg_pool2d: (input: f32[..], kernel: int, stride?: int, padding?: int) => f32[..]
 ```
 
 Average pooling over a square window of `kernel`: the window's elements plus +0 for those in
@@ -5493,7 +5508,7 @@ to `kernel`, `padding` to 0, and the result is `[N, C, OH, OW]`.
 #### `max_pool2d_grad`
 
 ```camel
-max_pool2d_grad: (input: Tensor, dy: Tensor, kernel: int, stride?: int, padding?: int) => Tensor
+max_pool2d_grad: (input: f32[..], dy: f32[..], kernel: int, stride?: int, padding?: int) => f32[..]
 ```
 
 The gradient of `max_pool2d` with respect to its input, given `dy` shaped like the pooling
@@ -5505,7 +5520,7 @@ result; the result is shaped like `input`.
 #### `avg_pool2d_grad`
 
 ```camel
-avg_pool2d_grad: (input: Tensor, dy: Tensor, kernel: int, stride?: int, padding?: int) => Tensor
+avg_pool2d_grad: (input: f32[..], dy: f32[..], kernel: int, stride?: int, padding?: int) => f32[..]
 ```
 
 The gradient of `avg_pool2d` with respect to its input, given `dy` shaped like the pooling
@@ -5519,7 +5534,7 @@ result; the result is shaped like `input`.
 #### `batch_norm`
 
 ```camel
-batch_norm: (input: Tensor, mean: Tensor, var: Tensor, gamma: Tensor, beta: Tensor, eps?: number) => Tensor
+batch_norm: (input: f32[..], mean: f32[..], var: f32[..], gamma: f32[..], beta: f32[..], eps?: number) => f32[..]
 ```
 
 Inference-mode batch normalization: `(input - mean) / sqrt(var + eps) * gamma + beta`, with
@@ -5531,7 +5546,7 @@ Inference-mode batch normalization: `(input - mean) / sqrt(var + eps) * gamma + 
 #### `batch_norm_train`
 
 ```camel
-batch_norm_train: (input: Tensor, gamma: Tensor, beta: Tensor, running_mean: Tensor, running_var: Tensor, momentum?: number, eps?: number) => (Tensor, Tensor, Tensor)
+batch_norm_train: (input: f32[..], gamma: f32[..], beta: f32[..], running_mean: f32[..], running_var: f32[..], momentum?: number, eps?: number) => (f32[..], f32[..], f32[..])
 ```
 
 Training-mode batch normalization: normalizes `input` with the batch statistics, and answers
@@ -5545,7 +5560,7 @@ to 1e-5.
 #### `batch_norm_train_grad`
 
 ```camel
-batch_norm_train_grad: (input: Tensor, gamma: Tensor, dy: Tensor, eps?: number) => (Tensor, Tensor, Tensor)
+batch_norm_train_grad: (input: f32[..], gamma: f32[..], dy: f32[..], eps?: number) => (f32[..], f32[..], f32[..])
 ```
 
 The gradients of training-mode batch normalization: `(dx, dgamma, dbeta)`, shaped like
@@ -5560,7 +5575,7 @@ differentiated, so the operator takes `dy` (the gradient of `y`) and `eps`.
 #### `embedding`
 
 ```camel
-embedding: (table: Tensor, indices: Tensor) => Tensor
+embedding: (table: f32[..], indices: f32[..]) => f32[..]
 ```
 
 Gathers rows of the rank-2 int-or-float table `[rows, dim]` by the rank-1 integer indices; the
@@ -5573,7 +5588,7 @@ result is `[indices.length, dim]`. An index outside `[0, rows)` is a fault.
 #### `embedding_table_grad`
 
 ```camel
-embedding_table_grad: (table: Tensor, indices: Tensor, dy: Tensor) => Tensor
+embedding_table_grad: (table: f32[..], indices: f32[..], dy: f32[..]) => f32[..]
 ```
 
 The gradient of `embedding` with respect to its table: unvisited rows stay zero, and the
@@ -5587,8 +5602,8 @@ result is shaped like `table`.
 #### `softmax_cross_entropy`
 
 ```camel
-softmax_cross_entropy: (logits: Tensor, target: Tensor) => float
-softmax_cross_entropy: (logits: Tensor, target: Tensor | number[]) => float
+softmax_cross_entropy: (logits: f32[..], target: f32[..]) => float
+softmax_cross_entropy: (logits: f32[..], target: f32[..] | number[]) => float
 ```
 
 The mean softmax cross-entropy of rank-2 `logits` `[batch, classes]` against a same-shaped
@@ -5603,8 +5618,8 @@ the same as the one-hot form's.
 #### `softmax_cross_entropy_grad`
 
 ```camel
-softmax_cross_entropy_grad: (logits: Tensor, target: Tensor, dy: number) => Tensor
-softmax_cross_entropy_grad: (logits: Tensor, target: Tensor | number[], dy: number) => Tensor
+softmax_cross_entropy_grad: (logits: f32[..], target: f32[..], dy: number) => f32[..]
+softmax_cross_entropy_grad: (logits: f32[..], target: f32[..] | number[], dy: number) => f32[..]
 ```
 
 The gradient of `softmax_cross_entropy` with respect to `logits`, scaled by `dy`; the result is

@@ -37,9 +37,10 @@ class IndexBuilder {
     core::sem::IndexedInstance instance;
     core::sem::ExprPool &x() { return instance.exprs; }
 
-    /// The parameter shape(operand)[axis], named s<operand>_<axis>, with its value when `known`
-    /// is an extent (>= 0). Asking twice gives the same parameter.
-    ExprId extent(size_t operand, size_t axis, int64_t known);
+    /// The parameter shape(operand)[axis], named s<operand>_<axis>, with its value when the
+    /// element type states one (an extent nobody stated is `std::nullopt`; plan section 5.3).
+    /// Asking twice gives the same parameter.
+    ExprId extent(size_t operand, size_t axis, std::optional<int64_t> known);
     /// A constant argument: the scalar operand `operand`, or element `element` of an int array.
     ExprId constant(
         std::string name, size_t operand, int64_t value, std::optional<size_t> element = {});

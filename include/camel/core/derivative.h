@@ -15,13 +15,29 @@
  *   - a tangent space per type code: the tangent type of a value, how two
  *     tangents add, and what the zero tangent is.
  *
- * Composite types (structs, tuples, arrays) have no entry: tangentTypeOf
- * derives theirs from their element types. A struct's gradient has the
- * struct's own shape -- a discrete field (`i64[..]`, an integer scalar) is
- * kept at its own type and its gradient is the zero of that shape and element
- * type, so the parameter tree and the gradient tree pair structurally -- while
- * a tuple drops its elements without a tangent (see `keepsInTangent` in
- * src/core/derivative.cpp). The builtin scalar
+ * Composite types (structs, tuples, arrays) have no entry: the two questions
+ * below derive their answers from their element types. Which of the two a
+ * caller asks is decided by *who the answer is for*, not by the aggregate's
+ * shape (the author's ruling of 2026-10-25 on
+ * discrete-tuple-tangent-space-and-machinery-aggregates):
+ *
+ *   - `gradientTypeOf` answers for the user: the gradient type of the
+ *     parameter `P` a `grad`/`with_grad` call differentiates, which is what the
+ *     call hands back and what `grad of P` names. A number and a boolean are
+ *     their own gradient (the value zero), a `string` and a function have none,
+ *     and a struct or a tuple has one exactly when every member has, the
+ *     member's gradient standing in its place -- a discrete member (`i64[..]`,
+ *     an integer scalar) is kept at its own type and its gradient is the zero
+ *     of that shape and element type, so the parameter tree and the gradient
+ *     tree pair structurally. A struct and a tuple answer by the same rule.
+ *   - `machineryTangentTypeOf` answers for the machinery: the tangent of a
+ *     value the transform itself carries (a loop's state, a captured tuple, an
+ *     aggregate on the reverse tape). The user never sees those, and only the
+ *     members that need a gradient are kept, a discrete member and a function
+ *     member being dropped. That is an implementation choice, not a language
+ *     rule; see `keepsInTangent` in src/core/derivative.cpp.
+ *
+ * The builtin scalar
  * operators and types register here from the builtin module; tensor, nn and
  * math register their own when loaded.
  */
@@ -199,16 +215,32 @@ class DerivativeRegistry {
     std::unordered_map<type::TypeCode, bool (*)(const type::Type *)> discrete_;
 };
 
-/// Tangent type of values of type `primal`, or nullptr when they have no tangent.
-type::Type *tangentTypeOf(type::Type *primal);
+/// The gradient type of the parameter `P` a user differentiates: what `grad` and `with_grad` hand
+/// back, and what `grad of P` names. A number and a boolean are their own gradient, with the value
+/// zero; a `string` and a function have none; and a struct or a tuple has one exactly when every
+/// member has, the member's gradient standing in its place. The two aggregate shapes answer by the
+/// same rule, so a tuple model `with <m: (f32[..], int)>` gets `(f32[..], int)` back with the
+/// `int` at zero. Null when the parameter has no gradient at all.
+type::Type *gradientTypeOf(type::Type *parameter);
 
-/// True for structs and tuples, whose tangents are handled element by element.
+/// Tangent type of a value the *machinery* carries -- a loop's state, a captured tuple, an
+/// aggregate on the reverse tape -- or null when the value carries no gradient. Only the members
+/// that need a gradient are kept; a discrete member (whose gradient is zero whatever the program
+/// does) and a function member are dropped. The user never sees these aggregates: this is the
+/// transform's own choice, and `grad`/`with_grad` answer with `gradientTypeOf` instead.
+type::Type *machineryTangentTypeOf(type::Type *primal);
+
+/// True for structs and tuples, whose gradients and tangents are handled element by element.
 bool isAggregate(const type::Type *t);
 size_t aggregateSize(type::Type *aggregate);
 type::Type *aggregateElement(type::Type *aggregate, size_t index);
-/// Position of element `index` of an aggregate in its tangent, or nullopt when the tangent does
-/// not keep the element (a tuple's element with no tangent; a struct always keeps its fields, a
-/// discrete one at its own type -- see `keepsInTangent`).
-std::optional<size_t> tangentElementIndex(type::Type *aggregate, size_t index);
+/// Position of element `index` of an aggregate in the gradient `gradientTypeOf` names: the
+/// element's own place, or nullopt when the aggregate has no gradient. Every element of an
+/// aggregate that has a gradient has one, so this is the element's index (or nothing at all).
+std::optional<size_t> gradientElementIndex(type::Type *aggregate, size_t index);
+/// Position of element `index` of an aggregate in the tangent the machinery carries
+/// (`machineryTangentTypeOf`), or nullopt when that tangent does not keep the element (a discrete
+/// member, a function member, a member with no tangent).
+std::optional<size_t> machineryTangentElementIndex(type::Type *aggregate, size_t index);
 
 } // namespace camel::core

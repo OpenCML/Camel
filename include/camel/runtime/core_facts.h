@@ -60,10 +60,13 @@
 
 namespace camel::runtime::fact {
 
-/// The value of core.shape. `dims` is nullopt when the rank is unknown; an unknown extent is -1.
+/// The value of core.shape. `dims` is nullopt when the rank is unknown; an extent nobody stated is
+/// an absent entry of the vector (plan section 5.3 of the arrays-memory design: the transitional
+/// `-1` sentinel is gone). The text form of the kind (`encode`/`decode`) still spells an absent
+/// extent as `-1`, which is the spelling its readers already parse.
 struct TensorShape {
     std::optional<camel::core::type::TypeCode> dtype;
-    std::optional<std::vector<int64_t>> dims;
+    std::optional<std::vector<std::optional<int64_t>>> dims;
     bool operator==(const TensorShape &) const = default;
 };
 

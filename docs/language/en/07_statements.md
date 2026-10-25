@@ -661,7 +661,7 @@ id
 - Arguments can only be types, and their number must equal the number of parameters; using it without arguments is an error.
 - The right-hand side can only refer to types already declared, so a type function cannot refer to itself.
 - It can be `export`ed, and is used in another module as `module::Pair<int>`.
-- The angle brackets of a module type, where it takes arguments, are interpreted by the type itself, and the arguments can be types or `const data`; the angle brackets of `Tensor<f32, const [2, 3]>`, another spelling of a numeric array, are interpreted by the array type itself.
+- The angle brackets of a module type are interpreted by the type itself, and the arguments can be types or `const data`; the angle brackets of `Tensor<f32, [2, 3]>`, another spelling of a numeric array, are interpreted by the array type itself (a shape argument is written without `const`: `Tensor<f32, const [2, 3]>` is `SemanticDiag::InvalidTypeArgument`).
 
 The type operations `&`, `\`, `+`, `-`, `^`, and `keyof`, `name of T` report `SemanticDiag::FeatureNotSupported` or a syntax error; their meaning is not yet decided. `typeof e` is a whole type, the type of the value of `e`, expanded by the compiler where the type is used. It cannot be nested inside a larger type (`typeof(1)[]` is `SemanticDiag::TypeOfNotWholeType`), and an operand with no value (`void`) is `SemanticDiag::TypeOfNotAValue`.
 

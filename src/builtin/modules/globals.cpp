@@ -215,25 +215,15 @@ std::optional<std::string> staticIndexRejection(const type_vec_t &norm, static_a
     return std::format("index {} is outside axis 0 of extent {}", *index, *extent);
 }
 
-/// Whether `type` is a tensor the module that owns tensors slices: a numeric array that is
+/// Whether `t` is a tensor the module that owns tensors slices: a numeric array that is
 /// open-rank (`f32[..]`, the transition spelling of `Tensor`), of rank 2 or more, or rank 1 with a
 /// stated extent (`f32[6]`, what a tensor operator returns and what `Tensor<f32, [6]>` names).
 /// What stays the core's is the program's own array of values: rank 1 with no extent stated
 /// (`T[]`) -- the form an array literal has and the form the core's array operators build and take
 /// -- because the programs that subscript one without importing the tensor module must keep
 /// working (docs/handover/questions/subscript-operator-choice-and-the-rank-two-refusal.md §二: the
-/// narrowing `t[idx]` had on this line, which `:op/idx_take` no longer needs -- it takes the rows
-/// of an array of any rank and of an open rank alike, `__idx_take_arr__`).
-bool isTensorSubscript(const Type *type) {
-    const ArrayType *array = asArrayType(type);
-    if (array == nullptr || !isNumericArrayType(type)) {
-        return false;
-    }
-    if (array->anyRank() || array->rank() >= 2) {
-        return true;
-    }
-    return staticFirstExtent(type).has_value();
-}
+/// same narrowing `t[idx]` already has on this line, where a rank-2 array is refused by the core
+/// and the module's `tensor:idx_take` answers another rank or an open rank).
 
 /// Why `t[a:b]` / `t[a:b:s]` cannot be this call: a constant bound leaves the statically known
 /// first extent, or the result would not be a view of a rank-1 array.
@@ -337,6 +327,154 @@ class StaticCheckedResolver final : public FuncTypeResolver {
     resolver_ptr_t inner_;
     Check check_;
 };
+
+/// Whether `slice(t, axis, start, end, step?)` is a call the core's own slice operator answers:
+/// the value is a rank-1 array whose length the type states, the axis is the constant 0 -- the
+/// only axis a rank-1 array has -- the step is the constant 1 or not written, and both bounds are
+/// constants inside that length.
+///
+/// Everything else keeps the tensor module's function form: another axis, a higher or an open
+/// rank, a bound outside the length, a bound that counts from the end, or an axis, a bound or a
+/// step the compiler does not know. The two spellings are one node with one rule and one adjoint
+/// rule (the author's ruling of 2026-10-25, discrete-gradient-and-rank-one-slice-ownership, point
+/// 2: `t[a:b]` and `slice(t, 0, a, b)` are the same node), and this predicate is what the core
+/// can answer of it today: a rank-1 array, the axis it is sliced along, and bounds that are the
+/// positions they name. The function form's own reading of its arguments -- a negative bound
+/// counts from the end, an out-of-range one is refused by name -- is the tensor module's
+/// (`sliceFunctionKernel`, `sliceFunctionInfer`), and a call it answers stays there until the two
+/// readings are one; see the question page for the readings this leaves apart.
+bool isCoreSliceCall(const type_vec_t &norm, static_args_t statics) {
+    if (norm.size() < 4 || norm.size() > 5) {
+        return false;
+    }
+    if (norm[0] == nullptr || norm[0]->code() != TypeCode::Array) {
+        return false;
+    }
+    const ArrayType *array = tt::as_ptr<ArrayType>(norm[0]);
+    if (array->anyRank() || array->rank() != 1) {
+        return false;
+    }
+    if (array->elemType() == nullptr || array->elemType()->code() == TypeCode::Void) {
+        return false;
+    }
+    for (size_t i = 1; i < norm.size(); ++i) {
+        if (norm[i] == nullptr || norm[i]->code() != TypeCode::Int64) {
+            return false;
+        }
+    }
+    const std::optional<int64_t> extent = staticFirstExtent(norm[0]);
+    const std::optional<int64_t> axis   = constantArg(statics, 1);
+    const std::optional<int64_t> from   = constantArg(statics, 2);
+    const std::optional<int64_t> to     = constantArg(statics, 3);
+    const std::optional<int64_t> step =
+        norm.size() >= 5 ? constantArg(statics, 4) : std::optional<int64_t>(1);
+    if (!extent || !axis || *axis != 0 || !from || !to || !step || *step != 1) {
+        return false;
+    }
+    return *from >= 0 && *to >= 0 && *from <= *extent && *to <= *extent;
+}
+
+/// A rule of the core's own that answers only the calls a predicate accepts and says nothing about
+/// the rest. Unlike `StaticCheckedResolver` -- whose check is also the reason a call is reported
+/// with, because the call it refuses is one no other rule answers -- this one is one overload
+/// among several that answer the same name: the calls it leaves are the other overload's, and a
+/// rule that declined a call has no reason of its own to report for it. Reporting one would put
+/// the core's wording in front of the module's on a call the module refuses with its own.
+class PredicatedResolver final : public FuncTypeResolver {
+  public:
+    using Predicate = bool (*)(const type_vec_t &, static_args_t);
+
+    PredicatedResolver(resolver_ptr_t inner, Predicate accepts)
+        : inner_(std::move(inner)), accepts_(accepts) {}
+
+    static resolver_ptr_t create(resolver_ptr_t inner, Predicate accepts) {
+        return resolver_ptr_t(new PredicatedResolver(std::move(inner), accepts));
+    }
+
+    std::optional<FunctionType *> resolve(
+        const type_vec_t &with, const type_vec_t &norm,
+        const ModifierSet &modifiers) const override {
+        // A path that carries no constant arguments cannot see the axis and the bounds the
+        // predicate reads: it answers nothing and leaves the call to the overloads that can.
+        if (!accepts_(norm, {})) {
+            return std::nullopt;
+        }
+        return inner_->resolve(with, norm, modifiers);
+    }
+
+    std::optional<FunctionType *> resolveWith(
+        const type_vec_t &with, const type_vec_t &norm, static_args_t normStatics,
+        const ModifierSet &modifiers) const override {
+        if (!accepts_(norm, normStatics)) {
+            return std::nullopt;
+        }
+        return inner_->resolveWith(with, norm, normStatics, modifiers);
+    }
+
+    std::optional<std::string> explainRejection(
+        const type_vec_t &with, const type_vec_t &norm, static_args_t normStatics,
+        const ModifierSet &modifiers) const override {
+        if (!accepts_(norm, normStatics)) {
+            return std::nullopt;
+        }
+        return inner_->explainRejection(with, norm, normStatics, modifiers);
+    }
+
+    std::string signature() const override { return inner_->signature(); }
+    FunctionType *fixedSignature() const override { return inner_->fixedSignature(); }
+    bool parameterNames(std::vector<std::string> &with, std::vector<std::string> &norm)
+        const override {
+        return inner_->parameterNames(with, norm);
+    }
+    bool varParameters(std::vector<bool> &with, std::vector<bool> &norm) const override {
+        return inner_->varParameters(with, norm);
+    }
+    std::optional<camel::core::error::SemanticDiag> rejectionDiag() const override {
+        return inner_->rejectionDiag();
+    }
+
+  private:
+    resolver_ptr_t inner_;
+    Predicate accepts_;
+};
+
+/// The type a slice of `norm[0]` has: an array of the value's element type, one dimension, whose
+/// length is not in the type. Which positions a slice takes is a value -- the length of the array
+/// it is taken from -- and the core's arrays are the rank-1 arrays whose extent the type does not
+/// state (`T[]`); a slice of one is another one. A tensor whose extent the type does state
+/// (`f32[6]`) is read the same way: the slice of what the type calls six elements is not a value
+/// the type can call an extent without reading the bounds.
+std::optional<Type *> sliceResultType(const type_vec_t &norm) {
+    if (norm.empty() || norm[0] == nullptr || norm[0]->code() != TypeCode::Array) {
+        return std::nullopt;
+    }
+    Type *elem = tt::as_ptr<ArrayType>(norm[0])->elemType();
+    if (elem == nullptr || elem->code() == TypeCode::Void) {
+        return std::nullopt;
+    }
+    return ArrayType::create(elem);
+}
+
+/// `slice(t, axis, start, end, step?)` -- the function form of the same slice node the subscript
+/// lowers to. The core answers the call it can: a rank-1 array of a stated element type, the axis
+/// 0, and constant bounds inside the length the type states (isCoreSliceCall). Every other call
+/// -- another axis, a higher or open rank, a negative or out-of-range bound, an axis or a bound
+/// the compiler does not know -- is the tensor module's function form, which answers any axis and
+/// any rank. So `x[1:4]` and `slice(x, 0, 1, 4)` are one node for a rank-1 value whose length is
+/// stated, which is what the ruling asks for, and the module keeps the readings the core does not
+/// have yet.
+resolver_ptr_t coreSliceFunctionResolver() {
+    return PredicatedResolver::create(
+        DynamicFuncTypeResolver::create(
+            {{0, {}}, {-1, {}}},
+            "(t: T[], axis: int, start: int, end: int, step: int) => T[]",
+            [](const type_vec_t &with, const type_vec_t &norm,
+               const ModifierSet &) -> optional<Type *> {
+                (void)with;
+                return sliceResultType(norm);
+            }),
+        isCoreSliceCall);
+}
 
 } // namespace
 
@@ -2333,6 +2471,12 @@ std::make_shared<StaticCheckedResolver>(
                             return arrType;
                         }),
                 },
+                {
+                    // The function form of the same slice node the subscript lowers to; see
+                    // coreSliceFunctionResolver for the calls each of the two answers.
+                    ":op/slice_sub",
+                    coreSliceFunctionResolver(),
+                },
             }),
         OperatorGroup::create(
             "__slice__",
@@ -2351,7 +2495,7 @@ std::make_shared<StaticCheckedResolver>(
                             {{0, {}}, {6, {false, false, false, false, false, false}}},
                             "(arr: T[], axis: int, start: int, end: int, step: int, written: int) "
                             "=> T[]",
-                            [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                            [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
                                 -> optional<Type *> {
                                 if (norm[0]->code() != TypeCode::Array)
                                     return nullopt;
@@ -2359,23 +2503,22 @@ std::make_shared<StaticCheckedResolver>(
                                     if (norm[i]->code() != TypeCode::Int64)
                                         return nullopt;
                                 }
-                                const auto &arrType = tt::as_ptr<ArrayType>(norm[0]);
-                                Type *elem         = arrType->elemType();
-                                // A tensor is sliced by the module that owns tensors: the subscript lowers to
-                                // that module's own slice node (`tensor:slice`, the same node
-                                // `slice(t, 0, a, b)` builds), which reads the elements at the
-                                // element type the value carries, while the core's slice is the
-                                // array of values whose elements the tangent space holds one slot
-                                // each (design principles 5.4, 9.9). Declining here leaves the value
-                                // to that module's own overload of `t[a:b]`; an array whose element
-                                // type nobody stated (its element is `Void`) is left to it too. The
-                                // core keeps a rank-1 array, numeric included, and is the only one
-                                // that answers when no module is loaded (isTensorSubscript).
-                                if (elem == nullptr || elem->code() == TypeCode::Void ||
-                                    isTensorSubscript(norm[0])) {
-                                    return nullopt;
+                                Type *elem = tt::as_ptr<ArrayType>(norm[0])->elemType();
+                                // One rule for both `[]` forms, for every rank and every element
+                                // type (the author's ruling of 2026-10-25, section
+                                // discrete-gradient-and-rank-one-slice-ownership, point 2: the two
+                                // subscripts are answered by the core alone, and the module copy
+                                // and the dispatch by "whose array is this" are the transition
+                                // types' residue, deleted together with the module's own
+                                // subscript kernel and type rule). An array whose element type
+                                // nobody stated -- the bare `Tensor` spelling, whose element is
+                                // `Void` -- has no element type to hand back, and keeps the array
+                                // type it has: a step-1 slice of a compact array is a view, so the
+                                // element type the value carries at run time is the one it keeps.
+                                if (elem == nullptr || elem->code() == TypeCode::Void) {
+                                    return norm[0];
                                 }
-                                return norm[0];
+                                return sliceResultType(norm);
                             }),
                         staticSliceRejection),
                 },

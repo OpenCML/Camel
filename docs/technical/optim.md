@@ -47,7 +47,7 @@
 
 | 原生路径做什么 | 现在缺什么 | 今天的结果 |
 | --- | --- | --- |
-| 只把有切线的成员交给叶子（`tangentTypeOf` 去掉没有切线的成员） | 一个类型级的形状投影：写出“与 `P` 同形、叶子换成切线”的类型。`grad` 的结果类型就是这样算出来的，Camel 还没有这种类型级操作 | `update` 的遍历由参数树驱动、按字段名去梯度里取对应叶子，而泛型遍历问不出“这个字段在不在”，所以梯度必须与参数**逐字段同形**：`test/cases/modules/nn/residual_mlp.cml` 那种带 `depth: int` 的模型，它的梯度里没有 `depth`，实例化时报 `SemanticDiag`“该结构没有字段 `depth`”。原生路径用 `tangentTypeOf` 去掉没有切线的成员，照样训练这棵树 |
+| 只把有切线的成员交给叶子（`machineryTangentTypeOf` 去掉没有切线的成员） | 一个类型级的形状投影：写出“与 `P` 同形、叶子换成切线”的类型。`grad` 的结果类型就是这样算出来的，Camel 还没有这种类型级操作 | `update` 的遍历由参数树驱动、按字段名去梯度里取对应叶子，而泛型遍历问不出“这个字段在不在”，所以梯度必须与参数**逐字段同形**：`test/cases/modules/nn/residual_mlp.cml` 那种带 `depth: int` 的模型，它的梯度里没有 `depth`，实例化时报 `SemanticDiag`“该结构没有字段 `depth`”。原生路径用 `machineryTangentTypeOf` 去掉没有切线的成员，照样训练这棵树 |
 | `walkArray` 逐元素进入数组，数组元素是叶子（设计原则 9.9） | R3 把数组当叶子，`match type` 不能静态展开数组元素；`ckpt:tree_leaves` 缺的也是同一件事（`stdlib/tree.cml` 的模块注释写了原因：值元组不能拼接） | `examples/models/naive-in-expert-out/train_step.cml` 的 `blocks: Block[]` 写不出来：数组叶子既没有 `zeros_like`，也没有逐元素的减法 |
 | 一个「元素类型没写在类型里」的叶子，它的元素类型只能在运行时从**值**里读 | 一个能在运行时说出张量元素类型的算子（或 `cast_like`）：类型层说不出（`Tensor` 的元素类型是**缺省**，不是某个默认值），算子层也没有 | `adam` 的 `case _` 支因此按值的宽度判元素类型（`size(to_bytes(p)) == numel(p) * 8`），代价是每个这样的叶子、每步复制一次数据；`cast` 的结果类型由 dtype 字面量静态决定，所以 `if` 的两支要用 `unstated`（把元素类型抹掉的接缝）合并。裁定见 `docs/handover/reviews/questions-2026-10-23.md` 的「f64-tensor-leaf」节（选 A，两侧一起，本模块的 `case _` 支不转换参数） |
 | —— | 一个模块只声明一个 `init` / `update`（不能按优化器重载），Optax 那种“每个优化器一个状态类型”因此写不出来 | 三个优化器共用一个状态类型 `{ m: P, v: P, step: int }`：`sgd` 多带两棵零树，白占内存；要按优化器分状态，语言得先有重载或和类型 |

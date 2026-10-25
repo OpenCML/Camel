@@ -43,6 +43,7 @@
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/reachable.h"
+#include "camel/utils/assert.h"
 
 #include <algorithm>
 #include <cstdlib>
@@ -89,9 +90,8 @@ std::string describe(const Value &v) {
     if (f.shape) {
         shape = "[";
         for (size_t i = 0; i < f.shape->size(); ++i) {
-            const int64_t d = (*f.shape)[i];
-            shape +=
-                (i ? "," : "") + (d == tensor::kUnknownDim ? std::string("?") : std::to_string(d));
+            const std::optional<int64_t> d = (*f.shape)[i];
+            shape += (i ? "," : "") + (!d ? std::string("?") : std::to_string(*d));
         }
         shape += "]";
     }
@@ -164,8 +164,8 @@ ValueInfo valueInfoOf(const std::string &name, const TensorFacts &facts) {
     if (facts.shape) {
         std::vector<Dim> dims;
         for (size_t i = 0; i < facts.shape->size(); ++i) {
-            const int64_t d = (*facts.shape)[i];
-            dims.push_back(d == tensor::kUnknownDim ? Dim{std::format("{}_d{}", name, i)} : Dim{d});
+            const std::optional<int64_t> d = (*facts.shape)[i];
+            dims.push_back(!d ? Dim{std::format("{}_d{}", name, i)} : Dim{*d});
         }
         info.shape = std::move(dims);
     }
@@ -1836,8 +1836,8 @@ Evaluator::BodyOutcome Evaluator::mergeOutcomes(
             }
             std::vector<int64_t> dims;
             if (facts.shape) {
-                for (int64_t extent : *facts.shape) {
-                    dims.push_back(extent == tensor::kUnknownDim ? 1 : extent);
+                for (const std::optional<int64_t> &extent : *facts.shape) {
+                    dims.push_back(!extent ? 1 : *extent);
                 }
             }
             std::string filler = emitter_.node("ConstantOfShape", {emitter_.int64s(dims)});
@@ -3009,7 +3009,7 @@ Value Evaluator::callClosure(
                 shape = a.shape;
                 for (size_t d = 0; d < shape->size(); ++d) {
                     if ((*a.shape)[d] != (*b.shape)[d]) {
-                        (*shape)[d] = tensor::kUnknownDim;
+                        (*shape)[d] = std::nullopt;
                     }
                 }
             }
@@ -3639,7 +3639,7 @@ Value Evaluator::evalSymbolicBranch(
         shape = a.shape;
         for (size_t d = 0; d < shape->size(); ++d) {
             if ((*a.shape)[d] != (*b.shape)[d]) {
-                (*shape)[d] = tensor::kUnknownDim;
+                (*shape)[d] = std::nullopt;
             }
         }
     }
@@ -3806,7 +3806,7 @@ Value Evaluator::evalSymbolicAggregateBranch(
             shape = fa.shape;
             for (size_t d = 0; d < shape->size(); ++d) {
                 if ((*fa.shape)[d] != (*fb.shape)[d]) {
-                    (*shape)[d] = tensor::kUnknownDim;
+                    (*shape)[d] = std::nullopt;
                 }
             }
         }
@@ -3973,7 +3973,7 @@ Value Evaluator::symbolicIntArray(
     for (size_t k = 0; k < fillSlots.size(); ++k) {
         elems[static_cast<size_t>(fillSlots[k])] = values[k];
     }
-    std::vector<int64_t> known;
+    std::vector<std::optional<int64_t>> known;
     std::vector<bool> symbolic;
     for (size_t i = 0; i < elems.size(); ++i) {
         if (!elems[i] || elems[i]->isConstant()) {
@@ -3986,7 +3986,7 @@ Value Evaluator::symbolicIntArray(
         if (elems[i]->form != Value::Form::Scalar) {
             unsupported(act, "an int array element that depends on the model input must be an int");
         }
-        known.push_back(tensor::kUnknownDim);
+        known.push_back(std::nullopt);
         symbolic.push_back(true);
     }
     if (std::ranges::none_of(symbolic, [](bool s) { return s; })) {
@@ -3996,13 +3996,20 @@ Value Evaluator::symbolicIntArray(
         // initializer; a Concat of constant parts would compute at model-run time what the
         // exporter already knows, and where the same shape is also a literal the model folds, the
         // two writings of one shape disagree over a `Concat` that need not be in the model.
-        return Value::symbolicIntArray(emitter_.int64s(known), known);
+        std::vector<int64_t> initializer;
+        initializer.reserve(known.size());
+        for (const std::optional<int64_t> &entry : known) {
+            // No element here is symbolic, so every entry was given a value above.
+            ASSERT(entry.has_value(), "an int array with no symbolic element has every entry");
+            initializer.push_back(*entry);
+        }
+        return Value::symbolicIntArray(emitter_.int64s(initializer), known);
     }
     std::vector<std::string> parts;
     const int64_t axis[] = {0};
     for (size_t i = 0; i < elems.size(); ++i) {
         if (!symbolic[i]) {
-            const int64_t one[] = {known[i]};
+            const int64_t one[] = {*known[i]};
             parts.push_back(emitter_.int64s(one));
             continue;
         }
@@ -4161,7 +4168,7 @@ class InputBinder {
                                 axis,
                                 rank));
                     }
-                    shape[static_cast<size_t>(a)] = tensor::kUnknownDim;
+                    shape[static_cast<size_t>(a)] = std::nullopt;
                     dynamic.push_back(static_cast<size_t>(a));
                 }
             }
@@ -4861,7 +4868,7 @@ class DeclaredInputBinder {
             std::vector<size_t> dynamic;
             for (size_t a = 0; a < shape.size(); ++a) {
                 if (shape[a] < 0) {
-                    shape[a] = tensor::kUnknownDim;
+                    shape[a] = std::nullopt;
                     dynamic.push_back(a);
                 }
             }

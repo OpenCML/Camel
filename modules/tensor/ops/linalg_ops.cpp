@@ -31,12 +31,12 @@ slot_t matmulKernel(ArgsView &, ArgsView &norm, context::Context &) {
     });
 }
 
-int64_t agree(int64_t a, int64_t b, const char *what) {
-    if (a == kUnknownDim) {
+std::optional<int64_t> agree(std::optional<int64_t> a, std::optional<int64_t> b, const char *what) {
+    if (!a) {
         return b;
     }
-    if (b != kUnknownDim && a != b) {
-        throw ShapeError(std::string(what) + ": " + std::to_string(a) + " vs " + std::to_string(b));
+    if (b && a != b) {
+        throw ShapeError(std::string(what) + ": " + std::to_string(*a) + " vs " + std::to_string(*b));
     }
     return a;
 }
@@ -51,8 +51,8 @@ matmulStaticShape(const std::optional<StaticShape> &lhs, const std::optional<Sta
         throw std::invalid_argument("matmul does not accept rank-0 tensors");
     }
     const bool lv = lhs->size() == 1, rv = rhs->size() == 1;
-    const int64_t K  = lhs->back();
-    const int64_t rK = rv ? (*rhs)[0] : (*rhs)[rhs->size() - 2];
+    const std::optional<int64_t> K  = lhs->back();
+    const std::optional<int64_t> rK = rv ? (*rhs)[0] : (*rhs)[rhs->size() - 2];
     agree(K, rK, "matmul inner dimensions differ");
     StaticShape lb(lhs->begin(), lhs->end() - (lv ? 1 : 2));
     StaticShape rb(rhs->begin(), rhs->end() - (rv ? 1 : 2));
@@ -89,7 +89,7 @@ std::optional<Type *> linearInfer(const InferContext &ctx) {
     if (!x.shape || !w.shape) {
         return tensorOf(
             dtype,
-            x.shape ? std::optional(StaticShape(x.shape->size(), kUnknownDim)) : std::nullopt);
+            x.shape ? std::optional(StaticShape(x.shape->size(), std::nullopt)) : std::nullopt);
     }
     if (x.shape->empty()) {
         return std::nullopt;

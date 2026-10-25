@@ -2592,15 +2592,16 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
-name = "grad_refuse_int"
-desc = "Refused at compile time with NotDifferentiable: the first `with` parameter is an int."
-kind = "negative"
-case = "../../../cases/modules/autodiff/grad_refuse_int.cml"
-args = ["${case}", "std::macro"]
-expect_exit = 1
-expect_diagnostic_line = 11
-expect_output_contains = ["SemanticDiag::NotDifferentiable", "has type int, which has no gradient"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+name = "grad_int_zero"
+desc = "An `int` parameter is differentiable and its gradient is the zero of its own type: `let g: int = grad(twice)<3>(2.0)` gives the int `0`, and the printed line is the only value in it. The gradient type of a parameter is a question of its own, asked for the user -- a number is its own gradient type, at zero -- and `string`/function parameters are still refused (`grad_refuse_string`, `grad_refuse_function`), because they have no gradient type at all (the author's ruling of 2026-10-25 on discrete-tuple-tangent-space-and-machinery-aggregates). The machinery's own question about the same int is still answered `no` (it carries no gradient through the tape)."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/grad_int_zero.cml"
+args = ["${case}", "std::macro", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "grad_int_zero g=0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
 [[tests]]
@@ -2640,6 +2641,18 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
+name = "grad_refuse_tuple"
+desc = "Refused at compile time with NotDifferentiable: the first `with` parameter is a tuple with a member that has no gradient, and the refusal names that member by its position (`element 1`, a `string`) rather than saying only that the tuple has none. A tuple answers by the same rule as a struct -- a member without a gradient makes the whole parameter have none (the author's ruling of 2026-10-25 on discrete-tuple-tangent-space-and-machinery-aggregates)."
+kind = "negative"
+case = "../../../cases/modules/autodiff/grad_refuse_tuple.cml"
+args = ["${case}", "std::macro"]
+expect_exit = 1
+expect_diagnostic_line = 20
+expect_output_contains = ["SemanticDiag::NotDifferentiable", "whose element 1 has type string, which has no gradient"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
 name = "grad_struct_all_discrete"
 desc = "A model whose every field is discrete is differentiable: the tangent space of a struct is taken field by field, and an integer and a boolean each have one -- their own type, with the value zero -- so the gradient is the model's own type, all zeros. There is no \"at least one trainable field\" exception (the author's ruling of 2026-10-25 on discrete-gradient-and-rank-one-slice-ownership)."
 kind = "behavior"
@@ -2649,6 +2662,19 @@ backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
 expect_stdout_exact = "12.0\n0\nfalse\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "grad_tuple_discrete_member"
+desc = "A tuple model keeps its discrete member in the gradient: `with <m: (f32[..], int)>` gets `(f32[..], int)` back, with the `int` at zero, and `let g: (f32[..], int) = gradient` pins that the gradient is the model's own type. What decides is who reads the answer -- the user's `grad`/`with_grad` gradient against the machinery's own aggregates -- not whether the parameter is a struct or a tuple (the author's ruling of 2026-10-25 on discrete-tuple-tangent-space-and-machinery-aggregates)."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/grad_tuple_discrete_member.cml"
+args = ["${case}", "std::macro", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "grad_tuple_discrete_member value=12.0 grad_sum=6.0 k=0\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 

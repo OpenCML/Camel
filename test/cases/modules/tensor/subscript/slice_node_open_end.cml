@@ -1,0 +1,14 @@
+/**
+ * One slice spelling, so that `std::gir` prints a graph small enough to read whole: `x[2:]` is the
+ * same slice of the same value with the end not written. See slice_one_node.cml.
+ */
+module slice_node_open_end
+
+import { Tensor, reshape } from tensor
+
+func main(): int sync {
+    let x = reshape([1.0, 2.0, 3.0, 4.0] as f32[], [4])
+    let b = x[2:]
+    println(b)
+    return 0
+}
