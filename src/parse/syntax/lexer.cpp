@@ -57,7 +57,7 @@ constexpr std::array<uint8_t, 256> makeCharClasses() {
         table[c] = kDigit;
     }
     table['\''] = table['"'] = table['`'] = kQuote;
-    for (char c : std::string_view(";,:.()[]{}<>=+-*/%^@&|!~?\\")) {
+    for (char c : std::string_view(";,:.()[]{}<>=+-*/%^@&|!~?")) {
         table[static_cast<unsigned char>(c)] = kPunct;
     }
     table['#'] = kHash;
@@ -808,9 +808,6 @@ TokenBuffer Lexer::tokenizeImpl(std::string source, size_t from, size_t to) {
                 break;
             case '~':
                 one(TokenKind::Tilde);
-                break;
-            case '\\':
-                one(TokenKind::Backslash);
                 break;
             case ':':
                 c1 == ':' ? two(TokenKind::ColonColon) : one(TokenKind::Colon);

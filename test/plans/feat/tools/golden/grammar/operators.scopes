@@ -391,23 +391,12 @@
 >}
 #^ meta.block.camel punctuation.section.block.end.camel
 >
->type Both = A & B
-#^^^^ meta.type.definition.camel storage.type.type.camel
-#     ^^^^ meta.type.definition.camel entity.name.type.camel
-#          ^ keyword.operator.assignment.camel
-#              ^ keyword.operator.type.camel
->type Diff = A \ B
-#^^^^ meta.type.definition.camel storage.type.type.camel
-#     ^^^^ meta.type.definition.camel entity.name.type.camel
-#          ^ keyword.operator.assignment.camel
-#              ^ keyword.operator.type.camel
->type Keys = A + B - C ^ D
-#^^^^ meta.type.definition.camel storage.type.type.camel
-#     ^^^^ meta.type.definition.camel entity.name.type.camel
-#          ^ keyword.operator.assignment.camel
-#              ^ keyword.operator.arithmetic.camel
-#                  ^ keyword.operator.arithmetic.camel
-#                      ^ keyword.operator.arithmetic.camel
+>let masked = flags & 3
+#^^^ meta.declaration.let.camel storage.type.let.camel
+#    ^^^^^^ meta.declaration.let.camel variable.other.constant.camel
+#           ^ keyword.operator.assignment.camel
+#                   ^ keyword.operator.logical.camel
+#                     ^ constant.numeric.integer.decimal.camel
 >type Fn = (x: int, y: int) => int
 #^^^^ meta.type.definition.camel storage.type.type.camel
 #     ^^ meta.type.definition.camel entity.name.type.camel

@@ -1,5 +1,5 @@
-// A counter-example: `noisy` prints and its own signature does not say `pure`, so its type is not
-// what the requirement asks for. The error names the signature that would have matched.
+// A counter-example: `noisy` prints, so the resources its body infers do not fit the empty set the
+// parameter asks for. The error names the signature that would have matched.
 // Run: camel docs/tutorial/examples/10_pure_callback_wrong.cml
 module pure_callback_wrong
 

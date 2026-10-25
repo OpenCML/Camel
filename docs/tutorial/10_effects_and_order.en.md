@@ -370,8 +370,8 @@ Draw the graph of this program and the `tooltip` of a function node is the resou
 
 All three lines say what a call touches: `read_id` touches the handle it is given, `tick` touches the `console` group
 (expanded to `db` and `stdout`), `bump` touches the cell the caller hands it. **That is resource inference**: you need
-not write it, and it is visible on the graph; what you write is a promise, and the compiler checks the part of it it
-can (the errors below).
+not write it, and it is visible on the graph; what you write is a promise, and a body that goes beyond it is a compile
+error (the errors below).
 
 What a wrong clause looks like (all compile errors):
 
@@ -380,16 +380,26 @@ What a wrong clause looks like (all compile errors):
   `uses` says "these", and only one of the two may be written.
 - a body-less declaration (a native operator) whose clause is not the operator's: `SemanticDiag::NativeResourceMismatch`
   -- such a declaration *is* the whole signature of the operator, resources included.
+- a body that goes beyond its own `pure`/`uses` promise: `SemanticDiag::UsesPromiseViolated`. `uses` is an upper bound
+  and `pure` is the empty set; the error is at the declaration and the note points at the first use the signature does
+  not promise (a `pure` signature with a `var` parameter is reported here too: a `var` parameter is a resource by
+  itself).
 
 ## `pure`: touching no resource at all
 
-`pure` is the promise that a call touches no resource. Written in a **function type** it is a requirement: whoever
-passes a function in has to pass one that satisfies it, and satisfying it means **its own signature says `pure`**. `apply` in
+`pure` is the promise that a call touches no resource at all. Written in a **function type** it is a
+requirement: whoever passes a function in must pass one whose **inferred** resource set does not go
+beyond it -- a function that uses fewer resources fits where more are asked for, and not the other way
+round ([design principles 3.3](../design-principles.en.md#33-resources-uses-and-pure)).
+**What is written is the promise, and a body that goes beyond it is a compile error**: a named function
+is held to the clause it writes (`pure` must come out empty), and an anonymous function has no clause --
+its resources are inferred, so a lambda that touches nothing, or a named function whose body touches
+nothing, fits a `pure` parameter. `apply` in
 [`examples/10_pure_callback.cml`](examples/10_pure_callback.cml) accepts only a pure function:
 
 ```cml
-// `pure` in a function type is part of the requirement: `apply` accepts only a function whose own
-// signature says `pure`, and `twice` says it.
+// `pure` in a function type is part of the requirement: what is compared is the resources the
+// argument's body infers against the empty set the parameter asks for, and `twice` touches nothing.
 // Run: camel docs/tutorial/examples/10_pure_callback.cml
 module pure_callback
 
@@ -415,14 +425,16 @@ camel docs/tutorial/examples/10_pure_callback.cml
 8
 ```
 
-Pass a function whose signature does not say `pure` and the trouble is not a wrong value but a **signature that does
-not match** -- refused at the call ([`examples/10_pure_callback_wrong.cml`](examples/10_pure_callback_wrong.cml)):
+Pass a function that touches a resource and the trouble is not a wrong value but a **signature that does
+not match**: what is compared is the **resources the argument infers against the resources the parameter
+asks for**, and the error is raised at the call
+([`examples/10_pure_callback_wrong.cml`](examples/10_pure_callback_wrong.cml)):
 
 <!-- camel-snippet: counter-example: this program deliberately does not compile: the call is a mismatch, so the text block below is the diagnostic, not output -->
 
 ```cml
-// A counter-example: `noisy` prints and its own signature does not say `pure`, so its type is not
-// what the requirement asks for. The error names the signature that would have matched.
+// A counter-example: `noisy` prints, so the resources its body infers do not fit the empty set the
+// parameter asks for. The error names the signature that would have matched.
 // Run: camel docs/tutorial/examples/10_pure_callback_wrong.cml
 module pure_callback_wrong
 

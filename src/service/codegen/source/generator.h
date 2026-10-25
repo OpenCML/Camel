@@ -56,9 +56,7 @@ class Generator {
     std::string generateStructTypeLoad(const AST::node_ptr_t &node);
     std::string generateTupleTypeLoad(const AST::node_ptr_t &node);
     std::string generateFuncTypeLoad(const AST::node_ptr_t &node);
-    std::string generateUnitTypeLoad(const AST::node_ptr_t &node);
     std::string generateInferTypeLoad(const AST::node_ptr_t &node);
-    std::string generateDataTypeLoad(const AST::node_ptr_t &node);
     std::string generateRefTypeLoad(const AST::node_ptr_t &node);
 
     std::string generateNamedDataLoad(const AST::node_ptr_t &node);

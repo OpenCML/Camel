@@ -5229,7 +5229,7 @@ node_ptr_t Builder::visitRefData(const AST::node_ptr_t &ast) {
 /*
 Type(TypeType type) :=
     StreamType | NullableType | TypeExpr | ArrayType | StructType | TupleType
-    | FuncType | SpecType | UnitType | InferType | DataType | RefType ;
+    | FuncType | SpecType | InferType | RefType | EnumType ;
 */
 Type *Builder::visitType(const AST::node_ptr_t &ast) {
     ENTER("Type");
@@ -5274,14 +5274,8 @@ Type *Builder::visitType(const AST::node_ptr_t &ast) {
     case AST::TypeType::Spec:
         res = visitSpecType(ast);
         break;
-    case AST::TypeType::Unit:
-        res = visitUnitType(ast);
-        break;
     case AST::TypeType::Infer:
         res = visitInferType(ast);
-        break;
-    case AST::TypeType::Data:
-        res = visitDataType(ast);
         break;
     case AST::TypeType::Ref:
         res = visitRefType(ast);
@@ -5378,14 +5372,11 @@ Type *Builder::visitNullableType(const AST::node_ptr_t &ast) {
 /*
 TypeExpr(TypeOp op) := Type lhs, Type rhs ;
 enum TypeOp {
-    Inter,
-    Diff,
-    KeyUnion,
-    KeyInter,
-    KeyDiff,
-    Specialize, // Type type, (Type | Data)* args
     TypeOf
 }
+The reserved type operators (`&`, `\`, `+`, `-`, `^`) and the older spelling of specialization were
+read as `TypeOp` codes and refused here; they are not in the language, so the parser refuses them
+first and `typeof` is the only operation a `TypeExpr` carries.
 */
 Type *Builder::visitTypeExpr(const AST::node_ptr_t &ast) {
     ENTER("TypeExpr");
@@ -5396,50 +5387,7 @@ Type *Builder::visitTypeExpr(const AST::node_ptr_t &ast) {
     const auto &typeExpr = ast->loadAs<AST::TypeExprLoad>();
     AST::TypeOp op       = typeExpr->op();
 
-    // Handle different type operations based on the TypeOp enumeration
     switch (op) {
-    case AST::TypeOp::Inter: {
-        diags_->of(SemanticDiag::FeatureNotSupported)
-            .at(ast->load()->tokenRange())
-            .commit("TypeOp::Inter");
-        throw BuildAbortException();
-    } break;
-
-    case AST::TypeOp::Diff: {
-        diags_->of(SemanticDiag::FeatureNotSupported)
-            .at(ast->load()->tokenRange())
-            .commit("TypeOp::Diff");
-        throw BuildAbortException();
-    } break;
-
-    case AST::TypeOp::KeyUnion: {
-        diags_->of(SemanticDiag::FeatureNotSupported)
-            .at(ast->load()->tokenRange())
-            .commit("TypeOp::KeyUnion");
-        throw BuildAbortException();
-    } break;
-
-    case AST::TypeOp::KeyInter: {
-        diags_->of(SemanticDiag::FeatureNotSupported)
-            .at(ast->load()->tokenRange())
-            .commit("TypeOp::KeyInter");
-        throw BuildAbortException();
-    } break;
-
-    case AST::TypeOp::KeyDiff: {
-        diags_->of(SemanticDiag::FeatureNotSupported)
-            .at(ast->load()->tokenRange())
-            .commit("TypeOp::KeyDiff");
-        throw BuildAbortException();
-    } break;
-
-    case AST::TypeOp::Specialize: {
-        diags_->of(SemanticDiag::FeatureNotSupported)
-            .at(ast->load()->tokenRange())
-            .commit("TypeOp::Specialize (a.k.a. Generics or T<U, V, ...>)");
-        throw BuildAbortException();
-    } break;
-
     case AST::TypeOp::TypeOf: {
         // `typeof e`: the type of the value `e` will have. The placeholder keeps the expression
         // node; the graph builder builds it where this type is used and replaces the
@@ -5449,9 +5397,6 @@ Type *Builder::visitTypeExpr(const AST::node_ptr_t &ast) {
         node_ptr_t expression = visitData(ast->at(0));
         res                   = TypeOfType::create(expression);
     } break;
-
-    default:
-        ASSERT(false, "Unknown TypeOp");
     }
 
     LEAVE("TypeExpr");
@@ -5892,17 +5837,6 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
 }
 
 /*
-UnitType(Ref ref) : Type type ;
-*/
-Type *Builder::visitUnitType(const AST::node_ptr_t &ast) {
-    ENTER("UnitType");
-    diags_->of(SemanticDiag::FeatureNotSupported).at(ast->load()->tokenRange()).commit("UnitType");
-    throw BuildAbortException();
-    LEAVE("UnitType");
-    return nullptr;
-}
-
-/*
 InferType(Ref ref) ;
 */
 Type *Builder::visitInferType(const AST::node_ptr_t &ast) {
@@ -5910,17 +5844,6 @@ Type *Builder::visitInferType(const AST::node_ptr_t &ast) {
     diags_->of(SemanticDiag::FeatureNotSupported).at(ast->load()->tokenRange()).commit("InferType");
     throw BuildAbortException();
     LEAVE("InferType");
-    return nullptr;
-}
-
-/*
-DataType() : Data data ;
-*/
-Type *Builder::visitDataType(const AST::node_ptr_t &ast) {
-    ENTER("DataType");
-    diags_->of(SemanticDiag::FeatureNotSupported).at(ast->load()->tokenRange()).commit("DataType");
-    throw BuildAbortException();
-    LEAVE("DataType");
     return nullptr;
 }
 

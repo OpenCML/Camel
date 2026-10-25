@@ -216,8 +216,7 @@ string Generator::extractReturnType(const AST::node_ptr_t &node) {
                 return "";
             }
 
-            if (ttype == AST::TypeType::Ref || ttype == AST::TypeType::Data ||
-                ttype == AST::TypeType::Unit || ttype == AST::TypeType::Infer) {
+            if (ttype == AST::TypeType::Ref || ttype == AST::TypeType::Infer) {
                 return generateNode(node);
             }
         }
@@ -1261,16 +1260,6 @@ string Generator::generateTupleDataLoad(const AST::node_ptr_t &node) {
     return code;
 }
 
-string Generator::generateUnitTypeLoad(const AST::node_ptr_t &node) {
-    if (!node)
-        return "";
-    auto unitTypeLoad = dynamic_pointer_cast<AST::UnitTypeLoad>(node->load());
-    if (!unitTypeLoad)
-        return "";
-
-    return unitTypeLoad->geneCode();
-}
-
 string Generator::generateInferTypeLoad(const AST::node_ptr_t &node) {
     if (!node)
         return "";
@@ -1279,16 +1268,6 @@ string Generator::generateInferTypeLoad(const AST::node_ptr_t &node) {
         return "";
 
     return inferTypeLoad->geneCode();
-}
-
-string Generator::generateDataTypeLoad(const AST::node_ptr_t &node) {
-    if (!node)
-        return "";
-    auto dataTypeLoad = dynamic_pointer_cast<AST::DataTypeLoad>(node->load());
-    if (!dataTypeLoad)
-        return "";
-
-    return dataTypeLoad->geneCode();
 }
 
 string Generator::generateRefTypeLoad(const AST::node_ptr_t &node) {
