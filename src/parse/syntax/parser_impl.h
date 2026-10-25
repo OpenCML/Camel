@@ -398,11 +398,6 @@ class ParserImpl {
     // ---- Types (parser_type.cpp) ----
     bool typeStartsAt(uint32_t n) const;
     void parseType();
-    void parseInterType();
-    void parseDiffType();
-    void parseKeyUnionDiffType();
-    void parseKeyInterType();
-    void parseTypeUnit();
     void parseArrayType();
     void parseArrayDim();
     void parseSpecType();

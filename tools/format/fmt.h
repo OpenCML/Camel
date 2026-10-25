@@ -810,14 +810,6 @@ class Formatter {
 
     std::any visitTypeExpr(cst::TypeExpr context);
 
-    std::any visitInterType(cst::InterType context);
-
-    std::any visitDiffType(cst::DiffType context);
-
-    std::any visitKeyUnionDiffType(cst::KeyUnionDiffType context);
-
-    std::any visitKeyInterType(cst::KeyInterType context);
-
     std::any visitArrayType(cst::ArrayType context);
 
     std::any visitArrayDim(cst::ArrayDim context);

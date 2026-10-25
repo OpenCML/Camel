@@ -59,9 +59,7 @@ func pipes(xs: int[], idx: int): void sync {
     let tail = concat(all, ..xs)
 }
 
-type Both = A & B
-type Diff = A \ B
-type Keys = A + B - C ^ D
+let masked = flags & 3
 type Fn = (x: int, y: int) => int
 type Nullable = int?
 type Fallible = string!
