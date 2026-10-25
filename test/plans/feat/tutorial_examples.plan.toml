@@ -33,7 +33,7 @@ desc = "Every example beside the tutorial runs as the file it is: what a tutoria
 # another order instead of recording one. `06_let_to_var.cml` and `09_fault.cml` fail on purpose -- a
 # rejected program and a fault -- so what is pinned is the exit code, the diagnostic and the lines
 # printed before it. `shapes.cml` is a module with no `main`: running it as a program is refused, and
-# that refusal is its reading here; chapter 12 runs it by importing it. `13_graph.cml` has a second
+# that refusal is its reading here; chapter 8 runs it by importing it. `13_graph.cml` has a second
 # entry for the `std::rgir` dump that both its header and its page give, compared as graph shape rather
 # than as text, because the page's figure is a trimmed illustration of the dump and not the dump.
 #
@@ -215,13 +215,13 @@ golden = "golden/tutorial_examples/11_collections.txt"
 
 [[tests]]
 name = "tutorial.examples.12_modules"
-desc = "A program split over two files: main imports the functions of shapes.cml and calls them."
+desc = "Chapter 8: a program split over two files -- main imports the functions of shapes.cml and calls them."
 case = "../../../docs/tutorial/examples/12_modules.cml"
 golden = "golden/tutorial_examples/12_modules.txt"
 
 [[tests]]
 name = "tutorial.examples.12_stdlib"
-desc = "The standard library the chapter uses: sort, unique, string formatting, min and max, array primitives, statistics, math."
+desc = "Chapter 8: the standard library the chapter uses -- sort, unique, string formatting, min and max, array primitives, statistics, math."
 case = "../../../docs/tutorial/examples/12_stdlib.cml"
 golden = "golden/tutorial_examples/12_stdlib.txt"
 
