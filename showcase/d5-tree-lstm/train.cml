@@ -20,22 +20,22 @@ import { now } from time
 // == model ==
 // A leaf carries its one-hot word vector; an internal node carries two subtrees.
 type Tree = enum {
-    Leaf(Tensor),
+    Leaf(f32[..]),
     Node(Tree, Tree)
 }
 
 // `wx` maps the node input to each gate, `ux` maps the child hidden state.  The forget gates
 // use the child they forget, as in the binary Tree-LSTM.
 type Params = {
-    emb: Tensor,
-    wi: Tensor, wfl: Tensor, wfr: Tensor, wo: Tensor, wu: Tensor,
-    ui: Tensor, ufl: Tensor, ufr: Tensor, uo: Tensor, uu: Tensor,
-    bi: Tensor, bfl: Tensor, bfr: Tensor, bo: Tensor, bu: Tensor,
-    wout: Tensor, bout: Tensor
+    emb: f32[..],
+    wi: f32[..], wfl: f32[..], wfr: f32[..], wo: f32[..], wu: f32[..],
+    ui: f32[..], ufl: f32[..], ufr: f32[..], uo: f32[..], uu: f32[..],
+    bi: f32[..], bfl: f32[..], bfr: f32[..], bo: f32[..], bu: f32[..],
+    wout: f32[..], bout: f32[..]
 }
 
 with <p: Params>
-func cell(x: Tensor, hl: Tensor, cl: Tensor, hr: Tensor, cr: Tensor): (Tensor, Tensor) {
+func cell(x: f32[..], hl: f32[..], cl: f32[..], hr: f32[..], cr: f32[..]): (f32[..], f32[..]) {
     let i = sigmoid(x @ p.wi + hl @ p.ui + hr @ p.ui + p.bi)
     let fl = sigmoid(x @ p.wfl + hl @ p.ufl + hr @ p.ufl + p.bfl)
     let fr = sigmoid(x @ p.wfr + hl @ p.ufr + hr @ p.ufr + p.bfr)
@@ -48,7 +48,7 @@ func cell(x: Tensor, hl: Tensor, cl: Tensor, hr: Tensor, cr: Tensor): (Tensor, T
 // The recursion.  A leaf's input is its embedding; an internal node's input is the sum of the
 // children's hidden states, so the node type itself carries no extra parameter.
 with <p: Params>
-func forward(t: Tree): (Tensor, Tensor) {
+func forward(t: Tree): (f32[..], f32[..]) {
     return match t {
         case Tree::Leaf(onehot) => {
             let x = onehot @ p.emb
@@ -65,13 +65,13 @@ func forward(t: Tree): (Tensor, Tensor) {
 
 // == loss ==
 with <p: Params>
-func loss(t: Tree, target: Tensor): float {
+func loss(t: Tree, target: f32[..]): float {
     let (hidden, state) = forward<p>(t)
     return softmax_cross_entropy(hidden @ p.wout + p.bout, target)
 }
 
 // == data ==
-func tree_at(words: Tensor): Tree {
+func tree_at(words: f32[..]): Tree {
     let vocab = shape(words)[2]
     return Tree::Node(
         Tree::Node(
@@ -110,7 +110,7 @@ func count_params(p: Params): int {
 // One tree at a time; the validation set is small and the point is the recursion, not a
 // throughput record.
 with <p: Params>
-func accuracy(words: Tensor, labels: Tensor): float {
+func accuracy(words: f32[..], labels: f32[..]): float {
     let n = shape(words)[0]
     let (correct, finished) = loop count = 0.0, index = 0
         while index < n

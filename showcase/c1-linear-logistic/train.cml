@@ -19,12 +19,12 @@ import { now } from time
 // == model ==
 // Both problems use the same affine model; only the loss and the reported metric differ.
 type Model = {
-    w: Tensor,
-    b: Tensor
+    w: f32[..],
+    b: f32[..]
 }
 
 with <m: Model>
-func predict(x: Tensor): Tensor {
+func predict(x: f32[..]): f32[..] {
     return x @ m.w + m.b
 }
 
@@ -33,7 +33,7 @@ func predict(x: Tensor): Tensor {
 // form `relu(z) - z*y + log(1 + exp(-|z|))`, which never evaluates exp of a large positive
 // number; `y` is 0 or 1.
 with <m: Model>
-func loss(x: Tensor, y: Tensor, kind: int): float {
+func loss(x: f32[..], y: f32[..], kind: int): float {
     let z = predict<m>(x)
     return if kind == 0 then {
         let errors = z - y
@@ -52,7 +52,7 @@ func load_model(data: string): Model {
 // == evaluate ==
 // The first number is the validation loss, the second the metric that fits the problem: mean
 // absolute error for regression, accuracy for classification.
-func evaluate(m: Model, x: Tensor, y: Tensor, kind: int): (float, float) {
+func evaluate(m: Model, x: f32[..], y: f32[..], kind: int): (float, float) {
     let z = predict<m>(x)
     return if kind == 0 then {
         let errors = abs(z - y)
