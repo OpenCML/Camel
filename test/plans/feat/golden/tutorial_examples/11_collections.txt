@@ -1,0 +1,7 @@
+{alice: 28, bob: 31}
+28 0
+{alice: 28, carol: 45} 2
+{alice: 28, bob: 31}
+[alice, carol] [28, 45]
+{1, 2, 3} true false
+{1, 2, 3, 9} {1}
