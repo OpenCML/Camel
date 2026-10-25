@@ -362,12 +362,13 @@ camel docs/tutorial/examples/10_resources.cml
 
 ## `pure`：一个资源都不碰
 
-`pure` 是"这个调用一个资源都不碰"的承诺。写在**函数类型**上时它是要求：谁要传函数进来，就得传一个满足它的。
+`pure` 是"这个调用一个资源都不碰"的承诺。写在**函数类型**上时它是要求：谁要传函数进来，就得传一个满足它的；
+满足它的意思是**它自己的签名里写着 `pure`**。
 [`examples/10_pure_callback.cml`](examples/10_pure_callback.cml) 里的 `apply` 只接受纯函数：
 
 ```cml
-// `pure` in a function type is part of the requirement: `apply` accepts only a function that
-// touches no resource, and `twice` says so in its signature.
+// `pure` in a function type is part of the requirement: `apply` accepts only a function whose own
+// signature says `pure`, and `twice` says it.
 // Run: camel docs/tutorial/examples/10_pure_callback.cml
 module pure_callback
 
@@ -393,13 +394,13 @@ camel docs/tutorial/examples/10_pure_callback.cml
 8
 ```
 
-把一个会打印的函数传进去，就不是"值不对"，而是**签名不匹配**——这类错误在调用处就挡住（[`examples/10_pure_callback_wrong.cml`](examples/10_pure_callback_wrong.cml)）：
+把一个签名里没有 `pure` 的函数传进去，就不是"值不对"，而是**签名不匹配**——这类错误在调用处就挡住（[`examples/10_pure_callback_wrong.cml`](examples/10_pure_callback_wrong.cml)）：
 
 <!-- camel-snippet: counter-example: 这个程序故意不编译：调用处就是不匹配，下面的 text 块是诊断，不是输出 -->
 
 ```cml
-// A counter-example: `noisy` prints, so it is not a pure function and cannot be passed where the
-// signature requires one. The error names the signature that would have matched.
+// A counter-example: `noisy` prints and its own signature does not say `pure`, so its type is not
+// what the requirement asks for. The error names the signature that would have matched.
 // Run: camel docs/tutorial/examples/10_pure_callback_wrong.cml
 module pure_callback_wrong
 
