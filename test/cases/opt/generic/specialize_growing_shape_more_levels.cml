@@ -1,0 +1,19 @@
+module specialize_growing_shape_more_levels
+
+import { Tensor, new, concat, sum, shape } from tensor
+
+// The growing-shape recursion of specialize_growing_shape.cml with the level bound at 24 instead
+// of 12. The type-only specialization of the callee stops on its own types, not on how many levels
+// the recursion asks for, so the readings that case pins -- one instance, and a graph count that
+// does not move -- are the same here. The two cases are read together by the `bounded` entries of
+// test/plans/feat/opt/generic.plan.toml.
+func grow(i: int, n: int, acc: f64[..]): f64[..] {
+    return if i >= n then acc else grow(i + 1, n, concat(acc, new([[1.0, 2.0]]), 0))
+}
+
+func main(): int sync {
+    let t = grow(1, 24, new([[1.0, 2.0]]))
+    println(shape(t))
+    println(sum(t))
+    return 0
+}
