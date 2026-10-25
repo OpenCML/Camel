@@ -616,3 +616,17 @@ name = "tutorial.examples.17_exercise"
 desc = "The answer to the exercise of chapter 18: a law written as a `rule`, and the verdict its `check` prints."
 case = "../../../docs/tutorial/examples/17_exercise.cml"
 golden = "golden/tutorial_examples/17_exercise.txt"
+
+# The module beside chapter 8's program, which is a library like shapes.cml above: running it as a
+# program is refused, and that refusal is what this plan records for it.
+[[tests]]
+name = "tutorial.examples.geometry"
+desc = "A module without main: the file 08_modules.cml imports, refused as a program with a diagnostic that names the missing entry point."
+kind = "behavior"
+case = "../../../docs/tutorial/examples/geometry.cml"
+backends = false
+args = ["${case}"]
+expect_exit = 1
+expect_output_not_contains = []
+expect_diagnostic_name = "SemanticDiag::EntryModuleMissingMain"
+expect_output_contains = ["Entry module 'main' must define a resolvable 'main'"]
