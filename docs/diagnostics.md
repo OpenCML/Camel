@@ -8254,7 +8254,25 @@ None: choice: the repair is a decision only the writer can make
 A signature is a promise the compiler checks against the resources the function uses. 'uses' is an upper bound, so every resource the body uses must be named there, and 'pure' promises the empty set; a 'var' parameter is a resource by itself, and so is a capture. Change the body so that it no longer reaches for it, or change the signature to name it.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/effects/err_pure_var.cml`, run as `camel test/cases/effects/err_pure_var.cml`)
+
+```camel
+// `pure` promises that a call touches no resource at all. A `var` parameter is a resource by
+// itself: the cell is shared with the caller, so a call through the parameter reads and writes it
+// wherever the body is written, and no body can bring the set back to empty. So the signature is
+// refused at its own clause, and the note points at the parameter that breaks the promise
+// (UsesPromiseViolated).
+func bump(var c: int): int pure sync {
+    c = c + 1
+    return c
+}
+
+func main(): int sync {
+    var n = 1
+    println(bump(n))
+    return 0
+}
+```
 
 ### IgnoredSideEffect
 
