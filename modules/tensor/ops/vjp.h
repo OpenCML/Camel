@@ -115,15 +115,6 @@ vjp_node_t floatGradientAtWidth(VjpBuilder &builder, vjp_node_t value, vjp_node_
 /// principles 9.9).
 vjp_node_t tensorCastTo(VjpBuilder &builder, vjp_node_t value, vjp_node_t gradient);
 
-/// `tensorGradientAtElementType` is that conversion for a rule that builds a `sum_to` or a
-/// `broadcast_like` out of the gradient: the target's element type is the one the operator reads its
-/// gradient at, so the rule states the conversion rather than leaving a pair the signature refuses.
-/// It is stated for every such gradient and not only for a pair whose declared types differ: what
-/// the signature refuses is the fact a pass computed, and the gradient node a rule is building can
-/// still be filled by an operator whose own rule answers f32 (`gradientLike`).
-vjp_node_t tensorGradientAtElementType(
-    VjpBuilder &builder, vjp_node_t value, vjp_node_t gradient);
-
 /// Gradients of lhs @ rhs given the output gradient dy (batch dims and vectors included).
 void accumulateMatmulGradients(
     VjpBuilder &builder,

@@ -319,7 +319,7 @@ void sumVjp(VjpBuilder &b, const VjpCall &call) {
                 b,
                 call.inputs[0],
                 "tensor:broadcast_like",
-                {tensorGradientAtElementType(b, call.inputs[0], *dy), call.inputs[0]}));
+                {*dy, call.inputs[0]}));
     }
 }
 
@@ -340,13 +340,7 @@ void meanVjp(VjpBuilder &b, const VjpCall &call) {
             narrow ? b.addOper(
                          type::Type::Float32(), ":op/div_f", std::array<vjp_node_t, 2>{*dy, atWidth})
                    : addFloatOper(b, ":op/div_d", {*dy, atWidth});
-        b.accumulateGradient(
-            x,
-            addTensorOperFor(
-                b,
-                x,
-                "tensor:broadcast_like",
-                {tensorGradientAtElementType(b, x, share), x}));
+        b.accumulateGradient(x, addTensorOperFor(b, x, "tensor:broadcast_like", {share, x}));
     }
 }
 

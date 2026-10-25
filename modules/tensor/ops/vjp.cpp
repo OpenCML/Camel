@@ -253,29 +253,11 @@ vjp_node_t tensorCastTo(VjpBuilder &builder, vjp_node_t value, vjp_node_t gradie
     return floatGradientAtWidth(builder, value, gradient);
 }
 
-/// A gradient of `value` at the element type `value` states. `sum_to` and `broadcast_like` read
-/// their gradient operand at the target's element type (`gradientLikeTyped` in gradient_ops.cpp),
-/// while the gradient operators whose kernels compute in f32 only declare f32 (`gradientLike`, same
-/// file) -- and what a signature refuses is the *fact* a pass computed, not the type the rule wrote:
-/// the accumulator's gradient node is a value the rule itself is building, so its declared type can
-/// still say the two agree while the operator that fills it answers f32. The conversion is therefore
-/// stated for every gradient these two operators receive, which is what design principles 9.9 asks
-/// of the rule that produced the gradient (vjp.h, tensorCastTo). A value whose type leaves the
-/// element type out takes none, as in the accumulator.
-vjp_node_t tensorGradientAtElementType(
-    VjpBuilder &builder, vjp_node_t value, vjp_node_t gradient) {
-    return tensorCastTo(builder, value, gradient);
-}
-
 void accumulateOperand(VjpBuilder &builder, vjp_node_t operand, vjp_node_t gradient) {
     if (isTensorNode(builder, operand)) {
         builder.accumulateGradient(
             operand,
-            addTensorOperFor(
-                builder,
-                operand,
-                "tensor:sum_to",
-                {tensorGradientAtElementType(builder, operand, gradient), operand}));
+            addTensorOperFor(builder, operand, "tensor:sum_to", {gradient, operand}));
     } else if (isFloatNode(builder, operand)) {
         const vjp_node_t total = isTensorNode(builder, gradient)
                                      ? addFloatOper(builder, "tensor:sum", {gradient})
