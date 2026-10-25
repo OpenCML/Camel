@@ -116,6 +116,27 @@ expect_output_not_contains = ["not reached"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
+# The same constant, written in the function form of the node: `slice(t, axis, start, end, step)`
+# is the `:op/slice_sub` node the subscript lowers to, so the fault is the same one and gets the
+# same named diagnostic -- the check reads the node, not the spelling (the author's ruling of
+# 2026-10-25 on the two spellings, and its zero-step answer of 2026-10-26). The caret is under the
+# step, the fifth ordinary argument the call wrote.
+[[tests]]
+name = "subscript.step_zero_call"
+desc = "A call of the function form with a constant step of 0 is refused where the step is written, with the same named diagnostic as the subscript (one node, one answer): `slice(xs, 0, 0, 6, 0)` is `SemanticDiag::SliceStepZero`, and the program after it does not run."
+kind = "negative"
+case = "../../../cases/linear/faults/slice_step_zero_call.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::SliceStepZero"
+expect_diagnostic_code = "0x030001E9"
+expect_diagnostic_line = 11
+expect_diagnostic_column = 32
+expect_output_contains = ["The slice 't[a:b:s]' has a step of 0"]
+expect_output_not_contains = ["not reached"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
 [[tests]]
 name = "subscript.take_index"
 desc = "An int-array subscript is take: an index outside the array is IndexOutOfRange with the index as written, and the first call (with a repeated index) prints its elements in the order given."
