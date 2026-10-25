@@ -1,0 +1,45 @@
+tip=fffd45584 H554 第三轮：裁定第 1 条落了一处、七族清掉 21 条，入口名这一族仍未转绿（如实报）
+
+数字（逐名对比，除注明外新增红 0）
+- 81 → 69（gate-13）→ 65（gate-14）→ **66**（gate-15；`total: 6362, pass: 6268, fail: 66, skip: 12, known failures: 16`，RUN_EXIT=1）
+- gate-14→15 的 **+1 不是回归**：`native.entry_declaration_names_the_program` 按裁定把钉值 `main:exists` 改成 `implicit_protocol:exists`，实现还差一处，所以它红了（改前它绿是钉着旧行为）。
+- 本轮清掉 21 条：rename 3(+1 poison)、fault.in_map_many 4、exemplars 4、lsp.basics 1、exemplar 清单/其它 3、AST 与清单……逐条见下。
+
+裁定第 1 条（入口模块名 = 文件名）：落了第一步，未转绿
+- 改动：`src/service/semantic/analyze.cpp:515` 由字面 `"main"` 改为 `camel::utils::pathToUtf8(camel::utils::pathFromUtf8(path).stem())`，注释按裁定写（一个文件一个模块，入口不例外；5.x 的“不显示入口模块名”是显示规则，保留）。
+- 逐字读数（`camel-remote.ps1 -Plan 四个 plan`，build 36.2 s / test 4.0 s）：`explicit_type_arguments`、`ns.p18_self_module`、`ns.p30_using_own_nested`、`modules_213.self_entry` **仍红**，红的形态变了：
+  `(self_entry)…/self_entry.cml:11:23: [Error]: Unresolved reference: 'self_entry::twice'`；
+  `(generic_explicit_types)…/generic_explicit_types.cml:21:13: [Error]: Unresolved reference: 'generic_explicit_types::id'`；
+  `(implicit_protocol)…/implicit_protocol.cml:7:1: [Error]: The declaration 'exists' names the operator 'main:exists', which no loaded module implements.`
+- 还差的两处（我逐行定位到，但没改完）：
+  1. 入口模块只以 `mainModule_` 存在，不按名字可查：`src/core/context/context.cpp:397-400/519/877-881` 都是 `mainModule_` 特判，没有一处把它登记进按名查找；限定名解析因此找不到 `self_entry`/`generic_explicit_types` 这个模块 → 两个 `Unresolved reference`。
+  2. 编译单元里的模块名仍是 `main`：`src/compile/gir/builder_modules.cpp:415-416` 用 `unit_->module->name()` 拼 `where + ":" + name`，实测拿到的是 `main`，而诊断前缀是 `(implicit_protocol)`（`analyze.cpp` 那个模块名已生效）→ 说明编译入口的那条路径另有模块对象，仍需定位（我查了 `module.cpp/h`、`userdef.cpp` 的构造与 `setName`，都没有改名处，线索停在 `userdef.cpp:303 compileAsProgram` / `definitions.cpp:295`）。
+- plan 条目改前→改后：`native.entry_declaration_names_the_program` 的 `desc` 与 `expect_output_contains` 由 `main:exists` → `implicit_protocol:exists`（另两处钉值本轮已按实测修正：行 5→7、消息行）。
+- `main` 作为入口占位名的残留：`^"main"` 在 `src` 只剩 4 处非入口语义——`builder.cpp:57-58`（入口**函数**名 `main`，与模块名是两回事）、`queries.cpp:1702`（函数 `main` 的无返回类型特判）、`cpp_types.cpp:207`/`program_emitter.cpp:557`（C++ 保留字表）、`passes/test/facts.cpp` 与 `passes/trans/cml/cml.cpp`（测试/打印用图名）。
+
+裁定第 2 条：现状正确，已按裁定保留
+- `block_tag_no_target`、`gpu_at_type` 两条本轮已绿的用例即“块里一个能贴的声明都没有 → 在标签处报错”的口径；按此裁定，实现正确，未再改动（证据：`(block_no_target)…/block_no_target.cml:5:2: [Error]: The tag 'gpu' may not be written at a type: it is declared for func, nodes.`）。
+
+逐族 改前 → 改后（每族都给了命令与逐字读数）
+| 族 | 改前→改后 | 依据 |
+|---|---|---|
+| `rename.*_graph_identity`(+1 poison) | 4 → 0 | 摘要覆盖每个节点 `source.start.line`；把删掉的那行加回负载后 `identity.mjs` **exit=0**，原摘要 `c4fa5b6d…` 逐字复现，据此重录 3 个摘要 |
+| `fault.in_map_many` | 4 → 0 | verify 接受 `[10,11]`，实测 `line 9` → `[8,9]` |
+| `01/05/07/08` 四例 exemplars | 4 → 0 | `node exemplars/check.mjs --update …`（重录 dump/simplified/run.log），并把清单里被顶掉一行的钉值改掉（`diagnostic_line 19→18`、`…15:12→…14:12`、`…44:73→…43:73`） |
+| `lsp.basics` | 1 → 0 | `basics.test.mjs:66` `'0:0-6:0'` → `'0:0-4:0'`（实测 actual 逐字） |
+| `compile_bench.smoke` | 未绿（有进展） | 生成程序里的 `module main` 删掉；`stdlib_declaration` 改为按文件判定；删掉只会读声明的 `declared_module_name`；仍红，剩余原因待查 |
+| `grad_function_value_*` | 12 → 12（第一个断言已修） | 12 个断言的期望值曾被动过，实测诊断位置 = 标签值（如 `…branch.cml:10:13`），已改回；剩下的第二个断言：手跑得 `(at …grad_function_value_branch.cml:10:13)`，即消息命名的就是诊断那一处，而用例描述说反向传播先遇到第二次调用（11:13）→ 属实现侧，列非本支 |
+
+非本支红（一行证据后停止投入）
+- `lsp.fstring`：`precondition not met (${python} -c import camel, numpy): ModuleNotFoundError: No module named 'camel'` —— 环境缺 Python 绑定。
+- `grad_function_value_*`（12，第二个断言）：见上一行读数，消息命名位置与用例描述不符，属 autodiff/develop 侧。
+- 未判定完（仍在我这条线上排队，非“等裁定”）：`lsp.editing`(26/104 项)、`lsp.navigation`(18/66 项)、`lsp.code_and_related`（钉在 `test/cases/tools/lsp/*.test.mjs` 里的范围，三个 fixture 位移不一致，需逐个重推）、`export_*`5、`dropped_effects`3、`when_import`3、`camel_pass_parameter`3、`constant_fault`2、`attempt`2、`graph`3、`docs.snippets_compile`、`debugger.http_gateway`、`python_binding.session`、`native.clause_of_a_declaration_module`（重新变红，原因未查）。
+
+五个检查器（逐字，全部 exit 0）
+- `diagnostics registry: 278 codes, every one with a name, a message and what it says about an edit (15 with one, 263 with a reason), no value used twice, and the emitted headers agree`
+- `docs/reference/camel-for-ai.md is what its sources produce: 4 generated region(s), 756 entries, 278 diagnostics, 34 diagnostic name(s) cited by the prose, 106375 characters (budget 112000)`
+- `no unverified citation: 413 of 413 symbol citation(s) verified, 1876 path citation(s) across 4802 file(s)`
+- `headers: every one of 1364 member files carries the two-line header (C/C++ 1086, Camel 44, scripts 234)`
+- `grammar: 130 productions, in step with the parser, the token table and the language reference`
+
+本轮提交：`88c95780f`（钉值/摘要）、`f7008612e`（exemplars 重录 + 生成程序）、`02e91e1a9`（benchmark 按文件判定 + 清单钉值）、`fffd45584`（入口模块名按裁定）。纪律：未推 origin；未碰 `docs/language/**` 散文；未碰其它工作树/分支；未在 Windows 构建。
