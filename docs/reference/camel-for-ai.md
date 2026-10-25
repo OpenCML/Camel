@@ -84,10 +84,8 @@ principles §§2–3). Four consequences surprise a first draft:
    They are written in angle brackets after the name: `xs->map<inc>`, `logits<w>(x)`
    (design principles 4.4).
 
-Errors and faults are different things. A function whose failure the program is expected to handle
-returns `T!`, and the caller opens it with `!!`, `?->` or `match`. A **fault** — an index out of
-range, division by zero, recursion past the limit — is not a value: it stops the program with a
-located diagnostic, and `!!` does not catch it (§7).
+Errors and faults are different things: a failure the program is expected to handle is a `T!` value,
+opened with `!!`, `?->` or `match`, while a fault stops the program and `!!` does not catch it (§7).
 
 What runs the graph is a **pass**: `camel prog.cml` uses the default pipeline, `camel prog.cml
 std::fvm` chooses the bytecode VM, and `std::gir` prints the graph instead of running it (§10).
@@ -173,8 +171,7 @@ func greet(): int {
   compiler: using one is `SemanticDiag::ReservedIdentifier`.
 - **Numbers.** Decimal `42`, hexadecimal `0xff`, octal `0o17`, binary `0b1010`, reals with a
   fraction or an exponent (`1.5`, `1e-3`), and imaginary literals with a trailing `i` (`4i`,
-  `0.5-0.25i`), which are complex values. A numeric type is never converted to another implicitly
-  (§5).
+  `0.5-0.25i`), which are complex values.
 - **Text.** `'...'` and `"..."` are the same string type; `'''...'''` and `"""..."""` span lines. A
   backtick string interpolates: <code>`Hello, ${name}!`</code> is the formatted string of
   `'Hello, ${0}!'` and `name`. A string is UTF-8 and immutable, and its length and subscripts count
@@ -182,7 +179,7 @@ func greet(): int {
 - **Keywords are reserved**: using one as a name is `SyntaxDiag::KeywordAsIdentifier`. The table is
   generated from the token table the lexer reads, grouped as that file groups the words. Its
   `Reserved` group is the set of words the grammar accepts and the language does not implement yet
-  (§13); whether a word in another group is usable is what the rest of this file says.
+  (§13).
 
 ### Keywords and operators (generated)
 
@@ -381,7 +378,7 @@ annoExpr           : accessExpr (indices | parentArgues | structData | angledVal
 <!-- camel-for-ai end: precedence -->
 
 **Common errors.** `as` restricts a value, it does not convert one: `s as int` on a string is
-`SemanticDiag::DynamicCastForbidden`, and the fix is the conversion function `int(s)` (§12.5).
+`SemanticDiag::DynamicCastForbidden`; convert with `int(s)` (§12.5).
 
 <!-- camel-snippet: counter-example: as does no numeric conversion -->
 
@@ -429,8 +426,7 @@ func main(): int sync {
   `g` must be given.
 - The result type may be left out and is inferred from the body; only a recursive function must
   write it. A body with no `return` has the value of its last statement — and `println(x)` has the
-  value `x`, so `func main() sync { println('a') }` returns `'a'` and the run prints it twice: once
-  as the statement, once as the result.
+  value `x`, so `func main() sync { println('a') }` returns `'a'`, printed twice.
 - **Overloads** are several declarations of one name with different parameter types; each is a
   subgraph and the one that accepts the arguments runs. Two candidates that both accept is
   `SemanticDiag::AmbiguousCall`; two identical parameter lists is `SemanticDiag::Redeclaration`
@@ -444,17 +440,15 @@ func main(): int sync {
 - `let` binds once; `var` can be rebound, also through a path: `p.x = 5`, `xs[0] = 5`,
   `xs[i].f = e`. A path assignment rebinds the whole variable, as if written
   `xs = set(xs, i, set(xs[i], f, e))`; the target must be a variable, and `f().x = 5` is
-  `SemanticDiag::AssignmentTargetNotVariable`. Passing a value to a `var` parameter of a function is
-  how a callee can write back into the caller's variable (a write in a sync block is ordered by
-  where it is written, §7).
+  `SemanticDiag::AssignmentTargetNotVariable`. Passing a variable to a `var` parameter is how a callee
+  writes back into the caller's variable (§7).
 - **Generics** are declared after the name: `func first::<T>(xs: T[]): T? { ... }`, called as
   `first::<int>(xs)` or `first(xs)` when the arguments fix `T`.
 - **`loop`** is the language's own iteration, and it yields its last state:
   `loop acc = 0 for i in 0..5 do acc + i` adds 0 to 4 and gives 10. The states before `for` are
   written `name = start`, comma-separated; `for <name> in <range>` and `while <condition>` may each
   be left out, and the body's value is the next state. The name after `for` is bare — never
-  `for i in 0..5 { ... }`, which is `SyntaxDiag::UnexpectedToken`: a `for` on its own is not a
-  statement.
+  `for i in 0..5 { ... }`, which is `SyntaxDiag::UnexpectedToken`.
 - **`static loop`** folds a compile-time sequence, and its head is written like `loop`'s, without
   parentheses: `static loop acc = 0 for i in 0..3 do acc + t.[i]`. What stands after `in` is one
   criterion, not a list of spellings: what compile-time constants build through freely schedulable
@@ -531,7 +525,7 @@ A **sync block** orders the statements written directly in it, and only those: `
 calls run in the written order whatever they return. Outside it, an effect whose result nothing uses
 is dropped with the warning `SemanticDiag::EffectNotExecuted` — legal, and the reason a program can
 look busy and print nothing. The rule does not propagate inward: an arm or loop body written inside
-a sync block is an ordinary subgraph, and writing `sync` there again is what orders it.
+a sync block is an ordinary subgraph, and needs its own `sync`.
 
 ```camel
 func f(c: bool): int sync {
@@ -566,10 +560,9 @@ func main(): int sync {
 error[RuntimeDiag::IndexOutOfRange]: Index 5 is out of range for an array of length 3.
 ```
 
-**Common errors.** A fault is not an error value. `!!` opens a `T!`; it does not catch a fault,
-and `xs[10]` past the end of an array stops the program with `RuntimeDiag::IndexOutOfRange` and exit
-1 — the fix is to look at the length first. A function that writes must be `sync`, or its call is
-`SemanticDiag::EffectNotExecuted` (§7, §12.1).
+**Common errors.** A fault is not an error value: `!!` does not catch it, and `xs[10]` stops the
+program with `RuntimeDiag::IndexOutOfRange` — look at the length first (§12.18). A function that
+writes must be `sync`, or its call is `SemanticDiag::EffectNotExecuted` (§12.1).
 
 ## 8. Streams (`target`)
 
@@ -583,11 +576,9 @@ integers, and `f..g` composition, are implemented today.
 
 Sources: `docs/design-principles.cn.md` §4.2; `docs/design/io-concurrency-streams/`.
 
-**Common errors.** Streams are not in the language yet, so a stream spelling is refused instead of
-run: with the function it names declared, `xs..map(inc)` is `SemanticDiag::NoMatchingFunction` —
-`..` composes two functions and nothing else, and there is no stream `map` to find. The fix today is
-an array with `map` and a filter (§12.14); the design draft is
-`docs/design/io-concurrency-streams/`.
+**Common errors.** A stream spelling is refused instead of run: with the function it names declared,
+`xs..map(inc)` is `SemanticDiag::NoMatchingFunction` — `..` composes two functions and nothing else.
+The fix today is an array with `map` and a filter (§12.14).
 
 <!-- camel-snippet: counter-example: a stream spelling is not in the language yet -->
 
@@ -722,16 +713,15 @@ func main(): int sync {
   (a module search directory), `--max-recursion-depth <n>`, `-Wno-<warning>` and `-Werror`
   (diagnostics), `--output-format json`, `--explain <diagnostic name or code>` (the compiler
   explains one diagnostic). `camel check prog.cml` reports code-health problems without running it.
-- Nothing is written to the output because of an unused value: an expression statement whose value
-  no one needs is a **warning**, not a silent no-op, only where the language says so
+- An expression statement whose value no one needs is a **warning**, not a silent no-op
   (`SemanticDiag::EffectNotExecuted`, `SemanticDiag::UnusedPureResult`,
   `SemanticDiag::UnusedFallibleValue`).
 
 Sources: `docs/language/04_execution_model.md` §4.7, `docs/cli.cn.md`.
 
-**Common errors.** A pass list is not a run. `camel f.cml std::gir` prints the graph and stops,
-so a reader who wanted output sees none; pass a scheduling pass (`std::nvm`) when output is what is
-wanted, and keep `std::gir` for inspection (§10).
+**Common errors.** A pass list is not a run. `camel f.cml std::gir` prints the graph and stops, so a
+reader who wanted output sees none; pass a scheduling pass (`std::nvm`) when output is what is
+wanted.
 
 ## 11. Idioms
 
@@ -747,9 +737,9 @@ Written by someone who knows Camel, the same program looks like this.
   loop is really a loop, write the language's own form and let it carry the state:
   `loop acc = 0 for i in 0..n do acc + i` (§6).
 - **Weights are `with` parameters, and `grad` reads the first of them.** With `with <x: float>` in
-  front of `func f(y: float): float`, `f<3.0>(2.0)` is the value at `x = 3.0, y = 2.0` and
-  `grad(f)<3.0>(2.0)` is its derivative in `x`; a function with no `with` parameter is
-  `SemanticDiag::NotDifferentiable`, and a function-typed parameter is not a weight.
+  front of `func f(y: float): float`, `grad(f)<3.0>(2.0)` is the derivative at `x = 3.0, y = 2.0`;
+  a function with no `with` parameter is `SemanticDiag::NotDifferentiable`, and a function-typed
+  parameter is not a weight.
 - **`T?` and `T!` are the boundary types.** Let a function that can miss return `T?` and one that can
   fail return `T!`; open them where the decision is made (`??`, `!!`, `match`), not by inventing
   sentinel values like `-1` or `''`.
@@ -830,9 +820,8 @@ func add(a: i32, b: int): int {
 ## 12. Common errors
 
 Each entry is *what a first draft writes* — *what the compiler answers* — *what to write instead*.
-The diagnostic names are the compiler's, and every counter-example below is compiled by
-`node scripts/camel-for-ai.mjs --verify-errors`, which checks that the diagnostic named here is the
-one the compiler reports.
+Every counter-example below is compiled by `node scripts/camel-for-ai.mjs --verify-errors`, which
+checks that the diagnostic named here is the one the compiler reports.
 
 **1. An effect outside a `sync` block.** The program compiles, prints nothing from that line, and the
 compiler answers `SemanticDiag::EffectNotExecuted` (a warning). **Wrong:**
@@ -869,7 +858,7 @@ func f(x: Tensor): int {
 
 **Write instead** — import the name and build values with the module's functions: a shaped array is
 a different type, so `f32[2, 3]` is six floats and the tensor operators do not take it. A bare
-`Tensor` parameter is on its way out (**target**, `docs/design-principles.cn.md` §5.4).
+`Tensor` parameter is on its way out (§14).
 
 ```camel
 import tensor
@@ -930,8 +919,8 @@ func add(a: i32, b: int): int {
 ```
 
 **5. Text used as a number.** `'42'` is a string: `let x: int = '42'` is
-`SemanticDiag::DeclaredTypeMismatch`. `'42' as int` is an error too, and it is the other one:
-`as` is no numeric conversion, so the compiler answers `SemanticDiag::DynamicCastForbidden`.
+`SemanticDiag::DeclaredTypeMismatch`. `'42' as int` is the other error: `as` is no numeric
+conversion, so the compiler answers `SemanticDiag::DynamicCastForbidden`.
 **Wrong:**
 
 <!-- camel-snippet: counter-example: as does no numeric conversion; text is not a number -->
@@ -971,9 +960,8 @@ func main(): int sync {
 }
 ```
 
-**7. A `when` after the body.** The condition belongs between the result type and the body, and a
-`when` written after the body is a syntax error: after a function body the compiler answers
-`SyntaxDiag::UnexpectedToken`, because the condition does not fit where it was written. **Wrong:**
+**7. A `when` after the body.** The condition belongs between the result type and the body; after a
+function body the compiler answers `SyntaxDiag::UnexpectedToken`. **Wrong:**
 
 <!-- camel-snippet: counter-example: when goes before the body of a function, not after it -->
 
@@ -983,9 +971,8 @@ func pick::<T>(x: T): T {
 } when is_ordered::<T>()
 ```
 
-A trailing `when` on a `rule` is the same mistake, and the compiler has a diagnostic for that
-position: `SyntaxDiag::WhenAfterBody`, whose message says the condition comes before the body it
-guards.
+A trailing `when` on a `rule` is the same mistake, and answers `SyntaxDiag::WhenAfterBody`: the
+condition comes before the body it guards.
 
 <!-- camel-snippet: counter-example: a rule's condition follows its parameters, not its body -->
 
@@ -1146,9 +1133,8 @@ func main(): int sync {
 }
 ```
 
-**13. A `var` parameter given a `let`.** A `var` parameter is a mutable reference to a variable,
-so a binding that cannot be written back is refused with
-`SemanticDiag::ImmutablePassedToVarParam`. **Wrong:**
+**13. A `var` parameter given a `let`.** A `var` parameter needs a variable that can be written back,
+so a `let` is refused with `SemanticDiag::ImmutablePassedToVarParam`. **Wrong:**
 
 <!-- camel-snippet: counter-example: a var parameter needs a variable that can be written -->
 
@@ -1285,14 +1271,13 @@ func main(): int sync {
 }
 ```
 
-**18. A fault.** A fault is not an error value: it stops the program with a located diagnostic and
-exit code 1, and `!!` does not catch it. `println(xs[5])` on a three-element array answers
-`RuntimeDiag::IndexOutOfRange`. **Write instead** — check the index, or take a slice, which
-tolerates the end (`xs[3:9]`).
+**18. A fault.** `println(xs[5])` on a three-element array answers `RuntimeDiag::IndexOutOfRange`: a
+fault is not an error value, and `!!` does not catch it (§7). **Write instead** — check the index, or
+take a slice, which tolerates the end (`xs[3:9]`).
 
-**Common errors.** A reserved spelling reads like a construct the language has, and the compiler
-says otherwise: `typeof` is accepted by the grammar and refused where it is used
-(`SyntaxDiag::UnexpectedToken`), so the fix is the spelling the type system offers (§5).
+**Common errors.** A reserved spelling reads like a construct the language has, and the compiler says
+otherwise: `typeof` is refused where it is used (`SyntaxDiag::UnexpectedToken`); the fix is the
+spelling the type system offers (§5).
 
 <!-- camel-snippet: counter-example: a reserved spelling is read and then refused -->
 
@@ -1326,9 +1311,8 @@ them: most have no decided meaning yet. The diagnostics are named as the compile
 Source: `docs/language/08_top_level_and_grammar.md` §8.6.
 
 **Common errors.** Writing a `target` feature as if it already existed. The compiler refuses it
-today rather than doing something else: a stream spelling is `SemanticDiag::NoMatchingFunction`
-(§9 above), and the fix until the feature lands is the array form of the same program. Every
-`target` paragraph names the design draft that owns it.
+today: a stream spelling is `SemanticDiag::NoMatchingFunction` (§12.14), and the fix until the
+feature lands is the array form of the same program.
 
 ## 14. Not implemented yet (`target`)
 
@@ -1659,8 +1643,8 @@ configures it, and a call chains them — `s->trim->split<','>`, `xs->filter<p>-
 is the 64-bit integer and `float` the 64-bit float. A result `T!` is an error to be handled (`!!`,
 `?->`, `match`), `T?` a value that may be absent (`??`). A signature whose declaration carries type
 parameters is printed without them: `is_numeric: () => bool` is declared `is_numeric::<T>()` and is
-written with its type argument when the arguments do not fix it. `Tensor` is a type name the `tensor`
-module exports, so it is imported (§12.2).
+written with its type argument when the arguments do not fix it. `Tensor` is the `tensor` module's type
+name (§12.2).
 
 Source: `docs/stdlib-reference.md`, generated from the declarations in `stdlib/*.cml` and
 `stdlib/signatures/*.cml` by `scripts/stdlib-reference.mjs --write`. Regenerate this region with
