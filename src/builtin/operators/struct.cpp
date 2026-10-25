@@ -235,7 +235,9 @@ SliceRange sliceRange(Int64 size, Int64 startRaw, Int64 endRaw, Int64 step, Int6
 } // namespace
 
 // `t[a:b]`, `t[a:b:s]`, `t[:b]`, `t[a:]`, `t[:]`: the slice of the first dimension a subscript
-// writes (design principles 5.4). The bounds are read by `sliceRange` above.
+// writes (design principles 5.4). The call is the slice node itself: the value, the axis (0 --
+// a subscript slices the first dimension), the two bounds, the step and the two-bit mask. The
+// bounds are read by `sliceRange` above.
 //
 // A step other than 1 is a view with strides, which needs the multidimensional array
 // representation of. Until it lands, a stepped slice is a copy: the elements are the same
@@ -244,12 +246,14 @@ SliceRange sliceRange(Int64 size, Int64 startRaw, Int64 endRaw, Int64 step, Int6
 slot_t __slice_sub__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Array *arr    = norm.get<Array *>(0);
     auto *arrType = tt::as_ptr<ArrayType>(norm.type(0));
+    // `norm.get<Int64>(1)` is the axis: the lowering writes the constant 0 for it, and an array
+    // of values is sliced along its only dimension, so it is read and not otherwise used.
     const SliceRange range = sliceRange(
         static_cast<Int64>(arr->size()),
-        norm.get<Int64>(1),
         norm.get<Int64>(2),
         norm.get<Int64>(3),
-        norm.get<Int64>(4));
+        norm.get<Int64>(4),
+        norm.get<Int64>(5));
     if (arr->rank() != 1) {
         // A slice of a dimension other than the first is a view with strides; the type
         // system states rank 1, so this is a defect rather than something a program writes.

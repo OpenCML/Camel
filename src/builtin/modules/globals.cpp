@@ -215,10 +215,30 @@ std::optional<std::string> staticIndexRejection(const type_vec_t &norm, static_a
     return std::format("index {} is outside axis 0 of extent {}", *index, *extent);
 }
 
+/// Whether `type` is a tensor the module that owns tensors slices: a numeric array that is
+/// open-rank (`f32[..]`, the transition spelling of `Tensor`), of rank 2 or more, or rank 1 with a
+/// stated extent (`f32[6]`, what a tensor operator returns and what `Tensor<f32, [6]>` names).
+/// What stays the core's is the program's own array of values: rank 1 with no extent stated
+/// (`T[]`) -- the form an array literal has and the form the core's array operators build and take
+/// -- because the programs that subscript one without importing the tensor module must keep
+/// working (docs/handover/questions/subscript-operator-choice-and-the-rank-two-refusal.md §二: the
+/// same narrowing `t[idx]` already has on this line, where a rank-2 array is refused by the core
+/// and the module's `tensor:idx_take` answers another rank or an open rank).
+bool isTensorSubscript(const Type *type) {
+    const ArrayType *array = asArrayType(type);
+    if (array == nullptr || !isNumericArrayType(type)) {
+        return false;
+    }
+    if (array->anyRank() || array->rank() >= 2) {
+        return true;
+    }
+    return staticFirstExtent(type).has_value();
+}
+
 /// Why `t[a:b]` / `t[a:b:s]` cannot be this call: a constant bound leaves the statically known
 /// first extent, or the result would not be a view of a rank-1 array.
 std::optional<std::string> staticSliceRejection(const type_vec_t &norm, static_args_t statics) {
-    if (norm.size() != 5) {
+    if (norm.size() != 6) {
         return std::nullopt;
     }
     const ArrayType *array = asArrayType(norm[0]);
@@ -234,7 +254,7 @@ std::optional<std::string> staticSliceRejection(const type_vec_t &norm, static_a
     if (!extent) {
         return std::nullopt; // `T[]`: the length is not in the type, and the kernel reads it
     }
-    if (const std::optional<int64_t> step = constantArg(statics, 3); !step || *step != 1) {
+    if (const std::optional<int64_t> step = constantArg(statics, 4); !step || *step != 1) {
         return std::string(
             "a slice step other than the constant 1 is a view with strides, which needs the "
             "multidimensional array representation of H17");
@@ -242,13 +262,13 @@ std::optional<std::string> staticSliceRejection(const type_vec_t &norm, static_a
     // The bounds as the slice reads them: a bound the program did not write is 0 for the start and
     // the end of the array for the end, which the two-bit mask the compiler writes with the call
     // says (`globals.cpp`, `__slice__`).
-    const std::optional<int64_t> mask = constantArg(statics, 4);
+    const std::optional<int64_t> mask = constantArg(statics, 5);
     if (!mask) {
         return std::nullopt;
     }
     const std::optional<int64_t> from =
-        (*mask & 2) != 0 ? constantArg(statics, 1) : std::optional<int64_t>(0);
-    const std::optional<int64_t> to = (*mask & 1) != 0 ? constantArg(statics, 2) : extent;
+        (*mask & 2) != 0 ? constantArg(statics, 2) : std::optional<int64_t>(0);
+    const std::optional<int64_t> to = (*mask & 1) != 0 ? constantArg(statics, 3) : extent;
     if (!from || !to) {
         return std::nullopt; // a bound the compiler does not know: the kernel reads it
     }
@@ -2308,32 +2328,39 @@ std::make_shared<StaticCheckedResolver>(
                 {
                     ":op/slice_sub",
                     // `t[a:b]`, `t[a:b:s]`, `t[:b]`, `t[a:]`, `t[:]`: the slice of the first
-                    // dimension a subscript writes (design principles 5.4). The last argument is
-                    // a two-bit mask: bit 0 says whether the end was written (`t[a:]` runs to
-                    // the end), bit 1 whether the start was (`xs[:: -1]` starts at the last
-                    // element). A fixed-shape array's subscript is checked here, where its
-                    // constants are (staticSliceRejection).
+                    // dimension a subscript writes (design principles 5.4). The call is the
+                    // slice node itself -- the value, the axis (0: a subscript slices the first
+                    // dimension), the two bounds, the step, and a two-bit mask: bit 0 says
+                    // whether the end was written (`t[a:]` runs to the end), bit 1 whether the
+                    // start was (`xs[:: -1]` starts at the last element). A fixed-shape array's
+                    // subscript is checked here, where its constants are (staticSliceRejection).
                     std::make_shared<StaticCheckedResolver>(
                         DynamicFuncTypeResolver::create(
-                            {{0, {}}, {5, {false, false, false, false, false}}},
-                            "(arr: T[], start: int, end: int, step: int, written: int) => T[]",
+                            {{0, {}}, {6, {false, false, false, false, false, false}}},
+                            "(arr: T[], axis: int, start: int, end: int, step: int, written: int) "
+                            "=> T[]",
                             [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                                 -> optional<Type *> {
                                 if (norm[0]->code() != TypeCode::Array)
                                     return nullopt;
-                                for (size_t i = 1; i < 5; ++i) {
+                                for (size_t i = 1; i < 6; ++i) {
                                     if (norm[i]->code() != TypeCode::Int64)
                                         return nullopt;
                                 }
                                 const auto &arrType = tt::as_ptr<ArrayType>(norm[0]);
                                 Type *elem         = arrType->elemType();
-                                // An array whose element type nobody stated (its element is `Void`) is sliced by
-                                // the module that owns numeric arrays: it reads the elements at the
+                                // A tensor is sliced by the module that owns tensors: the subscript lowers to
+                                // that module's own slice node (`tensor:slice`, the same node
+                                // `slice(t, 0, a, b)` builds), which reads the elements at the
                                 // element type the value carries, while the core's slice is the
                                 // array of values whose elements the tangent space holds one slot
                                 // each (design principles 5.4, 9.9). Declining here leaves the value
-                                // to that module's own overload of `t[a:b]`.
-                                if (elem == nullptr || elem->code() == TypeCode::Void) {
+                                // to that module's own overload of `t[a:b]`; an array whose element
+                                // type nobody stated (its element is `Void`) is left to it too. The
+                                // core keeps a rank-1 array, numeric included, and is the only one
+                                // that answers when no module is loaded (isTensorSubscript).
+                                if (elem == nullptr || elem->code() == TypeCode::Void ||
+                                    isTensorSubscript(norm[0])) {
                                     return nullopt;
                                 }
                                 return norm[0];

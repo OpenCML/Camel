@@ -2490,12 +2490,14 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
                         "'take', or index one dimension at a time");
                 throw BuildAbortException();
             }
-            // `t[a:b]`, `t[a:b:s]`, `t[:b]`, `t[a:]`, `t[:]`: the three parts of the dimension
-            // (an unwritten one a null load) and which of the start and the end were written.
-            // A part that was not written is passed as the value it stands for, 0 for the
-            // start and 1 for the step; the end is read only when written. The last argument
-            // is a two-bit mask (bit 0 end, bit 1 start): `t[a:]` and `t[:b]` differ, and a
-            // negative step needs to know whether the start was given.
+            // `t[a:b]`, `t[a:b:s]`, `t[:b]`, `t[a:]`, `t[:]`: the slice of the first dimension a
+            // subscript writes (design principles 5.4). The call is the slice node itself: the
+            // value, the axis (the constant 0 -- a subscript slices the first dimension), the
+            // two bounds, the step, and a two-bit mask (bit 0 end, bit 1 start) saying which of
+            // the start and the end the program wrote: `t[a:]` and `t[:b]` differ, and a
+            // negative step needs to know whether the start was given. A part that was not
+            // written is passed as the value it stands for, 0 for the start and 1 for the step;
+            // the end is read only when written.
             node_ptr_t bound[3] = {nullptr, nullptr, nullptr};
             bool written[3]     = {false, false, false};
             for (size_t i = 0; i < 3; ++i) {
@@ -2512,6 +2514,9 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
             bound[1]                  = written[1] ? bound[1] : intConstant(0);
             bound[2]                  = written[2] ? bound[2] : intConstant(1);
             node_ptr_t endWrittenNode = intConstant((written[1] ? 1 : 0) | (written[0] ? 2 : 0));
+            // The axis: a subscript slices the first dimension, so the slice node's second
+            // argument is the constant 0 (the function form writes the axis itself).
+            *res << intConstant(0);
             for (size_t i = 0; i < 3; ++i) {
                 *res << bound[i];
                 if (written[i]) {
