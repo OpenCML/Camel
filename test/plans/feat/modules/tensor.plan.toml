@@ -451,13 +451,23 @@ timeout_ms = 20000
 
 [[tests]]
 name = "nan_text_in_a_tensor"
-desc = "A NaN's text carries no sign in the tensor form either (design principles 7.7, language reference 2.5.2): `inf - inf` is a NaN whose sign bit is set, and the tensor printer hands the element to the C library, which writes `-nan` for it unless the value is made positive first. The same value writes `nan` as a scalar, in a plain array, and in a tensor of f64 and of f32."
+desc = "A NaN's text carries no sign, and the array's is the only print form (design principles 7.7, language reference 2.5.2): `inf - inf` is a NaN whose sign bit is set, and the printer hands the element to the C library, which writes `-nan` for it unless the value is made positive first. The same value writes `nan` as a scalar and in an f64 and an f32 array, and no program writes `tensor(` at all."
 kind = "behavior"
 case = "../../../cases/modules/tensor/nan_text_in_a_tensor.cml"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_contains = ["nan], dtype=float64)", "nan], dtype=float32)"]
-expect_output_not_contains = ["-nan"]
+expect_stdout_exact = """scalar
+nan
+array
+[nan]
+tensor-f64
+[nan]
+tensor-f64-specials
+[nan, inf, -inf, -0.0, 0.0]
+tensor-f32
+[nan]
+"""
+expect_output_not_contains = ["-nan", "tensor("]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
