@@ -435,9 +435,10 @@ bool readsVariable(
     return false;
 }
 
-/// Whether a node carries the program's order instead of being a pure value: a call runs a
-/// graph, a branch, join, sync or loop runs (or orders) what it holds, a gate waits for its
-/// control inputs, and an operator that is not pure has an effect (design principles 3.3).
+/// Whether a node carries the program's order instead of being a value a pass may compute for
+/// itself: a call runs a graph, a branch, join, sync or loop runs (or orders) what it holds, a
+/// gate waits for its control inputs, and an operator that has an effect, or that must run where
+/// the program writes it, is not one a pass may recompute (design principles 3.3).
 /// This is the rule the generic rewrite pass uses to decide what it may not reorder
 /// (`carriesOrdering` in src/passes/opt/generic/rewrite.cpp).
 bool carriesOrdering(const GraphDraft &draft, gc_node_ref_t node) {
@@ -458,7 +459,7 @@ bool carriesOrdering(const GraphDraft &draft, gc_node_ref_t node) {
     case GCNodeKind::Oper: {
         const std::span<const std::byte> payload = draft.payloadOf(node);
         return payload.size() < sizeof(GCOperBody) ||
-               !camel::core::OperatorTable::instance().isPure(
+               !camel::core::OperatorTable::instance().mayBeRecomputed(
                    reinterpret_cast<const GCOperBody *>(payload.data())->oper);
     }
     default:
@@ -491,7 +492,7 @@ bool shapeTakesPart(
         return true;
     case GCNodeKind::Oper:
         return payload.size() >= sizeof(GCOperBody) &&
-               camel::core::OperatorTable::instance().isPure(
+               camel::core::OperatorTable::instance().mayBeRecomputed(
                    reinterpret_cast<const GCOperBody *>(payload.data())->oper);
     default:
         return false;

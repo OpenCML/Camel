@@ -3925,18 +3925,12 @@ class RewriteModule final : public BuiltinModule {
         context_->registerExecutorFactory("rewrite", [ctx = context_]() {
             return std::make_shared<RewriteExecutor>(ctx);
         });
-        // The readers are pure. `__rule` is not: constant folding would build the rule at
-        // compile time and keep it in a static area, where the collector does not trace the
-        // functions it holds. `__analysis` compiles an `analysis` declaration at macro time and
-        // installs its facts, so it is effectful as well; it was the one operator of the module
-        // whose purity was never declared, which nothing noticed while no program imported the
-        // module (handover H173).
+        // The readers are pure, and so is what builds a rule: making a rule value changes nothing
+        // outside the program. The makers and `analysis` are declared below with the fact that
+        // keeps a pass from folding them, which is a different question from the effect.
         camel::core::OperatorTable::instance().declare(
             "rewrite",
-            {{"rule", false},
-             {"rule_when", false},
-             {"rule_generic", false},
-             {"name", true},
+            {{"name", true},
              {"two_way", true},
              {"needs", true},
              {"consts", true},
@@ -3957,8 +3951,15 @@ class RewriteModule final : public BuiltinModule {
              {"check_evidence", true},
              {"check_reason", true},
              {"check_coverage", true},
-             {"check_coverage_table", true},
-             {"analysis", false}});
+             {"check_coverage_table", true}});
+        // What builds a rule and what compiles an analysis declaration has no effect on anything
+        // outside the program: the rule value it makes is the program's own, and the facts an
+        // analysis installs are the declaration's. What is true of them is that a pass may not
+        // fold them away: the value of a rule holds the functions of its sides, which a static
+        // area does not trace, and the facts of an analysis are installed where the program
+        // writes the declaration.
+        camel::core::OperatorTable::instance().declareUnfoldable(
+            "rewrite", {"rule", "rule_when", "rule_generic", "analysis"});
         loaded_ = true;
         return true;
     }

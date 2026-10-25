@@ -475,6 +475,14 @@ struct OperatorSemantics {
     std::optional<ResourceSpec> resources;
     /// The definition graph (design section 9), nullopt when the operator has none.
     std::optional<Definition> definition;
+    /// Its calls may be evaluated ahead of time and their results kept as values: the compiler
+    /// and the passes may fold them, move them, merge them with an identical call and drop them
+    /// when nothing uses them. False for an operator that must run where the program writes it,
+    /// though running it has no effect: its result holds functions the collector does not trace
+    /// (a rule's sides), or installing it is what the declaration means (an `analysis`). A
+    /// separate fact from the effect, because the two questions are different: whether running
+    /// the call changes anything outside the program, and whether a pass may answer it instead.
+    bool foldable = true;
 };
 
 } // namespace camel::core::sem
