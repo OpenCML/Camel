@@ -1236,3 +1236,13 @@ Linux 包在 manylinux 里构建，用 auditwheel 修正标签，并在构建时
 - 链改用同步边写出之后，控制边整个删除（`ctrlInputsOf` 以及它的各处读法、`SYNC` 节点），这些读法只读同步边和顺序边。这次加的 `|| syncInputsOf` 也就随之变成唯一的一种读法。
 - 注释只写现在的规则。"the kind it was written as until H242 moved the chain onto it"这类叙述历史的句子删掉。
 - **代码里不写任务编号**：仓库要公开（"提交不写任务编号"同样适用于注释）。现在 `src`、`include`、`modules` 里有 129 处 `H\d+`，最多的是 `modules/python/operators.cpp`（12）和 `modules/rewrite/module.cpp`（8）。逐处改成引用设计稿或设计原则的小节，或者直接删掉；以后的提交不再加。
+
+## `Tensor` 名字删除：收下，留一处返工
+
+`Tensor` 不再导出、不再打印，比较注册表删了，12 条逐元素张量律合成每条律一份、守卫写在元素类型上，提到已删东西的注释也改了。收下。
+
+**返工**：`ArrayType::elementTypeOpen()` 与 `isElementTypeOpenArray` 还在（`array.h:116-120`、`array.cpp` 五处、`text.cpp:420-425`、`builder_control.cpp:131`）。它的注释写的是"`Tensor` 在填参数之前绑定的那个对象"，`Tensor` 删了，它也就没有生产者了。删掉，连同打印用的 `number[..]`。`number` 不是语言里的类型名，打印出程序写不出来的拼写不行。如果还有哪个模块算子的签名靠它，说明那条签名没写元素类型，改成 `::<T>(x: T[..]) when is_numeric::<T>()`（5.1a）。
+
+## 2026-10-26-how-many-macro-refusals-the-user-sees
+
+**甲，§8 不动**：`std::macro` 是流水线里的一个遍，它拒绝时就是一次运行时故障，流水线停下。但一次故障可以说清楚它为什么发生：这个遍收集到的每一处拒绝，都作为这条故障的关联位置附上，**每处一条，各带自己的位置和原因**，不压缩成"还有 N 处、最近的一处在…"。主位置是第一处。CLI 照旧在第一条错误上停，不需要特例。12 条 `grad_function_value_*` 用例的金标照这个形状写。
