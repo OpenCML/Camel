@@ -1,6 +1,6 @@
 /**
  * A conversion of a constant that fails, inside an exported function: `weights()` is declared
- * to return a plain Tensor, so the compiler accepts the conversion to [3, 2], and the value is
+ * to return a plain f32[..], so the compiler accepts the conversion to [3, 2], and the value is
  * a [2, 3] tensor. Constant folding leaves the conversion in the graph (it is the program's
  * error to report), and the export refuses at the conversion (line 16) with what the
  * conversion itself says.

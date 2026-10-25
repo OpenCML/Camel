@@ -44,7 +44,7 @@ let lr = 0.003
 let attention_scale = f32(scalar_sqrt(d_head))
 
 // The shapes the program works in.  A named alias keeps a signature short; the alias itself
-// shows every extent, so a reader never has to guess what `Tensor` means here.
+// shows every extent, so a reader never has to guess what the array spelling means here.
 type TokenStates = f32[8, 16, 64]
 type HeadStates = f32[8, 4, 16, 16]
 type Scores = f32[8, 4, 16, 16]

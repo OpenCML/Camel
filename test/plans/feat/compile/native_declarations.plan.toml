@@ -897,7 +897,7 @@ expect_output_contains = ["This value has type 'bool', which is not the declared
 # a body-less `export func` can write; they stay in C++ and are recorded in
 # `stdlib/signatures/tensor.cml` as computed signatures. The cases below prove the declared
 # half: an importer reads it, a call checks against it, and a type-qualified alias
-# (`Tensor::numel`) is the same declaration, not a second signature.
+# (`tensor::numel`) is the same declaration, not a second signature.
 
 [[tests]]
 name = "native.tensor_declaration_import"

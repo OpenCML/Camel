@@ -319,7 +319,7 @@ void Builder::initInnerTypes() {
     typeScope_->insert(Reference("c64"), Type::Complex64());
     typeScope_->insert(Reference("c128"), Type::Complex128());
     // Reduced-precision tensor element types (design principles 7.3). They are names a
-    // program writes only as an argument of `Tensor<...>` and of `from_bytes::<...>`; no
+    // program writes only as an argument of an array spelling and of `from_bytes::<...>`; no
     // literal or scalar operator produces a value of either.
     typeScope_->insert(Reference("bf16"), Type::BFloat16());
     typeScope_->insert(Reference("f16"), Type::Float16());
@@ -5972,7 +5972,7 @@ Type *Builder::visitSpecType(const AST::node_ptr_t &ast) {
             // signature binds, not a runtime array constant (plan P3, 4.1).
             const AST::DimGroup &group = child->loadAs<AST::ArrayDimLoad>()->dim();
             if (group.pack != AST::DimPack::None) {
-                // `Tensor<f32, [..s]>` would make the element type's rank open; only an array
+                // `f32[..s]` would make the element type's rank open; only an array
                 // type takes a pack, and a shape argument is not a type.
                 diags_->of(SemanticDiag::InvalidTypeArgument)
                     .at(child->load()->tokenRange())

@@ -2731,7 +2731,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "grad_data_input_is_data"
-desc = "An ordinary argument is data even when its type has a tangent: a float `scale` converted to int and a `Tensor` of integer labels cast to int64 and back to float are inputs of the differentiated computation with nothing differentiable upstream, so they are not refused; the gradient is taken through the first `with` parameter and is 3.0 and [0, 1, 0] (sum 1.0) respectively (design principles 9.9). This is the C2 `with_grad(loss)` shape."
+desc = "An ordinary argument is data even when its type has a tangent: a float `scale` converted to int and an integer array of labels cast to int64 and back to float are inputs of the differentiated computation with nothing differentiable upstream, so they are not refused; the gradient is taken through the first `with` parameter and is 3.0 and [0, 1, 0] (sum 1.0) respectively (design principles 9.9). This is the C2 `with_grad(loss)` shape."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/grad_data_input.cml"
 args = ["${case}", "std::macro"]
@@ -3034,7 +3034,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "refuse_container_new"
-desc = "`new(xs)` with `xs: float[][]` converts the container to a tensor by flattening it, and the container has no adjoint: the gradient would have to return as an array of arrays, which no operator of this module builds from a tensor's gradient. The call is refused by name, with the container's type, at the new call (line 21); `refuse_container_reshape` is the same refusal for `reshape`. A numeric array is a tensor and is not refused (`adjoint_new_array` asserts its adjoint), and a constant container is converted by the forward rule and never visited here. Without the refusal this program faulted in the kernels, which read the container as a tensor: \"Expected Tensor argument\", with no place in the source to point at. (grad built at run time)"
+desc = "`new(xs)` with `xs: float[][]` converts the container to a tensor by flattening it, and the container has no adjoint: the gradient would have to return as an array of arrays, which no operator of this module builds from a tensor's gradient. The call is refused by name, with the container's type, at the new call (line 21); `refuse_container_reshape` is the same refusal for `reshape`. A numeric array is a tensor and is not refused (`adjoint_new_array` asserts its adjoint), and a constant container is converted by the forward rule and never visited here. Without the refusal this program faulted in the kernels, which read the container as a tensor: \"Expected an array argument\", with no place in the source to point at. (grad built at run time)"
 kind = "negative"
 case = "../../../cases/modules/autodiff/refuse_container_new.cml"
 args = ["${case}", "${run_nvm}"]

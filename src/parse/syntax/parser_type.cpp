@@ -223,7 +223,7 @@ void ParserImpl::parseArrayDim() {
 /// specType   : primaryType ('<' typeOrData (',' typeOrData)* '>')?
 /// typeOrData : typeExpr | arrayDim | 'const' dataExpr
 /// Rule 1: the `<` of type arguments touches the type (LAngle), as that of `with` arguments.
-/// A shape argument (`Tensor<f32, [n, 784]>`) is written without `const`; the `const` branch
+/// A shape argument (`f32[n, 784]`) is written without `const`; the `const` branch
 /// stays for the other constant arguments a module type may take.
 void ParserImpl::parseSpecType() {
     const size_t m = mark();

@@ -59,7 +59,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 
 | `ComparisonAcrossLines` | This '>' is read as a comparison with the next line, which starts with {0}: two statements may have been joined into one. |
 
-**Semantic — errors** (`SemanticDiag`) — 203
+**Semantic — errors** (`SemanticDiag`) — 202
 
 | `Redeclaration` | Redeclaration of reference: '{0}'. |
 | `ModuleNotFound` | Module '{0}' not found. {1} |
@@ -258,7 +258,6 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `ImplKernelNotBodyless` | The '#impl' tag of '{0}' names '{1}', which has a body. |
 | `StreamInContainer` | '{0}' cannot be the element of {1}: a stream is consumed once, while the elements of a container are read more than once. |
 | `NodeOfNotAParameter` | '{0}' is not a const parameter of the rule '{1}', so node_of({0}) names no node. |
-| `TensorElementTypeRequired` | The type '{0}' states no element type: a tensor's element type is part of its type, so this spelling is not a type of a value. |
 | `BranchElementTypeMismatch` | The two arms of the branch have different element types: '{0}' and '{1}'. An array's element type is part of its type, and a number of one element type does not become a number of another by itself. |
 | `RuleConstParamNotMatched` | '{0}' is a `const` parameter of the rule '{1}', and the left side matches no constant for it. |
 | `RuleWithParameterUnbound` | '{0}' is a `with` parameter of the rule '{1}', it has no default, and the rule value here binds nothing for it. |
@@ -286,7 +285,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `DivisionByZero` | Attempted division by zero. |
 | `IndexOutOfRange` | Index {0} is out of range for {1} of length {2}. |
 | `MaxRecursionDepthExceeded` | Maximum recursion depth ({1}) exceeded when evaluating graph '{0}'. |
-| `TensorDimensionMismatch` | Tensor shape mismatch in '{0}': {1}. |
+| `TensorDimensionMismatch` | Array shape mismatch in '{0}': {1}. |
 | `UnrecognizedGraphPass` | Unrecognized graph rewriting/scheduling/translation pass '{0}'. |
 | `TranslationRefused` | Translation pass '{0}' refused the graph: {1}. |
 | `PassInternalError` | Pass '{0}' failed with an internal error: {1}. |

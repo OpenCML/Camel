@@ -127,8 +127,8 @@ bool containsTypeOf(Type *type);
 Type *substituteTypeVars(Type *type, const type_bindings_t &bindings);
 
 /**
- * `type` with every named extent that `values` binds replaced by its value (`Tensor<f32, [n]>`
- * with n = 4 is `Tensor<f32, [4]>`). A `constas` parameter is not substituted: it is a
+ * `type` with every named extent that `values` binds replaced by its value (`f32[n]`
+ * with n = 4 is `f32[4]`). A `constas` parameter is not substituted: it is a
  * parameter, not an extent. Returns `type` itself when nothing in it was replaced.
  */
 Type *substituteExtentValues(Type *type, const ExtentValues &values, const ExtentPacks &packs = {});

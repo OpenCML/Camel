@@ -101,8 +101,8 @@ void setElement(Type *type, slot_t aggregate, size_t index, slot_t value) {
     }
 }
 
-/// A trainable leaf that is a tensor, in whichever spelling its type uses (`Tensor`, `Tensor<f32,
-/// [4, 4]>`, `f32[4, 4]`, `f32[]`): a numeric array is one tensor, not an array of its elements.
+/// A trainable leaf that is a tensor, in whichever spelling its type uses (`f32[4, 4]`, `f32[..]`,
+/// `f32[]`): a numeric array is one tensor, not an array of its elements.
 bool isTensorLeaf(Type *type) { return camel::tensor::isTensorType(type); }
 
 /// Rebuilds one array of a trainable tree, element by element and with the length the primal

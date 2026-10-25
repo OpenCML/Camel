@@ -62,8 +62,8 @@ class EngineRootScope {
 };
 
 /// The type a replacement writing gets. A pattern's type is what the rule was written with, and it
-/// can be less informed than the node the rule replaces: a law for `Tensor<f32>` replaces a
-/// `Tensor<f32, [3]>` node. When the pattern accepts the node's own type, the writing keeps it, so
+/// can be less informed than the node the rule replaces: a law for `f32[..]` replaces a
+/// `f32[3]` node. When the pattern accepts the node's own type, the writing keeps it, so
 /// a rewritten value has the type of the place it is written to (and a saturation, which merges
 /// writings by type, can merge them).
 camel::core::type::Type *writingType(
@@ -1393,8 +1393,8 @@ gc_node_ref_t DraftWritings::constantNode(
 }
 
 /// Whether a pattern term of `patternType` may match a node of `nodeType`: the type the pattern
-/// was written for must accept the node's (a `Tensor<f32>` pattern reads a `Tensor<f32, [3]>`,
-/// a pattern for `Tensor<f32>` never reads a `Tensor<int>`). The scalar operators have one id per
+/// was written for must accept the node's (a `f32[..]` pattern reads a `f32[3]`,
+/// a pattern for `f32[..]` never reads a `int[..]`). The scalar operators have one id per
 /// element type, so their id already says this; the tensor operators share one id for every
 /// element type, and without the check a tensor law would rewrite another dtype's arithmetic
 /// with an f32 rounding argument (rewrite design 2.2).

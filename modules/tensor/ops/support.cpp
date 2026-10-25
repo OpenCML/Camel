@@ -48,7 +48,7 @@ Array *tensorArg(ArgsView &args, size_t index, bool allowArray) {
     }
     // Rank zero is the element type itself (the rank-zero ruling,
     // docs/handover/reviews/questions-2026-10-23.md): the value of a rank-0 tensor is a scalar
-    // slot, and the type says so — `Tensor<f32, []>` is `f32`, not an array. A kernel that reads
+    // slot, and the type says so — `f32` is `f32`, not an array. A kernel that reads
     // the tensor reads an array of no dimension, so the scalar is boxed here; wrap() takes the
     // same value back out of a kernel's result, where the declared result type says the element.
     // Without this a gradient handed to `tensor:sum_to` or a broadcast reached the kernel as the
@@ -61,7 +61,7 @@ Array *tensorArg(ArgsView &args, size_t index, bool allowArray) {
             ArrayType::create(Type::create(argType->code()), std::span<const int64_t>{}));
         return box;
     }
-    throwRuntimeFault(RuntimeDiag::RuntimeError, "Expected Tensor argument");
+    throwRuntimeFault(RuntimeDiag::RuntimeError, "Expected an array argument");
 }
 
 kernels::Operand operandArg(ArgsView &args, size_t index, kernels::ScalarOperand &storage) {

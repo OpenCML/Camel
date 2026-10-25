@@ -3,7 +3,7 @@
  * elements, an array of the same shape whose elements are `bool`; `a == b` is the whole
  * comparison, one `bool` that says the shapes are the same and the elements are equal
  * everywhere. Whether the element type is written in the type (`f32[..]`) or left to the
- * value (`Tensor`) does not change either result, and neither does the operator's element type
+ * value (`f32[..]`) does not change either result, and neither does the operator's element type
  * decide which one a program gets: `==` is whole and `===` is elementwise for every array.
  *
  * The whole comparison follows the float rules of a scalar (design principles 7.3): an array

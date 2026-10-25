@@ -6,8 +6,8 @@
  *
  * A type may state its dimensions as expressions over names a signature binds:
  *
- *     func dense(x: Tensor<f32, const [constas n, 3]>, w: Tensor<f32, const [3, constas k]>)
- *         : Tensor<f32, const [n, k]>
+ *     func dense(x: f32[n, 3], w: f32[3, k])
+ *         : f32[n, k]
  *
  * `constas n` binds the name where it first appears in a parameter type; later occurrences
  * write `n`. A dimension is a linear form: a constant plus integer multiples of names. That is

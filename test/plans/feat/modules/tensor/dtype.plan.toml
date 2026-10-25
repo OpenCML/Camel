@@ -198,7 +198,7 @@ case = "../../../../cases/modules/tensor/dtype/f32_only.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::OperandTypeUnsupported"
-expect_output_contains = ["'conv2d' does not support a value of type 'Tensor<f64>'", "it takes f32 tensors."]
+expect_output_contains = ["'conv2d' does not support a value of type 'f64[..]'", "it takes f32 tensors."]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
@@ -300,12 +300,12 @@ timeout_ms = 10000
 
 [[tests]]
 name = "npy_no_element_type"
-desc = "`load_npy(p)` with no type argument, standing where no element type is expected, does not resolve: the element type is the one type variable no parameter mentions, so the call is refused (No matching function found, `SemanticDiag::NoMatchingFunction`) and the candidates print the five element types a `.npy` file can hold, each with the type argument it takes (`<tensor:load_npy_f32>: ::<float32>(path: string) => Tensor<float32>`). Before H466 this call compiled and returned a tensor whose element type was whatever the file held (design principles 5.5)."
+desc = "`load_npy(p)` with no type argument, standing where no element type is expected, does not resolve: the element type is the one type variable no parameter mentions, so the call is refused (No matching function found, `SemanticDiag::NoMatchingFunction`) and the candidates print the five element types a `.npy` file can hold, each with the type argument it takes (`<tensor:load_npy_f32>: ::<float32>(path: string) => float32[..]`). Before H466 this call compiled and returned a tensor whose element type was whatever the file held (design principles 5.5)."
 kind = "negative"
 case = "../../../../cases/modules/tensor/dtype/npy_no_element_type.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "<tensor:load_npy_f32>: ::<float32>(path: string) => Tensor<float32>", "<tensor:load_npy_i64>: ::<int64>(path: string) => Tensor<int64>"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "<tensor:load_npy_f32>: ::<float32>(path: string) => float32[..]", "<tensor:load_npy_i64>: ::<int64>(path: string) => int64[..]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 

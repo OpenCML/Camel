@@ -208,7 +208,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "loops.iterate_tensor"
-desc = "`for` over a tensor takes its elements along the first dimension: the rank-1 rows of a rank-2 tensor (views of the same data), the elements of a rank-1 tensor (values of the element type, not rank-0 arrays), a tensor whose first extent is 0, a loop over a row inside the body, and a function whose parameter is a `Tensor` of unknown rank (its elements have type `Tensor`)."
+desc = "`for` over a tensor takes its elements along the first dimension: the rank-1 rows of a rank-2 tensor (views of the same data), the elements of a rank-1 tensor (values of the element type, not rank-0 arrays), a tensor whose first extent is 0, a loop over a row inside the body, and a function whose parameter is a `f32[..]` of unknown rank (its elements have type `f32[..]`)."
 kind = "behavior"
 case = "../../../cases/loops/iterate_tensor.cml"
 args = ["${case}", "${backend}"]

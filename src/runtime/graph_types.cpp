@@ -95,7 +95,7 @@ const Type *firstUndetermined(const Type *type, std::vector<const Type *> &path)
         break;
     }
     if (!found && type->isOtherType()) {
-        // The arguments of a module type (`Map<K, V>`, `Tensor<f32, ...>`); a missing one (an
+        // The arguments of a module type (`Map<K, V>`, `f32[2, 3]`); a missing one (an
         // unknown dimension) is null and says nothing about the type of a value.
         for (Type *param : static_cast<const OtherType *>(type)->paramsSpan()) {
             if ((found = firstUndetermined(param, path))) {

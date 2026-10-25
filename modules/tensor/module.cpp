@@ -167,7 +167,7 @@ bool TensorModule::load() {
                 }
                 if (!std::filesystem::exists(path)) {
                     throw std::runtime_error(
-                        "a Tensor parameter takes a .npy file, and '" + text + "' does not exist");
+                        "an array parameter takes a .npy file, and '" + text + "' does not exist");
                 }
                 tensor::Array *t = tensor::loadNpy(path, camel::core::mm::autoSpace());
                 const slot_t value =

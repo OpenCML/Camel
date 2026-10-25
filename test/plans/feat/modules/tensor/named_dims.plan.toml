@@ -45,7 +45,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "unknown_extent_checked"
-desc = "An argument whose extent the compiler does not know (`Tensor<... const [-1]>`) is accepted; the extent another argument binds is checked where the call runs."
+desc = "An argument whose extent the compiler does not know (`f32[?]`) is accepted; the extent another argument binds is checked where the call runs."
 kind = "behavior"
 case = "../../../../cases/modules/tensor/named_dims/unknown_extent_checked.cml"
 args = ["${case}", "${backend}"]

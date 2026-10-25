@@ -126,7 +126,7 @@ constexpr std::pair<TypeCode, std::string_view> kNpyElementTypes[] = {
     {TypeCode::Bool, "load_npy_bool"}};
 
 /// What a `load_npy` call of element type `dtype` gives: a numeric array of that element type with
-/// the rank left open (`f32[..]` -- the flip's terminal spelling of `Tensor<f32>`, the same
+/// the rank left open (`f32[..]` -- the flip's terminal spelling of `f32[..]`, the same
 /// instance a bare `Tensor` parameter is instantiated to at the call, design principles 5.1/5.2).
 /// A tensor is a numeric array, so the result is the array type the element type states rather
 /// than a marker of its own; every position that takes a tensor of that element type takes it.
@@ -151,8 +151,7 @@ ArrayType *npyTensorType(TypeCode dtype) {
 
 /**
  * The element type of a `load_npy` call's result: the explicit type argument the call writes
- * (`load_npy::<f32>(p)`) or the element type of the position the call stands in (`Tensor<f32,
- * [3]>`, `f32[..]`). The result is `Tensor<dtype>`, the concrete element type, so every position
+ * (`load_npy::<f32>(p)`) or the element type of the position the call stands in (`f32[3]`, `f32[..]`). The result is the concrete element type as an array (`f32[..]`), the concrete element type, so every position
  * that takes a tensor takes the load; the kernel checks the file's own element type against it
  * and a mismatch is a fault at the call (design principles 5.5; handover H466). One resolver per
  * element type a `.npy` file can hold, and none of them accepts a call that names no element type
@@ -194,8 +193,8 @@ class LoadNpyResolver final : public FuncTypeResolver {
     /// The candidate line a failed resolution prints (`NoMatchingFunction`): the element type the
     /// call would have to name, and the result it gives.
     std::string signature() const override {
-        return "::<" + std::string(dtypeName(dtype_)) + ">(path: string) => Tensor<" +
-               std::string(dtypeName(dtype_)) + ">";
+        return "::<" + std::string(dtypeName(dtype_)) + ">(path: string) => " +
+               std::string(dtypeName(dtype_)) + "[..]";
     }
 
   private:
@@ -317,7 +316,7 @@ std::vector<OpDef> utilityOps() {
                 .name      = name,
                 .exports   = {},
                 .params    = {{"path", ParamKind::String}},
-                .resultDoc = "Tensor",
+                .resultDoc = "float[..]",
                 .infer     = [dtype](const InferContext &) -> std::optional<Type *> {
                     return npyTensorType(dtype);
                 },

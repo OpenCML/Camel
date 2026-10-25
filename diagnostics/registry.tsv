@@ -272,7 +272,7 @@ semantic	CmlUnsupportedConstruct	0x0001A5	error	std::cml cannot print {0}: {1}.	
 #/ A constant is larger than the printer's max_literal_bytes.
 semantic	CmlBigConstant	0x0001A6	error	std::cml refused the constant '{0}' of type {1} in {2}: {3} bytes, over max_literal_bytes ({4}).	Raise the limit with `std::cml max_literal_bytes=...`, or keep the value in a module the printed program imports.	none: choice: the repair is a decision only the writer can make
 #
-# Tensor element types (design/arrays-memory, P4 "element type exact"). 0x1A7 is retired: a
+# Array element types (design/arrays-memory, P4 "element type exact"). 0x1A7 is retired: a
 # tensor keeps the element type it is written with, so nothing rewrites it and there is no
 # such diagnostic. The code is not reused.
 #
@@ -443,7 +443,7 @@ runtime	RuntimeError	0x000000	error	An error has occurred: {0}.	Check the runtim
 runtime	DivisionByZero	0x000001	error	Attempted division by zero.	Ensure the denominator is not zero before performing division.	none: runtime: the divisor is zero at run time, and where to guard it is the program's logic
 runtime	IndexOutOfRange	0x000002	error	Index {0} is out of range for {1} of length {2}.	Ensure the index is within the valid range of the collection.	none: runtime: the index is computed at run time, and the repair is in the program's logic
 runtime	MaxRecursionDepthExceeded	0x000004	error	Maximum recursion depth ({1}) exceeded when evaluating graph '{0}'.	Check for infinite recursion. A call in tail position takes no frame, so write a deep recursion as a tail call; or raise the limit with --max-recursion-depth <n> or CAMEL_MAX_RECURSION_DEPTH=<n>.	none: runtime: the recursion is deeper than the limit at run time, and the repair is in the program's logic
-runtime	TensorDimensionMismatch	0x000009	error	Tensor shape mismatch in '{0}': {1}.	Check the shapes of all operands involved in the operation and ensure they are compatible for broadcasting or direct computation.	none: runtime: the shapes meet only at run time, and the repair is in the program's logic
+runtime	TensorDimensionMismatch	0x000009	error	Array shape mismatch in '{0}': {1}.	Check the shapes of all operands involved in the operation and ensure they are compatible for broadcasting or direct computation.	none: runtime: the shapes meet only at run time, and the repair is in the program's logic
 runtime	UnrecognizedGraphPass	0x00000A	error	Unrecognized graph rewriting/scheduling/translation pass '{0}'.	Check the pass name for possible typos, or refer to the documentation to see the passes supported in the current version.	none: runtime: the fault is raised while the program runs, and the repair is in the program's logic
 runtime	TranslationRefused	0x00000B	error	Translation pass '{0}' refused the graph: {1}.	A translation pass only translates the graph the preceding passes left. Run the passes named in the message before it, or remove the construct it cannot express.	none: runtime: a translation pass refused the graph, and what to change is the program's structure
 runtime	PassInternalError	0x00000C	error	Pass '{0}' failed with an internal error: {1}.	The pass gave up without a diagnostic of its own: it built or was given a graph it cannot handle, which is a defect of the compiler rather than of the program. Try the pipeline without this pass or with the passes in another order, and report the program together with the pass list.	none: runtime: the fault is raised while the program runs, and the repair is in the program's logic
