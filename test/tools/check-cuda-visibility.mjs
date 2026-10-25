@@ -68,8 +68,13 @@ const CUDA_AWARE_MODULES = [
  * tests (a plan that stops naming its case, a scan that stops reading one) is red here, and so is
  * a new CUDA-aware Python test, which is the moment to decide its visibility on purpose. The
  * second number is the Python tests of the plans tagged `gpu`, the layer that must keep the cards.
+ *
+ * 31 -> 32 on 2026-10-26: `ort_core_slice` joined, the ONNX Runtime probe of the core's own slice
+ * (`feat/modules/onnx.plan.toml`). It is a CPU-only program -- it exports a model and compares
+ * values -- so it names no device and the runner hides the machine's cards from it, like every
+ * other ONNX Runtime probe in that plan.
  */
-export const EXPECTED_EXAMINED = 31
+export const EXPECTED_EXAMINED = 32
 export const EXPECTED_DEVICE_LAYER = 17
 
 function walkPlanFiles(dir, out = []) {
