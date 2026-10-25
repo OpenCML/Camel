@@ -766,6 +766,29 @@ NodeVMSchedPass::apply(const camel::runtime::Program *program, std::ostream &os)
     return nullptr;
 }
 
+slot_t NodeVMSchedPass::callFunction(
+    ::Function *function, std::span<const slot_t> arguments,
+    std::span<const slot_t> withArguments) {
+    ASSERT(function != nullptr, "callFunction needs a function value.");
+    ASSERT(
+        function->program() != nullptr && function->graph() != nullptr,
+        "callFunction needs a function value with a body.");
+    // The captures are read from the value immediately before the call: making the closure vector
+    // allocates, and a collection between reading the tuple and reaching the frame would move what
+    // the slots name. Nothing in between is a safepoint, and the value is the caller's, held where
+    // the caller's roots keep it up to date.
+    ::Tuple *captured = function->tuple();
+    std::vector<slot_t> closure;
+    if (captured != nullptr) {
+        closure.reserve(captured->size());
+        for (size_t i = 0; i < captured->size(); ++i) {
+            closure.push_back(captured->get<slot_t>(i));
+        }
+    }
+    return callGraph(
+        function->program(), function->graph(), arguments, withArguments, closure);
+}
+
 slot_t NodeVMSchedPass::callGraph(
     const camel::runtime::Program *program, camel::runtime::GCGraph *graph,
     std::span<const slot_t> arguments, std::span<const slot_t> withArguments,

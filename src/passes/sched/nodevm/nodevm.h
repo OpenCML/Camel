@@ -56,6 +56,18 @@ class NodeVMSchedPass : public RuntimeGraphSchedulePass {
     const camel::runtime::Program *
     apply(const camel::runtime::Program *program, std::ostream &os) override;
 
+    /// Runs `function`'s body with `arguments` for its ordinary parameters and `withArguments` for
+    /// its `with` parameters, and returns its value. This is the entry point for calling a function
+    /// *value*: what its body captured where it was written lives in the closure the value was made
+    /// with (`function->tuple()`), which only the holder of the value knows, so a caller that holds
+    /// the value has no way of leaving those captures empty. `callGraph` is the entry point below
+    /// it, for the graph of a function whose value the caller does not hold -- a graph a context
+    /// published for an instance, or the entry of a program -- and there the closure is the
+    /// caller's to pass, and empty when the caller has none.
+    slot_t callFunction(
+        ::Function *function, std::span<const slot_t> arguments,
+        std::span<const slot_t> withArguments = {});
+
     /// Runs `graph` of `program` once with `arguments` for its ordinary parameters, `withArguments`
     /// for its `with` parameters, `closure` for the values its body captured, and returns its
     /// value. For a function written in Camel that a native caller runs (a pass written in Camel,
