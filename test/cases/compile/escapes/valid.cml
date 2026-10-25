@@ -1,5 +1,5 @@
 /**
- * H217: the escapes that stay valid, in the three string forms. Nothing here is an unknown
+ * The escapes that stay valid, in the three string forms. Nothing here is an unknown
  * escape, so the program compiles and runs without a warning.
  */
 module escapes_valid

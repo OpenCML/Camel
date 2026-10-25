@@ -1,5 +1,5 @@
-/// H220 trap 3: two module roots each hold `pkg/helper.cml` and `pkg/lib.cml`. The first `-I`
-/// root wins `pkg.helper`; that helper's own directory is the first root's `pkg/`, so its `lib`
+/// Trap 3: two module roots each hold `pkg/helper.cml` and `pkg/lib.cml`. The first `-I` root
+/// wins `pkg.helper`; that helper's own directory is the first root's `pkg/`, so its `lib`
 /// comes from there too, not from the second root's `pkg/lib.cml`.
 module main_roots
 

@@ -670,8 +670,8 @@ BranchArmEntries::BranchArmEntries(
     // The first node of each arm region in the order of the plan, whatever it does: an
     // interpreter resumes the arm at this position and runs the events of the loops that start
     // there before the node, so the first round of a loop can begin at a position whose node is
-    // only a port or a constant that does nothing by itself (a loop in an arm; H45). The nodes of
-    // the regions inside an arm are its nodes too, so what is found for a region is handed to the
+    // only a port or a constant that does nothing by itself (a loop in an arm). The nodes of the
+    // regions inside an arm are its nodes too, so what is found for a region is handed to the
     // region around it. A node of an arm laid out before its BRCH was needed by code outside the
     // branch and runs whether the arm is taken or not: it is no part of the range the BRCH jumps
     // over.
@@ -877,7 +877,7 @@ void writeRuntimeFillSlots(
         ASSERT(closureData != nullptr, "Runtime FILL function closure storage is null.");
         const auto *tupleType = func->tupleType();
         for (size_t i = 0; i < values.size(); ++i) {
-            // A closure capture is a stored value (H28 review item 1): a view must have been
+            // A closure capture is a stored value (review item 1): a view must have been
             // materialised before it is captured.
             CAMEL_ASSERT_NOT_VIEW(
                 values[i], tupleType->typeAt(slots[i]), "a closure capture");

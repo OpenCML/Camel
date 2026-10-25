@@ -4,8 +4,7 @@
  * them: `array:sort_i`, `array:sort_l`, `array:sort_f`, `array:sort_d`). bf16 and f16 are numbers
  * (`is_numeric` asks `is_float`), so the call is refused by name, where it is written, with what to
  * write instead rather than with a list of overloads that could never match: nothing is sorted as
- * raw two-byte slots, and the refusal is no longer the kernel's (H393; the ruling's
- * 「不在运行期拒绝」).
+ * raw two-byte slots, and the refusal is no longer the kernel's ('s 「不在运行期拒绝」).
  */
 module stdlib_reduced_sort_refused
 

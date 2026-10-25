@@ -1,14 +1,12 @@
 #!/usr/bin/env node
 /**
  * A `.cml` beside a `.cmo` of the same name is the declaration module of that C++ module, and it
- * may hold Camel definitions as well as the declarations of the C++ operators (ruling
- * impl-kernel-site, 2026-10-23: "声明模块可以有函数体，`DeclarationModuleHasBody` 删除"; H94: the
- * pair is one module; design principles 10.4: everything else is defined in Camel). The pair is
- * made in the test's own scratch directory out of the stdlib `bytes` module: the module's own
- * `.cml` gains one definition, which the program uses together with the C++ operators the same
- * file declares.
- *
- * Usage: node declaration_module_body.mjs
+ * may hold Camel definitions as well as the declarations of the C++ operators
+ * ("声明模块可以有函数体，`DeclarationModuleHasBody` 删除";: the pair is one module; design principles 10.4:
+ * everything else is defined in Camel). The pair is made in the test's own scratch directory out
+ * of the stdlib `bytes` module: the module's own `.cml` gains one definition, which the program
+ * uses together with the C++ operators the same file declares. Usage: node
+ * declaration_module_body.mjs
  */
 
 import fs from 'fs'

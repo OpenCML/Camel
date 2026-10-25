@@ -97,7 +97,7 @@ def check(path: Path, model: str, label: str) -> bool:
     onnx.checker.check_model(loaded, full_check=True)
     ops = op_types(loaded.graph)
     # A conversion that only names the value must leave no node at all: neither the ONNX Cast an
-    # element type conversion would need nor the Reshape a data movement would need (H41). The
+    # element type conversion would need nor the Reshape a data movement would need. The
     # identity conversion exports as nothing. `walk`'s loop condition is the one place where an
     # ONNX Cast is the operator's own (the counter's comparison), not a struct conversion: check
     # it here rather than forbidding the operator.

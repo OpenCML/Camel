@@ -2,33 +2,25 @@
 // SPDX-License-Identifier: MIT
 
 /*
- * Phase timing of one compiler run: where the wall-clock time and the heap allocations of
- * `camel x.cml <passes>` go, phase by phase (start-up, parse, GCT, GIR, each pass, teardown).
- *
- * Off by default. It is switched on by `camel --time-phases` (standard error),
- * `camel --time-phases=<file>` or by the environment variable CAMEL_TIME_PHASES=<file>
- * (`-` is standard error), and the report is one JSON
- * object: one entry per phase with its wall-clock time and its CPU time (user + system; -1 where
- * the platform has no such accounting), and with the counting allocator
- * also its allocations; benchmarks/compile/ renders the tables.
- *
- * The two times answer different questions. The wall clock is what a user waits for and what the
- * host's load stretches: a CPU-bound phase reads several times longer on a busy host without
- * having used more CPU. CPU time is what the phase itself cost, and it is what a ceiling that
- * should mean a regression is read against (the author's ruling of 2026-10-23,
- * docs/handover/reviews/questions-2026-10-23.md, "declaration-cost-gate").
- *
- * Cost when off: a Scope is one load of a global flag and one branch at each end, and scopes
- * are only placed around whole phases (a module, a pass), never inside a loop over nodes.
- *
- * A phase is a named interval; phases nest (the GIR phase of a module contains the phases of
- * the modules it imports) and repeat (one "gct" per module). Each one records its start, its
- * duration and, when the counting allocator shim (test/tools/allocshim) is preloaded, the
- * number and bytes of heap allocations made while it was open. The shim is found by symbol
- * at run time; without it the allocation fields are absent from the report.
- *
- * The recorder is process-wide and meant for the thread that drives the compilation: scopes
- * opened on other threads are ignored (their nesting could not be told apart).
+ * Phase timing of one compiler run: where the wall-clock time and the heap allocations of `camel
+ * x.cml <passes>` go, phase by phase (start-up, parse, GCT, GIR, each pass, teardown). Off by
+ * default. It is switched on by `camel --time-phases` (standard error), `camel
+ * --time-phases=<file>` or by the environment variable CAMEL_TIME_PHASES=<file> (`-` is standard
+ * error), and the report is one JSON object: one entry per phase with its wall-clock time and
+ * its CPU time (user + system; -1 where the platform has no such accounting), and with the
+ * counting allocator also its allocations; benchmarks/compile/ renders the tables. The two times
+ * answer different questions. The wall clock is what a user waits for and what the host's load
+ * stretches: a CPU-bound phase reads several times longer on a busy host without having used
+ * more CPU. CPU time is what the phase itself cost, and it is what a ceiling that should mean a
+ * regression is read against. Cost when off: a Scope is one load of a global flag and one branch
+ * at each end, and scopes are only placed around whole phases (a module, a pass), never inside a
+ * loop over nodes. A phase is a named interval; phases nest (the GIR phase of a module contains
+ * the phases of the modules it imports) and repeat (one "gct" per module). Each one records its
+ * start, its duration and, when the counting allocator shim (test/tools/allocshim) is preloaded,
+ * the number and bytes of heap allocations made while it was open. The shim is found by symbol
+ * at run time; without it the allocation fields are absent from the report. The recorder is
+ * process-wide and meant for the thread that drives the compilation: scopes opened on other
+ * threads are ignored (their nesting could not be told apart).
  */
 
 #pragma once

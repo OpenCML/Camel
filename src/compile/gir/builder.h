@@ -246,7 +246,7 @@ class Builder {
 
     /// The entities the modules of this program export. One table per program: declaring a
     /// module again for another program (a pass compiled as a program of its own) writes that
-    /// program's table, not this one (task H42).
+    /// program's table, not this one (task).
     camel::core::module::ProgramExports &exports() { return *exports_; }
     const camel::core::module::ProgramExports &exports() const { return *exports_; }
 
@@ -292,8 +292,7 @@ class Builder {
     /// The instance of one registered generic rule at `types`: its two sides and its condition,
     /// built here, in the builder the rule's templates belong to (where it was declared). Answers
     /// false with `why` when no instance can be made, and reports nothing on the way: a failed
-    /// instantiation is quiet (the ruling of 2026-10-23 on
-    /// `generic-rule-instantiation-set-and-predicate`), and only `why_not` repeats `why`.
+    /// instantiation is quiet, and only `why_not` repeats `why`.
     ///
     /// Public because the context's table of generic rules calls it where a rule is applied
     /// (rule_templates.cpp): the library was built long before, and an instance belongs to the
@@ -302,8 +301,7 @@ class Builder {
         const GenericRuleEntry &entry, const std::vector<Type *> &types, compile_graph_ptr_t &lhs,
         compile_graph_ptr_t &rhs, compile_graph_ptr_t &when, std::string &why);
 
-    /// What the condition of a generic rule says about one type tuple, at compile time (the ruling
-    /// of 2026-10-24 on `generic-rule-check-surface-and-multi-parameter-instances`: `check`
+    /// What the condition of a generic rule says about one type tuple, at compile time (`check`
     /// enumerates the instances of a generic rule over the registered types that its condition
     /// admits). The condition's type-level part alone is asked -- the type arguments of its
     /// predicate calls are bound to the tuple -- so nothing is instantiated and nothing is
@@ -365,9 +363,9 @@ class Builder {
         GCT::node_ptr_t exportList = nullptr;
         // Whether step two found it in error.
         bool failed = false;
-        // The body-less declarations of the module (handover H19, step 1): per name, the
-        // operator URI each rule declares and the rule itself. They are exported as one
-        // operator group once every declaration of the module has been read.
+        // The body-less declarations of the module (step 1): per name, the operator URI
+        // each rule declares and the rule itself. They are exported as one operator
+        // group once every declaration of the module has been read.
         struct NativeOperators {
             std::string name;
             // Where the first declaration of the name is written, for a diagnostic about the
@@ -377,8 +375,8 @@ class Builder {
         };
         std::vector<NativeOperators> nativeOperators;
         // The groups those declarations make, by name: the ones the module exports and the
-        // private ones, which only its own bodies call (handover H94, ruling 3). A module's
-        // private operator is not an entity of the module.
+        // private ones, which only its own bodies call. A module's private operator is not
+        // an entity of the module.
         std::unordered_map<std::string, oper_group_ptr_t> nativeOperatorGroups;
         // The names of the body-less declarations of the module that declare a pass, not an
         // operator (design principles 9.3): `when is_function::<F>()` is the pass's
@@ -421,11 +419,11 @@ class Builder {
     // principles 10.4): a direct call of the function is a call of the kernel instead; the
     // graph is kept for what asks to look inside (autodiff, fusion, export, a rule).
     std::unordered_map<DraftGraphBuilder *, ImplKernel> implKernels_;
-    // The kernel a generic `#impl` function declares, by its template (ruling impl-kernel-site;
-    // design principles 10.4, H228: one operator, per-type executors). A generic function's
-    // instances have signatures of their own, so which rule of the kernel's declaration is the
-    // executor is decided when the instance is built (adoptImplKernel); an instance whose types
-    // no rule accepts keeps the body, which is the semantics.
+    // The kernel a generic `#impl` function declares, by its template (one operator, per-type
+    // executors). A generic function's instances have signatures of their own, so which rule of
+    // the kernel's declaration is the executor is decided when the instance is built
+    // (adoptImplKernel); an instance whose types no rule accepts keeps the body, which is the
+    // semantics.
     struct ImplTemplateKernel {
         std::string name;
         std::string uri;
@@ -536,10 +534,10 @@ class Builder {
     // everything but the functions with decorators, which exist once their bodies are built
     // (`decorated`).
     void exportDeclarations(const GCT::node_ptr_t &expt, bool decorated);
-    // A body-less declaration of the current module (design principles 6.4; handover H19, step
-    // 1): checked against the operator table and the loaded executors, then kept as a rule of
-    // the operator group of its name. A body-less declaration with the pass applicability is
-    // not an operator; see `isPassDeclaration`.
+    // A body-less declaration of the current module (design principles 6.4; step 1): checked
+    // against the operator table and the loaded executors, then kept as a rule of the operator
+    // group of its name. A body-less declaration with the pass applicability is not an
+    // operator; see `isPassDeclaration`.
     void declareNativeOperator(const GCT::node_ptr_t &gct);
     // Whether a body-less declaration declares a pass (design principles 9.3): its applicability
     // condition is `is_function::<T>()`, the same condition the pipeline reads from the module's
@@ -548,11 +546,11 @@ class Builder {
     static bool isPassDeclaration(const GCT::node_ptr_t &gct);
     // Exports the operator groups of the body-less declarations of the current module, one group
     // per declared name, after its declarations were read. A name the module's export list
-    // `exportList` does not have stays private to the module (handover H94, ruling 3).
+    // `exportList` does not have stays private to the module.
     void exportNativeOperators(const GCT::node_ptr_t &exportList);
     // The entity `ref` names in the module whose code is being built: one of its body-less
     // declarations (exported or private) or a name the C++ module it declares brings, before
-    // what an import brings under the same name (design principles 10.1, 10.2; handover H94).
+    // what an import brings under the same name (design principles 10.1, 10.2).
     std::optional<camel::core::module::entity> ownNativeEntity(const Reference &ref);
     // The operator URI a body-less declaration names, from its `#op<'...'>` tag when it has one.
     std::optional<std::string> nativeOperatorUri(const GCT::node_ptr_t &gct);
@@ -783,21 +781,20 @@ class Builder {
     // (partialApplicationOf builds the call from it).
     std::unordered_map<node_handle_t, GCT::node_ptr_t> boundWithCallee_;
     // The `f<w>` expression that made the binding. Everything the partial application makes is
-    // located there: the expression itself, not the statement it is written in (H9 1.6).
+    // located there: the expression itself, not the statement it is written in (1.6).
     std::unordered_map<node_handle_t, GCT::node_ptr_t> boundWithOrigin_;
     // The candidates of such a binding when the pass being used has several and the position
-    // has not chosen one (H27e). The ambiguity is reported when the binding is refused for
-    // good (rejectUnappliedBinding): visiting a value first must not preempt the position
-    // that may still say which function is meant (`apply(scale<2>, 1.5)`).
+    // has not chosen one (e). The ambiguity is reported when the binding is refused for good
+    // (rejectUnappliedBinding): visiting a value first must not preempt the position that
+    // may still say which function is meant (`apply(scale<2>, 1.5)`).
     std::unordered_map<node_handle_t, std::vector<camel::core::type::FunctionType *>>
         ambiguousBindings_;
-    // The default of a parameter (design principles 4.4, handover H235/H276): the constant a call
-    // fills in when it leaves the parameter out, and the expression it was written as (where a
-    // diagnostic about it points). Evaluated once, where the declaration is, and the same value
-    // goes into every call: a default is never evaluated at a call site, and it is not part of
-    // the function's type, so a function value made from the declaration does not carry it.
-    // Ordinary parameters and `with` parameters follow the same rule, each aligned with its own
-    // parameter list.
+    // The default of a parameter (design principles 4.4, /): the constant a call fills in when it
+    // leaves the parameter out, and the expression it was written as (where a diagnostic about it
+    // points). Evaluated once, where the declaration is, and the same value goes into every call:
+    // a default is never evaluated at a call site, and it is not part of the function's type, so
+    // a function value made from the declaration does not carry it. Ordinary parameters and
+    // `with` parameters follow the same rule, each aligned with its own parameter list.
     struct ParameterDefaultValue {
         data_ptr_t data;
         GCT::node_ptr_t expr;
@@ -945,12 +942,11 @@ class Builder {
         camel::source::origin_id_t writtenAt = camel::source::kInvalidOriginId,
         const std::string &reason = {});
 
-    // ---- The value of a body (design principles 5.1: a return position) ----
-    // The last statement of a body is the value the body hands on, so it is a position with an
-    // expected type: the body's declared type when it has one (`func f(): void! { if … }`), else
-    // the type the place the body stands at asks for (a branch arm's `if`). A `return` written
-    // in an arm of that statement takes the type from there, not from the function's declared
-    // return type (handover H24).
+    // ---- The value of a body (design principles 5.1: a return position) ---- The last
+    // statement of a body is the value the body hands on, so it is a position with an expected
+    // type: the body's declared type when it has one (`func f: void! { if … }`), else the type
+    // the place the body stands at asks for (a branch arm's `if`). A `return` written in an arm
+    // of that statement takes the type from there, not from the function's declared return type.
     Type *ownDeclaredExitType() const;
     Type *tailPositionType() const;
     // See the definition: the hint for a call that put with-arguments in the parentheses.
@@ -1044,8 +1040,7 @@ class Builder {
     /// only retypes a constant -- `null` into a `T?` -- is the constant of the type it retypes it
     /// to, and carries it too.
     data_ptr_t constantOfNode(node_handle_t node) const;
-    /// The sequence a `static loop` walks when its head writes one out (`for i in <序列>`; H462
-    /// and the ruling of 2026-10-25 on which `in` forms count, H475). One rule draws the line:
+    /// The sequence a `static loop` walks when its head writes one out. One rule draws the line:
     /// the expression after `in` is a sequence the compiler works out when it is built only from
     /// compile-time constants -- literals, names bound to constants, the rounds of an enclosing
     /// `static` expansion -- joined by operations that are pure and cannot fail (the predicate
@@ -1401,12 +1396,12 @@ class Builder {
         const oper_group_ptr_t &ops, std::vector<Argument> &withInputs,
         std::vector<Argument> &normInputs, camel::core::type::type_vec_t &withTypes,
         camel::core::type::type_vec_t &normTypes, const GCT::node_ptr_t &call);
-    // ---- Build-time tuples (H51 step 6) ----
-    // A tuple that is known while the graph is built: its type and its element nodes, without a
-    // FILL node. A rest parameter's `ts` and a tuple comprehension are the two producers.
-    // `indices` reads only the type, `ts.[j]` selects an element, and `..ts` splices the
-    // elements; none of those builds a node for the tuple. A runtime use either materializes one
-    // FILL (a comprehension is a value expression) or is refused (`ts` is not a value).
+    // ---- Build-time tuples (step 6) ---- A tuple that is known while the graph is built: its
+    // type and its element nodes, without a FILL node. A rest parameter's `ts` and a tuple
+    // comprehension are the two producers. `indices` reads only the type, `ts.[j]` selects an
+    // element, and `..ts` splices the elements; none of those builds a node for the tuple. A
+    // runtime use either materializes one FILL (a comprehension is a value expression) or is
+    // refused (`ts` is not a value).
     struct StaticTuple {
         Type *type = nullptr; // TupleType of `elements`
         std::vector<node_handle_t> elements;
@@ -1418,11 +1413,11 @@ class Builder {
         /// Where the tuple was written, for the escape diagnostic and the materialized FILL.
         GCT::node_ptr_t origin;
     };
-    // ---- Rest parameters (design principles 5.5, H51 step 6) ----
-    // A rest function has no runtime arity, so it is never an instance: each direct call
-    // expands its body into the caller's graph, with the fixed parameters bound to the argument
-    // nodes and the rest parameter bound to the nodes the call's arguments leave over. The
-    // expansion is built here, once per call; there is no call node and no tuple fill.
+    // ---- Rest parameters (design principles 5.5, step 6) ---- A rest function has no runtime
+    // arity, so it is never an instance: each direct call expands its body into the caller's
+    // graph, with the fixed parameters bound to the argument nodes and the rest parameter bound
+    // to the nodes the call's arguments leave over. The expansion is built here, once per call;
+    // there is no call node and no tuple fill.
     struct RestBinding {
         std::string name;
         StaticTuple tuple; // the build-time tuple `ts`; not a value
@@ -1514,9 +1509,9 @@ class Builder {
     static bool sameImplSignature(FunctionType *function, FunctionType *kernel);
     /// Adopts the executor of the instance `graph` of the generic `#impl` function `tmpl`: the
     /// rule of the kernel's declaration that accepts `funcType`, if any. Chosen here, at
-    /// instantiation, because that is when the instance's types are known (ruling
-    /// impl-kernel-site; H228). An instance no rule accepts has no executor: it runs the body,
-    /// which is the semantics, and gives the same result.
+    /// instantiation, because that is when the instance's types are known. An instance no rule
+    /// accepts has no executor: it runs the body, which is the semantics, and gives the same
+    /// result.
     void adoptImplKernel(
         const generic_template_ptr_t &tmpl, const compile_graph_ptr_t &graph, FunctionType *funcType);
     /// Whether the rule `rule` of a body-less declaration applies to an instance of these types:
@@ -1552,15 +1547,14 @@ class Builder {
     /// compile-time values of constant arguments, as for `OperatorGroup::resolveForCall`.
     ///
     /// Two candidates that both write `when` and both hold for the arguments are an ambiguity,
-    /// not a choice: the order two declarations of one name are written in decides nothing (the
-    /// language author's ruling of 2026-10-23 on `two-when-conditions-hold`,
-    /// docs/handover/reviews/questions-2026-10-23.md), and the declaration-time check asks about
-    /// one type at a time, so the call site is the first place that can see the pair. Every such
-    /// candidate is recorded in `ambiguous` as `signature — when condition`, sorted and without
-    /// repeats, so that the report is the same whichever order the declarations are written in;
-    /// the caller reports it (AmbiguousCall, which names the call and lists them). A candidate
-    /// that writes no condition is not part of that list: which overload without `when` the group
-    /// answers with today is a separate question, left as it is.
+    /// not a choice: the order two declarations of one name are written in decides nothing, and
+    /// the declaration-time check asks about one type at a time, so the call site is the first
+    /// place that can see the pair. Every such candidate is recorded in `ambiguous` as `signature
+    /// — when condition`, sorted and without repeats, so that the report is the same whichever
+    /// order the declarations are written in; the caller reports it (AmbiguousCall, which names
+    /// the call and lists them). A candidate that writes no condition is not part of that list:
+    /// which overload without `when` the group answers with today is a separate question, left as
+    /// it is.
     ///
     /// The returned index is the first candidate in the group's own order — the fixed signatures
     /// first, then the order the rules were written in. It is what a call with fewer than two
@@ -1787,7 +1781,7 @@ class Builder {
     /// `(n, F, tags)`. Empty for a field with no tags, for a type that is not a named struct and
     /// for a type declared by another module (the facts of a field live in the module that
     /// declares the type, and reading a tag's value from Camel code waits for tag reflection --
-    /// design principles 6.2 and the handover's H51 Q5, which puts `(n, F, tags)` with it).
+    /// design principles 6.2, which puts `(n, F, tags)` with it).
     node_handle_t staticFieldTagsNode(
         Type *subject, size_t index, const GCT::node_ptr_t &where);
     // functionValueOf, and FunctionNameAsValue when `name` has no single function value.
@@ -1850,7 +1844,7 @@ class Builder {
     void rejectUnappliedBinding(node_handle_t node, const GCT::node_ptr_t &origin);
     /// An error at `origin` when a call has several candidates in the pass it is making:
     /// the exact matches when there are any, otherwise the functions a literal enters
-    /// (design principles 5.1, H27e). An ordinary call, an operator call and a partial
+    /// (design principles 5.1, e). An ordinary call, an operator call and a partial
     /// application used as a value all report through this one, so they cannot drift.
     /// Declaration order never settles the choice; the candidates are listed and the help
     /// says how to choose one. Throws BuildAbortException.
@@ -1977,10 +1971,9 @@ class Builder {
     node_handle_t visitLinkNode(const GCT::node_ptr_t &gct);
     /// `a..b` (the GCT link of `kCompositionCall`): the composition of two functions, or the
     /// interval of two integers, told apart by the types of the two operands (design principles
-    /// 4.2; the author's ruling of 2026-10-24 on `h248-generator-and-composition`). `expected`
-    /// is the type of the position the whole expression stands in: a function type there is the
-    /// type the lambda `(x) => g(f(x))` would have and instantiates the operands (the ruling,
-    /// section generic-operands-of-composition).
+    /// 4.2). `expected` is the type of the position the whole expression stands in: a function
+    /// type there is the type the lambda `(x) => g(f(x))` would have and instantiates the
+    /// operands.
     node_handle_t buildComposition(const GCT::node_ptr_t &gct, Type *expected);
     /// The same, from two operands already built: the sequence position of a loop builds them
     /// itself, to know whether the interval is the loop's form before the rest of `..` is built.
@@ -2003,7 +1996,7 @@ class Builder {
         const GCT::node_ptr_t &gct);
     /// The interval `a..b` of two integers as the array `int[]`. The form it is written in is
     /// `a..b` and nothing else: the two-parameter `range(a, b)` it used to be the same operation
-    /// as is gone (design principles 4.2, the ruling of 2026-10-24).
+    /// as is gone (design principles 4.2).
     node_handle_t intervalValue(
         node_handle_t lhs, node_handle_t rhs, const GCT::node_ptr_t &gct);
     node_handle_t visitWithNode(const GCT::node_ptr_t &gct);
@@ -2044,19 +2037,18 @@ class Builder {
     bool typeCaseMatches(Type *subject, const GCT::node_ptr_t &caseNode) const;
 
     /// Whether a name read in a case body that is not selected names something. It walks the
-    /// same layers as visitDRefNode, but builds no node and checks no type (H51 step 1, Q10).
+    /// same layers as visitDRefNode, but builds no node and checks no type (step 1, Q10).
     bool valueNameExists(const std::string &written, const GCT::node_ptr_t &gct);
 
     /// Resolve the names of a case body that is not selected: its own `let`/`var` names bind,
     /// and every other name must exist. No graph node is made and no type is checked.
     void resolveStaticBodyNames(const GCT::node_ptr_t &body);
-    /// Resolve the names of a generic declaration where it is declared (the ruling of 2026-10-24
-    /// on `generic-rule-condition-unresolved-name`, docs/handover/reviews/questions-2026-10-23.md):
-    /// the parameters bind, every other name its body writes must exist, and the declaration-site
-    /// half of its `when` clause is answered. No graph node is made and no type is read, so what
-    /// the check needs from the type parameters -- an operator overload, a field, the argument of
-    /// a call -- stays with the instantiation. A name that is not one at all is reported here, on
-    /// the declaration's line, and the module does not load.
+    /// Resolve the names of a generic declaration where it is declared: the parameters bind, every
+    /// other name its body writes must exist, and the declaration-site half of its `when` clause is
+    /// answered. No graph node is made and no type is read, so what the check needs from the type
+    /// parameters -- an operator overload, a field, the argument of a call -- stays with the
+    /// instantiation. A name that is not one at all is reported here, on the declaration's line,
+    /// and the module does not load.
     void resolveGenericTemplateNames(const generic_template_ptr_t &tmpl);
     /// The names a function's own parameters bind, for a body read where it is written: every
     /// parameter's name, and the names a parameter destructured as a tuple binds
@@ -2088,7 +2080,7 @@ class Builder {
     /// The per-state half of markLoopStateInPlace: rewrites state `index` when its next value
     /// (`next`) is `state->append<v>` and the body uses that state's parameter nowhere else.
     /// `initialIsPrivate`: the first value is a projection of a value the loop does not own (a
-    /// part of a struct state, H71); it is copied once before the loop either way.
+    /// part of a struct state); it is copied once before the loop either way.
     void markLoopStateInPlaceOne(
         const arm_ptr_t &body, const GCT::node_ptr_t &loop, std::vector<node_handle_t> &initial,
         size_t index, node_handle_t next, bool initialIsPrivate = false);
@@ -2292,7 +2284,7 @@ class Builder {
     OperatorOverloads operatorOverloadsOf(const std::string &group);
     /// The entity a name the current module imports stands for in this program
     /// (ProgramExports::importedEntity): the import bindings resolved against this program's
-    /// exported entities. The same module in two programs may see different graphs (task H42).
+    /// exported entities. The same module in two programs may see different graphs (task).
     std::optional<camel::core::module::entity> importedEntity(
         const Reference &ref,
         camel::core::module::ImportLayer layer = camel::core::module::ImportLayer::All) {
@@ -2395,7 +2387,7 @@ class Builder {
     /// (rejectUnusedPureResult).
     const GCT::Node *unusedStatement_ = nullptr;
 
-    // ---- Comprehensions and static access (H51 steps 3 and 4) ------------------------------
+    // ---- Comprehensions and static access (steps 3 and 4) ------------------------------
     //
     // `t.[n].[m]` inside a `static for` names the same parent once per inner round. The parent's
     // value does not change between the rounds of one expansion (the target is the same node:
@@ -2616,7 +2608,7 @@ class Builder {
     /// then the other arms decide through the join). The declared return type of the function
     /// is not the expected type of an arm's `return`: the value of an arm is the branch's, and
     /// the declared type is checked where the function itself returns (language reference
-    /// 7.3, handover H24).
+    /// 7.3).
     camel::core::type::Type *expectedExitTypeHere() const;
     /// What `return value` / `throw value` hands back: the value put into the declared
     /// `T?` / `T!`, or the failed form of the declared `T!`.

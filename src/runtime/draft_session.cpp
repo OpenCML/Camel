@@ -733,14 +733,14 @@ bool sameContent(const GCGraph &before, const GCGraph &after) {
 // ---------------------------------------------------------------------------------------------
 // The Debug-only safepoint draft-root check.
 //
-// The red line (handover note ⟨b2dbdd6⟩ (H74)): while a session holds a draft open, every safepoint the session
-// reaches must keep the draft's static values relocatable, or a collection at that safepoint
-// leaves the raw slots in the draft pointing at where the objects were. The root registration
-// itself stays where it is: the session's RootScope registers an external tracer, and a
-// DraftWritings's EngineRootScope covers the one draft it is made for. This section keeps only
-// the record the check needs: which sessions are alive, which drafts each has open, and which of
-// the existing scopes cover them. It registers no root of its own, so a path cannot satisfy the
-// check by registering somewhere else than the collector.
+// The red line: while a session holds a draft open, every safepoint the session reaches must keep
+// the draft's static values relocatable, or a collection at that safepoint leaves the raw slots in
+// the draft pointing at where the objects were. The root registration itself stays where it is: the
+// session's RootScope registers an external tracer, and a DraftWritings's EngineRootScope covers
+// the one draft it is made for. This section keeps only the record the check needs: which sessions
+// are alive, which drafts each has open, and which of the existing scopes cover them. It registers
+// no root of its own, so a path cannot satisfy the check by registering somewhere else than the
+// collector.
 //
 // The check runs at the start of every safepoint (gen.h, gen.cpp), not only at a collecting one,
 // so a path that forgets a scope is reported at the first safepoint it reaches rather than at the
@@ -1321,8 +1321,8 @@ std::vector<GraphId> RuntimeGraphDraftSession::conflicts() const {
     // real conflict. A session over a private program — the ONNX export's bound copy, a function
     // value's program, a subgraph root, a detached rewrite — holds a program that nobody else
     // writes, whose ids are not versions of the context's program at all: comparing the two
-    // reports every graph the copy made or replaced as a conflict (H112). There is nothing to
-    // check for those, and a checked commit must not refuse work it owns.
+    // reports every graph the copy made or replaced as a conflict. There is nothing to check for
+    // those, and a checked commit must not refuse work it owns.
     const bool contextProgram = mayPublish_ || current == program_;
     if (!contextProgram || runtimeRoot_ != program_->root()) {
         return {};

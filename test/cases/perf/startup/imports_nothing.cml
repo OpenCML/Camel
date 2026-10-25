@@ -1,4 +1,4 @@
 // The smallest program that runs: one line, no imports. `perf.startup` times the whole process
-// of `camel imports_nothing.cml std::nvm` (handover H142), so that a change which starts loading
-// the standard library before the program runs shows up as a regression.
+// of `camel imports_nothing.cml std::nvm`, so that a change which starts loading the standard
+// library before the program runs shows up as a regression.
 func main(): int { return 0 }

@@ -1,7 +1,7 @@
 /**
  * A comprehension rebuilds a tree of the same shape through `match type`: the struct case packs
- * a struct, the tuple case a tuple, and a leaf is itself (H51 step 4). This is the Camel
- * spelling of the C++ `tree_map` expansion, and it is a single instance per field type.
+ * a struct, the tuple case a tuple, and a leaf is itself (step 4). This is the Camel spelling
+ * of the C++ `tree_map` expansion, and it is a single instance per field type.
  */
 module comprehensions_rebuild
 

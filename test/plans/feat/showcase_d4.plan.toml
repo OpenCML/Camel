@@ -3,12 +3,12 @@ order = 912
 tier = "fast"
 tags = ["feat", "showcase", "d4", "mcts", "search", "recursion"]
 
-# The MCTS showcase (showcase/d4-mcts, H13 D4).  The whole standard output is pinned at a stated
-# seed and playout count on the four back ends: the tree a search builds is a value, so every
-# visit count, every sum and the move it chose are reproducible numbers, and a search that
-# selected differently would print a different line.  The properties in the verify scripts are the
-# ones a reader can check by hand: a move that wins now is worth exactly 1, the only move that
-# does not lose is the one the search picks, and a search that examined nothing must fail.
+# The MCTS showcase (showcase/d4-mcts, D4). The whole standard output is pinned at a stated seed
+# and playout count on the four back ends: the tree a search builds is a value, so every visit
+# count, every sum and the move it chose are reproducible numbers, and a search that selected
+# differently would print a different line. The properties in the verify scripts are the ones a
+# reader can check by hand: a move that wins now is worth exactly 1, the only move that does not
+# lose is the one the search picks, and a search that examined nothing must fail.
 #
 # `guard.*` are the refusals: an unreachable position, a position that is already over, and a
 # search with no playouts.  Each exits 1 with its own message and never prints a chosen move.

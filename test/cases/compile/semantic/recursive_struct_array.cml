@@ -1,9 +1,8 @@
 /**
- * A struct that mentions itself through an array (design principles 5.2, H23b). `Node` is one
+ * A struct that mentions itself through an array (design principles 5.2, b). `Node` is one
  * nominal type whose `children` field is a `Node[]`: the name is in scope while the fields are
  * read, so the field denotes the same type object the declaration denotes. The recurrence is
  * bounded by a pointer — the array holds Nodes by reference — and a value is a finite tree.
- *
  * The node value is a GC object of two slots; the children are a slot array (a Node holds a
  * reference, so it is not pure data and its array is not a data block). The collector traces
  * the array's elements with the element type `Node`, so a live tree keeps its whole subtree.

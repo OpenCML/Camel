@@ -1,5 +1,5 @@
 /**
- * The graph of a `static loop` (H51 step 5) is the hand-written unfolded fold: one ACCS per
+ * The graph of a `static loop` (step 5) is the hand-written unfolded fold: one ACCS per
  * field in declaration order, one addition per round, and no SLOOP, LOOP, SFOR or SACC node.
  */
 module static_loop_graph

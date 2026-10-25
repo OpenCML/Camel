@@ -1,4 +1,4 @@
-# The cost of everything `camel` does before a program runs (handover H142).
+# The cost of everything `camel` does before a program runs.
 #
 # A declaration module (`stdlib/<module>.cml`) is parsed and compiled like a library when it is
 # imported. The tool derives their set and their declaration count from the tree, so a new module is
@@ -7,18 +7,18 @@
 # one-line program with no imports, `inspect --ops` on a program that imports every standard library
 # module, and that same program run through `std::nvm`.
 #
-# The unit is CPU time (user + system), not the wall clock -- the author's ruling of 2026-10-23
+# The unit is CPU time (user + system), not the wall clock -- reading the host's load instead is
 # (docs/handover/reviews/questions-2026-10-23.md, "declaration-cost-gate" (a)):
 #
 #   "改量 CPU 时间，不量墙钟。共享主机上的墙钟随负载漂移，这正是 40/45/100/90 ms 在负载 106–130
-#    下报红的原因；进程的 CPU 时间（用户态 + 内核态）基本不随负载变（H167 的判定已经用 CPU 中位数）。
+#    下报红的原因；进程的 CPU 时间（用户态 + 内核态）基本不随负载变（判定已经用 CPU 中位数）。
 #    四条命令的天花板改为按 CPU 时间、取安静主机中位数加余量；"负载下红不算回归"的口径因此不需要。"
 #
 # So a crossed ceiling is a regression and never "the host was busy": the 1/5/15-minute load average
 # is printed beside the numbers as provenance, not as an excuse, and the wall clock is not gated at
 # all. Each ceiling is about two and a half times the quiet median of its command. Measured on the
 # Linux host (AMD EPYC 7343, 32 threads) on 2026-10-23 -- sixty fresh processes per command (five
-# samples of twelve) in each of four windows, at load 92.9, 75.2, 72.6 and 68.7 -- with H177's window
+# samples of twelve) in each of four windows, at load 92.9, 75.2, 72.6 and 68.7 -- with the window
 # at load 21.4, which read the same CPU time, as the quiet column:
 #
 #   version          median 4.2-5.0 ms (samples 4.2-5.8)     quiet 4.89   ceiling 12
@@ -30,35 +30,34 @@
 # percentage budget: the small commands' cost jumping to the full-import cost, +30 ms, crosses the
 # first two on the first sample. The wall-clock ceilings they replace were 40/45/100/90 ms and read
 # 13.0 ms for `--version`, which compiles nothing, at load 106-130 on 2026-10-23 -- the reading the
-# ruling answered. The older numbers and their spread are in handover notes ⟨c49da87⟩ (H142) and
-# ⟨83d6558⟩ (H177); H177's note states the wall-clock ceilings and the 30% share this ruling
-# replaced, and stands as the record of that unit.
+# rule answered. The older numbers and their spread are kept with the note that states the
+# wall-clock ceilings and the 30% share this rule replaced, as the record of that unit.
 #
 # `declarations=` is how many declarations the run compiles; it is printed for the record and moves
 # whenever a module is migrated. It is not asserted: the per-declaration ceiling and the absolute
 # total are.
 #
-# `declaration.cost` is the same idea one level down (handover H152): the compiler's own
-# `--time-phases` report of the declaration modules, added up and divided by their declarations, read
-# in the CPU time that report writes per phase. The process clock cannot resolve that work (the four
-# ceilings above are tens of milliseconds), so this is the measurement that moves when the declaration
-# path changes. Its two readings and its structural assertion are the two the author chose on
-# 2026-10-23 ("declaration-cost-gate" (b)):
+# `declaration.cost` is the same idea one level down: the compiler's own `--time-phases` report of
+# the declaration modules, added up and divided by their declarations, read in the CPU time that
+# report writes per phase. The process clock cannot resolve that work (the four ceilings above are
+# tens of milliseconds), so this is the measurement that moves when the declaration path changes.
+# Its two readings and its structural assertion are the two the author chose on 2026-10-23
+# ("declaration-cost-gate" (b)):
 #
 #   "选 3 + 2：结构断言"每个（阶段, 模块）每轮恰好出现一次"管重复编译；绝对的 CPU 总量管整体变慢；
 #    30% 共享率这条线退休。"
 #
 # Every round of the measurement asserts that each (phase, module) among parse, GCT and declare
-# appears exactly once -- a module compiled twice names itself, which no ratio and no total can -- and
-# the round's parse + GCT + declare CPU is read against an absolute total (12 ms: H177 §5.3's
-# candidate, sized for the 4.6 ms regression the per-declaration ceiling cannot see, and 1.2 times the
-# busiest median measured here). The 30% share of the compile work is deleted, not commented out: it
-# was the load-invariant half of a pair whose other half was the wall clock, and with CPU time there
-# is nothing left for it to excuse. Its numbers stay in handover note ⟨83d6558⟩ (H177) and
-# docs/technical/50_pyplot_cpython_init.md §4.3 as the record of the unit and rule it belonged to.
+# appears exactly once -- a module compiled twice names itself, which no ratio and no total can --
+# and the round's parse + GCT + declare CPU is read against an absolute total (12 ms: the candidate,
+# sized for the 4.6 ms regression the per-declaration ceiling cannot see, and 1.2 times the busiest
+# median measured here). The 30% share of the compile work is deleted, not commented out: it was the
+# load-invariant half of a pair whose other half was the wall clock, and with CPU time there is
+# nothing left for it to excuse. Its numbers stay in docs/technical/50_pyplot_cpython_init.md
+# §4.3 as the record of the unit and rule it belonged to.
 #
 # That measurement is CPU for the same reason as the four ceilings: the wall clock of those same
-# phases read 21 us per declaration on H177's quiet host and 75-104 us at load 106-112 on 2026-10-23,
+# phases read 21 us per declaration on the quiet host and 75-104 us at load 106-112 on 2026-10-23,
 # while the CPU reading of the same rounds is 27.5-28.5 us in every window measured at load 68-112.
 # The compiler henceforth writes `cpu_ns` beside `wall_ns` per phase (src/utils/phase_timer.cpp), and
 # a platform with no process CPU clock makes the line report an error instead of reading the wall
@@ -88,13 +87,13 @@ kind = "behavior"
 parallel = false
 tool = "node"
 case = "../../tools/startup-cost.mjs"
-# `${camel}` is the compiler of the build under test, named as an argument (the author's ruling of 2026-10-25).
+# `${camel}` is the compiler of the build under test, named as an argument.
 args = ["${case}", "--camel", "${camel}"]
 expect_exit = 0
 expect_stdout_contains = ["startup.cost metric=cpu_user_plus_system", "startup.cost version", "startup.cost imports_nothing", "startup.cost inspect_ops", "startup.cost imports_all", "declaration.cost declarations=", "per_declaration_us=", "total_ms=", "duplicates=0"]
 # The runner judges this entry on its own CPU time for the same reason the tool inside it
-# already reads its four ceilings that way (see the header above), by the author's ruling of
-# 2026-10-23 (docs/handover/reviews/questions-2026-10-23.md, "declaration-cost-gate" (a)):
+# already reads its four ceilings that way (see the header above)
+# (docs/handover/reviews/questions-2026-10-23.md, "declaration-cost-gate" (a)):
 #
 #   "改量 CPU 时间，不量墙钟。共享主机上的墙钟随负载漂移 ... 进程的 CPU 时间（用户态 + 内核态）基本
 #    不随负载变"

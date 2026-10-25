@@ -3,11 +3,10 @@ order = 427
 tier = "slow"
 tags = ["perf", "training", "budget", "counts"]
 
-# The guard half of `perf.step_budget`, split out by the 2026-10-25 ruling on the eight perf plans
-# that no layer reached: the guards that only assert counts and properties stay gate-able, and the
-# half that measures runs before a release. Nothing here is asserted on a duration; the plan keeps
-# the budget itself (`step.budget`) in `perf.step_budget`, which is in the release gate's FORBIDDEN
-# list.
+# The guard half of `perf.step_budget`, split out perf plans that no layer reached: the guards that
+# only assert counts and properties stay gate-able, and the half that measures runs before a
+# release. Nothing here is asserted on a duration; the plan keeps the budget itself (`step.budget`)
+# in `perf.step_budget`, which is in the release gate's FORBIDDEN list.
 #
 # Where one d=256 Camel training step's time goes: `examples/models/naive-in-expert-out/train_step.cml`
 # at the sweep's d=256 cell (batch 16 x sequence 32, d_model 256, 16 heads of width 16, FFN 512,
@@ -39,7 +38,7 @@ desc = "One profiled round of the d=256 step issues the pinned number of operato
 kind = "behavior"
 tool = "python"
 case = "../../cases/perf/step_budget.py"
-# `${camel}` is the compiler of the build under test, named as an argument (the author's ruling of 2026-10-25).
+# `${camel}` is the compiler of the build under test, named as an argument.
 args = ["${case}", "count", "--camel", "${camel}"]
 expect_exit = 0
 expect_stdout_contains = ["step operator counts: PASS"]

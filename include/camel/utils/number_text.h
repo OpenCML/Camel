@@ -42,8 +42,8 @@ template <typename T> inline constexpr bool is_half_float_v = IsHalfFloat<T>::va
 /// Reading a text as a number: it is one number of the language's grammar and the type holds
 /// it, or it is not a number at all, or it is a number the type cannot hold (overflow or
 /// underflow). The three refusals are different causes and are reported differently.
-/// `Underflow` is a nonzero number too small to tell from zero at the target width (H15i): it
-/// is refused like an overflow, never read as zero, and the reason can say which it is.
+/// `Underflow` is a nonzero number too small to tell from zero at the target width (i): it is
+/// refused like an overflow, never read as zero, and the reason can say which it is.
 /// `OutOfRangeInteger` is a number written as an integer token whose value does not fit an
 /// int64 (the widest integer a literal has): a float entry argument is refused with the
 /// integer's range rather than the float's, which would be a false statement about the text.
@@ -168,12 +168,12 @@ inline bool splitNumberSign(std::string_view &text, bool &negative) {
 /// hexadecimal digits, `0b` and binary digits, or `0o` and octal digits. Nothing else; `digits`
 /// is written without the radix prefix.
 ///
-/// A leading `0` is decimal here, not octal (H15i): `077` is the number 77. The source lexer
+/// A leading `0` is decimal here, not octal (i): `077` is the number 77. The source lexer
 /// refuses a leading-zero digit run before a number token reaches this function, so a literal
 /// cannot be written that way; an entry argument can, and so can the decimal text of a
-/// conversion function (data text, language reference 2.5.2). Octal in source is written
-/// `0o77`, which the source lexer and the entry reader accept; `parseWholeInteger` reads decimal
-/// digits only, so `int('0o77')` is not an integer text.
+/// conversion function (data text, language reference 2.5.2). Octal in source is written `0o77`,
+/// which the source lexer and the entry reader accept; `parseWholeInteger` reads decimal digits
+/// only, so `int('0o77')` is not an integer text.
 struct IntegerParts {
     unsigned radix = 10;
     std::string_view digits;
@@ -288,7 +288,7 @@ NumberTextStatus integerValue(std::string_view digits, unsigned radix, bool nega
 }
 
 /// The value of a real body. A number too small to tell from zero is Underflow and a number too
-/// large is OutOfRange; neither is read as a value (H15i). The two are told apart at T's own
+/// large is OutOfRange; neither is read as a value (i). The two are told apart at T's own
 /// width: 3.5e38 overflows a float but is a finite double, and 1e-9999 underflows both.
 template <std::floating_point T>
 NumberTextStatus realValue(std::string_view body, bool negative, T &out) {
@@ -363,10 +363,10 @@ NumberTextStatus parseWholeInteger(std::string_view text, T &out) {
 
 /// Reads `text` as one floating-point number of type T for a conversion function: an optional
 /// sign, then a decimal number with digits on both sides of its optional fraction and an
-/// optional exponent (`1`, `1.5`, `1e-3`), or `inf` / `nan` as the language prints them.
-/// Nothing else: no blanks, no hexadecimal form, no suffix. A number too small to tell from zero
-/// is refused as out of range here (`ConversionOutOfRange`), the same rule the literal and the
-/// entry argument apply (H15i); a conversion reports both overflow and underflow with one
+/// optional exponent (`1`, `1.5`, `1e-3`), or `inf` / `nan` as the language prints them. Nothing
+/// else: no blanks, no hexadecimal form, no suffix. A number too small to tell from zero is
+/// refused as out of range here (`ConversionOutOfRange`), the same rule the literal and the
+/// entry argument apply (i); a conversion reports both overflow and underflow with one
 /// diagnostic, so the distinction is folded into OutOfRange.
 template <std::floating_point T> NumberTextStatus parseWholeFloat(std::string_view text, T &out) {
     bool negative = false;
@@ -400,9 +400,9 @@ template <std::floating_point T> NumberTextStatus parseWholeFloat(std::string_vi
 /// entry argument share (reference 2.5.1, 2.5.2): an optional sign, then an integer token
 /// (decimal, `0x` hexadecimal, `0b` binary, `0o` octal) or a real token (digits with a point and
 /// digits after it, and/or an exponent), and nothing else. A real token too small to tell from
-/// zero is Underflow and one too large is OutOfRange (H15i); neither is a value. For an integer
-/// T only an integer token fits (`12`, `0x10`, `0o77`; `1.5` and `1e3` do not). A leading zero
-/// is decimal (`077` is 77): the lexer keeps such a run out of a source literal, but an entry
+/// zero is Underflow and one too large is OutOfRange (i); neither is a value. For an integer T
+/// only an integer token fits (`12`, `0x10`, `0o77`; `1.5` and `1e3` do not). A leading zero is
+/// decimal (`077` is 77): the lexer keeps such a run out of a source literal, but an entry
 /// argument and a conversion text read it, as data text (2.5.2).
 template <std::signed_integral T> NumberTextStatus parseNumberToken(std::string_view text, T &out) {
     bool negative = false;
@@ -434,7 +434,7 @@ template <std::floating_point T> NumberTextStatus parseNumberToken(std::string_v
     }
     // An integer token first: `0o77` is octal 63, and `0xFF` is 255. A source literal is written
     // that way; a leading zero (`077`, `09`) is plain decimal data text, which the lexer refuses
-    // in source but an entry argument and a conversion text read (H15i, reference 2.5.2).
+    // in source but an entry argument and a conversion text read (i, reference 2.5.2).
     number_text_detail::IntegerParts integer;
     if (number_text_detail::integerParts(text, integer)) {
         int64_t value = 0;
@@ -446,7 +446,7 @@ template <std::floating_point T> NumberTextStatus parseNumberToken(std::string_v
         out = static_cast<T>(value);
         if (negative && value == 0) {
             // The text wrote a sign the integer value cannot carry: `-0` at a position of a real
-            // type is the negative zero, and converting the integer zero would lose it (H15h).
+            // type is the negative zero, and converting the integer zero would lose it (h).
             out = -out;
         }
         return NumberTextStatus::Ok;
@@ -474,10 +474,10 @@ inline bool scientificParsesBack(std::string_view scientific, float &parsed) {
 
 /// The shortest scientific text -- `[-]d[.ddd]e[+-]dd`, correctly rounded by `to_chars` -- whose
 /// digits read back under `roundsBack` as the value they came from, for a value that is an
-/// element of a type narrower than f32 (a bf16 or an f16; design principles 7.7, the ruling of
-/// 2026-10-23, "reduced-precision-text"). `value` is the exact f32 widening of the element, so
-/// its own digits are a fallback that always reads back, and the loop only takes fewer of them.
-/// `roundsBack(token)` says whether one candidate is the same element of the narrow type.
+/// element of a type narrower than f32 (a bf16 or an f16; design principles 7.7). `value` is the
+/// exact f32 widening of the element, so its own digits are a fallback that always reads back,
+/// and the loop only takes fewer of them. `roundsBack(token)` says whether one candidate is the
+/// same element of the narrow type.
 template <typename RoundsBack>
 std::string_view shortestHalfDigits(float value, RoundsBack roundsBack, std::string &storage) {
     char buffer[64];
@@ -571,8 +571,8 @@ inline std::string layoutFloatText(std::string_view digits, int exponent, bool n
 /// float -- the shortest digits that read back as the same value (design principles 7.7) -- with
 /// "the same value" an element of the value's own type. The element widens to f32 exactly, so the
 /// digits are searched against that f32 and each candidate is held to the store rounding of the
-/// type (round to nearest, ties to even: `roundsBack`); `0.1 as bf16` prints `0.1`, where the
-/// f32 text of the same bits would print `0.100097656` (ruling 2026-10-23, "reduced-precision-text").
+/// type (round to nearest, ties to even: `roundsBack`); `0.1 as bf16` prints `0.1`, where the f32
+/// text of the same bits would print `0.100097656`.
 template <typename Half, typename RoundsBack>
 std::string halfText(Half value, RoundsBack roundsBack) {
     const float widened = value.toFloat();

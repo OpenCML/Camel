@@ -1,7 +1,6 @@
 /**
- * A stream type stands where any type stands (design principles 5.4; the author's ruling of
- * 2026-10-24 on the stream surface): a parameter, a result, a function type and a generic
- * signature all take one. The suffix is read left to right with no special case:
+ * A stream type stands where any type stands (design principles 5.4): a parameter, a result, a
+ * function type and a generic signature all take one. The suffix is read left to right with no special case:
  *
  *   int?..         the stream of a nullable int        `(int?)..`
  *   int!..         the stream of a fallible int        `(int!)..`
@@ -11,7 +10,7 @@
  *
  * `int..` and `int[..]` are two different types, and both stand in one signature here. The
  * only restriction on a stream is linearity, and it is a restriction on containers: an item of
- * a tuple may be a stream (the ruling's `tee` hands out a tuple and destructuring consumes it),
+ * a tuple may be a stream (the rule's `tee` hands out a tuple and destructuring consumes it),
  * while an array, a map or a set refuses one (test/cases/compile/stream/type_in_container.cml).
  *
  * Producing a value of a stream type is another slice: this program states the types only, and

@@ -1,13 +1,12 @@
 /**
- * bf16 and f16 are floating-point types (handover H238, design principles 7.3): `is_float`
- * names them once, and `is_numeric` and `is_ordered` inherit them from it. A generic function
- * guarded by `is_numeric::<T>()` / `is_ordered::<T>()` is therefore applicable where `T` is
- * bf16 or f16 — it used to be refused with WhenConditionUnmet, which quietly excluded the two
- * element types from every numeric declaration.
- *
- * The calls below only count the elements, so no operation on a bf16 or f16 value is written:
- * the declaration itself must become applicable. If either type were not in `is_float`, the
- * predicates would print false and the guarded calls would fail to compile.
+ * Bf16 and f16 are floating-point types (design principles 7.3): `is_float` names them once,
+ * and `is_numeric` and `is_ordered` inherit them from it. A generic function guarded by
+ * `is_numeric::<T>` / `is_ordered::<T>` is therefore applicable where `T` is bf16 or f16 — it
+ * used to be refused with WhenConditionUnmet, which quietly excluded the two element types
+ * from every numeric declaration. The calls below only count the elements, so no operation on
+ * a bf16 or f16 value is written: the declaration itself must become applicable. If either
+ * type were not in `is_float`, the predicates would print false and the guarded calls would
+ * fail to compile.
  */
 module stdlib_reduced_predicates
 

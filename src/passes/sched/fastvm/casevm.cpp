@@ -533,8 +533,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
         // frames this activation still has pushed above its root, and the root last. A lowered
         // loop's `next` frame is one of those pushed frames — no return has released it, and
         // the frame of the faulting call sits above it — so releasing the root first rewound
-        // past it: silently in a Release build, as the pool's assertion in a Debug one
-        // (H31 4.1).
+        // past it: silently in a Release build, as the pool's assertion in a Debug one (4.1).
         releaseFrame(currFrame);
         nestedCalls_ = nestedCallsBase;
         while (stackDepth_ > stackDepthBase) {

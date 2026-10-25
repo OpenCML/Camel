@@ -1,7 +1,7 @@
 module fold_subject
 
-// The corpus of the constant-folding comparison (H227): operations whose operands are all
-// constants and that the front end leaves in the graph, beside an operation that must not fold.
+// The corpus of the constant-folding comparison: operations whose operands are all constants
+// and that the front end leaves in the graph, beside an operation that must not fold.
 //
 //   chain      `2 * 3 + 4` written as a chain of lets: the front end folds the two literals into
 //              one constant, `a + 4` stays an operation over constants, and `b * 2` stays an

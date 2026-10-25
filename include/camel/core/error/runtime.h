@@ -95,11 +95,10 @@ template <typename T> std::string argToString(const T &value) {
 } // namespace runtime_fault_detail
 
 /// A query of a declaration with parameters named parts that are no value's operands (in either
-/// order a commutative operator allows). It is not a fault of the program: the ruling of
-/// 2026-10-23 on `rule_when_const_node` makes the condition that reads such a query false -- the
-/// rule does not apply here, the pass does not fail ("条件里的事实查询找不到时，条件为假（这条规则在
-/// 此不适用），而不是遍失败——条件本来就是"适用与否"的判断"). Whoever evaluates a condition catches
-/// it; a run that does not is a defect.
+/// order a commutative operator allows). It is not a fault of the program: a condition that
+/// reads such a query is false -- the rule does not apply here, the pass does not fail
+/// ("条件里的事实查询找不到时，条件为假（这条规则在 此不适用），而不是遍失败——条件本来就是"适用与否"的判断"). Whoever evaluates a condition
+/// catches it; a run that does not is a defect.
 class FactQueryNoValue : public std::exception {
   public:
     explicit FactQueryNoValue(std::string what) : what_(std::move(what)) {}

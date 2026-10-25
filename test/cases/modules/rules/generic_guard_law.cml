@@ -1,15 +1,13 @@
 /**
  * The types a rule is instantiated at are the types of the program it is applied to, so a maker
- * tries types the rule cannot be written for (the ruling of 2026-10-23 on
- * generic-rule-instantiation). This module is the case where the *condition* is what a type
- * refuses, and the condition is a generic function call with an explicit type argument:
- * `nonzero::<T>` is Camel code of the rule's own declaration scope, its body has no instance at
- * `int` (there is no `!=` between an `int` and a float literal), and the attempt has to end as
- * "no instance" -- quietly, with the reason kept for `why_not` -- rather than as a failure of the
- * build.
- *
- * `combine_nonzero` is therefore a rule for the floating sites of the target alone: the `int` site
- * is left as the program wrote it, and nothing of the attempt that `int` cost reaches the program.
+ * tries types the rule cannot be written for. This module is the case where the *condition* is
+ * what a type refuses, and the condition is a generic function call with an explicit type
+ * argument: `nonzero::<T>` is Camel code of the rule's own declaration scope, its body has no
+ * instance at `int` (there is no `!=` between an `int` and a float literal), and the attempt has
+ * to end as "no instance" -- quietly, with the reason kept for `why_not` -- rather than as a
+ * failure of the build. `combine_nonzero` is therefore a rule for the floating sites of the target
+ * alone: the `int` site is left as the program wrote it, and nothing of the attempt that `int`
+ * cost reaches the program.
  */
 module generic_guard_law
 

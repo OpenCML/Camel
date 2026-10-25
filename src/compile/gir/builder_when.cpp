@@ -2,14 +2,12 @@
 // SPDX-License-Identifier: MIT
 
 /*
- * The applicability condition of a declaration (design principles 5.13; handover H234).
- *
- * `func f(...): T when p { ... }` is selected only where `p` holds. The condition is a
- * compile-time predicate over the declaration's type parameters and its `with` parameters; it
- * is evaluated when the declaration is instantiated or selected, never when it is parsed, and
- * a false condition makes the declaration inapplicable rather than erroneous. A condition the
- * compiler cannot answer is reported, never taken for `true`.
- *
+ * The applicability condition of a declaration (design principles 5.13). `func f(...): T when
+ * p {... }` is selected only where `p` holds. The condition is a compile-time predicate over
+ * the declaration's type parameters and its `with` parameters; it is evaluated when the
+ * declaration is instantiated or selected, never when it is parsed, and a false condition
+ * makes the declaration inapplicable rather than erroneous. A condition the compiler cannot
+ * answer is reported, never taken for `true`.
 * The predicates are compile-time functions: any pure function of the library, answered when the
  * declaration is instantiated. A `match type` predicate (`is_numeric::<T>()`,
  * `has_field::<T>('w')`) is the common case: its body is Camel, and it is folded over the
@@ -117,13 +115,12 @@ using EvalCallResolver  = std::function<data_ptr_t(
     const std::vector<data_ptr_t> &arguments,
     const std::function<data_ptr_t(const GCT::node_ptr_t &)> &evalArgument,
     const camel::core::type::type_bindings_t &vars, size_t depth)>;
-/// How the evaluator works out the sequence of a `static loop` whose head writes one out
-/// (`for i in 0..5`, H462, the ruling of 2026-10-24). It is the same reading the graph builder
-/// uses (`Builder::staticLoopIntSequenceOf`, the `int` half of `Builder::staticLoopSequenceOf`,
-/// which has no room for a type or for another element type), passed in as a callback because
-/// the evaluator is a helper that holds no builder: a `when` predicate and the expansion must
-/// agree on the elements a head names, and a sequence the compiler cannot work out comes back
-/// as nothing.
+/// How the evaluator works out the sequence of a `static loop` whose head writes one out. It is
+/// the same reading the graph builder uses (`Builder::staticLoopIntSequenceOf`, the `int` half
+/// of `Builder::staticLoopSequenceOf`, which has no room for a type or for another element
+/// type), passed in as a callback because the evaluator is a helper that holds no builder: a
+/// `when` predicate and the expansion must agree on the elements a head names, and a sequence
+/// the compiler cannot work out comes back as nothing.
 using EvalSequenceResolver =
     std::function<std::optional<std::vector<int64_t>>(const GCT::node_ptr_t &)>;
 
@@ -397,9 +394,9 @@ class GctConstantEvaluator {
 
     /// Visits each round of a `static for`/`static loop`: the field name and type for `fields T`,
     /// the position and the element's type for `indices ts`, and the element itself for a
-    /// sequence the head writes out (`for i in 0..5`, H462). Does not touch the environment.
-    /// `round` is called with `(name, index, type, element)`, where `element` carries a value
-    /// only for a written sequence: it is the one round value that is not a position or a name.
+    /// sequence the head writes out (`for i in 0..5`). Does not touch the environment. `round` is
+    /// called with `(name, index, type, element)`, where `element` carries a value only for a
+    /// written sequence: it is the one round value that is not a position or a name.
     void walkRounds(
         const GCT::node_ptr_t &operand, bool byIndices, bool bySequence,
         const std::function<

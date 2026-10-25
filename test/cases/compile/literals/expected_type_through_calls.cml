@@ -1,11 +1,10 @@
 /**
  * The expected type of a call reaches the call through its type variables (design principles
- * 5.1, 5.5; the ruling of 2026-10-23 on `expected-type-through-literals-and-calls`). The
- * callee's result type is aligned with the type of the position the call stands in before the
- * arguments are bound, so every type variable the result mentions is solved there — not only
- * the ones that appear in the result alone — and a literal argument whose parameter mentions a
- * solved variable takes the solved type. The value written just above the f32 midpoint prints
- * 1.00000012, so an element is converted once from the value written.
+ * 5.1, 5.5). The callee's result type is aligned with the type of the position the call stands
+ * in before the arguments are bound, so every type variable the result mentions is solved
+ * there — not only the ones that appear in the result alone — and a literal argument whose
+ * parameter mentions a solved variable takes the solved type. The value written just above the
+ * f32 midpoint prints 1.00000012, so an element is converted once from the value written.
  */
 module expected_type_through_calls
 

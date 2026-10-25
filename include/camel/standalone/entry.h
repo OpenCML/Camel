@@ -75,7 +75,7 @@ struct EntryNumberText {
     /// names the integer's range, not the float's, which would be false about the text.
     const char *outOfRangeInteger = nullptr;
     /// A nonzero number too small to tell from zero: it is refused as out of range, and the
-    /// sentence says which way it is out (H15i). A complex parameter has the second one for its
+    /// sentence says which way it is out (i). A complex parameter has the second one for its
     /// imaginary part.
     const char *underflow          = nullptr;
     const char *underflowImaginary = nullptr;
@@ -156,7 +156,7 @@ class EntryArguments {
 
     /// What reading a number text gave: the value, or which refusal it is. A complex text has
     /// one more cause than a real one: its imaginary part. An underflow is out of range, and
-    /// separate from an overflow because the sentence says which way the value missed (H15i).
+    /// separate from an overflow because the sentence says which way the value missed (i).
     enum class ReadStatus {
         Ok,
         NotANumber,
@@ -183,11 +183,11 @@ class EntryArguments {
 
     /// One number as `camel` reads one: one whole number token of the language (camel/utils/
     /// number_text.h), not strtod's wider grammar: an optional sign, an integer token (`0xFF`,
-    /// `0b1010`, `0o77`; a leading zero is decimal data text, H15i) or a real token (digits with
-    /// an optional fraction and exponent), `inf` or `nan`. A nonzero real token too small to
-    /// tell from zero is refused as out of range, like a source literal (H15i). A number the
-    /// width cannot hold is OutOfRange, not NotANumber; an integer token whose value does not
-    /// fit an int64 is OutOfRangeInteger.
+    /// `0b1010`, `0o77`; a leading zero is decimal data text, i) or a real token (digits with an
+    /// optional fraction and exponent), `inf` or `nan`. A nonzero real token too small to tell
+    /// from zero is refused as out of range, like a source literal (i). A number the width
+    /// cannot hold is OutOfRange, not NotANumber; an integer token whose value does not fit an
+    /// int64 is OutOfRangeInteger.
     template <std::floating_point T> static ReadStatus readNumber(std::string_view text, T &out) {
         switch (camel::utils::parseNumberToken<T>(text, out)) {
         case camel::utils::NumberTextStatus::Ok:

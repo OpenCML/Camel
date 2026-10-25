@@ -218,7 +218,7 @@ export function findBuiltLibcamel(config) {
 }
 
 /**
- * CMake 在 configure 时写出的模块清单（H138）：每个配置一份，每行一个本次会构建的 `.cmo`
+ * CMake 在 configure 时写出的模块清单：每个配置一份，每行一个本次会构建的 `.cmo`
  * 绝对路径。见顶层 `CMakeLists.txt` 末尾的 `file(GENERATE)`。
  * @param {'Release'|'Debug'|'RelWithDebInfo'} config
  */
@@ -230,7 +230,7 @@ export function moduleManifestPath(config) {
  * 本次 configure 会构建的 `.cmo` 文件（绝对路径），按清单顺序返回其中已存在的那些。
  *
  * 清单是唯一权威：目录扫描会把“模块改名/删除后留在 build/ 里的旧 `.cmo`”一起收进安装，
- * 于是旧名仍然可导入（H138）。旧构建树没有清单时这里报错而不是退回到扫描——退回等于把缺陷
+ * 于是旧名仍然可导入。旧构建树没有清单时这里报错而不是退回到扫描——退回等于把缺陷
  * 原样保留。
  *
  * @param {'Release'|'Debug'|'RelWithDebInfo'} config
@@ -281,10 +281,9 @@ export function outArtifactInclude(tag) {
 }
 
 /**
- * The CPython extension module of the Python binding (H253): `out/<tag>/python/`. It is beside
- * `libs/` so the runpath `$ORIGIN/../libs` the build wrote finds libcamel here and in the wheel,
- * where the whole install lives under `camel/.cmlenv/`.
- * @param {string} tag
+ * The CPython extension module of the Python binding: `out/<tag>/python/`. It is beside `libs/`
+ * so the runpath `$ORIGIN/../libs` the build wrote finds libcamel here and in the wheel, where
+ * the whole install lives under `camel/.cmlenv/`. @param {string} tag
  */
 export function outArtifactPython(tag) {
     return path.join(outArtifactRoot(tag), 'python')
@@ -386,8 +385,8 @@ function pinnedFootprint(config, cmakeOptionFlags, gitVersion) {
 export function runCmakeBuild(config, cmakeOptionFlags) {
     process.chdir(BASEDIR)
     // The diagnostic numbers are assigned in diagnostics/registry.tsv and the headers and message
-    // tables are generated from it (H239). Generate before CMake configures, so a new declaration
-    // is numbered and the tree CMake reads already carries the emitted files; CMake then runs
+    // tables are generated from it. Generate before CMake configures, so a new declaration is
+    // numbered and the tree CMake reads already carries the emitted files; CMake then runs
     // --check again as a dependency of libcamel_objects, so a direct cmake build is guarded too.
     execSync('node scripts/diagnostics-catalog.mjs --generate', { cwd: BASEDIR, stdio: 'inherit' })
     const buildDir = path.join(BASEDIR, 'build')
@@ -422,7 +421,7 @@ export function runCmakeBuild(config, cmakeOptionFlags) {
 /**
  * 删掉本次 configure 不构建的模块产物：`build/{libs,modules}/<目录>/<config>/*.cmo` 里不在清单上
  * 的那些。CMake 不会删除已被改名或移除的 target 留下的文件，而那个文件正是旧实现“扫描 build/
- * 并复制到 stdlib/”时把旧模块名带回来的来源（H138）。只动当前配置的输出目录；`build/` 其余部分
+ * 并复制到 stdlib/”时把旧模块名带回来的来源。只动当前配置的输出目录；`build/` 其余部分
  * 是 CMake 的缓存，不属于这里管。
  *
  * @param {'Release'|'Debug'|'RelWithDebInfo'} config
@@ -453,9 +452,9 @@ function removeStaleModuleArtifacts(config, moduleFiles) {
 
 /**
  * 把可执行文件放到 libcamel 旁边（调试用），清掉源码树里旧构建留下的 `.cmo`，并从 `build/`
- * 删除本次 configure 不构建的模块产物（H138）。
+ * 删除本次 configure 不构建的模块产物。
  *
- * `.cmo` 不再复制进 `stdlib/`（H191）：源码树不是安装。模块查找本来就会看可执行文件旁与
+ * `.cmo` 不再复制进 `stdlib/`：源码树不是安装。模块查找本来就会看可执行文件旁与
  * `CAMEL_HOME` 下（`include/camel/utils/install_layout.h`），安装由 `collect-out` 按清单写进
  * `out/<tag>/stdlib`；在源码树里再放一份没有消费者，只会把构建产物留在源码树。
  * @param {'Release'|'Debug'|'RelWithDebInfo'} config
@@ -481,10 +480,10 @@ export function copyBuildArtifacts(config) {
         logWarn(`Built ${libName} not found under build/ for ${config}`)
     }
 
-    // 源码树不是安装（H191）：`.cmo` 不再复制进 `stdlib/`。模块查找会看可执行文件旁与
-    // `CAMEL_HOME` 下的 `stdlib`，`collect-out` 把清单里的 `.cmo` 写进 `out/<tag>/stdlib`，
+    // 源码树不是安装：`.cmo` 不再复制进 `stdlib/`。模块查找会看可执行文件旁与 `CAMEL_HOME` 下的
+    // `stdlib`，`collect-out` 把清单里的 `.cmo` 写进 `out/<tag>/stdlib`，
     // 所以在源码树里再放一份没有消费者。旧构建留下的在这里删掉：一个 `.cmo` 也不能比它的
-    // 模块活得久（H114 曾手工删掉这些文件，H138 把删除放进构建）。
+    // 模块活得久（这些文件不能比它们的模块活得久，删除已经放进构建）。
     if (fs.existsSync(stdlibDir)) {
         for (const f of fs.readdirSync(stdlibDir)) {
             if (!f.endsWith('.cmo')) continue
@@ -494,8 +493,8 @@ export function copyBuildArtifacts(config) {
     }
     removeStaleModuleArtifacts(config, moduleCmoFiles(config))
 
-    // H191: a step that starts writing build output next to the sources again fails the build,
-    // with the file named, instead of leaving it for the next person to find.
+    // A step that starts writing build output next to the sources again fails the build, with
+    // the file named, instead of leaving it for the next person to find.
     const guard = spawnSync(
         process.execPath,
         [path.join(BASEDIR, 'scripts', 'check-source-artifacts.mjs')],
@@ -508,14 +507,14 @@ export function copyBuildArtifacts(config) {
     logDone(`Copied all build artifacts`)
 }
 
-// --- the build stamp (H149) ---------------------------------------------------
+// --- the build stamp ---------------------------------------------------
 //
 // `out/<tag>/build-info.json` records the sources an install was produced from. Reusing an install
 // without rebuilding (`camel-remote.ps1 -NoBuild`, or a test run against `out/latest` by hand) is
-// only honest while the install still matches the tree: H129 lost 9 tests to a stale binary, H132
-// lost one (`test::saturate_props` was not registered in the old one), and H139 recorded the other
-// direction -- a green that could not have moved, because `-NoBuild` reads `out/latest/stdlib` and
-// that copy is made by the build.
+// only honest while the install still matches the tree: a stale binary lost 9 tests once and one
+// more later (`test::saturate_props` was not registered in the old one), and the other direction
+// was recorded too -- a green that could not have moved, because `-NoBuild` reads
+// `out/latest/stdlib` and that copy is made by the build.
 //
 // The stamp is written here, by the build itself (collect-out at the end of `npm run build`), so a
 // local build stamps too. `scripts/build-info.js check` compares it against the tree a run is about
@@ -530,16 +529,16 @@ export function copyBuildArtifacts(config) {
 //
 // The roots below are exactly what the build consumes: the C++ sources and headers, every module,
 // the tools, `third_party` (globbed into libcamel), `stdlib` (copied verbatim into
-// `out/<tag>/stdlib`, so a comment there *can* move a test -- H139), the CMake glue and the Conan
+// `out/<tag>/stdlib`, so a comment there *can* move a test --), the CMake glue and the Conan
 // recipe. Generated files (`*.cmo`, objects, libraries, DLLs) are excluded: they are products, not
-// inputs, and no build writes them into `stdlib/` any more (H191). `docs/`, `test/`, `scripts/`,
+// inputs, and no build writes them into `stdlib/` any more. `docs/`, `test/`, `scripts/`,
 // `agents/`, `editors/`, `pypi/`, `assets/`, `examples/`, `benchmarks/` and the markdown files are
 // not read by the build and are not fingerprinted.
 export const BUILD_INFO_FILE = 'build-info.json'
 
 /** Bumped when the recorded shape changes so an old stamp is refused instead of misread. */
-// 2: the build footprint the configure compiled in (H309) is recorded beside the fingerprint, so
-// `camel --version` can be compared with what the build stamped.
+// 2: the build footprint the configure compiled in is recorded beside the fingerprint, so `camel
+// --version` can be compared with what the build stamped.
 export const BUILD_INFO_SCHEMA = 2
 
 /** Bumped when the fingerprint algorithm or `BUILD_INFO_ROOTS` changes. */

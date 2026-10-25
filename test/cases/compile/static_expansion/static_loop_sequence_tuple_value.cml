@@ -1,9 +1,9 @@
 /**
  * `for x in ts` walks a compile-time tuple by element, and each round's `x` is the *value* at
- * that position, `ts.[i]` (the ruling of 2026-10-25, H475): `acc + x` adds it. This is the
- * program the h471 measurement wrote for the tuple form, and it is a *positive* case now -- the
- * reading that `x` is a type was wrong, and the type of `x` (one position's type) is asked for
- * with `typeof(x)` where it is needed.
+ * that position, `ts.[i]` (the rule): `acc + x` adds it. This is the program the measurement
+ * wrote for the tuple form, and it is a *positive* case now -- the reading that `x` is a type
+ * was wrong, and the type of `x` (one position's type) is asked for with `typeof(x)` where it
+ * is needed.
  */
 module static_loop_sequence_tuple_value
 

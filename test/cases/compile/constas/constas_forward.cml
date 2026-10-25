@@ -1,7 +1,7 @@
 /**
- * A `constas` value may be handed on to another `constas` parameter (H51 ruling, 2026-10-22):
- * `outer`'s compile-time value reaches `inner` as a compile-time value, so `outer<3>` makes
- * `inner<3>` and `outer<4>` makes `inner<4>` -- two instances each.
+ * A `constas` value may be handed on to another `constas` parameter: `outer`'s compile-time
+ * value reaches `inner` as a compile-time value, so `outer<3>` makes `inner<3>` and
+ * `outer<4>` makes `inner<4>` -- two instances each.
  */
 module constas_forward
 

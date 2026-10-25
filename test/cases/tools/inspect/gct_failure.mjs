@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 /**
- * `camel inspect --gct` must not print a construction tree it cannot vouch for. Before H181 the
+ * `camel inspect --gct` must not print a construction tree it cannot vouch for. Before the
  * branch printed whatever tree the failed build left behind and exited 0, so an import of a
  * module that does not exist and a declaration file that exists and did not load both looked
- * like a successful dump of a shorter tree. H172 fixed the same silence for `--ops`; this case
+ * like a successful dump of a shorter tree. fixed the same silence for `--ops`; this case
  * holds the class of bug for the construction-tree dump.
  *
  * The declaration module is made in the test's scratch directory beside a copy of the real

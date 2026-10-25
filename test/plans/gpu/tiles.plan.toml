@@ -1127,7 +1127,7 @@ name = "arithmetic_bit_contract"
 kind = "behavior"
 tool = "python"
 case = "../../cases/modules/tiles/arithmetic_bits.py"
-# `${camel}` is the compiler of the build under test, named as an argument (the author's ruling of 2026-10-25).
+# `${camel}` is the compiler of the build under test, named as an argument.
 args = ["${case}", "--camel", "${camel}"]
 expect_exit = 0
 expect_stdout_contains = ["Arithmetic bits: six operations, four schedulers, signed zeros and subnormals PASS"]
@@ -1163,7 +1163,7 @@ expect_exit = 0
 expect_stdout_contains = ["std::nvm: LOOP CPU boundaries", "std::fvm: LOOP CPU boundaries", "std::jit: LOOP CPU boundaries", "std::prl: LOOP CPU boundaries", "neighboring GPU regions preserved PASS"]
 # Four CPU back ends, a GPU region beside every loop and the permission checks: the script runs
 # many subprocesses and takes about 50 s alone, more than three minutes with the other GPU tests
-# on eight cores. The same ceiling as multi_state_loop_boundaries (H75, section 5).
+# on eight cores. The same ceiling as multi_state_loop_boundaries (section 5).
 timeout_ms = 360000
 
 [[tests]]
@@ -1211,11 +1211,11 @@ expect_exit = 0
 expect_stdout_contains = ["std::nvm: async public exact bits, completed results and eager faults PASS", "std::fvm: async public exact bits, completed results and eager faults PASS", "std::jit: async public exact bits, completed results and eager faults PASS", "std::prl: async public exact bits, completed results and eager faults PASS"]
 timeout_ms = 180000
 
-# --- No host fallback inside `#gpu` (GPU design 6.1, review of the GPU plan) -------------
-# A `#gpu` scope promises the device runs everything written in it and in the functions it
-# calls. An operator without a device program at this use is a compile-time error, never a host
-# run; the cases below pin the promise, the refusal, the host behaviour outside a scope
-# (temporary), and the shape retry that must keep working (h251).
+# --- No host fallback inside `#gpu` (GPU design 6.1, review of the GPU plan) ------------- A
+# `#gpu` scope promises the device runs everything written in it and in the functions it calls.
+# An operator without a device program at this use is a compile-time error, never a host run;
+# the cases below pin the promise, the refusal, the host behaviour outside a scope (temporary),
+# and the shape retry that must keep working.
 
 [[tests]]
 name = "nofallback.supported_runs_on_device"
@@ -1286,8 +1286,8 @@ timeout_ms = 60000
 name = "nofallback.shape_generic_call_still_retries"
 kind = "behavior"
 case = "../../cases/gpu/nofallback/shape_generic.cml"
-# h251: the type-only template cannot fix the shapes, so the run retries with the actual arguments
-# and still gets a device program. A refusal here would break a call the device can serve.
+# The type-only template cannot fix the shapes, so the run retries with the actual arguments and
+# still gets a device program. A refusal here would break a call the device can serve.
 args = ["${case}", 'std::profile json="${test_tmp}/profile.json"', "tiles::compile", "std::nvm"]
 skip_unless = ["node", "test/tools/have-cuda-device.mjs", "0"]
 expect_exit = 0

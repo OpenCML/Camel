@@ -48,7 +48,7 @@ template <std::floating_point To> std::string floatRangeReason(const char *targe
 }
 
 /// Why a nonzero number is too small for the floating-point type To (`target` is its name in a
-/// message): it rounds to zero, and a value that is not zero is never read as one (H15i). The
+/// message): it rounds to zero, and a value that is not zero is never read as one (i). The
 /// same sentence names a part of a complex number ("the imaginary part is too small for c64").
 inline std::string floatUnderflowReason(const char *target, std::string_view part = {}) {
     return part.empty()

@@ -83,7 +83,7 @@ desc = "The declaration files (stdlib/*.cml and stdlib/signatures/*.cml) list ex
 kind = "behavior"
 tool = "node"
 case = "../../../../scripts/stdlib-reference.mjs"
-# `${camel}` is the compiler of the build under test, named as an argument (the author's ruling of 2026-10-25).
+# `${camel}` is the compiler of the build under test, named as an argument.
 args = ["${case}", "--verify-ops", "--camel", "${camel}"]
 expect_exit = 0
 expect_stdout_contains = ["the declarations agree with the"]
@@ -174,13 +174,13 @@ expect_stdout_contains = ["migrated modules stay migrated"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 60000
 
-# ---- A declaration file that failed to load is an error, not a shorter list (H172) ----
+# ---- A declaration file that failed to load is an error, not a shorter list ----
 
 # `inspect --ops` is the tool people use to check what the modules register. A declaration module
-# that exists and does not load leaves its operators out of the listing; before H172 the tool
-# printed the rest and exited 0 (that is how H166 found its seven names only by counting them).
-# The case makes the declaration module in its scratch directory out of a real `.cmo` and points
-# `CAMEL_STD_LIB` at it.
+# that exists and does not load leaves its operators out of the listing; before the tool printed
+# the rest and exited 0 (that is how found its seven names only by counting them). The case makes
+# the declaration module in its scratch directory out of a real `.cmo` and points `CAMEL_STD_LIB`
+# at it.
 
 [[tests]]
 name = "registry.declaration_load_failure_is_an_error"

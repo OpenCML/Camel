@@ -1,10 +1,10 @@
 /**
- * The sequence of a `static loop` is decided by one rule, not by a list of accepted spellings
- * (the ruling of 2026-10-25, H475): an expression built only from compile-time constants through
- * operations that are pure and cannot fail is worked out when the function is compiled and then
- * unrolled. So `range(a, b, step)` with constant arguments walks `a, a + step, ...` (design
- * principles 4.2) and an array -- a literal, or a name bound once to one -- walks by element,
- * exactly as the constant interval `a..b` does.
+ * The sequence of a `static loop` is decided by one rule, not by a list of accepted spellings:
+ * an expression built only from compile-time constants through operations that are pure and
+ * cannot fail is worked out when the function is compiled and then unrolled. So `range(a, b,
+ * step)` with constant arguments walks `a, a + step,...` (design principles 4.2) and an array --
+ * a literal, or a name bound once to one -- walks by element, exactly as the constant interval
+ * `a..b` does.
  */
 module static_loop_sequence_forms
 

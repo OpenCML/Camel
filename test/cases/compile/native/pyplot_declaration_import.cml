@@ -1,8 +1,8 @@
 /**
  * The declarations of `pyplot:plot`, read from `stdlib/pyplot.cml`: four element types
  * (`i32[]`, `int[]`, `f32[]`, `float[]`) and two arities (with and without the output file
- * name), eight declarations of the one operator (handover H166). The calls are type-checked and
- * never run: `plot` writes an image file, so this case stays compile-only.
+ * name), eight declarations of the one operator. The calls are type-checked and never run:
+ * `plot` writes an image file, so this case stays compile-only.
  */
 module pyplot_declaration_import
 

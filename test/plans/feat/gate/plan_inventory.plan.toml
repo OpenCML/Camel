@@ -10,9 +10,9 @@ desc = "Every plan file under test/plans has one of the four fates -- a fast tar
 #
 # Why it is a fast-layer entry and not only a release-gate check: eight perf plans landed between
 # 2026-10-23 and 2026-10-24 without a fate, and the gate was unrunnable from then until the
-# inventory stopped dying on the first problem (the 2026-10-25 ruling). A plan that lands without a
-# fate must redden the commit that lands it, not the next release run weeks later. The check needs
-# no compiler and no install: it reads the tree and the tables.
+# inventory stopped dying on the first problem. A plan that lands without a fate must redden the
+# commit that lands it, not the next release run weeks later. The check needs no compiler and no
+# install: it reads the tree and the tables.
 #
 # It fails naming every unclassified plan at once, and it fails when the tables name a file that
 # does not exist (a renamed plan leaves a stale entry), or when it examined no plan file at all.

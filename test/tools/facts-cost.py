@@ -44,8 +44,8 @@ import subprocess
 import sys
 import time
 
-# The lines `test::facts_check` prints that say what the pass itself did (H158). They are read
-# from each run's stdout as extra per-run numbers beside the whole process's CPU.
+# The lines `test::facts_check` prints that say what the pass itself did. They are read from
+# each run's stdout as extra per-run numbers beside the whole process's CPU.
 EXTRACTED = {
     "recompute_us": re.compile(r"FACTS recompute us=([0-9.]+)"),
     "stale": re.compile(r"FACTS counts .*?stale=(\d+)"),

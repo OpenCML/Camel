@@ -72,7 +72,7 @@ enum Position : uint8_t {
     Type       = 1u << 1, // before a type declaration
     Field      = 1u << 2, // before a field of a struct type
     Nodes      = 1u << 3, // on a function or a block: the nodes written in it
-    Param      = 1u << 4, // before a function parameter (not written yet: H2b)
+    Param      = 1u << 4, // before a function parameter (not written yet)
 };
 using Positions = uint8_t;
 

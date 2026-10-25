@@ -30,8 +30,8 @@ namespace camel::parse::ast {
 
 /// The arguments of a call or a binding, as they are written: the positional ones, the named
 /// ones, and the first positional one written after a named one (`f(a: 1, 2)`), which the call
-/// refuses where it is built (design principles 4.4, handover H276). The parser keeps the two
-/// lists apart; the third field is the evidence that they were interleaved.
+/// refuses where it is built (design principles 4.4). The parser keeps the two lists apart;
+/// the third field is the evidence that they were interleaved.
 struct ArgumentValues {
     node_ptr_t data                   = nullptr;
     node_ptr_t named                  = nullptr;
@@ -108,7 +108,7 @@ class Builder {
     /// The `node_of` names of the condition being built: a `const` parameter of a rule that the
     /// condition reaches with `node_of(c)`, and the hidden node parameter appended to the
     /// condition for it. Empty outside a rule condition, so `node_of` written anywhere else is
-    /// refused by name (the ruling of 2026-10-23 on `rule_when_const_node`).
+    /// refused by name.
     std::map<std::string, std::string> ruleWhenNodeParams_;
     /// The rule whose condition is being built, for the refusal above.
     std::string ruleWhenName_;

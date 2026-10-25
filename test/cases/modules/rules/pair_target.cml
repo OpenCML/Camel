@@ -1,11 +1,8 @@
 /**
  * The program a law of two type parameters rewrites: `(x + y) - y` on `int` and on `i32`, and a
- * string value no instance of such a law can hold.
- *
- * The rule is written once for two type parameters, so a site of it is a *pair* of types: the int
- * site is `(int, int)` and the small one `(i32, i32)`, and a law that is asked for one type per
- * parameter has no instance at either (the ruling of 2026-10-23 on generic-rule-instantiation
- * assumes one type per value).
+ * string value no instance of such a law can hold. The rule is written once for two type
+ * parameters, so a site of it is a *pair* of types: the int site is `(int, int)` and the small
+ * one `(i32, i32)`, and a law that is asked for one type per parameter has no instance at either.
  */
 module pair_target
 

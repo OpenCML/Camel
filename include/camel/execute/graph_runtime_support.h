@@ -46,7 +46,7 @@ class RunPrograms {
     RunPrograms &operator=(const RunPrograms &) = delete;
 
     /// Starts running `main` in `context`: the program is rooted, and so is every program a
-    /// function value brings in (note), until end(); the context does not collect the graphs
+    /// function value brings in, until end(); the context does not collect the graphs
     /// itself meanwhile (the collector of run-time values does, through the heap).
     void begin(camel::core::context::Context &context, const camel::runtime::Program *main);
     void end();

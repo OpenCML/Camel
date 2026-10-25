@@ -1,7 +1,7 @@
 // The condition and the body read what they use where they are (design principles 3.10): the
 // constants `limit` (condition) and `step`, `scale` (body) are evaluated in place and are not
-// captures (H91). A variable read in the body is read each round and its cell is a capture.
-// Loops nest: the inner loop's regions read the outer state, which is a value and a capture.
+// captures. A variable read in the body is read each round and its cell is a capture. Loops
+// nest: the inner loop's regions read the outer state, which is a value and a capture.
 func main(): int sync {
     let limit = 20
     let step  = 3

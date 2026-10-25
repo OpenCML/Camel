@@ -1,9 +1,8 @@
-// The edges of a loop written in a branch arm (H45): a loop that runs no round, `for ... while`,
-// a loop in an arm inside a loop's body, a loop of a loop inside an arm, a loop and another `if`
-// in one arm (a region three deep), the same in a macro function's arm, four calls in one
-// expression, an effect after the loop in a `sync` arm, a body that ignores its state, two loops
-// in one arm, an initial value computed in the arm, and the loop's value feeding another
-// condition.
+// The edges of a loop written in a branch arm: a loop that runs no round, `for... while`, a loop
+// in an arm inside a loop's body, a loop of a loop inside an arm, a loop and another `if` in one
+// arm (a region three deep), the same in a macro function's arm, four calls in one expression,
+// an effect after the loop in a `sync` arm, a body that ignores its state, two loops in one arm,
+// an initial value computed in the arm, and the loop's value feeding another condition.
 func then_for(flag: bool, xs: int[]): int {
     if flag then loop acc = 0 for x in xs do acc + x else -1
 }

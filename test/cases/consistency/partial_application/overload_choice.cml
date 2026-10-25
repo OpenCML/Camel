@@ -1,11 +1,11 @@
 /**
- * Handover H27d: a context argument chooses its overload exactly as an ordinary call does
+ * Handover : a context argument chooses its overload exactly as an ordinary call does
  * (design principles 4.4, 5.1) -- exact match first, and only when no exact match exists may
  * the literal enter a parameter type. With `with <k: int>` and `with <k: f32>` both
- * declared, `scale<2>` is the `int` one, and `s(3)` is 6 (the f32 overload would print
- * 6.0). With `with <xs: float[]>` and `with <xs: f32[]>` both declared, `at<[7.0, 8.0]>` is
- * the `float[]` one (a decimal literal is a float), and `a(1)` is 16.0, not 8.0. With only
- * `with <k: f32>` declared, `half<3>` still takes the literal as an f32. A name still never
+ * declared, `scale<2>` is the `int` one, and `s(3)` is 6 (the f32 overload would print 6.0).
+ * With `with <xs: float[]>` and `with <xs: f32[]>` both declared, `at<[7.0, 8.0]>` is the
+ * `float[]` one (a decimal literal is a float), and `a(1)` is 16.0, not 8.0. With only `with
+ * <k: f32>` declared, `half<3>` still takes the literal as an f32. A name still never
  * converts (`err_context_argument_name`).
  */
 module partial_application_overload_choice

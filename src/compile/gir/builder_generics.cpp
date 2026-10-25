@@ -174,8 +174,7 @@ void Builder::registerGenericTemplates(const GCT::node_ptr_t &exec) {
         const std::string name = child->name();
         if (child->nativeDeclaration()) {
             // A body-less declaration is a rule of an operator, generic or not; a generic one is
-            // instantiated by its resolver when it is called, not from a template (handover
-            // H19, step 1).
+            // instantiated by its resolver when it is called, not from a template (step 1).
             continue;
         }
         Type *type = child->at(0)->dataType();
@@ -220,9 +219,9 @@ void Builder::registerGenericTemplates(const GCT::node_ptr_t &exec) {
         if (const auto *usings = GCT::Tree::of(child)->usingsOf(child)) {
             tmpl->usingFrames.push_back(usings);
         }
-        // The defaults of the declaration's parameters are evaluated where the
-        // declaration is written, once, and every instance takes the same values: a default is
-        // a compile-time constant (design principles 4.4, handover H235/H276).
+        // The defaults of the declaration's parameters are evaluated where the declaration is
+        // written, once, and every instance takes the same values: a default is a compile-time
+        // constant (design principles 4.4, /).
         evaluateDefaults(child, tmpl->funcType, tmpl.get(), false);
         if (isOperator) {
             operatorTemplates_[name].push_back({templateScope_, tmpl});
@@ -242,9 +241,8 @@ void Builder::registerGenericTemplates(const GCT::node_ptr_t &exec) {
     }
     // Every declaration of this block is known now, so the names that do not depend on a type
     // parameter are resolved here, on the declaration's line, rather than waiting for an
-    // instantiation that may never come (the ruling of 2026-10-24 on
-    // `generic-rule-condition-unresolved-name`: a misspelled predicate is an unresolved name like
-    // any other, and the module does not load). No type is read: what only the instantiation can
+    // instantiation that may never come (a misspelled predicate is an unresolved name like any
+    // other, and the module does not load). No type is read: what only the instantiation can
     // answer -- an operator overload, a field, the argument a call fits -- is not asked here.
     for (const generic_template_ptr_t &tmpl : declared) {
         resolveGenericTemplateNames(tmpl);
@@ -461,8 +459,7 @@ void Builder::settleGenericRuleMaker(
     registerNodeOrigin(context_, idNode, call, "gir.rule.generic");
     // The rule value keeps the id of its templates, and the maker is called with it: what a generic
     // rule holds is not a function of the program being built, so nothing of the declaration enters
-    // this graph but the id (design principles 5.5; the ruling of 2026-10-23 on
-    // generic-rule-instantiation).
+    // this graph but the id (design principles 5.5).
     normInputs.resize(kFixed + 1);
     normInputs[kFixed] = Argument{idNode, call, std::nullopt};
     normTypes.resize(kFixed + 1);
@@ -493,8 +490,8 @@ bool Builder::instantiateRuleTemplates(
     // finished long ago -- the rule is instantiated where the rule is applied, which is a pass
     // running later -- so the state a body build needs is entered again for the module the rule
     // belongs to (the same state a top-level declaration of it is built in). What a body says when
-    // it does not compile for these types stays out of the program (the ruling of 2026-10-23 on
-    // generic-rule-instantiation-set-and-predicate), and `why` is all that is kept of the attempt.
+    // it does not compile for these types stays out of the program, and `why` is all that is kept
+    // of the attempt.
     std::string said;
     const GCT::node_ptr_t origin = lhsTemplate->func;
     const bool inModule          = this->inModule(lhsTemplate->module, [&] {
@@ -518,9 +515,7 @@ bool Builder::instantiateRuleTemplates(
         lhs = rhs = when = nullptr;
         // Why the instance cannot be made is what the body said, and the maker's own phrase only
         // stands when it said nothing: `i32` has `+` and `-`, and a rule whose literal does not
-        // fit the type is not one whose pattern has no operator there (the ruling of 2026-10-23
-        // on `literal-inside-a-generic-body`, and on
-        // `generic-rule-instantiation-set-and-predicate`, §3).
+        // fit the type is not one whose pattern has no operator there.
         why = said.empty() ? "the pattern has no operator for this type" : said;
         return false;
     }
@@ -563,8 +558,7 @@ RuleConditionAt Builder::ruleConditionVerdict(
     // same state `instantiateRuleTemplates` enters, and for the same reason -- this runs while a
     // pass is applying the rule, long after the module was built. A predicate body that does not
     // compile for these types is held in a speculative scope, so the attempt is quiet and its
-    // reason is what the caller keeps (the ruling of 2026-10-23 on
-    // `generic-rule-instantiation-set-and-predicate`).
+    // reason is what the caller keeps.
     WhenResult verdict;
     std::string said;
     const bool inModule = this->inModule(whenTemplate->module, [&] {
@@ -1095,11 +1089,10 @@ compile_graph_ptr_t Builder::instantiateForCall(
         }
     }
     // 3. The callee's result type aligned with the type of the position the call stands in solves
-    // every variable it mentions (design principles 5.1, 5.5; the ruling of 2026-10-23 on
-    // `expected-type-through-literals-and-calls`): not only a variable that appears in the result
-    // alone, and not only one no value argument mentions. It stands before the literals, which
-    // take the type it gives them: `keep([1.0, 2.0], 2)` in an `f32[]` position is `T = f32` and
-    // the array is an `f32[]`, each element converted once from the value written, and a value
+    // every variable it mentions (design principles 5.1, 5.5): not only a variable that appears in
+    // the result alone, and not only one no value argument mentions. It stands before the literals,
+    // which take the type it gives them: `keep([1.0, 2.0], 2)` in an `f32[]` position is `T = f32`
+    // and the array is an `f32[]`, each element converted once from the value written, and a value
     // that already has a type is the type error it was (an `f64` value in an `f32` position).
     //
     // A `void` position is the absence of a requirement, not one: a value written where nothing is
@@ -1842,9 +1835,9 @@ compile_graph_ptr_t Builder::instantiateGeneric(
         }
         tmpl->instances.push_back({bindings, constas, extents, graph, false});
         // A generic `#impl` function's executor is chosen here, at instantiation, because this
-        // is where the instance's types are known (ruling impl-kernel-site; H228). An instance
-        // whose type has no executor keeps the body and runs it: the body is the semantics, so
-        // the result is the same, and `std::profile` tells the two paths apart.
+        // is where the instance's types are known. An instance whose type has no executor
+        // keeps the body and runs it: the body is the semantics, so the result is the same,
+        // and `std::profile` tells the two paths apart.
         adoptImplKernel(tmpl, graph, funcType);
         // The instance takes the declaration's parameter defaults as they are: they are
         // constants, the same for every instance, and a call of the instance fills them.

@@ -1,8 +1,8 @@
 /**
  * The defaults of `with` parameters, and `with` arguments given by name (design principles
- * 4.4, handover H235). A default is a compile-time constant evaluated where the declaration
- * is and filled into each call that leaves the parameter out; a call may give the parameters
- * by position, or by name after the positional ones.
+ * 4.4). A default is a compile-time constant evaluated where the declaration is and filled
+ * into each call that leaves the parameter out; a call may give the parameters by position,
+ * or by name after the positional ones.
  */
 module with_defaults
 

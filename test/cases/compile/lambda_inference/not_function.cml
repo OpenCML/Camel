@@ -1,6 +1,6 @@
 /**
  * A lambda whose parameter writes no type where the expected type is not a function type: the
- * diagnostic says what the type expected there is (design principles 5.9; H92 item 2).
+ * diagnostic says what the type expected there is (design principles 5.9).
  */
 module lambda_inference_not_function
 

@@ -1,15 +1,12 @@
 /**
- * The rule column and the instance column are two facts, not one (H247, slice S0; the ruling of
- * 2026-10-24 on `verification-verdict-surface`, 2: a `CheckReport` row carries `rule` and
- * `instance`).
- *
- * The engine names an instance of a generic law `int_add_zero<int>` -- one string, the type tuple
- * included. The row splits it: `rule` is the law's own name, `instance` is the type tuple the
- * instance was made at, and the rendering puts the two back together, so a reader of the report
- * still sees the name the engine, `explain` and the old report used. The integer family has an
- * instance at `int` and one at `i32` (the condition `is_integer::<T>()` holds for both), and each
- * row keeps the law's name in one column and its own tuple in the other, without repeating the
- * other column inside itself.
+ * The rule column and the instance column are two facts, not one (slice S0;: a `CheckReport` row
+ * carries `rule` and `instance`). The engine names an instance of a generic law
+ * `int_add_zero<int>` -- one string, the type tuple included. The row splits it: `rule` is the
+ * law's own name, `instance` is the type tuple the instance was made at, and the rendering puts
+ * the two back together, so a reader of the report still sees the name the engine, `explain` and
+ * the old report used. The integer family has an instance at `int` and one at `i32` (the
+ * condition `is_integer::<T>` holds for both), and each row keeps the law's name in one column
+ * and its own tuple in the other, without repeating the other column inside itself.
  */
 module verify_report_instance
 

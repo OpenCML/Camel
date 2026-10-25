@@ -1,10 +1,9 @@
 /**
  * `null` is a compile-time constant of the nullable type it stands in (design principles 4.4,
- * 5.1, the ruling of 2026-10-24 on `check-program-parameter`). The three positions: the default of
- * a parameter whose type is a `T?`, a `let` whose declared type is a `T?` (the literal takes the
- * position's type, so the value is a constant of that type), and a `return` under a declared `T?`.
- * A `with` parameter takes a default by the one rule the ordinary parameters follow, so its `T?`
- * takes `null` the same way.
+ * 5.1). The three positions: the default of a parameter whose type is a `T?`, a `let` whose
+ * declared type is a `T?` (the literal takes the position's type, so the value is a constant of
+ * that type), and a `return` under a declared `T?`. A `with` parameter takes a default by the one
+ * rule the ordinary parameters follow, so its `T?` takes `null` the same way.
  */
 module nullable_positions
 

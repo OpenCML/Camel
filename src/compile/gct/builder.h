@@ -337,10 +337,10 @@ class Builder {
     node_ptr_t literalNodeInType(const node_ptr_t &node, Type *type, const AST::node_ptr_t &at);
     /// A text element of the composite literal `data` where the type of its position expects
     /// something else, reported as the type mismatch it is (design principles 5.1) at the
-    /// element itself, as H27c reports an element whose value does not fit. Recurses through
-    /// nested composites; false when there is no such element, and the caller reports the
-    /// literal the way it did before. `where` is the position to use for an element whose own
-    /// position was not kept.
+    /// element itself, as the same check reports an element whose value does not fit.
+    /// Recurses through nested composites; false when there is no such element, and the
+    /// caller reports the literal the way it did before. `where` is the position to use for
+    /// an element whose own position was not kept.
     bool rejectTextInLiteral(
         const data_ptr_t &data, Type *type, camel::source::origin_id_t where);
     /// The initializer `value` of a declaration written with the type `type` (`let x: T = e`,
@@ -354,8 +354,8 @@ class Builder {
     node_ptr_t visitTupleData(const AST::node_ptr_t &ast);
     /// `..e` (design principles 5.5): an SPRD holding the operand of the rest argument.
     node_ptr_t visitSpreadArg(const AST::node_ptr_t &ast);
-    /// `{ static for ... }` / `( static for ... )` (H51 step 4): an SCOMP holding the generator.
-    /// The rounds are packed into a shape of the same fields in the graph builder.
+    /// `{ static for... }` / `( static for... )` (step 4): an SCOMP holding the generator. The
+    /// rounds are packed into a shape of the same fields in the graph builder.
     node_ptr_t visitStaticComprehension(const AST::node_ptr_t &ast, bool isStruct);
     /// `T { static for ... }`: an SCOMP holding the generator and the type node naming `T`.
     node_ptr_t visitShapeComprehension(const AST::node_ptr_t &ast);

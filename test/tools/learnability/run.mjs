@@ -2,9 +2,9 @@
 // Copyright (c) the OpenCML Organization
 // SPDX-License-Identifier: MIT
 
-// H254: the AI learnability evaluation. Measures whether a model that has never seen Camel can
-// write correct Camel from `docs/reference/camel-for-ai.md` alone, and reports numbers rather
-// than opinions: first-draft pass rate, compile-fix rounds needed, and every diagnostic read.
+// The AI learnability evaluation. Measures whether a model that has never seen Camel can write
+// correct Camel from `docs/reference/camel-for-ai.md` alone, and reports numbers rather than
+// opinions: first-draft pass rate, compile-fix rounds needed, and every diagnostic read.
 //
 // What is measured, and what is not
 // ---------------------------------

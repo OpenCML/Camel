@@ -1,8 +1,8 @@
 /**
  * A lambda argument that writes no type, given to a name with two overloads: there is no single
  * function type to take the parameter types from, and the call does not choose an overload to
- * make one (design principles 5.9; H92 item 2). The diagnostic names the parameter; it is not a
- * silent `any` and not a pick of one overload.
+ * make one (design principles 5.9). The diagnostic names the parameter; it is not a silent
+ * `any` and not a pick of one overload.
  */
 module lambda_inference_overload_untyped
 

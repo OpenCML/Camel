@@ -47,7 +47,7 @@ std::string entryNumberText(camel::core::type::TypeCode code) {
         return cppStringLiteral(camel::core::error::runtimeDiagMessage(diag, std::move(args)));
     };
     // ConversionOutOfRange is one diagnostic for both ways a number misses: the reason says
-    // which, so an underflow is rendered with its own sentence (H15i) and the translated
+    // which, so an underflow is rendered with its own sentence (i) and the translated
     // program refuses the same text the interpreter refuses, in the same words.
     const auto outOfRange = [&](const std::string &target, const std::string &reason) {
         return message(RuntimeDiag::ConversionOutOfRange, {"'" + mark + "'", target, reason});

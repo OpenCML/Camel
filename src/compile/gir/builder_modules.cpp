@@ -57,10 +57,10 @@ namespace {
 /// are compared exactly.
 ///
 /// The answer is used to refuse two generic declarations of one name that one call could enter
-/// (design principles 4.3, 5.1; handover H94, ruling 2). Where this does not look into a type
-/// (an application of a type function, for one) it says they can agree: refusing a pair that
-/// cannot overlap is a diagnostic to remove, while letting one through is a call whose meaning
-/// the declaration order decides.
+/// (design principles 4.3, 5.1). Where this does not look into a type (an application of a
+/// type function, for one) it says they can agree: refusing a pair that cannot overlap is a
+/// diagnostic to remove, while letting one through is a call whose meaning the declaration
+/// order decides.
 bool typesCanAgree(
     Type *left, Type *right, std::unordered_map<std::string, Type *> &leftBindings,
     std::unordered_map<std::string, Type *> &rightBindings) {
@@ -410,8 +410,7 @@ void Builder::declareNativeOperator(const GCT::node_ptr_t &gct) {
     FunctionType *funcType = tt::as_ptr<FunctionType>(gct->at(0)->dataType());
     // The URI's prefix is the name the module declares (`module bytes`), not the name the
     // runtime gave the file: the entry module is `main` to the runtime, but a declaration in it
-    // stands for an operator of the module it writes itself to be (design principles 10.1;
-    // handover H94, ruling 4).
+    // stands for an operator of the module it writes itself to be (design principles 10.1).
     const std::string &declared = unit_->module->declaredName();
     const std::string where     = declared.empty() ? unit_->module->name() : declared;
     std::string uri             = where + ":" + name;
@@ -424,7 +423,7 @@ void Builder::declareNativeOperator(const GCT::node_ptr_t &gct) {
     }
     // The declaration is the signature of an operator of a loaded module: an operator no executor
     // answers cannot be called, and a mistake of the declaration (a wrong module, a typo) must be
-    // reported where it is written rather than when the call runs (handover H19, step 1).
+    // reported where it is written rather than when the call runs (step 1).
     if (!context_->execMgr().findWithoutImport(uri).has_value()) {
         diags_->of(SemanticDiag::NativeDeclarationNotLoaded)
             .atOrigin(gct->origin())
@@ -483,10 +482,10 @@ void Builder::declareNativeOperator(const GCT::node_ptr_t &gct) {
             *declaredFacts->resources, funcType->withTypesCount()));
     }
     // A declaration may give its parameters defaults, exactly as a function with a body does
-    // (design principles 4.4; handover H276): the declaration is where they are written, and the
-    // rule the call resolves to is what names them. Evaluated here, once, so that a call that
-    // leaves a parameter out takes the one value. The owner is the declared signature: a call to
-    // a native operator recovers it from the operator group, which is all a `#op` line leaves.
+    // (design principles 4.4): the declaration is where they are written, and the rule the call
+    // resolves to is what names them. Evaluated here, once, so that a call that leaves a
+    // parameter out takes the one value. The owner is the declared signature: a call to a native
+    // operator recovers it from the operator group, which is all a `#op` line leaves.
     if (GCT::Tree::of(gct)->parameterDefaultsOf(gct) != nullptr) {
         evaluateDefaults(gct, funcType, funcType, false);
         if (const auto found = defaults_.find(funcType); found != defaults_.end()) {
@@ -497,15 +496,14 @@ void Builder::declareNativeOperator(const GCT::node_ptr_t &gct) {
         }
     }
     auto resolver = camel::core::type::DeclaredFuncTypeResolver::create(funcType);
-    // A declaration stands for an operator of this module (design principles 10.1; handover
-    // H94, ruling 5): the prefix of its URI is the name the module declares, or one of the
-    // protocols the module answers on (a module whose operators are not named after it, like
-    // `random`, answers on `rand:`), or empty for an operator the compiler itself names
-    // (`:op/...`). The protocols are the module's own statement, not the groups it exported: a
-    // module that declares every operator has no group left to read them from (handover H202).
-    // Naming another module's operator is refused here: that operator's own module is where its
-    // signature belongs, and replacing its resolver from here would be one module writing
-    // another's signature.
+    // A declaration stands for an operator of this module (design principles 10.1): the prefix
+    // of its URI is the name the module declares, or one of the protocols the module answers
+    // on (a module whose operators are not named after it, like `random`, answers on `rand:`),
+    // or empty for an operator the compiler itself names (`:op/...`). The protocols are the
+    // module's own statement, not the groups it exported: a module that declares every
+    // operator has no group left to read them from. Naming another module's operator is
+    // refused here: that operator's own module is where its signature belongs, and replacing
+    // its resolver from here would be one module writing another's signature.
     const std::string protocol = uri.substr(0, uri.find(':'));
     if (!protocol.empty() && protocol != where && protocol != unit_->module->name()) {
         const auto protocols = unit_->module->operatorProtocols();
@@ -537,9 +535,9 @@ void Builder::declareNativeOperator(const GCT::node_ptr_t &gct) {
     // group refuses them the same way); nor may a declaration repeat a function of the module.
     // Two *generic* declarations are checked alike, by what a call of the name could enter: a
     // call both accept would be decided by the order the declarations are written in, which no
-    // rule of the language allows (design principles 4.3, 5.1; handover H94, ruling 2). A fixed
-    // declaration beside a generic one is no such pair: the fixed one is the more specific, and
-    // a call it accepts is its own.
+    // rule of the language allows (design principles 4.3, 5.1). A fixed declaration beside a
+    // generic one is no such pair: the fixed one is the more specific, and a call it accepts is
+    // its own.
     //
     // Two generic declarations whose `when` conditions exclude each other are the exception the
     // language author ruled on (2026-10-24, "impl-declaration-arms",
@@ -660,8 +658,8 @@ void Builder::exportNativeOperators(const GCT::node_ptr_t &exportList) {
         }
         const Reference ref(group.name);
         // A declaration the module does not export is a private operator of the module: its own
-        // bodies call it, an importer cannot (handover H94, ruling 3). Either way it is the
-        // module's own group, kept here and not in the program's export table.
+        // bodies call it, an importer cannot. Either way it is the module's own group, kept
+        // here and not in the program's export table.
         const bool isExported = exported.contains(group.name);
         std::optional<camel::core::module::entity> existing;
         if (isExported) {
@@ -676,8 +674,8 @@ void Builder::exportNativeOperators(const GCT::node_ptr_t &exportList) {
             }
         }
         // A fixed declaration is the more specific rule: a call that both it and a generic
-        // declaration accept is its own (design principles 4.3; handover H94, ruling 2). The
-        // group answers in the order of its rules, so the fixed ones come first.
+        // declaration accept is its own (design principles 4.3). The group answers in the
+        // order of its rules, so the fixed ones come first.
         std::stable_sort(
             group.rules.begin(), group.rules.end(), [](const auto &a, const auto &b) {
                 return a.second->fixedSignature() != nullptr &&
@@ -693,7 +691,7 @@ void Builder::exportNativeOperators(const GCT::node_ptr_t &exportList) {
         if (existing.has_value()) {
             // The C++ module exports an operator group of this name too: the declaration is the
             // module's signature for it, so it replaces the group instead of being a second
-            // entity beside it (design principles 6.4; handover H94, ruling 1).
+            // entity beside it (design principles 6.4).
             unit_->module->replaceEntity(ref, ops);
         } else {
             unit_->module->exportEntity(ref, ops);
@@ -819,7 +817,7 @@ void Builder::adoptImplKernel(
         return;
     }
     const ImplTemplateKernel &kernel = declared->second;
-    // Which rule of the declaration is this instance's executor (H228: one operator, per-type
+    // Which rule of the declaration is this instance's executor (: one operator, per-type
     // executors). A rule with a fixed signature answers for the signature it names; a rule
     // declared with the function's own type parameters is asked with the instance's parameter
     // types, and its own result type is what a call of the instance gets. A rule only applies
@@ -935,12 +933,12 @@ void Builder::resolveImplDeclarations(const GCT::node_ptr_t &root) {
                 throw BuildAbortException();
             }
             FunctionType *funcType = tt::as_ptr<FunctionType>(child->at(0)->dataType());
-            // A generic function may carry `#impl` (ruling impl-kernel-site): its kernel is a
-            // body-less declaration of this module whose type parameters are its own, and which
-            // rule of it runs an instance is decided at instantiation, when that instance's
-            // types are known (adoptImplKernel; H228: one operator, per-type executors). An
-            // instance no rule accepts has no executor and runs the body, which is the
-            // semantics, so the result is the same.
+            // A generic function may carry `#impl`: its kernel is a body-less declaration of
+            // this module whose type parameters are its own, and which rule of it runs an
+            // instance is decided at instantiation, when that instance's types are known
+            // (adoptImplKernel;: one operator, per-type executors). An instance no rule
+            // accepts has no executor and runs the body, which is the semantics, so the result
+            // is the same.
             const bool generic = isGenericHere(funcType);
             generic_ref_t genericTemplate;
             if (generic) {
@@ -1118,7 +1116,7 @@ void Builder::resolveImplDeclarations(const GCT::node_ptr_t &root) {
 std::optional<camel::core::module::entity> Builder::ownNativeEntity(const Reference &ref) {
     // The module whose code is being built, which is not always the unit a caller is in: an
     // instance of a generic function is built in the module that declares it, and reaches that
-    // module's private operators from there (instantiateGeneric; handover H94, ruling 3).
+    // module's private operators from there (instantiateGeneric).
     if (module_ == nullptr) {
         return std::nullopt;
     }
@@ -1202,7 +1200,7 @@ void Builder::exportDeclarations(const GCT::node_ptr_t &gct, bool decorated) {
         }
         if (module_->getNativeEntity(ref).has_value()) {
             // A body-less declaration: its operator group is the module's own entity, exported
-            // when the declarations of the module were read (handover H19, step 1).
+            // when the declarations of the module were read (step 1).
             continue;
         }
         if (auto value = unit_->values.find(name); value != unit_->values.end()) {

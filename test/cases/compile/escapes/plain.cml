@@ -1,10 +1,8 @@
 /**
- * H217 probes: the escape table of a plain string ('...' / "...").
- *
- * Each line prints the length and, where the result is printable, the text the
- * escape produced. The seven probes of the ruling (`\101`, `\0`, `\x41`, `\u{1F600}`, `\n`,
- * `\8`, `\0x`) and the three octal-looking forms that must stop meaning a byte (`\01`,
- * `\012`, `\033`).
+ * Probes: the escape table of a plain string ('...' / "..."). Each line prints the length
+ * and, where the result is printable, the text the escape produced. The seven probes of the
+ * rule (`\101`, `\0`, `\x41`, `\u{1F600}`, `\n`, `\8`, `\0x`) and the three octal-looking
+ * forms that must stop meaning a byte (`\01`, `\012`, `\033`).
  */
 module escapes_plain
 

@@ -1,7 +1,6 @@
 /**
- * What the translation layer makes of a rule (H247, slice S1; rewrite design 8.1, and the ruling of
- * 2026-10-24 on `verification-verdict-surface`, 3, in
- * `docs/handover/reviews/questions-2026-10-23.md`).
+ * What the translation layer makes of a rule (slice S1 of the verdict-surface rule; rewrite
+ * design 8.1).
  *
  * The two sides of a rule are two graphs. The layer reads them into logic terms -- the integer
  * scalar fragment: the widths `int` and `i32`, the operators `+ - * / %` and unary `-`, integer

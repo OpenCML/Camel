@@ -1,6 +1,6 @@
 /**
  * The same refusal at a narrower context: 1e-50 is a double, but at an `f32` position its
- * nearest `f32` is zero, so it is refused (H15i).
+ * nearest `f32` is zero, so it is refused (i).
  */
 module literal_context_underflow_f32
 

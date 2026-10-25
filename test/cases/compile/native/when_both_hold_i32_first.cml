@@ -1,18 +1,16 @@
 /**
  * Two declarations of one kernel name whose `when` conditions hold together for one call: both
- * are candidates, and a call has no single answer. The language author's ruling of 2026-10-23 on
- * `two-when-conditions-hold` (`docs/handover/reviews/questions-2026-10-23.md`): "带 `when` 的候选
- * 都适用时，调用处报歧义，列出两条候选与各自成立的条件" -- "先写的赢" no longer exists for a
- * candidate that writes `when`, because the declaration-time check only samples the types the
- * compiler registers, and the call site is what decides.
- *
- * The declaration-time check asks each condition about every registered type with the type
- * variables *that condition writes* bound to it (`separateWhenConditions`): the first arm's
- * condition is about `T` alone and the second's about `U` alone, so no registered type satisfies
- * both and the pair is admitted. A call writes two different types -- `dual_kernel(x, y)` with
- * `x: i32` and `y: int` -- and then both conditions hold together, which no sampling of one type
- * at a time can see. Its twin `when_both_hold_int_first.cml` holds the same program with the two
- * declarations written in the other order and must report the same diagnostic.
+ * are candidates, and a call has no single answer. The rule on `two-when-conditions-hold` (` `):
+ * "带 `when` 的候选 都适用时，调用处报歧义，列出两条候选与各自成立的条件" -- "先写的赢" no longer exists for a candidate that
+ * writes `when`, because the declaration-time check only samples the types the compiler
+ * registers, and the call site is what decides. The declaration-time check asks each condition
+ * about every registered type with the type variables *that condition writes* bound to it
+ * (`separateWhenConditions`): the first arm's condition is about `T` alone and the second's
+ * about `U` alone, so no registered type satisfies both and the pair is admitted. A call writes
+ * two different types -- `dual_kernel(x, y)` with `x: i32` and `y: int` -- and then both
+ * conditions hold together, which no sampling of one type at a time can see. Its twin
+ * `when_both_hold_int_first.cml` holds the same program with the two declarations written in the
+ * other order and must report the same diagnostic.
  */
 module when_both_hold_i32_first
 

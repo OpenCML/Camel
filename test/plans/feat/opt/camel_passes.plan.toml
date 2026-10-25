@@ -9,9 +9,9 @@ expect_exit = 0
 timeout_ms = 20000
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths", "normalize_origins"]
 
-# A pass written in Camel (`stdlib/opt.cml`, handover H227) against the C++ pass that does the
-# same (`std::opt::cse`, `std::opt::dce values_only=true`). The evidence is graph equality: the
-# C++ run records the graph it produced in a golden, and the Camel run's graph is put to the
+# A pass written in Camel (`stdlib/opt.cml`) against the C++ pass that does the same
+# (`std::opt::cse`, `std::opt::dce values_only=true`). The evidence is graph equality: the C++
+# run records the graph it produced in a golden, and the Camel run's graph is put to the
 # isomorphic comparison the snapshot tests use (`gir_dot_isomorphic`, `test/tools/gir-dot.mjs`),
 # which compares each node's kind, type, shape and in/out degree and each edge's endpoint kinds,
 # link type and label — the same values, of the same types, in the same region structure, wired

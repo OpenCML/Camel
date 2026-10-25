@@ -9,8 +9,8 @@
 // entry runs it in full, FORBIDDEN names it as skipped by policy, or the debug layer is out of the
 // release gate and says so. A plan outside those four would have tests that no layer runs and no
 // line calls UNKNOWN; the list would keep saying "200 cases skipped" while the tree grew. This used
-// to be unchecked (H185): a renamed FORBIDDEN file was printed as skipped, and a new slow plan
-// under feat/ vanished from both layers.
+// to be unchecked: a renamed FORBIDDEN file was printed as skipped, and a new slow plan under feat/
+// vanished from both layers.
 //
 // The tables and the check live here, in one place, because two readers need the same facts:
 // `scripts/release-gate.mjs` imports them, and the merge gate's fast layer runs this file as an
@@ -29,14 +29,14 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
 // The fast layer. `smoke` + `feat` are what `npm run test` walks; `gpu/profile` is fast-tier but
 // under `gpu/`, which neither the fast target nor the slow list reaches -- it would otherwise be
-// as invisible as the rest of `gpu/**` was before H154.
+// as invisible as the rest of `gpu/**` was before the slow layer existed.
 export const FAST_TARGETS = ['smoke', 'test/plans/feat', 'test/plans/gpu/profile.plan.toml']
 
-// The slow layer, by explicit plan file (H154 §3). Fourteen files: six fast plans whose slow tests
-// are runnable, five whole slow plans, and three perf plans the tree keeps gate-able -- the
-// `para_speedup` plan the 2026-10-23 ruling made one, and the two count guards the 2026-10-25
-// ruling split out of `perf.step_budget` and `perf.reduce_layout` because they assert counts and
-// properties rather than durations. Every other slow test is in FORBIDDEN below.
+// The slow layer, by explicit plan file. Fourteen files: six fast plans whose slow tests are
+// runnable, five whole slow plans, and three perf plans the tree keeps gate-able -- the
+// `para_speedup` plan, and the two count guards split out of `perf.step_budget` and
+// `perf.reduce_layout` because they assert counts and properties rather than durations. Every
+// other slow test is in FORBIDDEN below.
 export const SLOW_PLANS = [
     'test/plans/feat/parse/frontend.plan.toml',
     'test/plans/feat/trans/cpp.plan.toml',
@@ -57,14 +57,14 @@ export const SLOW_PLANS = [
 // Never run. `agents/test.md`, General Policy: the full suite, the GC poison sweep, the GC
 // stress plans (`gc.collection_trees_*`, `gc_elder_*`), the progen random-program checks, the
 // PyTorch comparisons and the perf/timeit plans are milestone-only -- by the coordinator, on a
-// quiet machine -- and the shared host is not one. H154 §2 measured 200 cases here.
+// quiet machine -- and the shared host is not one. measured 200 cases here.
 //
 // A file in this list is named as a whole plan when the whole plan is excluded, and as a plan
 // with excluded slow entries when only some of its tests are excluded: the runner cannot select
-// a test by name, so naming such a file would start the forbidden tests too (H154 §2, the ONNX
-// row). Both kinds are skipped entirely, which is why the list holds 26 entries (23 whole plans
-// and 3 plans with forbidden slow entries) for those 200 cases plus the perf cases that landed
-// after that measurement.
+// a test by name, so naming such a file would start the forbidden tests too (the ONNX row).
+// Both kinds are skipped entirely, which is why the list holds 26 entries (23 whole plans and 3
+// plans with forbidden slow entries) for those 200 cases plus the perf cases that landed after
+// that measurement.
 export const FORBIDDEN = [
     // The benchmark/timeit plans: the machine's load is part of what they measure.
     { file: 'test/plans/perf/fib.plan.toml', reason: 'benchmark (`kind = "benchmark"`): measures the machine load' },
@@ -79,9 +79,8 @@ export const FORBIDDEN = [
     { file: 'test/plans/perf/showcase_c6.plan.toml', reason: 'PyTorch comparison (`skip_unless` torch; agents/test.md)' },
     { file: 'test/plans/perf/showcase_d5.plan.toml', reason: 'PyTorch comparison (`skip_unless` torch; agents/test.md)' },
     // The remaining perf plans: a measurement whose numbers only mean anything beside the whole
-    // sweep, recorded rather than gated (the 2026-10-25 ruling disposed of the eight that had no
-    // fate: one to the slow layer, two split into a gate-able count guard and a measurement, five
-    // here).
+    // sweep, recorded rather than gated (the eight that had no fate: one to the slow layer, two
+    // split into a gate-able count guard and a measurement, five here).
     { file: 'test/plans/perf/gemm_canonical_shapes.plan.toml', reason: 'a rate curve (GFLOP/s per shape and round): measured before a release, not in a gate' },
     { file: 'test/plans/perf/gemm_threads.plan.toml', reason: 'a thread-rate curve (GFLOP/s per thread count): measured before a release, not in a gate' },
     { file: 'test/plans/perf/instruction_counts.plan.toml', reason: 'needs a privileged container and `perf stat` (`kernel.perf_event_paranoid` refuses an unprivileged perf)' },
@@ -126,7 +125,7 @@ export function walkPlans(entry) {
 }
 
 // Every problem, not the first: the caller prints the whole list, so a reader sees all the plan
-// files that have no fate in one run instead of fixing one per run (H500).
+// files that have no fate in one run instead of fixing one per run.
 export function planInventoryProblems() {
     const problems = []
     for (const entry of FORBIDDEN) {

@@ -89,9 +89,8 @@ slot_t writeArguments(ArgsView &with, ArgsView &norm, std::ostringstream &out, b
                     norm.get<Float64>(i), camel::builtin::FloatTextFormat::Float64});
             break;
         case TypeCode::BFloat16:
-            // A bf16 or an f16 in a format is printed by its own type's text (7.7, the ruling of
-            // 2026-10-23): the value widens to f32 exactly, and the format says whose text a
-            // plain `{}` writes.
+            // A bf16 or an f16 in a format is printed by its own type's text: the value widens
+            // to f32 exactly, and the format says whose text a plain `{}` writes.
             store.push_back(camel::builtin::LanguageFloat<Float32>{
                 rtdata::halfValueFloat(norm.slot(i), code),
                 camel::builtin::FloatTextFormat::BFloat16});
@@ -155,8 +154,8 @@ slot_t __op_println__(ArgsView &with, ArgsView &norm, Context &ctx) {
 }
 
 // `eprintln` is `println` on the standard error stream: same text, one line end, and it gives
-// back its first argument (design principles 3.1). It is in the prelude (the author's ruling on
-// H134 question 2), so a program writes it without an import.
+// back its first argument (design principles 3.1). It is in the prelude, so a program writes it
+// without an import.
 slot_t __op_eprintln__(ArgsView &with, ArgsView &norm, Context &ctx) {
     std::ostringstream out;
     bool formatted      = false;

@@ -1,9 +1,9 @@
 /**
- * The type of a comprehension's fields comes from the round's value, not from `F` (H79
- * ruling 2). `widen` walks a nested struct/tuple with `match type` and gives every leaf a
- * `float`; the field type `F` at the leaves is `int`, so the result is the same shape with
- * every leaf a `float`. This is the shape `tree_map` has when its callback changes the leaves'
- * type, and the recursive rebuild is written with comprehensions only.
+ * The type of a comprehension's fields comes from the round's value, not from `F`. `widen`
+ * walks a nested struct/tuple with `match type` and gives every leaf a `float`; the field type
+ * `F` at the leaves is `int`, so the result is the same shape with every leaf a `float`. This
+ * is the shape `tree_map` has when its callback changes the leaves' type, and the recursive
+ * rebuild is written with comprehensions only.
  */
 module comprehension_value_type
 

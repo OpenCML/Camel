@@ -153,10 +153,9 @@ class Node {
         flags_ |= kFlagA;
     }
 
-    /// FUNC, DECL: a body-less declaration (design principles 6.4; handover H19, step 1). The FUNC
-    /// the parser built has its type as its only child and no graph is built from it; the DECL the
-    /// module makes of it stands for an operator of a C++ module, and what it declares is its
-    /// signature.
+    /// FUNC, DECL: a body-less declaration (design principles 6.4; step 1). The FUNC the parser
+    /// built has its type as its only child and no graph is built from it; the DECL the module
+    /// makes of it stands for an operator of a C++ module, and what it declares is its signature.
     bool nativeDeclaration() const {
         ASSERT(kind_ == NodeKind::FUNC || kind_ == NodeKind::DECL, "The node is no declaration");
         return (flags_ & kFlagB) != 0;
@@ -434,9 +433,8 @@ class Node {
     /// SLOOP: the fold walks a sequence written after `in` (`for i in 0..5`), rather than the
     /// fields of a type or the positions of a tuple value. The sequence must be one the compiler
     /// works out: an expression built only from compile-time constants through operations that
-    /// are pure and cannot fail (the ruling of 2026-10-24, H462, and the ruling of 2026-10-25,
-    /// H475, which draws the line by that one rule). Then it is evaluated and unrolled -- a
-    /// constant interval `a..b`, `range(a, b, step)` with constant arguments, an array literal
+    /// are pure and cannot fail (one rule draws the line). Then it is evaluated and unrolled --
+    /// a constant interval `a..b`, `range(a, b, step)` with constant arguments, an array literal
     /// or a constant array give one value per round, and a compile-time tuple gives the type at
     /// each position. The graph builder refuses anything else with
     /// `SemanticDiag::StaticLoopSequenceNotKnown`. Never set together with `staticLoopIndices`.

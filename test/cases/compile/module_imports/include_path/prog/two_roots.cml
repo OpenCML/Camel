@@ -1,5 +1,5 @@
-/// H129 case 3: two `-I` roots, one for each import (`-I ../roots/one` and
-/// `--include ../roots/two` in the plan).
+/// Case 3: two `-I` roots, one for each import (`-I../roots/one` and
+/// `--include../roots/two` in the plan).
 module include_two_roots
 
 import alpha

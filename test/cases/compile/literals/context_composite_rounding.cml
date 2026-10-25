@@ -1,8 +1,8 @@
 /**
- * Handover H27, item 1: a composite literal keeps the exact value each element was written as
- * until the type of its position is known, and GIR rebuilds it from those values. The decimal
- * below is just above the midpoint between 1.0 and the next f32: converted directly it rounds
- * up to 1.0000001192092896, while a conversion that first made it the nearest double would land
+ * Handover, item 1: a composite literal keeps the exact value each element was written as until
+ * the type of its position is known, and GIR rebuilds it from those values. The decimal below
+ * is just above the midpoint between 1.0 and the next f32: converted directly it rounds up to
+ * 1.0000001192092896, while a conversion that first made it the nearest double would land
  * exactly on the midpoint and round back down to 1.0. A `return` of the literal and a declared
  * array print the same 1.00000012, for an array element, a struct field and a nested array.
  */

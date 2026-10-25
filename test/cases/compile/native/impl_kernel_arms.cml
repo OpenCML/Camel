@@ -1,17 +1,16 @@
 /**
- * The arms of a generic kernel, written in Camel (design principles 10.4; H228: one operator,
- * per-type executors). A kernel declared with the function's own type parameter can be
- * instantiated with every element type the function admits, so which instances it implements is
- * what its own applicability condition says (`when`, design principles 4.4): `add_kernel` and
- * `sub_kernel` name `:op/add_i` and `:op/sub_i`, which compute on `i32`, and both are narrowed to
- * `i32` by `is_armed`. The `int` instances are outside the conditions, have no executor, and run
- * the functions' bodies, which are the semantics (10.4).
- *
- * `flipped`'s kernel does not agree with its body (`:op/sub_i` where the body adds): a tag
- * checks the signature, not the semantics (impl_disagreement.cml), so the two paths print
- * different numbers and which path ran is readable in the value, not only in `std::profile`. The
- * `i32` instances print their kernels' answers (42 and -4); the `int` instances must print their
- * bodies' (42 and 42), and a compiler that bound the kernel by name alone prints -4 twice.
+ * The arms of a generic kernel, written in Camel (design principles 10.4;: one operator, per-type
+ * executors). A kernel declared with the function's own type parameter can be instantiated with
+ * every element type the function admits, so which instances it implements is what its own
+ * applicability condition says (`when`, design principles 4.4): `add_kernel` and `sub_kernel`
+ * name `:op/add_i` and `:op/sub_i`, which compute on `i32`, and both are narrowed to `i32` by
+ * `is_armed`. The `int` instances are outside the conditions, have no executor, and run the
+ * functions' bodies, which are the semantics (10.4). `flipped`'s kernel does not agree with its
+ * body (`:op/sub_i` where the body adds): a tag checks the signature, not the semantics
+ * (impl_disagreement.cml), so the two paths print different numbers and which path ran is
+ * readable in the value, not only in `std::profile`. The `i32` instances print their kernels'
+ * answers (42 and -4); the `int` instances must print their bodies' (42 and 42), and a compiler
+ * that bound the kernel by name alone prints -4 twice.
  */
 module impl_kernel_arms
 

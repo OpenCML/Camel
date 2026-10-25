@@ -1,5 +1,5 @@
-/// H220: the entry program's `import sub.helper`; the library it names then imports `lib` in its
-/// own directory, so this prints `helper+sub` (design principles 10.2).
+/// The entry program's `import sub.helper`; the library it names then imports `lib` in its own
+/// directory, so this prints `helper+sub` (design principles 10.2).
 module main_sub
 
 import sub.helper

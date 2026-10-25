@@ -176,15 +176,15 @@ enum class SemanticDiag : uint32_t {
     // this one takes the next free code after them.
     StaticIndicesNotTuple = 0x000182,
 
-    // The sequence of a `static loop` (the rulings of 2026-10-24 and 2026-10-25; H462 and H475):
+    // The sequence of a `static loop` (the two rules that gave it its head and its step):
     // the head lost the parentheses it carried and takes any sequence known when the function is
     // compiled. One rule draws the line -- compile-time constants joined by operations that are
     // pure and cannot fail -- so what counts is the interval, `range`, an array and a compile-time
     // tuple, not a list of spellings. One the compiler cannot work out is this.
     StaticLoopSequenceNotKnown = 0x0001E7,
 
-    // The names of a `static for` / `static loop` head (the ruling of 2026-10-25 on
-    // `static-loop-sequence-two-argument-range-and-the-tuple-reading`, item 4): the number of names
+    // The names of a `static for` / `static loop` head (the rule on the two-argument range and the
+    // tuple reading, item 4): the number of names
     // follows the element -- `fields T` gives the field's name, its type and its tags, every other
     // element gives one thing -- and a head that names more than the element has parts is this.
     StaticHeadNameCount = 0x000000,
@@ -287,17 +287,17 @@ enum class SemanticDiag : uint32_t {
     // 6.4; handover H19, step 1). 0x17B and up.
     NativeDeclarationIncomplete = 0x00017B,
     NativeDeclarationNotLoaded  = 0x00017C,
-    // Handover H94 (the author's rulings on body-less declarations): 0x17E and up.
-    /// Two generic declarations of one name can take the same call (ruling 2).
+    // Body-less declarations: 0x17E and up.
+    /// Two generic declarations of one name can take the same call (rule 2).
     NativeDeclarationOverlap = 0x000180,
-    // The language author's ruling of 2026-10-24 on same-named `#impl` declarations split by their
-    // conditions (`docs/handover/reviews/questions-2026-10-23.md`, "impl-declaration-arms"): two
+    // The rule on same-named `#impl` declarations split by their
+    // conditions: two
     // same-named declarations whose `when` conditions are mutually exclusive are overloads and may
     // stand side by side; a type that satisfies both is this overlap. The conditions are asked about
     // every type the compiler registers, and a condition it cannot answer leaves the pair refused by
     // the older code above.
     WhenDeclarationOverlap = 0x0001E0,
-    /// A declaration names an operator of another module (ruling 5).
+    /// A declaration names an operator of another module (rule 5).
     NativeDeclarationForeignOperator = 0x000181,
 
     // A lambda's parameter that writes no type and that the function type of its position does
@@ -359,19 +359,19 @@ enum class SemanticDiag : uint32_t {
     /// An argument at a call has a type the parameter it fills does not take.
     ParamArgumentWrongType = 0x0001D6,
 
-    // Composition and the interval (`..`, design principles 4.2; the author's ruling of 2026-10-24
-    // on `h248-generator-and-composition`). 0x1D7 and up.
+    // Composition and the interval (`..`, design principles 4.2; the generator-and-composition rule).
+    // 0x1D7 and up.
     /// Neither reading of `..` takes these operands: they are not two functions and not two integers.
     CompOperandMismatch = 0x0001E1,
     /// The left operand of `..` is a function that takes more or fewer than one parameter.
     CompOperandNotUnary = 0x0001E2,
-    /// An operand of `..` is the name of a generic function, and nothing at this position says which instance it stands for. The refusal names the operand and both ways to settle it (the author's ruling of 2026-10-24, section generic-operands-of-composition of docs/handover/reviews/questions-2026-10-23.md).
+    /// An operand of `..` is the name of a generic function, and nothing at this position says which instance it stands for. The refusal names the operand and both ways to settle it.
     CompOperandGenericWithoutType = 0x0001E4,
     /// The interval of two integers is written `a..b` and nothing else: the two-parameter `range(a, b)`
-    /// the language used to have is gone (design principles 4.2; the author's ruling of 2026-10-24).
+    /// the language used to have is gone (design principles 4.2; the rule).
     RangeTwoArgumentsRemoved = 0x0001E5,
     /// `range(a, b, 0)` is no sequence at all: the step never moves (design principles 4.2; the
-    /// author's ruling of 2026-10-24 on `h426-interval-step-form`, which makes a step of 0 a fault
+    /// interval-step-form rule, which makes a step of 0 a fault
     /// and a constant one a compile-time error).
     RangeStepZero               = 0x0001E6,
     ReducedPrecisionUnsupported = 0x0001D7,
@@ -384,12 +384,12 @@ enum class SemanticDiag : uint32_t {
     ImplSignatureMismatch     = 0x0001DB,
     ImplKernelNotBodyless     = 0x0001DC,
     // The node of a `const` parameter inside a rule's condition (rewrite design 2 (second version)
-    // 1; the ruling of 2026-10-23 on `rule_when_const_node`): the surface name is `node_of(c)`,
+    // 1): the surface name is `node_of(c)`,
     // it takes the name of one of the rule's own `const` parameters, and it is written in the
     // condition. Nothing else reaches a node there.
     // A stream is linear (design principles 5.4): it is read one element at a time and is finished
     // when it ends, so a container whose elements can be read more than once cannot hold one. The
-    // author's ruling of 2026-10-24 (h248-stream-type-surface) names arrays, maps and sets; a tuple
+    // rule names arrays, maps and sets; a tuple
     // is not a container in that sense - its items are taken apart once - and a function signature
     // may take and give a stream.
     StreamInContainer   = 0x0001E3,

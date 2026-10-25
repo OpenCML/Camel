@@ -1,6 +1,6 @@
 /**
  * The module package_user imports. The test copies it into a directory whose name lies outside
- * the process code page, and that directory is what CAMEL_PACKAGES points at (H9 item 3).
+ * the process code page, and that directory is what CAMEL_PACKAGES points at.
  */
 module helper
 

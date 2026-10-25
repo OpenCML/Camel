@@ -1,5 +1,5 @@
-/// H220 trap 2: `import graph` beside a same-named file shadows the standard library's `graph`
-/// for this library, with no diagnostic. It exports only `answer`, which stdlib/graph does not
+/// Trap 2: `import graph` beside a same-named file shadows the standard library's `graph` for
+/// this library, with no diagnostic. It exports only `answer`, which stdlib/graph does not
 /// have, so taking the standard library's module instead would fail at `graph::answer`.
 module shadow_helper
 

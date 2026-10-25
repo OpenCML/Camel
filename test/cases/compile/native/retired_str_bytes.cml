@@ -1,8 +1,8 @@
 /**
  * `str::bytes` was retired, not renamed: `bytes::encode` is the one place where a string becomes
- * its UTF-8 bytes (handover H122). An old form is deleted outright, with no alias and no
- * diagnostic pointing at the new form (design principles 1): the name is an ordinary name the
- * module does not export, diagnosed where it is used.
+ * its UTF-8 bytes. An old form is deleted outright, with no alias and no diagnostic pointing at
+ * the new form (design principles 1): the name is an ordinary name the module does not export,
+ * diagnosed where it is used.
  */
 import { bytes } from str
 

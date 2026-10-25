@@ -115,7 +115,7 @@ enum Permission : uint16_t {
 };
 
 /// A set of permissions: 0 when none is granted. Two bytes since `nondeterministic` (review of
-/// H2b: the mask grows; there is no second column).
+/// b: the mask grows; there is no second column).
 using PermissionMask = uint16_t;
 
 inline constexpr PermissionMask kNoPermissions = 0;
@@ -260,11 +260,11 @@ struct RewriteErrorBound {
  * (`RewriteErrorBound.ulps`; modules/rewrite/module.cpp compares two sides with it).
  *
  * Every element type has its own, and the two reduced-precision floating types are not f32 with
- * its number (design principles 7.3; the ruling of 2026-10-23 on `check-generic-instance-space`,
- * 3, which opened the lane: "误差界里的 epsilon 取元素类型的（bf16 是 2^-8，f16 是 2^-10）"):
+ * its number (design principles 7.3: the error-bound epsilon is the element type's, bf16 2^-8 and
+ * f16 2^-10):
  *
  *   bf16   2^-8    8 significand bits (1 sign, 8 exponent, 7 stored)
- *   f16    2^-10   the ruling's number for the type
+ *   f16    2^-10   the element type's own number
  *   f32    2^-24   24 significand bits
  *   f64    2^-53   53 significand bits
  *

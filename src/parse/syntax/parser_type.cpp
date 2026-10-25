@@ -46,11 +46,10 @@ bool ParserImpl::typeStartsAt(uint32_t n) const {
     }
 }
 
-/// typeExpr : interType ('?' | '!' | '..')*
-/// A mark is `?` (may be null), `!` (may have failed) or `..` (the type is a stream). The marks
-/// are read left to right and each one wraps what is written before it, with no special case
-/// (the author's ruling of 2026-10-24): `T?..` is `(T?)..`, the stream of a nullable `T`, and
-/// `T..?` is the possibly absent stream. `T..` and `T[..]` are therefore two types.
+/// TypeExpr: interType ('?' | '!' | '..')* A mark is `?` (may be null), `!` (may have failed)
+/// or `..` (the type is a stream). The marks are read left to right and each one wraps what is
+/// written before it, with no special case: `T?..` is `(T?)..`, the stream of a nullable `T`,
+/// and `T..?` is the possibly absent stream. `T..` and `T[..]` are therefore two types.
 ///
 /// A dimension written after a stream mark applies to the stream: `T..[3]` is an array of three
 /// streams (the builder of the array reports that a stream is linear and cannot be an element —
@@ -271,10 +270,10 @@ void ParserImpl::parseSpecType() {
 /// else a tuple type.
 void ParserImpl::parsePrimaryType() {
     // After `fields` and after `match type` the parser is in a type position: the head `(` opens
-    // a tuple or a parenthesised type, so `fields ()` is the empty tuple type (H79 ruling 1).
-    // The flag belongs to the head only: a type nested in the parentheses keeps the
-    // function-type reading, and a function type at that head is written between one more pair
-    // of parentheses (`fields ((x: int) => int)`).
+    // a tuple or a parenthesised type, so `fields ()` is the empty tuple type. The flag belongs
+    // to the head only: a type nested in the parentheses keeps the function-type reading, and a
+    // function type at that head is written between one more pair of parentheses (`fields ((x:
+    // int) => int)`).
     const bool typeHead = typeHead_;
     typeHead_           = false;
     switch (cur_) {

@@ -395,9 +395,9 @@ PassMaker extractPass() {
     };
 }
 
-/// The saturation of the rules library, under the core's name (H225). Like `std::opt::algebra`,
-/// the laws are the library's (`rules::saturate_only`); unlike it, the extraction is not made, so
-/// the program stops in the state where a value has several writings.
+/// The saturation of the rules library, under the core's name. Like `std::opt::algebra`, the laws
+/// are the library's (`rules::saturate_only`); unlike it, the extraction is not made, so the
+/// program stops in the state where a value has several writings.
 PassMaker saturatePass() {
     return [](const context_ptr_t &ctx, const PassArgs &args) {
         return std::make_unique<OptimizeSaturatePass>(
@@ -865,7 +865,7 @@ std::string resolveAlias(const std::string &name) {
 }
 
 /// Test-only passes: they exist only to be named by a test's pipeline and are in no default
-/// pipeline, so naming one is the whole switch (H81 removed the variable that used to gate
+/// pipeline, so naming one is the whole switch (removed the variable that used to gate
 /// them).
 const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
 #define TEST_PASS(K, T)                                                                            \
@@ -1061,7 +1061,7 @@ std::optional<FoundPass> findDescriptor(const context_ptr_t &ctx, const std::str
 }
 
 /// Test-only passes: they exist only to be named by a test's pipeline and are in no default
-/// pipeline, so naming one is the whole switch (H81 removed the variable that used to gate
+/// pipeline, so naming one is the whole switch (removed the variable that used to gate
 /// them).
 std::optional<FoundPass> findTestPass(const std::string &name) {
     if (name == "test::params") {
@@ -1086,12 +1086,12 @@ struct ResolvedPass {
     /// A parameter the call wrote wrongly: unknown, written twice, of the wrong type, or a
     /// required one left out.
     std::optional<camel::execute::detail::ParamProblem> paramProblem;
-    /// A pass module that does not compile: its first error, as a secondary location (H36c).
+    /// A pass module that does not compile: its first error, as a secondary location (c).
     std::optional<std::string> problem;
     std::optional<DiagLabel> errorLocation;
     /// A `<module>::<pass>` whose module is there and compiles but provides no such pass: the
     /// module, the name, what the module does provide, and whether it declares the name without
-    /// exporting it (H130).
+    /// exporting it.
     struct MissingPass {
         std::string module;
         std::string function;
@@ -1207,12 +1207,11 @@ Diagnostic parameterDiagnostic(
     return diag;
 }
 
-/// The `help` of a pass specification whose module did not load, in place of the paragraph about how
-/// a pass specification is written (ruling of 2026-10-23, "pass-unavailable-diagnostics" 1). The
-/// user did not write the name wrongly: the module the name needs is not there to be loaded, and
-/// the diagnostic's message already carries the loader's own first reason. What the help owes the
-/// reader is that fact, said plainly, so that the paragraph about `key=value` words — the answer to
-/// a different problem — is not what they act on.
+/// The `help` of a pass specification whose module did not load, in place of the paragraph about
+/// how a pass specification is written. The user did not write the name wrongly: the module the
+/// name needs is not there to be loaded, and the diagnostic's message already carries the loader's
+/// own first reason. What the help owes the reader is that fact, said plainly, so that the
+/// paragraph about `key=value` words — the answer to a different problem — is not what they act on.
 ///
 /// `module` is the module the pass name resolved to; `reason` is the same text the message carries.
 std::string moduleLoadFailureHelp(const std::string &module, const std::string &reason) {
@@ -1336,7 +1335,7 @@ void listAvailablePasses(const std::string &name, const context_ptr_t &ctx) {
 }
 
 /// The passes of a module, as the sentence of a diagnostic writes them: "no passes", "the pass
-/// 'x'", "the passes 'x', 'y'" (H130).
+/// 'x'", "the passes 'x', 'y'".
 std::string providedPassesText(const std::vector<std::string> &passes) {
     if (passes.empty()) {
         return "no passes";
@@ -1351,14 +1350,14 @@ std::string providedPassesText(const std::vector<std::string> &passes) {
     return text;
 }
 
-/// The diagnostic for a pass name that does not resolve, told apart by what was found (H130):
-///   - a module that is there and cannot be used: its reason, chained to the module's own first
-///     error as a secondary location when that error has a position, exactly as any other
-///     refused pass specification;
-///   - a module that is there and provides no such pass: the short answer, naming the module and
-///     the passes it does provide, so that a name that is simply wrong does not read like a
-///     compiler that lost the module;
-///   - a name with no module behind it: unknown, followed by the list of passes that exist.
+/// The diagnostic for a pass name that does not resolve, told apart by what was found:
+/// - a module that is there and cannot be used: its reason, chained to the module's own first
+/// error as a secondary location when that error has a position, exactly as any other refused
+/// pass specification;
+/// - a module that is there and provides no such pass: the short answer, naming the module and
+/// the passes it does provide, so that a name that is simply wrong does not read like a compiler
+/// that lost the module;
+/// - a name with no module behind it: unknown, followed by the list of passes that exist.
 [[noreturn]] void
 throwUnresolvedPass(const std::string &spec, const ResolvedPass &resolved, size_t line, const context_ptr_t &ctx) {
     if (resolved.paramProblem) {
@@ -1826,8 +1825,8 @@ PassApplyResult applyPassesDetailed(
             // A program with graphs that have several writings per value: a pass that consumes
             // it (a back end, an exporter) gets one writing per value, picked by the default
             // cost; a pass that does not know the state does not get the program. A consuming
-            // pass that declares it reads the state (a dump drawing the classes, H225) is given
-            // the program as it is.
+            // pass that declares it reads the state (a dump drawing the classes) is given the
+            // program as it is.
             if (camel::runtime::hasWritings(*program) && !pass->acceptsWritings()) {
                 const bool consumes = dynamic_cast<GraphSchedulePass *>(pass.get()) != nullptr ||
                                       dynamic_cast<GraphTranslatePass *>(pass.get()) != nullptr;

@@ -1,5 +1,5 @@
 /**
- * A recursive struct through an array under collection stress (H23b): a live `Node` tree must
+ * A recursive struct through an array under collection stress (b): a live `Node` tree must
  * survive a collection that moves it. The tree is built, then many temporary trees are made
  * while it is still read afterwards; the collector has to trace `children` (Array) with the
  * element type `Node`, and each moved Node's own `children` slot, to keep the subtree alive.

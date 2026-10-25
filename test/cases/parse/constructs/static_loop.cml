@@ -1,7 +1,7 @@
 /**
- * `static loop` (H51 step 5): `static loop <state> for (n, F) in fields <type> do <body>` walks
- * the fields of the type at instantiation and advances the state once per field; the trip count
- * is the arity, so a `T` that comes from an enclosing generic counts only at instantiation. The
+ * `static loop` (step 5): `static loop <state> for (n, F) in fields <type> do <body>` walks the
+ * fields of the type at instantiation and advances the state once per field; the trip count is
+ * the arity, so a `T` that comes from an enclosing generic counts only at instantiation. The
  * value is the last state, and two states are a tuple.
  */
 module parse_constructs_static_loop

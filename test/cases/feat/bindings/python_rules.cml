@@ -1,15 +1,12 @@
 /**
- * The Camel side of the Python binding test (H253): what a Python caller reaches through
- * `camel.load`.
- *
+ * The Camel side of the Python binding test: what a Python caller reaches through `camel.load`.
  * Three kinds of result are here on purpose. `identity` gives the array it was handed back
- * unchanged, so the capsule the caller gets has to name the caller's own memory: that is what
- * "no copy" means, and it is the only direction an address can prove. `scale` builds a new array,
- * so it is the copy the zero-copy one is measured against. `checked_scale` fails, so the Python
- * side has an error value to turn into an exception with a position.
- *
- * Nothing here imports a standard library module: the functions a Python project calls are the
- * ones it wrote, and a test of the binding should not also be a test of the module search path.
+ * unchanged, so the capsule the caller gets has to name the caller's own memory: that is what "no
+ * copy" means, and it is the only direction an address can prove. `scale` builds a new array, so
+ * it is the copy the zero-copy one is measured against. `checked_scale` fails, so the Python side
+ * has an error value to turn into an exception with a position. Nothing here imports a standard
+ * library module: the functions a Python project calls are the ones it wrote, and a test of the
+ * binding should not also be a test of the module search path.
  */
 module python_rules
 

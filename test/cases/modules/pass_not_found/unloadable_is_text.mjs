@@ -1,15 +1,13 @@
 #!/usr/bin/env node
 /**
- * H204: `unloadable.cmo` is a fixture, not a compiled module.
- *
- * The module plan needs a file the loader finds and refuses; a text file does that on every
- * platform (`dlopen`: invalid ELF header; `LoadLibraryW`: not a valid Win32 application), so the
- * fixture must stay text: readable in review, and accepted by no loader. Every compiled object
- * (ELF, Mach-O, PE) contains NUL bytes, so committing one in the fixture's place turns this case
- * red -- the loader-refusal case must not quietly start exercising a real module.
- *
- * Red direction: `cp out/latest/stdlib/statistics.cmo test/cases/modules/pass_not_found/unloadable.cmo`
- * fails here with "the file contains a NUL byte", before the plan can pass on a loadable file.
+ * `unloadable.cmo` is a fixture, not a compiled module. The module plan needs a file the loader
+ * finds and refuses; a text file does that on every platform (`dlopen`: invalid ELF header;
+ * `LoadLibraryW`: not a valid Win32 application), so the fixture must stay text: readable in
+ * review, and accepted by no loader. Every compiled object (ELF, Mach-O, PE) contains NUL bytes, so
+ * committing one in the fixture's place turns this case red -- the loader-refusal case must not
+ * quietly start exercising a real module. Red direction: `cp out/latest/stdlib/statistics.cmo
+ * test/cases/modules/pass_not_found/unloadable.cmo` fails here with "the file contains a NUL byte",
+ * before the plan can pass on a loadable file.
  */
 import fs from 'node:fs'
 import path from 'node:path'

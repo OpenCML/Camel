@@ -227,7 +227,7 @@ struct Float16 {
     friend bool operator>=(Float16 a, Float16 b) { return a.toFloat() >= b.toFloat(); }
 };
 
-/// True for the two reduced-precision floating types (H238).
+/// True for the two reduced-precision floating types.
 template <typename T> struct IsReducedFloat : std::false_type {};
 template <> struct IsReducedFloat<BFloat16> : std::true_type {};
 template <> struct IsReducedFloat<Float16> : std::true_type {};
@@ -290,7 +290,7 @@ template <typename Half, typename T> inline slot_t halfFromValue(const T &value)
 /// finite value and the next power of two (2^128 for bf16, 2^16 for f16), which is where IEEE
 /// rounding overflows; a written value at or above it is the overflow a written conversion
 /// reports, the same way an f32 conversion reports a value beyond the range of f32. A value that
-/// rounds to zero is not an overflow: zero is a value of the type (H15i calls it an underflow).
+/// rounds to zero is not an overflow: zero is a value of the type (i calls it an underflow).
 template <typename Half> inline bool halfOverflows(float value) {
     if (!std::isfinite(value)) {
         return false;
@@ -300,8 +300,8 @@ template <typename Half> inline bool halfOverflows(float value) {
 
 /*
  * The text of a bf16 or an f16, and the one rule it follows. Design principles 7.7 says a float
- * becomes text as the shortest text that reads back as the same value; the ruling of 2026-10-23
- * ("reduced-precision-text") says "the same value" is an element of the value's own type, so a
+ * becomes text as the shortest text that reads back as the same value, and "the same value" is an
+ * element of the value's own type, so a
  * bf16 or an f16 is measured against its own rounding: `0.1 as bf16` prints `0.1`, where the text
  * of the f32 it widens to would print `0.100097656`. The digits are found by
  * camel::utils::halfText -- the one float text rule, parameterised by the format -- and every

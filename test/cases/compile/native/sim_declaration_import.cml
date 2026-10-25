@@ -1,8 +1,7 @@
 /**
  * `sim`'s declarations are what an importer sees: `pi_hits` takes two `int`s and answers an
  * `int`, `asian_call_price` takes three and answers a `float`, read from `stdlib/sim.cml`, and
- * both calls reach the C++ kernels with the same fixed seeds as `modules/std/sim/basic.cml`
- * (handover H179).
+ * both calls reach the C++ kernels with the same fixed seeds as `modules/std/sim/basic.cml`.
  */
 module sim_declaration_import
 

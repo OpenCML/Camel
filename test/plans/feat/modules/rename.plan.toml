@@ -3,10 +3,10 @@ order = 374
 tier = "fast"
 tags = ["feat", "modules", "rename", "diagnostic"]
 
-# A module rename is complete when the new name imports and the old one is not silently an alias
-# (handover H114): the old spelling is simply an unknown module, with no alias and no diagnostic
-# that points at the new spelling. One pair of tests per renamed module;
-# `rename_identity.plan.toml` proves the graph itself did not change.
+# A module rename is complete when the new name imports and the old one is not silently an
+# alias: the old spelling is simply an unknown module, with no alias and no diagnostic that
+# points at the new spelling. One pair of tests per renamed module; `rename_identity.plan.toml`
+# proves the graph itself did not change.
 
 [defaults]
 kind = "behavior"

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// H9 item 3: the process boundary on Windows. A user name, a PATH entry or a checkout whose path
+// Item 3: the process boundary on Windows. A user name, a PATH entry or a checkout whose path
 // holds characters the process code page cannot express used to break `env.basic`: Camel strings
 // are UTF-8 and guaranteed to be, while what the process hands the program (the command line, the
 // environment, the current directory, the module search paths) arrived as bytes of the code page.

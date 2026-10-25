@@ -1,24 +1,19 @@
 /**
- * The sorting family of `array` after the per-element split (H393; the ruling
- * docs/handover/reviews/questions-2026-10-23.md, section 「复核：归约按元素类型分臂」: the sorts
- * still read the element type code, and become what the reductions became).
- *
- * One body-less declaration per element type, each naming its own element type's operator
- * (`#op<'array:sort_i'>` for `i32`, `#op<'array:sort_d'>` for `float`, ...) and taking that
- * element type in its signature, so the element type is fixed where the executor is chosen and no
- * executor reads an array's element type code. `array_sort_kernels.paths` is what pins that down:
- * one profile row per element type and one call each, and no row for a sort as a whole. A compiler
- * that kept the shared executor would show one `array:sort` row for all four of these calls.
- *
- * The element type of a result is the declaration's, and nothing is converted on the way: every
- * call here is bound to the element type of its own declaration (`let r_i: i32[] = sort(s_i)`,
- * `let r_f: f32[] = sort(s_f)`, ...), so a call answered by another element type's declaration does
- * not typecheck at all. The inputs are written as typed arrays for the same reason: an array
- * literal is an `int[]` or a `float[]`.
- *
- * The rebindings `v = v->sort` are the compiler's in-place forms (design principles 11.3;
- * Builder::inPlaceRebindingOf). They are per element type as well — `array:sort_i_in_place` for an
- * `i32[]`, `array:sort_d_in_place` for a `float[]` — because the form is chosen by name
+ * The sorting family of `array` after the per-element split (section 「复核：归约按元素类型分臂」: the sorts
+ * still read the element type code, and become what the reductions became). One body-less
+ * declaration per element type, each naming its own element type's operator (`#op<'array:sort_i'>`
+ * for `i32`, `#op<'array:sort_d'>` for `float`,...) and taking that element type in its signature,
+ * so the element type is fixed where the executor is chosen and no executor reads an array's
+ * element type code. `array_sort_kernels.paths` is what pins that down: one profile row per element
+ * type and one call each, and no row for a sort as a whole. A compiler that kept the shared
+ * executor would show one `array:sort` row for all four of these calls. The element type of a
+ * result is the declaration's, and nothing is converted on the way: every call here is bound to the
+ * element type of its own declaration (`let r_i: i32[] = sort(s_i)`, `let r_f: f32[] =
+ * sort(s_f)`,...), so a call answered by another element type's declaration does not typecheck at
+ * all. The inputs are written as typed arrays for the same reason: an array literal is an `int[]`
+ * or a `float[]`. The rebindings `v = v->sort` are the compiler's in-place forms (design principles
+ * 11.3; Builder::inPlaceRebindingOf). They are per element type as well — `array:sort_i_in_place`
+ * for an `i32[]`, `array:sort_d_in_place` for a `float[]` — because the form is chosen by name
  * (OperatorTable::inPlaceForm) and the executor takes one element type: a shared in-place form
  * would have to read the element type at run time, which is the switch this change deletes.
  */

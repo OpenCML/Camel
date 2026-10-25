@@ -248,11 +248,11 @@ expect_stdout_contains = ["RULES refused: Rule 'add_swap_both' holds both ways (
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
 
-# The drawing of the state where a value has several writings (H225). Each case runs the same
-# program — `x + x` and `x * 2` are two writings of one value — through one pipeline and checks
-# the drawing as a property of what came out, never as a count of lines: a check that examined no
-# class at all fails, and `draw_classes.guard` shows the same check refusing a dump of the program
-# without the saturation, naming the case file and the dump line of the writing that stands alone.
+# The drawing of the state where a value has several writings. Each case runs the same program —
+# `x + x` and `x * 2` are two writings of one value — through one pipeline and checks the drawing
+# as a property of what came out, never as a count of lines: a check that examined no class at all
+# fails, and `draw_classes.guard` shows the same check refusing a dump of the program without the
+# saturation, naming the case file and the dump line of the writing that stands alone.
 
 [[tests]]
 name = "draw_classes.gir"

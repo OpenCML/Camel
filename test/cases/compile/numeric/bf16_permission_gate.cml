@@ -1,19 +1,15 @@
 /**
  * `change_precision` governs a computation the compiler moves to a lower precision, and that is
- * still gated after the ruling of 2026-10-23 (design principles 7.2-7.3; the ruling in
- * docs/handover/reviews/reduced-precision.md: "编译器自行引入的低精度计算（例如把 f32 的矩阵乘换成
- * bf16 计算）仍然要 change_precision"): the tiles scheduler takes the cuBLAS BF16 matrix product for
- * an f32 matmul only where the node carries `reassociate`, `change_precision` and `finite_math`
- * together (modules/tiles/src/schedule.cpp), and `#strict` revokes every permission, that one
- * included (7.4).
- *
- * The three functions below are the same f32 matrix product written three ways, and the plan each
- * one gets is printed: `granted` writes the three permissions and gets `cublas_bf16`, `revoked`
- * writes them and is marked `#strict`, so the permission an other arm of the compiler reads is
- * gone and it gets the canonical f32 kernel, and `canonical` writes nothing.
- *
- * A conversion the program writes is a different thing and is not gated at all: see
- * test/cases/modules/tensor/dtype/bf16_cast_no_permission.cml.
+ * still gated after the rule (design principles 7.2-7.3; the rule in : "编译器自行引入的低精度计算（例如把 f32
+ * 的矩阵乘换成 bf16 计算）仍然要 change_precision"): the tiles scheduler takes the cuBLAS BF16 matrix product
+ * for an f32 matmul only where the node carries `reassociate`, `change_precision` and
+ * `finite_math` together (modules/tiles/src/schedule.cpp), and `#strict` revokes every
+ * permission, that one included (7.4). The three functions below are the same f32 matrix product
+ * written three ways, and the plan each one gets is printed: `granted` writes the three
+ * permissions and gets `cublas_bf16`, `revoked` writes them and is marked `#strict`, so the
+ * permission an other arm of the compiler reads is gone and it gets the canonical f32 kernel, and
+ * `canonical` writes nothing. A conversion the program writes is a different thing and is not
+ * gated at all: see test/cases/modules/tensor/dtype/bf16_cast_no_permission.cml.
  */
 module compile_bf16_permission_gate
 

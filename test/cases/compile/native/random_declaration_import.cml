@@ -2,8 +2,8 @@
  * The declarations of `random` are what an importer sees: the generator functions take and give
  * their declared types, `randint` an `int`, `key` the module's `Key`, `split` a pair of keys,
  * `permutation` an `int[]`, and `choice`, `sample` and `shuffle` are generic declarations of the
- * element type of their array (`stdlib/random.cml`). Every call reaches the C++ operator (handover
- * H19, step 10; H128; H202).
+ * element type of their array (`stdlib/random.cml`). Every call reaches the C++ operator (step
+ * 10).
  */
 module random_declaration_import
 

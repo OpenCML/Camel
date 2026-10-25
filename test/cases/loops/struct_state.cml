@@ -1,6 +1,6 @@
-// A struct as a loop's state (H44 item 3): the state is one value, the struct, and each round
-// gives the next struct instead of assigning its fields. A loop's state is an expression, not a
-// `var` (design principles 3.10): `p.x = ...` inside the body is refused where it is written.
+// A struct as a loop's state (item 3): the state is one value, the struct, and each round gives
+// the next struct instead of assigning its fields. A loop's state is an expression, not a `var`
+// (design principles 3.10): `p.x =...` inside the body is refused where it is written.
 //
 // A named struct state also takes an unnamed struct body whose fields are the same ones in
 // another written order, and a nested named struct field the same (design principles 5.2): the

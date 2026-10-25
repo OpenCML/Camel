@@ -255,8 +255,7 @@ node_handle_t Builder::visitTypeApplication(const GCT::node_ptr_t &gct) {
             // attempt fails the same way a call that fails inside it does: the caller above the
             // scope is the one that decides what it means -- a search that has a candidate left,
             // or a rule's `when` template, for which a type it cannot be written for is not a
-            // reason to report anything where the type was tried (the ruling of 2026-10-23 on
-            // `generic-rule-instantiation-set-and-predicate`, §3).
+            // reason to report anything where the type was tried.
             throw BuildAbortException();
         }
         currGraph_->addDependencyGraph(graph);

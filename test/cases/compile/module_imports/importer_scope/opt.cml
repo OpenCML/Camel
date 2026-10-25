@@ -1,7 +1,7 @@
-/// H112, H124 property 2: std::opt compiles stdlib/rules.cml on demand, and its `import graph`
-/// resolves next to rules (stdlib/graph.cmo), not the graph.cml of this directory. The pass
-/// therefore runs here, next to a program file that would break it if it were taken for the
-/// library's `graph`.
+/// Property 2: std::opt compiles stdlib/rules.cml on demand, and its `import graph` resolves
+/// next to rules (stdlib/graph.cmo), not the graph.cml of this directory. The pass therefore
+/// runs here, next to a program file that would break it if it were taken for the library's
+/// `graph`.
 module importer_scope_opt
 
 func twice(x: int): int {

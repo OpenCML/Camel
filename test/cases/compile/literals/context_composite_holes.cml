@@ -1,8 +1,8 @@
 /**
- * Handover H412: a literal with a computed element is a FILL, not one constant, and the position
- * it stands in still gives its written elements their types (design principles 5.1). A tuple
- * field, an array field (fixed length and open rank) and an array written inside a tuple field
- * each take the declared field's element type even though a sibling field of the same literal is
+ * Handover a literal with a computed element is a FILL, not one constant, and the position it
+ * stands in still gives its written elements their types (design principles 5.1). A tuple field,
+ * an array field (fixed length and open rank) and an array written inside a tuple field each
+ * take the declared field's element type even though a sibling field of the same literal is
  * computed; so does a tuple in a declared position. The value just above the f32 midpoint prints
  * 1.00000012 rather than its float64 1.00000006: it became f32 where it was written, converted
  * once from the value written (design principles 5.1, 5.2).

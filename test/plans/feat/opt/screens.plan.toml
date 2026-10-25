@@ -3,19 +3,17 @@ order = 322
 tier = "fast"
 tags = ["feat", "opt", "generic", "screens"]
 
-# The generic passes skip a graph when a screen read from the frozen graph says they have nothing
-# to do in it (generic/screen.cpp), and when they already left its content alone. Each test runs
-# the optimizer with check_screens=true: the skipped graphs are given to the pass anyway, and a
-# rewrite there fails the run. A new rewrite in a pass that does not widen its screen fails here.
-#
-# This plan is also an acceptance item of H242, stated as the contract the screens owe: a screen may
-# not be stricter than the pass it screens for (docs/handover/reviews/questions-2026-10-23.md,
-# "fold-screen-contract-without-block", option (a); generic/screen.cpp states the same rule at the
-# top of the file). The group at the end of this plan is the one that carries it for H242's own
-# inputs -- the frozen graph of the effects model, a `var` read across a callee's write, a `sync`
-# block's chain, the two libraries whose results the same batch watches (`library_gemm`,
-# `grad_library`) -- so that a screen that starts refusing a rewrite those programs need fails a
-# test that names H242 rather than only the corpus around it.
+# The generic passes skip a graph when a screen read from the frozen graph says they have nothing to
+# do in it (generic/screen.cpp), and when they already left its content alone. Each test runs the
+# optimizer with check_screens=true: the skipped graphs are given to the pass anyway, and a rewrite
+# there fails the run. A new rewrite in a pass that does not widen its screen fails here. This plan
+# is also an acceptance item of, stated as the contract the screens owe: a screen may not be
+# stricter than the pass it screens for, "fold-screen-contract-without-block", option (a);
+# generic/screen.cpp states the same rule at the top of the file). The group at the end of this plan
+# is the one that carries it for 's own inputs -- the frozen graph of the effects model, a `var`
+# read across a callee's write, a `sync` block's chain, the two libraries whose results the same
+# batch watches (`library_gemm`, `grad_library`) -- so that a screen that starts refusing a rewrite
+# those programs need fails a test that names rather than only the corpus around it.
 
 [defaults]
 kind = "behavior"
@@ -622,8 +620,8 @@ name = "perf.fib_recursive"
 case = "../../../cases/perf/fib_recursive.cml"
 args = ["${case}", "std::opt check_screens=true", "std::null"]
 
-# H242's acceptance inputs for the contract above: the effects model's frozen graph, the `var`
-# cases the read/write model is measured on, and the two libraries the batch watches end to end.
+# 's acceptance inputs for the contract above: the effects model's frozen graph, the `var` cases
+# the read/write model is measured on, and the two libraries the batch watches end to end.
 [[tests]]
 name = "h242.effects_model_edges"
 case = "../../../cases/linear/runtime/effects_model_edges.cml"

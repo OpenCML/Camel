@@ -1851,8 +1851,8 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         }),
                 },
             }),
-        // `println` on the standard error stream, with the same declaration shape (the author's
-        // ruling on H134 question 2: it is in the prelude, so no import).
+        // `println` on the standard error stream, with the same declaration shape (it is in the
+        // prelude, so no import).
         OperatorGroup::create(
             "eprintln",
             {
@@ -2063,11 +2063,11 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                             -> optional<Type *> {
                             // `range(a, b)` is the interval of the integers from `a` to `b - 1`
                             // and `range(a, b, step)` is the same sequence with a step, as the
-                            // language's `a..b` is the one without one (design principles 4.2;
-                            // the author's ruling of 2026-10-24). One rule for the two spellings:
-                            // a second rule of the same URI would leave the table (which holds
-                            // one resolver per URI) with the last one only, so every re-typing of
-                            // the call would read the other spelling's arity.
+                            // language's `a..b` is the one without one (design principles 4.2).
+                            // One rule for the two spellings: a second rule of the same URI would
+                            // leave the table (which holds one resolver per URI) with the last
+                            // one only, so every re-typing of the call would read the other
+                            // spelling's arity.
                             if (norm.size() != 2 && norm.size() != 3) {
                                 return nullopt;
                             }

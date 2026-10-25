@@ -1,8 +1,8 @@
 /**
  * A module may declare only its own operators: `#op<'bytes:size'>` names an operator of `bytes`,
- * and the declaration is refused where it is written (design principles 10.1; handover H94,
- * ruling 5). The exceptional binding gives a name to an operator of this module, it does not
- * make one module the author of another's signature.
+ * and the declaration is refused where it is written (design principles 10.1). The exceptional
+ * binding gives a name to an operator of this module, it does not make one module the author of
+ * another's signature.
  */
 module bytes_tag
 

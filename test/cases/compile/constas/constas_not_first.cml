@@ -1,6 +1,6 @@
 /**
- * A `constas` parameter may stand in any position among the ordinary parameters (H51 ruling,
- * 2026-10-22): the call writes its value at that position, and it takes no runtime slot.
+ * A `constas` parameter may stand in any position among the ordinary parameters: the call
+ * writes its value at that position, and it takes no runtime slot.
  */
 module constas_not_first
 

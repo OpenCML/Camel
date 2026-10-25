@@ -1,7 +1,7 @@
 /**
  * The declaration of `autodiff:stop_gradient` is what an importer sees: one parameter bound by a
  * type variable, and the result of the same type. Each call reaches the C++ operator, which
- * returns its argument (handover H19, step 10; H165).
+ * returns its argument (step 10).
  */
 module autodiff_declaration_import
 

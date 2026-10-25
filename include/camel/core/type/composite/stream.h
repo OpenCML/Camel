@@ -9,25 +9,20 @@ namespace camel::core::type {
 
 /**
  * Immutable StreamType: `T..` (design principles 5.4), the elements of `T` that arrive one
- * after another — a sequence produced on demand, possibly endless.
- *
- * `T..` is a type of its own, not the open-rank array `T[..]` (the author's ruling of
- * 2026-10-24 on the stream surface): `T[..]` is an array whose extents are a prefix, and all
- * its elements exist at once; `T..` is a stream. The suffix is read left to right, without a
- * case for each combination: `T?..` is `(T?)..`, `T!..` is `(T!)..`, `T[3]..` is the stream of
+ * after another — a sequence produced on demand, possibly endless. `T..` is a type of its own,
+ * not the open-rank array `T[..]`: `T[..]` is an array whose extents are a prefix, and all its
+ * elements exist at once; `T..` is a stream. The suffix is read left to right, without a case
+ * for each combination: `T?..` is `(T?)..`, `T!..` is `(T!)..`, `T[3]..` is the stream of
  * `T[3]`, `T[..]..` is the stream of the open-rank array, and `T..?` is the possibly absent
  * stream. The one restriction comes from linearity: a stream is consumed once, so it cannot be
  * the element of an array, a map or a set (a container's elements can be read many times), and
- * the builder that builds the container says so (SemanticDiag::StreamInContainer).
- *
- * Interned: one element type gives one object, so `T..` is one type however it is reached —
- * written as a suffix, named by a `type` alias, instantiated from a generic signature, or read
- * back from a graph. Equality, overload selection, `#impl` signature agreement and every
- * printed form follow from that one object.
- *
- * A value of this type does not exist yet: producing one (a generator, a source) is another
- * slice, and this type states only what the programs that will produce them are written
- * against.
+ * the builder that builds the container says so (SemanticDiag::StreamInContainer). Interned:
+ * one element type gives one object, so `T..` is one type however it is reached — written as a
+ * suffix, named by a `type` alias, instantiated from a generic signature, or read back from a
+ * graph. Equality, overload selection, `#impl` signature agreement and every printed form
+ * follow from that one object. A value of this type does not exist yet: producing one (a
+ * generator, a source) is another slice, and this type states only what the programs that will
+ * produce them are written against.
  */
 class StreamType : public CompositeType {
   public:

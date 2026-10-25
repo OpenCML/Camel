@@ -2,18 +2,18 @@
 // Copyright (c) the OpenCML Organization
 // SPDX-License-Identifier: MIT
 
-// A module that has moved to a declaration module stays migrated (handover H137), and the
-// computed signatures a declaration cannot express have one recorded place (handover H180).
+// A module that has moved to a declaration module stays migrated, and the computed
+// signatures a declaration cannot express have one recorded place.
 //
 //   node scripts/stdlib-declarations.mjs --check [--camel <path>]
 //
-// H19 moves a fixed-signature C++ module from `stdlib/signatures/<module>.cml` to
-// `stdlib/<module>.cml` and deletes the C++ `OperatorGroup` (H94, H104, H113, H115, H126,
-// H128, H131). The compiler and `--verify-ops` check the *result* of that move, but nothing
-// checks that a later edit does not move the module back: re-adding a `StaticFuncTypeResolver`
-// for a name the declaration already fixes, leaving the old signature file behind, or exporting
-// a second copy of the signature from C++ all leave `--verify-ops` green, because the second
-// copy agrees with the declaration. This script is the guard for those shapes.
+// A fixed-signature C++ module moves from `stdlib/signatures/<module>.cml` to
+// `stdlib/<module>.cml` and deletes the C++ `OperatorGroup`. The compiler and `--verify-ops`
+// check the *result* of that move, but nothing checks that a later edit does not move the
+// module back: re-adding a `StaticFuncTypeResolver` for a name the declaration already fixes,
+// leaving the old signature file behind, or exporting a second copy of the signature from C++
+// all leave `--verify-ops` green, because the second copy agrees with the declaration. This
+// script is the guard for those shapes.
 //
 // A module is a *declaration module* when `stdlib/<module>.cml` exists, its header says
 // `module <module>`, and a C++ module of that name registers itself with `BuiltinModule`. The
@@ -48,36 +48,34 @@
 //
 // And one check for the registry as a whole:
 //
-//   5. Every C++ module of `modules/` that registers operators is either imported by
-//      `registry_all.cml` — the program `--verify-ops` reads — and listed in MODULES, or named
-//      in UNCHECKED_MODULES with a reason and a probe that imports it. A module that registers
-//      operators and is in neither place is a hole: `--verify-ops` never sees it and every check
-//      stays green (handover H166 found `python`/`pyplot` that way; H173 found `sim`, which
-//      registry_all imported while MODULES did not list it, and the four modules no program
-//      imported at all). A module imported but absent from MODULES is the same hole and is
-//      reported too.
+// 5. Every C++ module of `modules/` that registers operators is either imported by
+// `registry_all.cml` — the program `--verify-ops` reads — and listed in MODULES, or named in
+// UNCHECKED_MODULES with a reason and a probe that imports it. A module that registers operators
+// and is in neither place is a hole: `--verify-ops` never sees it and every check stays green
+// (`python`/`pyplot` were found that way, `sim` was imported by registry_all while MODULES did
+// not list it, and four modules were imported by no program at all). A module imported but
+// absent from MODULES is the same hole and is reported too.
 //
 // And one for the notation:
 //
-//   6. A computed name has exactly one place: `stdlib/signatures/<module>.cml`, named by the
-//      MODULES entry's `computed:` field. The inline `// dynamic func` form is retired (H180):
-//      it cannot carry an `#op` URI, so a computed name whose operator URI differs from
-//      `<module>:<name>` has no inline spelling. An inline record is a problem even when the
-//      name is also in the file (the pointer and the file are then two places); a module whose
-//      `computed:` field names a file that records no name is a pointer that does not agree
-//      with reality. A name recorded in neither place is caught by the exported-name loop of
-//      check 4 ("no computed signature records it").
+// 6. A computed name has exactly one place: `stdlib/signatures/<module>.cml`, named by the
+// MODULES entry's `computed:` field. The inline `// dynamic func` form is retired: it cannot
+// carry an `#op` URI, so a computed name whose operator URI differs from `<module>:<name>` has
+// no inline spelling. An inline record is a problem even when the name is also in the file
+// (the pointer and the file are then two places); a module whose `computed:` field names a
+// file that records no name is a pointer that does not agree with reality. A name recorded in
+// neither place is caught by the exported-name loop of check 4 ("no computed signature records
+// it").
 //
 // The reserved groups are the exception to (1) and (4): `__neq__` because `!=` cannot be declared
 // (design principles 4.3 — an overload of `==` gives it, and `operator !=` is
 // OperatorNotOverloadable), and the compiler negates a *Camel* overload of `==`, not a native
 // one, so a module whose types have their own `==` keeps the `__neq__` group in C++. Rewrite's
 // `__rule`, `__rule_when`, `__rule_generic` and `__analysis` are the compiled form of the
-// language's `rule` and `analysis` declarations, so they are exported by C++ as well (handover
-// H183). None of them has a Camel name: neither the declaration file nor the reference page
-// carries it, and `--verify-ops` filters reserved names out. Every other reserved group stays
-// checked.
-// Two shapes that the tensor module writes are resolved rather than reported:
+// language's `rule` and `analysis` declarations, so they are exported by C++ as well. None of
+// them has a Camel name: neither the declaration file nor the reference page carries it, and
+// `--verify-ops` filters reserved names out. Every other reserved group stays checked. Two shapes
+// that the tensor module writes are resolved rather than reported:
 //
 //   - A module that exports the groups of its operator registry
 //     (`for (g : OpRegistry::instance().operatorGroups("<module>"))`, `modules/tensor` and
@@ -89,12 +87,12 @@
 //     publish it for every registry operator, i.e. from this loop; a module that publishes no
 //     alias at all, like `nn`, need not invent one.
 //
-//   - A type-qualified alias (`exportEntity(Reference({"Tensor", name}), group)`). A
-//     declaration has no syntax for `Tensor.shape`, so C++ publishes it, and the compiler
-//     points it at the declaration when the declaration replaces the module's entity
-//     (`Module::replaceTypeQualifiedAliases`, handover H151). This is not a second signature:
-//     `--verify-ops` requires the alias to resolve to the same operator as the plain name
-//     (same URI, same parameter counts, which a stale C++ group would not report).
+// - A type-qualified alias (`exportEntity(Reference({"Tensor", name}), group)`). A
+// declaration has no syntax for `Tensor.shape`, so C++ publishes it, and the compiler points
+// it at the declaration when the declaration replaces the module's entity
+// (`Module::replaceTypeQualifiedAliases`). This is not a second signature: `--verify-ops`
+// requires the alias to resolve to the same operator as the plain name (same URI, same
+// parameter counts, which a stale C++ group would not report).
 //
 // A loop over a group factory (`for (g : getOperatorGroups())`, also when the call is qualified)
 // is resolved by reading the `OperatorGroup::create` calls in the factory's body. A module may
@@ -107,9 +105,9 @@
 // Check 3 needs a built compiler, and that install has to be this tree's build: the run refuses an
 // install whose `out/<tag>/build-info.json` does not match this tree (exit 2, naming the install
 // and its stamp) instead of reporting the differences between this tree's declarations and another
-// tree's registry -- the shape H149 guards, one rule with `scripts/release-gate.mjs`. `--camel
-// <path>` names the install to measure (this tree's `out/latest/bin/camel` without it), passing the
-// same check.
+// tree's registry -- the shape the install-stamp check guards, one rule with
+// `scripts/release-gate.mjs`. `--camel <path>` names the install to measure (this tree's
+// `out/latest/bin/camel` without it), passing the same check.
 
 import fs from 'node:fs'
 import path from 'node:path'
@@ -142,12 +140,12 @@ const UNDERIVABLE_OPERATORS = new Set([
 // lists its operators and another plan still checks their purity.
 //
 // `nn`, `autodiff` and `onnx` are the tensor stack's layers. Their signatures are computed by
-// the tensor OpRegistry and the C++ resolvers (H157 inventories them name by name); the
-// reference page excludes the tensor stack by design, and writing a signature file for them
-// would be the declaration migration the H19 ledger assigns, not coverage. Their purity is
-// checked by `registry.purity_declared_tensor_stack` over `registry_tensor.cml`.
+// the tensor OpRegistry and the C++ resolvers; the reference page excludes the tensor stack
+// by design, and writing a signature file for them would be the declaration migration, not
+// coverage. Their purity is checked by `registry.purity_declared_tensor_stack` over
+// `registry_tensor.cml`.
 //
-// Empty since H179 declared `onnx` (`supported_operators` in stdlib/onnx.cml, `export_model` in
+// Empty since `onnx` was declared (`supported_operators` in stdlib/onnx.cml, `export_model` in
 // stdlib/signatures/onnx.cml): every module that registers operators is now in the probe and in
 // MODULES. The list stays, with its checks, so an exclusion has to be justified the same way.
 const UNCHECKED_MODULES = []

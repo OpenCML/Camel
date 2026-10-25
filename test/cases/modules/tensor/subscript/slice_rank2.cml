@@ -1,7 +1,7 @@
 /**
  * A slice of the first dimension of a tensor of rank 2 or more takes every element of the other
- * dimensions at the coordinates left out, which is a view with strides: it waits for H17
- * (design principles 5.4). The call is refused at compile time, and says what is missing.
+ * dimensions at the coordinates left out, which is a view with strides: it waits for (design
+ * principles 5.4). The call is refused at compile time, and says what is missing.
  */
 module subscript_slice_rank2
 import { Tensor, reshape, shape } from tensor

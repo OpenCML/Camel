@@ -1,5 +1,5 @@
-/// H220: the entry program follows the same rule as a library module: its own directory is its
-/// own directory, so `import lib` here takes the `lib.cml` beside the entry file (value `root`).
+/// The entry program follows the same rule as a library module: its own directory is its own
+/// directory, so `import lib` here takes the `lib.cml` beside the entry file (value `root`).
 module main_lib
 
 import lib

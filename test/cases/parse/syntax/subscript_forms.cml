@@ -1,7 +1,7 @@
 /**
  * Every form of a subscript (design principles 5.4): a slice with both bounds, with only one,
  * with neither, with a step, an int-array index (the `take` of the first dimension) and
- * `last(xs)`. The forms whose view needs H17 have their own cases.
+ * `last(xs)`. The forms whose view needs have their own cases.
  */
 module subscript_forms
 

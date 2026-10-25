@@ -916,7 +916,7 @@ template <typename T> std::optional<T> toFloating(const Rational &value, bool ne
     }
     const std::string text = exactDecimal(value).value_or(approximateDecimal(value, 50));
     T converted{};
-    // parseWholeFloat refuses an overflow and an underflow alike (H15i): neither is a value the
+    // ParseWholeFloat refuses an overflow and an underflow alike (i): neither is a value the
     // type holds, so neither is rounded to zero or to an infinity here.
     const auto status = camel::utils::parseWholeFloat<T>(text, converted);
     return status == camel::utils::NumberTextStatus::Ok ? std::optional<T>(converted)
@@ -1034,7 +1034,7 @@ template <typename T> bool partUnderflows(const Rational &value) {
     if (value.num.isZero()) {
         return false;
     }
-    // The same boundary toFloating used before H15i: 2^-kHalfUlpExponent is half the smallest
+    // The same boundary toFloating used before: 2^-kHalfUlpExponent is half the smallest
     // subnormal of T, the largest magnitude that rounds to zero.
     constexpr int kHalfUlpExponent =
         std::numeric_limits<T>::digits - std::numeric_limits<T>::min_exponent + 1;

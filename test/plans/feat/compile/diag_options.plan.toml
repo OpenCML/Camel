@@ -430,7 +430,7 @@ expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
 
-# ---- A command line that cannot be honoured is an error, not a run with a default (H181) ----
+# ---- A command line that cannot be honoured is an error, not a run with a default ----
 
 # These three refusals printed their reason and returned 0. They are not program diagnostics, but
 # the same question applies: a branch that reports a failure and exits 0 tells a script that the

@@ -1,16 +1,14 @@
 /**
- * The check compares a rule's two sides with the error bound of the permissions it needs, not
- * with one uniform rounding bound (design principles 7.2-7.4, review of H38).
- *
- * Both rules below state the same wrong equation: `x * 2.0` is `x * 2.000000001`, an error of
- * about 5e-10 relative. That is far outside the rounding a `reassociate` grant allows -- the two
- * sides are one number only to within the rounding of the rule's own operators, and 5e-10 is
- * thousands of ulps of the result, so `wrong_reassociate` is `refuted` (its proposition is real
- * equality, and the comparison is made in the reference's precision: ruling of 2026-10-24 on
- * `verification-report-surface-s0`). The same error is inside the bf16 bound of
- * `change_precision` (2^-8 per step), whose proposition is an error bound and whose comparison is
- * untouched by that ruling, so `wrong_precision` is `sampled`: a looser bound would hide the first
- * rule, and the tight one is what catches it.
+ * The check compares a rule's two sides with the error bound of the permissions it needs, not with
+ * one uniform rounding bound (design principles 7.2-7.4, review of ). Both rules below state the
+ * same wrong equation: `x * 2.0` is `x * 2.000000001`, an error of about 5e-10 relative. That is
+ * far outside the rounding a `reassociate` grant allows -- the two sides are one number only to
+ * within the rounding of the rule's own operators, and 5e-10 is thousands of ulps of the result,
+ * so `wrong_reassociate` is `refuted` (its proposition is real equality, and the comparison is
+ * made in the reference's precision: rule on `verification-report-surface-s0`). The same error is
+ * inside the bf16 bound of `change_precision` (2^-8 per step), whose proposition is an error bound
+ * and whose comparison is untouched by that rule, so `wrong_precision` is `sampled`: a looser
+ * bound would hide the first rule, and the tight one is what catches it.
  */
 module check_bound
 import { check } from rewrite

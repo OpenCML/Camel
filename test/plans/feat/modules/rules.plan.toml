@@ -239,8 +239,8 @@ expect_stdout_contains = ["IndexError", "the report has 1 row(s), and row 1 was 
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
 
-# ---- The translation layer (H247, slice S1): a rule's two sides as integer scalar terms, and the
-# ---- declaration of what the layer covers (rewrite design 8.1).
+# ---- The translation layer (slice S1): a rule's two sides as integer scalar terms, and the ----
+# declaration of what the layer covers (rewrite design 8.1).
 
 [[tests]]
 name = "rules.the_translation_boundary_is_a_declared_table"

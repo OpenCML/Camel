@@ -4,7 +4,7 @@ tier = "fast"
 tags = ["feat", "modules", "pass", "diagnostics", "module"]
 desc = "A pass named through a module that is there: a module that provides no such pass names itself and the passes it does provide, and a module that cannot be loaded keeps the loader's reason"
 
-# H130: a pass named through a module that is there.
+# A pass named through a module that is there.
 #
 # `camel file.cml module::pass` used to answer "Pass <module::pass> not found, available passes
 # are: ..." whenever the module could not be used: it does not export the name, it provides no such
@@ -66,8 +66,8 @@ expect_exit = 0
 expect_stdout_exact = "42\n"
 timeout_ms = 10000
 
-# H124 probe C: `std::opt` asks for `rules::simplify`, and this directory's rules.cml (found before
-# the standard library's) provides no pass at all. The message must say that, and it must name the
+# Probe C: `std::opt` asks for `rules::simplify`, and this directory's rules.cml (found before the
+# standard library's) provides no pass at all. The message must say that, and it must name the
 # module the name resolved to.
 
 [[tests]]
@@ -82,12 +82,12 @@ expect_output_not_contains = ["not found, available passes are", "42"]
 normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
 timeout_ms = 20000
 
-# `onnx` gained a declaration module in H179 (`stdlib/onnx.cml`), so it is now a Camel module of
-# the kind H130 answers with the short diagnostic. The ruling of 2026-10-23
-# (pass-unavailable-diagnostics 2) makes the declaration the one statement of which passes a module
-# provides: `stdlib/onnx.cml` declares `onnx::export_model` (the alias `onnx::export` is the
-# registration's), so the sentence "it provides no passes" is gone -- the fact it asserted stopped
-# being true. The generic unknown-pass answer is kept by the `hash` case in feat/compile/diag_json.
+# `onnx` gained a declaration module in (`stdlib/onnx.cml`), so it is now a Camel module of the
+# kind answers with the short diagnostic. The rule (pass-unavailable-diagnostics 2) makes the
+# declaration the one statement of which passes a module provides: `stdlib/onnx.cml` declares
+# `onnx::export_model` (the alias `onnx::export` is the registration's), so the sentence "it
+# provides no passes" is gone -- the fact it asserted stopped being true. The generic unknown-pass
+# answer is kept by the `hash` case in feat/compile/diag_json.
 
 [[tests]]
 name = "pass_absent_from_a_declaration_module"
@@ -102,17 +102,16 @@ normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trai
 timeout_ms = 20000
 
 # A module whose file is there but that the loader refuses: the pass specification reports the
-# loader's reason. Before H130 this was "Pass <unloadable::run> not found" with the reason lost.
-#
-# H204: the fixture is one line of text, 72 bytes, not a shared library. The lookup finds it (a
-# `.cmo` of the name comes first), then `dlopen` / `LoadLibraryW` refuses it. The platform's own
-# words differ -- "invalid ELF header" on Linux, `Win32Error(193)` ("not a valid Win32
-# application", localized) on Windows -- so this case asserts only Camel's stable part:
-# InvalidPassParameter, "its library 'unloadable' cannot be loaded", and "Found .cmo but load
-# failed". The reason travels in the diagnostic and is not pinned. An empty file and a 21-byte
-# text fail too, but Linux then says "file too short"; at 72 bytes the reason reads as "not a
-# valid module" on both platforms. A real module in its place is accepted and the answer changes
-# to the generic unknown-pass one, which is this case's red direction.
+# loader's reason. Before this was "Pass <unloadable::run> not found" with the reason lost. The
+# fixture is one line of text, 72 bytes, not a shared library. The lookup finds it (a `.cmo` of
+# the name comes first), then `dlopen` / `LoadLibraryW` refuses it. The platform's own words
+# differ -- "invalid ELF header" on Linux, `Win32Error(193)` ("not a valid Win32 application",
+# localized) on Windows -- so this case asserts only Camel's stable part: InvalidPassParameter,
+# "its library 'unloadable' cannot be loaded", and "Found.cmo but load failed". The reason
+# travels in the diagnostic and is not pinned. An empty file and a 21-byte text fail too, but
+# Linux then says "file too short"; at 72 bytes the reason reads as "not a valid module" on both
+# platforms. A real module in its place is accepted and the answer changes to the generic
+# unknown-pass one, which is this case's red direction.
 
 [[tests]]
 name = "pass_module_that_cannot_be_loaded"
@@ -126,13 +125,13 @@ expect_output_not_contains = ["not found, available passes are", "42"]
 normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
 timeout_ms = 10000
 
-# The ruling of 2026-10-23 (pass-unavailable-diagnostics 1): a module that fails to load gets its
-# own `help`, one that says the module itself did not load and carries the module's own first
-# diagnostic, instead of leaving the reader the paragraph about how pass parameters are written.
-# The paragraph is the answer to a different problem: nothing on the command line is a parameter
-# mistake. The codes stay as they are -- this was and is `InvalidPassParameter`; the ruling keeps
-# both module codes (`PassNotProvidedByModule` / `PassNotExportedByModule`) for the two names that
-# exist in a module that loads, because their fixes differ.
+# A module that fails to load gets its own `help`, one that says the module itself did not load
+# and carries the module's own first diagnostic, instead of leaving the reader the paragraph about
+# how pass parameters are written. The paragraph is the answer to a different problem: nothing on
+# the command line is a parameter mistake. The codes stay as they are -- this was and is
+# `InvalidPassParameter` keeps both module codes (`PassNotProvidedByModule` /
+# `PassNotExportedByModule`) for the two names that exist in a module that loads, because their
+# fixes differ.
 
 [[tests]]
 name = "the_help_of_a_module_that_cannot_be_loaded_is_about_the_module"
@@ -204,7 +203,7 @@ assert(!d.data.suggestion.includes('did not load'),
 normalizers = ["strip_ansi", "normalize_newlines"]
 timeout_ms = 10000
 
-# H204: the fixture stays text, so review can read it and no loader can accept it. A compiled
+# The fixture stays text, so review can read it and no loader can accept it. A compiled
 # object (ELF, Mach-O, PE) has NUL bytes; committing one in the fixture's place fails here.
 
 [[tests]]
@@ -233,10 +232,10 @@ expect_output_contains = ["Pass <none_such::run> not found, available passes are
 expect_output_not_contains = ["PassNotProvidedByModule", "PassNotExportedByModule", "42"]
 normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
 timeout_ms = 10000
-# `rewrite` gained a declaration module in H183 (`stdlib/rewrite.cml`), so it is now a Camel
-# module of the kind H130 answers with the short diagnostic. It registers no pass, and the
-# `provided` list names only the module's Camel pass functions, so it says "no passes". This is the
-# same intended change H179 recorded for `onnx`; no diagnostic code was added.
+# `rewrite` gained a declaration module in (`stdlib/rewrite.cml`), so it is now a Camel module of
+# the kind answers with the short diagnostic. It registers no pass, and the `provided` list names
+# only the module's Camel pass functions, so it says "no passes". This is the same intended change
+# recorded for `onnx`; no diagnostic code was added.
 
 [[tests]]
 name = "pass_absent_from_rewrite_declaration_module"
@@ -250,12 +249,12 @@ expect_output_not_contains = ["not found, available passes are", "2011"]
 normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
 timeout_ms = 20000
 
-# H209: `data` says where a diagnostic is, not what it is about. A pass name is a command-line
-# matter and has no file, so `data.moduleName` and `data.modulePath` are empty -- the same
-# diagnostic prints `():?:?:` in the short text form. What it is about is not lost: `data.stage`
-# carries `pass:<module>::<pass>` and the message carries the rest. A JSON consumer reads
-# `stage`; it must not synthesize a module out of the two location fields. The contract is
-# stated in docs/technical/30_diagnostics_reporting.md, "The JSON `data` object".
+# `data` says where a diagnostic is, not what it is about. A pass name is a command-line matter
+# and has no file, so `data.moduleName` and `data.modulePath` are empty -- the same diagnostic
+# prints `:?:?:` in the short text form. What it is about is not lost: `data.stage` carries
+# `pass:<module>::<pass>` and the message carries the rest. A JSON consumer reads `stage`; it
+# must not synthesize a module out of the two location fields. The contract is stated in
+# docs/technical/30_diagnostics_reporting.md, "The JSON `data` object".
 
 [[tests]]
 name = "json_data_of_a_pass_the_module_does_not_provide"

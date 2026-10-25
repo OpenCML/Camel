@@ -1,11 +1,10 @@
 /**
- * Rules with a side condition (`when`), and the passes that use them (H38, rewrite design 2.1).
- *
- * The condition is a function of the rule's parameters seen as nodes of the draft being
- * rewritten: it can test the shape of a node (`op`), the type of a node (`type_of`,
- * `type_name`) and the facts of the store (`constant`, `is_constant`). The sides keep seeing the
- * values of the matched subgraph. A condition is pure: it reads the draft and answers whether the
- * rule applies to this match.
+ * Rules with a side condition (`when`), and the passes that use them (rewrite design 2.1). The
+ * condition is a function of the rule's parameters seen as nodes of the draft being rewritten: it
+ * can test the shape of a node (`op`), the type of a node (`type_of`, `type_name`) and the facts
+ * of the store (`constant`, `is_constant`). The sides keep seeing the values of the matched
+ * subgraph. A condition is pure: it reads the draft and answers whether the rule applies to this
+ * match.
  */
 module when_rules
 import { Program, Node, Graph, graphs, nodes, op, op_name, name, constant, type_of, type_name } from graph

@@ -1,7 +1,7 @@
 /**
- * A `constas` value may be a string (H51 ruling, 2026-10-22): the value is not read by a type,
- * only by the body, and it is part of the instance key. `label("w", 1)` and `label("h", 2)` are
- * two instances, `label<"w">` and `label<"h">`, each with one port (`n`) and no port for `k`.
+ * A `constas` value may be a string: the value is not read by a type, only by the body, and it
+ * is part of the instance key. `label("w", 1)` and `label("h", 2)` are two instances,
+ * `label<"w">` and `label<"h">`, each with one port (`n`) and no port for `k`.
  */
 module constas_string
 

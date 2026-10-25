@@ -1,19 +1,16 @@
 /**
- * A type the check cannot make a value of is still named, by the type.
- *
- * This is the other half of `check_reduced_element_type`: making `bf16` and `f16` drawable must
- * not turn "the check cannot make a value of this type" into silence, a skip, or a value of some
- * other type. `string` is a type that stays undrawable -- the sampler draws the four floating
- * element types, `int`, `i32`, `bool` and the tensors the element-type reader knows, and nothing
- * else -- and it is a type the operator groups registered (the `+` of two strings is one of
- * them), so a law whose condition admits it has an instance there and that instance is reported.
- *
- * The row is `sampled` with `evidence none` and the reason names the parameter's own type, in the
- * reason column and not in the verdict or the evidence (the ruling of 2026-10-24 on
- * `verification-licence-to-precondition`, licence 3, option A: a `sampled` that sampled and a
- * `sampled` that could not are written apart). The same call carries the library's `float_add_self`,
- * whose `bf16` and `f16` instances are checked with 200 values each: the reason for one is no
- * reason at all for the others, and neither answer is allowed to stand in for the other.
+ * A type the check cannot make a value of is still named, by the type. This is the other half of
+ * `check_reduced_element_type`: making `bf16` and `f16` drawable must not turn "the check cannot
+ * make a value of this type" into silence, a skip, or a value of some other type. `string` is a
+ * type that stays undrawable -- the sampler draws the four floating element types, `int`, `i32`,
+ * `bool` and the tensors the element-type reader knows, and nothing else -- and it is a type the
+ * operator groups registered (the `+` of two strings is one of them), so a law whose condition
+ * admits it has an instance there and that instance is reported. The row is `sampled` with
+ * `evidence none` and the reason names the parameter's own type, in the reason column and not in
+ * the verdict or the evidence (a `sampled` that sampled and a `sampled` that could not are written
+ * apart). The same call carries the library's `float_add_self`, whose `bf16` and `f16` instances
+ * are checked with 200 values each: the reason for one is no reason at all for the others, and
+ * neither answer is allowed to stand in for the other.
  */
 module check_type_cannot_be_made
 

@@ -4,12 +4,12 @@ tier = "fast"
 tags = ["feat", "tools", "clean"]
 desc = "`npm run clean` removes exactly the build trees, installs, test scratch and polluted source files it owns, and never a tracked file, a declaration or `.git`"
 
-# H195: `scripts/clean.js` was a stub, so the 27 `.cmo` files H191 found in the source `stdlib/`
-# had no one-command cleanup and `check-source-artifacts.mjs --clean` was the only delete
-# implementation. The case plants a checkout under `${test_tmp}`, runs every tier flag with
-# `--dry-run`, runs the default for real, and checks the exact paths that went and the exact paths
-# that stayed -- including a `.cmo` in the fake checkout's git index, the tracked `unloadable.cmo`
-# fixture, `stdlib/keep.cml`, the fake `.git`, and a file outside the `run-*` scratch.
+# `scripts/clean.js` was a stub, so the 27 `.cmo` files found in the source `stdlib/` had no
+# one-command cleanup and `check-source-artifacts.mjs --clean` was the only delete implementation.
+# The case plants a checkout under `${test_tmp}`, runs every tier flag with `--dry-run`, runs the
+# default for real, and checks the exact paths that went and the exact paths that stayed --
+# including a `.cmo` in the fake checkout's git index, the tracked `unloadable.cmo` fixture,
+# `stdlib/keep.cml`, the fake `.git`, and a file outside the `run-*` scratch.
 
 [[tests]]
 name = "clean.tiers"

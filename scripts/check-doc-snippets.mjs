@@ -614,7 +614,7 @@ async function checkSnippet(documentAbs, snippet, lines, fences) {
 
 const args = ARGV.filter((arg) => !arg.startsWith('--'))
 const entries = ARGV.includes('--default-roots') || args.length === 0 ? ['README.md', 'docs'] : args
-// The H171 defect: the plan passed the script's own path, the scope came out empty, and the guard
+// The defect: the plan passed the script's own path, the scope came out empty, and the guard
 // reported a pass. A scope entry that does not exist and a scan of no document are now refusals.
 const missing = entries.filter((entry) => !fs.existsSync(path.resolve(ROOT, entry)))
 if (missing.length > 0) {

@@ -29,8 +29,7 @@ case = "../../cases/perf/gemm_threads_curve.cml"
 args = ["${case}", "--arg", "rounds=1", "--arg", "reps=1", "tensor::fuse", "std::jit"]
 expect_exit = 0
 # The cost bound is this test's own CPU time (user + system), and the timeout below is its liveness
-# bound, by the author's ruling of 2026-10-23 (docs/handover/reviews/questions-2026-10-23.md,
-# "declaration-cost-gate" (a)):
+# bound (docs/handover/reviews/questions-2026-10-23.md, "declaration-cost-gate" (a)):
 #
 #   "改量 CPU 时间，不量墙钟。共享主机上的墙钟随负载漂移 ... 进程的 CPU 时间（用户态 + 内核态）基本
 #    不随负载变"
@@ -47,7 +46,7 @@ expect_exit = 0
 # The CPU figure spreads 2.4 % between the windows where the wall clock spreads 16 %. The
 # budget is 14 s: 1.63x the higher reading rounded up to the next 1000 ms -- the headroom the
 # four resnet referees of feat/modules/autodiff.plan.toml took -- and 1.73x the busiest
-# reading seen. The timeout below stays; by the ruling above it is the liveness bound only.
+# reading seen. The timeout below stays; it is the liveness bound only.
 cpu_budget_ms = 14000
 timeout_ms = 300000
 verify_script = """

@@ -1,8 +1,8 @@
 /**
- * A subscript slice with a step other than 1 takes every step-th element. Until H17's strided
- * views the result is a copy, but the elements are the same on every back end (design principles
- * 5.4). A negative step runs backwards; an omitted start is the last element and an omitted end
- * the position before the first.
+ * A subscript slice with a step other than 1 takes every step-th element. Until 's strided views
+ * the result is a copy, but the elements are the same on every back end (design principles 5.4).
+ * A negative step runs backwards; an omitted start is the last element and an omitted end the
+ * position before the first.
  */
 module subscript_step
 

@@ -1,7 +1,7 @@
 module divergence
 
-// The forms the legacy C++ algebraic pass and the rule library do not answer the same way (H160).
-// Each one is a graph the measurement reports as a difference rather than normalises away: the two
+// The forms the legacy C++ algebraic pass and the rule library do not answer the same way. Each
+// one is a graph the measurement reports as a difference rather than normalises away: the two
 // sides are put through the same pass list and the tables are compared line by line.
 //
 //   anchor_add     `x + 0` as the value the function returns. The add is the graph's named node

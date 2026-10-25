@@ -4,8 +4,8 @@ tier = "slow"
 tags = ["perf", "tensor", "gemm"]
 
 # The canonical GEMM's rate at the d=256 step's shapes, one thread, printed per shape and per round
-# (design principles 7.6: one configuration, one result; and the packer/hand-off costs the band-major
-# change of H296 moved are only visible in a rate at these extents).
+# (design principles 7.6: one configuration, one result; and the packer/hand-off costs the
+# band-major change of moved are only visible in a rate at these extents).
 #
 # What this case holds is not a wall-clock budget: the reference host is shared, and the numbers in
 # the comments below were taken at load average 100. What it holds is that every shape was measured,

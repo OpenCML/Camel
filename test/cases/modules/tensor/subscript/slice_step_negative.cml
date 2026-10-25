@@ -1,8 +1,8 @@
 /**
- * A slice with a negative step runs backwards for an array, but on a tensor the step must be
- * the constant 1: any other step is a view with strides, which waits for H17 (design principles
- * 5.4), and is refused at compile time. A negative step is refused like a positive one, not read
- * as "the same slice backwards", so no gradient is ever built from it.
+ * A slice with a negative step runs backwards for an array, but on a tensor the step must be the
+ * constant 1: any other step is a view with strides, which waits for (design principles 5.4),
+ * and is refused at compile time. A negative step is refused like a positive one, not read as
+ * "the same slice backwards", so no gradient is ever built from it.
  */
 module subscript_slice_step_negative
 import { Tensor, reshape, shape } from tensor

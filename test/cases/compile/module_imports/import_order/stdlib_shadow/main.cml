@@ -1,5 +1,5 @@
-/// H220 trap 2: the library's `import graph` is the file beside it (41), not the standard
-/// library's module, and the program is not told. The ruling orders the search; it adds no
+/// Trap 2: the library's `import graph` is the file beside it (41), not the standard
+/// library's module, and the program is not told. The rule orders the search; it adds no
 /// diagnostic, so this case pins the behaviour and the question is reported to the author.
 module main_shadow
 

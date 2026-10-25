@@ -90,8 +90,8 @@ int64_t nowNs(const Recorder &r) {
 /// The CPU time (user + system) this process has used so far, in nanoseconds, or -1 where the
 /// platform cannot report it. `Clock` is a wall clock: it drifts with whatever else the host is
 /// running, so a CPU-bound phase reads several times longer on a busy host without having used
-/// more CPU. The declaration-cost gate reads CPU time for that reason (the author's ruling of
-/// 2026-10-23, docs/handover/reviews/questions-2026-10-23.md, "declaration-cost-gate" (a)).
+/// more CPU. The declaration-cost gate reads CPU time for that reason (the wall clock drifts
+/// with whatever else the host is running, CPU time does not).
 int64_t cpuNowNs() {
 #if defined(_WIN32)
     FILETIME created{}, exited{}, kernelTime{}, userTime{};

@@ -1,7 +1,6 @@
-// `for i in 0..n` is fused by the compiler (design principles 4.2, the ruling of 2026-10-24): the
-// loop takes the two bounds and walks the integers between them, so the array of the interval is
-// never built. Which rounds happen, when there is none, and what the end means are what the array
-// of the interval gave.
+// `for i in 0..n` is fused by the compiler (design principles 4.2): the loop takes the two bounds
+// and walks the integers between them, so the array of the interval is never built. Which rounds
+// happen, when there is none, and what the end means are what the array of the interval gave.
 module h426_interval_loop
 
 func main(): int sync {

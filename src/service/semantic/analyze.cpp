@@ -937,7 +937,7 @@ class ModelBuilder {
             std::optional<ExternalName> ext;
             if (context != nullptr) {
                 // What the name means is the program's: its exported entities are the graphs
-                // this compilation made (one table per program, task H42).
+                // this compilation made (one table per program, task).
                 if (auto entity = context->programExports().importedEntity(module, ref)) {
                     ext = describe(name, *entity);
                 }
@@ -953,7 +953,7 @@ class ModelBuilder {
                 }
                 if (ext->definitions.empty()) {
                     // The type's own declaration, not the import: the compiler recorded where
-                    // it is, in the module the name comes from (task H82).
+                    // it is, in the module the name comes from (task).
                     ext->definitions = typeDeclarationOf(module, ref);
                 }
             }
@@ -1017,12 +1017,12 @@ class ModelBuilder {
             // loader compiles beside it (`Context::loadModuleFrom` returns one module with
             // both; `Module::inheritExportsFrom` copies the C++ facts in, the declarations are
             // exported on top). Those declarations are readable before the module's bodies are
-            // built, so a module a text imports but never calls is not `loaded()`: ask for
-            // them, as `camel inspect --ops` does before it reads a module's entities and as
+            // built, so a module a text imports but never calls is not `loaded()`: ask for them,
+            // as `camel inspect --ops` does before it reads a module's entities and as
             // `ProgramExports::importedEntity` does before it resolves an imported name.
-            // Requiring `loaded()` here was the hole of handover H145: a migrated module
-            // registers no signature in C++ (`exportEntity` is gone for every declared name),
-            // so completion after `math::` was empty.
+            // Requiring `loaded()` here was the hole: a migrated module registers no
+            // signature in C++ (`exportEntity` is gone for every declared name), so completion
+            // after `math::` was empty.
             if (!mod->loaded()) {
                 try {
                     mod->declareEntities();
@@ -1055,7 +1055,7 @@ class ModelBuilder {
             };
             if (context != nullptr) {
                 // The program's entities for the module, then the module's own (native) names:
-                // what a name means is the program's (task H42).
+                // what a name means is the program's (task).
                 context->programExports().forEachExportedEntity(*mod, visitEntity);
             } else {
                 mod->nativeEntityNS()->forEach(visitEntity);

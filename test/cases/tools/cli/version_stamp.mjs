@@ -1,17 +1,14 @@
 #!/usr/bin/env node
 /**
- * `camel --version` names the build the binary was compiled in, and that name is the footprint
- * the build stamped. This case holds both, without hardcoding a stamp: the value is read from
+ * `camel --version` names the build the binary was compiled in, and that name is the footprint the
+ * build stamped. This case holds both, without hardcoding a stamp: the value is read from
  * `out/<tag>/build-info.json`, so a rebuild with a new footprint stays green while a binary whose
- * stamp and install disagree goes red.
- *
- * The shape is the pinned footprint's: a UTC timestamp `YYMMDD_HHMMSS` and, when git is available,
- * the `git describe` suffix with `-` replaced by `_`. The configure fallback (`%y%m%d_%H%M%S`)
- * fails the shape, which is how an unconfigured or stale `build_config.h` shows itself.
- *
- * Red when: build-info.json's footprint is edited, `camel --version` stops printing it, or the
- * binary is built from a tree other than the install it sits in (the stale-binary case H149 was
- * about). Run: node version_stamp.mjs
+ * stamp and install disagree goes red. The shape is the pinned footprint's: a UTC timestamp
+ * `YYMMDD_HHMMSS` and, when git is available, the `git describe` suffix with `-` replaced by `_`.
+ * The configure fallback (`%y%m%d_%H%M%S`) fails the shape, which is how an unconfigured or stale
+ * `build_config.h` shows itself. Red when: build-info.json's footprint is edited, `camel
+ * --version` stops printing it, or the binary is built from a tree other than the install it sits
+ * in (the stale-binary case was about). Run: node version_stamp.mjs
  */
 
 import fs from 'fs'

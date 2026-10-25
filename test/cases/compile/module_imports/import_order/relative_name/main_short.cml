@@ -1,4 +1,4 @@
-/// H232: imports `short`, whose `import ..lib` cannot be formed against its one-component name.
+/// Imports `short`, whose `import..lib` cannot be formed against its one-component name.
 module main_short
 
 import short

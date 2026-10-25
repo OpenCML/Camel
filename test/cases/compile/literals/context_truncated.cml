@@ -1,5 +1,5 @@
 /**
- * Handover H24, item 6: a decimal literal where an integer is asked for is one diagnostic
+ * Handover, item 6: a decimal literal where an integer is asked for is one diagnostic
  * (`LiteralNotRepresentable`) that says why: the value would be truncated. A variable is not
  * converted by this rule, and a literal is not cut to fit.
  */
