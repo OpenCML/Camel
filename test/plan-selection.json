@@ -326,9 +326,14 @@
             "plans": ["feat/exemplars.plan.toml"]
         },
         {
-            "comment": "The chapter examples beside the tutorial (docs/tutorial/examples/*.cml): the plan that runs each of them as a file and pins what it prints, plus the documentation check, because a page links to the file it shows and a rename or a deletion breaks that link. This rule is narrower than the general docs rule and comes before it, so a tutorial page itself still selects that rule.",
+            "comment": "The chapter examples beside the tutorial (docs/tutorial/examples/*.cml): the plan that runs each of them as a file and pins what it prints, plus the documentation check, because a page links to the file it shows and a rename or a deletion breaks that link, plus the picture check, because a picture is drawn from the example beside it. This rule is narrower than the general docs rule and comes before it, so a tutorial page itself still selects that rule.",
             "paths": ["docs/tutorial/examples/"],
-            "plans": ["feat/tutorial_examples.plan.toml", "feat/docs_links.plan.toml"]
+            "plans": ["feat/tutorial_examples.plan.toml", "feat/docs_links.plan.toml", "feat/docs/tutorial_images.plan.toml"]
+        },
+        {
+            "comment": "The tool that draws the tutorial's pictures and the pictures themselves: docs.tutorial_images re-dumps every example its sheet names and requires images/<name>.dot to be what comes out, so an edit to the tool or to a picture has to run it. It draws nothing -- the comparison is of DOT, and the redraw needs Graphviz -- so it rides the fast layer.",
+            "paths": ["docs/tutorial/tools/", "docs/tutorial/images/"],
+            "plans": ["feat/docs/tutorial_images.plan.toml"]
         },
         {
             "comment": "The generated stdlib reference: stdlib_registry.registry.reference_is_generated re-runs --verify-doc, so a hand edit fails there; docs_links is the ordinary documentation check.",
