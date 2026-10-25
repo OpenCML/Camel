@@ -500,7 +500,7 @@ void registerTensorTangentSpace() {
     // tensor. A tensor gradient that came back as one left the next tensor operator reading a
     // value its type does not promise — expand_axis on the gradient of a mean_axis, which is the
     // `export_grad_mean` crash. The tangent type of an array is taken from its element type
-    // (derivative.cpp's computeTangentType), so nothing states one here: a tensor's element type
+    // (derivative.cpp's `computeTangent`), so nothing states one here: a tensor's element type
     // is always in its type. The space owns the
     // tensors of the array code and not the arrays of values that share it — an array of
     // structs, tuples or arrays keeps the core's array space (`:tangent/add_arr`,

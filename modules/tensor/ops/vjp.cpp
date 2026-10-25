@@ -59,7 +59,9 @@ type::Type *vjpTensorType(const VjpBuilder &builder, vjp_node_t value) {
     if (statesTensorElementType(type)) {
         return type;
     }
-    type::Type *tangent = camel::core::tangentTypeOf(type);
+    // The machinery's own question: does a value of this type need a gradient channel at all
+    // (`machineryTangentTypeOf`) -- not the gradient type a user's parameter gets.
+    type::Type *tangent = camel::core::machineryTangentTypeOf(type);
     return statesTensorElementType(tangent) ? tangent : nullptr;
 }
 
@@ -83,13 +85,13 @@ type::Type *gradientTypeFrom(const VjpBuilder &builder, std::span<const vjp_node
         }
     }
     for (vjp_node_t input : inputs) {
-        if (type::Type *tangent = camel::core::tangentTypeOf(builder.nodeType(input));
+        if (type::Type *tangent = camel::core::machineryTangentTypeOf(builder.nodeType(input));
             tangent != nullptr && tangent->code() == type::TypeCode::Array) {
             return tangent;
         }
     }
     for (vjp_node_t input : inputs) {
-        if (type::Type *tangent = camel::core::tangentTypeOf(builder.nodeType(input))) {
+        if (type::Type *tangent = camel::core::machineryTangentTypeOf(builder.nodeType(input))) {
             return tangent;
         }
     }
