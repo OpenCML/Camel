@@ -10,21 +10,21 @@ module function_branch
 import { Tensor, reshape, sum } from tensor
 import { export_model } from onnx
 
-func build(h: Tensor): (x: Tensor) => Tensor {
-    return if sum(h * h) < 1.0 then (x: Tensor): Tensor => x + h else (x: Tensor): Tensor => x * h
+func build(h: float[..]): (x: float[..]) => float[..] {
+    return if sum(h * h) < 1.0 then (x: float[..]): float[..] => x + h else (x: float[..]): float[..] => x * h
 }
 
-func twice(h: Tensor, g: (x: Tensor) => Tensor): (x: Tensor) => Tensor {
-    return (x: Tensor): Tensor => g(g(x)) * 0.5 + h
+func twice(h: float[..], g: (x: float[..]) => float[..]): (x: float[..]) => float[..] {
+    return (x: float[..]): float[..] => g(g(x)) * 0.5 + h
 }
 
-func model(x: Tensor): Tensor {
+func model(x: float[..]): float[..] {
     let f = build(x)
     return f(x)
 }
 
 func main(): int sync {
     let x = reshape([1.0, 2.0, 3.0, 4.0], [2, 2])
-    export_model((x: Tensor): Tensor => model(x), x, 'tmp/test/onnx/refusal_function_branch.onnx')
+    export_model((x: float[..]): float[..] => model(x), x, 'tmp/test/onnx/refusal_function_branch.onnx')
     return 0
 }

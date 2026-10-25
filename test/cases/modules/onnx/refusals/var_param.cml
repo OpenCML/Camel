@@ -10,12 +10,12 @@ import { Tensor, reshape } from tensor
 import { export_model } from onnx
 import { get_env } from env
 
-func bump(var acc: Tensor): int sync {
+func bump(var acc: float[..]): int sync {
     acc = acc + 1.0
     return 0
 }
 
-func forward(x: Tensor): Tensor sync {
+func forward(x: float[..]): float[..] sync {
     var acc = x * 2.0
     bump(acc)
     return acc
@@ -23,7 +23,7 @@ func forward(x: Tensor): Tensor sync {
 
 func main(): int sync {
     let x = reshape([1.0, -2.0, 3.0, 4.0], [2, 2])
-    export_model((x: Tensor): Tensor => forward(x), x, get_env('ONNX_OUT'))
+    export_model((x: float[..]): float[..] => forward(x), x, get_env('ONNX_OUT'))
     println('exported')
     return 0
 }
