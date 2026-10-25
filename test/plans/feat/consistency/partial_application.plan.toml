@@ -105,16 +105,36 @@ expect_output_not_contains = ["Segmentation fault", "dumped core", "internal err
 expect_output_contains = ["name=SemanticDiag::PartialApplicationRefused", "err_configured_twice.cml:5:"]
 
 [[tests]]
-name = "partial_application.err_var_parameter"
-desc = "A function with a `var` context parameter: refused, not guessed (DESIGN-QUESTION(partial-application-var))."
-kind = "negative"
-case = "../../../cases/consistency/partial_application/err_var_parameter.cml"
-args = ["-E", "short", "${case}"]
+name = "partial_application.var_parameter"
+desc = "A function with a `var` context parameter can be partially applied (graph model Q9, `partial-application-var`): `add<t>` is a function value that captured the cell of `t`, and each call writes it through the capture, so the calls accumulate. `sync` stands on the value's type because calling it writes the captured variable, and the function the value makes writes the capture the way the forwarder does."
+kind = "behavior"
+case = "../../../cases/consistency/partial_application/var_parameter.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_output_not_contains = ["[Error]", "error[", "Segmentation fault", "dumped core"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === "1 3 6 6\n16 16", `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "partial_application.var_parameter_type_carries_sync"
+desc = "The type of `add<t>` on the graph carries `sync`: the function value writes the cell it captured, and the graph says so (graph model Q9: 'require the resulting function value's type to carry `sync`'). The declared `add` has `sync` at its head, and the value the partial application makes keeps it together with the capture the bound cell enters through."
+kind = "behavior"
+case = "../../../cases/consistency/partial_application/var_parameter.cml"
+args = ["${case}", "std::gir"]
 backends = ["nvm"]
 backends_agree = []
-expect_exit = 1
-expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error"]
-expect_output_contains = ["name=SemanticDiag::ConstructNotSupported", "err_var_parameter.cml:5:13:"]
+expect_exit = 0
+expect_stdout_contains = ["sync"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 30000
 
 [[tests]]
 name = "partial_application.err_ambiguous"
