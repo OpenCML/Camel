@@ -1453,9 +1453,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                             -> optional<Type *> {
                             // By content (design principles 4.2): both sides of one type,
                             // an array, a tuple or a struct, every part of which is itself
-                            // comparable (no function value), and a numeric array whose element
-                            // type its values carry (a tensor), which the module that declares
-                            // it registers as comparable. A primitive has its own entry above,
+                            // comparable (no function value). A primitive has its own entry above,
                             // so it is not this one's business; anything else has no overload,
                             // which is a located compile-time error.
                             const TypeCode code  = norm[0]->code();
@@ -1465,8 +1463,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                                                     !tt::as_ptr<TupleType>(norm[0])->isCell() &&
                                                     !tt::as_ptr<TupleType>(norm[0])->isTagged());
                             // An enum compares by its variant and then its fields.
-                            const bool comparable = composite || asEnumType(norm[0]) != nullptr ||
-                                                    isRegisteredContentComparableType(code);
+                            const bool comparable = composite || asEnumType(norm[0]) != nullptr;
                             if (!comparable || !norm[0]->equals(norm[1]) ||
                                 !isContentComparable(norm[0])) {
                                 return nullopt;
@@ -1544,9 +1541,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                             -> optional<Type *> {
                             // By content (design principles 4.2): both sides of one type,
                             // an array, a tuple or a struct, every part of which is itself
-                            // comparable (no function value), and a numeric array whose element
-                            // type its values carry (a tensor), which the module that declares
-                            // it registers as comparable. A primitive has its own entry above,
+                            // comparable (no function value). A primitive has its own entry above,
                             // so it is not this one's business; anything else has no overload,
                             // which is a located compile-time error.
                             const TypeCode code  = norm[0]->code();
@@ -1556,8 +1551,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                                                     !tt::as_ptr<TupleType>(norm[0])->isCell() &&
                                                     !tt::as_ptr<TupleType>(norm[0])->isTagged());
                             // An enum compares by its variant and then its fields.
-                            const bool comparable = composite || asEnumType(norm[0]) != nullptr ||
-                                                    isRegisteredContentComparableType(code);
+                            const bool comparable = composite || asEnumType(norm[0]) != nullptr;
                             if (!comparable || !norm[0]->equals(norm[1]) ||
                                 !isContentComparable(norm[0])) {
                                 return nullopt;
