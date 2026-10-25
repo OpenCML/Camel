@@ -5,7 +5,7 @@
 #define CONFIG_H
 #endif
 
-#define VERSION "0.2.32"
+#define VERSION "0.2.33"
 
 #include <string>
 #include <vector>
