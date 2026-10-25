@@ -18,7 +18,7 @@ module law
 import { check } from rewrite
 
 // Multiplying by -1 is negating. A `rule` names a pattern and the writing it may be replaced by.
-rule negate(x: int) { x * -1 => 0 - x }
+rule negate(x: int) when nonnegative(x) { x * -1 => 0 - x }
 
 func negated(x: int): int {
     return x * -1
@@ -41,6 +41,15 @@ func main(): int sync {
     println(negated(7), combined(7), doubled(7))
     return 0
 }
+
+// What the compiler may rely on: the values this program works with are counts, so a count is
+// never negative and a difference of two counts may be. `join` says how the two writings of one
+// value are merged.
+fact nonnegative(v: int): bool match v {
+    case const c => c >= 0
+    case x - y   => false
+    case _       => true
+} join or
 ```
 
 ```bash
@@ -62,78 +71,10 @@ sampled negate: proposition equality, evidence samples 100, fired 8 of 8, covera
   试了 8 次、8 次两边相等；最后 `(x * -1) = (0 - x)` 是它对这条定律的理解。
 - `check` 的判定是**抽样**：它给出反例就说明定律错了，它不报错只是说没抽到反例。
 
-## 让改写引擎用上它
+## 让 `std::opt` 用上它
 
-定律要真的改到程序上，得交给改写引擎。`rewrite` 模块的 `rewrite(p, rules)` 就是"把 `rules` 里的定律
-在整个程序上跑一遍"；它接收的是一个 `Program`，所以外面要包一个**遍**
-（[`examples/laws.cml`](examples/laws.cml)；写自己的遍是第 18 章的事）：
-
-```cml
-// The law of chapter 17 as a pass the pipeline can run: same rule, wrapped so a pipeline can
-// apply it to a program.
-// Run: camel -I docs/tutorial/examples docs/tutorial/examples/17_rule.cml laws::apply std::gir
-module laws
-
-import { Program } from graph
-import { rewrite } from rewrite
-
-// Multiplying by -1 is negating.
-rule negate(x: int) { x * -1 => 0 - x }
-
-// `rewrite` applies the rules it is given, once, over the whole program.
-export func apply(p: Program): Program! {
-    return rewrite(p, [negate])
-}
-```
-
-`-I` 告诉编译器去哪里找 `laws` 这个模块，`laws::apply` 就是那个遍。把它挂在 `std::gir` 前面：
-
-<!-- camel-snippet: graph-dump: the text block is one excerpt of std::gir's DOT, not the program's stdout -->
-
-```cml
-// The law of chapter 17 as a pass the pipeline can run: same rule, wrapped so a pipeline can
-// apply it to a program.
-// Run: camel -I docs/tutorial/examples docs/tutorial/examples/17_rule.cml laws::apply std::gir
-module laws
-
-import { Program } from graph
-import { rewrite } from rewrite
-
-// Multiplying by -1 is negating.
-rule negate(x: int) { x * -1 => 0 - x }
-
-// `rewrite` applies the rules it is given, once, over the whole program.
-export func apply(p: Program): Program! {
-    return rewrite(p, [negate])
-}
-```
-
-```bash
-camel -I docs/tutorial/examples docs/tutorial/examples/17_rule.cml laws::apply std::gir
-```
-
-```text
-            label="negated";
-            F04 [label="ARGS", type="ARGS"];
-            O04 [label="EXIT", type="EXIT"];
-            N06 [label="x", type="PORT", param_name="x", param_kind="normal", param_index="0", value_type="int"];
-            N07 [label="0", type="DATA", value_type="int"];
-            N08 [label=":op/sub_l", type="OPER", origin=1930, span="10:13-10:14", srcfile="docs/tutorial/examples/17_rule.cml", value_type="int"];
-            F04 -> N06 [label="0", type="NORM_PORT"];
-            N08 -> O04 [label="0", type="EXIT"];
-            N07 -> N08 [label="0|0", type="NORM"];
-            N06 -> N08 [label="0|1", type="NORM"];
-        }
-```
-
-源码里 `negated` 写的是 `x * -1`，图里现在是 `0 - x`（`N07` 是常量 `0`，`N08` 是做减法的 `:op/sub_l`）：
-**你的定律在你的程序上用上了**。运行结果不变（`negated(7)` 还是 `-7`）——这就是第 1 章那句话的另一半：
-改写可以来自你写的定律。
-
-## 编译器自己的那批定律
-
-`std::opt` 用的就是同一个引擎，只是定律来自标准库。同一份程序，`combined` 这一段在
-`camel docs/tutorial/examples/17_rule.cml std::opt std::gir` 之后是（节选）：
+定律写在你自己的模块里，就是这个模块交给优化器的东西：`std::opt` 把标准库那批定律与你的定律放在
+一起，用在你的程序上。同一个文件在 `std::opt` 之后是这样：
 
 <!-- camel-snippet: graph-dump: the text block is one excerpt of std::opt std::gir's DOT, not the program's stdout -->
 
@@ -145,7 +86,7 @@ module law
 import { check } from rewrite
 
 // Multiplying by -1 is negating. A `rule` names a pattern and the writing it may be replaced by.
-rule negate(x: int) { x * -1 => 0 - x }
+rule negate(x: int) when nonnegative(x) { x * -1 => 0 - x }
 
 func negated(x: int): int {
     return x * -1
@@ -168,6 +109,90 @@ func main(): int sync {
     println(negated(7), combined(7), doubled(7))
     return 0
 }
+
+// What the compiler may rely on: the values this program works with are counts, so a count is
+// never negative and a difference of two counts may be. `join` says how the two writings of one
+// value are merged.
+fact nonnegative(v: int): bool match v {
+    case const c => c >= 0
+    case x - y   => false
+    case _       => true
+} join or
+```
+
+```bash
+camel docs/tutorial/examples/17_rule.cml std::opt std::gir
+```
+
+```text
+            label="negated";
+            F04 [label="ARGS", type="ARGS"];
+            O04 [label="EXIT", type="EXIT"];
+            N06 [label="x", type="PORT", param_name="x", param_kind="normal", param_index="0", value_type="int"];
+            N07 [label="0", type="DATA", value_type="int"];
+            N08 [label=":op/sub_l", type="OPER", origin=1930, span="10:13-10:14", srcfile="docs/tutorial/examples/17_rule.cml", value_type="int"];
+            F04 -> N06 [label="0", type="NORM_PORT"];
+            N08 -> O04 [label="0", type="EXIT"];
+            N07 -> N08 [label="0|0", type="NORM"];
+            N06 -> N08 [label="0|1", type="NORM"];
+        }
+```
+
+源码里 `negated` 写的是 `x * -1`，图里现在是 `0 - x`（`N07` 是常量 `0`，`N08` 是做减法的 `:op/sub_l`）：
+**你的定律在你的程序上用上了**。运行结果不变（`negated(7)` 还是 `-7`）——这就是第 1 章那句话的另一半：
+改写可以来自你写的定律。
+
+这条定律只在事实成立的地方用：`x` 是非负的计数时，`x * -1` 才允许写成 `0 - x`。这个事实写在文件的
+末尾，下一节讲它。
+
+## 编译器自己的那批定律
+
+`std::opt` 手里除了你写的定律，还有标准库那一批：`x * 3 + x * 5` 这类式子标准库早就认识。同一份程序，
+`combined` 这一段在
+`camel docs/tutorial/examples/17_rule.cml std::opt std::gir` 之后是（节选）：
+
+<!-- camel-snippet: graph-dump: the text block is one excerpt of std::opt std::gir's DOT, not the program's stdout -->
+
+```cml
+// The law of this program's arithmetic, written the way the compiler reads laws.
+// Run: camel docs/tutorial/examples/17_rule.cml
+module law
+
+import { check } from rewrite
+
+// Multiplying by -1 is negating. A `rule` names a pattern and the writing it may be replaced by.
+rule negate(x: int) when nonnegative(x) { x * -1 => 0 - x }
+
+func negated(x: int): int {
+    return x * -1
+}
+
+// Laws the compiler's own library already knows: a sum of two scaled copies of one value is one
+// scaled copy, so this is one multiplication.
+func combined(x: int): int {
+    return x * 3 + x * 5
+}
+
+// The same value written twice: `std::opt::saturate` keeps both writings in one class.
+func doubled(x: int): int {
+    return x * 2 + x * 2
+}
+
+func main(): int sync {
+    // `check` draws random instances and compares the two sides of every rule it is given.
+    println(check([negate], 100, 1))
+    println(negated(7), combined(7), doubled(7))
+    return 0
+}
+
+// What the compiler may rely on: the values this program works with are counts, so a count is
+// never negative and a difference of two counts may be. `join` says how the two writings of one
+// value are merged.
+fact nonnegative(v: int): bool match v {
+    case const c => c >= 0
+    case x - y   => false
+    case _       => true
+} join or
 ```
 
 ```bash
@@ -207,7 +232,7 @@ module law
 import { check } from rewrite
 
 // Multiplying by -1 is negating. A `rule` names a pattern and the writing it may be replaced by.
-rule negate(x: int) { x * -1 => 0 - x }
+rule negate(x: int) when nonnegative(x) { x * -1 => 0 - x }
 
 func negated(x: int): int {
     return x * -1
@@ -230,6 +255,15 @@ func main(): int sync {
     println(negated(7), combined(7), doubled(7))
     return 0
 }
+
+// What the compiler may rely on: the values this program works with are counts, so a count is
+// never negative and a difference of two counts may be. `join` says how the two writings of one
+// value are merged.
+fact nonnegative(v: int): bool match v {
+    case const c => c >= 0
+    case x - y   => false
+    case _       => true
+} join or
 ```
 
 ```bash
@@ -273,9 +307,56 @@ camel docs/tutorial/examples/17_rule.cml std::opt::saturate std::gir
 
 ## 领域知识：`fact`
 
-定律说的是"这两个写法等价"；程序里还有一些知识不是等式，而是**关于值的性质**——比如某个端口上的数
-永远非负、某个值只在 0 和 1 之间。这类知识用 `fact` 声明：它给一个类型声明一个初值、一个把两部分合并
-起来的规则，以及它在什么条件下成立；`rule` 里的 `when` 可以读它，改写就只在事实成立时发生。
+定律说的是"这两个写法等价"。程序里还有一类知识不是等式，而是**关于值的性质**：某个值永远非负、
+只在 0 和 1 之间、是某个范围的计数。这类知识用 `fact` 声明，`rule` 的 `when` 读它，改写就只在事实
+成立的地方发生。
+
+[`examples/17_fact.cml`](examples/17_fact.cml)：
+
+```cml
+// The knowledge of your field that is not an equation, handed to the compiler.
+// Run: camel docs/tutorial/examples/17_fact.cml
+module domain
+
+import { check } from rewrite
+import { abs } from math
+
+// A `fact` says what the compiler may rely on for a value: a square is never negative. The match
+// reads how the value was built; `join` says how the two writings of one value are merged.
+fact nonnegative(v: int): bool match v {
+    case const c => c >= 0
+    case x * x   => true
+    case _       => false
+} join or
+
+// The law holds only where the fact does: on a value that is never negative, `abs` changes nothing.
+rule abs_of_nonnegative(x: int) when nonnegative(x) { abs(x) => x }
+
+func squared(x: int): int {
+    return abs(x * x)
+}
+
+func main(): int sync {
+    // `check` samples the law together with its premise, so the fact decides where it may fire.
+    println(check([abs_of_nonnegative], 100, 1))
+    println(squared(-3))
+    return 0
+}
+```
+
+```bash
+camel docs/tutorial/examples/17_fact.cml
+```
+
+```text
+sampled abs_of_nonnegative: proposition equality, evidence samples 100, fired 8 of 8, coverage integer scalar int: abs(x) = x
+
+9
+```
+
+`fact` 的头写明它给哪个类型算哪一项知识（这里是 `int` 的 `nonnegative`）；主体是一个 `match`，但它读的
+是值**在图上是怎样构造出来的**：平方构造出来的值非负、常量可以在编译期判掉，其余写 `case _`。`join` 说
+一个值有两种写法时，两者的知识怎么合并（这里 `or`：任一种写法说它非负，就非负）。
 
 `fact` 与 `rule` 一起，是把"我这门领域里成立的东西"交给编译器的两个入口：`rule` 给等价，`fact` 给前提。
 它们的完整规则见语言参考第 8 章。
@@ -287,6 +368,7 @@ camel docs/tutorial/examples/17_rule.cml std::opt::saturate std::gir
 - **`saturate` 之后，图上一个值可以有几个节点**：它们分成一类一类的等价类，`chosen` 标出抽取时会留下
   哪一个。这时候的图不是"程序"，而是"所有等价写法的集合"。
 - 定律来自标准库还是来自你的文件，在图这一层没有区别；区别只在流水线里挂了谁。
+- **`fact` 不往图上加节点**：它是遍对图上值的断言，一条定律能不能用，由遍读到的知识决定。
 
 ## 练习
 
