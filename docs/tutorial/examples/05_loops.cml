@@ -1,0 +1,22 @@
+// `loop` carries its state from one round to the next; the body's value is the next state.
+// Run: camel docs/tutorial/examples/05_loops.cml
+module loops
+
+func main(): int sync {
+    // One round per element of the sequence.
+    let total = loop acc = 0 for x in 1..6 do acc + x * x
+    println(total)
+
+    // The condition decides when to stop; there is no `break` and no `continue`.
+    let halved = loop n = 100 while n > 1 do n / 2
+    println(halved)
+
+    // Two names on the loop head: the body's value is the next pair.
+    let (i, acc) = loop i = 1, acc = 0 while i <= 4 do (i + 1, acc + i)
+    println(i, acc)
+
+    // Both forms: the condition is checked before each round.
+    let first_big = loop hit = 0 for x in [2, 7, 9] while hit == 0 do if x > 5 then x else hit
+    println(first_big)
+    return 0
+}

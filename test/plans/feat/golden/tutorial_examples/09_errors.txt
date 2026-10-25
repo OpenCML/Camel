@@ -1,0 +1,6 @@
+3
+-1
+ok 5
+DivByZero: the divisor is zero
+12 0
+error DivByZero: the divisor is zero
