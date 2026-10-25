@@ -30,7 +30,8 @@ namespace camel::core::rtdata {
 namespace {
 
 /// The types a module declared content-comparable (camel/core/rtdata/equality.h). A vector, not
-/// a set: a program registers a handful of them and asks once per resolved comparison.
+/// a set: a program registers a handful of them and asks once per resolved comparison. The
+/// transition period's `Tensor` is its one entry, and both go when a tensor is an array.
 std::shared_mutex contentComparableMutex;
 std::vector<TypeCode> contentComparableTypes;
 
@@ -78,7 +79,9 @@ bool isContentComparableImpl(const Type *type, std::vector<const Type *> &active
     case TypeCode::Array:
         // An array whose element type is not written yet (`Tensor`, the array spelling of a
         // numeric array) compares by content: every element the value holds is a number, and
-        // the value carries the element type its comparison reads.
+        // the value carries the element type its comparison reads. This arm is the transition
+        // period's and is deleted with the marking: an array a program writes fixes its element
+        // type, and then the elements alone decide whether it is comparable.
         comparable = static_cast<const ArrayType *>(type)->isNumericUnknown() ||
                      isContentComparableImpl(static_cast<const ArrayType *>(type)->elemType(), active);
         break;
@@ -181,7 +184,8 @@ bool comparePair(slot_t a, slot_t b, const Type *type, std::vector<EqualPair> &p
     // A numeric array of a module (a tensor, whose element type its values carry): the whole
     // comparison is the shape and then the elements, which only the array's own rule can read
     // (design principles 4.2). No identity short-cut: an array that holds a NaN does not equal
-    // itself.
+    // itself. The registered type is the transition period's `Tensor`; when a tensor is an array
+    // this branch and the registry it reads are deleted together.
     if (isRegisteredContentComparableType(type->code())) {
         if (a == NullSlot || b == NullSlot) {
             return a == b;
