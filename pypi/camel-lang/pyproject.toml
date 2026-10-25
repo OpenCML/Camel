@@ -18,7 +18,9 @@ requires-python = ">=3.8"
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Operating System :: Microsoft :: Windows",
-    "Operating System :: MacOS",
+    # No `Operating System :: MacOS` until a macOS wheel is built and uploaded: a classifier
+    # that names a platform with no distribution on it is the same overstatement the old
+    # `MacOS` line was (5.37 item 3, and item 6's macOS wheel is still to be built).
     "Operating System :: POSIX :: Linux",
     "Programming Language :: Other",
     "Programming Language :: Python :: 3 :: Only",
