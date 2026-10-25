@@ -1129,3 +1129,38 @@ println(grow([1.0, 2.0], read_int()))
 ## PyPI 发布链路：收下
 
 Linux 包在 manylinux 里构建，用 auditwheel 修正标签，并在构建时检查标签；重新打标签时把 `Tag` 写进 WHEEL 头；工作流读 PEP 639 的许可证声明；`camel` 改成 pip 的入口；删掉了 MacOS 分类（暂时没有 macOS 包）。收下。下一次打标签，看 PyPI 上实际出现的版本和文件列表，作为验收。macOS、arm64 两格和"本体 + 稳定 ABI 互操作"按 5.37 第 6、7 条接着做。
+
+## 教程第 10 章：收下，一处返工；红线 8 的检查缺了
+
+第 10 章（效应与顺序）写得好：没人要的结果不算、`sync` 不向内继承、`var` 的写入顺序、同一资源的效应自己有序、资源推断与 `uses`/`pure`，图也接进了检查。收下。
+
+但这一章有一句改成了"手写出来的是承诺，编译器检查它能查的那些"，后面列的三条诊断（`UnknownResource`、`PureAndUses`、`NativeResourceMismatch`）只管子句写得对不对，**没有一条检查函数体是否守住了承诺**：签名写 `uses db`，函数体却往 `stdout` 打印；签名写 `pure`，函数体却碰了资源。我核对了诊断注册表，这样的诊断不存在。设计原则第 1 节的红线 8 是"承诺（`pure`、`uses`）不被违反 —— 编译器检查"，所以这是红线缺了强制机制，不是可以写进教程的边界。
+1. **H7 车道把这条检查补上，排在它的第一位**：函数体推出的资源集合必须包含在签名写的 `uses` 里；写了 `pure` 的，推出的集合必须为空。违反时报一条具名诊断，点出签名写的资源和函数体多碰了的那个资源（以及碰它的那个调用）。递归按推断时的不动点处理。用例覆盖：多碰了一个模块资源、`pure` 函数里调用了打印、通过回调形参间接碰到资源。
+2. **第 10 章按目标写**：删掉"它能查的那些"，写成"手写的是承诺，函数体超出承诺就是编译错误"，配一个违反承诺的反例，在检查落地之前进待实现名单。
+3. 顺带：诊断注册表里"`0x1A7 is retired … The code is not reused`"、`CmlUnsupportedConstruct` 消息里的"(yet)"，按前面的裁定，空号不写原名，消息不写"暂时"。`std::cml` 往返是红线 5，它能打印的范围要按计划补全，不在消息里写"这一版还不行"。
+
+## P4 合入 develop
+
+张量并进数组合入了：`Tensor` 成为数组本身，模块的切片内核和"看是谁的数组再分派"的那段删了，标准库签名区写元素类型，梯度类型按"给用户的"与"机件内部的"拆开，所有生成物从合并后的树重新生成。按"过渡不进 develop"，合入时删除步已经做完。这是主线的一大步，收下。
+
+**随合并回到问题目录的十页旧问题**：`2026-10-25-in-place-decision-layer`、`after-the-tensor-deletion-four-open-points`、`dim-name-relaxation-and-element-type-change`、`discrete-gradient-and-rank-one-slice-ownership`、`grammar-snapshot-case-bare-tensor-golden`、`open-rank-round-type-and-the-value-a-round-hands-over`、`slice-function-form-and-what-the-core-answers`、`subscript-operator-choice-and-the-rank-two-refusal`、`tensor-gradient-structure-and-slice-adjoint`、`tensor-reduction-element-type-code-half`。这些是翻转线上的副本，随合并带了回来，本文件里同名的几节都已裁定。照原裁定执行，问题页删掉。
+
+## 2026-10-26-growing-shape-graph-count-after-the-merge
+
+**4 是对的**，并收下翻转线的说明：5 是删除元素类型开放的 `Tensor` 拼写之前的读数，多出的那个实例来自开放的元素类型被递归实参收窄，而且会随层数变化。删掉之后只剩声明本身和 `main` 调用的那一个实例，与层数无关。我在 `specialize-growing-shape-graph-floor-reads-five` 一节说"5 就是不动点"，那是对当时那棵树的读数，现在以 4 为准；`bounded.rgir` 与 `more_levels.bounded` 两条一起收。
+
+## plain-data-predicate-in-a-when-clause
+
+**修 `when` 的编译期求值，不把 `is_plain` 改成内建**：设计原则第 1 节的"只有一门语言"，以及 5.5 的"类型函数是在编译期运行的普通函数"。`when` 的求值发生在实例化时，类型实参已经是具体的；在这个时刻，调用一个只依赖类型实参和编译期常量的纯函数（包括里面的 `match type`、对字段的递归），就是把它按这些具体类型实例化再求值。泛型展开早就在做同样的事。现在求值器在"调用另一个用户函数"这一步停下，是求值器的缺口，不是语言的边界。
+- `is_plain` 留在 `stdlib/types.cml`，用 Camel 写。修好后 `to_bytes` 对纯数据的结构体、元组数组可以实例化，对其余类型给出干净的"没有适用的重载"。
+- `WhenConditionNotConstant` 只留给条件里真的读到运行期值的情况（比如读了一个非常量的实参）。
+- **`from_bytes` 用同一个谓词**：`from_bytes::<T>(b: Bytes, shape: int[]): T[..] when is_plain::<T>()` 一个声明，取代按元素类型注册的 7 个。它读的就是 `to_bytes` 写出的那种布局，也就是数据块里这个元素类型的布局，两个方向对称。`load_npy::<T>` 同理。
+
+## P4 删除步的残留：返工
+
+抽查合并后的树，删除步还差这几处（"过渡不进 develop"），由 P4 那条车道接着清：
+1. **`Tensor` 这个类型名还在**：`modules/tensor/module.cpp:94` 仍然 `exportType(Reference("Tensor"), ArrayType::elementTypeOpen())`。交接说明 5.30 是负责人的原话："`Tensor`/`Tensor<T, S>` 作为类型名删除，不留别名、不留'已退役'诊断"。删掉这个导出，写 `Tensor` 就是普通的未知名字；`TensorElementTypeRequired` 这条只为它存在的诊断一起删。仓库里还写着 `Tensor<…>`、`: Tensor` 的 `.cml` 与文档全部改成 `T[维度]`。
+2. **比较注册表**：`registerContentComparableType`（`equality.cpp`、`equality.h`）还在。它在 5.1a 依赖表里，标明随过渡类型删除。
+3. **模块的 `tensor:slice` 还有内部使用者**：`gradient_ops.cpp:338`、`layout_ops.cpp:666/672`（拼接的伴随用它切开梯度），以及 ONNX 的 `lowering.cpp:1177`。这些改用核心的切片节点，模块的切片算子随之整个删掉。ONNX 降低改认核心的切片。
+4. **规则库里 13 条 `tensor_f32_*`、`tensor_i64_*`**：5.1a 依赖表里列着，要随 P4 删除，标量那条律推广到数值数组。规则语言的泛型律已经能写，一起做。
+5. **提到过渡名字的注释**：`support.cpp:193`（`numericUnknown`）、`globals.cpp:226` 和 `layout_ops.cpp:716`（模块的 `tensor:idx_take`）。注释只写现在怎么做，提到已删东西的句子删掉。
