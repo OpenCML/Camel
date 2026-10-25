@@ -17,6 +17,14 @@ from that harness what applies to both (see "Reuse" below).
 
 Findings are in [`test/cases/opt/progen/`](../../cases/opt/progen/README.md).
 
+The archived programs are generator output, and no check re-draws them. `findings/<name>.cml` and
+`test/cases/feat/mm/capacity/perm_query_types.cml` each carry a header naming the seed, the feature
+set and the generator version they came from (`show --seed N` draws that program again). What reads
+them is a re-run -- `findings`, and the `feat/opt/progen_simplify` and `feat/mm/capacity` plans
+execute the programs they name and compare what they print -- while nothing compares the committed
+text with a fresh draw: a header whose seed no longer reproduces its file is a stale claim no check
+reports, so re-draw and diff by hand when the generator changes.
+
 ## Usage
 
 All commands run from the repository root; the compiler is the install `--camel <path>` names,
