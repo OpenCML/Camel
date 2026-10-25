@@ -277,6 +277,14 @@ class Diagnostics {
     std::unordered_map<Severity, size_t> countBySeverity() const;
     std::unordered_map<DiagType, size_t> countByType() const;
     bool hasErrors() const;
+    /// Whether this container already holds `d`. The criterion is the one `add` uses to recognise
+    /// an error it has -- the same code, the same message and the same place -- with the place
+    /// resolved on both sides when they are written in different forms (a dump resolves the ranges
+    /// it writes, the diagnostic a caller asks about may still carry the token range or the span
+    /// or origin id the builder gave it; `tokens` resolves a token range). A caller asks this
+    /// about a diagnostic it is thinking of showing again -- the one a limit stopped on -- and
+    /// writes it only when the answer is no.
+    bool holds(const Diagnostic &d, const RangeConverter *tokens = nullptr) const;
 
   private:
     std::string moduleName_;
