@@ -19,11 +19,15 @@ Findings are in [`test/cases/opt/progen/`](../../cases/opt/progen/README.md).
 
 The archived programs are generator output, and no check re-draws them. `findings/<name>.cml` and
 `test/cases/feat/mm/capacity/perm_query_types.cml` each carry a header naming the seed, the feature
-set and the generator version they came from (`show --seed N` draws that program again). What reads
+set and the generator version they came from (`show --seed N` draws it again in that version). What reads
 them is a re-run -- `findings`, and the `feat/opt/progen_simplify` and `feat/mm/capacity` plans
 execute the programs they name and compare what they print -- while nothing compares the committed
 text with a fresh draw: a header whose seed no longer reproduces its file is a stale claim no check
 reports, so re-draw and diff by hand when the generator changes.
+The versions recorded there stop at 1, 2 and 3 (15 files record none, 2 predate versioning) while
+`generate.VERSION` is 6 today, and the version is part of the random stream, so those seeds draw
+another program now -- a 3293 draw differs from `perm_query_types.cml`'s program body in 229 lines.
+A byte comparison here is therefore not only missing but meaningless.
 
 ## Usage
 
