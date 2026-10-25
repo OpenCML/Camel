@@ -40,7 +40,6 @@ a7cf39b2b3eac286 ok test/cases/parse/rulings/null_compare.cml
 571c5aa0c5933255 ok test/cases/parse/rulings/power.cml
 90a46957243a144f ok test/cases/parse/rulings/reserved_and.cml
 eb2e9da6ca6b14bb ok test/cases/parse/rulings/static_for_head_names.cml
-b5587cde7ca00d69 no test/cases/parse/rulings/static_for_head_parenthesized.cml
 0e0ccb8d174fba41 no test/cases/parse/rulings/stream_type_as_interval.cml
 698d8e24a098a91d ok test/cases/parse/rulings/stream_type_in_array.cml
 8013e40aaaa7e4a2 ok test/cases/parse/rulings/stream_type_marks.cml
