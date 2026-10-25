@@ -977,7 +977,9 @@ assert(observed >= 0, input.stdout)
 assert(result > observed, input.stdout)
 assert(report.device_work.kernels >= 1, JSON.stringify(report.device_work))
 assert(report.device_work.syncs === 3, JSON.stringify(report.device_work))
-assert(report.device_work.to_host_bytes === 20, JSON.stringify(report.device_work))
+// sum(y) answers y's element type f32, so the value the host reads where the `println` sits is 4
+// bytes and not the 8 an f64 sum took: the two readings are 16 bytes, not 20.
+assert(report.device_work.to_host_bytes === 16, JSON.stringify(report.device_work))
 }
 """
 timeout_ms = 60000
