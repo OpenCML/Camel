@@ -185,6 +185,13 @@
 
 **最优先（决策者 2026-10-24 夜）**：H242 的整批集成（同步边、顺序边、删控制边与 `SYNC`、`var` 读成数据边，按 sync-chain-liveness-and-splice 的裁定顺序）与 P4 张量翻转（按 tensor-flip-staging-order 的顺序修完分支、`Tensor` 成为别名、删除 `Tensor` 类型名）。这两块是节点收敛（H245）、流（H248 其余部分）、GPU 整段编译的前置条件，**优先于新开的小任务**；子代理先排给这两块，其余车道在它们的间隙做。
 
+**H233 剩余部分现在做（决策者 2026-10-25 核对）**：第 6 条已经落地，内置遍都是标准库里的 `::<F>(f: F): F! when is_function::<F>()` 声明。第 1–4 条还没有：`stdlib/graph.cml` 的公开接口仍是 `current(): Program`、`graphs(p: Program)`、`root(p)`；用 Camel 写的遍（`stdlib/opt.cml`、`stdlib/rewrite.cml`、`stdlib/rules.cml`，共约 80 处）仍是 `(p: Program) => Program!`；据记录，在源码里对单个函数调用遍（`loss->rules::simplify`）也还不行。按 5.12 一次做完，不留过渡：
+- `graph` 模块的公开接口改成以函数为中心（`open(f: F): Txn<F>`、`commit(t): F!`、`graph_of(f)`），`Program`、`current()`、`root()`、`graphs(p)` 从公开接口删除；程序级的信息经函数所在的程序读取。
+- `opt.cml`、`rewrite.cml`、`rules.cml` 里的遍全部改成 `::<F>(f: F): F! when is_function::<F>()`，规则集等配置放进 `with` 参数（见 reviews/stdlib-rewrite.md 第 5 条）；文档注释里"A pass is a function `(p: Program) => Program!`"一类的说法一起改。
+- `f->rules::simplify`、`f->std::opt<safe_fp: true>` 在源码里能直接调用，与命令行上的同名遍是同一个调用；闭包的捕获随新函数带上。
+- `ctrl_inputs` 这类读控制边的接口随 H242 删除控制边一起改成同步边、顺序边的读法，不在这里另起一套。
+- 这一片改的是 `graph`、`rewrite` 模块与三个标准库文件，和规则语言第二版（H232）同在改写引擎一带，由同一条车道串行做，排在 H232 当前的步骤之后；与 H242、P4 不重叠。
+
 **GPU 与 P4 并行（负责人 2026-10-25 同意）**：H49 中不依赖张量并进数组的部分现在就做，不等 P4——S2 放置键与两个标签、S3 放置解析与作用域边界、S4 拒绝、S5a 按控制区域切段、S5b 派生图继承放置（导数图由 `std::macro` 在编译期展开，不新增遍）、模块位置的标签、3090 上现有路径的基线测量；S6–S10 等 P4 合入。§2.6 与 §10 五问的裁定见 reviews/questions-2026-10-24-evening.md 的「H49 GPU 计划」一节。GPU 车道用单独的子代理；人手不够时从其余小活里调，不从 H242 与 P4 调。
 
 **文档清理（负责人 2026-10-25 同意，分两步，不等 H216）**：仓库里还有不少已经没用的文档和过时的写法。教程里"Camel 目前没有循环语法"那句，决策者已经改掉，其余照下面做。
