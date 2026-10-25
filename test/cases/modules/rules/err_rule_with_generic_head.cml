@@ -1,0 +1,12 @@
+/**
+ * A rule whose head declares type parameters and whose declaration writes `with` parameters.
+ *
+ * The sides of such a rule are instantiated for the types it is used with, one instance per type,
+ * while a `with` value is bound once, where the rule value is written. The two are not bound
+ * together yet, so the declaration is refused where the type parameters are written.
+ */
+module err_rule_with_generic_head
+import { Program } from graph
+
+with <tile: int>
+rule tiled::<T>(x: T) when tile > 0 { x + 0 => x }

@@ -1,0 +1,12 @@
+/**
+ * A rule whose right side reads one of its `with` parameters.
+ *
+ * The right side is the replacement, built from the terms the match binds, so it holds an
+ * operator, a constant or one of the rule's parameters too -- and the read of the value is
+ * refused where the parameter is written.
+ */
+module err_rule_with_right_read
+import { Program } from graph
+
+with <shift: int>
+rule add_shift(x: int) { x + 0 => x + shift }

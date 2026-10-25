@@ -1492,3 +1492,90 @@ assert(allDefaults === left, 'the defaults of samples and seed read the register
 }
 """
 timeout_ms = 20000
+
+[[tests]]
+name = "rules.with_parameters_bound"
+desc = "A rule whose declaration writes `with` parameters is a function of them: `add_zero_tiled<1>` and `mul_one_scaled` (whose parameter has a default, so its name alone is a `Rule`) enter a rule set as `Rule` values. The report before and after shows the two functions that hold the pattern losing their addition, and the one that holds `x * 1` losing its product."
+kind = "behavior"
+case = "../../../cases/modules/rules/with_target.cml"
+args = ["${case}", "with_rules::report", "with_rules::apply", "with_rules::report", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["left 1 0\nright 2 0\nfolded 0 1\nleft 0 0\nright 1 0\nfolded 0 0\n3 7 5\n"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.with_parameters_the_condition_reads"
+desc = "The `when` of a rule with `with` parameters reads them: the same rule and the same program, bound to 0 instead of 1, refuses -- both additions stay -- while the rule bound by its default still fires. The value is what the two runs differ by."
+kind = "behavior"
+case = "../../../cases/modules/rules/with_target.cml"
+args = ["${case}", "with_rules::report", "with_rules::apply_refusing", "with_rules::report", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["left 1 0\nright 2 0\nfolded 0 1\nleft 1 0\nright 2 0\nfolded 0 0\n3 7 5\n"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.with_parameter_unbound"
+desc = "A rule with a `with` parameter that has no default is no `Rule` until it is bound: writing the name alone in a rule set is a compile error that says so (RuleWithParameterUnbound), and the program does not run."
+kind = "negative"
+case = "../../../cases/modules/rules/err_rule_with_unbound.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::RuleWithParameterUnbound"
+expect_diagnostic_line = 16
+expect_output_contains = ["'shift' is a `with` parameter of the rule 'add_shift', it has no default, and the rule value here binds nothing for it"]
+expect_output_not_contains = ["15 3 5"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.with_parameter_format"
+desc = "camel-format writes a rule's `with` parameters before the declaration, as it writes a function's, and before `export`: one line for the `with` clause, however many parameters it lists, and the declaration on the next line. The parameters keep the spelling of the input (`tile: int, scale: float = 1.0, shift: int = 2`), so the formatted text is the text the formatter was given."
+kind = "snapshot"
+tool = "camel-format"
+case = "../../../cases/modules/rules/with_format.cml"
+args = ["${case}"]
+expect_exit = 0
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "golden/with_format.cml"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.with_parameter_generic_head"
+desc = "A rule that declares type parameters and `with` parameters together is refused (RuleWithParameterGenericHead): the sides of a generic rule are instantiated for the types it is used with, one instance per type, while a `with` value is bound once, where the rule value is written. The refusal names the rule and stands where the type parameters are written."
+kind = "negative"
+case = "../../../cases/modules/rules/err_rule_with_generic_head.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::RuleWithParameterGenericHead"
+expect_diagnostic_line = 12
+expect_output_contains = ["The rule 'tiled' declares type parameters and `with` parameters together, which is not implemented yet"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.with_parameter_on_the_left_is_refused"
+desc = "The left side of a rule is the pattern matched against the program, so it holds an operator, a constant or one of the rule's parameters: a `with` parameter read there is refused where the parameter is written (RuleWithParameterOnASide), with the side named, and no rule is declared."
+kind = "negative"
+case = "../../../cases/modules/rules/err_rule_with_left_read.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::RuleWithParameterOnASide"
+expect_diagnostic_line = 11
+expect_output_contains = ["The left side of the rule 'add_tiled' reads the `with` parameter 'tile', which is not implemented yet"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.with_parameter_on_the_right_is_refused"
+desc = "The right side of a rule is the replacement built from the terms the match binds, so it holds the same terms as the left one: a `with` parameter read there is refused at the parameter too, and the side the refusal names is the right one."
+kind = "negative"
+case = "../../../cases/modules/rules/err_rule_with_right_read.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::RuleWithParameterOnASide"
+expect_diagnostic_line = 11
+expect_output_contains = ["The right side of the rule 'add_shift' reads the `with` parameter 'shift', which is not implemented yet"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
