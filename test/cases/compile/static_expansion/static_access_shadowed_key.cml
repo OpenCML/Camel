@@ -1,7 +1,7 @@
 module static_access_shadowed_key
 
 func field(t: {a: int}): int {
-    static for (n, F) in fields {a: int} => {
+    static for n, F in fields {a: int} => {
         var n = 'a'
         n = 'b'
         t.[n]

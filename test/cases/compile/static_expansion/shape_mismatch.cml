@@ -5,7 +5,7 @@ type A = {a: int}
 type B = {b: int, c: int}
 
 func build(u: B) {
-    return A { static for (n, F) in fields B => u.[n] }
+    return A { static for n, F in fields B => u.[n] }
 }
 
 func main(): int sync {

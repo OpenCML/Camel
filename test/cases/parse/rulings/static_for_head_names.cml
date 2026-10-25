@@ -1,0 +1,59 @@
+// The `for ... in ...` head of `static for` takes no parentheses, exactly as the ordinary
+// `loop`'s does: `for n in fields T`, `for n, F in fields T`, `for n, F, tags in fields T` and
+// `for j in indices ts`. One name is the field's name, two add its type, three add its tags as a
+// compile-time struct, and `indices` binds the position in a tuple. Each head is run here once.
+module static_for_head_names
+
+tag width<w: int> on field
+
+type Box = {
+    #width<8> low: int,
+    high: int,
+}
+
+type Pair = (int, string)
+
+/// One name: the field's name, once per field, in declaration order.
+func names(b: Box) {
+    sync {
+        static for n in fields Box => println(n, b.[n])
+    }
+}
+
+/// Two names: the field's type is usable in a type position (`let v: F`).
+func total(b: Box): int {
+    var sum = 0
+    static for n, F in fields Box => {
+        let v: F = b.[n]
+        sum = sum + v
+    }
+    return sum
+}
+
+/// Three names: `tags` is the field's tags as a compile-time struct, so `low` gives
+/// `{width: {w: 8}}` and the untagged `high` gives `{}`.
+func widths(b: Box): int {
+    var sum = 0
+    static for n, F, tags in fields Box => {
+        sum = sum + (match type typeof(tags) {
+            case { width: { w: int } } => tags.width.w
+            case _ => 0
+        })
+    }
+    return sum
+}
+
+/// `indices`: one name, the position in the tuple, a compile-time `int`.
+func positions(p: Pair) {
+    sync {
+        static for j in indices p => println(j, p.[j])
+    }
+}
+
+func main(): int sync {
+    names({low: 1, high: 2})
+    println(total({low: 1, high: 2}))
+    println(widths({low: 1, high: 2}))
+    positions((10, 'x'))
+    return 0
+}

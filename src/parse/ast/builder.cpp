@@ -4038,7 +4038,7 @@ structData
 Value Builder::visitStructData(cst::StructData context) {
     ENTER("StructData");
     if (const auto generator = context->get<cst::StaticForExpr>()) {
-        // `{ static for (n, F) in fields T => e }`: the value has the fields of `T`, each from one
+        // `{ static for n, F in fields T => e }`: the value has the fields of `T`, each from one
         // round; the generator is built once and the rounds are packed in the graph builder.
         node_ptr_t compNode = createNodeAs<StructCompLoad>();
         setNodeTokenRangeByContext(compNode, context);

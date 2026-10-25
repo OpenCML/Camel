@@ -1,7 +1,7 @@
 module static_for_and_access
 
 func show::<T>(t: T) {
-    static for (n, F) in fields T => {
+    static for n, F in fields T => {
         let v: F = t.[n]
         println(n, v)
     }
@@ -21,5 +21,5 @@ func apply(f: (x: int) => int): int {
 }
 
 func overLeaf() {
-    static for (n, F) in fields ((x: int) => int) => {}
+    static for n, F in fields ((x: int) => int) => {}
 }

@@ -4813,7 +4813,7 @@ A 'static for' walks a struct or an ordinary tuple. A 'T?' or 'T!' and a mutable
 module static_for_not_composite
 
 func walk(t: int) {
-    static for (n, F) in fields int => {
+    static for n, F in fields int => {
         println(n, t)
     }
 }
@@ -4983,7 +4983,7 @@ The block is the value of one field: its last statement must have a value. A cal
 module comprehension_void_element
 
 func broken(t: {a: int, b: int}) {
-    return { static for (n, F) in fields {a: int, b: int} => {} }
+    return { static for n, F in fields {a: int, b: int} => {} }
 }
 
 func main(): int sync {
@@ -6122,7 +6122,7 @@ func nothing(): void {
 }
 
 func main(): int sync {
-    static for (j, C) in fields typeof(nothing()) => println(j)
+    static for j, C in fields typeof(nothing()) => println(j)
     return 0
 }
 ```
@@ -6153,7 +6153,7 @@ typeof is written inside the larger type {0}.
 module typeof_inside_type
 
 func main(): int sync {
-    static for (j, C) in fields typeof(1)[] => println(j)
+    static for j, C in fields typeof(1)[] => println(j)
     return 0
 }
 ```
@@ -6186,7 +6186,7 @@ module shape_not_composite
 type N = int
 
 func build(t: int) {
-    return N { static for (n, F) in fields N => t }
+    return N { static for n, F in fields N => t }
 }
 
 func main(): int sync {
@@ -6212,7 +6212,7 @@ The shape {0} is filled from the fields of {1}.
 **Help**
 
 ```text
-Write `T { static for (n, F) in fields T => ... }`: the generator must walk the shape the comprehension constructs.
+Write `T { static for n, F in fields T => ... }`: the generator must walk the shape the comprehension constructs.
 ```
 
 **Example** (`test/cases/compile/static_expansion/shape_mismatch.cml`, run as `camel test/cases/compile/static_expansion/shape_mismatch.cml`)
@@ -6224,7 +6224,7 @@ type A = {a: int}
 type B = {b: int, c: int}
 
 func build(u: B) {
-    return A { static for (n, F) in fields B => u.[n] }
+    return A { static for n, F in fields B => u.[n] }
 }
 
 func main(): int sync {
