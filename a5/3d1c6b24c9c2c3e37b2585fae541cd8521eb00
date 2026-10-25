@@ -1,0 +1,24 @@
+h533 三层命名与账本判据（合入 a53d1c6b2）
+
+交付（52 个路径，按主题三次提交 + 一次合 develop）：
+- **三层命名 fast / slow / milestone**：`plan-inventory.mjs` 改为调用 runner 自己的
+  `loadPlanTests`/`expandSweeps`/`testTier`，不再各写一份展开逻辑；未抽样副本归 milestone
+  （sweep 2768 = 157 抽样 + 2611 未抽样）；22 个整计划文件写 `tier="milestone"`，3 个文件只给个别测试打标记。
+- **账本只认代码**：计划 / `import` / 运行工具的代码算读，注释与 `desc` 不算。三个反例：没人读的用例 → exit 1 点名；
+  只在 `#` 注释里点名 → 仍算没被读到；放进工具会打开的目录 → 算被读到。`CASE_EXCEPTIONS` 只剩 1 条。
+- `array_alias.plan.toml` 搬进 `test/plans/feat/compile/`（选中用例不变，8 条 XFAIL 名字与顺序一致）；
+  `perf/gc` 两个工具各一条 milestone 条目（主机实跑 `46.83 s` / `5.55 s`）；`facts-cost.py` 示例改指现存用例；
+  `ns.p23_graph_names` → `ns.p01_graph_names`。
+- 顺手修掉一个真 bug：账本原依赖 `git ls-files`，搬文件后主机索引过时 → ENOENT 且漏掉新计划；
+  改成走 `NAMING_ROOTS` 目录树，未跟踪的新计划也算读者。
+
+读数：闸门 `6217 / 6190 / fail 0 / skip 11 / known 16`，红名单空；`gate.plan_inventory` 12.28 s、
+`gate.case_ledger` 12.77 s、`runner.backend_matrix` 36.07 s 全 PASS；`plan-inventory: 255 plan files…` / `2765 case files… (1 recorded)`。
+
+**known failures 8 → 16 的记账**：增量正好是搬进 `feat/compile` 的 8 条 `array_alias` XFAIL
+（`alias.eq_two_spellings.nvm`、`alias.bare_tensor.nvm`、`alias.type_text.nvm`、`alias.as_shape_check.nvm`、
+`alias.err_as_shape.nvm`、`alias.err_element_type.nvm`、`alias.var_widening.nvm`、`alias.err_var_rank.nvm`）。
+它们原先躺在 `test/cases/compile/array_alias/`，没有任何 run 会走进去，所以从不可见；**裁定授权的搬动让它们现形**。
+FAIL 仍为 0，每条 note 写明"P4 未落地，P4 提交时去掉标记"。按"授权导致的可见化"记账，不是 known_fail 增长。
+
+问题页：`milestone-layer-what-prose-still-says-slow.md`（两处旧词谁改、诊断示例是否跳过 known_fail、跳过行 200 还是 225、"381" 的定义、`facts-cost.py` 是否进计划）。
