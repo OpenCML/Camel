@@ -1,0 +1,33 @@
+tip=d0afec4ed H554 第八轮：管线位置 4 条按裁定落地 + 生成物两件（47 → 40，新增红 0）
+
+数字
+- **47 → 40**（gate-25：`total: 6379, pass: 6311, fail: 40, skip: 12, known failures: 16`；逐名对比 **fixed 7 / new 0**）。清掉的 7 条：管线位置 4 + `catalog.doc_is_generated` + `gate.case_ledger` + `gate.plan_inventory`。
+- 单跑 `diag_json.plan.toml` + `modules/graph.plan.toml`：`total: 93, pass: 93, fail: 0`。
+
+① 管线位置 4 条（裁定授权的修法，改前→改后逐字）
+- 文本形式本来就是对的，是钉值过时：实测 `--> <pipeline>:1:30`（unknown 参数）、`--> <pipeline>:1:26`（wrong type）→ 两条 `expect_diagnostic_line = 0` 改成 **1**（列 30/26 不变）。
+- **一处要你裁决的细节**：裁定写"来源名叫 `(pipeline)`"，而编译器文本与 JSON 用的都是 **`<pipeline>`**（`--> <pipeline>:1:30`、`modulePath:"<pipeline>"`）。我按代码现状保留 `<pipeline>` 并写进文档，未改名（改名会动 4 条钉值 + 文档）。若裁定要字面 `(pipeline)`，一行即可改。
+- JSON 未知遍：改前 `{"start":{"line":0,"character":0},"end":{"line":0,"character":0}}` + `modulePath:""`；改后 `0:0–0:17`（`std::no_such_pass` 17 字符）、`modulePath:"<pipeline>"`、`moduleName:"pipeline"`；用例由"断言没有范围"改成断言这个范围。
+- `pass_parameter_stage`：JSON 侧本来就给了真实列 `{"line":1,"character":9}–{"line":1,"character":17}`（`safe_fpp`，0 起算、来源 `<pipeline>`）——错的是用例自己的 `d.range.start.line === 0`（它的断言消息里就写着 1）→ 改成 **1**。
+- 代码：`src/execute/pass.cpp` 新增 `setPipelineRange(diag, line, column, length)`，参数诊断与未知遍诊断共用；`docs/cli.md` 的 JSON 诊断一节补上这段约定，并把"未知遍"从"无位置"那串里去掉（只保留模块不提供的遍、永不运行的遍、`--devices` 点名的设备）。
+- 残留（如实）：执行期那条未知遍路径（`pass.cpp` 第二个 `UnrecognizedGraphPass` 站点）仍不带范围——那里手里没有"这是第几个遍词"，加代号要另取索引，本轮未做。
+
+② 生成物两件
+- `docs/diagnostics.md`：`node scripts/diagnostics-catalog.mjs --write` 重出（`1 file(s)`），随后 `--verify-doc` 逐字 `docs/diagnostics.md is up to date`。
+- `err_rule_with_generic_head.cml`：develop 不带它，合并后全树无一处读它 → 删除（不是记进 `CASE_EXCEPTIONS`）→ `plan-inventory` 逐字 `257 plan files, every one of them has a destination` / `2802 case files, every one of them is read by code or recorded with a reason (1 recorded)`，两个 gate 用例转绿。
+- `frontend.ast_snapshot` **仍红**：需要重录（`test/cases/parse` 语料在我这条线上变过）——下一轮第一件事：`python3 test/tools/parsecheck/check.py snapshot --update`，再把记录文件从主机取回（该工具在主机构建物上跑）。
+
+③ 可重复的一步（你要的逐字命令，已进仓库）
+- 合并 develop 后跑：`node scripts/strip-module-declarations.mjs`（先看会改什么用 `--check`）。它只读写 `test/cases` 与 `test/plans`：删掉用例里的 `module X` 声明行，把"声明名≠文件名"的引用改成文件名。当前读数逐字 `strip-module-declarations: 0 declaration(s) to drop, 0 name(s) that follow their file, 0 file(s) rewritten`（本树已干净）。脚本带三行头（`#!/usr/bin/env node` + 两行许可），`headers --check` 认它。
+
+④ 检查器（合并后重跑，五条都 exit 0，逐字）
+- `diagnostics registry: 277 codes, every one with a name, a message and what it says about an edit (15 with one, 262 with a reason), no value used twice, and the emitted headers agree`
+- `docs/reference/camel-for-ai.md is what its sources produce: 4 generated region(s), 755 entries, 277 diagnostics, 34 diagnostic name(s) cited by the prose, 106258 characters (budget 112000)`
+- `no unverified citation: 413 of 413 symbol citation(s) verified, 1939 path citation(s) across 4809 file(s)`
+- `headers: every one of 1364 member files carries the two-line header (C/C++ 1086, Camel 44, scripts 234)`
+- `grammar: 130 productions, in step with the parser, the token table and the language reference`
+- `-Check all` 的第六条本轮**未跑**（如实）。
+
+⑤ 本轮未做（照实）：`grad_function_value_*` 12 的重判；develop 侧 JSON/阶段族 14 条（`entry_args.missing_argument_json`、`check.lexical_limit_json`、`failed_depth/evaluation.error`、`fixes_apply`、`dump_after_each_pass`、`fusion_group.profile.none`、`grants.graph`、`json_data_of_a_pass_the_module_does_not_provide`、`macro_body_effect_stage`、`nullable_positions.default_is_a_null_constant`、`partial_application_span`、`captured_write_graph.warnings`、`camel_passes.fold_fault.fault_is_reported`）；本支剩族 `constant_fault_reached.simplify_fvm`、`graph`/`graph.attrs`（在别的 plan 里，待补跑定位）、`gpu_scope.module_tag_propagates`、`rules.generic_condition_effect_at_instantiation`、`compile_bench.smoke`、`docs.snippets_compile`、`python_binding.session`、`debugger.http_gateway`、LSP 三族与 `lsp.fstring`（环境）。
+
+提交：`ef7047c4e`（生成物 + 孤儿用例）、`fc8ed9b00`（管线位置）、`d0afec4ed`（剥离脚本）。纪律：未推 origin；未碰 `docs/language/**` 散文；未碰其它工作树/分支；未在 Windows 构建。
