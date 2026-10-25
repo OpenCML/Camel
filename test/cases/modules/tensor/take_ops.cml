@@ -9,7 +9,7 @@ import { Tensor, reshape, range, take, one_hot, shape, sum, abs, cast } from ten
 import { softmax_cross_entropy, softmax_cross_entropy_grad } from nn
 import { grad } from autodiff
 
-with <w: Tensor>
+with <w: f32[..]>
 func row_sum(): float {
     return sum(take(w, [0, 0, 1]))
 }

@@ -9,12 +9,12 @@ module reshape_view_gc
 import { Tensor, reshape, flatten, unsqueeze, new, sum, concat } from tensor
 
 // A fresh owner every call: only the returned view keeps it alive.
-func make_view(i: int): Tensor {
+func make_view(i: int): f32[..] {
     let base = new([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]] as f32[][]) * f32(i)
     return unsqueeze(reshape(flatten(reshape(base, [3, 2])), [6]), 0)
 }
 
-func spin(i: int, n: int, acc: Tensor): Tensor {
+func spin(i: int, n: int, acc: f32[..]): f32[..] {
     return if i >= n then acc else sync {
         let v = make_view(i)
         // A view of a view reads the same owner.

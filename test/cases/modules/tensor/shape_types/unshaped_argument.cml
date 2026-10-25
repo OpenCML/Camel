@@ -1,7 +1,7 @@
 module shape_unshaped_argument
 import { Tensor, zeros, ones, reshape, sum, tanh, load_npy } from tensor
 import { get_env } from env
-func f(b: Tensor<[3]>): float {
+func f(b: Tensor<f32, [3]>): float {
     return sum(b)
 }
 func main(): int sync {
