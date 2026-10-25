@@ -1511,6 +1511,12 @@ node_ptr_t Builder::visitFuncDecl(const AST::node_ptr_t &ast) {
     }
     funcDeclPending_    = true;
     node_ptr_t funcNode = visitFuncData(funcDataNode);
+    if (declLoad->ruleBinding()) {
+        // The function a rule with `with` parameters is written as: a use of its name as a value
+        // is the call that binds them and gives the `Rule`, not a function value (design
+        // principles 5.5). The graph builder reads the mark from the FUNC node.
+        funcNode->setRuleBinding();
+    }
 
     // Decorator annotations are lowered to ANNO nodes attached after FUNC payload.
     // Each ANNO node owns one lowered GCT expression (currently lowered from funcAnno -> Data).

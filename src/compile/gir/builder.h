@@ -1851,6 +1851,23 @@ class Builder {
     node_handle_t partialApplicationOf(
         node_handle_t target, const GCT::node_ptr_t &origin,
         camel::core::type::FunctionType *expected = nullptr);
+    /// The top-level declaration `graph` is, when it is the function a rule with `with`
+    /// parameters is written as (design principles 5.5); nullptr for every other graph. The mark
+    /// is on the declaration's FUNC node, so a use above the declaration and an imported rule
+    /// are both found.
+    const TopLevelDeclaration *ruleBindingOf(const compile_graph_ptr_t &graph) const;
+    /// The one graph a DREF of a declaration holds, whichever of the two shapes the reference
+    /// target has; nullptr when the name is not one declaration (an operator group, or a name
+    /// with several graphs).
+    compile_graph_ptr_t singleGraphOfDref(const DraftGraphBuilder::DrefTarget &target) const;
+    /// Whether `node` is a use of such a name. A call of it binds the rule's parameters and
+    /// gives the `Rule`; a function value is not what the name stands for.
+    bool isRuleBindingTarget(node_handle_t node) const;
+    /// `name` or `name<value...>` where `name` is a rule's binding function: the call that
+    /// gives the `Rule`. The values already bound (`boundWithArgs_`) are the `with` arguments,
+    /// and the parameters left over are filled from their defaults; a parameter that has none is
+    /// `RuleWithParameterUnbound`, reported at `at`.
+    node_handle_t ruleBindingValueOf(node_handle_t target, const GCT::node_ptr_t &at);
     /// `a op= b` is `a = a op b` (design principles 4.2): the new value is computed and the
     /// variable bound to it. One rule for every type, whoever declared it: `a op b` must be
     /// defined for these operands and must give `a`'s own type, and the rebinding applies only
@@ -2068,6 +2085,13 @@ class Builder {
     node_handle_t visitNRefNode(const GCT::node_ptr_t &gct);
     /// A name: its value node, or the build-time tuple a rest parameter names (no node).
     std::any visitDRefNode(const GCT::node_ptr_t &gct);
+    /// The resolution visitDRefNode wraps: the node the name stands for, before a name that is a
+    /// rule's binding function is made the call that binds its parameters.
+    std::any resolveDRefNode(const GCT::node_ptr_t &gct);
+    /// A DREF is being visited as the callee of `name<...>` (`visitWithNode`) or of a call
+    /// (`visitLinkNode`): the binding is made there, where the angled values are known, so the
+    /// name itself stays the name.
+    bool ruleBindingCallee_ = false;
     node_handle_t visitCastNode(const GCT::node_ptr_t &gct);
     node_handle_t visitVariNode(const GCT::node_ptr_t &gct);
     node_handle_t visitLinkNode(const GCT::node_ptr_t &gct);

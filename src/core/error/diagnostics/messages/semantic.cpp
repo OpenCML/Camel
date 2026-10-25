@@ -1589,6 +1589,30 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::RuleWithParameterUnbound,
+            {
+                "RuleWithParameterUnbound",
+                "'{0}' is a `with` parameter of the rule '{1}', it has no default, and the rule value here binds nothing for it.",
+                "A rule whose declaration writes `with` parameters is a function of them, and only `name<value>` gives the `Rule`: `tile_matmul<64>` binds `tile` there. An unbound parameter is not the same as an unset one - the rule value would carry no value for the rule's condition to read - so the use is refused rather than a rule made that cannot match. Write the binding where the rule value is written (`tile_matmul<64>`), or give the parameter a default in the declaration (`with <tile: int = 16>`), which binds it wherever the name is used as it is.",
+            },
+        },
+        {
+            SemanticDiag::RuleWithParameterGenericHead,
+            {
+                "RuleWithParameterGenericHead",
+                "The rule '{0}' declares type parameters and `with` parameters together, which is not implemented yet.",
+                "A generic rule's sides are instantiated for the types of the call, one instance per type, and a `with` value is bound once, where the rule value is written (rewrite design 2 (second version) 1). The two are not bound together yet: a rule with `with` parameters is written over the types it is used with (one rule per element type), and the value it takes is then a parameter of that rule or a `const` parameter the left side matches.",
+            },
+        },
+        {
+            SemanticDiag::RuleWithParameterOnASide,
+            {
+                "RuleWithParameterOnASide",
+                "The {0} side of the rule '{1}' reads the `with` parameter '{2}', which is not implemented yet.",
+                "A rule's `with` parameter is a value, and both sides of a rule are read as patterns: the left side is matched against the program -- an operator, a constant or one of the rule's own parameters, in the order it writes them -- and the right side is built from those same terms, with a term of constants evaluated when the rule fires. Neither pattern holds a value the caller gives, so what a side reads has to be written into it. Write the value as a constant of the side it belongs in, or read it in the condition (`when`), which is called with it.",
+            },
+        },
+        {
             SemanticDiag::IgnoredSideEffect,
             {
                 "IgnoredSideEffect",

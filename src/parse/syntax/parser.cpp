@@ -979,6 +979,12 @@ void ParserImpl::parseFuncDeclRest(size_t m) {
         parseAngledParams();
     }
     eat(TK::KwExport);
+    // `with <...> rule ...` (`rule tile_matmul(...)`, design principles 5.5): a rule writes the
+    // same `with` parameters, in the same place, so the declaration is a rule from here on and
+    // the rest of it is read as one.
+    if (atRuleDecl(0)) {
+        return parseRuleDeclRest(m);
+    }
     if (!eat(TK::KwFunc)) {
         unexpected({e(TK::KwFunc)});
         return close(m, NK::FuncDecl);

@@ -1,0 +1,18 @@
+/**
+ * A rule with a `with` parameter that nothing binds, used as a `Rule` value.
+ *
+ * `add_shift` is a function of `shift`, so the name is not a `Rule`: only `add_shift<5>` is. The
+ * declaration is a compile error where the value is written, whether it stands in a rule set or
+ * anywhere else a `Rule` is wanted.
+ */
+module err_rule_with_unbound
+import { Program } from graph
+import { rewrite } from rewrite
+
+with <shift: int>
+rule add_shift(x: int) { x + 0 => x }
+
+export func apply(p: Program): Program! {
+    let rules = [add_shift]
+    return rewrite(p, rules)
+}

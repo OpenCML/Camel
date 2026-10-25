@@ -838,8 +838,8 @@ funcDecl   :
         FUNC identRef parentParams (':' typeExpr)? stmtBlock ;
 */
 /*
-ruleDecl : 'export'? IDENTIFIER identDef ruleContext? parentParams '{' ruleBody '}'
-           (IDENTIFIER dataExpr)? ;
+ruleDecl : frontMatter? ('with' angledParams)? 'export'? IDENTIFIER identDef typeParams?
+           ruleContext? parentParams whenClause? '{' ruleBody '}' ;
 ruleBody : dataExpr ('=>' | '<=>') dataExpr ;
 
 A rule is the shorthand of a pair of functions with the same parameters, the left one the pattern
@@ -854,6 +854,19 @@ holds them (rewrite design 2 (second version) 8.5):
 the value `name` (type `Rule`): it is held in a variable, passed and returned like any value,
 stored in a `Rule[]`, exported and imported. `consts` has bit i set when the parameter i is
 `const`.
+
+A rule that declares `with` parameters is a function of them instead (design principles 5.5):
+
+    with <tile: int>
+    rule tile_matmul(a: f32[m, k], b: f32[k, n]) when m % tile == 0 { ... }
+
+makes the three sides functions of `tile` as well, and
+
+    with <tile: int>
+    func tile_matmul(): Rule => __rule_when('tile_matmul', ..., tile_matmul__lhs<tile>, ...)
+
+so that `tile_matmul<64>` -- the same spelling a function's partial application has -- calls it
+and gives the `Rule`, and `tile_matmul` alone does too when every parameter has a default.
 */
 Value Builder::visitRuleDecl(cst::RuleDecl context) {
     ENTER("RuleDecl");
@@ -871,6 +884,11 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
     const auto sides  = body->exprs();
     const bool twoWay = body->has(TK::Equiv);
     const auto params = context->get<cst::ParentParams>();
+    // The rule's `with` parameters, written before `export` as a function writes them (design
+    // principles 4.4, 5.5). They are the rule's own, so the left side, the right side and the
+    // condition are all functions of them and read them by name, and the value the rule is
+    // written as is a function of them too.
+    const auto withParams = context->get<cst::AngledParams>();
     // The rule's applicability condition is part of its signature, so it is written between the
     // parameters and the body (`rule add_zero::<T>(x: T) when is_integer::<T>() { … }`, design
     // principles 4.4). A trailing `when` is a syntax error and is
@@ -886,6 +904,17 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
         for (const auto ident : declared->all<cst::IdentDef>()) {
             typeParams.emplace_back(ident->text());
         }
+    }
+    if (withParams && !typeParams.empty()) {
+        // A `with` value is bound once, where the rule value is written; the sides of a generic
+        // rule are instantiated per type, at the call. Binding both is a work of its own, so the
+        // combination is refused by name rather than lowered into a rule that would not match
+        // what it says (rewrite design 2 (second version) 1).
+        diags_->of(SemanticDiag::RuleWithParameterGenericHead)
+            .at(rangeOf(context->get<cst::TypeParams>()->firstToken(), context->lastToken()))
+            .commit(name);
+        LEAVE("RuleDecl");
+        return Value();
     }
     int64_t consts    = 0;
     if (const auto paired = params ? params->get<cst::PairedParams>() : cst::PairedParams()) {
@@ -924,6 +953,34 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
             diags_->of(SemanticDiag::RuleConstParamNotMatched)
                 .at(rangeOf(ident->firstToken(), ident->lastToken()))
                 .commit(written, name);
+        }
+    }
+
+// A `with` parameter is the rule's own value, and the two sides are the patterns the engine
+    // matches and rebuilds with: the left side is a term of an operator, a constant or one of the
+    // rule's parameters, and the right side is built from those same terms (rewrite design 2
+    // (second version) 1). Neither holds a value the caller supplies, so a side that reads one is
+    // refused here, where it is written, and not lowered into a side whose term the engine would
+    // have no value for. The condition is a function of the rule's parameters and is called with
+    // them (`when m % tile == 0`), so the `with` parameters are read there.
+    if (withParams) {
+        const auto paired = withParams->get<cst::PairedParams>();
+        for (size_t i = 0; i < 2; ++i) {
+            for (const auto pair : paired->all<cst::KeyParamPair>()) {
+                const auto ident = pair->get<cst::IdentDef>();
+                if (!ident) {
+                    continue;
+                }
+                const std::string written(ident->text());
+                if (!readsDataName(sides[i], written)) {
+                    continue;
+                }
+                diags_->of(SemanticDiag::RuleWithParameterOnASide)
+                    .at(rangeOf(ident->firstToken(), ident->lastToken()))
+                    .commit(i == 0 ? "left" : "right", name, written);
+                LEAVE("RuleDecl");
+                return Value();
+            }
         }
     }
 
@@ -1024,7 +1081,13 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
         imports_.push_back(import_);
     }
 
-    // One side as a function of the rule's parameters: `func name__<side>(params) => expr`.
+    // One side as a function of the rule's parameters: `func name__<side>(params) => expr`. Both
+    // sides are functions of the rule's own parameters and of nothing else: each is read as a
+    // pattern the engine matches and rebuilds with, and a term of a pattern is an operator, a
+    // constant or one of those parameters. A `with` parameter is a value of the caller's, so it
+    // is no term of either side, and a side that reads one is refused where it is written
+    // (RuleWithParameterOnASide); the condition is the function the value reaches, and it is the
+    // one built below as a function of them.
     const auto side = [&](const std::string &suffix, syn::Node expr) {
         const Reference sideRef = qualifyRef(Reference(name + suffix));
         node_ptr_t funcTypeNode = createNodeAs<FuncTypeLoad>();
@@ -1140,7 +1203,13 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
         node_ptr_t whenType = createNodeAs<FuncTypeLoad>();
         setNodeTokenRangeByContext(whenType, when);
         unwrapNodeAs<FuncTypeLoad>(whenType)->setTypeParams(typeParams);
-        *whenType << createNodeAs<RepeatedLoad>("NamedPair");
+        if (withParams) {
+            // The condition is a function of the rule's `with` parameters as the sides are, so
+            // it reads them by name (`when m % tile == 0`).
+            *whenType << any2node(visitAngledParams(withParams));
+        } else {
+            *whenType << createNodeAs<RepeatedLoad>("NamedPair");
+        }
         *whenType << whenParams;
         node_ptr_t whenResult = createNodeAs<OptionalLoad>("Type");
         node_ptr_t boolType   = createNodeAs<RefTypeLoad>(Reference("bool"));
@@ -1170,6 +1239,27 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
         setNodeTokenRangeByContext(refNode, context);
         return refNode;
     };
+    // One side as the maker takes it: the name of the side's function; or, for the condition, which
+    // is a function of the rule's `with` parameters, that name with the parameters bound
+    // (`name__when<tile>`), the partial application of the condition. The condition is called by
+    // the engine with the values its function value carries, so the value reaches it there, while
+    // the two sides are patterns and take the rule's parameters alone.
+    const auto sideValue = [&](const std::string &suffix) {
+        node_ptr_t target = reference(name + suffix);
+        if (!withParams) {
+            return target;
+        }
+        node_ptr_t bind = createNodeAs<ReservedExprLoad>(ReservedDataOp::Bind);
+        setNodeTokenRangeByContext(bind, context);
+        node_ptr_t bound = createNodeAs<RepeatedLoad>("Data");
+        setNodeTokenRangeByContext(bound, context);
+        const auto paired = withParams->get<cst::PairedParams>();
+        for (const auto pair : paired->all<cst::KeyParamPair>()) {
+            *bound << reference(std::string(pair->get<cst::IdentDef>()->text()));
+        }
+        *bind << target << bound << createNodeAs<RepeatedLoad>("NamedData");
+        return bind;
+    };
     node_ptr_t args = createNodeAs<RepeatedLoad>("Data");
     setNodeTokenRangeByContext(args, context);
     *args << literal(LiteralType::String, name);
@@ -1180,7 +1270,7 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
     *args << reference(name + "__rhs");
     std::string makerName = "__rule";
     if (whenFunc) {
-        *args << reference(name + "__when");
+        *args << sideValue("__when");
         makerName = "__rule_when";
     }
     // A rule whose head declares type parameters has no function values to give: its sides are
@@ -1204,9 +1294,65 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
     setNodeTokenRangeByContext(call, context);
     *call << reference(makerName) << args << createNodeAs<RepeatedLoad>("NamedData");
 
-    // The rule is a module-level value, not a function: `let name = __rule(...)` (rewrite design
-    // 2 (second version) 8.5). A value can be held, passed, returned and put in a `Rule[]`; a
-    // function that made one could only be called.
+    if (withParams) {
+        // A rule with `with` parameters is a function of them (design principles 5.5):
+        // `with <tile: int> func name(): Rule => __rule_when('name', ..., name__lhs, name__rhs,
+        // name__when<tile>)`. `name<64>`, the spelling a function's partial application has, calls
+        // it and gives the `Rule`; used as it is (`name`), the call is made with the defaults, so
+        // a rule whose parameters all have one is a `Rule` value by its name alone.
+        if (!ruleTypeImportAdded_) {
+            ruleTypeImportAdded_ = true;
+            auto ruleImport      = std::make_shared<ImportLoad>();
+            ruleImport->setTokenRange(extractTokenRangeFromContext(context));
+            ruleImport->setPath("rewrite");
+            ruleImport->setRefs({Reference("Rule")});
+            imports_.push_back(ruleImport);
+        }
+        node_ptr_t bindType = createNodeAs<FuncTypeLoad>();
+        setNodeTokenRangeByContext(bindType, context);
+        unwrapNodeAs<FuncTypeLoad>(bindType)->setTypeParams({});
+        *bindType << any2node(visitAngledParams(withParams));
+        *bindType << createNodeAs<RepeatedLoad>("NamedPair");
+        node_ptr_t bindResult = createNodeAs<OptionalLoad>("Type");
+        setNodeTokenRangeByContext(bindResult, context);
+        node_ptr_t ruleType = createNodeAs<RefTypeLoad>(Reference("Rule"));
+        setNodeTokenRangeByContext(ruleType, context);
+        *bindResult << ruleType;
+        *bindType << bindResult;
+
+        node_ptr_t stmts = createNodeAs<RepeatedLoad>("Stmt");
+        setNodeTokenRangeByContext(stmts, context);
+        node_ptr_t valueStmt = createNodeAs<ExprStmtLoad>();
+        setNodeTokenRangeByContext(valueStmt, context);
+        *valueStmt << call;
+        *stmts << valueStmt;
+        node_ptr_t bindBody = createNodeAs<StmtBlockLoad>();
+        setNodeTokenRangeByContext(bindBody, context);
+        *bindBody << stmts;
+
+        node_ptr_t bindData = createNodeAs<FuncDataLoad>(ref);
+        setNodeTokenRangeByContext(bindData, context);
+        *bindData << bindType << bindBody;
+        node_ptr_t bindDecl = createNodeAs<FuncDeclLoad>(ref);
+        setNodeTokenRangeByContext(bindDecl, context);
+        // The function the declaration is written as, not one the program wrote: the graph
+        // builder marks its graph, and a use of the name as a value makes the call that binds
+        // the parameters instead of a function value (`ruleBindingValueOf`).
+        unwrapNodeAs<FuncDeclLoad>(bindDecl)->setRuleBinding();
+        *bindDecl << bindData;
+
+        LEAVE("RuleDecl");
+        std::vector<node_ptr_t> bound{lhsFunc, rhsFunc};
+        if (whenFunc) {
+            bound.push_back(whenFunc);
+        }
+        bound.push_back(bindDecl);
+        return bound;
+    }
+
+    // A rule without `with` parameters is a module-level value, not a function:
+    // `let name = __rule(...)` (rewrite design 2 (second version) 8.5). A value can be held,
+    // passed, returned and put in a `Rule[]`; a function that made one could only be called.
     node_ptr_t typeList = createNodeAs<RepeatedLoad>("Type");
     setNodeTokenRangeByContext(typeList, context);
     node_ptr_t dataList = createNodeAs<RepeatedLoad>("Data");

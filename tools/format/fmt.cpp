@@ -649,7 +649,7 @@ any Formatter::visitWhenClause(cst::WhenClause context) {
 }
 
 /*
-ruleDecl : EXPORT? IDENTIFIER identDef ruleContext? parentParams whenClause? '{' ruleBody '}' ;
+ruleDecl : ('with' angledParams)? EXPORT? IDENTIFIER identDef ruleContext? parentParams whenClause? '{' ruleBody '}' ;
 */
 any Formatter::visitRuleDecl(cst::RuleDecl context) {
     string result;
@@ -660,6 +660,12 @@ any Formatter::visitRuleDecl(cst::RuleDecl context) {
         // where the reader put them (commentsInFrontMatter).
         result += any_cast<string>(visitTagUse(tagUse)) +
                   commentsInFrontMatter(tagUse->lastToken()->index());
+    }
+    // The `with` parameters come first, before `export`, as they do in a function declaration
+    // (design principles 4.4, 5.5): they are the rule's own context parameters.
+    if (const auto angledParams = context->get<cst::AngledParams>()) {
+        result += "with " + any_cast<string>(visitAngledParams(angledParams)) +
+                  commentsInFrontMatter(angledParams->lastToken()->index());
     }
     result += context->has(TK::KwExport) ? "export rule " : "rule ";
     result += any_cast<string>(visitIdentDef(context->get<cst::IdentDef>()));

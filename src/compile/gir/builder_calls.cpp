@@ -575,6 +575,111 @@ node_handle_t Builder::partialApplicationOf(
     return createFuncDataNode(graph, true, false);
 }
 
+compile_graph_ptr_t
+Builder::singleGraphOfDref(const DraftGraphBuilder::DrefTarget &target) const {
+    if (std::holds_alternative<graph_ptr_t>(target)) {
+        return std::get<graph_ptr_t>(target);
+    }
+    // A name declared once in the module still comes back as the set of the graphs it has there
+    // (a name may be declared once and hold several overloads): one is a declaration.
+    if (std::holds_alternative<graph_vec_ptr_t>(target)) {
+        auto graphs = asCompileGraphVec(target);
+        if (graphs && graphs->size() == 1) {
+            return graphs->front();
+        }
+    }
+    return nullptr;
+}
+
+const Builder::TopLevelDeclaration *
+Builder::ruleBindingOf(const compile_graph_ptr_t &graph) const {
+    if (graph == nullptr) {
+        return nullptr;
+    }
+    const auto known = topLevelFunctions_.find(graph.get());
+    if (known == topLevelFunctions_.end() || known->second == nullptr ||
+        known->second->gct == nullptr || !known->second->gct->ruleBinding()) {
+        return nullptr;
+    }
+    return known->second;
+}
+
+bool Builder::isRuleBindingTarget(node_handle_t node) const {
+    if (node == nullptr || !nodeIsKind(node, runtime::GCNodeKind::Dref)) {
+        return false;
+    }
+    return ruleBindingOf(singleGraphOfDref(nodeGraphOf(node)->drefTarget(node))) != nullptr;
+}
+
+node_handle_t Builder::ruleBindingValueOf(node_handle_t target, const GCT::node_ptr_t &at) {
+    const compile_graph_ptr_t graph =
+        singleGraphOfDref(nodeGraphOf(target)->drefTarget(target));
+    const TopLevelDeclaration *declaration = ruleBindingOf(graph);
+    ASSERT(declaration != nullptr, "A rule's binding function is declared at the top level.");
+    FunctionType *calleeType = graph->funcType();
+
+    // The values written beside the name (`name<value>`) are the `with` arguments, in the order
+    // they were written: the nodes visitWithNode built, bound to names so the synthesised call
+    // reads them once.
+    std::vector<Argument> bound;
+    GCT::node_ptr_t calleeGct = nullptr;
+    if (const auto it = boundWithArgs_.find(target); it != boundWithArgs_.end()) {
+        bound = std::move(it->second);
+        if (const auto callee = boundWithCallee_.find(target); callee != boundWithCallee_.end()) {
+            calleeGct = callee->second;
+        }
+        boundWithArgs_.erase(it);
+        boundWithCallee_.erase(target);
+        boundWithOrigin_.erase(target);
+    }
+    if (calleeGct == nullptr) {
+        // `name` alone: the name is the DREF this was reached through, and it is the callee of
+        // the call the value is.
+        calleeGct = at;
+    }
+    // A parameter the value does not bind is filled from its default. A parameter that has none
+    // leaves no `Rule` to write: the rule is a function of it, and the name is a call of that
+    // function only when every parameter is bound (design principles 5.5).
+    const std::vector<std::optional<ParameterDefaultValue>> *withDefaults = nullptr;
+    if (const auto it = defaults_.find(graph.get()); it != defaults_.end() && !it->second.with.empty()) {
+        withDefaults = &it->second.with;
+    }
+    for (size_t i = bound.size(); i < calleeType->withTypesCount(); ++i) {
+        if (withDefaults == nullptr || i >= withDefaults->size() ||
+            !(*withDefaults)[i].has_value()) {
+            diags_->of(SemanticDiag::RuleWithParameterUnbound)
+                .atOrigin(at->origin())
+                .commit(calleeType->argNameAt(i), declaration->names.front());
+            throw BuildAbortException();
+        }
+    }
+
+    const auto make = [&](GCT::node_ptr_t node) {
+        node->setOrigin(at->origin());
+        return node;
+    };
+    const auto nameNode = [&](const std::string &name) { return make(tree_->makeDRef(name)); };
+    std::vector<std::string> boundNames;
+    for (Argument &arg : bound) {
+        arg.node = functionValueOf(arg.node, arg.expr);
+        boundNames.push_back(bindTemporary(valueOf(arg.node)));
+    }
+    GCT::node_ptr_t with = make(tree_->makeWith(boundNames.size()));
+    *with << tree_->clone(calleeGct);
+    for (const std::string &name : boundNames) {
+        *with << nameNode(name);
+    }
+    GCT::node_ptr_t call = make(tree_->makeLink(0));
+    *call << with;
+    // The call is the one the binding makes, so the name inside it stays the name: the values
+    // bound here are what the parameters take, and the parameters left over are filled from
+    // their defaults by the call itself.
+    const bool outerRuleBindingCallee = std::exchange(ruleBindingCallee_, true);
+    node_handle_t value               = visitLinkNode(call);
+    ruleBindingCallee_                = outerRuleBindingCallee;
+    return value;
+}
+
 compile_graph_ptr_t Builder::forwardingGraphOf(const compile_graph_ptr_t &target) {
     FunctionType *targetType = target->funcType();
     // Its own type object (a graph completes its function type in place): the declared
