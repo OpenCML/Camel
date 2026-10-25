@@ -103,6 +103,30 @@ def _adopt_bundled_install() -> None:
         os.environ["CAMEL_HOME"] = str(bundled)
 
 
+def _missing_message() -> str:
+    """Why no extension was found -- and the two cases need different words.
+
+    A wheel that carries the body only (`py3-none-<platform>`, which any Python 3 can install)
+    has no extension on purpose, so its message names the interpreter the extension needs and
+    says that the `camel` command is unaffected. A checkout that was never built has an
+    extension that does not exist yet, and that message says how to build it.
+    """
+    bundled = _HERE / ".cmlenv"
+    if (bundled / "bin").is_dir():
+        return (
+            "camel was installed without its Python interop extension: this wheel "
+            "(py3-none-<platform>) carries the `camel` command only, and calling Camel from "
+            "Python needs CPython 3.10 or newer. Install camel-lang with that interpreter and "
+            "pip picks the wheel that has the extension; `camel` itself works as it is."
+        )
+    return (
+        "the Camel extension module (_camel) was not found. It is built with the rest of the "
+        "project (`npm run build`, which needs Python's development files) and installed as "
+        "out/latest/python/_camel*.so; a wheel carries it at camel/.cmlenv/python/. Looked in: "
+        + ", ".join(str(d) for d in _extension_dirs())
+    )
+
+
 def _load():
     _adopt_bundled_install()
     _preload_library()
@@ -119,12 +143,7 @@ def _load():
         if str(directory) not in sys.path:
             sys.path.insert(0, str(directory))
         return importlib.import_module("_camel")
-    raise ImportError(
-        "the Camel extension module (_camel) was not found. It is built with the rest of the "
-        "project (`npm run build`, which needs Python's development files) and installed as "
-        "out/latest/python/_camel*.so; a wheel carries it at camel/.cmlenv/python/. Looked in: "
-        + ", ".join(str(d) for d in _extension_dirs())
-    )
+    raise ImportError(_missing_message())
 
 
 _camel = _load()
