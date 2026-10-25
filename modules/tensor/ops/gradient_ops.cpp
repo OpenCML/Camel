@@ -196,12 +196,20 @@ InferFn gradientLike(size_t index) {
     };
 }
 
-/// A gradient of the value it is made like: that value's shape and element type. The operator it is
-/// used for builds the adjoint of `index`, and a gradient is read at the width of the value it is
-/// the gradient of (design principles 9.9): an f32 fill read as f64 is 0.0078125, not the derivative.
+/// The signature of `sum_to` and `broadcast_like`: `::<T>(g: T[..], like: T[..])`. The result is
+/// argument `index`'s shape and element type, and the other argument is that same element type. A
+/// gradient is read at the width of the value it is the gradient of (design principles 9.9): an
+/// f32 fill read as f64 is 0.0078125, not the derivative. Two arguments whose element types
+/// disagree match no arm -- there is no conversion between numeric types to reach one (design
+/// principles 5.1) -- so the call is refused by the signature, not narrowed into an arm.
 InferFn gradientLikeTyped(size_t index) {
     return [index](const InferContext &ctx) -> std::optional<Type *> {
-        return tensorOf(ctx.facts(index).dtype, ctx.facts(index).shape);
+        const auto &like  = ctx.facts(index);
+        const auto &other = ctx.facts(index == 0 ? 1 : 0);
+        if (like.dtype && other.dtype && *like.dtype != *other.dtype) {
+            return std::nullopt;
+        }
+        return tensorOf(like.dtype, like.shape);
     };
 }
 
@@ -405,10 +413,13 @@ std::vector<OpDef> gradientOps() {
                 static_cast<camel::core::rtdata::Int64>(*(*shape)[static_cast<size_t>(axis)]));
         }});
 
+    // sum_to(g, like) is `::<T>(g: T[..], like: T[..])`: the gradient and the value it reduces
+    // onto are one element type, and its arms are the float widths its kernel carries -- f32 and
+    // f64 (indexing.cpp says which, and design principles 5.1: no conversion to reach an arm).
     defs.push_back(internal(
         "sum_to",
         {{"g", ParamKind::Tensor}, {"like", ParamKind::Tensor}},
-        gradientLike(1),
+        gradientLikeTyped(1),
         &sumToKernel));
     defs.push_back(internal(
         "broadcast_like",

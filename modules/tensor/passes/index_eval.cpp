@@ -475,8 +475,7 @@ std::optional<Num> pointwise(std::string_view op, const std::vector<Num> &v) {
     return std::nullopt;
 }
 
-/// The operators whose Unique write copies the one value it reads (converted to the result's
-/// dtype: broadcast_like and expand_axis produce f32).
+/// The operators whose Unique write copies the one value it reads.
 bool isMove(std::string_view op) {
     for (std::string_view m : {"transpose", "permute", "slice", "reshape", "flatten", "unsqueeze",
                                "broadcast_like", "expand_axis", "sum_to"}) {
