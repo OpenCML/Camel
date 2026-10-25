@@ -11,7 +11,7 @@ import { grad } from autodiff
 with <x: f32[..]>
 func backwards_loss(): float {
     let c = reshape([1.0, 1.0, 1.0] as f32[], [3])
-    return sum(x[5:0:-2] * c)
+    return float(sum(x[5:0:-2] * c))
 }
 
 func main(): int sync {
