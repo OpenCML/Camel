@@ -147,26 +147,6 @@ const PENDING = [
     },
     {
         file: 'docs/tutorial/17_teaching_a_law.cn.md',
-        key: 'fb4bb02afc482ac0',
-        reason:
-            'chapter 17: the step this page teaches -- hand the rule set to `std::opt` ' +
-            '(`rules: Rule[]`, ruled in std-opt-and-module-rules) -- is not implemented, and what ' +
-            '`check` prints for a law whose premise is a fact\'s conclusion (rewrite design 8.1) is ' +
-            'not implemented either, so the tree reads "no premise yet" where the page reads ' +
-            '"fired 8 of 8"',
-    },
-    {
-        file: 'docs/tutorial/17_teaching_a_law.en.md',
-        key: 'fb4bb02afc482ac0',
-        reason:
-            'chapter 17: the step this page teaches -- hand the rule set to `std::opt` ' +
-            '(`rules: Rule[]`, ruled in std-opt-and-module-rules) -- is not implemented, and what ' +
-            '`check` prints for a law whose premise is a fact\'s conclusion (rewrite design 8.1) is ' +
-            'not implemented either, so the tree reads "no premise yet" where the page reads ' +
-            '"fired 8 of 8"',
-    },
-    {
-        file: 'docs/tutorial/17_teaching_a_law.cn.md',
         key: '541c9f141b75d63c',
         reason:
             'chapter 17: the `fact` compiles now; the text block asks for `check` to fire a law on ' +

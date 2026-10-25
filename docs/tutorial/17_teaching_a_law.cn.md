@@ -18,7 +18,8 @@ module law
 import { check } from rewrite
 
 // Multiplying by -1 is negating. A `rule` names a pattern and the writing it may be replaced by.
-rule negate(x: int) when nonnegative(x) { x * -1 => 0 - x }
+// This one holds for every `int`, so it carries no condition; chapter 17 shows a law that needs one.
+rule negate(x: int) { x * -1 => 0 - x }
 
 func negated(x: int): int {
     return x * -1
@@ -41,15 +42,6 @@ func main(): int sync {
     println(negated(7), combined(7), doubled(7))
     return 0
 }
-
-// What the compiler may rely on: the values this program works with are counts, so a count is
-// never negative and a difference of two counts may be. `join` says how the two writings of one
-// value are merged.
-fact nonnegative(v: int): bool match v {
-    case const c => c >= 0
-    case x - y   => false
-    case _       => true
-} join (lhs: bool, rhs: bool) => lhs | rhs
 ```
 
 ```bash
@@ -64,157 +56,45 @@ sampled negate: proposition equality, evidence samples 100, fired 8 of 8, covera
 
 一条 `rule` 由三部分组成：**名字**、**模式**（`=>` 左边）、**可以换成什么**（右边）。
 
+- 这条定律对每个 `int` 都成立：`x * -1` 与 `0 - x` 在任何 `x` 上都是同一个值，所以它**不用写条件**。
+  只在某种知识成立的地方才允许换的定律，要写 `when`——下面讲 `fact` 时有一条真正需要它的例子。
 - 形参里写 `x: int` 的名字是"这里可以是任意表达式"；写 `const c: int` 的名字是"这里必须是一个常量"。
   `x * c1 + x * c2 => x * (c1 + c2)` 就是标准库那条合成定律的写法（右边的 `c1 + c2` 在编译期算掉）。
 - 一条 `rule` 是一个**值**，类型是 `Rule`。它可以被传进函数、放进数组，也可以交给改写引擎。
 - `check` 拿它去抽查：随机造实例，把两边都算一遍，再比较。上面那行 `fired 8 of 8` 说的是这条定律被
   试了 8 次、8 次两边相等；最后 `(x * -1) = (0 - x)` 是它对这条定律的理解。
 - `check` 的判定是**抽样**：它给出反例就说明定律错了，它不报错只是说没抽到反例。
+- 同一份文件里还有两个函数：`combined` 是标准库定律认识的样子，`doubled` 是同一个值写了两次。
 
 ## 把定律交给优化器
 
 一条 `rule` 是一个**值**，不会自己进任何遍：模块里写下的规则不被收集（[语言参考 9.4](../language/09_rules_and_facts.md)）。
-`std::opt` 用的是标准库那批定律（`stdlib/rules.cml`）；要把自己写的定律也交给它，写法是把规则集**显式**传进去：
-Camel 里写 `f->std::opt<rules: [negate]>`，命令行写 `std::opt rules=[law::negate]`。今天的 `std::opt` 还没有
-`rules` 参数（写它会得到 `SemanticDiag::ParamArgumentUnknown`），所以今天要让自己的定律生效，就写一条自己的遍再交给
-命令行——上面 `check([negate], …)` 就是"显式交出去"的例子。下面这份文件交给 `std::opt` 时，`negated` 这一半
-**没有变**：`x * -1` 原样留着，因为这条定律是你的，优化器不知道它。
-
-<!-- camel-snippet: graph-dump: the text block is one excerpt of std::opt std::gir's DOT, not the program's stdout -->
-
-```cml
-// The law of this program's arithmetic, written the way the compiler reads laws.
-// Run: camel docs/tutorial/examples/17_rule.cml
-module law
-
-import { check } from rewrite
-
-// Multiplying by -1 is negating. A `rule` names a pattern and the writing it may be replaced by.
-rule negate(x: int) when nonnegative(x) { x * -1 => 0 - x }
-
-func negated(x: int): int {
-    return x * -1
-}
-
-// Laws the compiler's own library already knows: a sum of two scaled copies of one value is one
-// scaled copy, so this is one multiplication.
-func combined(x: int): int {
-    return x * 3 + x * 5
-}
-
-// The same value written twice: `std::opt::saturate` keeps both writings in one class.
-func doubled(x: int): int {
-    return x * 2 + x * 2
-}
-
-func main(): int sync {
-    // `check` draws random instances and compares the two sides of every rule it is given.
-    println(check([negate], 100, 1))
-    println(negated(7), combined(7), doubled(7))
-    return 0
-}
-
-// What the compiler may rely on: the values this program works with are counts, so a count is
-// never negative and a difference of two counts may be. `join` says how the two writings of one
-// value are merged.
-fact nonnegative(v: int): bool match v {
-    case const c => c >= 0
-    case x - y   => false
-    case _       => true
-} join (lhs: bool, rhs: bool) => lhs | rhs
-```
+要把定律交给 `std::opt`，写法是把规则集**显式**传进去：Camel 里写 `f->std::opt<rules: [negate]>`，命令行写
+`std::opt rules=[law::negate]`。**没交出去的定律不会被用**：下面 `negated` 这一半交给 `std::opt` 之后
+**没有变**，`x * -1` 原样留在图上：
 
 ```bash
-camel docs/tutorial/examples/17_rule.cml std::opt std::gir
+camel docs/tutorial/examples/17_rule.cml std::opt std::rgir > negated.dot
+dot -Tsvg negated.dot -o negated.svg
 ```
 
-```text
-            label="negated";
-            F0D [label="ARGS", type="ARGS"];
-            O0D [label="EXIT", type="EXIT"];
-            N33 [label="x", type="PORT", param_name="x", param_kind="normal", param_index="0", value_type="int"];
-            N34 [label="-1", type="DATA", origin=2078, span="10:15-10:17", srcfile="docs/tutorial/examples/17_rule.cml", value_type="int"];
-            N35 [label=":op/mul_l", type="OPER", origin=2079, span="10:13-10:14", srcfile="docs/tutorial/examples/17_rule.cml", value_type="int"];
-            F0D -> N33 [label="0", type="NORM_PORT"];
-            N35 -> O0D [label="0", type="EXIT"];
-            N33 -> N35 [label="0|0", type="NORM"];
-            N34 -> N35 [label="0|1", type="NORM"];
-        }
-```
+![negated：这条定律是自己的，没交出去，x * -1 原样留着](images/17_rule_negated.svg)
 
-`negated` 还是 `x * -1`（`:op/mul_l`，常量 `-1`），运行结果不变（`negated(7)` 还是 `-7`）——这是"定律没有自己
-进去"的读数。要让它在图上生效，就把它显式交出去：`check` 是这样，规则集进 `std::opt` 也是这样（`std::opt rules=[…]`）。
+图上还是一条 `:op/mul_l` 加一个常量 `-1`，运行结果也没变（`negated(7)` 还是 `-7`）——这就是"定律没有自己
+进去"的读数。
 
-这条定律只在事实成立的地方用：`x` 是非负的计数时，`x * -1` 才允许写成 `0 - x`。这个事实写在文件的
-末尾，下一节讲它。
+**交出去，它才会用**。今天 `std::opt` 还没有 `rules` 参数（写它会得到 `SemanticDiag::ParamArgumentUnknown`），
+所以今天要让自己的定律生效有两条路：写一条自己的遍再交给命令行，或者像上面那样用 `check([negate], …)`
+让它拿随机实例去抽查——`fired 8 of 8` 就是"显式交出去"的读数。等 `rules` 参数落地，同一个文件里那句
+`x * -1` 会被换成 `0 - x`，图上那个 `:op/mul_l` 也就变成 `:op/sub_l`：**定律是值，交出去才用**，
+这是这条流水线唯一的知识入口。
 
 ## 编译器自己的那批定律
 
-`std::opt` 手里是标准库那一批（你写的那条不在里面）：`x * 3 + x * 5` 这类式子标准库早就认识。同一份程序，
-`combined` 这一段在
-`camel docs/tutorial/examples/17_rule.cml std::opt std::gir` 之后是（节选）：
+`std::opt` 手里是标准库那一批（你写的那条不在里面）：`x * 3 + x * 5` 这类式子标准库早就认识。同一份文件、
+同一条命令，`combined` 这一段是这样：
 
-<!-- camel-snippet: graph-dump: the text block is one excerpt of std::opt std::gir's DOT, not the program's stdout -->
-
-```cml
-// The law of this program's arithmetic, written the way the compiler reads laws.
-// Run: camel docs/tutorial/examples/17_rule.cml
-module law
-
-import { check } from rewrite
-
-// Multiplying by -1 is negating. A `rule` names a pattern and the writing it may be replaced by.
-rule negate(x: int) when nonnegative(x) { x * -1 => 0 - x }
-
-func negated(x: int): int {
-    return x * -1
-}
-
-// Laws the compiler's own library already knows: a sum of two scaled copies of one value is one
-// scaled copy, so this is one multiplication.
-func combined(x: int): int {
-    return x * 3 + x * 5
-}
-
-// The same value written twice: `std::opt::saturate` keeps both writings in one class.
-func doubled(x: int): int {
-    return x * 2 + x * 2
-}
-
-func main(): int sync {
-    // `check` draws random instances and compares the two sides of every rule it is given.
-    println(check([negate], 100, 1))
-    println(negated(7), combined(7), doubled(7))
-    return 0
-}
-
-// What the compiler may rely on: the values this program works with are counts, so a count is
-// never negative and a difference of two counts may be. `join` says how the two writings of one
-// value are merged.
-fact nonnegative(v: int): bool match v {
-    case const c => c >= 0
-    case x - y   => false
-    case _       => true
-} join (lhs: bool, rhs: bool) => lhs | rhs
-```
-
-```bash
-camel docs/tutorial/examples/17_rule.cml std::opt std::gir
-```
-
-```text
-            label="combined";
-            F0E [label="ARGS", type="ARGS"];
-            O0E [label="EXIT", type="EXIT"];
-            N36 [label="x", type="PORT", param_name="x", param_kind="normal", param_index="0", value_type="int"];
-            N37 [label="8", type="DATA", value_type="int"];
-            N38 [label=":op/mul_l", type="OPER", origin=2088, span="16:17-16:18", srcfile="docs/tutorial/examples/17_rule.cml", value_type="int"];
-            F0E -> N36 [label="0", type="NORM_PORT"];
-            N38 -> O0E [label="0", type="EXIT"];
-            N36 -> N38 [label="0|0", type="NORM"];
-            N37 -> N38 [label="0|1", type="NORM"];
-        }
-```
+![combined：标准库的定律把 x * 3 + x * 5 合成一个乘法乘 8](images/17_rule_combined.svg)
 
 `x * 3 + x * 5` 剩下一乘：`3 + 5` 先算成常量 `8`，两个乘法合成一个。这条定律不在你的文件里，
 在标准库里；`std::opt` 用它，是因为流水线里挂着那批定律。
@@ -222,87 +102,10 @@ camel docs/tutorial/examples/17_rule.cml std::opt std::gir
 ## 等价图：一个值的多种写法
 
 优化不总是马上决定"用哪种写法"。`std::opt::saturate` 把标准库的定律用到不动为止，**把同一个值的几种
-写法都留着**，让后面的阶段再挑。同一份程序的 `doubled` 那一段，在
-`camel docs/tutorial/examples/17_rule.cml std::opt::saturate std::gir` 之后是（节选）：
+写法都留着**，让后面的阶段再挑。`doubled` 这一段在
+`camel docs/tutorial/examples/17_rule.cml std::opt::saturate std::rgir` 之后是这样：
 
-<!-- camel-snippet: graph-dump: the text block is one excerpt of std::opt::saturate std::gir's DOT, not the program's stdout -->
-
-```cml
-// The law of this program's arithmetic, written the way the compiler reads laws.
-// Run: camel docs/tutorial/examples/17_rule.cml
-module law
-
-import { check } from rewrite
-
-// Multiplying by -1 is negating. A `rule` names a pattern and the writing it may be replaced by.
-rule negate(x: int) when nonnegative(x) { x * -1 => 0 - x }
-
-func negated(x: int): int {
-    return x * -1
-}
-
-// Laws the compiler's own library already knows: a sum of two scaled copies of one value is one
-// scaled copy, so this is one multiplication.
-func combined(x: int): int {
-    return x * 3 + x * 5
-}
-
-// The same value written twice: `std::opt::saturate` keeps both writings in one class.
-func doubled(x: int): int {
-    return x * 2 + x * 2
-}
-
-func main(): int sync {
-    // `check` draws random instances and compares the two sides of every rule it is given.
-    println(check([negate], 100, 1))
-    println(negated(7), combined(7), doubled(7))
-    return 0
-}
-
-// What the compiler may rely on: the values this program works with are counts, so a count is
-// never negative and a difference of two counts may be. `join` says how the two writings of one
-// value are merged.
-fact nonnegative(v: int): bool match v {
-    case const c => c >= 0
-    case x - y   => false
-    case _       => true
-} join (lhs: bool, rhs: bool) => lhs | rhs
-```
-
-```bash
-camel docs/tutorial/examples/17_rule.cml std::opt::saturate std::gir
-```
-
-```text
-            label="doubled";
-            writings_cost="weighted";
-            F0F [label="ARGS", type="ARGS"];
-            O0F [label="EXIT", type="EXIT"];
-            N36 [label="x", type="PORT", param_name="x", param_kind="normal", param_index="0", value_type="int"];
-            subgraph cluster_class_C02 {
-            label="class c1";
-            style=dashed;
-            C02 [label="class c1", type="CLASS"];
-                N37 [label="2", type="DATA", origin=2092, span="21:15-21:16", srcfile="docs/tutorial/examples/17_rule.cml", value_type="int", class="c1", chosen="true"];
-                N38 [label="2", type="DATA", origin=2095, span="21:23-21:24", srcfile="docs/tutorial/examples/17_rule.cml", value_type="int", class="c1"];
-            }
-            subgraph cluster_class_C03 {
-            label="class c2";
-            style=dashed;
-            C03 [label="class c2", type="CLASS"];
-                N39 [label=":op/mul_l", type="OPER", origin=2093, span="21:13-21:14", srcfile="docs/tutorial/examples/17_rule.cml", value_type="int", class="c2", chosen="true"];
-                N3A [label=":op/mul_l", type="OPER", origin=2096, span="21:21-21:22", srcfile="docs/tutorial/examples/17_rule.cml", value_type="int", class="c2"];
-            }
-            subgraph cluster_class_C04 {
-            label="class c5";
-            style=dashed;
-            C04 [label="class c5", type="CLASS"];
-                N3B [label=":op/add_l", type="OPER", origin=2097, span="21:17-21:18", srcfile="docs/tutorial/examples/17_rule.cml", value_type="int", class="c5"];
-                N3C [label=":op/mul_l", type="OPER", origin=2097, span="21:17-21:18", srcfile="docs/tutorial/examples/17_rule.cml", value_type="int", class="c5", chosen="true"];
-                N3D [label=":op/mul_l", type="OPER", origin=2097, span="21:17-21:18", srcfile="docs/tutorial/examples/17_rule.cml", value_type="int", class="c5"];
-                N3E [label=":op/mul_l", type="OPER", origin=2097, span="21:17-21:18", srcfile="docs/tutorial/examples/17_rule.cml", value_type="int", class="c5"];
-            }
-```
+![doubled：x * 2 + x * 2 的几种写法留在一个个等价类里](images/17_rule_saturate.svg)
 
 每个虚线框是**一类等价的值**（`class`）：框里的节点是同一个值的不同写法，标了 `chosen="true"` 的那一个
 是后面抽取时会留下的。`doubled` 的 `x * 2 + x * 2` 因此同时留着 `x * (2 + 2)`、`x * 4` 等写法——定律
