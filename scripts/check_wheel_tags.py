@@ -19,6 +19,12 @@ level that platform's policy defines:
 
 `*-any.whl` is refused as well: this distribution is a native build by definition.
 
+A platform field may be a dot-separated *list* of alternatives, and `auditwheel repair` does use
+one: asked for `manylinux_2_28_x86_64` on a wheel whose only requirement is glibc 2.27 it writes
+`manylinux_2_27_x86_64.manylinux_2_28_x86_64`, naming both the higher-priority tag it found and
+the one it was asked for. Every alternative has to be publishable, and `--expect` is satisfied when
+it is one of them.
+
 This runs in the build step, so a wrong tag fails the job that produced it instead of being
 rejected by the index after the whole matrix has been built and downloaded.
 
@@ -59,8 +65,14 @@ def wheel_wheel_tags(path):
     return tags
 
 
+def platform_alternatives(platform_tag):
+    """The platform field as the set of tags it offers: `a.b` is compatible with either."""
+    return set(platform_tag.split("."))
+
+
 def platform_ok(platform_tag):
-    return platform_tag.startswith(ALLOWED)
+    """Every alternative has to be publishable; one `linux_x86_64` in the list is enough to refuse."""
+    return all(part.startswith(ALLOWED) for part in platform_alternatives(platform_tag))
 
 
 def check(path, expect):
@@ -76,7 +88,7 @@ def check(path, expect):
             "platform tag %r is not one of manylinux_*/musllinux_*/macosx_*/win_* "
             "(PyPI rejects it; see this file's docstring)" % platform_tag
         )
-    if expect and platform_tag != expect:
+    if expect and expect not in platform_alternatives(platform_tag):
         problems.append("platform tag %r is not the expected %r" % (platform_tag, expect))
 
     # A tag that says `any` while the wheel carries a native binary, or a python tag that
@@ -88,18 +100,24 @@ def check(path, expect):
     inner = wheel_wheel_tags(path)
     if not inner:
         problems.append("no `Tag:` line in *.dist-info/WHEEL")
+    inner_platforms = set()
     for tag in inner:
         fields = tag.split("-")
         if len(fields) != 3:
             problems.append("malformed Tag: %r" % tag)
             continue
-        if fields[2] != platform_tag:
-            problems.append(
-                "Tag: %r disagrees with the file name's platform tag %r; pip reads the name "
-                "and the index reads both" % (tag, platform_tag)
-            )
+        inner_platforms |= platform_alternatives(fields[2])
         if not platform_ok(fields[2]):
             problems.append("Tag: %r carries an unpublishable platform tag" % tag)
+    # A single `Tag:` may name several platforms itself, so the two sides are compared as
+    # sets. They have to be equal: the metadata left behind by an earlier tag is what the
+    # 0.2.31 rejection was made of, and the index reads both.
+    if inner and inner_platforms != platform_alternatives(platform_tag):
+        problems.append(
+            "the Tag: lines inside the wheel offer %s but the file name says %s; pip reads "
+            "the name and the index reads both"
+            % (sorted(inner_platforms), sorted(platform_alternatives(platform_tag)))
+        )
     return problems
 
 
