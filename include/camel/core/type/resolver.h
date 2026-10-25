@@ -45,6 +45,16 @@ struct StaticArg {
 /// Compile-time knowledge of a call's norm arguments, aligned with their types.
 using static_args_t = std::span<const StaticArg>;
 
+/**
+ * A result callback that also reads what the compiler knows about the call's constant arguments:
+ * the path a rule whose result type depends on their values needs (`slice(t, axis, a, b)` states
+ * the length it takes when the bounds are constants, design principles 5.4). A rule that declares
+ * one answers from it whenever the caller has the statics -- `resolveWith`, which every call site
+ * with constants reaches -- and keeps the plain callback above for a caller that has none.
+ */
+using ResolverWithStaticsFunc = std::function<std::optional<Type *>(
+    const type_vec_t &, const type_vec_t &, static_args_t, const ModifierSet &)>;
+
 /// The names a signature gives its parameters, the `with` ones first and the ordinary ones after;
 /// false when it records no name for some position (see FuncTypeResolver::parameterNames).
 bool namesOfSignature(
@@ -234,6 +244,21 @@ class DynamicFuncTypeResolver : public FuncTypeResolver {
         const type_vec_t &with, const type_vec_t &norm,
         const ModifierSet &modifiers) const override;
 
+    /// The same resolution with the call's constants in hand: a rule that declared a callback
+    /// reading them (withStatics) answers from it, so its result type may follow the values the
+    /// program wrote, and a rule that declared none answers as it always did.
+    std::optional<FunctionType *> resolveWith(
+        const type_vec_t &with, const type_vec_t &norm, static_args_t normStatics,
+        const ModifierSet &modifiers) const override;
+
+    /// Declares that this rule's result may also follow the call's constant arguments, for an
+    /// operator whose result type depends on their values. The plain callback above stays: it
+    /// answers a caller that has no statics, and it is what the rule answers without them.
+    DynamicFuncTypeResolver *withStatics(ResolverWithStaticsFunc resolver) {
+        staticsResolver_ = std::move(resolver);
+        return this;
+    }
+
     std::string signature() const override { return signature_; }
 
     bool varParameters(std::vector<bool> &with, std::vector<bool> &norm) const override {
@@ -292,6 +317,9 @@ class DynamicFuncTypeResolver : public FuncTypeResolver {
     FunctionType *fixed_ = nullptr;
     var_declare_t withVars_, normVars_;
     ResolverFunc resolver_;
+    /// The callback that also reads the call's constants; null for a rule whose result follows
+    /// its argument types alone.
+    ResolverWithStaticsFunc staticsResolver_;
 };
 
 /**
