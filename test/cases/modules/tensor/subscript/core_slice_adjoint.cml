@@ -4,7 +4,7 @@
  * author's ruling of 2026-10-25, discrete-gradient-and-rank-one-slice-ownership, point 2), and its
  * adjoint is `:tangent/scatter_slice_arr`. That kernel used to build its result with
  * `Array::create(alloc, size)` -- an array of bare slots -- so the gradient carried no element
- * type and the next tensor operator to read it refused with `sum: Unsupported Tensor dtype`
+ * type and the next tensor operator to read it refused with `sum: Unsupported array element type`
  * (exit 1). The adjoint now creates the value with the tangent type, so the value states the
  * element type the forward value has (`f32[6]`).
  *

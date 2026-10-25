@@ -4,8 +4,8 @@
  * boundary), the if-then-else joins two arms of one type (branch contract),
  * `println` is an effect, and `format` has no ONNX lowering (export capability).
  *
- * `gate` is written with its element type and shape (`f32[4]`), the terminal spelling: a bare
- * `Tensor` parameter leaves the element type unstated, so `t[0]` had no type for `t[0] > 0.5`.
+ * `gate` is written with its element type and shape (`f32[4]`), the terminal spelling: a parameter
+ * that writes no element type leaves it unstated, so `t[0]` had no type for `t[0] > 0.5`.
  */
 module boundaries
 

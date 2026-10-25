@@ -1,6 +1,6 @@
 /**
  * Aggregates of precisely typed tensors are accepted where the declared type
- * uses plain `Tensor`: struct fields, tuple elements, and array elements are
+ * uses an open-rank array (`f64[..]`): struct fields, tuple elements, and array elements are
  * checked covariantly (they are immutable).
  */
 module struct_covariance
