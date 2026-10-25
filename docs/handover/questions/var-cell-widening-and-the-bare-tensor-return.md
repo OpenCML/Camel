@@ -92,3 +92,29 @@ P6（把格子写成 `Tensor`）与 P7（把返回值挪到自己的绑定）之
    （`screens.plan.toml` 那两条连期望都没有），终态下它们到底「本来就该报错」还是「该绿」，需要一句裁定。
 3. `:323` 与 `:784` 要不要按实测补一句：「返回裸 `Tensor` 的调用进不了写明元素类型的 `var` 格子，
    与加宽规则无关」？
+
+## 五、同一族的两个慢层读数（集成 lane 补，只事实）
+
+同样「裸 `Tensor` 进不去写明元素类型的位置」的形状，在慢层还有两处，它们比上面四条更重：**用例根本
+编译不过**（不是期望问题），而 develop 上同样两个程序都能跑。
+
+`test/cases/feat/mm/gc/gc_training_peak.cml:29`（`let next = sgd(wf, g, 0.5)`）：
+
+```
+error[SemanticDiag::NoMatchingFunction]: No matching function found for argument types: <>
+(f32[?, 4], Tensor, float).
+    --> test/cases/feat/mm/gc/gc_training_peak.cml:29:23
+    <nn:sgd>: (params: P, grads: grad of P, lr: float) => P
+```
+
+- 逐字读数：`tip=c5c506e44` 上 `camel gc_training_peak.cml --arg steps=2 --arg batch=64 --arg width=64
+  std::nvm` 直接报上面这条；同一命令在 develop（`tip=0a1a509f5`）打印
+  `gc_training_peak base=18056 peak=28808 low=22664 released=0 loss=0.6931471805599647` 并退出 0。
+- 参数里 `wf = zeros([width, 4])` 的类型是 `f32[?, 4]`（`width` 是运行时实参），
+  `g = loss_grad<wf>(X, labels)` 的类型是**裸 `Tensor`**；`nn:sgd` 的签名印在
+  `modules/nn/optim.cpp:567`，`P` 与 `grad of P` 都绑到第一个实参的类型上，裸 `Tensor` 与
+  `f32[?, 4]` 不统一 ⇒ 拒绝。`test/plans/feat/mm/gc_pacing.plan.toml:487`／`:521` 两条
+  （`gc_pacing.training_400`／`.training_800`）因此在慢层红，连续两次（`188.00 ms`／`180.22 ms`
+  与 `129.56 ms`／`209.13 ms`），**是编译期拒绝、不是抖动也不是过期期望**。
+- 它与本页第三、四节的 `lrit`／`mnist` 同一族（裸 `Tensor` 与未定元素类型的位置），所以问题也同一处：
+  `grad of P` 该不该接受「未定元素类型的梯度」这种裸 `Tensor`。本文只记读数。
