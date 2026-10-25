@@ -58,6 +58,11 @@ class ParserImpl {
     // principles 5.9). A function declaration's or a function type's parameters always write
     // their types.
     bool lambdaParams_ = false;
+    // The parameter list being parsed belongs to a tag declaration, where a parameter's type may
+    // be the keyword `func` (design principles 6.2: `tag vjp<rule: func> on func`). A tag carries
+    // a function under such a parameter, and `func` is the one type position that reads the
+    // keyword as a name; everywhere else a type position still refuses it.
+    bool tagParams_ = false;
 
     bool panic_     = false; // an error was reported and the parser has not resynchronized
     uint32_t depth_ = 0;     // nesting of expressions, types and blocks
@@ -103,6 +108,16 @@ class ParserImpl {
             p.typeHead_ = true;
         }
         ~TypeHeadScope() { p.typeHead_ = old; }
+    };
+    /// Sets `tagParams_` for the parameter list of a tag declaration, where `func` stands as a
+    /// type name; restores it at the end.
+    struct TagParamScope {
+        ParserImpl &p;
+        bool old;
+        explicit TagParamScope(ParserImpl &parser) : p(parser), old(parser.tagParams_) {
+            p.tagParams_ = true;
+        }
+        ~TagParamScope() { p.tagParams_ = old; }
     };
     struct Depth {
         ParserImpl &p;

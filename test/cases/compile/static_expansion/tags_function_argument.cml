@@ -1,15 +1,12 @@
 /**
- * A tag parameter declared with the kind `function` carries a function of the program as its graph
- * reference: an internal number, not a value the language has. A `static` head that reads such a
- * field's tags is refused here, rather than handed that number as a string; the tags of the other
- * fields of the same type are read as usual.
- *
- * The kind is written `function` and not `func` because `func` is a keyword, which the type
- * position of a tag parameter does not accept yet; the two are the same kind to the compiler.
+ * A tag parameter declared `func` carries a function of the program as its graph reference: an
+ * internal number, not a value the language has. A `static` head that reads such a field's tags
+ * is refused here, rather than handed that number as a string; the tags of the other fields of
+ * the same type are read as usual.
  */
 module tags_function_argument
 
-tag rule<f: function> on field
+tag rule<f: func> on field
 tag width<w: int> on field
 
 func twice(x: int): int {

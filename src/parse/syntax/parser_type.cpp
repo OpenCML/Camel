@@ -269,6 +269,10 @@ void ParserImpl::parseSpecType() {
 /// A `(` opens a function type when its head is that of a parameter list (`(name:`, `(var`, or
 /// an empty list followed by `=>`); otherwise `(T)` is the parenthesized type and anything
 /// else a tuple type.
+///
+/// One parameter list reads a keyword as a type name: a tag declaration's parameters may be
+/// declared `func` (`tag vjp<rule: func> on func`, design principles 6.2), and that is where the
+/// name below is admitted. A type position elsewhere still refuses `func`.
 void ParserImpl::parsePrimaryType() {
     // After `fields` and after `match type` the parser is in a type position: the head `(` opens
     // a tuple or a parenthesised type, so `fields ` is the empty tuple type (rule 1).
@@ -287,6 +291,16 @@ void ParserImpl::parsePrimaryType() {
     case TK::Lt:
     case TK::KwSync:
         return parseFuncType();
+    case TK::KwFunc:
+        // A tag parameter declared `func` names the kind of argument the tag carries: a function
+        // (design principles 6.2: `export tag vjp<rule: func> on func`). The keyword is a name
+        // only here; at every other type position the check below reports it.
+        if (tagParams_) {
+            const size_t m = mark();
+            bump();
+            return close(m, NK::RefType);
+        }
+        break;
     case TK::KwTypeof: {
         // The operand stops before an assignment: `let v: typeof a = b` declares `v`.
         const size_t m = mark();

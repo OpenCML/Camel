@@ -800,6 +800,10 @@ void ParserImpl::parseFuncDecl() {
 /// and the second form makes it the group of the tags in the list (`tag finite_math = [no_nans,
 /// no_infs]`). `tag`, `on` and `read_by` are contextual: they are not reserved words, and a
 /// declaration starts with `tag` only when a name, `<` or `=` follows it.
+///
+/// A parameter's type may be the keyword `func` (design principles 6.2: `tag vjp<rule: func> on
+/// func`): the tag carries a function under that parameter. This is the only type position that
+/// reads the keyword as a name.
 void ParserImpl::parseTagDecl() {
     const size_t m = mark();
     eat(TK::KwExport);
@@ -813,6 +817,9 @@ void ParserImpl::parseTagDecl() {
         return;
     }
     if (cur_ == TK::Lt || cur_ == TK::LAngle) {
+        // A tag's parameters are declared in the one parameter list where a type may be the
+        // keyword `func` (design principles 6.2: `tag vjp<rule: func> on func`).
+        TagParamScope tagParams(*this);
         parseAngledParams();
     }
     if (!atWord(0, "on")) {
