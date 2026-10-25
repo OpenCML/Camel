@@ -30,7 +30,7 @@
 //   /// @example <code>    // <result>
 //   /// @example-fragment <why it is not a program of its own>   (optional; the example is then
 //   ///                                                          shown but not compiled)
-//   #op<'protocol:operator'>                       (only when the URI is not `<module>:<name>`;
+//   #op('protocol:operator')                       (only when the URI is not `<module>:<name>`;
 //   with <a: A>                                     `*` stands for any text, for a group of
 //   export func name(x: X): R                       overloads that differ by type)
 //
@@ -674,7 +674,7 @@ function readDeclarations(file, module) {
         // above the declaration - above the tag, or between the tag and the declaration - is its
         // description. The line therefore does not end the pending comment, which is what the AST
         // builder does too (it reads the comment above the declaration's first token, and the tag
-        // is that token: src/parse/ast/builder.cpp, docOf). A `#op<'module:function'>` names the
+        // is that token: src/parse/ast/builder.cpp, docOf). A `#op('module:function')` names the
         // operator a C++ declaration implements when it does not follow the convention (design
         // principles 6.4, step 1). This used to end the comment for a module written
         // in Camel, which lost the description of every such declaration from the page.
@@ -683,7 +683,7 @@ function readDeclarations(file, module) {
             if (tagged) {
                 pendingUri = tagged[1]
             } else if (module.kind === 'cpp') {
-                // A signature file writes `#op<...>` and nothing else: another tag there is a typo,
+                // A signature file writes `#op(...)` and nothing else: another tag there is a typo,
                 // not a declaration.
                 throw new Error(`${path.basename(file)}:${i + 1}: unknown tag on a declaration`)
             }

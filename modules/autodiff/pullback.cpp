@@ -2395,7 +2395,7 @@ void ForwardRewrite::rewriteClosureCall(
     }
     const auto *body = reinterpret_cast<const rt::GCOperBody *>(draft_.payloadOf(callee).data());
     // The two operators of this module that take a function, recognised by id. (A custom rule
-    // is a declaration tag now, `#vjp<rule>`: it is not a call of an operator.)
+    // is a declaration tag now, `#vjp(rule)`: it is not a call of an operator.)
     static const camel::core::OperId kGrad =
         camel::core::OperatorTable::instance().intern("autodiff:grad");
     static const camel::core::OperId kValueAndGrad =
@@ -2450,7 +2450,7 @@ void ForwardRewrite::rewriteCall(gc_node_ref_t call) {
         return;
     }
     if (hasRule(callee)) {
-        // The declaration has a custom rule (`#vjp<rule>`): the call computes its ordinary
+        // The declaration has a custom rule (`#vjp(rule)`): the call computes its ordinary
         // value as it is, and the rule, not the body, gives the gradient. The call is a site
         // the backward pass replaces (visitRuleSite), as a call through a function value is.
         ::Function *rule = ruleOf(draft_.program(), callee);

@@ -65,7 +65,7 @@ template <typename T> bool numberLess(T a, T b) {
 // (keys: number[] | bool[] | string[]) => int[]: the positions of the keys in ascending order of
 // key. Equal keys keep their order (a stable sort), so sorting by one key and then by another
 // works. One executor per key element type: which one runs is fixed by the declaration the call
-// compiled through (`#op<'array:argsort_i'>` and its siblings, stdlib/array.cml), so nothing here
+// compiled through (`#op('array:argsort_i')` and its siblings, stdlib/array.cml), so nothing here
 // asks the array which element type it holds and an element type with no declaration is refused
 // where the call is written rather than here.
 
@@ -273,7 +273,7 @@ void mergeSortSlots(T *vals, size_t n, Compare comp, T *tmp) {
 //
 // The algorithm and the element type are template parameters, because both are fixed where the
 // executor is chosen: the declaration a call compiled through names its own element type
-// (`#op<'array:sort_i'>`, ...), and the algorithm is the name the call used. Nothing here reads
+// (`#op('array:sort_i')`, ...), and the algorithm is the name the call used. Nothing here reads
 // the element type code, so there is no run-time switch on it and no default arm that could
 // guess: an element type no declaration names never reaches an executor at all.
 template <SortAlgo Algo, typename T> Array *__doSortSlots__(Array *arr, const ArrayType *arrType, bool inPlace) {

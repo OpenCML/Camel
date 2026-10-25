@@ -171,7 +171,7 @@
 ```camel
 rule mul_one(x: float) { x * 1.0 => x }
 
-#requires<reassociate>
+#requires(reassociate)
 rule add_assoc(a: f32, b: f32, c: f32) { (a + b) + c <=> a + (b + c) }
 
 rule fuse_map<f, g>(xs: int[]) { xs->map<f>->map<g> => xs->map<(a) => g(f(a))> }
@@ -181,7 +181,7 @@ export let simplify = [mul_one, add_assoc, fuse_map]
 ```
 
 - `=>` 单向（贪心引擎），`<=>` 双向（等价饱和）；`when` 是条件，可以读模式变量的标签与事实。
-- 所需许可是规则声明上的标签 `#requires<...>`。
+- 所需许可是规则声明上的标签 `#requires(...)`。
 - `rule` 是"两个参数相同的函数加配对"的简写（1），语义相同。规则可以导出、导入；规则列表是普通的值。
 - **入库前的随机检验是强制的**：测试工具枚举全部 `rule` 声明，对每条规则用随机输入、按它声明的许可分别运行两边并比较（数值契约 7.3）；标准规则库不通过不能合并。
 

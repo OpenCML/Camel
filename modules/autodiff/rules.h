@@ -4,10 +4,10 @@
 /*
  * Custom derivative rules for user functions (design principles 6.2, 8).
  *
- *   #vjp<rule>
+ *   #vjp(rule)
  *   func f(x1, ..., xn): y { ... }
  *
- * `#vjp<rule>` is a declaration tag (`export tag vjp<rule: func> on func`): its value is the
+ * `#vjp(rule)` is a declaration tag (`export tag vjp(rule: func) on func`): its value is the
  * graph reference of `rule`. The GIR builder keeps that graph in the reference table of f's
  * graph (kGraphRefRule), so the frozen graph names its rule directly: no rewritten copy of f,
  * no closure capture, no side table keyed by graph identity. When f is differentiated, calls of
@@ -27,14 +27,14 @@
 
 namespace camel::autodiff {
 
-/// The rule of the function graph `graph`, nullptr when its declaration has no `#vjp<rule>`.
+/// The rule of the function graph `graph`, nullptr when its declaration has no `#vjp(rule)`.
 /// `program` holds both the function graph and the rule graph.
 ::Function *ruleOf(const camel::runtime::Program *program, const camel::runtime::GCGraph *graph);
 
 /// The rule of the function value `function`, nullptr when it has none.
 ::Function *ruleOf(const ::Function *function);
 
-/// Whether the function graph `graph` has a rule (`#vjp<rule>` on its declaration).
+/// Whether the function graph `graph` has a rule (`#vjp(rule)` on its declaration).
 bool hasRule(const camel::runtime::GCGraph *graph);
 
 } // namespace camel::autodiff

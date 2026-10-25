@@ -302,7 +302,7 @@ void registerCamelPass(
     descriptor.make = [module, function, params](const context_ptr_t &ctx, const PassArgs &args) {
         return std::make_unique<CamelPass>(ctx, module, function, params, args);
     };
-    // A Camel pass says which tags it reads with `#reads<...>` on its function: that is what
+    // A Camel pass says which tags it reads with `#reads(...)` on its function: that is what
     // makes a tag's facts read, exactly as a C++ module's `read_by` does (design principles
     // 6.2). The module is the one the pass was compiled from (already in the context).
     try {

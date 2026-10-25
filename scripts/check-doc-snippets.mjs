@@ -138,7 +138,7 @@ const PENDING = [
     {
         file: 'docs/language/07_statements.md',
         key: '9aa3336c2988ef4b',
-        reason: 'tags: the ruled use spelling takes its arguments in parentheses, where this tree still reads `#name<...>`',
+        reason: 'tags: the ruled use spelling takes its arguments in parentheses, where this tree still reads `#name(...)`',
     },
     {
         file: 'docs/language/07_statements.md',
@@ -158,7 +158,7 @@ const PENDING = [
     {
         file: 'docs/language/en/07_statements.md',
         key: '59575e3c0ed44920',
-        reason: 'tags: the ruled use spelling takes its arguments in parentheses, where this tree still reads `#name<...>`',
+        reason: 'tags: the ruled use spelling takes its arguments in parentheses, where this tree still reads `#name(...)`',
     },
     {
         file: 'docs/language/en/07_statements.md',

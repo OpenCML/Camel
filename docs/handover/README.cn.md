@@ -310,7 +310,7 @@
 依据设计原则 10.4（新改）。
 
 1. **审计**：每个原生算子与每个标准库函数归入三类之一——原子算子、Camel 定义、Camel 定义加 `#impl`。属于组合却写成 C++ 的迁回 Camel；需要快路径的改成 Camel 定义加 `#impl`；原子算子补齐语义声明。审计表一页，随迁移一起交。
-2. **`#impl` 机制**：带函数体的函数可标 `#impl<f>`，`f` 是本模块一条私有的无体声明（原生内核），签名必须与函数相同；普通遍与执行器把它当一个算子（不内联），自动微分、融合、导出与规则按需展开函数体；差分测试锁住两者一致。H64 的 Adam 是第一个用户（`optim` 用 Camel 定义，H64 的内核作快路径）。
+2. **`#impl` 机制**：带函数体的函数可标 `#impl(f)`，`f` 是本模块一条私有的无体声明（原生内核），签名必须与函数相同；普通遍与执行器把它当一个算子（不内联），自动微分、融合、导出与规则按需展开函数体；差分测试锁住两者一致。H64 的 Adam 是第一个用户（`optim` 用 Camel 定义，H64 的内核作快路径）。
 3. **语言缺口**：泛型实例里的字面量按实例化后的类型取型（`acc: T` 处的 `0` 成为 `T`），之后 `array::sum` 只留一个泛型定义。
 4. **`stdlib/array.cml` 的具体问题**：`all`/`count` 用 `loop … for … while` 写（不经中间数组、可提前结束）；`min`/`max` 用 `math::min`/`math::max` 归约，NaN 与 ±0 遵守 7.7；`sum`/`min`/`max`/`all`/`any`/`count` 在数值数组上配归约内核（求和顺序遵守 `reassociate`，`#strict` 退回顺序折叠）。
 5. **验收**：一个大量使用这些函数的程序，编译时间与执行时间与改动前对照（不得变慢），数值数组上的 `sum`/`min`/`max` 与张量归约同速。
@@ -362,7 +362,7 @@
    export func opt::<F>(f: F): F! when is_function::<F>()
    ```
    模块遍同样（`tiles::compile` 在 `tiles` 的声明里）。于是：流水线上的每个名字都按模块与名字解析成一个函数，**删除独立的遍注册表**；`camel inspect --passes` 就是列出这些函数；Camel 里 `f->std::opt<safe_fp: true>` 与命令行 `std::opt safe_fp=true` 是同一个调用。打印、导出、执行类遍是带副作用、给出空图的函数（`std::gir`、`std::fvm`）。
-7. **与 H227 对接**：Camel 写的遍是语义与参考，C++ 是实现，两者用 `#impl` 连起来——`opt::cse` 的 Camel 定义标 `#impl<cse_native>`，默认执行 C++ 版本，差分测试保证一致（设计原则 10.4 在遍上的形态）。
+7. **与 H227 对接**：Camel 写的遍是语义与参考，C++ 是实现，两者用 `#impl` 连起来——`opt::cse` 的 Camel 定义标 `#impl(cse_native)`，默认执行 C++ 版本，差分测试保证一致（设计原则 10.4 在遍上的形态）。
 
 ### 5.13 H234 适用条件 `when`（决策者 2026-10-22，负责人同意）
 
@@ -695,7 +695,7 @@ CI 的触发不改（只在 `v*` 标签与手动触发时运行，不花 runner 
 | H16 | 一批小项（Json、管道实参、enum 作键、调试构建、快照核对等） | 无 | **已完成**（note ⟨c1b8a7c⟩） |
 | H17 | 原生多维数组与缓冲区（先交计划） | H16 | **部分完成**（第 1 项基本落地、第 3 项部分；第 2、4 项未开始；报告 note ⟨0f5f935⟩、note ⟨e36f1ec⟩） |
 | H18 | 图存储第 3 步：索引与增量提交 | — | **已作废** |
-| H19 | 标准库重新规划的落地（先交计划） | H16 | **部分完成**（步骤 0–1 与第 10 步的声明化已入；`env`/`process`/`hash` 由 H163 迁完（3 模块、7 名字、8 条声明）；第 3、5、6、7 步与 `ckpt`（H140/H174）、`globals` 未做；报告 note ⟨05673a8⟩）：约定页 `docs/stdlib-conventions.cn.md`；声明机制与 `bytes` 试点。声明模块里原生实现是**无函数体**的 `export func`，按「模块名:函数名」绑定 C++ 算子，约定外的名字用标签（`#op<'bytes:raw_len'>`）作例外；与 `.cmo` 同名的 `.cml` 是声明模块，声明是类型的唯一来源；泛型无体声明按类型实例化，图上是 OPER 不是 CALL |
+| H19 | 标准库重新规划的落地（先交计划） | H16 | **部分完成**（步骤 0–1 与第 10 步的声明化已入；`env`/`process`/`hash` 由 H163 迁完（3 模块、7 名字、8 条声明）；第 3、5、6、7 步与 `ckpt`（H140/H174）、`globals` 未做；报告 note ⟨05673a8⟩）：约定页 `docs/stdlib-conventions.cn.md`；声明机制与 `bytes` 试点。声明模块里原生实现是**无函数体**的 `export func`，按「模块名:函数名」绑定 C++ 算子，约定外的名字用标签（`#op('bytes:raw_len')`）作例外；与 `.cmo` 同名的 `.cml` 是声明模块，声明是类型的唯一来源；泛型无体声明按类型实例化，图上是 OPER 不是 CALL |
 | H20 | H13、H14 检查后的小项 | 无 | **已完成**（note ⟨c02d57a⟩） |
 | H21 | 下标与切片、lambda 参数推断、对第一个参数求导 | H15（下标部分与 H17 协调） | **部分完成**（第 1 项前半由 H83 完成：语法、类型、rank-1 的切片与 `t[idx]`、`last`、格式化器、语言服务器、文档；多维切片与步长不为 1 的视图等 H17。第 2 项由 H92 完成（形参类型与省略的返回类型从所在位置的函数类型推出；报告 note ⟨e8cc395⟩），泛型高阶函数（`map`/`tree_reduce`）的推断记为待决；第 3 项已撤回并按 H25 完成 `16136a3a`；报告 note ⟨f59daa7⟩、note ⟨f5a2559⟩） |
 | H22 | 循环与求导的跟进 | 无 | **已完成**（note ⟨529f059⟩） |
@@ -776,7 +776,7 @@ CI 的触发不改（只在 `v*` 标签与手动触发时运行，不花 runner 
 | H125 | **`permissions.strict_algebra` 的期望与 7.4 冲突**（H112 §6.1 转交）：`#strict` 下 CSE 把 `x*0.1 + x*0.1` 合成 `p + p`，规则库的 `float_add_self`（`p + p => p*2.0`，无 `#requires`）再把它精确翻倍；旧断言却要求“1 个乘 + 1 个加” | 无 | **已完成**（note ⟨0abbf5d⟩） |
 | H126 | H19 第 10 步的下一批模块声明化（`bytes`/`str`/`math`/`json` 之后）：迁移 `re`，`stdlib/re.cml` 写唯一一条声明 `test(pattern: string, text: string): bool`，删掉 C++ 的 `OperatorGroup`/`StaticFuncTypeResolver`、`exportEntity`、`stdlib/signatures/re.cml`，导出组来自声明；`re` 没有计算签名、值、资源、原地形式或泛型，全部签名都可迁移 | 无 | **已完成**（note ⟨bd54bb4⟩） |
 | H127 | **H19 第 11 步的收尾**：删除文档与工具里旧的“函数体写 `return '<URI>'`”签名写法，确认编译器不再特判它，并给 `stdlib/signatures/*.cml` 加“条目不得带函数体”的门禁 | H19 | **已完成**（note ⟨ff1e5f8⟩） |
-| H128 | H19 第 10 步的下一批模块声明化（`json` 之后）：迁移 `random`，`stdlib/random.cml` 写 7 条固定签名（`seed`/`rand`/`randn`/`randint`/`key`/`split`/`permutation`，逐条 `#op<'rand:...'>`），删掉 C++ 的 7 条静态组与签名文件里的对应条目，导出组来自声明；`choice`/`sample`/`shuffle` 的计算签名留在 C++，参考条目用 `computed: 'signatures/random.cml'` | 无 | **已完成**（note ⟨b3452d6⟩） |
+| H128 | H19 第 10 步的下一批模块声明化（`json` 之后）：迁移 `random`，`stdlib/random.cml` 写 7 条固定签名（`seed`/`rand`/`randn`/`randint`/`key`/`split`/`permutation`，逐条 `#op('rand:...')`），删掉 C++ 的 7 条静态组与签名文件里的对应条目，导出组来自声明；`choice`/`sample`/`shuffle` 的计算签名留在 C++，参考条目用 `computed: 'signatures/random.cml'` | 无 | **已完成**（note ⟨b3452d6⟩） |
 | H129 | **`-I` / `--include` 被解析后从未加入模块搜索路径（H124 §6 第 3 条）**：标志被接受、被静默忽略，只有模块恰好位于既有根下时才能编译 | 无 | **已完成**（note ⟨3275a1d⟩） |
 | H130 | **模块在、遍不可用的诊断（H124 的 A/C）：`module::pass` 解析不到时只报 “pass not found” 加全部遍，模块自己的原因被丢掉**——文件在但加载/编译失败也被记成“不存在”，模块在、遍不在时也不说它提供了哪些遍 | 无 | **已完成**（note ⟨5dd110d⟩） |
 | H131 | H19 第 10 步的下一批模块声明化（`bytes`/`str`/`math`/`json`/`re` 之后）：迁移 `fs`，`stdlib/fs.cml` 写 15 条声明（签名的唯一来源），删掉 C++ 的 `OperatorGroup`/`StaticFuncTypeResolver`、`exportEntity`、`stdlib/signatures/fs.cml`，导出组来自声明；`fs` 每个算子都有副作用，效果与资源的事实留在 C++ 的纯度与 `declareResources`，不写进声明 | 无 | **已完成**（note ⟨f7dfc75⟩） |
@@ -991,13 +991,13 @@ VJP 与 ONNX lowering 全部删除，ONNX 导出与 Tiles 的区域分析看到�
 协调者一方已完成第 8 步的前半：`rule` 声明（解析、格式化、编译成函数）、原生模块 `rewrite`（`rewrite`、`saturate`、`extract`、`check`）、随机检验工具、`stdlib/rules.cml`（26 条精确规则，均通过检验）与 `rules::simplify`、`rules::saturate_all`；见 `docs/technical/46_rules.md`。
 
 1. **`when`**：按协调者已定的方案 (a)——在 `graph` 模块的句柄上加草稿引用，`when` 中的模式变量是指向正在改写的草稿的 `graph::Node`。
-2. **`#requires<...>`**（等 H2）：需要许可的规则（`x*c1 + x*c2`、`(x*c1)*c2`、整数倍的 `x*c + x*c`），检验按许可对应的误差界（数值契约）。
+2. **`#requires(...)`**（等 H2）：需要许可的规则（`x*c1 + x*c2`、`(x*c1)*c2`、整数倍的 `x*c + x*c`），检验按许可对应的误差界（数值契约）。
 3. **分析 `analysis`**（8.7）：语法、编译成函数与事实种类，`when` 中按名字读取。
 4. **追平后删除 `algebra.cpp`**：在代数语料与规模程序上与 `std::opt::algebra` 结果一致后删除，`std::opt::algebra` 改为由标准规则库实现。
 5. 泛型规则等 `where`（裁定 2.18）与泛型第一期，之前写单态规则。
 6. 给 `rewrite` 模块新调用的核心函数补 Windows 导出项。
 
-**剩下什么**：第 2 项 `#requires<...>`、第 3 项 `analysis`、第 4 项删除 `algebra.cpp`、第 5 项泛型规则只有计划；第 1 项 `when` 与第 6 项导出清单已完成。
+**剩下什么**：第 2 项 `#requires(...)`、第 3 项 `analysis`、第 4 项删除 `algebra.cpp`、第 5 项泛型规则只有计划；第 1 项 `when` 与第 6 项导出清单已完成。
 
 ### H43：区域与循环的收尾（2026-10-21 指派，丙车道交给施工方）
 
