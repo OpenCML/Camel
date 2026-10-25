@@ -207,7 +207,7 @@ class TypeMatchLoad : public DataLoad {
 };
 
 /// One pattern of a `match type` case. `kind` is a shape, or Identity with the type written
-/// in `type` (a TypeLoad): `case int`, `case Tensor<f32, [..]>`, `case T`.
+/// in `type` (a TypeLoad): `case int`, `case f32[..]`, `case T`.
 struct TypeCasePattern {
     TypeCaseKind kind = TypeCaseKind::Wildcard;
     node_ptr_t type; // Identity only

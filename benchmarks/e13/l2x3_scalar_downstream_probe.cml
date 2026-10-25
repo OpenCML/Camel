@@ -5,7 +5,7 @@
  */
 module e13_l2x3_scalar_downstream
 
-import { Tensor, relu, mean, reshape } from tensor
+import { relu, mean, reshape } from tensor
 import { with_grad } from autodiff
 import { sgd } from nn
 import { get_env } from env

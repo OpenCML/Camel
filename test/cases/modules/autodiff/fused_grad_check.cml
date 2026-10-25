@@ -8,7 +8,7 @@
 module fused_grad_check
 
 import { grad } from autodiff
-import { Tensor, new, sum, relu } from tensor
+import { new, sum, relu } from tensor
 
 func check(name: string, f: <x: f32[..]> () => float, df: <x: f32[..]> () => f32[..], x: f32[..], v: f32[..]): int sync {
     let h = 0.001

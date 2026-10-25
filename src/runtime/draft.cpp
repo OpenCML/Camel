@@ -1306,8 +1306,9 @@ void GraphDraft::closeChainOver(gc_node_ref_t id) {
         setSyncInputs(user, kept);
         // While the control kind still exists it names the same pair beside the sync edge: the two
         // orderings have to agree until the control edges go (src/runtime/graph_edges.cpp,
-        // checkControlAndSyncAgree reads that back). The edge is written rather than inferred,
-        // because the path through the node this chain closes over is the one about to disappear.
+        // `checkSyncEdges` is what reads the sync edge back). The edge is written rather than
+        // inferred, because the path through the node this chain closes over is the one about to
+        // disappear.
         for (gc_node_ref_t pred : kept) {
             const auto ctrl = ctrlInputsOf(user);
             if (std::ranges::find(ctrl, pred) == ctrl.end()) {

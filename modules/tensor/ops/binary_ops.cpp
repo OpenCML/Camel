@@ -95,7 +95,7 @@ class FromBytesResolver final : public FuncTypeResolver {
         return std::nullopt;
     }
     std::string signature() const override {
-        return "::<" + std::string(dtypeName(dtype_)) + ">(bytes: Bytes, shape: int[]) => Tensor";
+        return "::<" + std::string(dtypeName(dtype_)) + ">(bytes: Bytes, shape: int[]) => " + std::string(dtypeName(dtype_)) + "[..]";
     }
 
   private:
@@ -111,7 +111,7 @@ std::vector<OpDef> binaryOps() {
                 .name      = name,
                 .exports   = {},
                 .params    = {{"bytes", ParamKind::Bytes}, {"shape", ParamKind::IntArray}},
-                .resultDoc = "Tensor",
+                .resultDoc = "float[..]",
                 .infer     = [dtype](const InferContext &ctx) -> std::optional<Type *> {
                     return resultType(dtype, ctx);
                 },

@@ -15,7 +15,7 @@
 
 module perf_fusion_step
 
-import { Tensor, sum, zeros } from tensor
+import { sum, zeros } from tensor
 import { with_grad } from autodiff
 import { now } from time
 

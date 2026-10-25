@@ -1176,3 +1176,44 @@ Linux 包在 manylinux 里构建，用 auditwheel 修正标签，并在构建时
 **(c) 不矛盾，是 3.4 的措辞不够准**：3.4 说的"一定发生、按书写顺序发生"，指的是块执行的时候，块里的效应不会被逐个丢掉；块本身执不执行，和任何表达式一样，看它是否被需要。所以实现和语言参考 4.3.1 是对的。我已把 3.4 的那句话补全（中英文，含义不变），并记入裁定记录。顺带修帮助文字：效应写在一个没人用的 `sync { … }` 里时，不说"not in a sync block"，而说"它所在的同步块本身没有被用到"。
 
 **`docs/design/io-concurrency-streams/plan.cn.md:297` 的 `module` 行**：可以，这条车道直接删掉。这类随语言改动的机械修改，以后在 `docs/design/**` 里也直接做，不用再问。
+
+## 2026-10-26-two-stream-plan-lines-against-the-rulings
+
+1. **流有值，它的值就是"步进函数 + 当前状态"**，这本身就在路线二里面，所以两个选项都不完全对：
+   - 路线二说的是"状态机写成图里的步进函数"。这个步进函数加上它的状态，就是一个普通的函数值（闭包）。流值不需要新的运行期表示，也不需要新的节点种类，四个后端照样一行不改。
+   - 流是一等的值：它能写进签名（`func pass(s: int..): int..`），能当参数、能返回，`tee` 也要拿它当值。所以"流只能在 `for` 位被消费，出现在别处就报诊断"会把已经裁定的流类型削掉一半，不行。
+   - `__iter__` 的流重载就是"每轮调用一次步进函数、拉空就结束"，片 F 那行保留，按这个意思写清楚。
+   - **在 `for` 位把生成器融合进消费者的 `loop`，是优化**：生产者和消费者同时可见时（同一个函数里，或内联之后）照做，省掉闭包；看不见时走步进函数值。两条路的结果必须相同，差分用例两种都覆盖。
+   - 线性（每个流只消费一次，2026-10-23 的 (f)）照旧，由类型检查保证。
+2. **`plan.cn.md:297` 的 `module` 行：可以删**。上一节已经授权过：这类随语言改动的机械修改，在 `docs/design/**` 里直接做，不用再问。三处代码注释改成引用裁定小节，也对。
+
+## 切片、wheel、`yield` 这一批
+
+**收下**：核心的切片对任何轴、任何秩都用六个词，ONNX 的降低与导出矩阵跟上，模块的切片和它那份重复的常量步长拒绝删了，步长 0 只由一条具名诊断回答。Linux wheel 只带一份 `libcamel`，链接行写明 Threads 与 dl，构建树的 RUNPATH 不进 wheel，DLPack 按步长判断紧凑也收了。
+
+**`yield` 语法半批第二次合入、带着按名字拒绝**：这是我前后说法不一致造成的。我先说"不能这样合"，后来又写了"排在第一位的返工"，读起来像"可以先留在 develop 上"。以后一条为准：**现在既然已经在 develop 上，就不回退**，生成器状态机（路线二，流的值是步进函数加状态，见上一节）是这条车道的第一项，做完时删掉那条拒绝。
+
+**`deleting-the-module-slice-what-it-takes`**（删除已经落地，按剩下的前置答）：
+1. **伴随的 ONNX 降低**：给 `:tangent/scatter_slice_arr` 补上（`ScatterND` 或 `Pad`），配一条 ORT 比对用例。
+2. **结果类型写 extent**：已裁定（`slice-result-type-states-no-extent`，选项 A），按那一节做。
+3. **模块读法消失后的用例**：负数界与步长 0 按裁定在书写处报错，`in_range`、`slice_runtime`、`ort_slice_start` 改写成正数界或反例；措辞统一用核心的那一种；tiles 的索引后端改认核心的切片节点 `:op/slice_sub`，不能只认已删的模块节点。
+4. "轴是字面量 `0` 却报'不是导出期常量'"：改成正数界后看是否还能复现。能复现就是缺陷，单独查。
+
+三页 `slice-*` 旧问题上一轮已经裁定，随合并又回来了，删掉。
+
+**返工两处诊断**：
+- **`RangeTwoArgumentsRemoved`**（"The two-parameter 'range(a, b)' is gone; write the interval 'a..b'"）正是"不留指向新写法的诊断"要删的那一类。删掉，`range(a, b)` 就是普通的"没有适用的重载"（`range` 只有三个参数的那一种）。
+- **`LoopSequenceNotIterable`** 的消息还写着"an array, a string, a map or a tensor"。P4 之后张量就是数组，"tensor"删掉；流的 `for` 落地后补上"a stream"。
+
+## 2026-10-26-design-principles-type-operators-and-the-stream-round-source
+
+1. **类型运算**：我已改第 15 节（中英文，并记入裁定记录）：文法里没有类型运算，也不预留运算符；要不要有类型运算仍是开放问题，加的时候写法和含义一起定。文法删掉它们、`x as T + U` 读成 `(x as T) + U`，都对。
+2. **流的 `for` 不加驱动侧的轮次源，在图上展开成已有的 `while` 循环**：
+   - 驱动侧加一个"每轮调一次步进函数"，等于把一段语义藏进运行时，图上看不见：遍看不到步进调用，就没法内联、融合，也没法对它求导。路线二的要点正是"复用 LOOP/BRCH，不新增节点种类"，而 `LoopKind::While` 已经在。
+   - 写法：`loop acc = a0 for x in s do b`，其中 `s` 是流、`step` 是它的步进函数、返回 `(T, 状态)?`。编译器展开成状态为 `(next, acc)` 的 while 循环：初值 `(step(s0), a0)`；条件 `next != null`；循环体取出 `(x, st)`，算 `acc' = b`，交回 `(step(st), acc')`。`for … while c` 把 `c` 并进条件。
+   - `__iter__` 的流重载就按这个形状写（标准库里用 Camel 写）。生产者可见时的融合，就是把 `step` 内联进这个循环体，是一次普通的图重写。
+   - `loop_driver.h`、`runtime/loop.h` 不动，四个后端也不动。
+
+## 2026-10-26-range-two-arguments-and-the-overload-table
+
+**做备选 1，用最简单的路**：`a..b` 的降低直接写出第三个实参 `1`，也就是 `$builtin::range(a, b, 1)`。这样编译器自己的调用也是三个实参，`range` 的变量表收窄成恰好 3 个，`range(a, b)` 自然落到普通的 `NoMatchingFunction`。不需要让解析层分清两个名字，也不留按名字的特判（`builder_operators.cpp` 与 `builder_static.cpp` 里的两处都删掉）。区间那种形态（`LoopIterableForm::Interval`）照旧按步长 1 识别。备选 2 那种临时做法不进 develop。

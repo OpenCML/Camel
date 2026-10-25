@@ -12,7 +12,7 @@
  */
 module slice_open_end
 
-import { Tensor, reshape, sum } from tensor
+import { reshape, sum } from tensor
 import { grad } from autodiff
 
 with <x: f32[..]>

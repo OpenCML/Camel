@@ -366,6 +366,34 @@ void Builder::reportDroppedEffects(const compile_graph_ptr_t &graph, bool report
         return false;
     };
     auto sourceContext = context_ ? context_->sourceContext() : nullptr;
+    // Why the effect does not run changes with where it is written. An effect that is the value of
+    // a `sync { ... }` block nothing needs is not "outside a sync block": it is inside one that
+    // never runs, and putting the block on a chain is what the writer has to do (design principles
+    // 3.4, as the author ruled on the standalone block statement). A `sync` body hands its value on
+    // through a GATE (builder_control.cpp, the `sync` body's exit), and the block's statements are
+    // reached from it by the control edges it carries, so the block is found by walking the users
+    // of the effect: a GATE above it means the effect's value is the block's value, and a block
+    // whose value nothing needs is one that never runs.
+    const auto inUnusedSyncBlock = [&](draft_node_ref_t start) {
+        std::unordered_set<draft_node_ref_t> seen{start};
+        std::vector<draft_node_ref_t> stack{start};
+        while (!stack.empty()) {
+            const draft_node_ref_t id = stack.back();
+            stack.pop_back();
+            for (auto users : {draft.ctrlUsersOf(id), draft.syncUsersOf(id)}) {
+                for (draft_node_ref_t user : users) {
+                    if (!seen.insert(user).second) {
+                        continue;
+                    }
+                    if (nodeKindOf(draft.ref(user)) == runtime::GCNodeKind::Gate) {
+                        return true;
+                    }
+                    stack.push_back(user);
+                }
+            }
+        }
+        return false;
+    };
     for (draft_node_ref_t id : dropped) {
         if (feedsDroppedEffect(id)) {
             continue;
@@ -395,7 +423,12 @@ void Builder::reportDroppedEffects(const compile_graph_ptr_t &graph, bool report
         if (origin == camel::source::kInvalidOriginId && sourceContext) {
             origin = sourceContext->debugMap().graphOrigin(graph->graphId());
         }
-        diags_->of(SemanticDiag::EffectNotExecuted).atOrigin(origin).commit(subject);
+        diags_->of(SemanticDiag::EffectNotExecuted)
+            .atOrigin(origin)
+            .commit(
+                subject, inUnusedSyncBlock(id)
+                             ? std::string("the sync block it is in is not used")
+                             : std::string("nothing depends on it and it is not in a sync block"));
     }
 }
 

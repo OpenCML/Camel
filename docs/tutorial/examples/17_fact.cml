@@ -1,6 +1,5 @@
 // The knowledge of your field that is not an equation, handed to the compiler.
 // Run: camel docs/tutorial/examples/17_fact.cml
-module domain
 
 import { check } from rewrite
 import { abs } from math

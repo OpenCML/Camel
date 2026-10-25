@@ -6,7 +6,7 @@
 module gru_lite
 
 import { grad, with_grad } from autodiff
-import { Tensor, full, ones, shape, sigmoid, sum, tanh, zeros } from tensor
+import { full, ones, shape, sigmoid, sum, tanh, zeros } from tensor
 import { sgd } from nn
 
 type GruLite = {

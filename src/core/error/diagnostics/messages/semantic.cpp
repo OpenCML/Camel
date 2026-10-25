@@ -681,7 +681,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "ConstasNotAllowed",
                 "The dimension name '{0}' is bound here, but only a parameter type can bind one.",
-                "A dimension name binds where it first appears in a parameter type, 'x: Tensor<f32, [n, 3]>'. Every later occurrence, including one in the return type, writes 'n'.",
+                "A dimension name binds where it first appears in a parameter type, 'x: f32[n, 3]'. Every later occurrence, including one in the return type, writes 'n'.",
             },
         },
         {
@@ -1589,14 +1589,6 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
-            SemanticDiag::TensorElementTypeRequired,
-            {
-                "TensorElementTypeRequired",
-                "The type '{0}' states no element type: a tensor's element type is part of its type, so this spelling is not a type of a value.",
-                "Every tensor type writes its element type: 'Tensor<f32>' (a rank nobody fixes yet), 'Tensor<f32, [2, 3]>', or the array type itself, 'f32[..]' and 'f32[2, 3]'. A signature that takes a tensor of any element type declares a type variable in its head and writes it as the element type -- 'func f::<T>(x: Tensor<T>)', which is the same type as 'func f::<T>(x: T[..])' -- and the call's argument fixes that type variable, so the body sees the element type the call bound. A shape written without an element type ('Tensor<[3]>') leaves the same question open.",
-            },
-        },
-        {
             SemanticDiag::BranchElementTypeMismatch,
             {
                 "BranchElementTypeMismatch",
@@ -1626,6 +1618,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "RuleWithArgumentNotConstant",
                 "The value bound to the `with` parameter '{0}' of the rule '{1}' is not a compile-time constant of the type '{2}'.",
                 "A rule's `with` value is part of what selects the instance the rule's sides and its condition are made at, so it is known while the program is compiled: write a literal, a constant, or a constant expression of an integer, real, bool or string type. A value the compiler cannot work out would need one instance for every value it could take.",
+            },
+        },
+        {
+            SemanticDiag::UsesPromiseViolated,
+            {
+                "UsesPromiseViolated",
+                "'{0}' does not keep its resource promise: {1}.",
+                "A signature is a promise the compiler checks against the resources the function uses. 'uses' is an upper bound, so every resource the body uses must be named there, and 'pure' promises the empty set; a 'var' parameter is a resource by itself, and so is a capture. Change the body so that it no longer reaches for it, or change the signature to name it.",
             },
         },
         {
@@ -1672,8 +1672,8 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             SemanticDiag::EffectNotExecuted,
             {
                 "EffectNotExecuted",
-                "{0} has side effects but is never executed: nothing depends on it and it is not in a sync block.",
-                "Evaluation is driven by dependencies: outside a sync block an expression whose result (or the variable it writes) nothing needs does not run. This is legal. To run it, put it in a sync block ('sync {{ ... }}', or a function body 'func f(): T sync {{ ... }}'), or use its result.",
+                "{0} has side effects but is never executed: {1}.",
+                "Evaluation is driven by dependencies: an expression whose result (or the variable it writes) nothing needs does not run, and a sync block nothing needs does not run either, so the effects written directly in it do not run with it. This is legal. To run it, put it on a sync chain ('sync {{ ... }}' in a function body, or use the block's value), or use its result.",
             },
         },
         {

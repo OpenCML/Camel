@@ -3,10 +3,7 @@
  */
 module svm
 
-import {
-    add, subtract, multiply, matmul, ones, zeros,
-    sum, eye, transpose, show, pow, Tensor, shape, concat, range, reshape
-} from tensor
+import { add, subtract, multiply, matmul, ones, zeros, sum, eye, transpose, show, pow, shape, concat, range, reshape } from tensor
 
 func svm_train(X: f32[..], y: f32[..], learning_rate: float, epochs: int, lambda: float): f32[..] sync {
     let m = shape(X)[0]

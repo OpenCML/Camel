@@ -3,7 +3,7 @@
  * `void` and binds no type variable, so no candidate of the declaration applies and the call is
  * refused when the program is compiled.
  *
- * The C++ `TensorLike` resolver accepted it and the kernel then faulted ("Unsupported Tensor
+ * The C++ `TensorLike` resolver accepted it and the kernel then faulted ("Unsupported array element type
  * dtype."); the declaration refuses it earlier and names the candidate it could not match, which is
  * the answer this case pins (docs/stdlib-conventions.cn.md 第 8 节).
  */

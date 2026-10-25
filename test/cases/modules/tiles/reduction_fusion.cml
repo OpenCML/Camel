@@ -1,21 +1,21 @@
 module tiles_reduction_fusion
-import { Tensor, reshape, sum, mean, transpose, save_npy } from tensor
+import { reshape, sum, mean, transpose, save_npy } from tensor
 import { get_env } from env
 import { inspect, run_preferred_resident, download } from tiles
 
 func sample(i: int): f32 { return f32(float(i % 17 - 8) * 0.125) }
-func rows(x: Tensor<f32>, b: Tensor<f32>): Tensor<f32> {
+func rows(x: f32[..], b: f32[..]): f32[..] {
     return sum((x + b) * 0.5, 1)
 }
-func columns(x: Tensor<f32>): Tensor<f32> {
+func columns(x: f32[..]): f32[..] {
     return mean(transpose(x) * 0.25, 0)
 }
-func middle(x: Tensor<f32>): Tensor<f32> { return sum(x * 0.5, 1) }
-func epilogue(x: Tensor<f32>, b: Tensor<f32>): Tensor<f32> {
+func middle(x: f32[..]): f32[..] { return sum(x * 0.5, 1) }
+func epilogue(x: f32[..], b: f32[..]): f32[..] {
     return (sum(x * 0.5, 1) + b) * 0.25
 }
-func two_reductions(x: Tensor<f32>): Tensor<f32> { return sum(x * 0.5, 1) + mean(x, 1) }
-func rounded(x: Tensor<f32>): Tensor<f32> { return sum(x, 1) - 16777216.0 }
+func two_reductions(x: f32[..]): f32[..] { return sum(x * 0.5, 1) + mean(x, 1) }
+func rounded(x: f32[..]): f32[..] { return sum(x, 1) - 16777216.0 }
 func main(): int sync {
     let folder = get_env('TILES_TEST_OUT')
     let x = reshape(0..(17 * 513)->map<sample>, [17, 513])

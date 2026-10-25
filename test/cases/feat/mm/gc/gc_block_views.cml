@@ -8,7 +8,7 @@
  */
 module gc_block_views
 
-import { Tensor, reshape, zeros, numel } from tensor
+import { reshape, zeros, numel } from tensor
 
 func main(steps: int, temp: int): int sync {
     let a = zeros([750000])

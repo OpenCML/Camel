@@ -6,9 +6,9 @@
  * expectation must move to the device conversion that lands there.
  */
 module tiles_cast_dtype
-import { Tensor, reshape, cast } from tensor
+import { reshape, cast } from tensor
 import { inspect } from tiles
-func ints(x: Tensor<f32>): Tensor<int> { return cast(x, "int64") }
+func ints(x: f32[..]): int[..] { return cast(x, "int64") }
 func main(): int sync {
     let x = reshape([1.0, 2.0, 3.0] as f32[], [3])
     println(inspect<ints>(x))

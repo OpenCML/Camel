@@ -283,8 +283,8 @@ Type *ArrayType::firstDimensionElement() const {
 const Type *
 ArrayType::applyArguments(std::span<const TypeArgument> arguments, std::string &error) const {
     // The array a name that requires an element type is bound to (`elementTypeOpen()`) reads the
-    // arguments of that name: one element type and then one shape. `Tensor<f32>` is `f32[..]` (a
-    // rank nobody fixed) and `Tensor<f32, [2, 3]>` is `f32[2, 3]`, so the two spellings of one
+    // arguments of that name: one element type and then one shape. `f32[..]` is `f32[..]` (a
+    // rank nobody fixed) and `f32[2, 3]` is `f32[2, 3]`, so the two spellings of one
     // type are one type. The element type is required: the element type of a value is always in
     // its type (docs/design/arrays-memory/plan.cn.md section 5.1a), so a spelling that leaves it
     // out denotes nothing.
@@ -300,11 +300,11 @@ ArrayType::applyArguments(std::span<const TypeArgument> arguments, std::string &
         if (argument.type != nullptr) {
             if (elemType != nullptr || hasShape) {
                 error = "a Tensor takes one element type, written before the shape: "
-                        "Tensor<dtype, [d0, d1, ...]> (or dtype[d0, d1, ...])";
+                        "dtype[d0, d1, ...] (or dtype[d0, d1, ...])";
                 return nullptr;
             }
             // The element of a numeric array is a numeric scalar (array.h), or a type variable the
-            // signature binds at the call: `func f::<T>(x: Tensor<T>)` is `T[..]`, and the call
+            // signature binds at the call: `func f::<T>(x: T[..])` is `T[..]`, and the call
             // gives `T` the element type its argument has. The written type is kept exactly,
             // because the array stores it and the kernels dispatch on it.
             const TypeCode code = argument.type->code();
@@ -318,7 +318,7 @@ ArrayType::applyArguments(std::span<const TypeArgument> arguments, std::string &
             continue;
         }
         if (hasShape) {
-            error = "a Tensor takes one shape: Tensor<dtype, [d0, d1, ...]>";
+            error = "a Tensor takes one shape: dtype[d0, d1, ...]";
             return nullptr;
         }
         if (argument.extents) {
@@ -357,17 +357,17 @@ ArrayType::applyArguments(std::span<const TypeArgument> arguments, std::string &
         // The element type is what the name exists to be given: a spelling that states only a
         // shape answers no question about the element type of a value, and the element type of a
         // value is always in its type.
-        error = "a Tensor needs its element type: write 'Tensor<f32>' or 'Tensor<f32, [2, 3]>', "
+        error = "a Tensor needs its element type: write 'f32[..]' or 'f32[2, 3]', "
                 "or name the array type itself ('f32[..]', 'f32[2, 3]')";
         return nullptr;
     }
     if (!hasShape) {
-        // `Tensor<f32>`: no shape is stated, so nothing fixes the rank (`f32[..]`).
+        // `f32[..]`: no shape is stated, so nothing fixes the rank (`f32[..]`).
         return openRank(elemType);
     }
     if (extents.empty()) {
         // Every dimension is removed, and a type with no dimension is its element type (the
-        // rank-zero rule, docs/handover/reviews/questions-2026-10-23.md): `Tensor<f32, []>`
+        // rank-zero rule, docs/handover/reviews/questions-2026-10-23.md): `f32`
         // is `f32`, the scalar.
         return elemType;
     }

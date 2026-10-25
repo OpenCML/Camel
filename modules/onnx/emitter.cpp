@@ -46,8 +46,8 @@ const Array *constantTensor(const Value &value) {
 }
 
 /// The ONNX element dtype an operand of Camel dtype `dtype` takes: exactly the Camel type.
-/// A tensor is the element type it is written with here too, so `Tensor<f64>` is an ONNX
-/// double and `Tensor<i32>` an ONNX int32, never a normalized stand-in.
+/// A tensor is the element type it is written with here too, so `f64[..]` is an ONNX
+/// double and `i32[..]` an ONNX int32, never a normalized stand-in.
 TypeCode operandTarget(TypeCode dtype) { return dtype; }
 
 /// Encodes `count` elements read through `read(i)` into raw little-endian bytes of `dtype`.

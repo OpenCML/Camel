@@ -2,7 +2,7 @@
 // rank-2 binding a `var` established, and the program is refused where it is written.
 module array_alias_err_var_rank
 
-import { Tensor, ones } from tensor
+import { ones } from tensor
 
 func main(): int sync {
     var w = ones([2, 3])

@@ -13,7 +13,7 @@
 
 module perf_fusion_chain
 
-import { Tensor, sum, zeros } from tensor
+import { sum, zeros } from tensor
 import { with_grad } from autodiff
 import { now } from time
 

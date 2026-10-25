@@ -24,7 +24,7 @@
  */
 module gemm_threads_curve
 
-import { Tensor, num_threads, set_num_threads, sum, zeros } from tensor
+import { num_threads, set_num_threads, sum, zeros } from tensor
 import { now } from time
 
 /// The operands, allocated once: a visit to a thread count must measure the GEMM, not the allocator.

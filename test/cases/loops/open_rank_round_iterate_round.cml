@@ -5,10 +5,10 @@
 // reference's "a rank-0 array has no first dimension and is not a sequence",
 // docs/language/en/06_expressions.md).
 module open_rank_round_iterate_round
+import tensor
 
-import { Tensor } from tensor
 
-func rounds(x: Tensor<f32>): int {
+func rounds(x: f32[..]): int {
     return loop c = 0 for v in x do (
         c + (loop d = 0 for u in v do d + 1)
     )

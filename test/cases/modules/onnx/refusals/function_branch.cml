@@ -7,7 +7,7 @@
  */
 module function_branch
 
-import { Tensor, reshape, sum } from tensor
+import { reshape, sum } from tensor
 import { export_model } from onnx
 
 func build(h: float[..]): (x: float[..]) => float[..] {

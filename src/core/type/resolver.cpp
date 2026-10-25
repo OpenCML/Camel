@@ -309,6 +309,14 @@ std::optional<FunctionType *> StaticFuncTypeResolver::resolve(
 
 std::optional<FunctionType *> DynamicFuncTypeResolver::resolve(
     const type_vec_t &withArgs, const type_vec_t &normArgs, const ModifierSet &modifiers) const {
+    // A caller that holds no constants asks the rule the same question without them; a rule whose
+    // result follows their values answers what it can without them.
+    return resolveWith(withArgs, normArgs, {}, modifiers);
+}
+
+std::optional<FunctionType *> DynamicFuncTypeResolver::resolveWith(
+    const type_vec_t &withArgs, const type_vec_t &normArgs, static_args_t normStatics,
+    const ModifierSet &modifiers) const {
     if (withVars_.first != -1 && static_cast<int>(withArgs.size()) != withVars_.first) {
         return std::nullopt; // reject
     }
@@ -326,7 +334,11 @@ std::optional<FunctionType *> DynamicFuncTypeResolver::resolve(
     for (size_t i = 0; i < norm.size(); i++) {
         norm[i] = isVar(normVars_, i) ? valueTypeOf(norm[i]) : norm[i];
     }
-    auto optResType = resolver_(with, norm, modifiers);
+    // The rule's own callback, and the one that also reads the call's constants when the rule
+    // declared it: a rule whose result type follows the values the program wrote answers from the
+    // statics path, and a rule that declared none answers exactly as it did.
+    auto optResType = staticsResolver_ ? staticsResolver_(with, norm, normStatics, modifiers)
+                                       : resolver_(with, norm, modifiers);
     if (!optResType) {
         return std::nullopt; // reject
     }

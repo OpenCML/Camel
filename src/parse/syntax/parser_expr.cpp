@@ -1333,7 +1333,7 @@ void ParserImpl::parseStaticLoopHeader() {
 
 /// typeCasePattern : 'struct' | 'tuple' | 'func' | '#' 'leaf' | '_' | typeExpr
 /// The words are contextual: only here do they name a shape, not a type. Anything else that
-/// starts a type is an identity pattern (`case int`, `case Tensor<f32, [..]>`, `case T`): the
+/// starts a type is an identity pattern (`case int`, `case f32[..]`, `case T`): the
 /// same clause with a type written in it (design principles 5.5).
 void ParserImpl::parseTypeCasePattern() {
     const size_t m = mark();

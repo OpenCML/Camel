@@ -107,7 +107,7 @@ void flattenArray(const Array *array, type::Type *valueType, Array *tensor, uint
             tensor->setFromBool(offset++, scalarToBool(elemType->code(), value));
             break;
         default:
-            throw std::invalid_argument("Unsupported Tensor dtype");
+            throw std::invalid_argument("Unsupported array element type");
         }
     }
 }

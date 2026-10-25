@@ -6,7 +6,7 @@
  */
 module export_dynamic
 
-import { Tensor, reshape, zeros, shape } from tensor
+import { reshape, zeros, shape } from tensor
 import { export_model, supported_operators } from onnx
 import { get_env } from env
 

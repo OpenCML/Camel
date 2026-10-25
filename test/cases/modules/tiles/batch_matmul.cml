@@ -1,20 +1,20 @@
 module batch_matmul_checks
-import { Tensor, randn, seed, sum, mean, abs, reshape, shape, set_num_threads } from tensor
+import { randn, seed, sum, mean, abs, reshape, shape, set_num_threads } from tensor
 import { with_grad } from autodiff
 import { source, run_preferred_resident, download } from tiles
 
-type Pair = { a: Tensor<f32>, b: Tensor<f32> }
-func pair(a: Tensor<f32>, b: Tensor<f32>): Pair { return { a: a, b: b } }
-func product(a: Tensor<f32>, b: Tensor<f32>): Tensor<f32> { return a @ b }
+type Pair = { a: f32[..], b: f32[..] }
+func pair(a: f32[..], b: f32[..]): Pair { return { a: a, b: b } }
+func product(a: f32[..], b: f32[..]): f32[..] { return a @ b }
 with <w: Pair>
-func loss(target: Tensor<f32>): float {
+func loss(target: f32[..]): float {
     let e = w.a @ w.b - target
     return mean(e * e)
 }
-func derivative(w: Pair, target: Tensor<f32>): (float, Pair) {
+func derivative(w: Pair, target: f32[..]): (float, Pair) {
     return with_grad(loss)<w>(target)
 }
-func check(name: string, a: Tensor<f32>, b: Tensor<f32>, target: Tensor<f32>, run_gpu: bool): int sync {
+func check(name: string, a: f32[..], b: f32[..], target: f32[..], run_gpu: bool): int sync {
     let w = pair(a, b)
     let code = source<derivative>((w, target))
     if len(code) == 0 then sync { exit(1) }

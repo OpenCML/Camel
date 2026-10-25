@@ -1,9 +1,9 @@
 module shape_propagated_mismatch
-import { Tensor, zeros, ones, reshape, sum, tanh, load_npy } from tensor
-func g(h: Tensor<f32, [2, 4]>): Tensor<f32> {
+import { zeros, ones, reshape, sum, tanh, load_npy } from tensor
+func g(h: f32[2, 4]): f32[..] {
     return h
 }
-func f(x: Tensor<f32, [2, 3]>, w: Tensor<f32, [3, 5]>): Tensor<f32> {
+func f(x: f32[2, 3], w: f32[3, 5]): f32[..] {
     return g(x @ w)
 }
 func main(): int sync {

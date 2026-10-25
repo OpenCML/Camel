@@ -4,7 +4,7 @@
  */
 module export_dynamic_recursion
 
-import { Tensor, reshape, sum } from tensor
+import { reshape, sum } from tensor
 import { export_model } from onnx
 import { get_env } from env
 

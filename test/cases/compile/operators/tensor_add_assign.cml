@@ -6,11 +6,11 @@
  */
 module tensor_add_assign
 
-import { Tensor, ones, sum } from tensor
+import { ones, sum } from tensor
 
 func main(): int sync {
-    var a: Tensor<f32, [3]> = ones([3])
-    let b: Tensor<f32, [3]> = ones([3]) + ones([3])
+    var a: f32[3] = ones([3])
+    let b: f32[3] = ones([3]) + ones([3])
     let old                  = a
     a += b
     println(sum(a), sum(old))

@@ -5,7 +5,7 @@
  */
 module compound_assign
 
-import { Tensor, ones, sum } from tensor
+import { ones, sum } from tensor
 
 func bump(var w: f32[], d: f32): float sync {
     w += d

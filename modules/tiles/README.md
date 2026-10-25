@@ -9,7 +9,7 @@ not an implementation of its complete language, scheduling, or optimization mode
 ```cml
 import { Tensor, reshape } from tensor
 
-func add(a: Tensor<f32>, b: Tensor<f32>): Tensor<f32> { return a + b }
+func add(a: f32[..], b: f32[..]): f32[..] { return a + b }
 
 func main(): int sync {
     let x = reshape([1.0, 2.0, 3.0], [3])
@@ -47,7 +47,7 @@ A `#gpu` label asks for the device explicitly (design principles 13.4):
 import { Tensor } from tensor
 
 #gpu
-func add(x: Tensor<f32>, y: Tensor<f32>): Tensor<f32> { return x + y }
+func add(x: f32[..], y: f32[..]): f32[..] { return x + y }
 ```
 
 `#gpu` marks a function or a block with a compile-time fact; it names no card. The card (or the
@@ -197,7 +197,7 @@ This is not a persistent semantic fingerprint or a cache of graph compilation.
   template is used when the signature fixes the shapes; a shape-generic signature is
   specialized from the call's arguments on the same device, not moved to the host
   merely because the template cannot be made. It returns
-  `Device<Tensor<...>>` or `Device<float>` leaves in the result's original tuple/struct
+  `Device<f32[..]>` or `Device<float>` leaves in the result's original tuple/struct
   structure. Outputs retain their allocations instead of downloading; feed them
   directly into subsequent graph calls and use `download` only when host values are
   needed. Returned inputs and repeated leaves share native ownership. Completion is
@@ -238,7 +238,7 @@ This is not a persistent semantic fingerprint or a cache of graph compilation.
 - `available()` reports whether driver/NVRTC initialization succeeds. A successful
   result does not guarantee a subsequent compilation or memory allocation succeeds.
 - `device()` reports the selected GPU, or raises a diagnostic explaining failure.
-- `upload(tensor)` returns an immutable `Device<Tensor<...>>` owning f32 GPU
+- `upload(tensor)` returns an immutable `Device<f32[..]>` owning f32 GPU
   storage. Static dtype/shape refinements are retained. `download(deviceValue)`
   returns a host tensor. Both transfers complete before returning; repeated
   downloads preserve the device value. Empty tensors are supported.

@@ -1,7 +1,7 @@
 module shape_inference_recursion_leaf_as
-import { Tensor, slice, reshape, sum } from tensor
-func tree(x: Tensor<f32, [?]>, n: int): Tensor<f32, [1]> {
-    return if n <= 1 then x as Tensor<f32, [1]> else tree(slice(x, 0, 0, n / 2), n / 2) + tree(slice(x, 0, n / 2, n), n - n / 2)
+import { slice, reshape, sum } from tensor
+func tree(x: f32[?], n: int): f32[1] {
+    return if n <= 1 then x as f32[1] else tree(slice(x, 0, 0, n / 2), n / 2) + tree(slice(x, 0, n / 2, n), n - n / 2)
 }
 func main(): int sync {
     println(sum(tree(reshape([1.0, 2.0, 3.0, 4.0, 5.0] as f32[], [5]), 5)))

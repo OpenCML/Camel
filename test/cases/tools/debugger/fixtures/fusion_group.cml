@@ -3,7 +3,7 @@
 // (they do not execute) and must stop at the tail, where the group runs (35_debugger.md, 2).
 module fusion_group_fixture
 
-import { Tensor, sum, zeros } from tensor
+import { sum, zeros } from tensor
 import { with_grad } from autodiff
 
 type Model = {

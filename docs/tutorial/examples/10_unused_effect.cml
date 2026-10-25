@@ -1,7 +1,6 @@
 // An effect whose result nothing needs: `greet`'s body is not a sync block, so its `println`
 // never runs.
 // Run: camel docs/tutorial/examples/10_unused_effect.cml
-module unused_effect
 
 func greet(): int {
     println('hello from greet')

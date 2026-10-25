@@ -247,7 +247,7 @@ enum class SemanticDiag : uint32_t {
     /// A constant is larger than the printer's max_literal_bytes.
     CmlBigConstant = 0x0001A6,
 
-    // Tensor element types (design/arrays-memory, P4 "element type exact"). 0x1A7 is retired: a
+    // Array element types (design/arrays-memory, P4 "element type exact"). 0x1A7 is retired: a
     // tensor keeps the element type it is written with, so nothing rewrites it and there is no
     // such diagnostic. The code is not reused.
 
@@ -407,11 +407,10 @@ enum class SemanticDiag : uint32_t {
     // may take and give a stream.
     StreamInContainer   = 0x0001E3,
     NodeOfNotAParameter = 0x0001DE,
-    // The element type of a value is in its type (design principles 5.1), so a tensor type writes one:
-    // the name `Tensor` on its own, and a shape written without it (`Tensor<[3]>`), ask a question the
-    // type of a value answers. A signature that takes any element type declares a type variable in its
-    // head and writes it as the element type.
-    TensorElementTypeRequired = 0x0001ED,
+    // The element type of a value is in its type (design principles 5.1), so an array type writes one:
+    // a shape with no element type in front of it asks a question the type of a value answers. A
+    // signature that takes any element type declares a type variable in its head and writes it in the
+    // element type's place.
     BranchElementTypeMismatch = 0x0001EE,
     RuleConstParamNotMatched  = 0x0001E8,
     RuleWithParameterUnbound  = 0x0001DD,
@@ -419,6 +418,12 @@ enum class SemanticDiag : uint32_t {
     // its condition are made at, so it is a value the compiler knows.
     RuleWithArgumentNotConstant = 0x0001F0,
 
+    // The resource clause's promise (design effects plan 4.3, step 5): the resources a body infers
+    // have to be within what its signature promises. The resource group above is 0x1A0-0x1A4, and
+    // 0x1A5-0x1A6 are `std::cml` and 0x1A7 is retired, so this one is appended at the end of the
+    // semantic space instead of being placed next to a group that has no room left.
+    /// The resources a body uses are not within what its `pure`/`uses` signature promises.
+    UsesPromiseViolated = 0x0001F1,
     // What the item-5 clearance named, where the rule itself can be said: 0x1F2 and up. The
     // constructs with no ruling left the grammar and are ordinary syntax errors instead; these four
     // are language rules, so each one names the rule rather than saying "not supported".

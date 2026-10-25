@@ -1,0 +1,24 @@
+/**
+ * A slice along an axis that is not the first, with constant bounds: the result's type keeps the
+ * length of every axis the slice does not cut and states the length the bounds and the step give
+ * the axis it cuts (design principles 5.4; the author's ruling of 2026-10-25, point A -- the
+ * inference the module already had, which the core took over and must not lose). `m` is an
+ * `f32[3, 4]`, and `slice(m, 1, 1, 3)` cuts axis 1 into two positions, so the value is an
+ * `f32[3, 2]`: `row`'s parameter states exactly that, and the call needs no conversion. A type
+ * that stated neither extent (`f32[?, ?]`) would be refused here with `ArgumentNeedsConversion`.
+ *
+ * `slice` is called unqualified here, so the module's own `slice` is not in scope and the core's
+ * function form answers (only `reshape` and `sum` come from the module).
+ */
+module slice_axis_constant_bounds
+import { reshape, sum } from tensor
+
+func row(a: f32[3, 2]): float {
+    return sum(a)
+}
+
+func main(): int sync {
+    let m = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0] as f32[], [3, 4])
+    println(row(slice(m, 1, 1, 3)))
+    return 0
+}

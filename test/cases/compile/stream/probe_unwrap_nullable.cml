@@ -1,0 +1,10 @@
+// A pinned reading of the language, measured while choosing how a yielded element is delivered:
+// the postfix `!` is not a spelling of the language -- it left the grammar, so `x!` is an ordinary
+// syntax error ("Expected ',' or ')' before '!'") -- so a value of a nullable type is not unwrapped
+// with `x!`; `??` is the form the language has.
+
+func main(): int sync {
+    let x: int? = 5
+    println(x!)
+    return 0
+}

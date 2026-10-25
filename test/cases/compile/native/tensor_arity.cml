@@ -5,7 +5,7 @@
  */
 module tensor_arity
 
-import { Tensor, new, numel } from tensor
+import { new, numel } from tensor
 
 func main(): int sync {
     let t = new([[1.0, 2.0]] as f32[][])

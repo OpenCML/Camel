@@ -319,7 +319,7 @@ void Builder::initInnerTypes() {
     typeScope_->insert(Reference("c64"), Type::Complex64());
     typeScope_->insert(Reference("c128"), Type::Complex128());
     // Reduced-precision tensor element types (design principles 7.3). They are names a
-    // program writes only as an argument of `Tensor<...>` and of `from_bytes::<...>`; no
+    // program writes only as an argument of an array spelling and of `from_bytes::<...>`; no
     // literal or scalar operator produces a value of either.
     typeScope_->insert(Reference("bf16"), Type::BFloat16());
     typeScope_->insert(Reference("f16"), Type::Float16());
@@ -1341,6 +1341,58 @@ Builder::resourceSignatureOf(const AST::node_ptr_t &funcTypeAst, const FunctionT
         throw BuildAbortException();
     }
     if (clause->pure()) {
+        // `pure` promises the empty set (design effects plan 4.3, step 5). A `var` parameter is a
+        // resource by itself: the cell is shared with the caller, so a call through the parameter
+        // reads and writes that cell wherever the body is written, and no body can bring the set
+        // back to empty. So a signature that writes `pure` and gives a parameter `var` is refused
+        // where it is written, and the note points at the parameter that breaks the promise (the
+        // author's ruling: the error is at the declaration's clause, the note at the first use the
+        // signature does not promise).
+        const auto varRangeOf =
+            [&](const std::string &name) -> std::optional<camel::core::error::TokenRange> {
+            for (size_t list = 0; list < 2; ++list) {
+                const auto &params = funcTypeAst->atAs<AST::RepeatedLoad>(list);
+                for (size_t pi = 0; pi < params->size(); ++pi) {
+                    const auto &pair = (*params)[pi];
+                    if (pair == nullptr) {
+                        continue;
+                    }
+                    const auto &load = pair->loadAs<AST::NamedPairLoad>();
+                    if (load->isVar() && load->getRef().ident() == name) {
+                        return load->tokenRange();
+                    }
+                }
+            }
+            return std::nullopt;
+        };
+        const auto varNameAt = [&](size_t index) -> std::string {
+            // The parameter numbering a call uses: `with` parameters first, ordinary ones after
+            // them (the same numbering resourceSignatureOf uses below).
+            const size_t withCount = built->withTypesCount();
+            if (index < withCount) {
+                return built->withIsVarAt(index) ? std::string(built->argNameAt(index))
+                                                 : std::string();
+            }
+            const size_t norm = index - withCount;
+            return built->normIsVarAt(norm) ? std::string(built->argNameAt(index)) : std::string();
+        };
+        for (size_t i = 0; i < built->withTypesCount() + built->normTypesCount(); ++i) {
+            const std::string name = varNameAt(i);
+            if (name.empty()) {
+                continue;
+            }
+            // The builder is kept by value: `of` hands out a temporary and the chain returns a
+            // reference to it, so a reference held across statements would outlive the builder.
+            auto diag = diags_->of(SemanticDiag::UsesPromiseViolated).at(clause->tokenRange());
+            if (const auto range = varRangeOf(name); range.has_value()) {
+                diag.related(
+                    *range,
+                    "this parameter is a resource: a call through it writes the caller's cell, so "
+                    "the call touches it wherever the body is written");
+            }
+            diag.commit(built->toString(), "the 'var' parameter '" + name + "'");
+            throw BuildAbortException();
+        }
         return signature;
     }
     // The parameters the clause may name, in the numbering a call uses: with parameters first,
@@ -5256,18 +5308,6 @@ Type *Builder::visitType(const AST::node_ptr_t &ast) {
         throw BuildAbortException();
     }
 
-    // A name that requires an element type (`Tensor`) stands for no type of a value on its own:
-    // the element type of a value is in its type (design principles 5.1). It is a type as the base
-    // of the spelling that gives it one (`Tensor<f32>`), and `visitSpecType` applies that
-    // argument; everywhere else the author is told to write one
-    // (docs/design/arrays-memory/plan.cn.md section 5.1a).
-    if (res != nullptr && !asTypeFunctionBase && isElementTypeOpenArray(res)) {
-        diags_->of(SemanticDiag::TensorElementTypeRequired)
-            .at(ast->load()->tokenRange())
-            .commit(res->toString());
-        throw BuildAbortException();
-    }
-
     if (auto *recorder = context_ ? context_->semanticRecorder() : nullptr) {
         recorder->typeExpression(ast->load()->origin(), res);
     }
@@ -5817,17 +5857,6 @@ Type *Builder::visitSpecType(const AST::node_ptr_t &ast) {
     ASSERT(ast->size() >= 1, "SpecType must have base type");
     typeFunctionBase_ = ast->size() >= 2;
     Type *base        = visitType(ast->atAs<AST::TypeLoad>(0));
-    // A name that requires an element type (`Tensor`, which the tensor module exports as the open
-    // rank array whose element type nobody stated) reads that element type from the spelling's
-    // first argument: one that gives only a shape leaves the question the name exists to answer
-    // open, and the author is told which spellings answer it (docs/design/arrays-memory/plan.cn.md
-    // section 5.1a).
-    const auto refuseElementTypeOpen = [&]() {
-        diags_->of(SemanticDiag::TensorElementTypeRequired)
-            .at(ast->load()->tokenRange())
-            .commit(base->toString());
-        throw BuildAbortException();
-    };
     if (ast->size() < 2) {
         LEAVE("SpecType");
         return base;
@@ -5844,7 +5873,7 @@ Type *Builder::visitSpecType(const AST::node_ptr_t &ast) {
             // signature binds, not a runtime array constant (plan P3, 4.1).
             const AST::DimGroup &group = child->loadAs<AST::ArrayDimLoad>()->dim();
             if (group.pack != AST::DimPack::None) {
-                // `Tensor<f32, [..s]>` would make the element type's rank open; only an array
+                // `f32[..s]` would make the element type's rank open; only an array
                 // type takes a pack, and a shape argument is not a type.
                 diags_->of(SemanticDiag::InvalidTypeArgument)
                     .at(child->load()->tokenRange())
@@ -5863,21 +5892,6 @@ Type *Builder::visitSpecType(const AST::node_ptr_t &ast) {
         if (child->type() == AST::LoadType::Type) {
             arguments.push_back(TypeArgument{.type = visitType(child), .data = nullptr});
             continue;
-        }
-        if (child->type() == AST::LoadType::Data) {
-            const auto &dataLoad = child->loadAs<AST::DataLoad>();
-            if (dataLoad->dataType() == AST::DataType::Array && base->toString() == "Tensor") {
-                // `const [3]` is the spelling a shape had before the array type took shapes
-                // over; a shape argument is written without `const` (plan P3, 4.1).
-                diags_->of(SemanticDiag::InvalidTypeArgument)
-                    .at(child->load()->tokenRange())
-                    .commit(
-                        base->toString(),
-                        std::format(
-                            "a shape is written without 'const': '{}<f32, [3]>'",
-                            base->toString()));
-                throw BuildAbortException();
-            }
         }
         const data_ptr_t data = extractStaticDataFromNode(visitData(child));
         if (!data) {
@@ -5918,23 +5932,8 @@ Type *Builder::visitSpecType(const AST::node_ptr_t &ast) {
         return typeFunc->apply(types);
     }
     if (arguments.empty()) {
-        if (isElementTypeOpenArray(base)) {
-            // `Tensor<>`: no argument at all states no element type either.
-            refuseElementTypeOpen();
-        }
         LEAVE("SpecType");
         return base;
-    }
-    if (isElementTypeOpenArray(base)) {
-        // The first argument of `Tensor` is its element type; a spelling that gives only a shape
-        // (`Tensor<[3]>`) leaves the question the name exists to answer open.
-        bool statesElementType = false;
-        for (const TypeArgument &argument : arguments) {
-            statesElementType = statesElementType || argument.type != nullptr;
-        }
-        if (!statesElementType) {
-            refuseElementTypeOpen();
-        }
     }
     if (const CollectionType *coll = asCollectionTypeOrPrototype(base);
         coll != nullptr && !arguments.empty() && arguments.front().type != nullptr) {

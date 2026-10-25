@@ -2,13 +2,13 @@
  * current native `ckpt` code. The test that runs it hashes the fixture before and after.
  */
 module checkpoint_fixture_load
-import { Tensor, to_bytes } from tensor
+import { to_bytes } from tensor
 import { to_array } from bytes
 import { load_tree } from ckpt
 import { sha256 } from hash
 
 type Record = {
-    w: Tensor<f32>, odd: Tensor<int>, empty: Tensor<f32>,
+    w: f32[..], odd: int[..], empty: f32[..],
     note: string, cursor: (int, float), enabled: bool
 }
 

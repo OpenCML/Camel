@@ -21,7 +21,7 @@ module rules
 import { Program } from graph
 import { abs, exp as math_exp, expm1, log as math_log, log1p, trunc } from math
 import { Proof, Rule, Run, rewrite, saturate, extract, run } from rewrite
-import { Tensor, exp, log, log_softmax, sigmoid, softmax, sum } from tensor
+import { exp, log, log_softmax, sigmoid, softmax, sum } from tensor
 import { is_float, is_integer } from types
 
 // ---- Integers: wrapping arithmetic, every law is exact ----
@@ -221,7 +221,7 @@ export rule float_combine_one_mixed::<T>(x: T, const c: T) when is_float::<T>() 
 /// `x*c + x*c => x*(2c)` is exact when `c` is a finite integer with `1 <= |c| <= 2^23`: doubling
 /// a rounded product commutes with rounding there, and `2c` is exactly representable. Its f64
 /// twin is `exactDoubling` above; the bound is the one thing a type decides here, so the two
-/// rules it guards (`float32_double` and `tensor_f32_double`) stay two rules.
+/// rules it guards (`float32_double` and `tensor_double`) stay two rules.
 func exactDoubling32(c: f32): bool {
     return finiteValue(c) && abs(c) >= 1.0 && trunc(c) == c && abs(c) <= 8388608.0
 }
@@ -230,30 +230,32 @@ export rule float32_double(x: f32, const c: f32) when exactDoubling32(c) {
     x * c + x * c => x * (c + c)
 }
 
-// ---- Tensors: the elementwise laws of the f32 element type ----
+// ---- Tensors: the elementwise laws, one law for every element type ----
 //
-// The elementwise tensor operators declare their laws once for float32 elements (`add`,
-// `subtract`, `multiply` in modules/tensor/ops/semantics.cpp: neutral elements, `multiply`
-// distributing over `add`), and those are the laws below. Two things make the tensor case
-// different from the scalar one, and both are visible in every rule here:
+// The elementwise tensor operators declare their laws once (`add`, `subtract`, `multiply` in
+// modules/tensor/ops/semantics.cpp: neutral elements, `multiply` distributing over `add`), and the
+// array spelling lets each law be written once for the whole family: the head `x: T[..]` binds `T`
+// to the *element* type of the matched node, so one generic rule is the law for every element type
+// whose guard holds, exactly as `float_mul_one::<T>` is the scalar law for every float. The twelve
+// `tensor_f32_*` declarations this block used to carry said the same twelve laws again, once per
+// element type; they are gone with the transitional type that made the array a type of its own.
 //
-// 1. **The operator id does not carry the element type.** `tensor:add` is addition for f32, i64
-//    and bool elements alike, so a rule must also say which type it is about. The pattern types
-//    are `Tensor<f32>`, and the matcher requires the type of a pattern term to accept the type of
-//    the node it matches (`acceptsType` in src/runtime/writings.cpp); a `Tensor<i64>` expression
-//    therefore never matches these rules, whose rounding argument is f32's. A `Tensor<f32, [3]>`
-//    still matches: a less informed type is assignable from a more informed one.
+// 1. **The operator id does not carry the element type.** `tensor:add` is addition for every
+//    numeric element type, so a rule says which element types it is about in its guard
+//    (`is_float::<T>()`), and the pattern types say the operand is an array of them. The matcher
+//    requires the type of a pattern term to accept the type of the node it matches (`acceptsType`
+//    in src/runtime/writings.cpp); a `f32[3]` still matches `T[..]`: a less informed type is
+//    assignable from a more informed one.
 // 2. **The coefficient takes the element type.** A scalar beside a tensor is not an exception to
 //    the literal rule: a literal there takes the tensor's element type (design principles 5.1),
 //    so `x * 3.0` has an f32 constant, and a scalar whose type is its own is refused rather than
-//    narrowed. A tensor rule's coefficient parameter is therefore declared `f32` - the type the
-//    matcher checks the constant against - and the guards are the element guards above at their
-//    `f32` instance (`combineSameSign::<f32>`), whose arithmetic is the arithmetic the rule's
-//    kernel performs. The tensor family itself cannot collapse over the element type today: the
-//    maker binds a type parameter to the type of a whole matched node, and `Tensor<T>` is refused
-//     as a module type with a type-variable argument (measured 2026-10-24; the rule's §6 asks for
-//    the extent to be measured rather than assumed). So these twelve rules stay written per
-//    element type, and the element type they name is the one whose element laws the scalars got.
+//    narrowed. A tensor rule's coefficient parameter is therefore declared `T` - the element type
+//    the matcher checks the constant against - and the guards are the element guards above at
+//    that same instance, called inferred from the law's own type variable (`combineSameSign(c1,
+//    c2)`), whose arithmetic is the arithmetic the rule's kernel performs.
+// 3. **The doubling law's bound is the one thing a width decides.** `tensor_double` reads
+//    `exactDoubling32`, whose `2^23` bound is f32's, and that call is what fixes the law's type
+//    variable at f32 - the same split `float_double` and `float32_double` keep for scalars.
 //
 // The permission sets are the element families' (reassociate for a regrouping, plus the
 // assumptions a cancellation needs). The `x*0`/`x-x` family is where the float laws part company with the integer
@@ -264,61 +266,62 @@ export rule float32_double(x: f32, const c: f32) when exactDoubling32(c) {
 // right side that calls a Camel function -- `t * 0.0 => zeros_like(t)` -- where `zeros_like` reads
 // `t` for its shape, so the matched value is not dropped and the effect check is satisfied too.
 
-export rule tensor_f32_mul_one(x: Tensor<f32>) { x * 1.0 => x }
-export rule tensor_f32_add_minus_zero(x: Tensor<f32>) { x + -0.0 => x }
-export rule tensor_f32_sub_zero(x: Tensor<f32>) { x - 0.0 => x }
-export rule tensor_f32_div_one(x: Tensor<f32>) { x / 1.0 => x }
-export rule tensor_f32_neg_neg(x: Tensor<f32>) { -(-x) => x }
+export rule tensor_mul_one::<T>(x: T[..]) when is_float::<T>() { x * 1.0 => x }
+export rule tensor_add_minus_zero::<T>(x: T[..]) when is_float::<T>() { x + -0.0 => x }
+export rule tensor_sub_zero::<T>(x: T[..]) when is_float::<T>() { x - 0.0 => x }
+export rule tensor_div_one::<T>(x: T[..]) when is_float::<T>() { x / 1.0 => x }
+export rule tensor_neg_neg::<T>(x: T[..]) when is_float::<T>() { -(-x) => x }
 
 /// `t + t => t * 2.0`: exactly the f32 doubling, elementwise.
-export rule tensor_f32_add_self(x: Tensor<f32>) { x + x => x * 2.0 }
+export rule tensor_add_self::<T>(x: T[..]) when is_float::<T>() { x + x => x * 2.0 }
 
 #requires(reassociate)
-export rule tensor_f32_combine(x: Tensor<f32>, const c1: f32, const c2: f32) when combineSameSign::<f32>(c1, c2) {
+export rule tensor_combine::<T>(x: T[..], const c1: T, const c2: T) when is_float::<T>() && combineSameSign(c1, c2) {
     x * c1 + x * c2 => x * (c1 + c2)
 }
 
 #requires(reassociate, no_infs, no_signed_zeros)
-export rule tensor_f32_combine_mixed(x: Tensor<f32>, const c1: f32, const c2: f32) when combineMixedSign::<f32>(c1, c2) {
+export rule tensor_combine_mixed::<T>(x: T[..], const c1: T, const c2: T) when is_float::<T>() && combineMixedSign(c1, c2) {
     x * c1 + x * c2 => x * (c1 + c2)
 }
 
 #requires(reassociate, no_infs)
-export rule tensor_f32_fold(x: Tensor<f32>, const c1: f32, const c2: f32) when foldCoefficients::<f32>(c1, c2) {
+export rule tensor_fold::<T>(x: T[..], const c1: T, const c2: T) when is_float::<T>() && foldCoefficients(c1, c2) {
     (x * c1) * c2 => x * (c1 * c2)
 }
 
-export rule tensor_f32_double(x: Tensor<f32>, const c: f32) when exactDoubling32(c) {
+export rule tensor_double::<T>(x: T[..], const c: T) when exactDoubling32(c) {
     x * c + x * c => x * (c + c)
 }
 
 /// The bare operand: `t*c + t` is `t*c + t*1.0`, the same law and the same permission as
-/// `tensor_f32_combine`, with the coefficient 1 implicit (the element families' `*_combine_one`).
+/// `tensor_combine`, with the coefficient 1 implicit (the element families' `*_combine_one`).
 /// One rule reads both orders of the sum.
 #requires(reassociate)
-export rule tensor_f32_combine_one(x: Tensor<f32>, const c: f32) when combineOneSameSign::<f32>(c) {
+export rule tensor_combine_one::<T>(x: T[..], const c: T) when is_float::<T>() && combineOneSameSign(c) {
     x * c + x => x * (c + 1.0)
 }
 
 #requires(reassociate, no_infs, no_signed_zeros)
-export rule tensor_f32_combine_one_mixed(x: Tensor<f32>, const c: f32) when combineOneMixedSign::<f32>(c) {
+export rule tensor_combine_one_mixed::<T>(x: T[..], const c: T) when is_float::<T>() && combineOneMixedSign(c) {
     x * c + x => x * (c + 1.0)
 }
 
 /// `a*(b+c) <=> a*b + a*c`, elementwise and with the same broadcasting on both sides. It grows
 /// a writing (an add becomes two products), so it belongs to the saturation, not to `simplify`.
 ///
-/// It is an i64 law only: for f32 it is not a law under any permission the design grants, because
-/// the products may overflow where the sum does not (`a*(b+c)` is 0 where `a*b + a*c` is
+/// It is an integer law only: for floats it is not a law under any permission the design grants,
+/// because the products may overflow where the sum does not (`a*(b+c)` is 0 where `a*b + a*c` is
 /// `inf + -inf`, a NaN). The element library has no float distribute either, for the same reason,
-/// and `algebra.cpp` has none at all.
+/// and `algebra.cpp` has none at all. Integer arithmetic is a ring modulo the width, so one rule
+/// is the law for every integer element type.
 #requires(reassociate)
-export rule tensor_i64_distribute(a: Tensor<int>, b: Tensor<int>, c: Tensor<int>) {
+export rule tensor_distribute::<T>(a: T[..], b: T[..], c: T[..]) when is_integer::<T>() {
     a * (b + c) <=> a * b + a * c
 }
 
 /// The rules that make an expression smaller, applied one way to a fixpoint, under the numeric
-/// policy of the pass. `tensor_i64_distribute` is not here: it grows a writing, and `simplify`
+/// policy of the pass. `tensor_distribute` is not here: it grows a writing, and `simplify`
 /// only takes steps that make one smaller. Commutation and association are not rules: the matcher
 /// reads them from the operator's declaration (design 6).
 ///
@@ -339,10 +342,10 @@ func simplifyWith(p: Program, strict: bool): Program! {
         float_mul_one, float_add_minus_zero, float_sub_zero, float_div_one, float_neg_neg,
         float_combine, float_combine_mixed, float_fold, float_double, float32_double,
         float_add_self, float_combine_one, float_combine_one_mixed,
-        tensor_f32_mul_one, tensor_f32_add_minus_zero, tensor_f32_sub_zero, tensor_f32_div_one,
-        tensor_f32_neg_neg, tensor_f32_add_self, tensor_f32_combine, tensor_f32_combine_mixed,
-        tensor_f32_fold, tensor_f32_double, tensor_f32_combine_one,
-        tensor_f32_combine_one_mixed,
+        tensor_mul_one, tensor_add_minus_zero, tensor_sub_zero, tensor_div_one,
+        tensor_neg_neg, tensor_add_self, tensor_combine, tensor_combine_mixed,
+        tensor_fold, tensor_double, tensor_combine_one,
+        tensor_combine_one_mixed,
         // Accuracy rules (8.10): their `#requires(refine_accuracy)` decides whether they fire.
         tensor_log_softmax_of_softmax, float_log1p, float_expm1,
     ], strict)
@@ -397,11 +400,11 @@ func saturateList(p: Program, rounds: int, strict: bool): Program! {
         float_mul_one, float_add_minus_zero, float_sub_zero, float_div_one, float_neg_neg,
         float_combine, float_combine_mixed, float_fold, float_double, float_add_self,
         float_combine_one, float_combine_one_mixed, float32_double,
-        tensor_f32_mul_one, tensor_f32_add_minus_zero, tensor_f32_sub_zero, tensor_f32_div_one,
-        tensor_f32_neg_neg, tensor_f32_add_self, tensor_f32_combine, tensor_f32_combine_mixed,
-        tensor_f32_fold, tensor_f32_double, tensor_f32_combine_one,
-        tensor_f32_combine_one_mixed,
-        tensor_i64_distribute,
+        tensor_mul_one, tensor_add_minus_zero, tensor_sub_zero, tensor_div_one,
+        tensor_neg_neg, tensor_add_self, tensor_combine, tensor_combine_mixed,
+        tensor_fold, tensor_double, tensor_combine_one,
+        tensor_combine_one_mixed,
+        tensor_distribute,
     ], rounds, strict)
 }
 
@@ -586,7 +589,7 @@ func pair(r: Run<Program>, left: Rule[], right: Rule[], strict: bool): Run<Progr
 /// f32 becomes an absolute error in its log, and a probability that rounds to zero gives -inf where
 /// the true log-softmax is finite. `log_softmax` avoids both.
 #requires(refine_accuracy)
-export rule tensor_log_softmax_of_softmax(x: Tensor<f32>, const axis: int) {
+export rule tensor_log_softmax_of_softmax(x: f32[..], const axis: int) {
     log(softmax(x, axis)) => log_softmax(x, axis)
 }
 
@@ -666,7 +669,7 @@ export func accuracy(p: Program): Program! {
 /// and `sigmoid(x)` next to each other before the pass and the same text after it. What changes
 /// is the cost: neg, exp, add and divide are four kernels and four passes over the data; sigmoid
 /// is one kernel and one pass.
-export rule tensor_sigmoid_chain(x: Tensor<f32>) {
+export rule tensor_sigmoid_chain(x: f32[..]) {
     1.0 / (1.0 + exp(-x)) => sigmoid(x)
 }
 

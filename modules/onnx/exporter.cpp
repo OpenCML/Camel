@@ -536,25 +536,37 @@ constexpr const char *kGrowingArray =
     "an array variable is appended to (`acc = acc->append<v>`); an ONNX model holds no growing "
     "arrays: compute the values as a tensor instead";
 
-/// Whether running `from` is a precondition of running `to` (data or control edges).
+/// Whether running `from` is a precondition of running `to` (data, control or sync edges).
+///
+/// The walk goes backwards, from `to` to its predecessors, because that is the direction the
+/// graph's tables have: the data and control predecessors are the node's own input runs, and the
+/// sync predecessors of the chain of a `sync` block are `syncPredsOf` (docs/design/effects/edges.cn.md
+/// 1.5). The sync edge is one of the orderings that make a run before another -- a read that
+/// follows the assignment written before it in the same block runs after it by that edge -- so a
+/// model whose variables are read and assigned in one `sync` block is exportable. (Forward, the
+/// graph has no `syncUsersOf`: the sync edges live in their own array, sorted by user.)
 bool runsBefore(const GCGraph *g, gc_node_ref_t from, gc_node_ref_t to) {
     if (from == to) {
         return false;
     }
-    std::unordered_set<gc_node_ref_t> seen{from};
-    std::vector<gc_node_ref_t> work{from};
+    std::unordered_set<gc_node_ref_t> seen{to};
+    std::vector<gc_node_ref_t> work{to};
     while (!work.empty()) {
         const gc_node_ref_t ref = work.back();
         work.pop_back();
-        for (const auto users :
-             {g->normOutputsOf(ref), g->withOutputsOf(ref), g->ctrlOutputsOf(ref)}) {
-            for (gc_node_ref_t user : users) {
-                if (user == to) {
-                    return true;
+        if (ref == from) {
+            return true;
+        }
+        for (const auto preds : {g->normInputsOf(ref), g->withInputsOf(ref), g->ctrlInputsOf(ref)}) {
+            for (gc_node_ref_t pred : preds) {
+                if (seen.insert(pred).second) {
+                    work.push_back(pred);
                 }
-                if (seen.insert(user).second) {
-                    work.push_back(user);
-                }
+            }
+        }
+        for (const auto &edge : g->syncPredsOf(ref)) {
+            if (edge.user == ref && seen.insert(edge.pred).second) {
+                work.push_back(edge.pred);
             }
         }
     }
@@ -4715,8 +4727,8 @@ void refuseUnendedUnrolling(
             "changing; here every level that was unrolled gave the next call arguments more "
             "specific than the loop's own (a more precise type, or a constant), so one more "
             "level was unrolled each time. Give the values the recursion carries and the "
-            "constants it uses types that say their element type and shape (`x as Tensor<f32, "
-            "const [...]>`)",
+            "constants it uses types that say their element type and shape (`x as f32[..]`, "
+            "`x as f32[const [...] ]`)",
             isSourceName(name) ? std::format(" of '{}'", name) : std::string(),
             full->graph(),
             full->bytes(),
@@ -4857,7 +4869,7 @@ class DeclaredInputBinder {
                     name,
                     std::format(
                         "is declared '{}', which leaves its {} unknown; a model input needs "
-                        "both: write the type with them, e.g. Tensor<f32, const [2, 3]> (a "
+                        "both: write the type with them, e.g. f32[2, 3] (a "
                         "negative extent is a dynamic axis), or give the parameter a value "
                         "with --arg, which makes it a constant of the model",
                         ty->toString(),

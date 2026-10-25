@@ -30,10 +30,6 @@ export func area(w: float, h: float): float {
 }
 ```
 
-> The tree's `examples/shapes.cml` still opens with a `module shapes` line. That is a **retired spelling**: the
-> declaration is no longer in the language and the repository is clearing it out of sources and documents
-> (design principles, section 14). Do not write it in a new file.
-
 The side that uses it has two spellings, and
 [`examples/08_modules.cml`](examples/08_modules.cml) shows both:
 

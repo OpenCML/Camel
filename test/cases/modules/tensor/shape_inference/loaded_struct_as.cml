@@ -1,12 +1,12 @@
 module shape_inference_loaded_struct_as
-import { Tensor, sum, ones, load_npy } from tensor
-type P = { w: Tensor<f32, [3]>, b: Tensor<f32, [3]> }
+import { sum, ones, load_npy } from tensor
+type P = { w: f32[3], b: f32[3] }
 with <m: P>
-func f(x: Tensor<f32, [3]>): float {
+func f(x: f32[3]): float {
     return sum(m.w * x + m.b)
 }
 func main(): int sync {
-    let p = { w: load_npy::<f32>('test/cases/modules/tensor/shape_types/x3.npy') as Tensor<f32, [3]>, b: ones([3]) }
+    let p = { w: load_npy::<f32>('test/cases/modules/tensor/shape_types/x3.npy') as f32[3], b: ones([3]) }
     println(f<p>(ones([3])))
     return 0
 }

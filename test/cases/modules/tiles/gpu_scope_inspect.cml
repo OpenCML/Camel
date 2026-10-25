@@ -13,28 +13,28 @@
 /// loop's segment is hoisted out of the loop.
 module tiles_gpu_scope_inspect
 
-import { Tensor, reshape, sum } from tensor
+import { reshape, sum } from tensor
 import { inspect } from tiles
 
 #gpu
-func pair(x: Tensor<f32, [3]>): Tensor<f32, [3]> {
+func pair(x: f32[3]): f32[3] {
     let y = x * 2.0
     let z = y + 3.0
     return z - 1.0
 }
 
 #gpu
-func empty(x: Tensor<f32, [3]>): Tensor<f32, [3]> {
+func empty(x: f32[3]): f32[3] {
     return x
 }
 
 #gpu
-func accumulated(x: Tensor<f32, [3]>): Tensor<f32, [3]> {
+func accumulated(x: f32[3]): f32[3] {
     return loop y = x for k in [1, 2] do y + x
 }
 
 #cpu
-func kept(x: Tensor<f32, [3]>): Tensor<f32, [3]> {
+func kept(x: f32[3]): f32[3] {
     let y = x * 2.0
     return y + 3.0
 }
