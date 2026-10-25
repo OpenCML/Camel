@@ -1,6 +1,6 @@
 // `std::opt` needs the pass `rules::simplify`, which the standard library's rules.cml provides.
 // This directory's rules.cml is found first, and it has no `simplify`: the pipeline must say
-//  that this module provides no such pass, not that the pass is not found anywhere (
+// that this module provides no such pass, not that the pass is not found anywhere (
 // probe C).
 module main
 

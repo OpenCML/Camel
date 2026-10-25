@@ -887,7 +887,7 @@ void Builder::rejectUnappliedBinding(node_handle_t node, const GCT::node_ptr_t &
     const camel::source::origin_id_t at =
         exprOrigin != camel::source::kInvalidOriginId ? exprOrigin : where->origin();
     // Several candidates in the pass the binding could use: the same ambiguity an ordinary
-    //  call reports, with the same candidate list. No position chose one (`expected`),
+    // call reports, with the same candidate list. No position chose one (`expected`),
     // which is why the binding is being refused now.
     if (const auto ambiguous = ambiguousBindings_.find(node);
         ambiguous != ambiguousBindings_.end()) {
@@ -1082,7 +1082,7 @@ void Builder::rejectLiteralValue(
     const std::string range = literal::rangeText(type);
     std::string reason;
     if (value.underflows(type)) {
-        //  A nonzero value whose nearest value of the type is zero: not a range above its
+        // A nonzero value whose nearest value of the type is zero: not a range above its
         // largest, and not rounded away.
         reason = folded ? "the value " + value.toString() +
                               " is too small to be represented (the nearest value is zero)"

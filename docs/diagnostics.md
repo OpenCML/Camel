@@ -510,7 +510,7 @@ Every '{1}' needs its '{0}'. The note shows the '{1}' that is still open here.
 /// A list whose text ends where a name was required. The name is asked for through `identDef` and
 /// reported where it should stand; the list closes without one. Reading the token that stands
 /// there instead - the terminal token - put that token in the tree twice and made
-///  `camel-parsecheck fuzz` report "the leaves of the tree are not the tokens of the text".
+/// `camel-parsecheck fuzz` report "the leaves of the tree are not the tokens of the text".
 module syntax_ident_list_open
 
 resource a = [b,
@@ -1823,7 +1823,7 @@ Check the file for syntax errors.
 
 ```camel
 // A program whose import is a module that does not parse. The import is a dependency of the
-//  program, so the program fails at the compile step with that module's parse diagnostic —
+// program, so the program fails at the compile step with that module's parse diagnostic —
 // not later, and not with a pass diagnostic: nothing asked for a pass of it.
 module imports_unparsable
 import unparsable_pass
@@ -2796,7 +2796,7 @@ The errors are reported for that module. This one follows from them and goes awa
 **Example** (`test/cases/compile/module_imports/import_order/relative_name/main_short.cml`, run as `camel -E short test/cases/compile/module_imports/import_order/relative_name/main_short.cml`)
 
 ```camel
-///  imports `short`, whose `import..lib` cannot be formed against its one-component name.
+/// imports `short`, whose `import..lib` cannot be formed against its one-component name.
 module main_short
 
 import short
@@ -4470,7 +4470,7 @@ A tag argument is a compile-time constant of the kind the parameter declares: wr
 **Example** (`test/cases/compile/tags/err_float.cml`, run as `camel test/cases/compile/tags/err_float.cml`)
 
 ```camel
-///  A tag argument of a type a tag cannot hold yet (adds them).
+/// A tag argument of a type a tag cannot hold yet (adds them).
 module err_float
 
 export tag width<w: int> on type
@@ -7624,7 +7624,7 @@ The name of a generic function stands for no one function until a position fixes
 // principles 5.5), and nothing here does: the composition stands in a `let` with no declared
 // type, so neither the operand nor the whole expression has a function type to take the instance
 // from. The refusal is the composition's own, and it says what the operand is and both ways to
-//  settle it (the rule is docs/handover/reviews/questions-2026-10-23.md, section
+// settle it (the rule is docs/handover/reviews/questions-2026-10-23.md, section
 // generic-operands-of-composition).
 module h428_comp_operand_generic
 
@@ -8678,7 +8678,7 @@ The graph, permanent and meta spaces hold the compiled program (its runtime grap
 **Example** (`test/cases/compile/stream/interval_loop_not_materialised.cml`, run as `CAMEL_GC_HEAP_LIMIT_MB=8 camel test/cases/compile/stream/interval_loop_not_materialised.cml std::nvm`)
 
 ```camel
-//  `for i in 0..n` builds no array (design principles 4.2): the rounds
+// `for i in 0..n` builds no array (design principles 4.2): the rounds
 // are the two bounds walked, so two million rounds run where an `int[]` of the same interval does
 // not fit the heap cap the plan sets (`int64` x 2,000,000 is 16 MB, the cap is 8).
 module h426_interval_loop_not_materialised
@@ -9356,7 +9356,7 @@ Write `export func {1}::<F>(f: F): F! when is_function::<F>()` in module {0}, or
 **Example** (`test/cases/modules/pass_not_found/main.cml`, run as `camel test/cases/modules/pass_not_found/main.cml declares_not_exported::run std::nvm`)
 
 ```camel
-//  A program to run a pass list against. It imports nothing: the passes named on the
+// A program to run a pass list against. It imports nothing: the passes named on the
 // pipeline are the only modules the pipeline has to find.
 module main
 

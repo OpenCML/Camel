@@ -1,4 +1,4 @@
-///  the same name as `packages/order.cml`. `-I` is searched before `CAMEL_PACKAGES`.
+/// the same name as `packages/order.cml`. `-I` is searched before `CAMEL_PACKAGES`.
 module order
 
 export func value(): int {

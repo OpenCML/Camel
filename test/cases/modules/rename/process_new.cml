@@ -1,5 +1,5 @@
 /**
- *  `process` is the module of the process and the machine (which renamed `os`;
+ * `process` is the module of the process and the machine (which renamed `os`;
  * the terminal is `io`'s); this proves the new name imports and its operators run.
  */
 module process_new

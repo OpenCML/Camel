@@ -1,6 +1,6 @@
 /**
  * The algebra laws fire on a product that carries a control input, and the writing that replaces
- *  it waits for the same things the product waited for (design principles 3.3, 3.4).
+ * it waits for the same things the product waited for (design principles 3.3, 3.4).
  *
  * `scaled` is called twice in one argument list: inlining gives the second body's entry product a
  * control input from the first call's effect, so the two products are ordered. The law

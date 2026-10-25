@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 // The parallel-versus-serial speed-up of the cheap parallel workload, asserted as a property of one
-//  run (docs/handover/reviews/questions-2026-10-23.md,
+// run (docs/handover/reviews/questions-2026-10-23.md,
 // "perf-para-gate"):
 //
 //   "选 B：把已量过的便宜子集（monte_carlo_pi.prl，约 1.6 s）立成可进闸门的计划。度量取同一次运行里
@@ -10,7 +10,7 @@
 //
 // The measured quantity is therefore the ratio of the two sides **of the same run**, not a stored
 // baseline, and CPU time is recorded beside it. The expensive full `perf.para` stays where it is
-//  (before a release); this tool prices one case, `monte_carlo_pi`.
+// (before a release); this tool prices one case, `monte_carlo_pi`.
 //
 //   node test/tools/para-speedup.mjs                  measure both sides and gate the property
 //   node test/tools/para-speedup.mjs --json           the numbers, without the gate
@@ -22,7 +22,7 @@
 // What it runs, exactly as `test/plans/perf/para.plan.toml` runs that case: the same program, timed
 // by `--timeit <pass>/1`, once on the plan's own serial side (`std::nvm`, the baseline NVM scheduler
 // that plan pairs with `std::prl`) and once on its parallel side (`std::prl`), with no `-t` on
-//  either side, so the parallel side's width is the machine's core count -- the plan the rule keeps
+// either side, so the parallel side's width is the machine's core count -- the plan the rule keeps
 // for a release passes none either. The pass window `--timeit` prints excludes the compile of both
 // sides, so the two walls are the same window over the same workload; the workload's own receipt
 // (`Running N times`, `Samples per simulation`, `Total hits`) is read too and must be identical on

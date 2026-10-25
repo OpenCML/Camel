@@ -1,4 +1,4 @@
-///  trap 4: an upward path. An import names a module, not a file, so `../lib` is not a name:
+/// trap 4: an upward path. An import names a module, not a file, so `../lib` is not a name:
 /// the parser stops at `/`. This pins that the own-directory rule does not enable file-path
 /// traversal (and the parent file `../lib.cml` exists, so a silent traversal would show up here).
 module main_escape

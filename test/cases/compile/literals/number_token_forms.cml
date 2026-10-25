@@ -1,5 +1,5 @@
 /**
- *  The number tokens a literal and an entry argument share: an integer token is decimal,
+ * The number tokens a literal and an entry argument share: an integer token is decimal,
  * hexadecimal (`0x`), binary (`0b`) or octal (`0o`), and a real token may carry leading zeros
  * (`077.5`) because its point makes it unambiguous. A float position takes an integer token and
  * converts it to its width, as a command-line argument of that type is read. A leading-zero

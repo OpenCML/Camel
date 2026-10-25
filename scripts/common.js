@@ -218,7 +218,7 @@ export function findBuiltLibcamel(config) {
 }
 
 /**
- *  CMake 在 configure 时写出的模块清单：每个配置一份，每行一个本次会构建的 `.cmo`
+ * CMake 在 configure 时写出的模块清单：每个配置一份，每行一个本次会构建的 `.cmo`
  * 绝对路径。见顶层 `CMakeLists.txt` 末尾的 `file(GENERATE)`。
  * @param {'Release'|'Debug'|'RelWithDebInfo'} config
  */
@@ -281,7 +281,7 @@ export function outArtifactInclude(tag) {
 }
 
 /**
- *  The CPython extension module of the Python binding: `out/<tag>/python/`. It is beside
+ * The CPython extension module of the Python binding: `out/<tag>/python/`. It is beside
  * `libs/` so the runpath `$ORIGIN/../libs` the build wrote finds libcamel here and in the wheel,
  * where the whole install lives under `camel/.cmlenv/`.
  * @param {string} tag
@@ -386,7 +386,7 @@ function pinnedFootprint(config, cmakeOptionFlags, gitVersion) {
 export function runCmakeBuild(config, cmakeOptionFlags) {
     process.chdir(BASEDIR)
     // The diagnostic numbers are assigned in diagnostics/registry.tsv and the headers and message
-    //  tables are generated from it. Generate before CMake configures, so a new declaration
+    // tables are generated from it. Generate before CMake configures, so a new declaration
     // is numbered and the tree CMake reads already carries the emitted files; CMake then runs
     // --check again as a dependency of libcamel_objects, so a direct cmake build is guarded too.
     execSync('node scripts/diagnostics-catalog.mjs --generate', { cwd: BASEDIR, stdio: 'inherit' })
@@ -455,7 +455,7 @@ function removeStaleModuleArtifacts(config, moduleFiles) {
  * 把可执行文件放到 libcamel 旁边（调试用），清掉源码树里旧构建留下的 `.cmo`，并从 `build/`
  *  删除本次 configure 不构建的模块产物。
  *
- *  `.cmo` 不再复制进 `stdlib/`：源码树不是安装。模块查找本来就会看可执行文件旁与
+ * `.cmo` 不再复制进 `stdlib/`：源码树不是安装。模块查找本来就会看可执行文件旁与
  * `CAMEL_HOME` 下（`include/camel/utils/install_layout.h`），安装由 `collect-out` 按清单写进
  * `out/<tag>/stdlib`；在源码树里再放一份没有消费者，只会把构建产物留在源码树。
  * @param {'Release'|'Debug'|'RelWithDebInfo'} config
@@ -494,7 +494,7 @@ export function copyBuildArtifacts(config) {
     }
     removeStaleModuleArtifacts(config, moduleCmoFiles(config))
 
-    //  A step that starts writing build output next to the sources again fails the build,
+    // A step that starts writing build output next to the sources again fails the build,
     // with the file named, instead of leaving it for the next person to find.
     const guard = spawnSync(
         process.execPath,
@@ -512,8 +512,8 @@ export function copyBuildArtifacts(config) {
 //
 // `out/<tag>/build-info.json` records the sources an install was produced from. Reusing an install
 // without rebuilding (`camel-remote.ps1 -NoBuild`, or a test run against `out/latest` by hand) is
-//  only honest while the install still matches the tree: lost 9 tests to a stale binary,
-//  lost one (`test::saturate_props` was not registered in the old one), and recorded the other
+// only honest while the install still matches the tree: lost 9 tests to a stale binary,
+// lost one (`test::saturate_props` was not registered in the old one), and recorded the other
 // direction -- a green that could not have moved, because `-NoBuild` reads `out/latest/stdlib` and
 // that copy is made by the build.
 //
@@ -530,9 +530,9 @@ export function copyBuildArtifacts(config) {
 //
 // The roots below are exactly what the build consumes: the C++ sources and headers, every module,
 // the tools, `third_party` (globbed into libcamel), `stdlib` (copied verbatim into
-//  `out/<tag>/stdlib`, so a comment there *can* move a test --), the CMake glue and the Conan
+// `out/<tag>/stdlib`, so a comment there *can* move a test --), the CMake glue and the Conan
 // recipe. Generated files (`*.cmo`, objects, libraries, DLLs) are excluded: they are products, not
-//  inputs, and no build writes them into `stdlib/` any more. `docs/`, `test/`, `scripts/`,
+// inputs, and no build writes them into `stdlib/` any more. `docs/`, `test/`, `scripts/`,
 // `agents/`, `editors/`, `pypi/`, `assets/`, `examples/`, `benchmarks/` and the markdown files are
 // not read by the build and are not fingerprinted.
 export const BUILD_INFO_FILE = 'build-info.json'

@@ -1,5 +1,5 @@
 /**
- *  Handover : an array literal argument enters the element type of its parameter, so an
+ * Handover: an array literal argument enters the element type of its parameter, so an
  * element the element type cannot hold is refused once the callee is known (`LiteralNotRepresentable`,
  * at the argument, quoting the element's value) rather than left as a `float[]` with no matching
  * function.

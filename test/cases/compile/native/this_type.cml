@@ -1,8 +1,8 @@
 /**
  * An integer where the declaration has no value parameter at all: the argument is refused at the
  * declaration's type, and the signature and argument types in the message are the declaration's
- *  ` => string` — the one source is `stdlib/this.cml`, not the C++ module (step 10;
- *  With no value parameter there is no wrong-type case distinct from the wrong count; this
+ * ` => string` — the one source is `stdlib/this.cml`, not the C++ module (step 10;
+ * With no value parameter there is no wrong-type case distinct from the wrong count; this
  * is the closest one, and it still shows the declared type being applied.
  */
 module this_type

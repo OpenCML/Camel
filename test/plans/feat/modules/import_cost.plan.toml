@@ -4,7 +4,7 @@ tier = "fast"
 tags = ["feat", "modules", "import", "cost"]
 desc = "`import` executes no code (design principles 3.1, ruling of 2026-10-22): every module's import declares names and nothing else, the module-level `let` probes show the root graph running only when depended on, and the modules that still work at import time are named with their class and price (H222)."
 
-#  The audit of, one probe per module of the standard library: a program that imports the
+# The audit of, one probe per module of the standard library: a program that imports the
 # module and does nothing else must exit 0, print nothing and create no file. The tool also scans
 # each module's `load()` and constructor for the shapes that make import execute code (an
 # environment read, a file or directory read, CPython initialisation, a thread, an exit hook) and
@@ -17,14 +17,14 @@ desc = "Every module imports cleanly (exit 0, no output, no file) and does no im
 kind = "behavior"
 tool = "node"
 case = "../../../tools/import-audit.mjs"
-#  `${camel}` is the compiler of the build under test, named as an argument.
+# `${camel}` is the compiler of the build under test, named as an argument.
 args = ["${case}", "--camel", "${camel}"]
 expect_exit = 0
 expect_stdout_contains = ["import.audit modules=27 a=0 b=2 c=25", "import.audit pyplot", "import.audit python", "import.audit array ", "import.audit resolution", "import.audit declaration"]
 normalizers = ["strip_ansi", "normalize_newlines"]
 timeout_ms = 120000
 
-#  The rule itself, in the two directions the table row states (design principles 3.1, row
+# The rule itself, in the two directions the table row states (design principles 3.1, row
 # 模块顶层的 `let`): a module imported and never used runs nothing at all — the flag its top-level
 # `write_text` would leave never appears — and naming that top-level `let` is a dependency, so the
 # flag appears. A later change that made module-level `let`s eager at import fails the first, and

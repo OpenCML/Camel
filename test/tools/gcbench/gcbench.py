@@ -116,7 +116,7 @@ def run_once(camel, args, mode, extra_env):
     for name in ("CAMEL_GC_ENABLE_YOUNG_COPYING", "CAMEL_GC_POISON"):
         env.pop(name, None)
     # The collector and the statistics line are the run's, not the environment's: --gc and a
-    #  profile pass before the back end. args[0] is the entry file.
+    # profile pass before the back end. args[0] is the entry file.
     args = ["--gc", mode, args[0], "std::profile gc_stats=1 report=false", *args[1:]]
     with tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
         started = time.perf_counter()

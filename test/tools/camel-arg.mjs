@@ -5,7 +5,7 @@
 //
 // `--camel <path>` (or `--camel=<path>`) names the install a run measures; with none it is
 // `$CAMEL_HOME/bin/camel`, else this tree's `out/latest/bin/camel`. `CAMEL_HOME` is the install
-//  location's convention : an explicitly named install is a
+// location's convention: an explicitly named install is a
 // command-line argument, never an environment switch.
 //
 // A `--camel` with no value is a usage error: the caller's own `usage` prints (each tool owns its
@@ -15,7 +15,7 @@
 // The stamp rule of a checker that reads an install's operator registry is `scripts/install-stamp.mjs`
 // (`refuseInstallNotOfThisTree`), and it states its own default for the case it guards: this tree's
 // `out/latest`. The two defaults are not merged here on purpose -- `CAMEL_HOME` is the install
-//  location's convention (the rule keeps it), so a tool that honors it must not lose it to a
+// location's convention (the rule keeps it), so a tool that honors it must not lose it to a
 // helper whose subject is the stamp.
 
 import path from 'node:path'

@@ -429,7 +429,7 @@ Context::importModule(const std::string &rawModuleName, const module::Module *im
     auto candidates = getModuleNameCandidates(importerName, rawModuleName, nameProblem);
     if (!nameProblem.empty()) {
         // The spelling is a name the grammar accepts, but against this importer it names nothing.
-        //  It is reported as not found and never becomes a path to search.
+        // It is reported as not found and never becomes a path to search.
         throw DiagnosticBuilder::of(SemanticDiag::ModuleNotFound)
             .commit(rawModuleName, nameProblem + "\n");
     }
@@ -437,9 +437,9 @@ Context::importModule(const std::string &rawModuleName, const module::Module *im
     // Design principles 10.2: a module's import looks in its own directory first, then the module
     // roots, then the standard library, and the entry program follows the same rule. The entry
     // directory is therefore its own directory and never a root for another module: a library's
-    //  import resolves to the same place whoever imports it. Without that, the standard
+    // import resolves to the same place whoever imports it. Without that, the standard
     // library's own `import graph` in stdlib/rules.cml could find a same-named program of the
-    //  entry directory instead of stdlib/graph.cmo.
+    // entry directory instead of stdlib/graph.cmo.
     const std::string importerDir = importerDirectory(importer);
 
     for (const auto &name : candidates) {
@@ -538,7 +538,7 @@ module_ptr_t Context::acceptModule(
         importName,
         module->path()));
     // Register before load so compile failures remain visible to dumpAllModuleDiagnostics. The
-    //  cache is keyed by the file the name resolved to, not by the name: two modules in
+    // cache is keyed by the file the name resolved to, not by the name: two modules in
     // different directories that import the same name get the file beside each of them.
     if (!resolvedPath.empty()) {
         modulesByPath_[canonicalPathKey(resolvedPath)] = module;
@@ -587,7 +587,7 @@ std::vector<std::string> Context::getModuleNameCandidates(
         // A relative import spelling is resolved against the importing module's own name, not
         // against its directory (design principles 10.2: an import names a module, not a path).
         // When the prefix drops more components than the name has, the spelling names nothing:
-        //  the import fails here, before any lookup, rather than becoming a path.
+        // the import fails here, before any lookup, rather than becoming a path.
         std::string resolved = resolveRelativeModuleName(currentModule, rawImportName, problem);
         if (problem.empty())
             candidates.push_back(std::move(resolved));
@@ -648,7 +648,7 @@ std::string Context::resolveRelativeModuleName(
 
 std::pair<std::string, bool>
 Context::findModuleUnder(const std::string &baseDir, const std::string &moduleName) {
-    //  A lookup key is a resolved module name, never an import spelling or a path: the
+    // A lookup key is a resolved module name, never an import spelling or a path: the
     // relative prefix is resolved against the importing module's name before this, and a leading
     // dot here would turn into a leading '/' below and search the filesystem root.
     if (!isModuleName(moduleName))
@@ -719,7 +719,7 @@ std::pair<std::string, bool> Context::resolveModulePath(
 
 std::pair<std::string, bool> Context::getModulePathAndKind(const std::string &moduleName) {
     // The module roots: `-I` in the order given, `CAMEL_PACKAGES`, the legacy `CAMEL_MODULE_PATH`,
-    //  then the standard library. The entry file's directory is not one of them; the
+    // then the standard library. The entry file's directory is not one of them; the
     // importing module's own directory is searched by `resolveModulePath` before this.
     for (const auto &dir : entryConfig_.searchPaths) {
         if (dir.empty())
@@ -738,7 +738,7 @@ std::pair<std::string, bool> Context::getModulePathAndKind(const std::string &mo
 std::vector<std::string> Context::getModuleSearchDiagnostics(
     const std::string &moduleName, const std::string &importerDir) const {
     // Only a resolved module name can name the files to report on; a relative spelling names
-    //  nothing and is never turned into a path.
+    // nothing and is never turned into a path.
     if (!isModuleName(moduleName))
         return {};
     std::string relativePath = moduleName;
@@ -843,7 +843,7 @@ Context::loadModuleFrom(const std::string &moduleName, const std::string &path, 
         if (!mod)
             return mod;
         // A `.cml` beside the `.cmo` is the declaration module of that module (design
-        //  principles 6.4, step 1): the C++ module implements its operators, and
+        // principles 6.4, step 1): the C++ module implements its operators, and
         // the `.cml` is the single source of their signatures. It is not a shadow of the
         // `.cmo` — the `.cmo` is still what the lookup found and what the name stands for —
         // and it is not dead code.
@@ -862,7 +862,7 @@ Context::loadModuleFrom(const std::string &moduleName, const std::string &path, 
                     moduleName, camel::utils::pathToUtf8(declarations), shared_from_this()));
             declared->setDeclarationModule(true);
             declared->setImplementation(mod);
-            //  One module, not two (design principles 6.4; handover): what the
+            // One module, not two (design principles 6.4; handover): what the
             // C++ module exports — its types, its constants and the groups and tags it
             // declares — is what this module exports, and a `.cml` name is written into the
             // same tables. An importer of the name never learns there were two objects.

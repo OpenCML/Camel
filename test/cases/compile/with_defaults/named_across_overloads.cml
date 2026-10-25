@@ -2,7 +2,7 @@
  * A named `with` argument binds across an overload set when every declaration names each `with`
  * position the same way: `rounds` is the first `with` parameter of both declarations of `show`, so
  * `show<rounds: 2>(3)` and `show<rounds: 2>('a')` each reach the declaration its argument's type
- *  selects (design principles 4.4).
+ * selects (design principles 4.4).
  */
 module with_named_across_overloads
 

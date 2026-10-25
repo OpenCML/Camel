@@ -1,7 +1,7 @@
 /**
  * `array:sort` is declared with an array argument: a number is refused at the call, and the
- *  message names the declaration's parameter (`stdlib/array.cml`, not the C++) (
- *  bucket 1).
+ * message names the declaration's parameter (`stdlib/array.cml`, not the C++) (
+ * bucket 1).
  */
 module array_sort_type
 

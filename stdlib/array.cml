@@ -33,7 +33,7 @@ import { is_bool, is_numeric, is_ordered, is_string } from types
 // type. The executor a declaration names takes exactly the element type its signature names
 // (builtin/operators/array.cpp), so the element type is known where the executor is chosen and no
 // run-time switch on the element type is left anywhere in the module. This is the shape the
-//  reductions' kernels got (: one operator, per-type executors; design principles 10.4), and
+// reductions' kernels got (: one operator, per-type executors; design principles 10.4), and
 // the shape `abs`, `min` and `max` in `stdlib/math.cml` already had: the element type is named by
 // the signature, which is what the operator path resolves a call by, so `sort(xs)` is written as
 // it always was and no kernel's name is ever written.
@@ -244,7 +244,7 @@ export func sum::<T>(xs: T[]): T when is_numeric::<T>() {
 }
 
 /// The f64 sum of the elements, from +0 in ascending order: the accumulator of `sum` for every
-///  floating-point element type (design principles 7.3)).
+/// floating-point element type (design principles 7.3)).
 /// `float(x)` reads each element into the f64 accumulator, so no addition is done at a narrower
 /// width; the caller converts the result into the element type, once.
 func sumF64::<T>(xs: T[]): float {
@@ -307,7 +307,7 @@ export func zip_with::<T, U, V>(xs: T[], ys: U[]): V[] {
 // instead (design principles 10.4, "常用而热的定义带原生内核"). The declaration's own `when` is what
 // says which element type has an executor: `Builder::declaredRuleApplies` binds the declaration's
 // type parameter from the instance's element type and evaluates the condition, an element type it
-//  refuses has no executor and keeps the body, which is the semantics (: one operator, per-type
+// refuses has no executor and keeps the body, which is the semantics (: one operator, per-type
 // executors).
 //
 // One declaration per element type, and each declaration names the operator of its own element type

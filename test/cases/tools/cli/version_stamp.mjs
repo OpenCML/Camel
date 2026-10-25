@@ -10,7 +10,7 @@
  * fails the shape, which is how an unconfigured or stale `build_config.h` shows itself.
  *
  * Red when: build-info.json's footprint is edited, `camel --version` stops printing it, or the
- *  binary is built from a tree other than the install it sits in (the stale-binary case was
+ * binary is built from a tree other than the install it sits in (the stale-binary case was
  * about). Run: node version_stamp.mjs
  */
 

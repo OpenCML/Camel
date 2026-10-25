@@ -13,7 +13,7 @@
  *   node scripts/build-info.js show  --tag latest [--root DIR]
  *   node scripts/build-info.js stamp --tag TAG [--config Release] [--root DIR]
  *
- *  `check` is what `camel-remote.ps1 -NoBuild` runs on the host before the plan:
+ * `check` is what `camel-remote.ps1 -NoBuild` runs on the host before the plan:
  *
  *   * exit 0 -- the install was built from the same source content as this tree; say nothing;
  *   * exit 4 -- refuse: the stamp is missing, unusable, or names different sources. The message

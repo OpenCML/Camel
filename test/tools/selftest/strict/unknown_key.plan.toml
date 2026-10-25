@@ -1,5 +1,5 @@
 # Fixture of test/tools/selftest/run.mjs: a misspelled assertion key must fail this plan, naming
-#  the file, the test and the key, instead of silently asserting nothing.
+# the file, the test and the key, instead of silently asserting nothing.
 id = "selftest.strict.unknown_key"
 order = 6
 tier = "fast"

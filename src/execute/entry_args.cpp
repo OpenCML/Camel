@@ -177,7 +177,7 @@ std::pair<T, T> complexFromText(
             return;
         case camel::utils::NumberTextStatus::Underflow:
             // A nonzero part too small to tell from zero is not zero: the same refusal as a real
-            //  parameter's, with the part named.
+            // parameter's, with the part named.
             refuseOutOfRange(text, target, camel::core::floatUnderflowReason(target, part));
         case camel::utils::NumberTextStatus::OutOfRange:
             refuseOutOfRange(
@@ -218,7 +218,7 @@ Loaded loadValue(const std::string &text, Type *declared, const std::string &wha
 
 /// One integer parameter, read at the width it is declared with, as one whole number token of
 /// the language (parseNumberToken: decimal, `0x`, `0b` or `0o` octal; a leading zero is decimal
-///  data text): `i32` is an int32 all the way, so a text outside that range is refused with
+/// data text): `i32` is an int32 all the way, so a text outside that range is refused with
 /// the range of `i32` rather than read as an int64 and narrowed (design principles 5.1: a value
 /// is never cut to fit a type). `target` is the declared type's name in the message.
 template <std::signed_integral T>
@@ -238,7 +238,7 @@ Loaded loadInteger(const std::string &text, Type *declared, const char *target) 
 /// One floating-point parameter, read at the width it is declared with, as one whole number
 /// token of the language: a real token or an integer token (`0xFF`, `0o77`; a source literal
 /// takes that type too). A nonzero real token too small to tell from zero is refused, not read
-///  as zero, the same rule a source literal and a conversion function apply. `f32` is a
+/// as zero, the same rule a source literal and a conversion function apply. `f32` is a
 /// float all the way, so a text outside its range is refused with the range of `f32` rather than
 /// read as a double and narrowed. `target` is the declared type's name in the message.
 template <std::floating_point T>

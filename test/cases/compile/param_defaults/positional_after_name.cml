@@ -1,5 +1,5 @@
 /**
- *  A positional argument is written after a named one (design principles 4.4):
+ * A positional argument is written after a named one (design principles 4.4):
  * the named arguments come after the positional ones, so `2` here has no place to go.
  */
 module param_argument_after_name

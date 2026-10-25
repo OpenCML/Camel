@@ -241,7 +241,7 @@ await runTest(async (t) => {
         )
         // The passes evaluate graphs of their own (the rules library's). That work is not the
         // program's run: a breakpoint on code that survives the passes must stay verified, or a
-        //  pass would wipe out every breakpoint of the file before the program starts.
+        // pass would wipe out every breakpoint of the file before the program starts.
         const stop = await dap.waitStop()
         check(
             !dap.events.some((e) => e.event === 'breakpoint' && e.body.breakpoint?.id === s.breakpoints[CALLS][2].id),

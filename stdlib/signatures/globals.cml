@@ -15,7 +15,7 @@
  * are the ones the reference page prints: `--verify-ops` compares them with the names of the
  * registered rules, position by position, in both the `with` list and the ordinary one. Until a
  * built-in's signature has one source -- the declaration, with C++ registering the implementation
- *  (2026-10-24: "a built-in's signature has one source", to be done
+ * (2026-10-24: "a built-in's signature has one source", to be done
  * before the public repository is reorganised) -- the two spellings have to stay equal, and a
  * difference is a test failure rather than a silent drift. The names here are the ones to keep:
  * the reference page is generated from them, and a position a call names is the position this file

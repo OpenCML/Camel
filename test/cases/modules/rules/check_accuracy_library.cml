@@ -4,12 +4,12 @@
  * near-zero log, overflow, underflow and denormal regions, and the worst error ratio is reported.
  *
  * `float_log1p` and `float_expm1` are one law each for the whole floating family since the fold, and
- *  `check` now walks the instances of a generic law (the rule on
+ * `check` now walks the instances of a generic law (the rule on
  * `generic-rule-check-surface-and-multi-parameter-instances`, §1): each of the two is checked at
  * `float` and `f32`, under its own name, over the 100 samples and the seed this case has always
  * pinned. Their `bf16`/`f16` instances are absent from the report rather than reported: `math:log1p`
  * and `math:expm1` are registered for `f32`/`f64` only, so no instance of either law can be made
- *  for those types at all, and a failed instantiation says nothing where it happened (the rule of
+ * for those types at all, and a failed instantiation says nothing where it happened (the rule of
  * 2026-10-23 on `generic-rule-instantiation-set-and-predicate`, §3 -- `why_not` is where that
  * reason is read).
  *

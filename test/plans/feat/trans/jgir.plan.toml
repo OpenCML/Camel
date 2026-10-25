@@ -9,7 +9,7 @@ desc = "Compact/rich/annotated semantics and versioned runtime JSON: graph IDs, 
 kind = "behavior"
 tool = "python"
 case = "../../../cases/trans/jgir_contract.py"
-#  `${camel}` is the compiler of the build under test, named as an argument.
+# `${camel}` is the compiler of the build under test, named as an argument.
 args = ["${case}", "--camel", "${camel}"]
 expect_exit = 0
 expect_stdout_contains = ["GIR formats and JSON v1: PASS"]

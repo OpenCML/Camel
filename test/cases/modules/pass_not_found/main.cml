@@ -1,4 +1,4 @@
-//  A program to run a pass list against. It imports nothing: the passes named on the
+// A program to run a pass list against. It imports nothing: the passes named on the
 // pipeline are the only modules the pipeline has to find.
 module main
 

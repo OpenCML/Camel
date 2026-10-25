@@ -443,7 +443,7 @@ void ParserImpl::parseDecl() {
 ///   - `sync` is looked past to see what it is written on: `{` (a synchronous block),
 ///     anything else (a lambda or a function type, read as an expression);
 ///   - `{` is a struct literal when it is `{}`, `{ name: ...` or `{ ...`, a block otherwise.
-///  `static for` is a statement, not a value: it parses here only, so writing it
+/// `static for` is a statement, not a value: it parses here only, so writing it
 /// where a value is needed is a syntax error rather than a silently dropped value.
 void ParserImpl::parseStmt() {
     Depth depth(*this);
@@ -553,7 +553,7 @@ void ParserImpl::parseStmtBlock() {
 
 /// blockExpr : stmtBlock | dataExpr
 /// The block is the first alternative: `{}` is the empty block here. `{ name: ...`, `{ ...` and
-///  `{ static for...` are expressions: a struct literal or a struct comprehension.
+/// `{ static for...` are expressions: a struct literal or a struct comprehension.
 void ParserImpl::parseBlockExpr() {
     if ((cur_ == TK::KwSync && peek(1) == TK::LBrace) ||
         (cur_ == TK::LBrace && !braceIsStruct(0))) {
@@ -785,7 +785,7 @@ void ParserImpl::parseFrontMatter() {
 /// (design principles 6.4): it has no block, and what it declares is its signature. The
 /// `uses`/`pure` clause after the result type says which resources a call touches (design
 /// effects plan 3.1). The optional `when` after it is the applicability condition (design
-///  principles 5.13).
+/// principles 5.13).
 void ParserImpl::parseFuncDecl() {
     const size_t m = mark();
     parseFrontMatter();
@@ -807,7 +807,7 @@ void ParserImpl::parseTagDecl() {
     expectName(NK::IdentDef);
     if (eat(TK::Assign)) {
         // Same as parseResourceDecl: `tag finite =` with the text ending there must leave the
-        //  terminal token to the Program node, not read it as the `[` of the group.
+        // terminal token to the Program node, not read it as the `[` of the group.
         parseBracketedIdents(TK::RBracket, NK::BracketIdents);
         close(m, NK::TagDecl);
         return;
@@ -967,7 +967,7 @@ void ParserImpl::parseFuncDeclRest(size_t m) {
         parseWhenClause();
     }
     // A function written without a body is the declaration of an operator of a C++ module: the
-    //  signature is the whole of it (design principles 6.4 step 1). A block is
+    // signature is the whole of it (design principles 6.4 step 1). A block is
     // still what follows a signature in every other case, so the next token decides; `sync`
     // belongs to the block and is read with it (parseStmtBlock).
     const bool hasBlock =
@@ -996,7 +996,7 @@ void ParserImpl::parseTypeParams() {
     bump(); // `<`
     {
         Scope scope(*this, false);
-        //  `::<` at the end of the text: the name is reported, not read.
+        // `::<` at the end of the text: the name is reported, not read.
         parseIdentDef();
         while (!panic_ && eat(TK::Comma) && cur_ == TK::Identifier) {
             parseIdentDef();
@@ -1155,7 +1155,7 @@ void ParserImpl::parseResourceDecl() {
     if (eat(TK::Assign)) {
         // The group of a resource is written in brackets, and the text may end right after the
         // `=`: `parseBracketedIdents` asks for the bracket and reports it when it is not there,
-        //  rather than taking whatever token stands there.
+        // rather than taking whatever token stands there.
         parseBracketedIdents(TK::RBracket, NK::BracketIdents);
     } else if (atWord(0, "unordered")) {
         bump();
@@ -1192,7 +1192,7 @@ void ParserImpl::parseModifiers() {
 /// Asking through `identDef` is what the parser does where a name is required but the text may end
 /// where the name should be. There, taking the token that stands at the end would fold the terminal
 /// token into the tree, and `parseProgram` closes the Program node with that same token, so the tree
-///  would hold one token twice and stop being lossless.
+/// would hold one token twice and stop being lossless.
 void ParserImpl::parseIdentDef() { expectName(NK::IdentDef); }
 
 /// identRef : (IDENTIFIER '::')* IDENTIFIER
@@ -1247,7 +1247,7 @@ static TK openOf(TK closer) {
 /// The caller passes the opening token it decided on; the function asks for it, so a text that ends
 /// where the list opens is reported rather than read: taking the terminal token as the opener would
 /// fold it into the tree and leave the Program node without it (or with it twice), which is not
-///  lossless. A name that is not there is reported by `parseIdentDef` in the same way.
+/// lossless. A name that is not there is reported by `parseIdentDef` in the same way.
 void ParserImpl::parseBracketedIdents(TK closer, NK kind) {
     const size_t m = mark();
     if (!expect(openOf(closer))) {

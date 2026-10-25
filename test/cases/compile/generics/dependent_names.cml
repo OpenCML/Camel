@@ -1,7 +1,7 @@
 /**
  * Names in a generic body that only the instantiation can resolve are not asked about where the
  * declaration is written: an operator on a type parameter, a field of a parameter, whether a call
- *  fits. The names that are names of the declaration's own scope are resolved there (the rule of
+ * fits. The names that are names of the declaration's own scope are resolved there (the rule of
  * 2026-10-24 on `generic-rule-condition-unresolved-name`,
  * docs/handover/reviews/questions-2026-10-23.md) -- including the awkward ones, which this program
  * is made of:

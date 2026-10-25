@@ -53,7 +53,7 @@ namespace camel::runtime {
 ///
 /// **Ctrl** is the fourth entry and is not one of the design's three: it is the old "control
 /// edge", kept only for the read-use edges the design wants as data edges and cannot have yet
-///  (the rules on the var initializer's write and on the capture order edge, in
+/// (the rules on the var initializer's write and on the capture order edge, in
 /// docs/handover/reviews/questions-2026-10-23.md). It
 /// carries "used" like a data port and orders like an order edge, which is exactly why it must
 /// go: no pass can treat it as either. Every remaining producer is named in the handover note of

@@ -1,5 +1,5 @@
 /**
- *  Handover, the other side of the rule. The position types the literals written in it
+ * Handover, the other side of the rule. The position types the literals written in it
  * (design principles 5.1); a value the program computes keeps its own type. When a computed
  * element is not of the type the position gives that element, the position does not fit: the
  * literal keeps the type its own elements give it, its literal siblings are not converted, and

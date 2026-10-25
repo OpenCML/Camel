@@ -1,4 +1,4 @@
-//  The equivalence the rule rests on, read off one program: the composition and the lambda it
+// The equivalence the rule rests on, read off one program: the composition and the lambda it
 // stands for are written in the same two positions - a declared value and the argument of a
 // function whose parameter names the function type - and both give the same numbers. A
 // distribution that reached only one of those positions would show here.

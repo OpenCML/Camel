@@ -27,17 +27,17 @@
 //
 //  ┌────────────────────────────────────────────────────┐
 //  │                 Young Generation                   │  ← Where new objects live; copying
-//  collection ├────────────────────────────────────────────────────┤ │
+// collection ├────────────────────────────────────────────────────┤ │
 //  ┌──────────────────────────────────────────────┐  │ │  │  birthSpace_ (Birth Space / Eden) │  │
 //  ← Fast allocation for new objects │  │  ████████████████████████████████████████    │  │ [Minor
-//  GC source] │  │  (Larger, e.g., 8MB)                         │  │ │
+// GC source] │  │  (Larger, e.g., 8MB)                         │  │ │
 //  └──────────────────────────────────────────────┘  │ │ │ │  ┌────────────────────────────┐ │ │  │
-//  havenSpace_ (To Space)     │                    │  ← Survivor To │  │  ████████████████ │ │
-//  [Minor GC destination] │  │  (Smaller, e.g., 1MB)      │                    │ │
+// havenSpace_ (To Space)     │                    │  ← Survivor To │  │  ████████████████ │ │
+// [Minor GC destination] │  │  (Smaller, e.g., 1MB)      │                    │ │
 //  └────────────────────────────┘                    │ │           ⇅ (Swap during Minor GC) │ │
 //  ┌────────────────────────────┐                    │ │  │ cacheSpace_ (From Space)   │ │  ←
-//  Survivor From │  │  ████████████████          │                    │     [Minor GC source] │  │
-//  (Equal to havenSpace_)    │                    │ │  └────────────────────────────┘ │
+// Survivor From │  │  ████████████████          │                    │     [Minor GC source] │  │
+// (Equal to havenSpace_)    │                    │ │  └────────────────────────────┘ │
 //  └────────────────────────────────────────────────────┘
 //           │ (age >= threshold)
 //           │ Promotion
@@ -77,11 +77,11 @@
 //    cacheSpace_:    ███ (1MB)                                   ← Same as Haven
 //    elderGenSpace_: ██████████████████████████████████████████████████ (16MB)
 //
-//  Design rationale:
+// Design rationale:
 //  - Large birthSpace_: most objects die young; ample room reduces GC frequency
 //  - Small havenSpace_/cacheSpace_: few survivors per GC (often under 10%); no need for huge
-//  To/From
-//  - Typical ratio Birth : Haven : Haven = 8 : 1 : 1 (tunable)
+// To/From
+//  - Typical ratio Birth: Haven: Haven = 8 : 1 : 1 (tunable)
 //
 // ============================================================================
 
@@ -114,7 +114,7 @@
 //    │                   │
 //    ↓                   ↓
 // havenSpace_      elderGenSpace_
-//  (stay in young gen) (promote to old gen)
+// (stay in young gen) (promote to old gen)
 //    │                   │
 //    └────────┬──────────┘
 //             ↓
@@ -126,7 +126,7 @@
 // Minor GC detailed flow
 // ============================================================================
 //
-//  State before GC:
+// State before GC:
 //  ┌─────────────────┐
 //  │  birthSpace_    │  [████████████████████████████] ← full; triggers Minor GC
 //  └─────────────────┘
@@ -137,7 +137,7 @@
 //  │  cacheSpace_    │  [░░░░░░] ← From space (empty)
 //  └─────────────────┘
 //
-//  Step 1: swap havenSpace_ ↔ cacheSpace_
+// Step 1: swap havenSpace_ ↔ cacheSpace_
 //  ┌─────────────────┐
 //  │  birthSpace_    │  [████████████████████████████]
 //  └─────────────────┘
@@ -148,7 +148,7 @@
 //  │  cacheSpace_    │  [███░░░] ← new From (was To)
 //  └─────────────────┘
 //
-//  Step 2: copy live/reachable objects (roots drive traversal; reachability implied)
+// Step 2: copy live/reachable objects (roots drive traversal; reachability implied)
 //  ┌─────────────────┐
 //  │  birthSpace_    │  [████████████████████████████] → scan live objects
 //  └─────────────────┘       ↓
@@ -159,7 +159,7 @@
 //  │  cacheSpace_    │  [███░░░] → scan live objects
 //  └─────────────────┘
 //
-//  Step 3: bulk-reset birthSpace_ and cacheSpace_
+// Step 3: bulk-reset birthSpace_ and cacheSpace_
 //  ┌─────────────────┐
 //  │  birthSpace_    │  [░░░░░░░░░░░░░░░░░░░░░░░░░░░░] ← cleared
 //  └─────────────────┘
@@ -308,7 +308,7 @@ class GenerationalAllocatorWithGC : public IAllocator {
     void *alloc(size_t payloadSize, size_t align = alignof(slot_t)) override;
 
     /// Accounts for `bytes` a core Block is about to take from the Block space. The bytes are
-    ///  live values (the review of the plan requires them to pace the collector and to
+    /// live values (the review of the plan requires them to pace the collector and to
     /// count against CAMEL_GC_HEAP_LIMIT_MB), but they are allocated outside this allocator, so
     /// the array layer calls this before taking them.
     void checkBlockBytes(size_t bytes);

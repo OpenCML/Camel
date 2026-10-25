@@ -1,7 +1,7 @@
 module main
 
 // A partial application is a function value located at the expression itself: `inc<1>`, not
-//  the `let` statement it is written in (1.6, item 4).
+// the `let` statement it is written in (1.6, item 4).
 
 with <step: int>
 func inc(x: int): int { return x + step }

@@ -33,7 +33,7 @@ namespace {
 /// value the builder materialized) is one, and so is any node the graph marks `constant`. A
 /// constant is evaluated where it is read, in place, and is not a capture of a LOOP: a consumer
 /// that lifts the loop into another representation needs no input for it (design principles 3.10;
-///  "a constant is not a capture").
+/// "a constant is not a capture").
 bool constantValue(const GCNode &node) {
     return node.kind == GCNodeKind::Data || node.isConstant();
 }

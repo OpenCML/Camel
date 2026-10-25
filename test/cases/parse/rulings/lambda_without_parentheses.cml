@@ -1,5 +1,5 @@
 /**
- *  A lambda's parameters are written in parentheses (on
+ * A lambda's parameters are written in parentheses (on
  * `composition-expected-type-edges` item 4): `(x) => e` is the spelling and `x => e` is not one,
  * because a rule body's `x => x` already spends that arrow. The composition `f..g` is the lambda
  * `(x) => g(f(x))` and is accepted beside it; the unparenthesised `x => e` is reported by name -

@@ -1,4 +1,4 @@
-//  item 4: the old value of a loop state is not visible once the next round begins, so a
+// item 4: the old value of a loop state is not visible once the next round begins, so a
 // body that only ever appends to its state may write the state's array in place (design
 // principles 10.5), the same criterion as `t = t->relu`. `std::mem::blocks()` reads the block
 // counters between the operations, so the difference is visible from the language: growing to

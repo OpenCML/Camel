@@ -1,5 +1,5 @@
 /**
- *  The report a call site pre-renders names the recursion limit, not a placeholder.
+ * The report a call site pre-renders names the recursion limit, not a placeholder.
  * `add` is an ordinary call; `depth(1000)` meets the default limit of 1000 open calls. The
  * generated program prints the same two lines as the interpreters and stops with the same
  * located MaxRecursionDepthExceeded report.

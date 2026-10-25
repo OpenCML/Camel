@@ -1,5 +1,5 @@
 /**
- *  Handover a literal with a computed element is a FILL, not one constant, and the position
+ * Handover a literal with a computed element is a FILL, not one constant, and the position
  * it stands in still gives its written elements their types (design principles 5.1). A tuple
  * field, an array field (fixed length and open rank) and an array written inside a tuple field
  * each take the declared field's element type even though a sibling field of the same literal is

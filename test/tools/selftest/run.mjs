@@ -67,7 +67,7 @@ function runRunner(args, extraEnv = {}) {
 
 // `test/runner.mjs` is the command `node scripts/test.js` runs: target resolution, `--changed`
 // and `--list` live there, above the plan runner. A check of a target shorthand has to go
-//  through it, not through run-tests.mjs, or it would test a different parser.
+// through it, not through run-tests.mjs, or it would test a different parser.
 function runTestCli(args, extraEnv = {}) {
     const proc = spawnSync(process.execPath, [path.join(repoRoot, 'test', 'runner.mjs'), ...args], {
         encoding: 'utf8',
@@ -353,7 +353,7 @@ for (const [label, run] of [
         problems.push(`named plan (${label}): the run did not say the named plan runs in full`)
     }
 }
-//  `--changed`'s `layer: true` rule: the plan file stays a named target but follows the
+// `--changed`'s `layer: true` rule: the plan file stays a named target but follows the
 // tier, so a fast plan's slow test is filtered instead of run in full.
 const tierLayered = runRunner(['--tier', 'fast', '--selection-layer', tierPlan, tierPlan])
 if (!tierLayered.output.includes('[SUMMARY] total: 2, pass: 2, fail: 0')) {
@@ -456,7 +456,7 @@ if (!hasPlan(docs, 'feat/docs_links.plan.toml')) {
     problems.push(`--changed: docs/ selected ${docs ? docs.names.join(', ') : 'nothing'}`)
 }
 // A directory rule names the plan that mirrors the path, and the file rule adds the plans
-//  outside that tree that the same change can break: tensor keeps its own plans and adds
+// outside that tree that the same change can break: tensor keeps its own plans and adds
 // the autodiff plan, which is layered so its slow PyTorch comparisons stay out of --tier fast.
 const tensor = plansForChanges(['modules/tensor/ops/matmul.cpp'])
 if (!hasTarget(tensor, 'test/plans/feat/modules/tensor')) {
@@ -684,7 +684,7 @@ for (const entry of RULELESS_ALLOWED) {
 
 //  --- every plan file of the branch is reachable from a case path ------------------------
 // `--changed` selects plans through files, never through a plan's existence. A plan that no case
-//  path selects is a plan the change that breaks its cases never runs, and the per-file check
+// path selects is a plan the change that breaks its cases never runs, and the per-file check
 // cannot see it: the case files themselves are covered, they just select another plan. Both sides
 // are derived from the tree (no count is written down): the plan files under test/plans/, the
 // `case` entries each one names (resolved the way the runner resolves them), and the selection
@@ -692,14 +692,14 @@ for (const entry of RULELESS_ALLOWED) {
 // selection resolves to its file, or to a directory that contains it.
 //
 // The verdict is about the **branch**, so the population is the plan files git has in its index
-//  A plan file that is only in the working tree -- an agent's scratch plan, written to try a
+// A plan file that is only in the working tree -- an agent's scratch plan, written to try a
 // case out and deleted again -- is not one of the branch's plans, and the live tree is shared with
 // whoever is working in it: two gates of another task went red on this check, naming an untracked
 // draft that had nothing to do with the branch under test, and passed again once the draft was
 // removed. Such a file is named as a note instead, so the hole is still visible to the agent that
 // wrote it, and the same file committed makes this check red for real -- which is the gate that
 // matters, because nothing reaches develop uncommitted. The walk itself stays over the directory
-//  (a plan file's absence from git is a fact about git, not about the runner), and keeps its
+// (a plan file's absence from git is a fact about git, not about the runner), and keeps its
 // own untracked files on purpose: a new class that is not committed yet must still be caught.
 const SELFTEST_PLANS_ROOT = path.join(repoRoot, 'test', 'plans')
 function walkPlanFiles(dir, out = []) {
@@ -858,7 +858,7 @@ if (savedBase === undefined) delete process.env.CAMEL_TEST_BASE
 else process.env.CAMEL_TEST_BASE = savedBase
 
 // --- a benchmark whose timed pass fails --------------------------------------------------------
-//  gives the `--timeit` failure payload no `mean_ms`; before the runner learnt to read it, the
+// gives the `--timeit` failure payload no `mean_ms`; before the runner learnt to read it, the
 // payload crashed the runner while it formatted the metric. The test must fail, with the
 // diagnostic, and the summary must still be printed.
 const benchPlan = path.join(here, 'benchmark_failure.plan.toml')

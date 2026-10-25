@@ -1,5 +1,5 @@
 /**
- *  Handover, items 2 and 3: the elements of an array literal and the fields of a struct
+ * Handover, items 2 and 3: the elements of an array literal and the fields of a struct
  * literal are positions with an expected type, and a literal in one array with no expected
  * type takes the widest kind of the literals written next to it (integer < decimal), as in
  * Go: `[1, 2.0]` is a float array. The pattern of a `match` case takes the type of the value

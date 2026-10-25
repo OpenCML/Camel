@@ -1,6 +1,6 @@
 /**
  * The reductions of `array` — `sum`, `min` and `max` — have native kernels, and each kernel
- *  answers what the Camel body beside it says (design principles 10.4
+ * answers what the Camel body beside it says (design principles 10.4
  * docs/handover/reviews/questions-2026-10-23.md, section "array-kernel-executors": 「`array:sum`/
  * `min`/`max` 是数组归约的实现原子」, acceptance 「内核与函数体一致（含 bf16/f16、空数组、NaN）」).
  *

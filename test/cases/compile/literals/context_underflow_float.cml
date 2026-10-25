@@ -1,6 +1,6 @@
 /**
  * A nonzero real too small to tell from zero is not zero: the literal is refused with that
- *  reason when the context gives it `float`.
+ * reason when the context gives it `float`.
  */
 module literal_context_underflow_float
 

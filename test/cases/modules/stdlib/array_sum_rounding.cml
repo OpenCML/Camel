@@ -33,7 +33,7 @@ func widened(xs: f32[]): f64[] {
 
 /// The fold written with an f32 accumulator: the accumulator's type is f32, so every addition
 /// rounds — this is what "round after every step" means, and what `array_sum` did for an f32
-///  array before the array reduction's rule.
+/// array before the array reduction's rule.
 func foldF32(xs: f32[]): f32 {
     return xs->reduce<(acc: f32, item: f32): f32 => acc + item, f32(0.0)>
 }
@@ -57,7 +57,7 @@ func main(): int sync {
     let sumA = array_sum(a)
     let refA = array_sum(widened(a))
     let foldA = foldF32(a)
-    //  The rule's rule, as a property of the value: the answer is the f64 sum rounded once.
+    // The rule's rule, as a property of the value: the answer is the f64 sum rounded once.
     let onceA = sumA == f32(refA)
     // And it is not the per-step f32 fold: without this the case would also pass under the old
     // rule for a vector where the two agree.

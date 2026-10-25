@@ -1,6 +1,6 @@
 // Every keyword of the lexer in a position the parser accepts it in, where there is one.
 // `inner`, `outer`, `atomic` and `shared` are no longer keywords: they are ordinary names
-//  so they appear below as values.
+// so they appear below as values.
 module keywords
 
 import { now } from time

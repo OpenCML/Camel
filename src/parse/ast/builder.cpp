@@ -844,7 +844,7 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
     const auto params = context->get<cst::ParentParams>();
     // The rule's applicability condition is part of its signature, so it is written between the
     // parameters and the body (`rule add_zero::<T>(x: T) when is_integer::<T>() { … }`, design
-    //  principles 4.4). A trailing `when` is a syntax error and is
+    // principles 4.4). A trailing `when` is a syntax error and is
     // reported by name (`SyntaxDiag::WhenAfterBody`); its expression is still read here, so the
     // refusal that follows is about the placement and not about a missing condition.
     const auto whenClause = context->get<cst::WhenClause>();
@@ -1003,7 +1003,7 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
     node_ptr_t whenFunc;
     if (when) {
         // The condition of this rule is being built: `node_of(c)` is read here and nowhere else
-        //  and the name of the rule is what
+        // and the name of the rule is what
         // a refusal names.
         ruleWhenName_ = name;
         const auto paired = params ? params->get<cst::PairedParams>() : cst::PairedParams();
@@ -1033,7 +1033,7 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
             imports_.push_back(graphImport);
         }
         const Reference whenRef = qualifyRef(Reference(name + "__when"));
-        //  The hidden node parameter of every `const` parameter (the rule on
+        // The hidden node parameter of every `const` parameter (the rule on
         // `rule_when_const_node`: "条件函数按 `const` 形参追加隐藏的节点形参，构建期把
         // `node_of(c)` 换成它；不引入新类型"). The condition takes the rule's parameters first,
         // in the order they are written, and then one node per `const` parameter, in the same
@@ -1128,7 +1128,7 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
     // A rule whose head declares type parameters has no function values to give: its sides are
     // generic functions, and a generic function is instantiated where it is called. The value
     // carries its templates instead, and the maker takes them under the id it registers them
-    //  (the rule on generic-rule-instantiation); the maker of such a rule is
+    // (the rule on generic-rule-instantiation); the maker of such a rule is
     // `__rule_generic`, whatever the arguments after `consts` are.
     const bool genericHead = !typeParams.empty();
     if (genericHead) {
@@ -3572,7 +3572,7 @@ Value Builder::visitLinkExpr(cst::LinkExpr context) {
             calleeNode    = rhsNode->at(0);
             namedDataList = rhsNode->at(2);
             // The merged call stands for the one on the right: a positional argument written
-            //  after a name there is still the same refusal.
+            // after a name there is still the same refusal.
             linkNode->loadAs<ReservedExprLoad>()->setPositionalAfterNamed(
                 rhsNode->loadAs<ReservedExprLoad>()->positionalAfterNamed());
             calleeNode->setParent(nullptr);
@@ -3670,7 +3670,7 @@ annoExpr
 */
 Value Builder::visitAnnoExpr(cst::AnnoExpr context) {
     ENTER("AnnoExpr");
-    //  `node_of(c)` in a rule's condition :
+    // `node_of(c)` in a rule's condition :
     // "条件函数按 `const` 形参追加隐藏的节点形参，构建期把 `node_of(c)` 换成它；不引入新类型"
     // and "名字是 `node_of(c)`，只接受该规则（或 `fact` 的 `case`）自己的形参名". The call is
     // read here, before the callee is built, and becomes the hidden node parameter the rule
@@ -3755,7 +3755,7 @@ Value Builder::visitAnnoExpr(cst::AnnoExpr context) {
                 node_ptr_t namedDataList = values.named;
                 if (values.positionalAfterNamed != nullptr) {
                     // `f(a: 1, 2)`: the call refuses it, at the argument out of place
-                    //  (design principles 4.4).
+                    // (design principles 4.4).
                     exprNode->loadAs<ReservedExprLoad>()->setPositionalAfterNamed(
                         nodeOrigin(values.positionalAfterNamed));
                 }
@@ -4204,7 +4204,7 @@ std::string decodeFStringText(std::string_view text) {
 }
 
 /// An interpolation is empty when it holds no token that is neither white space nor a comment
-///  (the author's criterion). White space is never a token, so this is: every token
+/// (the author's criterion). White space is never a token, so this is: every token
 /// is Eof or a comment. `Command` (the ignored `#!` line) and `Error` are not comments, and either
 /// leaves the interpolation non-empty.
 bool isEmptyInterpolation(const syn::TokenBuffer &tokens) {
@@ -4253,7 +4253,7 @@ size_t unicodeEscapeEnd(std::string_view text, size_t i) {
 
 /// The pattern text for `format`: the literal braces of a formatted string are doubled, so
 /// `format` prints them. A valid `\u{H…}` is a character escape, not format syntax: its braces are
-///  left alone for decodeEscapes, which doubles a brace the escape produces. An invalid one
+/// left alone for decodeEscapes, which doubles a brace the escape produces. An invalid one
 /// is kept as written, so its braces are format syntax and are doubled here.
 std::string escapeFormatBraces(std::string_view text) {
     std::string out;
@@ -4355,7 +4355,7 @@ Value Builder::visitFStringData(cst::Literal context) {
         syn::TokenBuffer tokens = syn::Lexer::tokenizeRange(source, part.exprBegin, part.exprEnd);
         // No token that is neither white space nor a comment is `${}`, `${ }`, `${:spec}` or
         // `${/*c*/}`: an interpolation without an expression is its own mistake, not a parse
-        //  error inside an expression (item 1). `${/**/ 1}` has a token and is
+        // error inside an expression (item 1). `${/**/ 1}` has a token and is
         // an expression.
         if (isEmptyInterpolation(tokens)) {
             diags_->of(SyntaxDiag::EmptyInterpolation).at(interpolationRange(part)).commit();
@@ -4371,7 +4371,7 @@ Value Builder::visitFStringData(cst::Literal context) {
         if (!sub.root() || sub.hasErrors()) {
             // The first ':' outside every bracket ends the expression. A lambda with a return
             // type has such a ':' at its top level, so its `=>` ended up in the specification
-            //  and the expression is incomplete: say what the fix is (item 1).
+            // and the expression is incomplete: say what the fix is (item 1).
             if (part.hasSpec) {
                 const std::string_view spec = whole.substr(
                     part.specBegin, static_cast<size_t>(part.specEnd) - part.specBegin);

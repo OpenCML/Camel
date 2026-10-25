@@ -1,5 +1,5 @@
 /**
- *  The process boundary of item 3: the working directory, an environment variable's value and
+ * The process boundary of item 3: the working directory, an environment variable's value and
  * every file this program names contain characters outside the process code page (an emoji is in
  * none of them; Chinese is only in some). Each line is printed bare, so that
  * test/cases/tools/unicode/unicode_paths.test.mjs compares the exact UTF-8 text.

@@ -1,7 +1,7 @@
 /**
  * A lambda whose parameter count differs from the expected function type: the parameters the
  * expected type does determine are filled in, and the diagnostic names the first parameter it
- *  cannot (design principles 5.9; item 2).
+ * cannot (design principles 5.9; item 2).
  */
 module lambda_inference_arity
 

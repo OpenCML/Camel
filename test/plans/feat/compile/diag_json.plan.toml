@@ -69,7 +69,7 @@ assert(input.stderr.includes('available passes are'), 'the pass listing goes to 
 assert(d.data.stage === 'pass:std::no_such_pass', 'stage is pass:std::no_such_pass, got ' + d.data.stage)
 assert(d.data.name === 'RuntimeDiag::UnrecognizedGraphPass', 'name is RuntimeDiag::UnrecognizedGraphPass, got ' + d.data.name)
 assert(d.range.end.line === 0 && d.range.end.character === 0, 'no source range')
-//  `data` says where the diagnostic is, not what it is about. A command line has no file,
+// `data` says where the diagnostic is, not what it is about. A command line has no file,
 // so both location fields are empty and the pass is in data.stage; a consumer reads that.
 assert(d.data.moduleName === '' && d.data.modulePath === '', 'a command-line diagnostic has no file: ' + JSON.stringify(d.data))
 """

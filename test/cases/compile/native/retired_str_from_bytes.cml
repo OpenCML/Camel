@@ -1,6 +1,6 @@
 /**
  * `str::from_bytes` was retired, not renamed: `bytes::decode` is the one place where UTF-8 bytes
- *  become a string, and malformed bytes are its error value. An old form is
+ * become a string, and malformed bytes are its error value. An old form is
  * deleted outright, with no alias and no diagnostic pointing at the new form (design principles
  * 1): the name is an ordinary name the module does not export, diagnosed where it is used.
  */

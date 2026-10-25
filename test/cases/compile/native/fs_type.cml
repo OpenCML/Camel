@@ -1,7 +1,7 @@
 /**
  * An integer where the declaration says `string`: the call is refused at the declaration's
  * type, and the message prints the declaration's own parameter name (`path`) — the one source
- *  is `stdlib/fs.cml`, not the C++ module.
+ * is `stdlib/fs.cml`, not the C++ module.
  */
 module fs_type
 

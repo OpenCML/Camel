@@ -1,5 +1,5 @@
 /**
- *  Handover, item 2, neighbour: `'42' as int` is a forbidden cast of a text to a number, not
+ * Handover, item 2, neighbour: `'42' as int` is a forbidden cast of a text to a number, not
  * text that is not a number: `as` is not the text-to-number conversion (design principles 5.1);
  * write `int(s)` or `parse_int(s)`.
  */

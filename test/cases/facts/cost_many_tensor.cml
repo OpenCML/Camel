@@ -1,4 +1,4 @@
-//  measurement workload: N groups of three tensor function graphs (a matmul, a loop and a
+// measurement workload: N groups of three tensor function graphs (a matmul, a loop and a
 // reduction) plus main. Tensor operators give shape, instance, reorder and resource facts; the
 // loops give loopDomain facts. `std::opt`'s algebra stage loads the rules library (and math)
 // after these facts exist when the pipeline seeds them first.

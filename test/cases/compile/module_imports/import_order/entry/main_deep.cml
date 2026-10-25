@@ -1,4 +1,4 @@
-///  `deep/helper.cml` imports `lib` and has no `lib.cml` beside it. The entry directory is
+/// `deep/helper.cml` imports `lib` and has no `lib.cml` beside it. The entry directory is
 /// not a module root, so this import must fail even though `../lib.cml` exists: the old order
 /// found it there and printed `helper+root` (the case this one pins).
 module main_deep

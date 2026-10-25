@@ -1,7 +1,7 @@
 /**
  * `rand:choice` is declared with an array: a number is refused at the call, and the message names
  * the declaration's type variable and parameter (`xs`) — `stdlib/random.cml`, not the C++, is the
- *  source (bucket 1).
+ * source (bucket 1).
  */
 module random_choice_type
 

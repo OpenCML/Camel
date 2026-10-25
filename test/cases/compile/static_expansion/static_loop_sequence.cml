@@ -1,8 +1,8 @@
 /**
- *  `static loop` over a sequence : the head is `for i in <序列>`,
+ * `static loop` over a sequence: the head is `for i in <序列>`,
  * without the parentheses it used to carry -- one thing, one spelling, the same shape the
  * ordinary `loop` writes. The constant interval `a..b` is one of the sequences the compiler works
- *  out (the one rule of; `range` and arrays are in
+ * out (the one rule of; `range` and arrays are in
  * `static_loop_sequence_forms.cml`), read half-open exactly as `..` is everywhere else (`0..5` is
  * 0, 1, 2, 3, 4). The rounds are unrolled where the loop stands, so `i` is a compile-time
  * constant: it is an ordinary `int` value and a `t.[i]` key at the same time.

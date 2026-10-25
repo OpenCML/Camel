@@ -1,7 +1,7 @@
 /**
  * A call of several declarations fills no default: `b` has a default in both declarations of `f`,
  * but a default is written by one declaration, and the call `f(a: 1, c: 3)` does not say which one
- *  it means, so it gives `b` a value or none of them does (design principles 4.4).
+ * it means, so it gives `b` a value or none of them does (design principles 4.4).
  */
 module param_overload_default_hole
 

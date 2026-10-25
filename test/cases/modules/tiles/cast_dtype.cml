@@ -1,8 +1,8 @@
 /**
  * A cast to another element type has no Tiles lowering yet (only f32 tensor storage exists,
- *  the compiler raises UnsupportedComputation so a region keeps the value on the CPU,
+ * the compiler raises UnsupportedComputation so a region keeps the value on the CPU,
  * where the tensor kernel converts, instead of reinterpreting the bits. Asking the whole-graph
- *  path to compile it surfaces that refusal. When step 5 adds bool/int64 storage, this
+ * path to compile it surfaces that refusal. When step 5 adds bool/int64 storage, this
  * expectation must move to the device conversion that lands there.
  */
 module tiles_cast_dtype

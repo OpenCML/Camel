@@ -400,7 +400,7 @@ class OperatorTable {
     /// Declares the overloads of one operator group, at module load time: its name and the URI of
     /// each of its overloads. `OperatorGroup` declares itself here when it is created, so the
     /// table can answer which types a group was registered for -- what `check` takes the
-    ///  instances of a generic rule from (the rule on
+    /// instances of a generic rule from (the rule on
     /// `generic-rule-check-surface-and-multi-parameter-instances`), and what a future `vmap` or
     /// a target's element-type extraction reads. Declaring the same group twice adds to it: the
     /// groups of one name a program sees are merged (OperatorGroup::merged).

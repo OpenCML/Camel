@@ -149,10 +149,10 @@ const refuted = (name) => {
 // `tensor_f32_combine_mixed`, whose own guard (`combineMixedSign`) was read as assuming `reassociate`
 // covers the opposite-sign cancellation: a tensor with a `1e+30` element, `c1 = 48`, `c2 = -47` gave
 // two element-type results 27 ulps of the result apart, `1.0000041e+30` and `1e+30`, and the rule was
-//  refused by measuring those two against each other. The rule on
+// refused by measuring those two against each other. The rule on
 // `verification-report-surface-s0` withdrew that method -- a `reassociate` rule is compared where the
 // real value is, both sides evaluated in the reference's precision -- and the rule is `sampled`
-//  No rule is excused now, so every `refuted` line fails the run.
+// No rule is excused now, so every `refuted` line fails the run.
 //
 // One rule IS still `refuted`, at the type the reduced-precision lane made checkable:
 // `float_combine_mixed`'s guard is incomplete at `f16` -- `x = 10000.0`, `c1 = 39`, `c2 = -55` are

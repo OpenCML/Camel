@@ -72,7 +72,7 @@ class Struct : public rtdata::Object {
 
     /// One field as the raw slot it is stored as, without the initialized check: a printer
     /// renders a value that may still be under construction (a collection a higher-order
-    ///  operator is filling) and shows its unwritten elements instead of aborting.
+    /// operator is filling) and shows its unwritten elements instead of aborting.
     slot_t slotAt(size_t index) const {
         ASSERT(index < size(), "Index out of range");
         if (isView()) {

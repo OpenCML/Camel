@@ -1,4 +1,4 @@
-///  trap 3: the `pkg/lib.cml` of the second root (value 2).
+/// trap 3: the `pkg/lib.cml` of the second root (value 2).
 module lib
 
 export func n(): int {

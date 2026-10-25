@@ -1,6 +1,6 @@
 /**
  * A struct that mentions itself through a map: legal by design principles 5.2, but only the
- *  array case has a representation yet. The declaration says so instead of leaving the
+ * array case has a representation yet. The declaration says so instead of leaving the
  * name unresolved.
  */
 module type_recursion_through_map

@@ -1,6 +1,6 @@
 /**
  * A subscript that slices one dimension and indexes another (`m[:, 0]`, `m[a:b, c]`) is a view
- *  with strides, which needs (design principles 5.4). The syntax is accepted and the form is
+ * with strides, which needs (design principles 5.4). The syntax is accepted and the form is
  * refused with a located diagnostic that names the work it waits for, rather than lowered to a
  * copy that would not share the block a slice shares.
  */

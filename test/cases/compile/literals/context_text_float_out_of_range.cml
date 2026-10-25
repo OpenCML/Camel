@@ -1,5 +1,5 @@
 /**
- *  Handover : a float text that is a number too large for float is out of range, which the
+ * Handover: a float text that is a number too large for float is out of range, which the
  * message says, rather than text that is not a number.
  */
 module literal_context_text_float_out_of_range

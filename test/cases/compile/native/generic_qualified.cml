@@ -1,6 +1,6 @@
 /**
  * The group a declaration makes is the module's own entity: naming the module reaches it, as it
- *  reaches a C++ module's operator (design principles 10.2, rule 5 keeps this
+ * reaches a C++ module's operator (design principles 10.2, rule 5 keeps this
  * property while refusing a declaration of another module's operator).
  */
 import generic_module

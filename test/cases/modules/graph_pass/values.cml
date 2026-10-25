@@ -2,7 +2,7 @@
 // expression of them, the result of a call, and a value a helper function reads. The values are
 // computed before the pass runs, as a program computes its top-level values before `main`
 // (design principles 10.1): the pass runs as the entry of a program of its own, not as a
-//  function graph encoded alone (task).
+// function graph encoded alone (task).
 module values
 import { Program } from graph
 

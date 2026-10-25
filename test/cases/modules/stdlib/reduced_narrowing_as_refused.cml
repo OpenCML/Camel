@@ -3,7 +3,7 @@
  * refuses `x as i32` on a float that may not fit: the static type of x is `f32`, and not every
  * f32 is a bf16 (the conversion rounds). The written conversion `bf16(x)` is how a program asks
  * for that rounding, and it needs no numeric permission, because writing it is asking for that
- *  precision (design principles 7.2-7.3; rule docs/handover/reviews/reduced-precision.md item
+ * precision (design principles 7.2-7.3; rule docs/handover/reviews/reduced-precision.md item
  * (c)). Widening the other way — `b as f32` — is a cast that loses nothing and is accepted.
  */
 module stdlib_reduced_narrowing_as_refused

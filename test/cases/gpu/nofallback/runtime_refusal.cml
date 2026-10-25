@@ -1,7 +1,7 @@
 /// (e) The runtime side of the same promise: `product` is `#gpu` but its signature is generic,
 /// so the compile pass cannot see the rank until the call site. The actual arguments are rank 1,
 /// the device back end refuses the shape, and the run reports it instead of replaying the graph
-///  on the host (GPU design 6.1). The compile pass defers this case on purpose: shows that a
+/// on the host (GPU design 6.1). The compile pass defers this case on purpose: shows that a
 /// shape the types do not fix may still compile with the actual arguments.
 module gpu_nofallback_runtime
 

@@ -220,7 +220,7 @@ DefinitionStore::importLibrary(const std::string &name) {
             "its library '{}' cannot be loaded: {}", name, loadFailureReason(name, d.message));
         // A module that is not there and one that is there and refused are both reached here
         // (a `.cmo` that will not load, a file that does not declare itself). The second has a
-        //  reason the user needs: only a name with no file behind it is absent.
+        // reason the user needs: only a name with no file behind it is absent.
         entry.absent = !context_.moduleFileExists(name);
     } catch (const std::exception &e) {
         entry.problem = std::format("its library '{}' cannot be loaded: {}", name, e.what());
@@ -298,7 +298,7 @@ std::optional<DefinitionStore::LibraryFunction> DefinitionStore::libraryFunction
         // that limit is the first error, which is a property of the iteration, not of the
         // library: the library still did not compile, and it is reported as such below, with
         // its first error as the secondary location. Letting the limit escape here is what made
-        //  `--timeit` print a bare `SyntaxDiag` instead of `InvalidPassParameter`.
+        // `--timeit` print a bare `SyntaxDiag` instead of `InvalidPassParameter`.
         status = UserDefinedModule::ProgramStatus::Failed;
     }
     LibraryLookup what;
@@ -306,7 +306,7 @@ std::optional<DefinitionStore::LibraryFunction> DefinitionStore::libraryFunction
     what.module      = module;
     if (status == UserDefinedModule::ProgramStatus::NoSuchFunction) {
         // The module is there and compiles; the name is what is wrong. Say which function it
-        //  declares without exporting, and which ones it does export.
+        // declares without exporting, and which ones it does export.
         what.absent             = true;
         what.declaresUnexported = module->declaresFunction(functionName);
         return remember(std::nullopt, true, std::nullopt, what);
@@ -317,7 +317,7 @@ std::optional<DefinitionStore::LibraryFunction> DefinitionStore::libraryFunction
     if (status != UserDefinedModule::ProgramStatus::Built) {
         // The library's own first error becomes a secondary location, so the pipeline's
         // InvalidPassParameter carries the file, line, column and source line of what really
-        //  failed instead of stitching that text into its message. A failure with no
+        // failed instead of stitching that text into its message. A failure with no
         // position (an imported module that does not compile) keeps its reason in the message.
         auto location = firstErrorLocation(*module);
         if (location) {
@@ -376,7 +376,7 @@ DefinitionStore::Entry &DefinitionStore::build(core::OperId oper) {
         return refuse(problem);
     }
     // The library is declared into the context's program (compileAsLibrary); its exported names
-    //  are that program's table (one table per program, task).
+    // are that program's table (one table per program, task).
     const auto entity = context_.programExports().exportedEntity(*module, Reference(d.function));
     using Access      = core::module::detail::EntityAccess;
     if (!entity) {
@@ -426,7 +426,7 @@ DefinitionStore::Entry &DefinitionStore::build(core::OperId oper) {
             "operands only");
     }
     if (!graph->closureNodes().empty()) {
-        //  A capture is a module-level value of the definition's own module (task): a
+        // A capture is a module-level value of the definition's own module (task): a
         // definition library is encoded as the function graph alone, so there is no root graph
         // that could compute the value and no call site whose closure could carry it.
         std::string captured;

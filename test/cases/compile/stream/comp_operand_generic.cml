@@ -2,7 +2,7 @@
 // principles 5.5), and nothing here does: the composition stands in a `let` with no declared
 // type, so neither the operand nor the whole expression has a function type to take the instance
 // from. The refusal is the composition's own, and it says what the operand is and both ways to
-//  settle it (the rule is docs/handover/reviews/questions-2026-10-23.md, section
+// settle it (the rule is docs/handover/reviews/questions-2026-10-23.md, section
 // generic-operands-of-composition).
 module h428_comp_operand_generic
 

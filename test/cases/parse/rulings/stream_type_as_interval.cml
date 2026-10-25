@@ -1,5 +1,5 @@
 /**
- *  The right side of `as` is a type : `..` after a type there
+ * The right side of `as` is a type : `..` after a type there
  * is the stream suffix. A number written directly after the `..` is the interval reading in a
  * place where a type stands, and it is reported by name - SyntaxDiag::AsRightSideIsType, at the
  * `..`, saying how to write the interval instead (`(a..b)`).

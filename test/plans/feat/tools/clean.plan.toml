@@ -4,7 +4,7 @@ tier = "fast"
 tags = ["feat", "tools", "clean"]
 desc = "`npm run clean` removes exactly the build trees, installs, test scratch and polluted source files it owns, and never a tracked file, a declaration or `.git`"
 
-#  `scripts/clean.js` was a stub, so the 27 `.cmo` files found in the source `stdlib/`
+# `scripts/clean.js` was a stub, so the 27 `.cmo` files found in the source `stdlib/`
 # had no one-command cleanup and `check-source-artifacts.mjs --clean` was the only delete
 # implementation. The case plants a checkout under `${test_tmp}`, runs every tier flag with
 # `--dry-run`, runs the default for real, and checks the exact paths that went and the exact paths

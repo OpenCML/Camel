@@ -1,8 +1,8 @@
 /**
  * An `int` where the declarations of `statistics:mean` take an array of numbers: the call is
  * refused at the declarations' type, and the signatures in the message have their own parameter
- *  name (`xs`) — the one source is `stdlib/statistics.cml`, not the C++ module (
- *  step 10).
+ * name (`xs`) — the one source is `stdlib/statistics.cml`, not the C++ module (
+ * step 10).
  */
 module statistics_type
 

@@ -1,5 +1,5 @@
 /**
- *  A `constas` parameter may stand in any position among the ordinary parameters (rule,
+ * A `constas` parameter may stand in any position among the ordinary parameters (rule,
  * 2026-10-22): the call writes its value at that position, and it takes no runtime slot.
  */
 module constas_not_first

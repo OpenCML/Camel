@@ -1,7 +1,7 @@
 /**
  * The declaration of `nn:save_params` takes two ordinary arguments: one is refused at the call,
  * and the overload the message lists is the declaration's — `stdlib/nn.cml`, not the C++ module
- *  (step 10).
+ * (step 10).
  */
 module nn_arity
 

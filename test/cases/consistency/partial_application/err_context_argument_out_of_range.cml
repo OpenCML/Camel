@@ -1,5 +1,5 @@
 /**
- *  Handover : an element of a composite literal bound as a context argument is a position
+ * Handover: an element of a composite literal bound as a context argument is a position
  * with an expected type too: `at<[1.0, 1e40]>` with `with <xs: f32[]>` is refused at the
  * element, quoting it as written (`1e40`), not at the whole literal and not as `NoMatching`.
  */

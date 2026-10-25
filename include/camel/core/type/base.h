@@ -87,7 +87,7 @@ enum class TypeCode : uint32_t {
     // ask instead of `isPrimitive`.
     Complex64  = makeTypeCode(TypeFlag::Primitive | TypeFlag::GC_Traced, 0x011),
     Complex128 = makeTypeCode(TypeFlag::Primitive | TypeFlag::GC_Traced, 0x012),
-    //  Reduced-precision floating types (design principles 7.3): `bf16` and `f16`, the
+    // Reduced-precision floating types (design principles 7.3): `bf16` and `f16`, the
     // element types of `Tensor<bf16>` and `Tensor<f16>` and scalar types of the language as
     // well — a literal has one, and it has the written conversion, the arithmetic and the
     // comparisons of any other float (camel/core/rtdata/half.h). A value of one fits in a slot
@@ -98,7 +98,7 @@ enum class TypeCode : uint32_t {
     Float16  = makeTypeCode(TypeFlag::Primitive, 0x015),
     // The stream `T..` (design principles 5.4): the elements of `T` that arrive one after
     // another, produced on demand. A type of its own, not the open-rank array `T[..]`: the
-    //  rule (-stream-type-surface) makes the stream a core type and
+    // rule (-stream-type-surface) makes the stream a core type and
     // keeps the two suffix readings apart. GC-traced, like an array: a stream value holds the
     // producer of its elements.
     Stream   = makeTypeCode(TypeFlag::Composite | TypeFlag::GC_Traced, 0x016),

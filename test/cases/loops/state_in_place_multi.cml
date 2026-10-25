@@ -1,4 +1,4 @@
-//  second item: the in-place write of a loop state, proved for several states at once. The
+// second item: the in-place write of a loop state, proved for several states at once. The
 // decision is per state (Builder::markLoopStateInPlace): a state whose first value is a literal
 // and whose only use in the body is `state->append<v>` is appended to in place; every other
 // state is left alone. The allocation counts below (`std::mem::blocks()` read between the

@@ -1,8 +1,8 @@
 /**
  * A tail recursion whose depth depends on the model input and whose state is ONE tuple argument
  * that every call replaces. A loop carries tensors and scalars, so the tuple is flattened into
- *  one carried value per element at the loop's entry and rebuilt at both ends (the outline,
- *  item 3); the model has one Loop and the tuple's two values as outputs.
+ * one carried value per element at the loop's entry and rebuilt at both ends (the outline,
+ * item 3); the model has one Loop and the tuple's two values as outputs.
  */
 module export_loop_tuple_argument
 import { Tensor, reshape, sum, tanh } from tensor

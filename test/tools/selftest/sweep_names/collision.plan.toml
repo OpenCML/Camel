@@ -1,4 +1,4 @@
-#  Fixture of test/tools/selftest/run.mjs: the plan-name collision. Both source plans have a test named
+# Fixture of test/tools/selftest/run.mjs: the plan-name collision. Both source plans have a test named
 # `shapes`; a copy is named after the sweep and its source plan, so the two cannot collide. Before
 # the source plan was part of the name, all four copies were `poison:shapes.*`: the fvm copies of
 # the two plans compared against one shared `poison:shapes.nvm` and the run failed with

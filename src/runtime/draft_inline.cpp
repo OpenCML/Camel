@@ -1449,7 +1449,7 @@ DraftInlineResult inlineCallableInDraft(
     const uint32_t callBlockRegion = controlRegionOf(draft, funcNodeId);
     // The call is the whole of its arm, which already has its region: the body goes into it.
     // The region records the function this code is a copy of, which is what the inline history
-    //  asks it (GraphDraft::inlinedCopyOf). A type specialization is that function with a
+    // asks it (GraphDraft::inlinedCopyOf). A type specialization is that function with a
     // more precise type, and the program the next round sees makes it again, under a new id, when
     // its copy of the specialization is gone: recording the specialization's id would leave a
     // record nothing resolves, the history would not recognize the call, and a recursion would

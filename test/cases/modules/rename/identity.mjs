@@ -1,7 +1,7 @@
-//  The graph identity of a module rename: `std::jgir` of a sample program is
+// The graph identity of a module rename: `std::jgir` of a sample program is
 // compared after the module name is replaced in every string of the document, so the graph may
 // differ from the graph before the rename in that name and in nothing else. The expected digest
-//  was recorded from the same sample on `origin/develop` before the rename; recorded the
+// was recorded from the same sample on `origin/develop` before the rename; recorded the
 // values below again because `std::jgir` prints each operator's resources and these samples call
 // `println`, whose resource was renamed from `io:stdout` to `stdout` (the module rename itself
 // still changes only the module name; the samples differ from their `_old` twins in that only).
@@ -17,7 +17,7 @@
 //
 // The jgir document names each node's source file by absolute path. Where the checkout sits is
 // not part of the graph, so that path is replaced with a marker before hashing; a digest that
-//  still contains it is only valid in the checkout that recorded it.
+// still contains it is only valid in the checkout that recorded it.
 
 import crypto from 'node:crypto'
 import fs from 'node:fs'
@@ -51,7 +51,7 @@ const CASES = {
     },
 }
 
-//  A sweep copy is named `<sweep>:<source plan>:<test name>`, so the last dot-segment is
+// A sweep copy is named `<sweep>:<source plan>:<test name>`, so the last dot-segment is
 // the test name whether this runs from its own plan (`rename.env_graph_identity`) or from a copy
 // of it (`poison:modules.rename_identity:rename.env_graph_identity`).
 const key = input.test_name.split('.').pop().split('_')[0]
@@ -95,7 +95,7 @@ const rewrite = (value) => {
         const normalized = normalizeSourcePath(value)
         // The digest must not depend on where the checkout sits. A path that survived
         // normalization means the payload had no usable `case_path` and the fallback did not
-        //  recognize the source path: fail loudly instead of hashing an absolute path.
+        // recognize the source path: fail loudly instead of hashing an absolute path.
         if (path.isAbsolute(normalized)) {
             throw new Error(
                 `the payload has no usable case_path and ${JSON.stringify(normalized)} does not ` +

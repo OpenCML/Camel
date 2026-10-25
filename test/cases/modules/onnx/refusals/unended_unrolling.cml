@@ -5,7 +5,7 @@
  * seen, including where the recursion is called. The loop is therefore the same at every
  * level, the simplification ends, and the export succeeds.
  *
- *  Before the value was an unnamed struct typed by its fields where the constant was
+ * Before the value was an unnamed struct typed by its fields where the constant was
  * visible: each unrolled level was more precisely typed than the loop, one more level was
  * unrolled each time, and the export was refused (TranslationRefused at the recursive call,
  * or the unlocated "Runtime draft encoding failed to allocate ... bytes"). The onnx plan keeps

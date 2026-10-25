@@ -1,6 +1,6 @@
 /**
  * An integer where the declaration says `Bytes`: rejected at the call, and the message lists the
- *  declaration's signature, parameter name included (step 1).
+ * declaration's signature, parameter name included (step 1).
  */
 import bytes
 

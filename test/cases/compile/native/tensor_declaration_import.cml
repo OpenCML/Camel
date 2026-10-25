@@ -3,7 +3,7 @@
  * extent of one axis, the binary form and the module's state are read from `stdlib/tensor.cml`,
  * and the calls reach the operators the C++ module runs. A computed signature (`reshape`, whose
  * shape follows its argument; `from_bytes`, whose element type is a type argument) stays in C++
- *  and is imported the same way.
+ * and is imported the same way.
  */
 module tensor_declaration_import
 

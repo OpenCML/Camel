@@ -5,7 +5,7 @@ tags = ["feat", "compile", "modules", "native", "declaration", "generics"]
 desc = "A body-less `export func` in a `.cml` is the declaration of an operator of a C++ module: the declaration is the signature, a call checks against it and reaches the operator, and a generic declaration is instantiated by type (handover H19, step 1)"
 
 # Design principles 6.4 (a primitive is an operator written in C++, and its signature is written
-#  once) and 6.2 (the tag that names the exception), step 1.
+# once) and 6.2 (the tag that names the exception), step 1.
 #
 # The four cases the step has to prove: a declaration of a generic operator mixed with ordinary
 # functions of the module; a declaration whose operator is not loaded (a located diagnostic, not
@@ -459,7 +459,7 @@ expect_output_contains = ["overlap.cml:14", "Two declarations of 'pick'", "(xs: 
 
 # ---- Two same-named declarations whose conditions exclude each other are overloads ----
 #
-#  The rule on `impl-declaration-arms`
+# The rule on `impl-declaration-arms`
 # (`docs/handover/reviews/questions-2026-10-23.md`): declarations split by mutually exclusive
 # `when` conditions are overloads and may stand side by side, and the check is the same for every
 # same-named overload that writes `when`, not a special case of `#impl`. A type that satisfies both
@@ -544,7 +544,7 @@ verify_script = """
 
 # ---- Two candidates whose own `when` both hold are an ambiguity, not a choice ----
 #
-#  The rule on `two-when-conditions-hold`
+# The rule on `two-when-conditions-hold`
 # (`docs/handover/reviews/questions-2026-10-23.md`): "带 `when` 的候选都适用时，调用处报歧义，列出两
 # 条候选与各自成立的条件". "先写的赢" no longer exists for a candidate that writes `when`, because the
 # declaration-time check samples the registered types one at a time and the call site is what
@@ -597,7 +597,7 @@ timeout_ms = 8000
 # ---- A declaration cannot be parametric ----
 
 # `from_bytes::<T>` and a per-leaf `ckpt_get::<L>` ask for one name whose result type the call
-#  names; the declaration mechanism has no such form. The two cases below state
+# names; the declaration mechanism has no such form. The two cases below state
 # what is missing, not how the module happens to be written today.
 
 [[tests]]
@@ -927,7 +927,7 @@ expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "tensor_type.cml:11:21", "argument types: <> (string)", "<tensor:to_bytes>: (t: Tensor) => Bytes"]
 #  ---- The declaration of `show` ----
 #
-#  `show` is the last zero-syntax name of the inventory: its result is fixed `void`, and its
+# `show` is the last zero-syntax name of the inventory: its result is fixed `void`, and its
 # umbrella parameter (`TensorLike`: a tensor or any array) is two declarations, one per accepted
 # type. The C++ module keeps the kernel, the traits, the semantics and the resources; it no
 # longer exports the group, so the declaration is the module's signature for the name.
@@ -1177,7 +1177,7 @@ expect_diagnostic_code = "0x03000110"
 expect_diagnostic_line = 12
 expect_diagnostic_column = 5
 expect_output_contains = ["This value has type 'string[]', which is not the declared type 'int'"]
-#  the callable operators of `rewrite` are declarations now (`stdlib/rewrite.cml`):
+# the callable operators of `rewrite` are declarations now (`stdlib/rewrite.cml`):
 # the engines that take a `Program` and `Rule[]`, the rule readers that take a `Rule`, and the
 # run readers that take a `Run`.
 
@@ -1234,7 +1234,7 @@ args = ["check", "${case}"]
 expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "rule_reader_type.cml:11:24", "argument types: <> (int)", "<rewrite:consts>: (r: Rule) => int"]
 
-#  `env`, `process` and `hash` are declaration modules now (`stdlib/env.cml`,
+# `env`, `process` and `hash` are declaration modules now (`stdlib/env.cml`,
 # `stdlib/process.cml`, `stdlib/hash.cml`). `env` and `process` keep their resources and their
 # effects in C++; `hash` is pure, and `sha256` is two declarations with two `#op` URIs. Each
 # module has the three cases the migration adds: the importer sees the declared types, a wrong

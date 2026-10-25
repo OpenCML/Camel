@@ -1,5 +1,5 @@
 /**
- *  Rules with a side condition (`when`), and the passes that use them (rewrite design 2.1).
+ * Rules with a side condition (`when`), and the passes that use them (rewrite design 2.1).
  *
  * The condition is a function of the rule's parameters seen as nodes of the draft being
  * rewritten: it can test the shape of a node (`op`), the type of a node (`type_of`,

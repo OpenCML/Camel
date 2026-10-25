@@ -241,7 +241,7 @@ Module::importedBindingsForRef(const Reference &ref, ImportLayer layer) const {
         // remote prefix, so a `using namespace m` would otherwise reach the built-in of a name
         // through layer 4 -- where the language's rule puts the prelude below every layer the
         // program wrote, and a `using namespace` brings the module's own names, not the prelude
-        //  again (design principles 6.x).
+        // again (design principles 6.x).
         if (binding.mod != nullptr && binding.mod->name().empty() &&
             binding.remotePrefixParts.empty()) {
             continue;

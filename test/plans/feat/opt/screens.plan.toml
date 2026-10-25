@@ -8,14 +8,14 @@ tags = ["feat", "opt", "generic", "screens"]
 # the optimizer with check_screens=true: the skipped graphs are given to the pass anyway, and a
 # rewrite there fails the run. A new rewrite in a pass that does not widen its screen fails here.
 #
-#  This plan is also an acceptance item of, stated as the contract the screens owe: a screen may
+# This plan is also an acceptance item of, stated as the contract the screens owe: a screen may
 # not be stricter than the pass it screens for (docs/handover/reviews/questions-2026-10-23.md,
 # "fold-screen-contract-without-block", option (a); generic/screen.cpp states the same rule at the
-#  top of the file). The group at the end of this plan is the one that carries it for the own
+# top of the file). The group at the end of this plan is the one that carries it for the own
 # inputs -- the frozen graph of the effects model, a `var` read across a callee's write, a `sync`
 # block's chain, the two libraries whose results the same batch watches (`library_gemm`,
 # `grad_library`) -- so that a screen that starts refusing a rewrite those programs need fails a
-#  test that names rather than only the corpus around it.
+# test that names rather than only the corpus around it.
 
 [defaults]
 kind = "behavior"
@@ -622,7 +622,7 @@ name = "perf.fib_recursive"
 case = "../../../cases/perf/fib_recursive.cml"
 args = ["${case}", "std::opt check_screens=true", "std::null"]
 
-#  the acceptance inputs for the contract above: the effects model's frozen graph, the `var`
+# the acceptance inputs for the contract above: the effects model's frozen graph, the `var`
 # cases the read/write model is measured on, and the two libraries the batch watches end to end.
 [[tests]]
 name = "h242.effects_model_edges"

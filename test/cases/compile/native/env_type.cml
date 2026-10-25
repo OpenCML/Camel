@@ -1,7 +1,7 @@
 /**
  * An integer where the declaration of `env:get_env` says `string`: the call is refused at the
  * declaration's type, and the message prints the declaration's own parameter name (`name`) --
- *  the one source is `stdlib/env.cml`, not the C++ module.
+ * the one source is `stdlib/env.cml`, not the C++ module.
  */
 module env_type
 

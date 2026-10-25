@@ -1,5 +1,5 @@
 /**
- *  The import that must execute nothing, in the sharpest form the language allows.
+ * The import that must execute nothing, in the sharpest form the language allows.
  *
  * `import unused_let_writer` is the only thing this program does with the module: `wrote` is
  * never named, so the module's top-level `let` — a `write_text` of a flag file — has no dependent

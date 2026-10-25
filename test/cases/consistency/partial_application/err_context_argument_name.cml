@@ -1,5 +1,5 @@
 /**
- *  Handover : a literal context argument takes the type of its `with` parameter, but a
+ * Handover: a literal context argument takes the type of its `with` parameter, but a
  * name is a value of its own type and does not convert (design principles 5.1): `scale<n>`
  * with `n` an int and `with <k: f32>` stays a refused partial application.
  */

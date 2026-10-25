@@ -318,7 +318,7 @@ void Builder::initInnerTypes() {
     typeScope_->insert(Reference("float"), Type::Float64());
     typeScope_->insert(Reference("c64"), Type::Complex64());
     typeScope_->insert(Reference("c128"), Type::Complex128());
-    //  Reduced-precision tensor element types (design principles 7.3). They are names a
+    // Reduced-precision tensor element types (design principles 7.3). They are names a
     // program writes only as an argument of `Tensor<...>` and of `from_bytes::<...>`; no
     // literal or scalar operator produces a value of either.
     typeScope_->insert(Reference("bf16"), Type::BFloat16());
@@ -350,7 +350,7 @@ static bool isIntegerPrimitive(Type *type) {
 // A literal that could not be converted to the type its position asks for: out of the range
 // of a narrower numeric type (`let b: i32 = 3000000000`), a decimal literal in an integer type
 // (`let x: int = 1.9`), or a value of another type. One diagnostic says which literal, which
-//  type, and why.
+// type, and why.
 //
 // A text where a number is expected is not a range problem and not a text that is not a number
 // either: there is no implicit text-to-number conversion (design principles 5.1), so it is a
@@ -616,14 +616,14 @@ node_ptr_t Builder::visitModule(const AST::node_ptr_t &ast) {
                 // (design principles 9.3), and for a function with a body the record is where the
                 // condition of the declaration is read while the declarations of one name are
                 // compared -- two of them whose conditions exclude each other are overloads and
-                //  may stand side by side (design principles 4.4; the rule on
+                // may stand side by side (design principles 4.4; the rule on
                 // `impl-declaration-arms`, docs/handover/reviews/questions-2026-10-23.md).
                 if (const auto *when = tree_->whenOf(node); when != nullptr) {
                     tree_->setWhen(declNode, *when);
                 }
                 if (node->nativeDeclaration()) {
                     // The declaration keeps what makes it one: no body, so the graph builder
-                    //  makes an operator rule of it instead of a graph (handover step 1),
+                    // makes an operator rule of it instead of a graph (handover step 1),
                     // and its tag uses go with it (`#op<'module:function'>`; design principles
                     // 6.2).
                     declNode->setNativeDeclaration();
@@ -1665,7 +1665,7 @@ node_ptr_t Builder::visitTypeDecl(const AST::node_ptr_t &ast) {
             const std::string name = typeLoad->ref().toString();
             if (!mention.directly) {
                 // Legal by the rule, but the representation cannot hold it yet (see the
-                //  the report): say so instead of leaving the name unresolved.
+                // the report): say so instead of leaving the name unresolved.
                 diags_->of(SemanticDiag::FeatureNotSupported)
                     .at(ast->load()->tokenRange())
                     .commit(
@@ -2399,7 +2399,7 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
     // A dimension of a subscript that slices is not an element index (design principles 5.4):
     // `t[a:b]` calls the slice operator, `t[i]` the index operator. The dimensions are counted
     // because a slice of a dimension other than the first is a view with strides, which needs
-    //  the multidimensional array representation that is not there yet.
+    // the multidimensional array representation that is not there yet.
     AST::node_ptr_t sliceDimension = nullptr;
     size_t subscriptDimensions     = 0;
     if (binaryExpr->op() == AST::BinaryDataOp::Index) {
@@ -2479,7 +2479,7 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
                 // `t[:, 0]`, `t[a:b, c]`: the result takes every element of the dimension that
                 // is not sliced at the coordinate the index gives, so it is a view with
                 // strides (design principles 5.4). That needs the multidimensional array
-                //  representation that is not there yet; until then the form is a located error rather
+                // representation that is not there yet; until then the form is a located error rather
                 // than a copy that would read like the view but not share its block.
                 diags_->of(SemanticDiag::ConstructNotSupported)
                     .at(indices->load()->tokenRange())
@@ -2594,7 +2594,7 @@ node_ptr_t Builder::visitLogicalExpr(const AST::node_ptr_t &ast) {
         *caseNode << execNode;
         return caseNode;
     };
-    *brchNode << lhsNode << armOf(CaseType::True, isAnd ? rhsNode : decidedNode)
+    *brchNode << lhsNode << armOf(CaseType::True, isAnd ? rhsNode: decidedNode)
               << armOf(CaseType::Else, isAnd ? decidedNode : rhsNode);
 
     node_ptr_t res = brchNode;
@@ -2724,7 +2724,7 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
         AST::node_ptr_t passOperator = nullptr;
         // The name of each argument, aligned with the arguments in the order written: empty for
         // a positional one. The name is not a child of the LINK; the call checks it against the
-        //  callee when the call is resolved (design principles 4.4).
+        // callee when the call is resolved (design principles 4.4).
         std::vector<std::optional<std::string>> argNames;
         const auto appendArgument = [&](node_ptr_t gctArg) {
             *res << gctArg;
@@ -2853,7 +2853,7 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
         int32_t argSlot                                      = 0;
         // The name of each argument, aligned with the arguments; empty for a positional one.
         // The name is not a child of the WITH: the binding checks it against the callee when
-        //  the call is resolved (design principles 4.4).
+        // the call is resolved (design principles 4.4).
         std::vector<std::optional<std::string>> argNames;
         for (auto &argNode : *argsNode) {
             node_ptr_t gctArg = visitData(argNode);
@@ -2886,7 +2886,7 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
     case AST::ReservedDataOp::Comp: {
         const auto &rhsASTNode = ast->atAs<AST::DataLoad>(1);
         // `a..b` has two readings, and the types of its two operands tell them apart (design
-        //  principles 4.2; the rule on ` -generator-and-composition`):
+        // principles 4.2; the rule on ` -generator-and-composition`):
         // between two functions it is the composition `f..g`, the lambda `(x) => g(f(x))`, and
         // between two integers it is the interval `[a, b)`. GCT has no types, so the construct
         // is handed on as one call of the compiler's own name for it, which the GIR builder
@@ -3583,7 +3583,7 @@ node_ptr_t Builder::visitStaticLoop(const AST::node_ptr_t &ast) {
     }
     // A written sequence's round name is a value, never a type: `for i in 0..5` binds the round's
     // integer and `for x in ts` binds the element `ts.[i]`, whose type is the type at that
-    //  position. It is bound by the graph builder at each round,
+    // position. It is bound by the graph builder at each round,
     // as the `j` of `indices` is, so nothing of it goes into the type scope here; a body that uses
     // it where a type belongs writes `typeof x`, and `fields T` is the spelling that gives a
     // field's name and type.
@@ -3707,10 +3707,10 @@ node_ptr_t Builder::visitLiteral(const AST::node_ptr_t &ast) {
     case LiteralType::String: {
         // Decode escaped characters in the string and create a StringData object. A formatted
         // string's pattern is decoded with `doubleBraces`: a brace that an escape produces is a
-        //  literal brace of that pattern, and `format` must see it doubled.
+        // literal brace of that pattern, and `format` must see it doubled.
         //
         // Every escape form is decoded here, so an unknown escape is reported here too, once per
-        //  spelling, in the lexical catalogue: an octal escape is simply unknown, and so is
+        // spelling, in the lexical catalogue: an octal escape is simply unknown, and so is
         // `\q`. The text keeps the pair as written; a warning does not stop the program.
         std::vector<std::string> unknownEscapes;
         std::string decoded = decodeEscapes(str, literal->fromFormattedString(), &unknownEscapes);
@@ -3781,7 +3781,7 @@ node_ptr_t Builder::visitLiteral(const AST::node_ptr_t &ast) {
             break;
         case camel::utils::NumberTextStatus::Underflow:
             // A nonzero number too small to tell from zero is a value the type cannot hold, not
-            //  zero (design principles 5.1): the literal is refused with that reason.
+            // zero (design principles 5.1): the literal is refused with that reason.
             diags_->of(SemanticDiag::LiteralNotRepresentable)
                 .at(ast->load()->tokenRange())
                 .commit(str, "float", "too small to be represented (the nearest value is zero)");
@@ -3971,7 +3971,7 @@ node_ptr_t Builder::visitArrayData(const AST::node_ptr_t &ast) {
     // The value each element was written as is kept even when another element is computed: the
     // position of the whole literal decides the type of the elements it did write, and an element
     // converted from the double it was lowered to instead of from the value written is rounded
-    //  twice (design principles 5.1; the rule on
+    // twice (design principles 5.1; the rule on
     // `expected-type-through-literals-and-calls`, item 3). A computed element has no value of
     // its own, but it keeps its position, which is where it is reported.
     tree_->setLiteralElements(arrayData, std::move(literalElements));
@@ -4085,7 +4085,7 @@ bool Builder::rejectTextInLiteral(
     }
     // A text where the position expects another type is a type mismatch, not a literal that
     // does not fit: there is no implicit text-to-number (or text-to-anything) conversion
-    //  (design principles 5.1). The element's own position is where it is written, as
+    // (design principles 5.1). The element's own position is where it is written, as
     // reports an element whose value does not fit (see the GIR builder's literalElementInType).
     if (data->type()->code() == TypeCode::String) {
         diags_->of(SemanticDiag::DeclaredTypeMismatch)
@@ -4220,7 +4220,7 @@ node_ptr_t Builder::declaredValue(const node_ptr_t &value, Type *type, const AST
         // principles 5.1). Converting its data now would keep the type its values give it.
         if (!isUnresolvedLiteral(value->data())) {
             // A text field of a composite literal is reported at the field itself, as a type
-            //  mismatch; a lone text value keeps the declaration's position, as the same check reports it
+            // mismatch; a lone text value keeps the declaration's position, as the same check reports it
             // (`let x: int = '42'` is a mismatch at the declaration), and anything else the
             // conversion cannot take is reported for the literal as a whole below.
             if (isComposite(value->data()->type()->code()) &&
@@ -4276,7 +4276,7 @@ node_ptr_t Builder::visitDataInto(const AST::node_ptr_t &ast, Type *type, bool &
             // expected type too (`let t: (f32, f32) = (1.0, 2.0)`; design principles 5.1). Built
             // as the declared type, each element is converted from the value it was written as;
             // left to declaredValue, the whole tuple was converted from the doubles its elements
-            //  had been lowered to, and every element was rounded twice (
+            // had been lowered to, and every element was rounded twice (
             // on `expected-type-through-literals-and-calls`, item 3).
             return visitTupleInto(ast, type, entered);
         }
@@ -4370,11 +4370,11 @@ node_ptr_t Builder::visitArrayInto(const AST::node_ptr_t &ast, Type *arrayType, 
     ArrayDataFactory factory;
     // The position names the element type: the literal is that array even where an element is
     // a computed value (`[[a, b]]` for an `int[][]`), so the type is not left to the elements
-    //  to fix (and a nested literal is not read as the type of an outer position).
+    // to fix (and a nested literal is not read as the type of an outer position).
     factory.setElemType(elemType);
     bool dangling       = false;
     node_ptr_t execNode = makeExec(false, true);
-    //  Each element's position, as the ordinary build keeps it.
+    // Each element's position, as the ordinary build keeps it.
     std::vector<Tree::LiteralElement> literalElements;
     for (const auto &item : *ast->atAs<AST::RepeatedLoad>(0)) {
         bool nested         = false;
@@ -4398,7 +4398,7 @@ node_ptr_t Builder::visitArrayInto(const AST::node_ptr_t &ast, Type *arrayType, 
     // Each element's value as it was written is kept even when another element of the literal is
     // computed (design principles 5.1): the position of the whole literal decides the type of
     // the elements it did write, and an element converted from the double it was lowered to
-    //  instead of from the value written is rounded twice (the rule on
+    // instead of from the value written is rounded twice (the rule on
     // `expected-type-through-literals-and-calls`, item 3). A computed element has no value of
     // its own, but it keeps its position, which is where it is reported.
     tree_->setLiteralElements(built, std::move(literalElements));
@@ -4442,7 +4442,7 @@ node_ptr_t Builder::visitTupleInto(const AST::node_ptr_t &ast, Type *tupleType, 
     // no type of its own, and the position's type is what the remaining elements are converted
     // into. Left to the factory, the type would come from the elements — the hole becoming
     // whatever a hole is — and a literal nested in another literal would then fall back to its
-    //  ordinary build and lose the position's element types (design principles 5.1
+    // ordinary build and lose the position's element types (design principles 5.1
     // of 2026-10-23 on `expected-type-through-literals-and-calls`, item 3).
     data_vec_t data;
     bool dangling       = false;
@@ -4507,7 +4507,7 @@ node_ptr_t Builder::visitStructInto(const AST::node_ptr_t &ast, Type *structType
     // not the order they are written in: a literal at a position of a struct type is a value
     // of that type (design principles 5.2), so `{ y: 1, x: 2 }` at `Point` is a `Point` whose
     // fields are `x, y`. Each field keeps the position it was written at, for diagnostics
-    //  a field the field type cannot take is reported at the field, not at the
+    // a field the field type cannot take is reported at the field, not at the
     // literal.
     std::unordered_map<std::string, Tree::LiteralElement> literalElementsByName;
     for (size_t i = 0; i < sType->size(); ++i) {
@@ -4625,7 +4625,7 @@ node_ptr_t Builder::visitStructData(const AST::node_ptr_t &ast) {
     {
         // The value every field was written as is kept even when another field is computed: the
         // position of the whole literal decides each written field's type, and a field converted
-        //  from the double it was lowered to is rounded twice (design principles 5.1
+        // from the double it was lowered to is rounded twice (design principles 5.1
         // of 2026-10-23 on `expected-type-through-literals-and-calls`, item 3).
         const auto object = std::dynamic_pointer_cast<StructData>(structData);
         std::vector<Tree::LiteralElement> literalElements;
@@ -4659,7 +4659,7 @@ node_ptr_t Builder::visitTupleData(const AST::node_ptr_t &ast) {
     TupleDataFactory factory;
     bool dangling       = false;
     node_ptr_t execNode = makeExec(false, true);
-    //  Each element's position and exact value, as for an array or struct literal :
+    // Each element's position and exact value, as for an array or struct literal:
     // a tuple is positional, and an element the element type cannot take is reported at the
     // element.
     std::vector<Tree::LiteralElement> literalElements;
@@ -4673,7 +4673,7 @@ node_ptr_t Builder::visitTupleData(const AST::node_ptr_t &ast) {
 
     auto tupleData = factory.build();
     // As for an array or a struct literal: each element's value as written is kept even when
-    //  another element is computed (design principles 5.1; the rule on
+    // another element is computed (design principles 5.1; the rule on
     // `expected-type-through-literals-and-calls`, item 3).
     tree_->setLiteralElements(tupleData, std::move(literalElements));
     node_ptr_t res = tree_->makeData(tupleData);
@@ -4846,14 +4846,14 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
     // A declaration without a body declares an operator of a C++ module (design principles 6.4):
     // it has a signature and nothing to build, so the FUNC carries its type alone and is marked
     // as a declaration. The graph builder turns it into an operator group instead of a graph
-    //  (step 1) -- unless its condition is the pass applicability, in which case it
+    // (step 1) -- unless its condition is the pass applicability, in which case it
     // declares a pass and the pipeline reads it (design principles 9.3).
     const bool nativeDeclaration = ast->size() < 2;
     // A `.cml` found beside a `.cmo` of the same name is that C++ module's *declaration*
     // module, in which the C++ operators are declared; it may also hold Camel definitions
-    //  (rule impl-kernel-site, 2026-10-23: "声明模块可以有函数体，`DeclarationModuleHasBody`
+    // (rule impl-kernel-site, 2026-10-23: "声明模块可以有函数体，`DeclarationModuleHasBody`
     // 删除"). One module is the pair: declarations and Camel definitions in the `.cml`, the
-    //  native kernels they name in the `.cmo` (design principles 10.4).
+    // native kernels they name in the `.cmo` (design principles 10.4).
     if (nativeDeclaration) {
         if (!funcType->hasExitType()) {
             diags_->of(SemanticDiag::NativeDeclarationIncomplete)
@@ -5203,7 +5203,7 @@ Type *Builder::visitArrayType(const AST::node_ptr_t &ast) {
             throw BuildAbortException();
         }
         // A stream is consumed once and the elements of an array are read more than once, so
-        //  `T..[3]` has no meaning (design principles 5.4).
+        // `T..[3]` has no meaning (design principles 5.4).
         // The dimension is read against the stream here, so the element of the array the
         // dimension would make is refused before the array is built.
         if (type != nullptr && type->code() == TypeCode::Stream) {
@@ -5429,7 +5429,7 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
             dimBindAllowed_ = false;
         }
 
-        //  The default of a `with` parameter (design principles 4.4). The
+        // The default of a `with` parameter (design principles 4.4). The
         // expression is lowered here, in the scope of the signature; GIR evaluates it where the
         // declaration is, once, when it builds the graph (visitFuncNode / visitDeclNode).
         node_ptr_t defaultExpr = nullptr;
@@ -5471,7 +5471,7 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
             // Only a function declaration offers `constas` in its parameter list (the parser
             // admits it nowhere else). A declaration may have any number of them, in any
             // position, and their values are not read by a type necessarily: the body may use
-            //  them (design principles 5.4).
+            // them (design principles 5.4).
             if (!signature) {
                 ASSERT(false, "A constas parameter outside a function declaration.");
                 diags_->of(SemanticDiag::FeatureNotSupported)
@@ -5534,7 +5534,7 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
             type            = paramTypeOf(paramPair, name);
             dimBindAllowed_ = false;
         }
-        //  The default of an ordinary parameter (design principles 4.4):
+        // The default of an ordinary parameter (design principles 4.4):
         // the same rule as for a `with` parameter. The expression is lowered here, in the
         // scope of the signature; GIR evaluates it where the declaration is, once, when it
         // builds the graph, and fills the value into each call that leaves the parameter out.
@@ -5792,7 +5792,7 @@ Type *Builder::visitSpecType(const AST::node_ptr_t &ast) {
         Type *keyType = arguments.front().type;
         // A stream is consumed once and the element of a set, like the key of a map, is read
         // more than once: the linearity refusal says so before the key rules look at what the
-        //  type is otherwise (design principles 5.4).
+        // type is otherwise (design principles 5.4).
         if (keyType->code() == TypeCode::Stream) {
             diags_->of(SemanticDiag::StreamInContainer)
                 .at(ast->load()->tokenRange())
@@ -5842,7 +5842,7 @@ Type *Builder::visitSpecType(const AST::node_ptr_t &ast) {
         throw BuildAbortException();
     }
     // A stream is consumed once, and the elements of a map or a set are read more than once
-    //  (design principles 5.4). The element of a set and the
+    // (design principles 5.4). The element of a set and the
     // key of a map are refused by the key rules already ('values of this type have no order');
     // this is the value of a map, which no key rule looks at.
     if (const CollectionType *coll = asCollectionTypeOrPrototype(res); coll != nullptr) {
@@ -6152,7 +6152,7 @@ Type *Builder::lookupType(const Reference &ref, const AST::node_ptr_t &ast) {
     // The types the module itself exports without a type declaration in this file: a `.cml`
     // beside a `.cmo` is that C++ module's declaration module, so what the C++ module exports
     // is directly visible here, as if it were written at the top of this file (design
-    //  principles 6.4, rule 1).
+    // principles 6.4, rule 1).
     if (const auto exported = module_->getExportedType(Reference(own)); exported.has_value()) {
         return exported.value();
     }

@@ -111,18 +111,18 @@ expect_stdout_exact = "kernel=42,2,0,1 body=42,2,0,1 diff=0,0,0,0\n"
 # beside the operators, or a test-scoped way to declare another module's operator; both are the
 # language author's call.
 #
-#  The rule (`docs/handover/reviews/questions-2026-10-23.md`,
+# The rule (`docs/handover/reviews/questions-2026-10-23.md`,
 # 「## impl-kernel-site」) chose the first of the two, and removed both walls on the way
-#  (`docs/handover/reviews/H141-H213.md`, Q2): 「选 (a)，而且取宽的那一种：声明模块可以有函数体，
+# (`docs/handover/reviews/H141-H213.md`, Q2): 「选 (a)，而且取宽的那一种：声明模块可以有函数体，
 # `DeclarationModuleHasBody` 删除」 and 「泛型函数可以带 `#impl`」 — the kernel is a body-less
 # declaration with the function's own type parameters, the executor is chosen at instantiation
-#  per, an instance whose type has no executor runs the body (the body is the semantics, so
+# per, an instance whose type has no executor runs the body (the body is the semantics, so
 # the result is the same), and `std::profile` says which path that instance took. So the
 # standard library gets its first `#impl` kernels: the tensor module's own `stdlib/tensor.cml`
 # declares the kernel beside the declaration and holds the Camel definition (its `.cmo` is the
-#  same module), and a generic function may carry one (Adam, once `optim` lands: step
+# same module), and a generic function may carry one (Adam, once `optim` lands: step
 #  14; the rule kept `nn:adam` out of this batch). `impl.kernel_site` states what the two
-#  rule items can now be written as; `impl.generic_executor` is the generic rule itself.
+# rule items can now be written as; `impl.generic_executor` is the generic rule itself.
 
 # ---- The optimizer: a direct call is not a call to inline ----
 

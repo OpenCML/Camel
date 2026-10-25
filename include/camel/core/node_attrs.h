@@ -190,7 +190,7 @@ std::string text(AttrSetId set);
  * not hold (or holds with `Refused` for ONNX), Tiles does the same, and `inspect --attrs`
  * checks the table against every attribute key the loaded modules interned. A new key, or a new
  * value of a key with a closed set (`tensor.kernel=...`), therefore fails until classified in
- *  all four consumers; that is the class guard.
+ * all four consumers; that is the class guard.
  */
 enum class Fate : uint8_t { Carried, Refused, NotOnANode };
 

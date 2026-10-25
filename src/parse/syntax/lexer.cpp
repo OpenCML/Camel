@@ -522,7 +522,7 @@ TokenBuffer Lexer::tokenizeImpl(std::string source, size_t from, size_t to) {
             // digits, `0o` and octal digits; then an exponent on a decimal number. A decimal
             // digit run that starts with `0` and has more than that one digit (`09`, `077`) is
             // not a number token: it is refused here as a whole, with a located error, instead
-            //  of being cut into `0` and `9`. Octal is written `0o77`. A prefixed form
+            // of being cut into `0` and `9`. Octal is written `0o77`. A prefixed form
             // with no digit of its base is refused the same way instead of being cut.
             size_t end   = j;
             bool invalid = false;

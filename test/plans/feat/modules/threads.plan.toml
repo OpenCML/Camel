@@ -84,7 +84,7 @@ expect_exit = 0
 expect_stdout_exact = "threads=4 expected=4\n"
 
 # `--timeit` builds its own Context for every iteration (tools/camel-cli/timeit.cpp), and until
-#  it built it without `EntryConfig::maxThreads`: the flag was accepted and the pools of the
+# it built it without `EntryConfig::maxThreads`: the flag was accepted and the pools of the
 # timed run took the machine's core count instead, so `camel -t 4 --timeit std::prl/1 ...` measured
 # a width nobody asked for. The two cases below pin the flag on that path, and each one's assertion
 # prints the number the timed run actually saw, so a red names it. What they read is not a time:
@@ -165,8 +165,8 @@ expect_exit = 0
 compare_to = "values.cli_one"
 compare_fields = ["exit_code", "stdout_normalized"]
 
-#  The library GEMM's own pool is one thread (gemm.cpp): the tensor pool spends the run's
-#  budget, and a second pool beside it competed for the same cores on a loaded host (measured
+# The library GEMM's own pool is one thread (gemm.cpp): the tensor pool spends the run's
+# budget, and a second pool beside it competed for the same cores on a loaded host (measured
 # the uncapped library losing to the canonical kernel from four threads up). So a whole-work
 # product splits its output rows over the tensor pool, one library thread per chunk: `plain` is
 # the run's number again (rows only, every output element's sum stays inside one call), while
@@ -175,7 +175,7 @@ compare_fields = ["exit_code", "stdout_normalized"]
 # (`gemm_threads`, `gemm_library_threads`) and exits non-zero when they are not those; a wall
 # clock takes no part in it.
 #
-#  The contract that came back: before `plain` had to equal `-t`, because the library took the
+# The contract that came back: before `plain` had to equal `-t`, because the library took the
 # whole budget for a whole-work product; with the library capped to one thread `plain` was 1 at
 # every `-t` (that was the price of one pool); with the rows split over the pool `plain` is the
 # run's number again, and the library's one thread is reported separately (`plain_lib`), not folded
@@ -267,7 +267,7 @@ assert(Number(m[5]) === (m[7] === 'cblas' ? 1 : 0), 'the batched product reports
 # The process's own thread count, read from the operating system (`process.thread_count`), after a
 # whole-work library product and a batched product have created every pool the run will have. At
 # `-t 1` the run is the caller alone; at 4, 8 and 16 the tensor pool's workers are the only others.
-#  Before the library's constructor had already created 31 threads at `-t 1`, so all four cases
+# Before the library's constructor had already created 31 threads at `-t 1`, so all four cases
 # were red by a wide margin.
 
 [[tests]]

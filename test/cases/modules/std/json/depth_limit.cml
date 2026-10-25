@@ -1,6 +1,6 @@
 /**
  * The depth limit of a JSON document is a fixed constant, not an environment variable (the
- *  rule on question 4; design principles 11.2). The constant is named once, as
+ * rule on question 4; design principles 11.2). The constant is named once, as
  * `kJsonMaxDepth` in modules/json/operators.cpp, and this case pins its value from both sides:
  * a document of exactly 10000 levels decodes, and one of 10001 levels is the error value
  * JsonTooDeep at the bracket that goes too deep (line 1, column 10001). Raising the constant

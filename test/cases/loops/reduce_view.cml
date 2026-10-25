@@ -1,4 +1,4 @@
-//  a value that survives an element is never a compact-element view.
+// a value that survives an element is never a compact-element view.
 //
 // `reduce` keeps its accumulator across rounds. The element callback may return the element it
 // was given (`(a, b) => if b.1 > a.1 then b else a`), and a compact-element view is tied to the

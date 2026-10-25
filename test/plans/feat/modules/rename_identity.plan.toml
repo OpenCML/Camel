@@ -4,7 +4,7 @@ tier = "fast"
 tags = ["feat", "modules", "rename", "identity"]
 
 # A rename is a spelling change: the graph an unchanged program produces is the same before and
-#  after it, apart from the module name in the operator URIs. Each sample holds
+# after it, apart from the module name in the operator URIs. Each sample holds
 # literals only and is dumped with `std::jgir`, a translation pass, so nothing is executed and the
 # graph does not depend on the machine. `identity.mjs` replaces the module name in every string of
 # the JSON document and compares its digest with the one recorded before the rename.

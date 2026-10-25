@@ -186,10 +186,10 @@ void checkLoopSourceCache() {
     std::cout << "tiles loop source cache: exact domains, embedded bits, bindings and recursive contracts passed\n";
 }
 
-///  `tensor:cast_like` never reaches a plan. The compiler aliases it when the element
+/// `tensor:cast_like` never reaches a plan. The compiler aliases it when the element
 /// types already agree and raises UnsupportedComputation for a conversion, which keeps that
 /// region on the CPU (notes/core-semantics-map.md). A plan that names it is either a scheduler
-///  extension or a compiler regression; step 5 replaces this expectation with the device
+/// extension or a compiler regression; step 5 replaces this expectation with the device
 /// conversion test.
 void checkCastLikeBoundary() {
     Program same;
@@ -198,7 +198,7 @@ void checkCastLikeBoundary() {
                   {.op = "cast_like", .shape = {2}, .inputs = {0, 1}}};
     same.outputs = {2};
     rejects(same, [](auto &) {}, "unknown operation");
-    //  Only f64 is the other element type today; bool/int64 tensor storage arrives with
+    // Only f64 is the other element type today; bool/int64 tensor storage arrives with
     // step 5, and the same rejection must hold for them.
     auto conversion = same;
     conversion.nodes[0] = Node{.op = "input", .dtype = DType::F64, .scalarBits = 0};

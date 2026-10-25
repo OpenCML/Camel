@@ -152,7 +152,7 @@ std::vector<JitBlocker> collectBlockers(const CompilationUnit &unit, bool firstO
 constexpr size_t kMaxRegisterArgs = 4;
 
 // A loop of regions whose three events (LBEG, LTST, LEND) are in the unit, and whether the rounds
-//  of it are lowered to native code instead of calls of the loop helpers of trampoline.h.
+// of it are lowered to native code instead of calls of the loop helpers of trampoline.h.
 // The pcs are the ones the events were emitted at (compile.cpp): the LBEG starts the loop, the
 // LTST runs after the condition's region, the LEND after the body's region, and the LEND jumps
 // back to the first instruction of a round when another one follows.
@@ -1558,7 +1558,7 @@ X64Backend::LowerResult X64Backend::compileBytecodeWith(
         // when the loop stops, LEND back to the first instruction of a round when another one
         // follows. Both events are barriers for the slot cache (the helpers write the frame).
         //
-        //  Where the round's shape allows it (LoopRound), the two events a round has are
+        // Where the round's shape allows it (LoopRound), the two events a round has are
         // lowered instead: the test is a load and a conditional jump, the back edge a direct
         // jump, the state binding slot copies, and the round counter is not counted at all (no
         // instruction of such a round reads it; it becomes -1 on the stop path, which is what

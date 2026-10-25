@@ -1,6 +1,6 @@
 /**
  * A composite literal is rounded once into the type of its position, wherever it is written
- *  (design principles 5.1; the rule on
+ * (design principles 5.1; the rule on
  * `expected-type-through-literals-and-calls`, item 3): the same value below, written in a
  * declaration, in a `return`, in a struct field, in an array and in a declared array, prints
  * the same 1.00000012. A tuple literal in a declaration position rounded through the double it

@@ -217,7 +217,7 @@ case = "../../../cases/consistency/values/deep_enum_chain.cml"
 golden = "golden/deep_enum_chain.txt"
 # Out of the poison sweep (docs/technical/24): poisoning moves the young generation at every
 # safepoint, and a million nodes built one per safepoint turn that into quadratic copying
-#  (measured: over the 200 s timeout baseline). The program still runs in this plan.
+# (measured: over the 200 s timeout baseline). The program still runs in this plan.
 sweep = false
 
 [[tests]]

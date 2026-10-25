@@ -1,7 +1,7 @@
 /**
  * A training-style loop keeps its peak near its live set. The model is a `[width, 4]` tensor,
  * the batch `[batch, width]`, and each step computes the integer-label softmax cross entropy of
- *  `X @ w` through `grad` and applies the gradient (the shape section 8 shows: the labels are
+ * `X @ w` through `grad` and applies the gradient (the shape section 8 shows: the labels are
  * a tensor cast to int64 inside the differentiated function, which the discrete-value rule now
  * accepts). The batch and the model stay alive; the logits, the gradient and the updated model
  * of each step are garbage. The high-water mark is the live set plus one pacing window, and it

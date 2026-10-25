@@ -1,6 +1,6 @@
 /**
  * A stream is linear: it is consumed once, and the elements of an array are read more than once
- *  (design principles 5.4; the rule: the restriction on `T..[3]` comes
+ * (design principles 5.4; the rule: the restriction on `T..[3]` comes
  * from linearity, and the suffix reads left to right, so the spelling is `(int..)[3]`). The
  * dimension is read against the stream and the array is refused by name
  * (SemanticDiag::StreamInContainer) - never built, never silently read as `int..` of `[3]`.

@@ -1,5 +1,5 @@
 /**
- *  The arms of a generic kernel, written in Camel (design principles 10.4; one operator,
+ * The arms of a generic kernel, written in Camel (design principles 10.4; one operator,
  * per-type executors). A kernel declared with the function's own type parameter can be
  * instantiated with every element type the function admits, so which instances it implements is
  * what its own applicability condition says (`when`, design principles 4.4): `add_kernel` and

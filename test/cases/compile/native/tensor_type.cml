@@ -1,7 +1,7 @@
 /**
  * A string where the declaration of `to_bytes` takes a tensor: the call is refused at the
  * declaration's type, and the message prints its own parameter name (`t`) — the one source is
- *  `stdlib/tensor.cml`, not the C++ module.
+ * `stdlib/tensor.cml`, not the C++ module.
  */
 module tensor_type
 

@@ -2,7 +2,7 @@
  * The overloads of one name have to name the parameter at a position the same way, and the rule
  * holds for the `with` parameters as for the ordinary ones: the first `with` parameter of `show` is
  * `rounds` in one declaration and `iters` in the other, so `rounds` names no one parameter of
- *  `show` (design principles 4.4).
+ * `show` (design principles 4.4).
  */
 module with_overload_names
 

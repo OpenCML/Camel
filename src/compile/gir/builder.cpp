@@ -76,7 +76,7 @@ void Builder::buildEntryCall() {
                 // it: a library built as a program of its own (`buildLibraryEntry`: a Camel pass
                 // compiled on demand, such as stdlib/rules.cml) has its own entry function, and
                 // recording it would move every later diagnostic about the running program to
-                //  that library's source.
+                // that library's source.
                 if (libraryEntryFunction_.empty()) {
                     sourceContext->debugMap().registerEntryOrigin(mainOrigin);
                 }
@@ -310,7 +310,7 @@ void Builder::rejectRedeclaredFunction(
             // Two declarations of one name with the same parameters are told apart by their
             // conditions, if they write any: `when` is the applicability condition of an
             // overload (design principles 4.4), so two whose conditions exclude each other cover
-            //  one family of argument types each and are overloads (
+            // one family of argument types each and are overloads (
             // of 2026-10-24 on `impl-declaration-arms`,
             // docs/handover/reviews/questions-2026-10-23.md: the same check applies to every
             // same-named overload that has `when`, ordinary functions with bodies included).
@@ -608,7 +608,7 @@ void_ptr_t Builder::visitDeclNode(const GCT::node_ptr_t &gct) {
             return nullptr;
         }
         // A body-less declaration declares an operator of a C++ module (design principles 6.4):
-        //  it is checked and kept as an operator rule, not as a graph (step 1).
+        // it is checked and kept as an operator rule, not as a graph (step 1).
         // A `constas` parameter belongs to the declaration's compile-time identity, which the
         // native declaration mechanism does not carry (design principles 5.4). A pass-shaped
         // declaration is not an operator; it was handled above.
@@ -650,13 +650,13 @@ void_ptr_t Builder::visitDeclNode(const GCT::node_ptr_t &gct) {
     if (const auto *when = GCT::Tree::of(gct)->whenOf(gct)) {
         // The declaration's condition, kept while the declarations of one name are read: the
         // next declaration of the name is compared with this one before either body is built
-        //  (`rejectRedeclaredFunction`; design principles 4.4, and the rule on
+        // (`rejectRedeclaredFunction`; design principles 4.4, and the rule on
         // `impl-declaration-arms`).
         whenClauses_[graph.get()] = *when;
     }
     // The declaration's parameter defaults are evaluated here, where the declaration is,
     // before any body is built: a call written above the definition fills them too, and every
-    //  call shares the one value (design principles 4.4).
+    // call shares the one value (design principles 4.4).
     evaluateDefaults(gct, funcType, graph.get(), false);
     leaveScope();
 
@@ -676,7 +676,7 @@ compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
     FunctionType *funcType   = tt::as_ptr<FunctionType>(type);
     if (gct->nativeDeclaration()) {
         // A body-less declaration declares an operator rule; there is no body to build
-        //  (visitDeclNode, step 1).
+        // (visitDeclNode, step 1).
         LEAVE("FUNC");
         return nullptr;
     }
@@ -956,7 +956,7 @@ void Builder::buildFuncBody(
         bodyStates_[graph.get()] = BodyState::Open;
         // The defaults of the declaration's parameters, in the scope of its body: a
         // declaration at a module's top level was evaluated already, where it is written
-        //  (visitDeclNode), and an instance of a generic one takes its template's.
+        // (visitDeclNode), and an instance of a generic one takes its template's.
         evaluateDefaults(gct, funcType, graph.get(), true);
         // A parameter destructured as a tuple: the port is the tuple, and the names take its
         // elements (`((a, b)) => ...` binds as `let (a, b) = p` does). The parameter is one
@@ -1185,7 +1185,7 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct, Type *tailExpec
             } else if (!gct->operands()) {
                 // A statement whose value nothing takes is in no position: the type the
                 // block's value stands at does not reach inside it, or a `let` written before
-                //  the value of a `T?` arm would build its initializer in that `T?`. An
+                // the value of a `T?` arm would build its initializer in that `T?`. An
                 // operand scope (`gct->operands()`) is in the position of the element or
                 // field it builds, and keeps it.
                 ExpectedValueScope statementScope(expectedValueType_, nullptr);

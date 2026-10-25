@@ -6,7 +6,7 @@
  * Fails when a reader-facing page teaches a pass invocation the command line refuses.
  *
  * A pass parameter is a `key=value` word after the pass name (design principles 9.3). The
- *  rule that wrote that down deleted three other spellings at once: `std::opt(safe_fp=true)`,
+ * rule that wrote that down deleted three other spellings at once: `std::opt(safe_fp=true)`,
  * the colon spelling `safe_fp: true`, and positional parameters. A page that still shows one is
  * a defect by the same reasoning: the reader copies a spelling the tool refuses with
  * `RuntimeDiag::InvalidPassParameter`.
@@ -515,7 +515,7 @@ const PASS_NAMES = new Set()
 
 const BY_LENGTH = [...PASS_NAMES].sort((a, b) => b.length - a.length)
 const escape = (name) => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-//  A known pass name immediately followed by `(`: the spelling the rule deleted.
+// A known pass name immediately followed by `(`: the spelling the rule deleted.
 const PAREN_FORM = new RegExp(`(${BY_LENGTH.map(escape).join('|')})\\(`)
 // A word that can be a specification's name: a qualified pass name, the shape a module's pass
 // has whether or not this build registers it (`tiles::compile`, `mymod::report`).

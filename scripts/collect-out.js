@@ -277,7 +277,7 @@ function collect(config, tag) {
         }
     }
 
-    //  The Python binding: the CPython extension module, next to libs/ so the runpath
+    // The Python binding: the CPython extension module, next to libs/ so the runpath
     // `$ORIGIN/../libs` the build wrote finds libcamel in both layouts. Absent whenever the
     // configure found no Python development files, which is not a warning: the rest of the
     // install is complete without it.
@@ -303,7 +303,7 @@ function collect(config, tag) {
     if (fs.existsSync(stdlibSrc)) {
         fs.cpSync(stdlibSrc, stdlibDir, { recursive: true })
     }
-    //  The `.cmo` files this configure builds, from CMake's manifest. Never scan
+    // The `.cmo` files this configure builds, from CMake's manifest. Never scan
     // build/{libs,modules} for them: a module that was renamed or removed leaves its artifact
     // behind, and copying that forward is how a retired name kept resolving.
     const moduleFiles = moduleCmoFiles(config)

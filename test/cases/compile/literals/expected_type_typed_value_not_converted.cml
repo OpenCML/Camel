@@ -1,6 +1,6 @@
 /**
  * A value that already has a type is not converted by the expected type of the position: the
- *  expected type of a call moves a literal, never a value (design principles 5.1; the rule of
+ * expected type of a call moves a literal, never a value (design principles 5.1; the rule of
  * 2026-10-23 on `expected-type-through-literals-and-calls`). The `float[]` value here keeps its
  * type, so `T` is `float[]` and the call is a `float[]`; the `f32[]` declaration it is written in
  * refuses it, exactly as it did before the expected type was carried through the call. Nothing is

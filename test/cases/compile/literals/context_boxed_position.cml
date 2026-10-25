@@ -1,5 +1,5 @@
 /**
- *  Handover a position that takes a value by putting it into the form (`T?`, `T!`) takes
+ * Handover a position that takes a value by putting it into the form (`T?`, `T!`) takes
  * the value itself and the payload put into the form, so it does not determine which of the two
  * the value is (design principles 3.8, 5.2, `entersImplicitly`). A call standing in such a
  * position has the type its own arguments give it, and the form is put on at the position:

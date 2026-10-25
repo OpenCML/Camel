@@ -97,7 +97,7 @@ for (const name of GRAPHS) {
         assert(inputs.join(',') === `${constant}@1,x@0`, `'${name}' on the C++ side does not read the port and the constant ${constant}: ${inputs.join(',')}`)
         // The engine's form: the rule fired on that same node and the anchor was moved onto what its
         // right side wrote, which for `x + 0 => x` is the port. The operation, its constant and both
-        //  of its edges are gone and the graph exits at the port. This is the rule's own sentence
+        // of its edges are gone and the graph exits at the port. This is the rule's own sentence
         // about the handover (`rule-conditions-and-policy` item 3), and the `rules` lane holds the
         // same rewriting of a graph's return expression (`coefficients` and `chain` fold there).
         assert(lib.nodes.length === 1 && lib.edges.length === 0, `'${name}' on the library side is ${lib.nodes.length} nodes and ${lib.edges.length} edges, not the recorded sole port`)
@@ -107,7 +107,7 @@ for (const name of GRAPHS) {
     }
     // Every graph that is not one of the two anchored forms is the same graph on the two sides,
     // `effect_mul_zero` included: it was a difference until the engine refused the match that
-    //  dropped the print (design principles 9.7, the `rule-drops-effect` rule), so this comparison
+    // dropped the print (design principles 9.7, the `rule-drops-effect` rule), so this comparison
     // is what keeps it an agreement, and a rule or an engine change that drops a live effect again
     // fails here. The assertions this corpus used to make about the library side -- its sole
     // arithmetic gone, two prints with one of them left without a user -- described the violation

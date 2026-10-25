@@ -2,7 +2,7 @@
 // Copyright (c) the OpenCML Organization
 // SPDX-License-Identifier: MIT
 
-//  `npm run clean`.
+// `npm run clean`.
 //
 // A build, an install and a test run each leave a tree behind that no source file needs. This
 // command removes them, and it never needs a build: it only reads and deletes paths.

@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /**
- *  `npm run clean` removes exactly the four tiers it owns and nothing else.
+ * `npm run clean` removes exactly the four tiers it owns and nothing else.
  *
  * The case builds a checkout under `${test_tmp}` that looks like a used worktree: a build tree, a
  * `cmake-build-*` directory, three `out/<tag>` installs, two test run directories, the results
- *  log, source-tree pollution the guard reports, and a source declaration. Two files must
+ * log, source-tree pollution the guard reports, and a source declaration. Two files must
  * survive because they are source, not build output:
  *
  *   - `stdlib/keep.cml` — a declaration file (`stdlib/*.cml`);

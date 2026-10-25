@@ -1,5 +1,5 @@
 /**
- *  The rule column and the instance column are two facts, not one (slice S0; the rule of
+ * The rule column and the instance column are two facts, not one (slice S0; the rule of
  * 2026-10-24 on `verification-verdict-surface`, 2: a `CheckReport` row carries `rule` and
  * `instance`).
  *

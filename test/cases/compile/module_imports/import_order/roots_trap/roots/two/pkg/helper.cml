@@ -1,4 +1,4 @@
-///  trap 3: the second root's `pkg/` library; the same source, reached when this root comes
+/// trap 3: the second root's `pkg/` library; the same source, reached when this root comes
 /// first.
 module pkg_helper
 

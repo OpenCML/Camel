@@ -1,5 +1,5 @@
 /**
- *  The graph of an `indices` generator. is the hand-written expansion: one ACCS per
+ * The graph of an `indices` generator. is the hand-written expansion: one ACCS per
  * position, in order, and no SFOR, SLOOP, SACC or LOOP node. (A tuple comprehension of `j` is
  * covered by its value in `indices.cml`; its graph is the FILL of the positions.)
  */

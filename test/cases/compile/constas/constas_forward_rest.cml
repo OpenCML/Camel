@@ -1,6 +1,6 @@
 /**
  * A `constas` value is handed on, together with the rest parameter, to a declaration that takes
- *  both (rule, 2026-10-22): `columnOf("w", a, b)` is `column<"w">(a, b)`. This is the shape
+ * both (rule, 2026-10-22): `columnOf("w", a, b)` is `column<"w">(a, b)`. This is the shape
  * the design's `tree_map` uses to reach `column(n, ts)` -- a wrapper that forwards the field name
  * it was given and the trees it was given.
  */

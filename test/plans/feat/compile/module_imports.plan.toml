@@ -231,9 +231,9 @@ expect_exit = 0
 expect_stdout_contains = ["return static_cast<int>(main_(0, 10));"]
 
 #  ---- whose directory an import resolves in ----
-#  put the importing module's own directory ahead of the global search roots, so that
+# put the importing module's own directory ahead of the global search roots, so that
 # stdlib/rules.cml's `import graph` finds stdlib/graph.cmo and not a same-named program of the
-#  entry directory. pins both sides of that rule in one directory holding a graph.cml.
+# entry directory. pins both sides of that rule in one directory holding a graph.cml.
 
 [[tests]]
 name = "imports.entry_dir_wins"
@@ -254,7 +254,7 @@ expect_exit = 0
 expect_stdout_exact = "42\n"
 
 #  ---- -I / --include adds module search roots ----
-#  Documented order since (design principles 10.2, docs/cli.md): a module's own directory,
+# Documented order since (design principles 10.2, docs/cli.md): a module's own directory,
 # then each -I directory in the order given, then CAMEL_PACKAGES, then CAMEL_MODULE_PATH, then
 # the standard library; the entry program follows the same rule, so the entry file's directory is
 # its own directory and is not a root for another module. `-I` paths are resolved against the
@@ -433,7 +433,7 @@ expect_output_contains = ["name=SyntaxDiag::UnexpectedToken", "Unexpected '/'", 
 
 #  ---- a relative spelling is a name, never a path ----
 # The grammar writes a relative module name as one to three leading dots before a dotted name
-# (`moduleName : ('.' | '..' | '...')? IDENTIFIER ('.' IDENTIFIER)*`), and the dots drop that many
+# (`moduleName: ('.' | '..' | '...')? IDENTIFIER ('.' IDENTIFIER)*`), and the dots drop that many
 # components from the importing module's own name (design principles 10.2). The resolved name is
 # looked up in the importing module's own directory and then the module roots; a spelling that
 # drops more components than the name has names nothing. Its spelling then reached the lookup as

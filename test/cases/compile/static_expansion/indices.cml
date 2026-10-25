@@ -1,5 +1,5 @@
 /**
- *  `indices`.: `static for (j) in indices ts` and `static loop... for j in
+ * `indices`. `static for (j) in indices ts` and `static loop... for j in
  * indices ts` walk the positions of a tuple value when the function is instantiated. `j` is an
  * ordinary `int` value and a compile-time key, the trip count is the tuple's arity, and a tuple
  * held by a type parameter gives a count known only at instantiation.

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
- *  `import` executes no code (design principles 3.1; the rule,
- *  in answer to `docs/technical/50_pyplot_cpython_init.md`; handover): importing `pyplot` or
+ * `import` executes no code (design principles 3.1; 
+ * in answer to `docs/technical/50_pyplot_cpython_init.md`; handover): importing `pyplot` or
  * `python` must not create the embedded CPython, and the first operator call must create it.
  *
  * The strongest honest proof is the environment, not a clock. CPython cannot start with a
@@ -154,7 +154,7 @@ for (const name of ['import_pyplot', 'import_python']) {
     )
 }
 
-//  2. The tool's observable from : the listing no longer depends on an interpreter.
+//  2. The tool's observable from: the listing no longer depends on an interpreter.
 {
     const r = camel(['inspect', '--ops', path.join(SCRATCH, 'import_pyplot.cml')], HOSTILE)
     check('`inspect --ops` on the import-only program exits 0', r.status === 0, `exit ${r.status}: ${r.stderr}`)

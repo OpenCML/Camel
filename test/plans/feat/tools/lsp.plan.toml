@@ -42,7 +42,7 @@ case = "../../../cases/tools/lsp/code_actions.test.mjs"
 name = "lsp.robustness"
 desc = "Malformed frames, empty and half-written documents, positions outside the text, UTF-16 positions on lines with Chinese text and emoji, a document of 20000 lines, a burst of edits, cancellation: every request is answered and the server stays up."
 case = "../../../cases/tools/lsp/robustness.test.mjs"
-#  Slow layer: measured 6.2 s in the full serial run.
+# Slow layer: measured 6.2 s in the full serial run.
 tier = "slow"
 timeout_ms = 180000
 

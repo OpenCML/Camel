@@ -1,7 +1,7 @@
 /**
  * The declarations of `time` are what an importer sees: `now` gives a float, `strftime` takes a
  * timestamp and a format and gives a string, `strptime` takes two strings and gives a float.
- *  Every call reaches the C++ operator (step 10).
+ * Every call reaches the C++ operator (step 10).
  */
 module time_declaration_import
 

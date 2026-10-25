@@ -4,7 +4,7 @@
 /// Type parameters whose text ends where the first name was required. The name is asked for and
 /// reported, and the declaration closes without one; reading the token that stands there put the
 /// terminal token in the tree twice and made `camel-parsecheck fuzz` report "the leaves of the
-///  tree are not the tokens of the text".
+/// tree are not the tokens of the text".
 module syntax_type_params_open
 
 func f::<

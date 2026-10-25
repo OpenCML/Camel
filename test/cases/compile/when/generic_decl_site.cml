@@ -2,7 +2,7 @@
  * A generic declaration's `when` condition is answered where the declaration is written, for the
  * half that does not depend on the type parameter: `is_integerr` is not a name this module can
  * see, so it is reported there, and `only_int` is called nowhere -- nothing had to instantiate it
- *  (the rule on `generic-rule-condition-unresolved-name`,
+ * (the rule on `generic-rule-condition-unresolved-name`,
  * docs/handover/reviews/questions-2026-10-23.md). Whether a well-formed condition *holds* is
  * still the instance's question: cases/compile/when/open_type.cml.
  */

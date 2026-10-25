@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * The other commands that compile the program must answer the same question `inspect` does
- *  did anything fail, and does the exit code say so? This case pins the paths
+ * did anything fail, and does the exit code say so? This case pins the paths
  * that were already right, so the shared decision in `tools/camel-cli/module_failures.h` cannot
  * drift back into a command that prints a result over a program that did not compile.
  *

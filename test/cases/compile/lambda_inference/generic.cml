@@ -2,7 +2,7 @@
  * A generic higher-order operator (`map`) now gives the lambda its expected type: the ordinary
  * arguments are typed first, so the operator's type variable is the element type when the
  * lambda is lowered, and its parameter type follows (design principles 5.9; the positions of the
- *  report, settled). `map` is declared by the builtin module, whose rule is a family of
+ * report, settled). `map` is declared by the builtin module, whose rule is a family of
  * types, so this case also covers the rule that a call fills its with-arguments' types.
  */
 module lambda_inference_generic

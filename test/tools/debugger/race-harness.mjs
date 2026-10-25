@@ -1,7 +1,7 @@
 // Copyright (c) the OpenCML Organization
 // SPDX-License-Identifier: MIT
 
-//  Load harness for the debug adapter <-> worker request lifecycle.
+// Load harness for the debug adapter <-> worker request lifecycle.
 //
 // The two DAP tests that flaked under load ("The program being debugged has ended." instead of
 // the answer to a `continue`/`nextPass`) are run many times in a row while N busy loops keep
@@ -19,10 +19,10 @@
 // harness does (their deadline is inherited, and a SIGTERM/SIGKILL of this process is also
 // covered by the children watching this process' pid).
 //
-//  The harness measures the load-dependent rate; it does not prove the mechanism. Before
+// The harness measures the load-dependent rate; it does not prove the mechanism. Before
 // the two tests were red about once in ten rounds on a loaded machine. A deterministic red
 // needs a probe that widens the window between the command's answer and the end of the run:
-//  A probe widens that window, and the rate with and without it is measured.
+// A probe widens that window, and the rate with and without it is measured.
 //
 // Exit code is 1 when at least one round failed, 0 otherwise: a CI job can use it directly,
 // but a green run proves nothing unless --rounds is large enough to have seen a red before.

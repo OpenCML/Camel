@@ -79,7 +79,7 @@ expect_output_contains = ["PassNotProvidedByModule", "Module 'identity' provides
 expect_output_not_contains = ["not found, available passes are"]
 timeout_ms = 10000
 
-#  A pass written in Camel has a top level of its own (task): the pass is the entry of a
+# A pass written in Camel has a top level of its own (task): the pass is the entry of a
 # program of its own, so a module-level `let` is computed before it runs, whether it is a
 # literal, an expression or the result of a call (design principles 10.1). Encoding the
 # function's graph alone left its capture ports unbound and they read 0.
@@ -252,7 +252,7 @@ timeout_ms = 20000
 # turns its test red. They are not a byte-for-byte differential: the C++ draft rewrite leaves the
 # neutral operand constant dead and attaches the parameter's source span to the port it keeps,
 # while the rule engine prunes the constant and its commit leaves the port without a span. Both are
-#  engine artefacts, not the laws; has the diff.
+# engine artefacts, not the laws; has the diff.
 
 [[tests]]
 name = "neutral_identities_by_std_opt_algebra"
@@ -357,9 +357,9 @@ verify_script = '''
 '''
 timeout_ms = 20000
 
-#  The precise limit of the reference mode, and the reason the C++ file is not deleted: it
+# The precise limit of the reference mode, and the reason the C++ file is not deleted: it
 # keeps the graph's named node (the C++ pass's isReplaceable), while the rule engine rewrites it and
-#  moves the anchor onto what the rule's right side wrote -- the handover
+# moves the anchor onto what the rule's right side wrote -- the handover
 # makes the engine's job and not a rule condition
 # (`docs/handover/reviews/questions-2026-10-23.md`, `rule-conditions-and-policy` item 3). Both facts
 # are pinned here so that neither can drift silently.
@@ -553,7 +553,7 @@ timeout_ms = 10000
 
 # Two passes of one pipeline, each importing (one under names of its own) the module the program
 # being transformed imports: every program declares the module into its own export table, so there
-#  are three programs using the graphs their own builder made (task).
+# are three programs using the graphs their own builder made (task).
 
 [[tests]]
 name = "two_camel_passes_share_a_module"
@@ -626,7 +626,7 @@ expect_output_not_contains = ["InvalidPassParameter", "42"]
 normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
 timeout_ms = 10000
 
-#  the scope decides what is printed, not only whether the command stops. A pass library
+# the scope decides what is printed, not only whether the command stops. A pass library
 # on the command line is not a module the program is made of, so a run whose program compiles
 # and whose pass library does not reports the library through `InvalidPassParameter` (its first
 # error as a secondary location) and never through a bare parse diagnostic of its own.
@@ -673,7 +673,7 @@ timeout_ms = 10000
 
 # The compile path: the program's own imported module fails, so the program fails as a program;
 # the pass library that was loaded with the pass list is outside the report and outside the
-#  error count. Before its parse error was printed as a second module's diagnostics and
+# error count. Before its parse error was printed as a second module's diagnostics and
 # counted in the summary (`camel: 3 errors`).
 
 [[tests]]
@@ -715,7 +715,7 @@ expect_output_not_contains = ["unparsable_pass_lib.cml", "\"moduleName\":\"unpar
 normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
 timeout_ms = 10000
 
-#  the remaining nuance: a `--timeit` iteration reports a failed pass library through the same
+# the remaining nuance: a `--timeit` iteration reports a failed pass library through the same
 # wrapper as a run. The iteration is a failed iteration (no elapsed time, no summary); the
 # library's raw parse diagnostic is not what the user sees.
 

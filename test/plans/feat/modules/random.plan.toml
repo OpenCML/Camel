@@ -3,7 +3,7 @@ order = 365
 tier = "fast"
 tags = ["feat", "modules", "random", "purity"]
 
-#  Keyed random: `random::key`, `split` and `permutation` are pure Philox4x32-10
+# Keyed random: `random::key`, `split` and `permutation` are pure Philox4x32-10
 # functions. The same key gives the same bits on all four schedulers, in translated C++ and on
 # every platform; nothing touches the process generator.
 

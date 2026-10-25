@@ -1,5 +1,5 @@
 /**
- *  Every rule the standard library exports, handed to `check` (rewrite design 5.2; the rule of
+ * Every rule the standard library exports, handed to `check` (rewrite design 5.2; the rule of
  * 2026-10-24 on `verification-verdict-surface`, §4: a test that lists rules by name drifts, so the
  * question "is every rule of the library checked at all?" has to be asked of the library as a whole
  * and not of a hand-written list).

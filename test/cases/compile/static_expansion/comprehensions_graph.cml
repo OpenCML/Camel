@@ -1,5 +1,5 @@
 /**
- *  The graph of a comprehension.: the rounds are straight-line ACCS nodes in
+ * The graph of a comprehension. the rounds are straight-line ACCS nodes in
  * declaration order and the values are packed by one FILL per struct or tuple; the
  * comprehension leaves no node of its own. `t.[n].[m]` reads its parent once and both inner
  * fields project the same node, as the C++ expansion of `tree_map` does.

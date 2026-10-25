@@ -283,7 +283,7 @@ class StaticForLoad : public DataLoad {
 };
 
 /// `static loop s1 = a1, ..., sk = ak for i in <序列> do body` (`in fields T`, `in indices ts`,
-///  or a sequence the compiler works out —, dropped the
+/// or a sequence the compiler works out —, dropped the
 /// parentheses the head used to carry): children [0] a Repeated Data of the first values, [1] the
 /// walked shape (a type for `fields`, a value for `indices` and for a sequence), [2] the body (a
 /// block). The load holds the names of the state and the generator's bindings; the rounds are the

@@ -1,6 +1,6 @@
 /**
  * The declaration of `this:zen` is what an importer sees: no parameters and a `string` result,
- *  read from `stdlib/this.cml`, and the call reaches the C++ operator (step 10;
+ * read from `stdlib/this.cml`, and the call reaches the C++ operator (step 10;
  * 
  */
 module this_declaration_import

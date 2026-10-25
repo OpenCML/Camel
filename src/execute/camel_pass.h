@@ -25,7 +25,7 @@
 
 namespace camel::execute {
 
-///  Why a `<module>::<pass>` name is not a pass, when the module is there: the passes the
+/// Why a `<module>::<pass>` name is not a pass, when the module is there: the passes the
 /// module does provide, and whether it declares the name without exporting it. A module that is
 /// not there, or that cannot be loaded or compiled, has its own answer (`problem`).
 struct MissingCamelPass {
@@ -44,7 +44,7 @@ struct MissingCamelPass {
 /// when given, is the library's first error as a secondary location when it has one.
 /// `missing`, when given, receives what the module provides and whether it declares the name
 /// without exporting it, when the module is there and the name is not one of its passes: the
-///  caller then reports the name against that list.
+/// caller then reports the name against that list.
 void registerCamelPass(
     const camel::core::context::context_ptr_t &ctx, const std::string &module,
     const std::string &function, std::string &problem,

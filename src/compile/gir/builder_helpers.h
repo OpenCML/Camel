@@ -434,7 +434,7 @@ inline bool shouldAddSyncCtrlLink(node_handle_t from, node_handle_t to) {
     // cell's own `holdsUnsharedArray` mark (`:op/assn_owned` sets it, `:var/get` and `:op/assn`
     // clear it, `:var/peek` leaves it), and a control edge carries order, not a use (design
     // principles 3.3, 3.4). The transitive reduction over such edges lives in `std::opt::order`;
-    //  measured that adding or removing one changes no copy.
+    // measured that adding or removing one changes no copy.
     return linkCheek(from, to) && !hasDirectDataDependency(from, to);
 }
 
@@ -757,7 +757,7 @@ enum class ConditionSeparation {
     Overlapping,
     /// A condition could not be answered for a registered type, or one of the two declarations
     /// writes no condition at all: nothing is known about the pair, and it is refused exactly as
-    ///  it was before this check ("求不出... 按今天的规则拒绝").
+    /// it was before this check ("求不出... 按今天的规则拒绝").
     NotComputable,
 };
 
@@ -766,7 +766,7 @@ enum class ConditionSeparation {
 /// `c128`, `bool`, `string`, `void`) -- and one sample of each shape a composite value has, so
 /// that a condition that tells shapes apart (`is_function::<T>()`) is asked about those too. A
 /// type a program declares (a struct, an enum, a module's own type) is not among them: the
-///  rule's check is per registered type, and a pair whose conditions overlap only on such a type
+/// rule's check is per registered type, and a pair whose conditions overlap only on such a type
 /// is not caught here.
 ///
 /// `int` comes first: a pair whose conditions do not depend on the type at all (two ordinary
@@ -821,11 +821,11 @@ using WhenConditionAsker =
     std::function<WhenResult(const camel::core::type::type_bindings_t &bindings)>;
 
 /// Whether the conditions `left` and `right` exclude each other over `registeredWhenTypes()`
-///  (design principles 4.4, 5.1). `overlappingType` is set
+/// (design principles 4.4, 5.1). `overlappingType` is set
 /// to the type that satisfies both when the answer is `Overlapping`.
 ///
 /// The conditions are asked about every registered type, with the type bound to the type
-///  variables each one writes: a type both conditions hold for is the overlap the check is about.
+/// variables each one writes: a type both conditions hold for is the overlap the check is about.
 /// An answer that is neither true nor false (`a predicate with a part that has no compile-time
 /// value`, a name the declaration does not make visible, ...) is not an answer, so the pair is
 /// refused by the caller as it was before.

@@ -389,7 +389,7 @@ std::string debugRunArrayTypeSelfTest() {
     require(
         static_cast<const ArrayType *>(shape({2, 3}))->rank() == 2,
         "Tensor<[2, 3]> did not keep its rank");
-    //  Every dimension removed: the type is its element type (the rank-zero rule in
+    // Every dimension removed: the type is its element type (the rank-zero rule in
     // docs/handover/reviews/questions-2026-10-23.md, section rank-zero-tensor): `Tensor<f32, []>`
     // is `f32`, and not a rank-zero array.
     require(both(f32, {}) == f32, "Tensor<f32, []> is not f32");

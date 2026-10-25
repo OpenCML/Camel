@@ -1,6 +1,6 @@
 /**
  * A call that leaves out a parameter with no default is reported (design principles 4.4,
- *  handover): `b` has no default, and the call gives `c` by name, so it cannot be `b`.
+ * handover): `b` has no default, and the call gives `c` by name, so it cannot be `b`.
  */
 module param_argument_missing
 

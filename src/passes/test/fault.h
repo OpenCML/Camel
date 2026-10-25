@@ -3,7 +3,7 @@
 
 /*
  * TEST-ONLY fault-injection passes. They are not part of any pipeline: they exist only to be
- *  named by a test's pipeline, so naming one is the whole switch (removed the environment
+ * named by a test's pipeline, so naming one is the whole switch (removed the environment
  * variable that used to gate them).
  *
  * `test::drop_call_argument` commits a structurally broken program on purpose: it removes the

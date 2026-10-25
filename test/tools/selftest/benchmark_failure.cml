@@ -1,6 +1,6 @@
 // Fixture of benchmark_failure.plan.toml. The division by zero happens at run time (the divisor
 // comes from an array), so the timed pass fails and `--timeit --output-format json` reports the
-//  failed iteration instead of a mean.
+// failed iteration instead of a mean.
 module main
 
 func main(): int {

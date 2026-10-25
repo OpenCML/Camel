@@ -29,7 +29,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 # Every entry runs the same corpus through both sides with the same pass list, and the measurement is
 # the difference between the two results.
 #
-#  The rule (`docs/handover/reviews/questions-2026-10-23.md`) settled what a difference
+# The rule (`docs/handover/reviews/questions-2026-10-23.md`) settled what a difference
 # means, and this file is read under it: `std::opt::algebra` and `rules::simplify` are the same thing
 # (the reference mode is the `neutral_only` subset of the C++ side that remains), the library's
 # default numeric grant is design principles 7.3's default -- which allows `reassociate` and
@@ -40,7 +40,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 # (`rule-conditions-and-policy` items 2 and 3): the one left in this corpus is the anchored form --
 # the C++ pass's `isReplaceable` refuses to rewrite the graph's exit, output and returned value,
 # while the engine rewrites the matched node and moves the anchor onto the replacement, as the
-#  rule's item 3 says the engine must. The effect refusal below is decreed the same way, as a local
+# rule's item 3 says the engine must. The effect refusal below is decreed the same way, as a local
 # subgraph check before a rule is applied (`rule-drops-effect`).
 #
 #   `by_cpp`     the reference side of this tree, recorded as a golden: its graph (`std::gir` /
@@ -148,10 +148,10 @@ compare_fields = ["exit_code", "stdout_normalized"]
 # Two of them, and they are the anchored forms: the C++ pass's `isReplaceable` refuses the graph's
 # exit, output and returned value, so `anchor_add` and `anchor_mul32` keep their operation as the
 # named node there; the engine rewrites the matched node and moves the anchor onto the replacement,
-#  which is what the rule gives the engine as its job and not as a rule condition
+# which is what the rule gives the engine as its job and not as a rule condition
 # (`docs/handover/reviews/questions-2026-10-23.md`, `rule-conditions-and-policy` item 3), so those
 # two graphs exit at the port the rule's right side wrote. `effect_mul_zero` was a third difference
-#  and is an agreement now: the engine check the rule's `rule-drops-effect` decrees (before a rule is
+# and is an agreement now: the engine check the rule's `rule-drops-effect` decrees (before a rule is
 # applied, the subgraph the pattern variables its right side does not use bound is examined, and an
 # effect node, or a node carrying a sync or order edge, there refuses the application) refuses the
 # match that used to drop the print. `library_runs` and `differs` below pin that agreement, and a

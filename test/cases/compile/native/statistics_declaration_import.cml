@@ -2,7 +2,7 @@
  * The declarations of `statistics` are what an importer sees: each name takes an array of one
  * of the four numeric element types and gives `float` (or `float?`), and `quantile`'s
  * with-parameter is part of every one of its four signatures. Every call reaches the C++
- *  operator (step 10).
+ * operator (step 10).
  */
 module statistics_declaration_import
 

@@ -1,4 +1,4 @@
-//  A constant is not a capture (design principles 3.10): a value whose build-time value is
+// A constant is not a capture (design principles 3.10): a value whose build-time value is
 // known -- a literal, a folded literal, a static value -- is evaluated where it is read, in
 // place, and the loop lowering passes no input for it. A value that is merely loop-invariant
 // (here the parameter `n`) is not a constant and stays an input of the loop's regions.

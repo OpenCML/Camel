@@ -1,6 +1,6 @@
 /**
  * A struct comprehension keeps the field names and the declaration order of the type it walks,
- *  but each field's type is the type of that round's value (rule 2): `F` is `int` for `a`
+ * but each field's type is the type of that round's value (rule 2): `F` is `int` for `a`
  * and `float` for `b`, the values are `(F, float)`, and the result is
  * `{a: (int, float), b: (float, float)}` with `a` before `b`.
  */

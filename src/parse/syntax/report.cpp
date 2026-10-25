@@ -305,7 +305,7 @@ void reportLexicalErrors(const TokenBuffer &buffer, Diagnostics &diagnostics) {
         switch (error.kind) {
         case LexErrorKind::InvalidNumber: {
             // The whole written run (`09`, `077`, `0o8`), not one character of it: the text is
-            //  what the reader has to change.
+            // what the reader has to change.
             const std::string text(buffer.source().substr(error.begin, error.end - error.begin));
             auto builder = diagnostics.of(LexicalDiag::InvalidNumberFormat)
                                .at(CharRange{{line, column}, {line, buffer.columnOf(error.end)}});
@@ -478,7 +478,7 @@ void reportSyntaxErrors(const Tree &tree, Diagnostics &diagnostics) {
         }
 
         // `x => e`. A lambda's parameters need their parentheses (design principles 5.9; the
-        //  rule on `composition-expected-type-edges`, item 4): where a
+        // rule on `composition-expected-type-edges`, item 4): where a
         // name stands directly before an arrow that fits nothing, the writer wrote the one
         // spelling the language does not have. It is reported by name rather than as a token that
         // did not fit, and before the repairs below, because the same mistake reaches them as a

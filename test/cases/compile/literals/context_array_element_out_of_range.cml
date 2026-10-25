@@ -1,5 +1,5 @@
 /**
- *  Handover, item 2: an element of an array literal is a position with an expected type, so
+ * Handover, item 2: an element of an array literal is a position with an expected type, so
  * a literal element the element type cannot hold is reported at the element.
  */
 module literal_context_array_element_out_of_range

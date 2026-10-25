@@ -142,7 +142,7 @@ void declareStandardTags() {
         // `op`, written before a body-less declaration: the URI of the operator the declaration
         // is, when the operator's name is not the declaration's. A name that follows the
         // convention (`bytes:size` for `size` of `bytes`) needs no tag (design principles 6.4;
-        //  step 1).
+        // step 1).
         Decl op;
         op.name   = "op";
         op.ident  = "op";

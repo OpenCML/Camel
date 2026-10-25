@@ -1,6 +1,6 @@
 /**
  * int('99999999999999999999'): an integer text that is a number too large for int is out of
- *  range, which the message says, rather than not a number.
+ * range, which the message says, rather than not a number.
  */
 module int_text_out_of_range
 

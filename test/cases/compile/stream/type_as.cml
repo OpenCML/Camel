@@ -1,5 +1,5 @@
 /**
- *  The right side of `as` is always a type (option (c)): `..`
+ * The right side of `as` is always a type (option (c)): `..`
  * after a type there is the stream suffix, never the interval operator. `xs as int..` is a
  * conversion to the stream type, and it is read as one - not as an expression.
  */

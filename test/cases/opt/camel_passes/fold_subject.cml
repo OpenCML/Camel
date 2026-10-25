@@ -1,6 +1,6 @@
 module fold_subject
 
-//  The corpus of the constant-folding comparison: operations whose operands are all
+// The corpus of the constant-folding comparison: operations whose operands are all
 // constants and that the front end leaves in the graph, beside an operation that must not fold.
 //
 //   chain      `2 * 3 + 4` written as a chain of lets: the front end folds the two literals into

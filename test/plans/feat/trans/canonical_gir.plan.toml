@@ -9,7 +9,7 @@ desc = "The canonical JSON GIR document (version 2, canonical=true): determinist
 kind = "behavior"
 tool = "python"
 case = "../../../cases/trans/cml_canon_contract.py"
-#  `${camel}` is the compiler of the build under test, named as an argument.
+# `${camel}` is the compiler of the build under test, named as an argument.
 args = ["${case}", "--camel", "${camel}"]
 expect_exit = 0
 expect_stdout_contains = ["canonical GIR: PASS"]

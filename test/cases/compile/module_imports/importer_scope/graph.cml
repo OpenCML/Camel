@@ -1,7 +1,7 @@
 /// Deliberately named like the standard library's module: this directory also holds a program
-///  whose own `import graph` must take this file (property 1), while std::opt's
+/// whose own `import graph` must take this file (property 1), while std::opt's
 /// internal `import graph` in stdlib/rules.cml must still take the standard library's module
-///  (property 2). It exports only `answer`, so a standard-library graph used in its place
+/// (property 2). It exports only `answer`, so a standard-library graph used in its place
 /// fails at `graph::answer`, and this file used in place of the standard library fails at
 /// `Program` inside rules.cml.
 module graph

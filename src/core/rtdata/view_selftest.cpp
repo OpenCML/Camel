@@ -43,7 +43,7 @@ std::string debugRunViewSelfTest() {
     // The escape the debug guard catches: an unmaterialised view still reads as one.
     const bool escapeCaught = viewDetected && view != value;
 
-    //  The escape that actually happened, through a call boundary into reduce's accumulator.
+    // The escape that actually happened, through a call boundary into reduce's accumulator.
     // A slot-shaped element -- every field an 8-byte leaf -- is read through one reused
     // thread-local cell, so reading the next element overwrites the first view in place. An
     // accumulator that kept that view therefore names the element being read now. The call
@@ -86,7 +86,7 @@ std::string debugRunViewSelfTest() {
 std::string debugRunViewEscapeSelfTest() {
     using namespace camel::core::type;
 
-    //  The escape re-created on purpose: a slot-shaped element is read through the reused
+    // The escape re-created on purpose: a slot-shaped element is read through the reused
     // thread-local view cell, a callback would return it, and the reduce would keep it as its
     // accumulator. The store below is the production boundary (`storeReduceAccumulator`), the
     // same one the nvm reduce operator calls; in a debug build its guard aborts here.

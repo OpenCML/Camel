@@ -3,7 +3,7 @@ order = 912
 tier = "fast"
 tags = ["feat", "showcase", "d4", "mcts", "search", "recursion"]
 
-#  The MCTS showcase (showcase/d4-mcts D4). The whole standard output is pinned at a stated
+# The MCTS showcase (showcase/d4-mcts D4). The whole standard output is pinned at a stated
 # seed and playout count on the four back ends: the tree a search builds is a value, so every
 # visit count, every sum and the move it chose are reproducible numbers, and a search that
 # selected differently would print a different line.  The properties in the verify scripts are the

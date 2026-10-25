@@ -1,7 +1,7 @@
 /**
  * The declaration of `re:test` is what an importer sees: two string arguments and a bool result
  * are read from `stdlib/re.cml`, and the calls reach the operator the C++ module runs (handover
- *  step 10).
+ * step 10).
  */
 module re_declaration_import
 

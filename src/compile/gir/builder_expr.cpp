@@ -163,7 +163,7 @@ node_handle_t Builder::visitDataNode(const GCT::node_ptr_t &gct) {
                 // an `int` and an `int?`; design principles 3.8, 5.1). An element that is not of
                 // it enters it, or is reported: an `int` value is not a `float`. A literal whose
                 // element type the position names is built with it already (`let xs: float[] =
-                //  [n, m]`), so a nested literal never reads the type of an outer position.
+                // [n, m]`), so a nested literal never reads the type of an outer position.
                 Type *targetElem = nullptr;
                 if (dataType->resolved()) {
                     Type *elemType = tt::as_ptr<ArrayType>(dataType)->elemType();
@@ -431,7 +431,7 @@ void Builder::recordWrite(node_handle_t variable, node_handle_t exit, bool throu
         uses.clear();
     }
     // A store is one of the cell's known users (collapseNonEscapingVariableReads): a user the builder
-    // did not record -- a :var/take, a call handed the `var` -- makes the cell escape.
+    // did not record -- a:var/take, a call handed the `var` -- makes the cell escape.
     knownCellUsers_.insert(exit);
     setModifier(variable, exit);
     if (!throughCallee) {
@@ -454,7 +454,7 @@ void Builder::orderAfterLastWriter(node_handle_t variable, node_handle_t node) {
     // from before it. The two uses of this helper are one link today, and telling them apart
     // needs that data edge. The read is a data edge from the nearest write and writes are
     // ordered by order edges -- docs/handover/reviews/questions-2026-10-23.md,
-    //  " -capture-order-edge".
+    // " -capture-order-edge".
     if (auto modifier = modifierOf(variable); modifier.has_value()) {
         if (sameGraph(*modifier, currGraph_) && shouldAddSyncCtrlLink(*modifier, node)) {
             linkNodes(LinkType::Ctrl, *modifier, node);
@@ -669,10 +669,10 @@ std::any Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
     }
     if (module_ != nullptr) {
         // A body-less declaration of this module: the name stands for the operator group the
-        //  declaration made, which is no graph (step 1). A name the C++ module it
+        // declaration made, which is no graph (step 1). A name the C++ module it
         // declares brings (its constants among them) is this module's own too, and is looked up
         // here, before what an import brings under the same name (design principles 10.1;
-        //  rule 1: the `.cml` and the `.cmo` are one module).
+        // rule 1: the `.cml` and the `.cmo` are one module).
         for (const std::string &candidate : {name, written}) {
             auto native = ownNativeEntity(Reference(candidate));
             if (!native.has_value()) {
@@ -894,7 +894,7 @@ bool Builder::valueNameExists(const std::string &written, const GCT::node_ptr_t 
     }
     if (module_ != nullptr) {
         // A body-less declaration of this module: a name the module itself declared for a
-        //  native operator (step 1). `visitDRefNode` looks it up here, before what
+        // native operator (step 1). `visitDRefNode` looks it up here, before what
         // an import brings under the same name; a name in a `case` that is not selected must
         // see the same names, or the case would resolve differently once it is selected.
         for (const std::string &candidate : {name, written}) {
@@ -1387,7 +1387,7 @@ node_handle_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
     boundWithCallee_.try_emplace(targetNode, gct->at(0));
     // The `f<w>` expression the binding was made by: a partial application is located there,
     // at the callee and the angled arguments together (design principles 5.1), not at the
-    //  statement it is written in (1.6). Its span is derived where the binding is used as a
+    // statement it is written in (1.6). Its span is derived where the binding is used as a
     // value (partialApplicationOf), so an ordinary `f<w>(x)` allocates nothing extra.
     boundWithOrigin_.try_emplace(targetNode, gct);
     LEAVE("WITH");

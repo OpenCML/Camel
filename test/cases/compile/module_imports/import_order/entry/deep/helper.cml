@@ -1,4 +1,4 @@
-///  a library with no `lib.cml` beside it. Under the rule its `import lib` resolves to the
+/// a library with no `lib.cml` beside it. Under the rule its `import lib` resolves to the
 /// module roots and the standard library, never to the entry program's directory (the old order
 /// put the entry directory first among a library's fallback roots and printed `root` here).
 module helper

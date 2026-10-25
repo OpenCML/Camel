@@ -1,5 +1,5 @@
 /**
- *  The sequence of a `static loop` must be known when the function is compiled (the rule of
+ * The sequence of a `static loop` must be known when the function is compiled (the rule of
  *  2026-10-24). A bound that is a parameter has no fixed number of rounds: the loop is
  * unrolled where it stands, so nothing of it can be built, and the compiler says which sequence
  * it could not work out rather than reporting the message of a missing tuple.

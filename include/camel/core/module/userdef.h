@@ -63,7 +63,7 @@ class UserDefinedModule : public Module {
     // module was loaded as part of, so setProgramGraph must not replace it.
     bool buildingProgramOfItsOwn_ = false;
     // A `.cml` found beside a `.cmo` of its name declares that C++ module's operators
-    //  (design principles 6.4, step 1): its top-level functions have no body and
+    // (design principles 6.4, step 1): its top-level functions have no body and
     // `implementation_` is the C++ module, kept alive for its executors and operator traits.
     bool declarationModule_ = false;
     module_ptr_t implementation_;
@@ -83,7 +83,7 @@ class UserDefinedModule : public Module {
         const camel::core::type::FunctionType *type = nullptr;
     };
     /// The functions the module exports, in declaration order: its export list read against its
-    ///  declarations, so that a caller can name what the module offers (: the passes a
+    /// declarations, so that a caller can name what the module offers (: the passes a
     /// `module::pass` could have named). Only the construction tree is read — no graph is built
     /// — so this answers for a module that is parsed even when it does not compile; empty
     /// before the tree exists.
@@ -160,7 +160,7 @@ class UserDefinedModule : public Module {
     // A module written in Camel brings no names along with an import of it.
     void declareDefaultRefs() override {}
     /// A declaration module answers for the operators of the C++ module it declares: its `rand:`
-    ///  is the protocol of `random`'s operators, not a name of its own.
+    /// is the protocol of `random`'s operators, not a name of its own.
     std::vector<std::string> operatorProtocols() const override;
 
     static module_ptr_t fromFile(

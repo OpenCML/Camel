@@ -1,4 +1,4 @@
-//  A struct as a loop's state (item 3): the state is one value, the struct, and each round
+// A struct as a loop's state (item 3): the state is one value, the struct, and each round
 // gives the next struct instead of assigning its fields. A loop's state is an expression, not a
 // `var` (design principles 3.10): `p.x = ...` inside the body is refused where it is written.
 //

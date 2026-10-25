@@ -5,7 +5,7 @@
 // Precondition of the tests that assert Windows' wide-character process boundary
 // (`skip_unless = ["node", "test/tools/on-windows.mjs"]`).
 //
-//  A path holding characters outside the process code page (the point of item 3) is a Windows
+// A path holding characters outside the process code page (the point of item 3) is a Windows
 // question: elsewhere a path is bytes, and there is no code page to lose them to. Exit 0 on
 // Windows, 1 with the reason elsewhere.
 

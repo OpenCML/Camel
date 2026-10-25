@@ -3,7 +3,7 @@ order = 377
 tier = "fast"
 tags = ["feat", "modules", "io", "terminal"]
 
-#  `io` is the terminal until `Stream` exists (steps 4 and 10): what stdin has waiting, the keys
+# `io` is the terminal until `Stream` exists (steps 4 and 10): what stdin has waiting, the keys
 # themselves, and raw mode. The standard streams and `print`/`println`/`eprintln`/`input` are the
 # prelude's. The cases below need no interactive terminal: the read side is fed through a pipe, and
 # the effects and resources are read from the graph and from `inspect --ops`.

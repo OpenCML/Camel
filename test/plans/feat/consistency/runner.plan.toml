@@ -14,7 +14,7 @@ args = ["${case}"]
 expect_exit = 0
 expect_stdout_contains = ["runner self-test ok"]
 # The deciding reading is this self-test's own CPU time, not the wall clock: the runner's margin
-#  rule reads the CPU of every test's process tree. Six runs of this case inside the fast
+# rule reads the CPU of every test's process tree. Six runs of this case inside the fast
 # layer at -Jobs 8 on 2026-10-24 read 12.41-12.69 s of CPU against 22.0-23.5 s of wall -- a 2.3%
 # spread in the figure that decides, where the wall clock spread 6.5% in the same six runs. The
 # same fixture read 7.22-7.39 s of CPU when its nested tests ran unwrapped; the wrapper that makes

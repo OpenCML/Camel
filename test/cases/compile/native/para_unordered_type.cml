@@ -1,7 +1,7 @@
 /**
  * `para:unordered_foreach` is declared with an array: a number is refused at the call, and the
  * message names the declaration's type variable and parameter (`xs`) — `stdlib/para.cml`, not the
- *  C++, is the source (bucket 1).
+ * C++, is the source (bucket 1).
  */
 module para_unordered_type
 

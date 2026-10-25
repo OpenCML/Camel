@@ -1,5 +1,5 @@
 /**
- *  A tuple literal written as an argument takes the parameter's type element by element:
+ * A tuple literal written as an argument takes the parameter's type element by element:
  * a text element is the mismatch of that element, not a call that matches no overload.
  */
 module literal_context_tuple_argument_text

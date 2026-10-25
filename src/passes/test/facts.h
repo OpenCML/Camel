@@ -38,7 +38,7 @@
  * `test::facts_load_rules` loads the `rules` library (and through it `math`) before the facts are
  * seeded, and prints the declaration epoch before and after (`FACTS rules_loaded epoch <before> ->
  * <after>`). It returns the program unchanged. It is the control for measuring the cost of
- *  invalidation by the declaration epoch: the same pipeline without it lets `std::opt`'s
+ * invalidation by the declaration epoch: the same pipeline without it lets `std::opt`'s
  * algebra stage load `rules` after the facts exist, so those facts go stale although their graphs
  * did not change.
  *

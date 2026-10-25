@@ -1,6 +1,6 @@
 /**
  * A type variable nothing determines is still refused with the same diagnosis, whether the
- *  position says nothing (design principles 5.5; the rule on
+ * position says nothing (design principles 5.5; the rule on
  * `expected-type-through-literals-and-calls`): aligning the result type with the position adds
  * a source of types, it does not make an open one closed.
  */

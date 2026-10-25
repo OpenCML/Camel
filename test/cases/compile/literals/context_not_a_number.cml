@@ -1,5 +1,5 @@
 /**
- *  Handover, item 6: a text literal converted to a number says the text is not a number.
+ * Handover, item 6: a text literal converted to a number says the text is not a number.
  */
 module literal_context_not_a_number
 

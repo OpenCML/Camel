@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 /*
- *  The applicability condition of a declaration (design principles 5.13; handover).
+ * The applicability condition of a declaration (design principles 5.13; handover).
  *
  * `func f(...): T when p { ... }` is selected only where `p` holds. The condition is a
  * compile-time predicate over the declaration's type parameters and its `with` parameters; it
@@ -118,7 +118,7 @@ using EvalCallResolver  = std::function<data_ptr_t(
     const std::function<data_ptr_t(const GCT::node_ptr_t &)> &evalArgument,
     const camel::core::type::type_bindings_t &vars, size_t depth)>;
 /// How the evaluator works out the sequence of a `static loop` whose head writes one out
-///  (`for i in 0..5`). It is the same reading the graph builder
+/// (`for i in 0..5`). It is the same reading the graph builder
 /// uses (`Builder::staticLoopIntSequenceOf`, the `int` half of `Builder::staticLoopSequenceOf`,
 /// which has no room for a type or for another element type), passed in as a callback because
 /// the evaluator is a helper that holds no builder: a `when` predicate and the expansion must
@@ -397,7 +397,7 @@ class GctConstantEvaluator {
 
     /// Visits each round of a `static for`/`static loop`: the field name and type for `fields T`,
     /// the position and the element's type for `indices ts`, and the element itself for a
-    ///  sequence the head writes out (`for i in 0..5`). Does not touch the environment.
+    /// sequence the head writes out (`for i in 0..5`). Does not touch the environment.
     /// `round` is called with `(name, index, type, element)`, where `element` carries a value
     /// only for a written sequence: it is the one round value that is not a position or a name.
     void walkRounds(
@@ -1420,7 +1420,7 @@ const std::string written = callee->at(0)->name();
                         std::optional<bool> value;
                         if (found->second != nullptr && boolOf(found->second, value)) {
                             local.outcome =
-                                *value ? WhenOutcome::Holds : WhenOutcome::Fails;
+                                *value ? WhenOutcome::Holds: WhenOutcome::Fails;
                             return local;
                         }
                         local.outcome = WhenOutcome::NotBool;

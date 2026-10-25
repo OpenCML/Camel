@@ -239,7 +239,7 @@ void UserDefinedModule::setProgramGraph(
         // The module is not marked built here. What it exports in this program is this
         // program's, and a module is declared once per program: the program being compiled
         // (or another tool program) that loads the module later must declare it into its own
-        //  export table (task). Marking it Done would skip that declaration and leave the
+        // export table (task). Marking it Done would skip that declaration and leave the
         // names of this program as the module's only ones.
         return;
     }
@@ -329,7 +329,7 @@ UserDefinedModule::ProgramStatus UserDefinedModule::compileAsProgram(
     } buildingProgramOfItsOwn(buildingProgramOfItsOwn_);
     camel::utils::phase::Scope phaseScope("library", name_);
     auto builder = std::make_shared<camel::compile::gir::Builder>(context_);
-    //  A module written in Camel may import a library written in Camel (item 1): the
+    // A module written in Camel may import a library written in Camel (item 1): the
     // pass module is a program of its own, so its builder needs those imports declared and built
     // too. They are declared here, in import order, and built by buildFrom before this module.
     // Their graphs in this program are separate from the graphs the same module has in the
@@ -374,7 +374,7 @@ UserDefinedModule::ProgramStatus UserDefinedModule::compileAsProgram(
         // The module object may already export names for the program that loaded it. Those
         // names are that program's, and they stay there: this builder has its own export table
         // (Builder::exports), so declaring the module again records this program's graphs
-        //  (task).
+        // (task).
         builder->declareModule(mod, *mod->gct_, mod->diagnostics_);
         if (mod->diagnostics_->hasErrors()) {
             return ProgramStatus::Failed;
@@ -392,7 +392,7 @@ UserDefinedModule::ProgramStatus UserDefinedModule::compileAsProgram(
     const auto entity = builder->exports().exportedEntity(*this, Reference(entryFunction));
     if (!entity) {
         // A function that is there but not exported is the mistake `module::name` cannot tell
-        //  from a name that is not there; only the construction tree can.
+        // from a name that is not there; only the construction tree can.
         problem = declaresFunction(entryFunction)
                       ? std::format("'{}' declares '{}' but does not export it", name_, entryFunction)
                       : std::format("'{}' exports no '{}'", name_, entryFunction);
@@ -416,7 +416,7 @@ UserDefinedModule::ProgramStatus UserDefinedModule::compileAsProgram(
     programBuilders_.push_back(builder);
     // The module is not marked built: this program's exports are this program's, and another
     // program that loads the module (the one being transformed, another pass) declares it into
-    //  its own export table (task). The front end (parse, GCT) is done, which is what the
+    // its own export table (task). The front end (parse, GCT) is done, which is what the
     // module object shares with every program.
     return ProgramStatus::Built;
 }

@@ -1,4 +1,4 @@
-///  trap 1: imports the `lib` beside it, which is `a/lib.cml` (value 1).
+/// trap 1: imports the `lib` beside it, which is `a/lib.cml` (value 1).
 module one_a_source
 
 import lib

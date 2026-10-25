@@ -25,7 +25,7 @@ class GCGraph;
 
 namespace camel::core::error {
 
-/// The message of `diag` with `args` put in place of `{0}`, `{1}`, ...: the sentence a
+/// The message of `diag` with `args` put in place of `{0}`, `{1}`, ... the sentence a
 /// diagnostic reports, without its position or help. For a report nested inside another — the
 /// reason an entry argument was refused says what made it unreadable (design principles 10.6).
 std::string runtimeDiagMessage(RuntimeDiag diag, const std::vector<std::string> &args);
@@ -95,7 +95,7 @@ template <typename T> std::string argToString(const T &value) {
 } // namespace runtime_fault_detail
 
 /// A query of a declaration with parameters named parts that are no value's operands (in either
-///  order a commutative operator allows). It is not a fault of the program: the rule of
+/// order a commutative operator allows). It is not a fault of the program: the rule of
 /// 2026-10-23 on `rule_when_const_node` makes the condition that reads such a query false -- the
 /// rule does not apply here, the pass does not fail ("条件里的事实查询找不到时，条件为假（这条规则在
 /// 此不适用），而不是遍失败——条件本来就是"适用与否"的判断"). Whoever evaluates a condition catches
