@@ -541,10 +541,13 @@ bool Type::assignableFrom(Type *from) const {
 
 Type *Type::create(TypeCode code) {
     // One object per code, held by the type table (see the header): a dtype a module states, a
-    // primitive singleton and a clone of one are all the same type, with one id.
+    // primitive singleton and a clone of one are all the same type, with one id. The code is a
+    // 32-bit enum and the key's word is a `uintptr_t`, so it enters as the number it is and not as
+    // the bytes of the object: those are four bytes, and reading a word from them drags whatever
+    // follows them into the key, which would make two spellings of one code two types.
+    const uintptr_t word = static_cast<uintptr_t>(code);
     return TypeTable::instance().intern(
-        TypeTable::Shape::Primitive,
-        std::span<const uintptr_t>(reinterpret_cast<const uintptr_t *>(&code), 1),
+        TypeTable::Shape::Primitive, std::span<const uintptr_t>(&word, 1),
         [&]() -> Type * {
             EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
                 "Type",
