@@ -1896,44 +1896,14 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             normInputTypes.push_back(valueTypeOf(callableValueType(input.node)));
         }
     }
-    // A variable passed to a `var` parameter is the variable's cell, and the callee's port
-    // holds `cell` of what the parameter declares. The cell is written through every reference
-    // to it (TupleType::assignableFrom), so its content types would have to be equal for the
-    // value to pass -- but the contract is the parameter's, and the declared type is the upper
-    // bound of what the callee may write into the cell. The call therefore gives the caller's
-    // cell the declared content type, widening the argument exactly as the callee's own variable
-    // is typed: this is the cell rule read from the calling side, and it is the callee's port
-    // that the runtime graph is checked against. `normInputTypes` holds the argument's value
-    // type (a cell's content), so the widening is stated on the cell the argument node carries.
-    // Narrower than the parameter it may not be: a cell whose content does not fit the parameter
-    // at all is left as it is, and the ordinary report refuses the call.
-    if (argumentSignature != nullptr) {
-        const size_t count = std::min(normInputs.size(), argumentSignature->normTypesCount());
-        for (size_t i = 0; i < count; ++i) {
-            Type *param = argumentSignature->normTypeAt(i);
-            if (!argumentSignature->normIsVarAt(i) || param == nullptr ||
-                containsTypeVar(param) || normInputTypes[i] == nullptr) {
-                continue;
-            }
-            Type *argument = normInputs[i].node != nullptr ? nodeTypeOf(normInputs[i].node)
-                                                           : normInputTypes[i];
-            Type *argumentValue = valueTypeOf(argument);
-            if (argumentValue == argument) {
-                continue; // not a variable: its cell is its value, and coerceTo reports the rest
-            }
-            const auto *content = tt::as_ptr<ArrayType>(param);
-            if (content == nullptr || !content->isNumericUnknown() ||
-                !param->assignableFrom(argumentValue)) {
-                continue;
-            }
-            Type *cell = TupleType::cell(param);
-            if (argument->equals(cell)) {
-                continue; // the cell already stands for what the parameter declares
-            }
-            setNodeType(normInputs[i].node, cell);
-            normInputTypes[i] = param;
-        }
-    }
+    // A variable passed to a `var` parameter is the variable's cell, and the callee's port holds
+    // `cell` of what the parameter declares. The cell is written through every reference to it
+    // (TupleType::assignableFrom), so its content type is the parameter's: the argument's value
+    // type is what the parameter has to take, and the ordinary report below refuses a call whose
+    // cell does not fit. The parameter's type is a type of its own (an array with its element type
+    // written, `T[..]` for a generic head), so there is no wider spelling of the same value to
+    // hand the cell here.
+
     // A `with` argument may be written by name, and a `with` parameter may have a default
     // (design principles 4.4). The binding puts the arguments in the declaration's order and
     // fills the parameters the call leaves out, so that from here on an index into
@@ -2041,39 +2011,10 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         withInputTypes.push_back(valueTypeOf(nodeTypeOf(input.node)));
     }
     // A `with` parameter declared `var` takes the caller's variable too (design principles 4.4,
-    // 3.5), so the same reading as the ordinary `var` arguments above applies here: the cell is
-    // written through every reference to it, and the declared parameter type is the bound of
-    // what the callee may store. `with <var acc: Tensor>` called with a variable holding
-    // `f32[?, ?]` is that same edge, and the port the runtime graph is checked against is the
-    // parameter's. A cell whose content the parameter cannot take is left alone: the ordinary
-    // report refuses the call.
-    if (argumentSignature != nullptr) {
-        const size_t count = std::min(withInputs.size(), argumentSignature->withTypesCount());
-        for (size_t i = 0; i < count && i < withInputTypes.size(); ++i) {
-            Type *param = argumentSignature->withTypeAt(i);
-            if (!argumentSignature->withIsVarAt(i) || param == nullptr ||
-                containsTypeVar(param) || withInputTypes[i] == nullptr ||
-                withInputs[i].node == nullptr) {
-                continue;
-            }
-            Type *argument      = nodeTypeOf(withInputs[i].node);
-            Type *argumentValue = valueTypeOf(argument);
-            if (argumentValue == argument) {
-                continue; // not a variable: its cell is its value, and coerceTo reports the rest
-            }
-            const auto *content = tt::as_ptr<ArrayType>(param);
-            if (content == nullptr || !content->isNumericUnknown() ||
-                !param->assignableFrom(argumentValue)) {
-                continue;
-            }
-            Type *cell = TupleType::cell(param);
-            if (argument->equals(cell)) {
-                continue; // the cell already stands for what the parameter declares
-            }
-            setNodeType(withInputs[i].node, cell);
-            withInputTypes[i] = param;
-        }
-    }
+    // 3.5), and the reading above applies here as well: the cell is written through every
+    // reference to it, and the declared parameter type is the type of what the callee may store.
+    // A cell whose content the parameter cannot take is left alone: the ordinary report refuses
+    // the call.
 
     // An argument that is still a name without a single function value (several overloads, or
     // an operator whose signature is not one function type). Where the callee has one known
@@ -3303,22 +3244,6 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     };
 
     ASSERT(targetFuncType != nullptr, "Target function type must be resolved.");
-    // A declaration that writes the transitional `Tensor` is instantiated here, at the call, by
-    // the element type its arguments have: the call then sees `T[..]` -- `f32[..]` -- where the
-    // declaration wrote the spelling (design principles 5.5; the ruling of 2026-10-23 on
-    // bare-tensor-parameter-instantiation). The declaration itself is not rewritten: one graph
-    // serves every element type until the spelling is deleted at P4. What is instantiated is a
-    // *parameter*, and only its element type is substituted; the result type is not, because a
-    // body may answer with another element type (`export_capability`: an `f32` argument whose
-    // call returns an int tensor) or another rank (`print_value`: `forward` returns rank 1 from
-    // a rank-2 argument), so no claim about the result follows from the arguments alone
-    // (docs/handover/questions/bare-tensor-instantiation-return-rank.md).
-    if (targetOperator == nullptr && targetFuncType != nullptr) {
-        if (FunctionType *instantiated =
-                instantiatedTensorSignature(targetFuncType, withInputTypes, normInputTypes)) {
-            targetFuncType = instantiated;
-        }
-    }
     if (targetOperator == nullptr) {
         enterParameters(targetFuncType);
     } else {
@@ -3538,113 +3463,6 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     }
     LEAVE("LINK");
     return targetNode;
-}
-
-namespace {
-
-/// Whether `type` is the transitional spelling `Tensor` itself: the numeric array whose element
-/// type nobody has fixed and whose rank is open. `Tensor<[3]>` states a rank, and an array that
-/// states an element type states more: both are left as written.
-bool isBareTensorOccurrence(Type *type) {
-    const ArrayType *array = asArrayType(type);
-    return array != nullptr && array->isNumericUnknown() && array->anyRank() &&
-           array->extents().empty();
-}
-
-} // namespace
-
-FunctionType *Builder::instantiatedTensorSignature(
-    FunctionType *funcType, const type_vec_t &withTypes, const type_vec_t &normTypes) {
-    if (funcType == nullptr || funcType->hasRest() || funcType->hasConstas()) {
-        return nullptr;
-    }
-    const size_t withCount = funcType->withTypesCount();
-    const size_t normCount = funcType->normTypesCount();
-    // Only a parameter is instantiated. The result type is the declaration's own: a body may
-    // answer with another element type or another rank than the arguments have, so nothing about
-    // it follows from them (see the call site and
-    // docs/handover/questions/bare-tensor-instantiation-return-rank.md).
-    bool bare = false;
-    for (size_t i = 0; i < withCount && !bare; ++i) {
-        bare = isBareTensorOccurrence(funcType->withTypeAt(i));
-    }
-    for (size_t i = 0; i < normCount && !bare; ++i) {
-        bare = isBareTensorOccurrence(funcType->normTypeAt(i));
-    }
-    if (!bare) {
-        return nullptr;
-    }
-    // The type every bare occurrence takes: the element type the arguments at those positions
-    // have, `T[..]` as the end state writes it. Neither an extent nor a rank is substituted --
-    // the spelling never wrote either, and a body that computes another shape or another rank
-    // (`func forward(x: Tensor): Tensor { return zeros([shape(x)[0]]) + 1.0 }`) answers for
-    // values the declaration never related to its parameters, so a rank read off an argument
-    // would be a claim the value does not make. One of the arguments being a bare `Tensor`
-    // too, a value that is no array, or two arguments whose element types differ leaves the
-    // declaration as written.
-    Type *element       = nullptr;
-    std::vector<Type *> bareArguments;
-    const auto take = [&](Type *param, Type *actual) {
-        if (!isBareTensorOccurrence(param)) {
-            return true;
-        }
-        const ArrayType *array = asArrayType(actual);
-        if (array == nullptr || array->isNumericUnknown() ||
-            !isNumericScalarTypeCode(array->elemTypeCode())) {
-            return false;
-        }
-        Type *each = array->elemType();
-        if (element == nullptr) {
-            element = each;
-        } else if (element != each) {
-            return false;
-        }
-        bareArguments.push_back(const_cast<Type *>(actual));
-        return true;
-    };
-    for (size_t i = 0; i < withCount; ++i) {
-        if (!take(funcType->withTypeAt(i), i < withTypes.size() ? withTypes[i] : nullptr)) {
-            return nullptr;
-        }
-    }
-    for (size_t i = 0; i < normCount; ++i) {
-        if (!take(funcType->normTypeAt(i), i < normTypes.size() ? normTypes[i] : nullptr)) {
-            return nullptr;
-        }
-    }
-    if (element == nullptr || element->code() == TypeCode::Void) {
-        return nullptr;
-    }
-    Type *instance = ArrayType::openRank(element);
-    // The instantiated parameter must still take every argument it was read from, exactly as it
-    // did before: the instance is one element type with the rank left open, so every array of
-    // that element type fits, and the call is not turned into a conversion (design principles
-    // 5.1).
-    for (Type *actual : bareArguments) {
-        if (!instance->assignableFrom(actual)) {
-            return nullptr;
-        }
-    }
-    FunctionTypeFactory factory;
-    factory.setModifiers(funcType->modifiers());
-    factory.setHasCompileInfo(funcType->hasArgNames());
-    const auto nameAt = [&](size_t index) {
-        return funcType->hasArgNames() ? std::string(funcType->argNameAt(index)) : std::string();
-    };
-    for (size_t i = 0; i < withCount; ++i) {
-        Type *param = funcType->withTypeAt(i);
-        factory.addWithArg(
-            nameAt(i), isBareTensorOccurrence(param) ? instance : param, funcType->withIsVarAt(i));
-    }
-    for (size_t i = 0; i < normCount; ++i) {
-        Type *param = funcType->normTypeAt(i);
-        factory.addNormArg(
-            nameAt(withCount + i), isBareTensorOccurrence(param) ? instance : param,
-            funcType->normIsVarAt(i));
-    }
-    factory.setExitType(funcType->hasExitType() ? funcType->exitType() : nullptr);
-    factory.setResources(funcType->resources());
-    return factory.build();
 }
 
 } // namespace camel::compile::gir
