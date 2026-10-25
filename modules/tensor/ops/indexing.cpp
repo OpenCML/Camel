@@ -600,6 +600,9 @@ std::optional<IndexedInstance> broadcastLikeIndexing(const InferContext &ctx) {
     if (!g || !like || g->size() > like->size()) {
         return std::nullopt;
     }
+    if (!sameElementType(ctx)) {
+        return std::nullopt; // ::<T>(g: T[..], like: T[..]): no conversion between two of them
+    }
     IndexBuilder b;
     const size_t shift = like->size() - g->size();
     std::vector<ExprId> coords(g->size());
@@ -798,6 +801,9 @@ std::optional<IndexedInstance> sumToIndexing(const InferContext &ctx) {
     const auto like = shapeOf(ctx, 1);
     if (!g || !like || !fullyKnown(*g) || !fullyKnown(*like) || like->size() > g->size()) {
         return std::nullopt;
+    }
+    if (!sameElementType(ctx)) {
+        return std::nullopt; // ::<T>(g: T[..], like: T[..]): no conversion between two of them
     }
     IndexBuilder b;
     if (*g == *like) {

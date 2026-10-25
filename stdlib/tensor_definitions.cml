@@ -15,9 +15,8 @@
  * (OperatorTable::declareDefinition, with how the operator's operands bind the parameters).
  * The core compiles this file the first time a definition is asked for; nothing expands an
  * operator into its definition unless a pass or a back end asks to (camel/runtime/
- * definitions.h). The functions take f32 tensors, except `mean`, which is generic in its element
- * type: an operator applied to another element type is not expanded. This file imports modules
- * written in C++ only.
+ * definitions.h). The functions take f32 tensors: an operator applied to another element type
+ * is not expanded. This file imports modules written in C++ only.
  */
 module tensor_definitions
 
@@ -50,25 +49,17 @@ export func log_softmax(x: Tensor<f32>, axis: int): Tensor<f32> {
     }
 }
 
-/// tensor:mean of a whole tensor: the element type `T` is answered as
-/// T(sum(float(x)) / float(numel(x))) — the sum and the division both happen in f64 and their
-/// result is rounded into `T` once, never a sum rounded to the element type and divided again,
-/// which would round twice. The widening is written `cast(x, "f64")`: `float(x)` is a scalar
-/// conversion and a conversion does not map over an array (measured: `No matching function found
-/// for argument types: <> (f32[..])`), and the tensor-wide widening is the module's `cast`. The
-/// one rounding is the `match` on the element type: a conversion to a type variable is not
-/// something the language writes either, so each element type names its own. A tensor without
-/// elements is a fault.
-export func mean::<T>(x: T[..]): T {
-    let m = sum(cast(x, "f64")) / float(numel(x))
-    return match type T {
-        case float => float(m)
-        case f32 => f32(m)
-        case bf16 => bf16(m)
-        case f16 => f16(m)
-        case int => int(m)
-        case i32 => i32(m)
-    }
+/// tensor:mean of a whole tensor: the sum and the division both happen in f64 and their result is
+/// rounded into the element type once, never a sum rounded to the element type and divided again,
+/// which would round twice — the canonical form of the element type T is
+/// `mean::<T>(x: T[..]): T = T(sum(float(x)) / float(numel(x)))` (stdlib/signatures/tensor.cml).
+/// A definition has one graph and is written at the element type this library serves, f32; a mean
+/// of another element type is the operator's own kernel, not an expansion. The widening is written
+/// `cast(x, "f64")` because `float(x)` is a scalar conversion and a conversion does not map over an
+/// array (measured: `No matching function found for argument types: <> (f32[..])`). A tensor
+/// without elements is a fault.
+export func mean(x: Tensor<f32>): f32 {
+    return f32(sum(cast(x, "f64")) / float(numel(x)))
 }
 
 /// tensor:relu: maximum(x, +0) (design principles 7.7): a NaN gives NaN, -0 gives +0.
