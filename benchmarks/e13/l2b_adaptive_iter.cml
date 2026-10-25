@@ -24,25 +24,25 @@ import { sgd, save_params } from nn
 import { get_env } from env
 import { export_model } from onnx
 
-type Sc = { w: Tensor }
+type Sc = { w: f32[..] }
 
 /// Newton refinement of sqrt(m.w * x) while the residual exceeds 1e-3.
-with <m: Sc, x: Tensor>
-func newton(v: Tensor): Tensor {
+with <m: Sc, x: f32[..]>
+func newton(v: f32[..]): f32[..] {
     return if mean(abs(v * v - m.w * x)) > 0.001 then newton<m, x>(0.5 * (v + m.w * x / v)) else v
 }
 
 with <m: Sc>
-func loss(x: Tensor): float {
+func loss(x: f32[..]): float {
     let d = newton<m, x>(ones([1])) - 1.0
     return mean(d * d)
 }
 
-func fwd(m: Sc, x: Tensor): float {
+func fwd(m: Sc, x: f32[..]): float {
     return loss<m>(x)
 }
 
-func step(m: Sc, x: Tensor): (float, Sc) {
+func step(m: Sc, x: f32[..]): (float, Sc) {
     let vg = with_grad(loss)<m>(x)
     return (vg.0, sgd(m, vg.1, 0.01))
 }
@@ -51,7 +51,7 @@ func load(): Sc {
     return { w: reshape([0.5], [1]) }
 }
 
-func input_a(): Tensor {
+func input_a(): f32[..] {
     return reshape([4.0], [1])
 }
 

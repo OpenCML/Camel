@@ -10,10 +10,10 @@ module var_through_with_grad
 import { Tensor, reshape, sum } from tensor
 import { with_grad } from autodiff
 
-type P = { p0: Tensor }
+type P = { p0: f64[..] }
 
 with <m: P>
-func loss(x: Tensor, var cnt: int): float sync {
+func loss(x: f64[..], var cnt: int): float sync {
     cnt += 1
     return sum(m.p0 * x) * float(cnt)
 }

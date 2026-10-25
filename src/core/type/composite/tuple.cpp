@@ -87,6 +87,13 @@ TupleType *TupleType::allocate(const std::vector<Type *> &types) {
     return new (mem) TupleType(layout, types);
 }
 
+namespace {
+/// Defined below; the tuple constructors are the first thing in this file that needs it.
+Type *internMembers(
+    TypeTable::Shape shape, std::span<Type *const> members,
+    const std::function<Type *(const std::vector<Type *> &)> &make);
+} // namespace
+
 TupleType *TupleType::create() { return create(std::vector<Type *>{}); }
 
 TupleType *TupleType::create(const std::vector<Type *> &types) {
@@ -101,13 +108,13 @@ TupleType *TupleType::create(std::span<Type *const> types) {
     // too, and the many small graphs of a program (branch arms above all) share a handful of
     // them; a tuple type a program writes is shared by every place that writes it.
     static_assert(sizeof(Type *) == sizeof(uintptr_t));
-    const std::span<const uintptr_t> key(
-        reinterpret_cast<const uintptr_t *>(types.data()),
-        types.size());
-    Type *type = TypeTable::instance().intern(TypeTable::Shape::Tuple, key, [&]() -> Type * {
-        return allocate(std::vector<Type *>(types.begin(), types.end()));
-    });
-    return static_cast<TupleType *>(type);
+    // Keyed by the component ids, so two places that write the same tuple are one object (the
+    // components are interned before the tuple that holds them). A component that carries names
+    // (`(f32[n], int)`) stays in the key, and the canonical id points at the tuple of the same
+    // shape whose components are name-erased: that is what `equals` compares.
+    return static_cast<TupleType *>(internMembers(
+        TypeTable::Shape::Tuple, types,
+        [](const std::vector<Type *> &from) -> Type * { return allocate(from); }));
 }
 
 TupleType *TupleType::layout(std::span<Type *const> slotTypes) { return create(slotTypes); }
@@ -139,71 +146,64 @@ TupleType *TupleType::constructFrameLayout(void *memory, std::span<Type *const> 
     return new (memory) TupleType(layout, std::vector<Type *>(slotTypes.begin(), slotTypes.end()));
 }
 
-TupleType *TupleType::cell(Type *valueType) {
-    ASSERT(valueType != nullptr, "A variable cell needs a value type.");
-    static std::mutex mutex;
-    static std::vector<TupleType *> cells;
-    std::lock_guard lock(mutex);
-    for (TupleType *known : cells) {
-        if (known->typeAt(0) == valueType || known->typeAt(0)->equals(valueType)) {
-            return known;
-        }
-    }
-    // Cells are shared by the equality of their value types, a wider rule than the type
-    // table's key, so they keep their own list and only take a TypeId from the table.
-    TupleType *type = allocate(std::vector<Type *>{valueType});
-    type->cell_     = true;
-    TypeTable::instance().adopt(type);
-    cells.push_back(type);
-    return type;
-}
-
 namespace {
 
-/// One object per payload type and form, as for cells.
-TupleType *internTagged(
-    std::vector<TupleType *> &known, Type *payloadType, const std::function<TupleType *()> &make) {
-    // Occurrences of one type variable are equal whether or not they bind (`T` in a signature and
-    // `T`), so a type written with variables is never shared: sharing would drop the mark.
-    if (containsTypeVar(payloadType)) {
-        return make();
+/// Interns a form whose members are `members`: the key is the member ids and the canonical key is
+/// their canonical ids (see intern.h). `make` builds the object from the member objects it is
+/// handed; it runs under the table's lock and must not call back into the table.
+Type *internMembers(
+    TypeTable::Shape shape, std::span<Type *const> members,
+    const std::function<Type *(const std::vector<Type *> &)> &make) {
+    const std::vector<Type *> named(members.begin(), members.end());
+    std::vector<uintptr_t> key(named.size());
+    std::vector<uintptr_t> plain(named.size());
+    std::vector<Type *> plainMembers(named.size());
+    for (size_t i = 0; i < named.size(); ++i) {
+        Type *canonical = TypeTable::instance().canonical(named[i]);
+        key[i]          = typeKeyWord(named[i]);
+        plain[i]        = typeKeyWord(canonical);
+        plainMembers[i] = canonical;
     }
-    for (TupleType *type : known) {
-        if (type->typeAt(0) == payloadType || type->typeAt(0)->equals(payloadType)) {
-            return type;
-        }
-    }
-    TupleType *type = make();
-    known.push_back(type);
-    return type;
+    return TypeTable::instance().intern(
+        shape, key, [&]() -> Type * { return make(named); },
+        TypeTable::Canonical{plain, [&]() -> Type * { return make(plainMembers); }});
 }
 
 } // namespace
 
+TupleType *TupleType::cell(Type *valueType) {
+    ASSERT(valueType != nullptr, "A variable cell needs a value type.");
+    // One cell per value type (see intern.h): a `var` cell is a tuple of one field, and the table
+    // holds one object per structure like every other type, so it needs no list of its own.
+    Type *members[] = {valueType};
+    return static_cast<TupleType *>(internMembers(
+        TypeTable::Shape::Cell, members, [](const std::vector<Type *> &from) -> Type * {
+            TupleType *created = allocate(from);
+            created->cell_     = true;
+            return created;
+        }));
+}
+
 TupleType *TupleType::nullable(Type *payloadType) {
     ASSERT(payloadType != nullptr, "A nullable type needs a payload type.");
-    static std::mutex mutex;
-    static std::vector<TupleType *> known;
-    std::lock_guard lock(mutex);
-    return internTagged(known, payloadType, [&] {
-        TupleType *type = allocate(std::vector<Type *>{payloadType});
-        type->tag_      = Tag::Nullable;
-        TypeTable::instance().adopt(type);
-        return type;
-    });
+    Type *members[] = {payloadType};
+    return static_cast<TupleType *>(internMembers(
+        TypeTable::Shape::Nullable, members, [](const std::vector<Type *> &from) -> Type * {
+            TupleType *created = allocate(from);
+            created->tag_      = Tag::Nullable;
+            return created;
+        }));
 }
 
 TupleType *TupleType::fallible(Type *payloadType) {
     ASSERT(payloadType != nullptr, "A fallible type needs a payload type.");
-    static std::mutex mutex;
-    static std::vector<TupleType *> known;
-    std::lock_guard lock(mutex);
-    return internTagged(known, payloadType, [&] {
-        TupleType *type = allocate(std::vector<Type *>{payloadType, errorType()});
-        type->tag_      = Tag::Fallible;
-        TypeTable::instance().adopt(type);
-        return type;
-    });
+    Type *members[] = {payloadType, errorType()};
+    return static_cast<TupleType *>(internMembers(
+        TypeTable::Shape::Fallible, members, [](const std::vector<Type *> &from) -> Type * {
+            TupleType *created = allocate(from);
+            created->tag_      = Tag::Fallible;
+            return created;
+        }));
 }
 
 StructType *camel::core::type::errorType() {

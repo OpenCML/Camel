@@ -13,20 +13,20 @@ import { export_model } from onnx
 import { get_env } from env
 
 type Cnn = {
-    conv1_w: Tensor, conv1_b: Tensor,
-    conv2_w: Tensor, conv2_b: Tensor,
-    fc_w: Tensor, fc_b: Tensor
+    conv1_w: float[..], conv1_b: float[..],
+    conv2_w: float[..], conv2_b: float[..],
+    fc_w: float[..], fc_b: float[..]
 }
 
 with <m: Cnn>
-func loss(x: Tensor): float {
+func loss(x: float[..]): float {
     let c1 = relu(conv2d(x, m.conv1_w, m.conv1_b, 1, 1))
     let c2 = max_pool2d(relu(conv2d(c1, m.conv2_w, m.conv2_b)), 2)
     let y = flatten(c2) @ m.fc_w + m.fc_b
     return mean(y * y)
 }
 
-func step(m: Cnn, x: Tensor): (float, Cnn) {
+func step(m: Cnn, x: float[..]): (float, Cnn) {
     let vg = with_grad(loss)<m>(x)
     return (vg.0, sgd(m, vg.1, 0.01))
 }

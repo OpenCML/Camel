@@ -208,7 +208,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "loops.iterate_tensor"
-desc = "`for` over a tensor takes its elements along the first dimension: the rank-1 rows of a rank-2 tensor (views of the same data), the rank-0 sub-tensors of a rank-1 tensor, a tensor whose first extent is 0, a loop over a row inside the body, and a function whose parameter is a `Tensor` of unknown rank (its elements have type `Tensor`)."
+desc = "`for` over a tensor takes its elements along the first dimension: the rank-1 rows of a rank-2 tensor (views of the same data), the elements of a rank-1 tensor (values of the element type, not rank-0 arrays), a tensor whose first extent is 0, a loop over a row inside the body, and a function whose parameter is a `Tensor` of unknown rank (its elements have type `Tensor`)."
 kind = "behavior"
 case = "../../../cases/loops/iterate_tensor.cml"
 args = ["${case}", "${backend}"]
@@ -231,6 +231,60 @@ expect_exit = 0
 expect_stdout_contains = ["1 2 3 4 5"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+
+[[tests]]
+name = "loops.open_rank_round_rank1"
+desc = "The round of a `for` over an array whose rank is open hands over a value of the type the round's port declares (design principles 5.4, ArrayType::firstDimensionElement): `Tensor<f32>` is `f32[..]`, so the round is declared as that open-rank array one dimension fewer, and a value whose runtime rank is 1 gives the array of no dimension holding the element (a view sharing the element's data). `sum(v)` reads the element itself — 6.0 for [1.0, 2.0, 3.0] — on every back end; the scalar reading of this round is a compile-time type error (loops.open_rank_round_scalar_read)."
+kind = "behavior"
+case = "../../../cases/loops/open_rank_round_rank1.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "6.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "loops.open_rank_round_rank2"
+desc = "The same rule over a rank-2 value: the round is the row, so `sum(v)` gives that row's sum and the collected array is [3.0, 7.0] for [[1.0, 2.0], [3.0, 4.0]]. Reading the round as an array of the row's elements — not as a scalar — is what makes the per-row sums come out."
+kind = "behavior"
+case = "../../../cases/loops/open_rank_round_rank2.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "[3.0, 7.0]\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "loops.open_rank_round_scalar_read"
+desc = "A round of an array whose rank is open is that array, not its element (`Tensor<f32>` is `f32[..]`), so the scalar reading of the round -- `s + v` where `s` is the state -- is refused when the program is compiled, with the position of the operator that cannot take the two operands. The report keeps the types of both operands and names a writing that fits either intent: the conversion of the scalar operand, and the reduction that reads a scalar out of the array, `sum(v)`, which is the reading this round needs."
+kind = "negative"
+case = "../../../cases/loops/open_rank_round_scalar_read.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
+expect_diagnostic_line = 11
+expect_diagnostic_column = 39
+expect_output_contains = ["Invalid call to '__add__' with argument types <> (float, f32[..])", "the scalar operand has type 'float', but the tensor's element type is 'f32'", "write the conversion, f32(value)", "a scalar read out of the array is written sum(v) or an explicit conversion"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "loops.open_rank_round_iterate_round"
+desc = "The round of an open-rank array is an array, and the round of a value whose runtime rank is 1 is the array of no dimension holding the element: that value has no first dimension, so iterating it is not a loop of no round -- it is refused where the inner `for` reads it, with the position of that `for`, as `for` over any value with no dimension is (docs/technical/39_loops.md 2a). Before this change the inner loop silently ran no round at all and the program printed 0."
+kind = "negative"
+case = "../../../cases/loops/open_rank_round_iterate_round.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::RuntimeError"
+expect_diagnostic_line = 13
+expect_diagnostic_column = 14
+expect_output_contains = ["a value with no dimension has no first dimension to iterate over", "open_rank_round_iterate_round.cml:13:"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
 
 [[tests]]
 name = "loops.iterate_string.macro"
@@ -395,27 +449,27 @@ timeout_ms = 8000
 
 [[tests]]
 name = "loops.err_tensor_rank0"
-desc = "`for` over a rank-0 tensor: it has no first dimension. The shape is a constant, so the refusal is at compile time (`Tensor<f32, []>`)."
+desc = "`for` over a scalar: a value with no dimension is the element it holds, so `reshape(x, [])` gives the element type rather than a rank-0 array, and a scalar is not iterable. The refusal is at compile time, where the `for` is written."
 kind = "negative"
 case = "../../../cases/loops/err_tensor_rank0.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::LoopSequenceNotIterable"
-expect_diagnostic_line = 10
+expect_diagnostic_line = 13
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
 [[tests]]
 name = "loops.fault_tensor_rank0"
-desc = "`for` over a tensor whose rank is only 0 at run time: the fault is reported at the loop's sequence on nvm and on fvm."
+desc = "Reshaping to no dimension a tensor whose element count is not one: the target is the element itself, so a two-element tensor has no value to become, and the shape arrives through a parameter, so the refusal is when the reshape runs (not at the call). The loop that follows is never reached: `for` over a value with no dimension is refused where it is written (loops.err_tensor_rank0)."
 kind = "negative"
 case = "../../../cases/loops/fault_tensor_rank0.cml"
 args = ["-E", "short", "${case}", "${backend}"]
 backends = ["nvm", "fvm"]
 expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::RuntimeError"
-expect_output_contains = ["iter: a rank-0 tensor has no first dimension"]
-expect_diagnostic_line = 16
+expect_diagnostic_name = "RuntimeDiag::TensorDimensionMismatch"
+expect_output_contains = ["reshape changes tensor element count: [2] -> []"]
+expect_diagnostic_line = 13
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 

@@ -12,7 +12,7 @@ import {
 
 /// vals where mask is 1 and NaN where mask is 0 (0 / 0 is NaN for tensors).
 /// The arrays are float[]; cast is the explicit conversion to the f32 the tensor math runs in.
-func pick(mask: float[], vals: float[]): Tensor {
+func pick(mask: float[], vals: float[]): f32[..] {
     let m = cast(mask, 'float32')
     return (m / m) * cast(vals, 'float32')
 }
@@ -53,7 +53,10 @@ func main(): int sync {
     let defined = e / sum(e, 1, true)
     'softmax equal={}'->format<sum(abs(softmax(x, 1) - defined))>->println
     // A NaN anywhere in the axis makes the whole axis NaN (how a NaN prints depends on its sign).
+    // Counting the NaNs would go through `s != s`, a bool[]: bool is not numeric, so `sum` refuses
+    // it (design principles 5.4), and `cast` takes a Tensor or a number[]. The axis itself is the
+    // observable that says the same thing, so it is printed.
     let s = softmax(pick([1.0, 0.0, 1.0], [1.0, 2.0, 3.0]), 0)
-    'softmax nan_count={}'->format<sum(s !== s)>->println
+    'softmax axis={}'->format<s>->println
     return 0
 }

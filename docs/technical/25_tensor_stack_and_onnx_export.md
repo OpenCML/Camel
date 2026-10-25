@@ -224,7 +224,7 @@ The cases where the shape is knowledge of the run, so that `as` is the answer:
 
 | Case | Example |
 |---|---|
-| A tensor read from outside the program | `load_npy(path) as Tensor<f32, [3, 3]>` |
+| A tensor read from outside the program | `load_npy::<f32>(path) as Tensor<f32, [3, 3]>` (the call declares the element type, the `as` the shape) |
 | A result that a function declares as plain `Tensor` (the declaration is what callers see, whatever the body computes); declaring the shape is the alternative | `let t = g(x)` ... `h(t as Tensor<f32, [3]>)` |
 | A slice or index with computed bounds | `slice(x, 0, i, i + 1) as Tensor<f32, [1, 3]>` |
 | A reduction with a computed axis, a reshape whose target is computed as a whole or has two computed extents, a computed extent itself | `reshape(x, [n, 3]) as Tensor<f32, [2, 3]>` when `x` is `[?, 3]` |
@@ -424,8 +424,11 @@ not exported.
 
 ### 3.7 Tensor I/O
 
-`tensor.load_npy(path)` and `tensor.save_npy(t, path)` read and write NumPy
-`.npy` files. Benchmarks use them to share identical weights and inputs across
+`tensor.load_npy::<T>(path)` and `tensor.save_npy(t, path)` read and write NumPy
+`.npy` files. The load declares the element type of the array it reads -- written
+at the call or taken from the type of the position the call stands in -- and a
+file of another element type is a fault at the call, never a conversion (design
+principles 5.1, 5.5). Benchmarks use them to share identical weights and inputs across
 Camel, PyTorch, and TensorFlow, and tests use them to compare exported-model
 outputs against Camel's own execution.
 
@@ -530,7 +533,8 @@ rejection reason. That resolver extension is part of step 2.
   `grad`, `sgd`, `apply_gradients`, `vjp`, ...) keep hand-written groups,
   because they operate on Parameter objects and graphs, not tensors. The
   conv2d VJP forwards stride and padding; pooling has VJP rules.
-- `tensor.load_npy` / `tensor.save_npy` read and write NumPy files.
+- `tensor.load_npy::<T>` / `tensor.save_npy` read and write NumPy files; the load declares the
+  element type of the array it reads and faults at the call when the file's is another.
 
 ### Step 4 landed: ONNX exporter
 

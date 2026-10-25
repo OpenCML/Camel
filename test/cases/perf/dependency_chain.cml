@@ -15,14 +15,14 @@ module perf_dependency_chain
 import { Tensor, relu, sum, zeros } from tensor
 import { now } from time
 
-func chain(x: Tensor, w: Tensor, b: Tensor): Tensor {
+func chain(x: f32[..], w: f32[..], b: f32[..]): f32[..] {
     return relu(x @ w + b) @ w
 }
 
 func main(rounds: int): int sync {
-    let x: Tensor = zeros([64, 64]) + 0.01
-    let w: Tensor = zeros([64, 64]) + 0.01
-    let b: Tensor = zeros([64, 1]) + 0.001
+    let x: f32[..] = zeros([64, 64]) + 0.01
+    let w: f32[..] = zeros([64, 64]) + 0.01
+    let b: f32[..] = zeros([64, 1]) + 0.001
     let started = now()
     let (out, done) = loop y = x, step = 0
         while step < rounds

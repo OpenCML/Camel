@@ -236,21 +236,40 @@ SliceRange sliceRange(Int64 size, Int64 startRaw, Int64 endRaw, Int64 step, Int6
 } // namespace
 
 // `t[a:b]`, `t[a:b:s]`, `t[:b]`, `t[a:]`, `t[:]`: the slice of the first dimension a subscript
-// writes (design principles 5.4). The bounds are read by `sliceRange` above.
+// writes (design principles 5.4). The call is the slice node itself: the value, the axis (0 --
+// a subscript slices the first dimension), the two bounds, the step and the two-bit mask. The
+// bounds are read by `sliceRange` above.
+//
+// The function form `slice(t, 0, a, b, s?)` is the same node with the words a call has and a
+// subscript has not: it writes the axis itself and leaves out the mask, which for it is "both
+// bounds were written" (3). One operator, one rule, one adjoint rule for both spellings, and the
+// spelling is what the argument count says -- exactly as the tensor module's one `slice`
+// operator answered both before the ruling of 2026-10-25 (the author's
+// discrete-gradient-and-rank-one-slice-ownership, point 2: `t[a:b]` and `slice(t, 0, a, b)` are
+// the same node).
 //
 // A step other than 1 is a view with strides, which needs the multidimensional array
 // representation of. Until it lands, a stepped slice is a copy: the elements are the same
 // and the program does not have to know, but the result does not share the array's block.
 // records the deviation; step 1 still shares the block.
 slot_t __slice_sub__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    (void)with;
     Array *arr    = norm.get<Array *>(0);
     auto *arrType = tt::as_ptr<ArrayType>(norm.type(0));
+    // `norm.get<Int64>(1)` is the axis: a subscript writes the constant 0 for it, the function
+    // form writes the axis the program named (0 for a rank-1 array -- the only axis it has), and
+    // an array of values is sliced along its only dimension, so it is read and not otherwise
+    // used. The step and the mask follow the two bounds; a call that writes neither still says
+    // "step 1, both bounds written".
+    const size_t words  = norm.size();
+    const Int64 step    = words >= 5 ? norm.get<Int64>(4) : 1;
+    const Int64 written = words >= 6 ? norm.get<Int64>(5) : 3;
     const SliceRange range = sliceRange(
         static_cast<Int64>(arr->size()),
-        norm.get<Int64>(1),
         norm.get<Int64>(2),
         norm.get<Int64>(3),
-        norm.get<Int64>(4));
+        step,
+        written);
     if (arr->rank() != 1) {
         // A slice of a dimension other than the first is a view with strides; the type
         // system states rank 1, so this is a defect rather than something a program writes.
@@ -538,10 +557,34 @@ slot_t callTangentOperator(
     return (*op)(with, norm, ctx);
 }
 
+/// True when a module owns the tangent space of `type`. Two kinds share the array code: a
+/// tensor is a numeric array and the module that owns it published its own `add` and
+/// `zeros_like`, while an array of values is answered here. A space a module registered for a
+/// subset of a code is the one that owns those values.
+bool isModuleOwned(Type *type) {
+    const auto *space = camel::core::DerivativeRegistry::instance().findTangentSpace(type);
+    return space != nullptr && space->owns != nullptr;
+}
+
+/// The zero tangent of a value whose tangent type a module owns: the module says how to make it
+/// (`zeros_like`, `add`), and the registry passes that operator's URI on. An array whose element
+/// type states no tangent of its own (an array of `Void`, the empty array literal's type) has
+/// nothing to descend into, and `tensor:zeros_like` reads the element type the value actually has
+/// (the element type follows the value).
+slot_t moduleZeroTangent(Context &ctx, Type *primalType, Type *tangentType, slot_t primal);
 // The zero tangent of a value of primal type `primalType`, whose tangent type is
 // `tangentType`. `primal` is the primal value: an array's zero has the array's length, and a
 // struct or tuple's fields line up with the primal's, so the shape is taken from it.
+//
+// A type a module owns (a tensor, a numeric array) is not built here at all: its zero is the
+// module's own operator (`tensor:zeros_like`), which answers at the value's dtype and shape.
+// Recursing into a tensor's element type would take the numbers out of the tensor's arithmetic
+// -- and an array of `Void` has no element type to recurse into, which is the "zero tangent is
+// not defined for tangent type 'void'" fault.
 slot_t zeroTangent(Context &ctx, Type *primalType, Type *tangentType, slot_t primal) {
+    if (isModuleOwned(primalType)) {
+        return moduleZeroTangent(ctx, primalType, tangentType, primal);
+    }
     switch (tangentType->code()) {
     case TypeCode::Float64:
         return toSlot<Float64>(0.0);
@@ -554,7 +597,7 @@ slot_t zeroTangent(Context &ctx, Type *primalType, Type *tangentType, slot_t pri
         Struct *zero        = Struct::create(tangentStruct->size(), mm::autoSpace());
         size_t position     = 0;
         for (size_t i = 0; i < primalStruct->size(); ++i) {
-            Type *fieldTangent = camel::core::tangentTypeOf(primalStruct->typeAt(i));
+            Type *fieldTangent = camel::core::machineryTangentTypeOf(primalStruct->typeAt(i));
             if (fieldTangent == nullptr) {
                 continue;
             }
@@ -573,7 +616,7 @@ slot_t zeroTangent(Context &ctx, Type *primalType, Type *tangentType, slot_t pri
         Tuple *zero        = Tuple::create(tangentTuple->size(), mm::autoSpace());
         size_t position    = 0;
         for (size_t i = 0; i < primalTuple->size(); ++i) {
-            Type *elementTangent = camel::core::tangentTypeOf(primalTuple->typeAt(i));
+            Type *elementTangent = camel::core::machineryTangentTypeOf(primalTuple->typeAt(i));
             if (elementTangent == nullptr) {
                 continue;
             }
@@ -588,8 +631,22 @@ slot_t zeroTangent(Context &ctx, Type *primalType, Type *tangentType, slot_t pri
     case TypeCode::Array: {
         auto *tangentArray = tt::as_ptr<ArrayType>(tangentType);
         auto *primalArray  = tt::as_ptr<ArrayType>(primalType);
-        auto *value        = fromSlot<Array *>(primal);
-        Array *zero        = Array::create(mm::autoSpace(), value->size());
+        // An array whose element type is `Void` is an array whose element type nobody stated (the
+        // empty array literal's type): `Void` is the "a numeric scalar, which one is not fixed"
+        // marker, not a type whose tangent exists, so there is no element to take the zero of. The
+        // zero of such a value is its kind's own zero, made from the value
+        // (`tensor:zeros_like`), and the element type follows the value
+        // (docs/handover/reviews/questions-2026-10-23.md, rank-zero-tensor and
+        // unstated-element-type-scalar-and-print): zeroing the elements one by one is not the
+        // answer, and doing it refused with "a zero tangent is not defined for tangent type
+        // 'void'" although the value it is the zero of is a tensor.
+        const bool elementsUnstated = tangentArray->elemType() != nullptr &&
+                                      tangentArray->elemType()->code() == TypeCode::Void;
+        if (elementsUnstated) {
+            return moduleZeroTangent(ctx, primalType, tangentType, primal);
+        }
+        auto *value = fromSlot<Array *>(primal);
+        Array *zero = Array::create(mm::autoSpace(), value->size());
         for (size_t i = 0; i < value->size(); ++i) {
             zero->set<slot_t>(
                 i,
@@ -605,6 +662,12 @@ slot_t zeroTangent(Context &ctx, Type *primalType, Type *tangentType, slot_t pri
     }
     // A leaf whose tangent type a module owns (a tensor): the module says how to make the zero
     // of a value of its type, and the registry passes that operator's URI on.
+    return moduleZeroTangent(ctx, primalType, tangentType, primal);
+}
+
+// The zero tangent of a value whose tangent space a module owns: the module published the
+// operator, the registry passes its URI on.
+slot_t moduleZeroTangent(Context &ctx, Type *primalType, Type *tangentType, slot_t primal) {
     const auto *space = camel::core::DerivativeRegistry::instance().findTangentSpace(primalType);
     if (space == nullptr) {
         noStructuralTangent("a zero tangent", tangentType);
@@ -619,8 +682,19 @@ slot_t zeroTangent(Context &ctx, Type *primalType, Type *tangentType, slot_t pri
         ctx, space->zerosLikeUri, tangentType, {primal}, {primalType});
 }
 
+// The sum of two tangents of a type whose tangent space a module owns: the module published the
+// operator, the registry passes its URI on.
+slot_t moduleAddTangent(Context &ctx, Type *tangentType, slot_t lhsSlot, slot_t rhsSlot);
+
 // The sum of two tangents of `tangentType`. Both have the same shape.
+//
+// As for the zero, a tangent type a module owns (a tensor) is summed by the module's own
+// `add`, not element by element here: a tensor's tangent is the tensor, and adding two of them
+// is `tensor:add`, which answers at the tensor's dtype and shape.
 slot_t addTangent(Context &ctx, Type *tangentType, slot_t lhsSlot, slot_t rhsSlot) {
+    if (isModuleOwned(tangentType)) {
+        return moduleAddTangent(ctx, tangentType, lhsSlot, rhsSlot);
+    }
     switch (tangentType->code()) {
     case TypeCode::Float64:
         return toSlot<Float64>(fromSlot<Float64>(lhsSlot) + fromSlot<Float64>(rhsSlot));
@@ -660,6 +734,19 @@ slot_t addTangent(Context &ctx, Type *tangentType, slot_t lhsSlot, slot_t rhsSlo
     }
     case TypeCode::Array: {
         auto *arrayType = tt::as_ptr<ArrayType>(tangentType);
+        // As in zeroTangent: an array whose element type is the `Void` marker has no element type
+        // to add along, so its two tangents are added by the kind's own operator (`tensor:add`),
+        // which reads the element type the values actually have.
+        if (arrayType->elemType() != nullptr &&
+            arrayType->elemType()->code() == TypeCode::Void) {
+            const auto *space =
+                camel::core::DerivativeRegistry::instance().findTangentSpace(tangentType);
+            if (space == nullptr || space->addUri.empty()) {
+                noStructuralTangent("a sum of tangents", tangentType);
+            }
+            return callTangentOperator(
+                ctx, space->addUri, tangentType, {lhsSlot, rhsSlot}, {tangentType, tangentType});
+        }
         auto *lhs       = fromSlot<Array *>(lhsSlot);
         auto *rhs       = fromSlot<Array *>(rhsSlot);
         ASSERT(lhs->size() == rhs->size(), "autodiff: tangent arrays of different lengths.");
@@ -677,6 +764,12 @@ slot_t addTangent(Context &ctx, Type *tangentType, slot_t lhsSlot, slot_t rhsSlo
     }
     // A leaf whose tangent type a module owns (a tensor): the module published the operator that
     // adds two of them, and the registry passes its URI on.
+    return moduleAddTangent(ctx, tangentType, lhsSlot, rhsSlot);
+}
+
+// The sum of two tangents of a type whose tangent space a module owns: the module published the
+// operator, the registry passes its URI on.
+slot_t moduleAddTangent(Context &ctx, Type *tangentType, slot_t lhsSlot, slot_t rhsSlot) {
     const auto *space = camel::core::DerivativeRegistry::instance().findTangentSpace(tangentType);
     if (space == nullptr || space->addUri.empty()) {
         noStructuralTangent("a sum of tangents", tangentType);
@@ -717,7 +810,7 @@ slot_t __tangent_zeros_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Type *primalType  = norm.type(0);
     Type *tangentType = norm.resultType();
     if (tangentType == nullptr) {
-        tangentType = camel::core::tangentTypeOf(primalType);
+        tangentType = camel::core::machineryTangentTypeOf(primalType);
     }
     if (tangentType == nullptr || primalType->code() != TypeCode::Array) {
         throwRuntimeFault(
@@ -749,7 +842,10 @@ slot_t __tangent_scatter_add_arr__(ArgsView &with, ArgsView &norm, Context &ctx)
     if (index < 0 || static_cast<size_t>(index) >= base->size()) {
         throwRuntimeFault(RuntimeDiag::IndexOutOfRange, index, "an array", base->size());
     }
-    Array *result = Array::create(mm::autoSpace(), base->size());
+    // The gradient carries the element type of the array it is the gradient of: an array created
+    // without its type holds bare slots, and the next operator to read it finds no element type
+    // at all (the `sum: Unsupported Tensor dtype` of the flip line).
+    Array *result = Array::create(mm::autoSpace(), arrayType, base->size());
     for (size_t i = 0; i < base->size(); ++i) {
         result->set<slot_t>(i, base->get<slot_t>(i), arrayType);
     }
@@ -830,7 +926,7 @@ slot_t __tangent_scatter_slice_arr__(ArgsView &with, ArgsView &norm, Context &ct
     Type *const primalType  = norm.type(1);
     Type *const tangentType = norm.resultType() != nullptr
                                   ? norm.resultType()
-                                  : camel::core::tangentTypeOf(primalType);
+                                  : camel::core::machineryTangentTypeOf(primalType);
     if (tangentType == nullptr || primalType->code() != TypeCode::Array ||
         tangentType->code() != TypeCode::Array) {
         throwRuntimeFault(
@@ -855,7 +951,28 @@ slot_t __tangent_scatter_slice_arr__(ArgsView &with, ArgsView &norm, Context &ct
                 dx->size(),
                 range.count));
     }
-    Array *result = Array::create(mm::autoSpace(), like->size());
+    // The result is the tangent of the parent, so it is created with that type: the value the
+    // adjoint hands back states the element type the forward value has (design principles 9.9),
+    // and a downstream operator reading a slice's gradient reads that type off the value. An
+    // array created without a type holds bare slots and names no element type at all.
+    Array *result = Array::create(mm::autoSpace(), tangentArray, like->size());
+    // An array whose tangent's element type is `Void` has no element type to take a zero from;
+    // its kind's own zero reads the element type the value actually has, and every position the
+    // slice does not take holds that zero.
+    if (tangentArray->elemType() != nullptr &&
+        tangentArray->elemType()->code() == TypeCode::Void) {
+        slot_t zero = moduleZeroTangent(ctx, primalType, tangentType, rtdata::toSlot(like));
+        for (size_t i = 0; i < like->size(); ++i) {
+            result->set<slot_t>(i, zero, tangentArray);
+        }
+        for (Int64 i = 0; i < range.count; ++i) {
+            result->set<slot_t>(
+                static_cast<size_t>(range.start + i * range.step),
+                dx->get<slot_t>(static_cast<size_t>(i)),
+                tangentArray);
+        }
+        return rtdata::toSlot(result);
+    }
     for (size_t i = 0; i < like->size(); ++i) {
         result->set<slot_t>(
             i,

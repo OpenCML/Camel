@@ -22,25 +22,25 @@ import { Tensor, ones, zeros, shape, reshape, slice, sum } from tensor
 import { export_model } from onnx
 import { get_env } from env
 
-func run(t: int, steps: int, x: Tensor, h: Tensor): Tensor {
+func run(t: int, steps: int, x: f32[..], h: f32[..]): f32[..] {
     let batch = shape(x)[0]
     let features = shape(x)[2]
     return if t >= steps then h else run(t + 1, steps, x, h + reshape(slice(x, 1, t, t + 1), [batch, features]))
 }
 
-func forward(x: Tensor): Tensor {
+func forward(x: f32[..]): f32[..] {
     return run(0, shape(x)[1], x, zeros([shape(x)[0], shape(x)[2]]))
 }
 
-func shrink(t: Tensor): Tensor {
+func shrink(t: f32[..]): f32[..] {
     return if sum(t) > 1.0 then shrink(t * 0.5) else t
 }
 
-func pile(t: Tensor): Tensor {
+func pile(t: f32[..]): f32[..] {
     return if sum(t) > 1.0 then pile(t * 0.5) + t else t
 }
 
-func settle(t: Tensor): Tensor {
+func settle(t: f32[..]): f32[..] {
     return if sum(t) > 1.0 then (if sum(t * t) > 50.0 then t * 0.1 else settle(t * 0.5) + t) else t
 }
 

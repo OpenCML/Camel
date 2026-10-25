@@ -10,16 +10,16 @@ import { export_model } from onnx
 import { get_env } from env
 
 // Depth depends on the data only: halve until the sum is below 1.
-func halve(h: Tensor): Tensor {
+func halve(h: float[..]): float[..] {
     return if sum(h) < 1.0 then h else halve(h * 0.5)
 }
 
 // A counted loop whose bound comes from the data, with an unchanged argument (w).
-func iterate(i: int, n: int, v: Tensor, w: Tensor): Tensor {
+func iterate(i: int, n: int, v: float[..], w: float[..]): float[..] {
     return if i >= n then v else iterate(i + 1, n, tanh(v @ w) + v, w)
 }
 
-func model(x: Tensor, w: Tensor): (Tensor, Tensor) {
+func model(x: float[..], w: float[..]): (float[..], float[..]) {
     let steps = int(sum(x * x) * 0.2)
     return (halve(x), iterate(0, steps, x, w))
 }
@@ -30,7 +30,7 @@ func main(): int sync {
     let r = model(x, w)
     println(r.0)
     println(r.1)
-    export_model((x: Tensor, w: Tensor): (Tensor, Tensor) => model(x, w), (x, w), get_env('ONNX_OUT'))
+    export_model((x: float[..], w: float[..]): (float[..], float[..]) => model(x, w), (x, w), get_env('ONNX_OUT'))
     println('exported')
     return 0
 }

@@ -11,24 +11,24 @@ import { Tensor, new, reshape, permute, transpose, shape, mean, sum } from tenso
 import { with_grad } from autodiff
 
 type QK = {
-    q_w: Tensor,
-    k_w: Tensor
+    q_w: f32[..],
+    k_w: f32[..]
 }
 
-func split_heads(t: Tensor, heads: int): Tensor {
+func split_heads(t: f32[..], heads: int): f32[..] {
     let dims = shape(t)
     return permute(reshape(t, [dims[0], dims[1], heads, dims[2] / heads]), [0, 2, 1, 3])
 }
 
 with <m: QK>
-func scores(x: Tensor): Tensor {
+func scores(x: f32[..]): f32[..] {
     let q = split_heads(x @ m.q_w, 2)
     let k = split_heads(x @ m.k_w, 2)
     return q @ transpose(k)
 }
 
 with <m: QK>
-func loss(x: Tensor): float {
+func loss(x: f32[..]): float {
     let y = scores<m>(x)
     return mean(y * y)
 }

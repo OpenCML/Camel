@@ -12,22 +12,22 @@ import { with_grad } from autodiff
 import { export_model } from onnx
 import { get_env } from env
 
-type P = { w: Tensor }
+type P = { w: f32[..] }
 
 // A: a loop whose length depends on the data.
 with <m: P>
-func iterate(i: int, n: int, v: Tensor): Tensor {
+func iterate(i: int, n: int, v: f32[..]): f32[..] {
     return if i >= n then v else iterate<m>(i + 1, n, tanh(v @ m.w) + v * 0.5)
 }
 
 with <m: P>
-func loss_a(x: Tensor): float {
+func loss_a(x: f32[..]): float {
     return sum(iterate<m>(0, int(sum(x * x) * 0.5), x))
 }
 
 // B: the same with a data-dependent branch in the body.
 with <m: P>
-func iterate_b(i: int, n: int, v: Tensor): Tensor {
+func iterate_b(i: int, n: int, v: f32[..]): f32[..] {
     return if i >= n then v else iterate_b<m>(
         i + 1,
         n,
@@ -36,11 +36,11 @@ func iterate_b(i: int, n: int, v: Tensor): Tensor {
 }
 
 with <m: P>
-func loss_b(x: Tensor): float {
+func loss_b(x: f32[..]): float {
     return sum(iterate_b<m>(0, int(sum(x * x) * 0.5), x))
 }
 
-func step(w: Tensor, x: Tensor): (Tensor, Tensor, Tensor, Tensor) {
+func step(w: f32[..], x: f32[..]): (float[..], f32[..], float[..], f32[..]) {
     let m = { w: w }
     let a = with_grad(loss_a)<m>(x)
     let b = with_grad(loss_b)<m>(x)
@@ -48,15 +48,15 @@ func step(w: Tensor, x: Tensor): (Tensor, Tensor, Tensor, Tensor) {
 }
 
 func main(): int sync {
-    let w = load_npy('w.npy')
-    let x = load_npy('x.npy')
+    let w = load_npy::<f32>('w.npy')
+    let x = load_npy::<f32>('x.npy')
     let r = step(w, x)
     save_npy(r.0, 'native_0.npy')
     save_npy(r.1, 'native_1.npy')
     save_npy(r.2, 'native_2.npy')
     save_npy(r.3, 'native_3.npy')
     let exported = if get_env('ONNX_OUT') != '' then sync {
-        export_model((w: Tensor, x: Tensor): (Tensor, Tensor, Tensor, Tensor) => step(w, x), (w, x), get_env('ONNX_OUT'))
+        export_model((w: f32[..], x: f32[..]): (float[..], f32[..], float[..], f32[..]) => step(w, x), (w, x), get_env('ONNX_OUT'))
         1
     } else 0
     println(exported)

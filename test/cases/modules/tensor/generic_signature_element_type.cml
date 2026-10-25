@@ -52,7 +52,7 @@ func main(): int sync {
     println(firstDim(ints))
 
     // The tensor spelling still fills the same names, so no existing program changed.
-    let t: Tensor = ones([2, 3])
+    let t: f32[..] = ones([2, 3])
     println(shape(t))
     return 0
 }

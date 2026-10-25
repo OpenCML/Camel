@@ -198,7 +198,8 @@ class Resolver {
     NodeResources node(const GCGraph &graph, gc_node_ref_t ref) const;
 
     /// The origin of the value of `ref`, through GATEs and through Same/View results (a call's
-    /// result, an in-place operator's result) to the port or allocation it comes from.
+    /// result, an in-place operator's result, an assignment's result -- the cell that write
+    /// wrote into) to the port or allocation it comes from.
     ValueOrigin originOf(const GCGraph &graph, gc_node_ref_t ref) const;
     bool mayAlias(const GCGraph &graph, gc_node_ref_t a, gc_node_ref_t b) const;
 

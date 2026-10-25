@@ -33,5 +33,16 @@ std::string typeToString(const Type *type);
 std::string typeMangle(const Type *type);
 /// Structural equality of two types (the same relation as `Type::equals`).
 bool typeEquals(const Type *a, const Type *b);
+/**
+ * The same relation read off the type table instead of walked: two types are the same type when
+ * their canonical ids (camel/core/type/intern.h) are one. That id erases the naming words of a
+ * key, so `f32[n]` and `f32[?]` answer yes here, and an object built apart for one structure
+ * answers yes as well -- which is the comparison the graph, its content hashes and the e-graph
+ * make, since a type has no identity but its structure.
+ *
+ * A type the table does not hold has no canonical id: two such types are one only when they are
+ * the same object (`typeEquals` is the one that still walks them).
+ */
+bool sameCanonicalType(const Type *a, const Type *b);
 
 } // namespace camel::core::type

@@ -7,7 +7,7 @@ func centered(x: Tensor<f32>): Tensor<f32> {
 }
 func main(): int sync {
     let folder = get_env('TILES_TEST_OUT')
-    let x = load_npy(folder + '/input.npy') as Tensor<f32>
+    let x = load_npy::<f32>(folder + '/input.npy') as Tensor<f32>
     save_npy(centered(x), folder + '/cpu.npy')
     save_npy(download(run_preferred_resident<centered>(x)), folder + '/gpu.npy')
     println(inspect<centered>(x))

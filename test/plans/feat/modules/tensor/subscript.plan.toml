@@ -63,35 +63,144 @@ timeout_ms = 10000
 
 [[tests]]
 name = "slice_step"
-desc = "A subscript slice with a step takes every step-th element of the first axis (design principles 5.4): the step is a value like any other, so a constant step and a run-time step name the same elements, and the elements are the slice's value whether the result is a view or a copy."
-kind = "behavior"
+desc = "A subscript slice with a step other than the constant 1 is a view with strides: refused at compile time, naming H17 (design principles 5.4)."
+kind = "negative"
 case = "../../../../cases/modules/tensor/subscript/slice_step.cml"
 args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
+expect_output_contains = ["a slice step other than the constant 1", "H17"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "core_slice_adjoint"
+desc = "The core's slice answers `a[1:4]` on a rank-1 tensor whose length is stated (`reshape(x, [6])`), and its adjoint hands back a value of the element type the forward value has: `sum(a[1:4])` is 9.0 and the gradient sums to 3.0 instead of refusing with `sum: Unsupported Tensor dtype` (the author's ruling of 2026-10-25, point 2)."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/subscript/core_slice_adjoint.cml"
+args = ["${case}"]
 expect_exit = 0
-expect_stdout_exact = "[3]\n1.0\n3.0\n5.0\n[2]\n1.0\n4.0\n"
+expect_stdout_exact = "core_slice_adjoint value=9.0 grad_sum=3.0 grad_dot=3.0\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "core_slice_adjoint.fvm"
+desc = "The same node and the same adjoint on the bytecode VM: the gradient of the core's slice carries the element type there too (fvm)."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/subscript/core_slice_adjoint.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "core_slice_adjoint value=9.0 grad_sum=3.0 grad_dot=3.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+# The same chain on a value whose length the type does not state: `x[1:4]` with `x: f32[]` is the
+# core's slice on the flip line too, so this pair measures the core's chain itself, before and after
+# the scatter kernel learned to create its result with the tangent's array type.
+[[tests]]
+name = "core_slice_adjoint_open"
+desc = "The core's slice on a rank-1 value whose length is not stated (`x[1:4]`, `x: f32[]`) and its adjoint: `sum(x[1:4])` is 9.0 and the gradient sums to 3.0. Before the fix this refused with `sum: Unsupported Tensor dtype`, because the scatter created its result with bare slots."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/subscript/core_slice_adjoint_open.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "core_slice_adjoint_open value=9.0 grad_sum=3.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "core_slice_adjoint_open.fvm"
+desc = "The same open-length slice and its adjoint on the bytecode VM (fvm)."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/subscript/core_slice_adjoint_open.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "core_slice_adjoint_open value=9.0 grad_sum=3.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "slice_one_node"
+desc = "`x[1:4]`, `x[2:]`, `slice(x, 0, 1, 4)` and `x[[0, 2]]` on a rank-1 tensor whose length is stated: the three slice spellings are the core's one slice node and the row form is the core's take (std::gir prints the operators)."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/subscript/slice_one_node.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+expect_stdout_contains = ["label=\":op/slice_sub\"", "label=\":op/idx_take\""]
+expect_stdout_not_contains = ["label=\"tensor:slice\"", "label=\"tensor:idx_take\""]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "slice_node_subscript"
+desc = "`x[1:4]` on a rank-1 value whose length is stated: the core's slice node, printed by std::gir."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/subscript/slice_node_subscript.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+expect_stdout_contains = ["label=\":op/slice_sub\""]
+expect_stdout_not_contains = ["label=\"tensor:slice\""]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "slice_node_open_end"
+desc = "`x[2:]` on a rank-1 value whose length is stated: the core's slice node, printed by std::gir."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/subscript/slice_node_open_end.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+expect_stdout_contains = ["label=\":op/slice_sub\""]
+expect_stdout_not_contains = ["label=\"tensor:slice\""]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "slice_node_function"
+desc = "`slice(x, 0, 1, 4)` on a rank-1 value whose length is stated: the same core slice node `x[1:4]` builds, printed by std::gir."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/subscript/slice_node_function.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+expect_stdout_contains = ["label=\":op/slice_sub\""]
+expect_stdout_not_contains = ["label=\"tensor:slice\""]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "slice_node_take"
+desc = "`x[[0, 2]]` on a rank-1 value whose length is stated: the core's `:op/idx_take`, printed by std::gir."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/subscript/slice_node_take.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+expect_stdout_contains = ["label=\":op/idx_take\""]
+expect_stdout_not_contains = ["label=\"tensor:idx_take\""]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
 [[tests]]
 name = "slice_step_negative"
-desc = "A negative step runs the slice backwards (design principles 5.4): the elements from the start down to the end, the start defaulting to the last element and the end to the position before the first."
-kind = "behavior"
+desc = "A negative step is refused like a positive one on a tensor: `t[a:b:-1]` is still a view with strides (H17), refused at compile time rather than read as a backwards copy, so no gradient is ever built from an unsupported step (design principles 5.4)."
+kind = "negative"
 case = "../../../../cases/modules/tensor/subscript/slice_step_negative.cml"
 args = ["${case}"]
-expect_exit = 0
-expect_stdout_exact = "[3]\n6.0\n4.0\n2.0\n[6]\n6.0\n1.0\n"
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
+expect_output_contains = ["a slice step other than the constant 1", "H17"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
 [[tests]]
 name = "slice_step_zero"
-desc = "A subscript slice of a tensor whose step is the constant 0 takes no element at all: refused where the step is written (design principles 5.4), as the step of a range is (4.2)."
+desc = "A subscript slice of a tensor whose first extent is stated and whose step is not the constant 1 is a view with strides, refused at compile time and naming H17 (design principles 5.4): the zero step is refused like any other, and the program after it does not run."
 kind = "negative"
 case = "../../../../cases/modules/tensor/subscript/slice_step_zero.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
-expect_output_contains = ["a slice step of 0 takes no element"]
+expect_output_contains = ["a slice step other than the constant 1", "H17"]
 expect_output_not_contains = ["not reached"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000

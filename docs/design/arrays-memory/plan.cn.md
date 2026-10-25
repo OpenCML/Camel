@@ -385,7 +385,7 @@ P4 的终点：
 | `src/core/derivative.h/.cpp#setTangentType`/`statedTangentType` | 过渡类型的元素是 `Void`，结构上取不到切线，所以新加一个注册钩子 | 随过渡类型删除；`computeTangentType` 的 `Array` 分支恢复只走元素类型 |
 | `modules/autodiff/pullback.cpp#carriesGradient` 的 `Array` 分支 | 同上（`tangentTypeOf` 判据） | 可恢复为 `carriesGradient(elemType)` |
 | `modules/tensor/module.cpp` 的 `.npy` 加载器/保存器 | 检查值对着 `ArrayType::numericUnknown()` 做形状/元素检查 | 改为对着声明的具体数组类型检查 |
-| `modules/tensor/ops/gradient_ops.cpp#tensorTangentType` | 判断过渡类型有没有切线 | 随钩子删除 |
+| `modules/tensor/ops/gradient_ops.cpp#registerTensorTangentSpace` | 判断过渡类型有没有切线 | 随钩子删除：切线类型由元素类型给出 |
 | `modules/onnx/emitter.cpp` 的 `Value::constant(..., numericUnknown())` | 数组常量当张量时的声明类型 | 改为值自己的数组类型 |
 | `src/core/rtdata/equality.cpp` 的 `registerContentComparableType` / `isRegisteredContentComparableType`，以及 `isContentComparableImpl` 里的 `isNumericUnknown()` 分支 | 让模块的 `Tensor` 类型与元素类型未定的数组参加整体比较 `==` | 随过渡类型删除：张量就是数组，走数组自己的比较；注册表整个删掉 |
 | `modules/tensor/ops/layout_ops.cpp` 的 `OpDef idx_take`（`.exports = {"__idx__"}`）与 `setVjp(defs, "idx_take", &takeVjp)` | 模块的 `Tensor` 值经它参加 `t[idx]`；核心 `:op/idx_take` 已对任意秩按第 0 维取行、带反向 | 删掉这份副本，`t[idx]` 只有核心一条规则；函数形式 `tensor::take` 保留；`export_matrix` 去掉 `tensor:idx_take` 一行；`take_rows`、`gather_grad_f64`、`discrete_zero`、`gather_discrete_index_zero` 四个用例的 `t[idx]` 落到核心 |
@@ -400,7 +400,7 @@ P4 的终点：
 
 ### 5.2 元素类型精确
 
-- 删除 `normalizeTensorDType`（P4 已删；`TensorType::get` 只校验元素类型，`modules/tensor/type.cpp#TensorType::get` 起）：`Tensor<float>` 就是 `float[..]`（f64 存储），`Tensor<i32>` 就是 `i32[..]`，`Tensor<f64>` 就是 `f64[..]`。`zeros`/`ones` 等不写 dtype 的构造仍是 f32（与今天一致）。
+- 删除 `normalizeTensorDType`（P4 已删；`TensorType::get` 只校验元素类型，`modules/tensor/type.cpp` 起）：`Tensor<float>` 就是 `float[..]`（f64 存储），`Tensor<i32>` 就是 `i32[..]`，`Tensor<f64>` 就是 `f64[..]`。`zeros`/`ones` 等不写 dtype 的构造仍是 f32（与今天一致）。
 - 审计模块内核的 dtype 支持：elementwise 已支持 f32/f64/i32/i64（`modules/tensor/kernels/elementwise.cpp`）；conv/bn 的若干内核只接受 `const float*`（`kernels/conv.cpp` 283+、404+、572+）。这些算子的推断处要声明只支持 f32（今天没有声明，遇到 f64 会读错），遇到 f64 输入报运行时故障（而不是静默读错）。测试里没有 `Tensor<float>` 的用例（已核对），只有 `Tensor<int>` 出现在 `modules/nn` 的 checkpoint 用例里，`int` 就是 i64，与今天相同。
 - 删除 `TensorType::castSafetyFrom/castSlotFrom` 里的 dtype 归一化；`as` 的检查变成 `ArrayType::castSlotFrom` 的形状检查（P2）。
 

@@ -1,0 +1,22 @@
+/**
+ * A `with` parameter declared `var` takes the caller's variable, so a variable whose value is a
+ * numeric array with a stated element type and unstated extents passes to a `with <var t: Tensor>`
+ * parameter exactly as it does to an ordinary `var Tensor` parameter: the declared parameter type
+ * is the bound of what the callee may store through the cell.
+ * Expected output: 1.0 1.0
+ */
+module var_argument_with_parameter
+import { Tensor, reshape, sum } from tensor
+
+with <var acc: f64[]>
+func step(d: float): float sync {
+    acc = acc + d
+    return sum(acc)
+}
+
+func main(): int sync {
+    var w = reshape([0.0, 0.0], [2])
+    let r = step<w>(0.5)
+    println('{} {}'->format<r, sum(w)>)
+    return 0
+}

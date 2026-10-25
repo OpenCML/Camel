@@ -23,11 +23,11 @@ import { now } from time
 
 /// The canonical algorithm: `#strict` withholds every permission, the library GEMM included.
 #strict
-func exact(a: Tensor, b: Tensor): Tensor {
+func exact(a: f32[..], b: f32[..]): f32[..] {
     return a @ b
 }
 
-func bench(round: int, label: string, m: int, n: int, k: int, a: Tensor, b: Tensor, reps: int): void sync {
+func bench(round: int, label: string, m: int, n: int, k: int, a: f32[..], b: f32[..], reps: int): void sync {
     let warm = sum(exact(a, b))
     let started = now()
     let measured = loop i = 0, s = 0.0 while i < reps do {
@@ -42,7 +42,7 @@ func bench(round: int, label: string, m: int, n: int, k: int, a: Tensor, b: Tens
 
 /// The same product as broadcast-multiply-and-reduce: a temporary of m x k x n floats and a
 /// reduction, with none of the canonical kernel's blocking or packing.
-func bench_reference(round: int, m: int, n: int, k: int, a: Tensor, b: Tensor, reps: int): void sync {
+func bench_reference(round: int, m: int, n: int, k: int, a: f32[..], b: f32[..], reps: int): void sync {
     let warm = sum(unsqueeze(a, 2) * unsqueeze(b, 0), 1)
     let started = now()
     let measured = loop i = 0, s = 0.0 while i < reps do {

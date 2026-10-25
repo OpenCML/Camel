@@ -1,0 +1,21 @@
+// A body whose last statement is a write's value: `v` is the value the write wrote, and it is the
+// value the body hands on. The tail `return v` says the same thing and builds one graph with it,
+// so the printer writes the value back as `return v` and the two compile alike.
+func counted(): int sync {
+    var v = 1
+    v = 2
+    v
+}
+
+// The same body, with the value written as a `return`. The two functions differ in nothing but
+// their names and the way the value is written.
+func counted_returned(): int sync {
+    var v = 1
+    v = 2
+    return v
+}
+
+func main(): int sync {
+    println(counted(), counted_returned())
+    return 0
+}

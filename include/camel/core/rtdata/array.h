@@ -428,6 +428,18 @@ class Array : public rtdata::Object {
         return getSlot(flatIndex);
     }
     slot_t getSlotSlow(uint64_t flatIndex) const;
+
+    /// The `index`-th element along the first dimension, as the value a reader of the type
+    /// `ArrayType::firstDimensionElement()` gets: the element itself for a rank-1 array, and the
+    /// row — a view that shares this array's data — for a higher-rank one (design principles 5.4:
+    /// `t[i]` takes the i-th along the first dimension, one row when it has more than one). This
+    /// is the value a `for` over the array binds each round, for every array of every rank (the
+    /// ruling of 2026-10-24, docs/handover/reviews/questions-2026-10-24-evening.md section
+    /// loop-domain-through-the-tensor-iterator). `index` must be below `size()`, the number of
+    /// elements along the first dimension, which is what ends such a loop. A row of a slot array
+    /// (an array of references with more than one dimension) is copied rather than viewed: an
+    /// array is an immutable value, so the copy is the same value.
+    slot_t firstDimensionElement(uint64_t index);
     /// Stores one element from a slot. `arrayType` supplies the element type for the reference
     /// write barrier (slot arrays only; a compact write never needs one) and may be null for a
     /// compact array, whose own element type is enough.
@@ -671,13 +683,11 @@ class Array : public rtdata::Object {
     void recomputePointers();
 
     bool compactEqualsElements(const Array *other, bool deep) const;
+    /// Prints the elements as nested brackets. `elemType` is the type the elements print by: the
+    /// declared element type, or — when the declaration does not fix one, as an array whose element
+    /// is the `Void` marker does not — the type the value holds (`elemType_`).
     void printArray(
-        std::ostream &os, const type::ArrayType *arrayType, size_t dim, uint64_t &flatIndex,
-        const std::string &indent) const;
-    void printTensor(std::ostream &os) const;
-    void printTensorRecursive(std::ostream &os, size_t dim, uint64_t &flatIndex,
-                              const std::string &indent) const;
-    std::string formatTensorElement(uint64_t flatIndex) const;
+        std::ostream &os, const type::Type *elemType, size_t dim, uint64_t &flatIndex) const;
 
     camel::core::mm::IAllocator *allocator_ = nullptr;
     Block *block_                         = nullptr;

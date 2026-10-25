@@ -409,10 +409,16 @@ enum class SemanticDiag : uint32_t {
     // rule (-stream-type-surface) names arrays, maps and sets; a tuple
     // is not a container in that sense - its items are taken apart once - and a function signature
     // may take and give a stream.
-    StreamInContainer        = 0x0001E3,
-    NodeOfNotAParameter      = 0x0001DE,
-    RuleConstParamNotMatched = 0x0001E8,
-    RuleWithParameterUnbound = 0x0001DD,
+    StreamInContainer   = 0x0001E3,
+    NodeOfNotAParameter = 0x0001DE,
+    // The element type of a value is in its type (design principles 5.1), so a tensor type writes one:
+    // the name `Tensor` on its own, and a shape written without it (`Tensor<[3]>`), ask a question the
+    // type of a value answers. A signature that takes any element type declares a type variable in its
+    // head and writes it as the element type.
+    TensorElementTypeRequired = 0x0001ED,
+    BranchElementTypeMismatch = 0x0001EE,
+    RuleConstParamNotMatched  = 0x0001E8,
+    RuleWithParameterUnbound  = 0x0001DD,
     /// The value bound to a rule's `with` parameter is part of what selects the instance its sides and
     // its condition are made at, so it is a value the compiler knows.
     RuleWithArgumentNotConstant = 0x0001F0,

@@ -1,0 +1,31 @@
+/**
+ * A polymorphic recursion whose parameter is written with a dimension name (`f32[n]`) and takes
+ * half of the array it was given at every level, so the value the name would take is a different
+ * one at every level of the call cycle.
+ *
+ * The ruling of 2026-10-24 evening (recursion-specialization-fixed-point-followups, items 1 and 2)
+ * is what this case pins. The call the entry makes asks for an instance the call cycle does not
+ * hold yet, and gets one: `walk$spec0`, declared `(n: int, xs: f32[n]) => f32` - the declaration
+ * itself, with the extent the declaration leaves to the name still unbound and never the eight the
+ * entry argument is long. The call inside that instance is the group's second reading: the same
+ * function with a different key along the cycle, where the extent the name stands for is widened
+ * to `?`, so it binds nothing and the recursion reaches a fixed point instead of taking a copy per
+ * level. The total is not held up by a count:
+ * `kMaxTypeSpecializationsPerRecursiveFunction` is on its way out (item 3), and the readings of
+ * this case are the same with it at 8 and at 4096 (see
+ * specialize_dim_name_recursion.bounded).
+ *
+ * `n` counts levels, so it must be at most the number of halvings the array survives: three levels
+ * over eight elements read 1.0 + 2.0 + 3.0 and then stop at the two-element array's first element.
+ */
+module specialize_dim_name_recursion
+
+func walk(n: int, xs: f32[n]): f32 {
+    let h = len(xs) / 2
+    return if n <= 0 then xs[0] else xs[0] + walk(n - 1, xs[0 .. h])
+}
+
+func main(): int sync {
+    println(walk(3, [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]))
+    return 0
+}

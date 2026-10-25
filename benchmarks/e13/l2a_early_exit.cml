@@ -25,24 +25,24 @@ import { get_env } from env
 import { export_model } from onnx
 
 type Mlp = {
-    w1: Tensor, b1: Tensor, w2: Tensor, b2: Tensor,
-    w3: Tensor, b3: Tensor, wo: Tensor, bo: Tensor,
-    we: Tensor, be: Tensor
+    w1: float[..], b1: float[..], w2: float[..], b2: float[..],
+    w3: float[..], b3: float[..], wo: float[..], bo: float[..],
+    we: float[..], be: float[..]
 }
 
 with <m: Mlp>
-func loss(x: Tensor): float {
+func loss(x: float[..]): float {
     let h1 = relu(x @ m.w1 + m.b1)
     let h2 = relu(h1 @ m.w2 + m.b2)
     let y = if mean(abs(h2)) > 0.5 then h2 @ m.we + m.be else relu(h2 @ m.w3 + m.b3) @ m.wo + m.bo
     return mean(y * y)
 }
 
-func fwd(m: Mlp, x: Tensor): float {
+func fwd(m: Mlp, x: float[..]): float {
     return loss<m>(x)
 }
 
-func step(m: Mlp, x: Tensor): (float, Mlp) {
+func step(m: Mlp, x: float[..]): (float, Mlp) {
     let vg = with_grad(loss)<m>(x)
     return (vg.0, sgd(m, vg.1, 0.01))
 }
@@ -62,7 +62,7 @@ func load(): Mlp {
     }
 }
 
-func input_a(): Tensor {
+func input_a(): float[..] {
     return reshape([1.0, 2.0, -1.0, 0.5, -1.5, 2.0], [2, 3])
 }
 

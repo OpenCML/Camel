@@ -7,11 +7,14 @@
 
 #include "support.h"
 
+#include "../dtype.h"
 #include "../interop.h"
+#include "../tensor.h"
 #include "camel/core/error/runtime.h"
 #include "camel/core/mm.h"
 #include "camel/core/rtdata/string.h"
 #include "camel/core/type/composite/array.h"
+#include "camel/utils/assert.h"
 
 namespace camel::tensor::ops {
 
@@ -21,21 +24,49 @@ using camel::core::error::throwRuntimeFault;
 
 Array *tensorArg(ArgsView &args, size_t index, bool allowArray) {
     Type *argType = args.type(index);
-    if (asTensorType(argType)) {
+    if (isTensorType(argType)) {
+        // A tensor is a numeric array (plan section 5.2): the value the argument holds is the
+        // tensor itself, at whatever rank and element type it states. An array the module cannot
+        // use as one — a nested array of arrays, which has to be flattened — is what the
+        // conversion below is for.
         auto *tensor = args.get<Array *>(index);
         if (!tensor) {
-            throwRuntimeFault(RuntimeDiag::RuntimeError, "Tensor argument cannot be null");
+            // The slot the type promises a pointer in holds the element itself when the value has
+            // no dimension (the rank-zero ruling, docs/handover/reviews/questions-2026-10-23.md
+            // section rank-zero-tensor): a rank-0 result stays an array only where the type it is
+            // read by says so (wrap), so a value like this is a value with no dimension and not an
+            // argument that went missing. The message says what the value is rather than calling it
+            // a null argument (the author's ruling of 2026-10-25 on
+            // no-dimension-value-in-an-array-typed-slot: the transition-period bare `Tensor` is
+            // that gap, and no mechanism is built for it).
+            throwRuntimeFault(
+                RuntimeDiag::RuntimeError, "Tensor argument holds a value with no dimension");
         }
         return tensor;
     }
     if (allowArray && argType->code() == TypeCode::Array) {
         return tensorFromArray(args.slot(index), argType, resultAllocator());
     }
+    // Rank zero is the element type itself (the rank-zero ruling,
+    // docs/handover/reviews/questions-2026-10-23.md): the value of a rank-0 tensor is a scalar
+    // slot, and the type says so — `Tensor<f32, []>` is `f32`, not an array. A kernel that reads
+    // the tensor reads an array of no dimension, so the scalar is boxed here; wrap() takes the
+    // same value back out of a kernel's result, where the declared result type says the element.
+    // Without this a gradient handed to `tensor:sum_to` or a broadcast reached the kernel as the
+    // scalar it is and was refused as "not a Tensor".
+    if (isSupportedTensorScalar(argType->code())) {
+        Array *box = createTensor(argType->code(), std::span<const int64_t>{}, resultAllocator());
+        box->setSlot(
+            0,
+            args.slot(index),
+            ArrayType::create(Type::create(argType->code()), std::span<const int64_t>{}));
+        return box;
+    }
     throwRuntimeFault(RuntimeDiag::RuntimeError, "Expected Tensor argument");
 }
 
 kernels::Operand operandArg(ArgsView &args, size_t index, kernels::ScalarOperand &storage) {
-    if (asTensorType(args.type(index)) || args.type(index)->code() == TypeCode::Array) {
+    if (args.type(index)->code() == TypeCode::Array) {
         return kernels::Operand::of(tensorArg(args, index, true));
     }
     storage = kernels::ScalarOperand::fromSlot(args.type(index)->code(), args.slot(index));
@@ -63,7 +94,18 @@ Shape shapeArg(ArgsView &args, size_t index) {
     return parseShapeArray(args.get<::Array *>(index), args.type(index));
 }
 
-slot_t wrap(Array *tensor) {
+slot_t wrap(type::Type *declared, Array *tensor) {
+    // A result with no dimension is the element itself (the rank-zero ruling) — where the type
+    // the result is read by says the element. When that type is an array, declared or with a rank
+    // the compiler could not fix (`Tensor`, `f32[..]`), an array is what its readers take the
+    // slot for, so a rank-0 array stays one: a consumer reading an array (tensorArg, a reducer,
+    // the printer driven by the declared type) then finds the array its type promised, and only a
+    // consumer reading the element finds the element.
+    const bool element =
+        declared != nullptr && declared->code() != camel::core::type::TypeCode::Array;
+    if (element && tensor != nullptr && tensor->rank() == 0 && tensor->numel() == 1) {
+        return tensor->getSlot(0);
+    }
     return camel::core::rtdata::toSlot(static_cast<camel::core::rtdata::Object *>(tensor));
 }
 
@@ -133,10 +175,39 @@ StaticFacts::StaticFacts(std::span<type::Type *const> types, type::static_args_t
     }
 }
 
-type::Type *tensorOf(const TensorFacts &facts) { return TensorType::get(facts.dtype, facts.shape); }
+type::Type *tensorOf(const TensorFacts &facts) {
+    // The type a value with these facts has: a numeric array of that element type and shape
+    // (plan section 5.2). No dimension at all is the element type itself — the rank-zero ruling,
+    // docs/handover/reviews/questions-2026-10-23.md, section rank-zero-tensor — and a rank
+    // nobody fixed is the open-rank array.
+    std::vector<ExtentForm> forms;
+    if (facts.shape) {
+        forms.reserve(facts.shape->size());
+        for (const std::optional<int64_t> &extent : *facts.shape) {
+            forms.push_back(extent ? ExtentForm::constant(*extent) : ExtentForm::unknown());
+        }
+    }
+    // Every array a value can have states its element type (design principles 5.1), so a result
+    // type built from the facts always has one: the element type is a precondition of this
+    // function, not something a program can leave out. The two branches that used to build the
+    // transitional type here (`numericUnknown` / `numericUnknownFromForms`, plan section 5.1a's
+    // table row `tensorOf(facts)`) are gone with it.
+    ASSERT(facts.dtype.has_value(), "a tensor's element type is always in its type");
+    if (!isSupportedTensorScalar(*facts.dtype)) {
+        throw std::invalid_argument("Unsupported Tensor element type");
+    }
+    type::Type *elem = type::Type::create(*facts.dtype);
+    if (!facts.shape) {
+        return ArrayType::openRank(elem);
+    }
+    if (forms.empty()) {
+        return elem;
+    }
+    return ArrayType::create(elem, std::span<const ExtentForm>(forms));
+}
 
 type::Type *tensorOf(std::optional<TypeCode> dtype, std::optional<StaticShape> shape) {
-    return TensorType::get(dtype, std::move(shape));
+    return tensorOf(TensorFacts{dtype, std::move(shape)});
 }
 
 std::optional<TypeCode> promote(std::optional<TypeCode> lhs, std::optional<TypeCode> rhs) {
@@ -154,20 +225,22 @@ broadcast(const std::optional<StaticShape> &lhs, const std::optional<StaticShape
     const size_t rank = std::max(lhs->size(), rhs->size());
     StaticShape out(rank, 1);
     for (size_t i = 0; i < rank; ++i) {
-        const int64_t a = i < rank - lhs->size() ? 1 : (*lhs)[i - (rank - lhs->size())];
-        const int64_t b = i < rank - rhs->size() ? 1 : (*rhs)[i - (rank - rhs->size())];
+        const std::optional<int64_t> a =
+            i < rank - lhs->size() ? std::optional<int64_t>(1) : (*lhs)[i - (rank - lhs->size())];
+        const std::optional<int64_t> b =
+            i < rank - rhs->size() ? std::optional<int64_t>(1) : (*rhs)[i - (rank - rhs->size())];
         if (a == b) {
             out[i] = a;
         } else if (a == 1) {
             out[i] = b;
         } else if (b == 1) {
             out[i] = a;
-        } else if (a == kUnknownDim || b == kUnknownDim) {
+        } else if (!a || !b) {
             // One side unknown, the other known and != 1: the result must be the known extent.
-            out[i] = a == kUnknownDim ? b : a;
+            out[i] = !a ? b : a;
         } else {
             throw ShapeError(
-                "cannot broadcast extents " + std::to_string(a) + " and " + std::to_string(b));
+                "cannot broadcast extents " + std::to_string(*a) + " and " + std::to_string(*b));
         }
     }
     return out;
@@ -180,11 +253,11 @@ reduceShape(const std::optional<StaticShape> &input, std::optional<int64_t> axis
     }
     if (!axis) {
         if (keepDims) {
-            return StaticShape(input->size(), kUnknownDim);
+            return StaticShape(input->size(), std::nullopt);
         }
         return input->empty()
                    ? std::nullopt
-                   : std::optional<StaticShape>(StaticShape(input->size() - 1, kUnknownDim));
+                   : std::optional<StaticShape>(StaticShape(input->size() - 1, std::nullopt));
     }
     const auto rank = static_cast<int64_t>(input->size());
     int64_t a       = *axis < 0 ? *axis + rank : *axis;
@@ -210,7 +283,25 @@ reduceShape(const std::optional<StaticShape> &input, std::optional<int64_t> axis
 
 bool anyTensor(const InferContext &ctx, size_t count) {
     for (size_t i = 0; i < count && i < ctx.size(); ++i) {
-        if (asTensorType(ctx.type(i))) {
+        if (isTensorType(ctx.type(i))) {
+            return true;
+        }
+    }
+    if (ctx.sourceLevel()) {
+        return false;
+    }
+    // A rank-0 tensor's static type is the element type itself (the rank-zero ruling,
+    // docs/handover/reviews/questions-2026-10-23.md), so a type alone cannot tell one from a
+    // scalar -- and `tensorArg` boxes exactly that scalar slot, a kernel reading the tensor as an
+    // array of no dimension. Reading a graph the compiler already built (a pass, the export, a
+    // draft re-inference) the node itself answers the question the type cannot: it is a `tensor:`
+    // operator, so its numeric scalar operands are the rank-0 tensors its kernel takes, and
+    // answering "no tensor" here is what left such a node with no dtype and no shape. At source
+    // level the same call is not a tensor operation at all, and the scalar operator is the
+    // program's own choice; the question stays where it belongs.
+    for (size_t i = 0; i < count && i < ctx.size(); ++i) {
+        Type *type = ctx.type(i);
+        if (type != nullptr && isSupportedTensorScalar(type->code())) {
             return true;
         }
     }
@@ -219,20 +310,25 @@ bool anyTensor(const InferContext &ctx, size_t count) {
 
 bool anyTensorLike(const InferContext &ctx, size_t count) {
     for (size_t i = 0; i < count && i < ctx.size(); ++i) {
-        if (asTensorType(ctx.type(i)) || ctx.type(i)->code() == TypeCode::Array) {
+        if (ctx.type(i)->code() == TypeCode::Array) {
             return true;
         }
     }
     return false;
 }
 
-std::string formatShape(std::span<const int64_t> shape) {
+std::string formatShape(std::span<const std::optional<int64_t>> shape) {
     std::string out = "[";
     for (size_t i = 0; i < shape.size(); ++i) {
         out += i ? ", " : "";
-        out += shape[i] == kUnknownDim ? std::string("?") : std::to_string(shape[i]);
+        out += shape[i] ? std::to_string(*shape[i]) : std::string("?");
     }
     return out + "]";
+}
+
+std::string formatShape(std::span<const int64_t> shape) {
+    const std::vector<std::optional<int64_t>> known(shape.begin(), shape.end());
+    return formatShape(std::span<const std::optional<int64_t>>(known));
 }
 
 } // namespace camel::tensor::ops

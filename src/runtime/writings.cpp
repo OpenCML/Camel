@@ -5,6 +5,7 @@
 
 #include "camel/core/operator_table.h"
 #include "camel/core/tags.h"
+#include "camel/core/type/intern.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/draft_writes.h"
 
@@ -368,7 +369,10 @@ struct NodeKey {
     uint8_t kind     = 0;
     camel::core::sem::PermissionMask perms    = 0;
     uint32_t region  = 0;
-    const Type *type = nullptr;
+    /// The canonical id of the node's type (camel/core/type/intern.h), kNoTypeId when it has
+    /// none: one id per structure, so two nodes whose types were built in different places, or
+    /// whose types spell their dimensions differently, are the same key.
+    camel::core::type::TypeId typeId = camel::core::type::kNoTypeId;
     std::string payload;
     std::vector<gc_node_ref_t> norm;
     std::vector<gc_node_ref_t> with;
@@ -382,7 +386,7 @@ struct NodeKeyHash {
         mix(key.kind);
         mix(key.perms);
         mix(key.region);
-        mix(reinterpret_cast<uintptr_t>(key.type));
+        mix(key.typeId);
         for (gc_node_ref_t in : key.norm) {
             mix(in);
         }
@@ -393,6 +397,15 @@ struct NodeKeyHash {
         return h;
     }
 };
+
+/// The canonical id of `type` as a node key states it (see NodeKey::typeId).
+camel::core::type::TypeId canonicalTypeIdOf(const Type *type) {
+    return camel::core::type::TypeTable::instance().canonicalId(type);
+}
+
+/// Whether two nodes state the same type: one canonical id is one structure, whatever object
+/// carries it and whatever names its key spells (camel/core/type/text.h, sameCanonicalType).
+bool sameType(const Type *a, const Type *b) { return camel::core::type::sameCanonicalType(a, b); }
 
 } // namespace
 
@@ -615,15 +628,17 @@ NodeKey makeKey(
     key.kind   = static_cast<uint8_t>(kind);
     key.perms  = perms;
     key.region = region;
-    key.type   = type;
+    // The type the key states is the one the constant's bits are read with; the key itself
+    // records its canonical id (NodeKey::typeId).
+    const Type *keyType = type;
     switch (kind) {
     case GCNodeKind::Data: {
         const auto index = static_cast<size_t>(-dataIndex);
         const slot_t v   = draft.staticSlots()[index];
         if (const Type *ty = draft.staticSlotTypes()[index]) {
-            key.type = ty;
+            keyType = ty;
         }
-        key.payload = constantPayload(v, key.type);
+        key.payload = constantPayload(v, keyType);
         break;
     }
     case GCNodeKind::Oper: {
@@ -635,6 +650,7 @@ NodeKey makeKey(
         key.payload.assign(reinterpret_cast<const char *>(payload.data()), payload.size());
         break;
     }
+    key.typeId = canonicalTypeIdOf(keyType);
     for (gc_node_ref_t in : norm) {
         key.norm.push_back(canonOf(in));
     }
@@ -706,7 +722,7 @@ void DraftWritings::index(gc_node_ref_t node) {
                 const auto *ih = draft_.header(in);
                 if (associative && ih != nullptr && draft_.alive(in) &&
                     ih->kind == GCNodeKind::Oper && ih->permissions == h->permissions &&
-                    ih->dataType == h->dataType && takesPart(in) &&
+                    sameType(ih->dataType, h->dataType) && takesPart(in) &&
                     draft_.withInputsOf(in).empty() && !draft_.normInputsOf(in).empty() &&
                     reinterpret_cast<const GCOperBody *>(draft_.payloadOf(in).data())->oper ==
                         oper) {
@@ -774,7 +790,11 @@ bool DraftWritings::assertEqualDeferred(
     gc_node_ref_t a, gc_node_ref_t b, camel::core::sem::PermissionMask perms, uint16_t rule) {
     const auto *ha = draft_.header(a);
     const auto *hb = draft_.header(b);
-    if (ha == nullptr || hb == nullptr || ha->dataType != hb->dataType ||
+    // Two writings of one value have one type, compared by canonical id: the structural identity
+    // of the type, with the names in its key (a dimension name, a parameter name) erased, which
+    // is the relation `equals` uses. Comparing the objects would refuse two writings whose types
+    // were built in different places, which is what a rewrite does every time it re-encodes.
+    if (ha == nullptr || hb == nullptr || !sameType(ha->dataType, hb->dataType) ||
         draft_.nodeRegion(a) != draft_.nodeRegion(b) || ha->permissions != hb->permissions ||
         (perms & ~contextOf(a)) != 0) {
         throw std::logic_error(
@@ -1354,7 +1374,7 @@ gc_node_ref_t DraftWritings::constantNode(
     key.kind    = static_cast<uint8_t>(GCNodeKind::Data);
     key.perms   = perms;
     key.region  = region;
-    key.type    = type;
+    key.typeId  = canonicalTypeIdOf(type);
     key.payload = constantPayload(stored, type);
     auto &ix = *index_;
     if (auto found = ix.byKey.find(key); found != ix.byKey.end()) {
@@ -1922,13 +1942,14 @@ RewriteStats DraftWritings::rewrite(
             key.kind             = static_cast<uint8_t>(GCNodeKind::Data);
             key.perms            = h->permissions;
             key.region           = draft_.nodeRegion(node);
-            key.type             = h->dataType;
             const auto slotIndex = static_cast<size_t>(-h->dataIndex);
             const slot_t value   = draft_.staticSlots()[slotIndex];
+            const Type *keyType  = h->dataType;
             if (const Type *ty = draft_.staticSlotTypes()[slotIndex]) {
-                key.type = ty;
+                keyType = ty;
             }
-            key.payload = constantPayload(value, key.type);
+            key.payload = constantPayload(value, keyType);
+            key.typeId  = canonicalTypeIdOf(keyType);
             ix.byKey.try_emplace(key, node);
             if (node >= ix.keyOf.size()) {
                 ix.keyOf.resize(draft_.nodeSlotCount());

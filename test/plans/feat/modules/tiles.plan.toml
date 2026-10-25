@@ -11,7 +11,7 @@ args = ["--devices", "cpu", "--gc", "generational", "${case}", "tiles::test_outl
 backends = ["nvm", "fvm", "jit", "prl"]
 envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 expect_exit = 0
-expect_stdout_exact = "TILES_OUTLINED 2\ntensor([      4.,      16.,      36.], dtype=float32)\ntensor([      2.,       4.,       6.], dtype=float32)\ntensor([      8.,      10.,      12.], dtype=float32)\ntensor([     64.,     100.,     144.], dtype=float32)\ntensor([      4.,      16.,      36.], dtype=float32)\n"
+expect_stdout_exact = "TILES_OUTLINED 2\n[4.0, 16.0, 36.0]\n[2.0, 4.0, 6.0]\n[8.0, 10.0, 12.0]\n[64.0, 100.0, 144.0]\n[4.0, 16.0, 36.0]\n"
 timeout_ms = 180000
 
 [[tests]]
@@ -21,7 +21,7 @@ case = "../../../cases/modules/tiles/compiled_region.cml"
 args = ["--devices", "cpu", "${case}", "tiles::test_outline_compiled", "std::nvm"]
 envs = ["CAMEL_TILES_TEST_INVALIDATION=1"]
 expect_exit = 0
-expect_stdout_exact = "TILES_OUTLINED 2\ntensor([      4.,      16.,      36.], dtype=float32)\ntensor([      2.,       4.,       6.], dtype=float32)\ntensor([      8.,      10.,      12.], dtype=float32)\ntensor([     64.,     100.,     144.], dtype=float32)\ntensor([      4.,      16.,      36.], dtype=float32)\n"
+expect_stdout_exact = "TILES_OUTLINED 2\n[4.0, 16.0, 36.0]\n[2.0, 4.0, 6.0]\n[8.0, 10.0, 12.0]\n[64.0, 100.0, 144.0]\n[4.0, 16.0, 36.0]\n"
 timeout_ms = 180000
 
 [[tests]]
@@ -55,7 +55,16 @@ verify_script = """
 ({ input, assert }) => {
 const lines = input.stdout.trim().split('\n');
 assert(lines.length === 4, 'expected the value, the error and two plans');
-assert(lines[0].includes('dtype=float32'), 'cast-to-self changed the element type');
+// The one print form (author ruling, 2026-10-24) writes an array as its own shape in brackets and
+// each element in the shortest text of its own type; it carries no `dtype=` tag, so `dtype=float32`
+// here was reading a vehicle that no longer exists, not a changed element type. Line 0 is the
+// gradient of `sum(cast(x, "float32"))`, the case's first program. The value itself is pinned
+// exactly, and the element type stays pinned twice: statically by the case's own two lambdas
+// (`(v: Tensor<f32>): Tensor<f32>`, so a gradient of another element type does not compile), and at
+// run time by the plan numbers below -- cast_like/cast to a different element type cannot keep
+// materialized_values, allocations, logical_bytes, allocated_bytes and borrowed_bytes equal to the
+// cast-free derivative (an f64 buffer is twice as wide).
+assert(lines[0] === '[1.0, 1.0, 1.0]', 'the gradient of sum(cast(x, "float32")) is not the all-ones f32 value');
 assert(lines[1] === '0.0', 'gradient of sum(x) is not all ones');
 const withCast = JSON.parse(lines[2]);
 const plain = JSON.parse(lines[3]);
@@ -169,7 +178,7 @@ kind = "behavior"
 case = "../../../cases/modules/tiles/loop_source.cml"
 args = ["--devices", "cpu", "${case}", "std::nvm"]
 expect_exit = 0
-expect_stdout_contains = ["tensor([      3.,       6.,       9.], dtype=float32)", "const long long constant_3[2]", "for(unsigned long long k_iteration=0ULL;k_iteration<2ULL", "k_loop_input0=k_next0;"]
+expect_stdout_contains = ["[3.0, 6.0, 9.0]", "const long long constant_3[2]", "for(unsigned long long k_iteration=0ULL;k_iteration<2ULL", "k_loop_input0=k_next0;"]
 timeout_ms = 10000
 
 [[tests]]
@@ -178,7 +187,7 @@ kind = "behavior"
 case = "../../../cases/modules/tiles/loop_source.cml"
 args = ["--devices", "cpu", "${case}", "std::fvm"]
 expect_exit = 0
-expect_stdout_contains = ["tensor([      3.,       6.,       9.], dtype=float32)", "const long long constant_3[2]", "for(unsigned long long k_iteration=0ULL;k_iteration<2ULL", "k_loop_input0=k_next0;"]
+expect_stdout_contains = ["[3.0, 6.0, 9.0]", "const long long constant_3[2]", "for(unsigned long long k_iteration=0ULL;k_iteration<2ULL", "k_loop_input0=k_next0;"]
 timeout_ms = 10000
 
 [[tests]]
@@ -187,7 +196,7 @@ kind = "behavior"
 case = "../../../cases/modules/tiles/loop_source.cml"
 args = ["--devices", "cpu", "${case}", "std::jit"]
 expect_exit = 0
-expect_stdout_contains = ["tensor([      3.,       6.,       9.], dtype=float32)", "const long long constant_3[2]", "for(unsigned long long k_iteration=0ULL;k_iteration<2ULL", "k_loop_input0=k_next0;"]
+expect_stdout_contains = ["[3.0, 6.0, 9.0]", "const long long constant_3[2]", "for(unsigned long long k_iteration=0ULL;k_iteration<2ULL", "k_loop_input0=k_next0;"]
 timeout_ms = 10000
 
 [[tests]]
@@ -196,7 +205,7 @@ kind = "behavior"
 case = "../../../cases/modules/tiles/loop_source.cml"
 args = ["--devices", "cpu", "${case}", "std::prl"]
 expect_exit = 0
-expect_stdout_contains = ["tensor([      3.,       6.,       9.], dtype=float32)", "const long long constant_3[2]", "for(unsigned long long k_iteration=0ULL;k_iteration<2ULL", "k_loop_input0=k_next0;"]
+expect_stdout_contains = ["[3.0, 6.0, 9.0]", "const long long constant_3[2]", "for(unsigned long long k_iteration=0ULL;k_iteration<2ULL", "k_loop_input0=k_next0;"]
 timeout_ms = 10000
 
 [[tests]]
@@ -242,6 +251,7 @@ assert(plans[2].transfers.uploads.length === 2 && plans[2].transfers.downloads.l
 assert(!plans[2].transfers.uploads.includes(plans[2].transfers.resident[0].value), "resident edge must not upload again")
 assert(plans[5].transfers.uploads.length === 1, "embedded axis and keepdims must not upload")
 const [chain, dynamic, detour, ordered, sharedValues, constantAxis] = plans
+assert(detour.regions[0].uploads.length === 1 && detour.regions[0].downloads.length === 1 && detour.regions[1].uploads.length === 1 && detour.regions[1].downloads.length === 1 && detour.regions[1].resident.length === 1, "each segment must answer for its own boundary")
 assert(chain.regions.length === 1 && chain.regions[0].members.length === 2, "static pointwise chain must form one region")
 assert(chain.regions[0].inputs.length === 1 && chain.regions[0].outputs.length === 1, "region boundary must deduplicate inputs")
 assert(chain.regions[0].parameters.length === 1, "one external value must become one function parameter")
@@ -290,6 +300,7 @@ assert(plans[2].transfers.uploads.length === 2 && plans[2].transfers.downloads.l
 assert(!plans[2].transfers.uploads.includes(plans[2].transfers.resident[0].value), "resident edge must not upload again")
 assert(plans[5].transfers.uploads.length === 1, "embedded axis and keepdims must not upload")
 const [chain, dynamic, detour, ordered, sharedValues, constantAxis] = plans
+assert(detour.regions[0].uploads.length === 1 && detour.regions[0].downloads.length === 1 && detour.regions[1].uploads.length === 1 && detour.regions[1].downloads.length === 1 && detour.regions[1].resident.length === 1, "each segment must answer for its own boundary")
 assert(chain.regions.length === 1 && chain.regions[0].members.length === 2, "static pointwise chain must form one region")
 assert(chain.regions[0].inputs.length === 1 && chain.regions[0].outputs.length === 1, "region boundary must deduplicate inputs")
 assert(chain.regions[0].parameters.length === 1, "one external value must become one function parameter")
@@ -319,6 +330,7 @@ assert(plans[2].transfers.uploads.length === 2 && plans[2].transfers.downloads.l
 assert(!plans[2].transfers.uploads.includes(plans[2].transfers.resident[0].value), "resident edge must not upload again")
 assert(plans[5].transfers.uploads.length === 1, "embedded axis and keepdims must not upload")
 const [chain, dynamic, detour, ordered, sharedValues, constantAxis] = plans
+assert(detour.regions[0].uploads.length === 1 && detour.regions[0].downloads.length === 1 && detour.regions[1].uploads.length === 1 && detour.regions[1].downloads.length === 1 && detour.regions[1].resident.length === 1, "each segment must answer for its own boundary")
 assert(chain.regions.length === 1 && chain.regions[0].members.length === 2, "static pointwise chain must form one region")
 assert(chain.regions[0].inputs.length === 1 && chain.regions[0].outputs.length === 1, "region boundary must deduplicate inputs")
 assert(chain.regions[0].parameters.length === 1, "one external value must become one function parameter")
@@ -935,7 +947,7 @@ const both = input.normalized.stdout + input.normalized.stderr
 assert(!both.includes('error['), both)
 assert(!both.includes('cannot run on the device'), both)
 const observed = lines.indexOf('12.0')
-const result = lines.findIndex((line) => line.includes('result tensor('))
+const result = lines.findIndex((line) => line.includes('result [3.0, 5.0, 7.0]'))
 assert(observed >= 0, input.stdout)
 assert(result > observed, input.stdout)
 const row = lines.find((line) => line.startsWith('TILES_PLACEMENT ') && line.includes('"graph":"observed"'))
@@ -960,7 +972,7 @@ const fs = await import('node:fs')
 const report = JSON.parse(fs.readFileSync(input.test_tmp + '/profile.json', 'utf8'))
 const lines = input.normalized.stdout.split(String.fromCharCode(10)).filter(Boolean)
 const observed = lines.indexOf('12.0')
-const result = lines.findIndex((line) => line.includes('result tensor([      3.,       5.,       7.], dtype=float32)'))
+const result = lines.findIndex((line) => line.includes('result [3.0, 5.0, 7.0]'))
 assert(observed >= 0, input.stdout)
 assert(result > observed, input.stdout)
 assert(report.device_work.kernels >= 1, JSON.stringify(report.device_work))

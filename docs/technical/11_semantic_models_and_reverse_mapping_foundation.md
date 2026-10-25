@@ -150,7 +150,6 @@ GCT 是 AST 到 GIR 之间的过渡层，仍然是树，但节点已经转向“
 | `BRCH` | 条件或 match 分支入口 |
 | `CASE` | 分支体 |
 | `EXIT` | return / exit |
-| `WAIT` | waited 语义包装 |
 | `VARI` | `var` 语义包装 |
 
 ### 3.3 AST -> GCT 的主要 lowering 模式
@@ -160,7 +159,7 @@ GCT 是 AST 到 GIR 之间的过渡层，仍然是树，但节点已经转向“
 | `Literal` | `DATA` | 近似 1:1 |
 | `RefData` | `DREF` | 近似 1:1 |
 | `UnaryExpr` | `DREF("__op__") + LINK` | 降糖 |
-| `BinaryExpr` | `DREF("__op__") + LINK (+ WAIT)` | 降糖 |
+| `BinaryExpr` | `DREF("__op__") + LINK` | 降糖 |
 | `Call` | `LINK(callee, args...)` | 重编码 |
 | `Bind` | `WITH(callee, args...)` | 重编码 |
 | `Access` | `ACCS(target)` | 重编码 |
@@ -180,7 +179,7 @@ GCT 是 AST 到 GIR 之间的过渡层，仍然是树，但节点已经转向“
 本轮改造后：
 
 - `DREF("__add__")` 这类 operator/callee 节点开始在创建时绑定自己的语义来源
-- `LINK / WITH / ACCS / CAST / BRCH / CASE / WAIT / FUNC` 等主产物会在创建处登记 `SemanticBundle`
+- `LINK / WITH / ACCS / CAST / BRCH / CASE / FUNC` 等主产物会在创建处登记 `SemanticBundle`
 - `GctSemanticMap` 挂在 `SourceContext`，按 `GCT node origin` 存：
   - `mainOrigin`
   - `semanticParts`

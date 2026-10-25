@@ -31,16 +31,16 @@ import { now } from time
 // The parameter tree: one type, four tensors.  `b1`/`b2` broadcast over the rows of the
 // batch, the same way PyTorch's `nn.Linear` adds its bias.
 type Mlp = {
-    w1: Tensor,
-    b1: Tensor,
-    w2: Tensor,
-    b2: Tensor
+    w1: f32[..],
+    b1: f32[..],
+    w2: f32[..],
+    b2: f32[..]
 }
 
 // == model ==
 // x: [batch, 784] -> hidden: [batch, 128] -> logits: [batch, 10].
 with <m: Mlp>
-func logits(x: Tensor): Tensor {
+func logits(x: f32[..]): f32[..] {
     let hidden = relu(x @ m.w1 + m.b1)
     return hidden @ m.w2 + m.b2
 }
@@ -50,7 +50,7 @@ func logits(x: Tensor): Tensor {
 // `with_grad` gives back a tree of the same shape.  The targets are integer class labels;
 // the cast says so to the overload, since a tensor loaded from a file has no static dtype.
 with <m: Mlp>
-func loss(x: Tensor, labels: Tensor): float {
+func loss(x: f32[..], labels: f32[..]): float {
     return softmax_cross_entropy(logits<m>(x), cast(labels, 'int64'))
 }
 
@@ -59,16 +59,16 @@ func loss(x: Tensor, labels: Tensor): float {
 func load_model(data: string): Mlp {
     let init = data + '/init'
     return {
-        w1: load_npy(init + '/w1.npy'),
-        b1: load_npy(init + '/b1.npy'),
-        w2: load_npy(init + '/w2.npy'),
-        b2: load_npy(init + '/b2.npy')
+        w1: load_npy::<f32>(init + '/w1.npy'),
+        b1: load_npy::<f32>(init + '/b1.npy'),
+        w2: load_npy::<f32>(init + '/w2.npy'),
+        b2: load_npy::<f32>(init + '/b2.npy')
     }
 }
 
 // == evaluate ==
 // Validation: the loss over all rows at once and the fraction classified correctly.
-func evaluate(m: Mlp, x: Tensor, labels: Tensor): (float, float) {
+func evaluate(m: Mlp, x: f32[..], labels: f32[..]): (float, float) {
     let value = logits<m>(x)
     let class_ids = cast(labels, 'int64')
     let correct = sum(argmax(value, 1) === class_ids)
@@ -91,16 +91,16 @@ func main(
     set_num_threads(threads)
 
     // == data ==
-    let train_x = load_npy(data + '/train_images.npy')
-    let train_labels = load_npy(data + '/train_labels.npy')
-    let val_x = load_npy(data + '/val_images.npy')
-    let val_labels = load_npy(data + '/val_labels.npy')
-    let order = load_npy(data + '/train_order.npy')
+    let train_x = load_npy::<f32>(data + '/train_images.npy')
+    let train_labels = load_npy::<i64>(data + '/train_labels.npy')
+    let val_x = load_npy::<f32>(data + '/val_images.npy')
+    let val_labels = load_npy::<i64>(data + '/val_labels.npy')
+    let order = load_npy::<i64>(data + '/train_order.npy')
     let dataset_id = trim(read_text(data + '/dataset.id'))
 
     let model = load_model(data)
     let leaves = tree_paths(model)
-    let params = tree_reduce<(count: int, leaf: Tensor): int => count + numel(leaf)>(model, 0)
+    let params = tree_reduce<(count: int, leaf: f32[..]): int => count + numel(leaf)>(model, 0)
     let rows = shape(train_x)[0]
     let batches = rows / batch
     let before = evaluate(model, val_x, val_labels)
@@ -140,7 +140,7 @@ func main(
     let restored = load_tree::<Mlp>(dir, dataset_id) !! model
     let after_restore = evaluate(restored, val_x, val_labels)
     let drift = tree_reduce<(total: float, leaf: float): float => total + leaf>(
-        tree_map<(a: Tensor, b: Tensor): float => sum(abs(a - b))>(trained, restored), 0.0)
+        tree_map<(a: f32[..], b: f32[..]): float => sum(abs(a - b))>(trained, restored), 0.0)
     `c2 checkpoint val_loss=${after_restore.0:.9f} val_accuracy=${after_restore.1:.9f} l1_drift=${drift:.9f}`->println
     `c2 leaves ${leaves}`->println
     return 0

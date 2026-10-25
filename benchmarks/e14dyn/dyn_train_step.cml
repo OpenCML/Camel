@@ -22,32 +22,32 @@ import { sgd, save_params } from nn
 import { export_model } from onnx
 import { get_env } from env
 
-type Mlp = { w1: Tensor, b1: Tensor, w2: Tensor, b2: Tensor }
+type Mlp = { w1: float[..], b1: float[..], w2: float[..], b2: float[..] }
 
 with <m: Mlp>
-func fwd(x: Tensor): Tensor {
+func fwd(x: float[..]): float[..] {
     let h = relu(x @ m.w1 + m.b1)
     return h @ m.w2 + m.b2
 }
 
 with <m: Mlp>
-func loss_mean(x: Tensor): float {
+func loss_mean(x: float[..]): float {
     let y = fwd<m>(x)
     return mean(y * y)
 }
 
 with <m: Mlp>
-func loss_summean(x: Tensor): float {
+func loss_summean(x: float[..]): float {
     let y = fwd<m>(x)
     return sum(y * y) / float(shape(y)[0] * shape(y)[1])
 }
 
-func step_mean(m: Mlp, x: Tensor): (float, Mlp) {
+func step_mean(m: Mlp, x: float[..]): (float, Mlp) {
     let vg = with_grad(loss_mean)<m>(x)
     return (vg.0, sgd(m, vg.1, 0.01))
 }
 
-func step_summean(m: Mlp, x: Tensor): (float, Mlp) {
+func step_summean(m: Mlp, x: float[..]): (float, Mlp) {
     let vg = with_grad(loss_summean)<m>(x)
     return (vg.0, sgd(m, vg.1, 0.01))
 }
@@ -59,7 +59,7 @@ func main(): int sync {
         w2: reshape([1.0, -1.0, 0.5], [3, 1]),
         b2: reshape([0.2], [1])
     }
-    let x = load_npy(get_env('X'))
+    let x = load_npy::<f32>(get_env('X'))
     let useMean = get_env('LOSS') == 'mean'
     let vg = if useMean then step_mean(m, x) else step_summean(m, x)
     'CAMEL loss={}'->format<vg.0>->println

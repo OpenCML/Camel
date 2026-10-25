@@ -10,12 +10,12 @@ import { Tensor, full, reshape, sum } from tensor
 import { embedding, sgd } from nn
 
 type EmbeddingMf = {
-    user_table: Tensor,
-    item_table: Tensor
+    user_table: f64[..],
+    item_table: f64[..]
 }
 
 with <model: EmbeddingMf>
-func score(user_ids: Tensor, item_ids: Tensor): float {
+func score(user_ids: i64[..], item_ids: i64[..]): float {
     let users = embedding(model.user_table, user_ids)
     let items = embedding(model.item_table, item_ids)
     return sum(users * items)
@@ -27,7 +27,7 @@ func mse_loss(pred: float, rating: float): float {
 }
 
 with <model: EmbeddingMf>
-func model_loss(user_ids: Tensor, item_ids: Tensor, rating: float): float {
+func model_loss(user_ids: i64[..], item_ids: i64[..], rating: float): float {
     let pred = score<model>(user_ids, item_ids)
     return mse_loss(pred, rating)
 }
@@ -39,7 +39,7 @@ func init(): EmbeddingMf {
     }
 }
 
-func train(model: EmbeddingMf, u: Tensor, i: Tensor, rating: float, steps: int): EmbeddingMf {
+func train(model: EmbeddingMf, u: i64[..], i: i64[..], rating: float, steps: int): EmbeddingMf {
     return if steps == 0 then model else train(sgd(model, grad(model_loss)<model>(u, i, rating), 0.2), u, i, rating, steps - 1)
 }
 

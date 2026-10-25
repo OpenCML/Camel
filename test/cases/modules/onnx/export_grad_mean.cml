@@ -9,15 +9,15 @@ import { with_grad } from autodiff
 import { export_model } from onnx
 import { get_env } from env
 
-type P = { w: Tensor }
+type P = { w: f32[..] }
 
 with <m: P>
-func loss(x: Tensor): float {
+func loss(x: f32[..]): float {
     let rows = mean(m.w * x, 0)
     return sum(rows * rows) + mean(m.w * x)
 }
 
-func step(w: Tensor, x: Tensor): (Tensor, Tensor) {
+func step(w: f32[..], x: f32[..]): (f32[..], f32[..]) {
     let m = { w: w }
     let vg = with_grad(loss)<m>(x)
     return (reshape([f32(vg.0)], [1]), vg.1.w)
@@ -29,7 +29,7 @@ func main(): int sync {
     let r = step(w, x)
     println(r.0)
     println(r.1)
-    export_model((w: Tensor, x: Tensor): (Tensor, Tensor) => step(w, x), (w, x), get_env('ONNX_OUT'))
+    export_model((w: f32[..], x: f32[..]): (f32[..], f32[..]) => step(w, x), (w, x), get_env('ONNX_OUT'))
     println('exported')
     return 0
 }

@@ -33,15 +33,13 @@ import { tree_map } from tree
 // native operators registered, and a flat struct of tensors is refused by every spelling I tried
 // (docs/technical/optim.md records the table); this is the shape
 // test/cases/modules/nn/residual_mlp.cml trains with -- nested structs of tensors plus an `int`
-// leaf the optimizers leave alone -- so both implementations take it. Every tensor leaf leaves its
-// element type to the data, and the element type of the value is the element type both walks update
-// at (docs/handover/reviews/questions-2026-10-23.md, section `f64-tensor-leaf`: "unstated" means
-// the type does not say it): the values below are f32, so both sides compute them in double and
-// round once, and they have binary digits below the point, so a step computed at f32 instead of in
-// double would move them.
+// leaf the optimizers leave alone -- so both implementations take it. Every tensor leaf writes its
+// element type, which is the element type both walks update at, and the values below are f32: both
+// sides compute them in double and round once, and they have binary digits below the point, so a
+// step computed at f32 instead of in double would move them.
 type Linear = {
-    weight: Tensor,
-    bias: Tensor
+    weight: Tensor<f32, [?]>,
+    bias: Tensor<f32, [?]>
 }
 
 type Model = {
@@ -50,10 +48,11 @@ type Model = {
 }
 
 // A second tree, all tensors, for the property of `adamw`: `tree_map`'s callback is written for a
-// `Tensor`, so every leaf of this tree is one. It is only ever handed to this module.
+// tensor of a written element type, so every leaf of this tree is one. It is only ever handed to
+// this module.
 type Tensors = {
-    w: Tensor,
-    b: Tensor
+    w: Tensor<f32, [?]>,
+    b: Tensor<f32, [?]>
 }
 
 // The starting parameters of the first tree, in the one tensor spelling the native side takes: a
@@ -78,7 +77,7 @@ func model_at(): Model {
 // gradient of the first argument is refused when the call is compiled -- so both sides are handed
 // what `with_grad` answers for the parameters of this step.
 with <m: Model>
-func loss(x: Tensor): float {
+func loss(x: Tensor<f32, [?]>): float {
     return sum(tanh(m.l0.weight * x)) + sum(m.l1.weight * x) + sum(m.l0.bias * x) + sum(m.l1.bias * x)
 }
 
@@ -101,7 +100,7 @@ func tensors_gradient_at(step: int): Tensors {
 // than taken from `optim`, so the property below is not a restatement of the module's expression.
 // The rate factor is rounded to f32 first, because a tensor operator takes the wider of its two
 // element types: a `float` factor would widen these f32 leaves to f64 (design principles 7.4).
-func decayed(w: Tensor): Tensor {
+func decayed(w: Tensor<f32, [?]>): Tensor<f32, [?]> {
     return w * f32(1.0 - 0.01 * 0.1)
 }
 

@@ -55,28 +55,6 @@ void fillStrides(std::span<const int64_t> extents, int64_t *strides) {
     }
 }
 
-/// The storage name the tensor print has always used (the tensor module's dtypeName).
-const char *storageName(TypeCode code) {
-    switch (code) {
-    case TypeCode::Float32:
-        return "float32";
-    case TypeCode::Float64:
-        return "float64";
-    case TypeCode::Int32:
-        return "int32";
-    case TypeCode::Int64:
-        return "int64";
-    case TypeCode::Bool:
-        return "bool";
-    case TypeCode::BFloat16:
-        return "bfloat16";
-    case TypeCode::Float16:
-        return "float16";
-    default:
-        return "unknown";
-    }
-}
-
 } // namespace
 
 Array *Array::create(camel::core::mm::IAllocator &allocator, size_t initSize) {
@@ -136,6 +114,44 @@ Array *Array::wrap(
         "Only a pure-data array can wrap an external block");
     return createCompact(
         allocator, arrayType->elemType(), extents, block, byteOffset, false, view);
+}
+
+slot_t Array::firstDimensionElement(uint64_t index) {
+    if (index >= size_) {
+        throw std::invalid_argument("The first dimension of an array has no such element");
+    }
+    if (rank_ <= 1) {
+        // Rank 1: the first dimension's elements are the elements themselves.
+        return getSlot(index);
+    }
+    // A higher rank: the row at `index`, which is where the first dimension's stride takes it —
+    // the elements after the first extent, as the type states them (firstDimensionElement of
+    // ArrayType). Row-major, so a row is a run of `numel / size` elements.
+    const uint64_t row = numel_ / size_;
+    const uint64_t at  = index * row;
+    if (storage_ == Storage::Compact) {
+        // The row shares the data: a view of one dimension fewer (arrays are immutable values,
+        // and a view is how a reader of the type reads a row).
+        return rtdata::toSlot(
+            Array::view(this, std::span<const int64_t>(extents_ + 1, rank_ - 1), at));
+    }
+    // An array of references with more than one dimension: its row is the same run of slots,
+    // copied into an array of the row's shape. The copy is the same value, because an array is
+    // immutable.
+    const std::span<const int64_t> rowExtents(extents_ + 1, rank_ - 1);
+    Array *elements = createSlotsRank(*allocator_, rowExtents, static_cast<size_t>(row));
+    elements->elemTypeCode_ = elemTypeCode_;
+    elements->elemType_     = elemType_;
+    // The row's type, for the write barrier of every reference the copy stores: the elements are
+    // reachable from the new array, and it is the array of the row's shape the type says. (The
+    // element type is interned and lives for the process, so the cast only drops the `const` this
+    // value's own description carries.)
+    const type::ArrayType *rowType =
+        type::ArrayType::create(const_cast<type::Type *>(elemType_), rowExtents);
+    for (uint64_t i = 0; i < row; ++i) {
+        elements->setSlot(i, getSlot(at + i), rowType);
+    }
+    return rtdata::toSlot(elements);
 }
 
 Array *Array::createSlots(
@@ -1231,14 +1247,17 @@ rtdata::Object *Array::clone(
     ASSERT(typeInfo && typeInfo->code() == TypeCode::Array, "Type must be ArrayType");
     const auto *arrayType            = static_cast<const type::ArrayType *>(typeInfo);
     const type::TypeCode elemTypeCode = arrayType->elemTypeCode();
-    Array *copy = createSlots(allocator, size_, capacity_);
+    // A slot array of any rank keeps its shape: `size_` is the first extent only, so a rank-2
+    // value copied over it would come out as its first row (design principles 5.4). Every element
+    // is `numel_`, which is `size_` for the rank-1 arrays this has always copied.
+    Array *copy = createSlotsRank(allocator, std::span<const int64_t>(extents_, rank_), capacity_);
     copy->elemTypeCode_ = elemTypeCode;
     copy->elemType_     = arrayType->elemType();
     const rtdata::Object *const *srcArr =
         reinterpret_cast<const rtdata::Object *const *>(dataPtr_);
 
     if (type::isGCTraced(elemTypeCode) && fixedArray_ == nullptr) {
-        for (size_t i = 0; i < size_; ++i) {
+        for (size_t i = 0; i < numel_; ++i) {
             const rtdata::Object *oriRef = srcArr[i];
             rtdata::Object *stored       = nullptr;
             if (oriRef != nullptr) {
@@ -1260,9 +1279,9 @@ rtdata::Object *Array::clone(
         copy->dataPtr_ = reinterpret_cast<std::byte *>(copy->fixedArray_->data());
         camel::core::mm::writeBarrier(copy, arrayType, copy->fixedArray_, arrayType);
     } else {
-        std::memcpy(copy->inlineData_, dataPtr_, size_ * sizeof(slot_t));
+        std::memcpy(copy->inlineData_, dataPtr_, numel_ * sizeof(slot_t));
         if (type::isGCTraced(elemTypeCode)) {
-            for (size_t i = 0; i < size_; ++i) {
+            for (size_t i = 0; i < numel_; ++i) {
                 camel::core::mm::writeBarrier(
                     copy, arrayType, copy->inlineData_[i], arrayType->elemType());
             }
@@ -1272,6 +1291,13 @@ rtdata::Object *Array::clone(
 }
 
 void Array::print(std::ostream &os, const type::Type *typeInfo) const {
+    if (rank_ == 0) {
+        // A value with no dimension is the element it holds (the rank-zero ruling,
+        // docs/handover/reviews/questions-2026-10-23.md section rank-zero-tensor): it prints as
+        // that value, not as a bracketed list of none.
+        rtdata::printSlot(os, getSlot(0), const_cast<type::Type *>(elemType_));
+        return;
+    }
     if (typeInfo != nullptr && typeInfo->code() == TypeCode::Array) {
         // A compact aggregate stores its elements as bytes, and printing one materializes a
         // Struct/Tuple, which allocates and may move this array. Copy the bytes and the shape
@@ -1308,16 +1334,27 @@ void Array::print(std::ostream &os, const type::Type *typeInfo) const {
             printDim(0);
             return;
         }
+        // The declared element type is what the elements print by, unless the declaration does
+        // not fix one (its element is `Void`), and the elements of a value of that
+        // type print by the element type the value holds (plan section 5.4). A tensor is an array
+        // and prints like one, `[1, 2, 3]` and `[[1, 2], [3, 4]]`, with no `tensor(...)` wrapper.
+        const type::Type *elemType = static_cast<const type::ArrayType *>(typeInfo)->elemType();
+        if (elemType == nullptr || elemType->code() == TypeCode::Void) {
+            elemType = elemType_;
+        }
         uint64_t flatIndex = 0;
-        printArray(os, static_cast<const type::ArrayType *>(typeInfo), 0, flatIndex, "");
-    } else {
-        printTensor(os);
+        printArray(os, elemType, 0, flatIndex);
+        return;
     }
+    // The declared type does not say this is an array (it may be a scalar the checker left
+    // unresolved): print the array the value is, from the
+    // element type the value holds.
+    uint64_t flatIndex = 0;
+    printArray(os, elemType_, 0, flatIndex);
 }
 
 void Array::printArray(
-    std::ostream &os, const type::ArrayType *arrayType, size_t dim, uint64_t &flatIndex,
-    const std::string &indent) const {
+    std::ostream &os, const type::Type *elemType, size_t dim, uint64_t &flatIndex) const {
     os << "[";
     const int64_t extent = extents_[dim];
     for (int64_t i = 0; i < extent; ++i) {
@@ -1325,104 +1362,12 @@ void Array::printArray(
             os << ", ";
         }
         if (dim + 1 == rank_) {
-            rtdata::printSlot(os, getSlot(flatIndex++), arrayType->elemType());
+            rtdata::printSlot(os, getSlot(flatIndex++), const_cast<type::Type *>(elemType));
         } else {
-            printArray(os, arrayType, dim + 1, flatIndex, indent + "  ");
+            printArray(os, elemType, dim + 1, flatIndex);
         }
     }
     os << "]";
-}
-
-std::string Array::formatTensorElement(uint64_t flatIndex) const {
-    char buf[32];
-    std::ostringstream oss;
-    // The element goes to the C library, so the NaN is made positive first: the library writes
-    // `-nan` for a NaN whose sign bit is set, and a NaN's text carries no sign (design principles
-    // 7.7; the language reference, 2.5.2; camel/utils/number_text.h, withoutNaNSign).
-    switch (elemTypeCode_) {
-    case TypeCode::Float32:
-    case TypeCode::BFloat16:
-    case TypeCode::Float16: {
-        const double value = camel::utils::withoutNaNSign(getAsDouble(flatIndex));
-        if (value == std::floor(value) && std::abs(value) < 1e10) {
-            (void)std::snprintf(buf, sizeof(buf), "% 7.0f.", value);
-        } else {
-            (void)std::snprintf(buf, sizeof(buf), "% 7.4g", value);
-        }
-        oss << buf;
-        break;
-    }
-    case TypeCode::Float64: {
-        const double value = camel::utils::withoutNaNSign(getAsDouble(flatIndex));
-        if (value == std::floor(value) && std::abs(value) < 1e10) {
-            (void)std::snprintf(buf, sizeof(buf), "% 7.0f.", value);
-        } else {
-            (void)std::snprintf(buf, sizeof(buf), "% 11.7g", value);
-        }
-        oss << buf;
-        break;
-    }
-    case TypeCode::Int32:
-    case TypeCode::Int64:
-        oss << std::setw(7) << getAsInt64(flatIndex);
-        break;
-    case TypeCode::Bool:
-        oss << (getAsBool(flatIndex) ? "  true" : " false");
-        break;
-    default:
-        oss << "?";
-        break;
-    }
-    return oss.str();
-}
-
-void Array::printTensorRecursive(
-    std::ostream &os, size_t dim, uint64_t &flatIndex, const std::string &indent) const {
-    constexpr int indentStep      = 8;
-    constexpr size_t maxLineWidth = 100;
-    const std::string innerIndent = indent + std::string(indentStep, ' ');
-
-    if (rank_ == 0) {
-        os << formatTensorElement(0);
-        return;
-    }
-    if (dim + 1 == rank_) {
-        os << "[";
-        size_t currentLineWidth = indent.size() + indentStep;
-        for (int64_t i = 0; i < extents_[dim]; ++i) {
-            std::string element = formatTensorElement(flatIndex++);
-            if (i > 0) {
-                const size_t nextWidth = currentLineWidth + 2 + element.size();
-                if (nextWidth > maxLineWidth) {
-                    os << ",\n" << innerIndent;
-                    currentLineWidth = innerIndent.size();
-                } else {
-                    os << ", ";
-                    currentLineWidth += 2;
-                }
-            }
-            os << element;
-            currentLineWidth += element.size();
-        }
-        os << "]";
-        return;
-    }
-    os << "[";
-    for (int64_t i = 0; i < extents_[dim]; ++i) {
-        if (i > 0) {
-            os << ",\n" << innerIndent;
-        }
-        printTensorRecursive(os, dim + 1, flatIndex, innerIndent);
-    }
-    os << "]";
-}
-
-void Array::printTensor(std::ostream &os) const {
-    os << "tensor(";
-    uint64_t flatIndex = 0;
-    printTensorRecursive(os, 0, flatIndex, "");
-    os << ", dtype=" << storageName(elemTypeCode_);
-    os << ")";
 }
 
 void Array::updateRefs(

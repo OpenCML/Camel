@@ -6,6 +6,7 @@
 #pragma once
 #include "camel/core/operator.h"
 #include "camel/runtime/draft.h"
+#include "tiles/internal/residency.h"
 #include <cstddef>
 #include <memory>
 #include <span>
@@ -47,18 +48,6 @@ struct Segment {
 // all observable roots (including effect/control roots) and all dependency edge kinds.
 // The result contains node IDs only: no GC pointers or references to the source graph.
 std::vector<Segment> partitionRegions(const std::vector<RegionNode> &nodes);
-struct ResidentEdge {
-    size_t value, producer, consumer;
-};
-struct RegionTransfers {
-    std::vector<size_t> uploads;
-    std::vector<size_t> downloads;
-    std::vector<ResidentEdge> resident;
-};
-// All regions share one target. IDs denote immutable source values; CPU consumers
-// can require a download while another region retains the same resident value.
-RegionTransfers
-planRegionTransfers(const std::vector<RegionNode> &nodes, const std::vector<Segment> &regions);
 struct RegionDraft {
     std::unique_ptr<runtime::GraphDraft> graph;
     std::vector<size_t> parameters; // Source IDs; constant boundary values are embedded.
@@ -71,7 +60,10 @@ RegionDraft extractRegion(const runtime::GCGraph &source, const Segment &region)
 struct SegmentAnalysis {
     std::vector<Segment> regions;
     std::vector<std::string> exclusions;
-    RegionTransfers transfers;
+    // What crosses each segment's boundary, decided by the residency conclusion
+    // (`tiles/internal/residency.h`) from the placement facts of the same graph, not from the
+    // regions themselves.
+    ResidencyPlan residency;
 };
 /// The regions of one graph, and why the nodes that are in none are in none. With `scopes`, a
 /// node the `#gpu` scope covers is not excluded for the control edge that orders it in its block

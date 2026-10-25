@@ -827,7 +827,7 @@ args = ["${case}", "rules::simplify", "${backend}"]
 backends = ["nvm", "fvm", "prl"]
 backends_agree = ["stdout_normalized"]
 expect_exit = 0
-expect_stdout_contains = ["tensor([      8.,      16.,      24.], dtype=float32)", "tensor([      6.,      12.,      18.], dtype=float32) tensor([     15.,      30.,      45.], dtype=float32)", "tensor([      3.,       6.,       9.], dtype=float32)", "tensor([      1.,       2.,       3.], dtype=float32)", "tensor([    0.3,     0.6,     0.9], dtype=float32)"]
+expect_stdout_contains = ["[8.0, 16.0, 24.0]", "[6.0, 12.0, 18.0] [15.0, 30.0, 45.0]", "[3.0, 6.0, 9.0]", "[1.0, 2.0, 3.0]", "[0.3, 0.6, 0.90000004]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -838,7 +838,7 @@ kind = "behavior"
 case = "../../../cases/modules/rules/tensor_boundary.cml"
 args = ["${case}", "rules::simplify", "std::nvm"]
 expect_exit = 0
-expect_stdout_contains = ["tensor([      0.,       0.,       0.], dtype=float32) 0.0", "tensor([  1e-30,       0.,       0.], dtype=float32) 1e-30", "tensor([      0.,       0.,       0.], dtype=float32) 0.0"]
+expect_stdout_contains = ["[0.0, 0.0, 0.0] 0.0", "[1e-30, 0.0, 0.0] 1e-30", "[0.0, 0.0, 0.0] 0.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
 
@@ -849,7 +849,7 @@ kind = "behavior"
 case = "../../../cases/modules/rules/tensor_boundary.cml"
 args = ["${case}", "tensor_boundary::apply", "std::nvm"]
 expect_exit = 0
-expect_stdout_contains = ["tensor([    nan,     nan,     nan], dtype=float32) 0.0", "tensor([      0.,       0.,       0.], dtype=float32) 1e-30", "tensor([     -0.,       0.,      -0.], dtype=float32) 0.0"]
+expect_stdout_contains = ["[nan, nan, nan] 0.0", "[0.0, 0.0, 0.0] 1e-30", "[-0.0, 0.0, -0.0] 0.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
 
@@ -860,7 +860,7 @@ kind = "behavior"
 case = "../../../cases/modules/rules/tensor_target.cml"
 args = ["${case}", "rules::saturate_all", "std::nvm"]
 expect_exit = 0
-expect_stdout_contains = ["tensor([      8.,      16.,      24.], dtype=float32)"]
+expect_stdout_contains = ["[8.0, 16.0, 24.0]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
 
@@ -1473,7 +1473,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
 [[tests]]
 name = "rules.check_program_parameter"
-desc = "`check`'s `program` parameter is a `Program?` whose default is `null` (the ruling of 2026-10-24 on `check-program-parameter`; design principles 4.4), and `samples` and `seed` have defaults too, so the one-argument call the ruling writes compiles as it stands there. The candidate set of a generic law is the types every operator group registered, and then the types of the values a program the call was given has, each once, in the order its graphs write them (the ruling of 2026-10-24 on `generic-rule-check-surface-and-multi-parameter-instances`, 1): the case declares `Vec = Tensor<f32, [3]>`, which no group registered, so `sum_swap<Vec>` is an instance only in the report of the call that gives `current()`. The first and the third report are the same text: with no program, the candidate set is the registered types alone, which is every reading `check` had before the parameter existed."
+desc = "`check`'s `program` parameter is a `Program?` whose default is `null` (the ruling of 2026-10-24 on `check-program-parameter`; design principles 4.4), and `samples` and `seed` have defaults too, so the one-argument call the ruling writes compiles as it stands there. The candidate set of a generic law is the types every operator group registered, and then the types of the values a program the call was given has, each once, in the order its graphs write them (the ruling of 2026-10-24 on `generic-rule-check-surface-and-multi-parameter-instances`, 1): what a group registers is the fixed signatures of the declaration modules, and H466 removed `load_npy`'s `(path: string) => Tensor` -- the last one that named a tensor whose element type is open -- so with no program no `sum_swap<Tensor>` instance is made any more (design principles 5.5). The case declares `Vec = Tensor<f32, [3]>`, which no group registered, so `sum_swap<Vec>` is an instance only in the report of the call that gives `current()`, and that instance prints under the array's text (`f32[3]`): the printed text of every spelling is the array's (`compile/array_alias.plan.toml`). The first and the third report are the same text: with no program, the candidate set is the registered types alone, which is every reading `check` had before the parameter existed."
 kind = "behavior"
 case = "../../../cases/modules/rules/check_program_parameter.cml"
 args = ["${case}", "std::nvm"]
@@ -1485,9 +1485,10 @@ const blocks = input.normalized.stdout.trim().split(/\n\s*\n/)
 assert(blocks.length === 3, 'three reports, got ' + blocks.length + ': ' + blocks.join(' || '))
 const [left, given, allDefaults] = blocks
 assert(left.includes('sampled add_zero: proposition equality, evidence samples 100, fired 8 of 8'), 'the rule of no type parameter is checked: ' + left)
-assert(left.includes('sampled sum_swap<Tensor>: '), 'the registered types are the candidate set: ' + left)
-assert(!left.includes('Tensor<float32, [3]>'), 'no program, so the program\'s own type is no instance: ' + left)
-assert(given.includes('sampled sum_swap<Tensor<float32, [3]>>: '), "the program's own type joins the candidate set: " + given)
+assert(left.includes('sampled sum_swap<i32>: '), 'the registered types are the candidate set: ' + left)
+assert(!left.includes('sum_swap<Tensor>'), 'no group registers a tensor whose element type is open (H466): ' + left)
+assert(!left.includes('sampled sum_swap<f32[3]>'), "no program, so the program's own type is no instance: " + left)
+assert(given.includes('sampled sum_swap<f32[3]>: '), "the program's own type joins the candidate set: " + given)
 assert(allDefaults === left, 'the defaults of samples and seed read the registered types alone: ' + allDefaults)
 }
 """

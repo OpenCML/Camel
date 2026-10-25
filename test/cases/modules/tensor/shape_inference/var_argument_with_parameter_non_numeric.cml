@@ -1,0 +1,20 @@
+/**
+ * The refusal of `var_argument_non_numeric` on the `with` side: a `with <var t: Tensor>`
+ * parameter may write only a numeric element, so a cell holding a `string[]` is not given the
+ * declared parameter type and the call is refused at the argument.
+ * Expected: a compile-time error at the argument.
+ */
+module var_argument_with_parameter_non_numeric
+import { Tensor, sum } from tensor
+
+with <var acc: f64[]>
+func step(d: float): float sync {
+    acc = acc + d
+    return sum(acc)
+}
+
+func main(): int sync {
+    var xs = ['a', 'b']
+    println(step<xs>(0.5))
+    return 0
+}

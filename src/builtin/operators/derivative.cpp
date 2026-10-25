@@ -144,7 +144,7 @@ void appendArrayVjp(VjpBuilder &b, const VjpCall &call) {
         return;
     }
     Type *const arrayType   = b.nodeType(call.inputs[0]);
-    Type *const tangentType = camel::core::tangentTypeOf(arrayType);
+    Type *const tangentType = camel::core::machineryTangentTypeOf(arrayType);
     if (tangentType == nullptr) {
         return;
     }
@@ -176,7 +176,7 @@ void idxArrayVjp(VjpBuilder &b, const VjpCall &call) {
         return;
     }
     Type *const arrayType   = b.nodeType(call.inputs[0]);
-    Type *const tangentType = camel::core::tangentTypeOf(arrayType);
+    Type *const tangentType = camel::core::machineryTangentTypeOf(arrayType);
     if (tangentType == nullptr) {
         return; // an array whose elements have no tangent: the read has none either
     }
@@ -201,7 +201,7 @@ void idxTakeArrayVjp(VjpBuilder &b, const VjpCall &call) {
         return;
     }
     Type *const arrayType   = b.nodeType(call.inputs[0]);
-    Type *const tangentType = camel::core::tangentTypeOf(arrayType);
+    Type *const tangentType = camel::core::machineryTangentTypeOf(arrayType);
     if (tangentType == nullptr) {
         return; // an array whose elements have no tangent: the row take has none either
     }
@@ -230,7 +230,7 @@ void extendArrayVjp(VjpBuilder &b, const VjpCall &call) {
         return;
     }
     Type *const arrayType   = b.nodeType(call.inputs[0]);
-    Type *const tangentType = camel::core::tangentTypeOf(arrayType);
+    Type *const tangentType = camel::core::machineryTangentTypeOf(arrayType);
     if (tangentType == nullptr) {
         return;
     }
@@ -245,13 +245,14 @@ void extendArrayVjp(VjpBuilder &b, const VjpCall &call) {
     const std::array<vjp_node_t, 1> upstream{*dy};
     const vjp_node_t end = b.addOper(Type::Int64(), ":struct/len_arr", upstream);
     // The mask of a slice: bit 0 the end, bit 1 the start. The prefix writes both bounds; the
-    // suffix starts at len(xs) and ends at the upstream gradient's own length.
-    const std::array<vjp_node_t, 5> prefix{
-        *dy, staticInt(b, 0), split, staticInt(b, 1), staticInt(b, 3)};
+    // suffix starts at len(xs) and ends at the upstream gradient's own length. A slice node's
+    // second argument is the axis, and both halves are rank-1: 0.
+    const std::array<vjp_node_t, 6> prefix{
+        *dy, staticInt(b, 0), staticInt(b, 0), split, staticInt(b, 1), staticInt(b, 3)};
     b.accumulateGradient(
         call.inputs[0], b.addOper(tangentType, ":op/slice_sub", prefix));
-    const std::array<vjp_node_t, 5> suffix{
-        *dy, split, end, staticInt(b, 1), staticInt(b, 2)};
+    const std::array<vjp_node_t, 6> suffix{
+        *dy, staticInt(b, 0), split, end, staticInt(b, 1), staticInt(b, 2)};
     b.accumulateGradient(
         call.withInputs[0], b.addOper(tangentType, ":op/slice_sub", suffix));
 }
@@ -273,7 +274,7 @@ void scatterSliceArray(
     vjp_node_t step,
     vjp_node_t written) {
     Type *const arrayType   = b.nodeType(call.inputs[0]);
-    Type *const tangentType = camel::core::tangentTypeOf(arrayType);
+    Type *const tangentType = camel::core::machineryTangentTypeOf(arrayType);
     if (tangentType == nullptr) {
         return; // an array whose elements have no tangent: the slice has none either
     }
@@ -300,10 +301,21 @@ void sliceArrayVjp(VjpBuilder &b, const VjpCall &call) {
         b, call, call.withInputs[0], call.withInputs[1], staticInt(b, 1), staticInt(b, 3));
 }
 
-// `xs[a:b:s]`: start, end, step and the mask are the call's last four norm inputs.
+// `xs[a:b:s]`: the two bounds, the step and the mask follow the value and the axis. The function
+// form `slice(xs, 0, a, b, s?)` is the same node with the two words a call has not, and for it
+// those words stand for "step 1, both bounds written" -- the same defaults the forward kernel
+// reads (design principles 5.4; the author's ruling of 2026-10-25: both spellings are one node
+// with one adjoint rule).
 void sliceSubArrayVjp(VjpBuilder &b, const VjpCall &call) {
-    requireInputs(call, 5);
-    scatterSliceArray(b, call, call.inputs[1], call.inputs[2], call.inputs[3], call.inputs[4]);
+    if (call.inputs.size() < 4) {
+        throw std::runtime_error(std::format(
+            "Derivative of '{}' expects at least 4 inputs, got {}.",
+            call.uri,
+            call.inputs.size()));
+    }
+    const vjp_node_t step = call.inputs.size() >= 5 ? call.inputs[4] : staticInt(b, 1);
+    const vjp_node_t written = call.inputs.size() >= 6 ? call.inputs[5] : staticInt(b, 3);
+    scatterSliceArray(b, call, call.inputs[2], call.inputs[3], step, written);
 }
 
 // ---- the rules of a gradient graph: the second derivative of an array expression ----
@@ -379,8 +391,14 @@ void scatterSliceArrayVjp(VjpBuilder &b, const VjpCall &call) {
     requireInputs(call, 6);
     if (auto dy = b.gradientOf(call.output)) {
         if (b.isActive(call.inputs[0])) {
-            const std::array<vjp_node_t, 5> slice{
-                *dy, call.inputs[2], call.inputs[3], call.inputs[4], call.inputs[5]};
+            // A slice node's second argument is the axis, and this slice is of a rank-1 array: 0.
+            const std::array<vjp_node_t, 6> slice{
+                *dy,
+                staticInt(b, 0),
+                call.inputs[2],
+                call.inputs[3],
+                call.inputs[4],
+                call.inputs[5]};
             b.accumulateGradient(
                 call.inputs[0],
                 b.addOper(b.nodeType(call.inputs[0]), ":op/slice_sub", slice));
@@ -460,7 +478,11 @@ void registerBuiltinDerivatives() {
     // Arrays have no entry of their own either: their tangent is the array of their elements'
     // tangents, and adding two of them is elementwise (design principles 9.9).
     TangentSpace arraySpace;
-    arraySpace.addUri      = ":tangent/add_arr";
+    arraySpace.addUri       = ":tangent/add_arr";
     arraySpace.zerosLikeUri = ":tangent/zeros_arr";
+    // One element's gradient goes back to its place by slot: the core's arrays hold their elements
+    // one slot each (`:tangent/scatter_add_arr(base, i, delta)`), which is also the scatter the
+    // reverse loop uses for the element a round took.
+    arraySpace.scatterUri = ":tangent/scatter_add_arr";
     registry.setTangentSpace(TypeCode::Array, std::move(arraySpace));
 }

@@ -29,7 +29,7 @@ timeout_ms = 30000
 
 [[tests]]
 name = "unsupported_leaf_is_a_compile_error"
-desc = "A checkpoint leaf of a type no checkpoint can hold (an array) is refused when the program is compiled, with the path of the leaf."
+desc = "A checkpoint leaf of a type no checkpoint can hold (an array of arrays) is refused when the program is compiled, with the path of the leaf."
 kind = "negative"
 case = "../../../cases/modules/nn/checkpoint_unsupported_leaf.cml"
 args = ["${case}"]

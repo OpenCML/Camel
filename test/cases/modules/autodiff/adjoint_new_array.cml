@@ -1,0 +1,41 @@
+/**
+ * The adjoint of `new` on a numeric array (design principles 9.9). `new(xs)` converts a numeric
+ * array into a tensor, and an array's tangent is the array of its elements' tangents, so the
+ * adjoint is the tensor's gradient read back in the array's order -- the identity here, since
+ * `new` moves no element. Until the flip this program was refused by name at the new call; the
+ * commit that removed the refusal rewrote its case, which now asserts the gradient the rule
+ * builds.
+ *
+ * Hand adjoints, written out from the forward expressions:
+ *   t = new(xs), loss = sum(t) with xs = [1.0, 2.0]:        d loss / d xs = [1.0, 1.0]
+ *   t = new(w),  loss = sum(t * reshape([2, 3, 4], [3])) with w = [3.0, 4.0, 5.0]:
+ *                                                          d loss / d w  = [2.0, 3.0, 4.0]
+ * Both gradients are printed with `{}`, so each is compared with its adjoint element by element
+ * and the text carries every digit of it.
+ */
+module adjoint_new_array
+
+import { new, reshape, sum } from tensor
+import { grad } from autodiff
+
+with <xs: float[]>
+func plain(): float {
+    let t = new(xs)
+    return sum(t)
+}
+
+with <w: float[]>
+func weighted(): float {
+    let t = new(w)
+    let c = reshape([2.0, 3.0, 4.0] as f64[], [3])
+    return sum(t * c)
+}
+
+func main(): int sync {
+    let xs = [1.0, 2.0]
+    let g  = grad(plain)<xs>()
+    let w  = [3.0, 4.0, 5.0]
+    let gw = grad(weighted)<w>()
+    'adjoint_new_array g={} gw={}'->format<g, gw>->println
+    return 0
+}

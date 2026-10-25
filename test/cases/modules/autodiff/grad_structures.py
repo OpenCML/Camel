@@ -47,7 +47,7 @@ UNARY = [
 
 
 class Gen:
-    """One loss function `loss_k(b: Tensor): float`, as Camel text and as Python text."""
+    """One loss function `loss_k(b: f32[..]): float`, as Camel text and as Python text."""
 
     def __init__(self, rng: random.Random, index: int):
         self.rng, self.index = rng, index
@@ -78,7 +78,7 @@ class Gen:
         f = self.name("helper")
         c1, p1 = self.unary("a")
         c2, p2 = self.unary("t")
-        self.helpers_c.append(f"func {f}(a: Tensor): Tensor {{\n    let t = {c1}\n    return {c2}\n}}\n")
+        self.helpers_c.append(f"func {f}(a: f32[..]): f32[..] {{\n    let t = {c1}\n    return {c2}\n}}\n")
         self.helpers_p.append(f"def {f}(a):\n    t = {p1}\n    return {p2}\n")
         return self.let(f"{f}({v})", f"{f}({v})")
 
@@ -86,7 +86,7 @@ class Gen:
         s = self.let(f"mean({v}, 0, true) * 1.3", f"{v}.mean(0, keepdims=True) * 1.3")
         g = self.name("g")
         c1, p1 = self.unary("p")
-        self.body_c.append(f"    let {g} = (p: Tensor): Tensor => {{\n        let q = {c1}\n        tanh(q * {s}) + {s}\n    }}")
+        self.body_c.append(f"    let {g} = (p: f32[..]): f32[..] => {{\n        let q = {c1}\n        tanh(q * {s}) + {s}\n    }}")
         self.body_p.append(f"    def {g}(p):\n        q = {p1}\n        return np.tanh(q * {s}) + {s}")
         return self.let(f"{g}({v})", f"{g}({v})")
 
@@ -94,7 +94,7 @@ class Gen:
         s = self.let(f"sum({v})", f"{v}.sum()")
         g = self.name("inner_fn")
         c1, p1 = self.unary("p")
-        self.body_c.append(f"    func {g}(p: Tensor): Tensor {{\n        return {c1} * {s}\n    }}")
+        self.body_c.append(f"    func {g}(p: f32[..]): f32[..] {{\n        return {c1} * f32({s})\n    }}")
         self.body_p.append(f"    def {g}(p):\n        return {p1} * {s}")
         return self.let(f"{g}({v})", f"{g}({v})")
 
@@ -103,16 +103,16 @@ class Gen:
         c1, p1 = self.unary("y")
         c2, p2 = self.unary("y")
         if self.rng.random() < 0.5:  # arms return one value
-            self.helpers_c.append(f"func {fa}(y: Tensor): Tensor {{\n    return {c1}\n}}\n")
-            self.helpers_c.append(f"func {fb}(y: Tensor): Tensor {{\n    return {c2} * 0.5\n}}\n")
+            self.helpers_c.append(f"func {fa}(y: f32[..]): f32[..] {{\n    return {c1}\n}}\n")
+            self.helpers_c.append(f"func {fb}(y: f32[..]): f32[..] {{\n    return {c2} * 0.5\n}}\n")
             self.helpers_p.append(f"def {fa}(y):\n    return {p1}\n")
             self.helpers_p.append(f"def {fb}(y):\n    return {p2} * 0.5\n")
             return self.let(f"if sum({v}) > 0.1 then {fa}({v}) else {fb}({v})", f"{fa}({v}) if {v}.sum() > 0.1 else {fb}({v})")
         # arms return a tuple whose second component also depends on the argument
         self.helpers_c.append(
-            f"func {fa}(y: Tensor): (Tensor, Tensor) {{\n    let t = {c1}\n    return (t, tanh(mean(t, 0, true)))\n}}\n")
+            f"func {fa}(y: f32[..]): (f32[..], f32[..]) {{\n    let t = {c1}\n    return (t, tanh(mean(t, 0, true)))\n}}\n")
         self.helpers_c.append(
-            f"func {fb}(y: Tensor): (Tensor, Tensor) {{\n    let t = {c2}\n    return (t * 0.5, mean(y, 0, true))\n}}\n")
+            f"func {fb}(y: f32[..]): (f32[..], f32[..]) {{\n    let t = {c2}\n    return (t * 0.5, mean(y, 0, true))\n}}\n")
         self.helpers_p.append(f"def {fa}(y):\n    t = {p1}\n    return (t, np.tanh(t.mean(0, keepdims=True)))\n")
         self.helpers_p.append(f"def {fb}(y):\n    t = {p2}\n    return (t * 0.5, y.mean(0, keepdims=True))\n")
         a, b = self.name("pa"), self.name("pb")
@@ -129,7 +129,7 @@ class Gen:
             kinds.append(stage.__name__[6:])
             v = stage(v)
         name = f"loss{self.index}"
-        camel = "".join(self.helpers_c) + f"with <b: Tensor>\nfunc {name}(): float {{\n" + "\n".join(self.body_c) + f"\n    return sum({v})\n}}\n"
+        camel = "".join(self.helpers_c) + f"with <b: f32[..]>\nfunc {name}(): float {{\n" + "\n".join(self.body_c) + f"\n    return sum({v})\n}}\n"
         python = "".join(self.helpers_p) + f"def {name}(b):\n" + "\n".join(self.body_p) + f"\n    return float({v}.sum())\n"
         return camel, python, kinds
 

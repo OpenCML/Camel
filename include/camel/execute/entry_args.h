@@ -79,7 +79,9 @@ bool parseEntryArgument(const std::string &spec, EntryArgument &out);
  * `declared` is the type of the parameter (or of the struct field) the value is for; the loader
  * checks the value against it and stores the exact type of what it read in `valueType`. The
  * result may be a fresh object of the auto space. Failure is an exception (std::exception or
- * a RuntimeFault) whose message says why.
+ * a RuntimeFault) whose message says why. A loader that does not take the type at all — the
+ * values of a type code may be of more than one kind, as a Tensor is one kind of array —
+ * returns NullSlot, and the caller reports it like a type no loader takes.
  */
 using EntryArgumentLoader = std::function<
     slot_t(const std::string &text, core::type::Type *declared, core::type::Type *&valueType)>;
@@ -108,7 +110,8 @@ const runtime::Program *bindEntryArgumentSpecs(
 /**
  * Writes a value of a module-defined type to `path` (the counterpart of EntryArgumentLoader).
  * Returns the path it wrote, which may be `path` with the format's extension added. Failure is
- * an exception whose message says why.
+ * an exception whose message says why. An empty path is the saver saying it does not write this
+ * type, the counterpart of the loader's NullSlot (see loadValue).
  */
 using EntryResultSaver =
     std::function<std::string(slot_t value, core::type::Type *type, const std::string &path)>;

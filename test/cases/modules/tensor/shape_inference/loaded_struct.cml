@@ -7,7 +7,7 @@ func f(x: Tensor<f32, [3]>): float {
     return sum(m.w * x + m.b)
 }
 func main(): int sync {
-    let p = { w: load_npy('test/cases/modules/tensor/shape_types/x3.npy'), b: ones([3]) }
+    let p = { w: load_npy::<f32>('test/cases/modules/tensor/shape_types/x3.npy'), b: ones([3]) }
     println(f<p>(ones([3])))
     return 0
 }

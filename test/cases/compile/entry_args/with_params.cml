@@ -9,7 +9,7 @@ module with_params
 import { Tensor, tanh } from tensor
 
 with <w: Tensor<f32, [3, 4]>, b: Tensor<f32, [4]>>
-func layer(x: Tensor): Tensor {
+func layer(x: Tensor<f32>): Tensor<f32> {
     return tanh(x @ w + b)
 }
 

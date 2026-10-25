@@ -11,7 +11,7 @@ import { adam, constant, init, update } from optim
 
 type Unknown = { rate: float }
 
-type Model = { w: Tensor }
+type Model = { w: Tensor<f32, [?]> }
 
 func model_at(): Model {
     return { w: full([4], f32(0.5)) }

@@ -32,15 +32,18 @@ struct DraftInlineResult {
 DraftInlineResult inlineCallableInDraft(
     RuntimeGraphDraftSession &session, GraphDraft &draft, gc_node_ref_t funcNodeId,
     bool asArm = false);
-/// Bound on the type-only specializations of one recursive function that a program may hold.
+/// Runaway guard on the type-only specializations of one recursive function that a program may
+/// hold.
 ///
 /// A specialization that only refines parameter types (a tensor argument whose type carries its
 /// shape) re-infers the callee's types, so the recursive call inside the copy can carry yet
-/// another type: a recursion whose tensor grows every level (`loop(i + 1, n, concat(acc, row))`)
-/// would get a new copy per level without end, because nothing in the types says where the
-/// recursion stops. A recursion that keeps its types reuses its one copy and never meets the
-/// bound; past the bound the call keeps its current callee, which accepts the argument as it is.
-inline constexpr size_t kMaxTypeSpecializationsPerRecursiveFunction = 8;
+/// another type. Reading E bounds that recursion in the types themselves: a recursive call inside
+/// an instance of the function it names reuses that instance, and a call whose key differs
+/// (polymorphic recursion) has its extents and dimension names widened to `?` instead of taking a
+/// copy per level. No count is a shape bound any more, and nothing stops silently at one: passing
+/// this guard means the specialization never reached a fixed point, which is reported as a
+/// compiler error naming the function -- never a truncated shape.
+inline constexpr size_t kTypeSpecializationFixedPointGuard = 4096;
 
 bool specializeDirectFuncInDraft(
     RuntimeGraphDraftSession &session, GraphDraft &draft, gc_node_ref_t funcNodeId);

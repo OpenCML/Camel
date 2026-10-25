@@ -14,16 +14,16 @@ import { OptimizerState, adam, adam_state } from nn
 import { export_model } from onnx
 import { get_env } from env
 
-type Mlp = { w1: Tensor, b1: Tensor, w2: Tensor, b2: Tensor }
+type Mlp = { w1: f32[..], b1: f32[..], w2: f32[..], b2: f32[..] }
 
 with <m: Mlp>
-func loss(x: Tensor): float {
+func loss(x: f32[..]): float {
     let h = relu(x @ m.w1 + m.b1)
     let y = h @ m.w2 + m.b2
     return mean(y * y)
 }
 
-func step(m: Mlp, st: OptimizerState, x: Tensor): (float, Mlp, OptimizerState) {
+func step(m: Mlp, st: OptimizerState, x: f32[..]): (float, Mlp, OptimizerState) {
     let vg = with_grad(loss)<m>(x)
     let next = adam(m, vg.1, st, 0.001)
     return (vg.0, next.0, next.1)

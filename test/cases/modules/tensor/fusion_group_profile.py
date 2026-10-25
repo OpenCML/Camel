@@ -40,11 +40,17 @@ STEP = HERE / "fusion_group_step.cml"
 NONE = HERE / "fusion_group_none.cml"
 GOLDEN_TEXT = HERE / "fusion_group_none.profile.golden.txt"
 GOLDEN_JSON = HERE / "fusion_group_none.profile.golden.json"
-# The goldens were captured from the base commit (b43dd5c68). `origin` in the JSON is the
+# The goldens are recorded from this tree. `origin` in the JSON is the
 # internal node-origin id, not a source position: it moved when stdlib/tensor.cml gained its
 # pass declaration (design principles 9.3), which adds nodes to the module's declaration, and
 # the golden records the id this tree produces. The source positions the text report prints are
 # unchanged and are checked there.
+#
+# Re-recorded on 2026-10-25: the type table holds one object per type, so an operator execution no
+# longer allocates the type objects it asks the table for and its allocator calls fall from three
+# per execution to one (`tensor:multiply`: 54 calls for 18 executions before, 18 now). The
+# operator call counts, the block payloads, the byte counts and the values the program prints did
+# not move: every line the two goldens changed is an allocator-call count.
 #
 # The text golden moved for the same reason on 2026-10-24: `stdlib/tensor.cml` spells the element
 # type of its tensor signatures as an explicit type variable (`func to_bytes::<T>(t: T[..]) when
@@ -309,7 +315,7 @@ def main() -> int:
         check(code == 0, f"exit code 0 (got {code})")
         check(
             normalize_text(text) == GOLDEN_TEXT.read_text(encoding="utf-8"),
-            "the report is the base commit's report, byte for byte apart from the measured numbers",
+            "the report is the recorded report, byte for byte apart from the measured numbers",
         )
 
         _, _, doc = profile_json(NONE, [], steps)
@@ -317,7 +323,7 @@ def main() -> int:
         check("operator_executions" not in doc, "the JSON has no operator-executions key")
         check(
             normalize_doc(doc) == json.loads(GOLDEN_JSON.read_text(encoding="utf-8")),
-            "the JSON is the base commit's, apart from the measured durations",
+            "the JSON is the recorded one, apart from the measured durations",
         )
 
         plain = run(NONE, [], None, steps)

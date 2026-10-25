@@ -20,12 +20,12 @@ func dcube(): float {
     return grad(cube)<x>()
 }
 
-with <x: Tensor>
+with <x: f32[..]>
 func g(): float {
     return sum(x * x * x)
 }
 
-with <x: Tensor>
+with <x: f32[..]>
 func h(): float {
     return sum(grad(g)<x>())
 }

@@ -13,40 +13,40 @@ import { Tensor, reshape, mean, sum, abs, sqrt } from tensor
 import { grad } from autodiff
 import { batch_norm_train, batch_norm_train_grad } from nn
 
-type Inputs = { t: Tensor, g: Tensor, b: Tensor, rm: Tensor, rv: Tensor }
+type Inputs = { t: f32[..], g: f32[..], b: f32[..], rm: f32[..], rv: f32[..] }
 
 // The fixed loss weights: loss = sum(y * w), so dL/dy = w.
-func w(): Tensor {
+func w(): f32[..] {
     return reshape([
         0.5, -1.0, 0.25, 2.0, -0.75, 1.5, 0.125, -0.5, 1.0, 0.0, -2.0, 0.75, 0.5, 0.5, -0.25, 1.25
     ] as f32[], [2, 2, 2, 2])
 }
 
-func x(): Tensor {
+func x(): f32[..] {
     return reshape([
         1.0, 0.5, -0.5, 2.0, 0.0, 1.5, -1.0, 0.25, 0.75, -0.25, 1.25, 0.5, -0.75, 0.0, 2.0, -0.5
     ] as f32[], [2, 2, 2, 2])
 }
 
 // Per-channel mean over (batch, spatial) of a rank-4 NCHW tensor: [N,C,H,W] -> [C].
-func bmean(t: Tensor): Tensor {
+func bmean(t: f32[..]): f32[..] {
     return mean(mean(mean(t, 0), 1), 1)
 }
 
 // The manual decomposition: biased batch variance for the normalize, UNBIASED (M/(M-1))
 // variance for the running variance, running <- (1-m)*running + m*batch_stat.
-func reference(t: Tensor, g: Tensor, b: Tensor, rm: Tensor, rv: Tensor, m: float, eps: float): (Tensor, Tensor, Tensor) {
+func reference(t: f32[..], g: f32[..], b: f32[..], rm: f32[..], rv: f32[..], m: float, eps: float): (f32[..], f32[..], f32[..]) {
     let mu = bmean(t)
     let xc = t - reshape(mu, [1, 2, 1, 1])
     let va = bmean(xc * xc)
-    let xhat = xc / reshape(sqrt(va + eps), [1, 2, 1, 1])
+    let xhat = xc / reshape(sqrt(va + f32(eps)), [1, 2, 1, 1])
     let y = xhat * reshape(g, [1, 2, 1, 1]) + reshape(b, [1, 2, 1, 1])
-    let new_rm = (1.0 - m) * rm + m * mu
-    let new_rv = (1.0 - m) * rv + m * va * (8.0 / 7.0)
+    let new_rm = f32(1.0 - m) * rm + f32(m) * mu
+    let new_rv = f32(1.0 - m) * rv + f32(m) * va * f32(8.0 / 7.0)
     return (y, new_rm, new_rv)
 }
 
-func loss_at(t: Tensor, g: Tensor, b: Tensor, rm: Tensor, rv: Tensor): float {
+func loss_at(t: f32[..], g: f32[..], b: f32[..], rm: f32[..], rv: f32[..]): float {
     let r = batch_norm_train(t, g, b, rm, rv, 0.1, 0.00001)
     return sum(r.0 * w())
 }

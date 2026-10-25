@@ -1,21 +1,25 @@
 /**
- * Refused: a tail recursion whose depth depends on the model input and which carries an int
- * array that changes every call. A loop carries tensors and scalars, and tuples and structs of
- * them (the outline); an array has no carried form, so the diagnostic names the argument.
+ * Exported: a tail recursion whose depth depends on the model input carries an int array whose
+ * length is the same on every call — `[k]` is one element each round. Whether a Loop can keep a
+ * value is a fact about the loop body (the shape of the carried state does not change from one
+ * round to the next), not what the type prints, so the export is written. The trip count is a
+ * constant here (`k >= 3`), so the export unrolls the recursion and keeps the input-dependent If;
+ * the spelling of the type used to refuse this case (the ruling of 2026-10-24-evening,
+ * growable-array-vs-tensor-in-the-onnx-exporter, replaced that proxy with the fact).
  */
 module export_loop_carried_array
 import { Tensor, reshape, sum } from tensor
 import { export_model } from onnx
 import { get_env } from env
 
-func walk(x: Tensor, xs: int[], k: int): Tensor {
+func walk(x: float[..], xs: int[], k: int): float[..] {
     return if k >= 3 || sum(x * x) < 1.0 then x * 2.0 else walk(x, [k], k + 1)
 }
 
 func main(): int sync {
     let x = reshape([1.0, 2.0, 3.0, 4.0], [2, 2])
     println(len([0]))
-    export_model((x: Tensor): Tensor => walk(x, [0], 0), (x), get_env('ONNX_OUT'))
+    export_model((x: float[..]): float[..] => walk(x, [0], 0), (x), get_env('ONNX_OUT'))
     println('exported')
     return 0
 }

@@ -8,14 +8,14 @@ module grad_effects_kept
 import { Tensor, reshape, sum, tanh } from tensor
 import { grad, with_grad } from autodiff
 
-func helper(s: float, p: Tensor): Tensor sync {
+func helper(s: float, p: f32[..]): f32[..] sync {
     println('helper')
-    let a = tanh(p * s)
+    let a = tanh(p * f32(s))
     println('helper: done')
     return a + p
 }
 
-with <p: Tensor>
+with <p: f32[..]>
 func loss(): float sync {
     println('loss')
     let s = sum(p)

@@ -1,12 +1,12 @@
-// A bare numeric array enters a shaped position through `as`, which checks the shape when the
-// conversion runs (plan section 5.1: the two spellings are one type, so the conversion is a
-// checked one and not a dynamic cast that is refused).
+// An array whose type fixes no rank enters a shaped position through `as`, which checks the shape
+// when the conversion runs (plan section 5.1: the two spellings are one type, so the conversion is
+// a checked one and not a dynamic cast that is refused).
 module array_alias_as_shape_check
 
-import { Tensor, ones } from tensor
+import { ones } from tensor
 
 func main(): int sync {
-    let t: Tensor = ones([2, 3])
+    let t: f32[..] = ones([2, 3])
     let a = t as f32[2, 3]
     println(len(a))
     return 0

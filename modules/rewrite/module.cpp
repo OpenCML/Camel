@@ -757,13 +757,17 @@ class ProofType final : public OtherType {
 /// the same reason. This file builds and prints it (proof.cpp holds those methods).
 
 ProofType *ProofType::get() {
+    // One object for the one `Proof` code, from the type table (see intern.h).
     static ProofType *instance = nullptr;
     static std::once_flag once;
     std::call_once(once, [] {
         const TypeCode code = registerOtherType("rewrite::Proof", TypeFlag::GC_Traced);
-        void *mem = mm::permSpace().alloc(sizeof(ProofType), alignof(ProofType));
-        ASSERT(mem != nullptr, "Failed to allocate ProofType from permSpace");
-        instance = new (mem) ProofType(code);
+        instance            = static_cast<ProofType *>(TypeTable::instance().internOther(
+            code, std::span<const uintptr_t>(), [&]() -> Type * {
+                void *mem = mm::permSpace().alloc(sizeof(ProofType), alignof(ProofType));
+                ASSERT(mem != nullptr, "Failed to allocate ProofType from permSpace");
+                return new (mem) ProofType(code);
+            }));
     });
     return instance;
 }
@@ -806,13 +810,17 @@ class CheckReportType final : public OtherType {
 };
 
 CheckReportType *CheckReportType::get() {
+    // One object for the one `CheckReport` code, from the type table (see intern.h).
     static CheckReportType *instance = nullptr;
     static std::once_flag once;
     std::call_once(once, [] {
         const TypeCode code = registerOtherType("rewrite::CheckReport", TypeFlag::GC_Traced);
-        void *mem = mm::permSpace().alloc(sizeof(CheckReportType), alignof(CheckReportType));
-        ASSERT(mem != nullptr, "Failed to allocate CheckReportType from permSpace");
-        instance = new (mem) CheckReportType(code);
+        instance            = static_cast<CheckReportType *>(TypeTable::instance().internOther(
+            code, std::span<const uintptr_t>(), [&]() -> Type * {
+                void *mem = mm::permSpace().alloc(sizeof(CheckReportType), alignof(CheckReportType));
+                ASSERT(mem != nullptr, "Failed to allocate CheckReportType from permSpace");
+                return new (mem) CheckReportType(code);
+            }));
     });
     return instance;
 }
@@ -2432,7 +2440,7 @@ class Sampler {
             throw std::invalid_argument(
                 "a tensor parameter has an element type the check cannot make");
         }
-        std::vector<int64_t> dims;
+        std::vector<std::optional<int64_t>> dims;
         if (shape.dims) {
             dims = *shape.dims;
         } else {
@@ -2444,26 +2452,32 @@ class Sampler {
             } else if (rank == 2) {
                 dims = {2, 3};
             } else {
-                dims = std::vector<int64_t>(rank, 2);
+                dims = std::vector<std::optional<int64_t>>(rank, 2);
             }
         }
         int64_t elements = 1;
-        for (int64_t &extent : dims) {
-            if (extent < 0) {
+        for (std::optional<int64_t> &extent : dims) {
+            // An extent nobody stated (or a negative one) has no size: the sample takes 2.
+            if (!extent || *extent < 0) {
                 extent = 2;
             }
-            elements *= extent;
+            elements *= *extent;
         }
         if (elements > 1024) {
-            for (int64_t &extent : dims) {
+            for (std::optional<int64_t> &extent : dims) {
                 extent = 2;
             }
             elements = 1;
-            for (int64_t extent : dims) {
-                elements *= extent;
+            for (const std::optional<int64_t> &extent : dims) {
+                elements *= *extent;
             }
         }
-        sample->shape = dims;
+        sample->shape.clear();
+        sample->shape.reserve(dims.size());
+        for (const std::optional<int64_t> &extent : dims) {
+            // The two loops above gave every extent a size, so each one is engaged here.
+            sample->shape.push_back(extent.value());
+        }
         switch (dtype) {
         case TypeCode::Float32: {
             // The bytes of a vector of bytes are not aligned for a float: fill a typed buffer and
