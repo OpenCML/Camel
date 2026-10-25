@@ -399,7 +399,7 @@ expect_stdout_exact = "3\n"
 
 [[tests]]
 name = "native.foreign_operator_refused"
-desc = "`#op<'bytes:size'>` in a module other than `bytes` names another module's operator: refused at the declaration, in the file that wrote it, before any call."
+desc = "`#op('bytes:size')` in a module other than `bytes` names another module's operator: refused at the declaration, in the file that wrote it, before any call."
 kind = "negative"
 case = "../../../cases/compile/native/foreign_operator.cml"
 args = ["${case}"]

@@ -5,10 +5,10 @@
  * Tags: compile-time facts attached to declarations and to nodes (design principles 6.2).
  *
  * A tag is a name in the same namespace as functions and types. It is declared once, by a
- * Camel module (`tag vjp<rule: func> on func`) or by a C++ module (declare, below), and it
- * says where it may be written (`Func`, `Type`, `Field`, `Nodes`) and which passes read it.
- * Writing `#tag` at a position the tag does not list is a compile error (the graph builder
- * reports it at the tag).
+ * Camel module (`tag vjp::<F>(rule: F) on func when is_function::<F>()`) or by a C++ module
+ * (declare, below), and it says where it may be written (`Func`, `Type`, `Field`, `Nodes`) and
+ * which passes read it. Writing `#tag` at a position the tag does not list is a compile error
+ * (the graph builder reports it at the tag).
  *
  * The language gives a tag no meaning: the library that declares it, and the pass that reads
  * it, define it. The core keeps only where the facts are:
@@ -77,7 +77,7 @@ enum Position : uint8_t {
 };
 using Positions = uint8_t;
 
-/// A compile-time parameter of a tag (`rule: func`): its name and the type as written.
+/// A compile-time parameter of a tag (`rule: F`): its name and the type as written.
 struct TagParam {
     std::string name;
     std::string type;
@@ -94,6 +94,14 @@ struct Decl {
     std::string ident;
     Positions on = NoPosition;
     std::vector<TagParam> params;
+    /// The type parameters the tag declares (`::<F>`), as written. A tag carries no instance of
+    /// its own, so they are read as text: a parameter whose declared type is one of these names
+    /// is a function when `when` says so.
+    std::vector<std::string> typeParams;
+    /// The condition of the declaration (`when is_function::<F>()`), as written and without the
+    /// `when` word; empty when the declaration carries none. Read as text, the way a pass
+    /// declaration's condition is.
+    std::string when;
     /// An alias group (`tag finite_math = [no_nans, ...]`): the member tags, qualified. A use
     /// of the group is a use of each member. Empty for an ordinary tag.
     std::vector<Reference> aliases;
@@ -110,12 +118,12 @@ struct Decl {
     /// function or a block grants the permission to the code written there. `finite_math` is a
     /// group of the four assumptions and has 0 here; its members carry their bits.
     sem::PermissionMask permission = 0;
-    /// The tag's arguments are names, not values (`#reads<reassociate, contract>`): the AST
+    /// The tag's arguments are names, not values (`#reads(reassociate, contract)`): the AST
     /// builder reads each as a symbol instead of an expression. Used by the standard tag
     /// `reads`, whose value is the tuple of the names.
     bool names = false;
     /// A name of a `names` tag is itself a tag name, so a name no tag declares is a typo
-    /// (`#reads<reassocate>`). False when the names are plain names of the program: `#impl<f>`
+    /// (`#reads(reassocate)`). False when the names are plain names of the program: `#impl(f)`
     /// carries the name of a body-less declaration, which is not a tag.
     bool namesAreTags = true;
     /// The number of arguments is not the number of parameters: any number, at least one. The
@@ -173,7 +181,7 @@ void declareReader(std::string_view pass);
 /// (the registered `std::opt` matches `std::opt::inline`).
 bool isReader(std::string_view written);
 
-/// Records that the pass `pass` reads the tag `tag`: a Camel pass writes `#reads<tag, ...>` on
+/// Records that the pass `pass` reads the tag `tag`: a Camel pass writes `#reads(tag, ...)` on
 /// its function, and `registerCamelPass` records each name here. `tag` is as written in the
 /// program (`reassociate`, `main::fast`); a use of the tag is considered read when a pass of
 /// the pipeline is one of its readers, just as a `read_by` list of the declaration is.

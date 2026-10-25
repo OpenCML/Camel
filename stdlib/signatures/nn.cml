@@ -130,7 +130,7 @@ export func embedding_table_grad(table: Tensor, indices: Tensor, dy: Tensor): Te
 /// @fails fault `RuntimeError` when a label is outside `[0, classes)`
 /// @example softmax_cross_entropy(logits, target)    // a float
 export func softmax_cross_entropy(logits: Tensor, target: Tensor): float
-#op<'nn:softmax_cross_entropy_labels'>
+#op('nn:softmax_cross_entropy_labels')
 export func softmax_cross_entropy(logits: Tensor, target: Tensor | number[]): float
 
 /// The gradient of `softmax_cross_entropy` with respect to `logits`, scaled by `dy`; the result is
@@ -140,7 +140,7 @@ export func softmax_cross_entropy(logits: Tensor, target: Tensor | number[]): fl
 /// @fails fault `RuntimeError` when a label is outside `[0, classes)`
 /// @example softmax_cross_entropy_grad(logits, target, 1.0)    // like logits
 export func softmax_cross_entropy_grad(logits: Tensor, target: Tensor, dy: number): Tensor
-#op<'nn:softmax_cross_entropy_labels_grad'>
+#op('nn:softmax_cross_entropy_labels_grad')
 export func softmax_cross_entropy_grad(logits: Tensor, target: Tensor | number[], dy: number): Tensor
 
 // ---- optimizers ----

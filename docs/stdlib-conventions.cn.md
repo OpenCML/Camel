@@ -22,9 +22,9 @@
 | 数值语义、原地形式 | C++ 的 `declareSemantics` / `setInPlaceForm` |
 | 文档（描述、`@example`、`@fails`） | 声明上方的 `///` 注释 |
 
-C++ 模块不再重复写签名：没有函数体的声明就是签名本身，调用方按它检查，运行时由 `module:function`（例如 `bytes:len`）找到算子的执行器。声明名与算子名不同、或同一模块的算子用别的前缀（`random` 的 `rand:`）时用 `#op<'...'>` 标出；另一个模块的算子不能在这里声明。`docs/stdlib-reference.md` 由声明与计算签名文件生成，不手改。
+C++ 模块不再重复写签名：没有函数体的声明就是签名本身，调用方按它检查，运行时由 `module:function`（例如 `bytes:len`）找到算子的执行器。声明名与算子名不同、或同一模块的算子用别的前缀（`random` 的 `rand:`）时用 `#op('...')` 标出；另一个模块的算子不能在这里声明。`docs/stdlib-reference.md` 由声明与计算签名文件生成，不手改。
 
-- 一个名字按类型有各自的执行器 URI 时（`math` 的 `abs_i`、`abs_l`、…），声明逐个写、各带确切的 `#op<'模块:算子'>`；不能用一个 `func f::<T>` 的泛型声明代替，因为泛型声明仍只绑定一个 URI，而执行器是按类型分名的。签名文件里的 `*` 通配只作参考，不是声明可用的写法：`ExecutorManager` 与 `OperatorTable` 都按确切的 URI 查找。
+- 一个名字按类型有各自的执行器 URI 时（`math` 的 `abs_i`、`abs_l`、…），声明逐个写、各带确切的 `#op('模块:算子')`；不能用一个 `func f::<T>` 的泛型声明代替，因为泛型声明仍只绑定一个 URI，而执行器是按类型分名的。签名文件里的 `*` 通配只作参考，不是声明可用的写法：`ExecutorManager` 与 `OperatorTable` 都按确切的 URI 查找。
 - **一个计算签名只在 `stdlib/signatures/<模块>.cml` 一处记录，由模块条目的 `computed` 字段指名；声明文件里不写 `// dynamic func`，同一个名字不能两处都有、也不能两处都没有。** 计算签名的算子（C++ 的 `DynamicFuncTypeResolver`，结果类型取自实参）的类型规则留在 C++；参考条目、`///` 文档与 `@example` 写进签名文件，写成无函数体的 `export func`，只作参考、不参与编译。内联写法是一条注释，URI 只能读成 `<模块>:<名字>`，没有 `#op` 的位置——`tensor:sum_axis` 的 Camel 名字是 `sum`，`nn:softmax_cross_entropy_labels` 的是 `softmax_cross_entropy`，`python:py_call_kw` 的是 `py_call`——所以文件是唯一能覆盖全部计算名字的记法。`math` 的 `sqrt`（`i32`→`f32`、`int`→`float`）与 `shl`/`shr`（结果取第一个参数的类型）现在记在 `stdlib/signatures/math.cml`，`graph`、`json`、`random` 同样；参考页与 `--verify-ops` 把声明文件与它合起来对账。哪些签名算不出来、为什么，见第 8 节；本页只定记录位置。
 - 这条规则由 [`scripts/stdlib-declarations.mjs`](../scripts/stdlib-declarations.mjs) 的 `--check` 守住，检查器把它读成一句话：“a computed name has exactly one place: `stdlib/signatures/<module>.cml`, named by the MODULES entry's `computed:` field (handover H180)”——内联记录、两处都有、`computed` 指名却一个名字都不记录，都报问题；两处都没有由它的导出组检查报 “no computed signature records it”。跑它的是 [`stdlib_registry.plan.toml`](../test/plans/feat/modules/stdlib_registry.plan.toml) 里的 `registry.migrations_stay_migrated`，同计划的 `registry.signatures_match` 跑 `--verify-ops`；两条都在 `feat/modules`。
 - C++ 导出的值（`math::pi`）没有可写的声明：`export let` 必须有初始值，写了就是第二份值。声明模块里用 `// value 名字: 类型` 的注释记录参考页条目，`///` 说明与 `@example` 照常写在它上方；值本身仍由 C++ 导出。
@@ -36,7 +36,7 @@ C++ 模块不再重复写签名：没有函数体的声明就是签名本身，�
 - 参数名是签名的一部分，必须能当标识符；与关键字撞名时换一个合法写法（`str::replace` 的 `from` 写成 `from_`），类型不变，文档与诊断用新名字。
 - 声明只能出现在模块顶层。同一模块里一个名字要么是普通函数，要么是声明，不混用。
 - 声明与 C++ 算子的对应关系默认是 `<模块>:<函数>`，前缀是模块**声明**的名字：写在入口文件里也一样（`module bytes` 的入口文件里，`export func size(content: Bytes): int` 是 `bytes:size`，不是 `main:size`）。
-- 声明只能命名**本模块自己的算子**：`#op` 用于算子名不是 Camel 标识符、或本模块算子的 URI 前缀不叫模块名（`random` 的 `rand:`）的情况。写另一个模块的算子（在 `bytes_tag` 里写 `#op<'bytes:size'>`）在声明处报错，不静默替换那个模块的签名。
+- 声明只能命名**本模块自己的算子**：`#op` 用于算子名不是 Camel 标识符、或本模块算子的 URI 前缀不叫模块名（`random` 的 `rand:`）的情况。写另一个模块的算子（在 `bytes_tag` 里写 `#op('bytes:size')`）在声明处报错，不静默替换那个模块的签名。
 - 没有 `export` 的声明是本模块**私有**的算子：模块自己的函数可以调用它（通常就是包裹原生算子的那层），导入方看不到这个名字，`module::name` 也到不了。带 `export` 的才是模块的实体。
 - 有类型参数（`::<T>`）的声明是一个函数族：调用时按实参实例化，URI 仍是一个，图上是一个 OPER 而不是 CALL。
 - 声明的 URI 必须对应一个已注册的执行器与一条已登记的算子性质；`#op` 的 `*` 通配因此只出现在不编译的签名文件里，声明模块里写确切 URI（H113）。

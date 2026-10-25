@@ -187,9 +187,9 @@ Plan. §9 has what the fold measured.
 | family | rules | merge | what the merge needs |
 | --- | --- | --- | --- |
 | `int_*` / `int32_*` | 13 + 13 | 13 laws, no `#requires` in either | the only difference is the type spelling — the clean case |
-| `float_*` / `float32_*` | 12 + 12 | 12 laws | same: `float`/`f32`, with `#requires<reassociate>` / `<reassociate, no_infs[, no_signed_zeros]>` identical between the two |
+| `float_*` / `float32_*` | 12 + 12 | 12 laws | same: `float`/`f32`, with `#requires(reassociate)` / `<reassociate, no_infs[, no_signed_zeros]>` identical between the two |
 | `tensor_f32_*` | 12 | 12 laws of their own, or the same 12 as the scalars | the tensor operands are elementwise operators and the coefficients are `const c: float` (f64, guarded by `exactIn32`), while the scalar law's operands *are* the element type — **measure first** whether one law instantiated at `T` and at `Tensor<T>` resolves both. A tensor operator is one id shared by the element types (`tensor:add`, and `tensor_target.cml:36-38`: "the operator id is shared, the element type is not"), so a tensor instance has to key on the *element* type the operator instance carries |
-| `float_log1p` / `f32_log1p`, `float_expm1` / `f32_expm1` | 2 + 2 | 2 laws, `#requires<refine_accuracy>` | as the scalar family |
+| `float_log1p` / `f32_log1p`, `float_expm1` / `f32_expm1` | 2 + 2 | 2 laws, `#requires(refine_accuracy)` | as the scalar family |
 | `tensor_i64_distribute`, `tensor_log_softmax_of_softmax`, `tensor_sigmoid_chain` | 3 | stand alone | no family |
 
 Two laws do **not** fold into one across the int and float families, and the ruling's exception is

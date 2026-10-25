@@ -28,7 +28,7 @@ rule mul_one(x: float)                 { x * 1.0 => x }
 rule sub_self(x: float)                { x - x => 0.0 }
 rule fold_mul(x: float, const a: float, const b: float) { (x * a) * b => x * (a * b) }
 
-#requires<reassociate>
+#requires(reassociate)
 rule add_assoc(a: f32, b: f32, c: f32) { (a + b) + c <=> a + (b + c) }
 
 rule map_map<f, g>(xs: int[])          { xs->map<f>->map<g> => xs->map<(v) => g(f(v))> }
@@ -42,7 +42,7 @@ rule mm_add(a: Tensor<f32>, b: Tensor<f32>, c: Tensor<f32>) {
 ```
 
 - `rule 名字<上下文参数>(形参) { 左 => 右 }`；`<=>` 表示双向等价；`when` 后接条件。
-- 规则可以带标签：`#requires<...>` 声明所需许可（图存储第二版 3.3）。
+- 规则可以带标签：`#requires(...)` 声明所需许可（图存储第二版 3.3）。
 - `rule` 是"两个参数相同的函数加配对"的简写（设计原则 1），语义相同。规则可以导出、导入，规则的列表是普通的值。
 
 ### 2.2 左边：模式

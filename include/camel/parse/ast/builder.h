@@ -130,7 +130,7 @@ class Builder {
     Value visitTagDecl(syntax::cst::TagDecl context);
     /// The permission groups the program declares (`tag fast = [reassociate, contract]`), by
     /// the name they are declared with, expanded to the permissions their members grant. A
-    /// `#requires<fast>` written in the same program can name one of them (design principles
+    /// `#requires(fast)` written in the same program can name one of them (design principles
     /// 7.2: a permission is a tag, and a group of permissions is a tag too). Built before the
     /// declarations are visited, because a rule's requirement is read while it is parsed.
     void collectProgramPermissionGroups(syntax::cst::Program program);

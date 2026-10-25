@@ -25,13 +25,13 @@
 /// @effect runs arbitrary Python code
 /// @fails fault `RuntimeError` when the call raises
 /// @example py_call("math.sqrt", py_wrap(2.0))
-#op<'python:py_call'>
+#op('python:py_call')
 export func py_call(fn: string | PyObject, ...args: PyObject[]): PyObject
 
 /// Calls `fn` with a tuple (or an array) of positional arguments and a struct of keyword
 /// arguments. Both collections are optional; every element is a `PyObject`.
 /// @example py_call(fn, (py_wrap(2.0),), {x: py_wrap(1)})
-#op<'python:py_call_kw'>
+#op('python:py_call_kw')
 export func py_call(fn: string | PyObject, args?: (...PyObject) | PyObject[], kwargs?: Struct<...PyObject>): PyObject
 
 /// Writes the printed form of every `PyObject` argument to Python's standard output, with no

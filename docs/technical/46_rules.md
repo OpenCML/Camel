@@ -90,12 +90,12 @@ declaration, not the rule's public surface.
 The context of a rule (`rule fuse<f, g>(...)`) is read by the grammar and refused by the compiler
 (`ConstructNotSupported`) until generics land (H38 item 5).
 
-A rule may state the numeric permissions it needs with `#requires<...>` before the declaration
+A rule may state the numeric permissions it needs with `#requires(...)` before the declaration
 (design principles 7.2): a rule that rewrites `x * c1 + x * c2` into `x * (c1 + c2)` is only
-correct where `reassociate` is allowed. `#requires<reassociate, contract>` names permissions; the
-core group `finite_math` names the four assumptions it groups, so `#requires<finite_math>` needs
+correct where `reassociate` is allowed. `#requires(reassociate, contract)` names permissions; the
+core group `finite_math` names the four assumptions it groups, so `#requires(finite_math)` needs
 all four, and a module may declare its own group of permissions (`tag fast = [reassociate,
-contract]`) and require `#requires<fast>`: the AST pre-pass expands same-module groups
+contract]`) and require `#requires(fast)`: the AST pre-pass expands same-module groups
 recursively into a `sem::PermissionMask`. A program may not declare a tag with the name of a
 core permission (`SemanticDiag::TagShadowsPermission`), because that name always means the
 core's permission and the declaration would never be read. The mask is the third argument of
@@ -355,7 +355,7 @@ part reads with exactly these parts as its operands and one of the `on` clauses 
 in written order and values in node order. A declaration without parameters keeps the one-value
 form `range(n)`. There is no syntax that names the whole match.
 
-**`#requires` (implemented, H2b).** `#requires<reassociate, finite_math>` before a rule resolves the
+**`#requires` (implemented, H2b).** `#requires(reassociate, finite_math)` before a rule resolves the
 names to `sem::PermissionMask` -- `finite_math` expands to its four bits -- and fills the `needs`
 slot `Rule` already carries, so the engine and the check gate on it with no engine change. A name
 that is not a permission is a located `TagNotAPermission`, another tag before a rule is

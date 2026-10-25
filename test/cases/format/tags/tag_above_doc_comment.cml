@@ -1,9 +1,9 @@
 module format_tag_above_doc
 
-#op<':op/add_l'>
+#op(':op/add_l')
 func add_kernel(a: int, b: int): int
 
-#impl<add_kernel>
+#impl(add_kernel)
 /// The sum, written as a subtraction so that a body and its kernel can be told apart.
 ///
 /// The tag above this comment is the declaration's own, and the comment is the declaration's
@@ -15,10 +15,10 @@ export func add(a: int, b: int): int {
     return a - (0 - b)
 }
 
-#op<':op/sub_l'>
+#op(':op/sub_l')
 func sub_kernel(a: int, b: int): int
 
-#impl<sub_kernel>
+#impl(sub_kernel)
 
 /// The difference, with a blank line between its tag and this comment: the blank line is the
 /// reader's and the comment keeps its place below the tag.

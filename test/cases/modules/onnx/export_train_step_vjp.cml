@@ -18,7 +18,7 @@ func hard_sign_rule(x: Tensor, dy: Tensor): Tensor {
     return dy * 0.5
 }
 
-#vjp<hard_sign_rule>
+#vjp(hard_sign_rule)
 func hard_sign(x: Tensor): Tensor {
     return where(x > 0.0, x * 0.0 + 1.0, x * 0.0 - 1.0)
 }

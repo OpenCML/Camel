@@ -213,8 +213,8 @@ class StmtBlockLoad : public StmtLoad {
     bool synced_ = false;
 };
 
-/// One `#` form (design principles 6.2): `#name`, `#name<args>`, and each member of
-/// `#[a, b<v>]`. Its arguments, when it has any, are one RepeatedLoad("Data") child of data
+/// One `#` form (design principles 6.2): `#name`, `#name(args)`, and each member of
+/// `#[a, b(v)]`. Its arguments, when it has any, are one RepeatedLoad("Data") child of data
 /// expressions (compile-time values). The tag is resolved where it is written, when the tree is
 /// built: a tag written at a position it does not list, or with the wrong number of arguments,
 /// is reported at the tag.
@@ -232,12 +232,15 @@ class TagUseLoad : public Load {
 
 /// A tag declaration (design principles 6.2):
 ///
-///   tag vjp<rule: func> on func read_by autodiff::vjp
+///   tag width(w: int) on field
+///   export tag vjp::<F>(rule: F) on func when is_function::<F>()
 ///   tag finite_math = [no_nans, no_infs]
 ///
-/// The parameters are names with a type, as written; a tag does not use them yet (the pass
-/// that reads the tag checks its arguments), but the number of a use's arguments is checked
-/// against them.
+/// The parameters are the tag's own, in parentheses, a name and a type as written: the number
+/// of a use's arguments is checked against them, and a type the tag cannot carry is reported
+/// where the tag is written. The type parameters (`::<F>`) and the condition (`when`) are the
+/// ones a function, a rule and a pass declare, and the reader of the tag is what checks that an
+/// argument's signature fits.
 class TagDeclLoad : public StmtLoad {
   public:
     TagDeclLoad(Reference ref) : StmtLoad(StmtType::Tag), ref_(ref) {}
@@ -251,6 +254,16 @@ class TagDeclLoad : public StmtLoad {
     };
     void addParam(Param param) { params_.push_back(std::move(param)); }
     const std::vector<Param> &params() const { return params_; }
+
+    /// The type parameters (`::<F>`), as written. A parameter declared with one of these names
+    /// is a function when the condition says so.
+    void addTypeParam(std::string name) { typeParams_.push_back(std::move(name)); }
+    const std::vector<std::string> &typeParams() const { return typeParams_; }
+
+    /// The applicability condition (`when is_function::<F>()`) as written; empty when the
+    /// declaration carries none.
+    void setWhen(std::string text) { when_ = std::move(text); }
+    const std::string &when() const { return when_; }
 
     void addPosition(TagPosition position) {
         on_ = static_cast<uint8_t>(on_) | static_cast<uint8_t>(position);
@@ -276,6 +289,8 @@ class TagDeclLoad : public StmtLoad {
   private:
     Reference ref_;
     std::vector<Param> params_;
+    std::vector<std::string> typeParams_;
+    std::string when_;
     uint8_t on_ = 0;
     std::vector<Reference> aliases_;
     std::vector<Reference> readBy_;

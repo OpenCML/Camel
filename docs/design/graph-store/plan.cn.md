@@ -22,8 +22,8 @@
 |---|---|---|
 | `p1_regions.cml` | `if`、`match`、两个 `loop` | `pick` 有 2 个 arm 区域，`classify` 有 4 个（`case 1 \| 2` 拆成两臂）；循环是**区域形式**：`loop.condition/body` 为 `null`，`conditionRegion/bodyRegion` 指向 `g1r1/g1r2`；区域记录只有 `id/kind/parent/owner/result`，**没有 `index`、`ports`、`params`、`attrs`**；`pick` 的第 1 臂没有节点，`result` 是区域外的端口 `g2n0`。 |
 | `p2_tags.cml` | `#kernel { let a = x + 1 }`、`tag finite = [kernel, heavy]` | 标签只在**节点**上：`+` 节点带 `main::kernel`，`finite` 把两个标签都加到节点；**没有建 Block 区域**；`let` 本身不是节点。 |
-| `decl.cml`（`test/cases/compile/tags`） | `#kernel` 在函数上、`#shape`/`#width<32>` 在类型/字段上 | `std::jgir` 里**完全没有**这些标签：函数标签没有落到节点（`marked` 只有 `DATA 1`），类型/字段标签没有存储位置。`#strict` 是例外，它作为节点标签 `strict` 落在每个节点上（`p21`）。 |
-| `check_rules.cml` / `check_when.cml` | `rule` 声明 | 规则是普通图：`add_zero__lhs`、`add_zero__rhs`，加一个 `let add_zero = ...` 的构造图（7 个节点：名字字符串、单向/双向布尔、权限掩码、两个函数值、`rewrite:rule`）；`when` 形式多一个 `__when` 图和 `rewrite:rule_when`。`#requires<fast>` 变成掩码 `3`，组名丢失但位还在。 |
+| `decl.cml`（`test/cases/compile/tags`） | `#kernel` 在函数上、`#shape`/`#width(32)` 在类型/字段上 | `std::jgir` 里**完全没有**这些标签：函数标签没有落到节点（`marked` 只有 `DATA 1`），类型/字段标签没有存储位置。`#strict` 是例外，它作为节点标签 `strict` 落在每个节点上（`p21`）。 |
+| `check_rules.cml` / `check_when.cml` | `rule` 声明 | 规则是普通图：`add_zero__lhs`、`add_zero__rhs`，加一个 `let add_zero = ...` 的构造图（7 个节点：名字字符串、单向/双向布尔、权限掩码、两个函数值、`rewrite:rule`）；`when` 形式多一个 `__when` 图和 `rewrite:rule_when`。`#requires(fast)` 变成掩码 `3`，组名丢失但位还在。 |
 | `bound_closures.cml` | lambda、闭包、间接调用 | lambda 是图 `__g_3__`…；闭包是 `DATA Function` + `FILL`（`tupleSlots=1`）；调用是带函数值输入的 `CALL`；捕获在 `capturePorts`。 |
 | `p6_generic.cml` | 泛型函数/类型 | 实例图 `id<int>`、`id<string>`、`pair<float>`；**没有模板图**，类型参数只在名字里。 |
 | `p8_literals.cml` | 字面量 | `1.0e10` 的标签变成 `10000000000.0`（值对、拼写丢）；字符串原样打印、没有引号/转义（标签里直接出现换行、制表符）；数组是 `[1, 2, 3]`、嵌套数组；`f32` 的 `3.0` 值对。 |
@@ -168,13 +168,13 @@ GIR 是**无损数据转储**：它能打印语言写不出的图（两张写法
 ### 4.2 声明：类型、标签、规则
 
 - **类型**：从所有图/签名的 `Type*` 收集可达的命名声明（`StructDecl`/`EnumDecl`）。具体实例声明成具体类型：`type Option_int = enum { Some(int), None }`、`type Point = { x: int, y: int }`；打印机的类型书写器把 `Option<int>` 映射到 `Option_int`。字段名/变体名/顺序保留；泛型参数名丢掉。匿名 struct/tuple/array/function/optional 直接写结构。类型声明按依赖拓扑排序（递归通过数组/枚举是允许的，因为语言只允许这些环）。
-- **标签**：收集所有节点 `attrs` 的键，生成声明（`tag kernel on nodes`、`tag width<w: int> on nodes`；标准标签 `strict` 不声明）。打印事实：
+- **标签**：收集所有节点 `attrs` 的键，生成声明（`tag kernel on nodes`、`tag width(w: int) on nodes`；标准标签 `strict` 不声明）。打印事实：
   - 有 `Block` 区域时：按区域的 `attrs` 打印 `#[...] { ... }`，块内节点保留自己的标签（见 5.3）。
   - 没有 `Block` 区域、但一个语句的整棵表达式树的节点集合恰好等于某个标签集：在语句外打印块。
   - 否则拒绝（`CmlTagScope`），并把它记为缺口（5.3）。
-- **规则**：识别 `rewrite:rule` / `rewrite:rule_when` 的构造图（7/8 节点、`let name = ...` 的初值、名字字符串、单向/双向、掩码、lhs/rhs/when 函数值），打印 `rule name(...) { lhs => rhs }` / `<=>` / `when ...`；`#requires<...>` 从掩码的位反推标准标签名（`3 -> reassociate, contract`；组名丢失）。构造图不是这个形状（例如被折叠成 `Rule` 常量）则拒绝。
+- **规则**：识别 `rewrite:rule` / `rewrite:rule_when` 的构造图（7/8 节点、`let name = ...` 的初值、名字字符串、单向/双向、掩码、lhs/rhs/when 函数值），打印 `rule name(...) { lhs => rhs }` / `<=>` / `when ...`；`#requires(...)` 从掩码的位反推标准标签名（`3 -> reassociate, contract`；组名丢失）。构造图不是这个形状（例如被折叠成 `Rule` 常量）则拒绝。
 - **`#macro`**：图 `flags` 的 `kGraphFlagMacro` 或函数类型的 `macro` 修饰；打印在函数声明前。
-- **`#vjp<rule>`**：图的规则引用（`GCGraphRefRole::Rule`）打印成标准标签 `#vjp<rule>`；规则名从被引图取。
+- **`#vjp(rule)`**：图的规则引用（`GCGraphRefRole::Rule`）打印成标准标签 `#vjp(rule)`；规则名从被引图取。
 - **`#requires`** 只在规则上；其他声明标签（`#shape`、`#width`、函数上的 `#kernel`）等 §4.7 的声明标签存储落地后再打印（5.3、问题 2）。
 
 ### 4.3 函数体：表达式、`let`、`sync`、`var`

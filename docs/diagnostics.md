@@ -1866,7 +1866,7 @@ Use a valid operator URI in the form protocol:path (e.g. std:add).
 /// '#op' names an operator by URI: a URI without 'protocol:path' is refused.
 module operator_uri_invalid
 
-#op<'stdadd'>
+#op('stdadd')
 func add(a: int, b: int): int
 
 func main(): int sync {
@@ -3557,7 +3557,7 @@ The annotation '@{0}' is not accepted: {1}.
 **Help**
 
 ```text
-A line that starts with '@' annotates the function declaration or the block that follows. '@name' and '@name<args>' are decorators of a function or of a block; '@name(args)' is no longer accepted (numeric permissions are tags, design principles 7.2). A tag is written with '#': '#name', '#name<args>' or '#[a, b<v>]' (design principles 6.2).
+A line that starts with '@' annotates the function declaration or the block that follows. '@name' and '@name<args>' are decorators of a function or of a block; '@name(args)' is no longer accepted (numeric permissions are tags, design principles 7.2). A tag is written with '#': '#name', '#name(args)' or '#[a, b(v)]' (design principles 6.2).
 ```
 
 **Example** (`test/cases/compile/tags/err_numeric_annotation.cml`, run as `camel test/cases/compile/tags/err_numeric_annotation.cml`)
@@ -4356,7 +4356,7 @@ func add(a: int, b: int): int {
     return a + b
 }
 
-#impl<>
+#impl()
 func add_with_kernel(a: int, b: int): int {
     return a + b
 }
@@ -4388,10 +4388,10 @@ A tag is read before the program runs: write a literal, a top-level constant or 
 /// A tag argument that is not a compile-time value.
 module err_const
 
-export tag width<w: int> on type
+export tag width(w: int) on type
 
 func f(n: int): int {
-    #width<n>
+    #width(n)
     type T = { a: int }
     return 0
 }
@@ -4425,9 +4425,9 @@ Declare the struct as a type ('type S = { ... }') and tag the field in that decl
 /// A tag on a field of a struct type written inline, which is not a declaration.
 module tag_on_unnamed_field
 
-tag width<w: int> on field
+tag width(w: int) on field
 
-func f(x: { #width<8> a: int }): int {
+func f(x: { #width(8) a: int }): int {
     return x.a
 }
 
@@ -4453,7 +4453,7 @@ A tag argument is positional: '{0}' is named.
 **Help**
 
 ```text
-A tag's parameters are given in the order the tag declares them: write '#tag<a, b>', not '#tag<x: a>'.
+A tag's parameters are given in the order the tag declares them: write '#tag(a, b)', not '#tag(x: a)'.
 ```
 
 **Example** (`test/cases/compile/tags/tag_argument_named.cml`, run as `camel test/cases/compile/tags/tag_argument_named.cml`)
@@ -4462,9 +4462,9 @@ A tag's parameters are given in the order the tag declares them: write '#tag<a, 
 /// A tag argument is positional; naming one is refused.
 module tag_argument_named
 
-tag width<w: int> on func
+tag width(w: int) on func
 
-#width<w: 8>
+#width(w: 8)
 func g(): int {
     return 0
 }
@@ -4491,7 +4491,7 @@ The parameter '{0}' of the tag '{1}' is declared '{2}', but the argument is '{3}
 **Help**
 
 ```text
-A tag argument is a compile-time constant of the kind the parameter declares: write an integer for 'int', a real for 'float', 'true' or 'false' for 'bool', a string for 'string', and the name of a function for 'func' (the fact is the graph reference of that function).
+A tag argument is a compile-time constant of the kind the parameter declares: write an integer for 'int', a real for 'float', 'true' or 'false' for 'bool', a string for 'string', and the name of a function for a parameter that carries one (the fact is the graph reference of that function).
 ```
 
 **Example** (`test/cases/compile/tags/err_float.cml`, run as `camel test/cases/compile/tags/err_float.cml`)
@@ -4500,9 +4500,9 @@ A tag argument is a compile-time constant of the kind the parameter declares: wr
 /// A tag argument of a type a tag cannot hold yet (adds them).
 module err_float
 
-export tag width<w: int> on type
+export tag width(w: int) on type
 
-#width<1.5>
+#width(1.5)
 type T = { a: int }
 
 func main(): int { return 0 }
@@ -4536,7 +4536,7 @@ module err_requires_unknown
 import { Program } from graph
 import { rewrite } from rewrite
 
-#requires<reassociate2>
+#requires(reassociate2)
 rule r(x: int) { x + 0 => x }
 
 export func apply(p: Program): Program! {
@@ -4555,13 +4555,13 @@ None: choice: the repair is a decision only the writer can make
 **Message**
 
 ```text
-A rule may be preceded only by '#requires<...>', not by the tag '{0}'.
+A rule may be preceded only by '#requires(...)', not by the tag '{0}'.
 ```
 
 **Help**
 
 ```text
-State the permissions the rule needs as tag arguments: '#requires<reassociate>' (design principles 7.2).
+State the permissions the rule needs as tag arguments: '#requires(reassociate)' (design principles 7.2).
 ```
 
 **Example** (`test/cases/modules/rules/err_rule_tag.cml`, run as `camel test/cases/modules/rules/err_rule_tag.cml`)
@@ -4589,13 +4589,13 @@ None: choice: the repair is a decision only the writer can make
 **Message**
 
 ```text
-The parameter '{0}' of the tag '{1}' is declared '{2}': a tag parameter is an int, a float, a bool, a string or a func.
+The parameter '{0}' of the tag '{1}' is declared '{2}': a tag parameter is an int, a float, a bool, a string, a concrete function type, or a type parameter the condition selects with is_function.
 ```
 
 **Help**
 
 ```text
-Declare the parameter with the kind of the argument the tag is written with: 'tag {1}<{0}: int> on ...'; a 'func' parameter is written with the name of a function ('#vjp<rule>').
+Declare the parameter with the kind of the argument the tag is written with: 'tag {1}({0}: int) on ...'. A parameter that carries a function is a type parameter with a condition ('export tag vjp::<F>(rule: F) on func when is_function::<F>()') or a concrete function type ('tag rule(f: (x: int) => int) on field').
 ```
 
 **Example** (`test/cases/compile/tags/err_param_type.cml`, run as `camel test/cases/compile/tags/err_param_type.cml`)
@@ -4604,9 +4604,9 @@ Declare the parameter with the kind of the argument the tag is written with: 'ta
 /// A parameter of a kind a tag cannot carry: reported where the tag is written, not carried.
 module err_param_type
 
-tag callback<f: (x: int) => int> on type
+tag callback(xs: int[]) on type
 
-#callback<1>
+#callback(1)
 type T = { x: int }
 
 func main(): int { return 0 }
@@ -5139,12 +5139,12 @@ An operator has one meaning for one call: which rule applies must be decided by 
 ```camel
 module native_overlap
 
-#op<':op/idx_arr'>
+#op(':op/idx_arr')
 export func pick::<T>(xs: T[], i: int): T
 
 // The same call: an array of some element type and an index. `T` and `U` are no help — every
 // call of one is a call of the other.
-#op<':op/idx_arr'>
+#op(':op/idx_arr')
 export func pick::<U>(xs: U[], i: int): U
 
 func main(): int sync {
@@ -7270,13 +7270,13 @@ None: choice: the repair is a decision only the writer can make
 **Message**
 
 ```text
-The body-less declaration '{0}' cannot carry '#impl<{1}>': it has no Camel body.
+The body-less declaration '{0}' cannot carry '#impl({1})': it has no Camel body.
 ```
 
 **Help**
 
 ```text
-'#impl<f>' is written before a function whose Camel body is the semantics; f is the body-less declaration of the operator that runs it. A body-less declaration is the kernel itself and needs no tag: remove the tag, or write the body.
+'#impl(f)' is written before a function whose Camel body is the semantics; f is the body-less declaration of the operator that runs it. A body-less declaration is the kernel itself and needs no tag: remove the tag, or write the body.
 ```
 
 **Example** (`test/cases/compile/native/impl_on_bodyless.cml`, run as `camel test/cases/compile/native/impl_on_bodyless.cml`)
@@ -7284,8 +7284,8 @@ The body-less declaration '{0}' cannot carry '#impl<{1}>': it has no Camel body.
 ```camel
 module impl_on_bodyless
 
-#op<':op/add_l'>
-#impl<add_kernel>
+#op(':op/add_l')
+#impl(add_kernel)
 func add_kernel(a: int, b: int): int
 
 func main(): int sync {
@@ -7318,7 +7318,7 @@ The kernel of a '#impl' function is a body-less declaration of the same module (
 ```camel
 module impl_unknown
 
-#impl<nope>
+#impl(nope)
 func add(a: int, b: int): int {
     return a + b
 }
@@ -7355,7 +7355,7 @@ module impl_foreign
 
 import { at } from generic_module
 
-#impl<at>
+#impl(at)
 func first(xs: int[], i: int): int {
     return xs[i]
 }
@@ -7390,10 +7390,10 @@ The kernel is another implementation of the very same function: same 'with' and 
 ```camel
 module impl_signature
 
-#op<':op/add_l'>
+#op(':op/add_l')
 func add_kernel(a: int, b: int): int
 
-#impl<add_kernel>
+#impl(add_kernel)
 func add(a: float, b: float): float {
     return a + b
 }
@@ -7432,7 +7432,7 @@ func helper(a: int, b: int): int {
     return a + b
 }
 
-#impl<helper>
+#impl(helper)
 func add(a: int, b: int): int {
     return a - (0 - b)
 }
@@ -7554,13 +7554,13 @@ func is_number::<T>(): bool {
     }
 }
 
-#op<':op/add_i'>
+#op(':op/add_i')
 func arms_kernel::<T>(a: T, b: T): T when is_small_int::<T>()
 
-#op<':op/sub_i'>
+#op(':op/sub_i')
 func arms_kernel::<T>(a: T, b: T): T when is_number::<T>()
 
-#impl<arms_kernel>
+#impl(arms_kernel)
 func combine::<T>(a: T, b: T): T {
     return a * b
 }
@@ -7925,10 +7925,10 @@ module tags_field_name_conflict
 
 import tags_second_width
 
-tag width<w: int> on field
+tag width(w: int) on field
 
 type Box = {
-    #width<1> #tags_second_width::width<2> marked: int,
+    #width(1) #tags_second_width::width(2) marked: int,
 }
 
 func read(b: Box): int {
@@ -7959,7 +7959,7 @@ The tag '{0}' takes a function for its parameter '{1}', and a 'static' head cann
 **Help**
 
 ```text
-A 'func' parameter carries the function as its graph reference: an internal number, not a value the language has. Do not read the tags of this field at a 'static' head; a 'func' argument stays a fact for a pass that reads the tag after the program is compiled.
+A parameter that carries a function carries the function as its graph reference: an internal number, not a value the language has. Do not read the tags of this field at a 'static' head; a function argument stays a fact for a pass that reads the tag after the program is compiled.
 ```
 
 **Example** (`test/cases/compile/static_expansion/tags_function_argument.cml`, run as `camel test/cases/compile/static_expansion/tags_function_argument.cml`)
@@ -7967,16 +7967,16 @@ A 'func' parameter carries the function as its graph reference: an internal numb
 ```camel
 module tags_function_argument
 
-tag rule<f: func> on field
-tag width<w: int> on field
+tag rule::<F>(f: F) on field when is_function::<F>()
+tag width(w: int) on field
 
 func twice(x: int): int {
     return x + x
 }
 
 type Box = {
-    #rule<twice> scaled: int,
-    #width<8> plain: int,
+    #rule(twice) scaled: int,
+    #width(8) plain: int,
 }
 
 func read(b: Box): int {
@@ -9110,7 +9110,7 @@ module idx_field_missing
 
 type S = { x: int }
 
-#op<':op/idx_str'>
+#op(':op/idx_str')
 func field(s: S, k: string): int
 
 func main(): int sync {
@@ -9275,7 +9275,7 @@ func pick_rule(xs: float[], i: int, dy: float): f32 {
     return f32(0.0)
 }
 
-#vjp<pick_rule>
+#vjp(pick_rule)
 func pick(xs: float[], i: int): float {
     return xs[i]
 }

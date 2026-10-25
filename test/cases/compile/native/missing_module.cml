@@ -5,5 +5,5 @@
  */
 module missing_module
 
-#op<'nowhere:absent'>
+#op('nowhere:absent')
 export func absent(x: int): int

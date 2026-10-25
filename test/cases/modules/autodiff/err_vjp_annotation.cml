@@ -1,5 +1,5 @@
 /**
- * The removed `@vjp<rule>` decorator: reported at the annotation, pointing at `#vjp<rule>`.
+ * The removed `@vjp<rule>` decorator: reported at the annotation, pointing at `#vjp(rule)`.
  */
 module err_vjp_annotation
 

@@ -4,10 +4,10 @@
 // compile-time struct, and `indices` binds the position in a tuple. Each head is run here once.
 module static_for_head_names
 
-tag width<w: int> on field
+tag width(w: int) on field
 
 type Box = {
-    #width<8> low: int,
+    #width(8) low: int,
     high: int,
 }
 

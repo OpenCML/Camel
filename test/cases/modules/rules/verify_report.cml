@@ -34,17 +34,17 @@ rule holds(x: float) { x * 1.0 => x }
 
 rule differ(x: int) { x * 2 => x + 2 }
 
-#requires<nondeterministic>
+#requires(nondeterministic)
 rule anywhere(x: float, const c: float) { x * c => c * x }
 
 /// The assumptions the rule names are written out: with `no_infs`, `no_nans` and
 /// `no_signed_zeros` asked for, the non-finite values whose behaviour the real model does not have
 /// are outside the domain, and the rule's two halves are the finite equality and the IEEE equality
 /// that is left.
-#requires<reassociate, no_infs, no_nans, no_signed_zeros>
+#requires(reassociate, no_infs, no_nans, no_signed_zeros)
 rule fold(x: float, const c1: float, const c2: float) { x * c1 + x * c2 => x * (c1 + c2) }
 
-#requires<refine_accuracy>
+#requires(refine_accuracy)
 rule near_zero(x: float) { log(1.0 + x) => log1p(x) }
 
 func main(): int sync {

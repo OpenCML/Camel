@@ -188,7 +188,7 @@ class Formatter {
 
     /// The comments that stand between a declaration's front matter - the tags and the annotations
     /// it writes on lines of its own - and the token the declaration goes on with: a doc comment
-    /// written between `#impl<...>` and `func` stands inside the declaration, in no gap a list or a
+    /// written between `#impl(...)` and `func` stands inside the declaration, in no gap a list or a
     /// range looks at, and it is the declaration's own comment as much as one written above the
     /// tag. `commentsBefore` writes the comments above the first token (above the tag); this writes
     /// the ones after the element that ends at `afterToken`, where the reader put them. Nothing is

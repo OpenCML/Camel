@@ -554,7 +554,7 @@ class Builder {
     // declarations (exported or private) or a name the C++ module it declares brings, before
     // what an import brings under the same name (design principles 10.1, 10.2; handover).
     std::optional<camel::core::module::entity> ownNativeEntity(const Reference &ref);
-    // The operator URI a body-less declaration names, from its `#op<'...'>` tag when it has one.
+    // The operator URI a body-less declaration names, from its `#op('...')` tag when it has one.
     std::optional<std::string> nativeOperatorUri(const GCT::node_ptr_t &gct);
     // Notes the nodes of the root graph added since `firstNode` as nodes of the current module.
     void claimRootNodes(size_t firstNode);
@@ -1503,7 +1503,7 @@ class Builder {
     /// not a compile-time value or that the tag cannot carry.
     camel::core::attr::AttrValueId tagValueOf(
         const camel::core::tag::Decl &decl, const GCT::TagUse &use);
-    /// The `#impl<f>` use written on `gct`, when it has one: the kernel's name as written and
+    /// The `#impl(f)` use written on `gct`, when it has one: the kernel's name as written and
     /// where the tag is. The tag is a declaration fact (`on func`); a use anywhere else is
     /// reported by tagFactsOf like any other misplaced tag.
     struct ImplTag {
@@ -1792,7 +1792,7 @@ class Builder {
     /// The tags written on field `index` of the struct type `subject`, as a compile-time struct:
     /// the third thing the element of `fields T` gives, bound to the third name of `(n, F, tags)`.
     /// One field per tag, named by the tag (`width`), whose value is the record of that tag's
-    /// arguments, one field per declared parameter (`{ width: { w: 8 } }` for `#width<8>`); a tag
+    /// arguments, one field per declared parameter (`{ width: { w: 8 } }` for `#width(8)`); a tag
     /// with no arguments is the empty record, and so is a field with no tags at all. Empty for a
     /// type that is not a named struct and for a type declared by another module (the facts of a
     /// field live in the module that declares the type).
@@ -1801,7 +1801,7 @@ class Builder {
     node_handle_t staticFieldTagsNode(
         Type *subject, size_t index, const GCT::node_ptr_t &where, const GCT::node_ptr_t &head);
     /// The record of a tag's arguments: one field per argument, named by the parameter it was
-    /// written for (`w` for `#width<8>` under `tag width<w: int>`). A tag with no arguments is the
+    /// written for (`w` for `#width(8)` under `tag width(w: int)`). A tag with no arguments is the
     /// empty record; several arguments were kept as a tuple and are separated here. `qualified` is
     /// the tag's qualified name, for a report that has no declaration to read.
     data_ptr_t tagArgumentsRecord(
@@ -1809,7 +1809,7 @@ class Builder {
         camel::core::attr::AttrValueId id, const GCT::node_ptr_t &head);
     /// One argument of a tag as the compile-time value the program reads it as: the type the tag's
     /// declaration gives that parameter decides the kind, never the kind the fact is stored as
-    /// (`#width<true>` under `w: bool` reads back as a `bool`, not as the 1 the fact holds, and a
+    /// (`#width(true)` under `w: bool` reads back as a `bool`, not as the 1 the fact holds, and a
     /// real under `f32` as an `f32`). A parameter declared `func` has no value the compiler can
     /// give here yet: its fact is a graph reference, an internal number, so the reading is refused
     /// at `head` instead of giving that number as a string.

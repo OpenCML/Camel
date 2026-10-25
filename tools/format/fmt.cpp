@@ -479,14 +479,18 @@ any Formatter::visitFuncAnno(cst::FuncAnno context) {
 }
 
 /*
-tagDecl    : 'export'? 'tag' identDef angledParams? 'on' tagPositions ('read_by' tagReaders)?
+tagDecl    : 'export'? 'tag' identDef typeParams? parentParams? 'on' tagPositions
+                ('read_by' tagReaders)? whenClause?
            | 'export'? 'tag' identDef '=' bracketIdents
 */
 any Formatter::visitTagDecl(cst::TagDecl context) {
     string result = context->tok(TK::KwExport) ? "export tag " : "tag ";
     result += any_cast<string>(visitIdentDef(context->get<cst::IdentDef>()));
-    if (context->get<cst::AngledParams>()) {
-        result += any_cast<string>(visitAngledParams(context->get<cst::AngledParams>()));
+    if (context->get<cst::TypeParams>()) {
+        result += any_cast<string>(visitTypeParams(context->get<cst::TypeParams>()));
+    }
+    if (context->get<cst::ParentParams>()) {
+        result += any_cast<string>(visitParentParams(context->get<cst::ParentParams>()));
     }
     if (const auto group = context->get<cst::BracketIdents>()) {
         return result + " = " + any_cast<string>(visitBracketIdents(group));
@@ -494,6 +498,9 @@ any Formatter::visitTagDecl(cst::TagDecl context) {
     result += " on " + any_cast<string>(visitTagPositions(context->get<cst::TagPositions>()));
     if (context->get<cst::TagReaders>()) {
         result += " read_by " + any_cast<string>(visitTagReaders(context->get<cst::TagReaders>()));
+    }
+    if (context->get<cst::WhenClause>()) {
+        result += " " + any_cast<string>(visitWhenClause(context->get<cst::WhenClause>()));
     }
     return result;
 }
@@ -542,12 +549,12 @@ any Formatter::visitTagUse(cst::TagUse context) {
 }
 
 /*
-tagRef     : identRef angledValues?
+tagRef     : identRef parentArgues?
 */
 any Formatter::visitTagRef(cst::TagRef context) {
     string result = any_cast<string>(visitIdentRef(context->get<cst::IdentRef>()));
-    if (const auto values = context->get<cst::AngledValues>()) {
-        result += any_cast<string>(visitAngledValues(values));
+    if (const auto arguments = context->get<cst::ParentArgues>()) {
+        result += any_cast<string>(visitParentArgues(arguments));
     }
     return result;
 }
@@ -646,7 +653,7 @@ ruleDecl : EXPORT? IDENTIFIER identDef ruleContext? parentParams whenClause? '{'
 */
 any Formatter::visitRuleDecl(cst::RuleDecl context) {
     string result;
-    // The tags written before the rule (`#requires<...>`, design principles 6.2, 7.2): each on a
+    // The tags written before the rule (`#requires(...)`, design principles 6.2, 7.2): each on a
     // line of its own, as before a function or a type declaration.
     for (const auto &tagUse : context->all<cst::TagUse>()) {
         // The comments written between the tag and the declaration it belongs to are written here,

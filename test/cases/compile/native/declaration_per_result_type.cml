@@ -8,8 +8,8 @@ module tensor
 
 import { Tensor } from tensor
 
-#op<'tensor:from_bytes_f32'>
+#op('tensor:from_bytes_f32')
 export func from_bytes(encoded: Bytes, shape: int[]): Tensor<f32>
 
-#op<'tensor:from_bytes_i64'>
+#op('tensor:from_bytes_i64')
 export func from_bytes(encoded: Bytes, shape: int[]): Tensor<int>

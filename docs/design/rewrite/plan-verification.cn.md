@@ -52,7 +52,7 @@
 
 ### 1.2 今天的报告词汇（逐字，探针实测）
 
-三条用途各一行（无许可、`#requires<finite_math>`、`#requires<reassociate>`**不带守卫**、`#requires<refine_accuracy>`、`#requires<nondeterministic>`、带 `when`、张量各一条；探针规则见附录 A）：
+三条用途各一行（无许可、`#requires(finite_math)`、`#requires(reassociate)`**不带守卫**、`#requires(refine_accuracy)`、`#requires(nondeterministic)`、带 `when`、张量各一条；探针规则见附录 A）：
 
 ```
 ok plain: 100 samples agree, fired 8 of 8
@@ -90,7 +90,7 @@ FAIL narrow_mul_div: the two sides differ at (-2147483648): 0 and -2147483648
 
 ### 1.4 今天的许可表达与它隐含的前提映射
 
-许可写在规则声明前：`#requires<...>`，解析在 `src/parse/ast/builder.cpp`（第 869 行起），名字必须是核心的许可标签，否则报 `SemanticDiag::TagNotAPermission`（今天是负向用例 `rules.requires_unknown` 等 5 条）。
+许可写在规则声明前：`#requires(...)`，解析在 `src/parse/ast/builder.cpp`（第 869 行起），名字必须是核心的许可标签，否则报 `SemanticDiag::TagNotAPermission`（今天是负向用例 `rules.requires_unknown` 等 5 条）。
 
 | 许可 | 今天读成什么 | 8.1 要它读成什么 |
 |---|---|---|
@@ -146,7 +146,7 @@ FAIL narrow_mul_div: the two sides differ at (-2147483648): 0 and -2147483648
 | `f32` | 14 | `float32_combine`、`f32_log1p`、`f32_expm1` |
 | 张量（`Tensor<int>` / `Tensor<f32>`） | 15 | `tensor_f32_combine`、`tensor_i64_distribute`、`tensor_log_softmax_of_softmax` |
 
-带许可的 21 条：`#requires<reassociate>` 7 条、`#requires<reassociate, no_infs>` 3 条、`#requires<reassociate, no_infs, no_signed_zeros>` 6 条、`#requires<refine_accuracy>` 5 条。其余 48 条按 `docs/design-principles.cn.md` 第 7.3 节的默认值不需要许可，走 `kNoPermissions` 的按位比较路径。**21 条带许可的规则里 16 条同时带 `when` 守卫**——正好是 `reassociate` 族那 16 条（7 + 3 + 6），所以今天这 16 条一次值比较都没做（§1.1 末尾）。剩下 5 条 `refine_accuracy` 规则走误差路径。今天是**按规则条数**而不是按规则语义挑路径的，这一点决定了第一步该把"每条规则都有一条值比较或一条证明"当成硬要求。
+带许可的 21 条：`#requires(reassociate)` 7 条、`#requires(reassociate, no_infs)` 3 条、`#requires(reassociate, no_infs, no_signed_zeros)` 6 条、`#requires(refine_accuracy)` 5 条。其余 48 条按 `docs/design-principles.cn.md` 第 7.3 节的默认值不需要许可，走 `kNoPermissions` 的按位比较路径。**21 条带许可的规则里 16 条同时带 `when` 守卫**——正好是 `reassociate` 族那 16 条（7 + 3 + 6），所以今天这 16 条一次值比较都没做（§1.1 末尾）。剩下 5 条 `refine_accuracy` 规则走误差路径。今天是**按规则条数**而不是按规则语义挑路径的，这一点决定了第一步该把"每条规则都有一条值比较或一条证明"当成硬要求。
 
 算子的书写是类型化的模式（`:op/add_l`、`:op/add_i`、`:op/add_f`、`:op/add_d` 一类的后缀 `_l`/`_i`/`_f`/`_d`）。整数 `+ - *` 与一元 `-` **回绕**（`include/camel/standalone/num.h#wrapMul` 一族的无符号重解释）；整数 `/` 与 `%` 在除数为 0 时**故障**，除数为 `-1` 时按无符号回绕（`include/camel/utils/int_div.h#quotient`、`#remainder`）。这三条正是翻译器到 SMT 位向量的直接依据——**没有任何未定义行为**，所以翻译是忠实的，不需要 C 语义那样的"UB 即自由"处理。
 
@@ -246,8 +246,8 @@ FAIL narrow_mul_div: the two sides differ at (-2147483648): 0 and -2147483648
   - `reassociate`/`contract` → **实数模型**，命题种类 `real equality`（落到选项 A 还是 C，见问题文件 1 的选项 A/C）。
   - `refine_accuracy` → **误差界命题**，命题种类 `error bound`。
 - **红前用例**（两条，覆盖许可的两种处境）：
-  1. **库里的真形状**：`float_combine`（`#requires<reassociate>` **且带** `when combineSameSign(c1, c2)`）今天逐字 `ok float_combine: the condition selects the instances, fired 2 of 64`——一次值比较都没做。计划断言 `proved float_combine, class real equality`——今天红。
-  2. **不带守卫的许可规则**（探针形状）：`#requires<reassociate>` 的 `x * c1 + x * c2 => x * (c1 + c2)` 不带 `when` 时今天逐字 `FAIL reassoc: the two sides differ at (-inf, 7, -1): -nan and -inf`（`reassociate` 不含 `no_infs`，所以样本里有 `-inf`）。按 8.1 它应当是"实数上相等"，今天却是 `FAIL`——**同一条规则在"有守卫"与"无守卫"下今天给出两种互不相干的报告**，这本身就是要把许可与 `when` 合成一张前提表（§1.4 末）的理由。计划断言这两条都得到 `proved …, class real equality`——今天两条都红。
+  1. **库里的真形状**：`float_combine`（`#requires(reassociate)` **且带** `when combineSameSign(c1, c2)`）今天逐字 `ok float_combine: the condition selects the instances, fired 2 of 64`——一次值比较都没做。计划断言 `proved float_combine, class real equality`——今天红。
+  2. **不带守卫的许可规则**（探针形状）：`#requires(reassociate)` 的 `x * c1 + x * c2 => x * (c1 + c2)` 不带 `when` 时今天逐字 `FAIL reassoc: the two sides differ at (-inf, 7, -1): -nan and -inf`（`reassociate` 不含 `no_infs`，所以样本里有 `-inf`）。按 8.1 它应当是"实数上相等"，今天却是 `FAIL`——**同一条规则在"有守卫"与"无守卫"下今天给出两种互不相干的报告**，这本身就是要把许可与 `when` 合成一张前提表（§1.4 末）的理由。计划断言这两条都得到 `proved …, class real equality`——今天两条都红。
 - **验收**：
   ```
   camel test/cases/modules/rules/verify_licences.cml std::nvm
@@ -353,7 +353,7 @@ S1 ──┬─► S2 ───────────────────�
 
 1. **许可到前提的三种读法**：`reassociate`/`contract` 证"实数上相等"还是"按位相等"；`refine_accuracy` 的误差界成真时叫不叫 `proved`；`nondeterministic` 与今天的第四个字 `unchecked` 怎么合并。见 `docs/handover/reviews/questions-2026-10-23.md`（§verification-licence-to-precondition）`。
 2. **判定落在哪个面上**：任务书说"`stdlib/rules.cml` 每条规则都有标注"，标注写进规则语言、写成生成物、还是只在运行时报告里出现；`CheckReport` 每行带什么；覆盖不到的规则标什么、CI 要不要把 `refuted` 当硬失败。见 `docs/handover/reviews/questions-2026-10-23.md`（§verification-verdict-surface）`。
-3. **`approx_math` 作为许可的前提是什么**：`src/core/operator_semantics.cpp#rewriteErrorBound` 里没有这个位，8.1 也没说。今天的处置是"它不影响容差"，所以带 `#requires<approx_math>` 的规则按 `kNoPermissions` 的按位比较路径处理——这是不是作者要的，需要确认。出处：`include/camel/core/operator_semantics.h#Permission` 有这个位、`src/core/operator_semantics.cpp#rewriteErrorBound` 没有这个分支、`src/core/operator_semantics.cpp#parsePermission` 认这个名字。**本计划不裁定，按今天的读法落地并在报告里写明。**
+3. **`approx_math` 作为许可的前提是什么**：`src/core/operator_semantics.cpp#rewriteErrorBound` 里没有这个位，8.1 也没说。今天的处置是"它不影响容差"，所以带 `#requires(approx_math)` 的规则按 `kNoPermissions` 的按位比较路径处理——这是不是作者要的，需要确认。出处：`include/camel/core/operator_semantics.h#Permission` 有这个位、`src/core/operator_semantics.cpp#rewriteErrorBound` 没有这个分支、`src/core/operator_semantics.cpp#parsePermission` 认这个名字。**本计划不裁定，按今天的读法落地并在报告里写明。**
 4. **一个 `refuted` 的规则应当怎样退出标准库**：8.1 说"不得入库"，但今天的库是 69 条手写的规则，没有自动化的入/出库流程。是加一个 `refuted ⇒ 移除该规则` 的闸门，还是只让 CI 红、由人来改？出处：8.1 的报告那一条；`test/plan-selection.json` 把 `stdlib/rules.cml` 映到 5 个计划。
 
 ## 附录 A：测量命令与逐字输出
@@ -401,13 +401,13 @@ import { check } from rewrite
 import { Tensor } from tensor
 
 rule plain(x: float) { x * 1.0 => x }
-#requires<finite_math>
+#requires(finite_math)
 rule finite(x: float, const c1: float, const c2: float) { x * c1 + x * c2 => x * (c1 + c2) }
-#requires<reassociate>
+#requires(reassociate)
 rule reassoc(x: float, const c1: float, const c2: float) { x * c1 + x * c2 => x * (c1 + c2) }
-#requires<refine_accuracy>
+#requires(refine_accuracy)
 rule accurate(x: float) { x + 1.0 => x }
-#requires<nondeterministic>
+#requires(nondeterministic)
 rule anywhere(x: float, const c: float) { x * c => c * x }
 rule guarded(x: int, const c: int) { x * c => x } when c == 1
 rule tensor_law(x: Tensor<f32>) { x + x => x * 2.0 }

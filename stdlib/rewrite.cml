@@ -187,7 +187,7 @@ export type Run<F> = {
 /// @effect runs the rules' functions, and nothing else
 /// @fails error value `RuleInvalid` when a rule does not compile; error value `RuleTwoWay` when a rule is applied in a direction it does not allow
 /// @example let rs: Rule[] = []; p->run<rs>    // the run
-#op<'rewrite:run'>
+#op('rewrite:run')
 with <rules: Rule[], rounds: int = 16, strict: bool = false, explain: bool = false>
 export func run(p: Program): Run<Program>!
 
@@ -200,7 +200,7 @@ export func run(p: Program): Run<Program>!
 /// @pure
 /// @fails error value `NoAttribution` when the run was made without `explain: true`, and `InvalidArgument` for a value of another program; error value `NoChain` when no rewrite connects the two values
 /// @example explain(r, a, b)    // the chain between a and b
-#op<'rewrite:explain'>
+#op('rewrite:explain')
 export func explain(r: Run<Program>, a: Node, b: Node): Proof!
 
 /// Every rewrite of the run `r`, in the order it made them, each naming the rule, the round, the
@@ -210,7 +210,7 @@ export func explain(r: Run<Program>, a: Node, b: Node): Proof!
 /// @pure
 /// @fails error value `NoAttribution` when the run was made without `explain: true`, and `InvalidArgument` for a value of another program
 /// @example explain_all(r)    // every rewrite the run made
-#op<'rewrite:explain_all'>
+#op('rewrite:explain_all')
 export func explain_all(r: Run<Program>): Proof!
 
 /// Why the rule `rule` did not fire at the value `v` of the run `r` (rewrite design 8.7): the
@@ -220,31 +220,31 @@ export func explain_all(r: Run<Program>): Proof!
 /// @effect runs the rule's condition
 /// @fails error value `NoAttribution` when the run was made without `explain: true`, and `InvalidArgument` for a value of another program
 /// @example why_not(r, target, v)    // the reason
-#op<'rewrite:why_not'>
+#op('rewrite:why_not')
 export func why_not(r: Run<Program>, rule: Rule, v: Node): string!
 
 /// The name of the rule `r`.
 /// @pure
 /// @example rule_name(r)    // 'int_add_zero'
-#op<'rewrite:name'>
+#op('rewrite:name')
 export func rule_name(r: Rule): string
 
 /// Whether the rule `r` may also be applied from right to left.
 /// @pure
 /// @example rule_two_way(r)    // false
-#op<'rewrite:two_way'>
+#op('rewrite:two_way')
 export func rule_two_way(r: Rule): bool
 
 /// How many rewrites the rule `r` needs before it may fire.
 /// @pure
 /// @example rule_needs(r)    // 0
-#op<'rewrite:needs'>
+#op('rewrite:needs')
 export func rule_needs(r: Rule): int
 
 /// How many constants the rule `r` adds to the program.
 /// @pure
 /// @example rule_consts(r)    // 0
-#op<'rewrite:consts'>
+#op('rewrite:consts')
 export func rule_consts(r: Rule): int
 
 

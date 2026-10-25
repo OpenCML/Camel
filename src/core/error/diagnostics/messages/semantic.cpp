@@ -569,7 +569,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "InvalidAnnotation",
                 "The annotation '@{0}' is not accepted: {1}.",
-                "A line that starts with '@' annotates the function declaration or the block that follows. '@name' and '@name<args>' are decorators of a function or of a block; '@name(args)' is no longer accepted (numeric permissions are tags, design principles 7.2). A tag is written with '#': '#name', '#name<args>' or '#[a, b<v>]' (design principles 6.2).",
+                "A line that starts with '@' annotates the function declaration or the block that follows. '@name' and '@name<args>' are decorators of a function or of a block; '@name(args)' is no longer accepted (numeric permissions are tags, design principles 7.2). A tag is written with '#': '#name', '#name(args)' or '#[a, b(v)]' (design principles 6.2).",
             },
         },
         {
@@ -777,7 +777,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "TagArgumentNamed",
                 "A tag argument is positional: '{0}' is named.",
-                "A tag's parameters are given in the order the tag declares them: write '#tag<a, b>', not '#tag<x: a>'.",
+                "A tag's parameters are given in the order the tag declares them: write '#tag(a, b)', not '#tag(x: a)'.",
             },
         },
         {
@@ -785,7 +785,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "TagArgumentType",
                 "The parameter '{0}' of the tag '{1}' is declared '{2}', but the argument is '{3}' ({4}).",
-                "A tag argument is a compile-time constant of the kind the parameter declares: write an integer for 'int', a real for 'float', 'true' or 'false' for 'bool', a string for 'string', and the name of a function for 'func' (the fact is the graph reference of that function).",
+                "A tag argument is a compile-time constant of the kind the parameter declares: write an integer for 'int', a real for 'float', 'true' or 'false' for 'bool', a string for 'string', and the name of a function for a parameter that carries one (the fact is the graph reference of that function).",
             },
         },
         {
@@ -800,16 +800,16 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             SemanticDiag::RuleTagNotRequires,
             {
                 "RuleTagNotRequires",
-                "A rule may be preceded only by '#requires<...>', not by the tag '{0}'.",
-                "State the permissions the rule needs as tag arguments: '#requires<reassociate>' (design principles 7.2).",
+                "A rule may be preceded only by '#requires(...)', not by the tag '{0}'.",
+                "State the permissions the rule needs as tag arguments: '#requires(reassociate)' (design principles 7.2).",
             },
         },
         {
             SemanticDiag::TagParameterType,
             {
                 "TagParameterType",
-                "The parameter '{0}' of the tag '{1}' is declared '{2}': a tag parameter is an int, a float, a bool, a string or a func.",
-                "Declare the parameter with the kind of the argument the tag is written with: 'tag {1}<{0}: int> on ...'; a 'func' parameter is written with the name of a function ('#vjp<rule>').",
+                "The parameter '{0}' of the tag '{1}' is declared '{2}': a tag parameter is an int, a float, a bool, a string, a concrete function type, or a type parameter the condition selects with is_function.",
+                "Declare the parameter with the kind of the argument the tag is written with: 'tag {1}({0}: int) on ...'. A parameter that carries a function is a type parameter with a condition ('export tag vjp::<F>(rule: F) on func when is_function::<F>()') or a concrete function type ('tag rule(f: (x: int) => int) on field').",
             },
         },
         {
@@ -833,7 +833,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "TagFunctionArgumentNotReadable",
                 "The tag '{0}' takes a function for its parameter '{1}', and a 'static' head cannot give a function value yet.",
-                "A 'func' parameter carries the function as its graph reference: an internal number, not a value the language has. Do not read the tags of this field at a 'static' head; a 'func' argument stays a fact for a pass that reads the tag after the program is compiled.",
+                "A parameter that carries a function carries the function as its graph reference: an internal number, not a value the language has. Do not read the tags of this field at a 'static' head; a function argument stays a fact for a pass that reads the tag after the program is compiled.",
             },
         },
         {
@@ -1528,8 +1528,8 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             SemanticDiag::ImplOnBodylessDeclaration,
             {
                 "ImplOnBodylessDeclaration",
-                "The body-less declaration '{0}' cannot carry '#impl<{1}>': it has no Camel body.",
-                "'#impl<f>' is written before a function whose Camel body is the semantics; f is the body-less declaration of the operator that runs it. A body-less declaration is the kernel itself and needs no tag: remove the tag, or write the body.",
+                "The body-less declaration '{0}' cannot carry '#impl({1})': it has no Camel body.",
+                "'#impl(f)' is written before a function whose Camel body is the semantics; f is the body-less declaration of the operator that runs it. A body-less declaration is the kernel itself and needs no tag: remove the tag, or write the body.",
             },
         },
         {

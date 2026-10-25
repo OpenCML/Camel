@@ -238,7 +238,7 @@ export func sum(t: Tensor): float
 /// @pure
 /// @fails fault `RuntimeError` when the axis is outside the rank
 /// @example sum(new([[1.0, 2.0], [3.0, 4.0]]), 0)    // [4.0, 6.0]
-#op<'tensor:sum_axis'>
+#op('tensor:sum_axis')
 export func sum(t: Tensor, axis: int, keepdims?: bool): Tensor
 
 /// The sum of `sum` divided by the element count in `f64`; an empty tensor is a fault.
@@ -251,7 +251,7 @@ export func mean(t: Tensor): float
 /// @pure
 /// @fails fault `RuntimeError` when the axis is outside the rank, and fault `DivisionByZero` when the axis is empty
 /// @example mean(new([[1.0, 2.0], [3.0, 4.0]]), 1)    // [1.5, 3.5]
-#op<'tensor:mean_axis'>
+#op('tensor:mean_axis')
 export func mean(t: Tensor, axis: int, keepdims?: bool): Tensor
 
 /// IEEE 754-2019 maximum over the axis (exactly associative and commutative: any order gives
@@ -259,7 +259,7 @@ export func mean(t: Tensor, axis: int, keepdims?: bool): Tensor
 /// @pure
 /// @fails fault `RuntimeError` when the axis is outside the rank, and fault `RuntimeError` when the axis is empty
 /// @example max(new([[1.0, 2.0], [3.0, 4.0]]), 0)    // [3.0, 4.0]
-#op<'tensor:max_axis'>
+#op('tensor:max_axis')
 export func max(t: Tensor, axis: int, keepdims?: bool): Tensor
 
 /// IEEE 754-2019 minimum over the axis (exactly associative and commutative); keepdims keeps the
@@ -267,7 +267,7 @@ export func max(t: Tensor, axis: int, keepdims?: bool): Tensor
 /// @pure
 /// @fails fault `RuntimeError` when the axis is outside the rank, and fault `RuntimeError` when the axis is empty
 /// @example min(new([[1.0, 2.0], [3.0, 4.0]]), 1)    // [1.0, 3.0]
-#op<'tensor:min_axis'>
+#op('tensor:min_axis')
 export func min(t: Tensor, axis: int, keepdims?: bool): Tensor
 
 /// The position (`int64`) of the first maximum over the axis by IEEE 754-2019 maximum: the first
@@ -275,7 +275,7 @@ export func min(t: Tensor, axis: int, keepdims?: bool): Tensor
 /// @pure
 /// @fails fault `RuntimeError` when the axis is outside the rank, and fault `RuntimeError` when the axis is empty
 /// @example argmax(new([[1.0, 2.0], [3.0, 4.0]]), 1)    // [1, 1]
-#op<'tensor:argmax_axis'>
+#op('tensor:argmax_axis')
 export func argmax(t: Tensor, axis: int, keepdims?: bool): Tensor
 
 /// The position (`int64`) of the first minimum over the axis by IEEE 754-2019 minimum: the first
@@ -283,7 +283,7 @@ export func argmax(t: Tensor, axis: int, keepdims?: bool): Tensor
 /// @pure
 /// @fails fault `RuntimeError` when the axis is outside the rank, and fault `RuntimeError` when the axis is empty
 /// @example argmin(new([[1.0, 2.0], [3.0, 4.0]]), 0)    // [0, 0]
-#op<'tensor:argmin_axis'>
+#op('tensor:argmin_axis')
 export func argmin(t: Tensor, axis: int, keepdims?: bool): Tensor
 
 /// The softmax over the axis (-1, the last axis, by default), computed as its normative
@@ -369,5 +369,5 @@ export func cast(t: Tensor | number[], dtype: string): Tensor
 /// @pure
 /// @fails fault `TensorDimensionMismatch` when the number of bytes does not fit the shape and the element type
 /// @example from_bytes::<f32>(to_bytes(new([1.0, 2.0])), [2])
-#op<'tensor:from_bytes_*'>
+#op('tensor:from_bytes_*')
 export func from_bytes(bytes: Bytes, shape: int[]): Tensor

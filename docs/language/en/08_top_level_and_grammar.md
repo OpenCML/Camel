@@ -118,13 +118,14 @@ frontMatter        : (funcAnno | tagUse)*
 funcDecl           : frontMatter ('with' angledParams)? 'export'?
                      'func' (identRef | operatorName) typeParams? parentParams (':' typeExpr)?
                      resourceClause? whenClause? stmtBlock?
-tagDecl            : 'export'? 'tag' identDef angledParams? 'on' tagPositions ('read_by' tagReaders)?
+tagDecl            : 'export'? 'tag' identDef typeParams? parentParams? 'on' tagPositions
+                     ('read_by' tagReaders)? whenClause?
                      | 'export'? 'tag' identDef '=' bracketIdents
 tagPositions       : tagPositionName (',' tagPositionName)* ','?
 tagPositionName    : IDENTIFIER
 tagReaders         : identRef (',' identRef)* ','?
 tagUse             : '#' (tagRef | '[' (tagRef (',' tagRef)* ','?)? ']')
-tagRef             : identRef angledValues?
+tagRef             : identRef parentArgues?
 whenClause         : IDENTIFIER logicalOrExpr
 typeParams         : '::' '<' identDef (',' identDef)* ','? '>'
 operatorName       : IDENTIFIER (OPERATOR | '[' ']')

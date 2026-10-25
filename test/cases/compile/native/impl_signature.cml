@@ -4,10 +4,10 @@
  */
 module impl_signature
 
-#op<':op/add_l'>
+#op(':op/add_l')
 func add_kernel(a: int, b: int): int
 
-#impl<add_kernel>
+#impl(add_kernel)
 func add(a: float, b: float): float {
     return a + b
 }

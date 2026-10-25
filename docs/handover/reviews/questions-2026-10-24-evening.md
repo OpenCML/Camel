@@ -318,11 +318,11 @@ println(grow([1.0, 2.0], read_int()))
 
 ## fields-third-name-tags-binding
 
-1. **`tags` 绑定标签的值，组成一个编译期结构体**：字段名是标签名，字段值是该标签的实参记录。`type Box = { #width<8> low: int, high: int }` 里，`low` 那一轮的 `tags` 是 `{ width: { w: 8 } }`，`high` 那一轮是 `{}`。于是
+1. **`tags` 绑定标签的值，组成一个编译期结构体**：字段名是标签名，字段值是该标签的实参记录。`type Box = { #width(8) low: int, high: int }` 里，`low` 那一轮的 `tags` 是 `{ width: { w: 8 } }`，`high` 那一轮是 `{}`。于是
    - 读值：`tags.width.w`（编译期常量）；
    - 查有没有：`match type typeof(tags)` 或 `static for k, _ in fields typeof(tags)`——用已有的结构体与 `fields`，不另造标签反射的 API；
    - 每一轮 `tags` 的类型不同，这在展开里本来就成立（与元组那一轮的 `x` 同理）。
-   只给名字的 `string[]` 丢掉了值（`#width<8>` 的 8），不够用；改 `staticFieldTagsNode` 一处即可。无参数的标签（`#leaf`）的值是空记录 `{}`。
+   只给名字的 `string[]` 丢掉了值（`#width(8)` 的 8），不够用；改 `staticFieldTagsNode` 一处即可。无参数的标签（`#leaf`）的值是空记录 `{}`。
 2. **名字可以只写前缀**：`fields T` 的元素是 (名字, 类型, 标签)，头部可以写 1、2 或 3 个名字，按位置取前缀；多写才报 `StaticHeadNameCount`。我上一条"少了也报错"收回——前缀写法与现有语料一致，也不产生歧义。
 3. `H51-plan.md` Q5 已标注被本条取代。
 
@@ -552,7 +552,7 @@ println(grow([1.0, 2.0], read_int()))
 `{ width: { w: 8 } }` 的取名方式对。还原规则：**按标签声明里形参的类型还原**，不按内部存储的种类还原。
 - `bool` 还原成 `bool`。`attr` 缺 bool 这一种，就补上，或者在还原时按形参类型把 0/1 转回 `bool`；不能把存储的种类当成语言里的类型露给用户。
 - 函数实参：还原成那个函数本身（编译期已知的函数值，可以拿来调用）。图 id 的十进制文本是内部编号，不能露出来。现在做不到的，在 `static` 头部读到它时报编译错误，不给一个错误的值。
-- **同一字段上两个标签的名字相同**（`#a::width<1> #b::width<2>`）：报编译错误，点出两个限定名，不能先写的留下、后写的悄悄丢掉。
+- **同一字段上两个标签的名字相同**（`#a::width(1) #b::width(2)`）：报编译错误，点出两个限定名，不能先写的留下、后写的悄悄丢掉。
 - 无实参和 flags 还原成 `{}`，对。变参的多余实参今天字段标签上没有，等字段标签支持变参时，变参部分按它的形参名绑定成一个元组，不按位置起名 `"0"`、`"1"`。
 
 ## dim-name-relaxation-and-element-type-change（含**撤回**）
@@ -757,15 +757,15 @@ println(grow([1.0, 2.0], read_int()))
 
 标签声明的形参列表接受关键字 `func`，`function` 别名删了，`func_param.cml` 也钉住了正向用法。收下。
 
-**返工**（与上次 `static_for_head_parenthesized` 同一类）：`test/cases/compile/tags/err_function_alias.cml` 专门钉"写 `function` 会被拒"，注释里还在讲 `function` 不是名字，等于给删掉的别名留了一份记录。`TagParameterType` 这条诊断本身要有负例，所以换一个与旧写法无关的不支持类型（比如 `tag t<xs: int[]> on field`），注释只说规则："标签形参是 `int`、`float`、`bool`、`string` 或 `func`"。文件名、计划条目一并改，不再出现 `function_alias`。
+**返工**（与上次 `static_for_head_parenthesized` 同一类）：`test/cases/compile/tags/err_function_alias.cml` 专门钉"写 `function` 会被拒"，注释里还在讲 `function` 不是名字，等于给删掉的别名留了一份记录。`TagParameterType` 这条诊断本身要有负例，所以换一个与旧写法无关的不支持类型（比如 `tag t(xs: int[]) on field`），注释只说规则："标签形参是 `int`、`float`、`bool`、`string` 或 `func`"。文件名、计划条目一并改，不再出现 `function_alias`。
 
 ## 更正：标签的函数形参不写 `func`
 
-负责人 2026-10-25："func 是关键字，不适合做类型名。"本文件 `tag-parameter-kind-names` 一节"只用 `func` 一个名字"作废，上一节的返工随之变成：删掉标签形参列表对关键字 `func` 的放行，改为类型参数加条件 `tag vjp<rule: F> on func when is_function::<F>()`。设计原则 6.2、语言参考 7 章（中英文）已改；具体做法见交接说明 5.00"语法层收口"第 4 条。语言参考里那句"`@vjp<rule>` 报 `InvalidAnnotation`，应写 `#vjp<rule>`"是给旧写法指路的，一并删掉了。
+负责人 2026-10-25："func 是关键字，不适合做类型名。"本文件 `tag-parameter-kind-names` 一节"只用 `func` 一个名字"作废，上一节的返工随之变成：删掉标签形参列表对关键字 `func` 的放行，改为类型参数加条件 `export tag vjp::<F>(rule: F) on func when is_function::<F>()`。设计原则 6.2、语言参考 7 章（中英文）已改；具体做法见交接说明 5.00"语法层收口"第 4 条。语言参考里那句"`@vjp<rule>` 报 `InvalidAnnotation`，应写 `#vjp(rule)`"是给旧写法指路的，一并删掉了。
 
 ## 定稿：标签的函数形参（负责人 2026-10-25 讨论后）
 
-用到"任何函数"的地方，要表达的只是"这是一个函数"这一事实，`when is_function::<F>()` 已经能说，所以不设 `function` 之类的类型标记（它会是一个只限于函数的 `any`）。写法：`export tag vjp<rule: F> on func when is_function::<F>()`；签名固定时写具体的函数类型 `(x: T) => R`。设计原则 6.2、语言参考 7 章已按此写；施工见交接说明 5.00"语法层收口"第 4 条。
+用到"任何函数"的地方，要表达的只是"这是一个函数"这一事实，`when is_function::<F>()` 已经能说，所以不设 `function` 之类的类型标记（它会是一个只限于函数的 `any`）。写法：`export tag vjp::<F>(rule: F) on func when is_function::<F>()`；签名固定时写具体的函数类型 `(x: T) => R`。设计原则 6.2、语言参考 7 章已按此写；施工见交接说明 5.00"语法层收口"第 4 条。
 
 ## design-drafts-fates
 

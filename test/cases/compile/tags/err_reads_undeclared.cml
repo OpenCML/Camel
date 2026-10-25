@@ -1,10 +1,10 @@
 /**
- * A name written in `#reads<...>` must be a declared tag: `nowhere` is a typo, not a fact, and
+ * A name written in `#reads(...)` must be a declared tag: `nowhere` is a typo, not a fact, and
  * is reported where the name is written.
  */
 module err_reads_undeclared
 
-#reads<nowhere>
+#reads(nowhere)
 func f(): int {
     return 0
 }

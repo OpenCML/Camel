@@ -520,7 +520,7 @@ function declarationModules() {
     return modules
 }
 
-// The declarations of a file: each `#op<'uri'>` binds the next `func`, and a default URI is
+// The declarations of a file: each `#op('uri')` binds the next `func`, and a default URI is
 // `<module>:<name>`. `// dynamic func` records a signature C++ computes (math); a body-less
 // `func` is the same declaration without an export.
 function readDeclarations(file, moduleName) {
@@ -530,7 +530,7 @@ function readDeclarations(file, moduleName) {
     let pendingUri = null
     for (let i = 0; i < lines.length; i++) {
         const trimmed = lines[i].trim()
-        const tag = trimmed.match(/^#\[?op<['"]([^'"]+)['"]>/)
+        const tag = trimmed.match(/^#\[?op\(['"]([^'"]+)['"]\)/)
         if (tag) {
             pendingUri = tag[1]
             continue

@@ -25,7 +25,7 @@ expect_stdout_contains = ["g", "3.14159", "6.0", "0.0"]
 
 [[tests]]
 name = "constructs.tags"
-desc = "`tag` declarations with positions (`on nodes`, `on func`), a `read_by` pass, a grouped tag (`= [a, b]`), a tagged type, a tagged field, and `#name`, `#[a, b]` and `#name<value>` uses."
+desc = "`tag` declarations with positions (`on nodes`, `on func`), a `read_by` pass, a grouped tag (`= [a, b]`), a tagged type, a tagged field, and `#name`, `#[a, b]` and `#name(value)` uses."
 kind = "behavior"
 case = "../../../cases/parse/constructs/tags.cml"
 args = ["${case}"]
