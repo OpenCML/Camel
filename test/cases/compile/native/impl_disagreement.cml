@@ -10,10 +10,10 @@
  */
 module impl_disagreement
 
-#op<':op/sub_l'>
+#op(':op/sub_l')
 func sub_kernel(a: int, b: int): int
 
-#impl<sub_kernel>
+#impl(sub_kernel)
 func add(a: int, b: int): int {
     return a + b
 }

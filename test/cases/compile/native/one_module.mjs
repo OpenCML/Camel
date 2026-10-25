@@ -42,7 +42,7 @@ fs.writeFileSync(
     `module json
 
 /// The type the C++ module exports is this module's own type, written without an import.
-#op<'json:kind'>
+#op('json:kind')
 export func kind_of(value: Json): string
 
 /// A name the C++ module implements, declared here because the declaration module is the

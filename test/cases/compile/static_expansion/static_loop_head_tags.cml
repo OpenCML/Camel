@@ -2,7 +2,7 @@
  * The head names three things when the element has three: the element of `fields T` is the triple
  * (name, type, tags), so `for n, F, tags in fields T` walks on the same rule `static for` follows.
  * `tags` is the field's tags as a compile-time struct: one field per tag, named by the tag, whose
- * value is the record of that tag's arguments. `#width<8>` on `low` therefore gives
+ * value is the record of that tag's arguments. `#width(8)` on `low` therefore gives
  * `{ width: { w: 8 } }` and the untagged `high` gives `{}`, so `tags.width.w` reads the 8 under
  * the case whose type has that field, `fields typeof(tags)` has one field for `low` and none for
  * `high`, and each round's `tags` has a type of its own. The value is a compile-time constant, so
@@ -12,11 +12,11 @@
  */
 module static_loop_head_tags
 
-tag width<w: int> on field
+tag width(w: int) on field
 tag leaf on field
 
 type Box = {
-    #width<8> low: int,
+    #width(8) low: int,
     high: int,
 }
 

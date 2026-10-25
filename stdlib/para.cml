@@ -31,7 +31,7 @@ export func rendezvous(parties: int, timeout_ms: int): int
 /// Calls f for every element; the calls have no order among them.
 /// @effect what f does
 /// @example [1, 2]->unordered_foreach<(x: int) => println(x)>
-#op<':mark/unordered_foreach_arr'>
+#op(':mark/unordered_foreach_arr')
 with <f: (item: T) => R>
 export func unordered_foreach::<T, R>(xs: T[]): void
 
@@ -39,6 +39,6 @@ export func unordered_foreach::<T, R>(xs: T[]): void
 /// combined is not fixed, so f should be associative and commutative.
 /// @effect what f does
 /// @example [1, 2, 3]->unordered_reduce<(acc: int, x: int): int => acc + x, 0>
-#op<':mark/unordered_reduce_arr'>
+#op(':mark/unordered_reduce_arr')
 with <f: (acc: T, item: T) => T, initial: T>
 export func unordered_reduce::<T>(xs: T[]): T

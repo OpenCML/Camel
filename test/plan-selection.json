@@ -291,9 +291,9 @@
             "plans": ["feat/docs_headers.plan.toml"]
         },
         {
-            "comment": "The plan inventory: feat/gate/plan_inventory runs scripts/plan-inventory.mjs -- the one implementation of the four fates a plan file can have and of the check that every plan file has one, which the release gate imports rather than restating. A new plan that lands without a fate must redden the commit that lands it, so this is the fast-layer entry for that check, and a change to the tables or the check selects it.",
+            "comment": "The plan inventory: feat/gate/plan_inventory runs scripts/plan-inventory.mjs -- the one implementation of the four fates a plan file can have and of the check that every plan file has one, which the release gate imports rather than restating. A new plan that lands without a fate must redden the commit that lands it, so this is the fast-layer entry for that check, and a change to the tables or the check selects it. The case ledger lives in the same module, and feat/gate/case_ledger is its own fast-layer entry: a case that lands with nothing that reads it must redden the commit that lands it, the same way.",
             "paths": ["scripts/plan-inventory.mjs"],
-            "plans": ["feat/gate/plan_inventory.plan.toml"]
+            "plans": ["feat/gate/plan_inventory.plan.toml", "feat/gate/case_ledger.plan.toml"]
         },
         {
             "comment": "The other build/dev scripts (build.js, format.js, collect-out.js, ...): every plan runs the binary they build, but no plan reads them. Smoke is the smallest check that the toolchain still produces a working camel. scripts/perf-gate.mjs is covered here too: smoke does not run a perf plan.",
@@ -324,6 +324,11 @@
             "comment": "The exemplars and their checker: feat/exemplars re-runs every exemplar and checks its recorded output.",
             "paths": ["exemplars/"],
             "plans": ["feat/exemplars.plan.toml"]
+        },
+        {
+            "comment": "The chapter examples beside the tutorial (docs/tutorial/examples/*.cml): the plan that runs each of them as a file and pins what it prints, plus the documentation check, because a page links to the file it shows and a rename or a deletion breaks that link. This rule is narrower than the general docs rule and comes before it, so a tutorial page itself still selects that rule.",
+            "paths": ["docs/tutorial/examples/"],
+            "plans": ["feat/tutorial_examples.plan.toml", "feat/docs_links.plan.toml"]
         },
         {
             "comment": "The generated stdlib reference: stdlib_registry.registry.reference_is_generated re-runs --verify-doc, so a hand edit fails there; docs_links is the ordinary documentation check.",

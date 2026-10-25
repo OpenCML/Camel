@@ -299,8 +299,9 @@ class Builder {
     /// (rule_templates.cpp): the library was built long before, and an instance belongs to the
     /// builder that declared the rule.
     bool instantiateRuleTemplates(
-        const GenericRuleEntry &entry, const std::vector<Type *> &types, compile_graph_ptr_t &lhs,
-        compile_graph_ptr_t &rhs, compile_graph_ptr_t &when, std::string &why);
+        const GenericRuleEntry &entry, const std::vector<Type *> &types,
+        const RuleWithArguments &with, compile_graph_ptr_t &lhs, compile_graph_ptr_t &rhs,
+        compile_graph_ptr_t &when, std::string &why);
 
     /// What the condition of a generic rule says about one type tuple, at compile time (
     /// of 2026-10-24 on `generic-rule-check-surface-and-multi-parameter-instances`: `check`
@@ -554,7 +555,7 @@ class Builder {
     // declarations (exported or private) or a name the C++ module it declares brings, before
     // what an import brings under the same name (design principles 10.1, 10.2; handover).
     std::optional<camel::core::module::entity> ownNativeEntity(const Reference &ref);
-    // The operator URI a body-less declaration names, from its `#op<'...'>` tag when it has one.
+    // The operator URI a body-less declaration names, from its `#op('...')` tag when it has one.
     std::optional<std::string> nativeOperatorUri(const GCT::node_ptr_t &gct);
     // Notes the nodes of the root graph added since `firstNode` as nodes of the current module.
     void claimRootNodes(size_t firstNode);
@@ -1252,6 +1253,13 @@ class Builder {
     // its signature never writes (a predicate such as `is_plain::<T>()` matched in its body),
     // and those are bound by an explicit `::<...>` at the call all the same.
     bool isGenericHere(Type *type, const GCT::node_ptr_t &node) const {
+        if (node != nullptr && node->ruleBinding()) {
+            // The function a rule with `with` parameters is written as is not a template, even when
+            // the declaration's head writes type parameters: those belong to the rule's sides, and
+            // what the name stands for is the `Rule` calling it with values makes (design
+            // principles 5.4, 5.5). A template would leave the name with no `Rule` at all.
+            return false;
+        }
         if (node != nullptr &&
             camel::compile::gct::Tree::of(node)->headTypeParamsOf(node) != nullptr) {
             return true;
@@ -1370,6 +1378,10 @@ class Builder {
         /// the attempt as one that did not come about keeps this as its reason, and `why_not` is
         /// where a reader gets it (nothing is reported where the body said it).
         std::string reason() const;
+        /// The sink the user reads: the outermost sink this scope replaced. A verdict about the
+        /// program itself is reported here even while a scope is open, so that holding what one
+        /// attempt at one type tuple said cannot swallow it.
+        camel::core::error::Diagnostics *sinkForTheProgram() const;
 
       private:
         Builder &self_;
@@ -1485,6 +1497,10 @@ class Builder {
     /// Nodes). Resolved once per node and remembered. Reports a use that is wrong and throws
     /// BuildAbortException.
     TagFacts tagFactsOf(const GCT::node_ptr_t &gct, camel::core::tag::Position at);
+    /// The facts a tag written before `module` (`#gpu module m`, design principles 13.4) gives a
+    /// function declared at the top level of that module; empty for anything else. Read through
+    /// tagFactsOf, never directly: only there is the inner value made to win.
+    TagFacts moduleTagFactsOf(const GCT::node_ptr_t &gct);
     /// The facts of a list of uses (the tags of a block, of a field), each written at `at`.
     TagFacts tagFactsOfList(
         const std::vector<GCT::TagUse> &uses, camel::core::tag::Position at);
@@ -1499,7 +1515,7 @@ class Builder {
     /// not a compile-time value or that the tag cannot carry.
     camel::core::attr::AttrValueId tagValueOf(
         const camel::core::tag::Decl &decl, const GCT::TagUse &use);
-    /// The `#impl<f>` use written on `gct`, when it has one: the kernel's name as written and
+    /// The `#impl(f)` use written on `gct`, when it has one: the kernel's name as written and
     /// where the tag is. The tag is a declaration fact (`on func`); a use anywhere else is
     /// reported by tagFactsOf like any other misplaced tag.
     struct ImplTag {
@@ -1788,12 +1804,30 @@ class Builder {
     /// The tags written on field `index` of the struct type `subject`, as a compile-time struct:
     /// the third thing the element of `fields T` gives, bound to the third name of `(n, F, tags)`.
     /// One field per tag, named by the tag (`width`), whose value is the record of that tag's
-    /// arguments, one field per declared parameter (`{ width: { w: 8 } }` for `#width<8>`); a tag
+    /// arguments, one field per declared parameter (`{ width: { w: 8 } }` for `#width(8)`); a tag
     /// with no arguments is the empty record, and so is a field with no tags at all. Empty for a
     /// type that is not a named struct and for a type declared by another module (the facts of a
     /// field live in the module that declares the type).
+    /// `head` is the `static` node the tags are read at: two tags of the field that are written
+    /// with the same name, and an argument the reading cannot give as a value, are reported there.
     node_handle_t staticFieldTagsNode(
-        Type *subject, size_t index, const GCT::node_ptr_t &where);
+        Type *subject, size_t index, const GCT::node_ptr_t &where, const GCT::node_ptr_t &head);
+    /// The record of a tag's arguments: one field per argument, named by the parameter it was
+    /// written for (`w` for `#width(8)` under `tag width(w: int)`). A tag with no arguments is the
+    /// empty record; several arguments were kept as a tuple and are separated here. `qualified` is
+    /// the tag's qualified name, for a report that has no declaration to read.
+    data_ptr_t tagArgumentsRecord(
+        const camel::core::tag::Decl *decl, const std::string &qualified,
+        camel::core::attr::AttrValueId id, const GCT::node_ptr_t &head);
+    /// One argument of a tag as the compile-time value the program reads it as: the type the tag's
+    /// declaration gives that parameter decides the kind, never the kind the fact is stored as
+    /// (`#width(true)` under `w: bool` reads back as a `bool`, not as the 1 the fact holds, and a
+    /// real under `f32` as an `f32`). A parameter declared `func` has no value the compiler can
+    /// give here yet: its fact is a graph reference, an internal number, so the reading is refused
+    /// at `head` instead of giving that number as a string.
+    data_ptr_t tagArgumentValue(
+        const camel::core::tag::Decl *decl, const std::string &qualified, size_t index,
+        camel::core::attr::AttrValueId id, const GCT::node_ptr_t &head);
     // functionValueOf, and FunctionNameAsValue when `name` has no single function value.
     node_handle_t
     namedValueOf(node_handle_t node, const std::string &name, const GCT::node_ptr_t &origin);
@@ -1825,6 +1859,31 @@ class Builder {
     node_handle_t partialApplicationOf(
         node_handle_t target, const GCT::node_ptr_t &origin,
         camel::core::type::FunctionType *expected = nullptr);
+    /// The top-level declaration `graph` is, when it is the function a rule with `with`
+    /// parameters is written as (design principles 5.5); nullptr for every other graph. The mark
+    /// is on the declaration's FUNC node, so a use above the declaration and an imported rule
+    /// are both found.
+    const TopLevelDeclaration *ruleBindingOf(const compile_graph_ptr_t &graph) const;
+    /// The one graph a DREF of a declaration holds, whichever of the two shapes the reference
+    /// target has; nullptr when the name is not one declaration (an operator group, or a name
+    /// with several graphs).
+    compile_graph_ptr_t singleGraphOfDref(const DraftGraphBuilder::DrefTarget &target) const;
+    /// Whether `node` is a use of such a name. A call of it binds the rule's parameters and
+    /// gives the `Rule`; a function value is not what the name stands for.
+    bool isRuleBindingTarget(node_handle_t node) const;
+    /// `name` or `name<value...>` where `name` is a rule's binding function: the call that
+    /// gives the `Rule`. The values already bound (`boundWithArgs_`) are the `with` arguments,
+    /// and the parameters left over are filled from their defaults; a parameter that has none is
+    /// `RuleWithParameterUnbound`, reported at `at`.
+    node_handle_t ruleBindingValueOf(node_handle_t target, const GCT::node_ptr_t &at);
+    /// The compile-time value `argument` is, held to `declared`, the type of one `with` parameter of
+    /// the rule `ruleName` (`paramName` is the parameter's name). A rule value is bound to values
+    /// that are part of its instance key, so the value is a constant of a kind an instance can be
+    /// keyed by; one that is not is refused where it is written
+    /// (`RuleWithArgumentNotConstant`), and the attempt throws.
+    data_ptr_t ruleWithArgumentValue(
+        const Argument &argument, Type *declared, const std::string &ruleName,
+        const std::string &paramName, const GCT::node_ptr_t &at);
     /// `a op= b` is `a = a op b` (design principles 4.2): the new value is computed and the
     /// variable bound to it. One rule for every type, whoever declared it: `a op b` must be
     /// defined for these operands and must give `a`'s own type, and the rebinding applies only
@@ -1914,6 +1973,74 @@ class Builder {
     void settleEffectfulGraphs();
     // Then warns for each body of the current module.
     void reportDroppedEffectsOfBodies();
+    // Reports EffectInRuleCondition: a rule's condition may not have an effect. The condition is
+    // evaluated by the rewrite engine while it holds a session on the program it is rewriting, so
+    // a commit or a rewrite in it acts inside that session (see the diagnostic). The rule is a
+    // value of the module's top level, whose maker call the condition (and the effect) hangs
+    // below. Reported once per module, like the warnings above, so that the position and the
+    // module are the ones the rule is written in.
+    void reportEffectfulConditions();
+    // The condition graphs of the `rule ... when ...` declarations written in `graph`, with the
+    // place each rule is written. A maker call the front end wrote for a rule whose head has no
+    // type parameters carries its condition as a function value; a generic rule carries its
+    // templates instead, and its condition is read from the template here and from the instance
+    // where the tuple is known (`reportEffectInRuleInstance`). `ownedByUnit` reads only the values
+    // of the current module, for the root graph, which holds the top levels of every module.
+    struct RuleCondition {
+        // The condition graph of an ordinary rule, null for a generic one.
+        compile_graph_ptr_t graph;
+        // Where the rule is written: the maker call of the declaration.
+        camel::source::origin_id_t where = camel::source::kInvalidOriginId;
+        // The templates of a generic rule, null for an ordinary one.
+        const GenericRuleEntry *entry = nullptr;
+    };
+    std::vector<RuleCondition> ruleConditionsIn(
+        const compile_graph_ptr_t &graph, std::unordered_set<const void *> &visited,
+        bool ownedByUnit) const;
+    // The node of `graph` (or of a function it calls) that makes running the graph an effect,
+    // null when there is none. `inside` names the function the node was found in, or the graph
+    // itself. A call of an effectful function is not the effect: the effect is what that function
+    // does, which is what the report has to point at.
+    node_handle_t effectOfGraph(
+        const compile_graph_ptr_t &graph, std::unordered_set<const void *> &visited,
+        compile_graph_ptr_t &inside) const;
+    // What an effect of a generic rule's condition is, and where it is written: the body of a
+    // template is built once per type tuple, so at the declaration only the tree the declaration
+    // wrote can be read. `found` false: the rule's own writing has no effect, and only the
+    // instance can still say (`reportEffectInRuleInstance`).
+    struct TemplateEffect {
+        bool found = false;
+        std::string subject;
+        camel::source::origin_id_t origin = camel::source::kInvalidOriginId;
+    };
+    TemplateEffect effectOfConditionTemplate(const GenericRuleEntry &entry);
+    // Whether the name is a call of a generic function: its body exists per type tuple, and only
+    // the type arguments of an instance say which candidate it takes.
+    bool calleeIsGeneric(const std::string &name) const;
+    // Whether an overload of the operator group `name` has an effect.
+    bool operatorGroupHasEffect(const std::string &name) const;
+    // The wording of the report: what the effect is and, when it was found in a function the
+    // condition calls, which function that is.
+    std::string describeEffect(
+        const compile_graph_ptr_t &inside, node_handle_t effect, bool insideACall) const;
+    // Reports EffectInRuleCondition for the condition of one instance of a generic rule, when the
+    // type arguments are what revealed the effect (a call whose candidate the types decide). The
+    // report is about the rule, not about the attempt at one tuple, so it goes to the sink the
+    // user reads (`userSink`) and is made once for the rule. `module` declares the rule: the report
+    // is named after it, which matters where the sink it reaches has no module of its own.
+    void reportEffectInRuleInstance(
+        const GenericRuleEntry &entry, const camel::core::module::module_ptr_t &module,
+        const compile_graph_ptr_t &condition);
+    // The sink the user reads, whatever speculative scope the compiler is in: a verdict about the
+    // program itself goes here, so that a scope holding what one attempt said cannot swallow it.
+    camel::core::error::Diagnostics *userSink();
+    // The conditions already reported, so that a condition reached twice (through the root graph
+    // and through the module that wrote it) is one error.
+    std::unordered_set<const void *> conditionsReported_;
+    // The conditions of generic rules already reported, by their template: an effect that only the
+    // type arguments reveal is reported once for the rule, and a rule already reported where it is
+    // written is not reported again where it is instantiated.
+    std::unordered_set<const void *> templateConditionsReported_;
     compile_graph_ptr_t buildDecoratedGraph(
         const std::string &funcName, const compile_graph_ptr_t &rawGraph,
         const std::vector<GCT::node_ptr_t> &annoNodes);
@@ -1976,6 +2103,13 @@ class Builder {
     node_handle_t visitNRefNode(const GCT::node_ptr_t &gct);
     /// A name: its value node, or the build-time tuple a rest parameter names (no node).
     std::any visitDRefNode(const GCT::node_ptr_t &gct);
+    /// The resolution visitDRefNode wraps: the node the name stands for, before a name that is a
+    /// rule's binding function is made the call that binds its parameters.
+    std::any resolveDRefNode(const GCT::node_ptr_t &gct);
+    /// A DREF is being visited as the callee of `name<...>` (`visitWithNode`) or of a call
+    /// (`visitLinkNode`): the binding is made there, where the angled values are known, so the
+    /// name itself stays the name.
+    bool ruleBindingCallee_ = false;
     node_handle_t visitCastNode(const GCT::node_ptr_t &gct);
     node_handle_t visitVariNode(const GCT::node_ptr_t &gct);
     node_handle_t visitLinkNode(const GCT::node_ptr_t &gct);

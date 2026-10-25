@@ -81,9 +81,9 @@ STATEMENTS = [
     "type P<A, B,> = A", "let v = raise", "let a = 1 let b = 2", "a b", "a; b",
     # `fields` and `match type` are followed by a type position: a `(` there is a type, so `()`
     # is the empty tuple type and a function type takes one more pair of parentheses (rule 1).
-    "static for (n, F) in fields () => {}",
+    "static for n, F in fields () => {}",
     "let v = match type () { case tuple => 1 case _ => 2 }",
-    "static for (n, F) in fields ((x: int) => int) => {}",
+    "static for n, F in fields ((x: int) => int) => {}",
     "let v = match type ((x: int) => int) { case #leaf => 1 case _ => 2 }",
 ]
 

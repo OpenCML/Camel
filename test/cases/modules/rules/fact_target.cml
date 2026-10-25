@@ -1,0 +1,30 @@
+/**
+ * The program the `fact` tests rewrite: `sum` has two additions (the inner `a + b` and the
+ * outer one) and `mixed` has a product under an addition (the product takes the merged fact of
+ * its operands); both are read through the `depth` fact of the frozen graphs. `one` multiplies a
+ * parameter by the constant 1 and `two` by 2: the rule `mul_one` reads `sign` of the constant and
+ * rewrites only `x * 1`.
+ */
+module fact_target
+import fact_lib
+
+func sum(a: int, b: int): int {
+    return (a + b) + 1
+}
+
+func mixed(a: int, b: int): int {
+    return (a * b) + 1
+}
+
+func one(x: int): int {
+    return x * 1
+}
+
+func two(x: int): int {
+    return x * 2
+}
+
+func main(): int sync {
+    println(sum(1, 2), mixed(2, 3), one(7), two(7))
+    return 0
+}

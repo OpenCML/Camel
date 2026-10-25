@@ -275,10 +275,19 @@ moduleName : ('.' | '..' | '...')? IDENTIFIER ('.' IDENTIFIER)* ;
 any Formatter::visitModuleName(cst::ModuleName context) { return context->text(); }
 
 /*
-moduleDecl : MODULE identDef ;
+moduleDecl : frontMatter? MODULE identDef ;
 */
 any Formatter::visitModuleDecl(cst::ModuleDecl context) {
-    return "module " + any_cast<string>(visitIdentDef(context->get<cst::IdentDef>()));
+    string result;
+    // The tags written before the declaration (`#gpu module m`): a module carries the placement of
+    // the functions it declares (design principles 13.4, 6.2), so the tag stands before the
+    // keyword, one per line, and the formatter writes it back where the reader put it.
+    for (const auto &tagUse : context->all<cst::TagUse>()) {
+        result += any_cast<string>(visitTagUse(tagUse)) +
+                  commentsInFrontMatter(tagUse->lastToken()->index());
+    }
+    result += "module " + any_cast<string>(visitIdentDef(context->get<cst::IdentDef>()));
+    return result;
 }
 
 /*
@@ -470,14 +479,18 @@ any Formatter::visitFuncAnno(cst::FuncAnno context) {
 }
 
 /*
-tagDecl    : 'export'? 'tag' identDef angledParams? 'on' tagPositions ('read_by' tagReaders)?
+tagDecl    : 'export'? 'tag' identDef typeParams? parentParams? 'on' tagPositions
+                ('read_by' tagReaders)? whenClause?
            | 'export'? 'tag' identDef '=' bracketIdents
 */
 any Formatter::visitTagDecl(cst::TagDecl context) {
     string result = context->tok(TK::KwExport) ? "export tag " : "tag ";
     result += any_cast<string>(visitIdentDef(context->get<cst::IdentDef>()));
-    if (context->get<cst::AngledParams>()) {
-        result += any_cast<string>(visitAngledParams(context->get<cst::AngledParams>()));
+    if (context->get<cst::TypeParams>()) {
+        result += any_cast<string>(visitTypeParams(context->get<cst::TypeParams>()));
+    }
+    if (context->get<cst::ParentParams>()) {
+        result += any_cast<string>(visitParentParams(context->get<cst::ParentParams>()));
     }
     if (const auto group = context->get<cst::BracketIdents>()) {
         return result + " = " + any_cast<string>(visitBracketIdents(group));
@@ -485,6 +498,9 @@ any Formatter::visitTagDecl(cst::TagDecl context) {
     result += " on " + any_cast<string>(visitTagPositions(context->get<cst::TagPositions>()));
     if (context->get<cst::TagReaders>()) {
         result += " read_by " + any_cast<string>(visitTagReaders(context->get<cst::TagReaders>()));
+    }
+    if (context->get<cst::WhenClause>()) {
+        result += " " + any_cast<string>(visitWhenClause(context->get<cst::WhenClause>()));
     }
     return result;
 }
@@ -533,12 +549,12 @@ any Formatter::visitTagUse(cst::TagUse context) {
 }
 
 /*
-tagRef     : identRef angledValues?
+tagRef     : identRef parentArgues?
 */
 any Formatter::visitTagRef(cst::TagRef context) {
     string result = any_cast<string>(visitIdentRef(context->get<cst::IdentRef>()));
-    if (const auto values = context->get<cst::AngledValues>()) {
-        result += any_cast<string>(visitAngledValues(values));
+    if (const auto arguments = context->get<cst::ParentArgues>()) {
+        result += any_cast<string>(visitParentArgues(arguments));
     }
     return result;
 }
@@ -633,17 +649,23 @@ any Formatter::visitWhenClause(cst::WhenClause context) {
 }
 
 /*
-ruleDecl : EXPORT? IDENTIFIER identDef ruleContext? parentParams whenClause? '{' ruleBody '}' ;
+ruleDecl : ('with' angledParams)? EXPORT? IDENTIFIER identDef ruleContext? parentParams whenClause? '{' ruleBody '}' ;
 */
 any Formatter::visitRuleDecl(cst::RuleDecl context) {
     string result;
-    // The tags written before the rule (`#requires<...>`, design principles 6.2, 7.2): each on a
+    // The tags written before the rule (`#requires(...)`, design principles 6.2, 7.2): each on a
     // line of its own, as before a function or a type declaration.
     for (const auto &tagUse : context->all<cst::TagUse>()) {
         // The comments written between the tag and the declaration it belongs to are written here,
         // where the reader put them (commentsInFrontMatter).
         result += any_cast<string>(visitTagUse(tagUse)) +
                   commentsInFrontMatter(tagUse->lastToken()->index());
+    }
+    // The `with` parameters come first, before `export`, as they do in a function declaration
+    // (design principles 4.4, 5.5): they are the rule's own context parameters.
+    if (const auto angledParams = context->get<cst::AngledParams>()) {
+        result += "with " + any_cast<string>(visitAngledParams(angledParams)) +
+                  commentsInFrontMatter(angledParams->lastToken()->index());
     }
     result += context->has(TK::KwExport) ? "export rule " : "rule ";
     result += any_cast<string>(visitIdentDef(context->get<cst::IdentDef>()));
@@ -664,10 +686,10 @@ any Formatter::visitRuleDecl(cst::RuleDecl context) {
 }
 
 /*
-analysisDecl : frontMatter? 'export'? IDENTIFIER identDef parentParams? ':' typeExpr
-               '{' analysisClause* '}'
+factDecl : ('with' angledParams)? 'export'? 'fact' identDef typeParams? parentParams? ':' typeExpr
+           factBody factClause*
 */
-any Formatter::visitAnalysisDecl(cst::AnalysisDecl context) {
+any Formatter::visitFactDecl(cst::FactDecl context) {
     string result;
     for (const auto &tagUse : context->all<cst::TagUse>()) {
         // The comments written between the tag and the declaration it belongs to are written here,
@@ -675,44 +697,75 @@ any Formatter::visitAnalysisDecl(cst::AnalysisDecl context) {
         result += any_cast<string>(visitTagUse(tagUse)) +
                   commentsInFrontMatter(tagUse->lastToken()->index());
     }
-    result += context->tok(TK::KwExport) ? "export analysis " : "analysis ";
+    // The arguments the fact is queried with come first, as they do for a function
+    // (visitFuncDecl), and before `export`, which belongs to the declaration's name.
+    if (const auto angledParams = context->get<cst::AngledParams>()) {
+        result += "with " + any_cast<string>(visitAngledParams(angledParams)) +
+                  commentsInFrontMatter(angledParams->lastToken()->index());
+    }
+    result += context->tok(TK::KwExport) ? "export fact " : "fact ";
     result += any_cast<string>(visitIdentDef(context->get<cst::IdentDef>()));
-    if (const auto params = context->get<cst::ParentParams>()) {
-        result += any_cast<string>(visitParentParams(params));
+    if (const auto typeParams = context->get<cst::TypeParams>()) {
+        result += any_cast<string>(visitTypeParams(typeParams));
+    }
+    if (const auto parentParams = context->get<cst::ParentParams>()) {
+        result += any_cast<string>(visitParentParams(parentParams));
     }
     result += ": " + any_cast<string>(visitType(context->type()));
-    result += " {";
-    pushIndent();
-    for (const auto clause : context->all<cst::AnalysisClause>()) {
-        result += lineEnd() + any_cast<string>(visitAnalysisClause(clause));
+    result += " " + any_cast<string>(visitFactBody(context->get<cst::FactBody>()));
+    // The clauses that say how two facts are merged, one per line, as written.
+    for (const auto clause : context->all<cst::FactClause>()) {
+        result += lineEnd() + any_cast<string>(visitFactClause(clause));
     }
-    popIndent();
-    result += lineEnd() + "}";
     return result;
 }
 
 /*
-analysisClause : IDENTIFIER '=>' dataExpr
-               | IDENTIFIER '(' identList? ')' '=>' dataExpr
-               | IDENTIFIER '(' ('const' identDef ':' typeExpr | dataExpr) ')' '=>' dataExpr
+factBody : 'match' logicalOrExpr '{' factCase* '}'
 */
-any Formatter::visitAnalysisClause(cst::AnalysisClause context) {
-    const string keyword = context->tok(TK::Identifier).text();
-    const auto exprs     = context->exprs();
+any Formatter::visitFactBody(cst::FactBody context) {
+    return "match " + any_cast<string>(visitExpr(context->expr())) + " {" +
+           formatList(
+               vec(context->all<cst::FactCase>()),
+               context,
+               " ",
+               "",
+               PaddingNL | Multiline | PushScope) +
+           "}";
+}
+
+/*
+factCase : 'case' factPattern '=>' dataExpr
+*/
+any Formatter::visitFactCase(cst::FactCase context) {
+    return "case " + any_cast<string>(visitFactPattern(context->get<cst::FactPattern>())) + " => " +
+           any_cast<string>(visitExpr(context->expr()));
+}
+
+/*
+factPattern : 'const' identDef (':' typeExpr)? | dataExpr
+*/
+any Formatter::visitFactPattern(cst::FactPattern context) {
     if (const auto name = context->get<cst::IdentDef>()) {
-        return "on (const " + any_cast<string>(visitIdentDef(name)) + ": " +
-               any_cast<string>(visitType(context->type())) + ") => " +
-               any_cast<string>(visitExpr(exprs[0]));
+        string result = "const " + any_cast<string>(visitIdentDef(name));
+        if (const auto type = context->type()) {
+            result += ": " + any_cast<string>(visitType(type));
+        }
+        return result;
     }
-    if (const auto params = context->get<cst::IdentList>()) {
-        return keyword + "(" + any_cast<string>(visitIdentList(params)) + ") => " +
-               any_cast<string>(visitExpr(exprs[0]));
+    // `_` is no expression: it is written as it stands.
+    if (context->has(TK::Underscore)) {
+        return string("_");
     }
-    if (keyword == "on") {
-        return "on (" + any_cast<string>(visitExpr(exprs[0])) + ") => " +
-               any_cast<string>(visitExpr(exprs[1]));
-    }
-    return keyword + " => " + any_cast<string>(visitExpr(exprs[0]));
+    return any_cast<string>(visitExpr(context->expr()));
+}
+
+/*
+factClause : IDENTIFIER dataExpr
+*/
+any Formatter::visitFactClause(cst::FactClause context) {
+    return string(context->tok(TK::Identifier).text()) + " " +
+           any_cast<string>(visitExpr(context->expr()));
 }
 
 /*
@@ -1236,20 +1289,21 @@ staticForExpr
     : STATIC staticForHeader '=>' blockExpr
     ;
 staticForHeader
-    : FOR '(' (identDef | '_') (',' (identDef | '_'))* ')' IN
+    : FOR (identDef | '_') (',' (identDef | '_'))* IN
       ('fields' typeExpr | 'indices' dataExpr)
     ;
-The head writes as many names as the element it walks has parts (H475): `fields` gives the
+The head writes no parentheses, exactly as `staticLoopExpr`'s does: the two heads spell one
+`for ... in ...`. It writes as many names as the element it walks has parts: `fields` gives the
 triple (name, type, tags), `indices` gives one thing.
 */
 any Formatter::visitStaticForExpr(cst::StaticForExpr context) {
     const auto mode = context->tok(TK::Identifier);
     if (mode && mode.text() == "indices") {
-        return "static for (" + formatStaticHeadNames(context) + ") in indices " +
+        return "static for " + formatStaticHeadNames(context) + " in indices " +
                any_cast<string>(visit(context->expr())) + " => " +
                any_cast<string>(visitBlockExpr(context->lastChild().node()));
     }
-    return "static for (" + formatStaticHeadNames(context) + ") in fields " +
+    return "static for " + formatStaticHeadNames(context) + " in fields " +
            formatTypeInTypePosition(context->type()) + " => " +
            any_cast<string>(visitBlockExpr(context->lastChild().node()));
 }
@@ -1284,9 +1338,9 @@ staticLoopHeader
     : FOR (identDef | '_') (',' (identDef | '_'))* IN
       ('fields' typeExpr | 'indices' dataExpr | dataExpr)
     ;
-The head is written without the parentheses `static for` still has (H462, the ruling of
-2026-10-24): `for j in indices ts`, `for i in 0..5`, `for n in fields T`, or
-`for n, F, tags in fields T` (H475: the names follow the element, so a head may write one, two or
+The head is written without parentheses, exactly as `static for` writes its own (one head, one
+spelling): `for j in indices ts`, `for i in 0..5`, `for n in fields T`, or
+`for n, F, tags in fields T` (the names follow the element, so a head may write one, two or
 three of them).
 */
 any Formatter::visitStaticLoopExpr(cst::StaticLoopExpr context) {
@@ -2039,8 +2093,11 @@ any Formatter::dispatch(syn::Node context) {
         CAMEL_FORMAT(FuncDecl)
         CAMEL_FORMAT(RuleDecl)
         CAMEL_FORMAT(WhenClause)
-        CAMEL_FORMAT(AnalysisDecl)
-        CAMEL_FORMAT(AnalysisClause)
+        CAMEL_FORMAT(FactDecl)
+        CAMEL_FORMAT(FactBody)
+        CAMEL_FORMAT(FactCase)
+        CAMEL_FORMAT(FactPattern)
+        CAMEL_FORMAT(FactClause)
         CAMEL_FORMAT(RuleContext)
         CAMEL_FORMAT(TypeParams)
         CAMEL_FORMAT(RuleBody)
@@ -2167,7 +2224,7 @@ any Formatter::dispatch(syn::Node context) {
     case NK::TypeOfType:
         return "typeof " + any_cast<string>(visit(context.expr()));
     case NK::ShapeComp: {
-        // `T { static for (n, F) in fields U => e }`: the shape is written as a type, and the
+        // `T { static for n, F in fields U => e }`: the shape is written as a type, and the
         // generator prints as it does on its own; the braces are tokens, so the generator is
         // taken by kind and not by child index.
         const auto generator = context.get<cst::StaticForExpr>();

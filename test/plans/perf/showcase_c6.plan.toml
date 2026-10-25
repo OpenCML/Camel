@@ -1,6 +1,6 @@
 id = "perf.showcase_c6_vae"
 order = 902
-tier = "slow"
+tier = "milestone"
 tags = ["showcase", "slow", "c6", "vae", "autoencoder"]
 
 # The small configuration of showcase/c6-vae: four Gaussian clusters in the plane, a

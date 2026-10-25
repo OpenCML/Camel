@@ -1,13 +1,23 @@
 /**
- * A slice with a step other than 1 is a view with strides: it waits for (design principles
- * 5.4). On a tensor the step must be a constant, and anything but 1 is refused at compile time.
+ * A subscript slice with a step takes every step-th element of the first axis (design principles
+ * 5.4). The step is a value like any other, so a constant step and a run-time step name the same
+ * elements: the result is a copy until the strided views land, and its value is the slice's
+ * either way.
  */
 module subscript_slice_step
 import { Tensor, reshape, shape } from tensor
 
+func every::<T>(xs: T[..], a: int, b: int, s: int): T[..] {
+    return xs[a:b:s]
+}
+
 func main(): int sync {
-    println('ran')
-    let b = reshape([1.0, 2.0, 3.0, 4.0], [4])
-    println(shape(b[0:4:2]))
+    let b = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [6])
+    let stepped = b[0:6:2]
+    println(shape(stepped))
+    println(stepped[0]); println(stepped[1]); println(stepped[2])
+    let runtime = every(b, 0, 6, 3)
+    println(shape(runtime))
+    println(runtime[0]); println(runtime[1])
     return 0
 }

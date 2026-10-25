@@ -633,8 +633,8 @@ void validatePlan(const Program &p, InputBindings bindings) {
     }
 }
 
-std::string inspect(const Program &p) {
-    validatePlan(p);
+std::string inspect(const Program &p, InputBindings bindings) {
+    validatePlan(p, bindings);
     size_t logicalBytes = 0, allocatedBytes = 0, materialized = 0;
     size_t borrowedBytes = 0, borrowedInputs = 0;
     for (const auto &n : p.nodes)

@@ -12,7 +12,7 @@ and the same words.
 | 控制 | `if` |
 | 类型与转换 | `as` |
 | 字面量 | `null` |
-| 保留，尚未实现 | `is` |
+| 保留 | `is` |
 
 ## 2.5 Literals
 

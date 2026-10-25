@@ -37,7 +37,8 @@ Parts partsOf(
     ModifierSet modifiers, const std::vector<param_t> &withTypes,
     const std::vector<param_t> &normTypes, Type *exitType, bool hasNames,
     const std::vector<std::string> &argNames, bool hasRest,
-    const std::vector<uint16_t> &constasIndices, const sem::ResourceSignature &resources) {
+    const std::vector<uint16_t> &constasIndices, const std::vector<uint16_t> &withConstIndices,
+    const sem::ResourceSignature &resources) {
     Parts parts;
     parts.modifiers = modifiers;
     parts.resources = resources;
@@ -49,6 +50,7 @@ Parts partsOf(
     parts.hasNames     = hasNames;
     parts.hasRest      = hasRest;
     parts.constasIndices = constasIndices;
+    parts.withConstIndices = withConstIndices;
     if (hasNames) {
         ASSERT(argNames.size() == parts.params.size(), "One name per parameter.");
         parts.names.reserve(argNames.size());
@@ -73,6 +75,7 @@ FunctionType *FunctionTypeFactory::build() {
         argNames_,
         hasRest_,
         constasIndices_,
+        withConstIndices_,
         resources_));
 }
 
@@ -86,6 +89,7 @@ OpenFunctionType *FunctionTypeFactory::buildOpen() {
         argNames_,
         hasRest_,
         constasIndices_,
+        withConstIndices_,
         resources_));
 }
 
@@ -101,7 +105,8 @@ FunctionType::FunctionType(const Parts &parts, bool open)
       modifiers_(parts.modifiers), withCount_(static_cast<uint16_t>(parts.withCount)),
       normCount_(static_cast<uint16_t>(parts.params.size() - parts.withCount)),
       hasNames_(parts.hasNames), hasRest_(parts.hasRest),
-      constasIndices_(parts.constasIndices), resources_(parts.resources), open_(open) {
+      constasIndices_(parts.constasIndices), withConstIndices_(parts.withConstIndices),
+      resources_(parts.resources), open_(open) {
     for (size_t i = 0; i < parts.params.size(); ++i) {
         const auto &[type, isVar] = parts.params[i];
         types()[i]                = type;
@@ -152,6 +157,10 @@ FunctionType *FunctionType::intern(const Parts &parts) {
     key.push_back(parts.hasRest ? 1 : 0);
     key.push_back(parts.constasIndices.size());
     key.insert(key.end(), parts.constasIndices.begin(), parts.constasIndices.end());
+    // A `with` parameter whose argument is part of what the declaration means is part of what the
+    // signature is: two signatures that differ there are not the same signature.
+    key.push_back(parts.withConstIndices.size());
+    key.insert(key.end(), parts.withConstIndices.begin(), parts.withConstIndices.end());
     // The resources are part of what a signature promises: two types that differ only there are
     // not the same type (design effects plan 2.2).
     key.push_back(static_cast<uintptr_t>(parts.resources.mode));
@@ -227,6 +236,7 @@ FunctionType::Parts FunctionType::parts() const {
     parts.hasNames  = hasNames_;
     parts.hasRest   = hasRest_;
     parts.constasIndices = constasIndices_;
+    parts.withConstIndices = withConstIndices_;
     parts.resources = resources_;
     parts.params.reserve(paramCount());
     for (size_t i = 0; i < paramCount(); ++i) {

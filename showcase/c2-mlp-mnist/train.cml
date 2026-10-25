@@ -71,7 +71,7 @@ func load_model(data: string): Mlp {
 func evaluate(m: Mlp, x: f32[..], labels: f32[..]): (float, float) {
     let value = logits<m>(x)
     let class_ids = cast(labels, 'int64')
-    let correct = sum(argmax(value, 1) == class_ids)
+    let correct = sum(argmax(value, 1) === class_ids)
     return (softmax_cross_entropy(value, class_ids), float(correct) / float(shape(x)[0]))
 }
 

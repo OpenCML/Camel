@@ -63,7 +63,7 @@ std::optional<slot_t> staticValueOf(const GCGraph &graph, gc_node_ref_t ref) {
         for (gc_node_ref_t user : graph.normOutputsOf(ref)) {
             const GCNode *u = graph.node(user);
             if (u->kind != GCNodeKind::Oper ||
-                !table.isPure(graph.nodeBodyAs<GCOperBody>(user)->oper)) {
+                !table.mayBeRecomputed(graph.nodeBodyAs<GCOperBody>(user)->oper)) {
                 return std::nullopt;
             }
         }

@@ -1,7 +1,7 @@
 /// A tag written with the wrong number of arguments.
 module err_arity
 
-export tag width<w: int> on type
+export tag width(w: int) on type
 
 #width
 type T = { a: int }

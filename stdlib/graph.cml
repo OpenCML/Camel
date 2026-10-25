@@ -182,11 +182,11 @@ export func show(n: Node): string
 /// The number a graph, a node or an operator is known by inside its Program: the GraphId, the NodeId or the OperId. Stable for the Program, so a pass can key a map by it.
 /// @pure
 /// @example id(n)
-#op<'graph:id'>
+#op('graph:id')
 export func id(h: Graph): int
-#op<'graph:id'>
+#op('graph:id')
 export func id(h: Node): int
-#op<'graph:id'>
+#op('graph:id')
 export func id(h: Op): int
 
 // ---- facts ----
@@ -265,19 +265,19 @@ export func add_constant(t: Txn, g: Graph, value: string): Node
 // top), so only `==` is declared here.
 
 // Two handles of one kind compare by what they name in the Program.
-#op<'graph:eq'>
+#op('graph:eq')
 export func operator ==(a: Program, b: Program): bool
-#op<'graph:eq'>
+#op('graph:eq')
 export func operator ==(a: Graph, b: Graph): bool
-#op<'graph:eq'>
+#op('graph:eq')
 export func operator ==(a: Node, b: Node): bool
-#op<'graph:eq'>
+#op('graph:eq')
 export func operator ==(a: Region, b: Region): bool
-#op<'graph:eq'>
+#op('graph:eq')
 export func operator ==(a: TypeRef, b: TypeRef): bool
-#op<'graph:eq'>
+#op('graph:eq')
 export func operator ==(a: Op, b: Op): bool
-#op<'graph:eq'>
+#op('graph:eq')
 export func operator ==(a: Tag, b: Tag): bool
-#op<'graph:eq'>
+#op('graph:eq')
 export func operator ==(a: Txn, b: Txn): bool

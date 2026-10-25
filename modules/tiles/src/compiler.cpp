@@ -25,7 +25,7 @@
 #include "tiles/device.h"
 #include "tiles/internal/access.h"
 #include "tiles/internal/capability.h"
-#include "tiles/internal/compiled_region.h"
+#include "tiles/internal/compiled_scope.h"
 #include "tiles/internal/kernel_ir.h"
 #include "tiles/program.h"
 #include <algorithm>

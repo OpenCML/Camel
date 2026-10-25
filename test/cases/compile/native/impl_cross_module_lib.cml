@@ -9,10 +9,10 @@
  */
 module impl_cross_module_lib
 
-#op<':op/add_l'>
+#op(':op/add_l')
 func add_kernel(a: int, b: int): int
 
-#impl<add_kernel>
+#impl(add_kernel)
 export func add(a: int, b: int): int {
     return a - (0 - b)
 }

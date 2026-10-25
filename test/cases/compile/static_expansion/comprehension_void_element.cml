@@ -5,7 +5,7 @@
 module comprehension_void_element
 
 func broken(t: {a: int, b: int}) {
-    return { static for (n, F) in fields {a: int, b: int} => {} }
+    return { static for n, F in fields {a: int, b: int} => {} }
 }
 
 func main(): int sync {

@@ -10,7 +10,7 @@
 // test, and the slow plans under `feat/mm`, `feat/opt` and `feat/tools` never run at all.
 // `gpu/**` and `perf/**` are in no gate target either. A "green gate" therefore did not mean
 // "the tree is green"; it meant "the fast layer is green". An earlier audit then recommended
-// `-Plan test/plans -Tier all` for the release, which would have started the 200 cases
+// `-Plan test/plans -Tier all` for the release, which would have started the cases
 // `agents/test.md` reserves for a milestone on a quiet machine (GC stress and poison, progen,
 // the PyTorch comparisons, the benchmarks) on a shared host.
 //
@@ -23,7 +23,9 @@
 //                      included, whatever `--tier` says; that is the only honest way to reach
 //                      them, and a directory target would silently drop them again;
 //   3. static checks-- the seven tree/compiler checks a release has to pass;
-//   4. the policy  -- the plans in FORBIDDEN are never run. The gate prints them by name,
+//   4. the policy  -- the plans in FORBIDDEN are the milestone layer: each of their own files says
+//                      `tier = "milestone"`, so they are never run by an ordinary or a slow run and
+//                      `--tier milestone` is what selects them. The gate prints them by name,
 //                      with the reason and the policy, and refuses (exit 2) when a caller asks
 //                      for one (a positional target, `--include`, `--plan`, `--tier all`,
 //                      `--all`, or any directory that contains one).
@@ -49,9 +51,10 @@
 // A skipped plan is UNKNOWN, never green. This is the accounting `agents/test.md`
 // ask for, printed on every run:
 //
-//   * the 25 policy-forbidden plan files (21 whole plans + 4 plans whose forbidden tests are the
-//     slow ones) -- 200 slow cases today: the 193 measured across its 18 files, plus the
-//     seven the perf plans that landed afterwards add -- not run, not claimed;
+//   * the 25 policy-forbidden plan files (22 whole plans + 3 plans whose held-back entries are
+//     named one by one) -- the cases the milestone layer would run, counted below through the
+//     runner's own reading of those files and printed on every run -- not run by this gate, not
+//     claimed. They are the milestone layer, and `--tier milestone` is the layer that runs them;
 //   * the debug layer (`--tier debug`, a Debug build) -- never part of a Release gate.
 //
 // Exit codes: 0 every selected phase passed; 1 a phase failed; 2 refused or not runnable
@@ -61,12 +64,23 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { spawn, spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
-import { parseTomlFile } from '../test/tools/toml-lite.mjs'
-// The three fates and the check that every plan file has one live in `scripts/plan-inventory.mjs`,
+// The layers and the check that every plan file has one live in `scripts/plan-inventory.mjs`,
 // because the merge gate's fast layer runs the same check as a plan entry
 // (`test/plans/feat/gate/plan_inventory.plan.toml`); this script imports its tables instead of
 // keeping a second copy that could disagree with it.
-import { FAST_TARGETS, SLOW_PLANS, FORBIDDEN, planInventoryProblems, rel, walkPlans } from './plan-inventory.mjs'
+import {
+    FAST_TARGETS,
+    SLOW_PLANS,
+    FORBIDDEN,
+    caseLedgerProblems,
+    planInventoryProblems,
+    rel,
+    walkPlans,
+} from './plan-inventory.mjs'
+// The layer of a test, by the runner's own rule: the accounting below counts the cases the policy
+// holds back, and it must count the same tests the runner would run, from the same rule and the
+// same reading of a plan file.
+import { expandSweeps, loadPlanTests, testTier } from '../test/tools/run-tests.mjs'
 // The stamp rule the two stdlib checkers also apply, so the gate and a checker that reads the
 // install cannot disagree about what "this tree's build" means.
 import { refuseInstallNotOfThisTree } from './install-stamp.mjs'
@@ -169,7 +183,7 @@ function parseArgs(argv) {
             // The exact command an earlier audit recommended and a later one warned about. Refuse by name.
             die(
                 `REFUSED: '${arg}' selects plans by tier or by the whole tree, which would start ` +
-                    `the ${FORBIDDEN.length} plan files the policy forbids.\n[gate] ${POLICY}.\n` +
+                    `the ${FORBIDDEN.length} plan files the policy holds back for the milestone layer.\n[gate] ${POLICY}.\n` +
                     `[gate] The slow layer is an explicit plan file list (H154 §3); see --include for one file.`
             )
         } else if (arg.startsWith('-')) {
@@ -287,27 +301,43 @@ function readSummary(text) {
     return summary
 }
 
-// The slow tests the skip list covers, from the plans themselves: the printed accounting follows
-// the tree, so a plan that grows a slow test is counted the day it lands (it used to print the
-// literal 200 measured).
-function forbiddenSlowTests() {
+// The cases the policy holds back, read through the runner's own loaders: the printed accounting
+// follows the tree, so a plan that grows a case is counted the day it lands, and no number is
+// written down here to go stale. A whole plan the policy forbids carries `tier = "milestone"` in its own
+// file, so all of its cases count; in the three files only some tests are held back, and those say
+// `tier = "milestone"` themselves. Counting the runner's tests, not the raw table rows, is what
+// makes the number the number of cases `--tier milestone` would run from these files.
+function forbiddenMilestoneTests() {
     let total = 0
     for (const entry of FORBIDDEN) {
         const file = path.join(ROOT, entry.file)
         if (!fs.existsSync(file)) continue
-        const plan = parseTomlFile(file)
-        const planTier = plan.tier ?? 'fast'
-        total += (plan.tests ?? []).filter((test) => (test.tier ?? planTier) === 'slow').length
+        let read
+        try {
+            read = loadPlanTests(file)
+        } catch {
+            // a plan the runner cannot read fails the inventory check above, by name
+            continue
+        }
+        const plan = { ...read.doc, __planPath: file }
+        for (const test of [...read.tests, ...expandSweeps(read.doc, file)]) {
+            try {
+                if (testTier(plan, test) === 'milestone') total += 1
+            } catch {
+                // a plan whose tier the runner does not know fails the inventory check above
+            }
+        }
     }
     return total
 }
 
 function printSkipList() {
-    console.log(`[gate] skipped by policy: ${FORBIDDEN.length} plan files, ${forbiddenSlowTests()} slow cases`)
+    console.log(`[gate] held by policy for the milestone layer: ${FORBIDDEN.length} plan files, ${forbiddenMilestoneTests()} cases`)
     console.log(`[gate]   ${POLICY}`)
     for (const entry of FORBIDDEN) console.log(`[gate]   ${entry.file} -- ${entry.reason}`)
     console.log('[gate]   These cases are UNKNOWN, not green. This gate never runs them; the names are printed')
     console.log('[gate]   so the next reader does not mistake the fast layer for the whole tree.')
+    console.log('[gate]   They are selected by `--tier milestone`, which a milestone run names on purpose.')
     console.log('[gate] not run here: the debug layer (`--tier debug`, a Debug build) -- never part of a Release gate')
 }
 
@@ -359,16 +389,18 @@ async function main() {
         if (FORBIDDEN_BY_REL.has(file)) die(`internal error: '${file}' is both gated and forbidden; refusing to run`, 1)
     }
     // Every problem at once, from the one implementation of the inventory: a stale list entry (a
-    // slow plan that does not exist, a forbidden one that does not) and every plan file that has
-    // no fate. Printing the first one and dying hid the rest: eight perf plans had no fate, and the
-    // run named one of them, so the reader fixed one file per run and the list stayed a moving
-    // target.
-    const inventoryProblems = planInventoryProblems()
+    // slow plan that does not exist, a forbidden one that does not), every plan file that has no
+    // layer, and every file under test/cases that nothing reads. Printing the first one and dying
+    // hid the rest: eight perf plans had no layer, and the run named one of them, so the reader
+    // fixed one file per run and the list stayed a moving target.
+    const inventoryProblems = [...planInventoryProblems(), ...caseLedgerProblems()]
     if (inventoryProblems.length > 0) {
         for (const problem of inventoryProblems) console.error(`[gate] ${problem}`)
         die(
-            `the plan inventory has ${inventoryProblems.length} problem(s); every plan file must be reached by a ` +
-                'fast target, named in SLOW_PLANS, named in FORBIDDEN, or be a debug plan',
+            `the inventory has ${inventoryProblems.length} problem(s); every plan file must be reached by a ` +
+                'fast target, named in SLOW_PLANS, named in FORBIDDEN, or be a debug or milestone plan, and ' +
+                'every file under test/cases must be read by code (a plan, an import, a tool that opens it) ' +
+                'or recorded in CASE_EXCEPTIONS with the reason it is kept',
             1,
         )
     }
@@ -455,7 +487,7 @@ async function main() {
         }
         if (!phase.ok) failedPhases++
     }
-    console.log(`[gate] skipped   ${FORBIDDEN.length} plan files / ${forbiddenSlowTests()} slow cases (policy; UNKNOWN, not green)`)
+    console.log(`[gate] held back   ${FORBIDDEN.length} plan files / ${forbiddenMilestoneTests()} milestone cases (policy; UNKNOWN, not green)`)
     if (partial) console.log('[gate] PARTIAL   this run did not cover every layer; it is not a gate result')
     console.log(`[gate] GATE: ${failedPhases === 0 ? 'all selected phases passed' : `FAILED (${failedPhases} phase(s))`}`)
     if (failedPhases === 0 && !partial) {

@@ -1,0 +1,33 @@
+/**
+ * A program that interleaves a graph transaction with a rewrite without going through a rule
+ * condition: the transaction commits (which replaces the program) and the rewrite of the program
+ * the transaction started from runs after it.
+ */
+module interleaved_commit
+
+import { Program, current, root, open, commit, add_constant } from graph
+import { rewrite } from rewrite
+
+rule drop_one(x: int) when true { x * 1 => x }
+
+func redex(x: int): int {
+    return x * 1 + 0
+}
+
+export func interfere(p: Program): Program! sync {
+    let t = open(p)
+    let n = add_constant(t, root(p), 1)
+    let published = commit(t)
+    return match published {
+        case error e => sync { println('commit error value: ', e.kind); return published }
+        case q => rewrite(p, [drop_one])
+    }
+}
+
+func main(): int sync {
+    let p = current()
+    return match interfere(p) {
+        case error e => sync { println('outer error value: ', e.kind); return 1 }
+        case q => sync { println('interleaved ok'); return 0 }
+    }
+}

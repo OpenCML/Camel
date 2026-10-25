@@ -15,7 +15,7 @@
 #include "modules/tensor/ops/support.h"
 #include "modules/tensor/type.h"
 #include "tiles/device.h"
-#include "tiles/internal/compiled_region.h"
+#include "tiles/internal/compiled_scope.h"
 #include "tiles/internal/graph_values.h"
 #include "tiles/internal/regions.h"
 #include "tiles/program.h"
@@ -178,7 +178,7 @@ void checkInvalidation(::Function *function, core::context::Context &context) {
     auto &operators      = core::OperatorTable::instance();
     const auto &contract = first.contracts.at(0);
     operators.declareSemantics(contract.uri, *contract.declaration);
-    if (hasCompiledRegion(function, context.facts()))
+    if (hasCompiledScope(function, context.facts()))
         throw std::runtime_error("declaration epoch did not invalidate the template");
     (void)prepareProgram(function, args, context.facts(), true);
     (void)prepareProgram(function, args, context.facts(), true);
@@ -207,7 +207,7 @@ void checkInvalidation(::Function *function, core::context::Context &context) {
         revised->root()->id(),
         function->tupleType(),
         core::mm::autoSpace());
-    if (hasCompiledRegion(revisedFunction, context.facts()))
+    if (hasCompiledScope(revisedFunction, context.facts()))
         throw std::runtime_error("numeric permissions did not invalidate the template");
     (void)prepareProgram(revisedFunction, args, context.facts(), true);
     (void)prepareProgram(revisedFunction, args, context.facts(), true);
@@ -218,12 +218,12 @@ void checkInvalidation(::Function *function, core::context::Context &context) {
 }
 class RegionOutlineTestPass final : public RuntimeGraphRewritePass {
     operator_t run_;
-    std::optional<RegionDeviceOps> device_;
+    std::optional<SegmentDeviceOps> device_;
 
   public:
     RegionOutlineTestPass(
         const core::context::context_ptr_t &context, operator_t run = nullptr,
-        std::optional<RegionDeviceOps> device = {})
+        std::optional<SegmentDeviceOps> device = {})
         : RuntimeGraphRewritePass(context), run_(run), device_(device) {}
     const runtime::Program *apply(const runtime::Program *program, std::ostream &os) override {
         size_t count = 0;
@@ -250,7 +250,7 @@ class RegionOutlineTestPass final : public RuntimeGraphRewritePass {
                     graph->id(),
                     core::type::TupleType::create(std::vector<core::type::Type *>{}),
                     core::mm::autoSpace());
-                if (hasCompiledRegion(function, context_->facts()))
+                if (hasCompiledScope(function, context_->facts()))
                     templates.push_back(function);
             }
             if (templates.empty())
@@ -265,7 +265,7 @@ class RegionOutlineTestPass final : public RuntimeGraphRewritePass {
 };
 } // namespace
 void registerRegionTestPasses(
-    operator_t run, RegionDeviceOps device, RegionDeviceOps host, RegionDeviceOps preferred) {
+    operator_t run, SegmentDeviceOps device, SegmentDeviceOps host, SegmentDeviceOps preferred) {
     // Test-only passes: named by a test's pipeline and by nothing else. No environment variable
     // gates them (H81).
     core::OperatorTable::instance().set(

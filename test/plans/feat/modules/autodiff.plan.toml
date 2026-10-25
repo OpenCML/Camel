@@ -1402,7 +1402,6 @@ assert(out === '[0.7692267, 0.780836, 0.77707076] | [2.7822266, 1.7102305, -0.89
 """
 timeout_ms = 8000
 
-
 [[tests]]
 name = "loop_grad_sum"
 desc = "The gradient of a loop that adds a captured parameter once per round: the forward loop keeps the values each round's pullback reads in its collection slots (the tape) and the reverse pass is a loop of its own over them, so three rounds send one each back to the parameter. Every executor collects and drives the two loops the same way."
@@ -1862,6 +1861,20 @@ assert(out === '[1.9345258, 1.9592321, 1.9512241] | [3.5810165, 2.369704, -0.542
 }
 """
 timeout_ms = 12000
+
+[[tests]]
+name = "grad_function_values.reference"
+desc = "The gradients the four tests above pin are not the compiler agreeing with itself: grad_function_values_reference.py writes every loss again as a NumPy float64 function, differentiates it by central finite differences, runs grad_function_values.cml with the compiler under test, and compares what it printed. Its tolerance is 2e-3 relative to the largest element of the reference gradient, which is what float32 against float64 finite differences costs."
+kind = "behavior"
+tool = "python"
+case = "../../../cases/modules/autodiff/grad_function_values_reference.py"
+args = ["${case}", "values", "--check-camel", "${camel}"]
+skip_unless = ["${python}", "-c", "import numpy"]
+expect_exit = 0
+expect_stdout_contains = ["10 gradients checked, 0 wrong"]
+expect_output_not_contains = ["MISMATCH", "camel failed"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 120000
 
 [[tests]]
 name = "grad_function_values.macro"
@@ -2703,7 +2716,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "vjp.cross_module.macro.nvm"
-desc = "A function declared with `#vjp<rule>` in one module is differentiated from another module: the declaration tag's graph reference is read from the frozen graph, so the rule (10 * dy) is used instead of the derivative of the body (20 and 10, not 16 and 4). The library is imported by two modules, so the second import is served by the module cache: a tag that did not survive it would lose its rule."
+desc = "A function declared with `#vjp(rule)` in one module is differentiated from another module: the declaration tag's graph reference is read from the frozen graph, so the rule (10 * dy) is used instead of the derivative of the body (20 and 10, not 16 and 4). The library is imported by two modules, so the second import is served by the module cache: a tag that did not survive it would lose its rule."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/vjp_cross_module.cml"
 args = ["${case}", "std::macro", "${run_nvm}"]
@@ -2735,7 +2748,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "vjp_old_annotation_removed"
-desc = "The old `@vjp<rule>` decorator is deleted: it is reported at the annotation as `SemanticDiag::InvalidAnnotation`, naming `#vjp<rule>`, not at the operator it used to resolve to."
+desc = "The old `@vjp<rule>` decorator is deleted: it is reported at the annotation as `SemanticDiag::InvalidAnnotation`, naming `#vjp(rule)`, not at the operator it used to resolve to."
 kind = "negative"
 case = "../../../cases/modules/autodiff/err_vjp_annotation.cml"
 args = ["${case}"]
@@ -2743,7 +2756,7 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::InvalidAnnotation"
 expect_diagnostic_line = 10
 expect_diagnostic_column = 1
-expect_output_contains = ["#vjp<rule>"]
+expect_output_contains = ["#vjp(rule)"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
@@ -2812,6 +2825,40 @@ case = "../../../cases/modules/autodiff/slice_grad.cml"
 args = ["${case}", "std::macro", "${run_fvm}"]
 expect_exit = 0
 expect_stdout_exact = "slice_grad slice_d=0.0 nested_d=0.0 stepped_d=0.0 roundtrip_d=0.0 query_d=0.0 with_grad_d=0.0 value=33.0 nonzero=70.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "slice_grad_negative_step"
+desc = "A slice that takes its elements backwards (`x[5:0:-2]`) has no adjoint here: the scatter the gradient is built from walks forwards only, so differentiating it is a fault that names the step instead of a gradient landing at the wrong elements. The step of a subscript is an ordinary value of the graph, not a static slot the rule can read, so the fault is raised where the scatter runs and carries no position of the program: a backwards adjoint is not implemented."
+kind = "negative"
+case = "../../../cases/modules/autodiff/slice_grad_negative_step.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::RuntimeError"
+expect_output_contains = ["slice_grad", "slice step must be positive"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "array_take_grad.macro.fvm"
+desc = "The same array row-take adjoints when std::macro builds the gradient ahead of time and the FastVM runs it: the row scatter is placed in the compiled gradient graph, not only in a graph built at run time."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/array_take_grad.cml"
+args = ["${case}", "std::macro", "${run_fvm}"]
+expect_exit = 0
+expect_stdout_exact = "[7.0, 0.0, 3.0, 0.0, 0.0]\n[0.0, 3.0, 0.0, 0.0, 2.0]\narray_take_grad repeated_d=0.0 pair_d=0.0 nested_d=0.0 nonzero=136.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "array_take_grad.runtime.nvm"
+desc = "A row take of an array gathers whole rows, so its adjoint is the upstream gradient of those rows added back into the rows the indices named: the row scatter tangent/scatter_take_arr. Checked against adjoints written out by hand for a repeated index (xs[[0,2,0]] with weights 2,3,5 gives [7,0,3,0,0]), a plain pair ([0,3,0,0,2]) and a take of a take ([7,0,4,0,0]); the printed raw gradients are pinned too. `nonzero` is the summed squared distance to the zero array — 136.0 from the tree — so a rule that returned zeros prints 0.0 and fails. (grad built at run time)"
+kind = "behavior"
+case = "../../../cases/modules/autodiff/array_take_grad.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_exact = "[7.0, 0.0, 3.0, 0.0, 0.0]\n[0.0, 3.0, 0.0, 0.0, 2.0]\narray_take_grad repeated_d=0.0 pair_d=0.0 nested_d=0.0 nonzero=136.0\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 

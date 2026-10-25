@@ -1,6 +1,6 @@
 id = "perf.showcase_d4_mcts"
 order = 904
-tier = "slow"
+tier = "milestone"
 tags = ["showcase", "slow", "d4", "mcts", "search"]
 
 # The small configuration of showcase/d4-mcts: the Camel search and its Python counterpart

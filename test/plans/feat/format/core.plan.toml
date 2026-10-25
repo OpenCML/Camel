@@ -151,7 +151,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "format.static_for_and_access_snapshot"
-desc = "Formats `static for (n, F) in fields T => 块` and a compile-time field access `t.[key]`, in both an expression and a tuple access."
+desc = "Formats `static for n, F in fields T => 块` and a compile-time field access `t.[key]`, in both an expression and a tuple access."
 kind = "snapshot"
 tool = "camel-format"
 case = "../../../cases/format/static_for_and_access.cml"

@@ -1,0 +1,27 @@
+/**
+ * A dimension name relates the extents that write it; it is not part of what an instance is keyed
+ * by (design principles 5.4: a named dimension makes no instance). `grow` writes `f32[n]` and is
+ * not a generic function at all -- a function is generic only when its head writes `::<...>` --
+ * so no call of it builds an instance: the graph holds the declaration itself, still declared
+ * `(xs: f32[n], k: int) => f32`, whatever extent the argument has at a call, and whether the
+ * recursion is entered at all is a runtime value.
+ *
+ * `n` is written once in the signature, so it relates nothing and the compiler warns
+ * (DimensionNameUsedOnce); the program still runs. The depth is read from the environment
+ * because the plan runner closes a test's standard input, and `int(get_env(...))` is a runtime
+ * value of the same kind as `read_int()`.
+ */
+module grow_named_dimension
+
+import { get_env } from env
+import { sum } from array
+
+func grow(xs: f32[n], k: int): f32 {
+    return if k <= 0 then sum(xs) else grow(concat(xs, [xs[0]]), k - 1)
+}
+
+func main(): int sync {
+    let depth = int(get_env('CAMEL_GROW_DEPTH'))
+    println(grow([1.0, 2.0], depth))
+    return 0
+}

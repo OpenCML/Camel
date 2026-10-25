@@ -1,0 +1,28 @@
+/**
+ * A rule whose condition is an ordinary predicate over the constant it matched: the guard reads
+ * the coefficient's value and nothing else happens. The rule applies and the program is
+ * rewritten, which is what the check above must leave alone.
+ */
+module condition_pure
+
+import { Program, current } from graph
+import { rewrite } from rewrite
+
+/// The guard of the law: the coefficient is positive.
+func positive(c: float): bool {
+    return c > 0.0 && c - c == 0.0
+}
+
+rule keep_positive(x: float, const c: float) when positive(c) { x * c => x }
+
+func redex(x: float): float {
+    return x * 3.0
+}
+
+func main(): int sync {
+    let p = current()
+    return match rewrite(p, [keep_positive]) {
+        case error e => sync { println('outer error value: ', e.kind); return 1 }
+        case q => sync { println('rewritten'); return 0 }
+    }
+}

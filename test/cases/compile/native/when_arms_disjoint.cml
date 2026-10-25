@@ -38,13 +38,13 @@ func is_arm_int::<T>(): bool {
     }
 }
 
-#op<':op/sub_i'>
+#op(':op/sub_i')
 func arms_kernel::<T>(a: T, b: T): T when is_arm_i32::<T>()
 
-#op<':op/add_l'>
+#op(':op/add_l')
 func arms_kernel::<T>(a: T, b: T): T when is_arm_int::<T>()
 
-#impl<arms_kernel>
+#impl(arms_kernel)
 func combine::<T>(a: T, b: T): T {
     return a * b
 }

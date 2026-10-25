@@ -102,6 +102,16 @@ assert(Number(act[1]) === 2 && Number(act[2]) === 2, `unexpected relu/maximum re
 timeout_ms = 10000
 
 [[tests]]
+name = "broadcast_scalar_operand"
+desc = "The scalar side of a broadcasting operator: an f32 value whose type is its own beside a tensor, the round of a loop over a tensor whose shape is not fixed, and the tensor/literal controls."
+kind = "behavior"
+case = "../../../cases/modules/tensor/broadcast_scalar_operand.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["scalar param=18.0", "scalar local=18.0", "round loss=88.0", "round total=264.0", "round left=80.0", "round right=80.0", "round zeros=16.0", "tensor tensor=25.0", "tensor literal=5.0", "literal tensor=5.0"]
+timeout_ms = 10000
+
+[[tests]]
 name = "reductions"
 desc = "Axis reductions with keepdims, full reductions, and softmax/log_softmax along an axis."
 kind = "behavior"

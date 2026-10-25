@@ -9,8 +9,8 @@ module comprehension_value_type
 
 func widen::<T>(t: T) {
     return match type T {
-        case struct => { static for (n, F) in fields T => widen(t.[n]) }
-        case tuple => ( static for (n, F) in fields T => widen(t.[n]) )
+        case struct => { static for n, F in fields T => widen(t.[n]) }
+        case tuple => ( static for n, F in fields T => widen(t.[n]) )
         case _ => float(t)
     }
 }

@@ -7,7 +7,7 @@ module idx_field_missing
 
 type S = { x: int }
 
-#op<':op/idx_str'>
+#op(':op/idx_str')
 func field(s: S, k: string): int
 
 func main(): int sync {

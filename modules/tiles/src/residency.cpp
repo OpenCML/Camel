@@ -86,7 +86,7 @@ struct Crossing {
 
 ResidencyPlan planResidency(
     const ResidencyFacts &facts, const std::vector<RegionNode> &nodes,
-    const std::vector<Region> &regions) {
+    const std::vector<Segment> &regions) {
     const auto &values = facts.values;
     const size_t none  = regions.size();
     std::vector<size_t> owner(values.size(), none);

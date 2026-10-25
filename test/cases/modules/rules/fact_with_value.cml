@@ -1,0 +1,71 @@
+/**
+ * `fact` with `with` parameters (rewrite design 7.5): the arguments the query is written with are
+ * the fact's, and they reach the functions the declaration generates, so a case reads one by name.
+ *
+ * `times` is queried as `times<2>(y)` and `times<3>(y)`: the constant case multiplies the constant
+ * by the argument, the initial case is the argument negated, and the two queries are two facts.
+ *
+ * `mul_by_two` rewrites `x * y` to `x + x` only where `times<2>(y) == 4`, i.e. where the constant is 2;
+ * `mul_by_three` asks the same of `y` with 3, i.e. whether the constant is 3. On the target -- a
+ * product by 1 and a product by 2 -- the first fires once and the second never, so which constant
+ * the rule rewrites is decided by the value the case read, not by the shape of the pattern.
+ */
+module fact_with_value
+import { Program, Node, Graph, graphs, nodes, op, op_name, name } from graph
+import { max } from math
+import { rewrite } from rewrite
+
+with <factor: int = 2>
+fact times(v: int): int match v {
+    case const c: int => c * factor
+    case _            => 0 - factor
+} join max
+
+rule mul_by_two(y: int, x: int) when times<2>(y) == 4 { x * y => x + x }
+
+rule mul_by_three(y: int, x: int) when times<3>(y) == 9 { x * y => x + x + x }
+
+func opText(n: Node): string {
+    return match op(n) {
+        case null => ''
+        case o => op_name(o)
+    }
+}
+
+func nodesOf(p: Program, function: string): Node[] {
+    let found = graphs(p)->filter<(g: Graph): bool => name(g) == function>
+    return nodes(found[0])
+}
+
+func mulsOf(p: Program, function: string): int {
+    let muls = nodesOf(p, function)->filter<(n: Node): bool => opText(n) == ':op/mul_l'>
+    return loop total = 0 for n in muls do total + 1
+}
+
+export func apply_two(p: Program): Program! {
+    return rewrite(p, [mul_by_two])
+}
+
+export func apply_three(p: Program): Program! {
+    return rewrite(p, [mul_by_three])
+}
+
+export func report(p: Program): Program! sync {
+    println('one', mulsOf(p, 'one'), 'two', mulsOf(p, 'two'))
+    return p
+}
+
+/// The program the reports read: a product by 1 and a product by 2, and the values, which the
+/// rewrite keeps (`x * 2` becomes `x + x`).
+func one(x: int): int {
+    return x * 1
+}
+
+func two(x: int): int {
+    return x * 2
+}
+
+func main(): int sync {
+    println(one(7), two(7))
+    return 0
+}

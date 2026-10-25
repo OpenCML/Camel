@@ -17,7 +17,7 @@ A `**target**` note names its design under `docs/design/`, and a diagnostic is w
 | Control | `if` |
 | Type and conversion | `as` |
 | Literal | `null` |
-| Reserved (accepted, not implemented — §13) | `is` |
+| Reserved | `is` |
 
 **Operators and separators** (3): `=` `->` `..`
 <!-- camel-for-ai end: lexical -->
@@ -74,21 +74,21 @@ annoExpr           : accessExpr (indices | parentArgues | '!')*
 ## Diagnostics
 
 <!-- camel-for-ai region: diagnostics (generated from diagnostics/registry.tsv; node scripts/camel-for-ai.mjs --write) -->
-| Name | Sev | What the compiler says |
-|---|---|---|
+| Name | What the compiler says |
+|---|---|
 
-**Syntax** (`SyntaxDiag`) — 1 (1 error, 0 warnings)
+**Syntax — errors** (`SyntaxDiag`) — 1
 
-| `KeywordAsIdentifier` | E | '{0}' is a keyword and cannot be a name here |
+| `KeywordAsIdentifier` | '{0}' is a keyword and cannot be a name here |
 
-**Semantic** (`SemanticDiag`) — 2 (2 errors, 0 warnings)
+**Semantic — errors** (`SemanticDiag`) — 2
 
-| `UnresolvedReference` | E | '{0}' is not defined |
-| `DuplicateCollectionKey` | E | The key '{0}' is written twice |
+| `UnresolvedReference` | '{0}' is not defined |
+| `DuplicateCollectionKey` | The key '{0}' is written twice |
 
-**Run time and passes** (`RuntimeDiag`) — 1 (0 errors, 1 warning)
+**Run time and passes — warnings** (`RuntimeDiag`) — 1
 
-| `IgnoredSideEffect` | W | The call of '{{0}}' is dropped and its effect is lost |
+| `IgnoredSideEffect` | The call of '{{0}}' is dropped and its effect is lost |
 <!-- camel-for-ai end: diagnostics -->
 
 ## Signatures

@@ -66,6 +66,20 @@ std::string tooManyNestedCalls(size_t limit, std::string_view graphName) {
 }
 constexpr size_t kMacroFramePoolSize = 8 * mm::MB;
 
+/// The operator the plan names for an OPER node: an update node the memory plan marked Copy runs
+/// the plain form of the in-place form it names, which copies
+/// (docs/design/arrays-memory/README.cn.md 4.3.1). Every other node runs the operator it names.
+std::string plannedOperatorUri(camel::runtime::GCGraph &graph, camel::runtime::gc_node_ref_t ref) {
+    const auto *body = graph.nodeBodyAs<camel::runtime::GCOperBody>(ref);
+    if (body == nullptr) {
+        return {};
+    }
+    if (!camel::core::OperatorTable::instance().plainForm(body->uri()).has_value()) {
+        return std::string(body->uri());
+    }
+    return std::string(graph.execPlan().operatorUriFor(ref));
+}
+
 class MacroExecutionError : public std::runtime_error {
   public:
     using std::runtime_error::runtime_error;
@@ -598,8 +612,9 @@ MacroEvaluator::tryExecuteStaticOper(GCGraph *ownerGraph, gc_node_ref_t nodeRef,
     }
 
     operator_t op = body->op;
-    if (!op) {
-        const auto uri = std::string(body->uri());
+    const std::string planned(plannedOperatorUri(*ownerGraph, nodeRef));
+    if (!op || planned != body->uri()) {
+        const auto uri = planned;
         auto found     = context_->execMgr().find(uri);
         if (!found) {
             throw MacroExecutionError(
@@ -922,8 +937,9 @@ slot_t MacroEvaluator::executeGraph(Frame *frame, GCGraph *runtimeGraph) {
         case GCNodeKind::Oper: {
             const auto *body = runtimeGraph->nodeBodyAs<GCOperBody>(runtimeNodeIndex);
             operator_t op    = body->op;
-            if (!op) {
-                const auto uri = std::string(body->uri());
+            const std::string planned(plannedOperatorUri(*runtimeGraph, runtimeNodeIndex));
+            if (!op || planned != body->uri()) {
+                const auto uri = planned;
                 auto found     = context_->execMgr().find(uri);
                 if (!found) {
                     throw MacroExecutionError(

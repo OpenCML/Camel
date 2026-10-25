@@ -847,6 +847,436 @@ assert(input.stdout.includes('12.0') && input.stdout.includes('-3.0'), input.std
 timeout_ms = 30000
 
 [[tests]]
+name = "gpu_scope.inspect_segments"
+desc = "What a `#gpu` scope is, read without a device (plan 2.1-2.3, 2.5): the body of a function tagged `#gpu` or `#cpu` is one segment of its own operators, an empty scope is planned as nothing at all (question 5: an empty scope is not a defect), and a body written in a loop keeps its segment in the loop."
+kind = "behavior"
+case = "../../../cases/modules/tiles/gpu_scope_inspect.cml"
+args = ["--devices", "cpu", "${case}", "std::nvm"]
+envs = ["CUDA_VISIBLE_DEVICES=-1"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const NL = String.fromCharCode(10)
+const lines = (input.normalized.stdout + input.normalized.stderr).split(NL).filter(Boolean)
+const plan = (label) => {
+  const at = lines.findIndex((line) => line.startsWith(label + ' {'))
+  assert(at >= 0, `no ${label} line in ${JSON.stringify(lines.slice(0, 8))}`)
+  return JSON.parse(lines[at].slice(label.length + 1))
+}
+const pair = plan('pair'), empty = plan('empty'), loop = plan('accumulated'), host = plan('kept')
+assert(pair.stages.length === 1, `pair: ${JSON.stringify(pair.stages)}`)
+assert(pair.stages[0].members.length === 3, `pair members: ${JSON.stringify(pair.stages)}`)
+assert(empty.stages.length === 0, `empty: ${JSON.stringify(empty.stages)}`)
+assert(loop.stages.length === 1 && loop.stages[0].members.length >= 1,
+  `accumulated: ${JSON.stringify(loop.stages)}`)
+assert(host.stages.length === 1, `kept: ${JSON.stringify(host.stages)}`)
+assert(input.stdout.includes('value 57.0'), input.stdout)
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "gpu_scope.placement_facts"
+desc = "The placement fact the scope is (plan 2.1-2.3): the declaration of a `#gpu` function and every node written in it carry `gpu`, the body region is `gpu-required`, a `#cpu` body is the host's, and an empty `#gpu` scope is a device unit with no operator in it. Nothing warns: the tag has the reader it names."
+kind = "behavior"
+case = "../../../cases/modules/tiles/gpu_scope_segments.cml"
+args = ["--devices", "cpu", "${case}", "tiles::compile", "std::nvm"]
+envs = ["CUDA_VISIBLE_DEVICES=-1"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const NL = String.fromCharCode(10)
+const lines = (input.normalized.stdout + input.normalized.stderr).split(NL).filter(Boolean)
+const rows = lines.filter((line) => line.startsWith('TILES_PLACEMENT '))
+  .map((line) => JSON.parse(line.slice('TILES_PLACEMENT '.length)))
+const row = (name) => {
+  const found = rows.find((r) => r.graph === name)
+  assert(found, `no placement row for ${name}: ${JSON.stringify(rows.map((r) => r.graph))}`)
+  return found
+}
+for (const name of ['pair', 'empty', 'accumulated']) {
+  const fact = row(name)
+  assert(fact.body === 'gpu-required' && fact.body_fact === 'gpu', `${name}: ${JSON.stringify(fact)}`)
+  assert(fact.host === 0 && fact.gpu_required === fact.nodes, `${name}: ${JSON.stringify(fact)}`)
+  assert(fact.regions.length === 1 && fact.regions[0].fact === 'gpu', `${name}: ${JSON.stringify(fact.regions)}`)
+}
+const host = row('kept')
+assert(host.body === 'host' && host.body_fact === 'cpu' && host.gpu_required === 0,
+  `kept: ${JSON.stringify(host)}`)
+assert(input.stdout.includes('value 57.0'), input.stdout)
+assert(!lines.some((line) => line.includes('has no reader')), 'a tag with a reader warned about having none')
+assert(!input.normalized.stdout.includes('error['), input.stdout)
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "gpu_scope.placement_without_a_device"
+desc = "`--devices cpu` compiles the same support surface as a run with a device (plan 2.4): the program is accepted and the facts read from it are the same either way, because the support surface is decided while compiling and the option only says where the compiled segments run. This pair of entries pins the same reading twice — once without a device, once with one — and it is the identical list that makes them a comparison; a change to one has to be made to the other."
+kind = "behavior"
+case = "../../../cases/modules/tiles/gpu_scope_segments.cml"
+args = ["--devices", "cpu", "${case}", "tiles::compile", "std::nvm"]
+envs = ["CUDA_VISIBLE_DEVICES=-1"]
+expect_exit = 0
+expect_output_contains = ['TILES_PLACEMENT {"body":"gpu-required","body_fact":"gpu","gpu":0,"gpu_required":7,"graph":"pair"', 'TILES_PLACEMENT {"body":"gpu-required","body_fact":"gpu","gpu":0,"gpu_required":1,"graph":"empty"', 'TILES_PLACEMENT {"body":"gpu-required","body_fact":"gpu","gpu":0,"gpu_required":7,"graph":"accumulated"', 'TILES_PLACEMENT {"body":"host","body_fact":"cpu","gpu":0,"gpu_required":0,"graph":"kept"', "value 57.0"]
+timeout_ms = 30000
+
+[[tests]]
+name = "gpu_scope.placement_with_a_device"
+desc = "The other half of the entry above: the same command with a device named reads the same facts, and the expected list is the same by construction. It needs a card only because naming one the host does not have is the other half of the ruling."
+kind = "behavior"
+case = "../../../cases/modules/tiles/gpu_scope_segments.cml"
+args = ["--devices", "0", "${case}", "tiles::compile", "std::nvm"]
+skip_unless = ["node", "test/tools/have-cuda-device.mjs", "0"]
+expect_exit = 0
+expect_output_contains = ['TILES_PLACEMENT {"body":"gpu-required","body_fact":"gpu","gpu":0,"gpu_required":7,"graph":"pair"', 'TILES_PLACEMENT {"body":"gpu-required","body_fact":"gpu","gpu":0,"gpu_required":1,"graph":"empty"', 'TILES_PLACEMENT {"body":"gpu-required","body_fact":"gpu","gpu":0,"gpu_required":7,"graph":"accumulated"', 'TILES_PLACEMENT {"body":"host","body_fact":"cpu","gpu":0,"gpu_required":0,"graph":"kept"', "value 57.0"]
+timeout_ms = 60000
+
+[[tests]]
+name = "gpu_scope.host_effect_is_the_boundary"
+desc = "A host effect in a `#gpu` scope is the scope's boundary, not a refusal (plan 2.4, question 3): `println` written between two device operators stays on the host, and the scope is still one device unit around it. Before the ruling the same program stopped with 'cannot run on the device' on `:io/println`, and the effect could not be written at all. The effect is a statement of the body's chain and the pass cuts the body into segments beside it, so the scope runs as two segments with the effect between them: a statement a segment replaces hands its place in the chain, and what that place carried, to the call that replaces it. `--devices cpu` runs the segments on the host, writes no transfer at all, and still prints what the effect observes — nothing waits, so the run counts no synchronisation. While the handover was missing the effect kept no edge to the exit, so the run printed `main`'s observation alone with the effect's transfer beside it, unwritten: this entry is red on exactly that, the body's line is missing."
+kind = "behavior"
+case = "../../../cases/modules/tiles/gpu_scope_host_effect.cml"
+args = ["--devices", "cpu", "${case}", "tiles::compile", "std::nvm"]
+envs = ["CUDA_VISIBLE_DEVICES=-1"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.split(String.fromCharCode(10)).filter(Boolean)
+const both = input.normalized.stdout + input.normalized.stderr
+assert(!both.includes('error['), both)
+assert(!both.includes('cannot run on the device'), both)
+const observed = lines.indexOf('12.0')
+const result = lines.findIndex((line) => line.includes('result tensor('))
+assert(observed >= 0, input.stdout)
+assert(result > observed, input.stdout)
+const row = lines.find((line) => line.startsWith('TILES_PLACEMENT ') && line.includes('"graph":"observed"'))
+assert(row, JSON.stringify(lines))
+const report = JSON.parse(row.slice('TILES_PLACEMENT '.length))
+assert(report.body === 'gpu-required' && report.body_fact === 'gpu' && report.host === 0, row)
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "gpu_scope.host_effect_synchronises"
+desc = "Where the host reads a value the device holds, the pass writes an explicit `download` there and the run waits there: `std::profile` counts the waits in `device_work.syncs` (waits, not values — `downloads`/`transfers` count values). The observation point of this program is the effect in the scope's body, whose `println` reads the segment's value, and it is the transfer the scope's boundary alone does not need. The numbers are the back end's only configuration: one device, one stream, the public synchronous path, so every transfer batch is one wait. The run counts 3 — the argument's upload, the value the effect reads, and the value `main` reads — where the same program counted 2 while the call that replaced the segment's statements did not take the effect's place in the chain, which left the effect and its transfer outside the executed graph. `--devices cpu` runs the segment on the host and counts none of them; `to_host_bytes` carries both readings the host makes."
+kind = "behavior"
+case = "../../../cases/modules/tiles/gpu_scope_host_effect.cml"
+args = ["--devices", "0", "${case}", 'std::profile json="${test_tmp}/profile.json"', "tiles::compile", "std::nvm"]
+skip_unless = ["node", "test/tools/have-cuda-device.mjs", "0"]
+expect_exit = 0
+verify_script = """
+async ({ input, assert }) => {
+const fs = await import('node:fs')
+const report = JSON.parse(fs.readFileSync(input.test_tmp + '/profile.json', 'utf8'))
+const lines = input.normalized.stdout.split(String.fromCharCode(10)).filter(Boolean)
+const observed = lines.indexOf('12.0')
+const result = lines.findIndex((line) => line.includes('result tensor([      3.,       5.,       7.], dtype=float32)'))
+assert(observed >= 0, input.stdout)
+assert(result > observed, input.stdout)
+assert(report.device_work.kernels >= 1, JSON.stringify(report.device_work))
+assert(report.device_work.syncs === 3, JSON.stringify(report.device_work))
+assert(report.device_work.to_host_bytes === 20, JSON.stringify(report.device_work))
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "gpu_scope.unused_effect_outside_a_sync_block_does_not_run"
+desc = "An effectful expression written outside a sync block whose result nothing uses is not executed, and the compiler reports each one as EffectNotExecuted: evaluation follows the dependencies, and that is the language's own reading of its own program (design principles 3.1 and section 14, misreading 1), not a defect of the scope. The reading belongs to the program and not to the device, so it holds whether the scope is cut into segments or not — this entry is the run without `tiles::compile`, and it is red when a dropped effect runs (the run would print `never`) or when its warning is gone."
+kind = "behavior"
+case = "../../../cases/modules/tiles/gpu_scope_unused_effect.cml"
+args = ["--output-format", "json", "${case}", "std::nvm"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const diags = JSON.parse(input.stderr)
+assert(input.normalized.stdout === '12.0' + String.fromCharCode(10), JSON.stringify(input.normalized.stdout))
+assert(!input.stdout.includes('never'), input.stdout)
+const dropped = diags.filter((d) => d.data.name === 'SemanticDiag::EffectNotExecuted')
+assert(dropped.length === 1, JSON.stringify(diags.map((d) => d.data.name)))
+assert(dropped[0].message === "The call of 'println' has side effects but is never executed: nothing depends on it and it is not in a sync block.", dropped[0].message)
+assert(dropped[0].code === '0x03100004', dropped[0].code)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 30000
+
+[[tests]]
+name = "gpu_scope.unused_effect_stays_dropped_through_the_pass"
+desc = "The same program through `tiles::compile` (`--devices cpu`, so no transfer is written): the scope is cut into segments, and the effect written outside a sync block is still not executed and still reported as EffectNotExecuted. A segment's replaced statements hand their orderings to the call that replaces them; that handover keeps the program's order, and it does not make an effect nothing depends on reachable. Red when the pass executes the dropped effect, when it stops reporting it, or when it changes the program's line."
+kind = "behavior"
+case = "../../../cases/modules/tiles/gpu_scope_unused_effect.cml"
+args = ["--devices", "cpu", "--output-format", "json", "${case}", "tiles::compile", "std::nvm"]
+envs = ["CUDA_VISIBLE_DEVICES=-1"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const program = input.normalized.stdout.split(String.fromCharCode(10)).filter(Boolean).filter((line) => !line.startsWith('TILES_'))
+assert(JSON.stringify(program) === JSON.stringify(['12.0']), input.stdout)
+assert(!input.normalized.stdout.includes('never'), input.stdout)
+const dropped = JSON.parse(input.stderr).filter((d) => d.data.name === 'SemanticDiag::EffectNotExecuted')
+assert(dropped.length === 1, input.stderr)
+assert(dropped[0].message === "The call of 'println' has side effects but is never executed: nothing depends on it and it is not in a sync block.", dropped[0].message)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 30000
+
+[[tests]]
+name = "gpu_scope.arm_effect_runs_only_in_the_arm_taken"
+desc = "A `println` written in an arm of a `#gpu` scope runs only when the program takes that arm: the arm is a block of its own and the branch decides whether it runs, so a run that takes the first arm of one call and the second arm of the next prints each line once. The scope still runs on the device around the effects, and each arm is a segment of its own. An effect made an observable root would run in both arms, so both lines would be printed twice; that is the reading this entry pins (design principles 3.1, section 14, misreading 1)."
+kind = "behavior"
+case = "../../../cases/modules/tiles/gpu_scope_arm_effect.cml"
+args = ["--devices", "cpu", "${case}", "tiles::compile", "std::nvm"]
+envs = ["CUDA_VISIBLE_DEVICES=-1"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.split(String.fromCharCode(10)).filter(Boolean)
+const program = lines.filter((line) => !line.startsWith('TILES_'))
+assert(JSON.stringify(program) === JSON.stringify(['taken', '15.0', 'other arm', '15.0']), input.stdout)
+const row = lines.find((line) => line.startsWith('TILES_PLACEMENT ') && line.includes('"graph":"choose"'))
+assert(row, JSON.stringify(lines))
+const report = JSON.parse(row.slice('TILES_PLACEMENT '.length))
+assert(report.body === 'gpu-required' && report.body_fact === 'gpu', row)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 30000
+
+[[tests]]
+name = "gpu_scope.module_tag_propagates"
+desc = "A tag written before `module` (design principles 13.4) is the fact of every top-level function of that module, and a fact a function writes itself is the inner one and wins: `#gpu module m` makes `scaled` a device unit and leaves `kept` (which writes `#cpu`) on the host."
+kind = "behavior"
+case = "../../../cases/modules/tiles/gpu_scope_module.cml"
+args = ["--devices", "cpu", "${case}", "tiles::compile", "std::nvm"]
+envs = ["CUDA_VISIBLE_DEVICES=-1"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const NL = String.fromCharCode(10)
+const lines = (input.normalized.stdout + input.normalized.stderr).split(NL).filter(Boolean)
+const rows = lines.filter((line) => line.startsWith('TILES_PLACEMENT '))
+  .map((line) => JSON.parse(line.slice('TILES_PLACEMENT '.length)))
+const row = (name) => {
+  const found = rows.find((r) => r.graph === name)
+  assert(found, `no placement row for ${name}: ${JSON.stringify(rows.map((r) => r.graph))}`)
+  return found
+}
+assert(row('scaled').body === 'gpu-required' && row('scaled').body_fact === 'gpu',
+  `the module's tag did not reach scaled: ${JSON.stringify(row('scaled'))}`)
+assert(row('kept').body === 'host' && row('kept').body_fact === 'cpu',
+  `the function's own tag did not win: ${JSON.stringify(row('kept'))}`)
+assert(input.stdout.includes('value 30.0'), input.stdout)
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "gpu_scope.macro_needs_the_expansion_pass"
+desc = "A `#gpu` scope that still holds a macro operator is a pipeline defect, and the report names the pass that carries the expansion: `tiles::compile` consumes the derived graph, it never authors it (plan 2.6)."
+kind = "negative"
+case = "../../../cases/gpu/nofallback/grad_expand.cml"
+args = ["--devices", "cpu", "${case}", "tiles::compile", "std::nvm"]
+envs = ["CUDA_VISIBLE_DEVICES=-1"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::GpuScopeMacroNotExpanded"
+expect_diagnostic_code = "0x040001A9"
+expect_output_contains = ["`#gpu` scope 'step'", "operator 'autodiff:with_grad'", "is a macro operator no pass has expanded", "put the pass 'std::macro' before this one"]
+timeout_ms = 30000
+
+[[tests]]
+name = "gpu_scope.macro_of_a_function_the_run_chooses"
+desc = "The other half of the same reading: `f` is not known while compiling, so no pass can expand the call and the repair is not a pass. The scope's own defect is reported instead, naming the operator and the call site."
+kind = "negative"
+case = "../../../cases/gpu/nofallback/grad_dynamic.cml"
+args = ["--devices", "cpu", "${case}", "tiles::compile", "std::nvm"]
+envs = ["CUDA_VISIBLE_DEVICES=-1"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::GpuScopeUnsupported"
+expect_output_contains = ["`#gpu` scope 'step'", "operator 'autodiff:with_grad'", "needs a function known at compile time"]
+expect_output_not_contains = ["is a macro operator no pass has expanded"]
+timeout_ms = 30000
+
+[[tests]]
+name = "gpu_scope.macro_expansion_publishes_the_derived_graph"
+desc = "With `std::macro` before the pass the scope holds the derived graph instead of the macro operator: it is refused for a tensor operator of the backward pass (`broadcast_like`, which the device back end does not lower), and `TILES_PLACEMENT` shows `grad(loss)` as a `#gpu` body — the derived graph inherits the primal's placement (plan 2.3, 2.6)."
+kind = "negative"
+case = "../../../cases/gpu/nofallback/grad_expand.cml"
+args = ["--devices", "cpu", "${case}", "std::macro", "tiles::compile", "std::nvm"]
+envs = ["CUDA_VISIBLE_DEVICES=-1"]
+expect_exit = 1
+expect_output_not_contains = ["is a macro operator no pass has expanded"]
+verify_script = """
+({ input, assert }) => {
+const NL = String.fromCharCode(10)
+const lines = (input.normalized.stdout + input.normalized.stderr).split(NL).filter(Boolean)
+const row = lines.find((line) => line.startsWith('TILES_PLACEMENT') && line.includes('"graph":"grad(loss)"'))
+assert(row, `no placement row for grad(loss): ${JSON.stringify(lines.filter((l) => l.startsWith('TILES_PLACEMENT')).map((l) => l.slice(0, 80)))}`)
+const report = JSON.parse(row.slice('TILES_PLACEMENT '.length))
+assert(report.body === 'gpu-required' && report.body_fact === 'gpu', row)
+assert(report.gpu_required === report.nodes, row)
+const refusal = lines.find((line) => line.includes("scope 'grad(loss)'"))
+assert(refusal, JSON.stringify(lines.filter((l) => l.includes('scope '))))
+assert(refusal.includes("operator 'tensor:"), refusal)
+assert(refusal.includes('cannot run on the device'), refusal)
+assert(!lines.some((l) => l.includes('autodiff:with_grad')), 'the scope still holds the runtime operator')
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "gpu_scope.report_reads_the_segments_a_pass_cut"
+desc = "`inspect`, `regions` and `source` on a `#gpu` function through `tiles::compile`: the scope is cut, so each operator reads the graph each exec call carries, one plan per segment (`{"segments":[{"call":9,"graph":"pair/tiles.region/1","plan":...}]}`), and `regions` reports the segments as segments — the exec call is not one of the wrapper's `excluded` entries, which said `context_arguments` because a call with context arguments has no plan of its own. The `value` line is the same program's result: the reading changed and the program did not. Red when a report operator reads the wrapper instead of the segments a pass cut, or when the cut scope stops computing its value."
+kind = "behavior"
+case = "../../../cases/modules/tiles/gpu_scope_report.cml"
+args = ["--devices", "cpu", "${case}", "tiles::compile", "std::nvm"]
+envs = ["CUDA_VISIBLE_DEVICES=-1"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const NL = String.fromCharCode(10)
+const lines = input.normalized.stdout.split(NL).filter(Boolean).filter((line) => !line.startsWith('TILES_'))
+const inspect = lines.find((line) => line.startsWith('inspect '))
+const regions = lines.find((line) => line.startsWith('{"schema":1,"segments":'))
+const sourceAt = lines.findIndex((line) => line.startsWith('source // segment'))
+assert(inspect && regions && sourceAt >= 0, JSON.stringify(lines.slice(0, 3).map((l) => l.slice(0, 120))))
+const plans = JSON.parse(inspect.slice('inspect '.length))
+assert(plans.segments && plans.segments.length === 1, inspect)
+assert(plans.segments[0].graph.startsWith('pair/tiles.region/'), plans.segments[0].graph)
+assert(plans.segments[0].plan.values === 7 && plans.segments[0].plan.kernels === 1, JSON.stringify(plans.segments[0].plan))
+assert(plans.inputs.startsWith('unbound'), JSON.stringify(plans.inputs))
+const analysis = JSON.parse(regions)
+assert(analysis.segments.length === 1, regions)
+assert(analysis.segments[0].graph === plans.segments[0].graph, regions)
+assert(analysis.segments[0].regions.length === 1 && analysis.segments[0].regions[0].members.length === 3, regions)
+assert(analysis.regions.length === 0, regions)
+assert(!analysis.excluded.some((e) => e.node === analysis.segments[0].call), `the exec call is still excluded: ${regions}`)
+const source = lines.slice(sourceAt).join(NL)
+assert(source.includes('extern "C" __global__'), source.slice(0, 200))
+assert(source.includes('__fsub_rn('), 'the segment source is not the segment program')
+assert(lines.includes('value 18.0'), input.normalized.stdout)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 30000
+
+[[tests]]
+name = "gpu_scope.report_without_a_pass_reads_the_whole_graph"
+desc = "The same program without `tiles::compile`: no pass has cut anything, so the same three operators read the whole graph — one plan (`values:7`, `kernels:1`, no `segments` reading), one region whose three members are the scope's statements, one upload and one download, and one generated program with no segment header. Red when the segment reading is taken without a cut scope (it would have nothing to read), or when the whole-graph reading is lost."
+kind = "behavior"
+case = "../../../cases/modules/tiles/gpu_scope_report.cml"
+args = ["--devices", "cpu", "${case}"]
+envs = ["CUDA_VISIBLE_DEVICES=-1"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const NL = String.fromCharCode(10)
+const lines = input.normalized.stdout.split(NL).filter(Boolean).filter((line) => !line.startsWith('TILES_'))
+const inspect = lines.find((line) => line.startsWith('inspect '))
+const regions = lines.find((line) => line.startsWith('{"schema":1,'))
+const sourceAt = lines.findIndex((line) => line.startsWith('source // Generated by Camel Tiles'))
+assert(inspect && regions && sourceAt >= 0, JSON.stringify(lines.slice(0, 3).map((l) => l.slice(0, 120))))
+const plan = JSON.parse(inspect.slice('inspect '.length))
+assert(plan.segments === undefined, inspect)
+assert(plan.values === 7 && plan.kernels === 1, JSON.stringify(plan))
+const analysis = JSON.parse(regions)
+assert(analysis.segments.length === 0, regions)
+assert(analysis.regions.length === 1 && analysis.regions[0].members.length === 3, regions)
+assert(analysis.transfers.uploads.length === 1 && analysis.transfers.downloads.length === 1, regions)
+const source = lines.slice(sourceAt).join(NL)
+assert(!source.includes('// segment '), source.slice(0, 200))
+assert(source.includes('extern "C" __global__'), source.slice(0, 200))
+assert(lines.includes('value 18.0'), input.normalized.stdout)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 30000
+
+[[tests]]
+name = "gpu_scope.benchmark_reads_the_segments_a_pass_cut"
+desc = "`benchmark` on a scope a pass has cut: the report is the plan of each segment plus what it cannot measure — the call that runs a segment binds its inputs while the scope runs, so this report has none, and samples taken from inputs nothing wrote are not the program's. Red when the operator times the wrapper, runs a segment with values it does not have, or drops the disclosure."
+kind = "behavior"
+case = "../../../cases/modules/tiles/gpu_scope_benchmark.cml"
+args = ["--devices", "cpu", "${case}", "tiles::compile", "std::nvm"]
+envs = ["CUDA_VISIBLE_DEVICES=-1"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const report = input.normalized.stdout.split(String.fromCharCode(10)).filter(Boolean).find((line) => line.startsWith('{"schema":1,"inputs"'))
+assert(report, input.normalized.stdout.slice(0, 200))
+const parsed = JSON.parse(report)
+assert(parsed.segments.length === 1, report)
+assert(parsed.segments[0].graph.startsWith('pair/tiles.region/'), parsed.segments[0].graph)
+assert(parsed.segments[0].plan.values === 7 && parsed.segments[0].plan.kernels === 1, report)
+assert(parsed.inputs.startsWith('unbound'), report)
+assert(parsed.timing.includes('not measured'), report)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 30000
+
+[[tests]]
+name = "gpu_scope.a_function_the_device_refuses_names_the_operator"
+desc = "A report operator on a function the device back end refuses: `source<noisy>` where `noisy` prints. The reading is a dispatch decision and not a fault, so `RuntimeDiag::GraphNoDeviceProgram` (0x040001AA) names the operator that asked ('tiles:source'), the graph it asked for ('noisy') and what the back end said (the effectful operator inside it) — a named diagnostic with a code, not the `RuntimeError` that said 'An error has occurred', and not a `#gpu` scope, which this graph is not. The effect is still not executed, and the message the earlier entry pinned is preserved inside it. Red when a capability miss is reported as a runtime fault, when the operator or the graph is not named, or when the effect runs."
+kind = "negative"
+case = "../../../cases/modules/tiles/reject_effect.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::GraphNoDeviceProgram"
+expect_diagnostic_code = "0x040001AA"
+expect_output_contains = ["'tiles:source' has no device program for 'noisy'", "unsupported or effectful operator ':io/println'"]
+expect_output_not_contains = ["RuntimeDiag::RuntimeError", "BODY MUST NOT EXECUTE"]
+timeout_ms = 30000
+
+[[tests]]
+name = "gpu_scope.a_run_without_a_device_names_its_own_configuration"
+desc = "`benchmark` on a whole graph in a run that has no device (`--devices cpu`): the report needs the device to compile and run the plan, so this is a capability miss again — `RuntimeDiag::DeviceNotSelected` (0x040001AB) names the operator ('tiles:benchmark') and the run's own configuration, which the message carries verbatim ('the run selected the host only (--devices cpu)'). `DeviceUnavailable` is the other shape of this: there the run named a device that must exist. Red when a run that says it has no device is reported as a runtime fault."
+kind = "negative"
+case = "../../../cases/modules/tiles/gpu_scope_benchmark.cml"
+args = ["--devices", "cpu", "${case}"]
+envs = ["CUDA_VISIBLE_DEVICES=-1"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::DeviceNotSelected"
+expect_diagnostic_code = "0x040001AB"
+expect_output_contains = ["No device to run 'tiles:benchmark' on", "the run selected the host only (--devices cpu)"]
+expect_output_not_contains = ["RuntimeDiag::RuntimeError"]
+timeout_ms = 30000
+
+[[tests]]
+name = "gpu_scope.regions_reads_the_segments_of_the_shared_cases"
+desc = "`tiles::regions` on the module's own region cases through `tiles::compile`: every exec call the pass wrote is reported as a segment of its own, with the region analysis of the graph it carries, and none of them is one of the wrapper's `excluded` entries any more (`context_arguments` was the reason it gave for a call with context arguments). `detour` is the reading that shows the split: the host call in its middle makes two segments (`detour/tiles.region/1`, `/2`), and each is analysed on its own. Red when a cut scope's exec call is read as an exclusion, when the wrapper's own (empty) region analysis is all the report has, or when a split at a host call folds back into one segment."
+kind = "behavior"
+case = "../../../cases/modules/tiles/regions.cml"
+args = ["--devices", "cpu", "${case}", "tiles::compile", "std::nvm"]
+envs = ["CUDA_VISIBLE_DEVICES=-1"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const NL = String.fromCharCode(10)
+const lines = input.normalized.stdout.split(NL).filter(Boolean).filter((line) => !line.startsWith('TILES_'))
+assert(lines.length === 6, `expected six graph region analyses: ${JSON.stringify(lines.map((l) => l.slice(0, 40)))}`)
+const plans = lines.map(JSON.parse)
+for (const [at, plan] of plans.entries()) {
+  assert(Array.isArray(plan.segments), `line ${at}: no segments array`)
+  assert(!plan.excluded.some((e) => e.reason === 'context_arguments'),
+    `line ${at}: an exec call is still excluded as context arguments: ${JSON.stringify(plan.excluded)}`)
+}
+const [chain, dynamic, detour] = plans
+assert(chain.segments.length === 1 && chain.segments[0].graph.startsWith('chain/tiles.region/'), JSON.stringify(chain.segments))
+assert(chain.segments[0].regions.length === 1 && chain.segments[0].regions[0].members.length === 2, JSON.stringify(chain.segments))
+assert(chain.segments[0].transfers.uploads.length === 1 && chain.segments[0].transfers.downloads.length === 1, JSON.stringify(chain.segments))
+assert(dynamic.segments.length === 0, JSON.stringify(dynamic.segments))
+assert(detour.segments.length === 2, JSON.stringify(detour.segments.map((s) => s.graph)))
+assert(detour.segments.every((s) => s.graph.startsWith('detour/tiles.region/') && s.regions.length === 1), JSON.stringify(detour.segments))
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 30000
+
+[[tests]]
 name = "literal.type_is_the_element_type"
 desc = "The graph itself: the literal operand of a tensor operator is built in the tensor's element type (`f32` beside an `f32` tensor, `bf16` beside a `bf16` one, and the tensor parameter of the `f64` spelling stays `float`). Printed as GIR, where every DATA node states its value type."
 kind = "behavior"

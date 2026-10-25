@@ -27,13 +27,13 @@ func is_number::<T>(): bool {
     }
 }
 
-#op<':op/add_i'>
+#op(':op/add_i')
 func arms_kernel::<T>(a: T, b: T): T when is_small_int::<T>()
 
-#op<':op/sub_i'>
+#op(':op/sub_i')
 func arms_kernel::<T>(a: T, b: T): T when is_number::<T>()
 
-#impl<arms_kernel>
+#impl(arms_kernel)
 func combine::<T>(a: T, b: T): T {
     return a * b
 }

@@ -1,6 +1,6 @@
 id = "perf.gemm_threads"
 order = 421
-tier = "slow"
+tier = "milestone"
 tags = ["perf", "tensor", "threads"]
 
 # The library GEMM's thread curve (design principles 7.6: one configuration, one result; and the

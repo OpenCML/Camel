@@ -715,7 +715,7 @@ Builder::operatorValueGraphOf(const oper_idx_ptr_t &op, const GCT::node_ptr_t &o
                    : std::format("{}{}", prefix, i);
     };
     for (size_t i = 0; i < opType->withTypesCount(); ++i) {
-        factory.addWithArg(nameAt(i, "__w", i), opType->withTypeAt(i), false);
+        factory.addWithArg(nameAt(i, "__w", i), opType->withTypeAt(i), false, opType->withNeedsValueAt(i));
     }
     for (size_t i = 0; i < opType->normTypesCount(); ++i) {
         factory.addNormArg(
@@ -1659,7 +1659,11 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                                      gct->at(0)->type() == GCT::NodeKind::TAPP;
     const bool outerWithArgsOfCall = withArgsOfCall_;
     withArgsOfCall_                = gct->at(0)->type() == GCT::NodeKind::WITH;
-    any targetNodeRes              = visit(gct->at(0));
+    // The callee of a call is a name: a rule's binding function called here is called, not made
+    // the `Rule` its name gives (visitDRefNode).
+    const bool outerRuleBindingCallee = std::exchange(ruleBindingCallee_, true);
+    any targetNodeRes                 = visit(gct->at(0));
+    ruleBindingCallee_                = outerRuleBindingCallee;
     withArgsOfCall_                = outerWithArgsOfCall;
     genericCalleeAllowed_          = false;
     // The callee may be a lambda written in place (`((x: int): int => x + 1)(3)`,
@@ -2997,6 +3001,35 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                         .commit(
                             sourceTextOf(normInputs[0].expr),
                             sourceTextOf(normInputs[1].expr));
+                    throw BuildAbortException();
+                }
+            }
+            // A subscript slice with a constant step of 0 takes no element at all: the same rule
+            // as the step of a range, refused where the step is written (design principles 5.4
+            // for the slice, 4.2 for the range). The step is the fifth ordinary argument of
+            // `__slice__` -- the value, the axis, the two bounds, the step; the sixth is the mask
+            // that says which of the two bounds were written, so it is not the step. A step that
+            // is not constant is a fault of the run instead (RuntimeDiag::InvalidArgument), and a
+            // tensor's own slice checks its step with the shape facts it holds.
+            if (targetOperator->uri() == ":op/slice_sub" && normInputs.size() == 6 &&
+                withInputs.empty() && gct->size() >= 1 &&
+                gct->at(0)->type() == GCT::NodeKind::DREF && gct->at(0)->name() == "__slice__") {
+                const auto stepIsZero = [](const data_ptr_t &data) {
+                    if (const auto integer = std::dynamic_pointer_cast<LongData>(data);
+                        integer != nullptr) {
+                        return integer->data() == 0;
+                    }
+                    const auto integer = std::dynamic_pointer_cast<IntData>(data);
+                    return integer != nullptr && integer->data() == 0;
+                };
+                if (stepIsZero(constantOfNode(normInputs[4].node))) {
+                    // The caret is under the step, the argument that says why the slice can
+                    // never be right.
+                    const GCT::node_ptr_t &stepExpr = normInputs[4].expr;
+                    const auto where = stepExpr != nullptr && stepExpr->origin() != 0
+                                           ? stepExpr->origin()
+                                           : gct->origin();
+                    diags_->of(SemanticDiag::SliceStepZero).atOrigin(where).commit();
                     throw BuildAbortException();
                 }
             }

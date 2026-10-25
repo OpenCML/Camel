@@ -190,6 +190,29 @@ void idxArrayVjp(VjpBuilder &b, const VjpCall &call) {
         b.addOper(tangentType, ":tangent/scatter_add_arr", scatterInputs));
 }
 
+// y = t[idx]: the rows the indices name, taken along the first dimension (design principles
+// 5.4). The reverse of a gather is a scatter-add (9.9), and the tangent of an array is the array
+// of its elements' tangents: the gradient of `t` is a zero array of `t`'s shape with the rows
+// the indices named added back into the rows they were taken from, so a repeated index
+// accumulates its row's gradient. The indices are discrete: nothing reaches them.
+void idxTakeArrayVjp(VjpBuilder &b, const VjpCall &call) {
+    requireInputs(call, 2);
+    if (!b.gradientOf(call.output)) {
+        return;
+    }
+    Type *const arrayType   = b.nodeType(call.inputs[0]);
+    Type *const tangentType = camel::core::tangentTypeOf(arrayType);
+    if (tangentType == nullptr) {
+        return; // an array whose elements have no tangent: the row take has none either
+    }
+    const auto dy = b.gradientOf(call.output);
+    const std::array<vjp_node_t, 1> zeroInputs{call.inputs[0]};
+    const vjp_node_t zero = b.addOper(tangentType, ":tangent/zeros_arr", zeroInputs);
+    const std::array<vjp_node_t, 3> scatter{zero, call.inputs[1], *dy};
+    b.accumulateGradient(
+        call.inputs[0], b.addOper(tangentType, ":tangent/scatter_take_arr", scatter));
+}
+
 // `staticInt(b, n)`: an int constant of the gradient graph, for a fixed argument a rule emits.
 vjp_node_t staticInt(VjpBuilder &b, int64_t value) {
     return b.addStatic(toSlot<int64_t>(value), Type::Int64());
@@ -330,6 +353,23 @@ void scatterAddArrayVjp(VjpBuilder &b, const VjpCall &call) {
     }
 }
 
+// `tangent/scatter_take_arr(base, indices, delta)`: `base` with `delta`'s rows added back into
+// the rows the indices name. The forward is a gather of whole rows along the first dimension, so
+// the gradient of `delta` is those same rows of the upstream gradient -- a gather of it, which
+// is the row take itself -- and `base`, whose other rows only padding came from, keeps the
+// upstream gradient (design principles 9.9). The indices are discrete.
+void scatterTakeArrayVjp(VjpBuilder &b, const VjpCall &call) {
+    requireInputs(call, 3);
+    if (auto dy = b.gradientOf(call.output)) {
+        b.accumulateGradient(call.inputs[0], *dy);
+        if (b.isActive(call.inputs[2])) {
+            const std::array<vjp_node_t, 2> take{*dy, call.inputs[1]};
+            b.accumulateGradient(
+                call.inputs[2], b.addOper(b.nodeType(call.inputs[2]), ":op/idx_take", take));
+        }
+    }
+}
+
 // `tangent/scatter_slice_arr(dx, like, start, end, step, written)`: the array of `like`'s length
 // whose sliced positions hold `dx`'s elements. The forward is a gather over a range, so the
 // gradient of `dx` is the same range of the upstream gradient: the slice operator with the same
@@ -394,6 +434,8 @@ void registerBuiltinDerivatives() {
     registry.setRule(":op/dtof", dtofVjp);
     registry.setRule(":op/ftod", ftodVjp);
     registry.setRule(":op/idx_arr", idxArrayVjp);
+    // `t[idx]` takes rows, so its adjoint scatters whole rows back into the array's gradient.
+    registry.setRule(":op/idx_take", idxTakeArrayVjp);
     // A slice of an array is a range of positions, so its adjoint is the range scatter of the
     // tangent array: the gradient of the elements the slice took goes back to their places.
     registry.setRule(":struct/slice_arr", sliceArrayVjp);
@@ -418,6 +460,7 @@ void registerBuiltinDerivatives() {
     registry.setRule(":tangent/zeros_arr", noGradient);
     registry.setRule(":tangent/scatter_add_arr", scatterAddArrayVjp);
     registry.setRule(":tangent/scatter_slice_arr", scatterSliceArrayVjp);
+    registry.setRule(":tangent/scatter_take_arr", scatterTakeArrayVjp);
 
     registry.setTangentSpace(TypeCode::Float64, floatTangentSpace<F64>());
     registry.setTangentSpace(TypeCode::Float32, floatTangentSpace<F32>());

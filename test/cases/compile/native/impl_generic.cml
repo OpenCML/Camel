@@ -15,18 +15,18 @@
  */
 module impl_generic
 
-#op<':op/idx_arr'>
+#op(':op/idx_arr')
 func idx_kernel::<T>(xs: T[], i: int): T
 
-#impl<idx_kernel>
+#impl(idx_kernel)
 func at::<T>(xs: T[], i: int): T {
     return xs[i]
 }
 
-#op<':op/add_l'>
+#op(':op/add_l')
 func add_kernel(a: int, b: int): int
 
-#impl<add_kernel>
+#impl(add_kernel)
 func add::<T>(a: T, b: T): T {
     return a - (0 - b)
 }

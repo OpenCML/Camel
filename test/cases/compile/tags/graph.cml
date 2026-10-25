@@ -3,10 +3,10 @@
 module tags_nodes
 
 export tag plain on nodes
-export tag scale<k: int> on nodes
+export tag scale(k: int) on nodes
 export tag heavy on func, nodes
 
-#scale<2>
+#scale(2)
 func doubled(x: int): int {
     return x * 2
 }
@@ -16,14 +16,14 @@ func weighed(x: int): int {
     return x + 1
 }
 
-#scale<3>
+#scale(3)
 func main(): int {
     var a = doubled(3)
     #plain
     {
         a = a * 4
     }
-    #scale<5>
+    #scale(5)
     {
         a = a * 5
     }

@@ -27,6 +27,12 @@ Contents:
 [16 Taking gradients](#16-taking-gradients) ·
 [Where to go next](#where-to-go-next)
 
+Chapters already written to the new outline (Chinese and English together, each on its own page):
+[1 Five minutes to see the graph](01_five_minutes.en.md) ·
+[5 Arrays and loops](05_arrays_and_loops.en.md) ·
+[9 Evaluation by dependency](09_evaluation_by_dependency.en.md) ·
+[17 Teaching the compiler a law](17_teaching_a_law.en.md)
+
 ---
 
 ## 1. Your first program
@@ -157,7 +163,7 @@ func main(): int sync {
 ```
 
 - **A function is a subgraph, and a call is a node in the graph.** You will see this with your own eyes in section 13.
-- **Camel currently has no loop syntax** (no `for`, no `while`). Repeated computation is written as recursion, or with the higher-order operators of the next section. A call in tail position does not take a stack frame, so `sum_to` recursing a hundred thousand levels deep is no problem; for non-tail recursion (such as `fib`), the number of calls open at the same time may not exceed 1000 by default (adjustable with `--max-recursion-depth`).
+- **Repeated computation has three forms**: the `loop` expression, recursion, and the higher-order operators of the next section. A `loop` writes its state in its head, and the body's value is the next round's state, as in `loop acc = 0 for x in xs do acc + x * x`; it can also take a `while` condition ([language reference 6.8.6](../language/en/06_expressions.md#686-loop)), and its rounds do not count toward the call depth. A call in tail position does not take a stack frame, so `sum_to` recursing a hundred thousand levels deep is no problem; for non-tail recursion (such as `fib`), the number of calls open at the same time may not exceed 1000 by default (adjustable with `--max-recursion-depth`).
 - **Two kinds of parameters.** The ones in parentheses are the inputs the function processes; the ones in `with <...>` are the properties the function is configured with (context parameters), and at a call they are written in angle brackets. Configuration that other languages put in the members of an object is a `with` parameter in Camel.
 - **The pipe `->`** passes the value on its left as the argument of the function on its right; `a->f->g` is `g(f(a))`. Data flow written as a chain is exactly a path in the graph.
 
@@ -1115,7 +1121,7 @@ camel docs/tutorial/examples/16_grad.cml std::macro
 ## Where to go next
 
 - [Examples](../../examples/README.md): short programs organised by task — JSON, files, word-frequency counting, sorting, command-line tools, parallelism, simulation, training.
-- [Language reference](../language/en/README.md): the precise rules for every construct, and which forms are reserved and not yet implemented.
+- [Language reference](../language/en/README.md): the precise rules for every construct.
 - [Standard library reference](../stdlib-reference.md): every function of every module.
 - [Command line](../cli.md): all options, passes, diagnostic formats, resource limits; `camel --explain <diagnostic name>` explains one diagnostic.
 - [Design principles](../design-principles.en.md): why the language is the way it is.

@@ -31,7 +31,7 @@ class Program;
 
 namespace camel::tiles {
 
-struct Region;
+struct Segment;
 struct RegionNode;
 
 /// What the residency inference answered for one value of the graph, beyond the nodes' own facts:
@@ -85,7 +85,7 @@ struct ResidencyPlan {
 /// their values there -- and a value crosses the boundary once however many readers it has.
 ResidencyPlan planResidency(
     const ResidencyFacts &facts, const std::vector<RegionNode> &nodes,
-    const std::vector<Region> &regions);
+    const std::vector<Segment> &regions);
 
 /// The conclusion for one graph: the reading of the graph's own facts -- a node's placement, a
 /// parameter's declaration, what the exit type declares the graph hands back (`Device<T>` asserts a
@@ -94,7 +94,7 @@ ResidencyPlan planResidency(
 /// reader, `graph_regions.cpp`, which reads a signature through the module's type table.
 ResidencyPlan planResidency(
     const runtime::Program &program, const runtime::GCGraph &graph,
-    const std::vector<RegionNode> &nodes, const std::vector<Region> &regions);
+    const std::vector<RegionNode> &nodes, const std::vector<Segment> &regions);
 
 /// `TILES_RESIDENCY` lines, one JSON object per graph (docs/design/gpu/plan.cn.md 3.2): the same
 /// conclusion at graph granularity -- each value's block, the values that change block once each,

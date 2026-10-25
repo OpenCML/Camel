@@ -18,10 +18,10 @@ module impl_grad_body
 
 import { grad } from autodiff
 
-#op<':op/div_d'>
+#op(':op/div_d')
 func div_kernel(a: float, b: float): float
 
-#impl<div_kernel>
+#impl(div_kernel)
 func t(a: float, b: float): float {
     return a * b
 }

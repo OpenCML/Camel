@@ -186,6 +186,8 @@ class ParserImpl {
     void parseBlockExpr();
     void parseModuleName();
     void parseModuleDecl();
+    /// moduleDecl after the tags that may precede it; `m` marks where it began.
+    void parseModuleDeclRest(size_t m);
     void parseImportDecl();
     void parseBracedImports();
     void parseImportItem();
@@ -201,11 +203,11 @@ class ParserImpl {
     void parseAnnotatedStmt();
     /// The `@` decorators and `#` tag uses before a declaration or a block, in either order.
     void parseFrontMatter();
-    /// At `tag` naming a tag declaration (offset `n`): `tag name<...> on ...`, `tag name on ...`
+    /// At `tag` naming a tag declaration (offset `n`): `tag name(...) on ...`, `tag name on ...`
     /// or `tag name = [...]`.
     bool atTagDecl(uint32_t n) const;
     void parseTagDecl();
-    /// One `#` form: `#name`, `#name<args>`, or `#[a, b<v>]` (each member a tagRef).
+    /// One `#` form: `#name`, `#name(args)`, or `#[a, b(v)]` (each member a tagRef).
     void parseTagUse();
     /// tagRef : identRef angledValues?
     void parseTagRef();
@@ -227,12 +229,20 @@ class ParserImpl {
     void parseRuleDeclRest(size_t m);
     void parseRuleContext();
     void parseRuleBody();
-    /// At the name `analysis` (offset `n`) that starts an analysis declaration.
-    bool atAnalysisDecl(uint32_t n) const;
-    void parseAnalysisDecl();
-    /// analysisDecl after the tags and decorators that may precede it; `m` marks where it began.
-    void parseAnalysisDeclRest(size_t m);
-    void parseAnalysisClause();
+    /// At the name `fact` (offset `n`, after the `with` parameters and an `export` when they are
+    /// written) that starts a fact declaration.
+    bool atFactDecl(uint32_t n) const;
+    void parseFactDecl();
+    /// factDecl after the tags and decorators that may precede it; `m` marks where it began.
+    void parseFactDeclRest(size_t m);
+    void parseFactBody();
+    void parseFactCase();
+    void parseFactPattern();
+    void parseFactClause();
+    /// The index of the token at the offset `n` from the current position, trivia skipped.
+    uint32_t tokenIndexAt(uint32_t n) const;
+    /// The offset just after the `<...>` whose `<` is at the offset `angle`, or kNone.
+    uint32_t afterAngledParams(uint32_t angle) const;
     void parseDataDecl();
     void parseTypeDecl();
     /// typeDecl after the tags and decorators that may precede it; `m` marks where it began.
@@ -342,6 +352,7 @@ class ParserImpl {
     void parseStaticFor();
     void parseStaticForHeader();
     void parseStaticForName();
+    void parseStaticForNameList();
     void parseStaticLoop();
     void parseStaticLoopHeader();
     void parseMatchCase();

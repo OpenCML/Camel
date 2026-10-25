@@ -1,0 +1,50 @@
+/// The segments a `#gpu` scope is compiled from, as the scheduler reports them (docs/design/gpu/plan.cn.md
+/// 2.1-2.3, 2.5). `tiles::inspect` returns the plan of a function without a device, so the reading
+/// is available everywhere; the placement fact itself is read by `tiles::compile`, which
+/// `gpu_scope_segments` covers.
+///
+/// `pair` is a body of three device operators: one segment holding all three. `empty` is a body
+/// whose only node is the port it returns: no segment at all, and no warning — an empty scope is
+/// not a defect (2.4, question 5). `accumulated` writes its operators in a loop: the segment is
+/// the loop's body, so what the pass writes runs once per iteration. `kept` is the `#cpu` body:
+/// the host's own nodes, one segment like any other graph's.
+///
+/// Red when: the scope's body is not one segment, the empty scope is planned as something, or the
+/// loop's segment is hoisted out of the loop.
+module tiles_gpu_scope_inspect
+
+import { Tensor, reshape, sum } from tensor
+import { inspect } from tiles
+
+#gpu
+func pair(x: Tensor<f32, [3]>): Tensor<f32, [3]> {
+    let y = x * 2.0
+    let z = y + 3.0
+    return z - 1.0
+}
+
+#gpu
+func empty(x: Tensor<f32, [3]>): Tensor<f32, [3]> {
+    return x
+}
+
+#gpu
+func accumulated(x: Tensor<f32, [3]>): Tensor<f32, [3]> {
+    return loop y = x for k in [1, 2] do y + x
+}
+
+#cpu
+func kept(x: Tensor<f32, [3]>): Tensor<f32, [3]> {
+    let y = x * 2.0
+    return y + 3.0
+}
+
+func main(): int sync {
+    let x = reshape([1.0, 2.0, 3.0] as f32[], [3])
+    println('pair {}'->format<inspect<pair>(x)>)
+    println('empty {}'->format<inspect<empty>(x)>)
+    println('accumulated {}'->format<inspect<accumulated>(x)>)
+    println('kept {}'->format<inspect<kept>(x)>)
+    println('value {}'->format<sum(pair(x)) + sum(accumulated(x)) + sum(kept(x))>)
+    return 0
+}

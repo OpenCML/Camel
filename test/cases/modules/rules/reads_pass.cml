@@ -1,5 +1,5 @@
 /**
- * A pass written in Camel names the tags it reads on its own function: `#reads<marked>` makes
+ * A pass written in Camel names the tags it reads on its own function: `#reads(marked)` makes
  * `reads_pass::apply` a reader of `marked`, so a program that writes `#marked` with `read_by
  * reads_pass::apply` has its tag read when the pass is in the pipeline.
  */
@@ -8,7 +8,7 @@ import { Program } from graph
 
 export tag marked on func, read_by reads_pass::apply
 
-#[reads<marked>]
+#[reads(marked)]
 export func apply(p: Program): Program! sync {
     return p
 }
