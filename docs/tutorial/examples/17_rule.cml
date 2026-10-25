@@ -5,7 +5,7 @@ module law
 import { check } from rewrite
 
 // Multiplying by -1 is negating. A `rule` names a pattern and the writing it may be replaced by.
-// This one holds for every `int`, so it carries no condition; chapter 17 shows a law that needs one.
+// This one holds for every `int`, so it carries no condition; chapter 18 shows a law that needs one.
 rule negate(x: int) { x * -1 => 0 - x }
 
 func negated(x: int): int {

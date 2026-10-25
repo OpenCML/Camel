@@ -139,7 +139,7 @@ returns is the result of the program, and `-o` writes it to a file. All of that 
 - `export` is only **visibility**: it decides whether you can write that name in another file, and it produces
   nothing at run time.
 - So splitting into files is an arrangement for readers, the same as splitting into functions, and the graph is that
-  same graph. Chapter 18 shows the other side of this: a module can be used as a subgraph whole.
+  same graph. Chapter 19 shows the other side of this: a module can be used as a subgraph whole.
 
 ## Exercise
 

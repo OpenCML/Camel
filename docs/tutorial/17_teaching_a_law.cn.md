@@ -1,4 +1,4 @@
-# 第 17 章 · 教编译器一条定律
+# 第 18 章 · 教编译器一条定律
 
 [English](17_teaching_a_law.en.md) | 中文 · [返回目录](tutorial.cn.md)
 
@@ -18,7 +18,7 @@ module law
 import { check } from rewrite
 
 // Multiplying by -1 is negating. A `rule` names a pattern and the writing it may be replaced by.
-// This one holds for every `int`, so it carries no condition; chapter 17 shows a law that needs one.
+// This one holds for every `int`, so it carries no condition; chapter 18 shows a law that needs one.
 rule negate(x: int) { x * -1 => 0 - x }
 
 func negated(x: int): int {
@@ -185,7 +185,7 @@ sampled abs_of_nonnegative: proposition equality, evidence samples 100, fired 8 
 参考答案 [`examples/17_exercise.cml`](examples/17_exercise.cml)：
 
 ```cml
-// The answer to the exercise of chapter 17: a law written as a `rule`, and the verdict `check`
+// The answer to the exercise of chapter 18: a law written as a `rule`, and the verdict `check`
 // gives it.
 // Run: camel docs/tutorial/examples/17_exercise.cml
 module exercise

@@ -1,4 +1,4 @@
-# Chapter 17 · Teaching the compiler a law
+# Chapter 18 · Teaching the compiler a law
 
 English | [中文](17_teaching_a_law.cn.md) · [Back to the contents](tutorial.en.md)
 
@@ -20,7 +20,7 @@ module law
 import { check } from rewrite
 
 // Multiplying by -1 is negating. A `rule` names a pattern and the writing it may be replaced by.
-// This one holds for every `int`, so it carries no condition; chapter 17 shows a law that needs one.
+// This one holds for every `int`, so it carries no condition; chapter 18 shows a law that needs one.
 rule negate(x: int) { x * -1 => 0 - x }
 
 func negated(x: int): int {
@@ -206,7 +206,7 @@ only rewrites the expression.)
 Answer [`examples/17_exercise.cml`](examples/17_exercise.cml):
 
 ```cml
-// The answer to the exercise of chapter 17: a law written as a `rule`, and the verdict `check`
+// The answer to the exercise of chapter 18: a law written as a `rule`, and the verdict `check`
 // gives it.
 // Run: camel docs/tutorial/examples/17_exercise.cml
 module exercise
