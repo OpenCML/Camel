@@ -221,10 +221,6 @@ class Builder {
     Value visitFStringData(syntax::cst::Literal context);
     Value visitLiteral(syntax::cst::Literal context);
     Value visitTypeExpr(syntax::cst::TypeExpr context);
-    Value visitInterType(syntax::cst::InterType context);
-    Value visitDiffType(syntax::cst::DiffType context);
-    Value visitKeyUnionDiffType(syntax::cst::KeyUnionDiffType context);
-    Value visitKeyInterType(syntax::cst::KeyInterType context);
     Value visitArrayType(syntax::cst::ArrayType context);
     Value visitArrayDim(syntax::cst::ArrayDim context);
     /// The extents and the pack one `[...]` was written with.

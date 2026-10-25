@@ -219,12 +219,7 @@ loopExpr           : 'loop' loopState (',' loopState)* loopFor? loopWhile? 'do' 
 loopState          : identDef '=' logicalOrExpr
 loopFor            : 'for' identDef 'in' logicalOrExpr
 loopWhile          : 'while' logicalOrExpr
-typeExpr           : interType ('?' | '!' | '..')*
-interType          : diffType ('&' diffType)*
-diffType           : keyUnionDiffType ('\\' keyUnionDiffType)*
-keyUnionDiffType   : keyInterType (('+' | '-') keyInterType)*
-keyInterType       : typeUnit ('^' typeUnit)*
-typeUnit           : arrayType
+typeExpr           : arrayType ('?' | '!' | '..')*
 arrayType          : specType arrayDim+
 arrayDim           : '[' (']' | arrayDimItem (',' arrayDimItem)* ','?)? ']'
 arrayDimItem       : '?' | '..' identDef? | dataExpr
@@ -268,7 +263,7 @@ Where there is more than one reading, the following rules decide, each on a boun
 | `(` in a type | a function type for `(name:`, `(var`, an empty list followed by `=>`; `(T)` is the parenthesized type; anything else a tuple type |
 | `{`: struct or block | a struct for `{ name :`; `{}` is the empty block as a branch arm or a lambda body and the empty struct as a statement |
 | Arguments: positional or named | named from the first `name :` on |
-| `+` `-` `^` after a type | part of the type when a type can start after it (`x as T + U` casts to the type `T + U`) |
+| `+` `-` `^` after a type | part of the expression: a cast ends at the type, so `x as T + U` is `(x as T) + U` |
 | Unary `-` | always an operator; looser than `^` and `->`; applied directly to a number it gives the negative literal |
 
 Related files:

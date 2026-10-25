@@ -641,7 +641,7 @@
         { "name": "keyword.operator.arrow.camel", "match": "<=>|=>" },
         { "name": "keyword.operator.comparison.camel", "match": "===|!==|==|!=|<=|>=" },
         { "name": "keyword.operator.assignment.compound.camel", "match": "\\+=|-=|\\*=|/=|%=|\\^=|@=|&=|\\|=" },
-        { "name": "keyword.operator.logical.camel", "match": "&&|\\|\\||\\|" },
+        { "comment": "`&&`, `||` and the single `&` and `|`: the ordinary operators that evaluate both sides and can be overloaded.", "name": "keyword.operator.logical.camel", "match": "&&|\\|\\||\\||&" },
         { "name": "keyword.operator.fallback.camel", "match": "\\?\\?|!!" },
         { "name": "keyword.operator.comparison.camel", "match": "<|>" },
         { "name": "keyword.operator.assignment.camel", "match": "=" },
@@ -649,7 +649,7 @@
         { "name": "keyword.operator.bitwise.camel", "match": "~" },
         { "comment": "The mark of a fallible type, T!: it follows a name, a `)` , a `]` or a `>` (int!, Map<string, int>!, int[3]!). A postfix x! is not a form of the language.", "name": "keyword.operator.type.camel", "match": "(?<=[A-Za-z_0-9)\\]>?!])!" },
         { "name": "keyword.operator.logical.camel", "match": "!" },
-        { "comment": "Type operators: T? and A & B, A \\ B. '|' is not one: there are no union types, and the single pipe is the ordinary or operator (the pattern above).", "name": "keyword.operator.type.camel", "match": "\\?|&|\\\\" }
+        { "comment": "The nullable mark, T?. It is the only type operator: `A & B`, `A \\ B`, `A + B` and `A ^ B` are not types, and '|' never was one (there are no union types; the single pipe is the ordinary or operator).", "name": "keyword.operator.type.camel", "match": "\\?" }
       ]
     },
     "brackets": {
