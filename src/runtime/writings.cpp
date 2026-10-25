@@ -450,8 +450,10 @@ bool readsVariable(
 
 /// Whether a node carries the program's order instead of being a value a pass may compute for
 /// itself: a call runs a graph, a branch, join, sync or loop runs (or orders) what it holds, a
-/// gate waits for its control inputs, and an operator that has an effect, or that must run where
-/// the program writes it, is not one a pass may recompute (design principles 3.3).
+/// gate waits -- for its control inputs, or for the sync edge the chain of a `sync` block is
+/// written as (docs/design/effects/edges.cn.md 5.3, H242) -- and an operator that has an effect, or
+/// that must run where the program writes it, is not one a pass may recompute (design principles
+/// 3.3).
 /// This is the rule the generic rewrite pass uses to decide what it may not reorder
 /// (`carriesOrdering` in src/passes/opt/generic/rewrite.cpp).
 bool carriesOrdering(const GraphDraft &draft, gc_node_ref_t node) {
@@ -468,7 +470,10 @@ bool carriesOrdering(const GraphDraft &draft, gc_node_ref_t node) {
     case GCNodeKind::Loop:
         return true;
     case GCNodeKind::Gate:
-        return !draft.ctrlInputsOf(node).empty();
+        // Either kind of wait is what makes a gate more than plain forwarding: the sync edge is
+        // what the chain of a `sync` block writes (docs/design/effects/edges.cn.md 5.3), and the
+        // control edge is the kind it was written as until H242 moved the chain onto it.
+        return !draft.ctrlInputsOf(node).empty() || !draft.syncInputsOf(node).empty();
     case GCNodeKind::Oper: {
         const std::span<const std::byte> payload = draft.payloadOf(node);
         return payload.size() < sizeof(GCOperBody) ||
@@ -2049,6 +2054,18 @@ RewriteStats DraftWritings::rewrite(
                 std::vector<uint8_t> bound(varCount, 0);
                 std::vector<gc_node_ref_t> matchedWaits(
                     draft_.ctrlInputsOf(node).begin(), draft_.ctrlInputsOf(node).end());
+                // A statement of a `sync` block is ordered by the statement written before it, and
+                // that edge is a sync edge (docs/design/effects/edges.cn.md 1.5; H242) -- the
+                // control edge is the kind it was written as until the chain moved onto it. Both
+                // are "everything the match read that ordered it" (below): a law over data inputs
+                // is sound whatever the node is ordered after, and the writing that replaces it
+                // must not be moved across an effect, whichever kind of wait named that effect.
+                for (gc_node_ref_t wait : draft_.syncInputsOf(node)) {
+                    if (std::find(matchedWaits.begin(), matchedWaits.end(), wait) ==
+                        matchedWaits.end()) {
+                        matchedWaits.push_back(wait);
+                    }
+                }
                 std::optional<std::vector<gc_node_ref_t>> chosen;
                 std::optional<std::vector<gc_node_ref_t>> chosenWaits;
                 MatchRemainder                            remainder;

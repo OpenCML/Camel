@@ -5,18 +5,15 @@
  * The parser: type expressions.
  *
  *   typeExpr          T?  T!  T..  (marks, any number, read left to right)
- *   interType         &
- *   diffType          \
- *   keyUnionDiffType  +  -
- *   keyInterType      ^
- *   typeUnit          name of T
  *   arrayType         T[]
  *   specType          T<arguments>
  *   primaryType       name, {struct}, (T), (tuple), function type, typeof e
  *
- * A type often stands where an expression goes on after it (`x as T + 1`, `x as T ^ 2`), and
- * `+`, `-`, `^` are operators of both. The type keeps the operator when a type can follow it,
- * as the ANTLR grammar did: `x as T + U` is a cast to the type `T + U`.
+ * A type never continues with an operator. The type operators the grammar used to reserve here
+ * (`A & B`, `A \ B`, `A + B`, `A ^ B`) are not in the language, so writing one where a type is
+ * expected is an ordinary syntax error, and the operand of a cast ends at the type: `x as T + U`
+ * is a cast to `T` and then the expression's `+ U`. While the operators were reserved the same
+ * line read that the other way, keeping the operator for the type when a type could follow it.
  */
 
 #include "parser_impl.h"
@@ -46,7 +43,7 @@ bool ParserImpl::typeStartsAt(uint32_t n) const {
     }
 }
 
-/// typeExpr : interType ('?' | '!' | '..')*
+/// typeExpr : arrayType ('?' | '!' | '..')*
 /// A mark is `?` (may be null), `!` (may have failed) or `..` (the type is a stream). The marks
 /// are read left to right and each one wraps what is written before it, with no special case
 /// `T?..` is `(T?)..`, the stream of a nullable `T`, and
@@ -56,6 +53,10 @@ bool ParserImpl::typeStartsAt(uint32_t n) const {
 /// streams (the builder of the array reports that a stream is linear and cannot be an element —
 /// SemanticDiag::StreamInContainer). Written without a stream mark nothing changes: `T?[3]` is
 /// still a syntax error, and only the mark that was just read reopens the bracket.
+///
+/// `A of B` used to be read here and reported as not implemented; `of` is not a keyword of the
+/// language, so the form is an ordinary syntax error (handover 5.00 "语法层收口" item 5). The type
+/// operators `A & B`, `A \ B`, `A + B` and `A ^ B` left the grammar the same way.
 void ParserImpl::parseType() {
     Depth depth(*this);
     if (depth.tooDeep()) {
@@ -63,7 +64,7 @@ void ParserImpl::parseType() {
         return;
     }
     const size_t m = mark();
-    parseInterType();
+    parseArrayType();
     bool any    = false;
     bool stream = false;
     while (!lineBreak() && !panic_) {
@@ -101,74 +102,6 @@ void ParserImpl::parseType() {
     if (any) {
         close(m, NK::TypeExpr);
     }
-}
-
-/// interType : diffType ('&' diffType)*
-void ParserImpl::parseInterType() {
-    const size_t m = mark();
-    parseDiffType();
-    bool any = false;
-    while (cur_ == TK::Amp && !panic_) {
-        bump();
-        parseDiffType();
-        any = true;
-    }
-    if (any) {
-        close(m, NK::InterType);
-    }
-}
-
-/// diffType : keyUnionDiffType ('\\' keyUnionDiffType)*
-void ParserImpl::parseDiffType() {
-    const size_t m = mark();
-    parseKeyUnionDiffType();
-    bool any = false;
-    while (cur_ == TK::Backslash && !panic_) {
-        bump();
-        parseKeyUnionDiffType();
-        any = true;
-    }
-    if (any) {
-        close(m, NK::DiffType);
-    }
-}
-
-/// keyUnionDiffType : keyInterType (('+' | '-') keyInterType)*
-void ParserImpl::parseKeyUnionDiffType() {
-    const size_t m = mark();
-    parseKeyInterType();
-    bool any = false;
-    while ((cur_ == TK::Plus || cur_ == TK::Minus) && typeStartsAt(1) && !lineBreak() && !panic_) {
-        bump();
-        parseKeyInterType();
-        any = true;
-    }
-    if (any) {
-        close(m, NK::KeyUnionDiffType);
-    }
-}
-
-/// keyInterType : typeUnit ('^' typeUnit)*
-void ParserImpl::parseKeyInterType() {
-    const size_t m = mark();
-    parseTypeUnit();
-    bool any = false;
-    while (cur_ == TK::Caret && typeStartsAt(1) && !panic_) {
-        bump();
-        parseTypeUnit();
-        any = true;
-    }
-    if (any) {
-        close(m, NK::KeyInterType);
-    }
-}
-
-/// typeUnit : arrayType
-///
-/// `A of B` used to be read here and reported as not implemented; `of` is not a keyword of the
-/// language, so the form is an ordinary syntax error (handover 5.00 "语法层收口" item 5).
-void ParserImpl::parseTypeUnit() {
-    parseArrayType();
 }
 
 /// arrayType : specType arrayDim+

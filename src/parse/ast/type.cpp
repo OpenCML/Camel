@@ -54,12 +54,8 @@ std::string to_string(TypeType type) {
         return "Func";
     case TypeType::Spec:
         return "Spec";
-    case TypeType::Unit:
-        return "Unit";
     case TypeType::Infer:
         return "Infer";
-    case TypeType::Data:
-        return "Data";
     case TypeType::Ref:
         return "Ref";
     default:
@@ -69,25 +65,11 @@ std::string to_string(TypeType type) {
 }
 
 std::string to_string(TypeOp op) {
-    switch (op) {
-    case TypeOp::Inter:
-        return "&";
-    case TypeOp::Diff:
-        return "/";
-    case TypeOp::KeyUnion:
-        return "KEY_UNION";
-    case TypeOp::KeyInter:
-        return "KEY_INTER";
-    case TypeOp::KeyDiff:
-        return "KEY_DIFF";
-    case TypeOp::Specialize:
-        return "SPEC";
-    case TypeOp::TypeOf:
+    if (op == TypeOp::TypeOf) {
         return "typeof";
-    default:
-        ASSERT(false, "Unknown TypeOp");
-        return "Unknown";
     }
+    ASSERT(false, "Unknown TypeOp");
+    return "Unknown";
 }
 
 const std::string ResourceClauseLoad::toString() const {
@@ -171,11 +153,7 @@ const std::string FuncTypeLoad::geneCode() const {
     return result;
 }
 
-const std::string UnitTypeLoad::geneCode() const { return ref_.toString(); }
-
 const std::string InferTypeLoad::geneCode() const { return ref_.toString(); }
-
-const std::string DataTypeLoad::geneCode() const { return ref_.toString(); }
 
 const std::string RefTypeLoad::geneCode() const {
     auto s = ref_.toString();

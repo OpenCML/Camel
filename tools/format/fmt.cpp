@@ -1788,7 +1788,7 @@ any Formatter::visitLiteral(cst::Literal context) {
 
 /*
 typeExpr
-    : interType ('?' | '!')*
+    : arrayType ('?' | '!' | '..')*
     ;
 */
 any Formatter::visitTypeExpr(cst::TypeExpr context) {
@@ -1804,38 +1804,6 @@ any Formatter::visitTypeExpr(cst::TypeExpr context) {
         result += mark;
     }
     return result;
-}
-
-/*
-interType
-    : diffType ('&' diffType)*
-    ;
-*/
-any Formatter::visitInterType(cst::InterType context) { return formatBiOpsList(context, true); }
-
-/*
-diffType
-    : keyUnionDiffType ('\\' keyUnionDiffType)*
-    ;
-*/
-any Formatter::visitDiffType(cst::DiffType context) { return formatBiOpsList(context, true); }
-
-/*
-keyUnionDiffType
-    : keyInterType (('+' | '-') keyInterType)*
-    ;
-*/
-any Formatter::visitKeyUnionDiffType(cst::KeyUnionDiffType context) {
-    return formatBiOpsList(context, true);
-}
-
-/*
-keyInterType
-    : typeUnit ('^' typeUnit)*
-    ;
-*/
-any Formatter::visitKeyInterType(cst::KeyInterType context) {
-    return formatBiOpsList(context, true);
 }
 
 /*
@@ -2239,10 +2207,6 @@ any Formatter::dispatch(syn::Node context) {
         CAMEL_FORMAT(TupleData)
         CAMEL_FORMAT(FuncData)
         CAMEL_FORMAT(TypeExpr)
-        CAMEL_FORMAT(InterType)
-        CAMEL_FORMAT(DiffType)
-        CAMEL_FORMAT(KeyUnionDiffType)
-        CAMEL_FORMAT(KeyInterType)
         CAMEL_FORMAT(ArrayType)
         CAMEL_FORMAT(ArrayDim)
         CAMEL_FORMAT(SpecType)

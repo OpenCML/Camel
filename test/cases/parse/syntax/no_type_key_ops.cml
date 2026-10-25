@@ -1,0 +1,18 @@
+/**
+ * The key-union and key-difference family (`A + B`, `A - B`) and the key intersection (`A ^ B`)
+ * are not types: `+`, `-` and `^` are the operators of an expression, so a type ends before them
+ * and the declaration asks for its `=` there (line 10, column 14). The type operators the grammar
+ * reserved left the language in the item-5 clearance.
+ */
+module no_type_key_ops
+
+func f(x: int): int {
+    let a: A + B = x
+    return a
+}
+
+func main(): int sync {
+    println('never printed')
+    println(f(1))
+    return 0
+}

@@ -378,9 +378,7 @@ class Builder {
     Type *visitTupleType(const AST::node_ptr_t &ast);
     Type *visitFuncType(
         const AST::node_ptr_t &ast, Tree::ParameterDefaults *defaultsOut = nullptr);
-    Type *visitUnitType(const AST::node_ptr_t &ast);
     Type *visitInferType(const AST::node_ptr_t &ast);
-    Type *visitDataType(const AST::node_ptr_t &ast);
     Type *visitRefType(const AST::node_ptr_t &ast);
     Type *visitSpecType(const AST::node_ptr_t &ast);
     /// The extents of one `[...]` as linear forms (design principles 5.4). An unknown extent
