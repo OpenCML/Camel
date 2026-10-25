@@ -312,7 +312,7 @@ enum class SemanticDiag : uint32_t {
     TypeOfNotWholeType = 0x0001B4,
     /// `T { static for ... }` names a type that is not a struct or a tuple.
     SameShapeComprehensionNotComposite = 0x0001B5,
-    /// `T { static for (n, F) in fields U }` walks a type other than the shape `T`.
+    /// `T { static for n, F in fields U }` walks a type other than the shape `T`.
     SameShapeComprehensionMismatch = 0x0001B6,
 
     // Type identity in `match type` (`case int`, `case T`; design principles 5.5). 0x1C2.

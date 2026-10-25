@@ -1236,20 +1236,21 @@ staticForExpr
     : STATIC staticForHeader '=>' blockExpr
     ;
 staticForHeader
-    : FOR '(' (identDef | '_') (',' (identDef | '_'))* ')' IN
+    : FOR (identDef | '_') (',' (identDef | '_'))* IN
       ('fields' typeExpr | 'indices' dataExpr)
     ;
-The head writes as many names as the element it walks has parts (H475): `fields` gives the
+The head writes no parentheses, exactly as `staticLoopExpr`'s does: the two heads spell one
+`for ... in ...`. It writes as many names as the element it walks has parts: `fields` gives the
 triple (name, type, tags), `indices` gives one thing.
 */
 any Formatter::visitStaticForExpr(cst::StaticForExpr context) {
     const auto mode = context->tok(TK::Identifier);
     if (mode && mode.text() == "indices") {
-        return "static for (" + formatStaticHeadNames(context) + ") in indices " +
+        return "static for " + formatStaticHeadNames(context) + " in indices " +
                any_cast<string>(visit(context->expr())) + " => " +
                any_cast<string>(visitBlockExpr(context->lastChild().node()));
     }
-    return "static for (" + formatStaticHeadNames(context) + ") in fields " +
+    return "static for " + formatStaticHeadNames(context) + " in fields " +
            formatTypeInTypePosition(context->type()) + " => " +
            any_cast<string>(visitBlockExpr(context->lastChild().node()));
 }
@@ -1284,9 +1285,9 @@ staticLoopHeader
     : FOR (identDef | '_') (',' (identDef | '_'))* IN
       ('fields' typeExpr | 'indices' dataExpr | dataExpr)
     ;
-The head is written without the parentheses `static for` still has (H462, the ruling of
-2026-10-24): `for j in indices ts`, `for i in 0..5`, `for n in fields T`, or
-`for n, F, tags in fields T` (H475: the names follow the element, so a head may write one, two or
+The head is written without parentheses, exactly as `static for` writes its own (one head, one
+spelling): `for j in indices ts`, `for i in 0..5`, `for n in fields T`, or
+`for n, F, tags in fields T` (the names follow the element, so a head may write one, two or
 three of them).
 */
 any Formatter::visitStaticLoopExpr(cst::StaticLoopExpr context) {
@@ -2167,7 +2168,7 @@ any Formatter::dispatch(syn::Node context) {
     case NK::TypeOfType:
         return "typeof " + any_cast<string>(visit(context.expr()));
     case NK::ShapeComp: {
-        // `T { static for (n, F) in fields U => e }`: the shape is written as a type, and the
+        // `T { static for n, F in fields U => e }`: the shape is written as a type, and the
         // generator prints as it does on its own; the braces are tokens, so the generator is
         // taken by kind and not by child index.
         const auto generator = context.get<cst::StaticForExpr>();

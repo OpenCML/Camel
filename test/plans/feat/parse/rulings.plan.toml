@@ -2,7 +2,7 @@ id = "parse.rulings"
 order = 306
 tier = "fast"
 tags = ["feat", "parse", "syntax"]
-desc = "The syntax rulings of design principles 4.2: the precedence of `^`, literals with an exponent, renamed imports, documentation comments, an `if` statement without a block, and the postfix marks of a type (`?`, `!` and the stream's `..`, read left to right). Two rulings of 2026-10-24 are read here: the right side of `as` is a type, and a lambda's parameters are written in parentheses (5.9)."
+desc = "The syntax rulings of design principles 4.2: the precedence of `^`, literals with an exponent, renamed imports, documentation comments, an `if` statement without a block, and the postfix marks of a type (`?`, `!` and the stream's `..`, read left to right). Two rulings of 2026-10-24 are read here: the right side of `as` is a type, and a lambda's parameters are written in parentheses (5.9). The head of `static for` is read here too: it is the `for ... in ...` of `static loop`, without parentheses."
 
 [[tests]]
 name = "rulings.power"
@@ -276,5 +276,37 @@ expect_diagnostic_line = 17
 expect_diagnostic_column = 38
 expect_output_contains = ["A lambda's parameters need their parentheses: write '(x) => e', not 'x => e'."]
 expect_output_not_contains = ["UnknownInternalError", "Unexpected"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rulings.static_for_head_names"
+desc = "The `for ... in ...` head of `static for` is written without parentheses, as `static loop`'s is (one head, one spelling): one name (`n in fields T`) is the field's name, two (`n, F in fields T`) add its type as a name usable in a type position, three (`n, F, tags in fields T`) add the field's tags as a compile-time struct, and `j in indices ts` binds the position in a tuple. The case runs all four heads and this entry pins their whole output."
+kind = "snapshot"
+case = "../../../cases/parse/rulings/static_for_head_names.cml"
+args = ["${case}"]
+expect_exit = 0
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "golden/static_for_head_names.txt"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rulings.static_for_head_parenthesized"
+desc = "The parentheses of the old head spelling are not a second writing: the `(` after `for` fits nothing that can stand there, so the file is refused at the `(` with the ordinary unexpected-token diagnostic asking for a name - `Unexpected '('; expected a name.` - and nothing points at the spelling that is in the language. The whole report is pinned, so a later hint that names the new spelling would change this file."
+kind = "snapshot"
+case = "../../../cases/parse/rulings/static_for_head_parenthesized.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SyntaxDiag::UnexpectedToken"
+expect_diagnostic_code = "0x0200000A"
+expect_diagnostic_line = 10
+expect_diagnostic_column = 16
+expect_output_contains = ["Unexpected '('; expected a name."]
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "golden/static_for_head_parenthesized.txt"
+expect_output_not_contains = ["UnknownInternalError", "ConstructNotSupported", "static for n,", "no longer"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000

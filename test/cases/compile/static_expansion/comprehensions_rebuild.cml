@@ -7,8 +7,8 @@ module comprehensions_rebuild
 
 func rebuild::<T>(t: T) {
     return match type T {
-        case struct => { static for (n, F) in fields T => rebuild(t.[n]) }
-        case tuple => ( static for (n, F) in fields T => rebuild(t.[n]) )
+        case struct => { static for n, F in fields T => rebuild(t.[n]) }
+        case tuple => ( static for n, F in fields T => rebuild(t.[n]) )
         case _ => t
     }
 }

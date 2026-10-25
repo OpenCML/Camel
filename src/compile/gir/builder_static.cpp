@@ -1144,7 +1144,7 @@ node_handle_t Builder::visitStaticLoopNode(const GCT::node_ptr_t &gct) {
 
     // The names of the head are declared once, together (as for a run-time loop). The walked
     // entry's name `n` (`j`) is one of them for this purpose: `static loop n = ..., ... for
-    // (n, F)` would read the state where it meant the field.
+    // n, F` would read the state where it meant the field.
     {
         std::unordered_set<std::string> names;
         if (valueName != "_") {
@@ -1490,7 +1490,7 @@ node_handle_t Builder::visitStaticAccessNode(const GCT::node_ptr_t &gct) {
 
     // The key is a compile-time constant: a literal, the `n` of an enclosing `static for`, a
     // name bound once to a constant (`let first = ( static for ... ).[0]`), or an expression
-    // whose value is known at build time (`( static for (n, F) in fields S => n ).[0]` in the
+    // whose value is known at build time (`( static for n, F in fields S => n ).[0]` in the
     // library is such an expression: a comprehension over the field names, indexed at 0).
     const auto keyOfData = [](const data_ptr_t &data) -> std::optional<std::string> {
         if (auto text = std::dynamic_pointer_cast<StringData>(data)) {

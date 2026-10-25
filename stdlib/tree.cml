@@ -38,7 +38,7 @@ func paths_at::<T>(t: T, here: string) {
         // `T { ... }`: the result has the field names and the kind of `T`, and a string at each
         // one. The old spelling needed one branch for structs and one for tuples.
         case struct | tuple =>
-            T { static for (n, _) in fields T => paths_at(t.[n], dotted(here, n)) }
+            T { static for n, _ in fields T => paths_at(t.[n], dotted(here, n)) }
         case _ => here
     }
 }
@@ -57,9 +57,9 @@ func dotted(a: string, b: string): string {
 with <f: F>
 export func tree_map::<T, F>(t: T, ..ts) {
     return match type T {
-        case struct | tuple => T { static for (n, _) in fields T =>
-            tree_map<f>(t.[n], ..( static for (j) in indices ts => ts.[j].[n] )) }
-        case _ => f(t, ..( static for (j) in indices ts => ts.[j] ))
+        case struct | tuple => T { static for n, _ in fields T =>
+            tree_map<f>(t.[n], ..( static for j in indices ts => ts.[j].[n] )) }
+        case _ => f(t, ..( static for j in indices ts => ts.[j] ))
     }
 }
 
@@ -80,14 +80,14 @@ export func tree_reduce::<T, R, A>(t: T, init: R): R {
 /// @pure
 /// @example tree_unzip({ a: (1, 2.0) }, { a: 0 })    // ({ a: 1 }, { a: 2.0 })
 export func tree_unzip::<R, S>(r: R, s: S) {
-    return ( static for (j, _) in fields typeof(first_leaf(r, s)) => unzip_at(r, s, j) )
+    return ( static for j, _ in fields typeof(first_leaf(r, s)) => unzip_at(r, s, j) )
 }
 
 /// The name of the first field of `T`: a compile-time constant, so it can be a static access
 /// key. The compiler folds the call to its value where a constant is required (design
 /// principles 5.1, 6.5).
 func first_field::<T>(): string {
-    return ( static for (n, _) in fields T => n ).[0]
+    return ( static for n, _ in fields T => n ).[0]
 }
 
 /// Any leaf of `r`: its type is the leaf tuple. The first field name is a compile-time constant
@@ -103,7 +103,7 @@ func first_leaf::<R, S>(r: R, s: S) {
 /// The tree of one component of the leaf tuples: `j` names the component everywhere.
 func unzip_at::<R, S>(r: R, s: S, constas j: string) {
     return match type S {
-        case struct | tuple => S { static for (n, _) in fields S => unzip_at(r.[n], s.[n], j) }
+        case struct | tuple => S { static for n, _ in fields S => unzip_at(r.[n], s.[n], j) }
         case _ => r.[j]
     }
 }

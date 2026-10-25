@@ -8,7 +8,7 @@ module static_for_wildcard
 
 /// The field names of `T`, in order; the type name is not bound.
 func names_of::<T>(t: T) {
-    return ( static for (n, _) in fields T => n )
+    return ( static for n, _ in fields T => n )
 }
 
 /// The number of fields: the field name is not bound, and `F` is still a type.

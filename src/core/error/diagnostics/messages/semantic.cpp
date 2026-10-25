@@ -1305,7 +1305,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "SameShapeComprehensionMismatch",
                 "The shape {0} is filled from the fields of {1}.",
-                "Write `T {{ static for (n, F) in fields T => ... }}`: the generator must walk the shape the comprehension constructs.",
+                "Write `T {{ static for n, F in fields T => ... }}`: the generator must walk the shape the comprehension constructs.",
             },
         },
         {

@@ -333,8 +333,8 @@ semantic	TypeOfNotAValue	0x0001B3	error	typeof {0} has no value type: {1}.	`type
 semantic	TypeOfNotWholeType	0x0001B4	error	typeof is written inside the larger type {0}.	`typeof` stands for a whole type. Bind the value in a `let` and name its type, or write the enclosing type out.	none: choice: the repair is a decision only the writer can make
 #/ `T { static for ... }` names a type that is not a struct or a tuple.
 semantic	SameShapeComprehensionNotComposite	0x0001B5	error	{0} is not a struct or a tuple, so it has no shape to fill.	A same-shape comprehension names a struct or a tuple type; a leaf has no fields.	none: choice: the repair is a decision only the writer can make
-#/ `T { static for (n, F) in fields U }` walks a type other than the shape `T`.
-semantic	SameShapeComprehensionMismatch	0x0001B6	error	The shape {0} is filled from the fields of {1}.	Write `T {{ static for (n, F) in fields T => ... }}`: the generator must walk the shape the comprehension constructs.	none: choice: the repair is a decision only the writer can make
+#/ `T { static for n, F in fields U }` walks a type other than the shape `T`.
+semantic	SameShapeComprehensionMismatch	0x0001B6	error	The shape {0} is filled from the fields of {1}.	Write `T {{ static for n, F in fields T => ... }}`: the generator must walk the shape the comprehension constructs.	none: choice: the repair is a decision only the writer can make
 #
 # Type identity in `match type` (`case int`, `case T`; design principles 5.5). 0x1C2.
 #/ An identity pattern names a type that cannot select the subject: `void`, a `typeof`

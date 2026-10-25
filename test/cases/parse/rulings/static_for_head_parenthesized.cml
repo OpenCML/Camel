@@ -1,0 +1,17 @@
+// The head of `static for` is written without parentheses (one head, one spelling with
+// `static loop`): the `(` after `for` is not the head's, so the parser asks for a name where the
+// old spelling put one and refuses the file. Nothing points at a newer spelling: the token simply
+// fits nothing that can stand there.
+module static_for_head_parenthesized
+
+type Box = {a: int, b: int}
+
+func show(b: Box) {
+    static for (n, F) in fields Box => println(n, b.[n])
+}
+
+func main(): int sync {
+    show({a: 1, b: 2})
+    println('never printed')
+    return 0
+}
