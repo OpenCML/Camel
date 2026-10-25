@@ -528,7 +528,7 @@ std::string Builder::describeEffect(
         // function, and the report says which one so that the condition is still found.
         subject = std::format("{} in the function '{}'", subject, inside->name());
     }
-    return subject;
+return subject;
 }
 
 bool Builder::calleeIsGeneric(const std::string &name) const {

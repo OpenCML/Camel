@@ -2,23 +2,28 @@
 // SPDX-License-Identifier: MIT
 
 /*
- * `analysis` (rewrite design 4): the evaluation of a fact over a value and its data
- * dependencies, and the fact kind the result is stored under.
+ * `fact` (rewrite design 7.5): the evaluation of a fact over a value and its data dependencies,
+ * and the fact kind the result is stored under.
  *
- * A value's fact is read from the clauses of the declaration in the order they are written: the
- * first `on` pattern that matches the node gives the fact from the matched nodes (or the value
- * of a `const` parameter). A value no pattern matches takes the fact of its operands, joined
- * in order; a value with no operands takes `initial`. A value that is its own dependency (a
- * loop) takes the join of what has been computed so far and `initial` — the first version has
- * no widening and says so by returning `initial`.
+ * A value's fact is read from the cases of the declaration in the order they are written: the
+ * first case pattern that matches the node gives the fact from the matched nodes (or the value of
+ * a `const` parameter). A value no case matches takes the fact of its operands, merged by `join`
+ * in order; a value with no operands takes `initial`. A value that is its own dependency (a loop)
+ * takes the join of what has been computed so far and `initial` — the first version has no
+ * widening and says so by returning `initial`.
  *
- * A declaration with parameters (`analysis pair(a: Node, b: Node): bool`) is queried with the
+ * A declaration with parameters (`fact pair(a: Node, b: Node): bool`) is queried with the
  * parts of a value instead of the value itself: a rule's condition `pair(x, y)` hands over the
  * nodes its pattern variables name, and the fact is the one of the value those parts belong to
- * — the value a user of the first part with exactly these parts as its operands, one of the `on`
- * clauses matching it. This is how a condition reads the fact of the compound it is rewriting
+ * — the value a user of the first part with exactly these parts as its operands, one of the
+ * cases matching it. This is how a condition reads the fact of the compound it is rewriting
  * without a syntax naming the whole match (`node_of` is how it names the node of a `const`
  * parameter).
+ *
+ * A declaration's `with` arguments are part of what a fact is (rewrite design 7.5, ruling of
+ * 2026-10-25): the argument written at the query is read here, and the description, the fact kind
+ * and the stored value are all keyed by "the name and the arguments" (`user.fact.range<5>`), so
+ * `range<3>(x)` and `range<5>(x)` are two facts, each computed and kept on its own.
  *
  * The operands of a commutative operator are not an order: a rule's match may have paired them the
  * other way (`const c` pins which operand it is, so the matcher tries the exchange), and the parts
@@ -86,15 +91,20 @@ struct NodePattern {
     std::vector<NodePattern> args;
 };
 
-/// The fact of one analysis, with the values it needs to compute it: the functions are rooted
-/// for as long as the description is used (a description is kept per name for the fact store).
+/// The fact of one declaration, with the values it needs to compute it: the functions are rooted
+/// for as long as the description is used (a description is kept per key, name and arguments).
 struct Definition {
-    std::string name;
+    /// The name and the arguments the fact was queried with (`range<5>`): what the description,
+    /// the fact kind and the stored value are all keyed by.
+    std::string key;
     type::Type *factType = nullptr;
-    std::vector<std::shared_ptr<mm::RootHandle>> roots; // initial, join, widen, (pattern, fact)*
+    /// initial, join, meet, widen, narrow, then (pattern, fact)* per case.
+    std::vector<std::shared_ptr<mm::RootHandle>> roots;
     size_t initial = 0;
     size_t join = 1;
-    size_t widen = 2;
+    size_t meet = 2;
+    size_t widen = 3;
+    size_t narrow = 4;
     struct Clause {
         NodePattern pattern;
         size_t factFunction = 0;
@@ -103,7 +113,7 @@ struct Definition {
     std::vector<Clause> clauses;
 };
 
-/// The descriptions by name, and the names whose fact kind is registered.
+/// The descriptions by key, and the keys whose fact kind is registered.
 std::mutex descriptionsMutex;
 std::unordered_map<std::string, std::shared_ptr<Definition>> descriptions;
 std::unordered_set<std::string> registeredKinds;
@@ -473,7 +483,7 @@ slot_t evaluateQuery(
             throw err::FactQueryNoValue(std::format(
                 "the analysis '{}' is asked about a pattern variable the left side does not bind "
                 "to a node",
-                frame.definition->name));
+                frame.definition->key));
         }
     }
     std::vector<gc_node_ref_t> candidates(
@@ -490,7 +500,7 @@ slot_t evaluateQuery(
     }
     throw err::FactQueryNoValue(std::format(
         "the analysis '{}' has no value whose operands are these {} nodes",
-        frame.definition->name,
+        frame.definition->key,
         parts.size()));
 }
 
@@ -505,7 +515,7 @@ NodePattern compilePattern(
         if (found == ports.end()) {
             err::throwRuntimeFault(
                 err::RuntimeDiag::InvalidArgument,
-                "analysis.pattern",
+                "fact.pattern",
                 "the pattern reads a value that is not a parameter");
         }
         pattern.kind = NodePattern::Kind::Var;
@@ -518,14 +528,14 @@ NodePattern compilePattern(
         if (node->dataIndex >= 0) {
             err::throwRuntimeFault(
                 err::RuntimeDiag::InvalidArgument,
-                "analysis.pattern",
+                "fact.pattern",
                 "the pattern reads a value that is not a constant");
         }
         const auto index = static_cast<size_t>(-node->dataIndex);
         if (index >= graph.staticSlots().size()) {
             err::throwRuntimeFault(
                 err::RuntimeDiag::InvalidArgument,
-                "analysis.pattern",
+                "fact.pattern",
                 "the pattern names a constant the graph does not have");
         }
         pattern.kind  = NodePattern::Kind::Constant;
@@ -537,7 +547,7 @@ NodePattern compilePattern(
         if (!graph.withInputsOf(ref).empty() || !graph.ctrlInputsOf(ref).empty()) {
             err::throwRuntimeFault(
                 err::RuntimeDiag::InvalidArgument,
-                "analysis.pattern",
+                "fact.pattern",
                 "the pattern has an operator with a context argument or an order dependency");
         }
         pattern.kind = NodePattern::Kind::Op;
@@ -551,32 +561,34 @@ NodePattern compilePattern(
     default:
         err::throwRuntimeFault(
             err::RuntimeDiag::InvalidArgument,
-            "analysis.pattern",
+            "fact.pattern",
             "the pattern uses a value that is not an operator, a constant or a parameter");
     }
 }
 
 std::shared_ptr<Definition> buildDefinition(
-    camel::core::context::Context &ctx, ArgsView &norm, const std::string &name,
-    size_t nodeCount) {
+    camel::core::context::Context &ctx, ArgsView &norm, const std::string &key,
+    size_t nodeBegin, size_t nodeCount) {
     auto definition      = std::make_shared<Definition>();
-    definition->name     = name;
+    definition->key      = key;
     const size_t count   = norm.size();
-    const size_t onBegin = 4 + nodeCount;
+    const size_t onBegin = nodeBegin + nodeCount;
     auto root = [&](size_t index) {
         auto *fn      = norm.get<::Function *>(index);
-        auto *handle  = new mm::RootHandle(mm::autoSpace(), fn, nullptr, "rewrite.analysis");
+        auto *handle  = new mm::RootHandle(mm::autoSpace(), fn, nullptr, "rewrite.fact");
         return std::shared_ptr<mm::RootHandle>(handle);
     };
     definition->roots.push_back(root(1)); // initial
     definition->roots.push_back(root(2)); // join
-    definition->roots.push_back(root(3)); // widen
+    definition->roots.push_back(root(3)); // meet
+    definition->roots.push_back(root(4)); // widen
+    definition->roots.push_back(root(5)); // narrow
     ::Function *initial = norm.get<::Function *>(1);
     definition->factType = initial->graph()->funcType()->exitType();
     if (definition->factType == nullptr) {
         err::throwRuntimeFault(
             err::RuntimeDiag::InvalidArgument,
-            "analysis.initial",
+            "fact.initial",
             "the initial clause has no result type");
     }
     const type::TypeCode code = definition->factType->code();
@@ -585,8 +597,8 @@ std::shared_ptr<Definition> buildDefinition(
         code != type::TypeCode::Bool) {
         err::throwRuntimeFault(
             err::RuntimeDiag::InvalidArgument,
-            "analysis",
-            "the fact type of an analysis must be a scalar (int, float or bool)");
+            "fact",
+            "the fact type of a fact must be a scalar (int, float or bool)");
     }
     for (size_t index = onBegin; index + 2 < count; index += 3) {
         ::Function *patternFn = norm.get<::Function *>(index);
@@ -605,7 +617,7 @@ std::shared_ptr<Definition> buildDefinition(
         if (result == camel::runtime::kInvalidNodeRef) {
             err::throwRuntimeFault(
                 err::RuntimeDiag::InvalidArgument,
-                "analysis.pattern",
+                "fact.pattern",
                 "the pattern function has no result");
         }
         Definition::Clause clause;
@@ -618,63 +630,101 @@ std::shared_ptr<Definition> buildDefinition(
     return definition;
 }
 
-camel::runtime::fact::KindId factKindOf(const std::string &name) {
+camel::runtime::fact::KindId factKindOf(const std::string &key) {
     std::lock_guard lock(descriptionsMutex);
-    if (const auto found = factKindIds.find(name); found != factKindIds.end()) {
+    if (const auto found = factKindIds.find(key); found != factKindIds.end()) {
         return found->second;
     }
     const camel::runtime::fact::KindId kind =
         camel::runtime::fact::registerKind(camel::runtime::fact::KindSpec<AnalysisFact>{
-            .key        = "user.analysis." + name,
+            .key        = "user.fact." + key,
             .owner      = "user",
             .dependency = camel::runtime::fact::Dependency::Node,
             .print      = [](const AnalysisFact &fact) { return factText(fact); },
         });
-    factKindIds.emplace(name, kind);
+    factKindIds.emplace(key, kind);
     return kind;
+}
+
+/// The text of one `with` argument, as the fact's key spells it (`range<5>`): the value the
+/// compiler computed, which is part of what the fact is. A type the engine does not print is
+/// named by its type, so two arguments of different types still make two facts.
+std::string withArgText(const ArgsView &norm, size_t index) {
+    auto *argType = norm.type(index);
+    switch (argType->code()) {
+    case type::TypeCode::Int64:
+        return std::to_string(norm.get<rtdata::Int64>(index));
+    case type::TypeCode::Int32:
+        return std::to_string(norm.get<rtdata::Int32>(index));
+    case type::TypeCode::Bool:
+        return norm.get<rtdata::Bool>(index) ? std::string("true") : std::string("false");
+    case type::TypeCode::Float32:
+        return std::format("{}", static_cast<double>(norm.get<rtdata::Float32>(index)));
+    case type::TypeCode::Float64:
+        return std::format("{}", norm.get<rtdata::Float64>(index));
+    case type::TypeCode::String:
+        return std::string(norm.get<String *>(index)->view());
+    default:
+        return "<" + argType->toString() + ">";
+    }
 }
 
 } // namespace
 
 slot_t analysisKernel(ArgsView &, ArgsView &norm, camel::core::context::Context &ctx) {
     const std::string name(norm.get<String *>(0)->view());
-    // The query's pattern variables: the `Node` handles right after the four descriptions, one
-    // in the one-value form and one per parameter in a multi-parameter declaration. The `on`
+    // What the query was written with: the number of `with` arguments, then the arguments
+    // themselves. They are part of what the fact is, so they go into the key the description,
+    // the fact kind and the stored value are all keyed by (rewrite design 7.5).
+    const size_t count     = norm.size();
+    const size_t withCount = static_cast<size_t>(norm.get<rtdata::Int64>(6));
+    const size_t nodeBegin = 7 + withCount;
+    std::string key        = name;
+    if (withCount > 0) {
+        key += "<";
+        for (size_t i = 0; i < withCount; ++i) {
+            key += (i == 0 ? "" : ", ");
+            key += withArgText(norm, 7 + i);
+        }
+        key += ">";
+    }
+    // The query's pattern variables: the `Node` handles right after the `with` arguments, one
+    // in the one-value form and one per parameter in a multi-parameter declaration. The case
     // descriptions follow as triples.
-    const size_t count = norm.size();
-    size_t nodeCount   = 0;
-    while (4 + nodeCount < count &&
+    size_t nodeCount = 0;
+    while (nodeBegin + nodeCount < count &&
            camel::graphmod::HandleType::is(
-               norm.type(4 + nodeCount), camel::graphmod::HandleKind::Node)) {
+               norm.type(nodeBegin + nodeCount), camel::graphmod::HandleKind::Node)) {
         ++nodeCount;
     }
-    if (nodeCount == 0 || 4 + nodeCount >= count || (count - 4 - nodeCount) % 3 != 0) {
+    if (nodeCount == 0 || nodeBegin + nodeCount >= count ||
+        (count - nodeBegin - nodeCount) % 3 != 0) {
         err::throwRuntimeFault(
             err::RuntimeDiag::InvalidArgument,
-            "analysis",
-            "a query takes one or more nodes and then the patterns of its `on` clauses");
+            "fact",
+            "a query takes one or more nodes and then the patterns of its cases");
     }
     // The values behind the handles are the parts the fact is asked about; the integers stay
     // valid when the handles move at a safepoint.
     std::vector<gc_node_ref_t> parts;
     parts.reserve(nodeCount);
     for (size_t i = 0; i < nodeCount; ++i) {
-        auto *handle = norm.get<camel::graphmod::Handle *>(4 + i);
+        auto *handle = norm.get<camel::graphmod::Handle *>(nodeBegin + i);
         if (handle->kind() != camel::graphmod::HandleKind::Node) {
             err::throwRuntimeFault(
                 err::RuntimeDiag::InvalidArgument,
-                "analysis",
+                "fact",
                 "a query parameter is not a node");
         }
         parts.push_back(handle->index());
     }
-    auto *first = norm.get<camel::graphmod::Handle *>(4);
+    auto *first = norm.get<camel::graphmod::Handle *>(nodeBegin);
     const GraphDraft *draft = first->draft();
     const bool fromDraft    = draft != nullptr;
     const Program *program = fromDraft ? nullptr : first->program();
     const camel::runtime::GraphId graphId =
         fromDraft ? camel::runtime::GraphId::Invalid : first->graph();
-    if (currentFrame != nullptr && currentFrame->definition->name == name) {
+    if (currentFrame != nullptr && currentFrame->definition->key == key) {
         const bool sameSource =
             fromDraft ? currentFrame->source.draft == draft
                       : currentFrame->source.program == program &&
@@ -687,17 +737,17 @@ slot_t analysisKernel(ArgsView &, ArgsView &norm, camel::core::context::Context 
     std::shared_ptr<Definition> definition;
     {
         std::lock_guard lock(descriptionsMutex);
-        const auto found = descriptions.find(name);
+        const auto found = descriptions.find(key);
         if (found != descriptions.end()) {
             definition = found->second;
         }
     }
     if (!definition) {
-        definition = buildDefinition(ctx, norm, name, nodeCount);
+        definition = buildDefinition(ctx, norm, key, nodeBegin, nodeCount);
         std::lock_guard lock(descriptionsMutex);
-        descriptions.emplace(name, definition);
+        descriptions.emplace(key, definition);
     }
-    const camel::runtime::fact::KindId kind = factKindOf(name);
+    const camel::runtime::fact::KindId kind = factKindOf(key);
 
     Source source;
     if (fromDraft) {

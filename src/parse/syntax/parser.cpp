@@ -266,7 +266,7 @@ void ParserImpl::recover(bool inBlock, bool topLevel) {
                 break;
             }
             if (pos_ != start && tok().newlineBefore() &&
-                (topLevel ? startsDecl(cur_) || atRuleDecl(0) || atAnalysisDecl(0) : startsStmt(cur_))) {
+                (topLevel ? startsDecl(cur_) || atRuleDecl(0) || atFactDecl(0) : startsStmt(cur_))) {
                 break;
             }
             // A declaration keyword starts a declaration wherever it stands.
@@ -345,7 +345,7 @@ void ParserImpl::parseProgram() {
         if (cur_ == TK::Semi) {
             // One separator between declarations was taken already.
             error(SyntaxError::Kind::ExtraSemicolon, {}, pos_);
-        } else if (startsDecl(cur_) || atRuleDecl(0) || atAnalysisDecl(0)) {
+        } else if (startsDecl(cur_) || atRuleDecl(0) || atFactDecl(0)) {
             parseDecl();
             if (!panic_) {
                 eat(TK::Semi);
@@ -378,7 +378,7 @@ uint32_t ParserImpl::afterModifiers() const {
 }
 
 /// decl : moduleDecl | importDecl | exportDecl | namespaceDecl | usingNamespaceDecl
-///      | tagDecl | resourceDecl | dataDecl | funcDecl | typeDecl | ruleDecl
+///      | tagDecl | resourceDecl | dataDecl | funcDecl | typeDecl | ruleDecl | factDecl
 /// Decided on the first token; after `export` on the next one (`export let`, `export type`, ...).
 /// The word `tag` is not reserved: a declaration starts with it only when a tag name follows
 /// (`atTagDecl`), so a value called `tag` still reads as a value.
@@ -402,8 +402,8 @@ void ParserImpl::parseDecl() {
         return parseAnnotatedStmt();
     case TK::KwExport: {
         const TK next = peek(1);
-        if (atAnalysisDecl(1)) {
-            return parseAnalysisDecl();
+        if (atFactDecl(1)) {
+            return parseFactDecl();
         }
         if (atRuleDecl(1)) {
             return parseRuleDecl();
@@ -426,8 +426,8 @@ void ParserImpl::parseDecl() {
         if (atResourceDecl(0)) {
             return parseResourceDecl();
         }
-        if (atAnalysisDecl(0)) {
-            return parseAnalysisDecl();
+        if (atFactDecl(0)) {
+            return parseFactDecl();
         }
         if (atRuleDecl(0)) {
             return parseRuleDecl();
@@ -750,13 +750,15 @@ void ParserImpl::parseFuncAnno() {
 }
 
 /// A statement that starts with annotations or tag uses: a function declaration, a type
-/// declaration, a rule declaration (`#requires(...) rule f(...)`), a module declaration
+/// declaration, a rule declaration (`#requires(...) rule f(...)`), a fact declaration
+/// (`#requires(...) fact f(...)`), a module declaration
 /// (`#gpu module m`, design principles 13.4), or an annotated/tagged block
 /// (blockStmt's second form; an `@name(args)` annotation, the removed spelling of the numeric
 /// permission annotation; `#tag { ... }` on
 /// a block, 6.2). They are read first; a block follows when the next token is '{' or `sync {`, a
 /// type declaration when it is 'type', a module declaration when it is `module`, a rule when the
-/// tags are followed by `rule`, anything else continues the function declaration. After a tag use
+/// tags are followed by `rule`, a fact when they are followed by `fact`, anything else continues
+/// the function declaration. After a tag use
 /// '{' is always a block, never a struct literal.
 void ParserImpl::parseAnnotatedStmt() {
     const size_t m = mark();
@@ -766,6 +768,9 @@ void ParserImpl::parseAnnotatedStmt() {
     }
     if (atRuleDecl(0)) {
         return parseRuleDeclRest(m);
+    }
+    if (atFactDecl(0)) {
+        return parseFactDeclRest(m);
     }
     if (cur_ == TK::LBrace || (cur_ == TK::KwSync && peek(1) == TK::LBrace)) {
         parseStmtBlock();

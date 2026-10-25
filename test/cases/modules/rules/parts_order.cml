@@ -1,8 +1,8 @@
 /**
  * A fact query inside a condition, and the parts of a commutative operator. A rule whose condition
- * asks a parameterized analysis hands it the parts of the compound it matched (rule-language design
+ * asks a fact with parameters hands it the parts of the compound it matched (rule-language design
  * v2, section 1: a `const` parameter is the constant's value in a condition, and the node itself is
- * reached with `node_of(c)`; rewrite design 4.1-4.2: the query answers for the value whose parts
+ * reached with `node_of(c)`; rewrite design 7.5: the query answers for the value whose parts
  * these are).
  *
  * `mul_by_one(a, b)` is the fact of a product: its `x * y` clause is "by one" when the *second*
@@ -29,17 +29,15 @@ import { Program, Node, Graph, graphs, nodes, op, op_name, name } from graph
 import { max } from math
 import { rewrite } from rewrite
 
-analysis sign: int {
-    initial => 0
-    join(a, b) => max(a, b)
-    on (const c: int) => c
-}
+fact sign: int match v {
+    case const c: int => c
+    case _       => 0
+} join max
 
-analysis mul_by_one(a: Node, b: Node): bool {
-    initial => false
-    join(a, b) => a || b
-    on (x * y) => sign(y) == 1
-}
+fact mul_by_one(a: Node, b: Node): bool match (a, b) {
+    case x * y   => sign(y) == 1
+    case _       => false
+} join (lhs: bool, rhs: bool) => lhs || rhs
 
 func positive(c: float): bool {
     return c > 0.0

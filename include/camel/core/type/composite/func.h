@@ -66,7 +66,14 @@ class FunctionTypeFactory {
     /// The resources the signature publishes (design effects plan 2.2); Generic when not set.
     void setResources(const sem::ResourceSignature &resources) { resources_ = resources; }
 
-    void addWithArg(const std::string &ident, Type *type, bool isVar) {
+    /// Adds a `with` parameter. `recordsValue` marks a parameter whose argument must be a value
+    /// the compiler computes: the value is part of what the declaration means (a fact is computed
+    /// and cached for one argument, not for another), so a call that gives it something the
+    /// compiler cannot compute is refused where the argument is written.
+    void addWithArg(const std::string &ident, Type *type, bool isVar, bool recordsValue = false) {
+        if (recordsValue) {
+            withConstIndices_.push_back(static_cast<uint16_t>(withTypes_.size()));
+        }
         withTypes_.emplace_back(type, isVar);
         argNames_.push_back(ident);
     }
@@ -119,6 +126,9 @@ class FunctionTypeFactory {
     sem::ResourceSignature resources_;
     /// The parameters written with `constas`, as indices over all parameters (`with` first).
     std::vector<uint16_t> constasIndices_;
+    /// The `with` parameters whose argument must be a value the compiler computes, as indices
+    /// among the `with` parameters.
+    std::vector<uint16_t> withConstIndices_;
 };
 
 class FunctionType : public CompositeType {
@@ -200,6 +210,12 @@ class FunctionType : public CompositeType {
         return isConstasAt(withCount_ + index);
     }
 
+    /// Whether the `with` parameter at `index` must be given a value the compiler computes.
+    bool withNeedsValueAt(size_t index) const {
+        return std::find(withConstIndices_.begin(), withConstIndices_.end(), index) !=
+               withConstIndices_.end();
+    }
+
     std::span<Type *const> withTypesSpan() const { return {types(), withCount_}; }
     std::span<Type *const> normTypesSpan() const { return {types() + withCount_, normCount_}; }
     std::span<const TypeCode> withTypeCodesSpan() const { return {codes(), withCount_}; }
@@ -239,6 +255,8 @@ class FunctionType : public CompositeType {
         bool hasNames    = false;
         bool hasRest     = false;
         std::vector<uint16_t> constasIndices;
+        /// The `with` parameters whose argument must be a compile-time value (see addWithArg).
+        std::vector<uint16_t> withConstIndices;
         std::vector<SymId> names;
         sem::ResourceSignature resources;
     };
@@ -286,6 +304,9 @@ class FunctionType : public CompositeType {
     /// The parameters written with `constas`, as indices over all parameters (`with` first):
     /// a compile-time value at the call, not a runtime parameter (design principles 5.4).
     std::vector<uint16_t> constasIndices_;
+    /// The `with` parameters whose argument must be a compile-time value, as indices among the
+    /// `with` parameters (see FunctionTypeFactory::addWithArg).
+    std::vector<uint16_t> withConstIndices_;
     bool open_          = false;
     /// The resources the signature publishes (Generic when it says nothing).
     sem::ResourceSignature resources_;

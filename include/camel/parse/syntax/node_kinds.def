@@ -44,8 +44,11 @@ CAMEL_NODE(OperatorName, Other)        // IDENTIFIER (OPERATOR | '[' ']'): the n
 CAMEL_NODE(RuleDecl, Other)            // ('with' angledParams)? 'export'? IDENTIFIER identDef ruleContext? parentParams whenClause? '{' ruleBody '}'
 CAMEL_NODE(RuleContext, Other)         // '<' identDef (',' identDef)* ','? '>'
 CAMEL_NODE(RuleBody, Other)            // dataExpr ('=>' | '<=>') dataExpr
-CAMEL_NODE(AnalysisDecl, Other)        // 'export'? 'analysis' identDef ':' typeExpr '{' analysisClause* '}'
-CAMEL_NODE(AnalysisClause, Other)      // 'initial' '=>' dataExpr | ('join' | 'widen') '(' identList ')' '=>' dataExpr | 'on' '(' ('const' identDef ':' typeExpr | dataExpr) ')' '=>' dataExpr
+CAMEL_NODE(FactDecl, Other)            // ('with' angledParams)? 'export'? IDENTIFIER identDef typeParams? parentParams? ':' typeExpr factBody factClause*
+CAMEL_NODE(FactBody, Other)            // 'match' logicalOrExpr '{' factCase* '}'
+CAMEL_NODE(FactCase, Other)            // 'case' factPattern '=>' dataExpr
+CAMEL_NODE(FactPattern, Other)         // 'const' identDef (':' typeExpr)? | dataExpr
+CAMEL_NODE(FactClause, Other)          // IDENTIFIER dataExpr
 CAMEL_NODE(DataDecl, Other)            // ('let' | 'var') carrier (':' typeList)? '=' dataList
 CAMEL_NODE(TypeDecl, Other)            // 'type' identRef ('=' | '<' identDef (',' identDef)* ','? ('>' '=' | '>=')) (typeExpr | STRING), with the tag uses before it
 CAMEL_NODE(RetStmt, Other)             // ('return' | 'throw') dataList

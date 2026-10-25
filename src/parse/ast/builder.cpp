@@ -450,8 +450,8 @@ Value Builder::visitDecl(syn::Node context) {
         return visitTagDecl(cst::TagDecl(context));
     case NK::RuleDecl:
         return visitRuleDecl(cst::RuleDecl(context));
-    case NK::AnalysisDecl:
-        return visitAnalysisDecl(cst::AnalysisDecl(context));
+    case NK::FactDecl:
+        return visitFactDecl(cst::FactDecl(context));
     default:
         return Value();
     }
@@ -1390,41 +1390,59 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
 }
 
 /*
-analysisDecl : frontMatter? 'export'? 'analysis' identDef parentParams? ':' typeExpr
-               '{' analysisClause* '}'
-analysisClause : 'initial' '=>' dataExpr
-               | ('join' | 'widen') '(' identList? ')' '=>' dataExpr
-               | 'on' '(' ('const' identDef ':' typeExpr | dataExpr) ')' '=>' dataExpr
+factDecl : ('with' angledParams)? 'export'? 'fact' identDef typeParams? parentParams? ':' typeExpr
+           'match' logicalOrExpr '{' factCase* '}' factClause*
+factCase : 'case' factPattern '=>' dataExpr
+factPattern : 'const' identDef (':' typeExpr)? | dataExpr
+factClause : IDENTIFIER dataExpr
 
-An analysis is compiled to plain functions and one call of `__analysis`:
+A fact is compiled to plain functions and one call of `__fact`:
 
-    func range__initial() => 0.0
-    func range__join(a, b) => max(a, b)
-    func range__widen(a, b) => ...                  (join when omitted)
-    func range__on0(x: int, y: int) => x + y        (the pattern; never run)
-    func range__on0_fact(x: graph::Node, y: graph::Node) => range(x) + range(y)
-    func range(n: graph::Node): T => __analysis('range', range__initial, range__join,
-        range__widen, n, range__on0, range__on0_fact, constMask, ...)
+    func depth__initial() => 0
+    func depth__join(a0: int, a1: int) => max(a0, a1)
+    func depth__case0(c: int) => c                      (a `const` case: the matcher binds the
+    func depth__case0_fact(c: int) => 1                  value, not a node)
+    func depth__case1(x: int, y: int) => x + y          (a case over the construction: the
+    func depth__case1_fact(x: Node, y: Node) => max(depth(x), depth(y)) + 1   matcher reads it,
+    func depth(n: Node): int => __fact('depth', depth__initial, depth__join, ...)  nothing runs it)
 
-The pattern function carries the shape the matcher reads: its parameters are the pattern
-variables (typed `int` unless the clause declares a `const c: T`), and its body is the operator
-expression. The fact function takes the matched nodes (or the values of `const` parameters) and
-computes the fact. `__analysis` is an operator of the module `rewrite`, imported here.
+The cases are the engine's clauses: a pattern function carries the shape the matcher reads (its
+parameters are the pattern variables, typed `int`; a `const` case declares the type of its
+constant), and a fact function computes the fact of a value that matched. `case _`, which must be
+the last case, becomes `initial`: what the fact says of a value no other case matched, and what a
+value that depends on itself settles on.
 
-A declaration with parameters (`analysis pair(a: Node, b: Node): bool`) is a multi-parameter
-query: the parameters are the pattern variables a rule's condition hands it (`pair(x, y)`), and
-`__analysis` receives one node per parameter instead of the single queried value. The engine
-reads the fact of the value those parts belong to; the declaration without parameters keeps the
-one-value form (`range(n)`).
+Each trailing clause names one binary function, and the fact merges two facts by calling it:
+`join` (required) is how the facts of two writings of one value are merged, `meet` how equivalent
+writings meet, `widen` accelerates a loop and `narrow` tightens it afterwards. `meet`, `widen` and
+`narrow` default to `join`; the first version computes no loop acceleration. A clause is read in a
+function of its own, of the fact's type, so that a name of several overloads (or a lambda) is
+resolved where the fact's type is known.
+
+The declaration's `with` parameters are the arguments the query is written with
+(`depth<8>(x)`, and one with a default may be left out). They are copied onto the query function
+and marked `constas` there: the compiler must compute the argument, since the argument is part of
+which fact this is, and the engine computes and caches one fact per argument. A case or a trailing
+clause cannot name one: the engine calls those functions with the value the fact is about, without
+the arguments the query was written with (the refusal below says so).
+
+The head parameters are the parts of a value the query is written on
+(`aligned(x, y)` for `fact aligned(a: int, b: int)`), and are typed `Node` in the generated
+function: the head's types say what a `const` case's constant is. A declaration with none is the
+one-value form (`depth(n)`).
+
+A fact whose value type is one of its own type parameters (`fact depth::<T>(v: T): int`) is
+parsed but not compiled: the functions the engine is given are values, and a generic function is
+not one.
 */
-Value Builder::visitAnalysisDecl(cst::AnalysisDecl context) {
-    ENTER("AnalysisDecl");
-    if (!analysisImportAdded_) {
-        analysisImportAdded_ = true;
-        auto rewriteImport     = std::make_shared<ImportLoad>();
+Value Builder::visitFactDecl(cst::FactDecl context) {
+    ENTER("FactDecl");
+    if (!factImportAdded_) {
+        factImportAdded_ = true;
+        auto rewriteImport = std::make_shared<ImportLoad>();
         rewriteImport->setTokenRange(extractTokenRangeFromContext(context));
         rewriteImport->setPath("rewrite");
-        rewriteImport->setRefs({Reference("__analysis")});
+        rewriteImport->setRefs({Reference("__fact")});
         imports_.push_back(rewriteImport);
         auto graphImport = std::make_shared<ImportLoad>();
         graphImport->setTokenRange(extractTokenRangeFromContext(context));
@@ -1433,116 +1451,176 @@ Value Builder::visitAnalysisDecl(cst::AnalysisDecl context) {
         imports_.push_back(graphImport);
     }
 
+    const auto giveUp = [&](const std::string &what) {
+        diags_->of(SemanticDiag::ConstructNotSupported)
+            .at(rangeOf(context->firstToken()))
+            .commit("fact", what);
+        return Value();
+    };
     const std::string name = std::string(context->get<cst::IdentDef>()->text());
     const Reference ref    = qualifyRef(Reference(name));
     if (context->has(TK::KwExport)) {
         export_->addRef(ref);
     }
+    if (context->get<cst::TypeParams>()) {
+        LEAVE("FactDecl");
+        return giveUp(
+            "a fact whose value is one of its own type parameters is not compiled: the engine is "
+            "given the functions the fact is made of, and a function with type parameters is not "
+            "a value it can hold");
+    }
     const auto typeExprs = context->types();
     if (typeExprs.size() != 1) {
-        diags_->of(SemanticDiag::ConstructNotSupported)
-            .at(rangeOf(context->firstToken()))
-            .commit("analysis", "an analysis declaration needs the type of its fact");
-        LEAVE("AnalysisDecl");
-        return Value();
+        LEAVE("FactDecl");
+        return giveUp("a fact declaration needs the type of its fact");
     }
     const syn::Node factType = typeExprs[0];
-    const auto clauseNodes   = context->all<cst::AnalysisClause>();
 
-    // The expressions of the three fixed clauses; a `widen` that is absent is a `join`.
-    syn::Node initialExpr, joinExpr, widenExpr;
-    std::vector<std::string> joinParams, widenParams;
-    struct OnClause {
-        syn::Node pattern;
-        syn::Node rhs;
-        std::string constName;
-        syn::Node constType;
-    };
-    std::vector<OnClause> onClauses;
-    for (const auto clause : clauseNodes) {
-        const std::string keyword = clause->tok(TK::Identifier).text();
-        const auto exprs          = clause->exprs();
-        if (keyword == "initial") {
-            if (!exprs.empty()) {
-                initialExpr = exprs[0];
-            }
-        } else if (keyword == "join" || keyword == "widen") {
-            const auto idents = clause->get<cst::IdentList>();
-            std::vector<std::string> names;
-            if (idents) {
-                for (const auto ident : idents->all<cst::IdentDef>()) {
-                    names.push_back(std::string(ident->text()));
-                }
-            }
-            syn::Node body = exprs.empty() ? syn::Node() : exprs[0];
-            if (keyword == "join") {
-                joinExpr   = body;
-                joinParams = names;
-            } else {
-                widenExpr   = body;
-                widenParams = names;
-            }
-        } else if (keyword == "on") {
-            OnClause on;
-            const auto types = clause->types();
-            if (types.size() == 1 && exprs.size() == 1) {
-                on.constName = std::string(clause->get<cst::IdentDef>()->text());
-                on.constType = types[0];
-                on.pattern   = syn::Node();
-                on.rhs       = exprs[0];
-            } else if (exprs.size() == 2) {
-                on.pattern = exprs[0];
-                on.rhs     = exprs[1];
-            } else {
-                continue;
-            }
-            onClauses.push_back(std::move(on));
+    std::vector<syn::Node> cases;
+    if (const auto body = context->get<cst::FactBody>()) {
+        for (const auto each : body->all<cst::FactCase>()) {
+            cases.push_back(each);
         }
     }
-    if (!initialExpr || !joinExpr) {
-        diags_->of(SemanticDiag::ConstructNotSupported)
+    if (cases.empty()) {
+        LEAVE("FactDecl");
+        return giveUp("a fact needs the cases that say what it is, and 'case _' last");
+    }
+    const auto lastPattern = cases.back()->get<cst::FactPattern>();
+    if (!lastPattern || !lastPattern->has(TK::Underscore)) {
+        diags_->of(SemanticDiag::FactCaseDefaultMissing)
             .at(rangeOf(context->firstToken()))
-            .commit("analysis", "an analysis needs `initial` and `join`");
-        LEAVE("AnalysisDecl");
+            .commit(name);
+        LEAVE("FactDecl");
         return Value();
     }
+    const syn::Node initialRhs = cases.back()->expr(0);
 
-    // The names bound by the pattern of an `on` clause, in the order the pattern function
-    // declares them. A bare reference is a variable; the callee of a call is not (`abs(x)`
-    // binds x, not abs), and a qualified name belongs to a module.
-    const std::function<void(syn::Node, std::vector<std::string> &)> collectVars =
-        [&](syn::Node node, std::vector<std::string> &out) {
-            if (!node || node.empty()) {
-                return;
-            }
-            if (node.kind() == NK::RefData) {
-                const std::string text = std::string(node.text());
-                if (text.find("::") == std::string::npos &&
-                    std::find(out.begin(), out.end(), text) == out.end()) {
-                    out.push_back(text);
-                }
-                return;
-            }
-            if (node.kind() == NK::AnnoExpr && node->get<cst::ParentArgues>()) {
-                for (size_t i = 1; i < node->childCount(); ++i) {
-                    collectVars(node->child(i).node(), out);
-                }
-                return;
-            }
-            for (size_t i = 0; i < node->childCount(); ++i) {
-                collectVars(node->child(i).node(), out);
-            }
-        };
+    // The trailing clauses, as written. Each names one binary function; only `join` is required.
+    syn::Node joinClause, meetClause, widenClause, narrowClause;
+    for (const auto clause : context->all<cst::FactClause>()) {
+        const std::string keyword = clause->tok(TK::Identifier).text();
+        const auto exprs          = clause->exprs();
+        if (exprs.size() != 1) {
+            continue;
+        }
+        if (keyword == "join") {
+            joinClause = exprs[0];
+        } else if (keyword == "meet") {
+            meetClause = exprs[0];
+        } else if (keyword == "widen") {
+            widenClause = exprs[0];
+        } else if (keyword == "narrow") {
+            narrowClause = exprs[0];
+        }
+    }
+    if (!joinClause) {
+        LEAVE("FactDecl");
+        return giveUp(
+            "a fact needs a 'join': it says how the facts of two writings of one value are "
+            "merged");
+    }
 
-    const auto makeFunc = [&](const std::string &fname,
-                              const std::vector<std::pair<std::string, node_ptr_t>> &params,
-                              node_ptr_t retType,
-                              node_ptr_t body) -> node_ptr_t {
+    // The `with` parameters, as written. Every function that carries them builds its own copy:
+    // an expression tree is not shared between two declarations.
+    std::vector<std::string> withNames;
+    if (const auto params = context->get<cst::AngledParams>()) {
+        if (const auto paired = params->get<cst::PairedParams>()) {
+            for (const auto pair : paired->all<cst::KeyParamPair>()) {
+                if (pair->get<cst::IdentDef>()) {
+                    withNames.push_back(std::string(pair->get<cst::IdentDef>()->text()));
+                }
+            }
+        }
+    }
+    const auto withPairs = [&]() {
+        std::vector<node_ptr_t> built;
+        const auto params = context->get<cst::AngledParams>();
+        if (!params) {
+            return built;
+        }
+        const auto paired = params->get<cst::PairedParams>();
+        if (!paired) {
+            return built;
+        }
+        for (const auto pair : paired->all<cst::KeyParamPair>()) {
+            if (!pair->get<cst::IdentDef>()) {
+                continue;
+            }
+            const std::string paramName(pair->get<cst::IdentDef>()->text());
+            // Marked `constas` although it is a `with` parameter: the mark is read as "the
+            // compiler must compute this argument", which is what a fact's argument is.
+            node_ptr_t named = createNodeAs<NamedPairLoad>(
+                Reference(paramName), false, false, false, /*isConstas=*/true);
+            setNodeTokenRangeByContext(named, context);
+            if (pair->type()) {
+                *named << any2node(visitType(pair->type()));
+            } else {
+                node_ptr_t inferNode = createNodeAs<InferTypeLoad>(Reference());
+                setNodeTokenRangeByContext(inferNode, pair->get<cst::IdentDef>());
+                *named << inferNode;
+            }
+            node_ptr_t defaultOpt = createNodeAs<OptionalLoad>("DataExpr");
+            if (pair->expr()) {
+                setNodeTokenRangeByContext(defaultOpt, pair->expr());
+                *defaultOpt << any2node(visitExpr(pair->expr()));
+            }
+            *named << defaultOpt;
+            built.push_back(named);
+        }
+        return built;
+    };
+
+    const auto literal = [&](LiteralType type, const std::string &text) {
+        node_ptr_t node = createNodeAs<LiteralLoad>(Literal(type, text));
+        setNodeTokenRangeByContext(node, context);
+        return node;
+    };
+    const auto reference = [&](const std::string &text) {
+        node_ptr_t node = createNodeAs<RefDataLoad>(Reference(text));
+        setNodeTokenRangeByContext(node, context);
+        return node;
+    };
+    const auto callOf = [&](node_ptr_t callee, std::vector<node_ptr_t> theArgs) {
+        node_ptr_t dataList = createNodeAs<RepeatedLoad>("Data");
+        setNodeTokenRangeByContext(dataList, context);
+        for (const auto &each : theArgs) {
+            *dataList << each;
+        }
+        node_ptr_t namedList = createNodeAs<RepeatedLoad>("NamedData");
+        setNodeTokenRangeByContext(namedList, context);
+        node_ptr_t call = createNodeAs<ReservedExprLoad>(ReservedDataOp::Call);
+        setNodeTokenRangeByContext(call, context);
+        *call << callee << dataList << namedList;
+        return call;
+    };
+    const auto blockOf = [&](node_ptr_t expr) {
+        node_ptr_t stmt = createNodeAs<ExprStmtLoad>();
+        setNodeTokenRangeByContext(stmt, context);
+        *stmt << expr;
+        node_ptr_t stmts = createNodeAs<RepeatedLoad>("Stmt");
+        setNodeTokenRangeByContext(stmts, context);
+        *stmts << stmt;
+        node_ptr_t block = createNodeAs<StmtBlockLoad>();
+        setNodeTokenRangeByContext(block, context);
+        *block << stmts;
+        return block;
+    };
+    const auto makeFunc =
+        [&](const std::string &fname, const std::vector<node_ptr_t> &withParams,
+            const std::vector<std::pair<std::string, node_ptr_t>> &params, node_ptr_t retType,
+            node_ptr_t body) -> node_ptr_t {
         const Reference fnRef = qualifyRef(Reference(fname));
         node_ptr_t funcType   = createNodeAs<FuncTypeLoad>();
         setNodeTokenRangeByContext(funcType, context);
-        *funcType << createNodeAs<RepeatedLoad>("NamedPair");
+        node_ptr_t withList = createNodeAs<RepeatedLoad>("NamedPair");
+        setNodeTokenRangeByContext(withList, context);
+        for (const auto &each : withParams) {
+            *withList << each;
+        }
+        *funcType << withList;
         node_ptr_t normParams = createNodeAs<RepeatedLoad>("NamedPair");
+        setNodeTokenRangeByContext(normParams, context);
         for (const auto &[pname, ptype] : params) {
             node_ptr_t named = createNodeAs<NamedPairLoad>(Reference(pname), false, false);
             setNodeTokenRangeByContext(named, context);
@@ -1570,149 +1648,222 @@ Value Builder::visitAnalysisDecl(cst::AnalysisDecl context) {
     };
 
     std::vector<node_ptr_t> declarations;
-    declarations.push_back(
-        makeFunc(name + "__initial", {}, typeOf(factType), any2node(visitBlockExpr(initialExpr))));
-    std::vector<std::pair<std::string, node_ptr_t>> joinParamsDecl;
-    for (size_t i = 0; i < 2; ++i) {
-        joinParamsDecl.emplace_back(
-            i < joinParams.size() ? joinParams[i] : "a" + std::to_string(i), typeOf(factType));
+    declarations.push_back(makeFunc(
+        name + "__initial", {}, {}, typeOf(factType), any2node(visitBlockExpr(initialRhs))));
+    // One function per clause: it calls the function the clause names, of the fact's type, so that
+    // a name with several overloads is resolved where the type is known.
+    const auto mergeFunc = [&](const std::string &suffix, syn::Node clause) -> node_ptr_t {
+        std::vector<std::pair<std::string, node_ptr_t>> params = {
+            {"a0", typeOf(factType)}, {"a1", typeOf(factType)}};
+        node_ptr_t callee = any2node(visitExpr(clause));
+        node_ptr_t body   = blockOf(callOf(callee, {reference("a0"), reference("a1")}));
+        return makeFunc(name + suffix, {}, params, typeOf(factType), body);
+    };
+    declarations.push_back(mergeFunc("__join", joinClause));
+    if (meetClause) {
+        declarations.push_back(mergeFunc("__meet", meetClause));
     }
-    declarations.push_back(
-        makeFunc(name + "__join", joinParamsDecl, typeOf(factType), any2node(visitBlockExpr(joinExpr))));
-    if (widenExpr) {
-        std::vector<std::pair<std::string, node_ptr_t>> widenParamsDecl;
-        for (size_t i = 0; i < 2; ++i) {
-            widenParamsDecl.emplace_back(
-                i < widenParams.size() ? widenParams[i] : "a" + std::to_string(i),
-                typeOf(factType));
-        }
-        declarations.push_back(
-            makeFunc(name + "__widen", widenParamsDecl, typeOf(factType), any2node(visitBlockExpr(widenExpr))));
+    if (widenClause) {
+        declarations.push_back(mergeFunc("__widen", widenClause));
+    }
+    if (narrowClause) {
+        declarations.push_back(mergeFunc("__narrow", narrowClause));
     }
 
-    // The `on` clauses: the pattern function and the function that computes the fact.
-    struct CompiledOn {
+    // The head parameters: what the query is written on. Their types are not read here -- the
+    // pattern variables are nodes, or `int` where the pattern reads a shape -- but the first one
+    // gives a `const` case the type of its constant when the case writes none.
+    std::vector<std::string> queryArgs;
+    syn::Node firstHeadType;
+    if (const auto params = context->get<cst::ParentParams>()) {
+        if (const auto paired = params->get<cst::PairedParams>()) {
+            for (const auto pair : paired->all<cst::KeyParamPair>()) {
+                if (!pair->get<cst::IdentDef>()) {
+                    continue;
+                }
+                queryArgs.push_back(std::string(pair->get<cst::IdentDef>()->text()));
+                if (!firstHeadType && pair->type()) {
+                    firstHeadType = pair->type();
+                }
+            }
+        }
+    }
+    if (queryArgs.empty()) {
+        queryArgs.push_back("n");
+    }
+    std::vector<std::pair<std::string, node_ptr_t>> queryParams;
+    for (const auto &arg : queryArgs) {
+        queryParams.emplace_back(arg, refType("Node"));
+    }
+
+    // The names bound by a case's pattern. A bare reference is a variable; the callee of a call is
+    // not (`abs(x)` binds x, not abs), and a qualified name belongs to a module.
+    const std::function<void(syn::Node, std::vector<std::string> &)> collectVars =
+        [&](syn::Node node, std::vector<std::string> &out) {
+            if (!node || node.empty()) {
+                return;
+            }
+            if (node.kind() == NK::RefData) {
+                const std::string text = std::string(node.text());
+                if (text.find("::") == std::string::npos &&
+                    std::find(out.begin(), out.end(), text) == out.end()) {
+                    out.push_back(text);
+                }
+                return;
+            }
+            if (node.kind() == NK::AnnoExpr && node->get<cst::ParentArgues>()) {
+                for (size_t i = 1; i < node->childCount(); ++i) {
+                    collectVars(node->child(i).node(), out);
+                }
+                return;
+            }
+            for (size_t i = 0; i < node->childCount(); ++i) {
+                collectVars(node->child(i).node(), out);
+            }
+        };
+
+    struct CompiledCase {
         std::string patternFn;
         std::string factFn;
         uint64_t constMask = 0;
     };
-    std::vector<CompiledOn> compiled;
-    const auto nodeType = [&]() { return refType("Node"); };
-    for (size_t index = 0; index < onClauses.size(); ++index) {
-        const OnClause &on = onClauses[index];
-        const std::string prefix = name + "__on" + std::to_string(index);
+    // A case body and a trailing clause are read by the engine, which calls them with the value the
+    // fact is about and not with the arguments the query was written with, so a `with` parameter is
+    // not a name they have. `bound` are the names the case's own pattern binds: a case that calls
+    // its variable `limit` still says what it means.
+    const auto namesAWithParameter = [&](syn::Node expr, const std::vector<std::string> &bound) {
+        if (!expr || expr.empty() || withNames.empty()) {
+            return false;
+        }
+        std::vector<std::string> names;
+        collectVars(expr, names);
+        for (const std::string &one : names) {
+            if (std::find(bound.begin(), bound.end(), one) != bound.end()) {
+                continue;
+            }
+            if (std::find(withNames.begin(), withNames.end(), one) != withNames.end()) {
+                return true;
+            }
+        }
+        return false;
+    };
+    const auto refuseWithNameInClause = [&](syn::Node expr, const std::vector<std::string> &bound) {
+        if (!namesAWithParameter(expr, bound)) {
+            return false;
+        }
+        LEAVE("FactDecl");
+        giveUp(
+            "a clause cannot name a 'with' parameter of the fact: the engine calls the cases with "
+            "the value the fact is about, not with the argument the query was written with, so the "
+            "argument is only part of which fact this is");
+        return true;
+    };
+    if (refuseWithNameInClause(joinClause, {}) || refuseWithNameInClause(meetClause, {}) ||
+        refuseWithNameInClause(widenClause, {}) || refuseWithNameInClause(narrowClause, {}) ||
+        refuseWithNameInClause(initialRhs, {})) {
+        return Value();
+    }
+    std::vector<CompiledCase> compiled;
+    for (size_t index = 0; index + 1 < cases.size(); ++index) {
+        const syn::Node one         = cases[index];
+        const auto pattern          = one->get<cst::FactPattern>();
+        const syn::Node patternExpr = pattern ? pattern->expr(0) : syn::Node();
+        const syn::Node constDef    = pattern ? pattern->get<cst::IdentDef>() : syn::Node();
+        const std::string constName = constDef ? constDef->text() : std::string();
+        const syn::Node rhs         = one->expr(0);
+        // `case const c => ...`: the case is about one constant, and the fact function is given
+        // the value itself. The type is the one written, or the head's first parameter's.
+        syn::Node constType;
+        if (!constName.empty() && pattern) {
+            const auto written = pattern->types();
+            constType = written.size() == 1 ? written[0] : syn::Node();
+        }
+        if (!constName.empty()) {
+            if (!constType) {
+                constType = firstHeadType;
+            }
+            if (!constType) {
+                LEAVE("FactDecl");
+                return giveUp(
+                    "a 'const' case needs a type: write the type of the constant, or declare the "
+                    "value the fact is about with a type");
+            }
+        }
         std::vector<std::string> vars;
-        if (!on.constName.empty()) {
-            vars.push_back(on.constName);
+        if (!constName.empty()) {
+            vars.push_back(constName);
         } else {
-            collectVars(on.pattern, vars);
+            collectVars(patternExpr, vars);
         }
         if (vars.empty()) {
-            diags_->of(SemanticDiag::ConstructNotSupported)
-                .at(rangeOf(context->firstToken()))
-                .commit("analysis", "an `on` pattern names no variable");
-            continue;
+            LEAVE("FactDecl");
+            return giveUp("a case pattern names no variable, so the case says nothing");
+        }
+        if (refuseWithNameInClause(rhs, vars)) {
+            return Value();
         }
         std::vector<std::pair<std::string, node_ptr_t>> patternParams;
         std::vector<std::pair<std::string, node_ptr_t>> factParams;
         uint64_t mask = 0;
         for (size_t i = 0; i < vars.size(); ++i) {
-            if (i == 0 && !on.constName.empty()) {
-                patternParams.emplace_back(vars[i], typeOf(on.constType));
-                factParams.emplace_back(vars[i], typeOf(on.constType));
+            if (i == 0 && !constName.empty()) {
+                patternParams.emplace_back(vars[i], typeOf(constType));
+                factParams.emplace_back(vars[i], typeOf(constType));
                 mask |= uint64_t{1} << i;
             } else {
                 patternParams.emplace_back(vars[i], refType("int"));
-                factParams.emplace_back(vars[i], nodeType());
+                factParams.emplace_back(vars[i], refType("Node"));
             }
         }
+        const std::string prefix = name + "__case" + std::to_string(index);
         node_ptr_t patternBody;
-        if (!on.constName.empty()) {
-            // The `const` clause matches any constant of the type and binds its value: the
-            // pattern is the parameter itself, so the matcher binds the node and the fact
-            // function receives the value (the body of the clause is the fact).
-            node_ptr_t patternRef = createNodeAs<RefDataLoad>(Reference(on.constName));
-            setNodeTokenRangeByContext(patternRef, context);
-            node_ptr_t stmt = createNodeAs<ExprStmtLoad>();
-            setNodeTokenRangeByContext(stmt, context);
-            *stmt << patternRef;
-            node_ptr_t stmts = createNodeAs<RepeatedLoad>("Stmt");
-            setNodeTokenRangeByContext(stmts, context);
-            *stmts << stmt;
-            patternBody = createNodeAs<StmtBlockLoad>();
-            setNodeTokenRangeByContext(patternBody, context);
-            *patternBody << stmts;
+        if (!constName.empty()) {
+            // The pattern binds the constant itself: the matcher binds the node and the fact
+            // function receives the value.
+            patternBody = blockOf(reference(constName));
         } else {
-            patternBody = any2node(visitBlockExpr(on.pattern));
+            patternBody = any2node(visitBlockExpr(patternExpr));
         }
         declarations.push_back(makeFunc(
-            prefix,
-            patternParams,
-            on.constName.empty() ? refType("int") : typeOf(on.constType),
+            prefix, {}, patternParams, constName.empty() ? refType("int") : typeOf(constType),
             patternBody));
-        declarations.push_back(
-            makeFunc(prefix + "_fact", factParams, typeOf(factType), any2node(visitBlockExpr(on.rhs))));
+        declarations.push_back(makeFunc(
+            prefix + "_fact", {}, factParams, typeOf(factType), any2node(visitBlockExpr(rhs))));
         compiled.push_back({prefix, prefix + "_fact", mask});
     }
 
-    // The query function: `func name(a: Node, b: Node): T => __analysis(...)`. Its parameters
-    // are the pattern variables a rule's condition hands it; without a parameter list the query
-    // takes the value itself (`range(n)`), as it always has.
-    std::vector<std::pair<std::string, node_ptr_t>> queryParams;
-    std::vector<std::string> queryArgs;
-    if (const auto params = context->get<cst::ParentParams>()) {
-        if (const auto paired = params->get<cst::PairedParams>()) {
-            for (const auto pair : paired->all<cst::KeyParamPair>()) {
-                const std::string pname(pair->get<cst::IdentDef>()->text());
-                node_ptr_t ptype = pair->type() ? typeOf(pair->type()) : refType("Node");
-                queryParams.emplace_back(pname, ptype);
-                queryArgs.push_back(pname);
-            }
-        }
-    }
-    if (queryParams.empty()) {
-        queryParams.emplace_back("n", refType("Node"));
-        queryArgs.push_back("n");
-    }
+    // The query function: `func depth(n: Node): int => __fact(...)`. Its parameters are the parts
+    // of a value a rule's condition hands it; without a parameter list the query takes the value
+    // itself (`depth(n)`), as it always has.
     node_ptr_t args = createNodeAs<RepeatedLoad>("Data");
     setNodeTokenRangeByContext(args, context);
-    const auto literal = [&](LiteralType type, const std::string &text) {
-        node_ptr_t node = createNodeAs<LiteralLoad>(Literal(type, text));
-        setNodeTokenRangeByContext(node, context);
-        return node;
-    };
-    const auto reference = [&](const std::string &text) {
-        node_ptr_t node = createNodeAs<RefDataLoad>(Reference(text));
-        setNodeTokenRangeByContext(node, context);
-        return node;
-    };
     *args << literal(LiteralType::String, name);
     *args << reference(name + "__initial");
     *args << reference(name + "__join");
-    *args << reference(widenExpr ? name + "__widen" : name + "__join");
+    *args << reference(meetClause ? name + "__meet" : name + "__join");
+    *args << reference(widenClause ? name + "__widen" : name + "__join");
+    *args << reference(narrowClause ? name + "__narrow" : name + "__join");
+    // How many arguments the query was written with, then the arguments themselves: the engine
+    // computes and caches one fact per argument.
+    *args << literal(LiteralType::Integer, std::to_string(withNames.size()));
+    for (const std::string &paramName : withNames) {
+        *args << reference(paramName);
+    }
     for (const std::string &arg : queryArgs) {
         *args << reference(arg);
     }
-    for (const CompiledOn &on : compiled) {
-        *args << reference(on.patternFn);
-        *args << reference(on.factFn);
-        *args << literal(LiteralType::Integer, std::to_string(on.constMask));
+    for (const CompiledCase &one : compiled) {
+        *args << reference(one.patternFn);
+        *args << reference(one.factFn);
+        *args << literal(LiteralType::Integer, std::to_string(one.constMask));
     }
     node_ptr_t call = createNodeAs<ReservedExprLoad>(ReservedDataOp::Call);
     setNodeTokenRangeByContext(call, context);
-    *call << reference("__analysis") << args << createNodeAs<RepeatedLoad>("NamedData");
-    node_ptr_t exprStmt = createNodeAs<ExprStmtLoad>();
-    setNodeTokenRangeByContext(exprStmt, context);
-    *exprStmt << call;
-    node_ptr_t stmts = createNodeAs<RepeatedLoad>("Stmt");
-    setNodeTokenRangeByContext(stmts, context);
-    *stmts << exprStmt;
-    node_ptr_t block = createNodeAs<StmtBlockLoad>();
-    setNodeTokenRangeByContext(block, context);
-    *block << stmts;
-    declarations.push_back(makeFunc(name, queryParams, typeOf(factType), block));
+    *call << reference("__fact") << args << createNodeAs<RepeatedLoad>("NamedData");
+    declarations.push_back(
+        makeFunc(name, withPairs(), queryParams, typeOf(factType), blockOf(call)));
 
-    LEAVE("AnalysisDecl");
+    LEAVE("FactDecl");
     return declarations;
 }
 

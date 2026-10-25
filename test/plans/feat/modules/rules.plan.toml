@@ -559,21 +559,21 @@ assert(input.normalized.stdout === expected, `stdout was: ${JSON.stringify(input
 timeout_ms = 10000
 
 [[tests]]
-name = "rules.analysis_reads_a_fact_in_when"
-desc = "An `analysis` (rewrite design 4) compiles to functions and a fact kind: `depth` counts the additions a value is under (initial 0, a constant 1, an addition one more than the deepest operand, any other operator the join of its operands) and `sign` is the value of a constant. `report` reads `depth` of the frozen graphs of the target (sum 3, mixed 2) and counts products; the rule `mul_one` reads `sign(y)` in its `when`, where `y` is a pattern variable and so a node of the draft (a `const` parameter is the constant's value in a condition, rewrite design 2 (second version) 1), so it rewrites x * 1 but not x * 2; the second report shows the rewritten program."
+name = "rules.fact_reads_a_fact_in_when"
+desc = "A `fact` (rewrite design 7.5) compiles to functions and a fact kind: `depth` counts the additions a value is under (a `case _` of 0, a constant 1, an addition one more than the deepest operand, any other operator the merged fact of its operands) and `sign` is the value of a constant. `report` reads `depth` of the frozen graphs of the target (sum 3, mixed 2) and counts products; the rule `mul_one` reads `sign(y)` in its `when`, where `y` is a pattern variable and so a node of the draft (a `const` parameter is the constant's value in a condition, rewrite design 2 (second version) 1), so it rewrites x * 1 but not x * 2; the second report shows the rewritten program."
 kind = "behavior"
-case = "../../../cases/modules/rules/analysis_target.cml"
-args = ["${case}", "analysis_lib::report", "analysis_lib::apply", "analysis_lib::report", "std::nvm"]
+case = "../../../cases/modules/rules/fact_target.cml"
+args = ["${case}", "fact_lib::report", "fact_lib::apply", "fact_lib::report", "std::nvm"]
 expect_exit = 0
 expect_stdout_contains = ["sum 3 mixed 2 one 1 two 1\nsum 3 mixed 2 one 0 two 1\n4 7 7 14\n"]
 timeout_ms = 20000
 
 [[tests]]
-name = "rules.analysis_takes_the_parts_of_a_compound"
-desc = "A declaration with parameters (`analysis mul_by_one(a: Node, b: Node): bool`) is a multi-parameter query: a rule's condition hands it the parts of the compound, and the fact is the one of the value whose parts they are (rewrite design 4.1-4.2). `mul_one_by_parts` rewrites `x * 1` to `x` because `mul_by_one(x, node_of(c))` reads `sign(y) == 1` through the `x * y` clause; `x * 2` keeps its product because the query answers false. The coefficient is a `const` parameter, so its node is reached with `node_of(c)` (rule-language design v2, section 1: `const c` is the constant's value in a condition, and `node_of(c)` is the node), and the two parts are a factor and a node rather than two values pinned by shape. The first report prints one product in each function, the second only in `two`, and the values are unchanged."
+name = "rules.fact_takes_the_parts_of_a_compound"
+desc = "A declaration with parameters (`fact mul_by_one(a: Node, b: Node): bool`) is a multi-parameter query: a rule's condition hands it the parts of the compound, and the fact is the one of the value whose parts they are (rewrite design 4.1-4.2). `mul_one_by_parts` rewrites `x * 1` to `x` because `mul_by_one(x, node_of(c))` reads `sign(y) == 1` through the `x * y` case; `x * 2` keeps its product because the query answers false. The coefficient is a `const` parameter, so its node is reached with `node_of(c)` (rule-language design v2, section 1: `const c` is the constant's value in a condition, and `node_of(c)` is the node), and the two parts are a factor and a node rather than two values pinned by shape. The first report prints one product in each function, the second only in `two`, and the values are unchanged."
 kind = "behavior"
-case = "../../../cases/modules/rules/analysis_parts.cml"
-args = ["${case}", "analysis_parts::report", "analysis_parts::apply", "analysis_parts::report", "std::nvm"]
+case = "../../../cases/modules/rules/fact_parts.cml"
+args = ["${case}", "fact_parts::report", "fact_parts::apply", "fact_parts::report", "std::nvm"]
 expect_exit = 0
 expect_stdout_contains = ["one 1 two 1\none 0 two 1\n7 14\n"]
 timeout_ms = 20000
@@ -1579,3 +1579,31 @@ expect_diagnostic_line = 11
 expect_output_contains = ["The right side of the rule 'add_shift' reads the `with` parameter 'shift', which is not implemented yet"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
+
+[[tests]]
+name = "rules.fact_argument_is_not_a_constant"
+desc = "A fact is computed once for the arguments it is queried with, and two different arguments are two different facts, so the compiler must compute the argument where the query is written: `capped<y>(x)` names a parameter of the rule, a value of the run, and the declaration is refused with `SemanticDiag::FactArgumentNotConstant` (name=SemanticDiag::FactArgumentNotConstant, code=0x030001C3) on the written argument, rather than computing a fact for every value the parameter may take."
+kind = "negative"
+case = "../../../cases/modules/rules/fact_arg_not_constant.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::FactArgumentNotConstant"
+expect_diagnostic_line = 17
+expect_output_contains = ["The argument 'cap' of a fact is not a compile-time constant of type 'int'.", "An argument is therefore a value the compiler computes where the query is written", "fact_arg_not_constant.cml:17:42"]
+expect_output_not_contains = ["UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.fact_without_a_default_case"
+desc = "Every fact needs one case that takes whatever the others do not: `sign` matches only a constant, so nothing says what the fact is for a value no case matched, and the declaration is refused with `SemanticDiag::FactCaseDefaultMissing` (name=SemanticDiag::FactCaseDefaultMissing, code=0x030001C4) on the `fact` line. The value of that case is also what a value that depends on itself settles on, so it is not optional."
+kind = "negative"
+case = "../../../cases/modules/rules/fact_no_default.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::FactCaseDefaultMissing"
+expect_diagnostic_line = 8
+expect_output_contains = ["The fact 'sign' has no 'case _', so nothing says what it is for a value no other case matched.", "every fact needs one case that takes whatever they do not"]
+expect_output_not_contains = ["UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
