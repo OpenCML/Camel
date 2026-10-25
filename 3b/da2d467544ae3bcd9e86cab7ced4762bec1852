@@ -1,0 +1,1 @@
+h590 第二轮：export_matrix 加 --check（逐字节 + unified diff + exit 1；未知参数 exit 2），并判定生成器必须写 LF（.gitattributes * text=auto eol=lf），修掉 md 侧 CRLF（5020→4892 字节）；benchmarks/README.md 文件地图补两处生成关系。协调者据此把 export-matrix 与 model-generators 两条 python 校验接进 camel-remote.ps1 的 -Check 表（-Check all 现 8 项）。
