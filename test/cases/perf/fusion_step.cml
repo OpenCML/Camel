@@ -20,19 +20,19 @@ import { with_grad } from autodiff
 import { now } from time
 
 type Model = {
-    w: Tensor,
-    a: Tensor,
-    u: Tensor
+    w: f32[..],
+    a: f32[..],
+    u: f32[..]
 }
 
 with <m: Model>
-func fused_loss(x: Tensor): float {
+func fused_loss(x: f32[..]): float {
     let scaled = x / m.w
     return sum(scaled @ m.u)
 }
 
 with <m: Model>
-func declined_loss(x: Tensor): float {
+func declined_loss(x: f32[..]): float {
     let scaled = m.a / m.w
     return sum(scaled @ m.u)
 }

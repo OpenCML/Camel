@@ -872,12 +872,12 @@ parameter is on its way out (**target**, `docs/design-principles.cn.md` §5.4).
 import tensor
 import { Tensor } from tensor
 
-func twice(x: Tensor): float {
+func twice(x: f32[..]): float {
     return tensor::sum(tensor::multiply(x, 2.0))
 }
 
 func main(): int sync {
-    println(twice(tensor::new([1.0, 2.0])))
+    println(twice(tensor::new([1.0, 2.0] as f32[])))
     return 0
 }
 ```

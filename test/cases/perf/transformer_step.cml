@@ -19,26 +19,26 @@ import { now } from time
 // d = 8, s = 4, batch = 1: small enough to run a hundred steps in a second, large enough that
 // every operator of a real step is there.
 type Block = {
-    g1: Tensor,
-    g2: Tensor,
-    wq: Tensor,
-    wk: Tensor,
-    wv: Tensor,
-    wo: Tensor,
-    w1: Tensor,
-    b1: Tensor,
-    w2: Tensor,
-    b2: Tensor
+    g1: f32[..],
+    g2: f32[..],
+    wq: f32[..],
+    wk: f32[..],
+    wv: f32[..],
+    wo: f32[..],
+    w1: f32[..],
+    b1: f32[..],
+    w2: f32[..],
+    b2: f32[..]
 }
 
 // RMSNorm over the last axis, the gain applied after the normalization.
-func rmsnorm(x: Tensor, g: Tensor): Tensor {
+func rmsnorm(x: f32[..], g: f32[..]): f32[..] {
     let scale = mean(x * x, -1, true)
     return x / sqrt(scale + 1e-6) * g
 }
 
 with <block: Block>
-func attention(x: Tensor): Tensor {
+func attention(x: f32[..]): f32[..] {
     let h = rmsnorm(x, block.g1)
     let q = h @ block.wq
     let k = h @ block.wk
@@ -50,16 +50,16 @@ func attention(x: Tensor): Tensor {
 }
 
 with <block: Block>
-func feed_forward(x: Tensor): Tensor {
+func feed_forward(x: f32[..]): f32[..] {
     let h = rmsnorm(x, block.g2)
     return relu(h @ block.w1 + block.b1) @ block.w2 + block.b2 + x
 }
 
 with <block: Block>
-func logits(x: Tensor): Tensor { return feed_forward<block>(attention<block>(x)) }
+func logits(x: f32[..]): f32[..] { return feed_forward<block>(attention<block>(x)) }
 
 with <block: Block>
-func loss(x: Tensor, labels: Tensor): float {
+func loss(x: f32[..], labels: f32[..]): float {
     return softmax_cross_entropy(logits<block>(x), cast(labels, 'int64'))
 }
 
