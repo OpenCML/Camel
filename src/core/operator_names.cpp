@@ -122,8 +122,12 @@ std::optional<std::string_view> whyNotOverloadable(std::string_view symbol) {
         {"->", "it passes the value on its left to the function on its right"},
         {"..", "it composes two functions"},
         {"=", "assignment binds a variable to a value"},
-        {"===", "it is not part of the language"},
-        {"!==", "it is not part of the language"},
+        {"===",
+         "it is the elementwise equality of two arrays, and a scalar compares with '==': a "
+         "type of its own does not get a third meaning for the pair"},
+        {"!==",
+         "it is the elementwise inequality of two arrays, and a scalar compares with '!=': a "
+         "type of its own does not get a third meaning for the pair"},
         {".", "it reads a field"},
         {"=>", "it is not an operator"},
     };

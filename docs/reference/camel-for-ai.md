@@ -252,7 +252,10 @@ postfix `.`, `[...]`, `(...)` or `<...>` must touch what it follows.
 **Operators.** Arithmetic `+ - * / %`, power `^` (right-associative), matrix product `@`; `&&` and
 `||` are branches — the right side runs only if it decides the result — while `&` and `|` read both
 sides and may be overloaded; `==` and `!=` compare by content, so two arrays or two structs with
-equal contents are equal. Numeric types never convert implicitly: `i32` with `int`, or `int` with
+equal contents are equal. On an array `==` is the whole comparison — the shapes are the same and the
+elements are equal everywhere — and gives a `bool`, tensors included, however the element type is
+written; `===` and `!==` are element-wise and give a `bool` array of the same shape (on a scalar
+`===` is `==`). Numeric types never convert implicitly: `i32` with `int`, or `int` with
 `float`, is `SemanticDiag::NoMatchingFunction`, and `let y: float = n` (`n` an `int`) is
 `SemanticDiag::DeclaredTypeMismatch`. Only **literals** take the type their context asks for
 (`let x: f32 = 1`); variables do not. Convert with `float(n)`, `int(x)`, `string(v)`.

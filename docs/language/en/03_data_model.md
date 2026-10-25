@@ -207,7 +207,7 @@ The result of `s[i]` is a one-character string, not a number; use `str::codepoin
 
 ### 3.3.5 Values that cannot be compared
 
-`==` and `!=` apply to numbers, `bool`, `string`, `Map` and `Set`, and to arrays, tuples and structs: these three compare by content, element by element, and their element types must themselves be comparable ([6.7.3](06_expressions.md#673-comparison)). Functions, composite values with a function in them, and a `T?`/`T!` by itself have no `==` (compile-time error). For `===` see [6.7.3](06_expressions.md#673-comparison).
+`==` and `!=` apply to numbers, `bool`, `string`, `Map` and `Set`, and to arrays, tuples, structs and tensors (numeric arrays): the whole comparison is "the shapes are the same and the elements are equal everywhere" and gives a `bool`; arrays, tuples and structs compare by content, element by element, and their element types must themselves be comparable ([6.7.3](06_expressions.md#673-comparison)). `===` and `!==` do the same thing element by element; see [6.7.3](06_expressions.md#673-comparison). Functions, composite values with a function in them, and a `T?`/`T!` by itself have no `==` (compile-time error).
 
 ## 3.4 May be null `T?` and may fail `T!`
 
