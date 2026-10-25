@@ -33,30 +33,46 @@ Two of the previous tip's reds left without a new one: `export_fold` (10.03 s ti
 stdout before, `PASS 343.89 ms` here, its onnx model written and parsed by the plan's own verify
 script) and `rules.tensor_saturation_keeps_values` (`RewriteInvalid` before, `PASS 392.03 ms` here).
 
-## 2. Slow layer -- 11 at `c5c506e44`, 10 with the C++ fix, 5 once the bare-`Tensor` family is done
+## 2. Slow layer -- 11 at `c5c506e44`, 10 with the C++ fix, 6 measured at `511711e49`
 
-Whole-tree slow measurement at `tip=c5c506e44` (measurement lane), plus my own re-runs of the two
-plans named below, twice each. The slow layer has not been re-measured at `tip=26bd1c6cc` here: the
-two merges add no slow-entry change of their own beyond the `agree_with_fvm` fix below, and a fresh
-whole-tree slow measurement is the measurement lane's to take.
+Whole-tree slow measurement at `tip=c5c506e44` (measurement lane), plus my own re-runs of the plans
+named below by name (a plan file runs in full whatever the tier says), twice each for the three
+entries that only this line had. At `tip=511711e49` the entries were re-checked one by one, and the
+slow layer there is **6**, not 10: the three `poison:modules.rules` entries and the
+`gpu/tiles_transfer` entry went green with the fixes develop has since landed.
 
-| # | test | where it comes from |
-|---|---|---|
-| 1 | `debugger.dap_protocol` | red on develop too |
-| 2-4 | `poison:modules.rules:rules.library_verdicts_are_exactly_these`, `…reduced_element_type_instances_are_checked`, `…every_exported_rule_enters_the_check` | red on develop too |
-| 5 | `gpu/tiles_transfer :: tree_expansion_autodiff_and_device_update` | red on develop too |
-| 6-8 | `poison:…nn:lrit`, `poison:…nn:mnist`, `poison:…index_semantics:declaration_evaluator` | the fast layer's own reds, seen again in the slow selection -- the bare-`Tensor` family |
-| 9 | `feat/trans/cpp :: agree_with_fvm` | **only this line** -- fixed here, section 3 |
-| 10-11 | `feat/mm/gc_pacing :: gc_pacing.training_400`, `.training_800` | **only this line**, the bare-`Tensor` family, being fixed on this line |
+| # | test | state at `511711e49` | where it comes from |
+|---|---|---|---|
+| 1 | `debugger.dap_protocol` | **red**, `test/plans/feat/tools/debugger.plan.toml` reads `13/14` with only this one failing | red on develop too |
+| 2-4 | `poison:modules.rules:rules.library_verdicts_are_exactly_these`, `…reduced_element_type_instances_are_checked`, `…every_exported_rule_enters_the_check` | **green**, `test/plans/feat/modules/rules.plan.toml` reads `140/140` | red on develop at `0a1a509f5`, answered since |
+| 5 | `gpu/tiles_transfer :: tree_expansion_autodiff_and_device_update` | **green**, `test/plans/gpu/tiles_transfer.plan.toml` reads `3/3` | red on develop at `0a1a509f5`, the fixture that made it red is fixed |
+| 6-8 | `poison:…nn:lrit`, `poison:…nn:mnist`, `poison:…index_semantics:declaration_evaluator` | **red** | the fast layer's own reds, seen again in the slow selection -- the bare-`Tensor` family |
+| 9 | `feat/trans/cpp :: agree_with_fvm` | **green**, `test/plans/feat/trans/cpp.plan.toml` reads `11/11` | **only this line** -- fixed here, section 3 |
+| 10-11 | `feat/mm/gc_pacing :: gc_pacing.training_400`, `.training_800` | **red** | **only this line**, the bare-`Tensor` family, being fixed on this line |
 
 Entries 6-8 and 10-11 are one family: a bare `Tensor` -- the element type of a value not stated at
-its source -- does not bind to a parameter of known shape. Entries 1-5 are red on develop as well.
-The five that are left once that family is done are exactly entries 1-5, which is the endpoint
-section 5 states.
+its source -- does not bind to a parameter of known shape. With that family done, what is left is
+entry 1 alone, which is red on develop as well; the endpoint section 5 states that.
 
-Two slow entries went green at this tip without a new one: `feat/modules/onnx :: pass_export_equals_export_model`
-(two 120 s liveness kills and a cpu reading of 0 before; `PASS 25.50 s wall / 46.94 s cpu` here) and
-`poison:…rules.rules.tensor_saturation_keeps_values` (`PASS 313.05 ms`).
+Two slow entries went green before this at `c5c506e44` without a new one: `feat/modules/onnx ::
+pass_export_equals_export_model` (two 120 s liveness kills and a cpu reading of 0 before;
+`PASS 25.50 s wall / 46.94 s cpu` there) and `poison:…rules.rules.tensor_saturation_keeps_values`
+(`PASS 313.05 ms`).
+
+### The one merge this line refused
+
+`handover/h506-bare-tensor` (`887856c6b`, the tip at the time) was merged and **not landed**: the
+whole fast gate read `6219 / 5951 / fail 249 / skip 11 / known 8` against `fail 6` before it, with
+the gradient programs running but their expected values no longer printed (for example
+`grad_library`: "the program prints the gradient difference and the licence bound" fails). The cause
+is in the merge itself, not in the merge's targets: both this line and develop changed
+`modules/tensor/ops/vjp.cpp` and `…/vjp.h` (develop's and this line's versions differ by 128 and 49
+inserted lines), the lane's develop merge took develop's side (`a41b28e8d`'s second parent is
+`bbac1ff46`, which does not contain `5b629ad4d`), and merging that branch into this line blended the
+two implementations into a third one -- develop `09360763`, this line `f67fea29`, the lane
+`53619ff9`, the blend `47cbecf9`. The lane's work needs to sit on top of this line's `vjp.cpp`
+rather than beside it, so its branch has to start from a tip of this line and not from a develop
+merge of its own. The merge commit was `579d5ad57` and this line is back at `511711e49`.
 
 ## 3. The three that only this line has
 
@@ -151,12 +167,17 @@ other lane landed -- the exact specialization count, the two re-recorded profile
 
 ## 5. The account's six readings, and the endpoint
 
-| layer | before this batch | at `26bd1c6cc` (measured) | once the bare-`Tensor` family is done (projected) |
+| layer | before this batch | at `511711e49` (measured) | once the bare-`Tensor` family is done (projected) |
 |---|---|---|---|
-| fast | `fail 9` (`c5c506e44`: 6218/6190) | **`fail 6`** (6219/6194) = the six baseline names | **`fail 1`** -- `print_and_recompile` only |
-| slow | 11 (`c5c506e44`) | 10 (entry 9 fixed; not re-measured at this tip) | **5** -- exactly develop's own reds (1 `debugger.dap_protocol`, 3 `poison:modules.rules:*`, 1 `gpu/tiles_transfer :: tree_expansion_autodiff_and_device_update`) |
+| fast | `fail 9` (`c5c506e44`: 6218/6190) | **`fail 6`** (6219/6194 at `26bd1c6cc`; `511711e49` differs from it by this page only) = the six baseline names | **`fail 1`** -- `print_and_recompile` only |
+| slow | 11 (`c5c506e44`) | **6** (re-checked entry by entry at `511711e49`: `debugger.dap_protocol` red, the three `poison:modules.rules` entries and the `gpu/tiles_transfer` entry green, the three fast-family entries and the two `gc_pacing` entries red) | **1** -- `debugger.dap_protocol`, red on develop too |
 
 What that means for the day this line lands: its reds are the ones develop is red on anyway, plus
 `print_and_recompile`, which is another open ruling and not this line's. Everything the flip
 integration itself introduced -- the crashes, the print form, the element type, the `var` cell, the
 type identity, the C++ cell marking, the stale specialization and profile records -- is green.
+
+Two caveats on the table. The slow layer is a whole-tree selection and the measurement lane owns its
+full run; what is measured here is every entry of the eleven-entry account, plan by plan. And the
+bare-`Tensor` lane has not landed: its branch has to start from a tip of this line (section 2), so
+until it does, entries 6-8 and 10-11 of the slow layer and four of the fast layer's six stay red.
