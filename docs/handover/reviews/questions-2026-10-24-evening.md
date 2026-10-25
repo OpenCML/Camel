@@ -606,3 +606,9 @@ println(grow([1.0, 2.0], read_int()))
 ## tiles-transfer-case-ownership（报告）
 
 来路查得清楚。夹具在 `Tensor<f32>` 的位置上写了浮点字面量数组，元素类型读法改了以后它就成了 f64。按现在的规则，改夹具：字面量写 `as f32[]`，或者让 `reshape` 的结果放在声明了类型的位置上。由 GPU 车道认领。
+
+## `static for` 去括号这一批：收下，一处返工
+
+解析器、格式化器、标准库、用例和语言参考都改成了不带括号的头部，`static for` 和 `static loop` 共用一个读名字表的函数（`parseStaticForNameList`），这样写对。
+
+**返工**：删掉 `test/cases/parse/rulings/static_for_head_parenthesized.cml`，连同它的计划条目、基准文件和 AST 哈希那一行。这个用例把旧写法钉成"会报错"，注释里还讲旧写法曾经怎么写，等于给已删的写法留了一份记录（不计兼容：旧写法干净删除，不留"为什么不用 X"的痕迹）。带括号的头部报出来的只是普通的语法错误，解析器对普通语法错误的测试已经覆盖了。`docs/design-principles-log.cn.md` 是带日期的裁定日志，里面的旧写法保留原样。
