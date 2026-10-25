@@ -1,0 +1,34 @@
+tip=8b2035008 H554 第九轮：快照重录 + `-Check all` 补齐 + 4 条位置钉值（40 → 36，新增红 0）
+
+数字
+- **40 → 36**（gate-26：`total: 6379, pass: 6315, fail: 36, skip: 12, known failures: 16`；逐名 **fixed 4 / new 0**）：`frontend.ast_snapshot`、`graph.attrs`、`grants.graph`、`partial_application_span`。
+- **`-Check all`：6 run, 0 failed**（补齐第八轮漏的第六条）。
+
+① `frontend.ast_snapshot` 重录（主机侧）
+- 逐字：`probes: 227` / `wrote test/plans/feat/parse/golden/ast_hashes.txt (285 files: 58 cases + 227 probes; re-hashed 285 line(s), kept 0 recorded line(s) of the 286)`；把该文件取回工作树 `262 insertions(+), 263 deletions(-)` → 该 plan 复测全绿（`tags.plan.toml` + `frontend.plan.toml` 合跑 `total: 49, pass: 49, fail: 0`）。
+
+② `-Check all` 第六条 = `stdlib-reference`：逐字 `the declarations agree with the 615 registered operator overloads`。第六条与其余五条现在都 exit 0：
+- `diagnostics registry: 277 codes, every one with a name, a message and what it says about an edit (15 with one, 262 with a reason), no value used twice, and the emitted headers agree`
+- `docs/reference/camel-for-ai.md is what its sources produce: 4 generated region(s), 755 entries, 277 diagnostics, 34 diagnostic name(s) cited by the prose, 106258 characters (budget 112000)`
+- `no unverified citation: 413 of 413 symbol citation(s) verified, 1939 path citation(s) across 4810 file(s)`
+- `headers: every one of 1365 member files carries the two-line header (C/C++ 1086, Camel 44, scripts 235)`
+- `grammar: 130 productions, in step with the parser, the token table and the language reference`
+
+③ 连带修掉的一处与一处操作提示
+- 我上一轮提交的 `scripts/strip-module-declarations.mjs` 头部第四行是 `//`，`headers` 逐字报 `the header is not followed by a blank line (line 4 is "//")` → 加空行后 `headers` 转绿（脚本成员数 234 → 235）。
+- 修头部时用了 `--amend`，主机上的暂存分支因此变成非快进，helper 逐字提示 `refs/heads/handover/h554-no-module-decl there is the helper's scratch branch, not develop. Delete it and re-run` → 按它给的命令删掉（was `b39c35774`）后复跑正常。**这条命令你落地时可能也会遇到**：`ssh 88zjwei "git -C camel-work/Camel.git branch -D handover/h554-no-module-decl"`。
+
+④ 位置钉值三条（改前→改后逐字）
+- `graph.attrs`（`compile/tags.plan.toml`）：`Error: no OPER at line 10` → 6 个 span 钉值整体下移 1（`only(10/15/20/23/27,…)` → 9/14/19/22/26，`at(26)` → `at(25)`）→ 绿。
+- `grants.graph`（`compile/decorators.plan.toml`）：`Error: no node at line 12` → 该测试块内 13 行 span 钉值下移 1 → 绿。
+- `partial_application_span`（`compile/function_value_positions.plan.toml`）：实测 `span="7:12-7:18"`，plan 钉 `4:12-7:18`（develop 的 desc 里本来就写 `7:12-7:18`）→ 两条钉值改成 `7:12-7:18` → 绿。
+
+⑤ `grad_function_value_*` 12 重判（本线读数，逐字）
+- 该测试第二条断言：`/[(]at [^ ]*grad_function_value_branch[.]cml:11:13[)]/`，实测量出的却是 `grad_function_value_branch.cml:10:13`——**与第一条断言要求诊断所在的位置完全相同**（诊断在 10:13，消息里点名的调用也是 10:13，而用例里有两次调用）。作者的"切线逐字段定"裁定管的是梯度的取值，不决定"消息该点名哪一次调用"，所以**不是同根因**：属本支既有缺陷，一行证据停手（12 条共此形态）。
+
+⑥ 剩余 36 条分类（含本轮拿到的逐字读数，下一轮顺序）
+- 位置/命名类（本支）：`constant_fault_reached.simplify_fvm`（打印 `fold_constant_fault_reached.cml:10:15: [Error]: Attempted division by zero.`）、`gpu_scope.module_tag_propagates`（`Error: no placement row for scaled: ["__root__","Device::scaled","Device::kept","Device::Host::plain","main"]`）、`rules.generic_condition_effect_at_instantiation`、`graph`（仍在某 plan 里，`modules/graph.plan.toml` 已 93/93 绿，说明它在别的 plan，下一轮先定位）。
+- 脚本自身断言类（需逐脚本读）：`compile_bench.smoke`（`stdout does not start with "ok compile benchmark"`）、`docs.snippets_compile`（`stdout does not contain 'no stale snippet in'`）、`python_binding.session`（`stdout does not contain 'diagnostic:    camel.DiagnosticError name=SemanticDiag::UnresolvedReference code=0x0300000B'`）、`debugger.http_gateway`（`stdout does not start with "ok "`）、`lsp.editing`/`lsp.navigation`/`lsp.code_and_related`（同 "ok "）、`lsp.fstring`**环境**（一行证据：`ModuleNotFoundError: No module named 'camel'`）。
+- develop 侧 12 条（尚未定位到行，故未写问题页）：`camel_passes.fold_fault.fault_is_reported`、`captured_write_graph.warnings`、`check.lexical_limit_json`、`dump_after_each_pass`、`entry_args.missing_argument_json`（`stdout does not contain 'std::fvm: EntryArgumentMissing'`）、`failed_depth.error`、`failed_evaluation.error`、`fixes_apply`、`fusion_group.profile.none`、`json_data_of_a_pass_the_module_does_not_provide`、`macro_body_effect_stage`、`nullable_positions.default_is_a_null_constant`。
+
+提交：`b2c…`→本轮三条（快照重录与 span 钉值、头部空行、`-Check all` 无新增红）；`<pipeline>` 按你的话保持原样未改。纪律：未推 origin；未碰 `docs/language/**` 散文；未碰其它工作树/分支；未在 Windows 构建。
