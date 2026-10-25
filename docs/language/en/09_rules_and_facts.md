@@ -170,7 +170,7 @@ func main(): int sync {
 ```
 
 ```bash
-camel ./counts.cml counts::simplify std::nvm
+camel counts.cml counts::simplify std::nvm
 ```
 
 ```text
@@ -302,7 +302,7 @@ export func apply(p: Program): Program! {
 
 - **Different arguments are different facts**: the engine computes and caches by "fact + arguments", so `capped<3>` and `capped` each have a value of their own, and writing one argument does not change the fact read elsewhere.
 - **An argument must be a compile-time constant**: the value of a fact is decided by the program and by the arguments as written, so that every rule sees one answer. An argument that is not a constant is refused (`SemanticDiag::FactArgumentNotConstant`).
-- **The argument of a query**: the head of design 7.5, `fact range::<T>(v: T)`, makes the parameter a **value**, so `range(y)` and a query inside a `when` are one spelling. Today's implementation signs the query `name: (v: Node) => fact type` (the parameter is a **node**), so a query is written where a node is at hand: a rule's condition (`when`), the body of another fact ([9.5](#95-facts)), or any function that has a `Node`; an ordinary function body with only a **value** (`capped(y)`, `y: int`) is not a query — `SemanticDiag::NoMatchingFunction`, whose help lists `capped: (v: Node) => int` (see [9.8](#98-forms-that-are-not-implemented)).
+- **The argument of a query is a node**: a fact says **how** a value on the program's graph came to be, so it belongs to the graph and not to a value at run time; the `v: T` of the head `fact range::<T>(v: T)` therefore means **the node that produces type `T`** ([rules language v2](../../design/rewrite/v2.cn.md), section 1). A query is thus written where a node is at hand: a rule's condition (`when`), the body of another fact ([9.5](#95-facts)), or any function that has a `Node`. An ordinary function body runs at run time, where there is no "this value on the graph" to ask about, so a query is not written there: passing a value to a query reads `SemanticDiag::NoMatchingFunction` today (whose help lists `name: (v: Node) => fact type`), and by the ruling it should be a diagnostic that names the rule, which is not implemented yet.
 
 Counter-example: the argument of the fact is the rule's parameter `y`, which is not a constant.
 
@@ -387,7 +387,7 @@ func main(): int sync {
 ```
 
 ```bash
-camel ./fired.cml fired::simplify std::gir
+camel fired.cml fired::simplify std::gir
 ```
 
 ```text
@@ -396,7 +396,7 @@ camel ./fired.cml fired::simplify std::gir
             O04 [label="EXIT", type="EXIT"];
             N03 [label="a", type="PORT", param_name="a", param_kind="normal", param_index="0", value_type="int"];
             N04 [label="b", type="PORT", param_name="b", param_kind="normal", param_index="1", value_type="int"];
-            N05 [label=":op/add_l", type="OPER", origin=4343, span="14:17-14:18", srcfile="./fired.cml", value_type="int"];
+            N05 [label=":op/add_l", type="OPER", origin=4343, span="14:17-14:18", srcfile="fired.cml", value_type="int"];
             F04 -> N03 [label="0", type="NORM_PORT"];
             F04 -> N04 [label="1", type="NORM_PORT"];
             N05 -> O04 [label="0", type="EXIT"];
@@ -405,9 +405,9 @@ camel ./fired.cml fired::simplify std::gir
         }
 ```
 
-Without the pass (`camel ./fired.cml std::gir`) the same cluster also holds `N06 [label="math:abs_l", …]`: its
-edges are `N05 -> N06` and `N06 -> O04`, and after the pass that `N06 -> O04` becomes `N05 -> O04` while the
-`math:abs_l` node is gone.
+Without the pass (`camel fired.cml std::gir`) the same cluster also holds the `math:abs_l` node: it takes the
+result of the addition node and hands it to the exit, and after the pass the exit's input comes straight from
+the addition node, so the `math:abs_l` node is gone.
 
 ## 9.8 Forms that are not implemented
 
@@ -418,7 +418,6 @@ These forms are all ruled ([rules language v2](../../design/rewrite/v2.cn.md), s
 | the right side of a rule reading a `with` parameter | `SemanticDiag::RuleWithParameterOnASide`, whose message says "not implemented yet" |
 | type parameters and `with` parameters on one rule | `SemanticDiag::RuleWithParameterGenericHead` |
 | `std::opt rules=[law::negate]` on the command line, `f->std::opt<rules: [negate]>` in source | `SemanticDiag::ParamArgumentUnknown`; the name `std::opt` does not resolve in source today either |
-| the argument of a fact query is a **value** (`range(y)` with `y: T`, under the head `fact range::<T>(v: T)` of design 7.5) | today's query signature is `name: (v: Node) => fact type`; a value argument is `SemanticDiag::NoMatchingFunction` (whose help lists `(v: Node) => …`) |
 
 ## Related documents
 
