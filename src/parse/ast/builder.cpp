@@ -1512,7 +1512,12 @@ Value Builder::visitFactDecl(cst::FactDecl context) {
             }
         }
     }
-    const auto withPairs = [&]() {
+    // The `with` parameters of the declaration, once per function that carries them: an expression
+    // tree is not shared between two declarations. On the query function they are `constas`, the
+    // mark that says "the compiler must compute this argument"; on the functions the engine calls
+    // they are plain `with` parameters, because the engine passes the query's arguments to them as
+    // the `with` arguments of the call, so a case names one and reads the value.
+    const auto withPairs = [&](bool asConstas) {
         std::vector<node_ptr_t> built;
         const auto params = context->get<cst::AngledParams>();
         if (!params) {
@@ -1527,10 +1532,8 @@ Value Builder::visitFactDecl(cst::FactDecl context) {
                 continue;
             }
             const std::string paramName(pair->get<cst::IdentDef>()->text());
-            // Marked `constas` although it is a `with` parameter: the mark is read as "the
-            // compiler must compute this argument", which is what a fact's argument is.
             node_ptr_t named = createNodeAs<NamedPairLoad>(
-                Reference(paramName), false, false, false, /*isConstas=*/true);
+                Reference(paramName), false, false, false, /*isConstas=*/asConstas);
             setNodeTokenRangeByContext(named, context);
             if (pair->type()) {
                 *named << any2node(visitType(pair->type()));
@@ -1628,7 +1631,8 @@ Value Builder::visitFactDecl(cst::FactDecl context) {
 
     std::vector<node_ptr_t> declarations;
     declarations.push_back(makeFunc(
-        name + "__initial", {}, {}, typeOf(factType), any2node(visitBlockExpr(initialRhs))));
+        name + "__initial", withPairs(false), {}, typeOf(factType),
+        any2node(visitBlockExpr(initialRhs))));
     // One function per clause: it calls the function the clause names, of the fact's type, so that
     // a name with several overloads is resolved where the type is known.
     const auto mergeFunc = [&](const std::string &suffix, syn::Node clause) -> node_ptr_t {
@@ -1636,7 +1640,7 @@ Value Builder::visitFactDecl(cst::FactDecl context) {
             {"a0", typeOf(factType)}, {"a1", typeOf(factType)}};
         node_ptr_t callee = any2node(visitExpr(clause));
         node_ptr_t body   = blockOf(callOf(callee, {reference("a0"), reference("a1")}));
-        return makeFunc(name + suffix, {}, params, typeOf(factType), body);
+        return makeFunc(name + suffix, withPairs(false), params, typeOf(factType), body);
     };
     declarations.push_back(mergeFunc("__join", joinClause));
     if (meetClause) {
@@ -1706,42 +1710,6 @@ Value Builder::visitFactDecl(cst::FactDecl context) {
         std::string factFn;
         uint64_t constMask = 0;
     };
-    // A case body and a trailing clause are read by the engine, which calls them with the value the
-    // fact is about and not with the arguments the query was written with, so a `with` parameter is
-    // not a name they have. `bound` are the names the case's own pattern binds: a case that calls
-    // its variable `limit` still says what it means.
-    const auto namesAWithParameter = [&](syn::Node expr, const std::vector<std::string> &bound) {
-        if (!expr || expr.empty() || withNames.empty()) {
-            return false;
-        }
-        std::vector<std::string> names;
-        collectVars(expr, names);
-        for (const std::string &one : names) {
-            if (std::find(bound.begin(), bound.end(), one) != bound.end()) {
-                continue;
-            }
-            if (std::find(withNames.begin(), withNames.end(), one) != withNames.end()) {
-                return true;
-            }
-        }
-        return false;
-    };
-    const auto refuseWithNameInClause = [&](syn::Node expr, const std::vector<std::string> &bound) {
-        if (!namesAWithParameter(expr, bound)) {
-            return false;
-        }
-        LEAVE("FactDecl");
-        giveUp(
-            "a clause cannot name a 'with' parameter of the fact: the engine calls the cases with "
-            "the value the fact is about, not with the argument the query was written with, so the "
-            "argument is only part of which fact this is");
-        return true;
-    };
-    if (refuseWithNameInClause(joinClause, {}) || refuseWithNameInClause(meetClause, {}) ||
-        refuseWithNameInClause(widenClause, {}) || refuseWithNameInClause(narrowClause, {}) ||
-        refuseWithNameInClause(initialRhs, {})) {
-        return Value();
-    }
     std::vector<CompiledCase> compiled;
     for (size_t index = 0; index + 1 < cases.size(); ++index) {
         const syn::Node one         = cases[index];
@@ -1778,9 +1746,7 @@ Value Builder::visitFactDecl(cst::FactDecl context) {
             LEAVE("FactDecl");
             return giveUp("a case pattern names no variable, so the case says nothing");
         }
-        if (refuseWithNameInClause(rhs, vars)) {
-            return Value();
-        }
+
         std::vector<std::pair<std::string, node_ptr_t>> patternParams;
         std::vector<std::pair<std::string, node_ptr_t>> factParams;
         uint64_t mask = 0;
@@ -1804,10 +1770,11 @@ Value Builder::visitFactDecl(cst::FactDecl context) {
             patternBody = any2node(visitBlockExpr(patternExpr));
         }
         declarations.push_back(makeFunc(
-            prefix, {}, patternParams, constName.empty() ? refType("int") : typeOf(constType),
-            patternBody));
+            prefix, withPairs(false), patternParams,
+            constName.empty() ? refType("int") : typeOf(constType), patternBody));
         declarations.push_back(makeFunc(
-            prefix + "_fact", {}, factParams, typeOf(factType), any2node(visitBlockExpr(rhs))));
+            prefix + "_fact", withPairs(false), factParams, typeOf(factType),
+            any2node(visitBlockExpr(rhs))));
         compiled.push_back({prefix, prefix + "_fact", mask});
     }
 
@@ -1840,7 +1807,7 @@ Value Builder::visitFactDecl(cst::FactDecl context) {
     setNodeTokenRangeByContext(call, context);
     *call << reference("__fact") << args << createNodeAs<RepeatedLoad>("NamedData");
     declarations.push_back(
-        makeFunc(name, withPairs(), queryParams, typeOf(factType), blockOf(call)));
+        makeFunc(name, withPairs(true), queryParams, typeOf(factType), blockOf(call)));
 
     LEAVE("FactDecl");
     return declarations;
