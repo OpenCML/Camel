@@ -88,23 +88,6 @@ const TangentSpace *DerivativeRegistry::findTangentSpace(const type::Type *type)
     return nullptr;
 }
 
-void DerivativeRegistry::setTangentType(type::TypeCode code, type::Type *(*fn)(type::Type *)) {
-    std::unique_lock lock(mutex_);
-    tangentTypes_.insert_or_assign(code, fn);
-}
-
-type::Type *DerivativeRegistry::statedTangentType(type::Type *type) const {
-    if (type == nullptr) {
-        return nullptr;
-    }
-    std::shared_lock lock(mutex_);
-    auto it = tangentTypes_.find(type->code());
-    if (it == tangentTypes_.end() || it->second == nullptr) {
-        return nullptr;
-    }
-    return it->second(type);
-}
-
 void DerivativeRegistry::setDiscretePredicate(
     type::TypeCode code, bool (*predicate)(const type::Type *)) {
     std::unique_lock lock(mutex_);
@@ -165,26 +148,13 @@ Type *computeTangentType(Type *primal) {
     }
     case TypeCode::Array: {
         const ArrayType *array = tt::as_ptr<ArrayType>(primal);
-        // An array whose element type is numeric but not fixed yet — `Tensor`, the alias's
-        // transitional spelling — states no element type: its only element type is `Void`, which
-        // is the marker and not a type anything can be sliced to. Taking a tangent from it would
-        // build the array of that `Void` element's tangent, which is nothing, and every zero
-        // tangent and sum of tangents over such a value then refused ("a zero tangent is not
-        // defined for tangent type 'void'") although the value it is the tangent of is a tensor
-        // and `tensor:zeros_like`/`tensor:add` answer for it. The kind that owns the values
-        // states the tangent type: it is the value's own type, and the element type follows the
-        // value (docs/handover/reviews/questions-2026-10-23.md, rank-zero-tensor and
-        // unstated-element-type-scalar-and-print).
-        if (array->isNumericUnknown()) {
-            return DerivativeRegistry::instance().statedTangentType(primal);
-        }
-        // A numeric array whose element type is fixed is a tensor as well, and a tensor's tangent
-        // is a tensor of the same shape: building it from the element's tangent -- the array of the
-        // elements' tangents -- leaves out the extents of the value's own outermost dimension.
-        // `f32[2, 3]` came back as `f32[]` that way, and that is what a loop over the array
-        // scattered its rounds' row gradients into: the zero tangent and the scatter were typed one
-        // rank short of the array they accumulate into, and the gradient was two uninitialized
-        // floats where the hand adjoint is six ones
+        // A numeric array is a tensor, and a tensor's tangent is a tensor of the same shape:
+        // building it from the element's tangent -- the array of the elements' tangents -- leaves
+        // out the extents of the value's own outermost dimension. `f32[2, 3]` came back as
+        // `f32[]` that way, and that is what a loop over the array scattered its rounds' row
+        // gradients into: the zero tangent and the scatter were typed one rank short of the array
+        // they accumulate into, and the gradient was two uninitialized floats where the hand
+        // adjoint is six ones
         // (test/cases/modules/autodiff/loop_grad_refuse_slice_iterable.cml, `shape(d)` was `[2]`
         // while the value is `[2, 3]`). The construction still answers for an array whose elements
         // are arrays *as values* -- a nested array, whose elements' tangents are arrays of their
@@ -197,19 +167,20 @@ Type *computeTangentType(Type *primal) {
         }
         Type *elem    = array->elemType();
         Type *tangent = elem ? tangentTypeOf(elem) : nullptr;
-        if (tangent != nullptr) {
-            // The tangent of an array is an array of the same shape: a tangent space has the
-            // shape of the space it differentiates, and `gradientOf` compares the gradient of a
-            // parameter with the parameter's own tangent type. An array of a tangent scalar that
-            // forgot the shape (`ArrayType::create(tangent)`, one unknown extent) is the tangent
-            // of nothing but a rank-1 value, and made `nn::sgd` refuse a rank-2 parameter's
-            // gradient as a different type.
-            return tangent == elem ? const_cast<ArrayType *>(array)
-                                   : array->withElementType(tangent);
+        if (tangent == nullptr) {
+            // An array whose element has no tangent has no tangent of its own: its coproduct is
+            // the elements' coproducts, and they are nothing.
+            return nullptr;
         }
-        // A kind whose values share the array code states its own answer through the registry;
-        // without one there is no tangent.
-        return DerivativeRegistry::instance().statedTangentType(primal);
+        // The tangent of an array is an array of the same shape: a tangent space has the shape of
+        // the space it differentiates, and `gradientOf` compares the gradient of a parameter with
+        // the parameter's own tangent type. An array of a tangent scalar that forgot the shape
+        // (`ArrayType::create(tangent)`, one unknown extent) is the tangent of nothing but a rank-1
+        // value, and made `nn::sgd` refuse a rank-2 parameter's gradient as a different type. The
+        // element type of the value is always in its type, so the element's tangent is the only
+        // thing to take: a kind that would state a tangent of its own states a whole tangent
+        // *space* instead, and that is what the lookup below answers.
+        return tangent == elem ? const_cast<ArrayType *>(array) : array->withElementType(tangent);
     }
     default:
         break;
