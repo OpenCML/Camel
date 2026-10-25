@@ -249,6 +249,12 @@ export const CASE_EXCEPTIONS = [
 const CASE_ROOT = 'test/cases'
 const CASE_REFERENCE_KEYS = new Set(['case', 'verify_script_path', 'compare_to', 'golden', 'args', 'envs', 'plans'])
 
+// A plan is an index of the cases it runs, and `test/plan-selection.json` is an index of the
+// directories a change touches: neither reads a directory by naming it, only a harness, a program
+// or a data file of one does (a run list that names the directory its programs live in, a test
+// that names the fixture tree it loads).
+const INDEX_FILES = new Set(['test/plan-selection.json'])
+
 // Where a reference counts: the compiler, the standard library, the modules, the tools, the tests
 // and the scripts -- the paths a gate or a plan reads a case through. A document or a report that
 // *describes* a measurement is not a reader of the workload it measured, and neither is the
@@ -340,7 +346,9 @@ export function caseLedgerProblems() {
     }
     const tracked = listed.stdout.split('\0').filter(Boolean)
 
-    const files = walkTreeFiles(CASE_ROOT).sort()
+    const files = walkTreeFiles(CASE_ROOT)
+        .filter((file) => !baseOf(file).startsWith('.'))
+        .sort()
     const caseFiles = files.filter((file) => !file.endsWith('.plan.toml'))
     const treePlans = files.filter((file) => file.endsWith('.plan.toml'))
     if (caseFiles.length === 0) {
@@ -428,23 +436,67 @@ export function caseLedgerProblems() {
         push(near, dirOf(dir), file)
     }
     const TOKEN = /[A-Za-z0-9_.\-]+(?:\/[A-Za-z0-9_.\-]+)+/g
+    // A file named anywhere, a comment included, is a reference to it: a plan that says its expected
+    // values come from an independent implementation names a file someone has to rerun. A directory
+    // named in prose is not: only code that reads the directory does, so the two rules that read a
+    // whole directory -- a harness that joins the path of its fixture tree out of segments, and a
+    // directory a program or a run list names -- look at the text with comments stripped (`#` is a
+    // comment in a script or a data list, not in Camel, C++ or JavaScript, where it is an attribute
+    // or an operator).
+    const HASH_COMMENT = /\.(py|toml|txt|sh|ya?ml|cfg|ini)$/
+    const stripComments = (text, hash) => {
+        let out = text.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\/\/[^\n]*/g, ' ')
+        if (hash) out = out.replace(/#[^\n]*/g, ' ')
+        return out
+    }
     for (const file of tracked) {
         if (!NAMING_ROOTS.some((root) => file.startsWith(root))) continue
         // the exception table below names the files it records; the ledger is not a reader of them
         if (file === 'scripts/plan-inventory.mjs') continue
         if (BINARY_SUFFIX.test(file)) continue
+        const isPlan = file.endsWith('.plan.toml')
         const text = readText(`${ROOT}/${file}`)
         if (text === null) continue
+        const code = stripComments(text, HASH_COMMENT.test(file))
         for (const candidate of near.get(dirOf(file)) ?? []) {
+            // a file that writes its own name in a comment does not read itself
+            if (candidate === file) continue
             if (text.includes(baseOf(candidate))) mark(candidate, file)
         }
-        for (const match of text.matchAll(TOKEN)) {
-            const token = match[0].replace(/^[.\-/]+/, '').replace(/[.\-/]+$/, '')
-            for (const candidate of suffix.get(token) ?? []) mark(candidate, file)
-            // a fixture directory a harness reads: naming the whole case tree, or one of its
-            // top-level directories, is not a reference to any particular case
-            if (token.startsWith(`${CASE_ROOT}/`) && token.split('/').length >= 4) {
-                for (const candidate of dirSuffix.get(token) ?? []) mark(candidate, file)
+        const relOfJoin = (source) => {
+            const found = new Set()
+            for (const call of source.matchAll(/\.join\(([^)]*)\)/g)) {
+                const parts = [...call[1].matchAll(/['"]([^'"]+)['"]/g)].map((match) => match[1])
+                if (parts.length < 3) continue
+                const at = parts.join('/').indexOf(`${CASE_ROOT}/`)
+                if (at < 0) continue
+                found.add(parts.join('/').slice(at))
+            }
+            return found
+        }
+        // a harness that builds the path of its fixture tree out of segments
+        // (`path.join(ROOT, 'test', 'cases', 'modules', 'std', 'env', 'unicode')`) reads that
+        // directory, and no single token in its text says so
+        for (const joined of relOfJoin(code)) {
+            if (caseSet.has(joined)) {
+                mark(joined, file)
+            } else if (below.has(joined)) {
+                for (const child of below.get(joined)) mark(child, file)
+            }
+        }
+        for (const [source, whole] of [[text, false], [code, true]]) {
+            for (const match of source.matchAll(TOKEN)) {
+                const token = match[0].replace(/^[.\-/]+/, '').replace(/[.\-/]+$/, '')
+                for (const candidate of suffix.get(token) ?? []) mark(candidate, file)
+                // a fixture directory a harness reads: naming a directory reads every file under it.
+                // A plan's prose pointing at the directory its cases live in is an index, not a read:
+                // what a plan reads are its values, and those are resolved above with the plan's own
+                // directory as the base, and `test/plan-selection.json` is an index of the
+                // directories a change touches rather than a reader of them.
+                const broadens = whole && !isPlan && !INDEX_FILES.has(file)
+                if (broadens && token.startsWith(`${CASE_ROOT}/`) && token.split('/').length >= 4) {
+                    for (const candidate of dirSuffix.get(token) ?? []) mark(candidate, file)
+                }
             }
         }
     }
