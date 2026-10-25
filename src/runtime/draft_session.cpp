@@ -988,7 +988,10 @@ size_t RuntimeSpecializationKeyHasher::operator()(const RuntimeSpecializationKey
         hashCombine(seed, static_cast<uint8_t>(binding.kind));
         hashCombine(seed, binding.index);
         hashCombine(seed, binding.value);
-        hashCombine(seed, binding.type);
+        // The type enters as its canonical id, the same relation the key compares by
+        // (specializations.h): hashing the object would put two equal keys in two buckets.
+        hashCombine(
+            seed, camel::core::type::TypeTable::instance().canonicalId(binding.type));
         hashCombine(seed, binding.runtimeFlags);
     }
     return seed;

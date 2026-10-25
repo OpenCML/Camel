@@ -20,6 +20,7 @@
 #include "camel/core/type/composite/stream.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/core/type/enum.h"
+#include "camel/core/type/intern.h"
 
 #include <format>
 #include <optional>
@@ -681,5 +682,16 @@ std::string typeToString(const Type *type) { return typeText(type, false); }
 std::string typeMangle(const Type *type) { return typeText(type, true); }
 
 bool typeEquals(const Type *a, const Type *b) { return sameType(a, b); }
+
+bool sameCanonicalType(const Type *a, const Type *b) {
+    if (a == b) {
+        return true;
+    }
+    TypeTable &table  = TypeTable::instance();
+    const TypeId left = table.canonicalId(a);
+    // kNoTypeId is the id of every type the table does not hold, so it says nothing about a
+    // structure; two such types are the same type only by being the same object, above.
+    return left != kNoTypeId && left == table.canonicalId(b);
+}
 
 } // namespace camel::core::type

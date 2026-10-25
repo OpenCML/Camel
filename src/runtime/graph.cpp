@@ -26,6 +26,7 @@
 #include "camel/core/rtdata/struct.h"
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/type/composite/composite.h"
+#include "camel/core/type/intern.h"
 #include "camel/runtime/reachable.h"
 #include "camel/utils/log.h"
 
@@ -1916,7 +1917,9 @@ uint64_t GCGraph::nodeContentHash(gc_node_ref_t ref) const {
     mixValue(n->flags);
     mixValue(n->reserved);
     mixValue(n->dataIndex);
-    mixValue(n->typeId);
+    // The type enters as its canonical id: two records that name one structure, however their
+    // keys spell the names in it, are the same content (camel/core/type/intern.h).
+    mixValue(camel::core::type::TypeTable::instance().canonicalIdOf(n->typeId));
     mixInputs(normInputsOf(ref));
     mixInputs(withInputsOf(ref));
     mixInputs(ctrlInputsOf(ref));
