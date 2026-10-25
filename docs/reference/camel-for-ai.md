@@ -191,13 +191,10 @@ func greet(): int {
 |---|---|
 | Declaration | `let` `var` `func` `type` `with` `module` `import` `export` `from` `namespace` `using` |
 | Control | `if` `then` `else` `match` `case` `return` `throw` `sync` `loop` `while` `do` `for` `in` `static` |
-| Type and conversion | `as` `const` `constas` `enum` |
+| Type and conversion | `as` `const` `constas` `enum` `typeof` |
 | Literal | `null` `true` `false` |
-| Reserved (accepted, not implemented — §13) | `is` `of` `try` `catch` `finally` `typeof` `keyof` |
 
 **Operators and separators** (55): `;` `,` `:` `::` `.` `..` `...` `(` `)` `[` `]` `{` `}` `<` `<` `>` `<=` `<=>` `>=` `==` `!=` `===` `!==` `=` `+=` `-=` `*=` `/=` `%=` `^=` `@=` `&=` `|=` `+` `-` `*` `/` `%` `^` `@` `#` `&` `|` `&&` `||` `!` `!!` `~` `?` `??` `->` `?->` `=>` `\\` `_`
-
-The token table `include/camel/parse/syntax/token_kinds.def` groups `enum` (token table: `Reserved`; reference: Type and conversion). This file follows the reference.
 <!-- camel-for-ai end: lexical -->
 
 **Common errors.** A keyword cannot be a name: a binding called `if` is
@@ -343,7 +340,7 @@ parallel, result in position order), `xs->reduce<f, init>` and `xs->foreach<f>` 
 11  multiplicativeExpr  * / @ %                            repeat, left
 12  powerExpr           ^                                  right, one
 13  nullableExpr        ?? !!                              right (a whole expression on the right)
-14  unaryExpr           as is                              one
+14  unaryExpr           as                                 one
 15  linkExpr            -> ?->                             repeat, left
 16  negExpr             - ! ~                              prefix
 17  negPower            - ! ~ ^                            prefix, right
@@ -368,7 +365,7 @@ additiveExpr       : multiplicativeExpr (('+' | '-') multiplicativeExpr)*
 multiplicativeExpr : powerExpr (('*' | '/' | '@' | '%') powerExpr)*
 powerExpr          : nullableExpr ('^' powerExpr)?
 nullableExpr       : unaryExpr (('??' | '!!') dataExpr)?
-unaryExpr          : linkExpr (('as' | 'is') typeExpr)?
+unaryExpr          : linkExpr ('as' typeExpr)?
 linkExpr           : negExpr (('->' | '?->') compExpr)*
 negExpr            : ('-' | '!' | '~') negPower | compExpr
 negPower           : ('-' | '!' | '~') negPower | compExpr ('^' negPower)?
