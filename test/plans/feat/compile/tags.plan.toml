@@ -220,6 +220,27 @@ expect_exit = 0
 expect_stdout_exact = "42\n5\n"
 
 [[tests]]
+name = "func_signature"
+desc = "A tag parameter may declare a concrete function type instead (`f: (x: int) => int`), which fixes the signature a type parameter with `is_function` cannot: the tag is pasted with a function that has it, and the program runs as if the tag were not there."
+kind = "behavior"
+case = "../../../cases/compile/tags/func_signature.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "5\n"
+
+[[tests]]
+name = "func_signature_mismatch"
+desc = "The reader of a tag with a concrete function type checks the argument's signature where the tag is pasted (design principles 6.2): a function of another signature is refused at the tag, and the diagnostic prints both signatures."
+kind = "negative"
+case = "../../../cases/compile/tags/err_func_signature.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::TagArgumentType"
+expect_diagnostic_line = 11
+expect_diagnostic_column = 6
+expect_output_contains = ["The parameter 'f' of the tag 'rule' is declared '(x: int) => int', but the argument is 'twice_float' ((x: float) => float)."]
+
+[[tests]]
 name = "old_annotation_form"
 desc = "The old `@name(...)` form of a tag gets a located diagnostic that points at `#name` / `#[...]`, not a syntax error."
 kind = "negative"

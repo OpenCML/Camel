@@ -10,7 +10,7 @@ cd7c99fe2ec05bdc ok test/cases/parse/constructs/match_guard.cml
 a5e9896ce55676d8 ok test/cases/parse/constructs/operator_name.cml
 6b3b84a63e8e8e9a ok test/cases/parse/constructs/rest_signature.cml
 551b3ed8c1dc6b06 ok test/cases/parse/constructs/static_loop.cml
-17cd43b603695566 ok test/cases/parse/constructs/tags.cml
+048731836cfd030b ok test/cases/parse/constructs/tags.cml
 8abbc9717bdde956 ok test/cases/parse/constructs/type_arguments.cml
 2fe3134d6fc3e87e no test/cases/parse/numbers/bad_octal_digit.cml
 2fe3134d6fc3e87e no test/cases/parse/numbers/leading_zero.cml
@@ -39,7 +39,7 @@ a7cf39b2b3eac286 ok test/cases/parse/rulings/null_compare.cml
 245a6f02d7392e1f no test/cases/parse/rulings/optional_comp_removed.cml
 571c5aa0c5933255 ok test/cases/parse/rulings/power.cml
 90a46957243a144f ok test/cases/parse/rulings/reserved_and.cml
-eb2e9da6ca6b14bb ok test/cases/parse/rulings/static_for_head_names.cml
+69c13ca9cb1e0fa4 ok test/cases/parse/rulings/static_for_head_names.cml
 0e0ccb8d174fba41 no test/cases/parse/rulings/stream_type_as_interval.cml
 698d8e24a098a91d ok test/cases/parse/rulings/stream_type_in_array.cml
 8013e40aaaa7e4a2 ok test/cases/parse/rulings/stream_type_marks.cml

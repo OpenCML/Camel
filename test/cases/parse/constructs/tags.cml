@@ -2,6 +2,10 @@
  * Tags (design principles 6.2): a tag is declared with the places it may be written on (and,
  * optionally, the passes that read it), may be grouped into another tag, and is used as `#name`
  * or `#[a, b]`, with an argument, before a function, a type, a field and a block.
+ *
+ * A declaration declares type parameters and a condition the way a function does
+ * (`vjp::<F>(rule: F) ... when is_function::<F>()`), and a group member may carry an argument
+ * (`#[kernel, width(16)]`).
  */
 module parse_constructs_tags
 
@@ -10,6 +14,7 @@ export tag fast on func, nodes
 export tag readable on func, read_by std::opt
 tag pure = [kernel, fast]
 tag width(w: int) on type, field
+tag vjp::<F>(rule: F) on func when is_function::<F>()
 
 #kernel
 func marked(): int { return 1 }
@@ -17,11 +22,17 @@ func marked(): int { return 1 }
 #[pure]
 func grouped(): int { return 2 }
 
+#vjp(marked)
+func label(x: int): int { return x }
+
 #width(32)
 type Bits = {
     #width(8) low: int,
     high: int,
 }
+
+#[kernel, width(16)]
+type Mixed = { a: int }
 
 func main(): int sync {
     #kernel
