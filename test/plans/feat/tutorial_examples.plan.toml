@@ -500,3 +500,17 @@ desc = "The answer to the exercise of chapter 8: the same tool with the reading 
 case = "../../../docs/tutorial/examples/08_exercise.cml"
 args = ["${case}", "--arg", "path=docs/tutorial/examples/08_words.txt", "${backend}"]
 golden = "golden/tutorial_examples/08_exercise.txt"
+
+# ---- Chapter 9 --------------------------------------------------------------------------------
+
+[[tests]]
+name = "tutorial.examples.09_dependency"
+desc = "Who needs whose result decides what runs and what can run at the same time."
+case = "../../../docs/tutorial/examples/09_dependency.cml"
+golden = "golden/tutorial_examples/09_dependency.txt"
+
+[[tests]]
+name = "tutorial.examples.09_exercise"
+desc = "The answer to the exercise of chapter 9: one call now needs the other's result, which is what changes the graph."
+case = "../../../docs/tutorial/examples/09_exercise.cml"
+golden = "golden/tutorial_examples/09_exercise.txt"
