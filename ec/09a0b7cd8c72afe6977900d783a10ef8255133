@@ -1,0 +1,23 @@
+tip=ec09a0b7c H554 第七轮：合入 develop（`57a1cde7a`）+ 把 develop 新用例的 `module` 声明剥掉（43 → 合并线 47）
+
+数字（先说清口径）
+- 合并前这条线：gate-22 **43**；**合入 develop 后** gate-24：`total: 6379, pass: 6304, fail: 47, skip: 12, known failures: 16`。测试数 6366 → 6379（develop 带来 13 条）。
+- 47 里约 20 条是 develop 侧新带进来的（多为生成物/快照/JSON 族，见下），不是这条线的红；这条线自己的红同期在减少（`rules.*` 12/13 转绿、`gpu_scope.*` 8 → 1）。
+
+① develop 新用例仍写着 `module` 声明 —— 这是合并后最大的一族，一次修完
+- 证据：合并后 `test/cases/**` 里仍有 **7 行 `^module `**，逐一列出：`modules/rules/{err_rule_with_not_constant,with_generic_rules,with_generic_target}.cml`、`modules/tiles/gpu_scope_{arm_effect,benchmark,report,unused_effect}.cml`；这条线没有 `module` 关键字，于是这些用例编译不了 → 表现为 `rules.*` 与 `gpu_scope.*` 整族红。
+- 改前 → 改后：删掉那 7 行；声明名与文件名不同的 4 个（`tiles_gpu_scope_*` → 文件 stem `gpu_scope_*`）连同 plan 里的引用一起改名；`rules.plan.toml` 来自 develop（整份），它钉的行号随用例各短一行整体下移 1。
+- 逐字读数：`rules.requires_unknown` 改前 `expected diagnostic SemanticDiag::TagNotAPermission, line 6` / 实测 `err_requires_unknown.cml:5:11: [Error]: The tag 'reassociate2' grants no numeric permission`；`rules.with_parameter_unbound` 改前 `line 16` / 实测 `err_rule_with_unbound.cml:15:17`；`fact_arg_not_constant.cml:17:42` → `16:42`。改后 `rules.plan.toml` 单跑 `total: 150, pass: 149, fail: 1` → 再修那条后全绿；`gpu_scope.*` 只剩 1 条（`module_tag_propagates`）。
+
+② 合并本身
+- `git merge --no-ff origin/develop` → 5 处冲突，全部按内容裁决：develop 删掉的两个 `err_rule_with_*read.cml` 保持删除（`git rm`）；`rules.plan.toml`、`tiles.plan.toml`、`parse/golden/ast_hashes.txt` 取 develop 侧（这条线对它们只有"少一行"这一处改动，不是我自己的规则）。提交：`9573d1bae`（合并）、`ec09a0b7c`（剥离 + 改名 + 下移钉值）。
+
+③ 合并线上剩余 47 条的分类（下一轮按此顺序，先快后慢）
+- **生成物要重出**（4 条，机制性、不涉语义）：`catalog.doc_is_generated`（缺 `docs/diagnostics.md is up to date`）、`gate.case_ledger`（缺 `case files, every one of them is read by code or recorded with a reason`）、`gate.plan_inventory`、`frontend.ast_snapshot`（缺 `files read as recorded`）。下一轮第一件事：按各自脚本的 `--write` 重出，再复测。
+- **develop 侧 JSON/阶段族**（14 条，尚未定位到行）：`entry_args.missing_argument_json`、`check.lexical_limit_json`、`failed_depth.error`、`failed_evaluation.error`、`fixes_apply`、`dump_after_each_pass`、`fusion_group.profile.none`、`grants.graph`、`json_data_of_a_pass_the_module_does_not_provide`、`macro_body_effect_stage`、`nullable_positions.default_is_a_null_constant`、`partial_application_span`、`captured_write_graph.warnings`、`camel_passes.fold_fault.fault_is_reported`。
+- **这条线的剩族**：`constant_fault_reached.simplify_fvm`、`graph`/`graph.attrs`、`gpu_scope.module_tag_propagates`、`rules.generic_condition_effect_at_instantiation`、`compile_bench.smoke`、`docs.snippets_compile`、`python_binding.session`、`debugger.http_gateway`、`lsp.editing`/`navigation`/`code_and_related`，以及已归因的管线位置 4 条（问题页已上 develop，作者答后自删）与 `lsp.fstring`（环境缺 Python 绑定）。
+- `grad_function_value_*` 12：**本轮未重判**（预算给了合并与 ①），下一轮第一件事。
+
+④ 检查器：**本轮未重跑**（合并引入了 develop 的 src 改动，必须重跑，不能沿用旧读数）——如实报，下一轮开头与生成物重出一起做，收尾给 `-Check all` 6/6。
+
+纪律：未推 origin（合并只在本工作树）；未碰 `docs/language/**` 散文；未碰其它工作树/分支；未在 Windows 构建。
