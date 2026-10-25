@@ -383,7 +383,7 @@ A missing case, an extra case or a literal case mixed in is `SemanticDiag::Tagge
 
 **A `match` must have a default case.** A `match` without `case _` is the compile-time error `SemanticDiag::MatchWithoutDefault`, located at the `match`. Three shapes need none: a `match` on a `bool` that writes out both `case true` and `case false`, a `match` on a `T?` or `T!` with the fixed patterns above, and a `match` on an enum that names every variant. The compiler adds no arm the program does not write, so the arms on the graph correspond one to one to the `case`s in the source.
 
-Tuple patterns and struct patterns are not in the language: `case (...)` and `case {...}` are ordinary syntax errors. An identifier pattern on a value of an ordinary type (`case n => ...`) is `SemanticDiag::ConstructNotSupported`; use an `if` chain, or take the members first and then match. Tuple and struct patterns of enum variants are implemented, but a field position takes only a name or `_`.
+Tuple patterns and struct patterns are not in the language: `case (...)` and `case {...}` are ordinary syntax errors. An identifier pattern on a value of an ordinary type (`case n => ...`), and `error e` over an ordinary type, report `SemanticDiag::IdentifierPatternNeedsNullableOrErrorType`: only the two marks `T?` and `T!` can be taken apart (3.8), so to read the value or to catch the error write `??`, `!!`, or a `match` with a literal pattern and `_`. Tuple and struct patterns of enum variants are implemented, but a field position takes only a name or `_`.
 
 `try`/`catch`/`finally` is not part of Camel (it has no stable mapping onto the graph), and none of the three is a keyword: they are ordinary names, so a `try { ... }` written with them is an ordinary syntax error. An operation that may fail returns `T!`, handled with `!!`, `?->` and `case error e`.
 
@@ -454,7 +454,7 @@ func first(t: (int, float)) {
 - **The operand only supplies its type.** When the operand is a compile-time tuple (a rest parameter's `ts`, or a tuple comprehension), no container node is built: `indices ts` builds no `FILL`, and `ts.[j]` in the body is the element node itself, with no `ACCS`. A runtime tuple variable or parameter already has its own node; `indices` does not build another.
 - `j` may be used as a value (`print(j)`, or in arithmetic) and as the key of `t.[j]`: it is a compile-time constant in every round. A local of the same name still shadows it, and using that as a key reports `SemanticDiag::StaticAccessNotConstant` (the same rule as `n` of `fields`).
 - `indices` binds one name only (there is no `F`); the element types come from `ts`'s type and are not given a name yet. `static for j, F in indices ts` is a syntax error.
-- `indices` walks tuples only: a struct has field names, so use `fields T`. `{ static for j in indices ts => e }` has no field names to give and reports `SemanticDiag::ConstructNotSupported`; where a value is needed, write `( static for j in indices ts => e )`.
+- `indices` walks tuples only: a struct has field names, so use `fields T`. `{ static for j in indices ts => e }` has no field names to give and reports `SemanticDiag::StructComprehensionWithoutFields`; where a value is needed, write `( static for j in indices ts => e )`.
 - The graph is the hand-written expansion: the generator leaves no node of its own. `ts.[j]` over a compile-time tuple is the element node itself, the same field selection `ts.[0]`, `ts.[1]` make; over a runtime tuple value it still builds one `ACCS`.
 
 ```cml

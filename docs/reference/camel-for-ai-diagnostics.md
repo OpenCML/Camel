@@ -59,7 +59,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 
 | `ComparisonAcrossLines` | This '>' is read as a comparison with the next line, which starts with {0}: two statements may have been joined into one. |
 
-**Semantic — errors** (`SemanticDiag`) — 202
+**Semantic — errors** (`SemanticDiag`) — 206
 
 | `Redeclaration` | Redeclaration of reference: '{0}'. |
 | `ModuleNotFound` | Module '{0}' not found. {1} |
@@ -263,6 +263,10 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `RuleWithParameterUnbound` | '{0}' is a `with` parameter of the rule '{1}', it has no default, and the rule value here binds nothing for it. |
 | `RuleWithArgumentNotConstant` | The value bound to the `with` parameter '{0}' of the rule '{1}' is not a compile-time constant of the type '{2}'. |
 | `UsesPromiseViolated` | '{0}' does not keep its resource promise: {1}. |
+| `TypeAliasRecursionUnrepresented` | The type '{0}' mentions itself through a collection: recursion through an array, a map, a set or an enum is admitted by the language, and this compiler does not have that representation. |
+| `EnumWrittenWhereATypeIsExpected` | An enum is declared in a type declaration ('type Shape = enum ...') and its type is the name that declaration gives it: the variants are written there and nowhere else. |
+| `StructComprehensionWithoutFields` | A struct comprehension takes its field names from 'fields T', and 'indices' walks positions, which have no names: write a tuple comprehension '( static for ... in indices ... )', or walk 'fields T'. |
+| `IdentifierPatternNeedsNullableOrErrorType` | The pattern '{0}' takes a value of type 'T?' or 'T!' apart, and this value has type '{1}': write '??' or '!!', or a 'match' pattern that is a literal or '_'. |
 
 **Semantic — warnings** (`SemanticDiag`) — 12
 
