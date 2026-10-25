@@ -260,7 +260,7 @@ golden = "golden/tutorial_examples/15_tensor.txt"
 # gradient of the chapter's function at the point it picks.
 [[tests]]
 name = "tutorial.examples.16_grad"
-desc = "The gradient of a function: the derivative of the graph, evaluated, with `std::macro` expanded first as the header asks."
+desc = "Chapter 15: the gradient of a function -- the derivative of the graph, evaluated, with `std::macro` expanded first as the header asks."
 case = "../../../docs/tutorial/examples/16_grad.cml"
 args = ["${case}", "std::macro", "${backend}"]
 golden = "golden/tutorial_examples/16_grad.txt"
