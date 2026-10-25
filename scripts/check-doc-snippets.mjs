@@ -37,6 +37,11 @@
 // the page: the fence or the paragraph before it has to contain `counter-example`, `wrong`,
 // `反例`, `错误`, `does not compile` or `is an error`. A marker without a reason is an error.
 //
+// A page is written against the target language, so a snippet that the tree cannot compile yet is
+// not marked on the page: it is registered in PENDING below, keyed by the page and the snippet's
+// own text. A pending snippet that fails is exempted and named in the output; one that starts to
+// compile, and to print its text block when it has one, must be removed from the list.
+//
 // On a `docs/design/` or `docs/technical/` page a fence without an entry point is an excerpt,
 // not a program: those pages quote fragments, proposed syntax and measurements. Only their
 // fences that contain `func main` are compiled. The rule is in EXCERPTS below, with the reason.
@@ -51,6 +56,7 @@
 // Exit status 1 when a snippet is stale, 2 when the scope holds no document or no Camel fence: a
 // check of nothing is refused, never reported as a pass.
 
+import crypto from 'node:crypto'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -92,6 +98,40 @@ const EXCERPTS = [
     ['docs/design/', 'design note: excerpts and proposed syntax; only a fence with func main is a program'],
     ['docs/technical/', 'technical record: excerpts and measurements; only a fence with func main is a program'],
 ]
+
+// ---- The pending list ------------------------------------------------------------------------
+// A reader-facing page is written against the target language: a rule that is decided is written as
+// if it were already in place, and no mark on the page says otherwise. A snippet that the tree
+// cannot compile yet is registered here instead, so the page carries no sign of the gap and the
+// gate does not go red for it.
+//
+// An entry names the page and the snippet's own text. `key` is the first 16 hex digits of the
+// SHA-256 of the snippet's fences, line endings normalised, every line stripped of trailing
+// whitespace and the body of trailing blank lines (one key per snippet, however many fences it
+// groups). Editing a snippet therefore changes its key: the entry stops matching its snippet, and
+// that is a failure of its own (the rule below), never a quiet pass. `reason` is one line naming
+// the ruled construct the snippet is ahead of; a page may hold several entries.
+//
+// The list only shrinks. Three rules enforce that, and each one fails the run:
+//   * an entry without a reason, or with a key that is not 16 hex digits, is refused before
+//     anything is compiled;
+//   * an entry whose snippet now compiles -- and prints what its `text` block says, when it has
+//     one -- must be deleted, because the exemption outlived the gap;
+//   * an entry that matches no snippet of the scanned scope is refused, so an edit to the page (or
+//     to the fence grouping) cannot orphan an exemption quietly, and an entry cannot be added for
+//     a snippet that does not exist. This rule is applied under `--default-roots` only: a run over
+//     one file has not seen the rest of the tree.
+// The count is held at or below PENDING_MAX; deleting entries is routine, and adding one means
+// raising the ceiling in the same edit, which a review can see. Every run prints each entry it
+// used, with its reason, so the list can be reviewed from the output without reading this file.
+const PENDING = [
+    {
+        file: 'docs/reference/camel-for-ai.md',
+        key: 'fdcec12c6bd9c098',
+        reason: 'streams: `yield` and the stream return type are ruled, and this tree cannot compile them yet',
+    },
+]
+const PENDING_MAX = 1
 
 const OTHER_LANGUAGES = new Set([
     '', 'bash', 'c', 'cpp', 'c++', 'css', 'go', 'html', 'java', 'javascript', 'js', 'json',
@@ -196,6 +236,30 @@ function firstLine(fence) {
 
 function entryOf(fence) {
     return HAS_ENTRY.test(fence.body.join('\n'))
+}
+
+// The identity of a snippet, for PENDING: its own text, normalised so that a re-indent or a
+// line-ending change does not re-key it, and so that any edit to a word does.
+function snippetKey(snippet) {
+    const text = snippet.fences
+        .map((fence) =>
+            fence.body
+                .map((line) => line.replace(/\s+$/, ''))
+                .join('\n')
+                .replace(/\n+$/, ''),
+        )
+        .join('\n--\n')
+    return crypto.createHash('sha256').update(text).digest('hex').slice(0, 16)
+}
+
+function pendingEntry(rel, snippet) {
+    const key = snippetKey(snippet)
+    return PENDING.find((entry) => entry.file === rel && entry.key === key) || null
+}
+
+// The first line of a snippet, for a message a reader can locate on the page.
+function snippetOpens(snippet) {
+    return firstLine(snippet.fences[0]).trim().slice(0, 60) || '<empty fence>'
 }
 
 // ---- Snippet construction ------------------------------------------------------------------
@@ -616,6 +680,9 @@ async function checkSnippet(documentAbs, snippet, lines, fences) {
 
 const args = ARGV.filter((arg) => !arg.startsWith('--'))
 const entries = ARGV.includes('--default-roots') || args.length === 0 ? ['README.md', 'docs'] : args
+// The default roots are the whole reader-facing scope; a run over named files or directories has
+// seen only part of the tree, which is what the third pending-list rule below turns on.
+const FULL_SCOPE = ARGV.includes('--default-roots') || args.length === 0
 // The defect: the plan passed the script's own path, the scope came out empty, and the guard
 // reported a pass. A scope entry that does not exist and a scan of no document are now refusals.
 const missing = entries.filter((entry) => !fs.existsSync(path.resolve(ROOT, entry)))
@@ -639,6 +706,28 @@ const excerpts = []
 const snippets = []
 const scanned = []
 const skippedFiles = []
+
+// The pending list is a promise about the tree; a malformed entry is refused before anything runs,
+// so a mistyped key cannot look like an entry that happily matches nothing later.
+for (const entry of PENDING) {
+    if (!entry.file || typeof entry.file !== 'string')
+        problems.push('a pending entry does not name its page')
+    if (typeof entry.key !== 'string' || !/^[0-9a-f]{16}$/.test(entry.key))
+        problems.push(`${entry.file || '<no page>'}: a pending entry needs a 16 hex digit key (see snippetKey)`)
+    if (!entry.reason || !entry.reason.trim())
+        problems.push(`${entry.file || '<no page>'}: a pending entry needs one line saying which ruled construct the snippet is ahead of`)
+}
+if (PENDING.length > PENDING_MAX) {
+    problems.push(
+        `the pending list holds ${PENDING.length} entries, more than the ${PENDING_MAX} it declares: ` +
+            'the list only shrinks, so adding one also raises PENDING_MAX, in the same reviewed edit',
+    )
+}
+if (problems.length > 0) {
+    for (const problem of problems) console.log(problem)
+    console.log(`${problems.length} problem(s) in the pending list of scripts/check-doc-snippets.mjs`)
+    process.exit(1)
+}
 
 for (const abs of unique) {
     const rel = relative(abs)
@@ -721,10 +810,30 @@ await Promise.all(Array.from({ length: Math.min(JOBS, checkedSnippets.length || 
 let compiled = 0
 let ran = 0
 let graphDumps = 0
+const pendingUsed = new Map()
+const exempted = []
 for (const entry of results) {
     if (!entry) continue
     const result = entry.result
     const line = entry.snippet.open + 1
+    const pending = pendingEntry(entry.rel, entry.snippet)
+    if (pending) {
+        pendingUsed.set(pending, { entry, result })
+        if (result.status === 'failed') {
+            // A pending snippet is ahead of the compiler, not stale: the page says what the language
+            // is, and the tree has not caught up. The failure is named in the output and does not
+            // make the gate red. Once it compiles (and prints its text block, if it has one) the
+            // entry must go: the list is a record of the gap, and the gap closes.
+            exempted.push({ entry, pending, line, problems: result.problems })
+        } else {
+            problems.push(
+                `${entry.rel}:${line}: this snippet has a pending entry (key ${pending.key}, ` +
+                    `${JSON.stringify(snippetOpens(entry.snippet))}) and now compiles, so the entry is stale: ` +
+                    'remove it from PENDING in scripts/check-doc-snippets.mjs',
+            )
+        }
+        continue
+    }
     if (result.status === 'failed') {
         for (const problem of result.problems) problems.push(`${entry.rel}:${line}: ${problem}`)
     } else if (result.status === 'ran') {
@@ -736,7 +845,39 @@ for (const entry of results) {
 }
 compiled += ran
 
+// An entry that matched no snippet is refused under the default roots: the page changed, the fence
+// grouping changed, or the entry was written for a snippet that is not there. Each case needs a
+// human to re-key the entry or delete it, and silence is the one answer that would let the list
+// drift away from the pages it speaks for.
+if (FULL_SCOPE) {
+    for (const pending of PENDING) {
+        if (pendingUsed.has(pending)) continue
+        // The keys of that page's snippets are printed with the failure: re-keying an entry means
+        // copying one of them, and a run is the only place they are ever computed.
+        const onPage = checkedSnippets
+            .filter((entry) => entry.rel === pending.file)
+            .map((entry) => `  ${pending.file}:${entry.snippet.open + 1} key ${snippetKey(entry.snippet)} ${JSON.stringify(snippetOpens(entry.snippet))}`)
+        problems.push(
+            `${pending.file || '<no page>'}: the pending entry with key ${pending.key || '<no key>'} matches no ` +
+                'snippet of the pages scanned; re-key it to the snippet it speaks for, or remove it' +
+                (onPage.length > 0 ? `\n${onPage.join('\n')}` : ''),
+        )
+    }
+}
+
 for (const problem of problems) console.log(problem)
+
+for (const { entry, pending, line, problems: failed } of exempted) {
+    console.log(
+        `pending ${entry.rel}:${line} (key ${pending.key}, ${JSON.stringify(snippetOpens(entry.snippet))}) ` +
+            `is exempted: ${pending.reason} -- ${failed[0]}`,
+    )
+}
+for (const pending of PENDING) {
+    const used = pendingUsed.get(pending)
+    const where = used ? `${used.entry.rel}:${used.entry.snippet.open + 1}` : 'unused in this scope'
+    console.log(`pending list: ${pending.file} ${pending.key} (${where}): ${pending.reason}`)
+}
 
 const seconds = ((Date.now() - started) / 1000).toFixed(1)
 if (problems.length > 0) {
@@ -750,6 +891,7 @@ console.log(
     `no stale snippet in ${scanned.length} reader-facing document(s): ` +
         `${checkedSnippets.length} snippet(s), ${compiled} compiled, ${ran} ran their text block, ` +
         `${graphDumps} graph dump(s) compiled only, ${marked.length} marked incomplete, ` +
+        `${exempted.length} pending snippet(s) exempted (${PENDING.length} of at most ${PENDING_MAX} entries in the list), ` +
         `${excerpts.length} excerpt(s) on design/technical pages ` +
         `(${skippedFiles.length} generated/dated reference(s) allowlisted; ` +
         `${RECORDS.length} record directories not scanned; ${seconds} s)`,

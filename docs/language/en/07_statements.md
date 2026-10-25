@@ -51,7 +51,7 @@ var count = 0
   let a, b = 1, 'x'
   ```
 
-  Struct destructuring `let { x, y } = p` and array destructuring `let [a, b] = xs` are reserved, not implemented (`SemanticDiag::FeatureNotSupported`); use `p.x`, `xs[0]`.
+  Struct destructuring `let { x, y } = p` and array destructuring `let [a, b] = xs` are `SemanticDiag::FeatureNotSupported`; use `p.x`, `xs[0]`.
 - **`let _ = e` drops the value of `e` on purpose.** `_` is not a name: nothing is bound, so it can be written any number of times in one block, and it cannot be read. The expression is evaluated like the initial value of any `let` (in a sync block, in order). It is the way to say that a `T!` is ignored deliberately ([7.1](#71-expression-statements)). Only this form exists: `var _`, and `_` among several names, are syntax errors.
 - A `let` at the module top level is a global constant; a top-level `var` can be read and written by functions, also by an imported function of the module that declares it ([5.3](05_modules.md#53-exports)). **The top-level declarations do not depend on the order they are written in, only on what they use**: `let area = pi * r * r` may come before `let pi`; top-level values that depend on each other are `SemanticDiag::ModuleValueCycle` ([5.6](05_modules.md#56-loading-modules)). A local `let` in a function body is still declared before it is used.
 
@@ -506,6 +506,7 @@ A tag is declared at the top level of a module; after `on` come the positions it
 export tag kernel on nodes                  // before a block, function or type: the nodes in it
 export tag fast on func, nodes              // also the function's own declaration
 export tag width<w: int> on type, field     // with parameters, which are compile-time values
+export tag vjp<rule: func> on func          // a parameter of the kind func: the argument is a function, and the fact restores to that function
 tag finite = [kernel, fast]                 // a group: its members apply together
 ```
 
@@ -538,11 +539,11 @@ func main(): int {
 }
 ```
 
-`#name`, `#name<arguments>` and `#[a, b<v>]` (a group). A tag's arguments are compile-time values: a literal, a top-level constant or a function name. Each argument must be a constant of the kind its parameter declares — `int`, `float`, `bool`, `string`, or a function name for `func`; a real is carried as a real attribute by its bits and `1.5` prints as `1.5`. Writing a tag where its declaration does not list it is an error, located at the tag. So are a wrong number of arguments, an argument that is not a compile-time value, an argument whose kind is not the declared one (`SemanticDiag::TagArgumentType`), and a parameter of a kind a tag cannot carry yet (`SemanticDiag::TagParameterType`).
+`#name`, `#name<arguments>` and `#[a, b<v>]` (a group). A tag's arguments are compile-time values: a literal, a top-level constant or a function name. Each argument must be a constant of the kind its parameter declares — `int`, `float`, `bool`, `string`, or a function for `func`; a real is carried as a real attribute by its bits and `1.5` prints as `1.5`. Writing a tag where its declaration does not list it is an error, located at the tag. So are a wrong number of arguments, an argument that is not a compile-time value, an argument whose kind is not the declared one (`SemanticDiag::TagArgumentType`), and a parameter of a kind a tag cannot carry yet (`SemanticDiag::TagParameterType`).
 
 A tag of `on nodes` is a **node attribute** (`camel/core/node_attrs.h`): a tag written before a function body or a block holds for the nodes written in it, it accumulates with same-name tags outside by the attribute's combine rule, and an inner same-name tag with a parameter takes the inner value. A tag of `on func`, `on type` and `on field` belongs to the declaration itself: a C++ module reads it in one query, `tag::factsOf` (tags, permissions and readers; `tag::ofDeclaration` / `tag::ofField` remain); reading it from Camel code waits for the first stage of generics.
 
-A parameter may also be declared `func`: its argument is then a function name, and the tag's fact is the **graph reference** of that function (`attr::graphRef`), not a function value. The GIR builder keeps that graph in the reference table of the function's graph (`kGraphRefRule`), so the frozen graph names the function directly; it is not resolved by name again at run time and no closure captures it. A `func` argument is therefore a static function of the program, never a closure over the surrounding scope. The autodiff module declares `export tag vjp<rule: func> on func` this way: `#vjp<rule>` before a function declaration makes calls of that function use the rule instead of the derivative of its body ([26 Autodiff](../../technical/26_autodiff_as_graph_rewrite.md)). `@vjp<rule>` is reported at the annotation as `SemanticDiag::InvalidAnnotation`, naming `#vjp<rule>`.
+A parameter may also be declared `func`: its argument is a function, and the tag's fact is that function itself (the argument restores to the function), not its name and not an internal handle. The autodiff module declares `export tag vjp<rule: func> on func` this way: `#vjp<rule>` before a function declaration makes calls of that function use the rule instead of the derivative of its body ([26 Autodiff](../../technical/26_autodiff_as_graph_rewrite.md)). `@vjp<rule>` is reported at the annotation as `SemanticDiag::InvalidAnnotation`, naming `#vjp<rule>`.
 
 **`#impl<f>`: the Camel body is the semantics, the native kernel is the execution** (design principles 10.4). It is written before a function declaration that has a body:
 
@@ -662,7 +663,7 @@ id
 - It can be `export`ed, and is used in another module as `module::Pair<int>`.
 - The angle brackets of a module type, where it takes arguments, are interpreted by the type itself, and the arguments can be types or `const data`.
 
-The parts of type expressions that are reserved with their meaning undecided: the type operations `&`, `\`, `+`, `-`, `^`, and `keyof`, `name of T` (`SemanticDiag::FeatureNotSupported` or a syntax error). `typeof e` is implemented: it is a whole type, the type of the value of `e`, expanded by the compiler where the type is used. It cannot be nested inside a larger type (`typeof(1)[]` is `SemanticDiag::TypeOfNotWholeType`), and an operand with no value (`void`) is `SemanticDiag::TypeOfNotAValue`.
+The type operations `&`, `\`, `+`, `-`, `^`, and `keyof`, `name of T` report `SemanticDiag::FeatureNotSupported` or a syntax error; their meaning is not yet decided. `typeof e` is a whole type, the type of the value of `e`, expanded by the compiler where the type is used. It cannot be nested inside a larger type (`typeof(1)[]` is `SemanticDiag::TypeOfNotWholeType`), and an operand with no value (`void`) is `SemanticDiag::TypeOfNotAValue`.
 
 ## 7.8 Blocks
 

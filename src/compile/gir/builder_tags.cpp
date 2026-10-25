@@ -79,7 +79,7 @@ ArgKind kindOfDeclaredType(std::string_view type) {
     if (t == "string" || t == "str" || t == "text") {
         return ArgKind::String;
     }
-    if (t == "func" || t == "function") {
+    if (t == "func") {
         return ArgKind::Func;
     }
     return ArgKind::Other;
@@ -113,7 +113,7 @@ RestoredKind restoredKindOf(std::string_view type) {
     if (t == "string" || t == "str" || t == "text") {
         return RestoredKind::String;
     }
-    if (t == "func" || t == "function") {
+    if (t == "func") {
         return RestoredKind::Func;
     }
     return RestoredKind::Other;
@@ -336,6 +336,19 @@ Builder::tagValueOf(const camel::core::tag::Decl &decl, const GCT::TagUse &use) 
         }
         return camel::core::attr::tuple(values);
     }
+    // A parameter of a kind a tag cannot carry is refused by name whatever argument is written
+    // (TagParameterType): the declared kind is the same rule in this branch as in the one above,
+    // and a function name written for a parameter declared with a kind the language does not have
+    // would otherwise be reported as an argument that is not a compile-time value -- telling the
+    // writer to write what they wrote.
+    for (const camel::core::tag::TagParam &param : decl.params) {
+        if (kindOfDeclaredType(param.type) == ArgKind::Other) {
+            diags_->of(SemanticDiag::TagParameterType)
+                .atOrigin(use.origin)
+                .commit(param.name, use.name, param.type);
+            throw BuildAbortException();
+        }
+    }
     std::vector<camel::core::data::data_ptr_t> args;
     args.reserve(use.args.size());
     for (const auto &arg : use.args) {
@@ -380,17 +393,11 @@ Builder::tagValueOf(const camel::core::tag::Decl &decl, const GCT::TagUse &use) 
     }
     // Each argument must be a constant of the kind its parameter declares (design principles
     // 6.2): an `int` parameter takes an integer, a `float` one a real, `bool` a boolean and
-    // `string` a string. A parameter of another declared kind is a located diagnostic here,
-    // not a value silently carried as something else.
+    // `string` a string. A parameter of a kind a tag cannot carry was refused above, not carried
+    // as something else.
     for (size_t i = 0; i < args.size(); ++i) {
         const camel::core::tag::TagParam &param = decl.params[i];
         const ArgKind declared                  = kindOfDeclaredType(param.type);
-        if (declared == ArgKind::Other) {
-            diags_->of(SemanticDiag::TagParameterType)
-                .atOrigin(use.origin)
-                .commit(param.name, use.name, param.type);
-            throw BuildAbortException();
-        }
         const ArgKind actual = kindOfValue(args[i]->type()->code());
         if (actual != declared) {
             diags_->of(SemanticDiag::TagArgumentType)

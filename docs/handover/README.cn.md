@@ -185,6 +185,15 @@
 
 **最优先（决策者 2026-10-24 夜）**：H242 的整批集成（同步边、顺序边、删控制边与 `SYNC`、`var` 读成数据边，按 sync-chain-liveness-and-splice 的裁定顺序）与 P4 张量翻转（按 tensor-flip-staging-order 的顺序修完分支、`Tensor` 成为别名、删除 `Tensor` 类型名）。这两块是节点收敛（H245）、流（H248 其余部分）、GPU 整段编译的前置条件，**优先于新开的小任务**；子代理先排给这两块，其余车道在它们的间隙做。
 
+**H233 剩余部分现在做（决策者 2026-10-25 核对）**：第 6 条已经落地，内置遍都是标准库里的 `::<F>(f: F): F! when is_function::<F>()` 声明。第 1–4 条还没有：`stdlib/graph.cml` 的公开接口仍是 `current(): Program`、`graphs(p: Program)`、`root(p)`；用 Camel 写的遍（`stdlib/opt.cml`、`stdlib/rewrite.cml`、`stdlib/rules.cml`，共约 80 处）仍是 `(p: Program) => Program!`；据记录，在源码里对单个函数调用遍（`loss->rules::simplify`）也还不行。按 5.12 一次做完，不留过渡：
+- `graph` 模块的公开接口改成以函数为中心（`open(f: F): Txn<F>`、`commit(t): F!`、`graph_of(f)`），`Program`、`current()`、`root()`、`graphs(p)` 从公开接口删除；程序级的信息经函数所在的程序读取。
+- `opt.cml`、`rewrite.cml`、`rules.cml` 里的遍全部改成 `::<F>(f: F): F! when is_function::<F>()`，规则集等配置放进 `with` 参数（见 reviews/stdlib-rewrite.md 第 5 条）；文档注释里"A pass is a function `(p: Program) => Program!`"一类的说法一起改。
+- `f->rules::simplify`、`f->std::opt<safe_fp: true>` 在源码里能直接调用，与命令行上的同名遍是同一个调用；闭包的捕获随新函数带上。
+- `ctrl_inputs` 这类读控制边的接口随 H242 删除控制边一起改成同步边、顺序边的读法，不在这里另起一套。
+- 这一片改的是 `graph`、`rewrite` 模块与三个标准库文件，和规则语言第二版（H232）同在改写引擎一带，由同一条车道串行做，排在 H232 当前的步骤之后；与 H242、P4 不重叠。
+
+**格式化器：超宽的 `when` 单独一行（负责人 2026-10-25）**：`tools/format/fmt.cpp` 现在总把 `when` 子句接在签名后面，不管多长（例如 `stdlib/rules.cml` 的 `tensor_f32_combine` 一行超过 120 列）。改成：声明头超过折行宽度（80）时，`when` 子句另起一行、缩进 4 格，花括号留在 `when` 那一行末尾；还超宽，再把形参一行一个。`func`、`rule`、`fact`、`tag` 的声明头同一条规则，`uses`/`pure` 子句与 `when` 同样处理。格式化器改好后，用 `camel-format` 重排 `stdlib/`（标准库是写法的范本，不等 H231）。用例：一条超宽的规则、一个超宽的泛型函数，两种格式各钉一份。
+
 **GPU 与 P4 并行（负责人 2026-10-25 同意）**：H49 中不依赖张量并进数组的部分现在就做，不等 P4——S2 放置键与两个标签、S3 放置解析与作用域边界、S4 拒绝、S5a 按控制区域切段、S5b 派生图继承放置（导数图由 `std::macro` 在编译期展开，不新增遍）、模块位置的标签、3090 上现有路径的基线测量；S6–S10 等 P4 合入。§2.6 与 §10 五问的裁定见 reviews/questions-2026-10-24-evening.md 的「H49 GPU 计划」一节。GPU 车道用单独的子代理；人手不够时从其余小活里调，不从 H242 与 P4 调。
 
 **文档清理（负责人 2026-10-25 同意，分两步，不等 H216）**：仓库里还有不少已经没用的文档和过时的写法。教程里"Camel 目前没有循环语法"那句，决策者已经改掉，其余照下面做。
@@ -194,6 +203,17 @@
    - 每一页删还是留、改了什么，列成一张表写进报告，决策者审。
 2. **H242 与 P4 合入之后**：重写 `docs/technical/` 里描述控制边、`SYNC`、`TensorType`、张量栈的页面（如 `18_sync_control_semantics.md`、`25_tensor_stack_and_onnx_export.md`、`23_gc_runtime_lifetime.md`），按合入后的实现写。现在改，落地后还得再改一次。
 
+
+**语法层收口（负责人 2026-10-25："语法层既定计划尽快落地，我还要改插件高亮"）**：与 H242、P4 同列最优先，由前端那一条车道做（改的是 `src/parse/**`、`tools/format/`、`editors/vscode/` 与用例，与 H242、P4 的代码区不重叠）。决策者核对过，下面是已经裁定、但词法和文法还没落地的全部内容：
+1. **`fact` 取代 `analysis`**（规则语言第二版 7.5）：`fact range::<T>(v: T): Interval match v { case … } join f meet g widen h narrow k`；`analysis` 删掉，用例改写。
+2. **流的 `yield`**：`T..` 类型已经能解析，生成器里的 `yield e` 还没有。`tee` 是库函数，不进词法。
+3. **模块位置的标签**（H49 第 1 问）：源码里给 `module` 贴标签的写法，以及标签声明的 `on module`。
+4. **标签形参类型写 `func`**：标签声明的形参列表接受关键字 `func`，`function` 这个别名删掉。
+5. **清理保留字**：`is`、`of`、`keyof`、`try`、`catch`、`finally` 这些不进语言的词不再保留，写了就是普通的名字或语法错误；展开 `...xs`、结构体和数组解构同样处理。删掉只为指路而存在的诊断：`ConstructNotSupported`、`FeatureNotSupported`、`TryCatchNotInLanguage`（负责人 2026-10-25："try catch 不保留，应该是历史债"；设计原则 3.9 已改）。`throw`、`namespace`、`using`、`typeof`、`constas` 都是现行语法，保留。
+6. **格式化器**：超宽的 `when`/`uses` 另起一行（见下面"格式化器"一条），新语法（`fact`、`yield`、模块标签）都要能格式化。
+7. **给插件的交付物**：完成后在 `docs/language/02_lexical.md`（中英文）给出最终的关键字表与上下文关键字表（`rule`、`fact`、`when`、`uses`、`pure`、`yield`、`tag`、`on` 等只在特定位置是关键字的词），分组写清；仓库里 `editors/vscode/` 的 TextMate 文法与它的快照用例同步更新。负责人照这张表改插件，表里的词与文法逐个对得上。
+
+顺序：1、5、4 先做（只动解析器与用例），2、3 随后，6、7 收尾。每一项落地就合入，不攒批。
 
 **并行的第一梯队（负责人 2026-10-23 要求督促落地）**——四条改的代码区域互不重叠，同时推进：
 

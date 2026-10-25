@@ -48,7 +48,7 @@ let c = a + b
 | 控制 | `if` `then` `else` `match` `case` `return` `throw` `sync` `loop` `while` `do` `for` `in` `static` |
 | 类型与转换 | `as` `const` `constas` `enum` |
 | 字面量 | `null` `true` `false` |
-| 保留，尚未实现 | `is` `of` `try` `catch` `finally` `typeof` `keyof` |
+| 保留 | `is` `of` `try` `catch` `finally` `typeof` `keyof` |
 
 
 形如 `__x__`（前后各两个下划线）的名字是编译器自己用的：运算符就是这样命名的函数（`a + b` 是 `__add__(a, b)`）。变量、形参、函数都不能取这样的名字（`SemanticDiag::ReservedIdentifier`）。程序要给自己的类型定义运算符，写 `func operator +(a: V, b: V): V`（[7.4.5](07_statements.md#745-运算符重载)）；`operator` 不是关键字，只有紧跟在 `func` 之后、后面是一个运算符时才是这种写法。
