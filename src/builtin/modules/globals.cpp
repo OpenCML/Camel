@@ -216,15 +216,13 @@ std::optional<std::string> staticIndexRejection(const type_vec_t &norm, static_a
 }
 
 /// Whether `t` is a tensor the module that owns tensors slices: a numeric array that is
-/// open-rank (`f32[..]`, the transition spelling of `Tensor`), of rank 2 or more, or rank 1 with a
-/// stated extent (`f32[6]`, what a tensor operator returns and what `Tensor<f32, [6]>` names).
-/// What stays the core's is the program's own array of values: rank 1 with no extent stated
-/// (`T[]`) -- the form an array literal has and the form the core's array operators build and take
-/// -- because the programs that subscript one without importing the tensor module must keep
-/// working (docs/handover/reviews/questions-2026-10-24-evening.md, section
-/// subscript-operator-choice-and-the-rank-two-refusal: the
-/// same narrowing `t[idx]` already has on this line, where a rank-2 array is refused by the core
-/// and the module's `tensor:idx_take` answers another rank or an open rank).
+/// open-rank (`f32[..]`), of rank 2 or more, or rank 1 with a stated extent (`f32[6]`, what a
+/// tensor operator returns). What stays the core's is the program's own array of values: rank 1
+/// with no extent stated (`T[]`) -- the form an array literal has and the form the core's array
+/// operators build and take -- because the programs that subscript one without importing the
+/// tensor module must keep working (docs/handover/reviews/questions-2026-10-24-evening.md, section
+/// subscript-operator-choice-and-the-rank-two-refusal: the same narrowing `t[idx]` already has on
+/// this line, where a rank-2 array is refused by the core).
 
 /// Why `t[a:b]` / `t[a:b:s]` cannot be this call: a constant bound leaves the statically known
 /// first extent, or the result would not be a view of a rank-1 array.

@@ -714,11 +714,10 @@ void takeVjp(VjpBuilder &b, const VjpCall &call) {
 } // namespace
 
 // `t[idx]` with an int array over a rank-1 array of numbers is answered by the core's
-// `:op/idx_take` -- the element take -- and not by this module's `tensor:idx_take`, which the
-// row take of a tensor of any other rank (or of open rank) reaches. The adjoint of the element
-// take is the same one `take` has: `tensor:take_grad` scatters the gradient of each element
-// taken back into its own position, and for a rank-1 input that is the whole of it. Publishing
-// the rule for the core's URI keeps `xs[idx]` differentiable where the core answers it.
+// `:op/idx_take` -- the element take. The adjoint of the element take is the same one `take`
+// has: `tensor:take_grad` scatters the gradient of each element taken back into its own
+// position, and for a rank-1 input that is the whole of it. Publishing the rule for the core's
+// URI keeps `xs[idx]` differentiable where the core answers it.
 void registerSubscriptTakeRule() {
     camel::core::DerivativeRegistry::instance().setRule(":op/idx_take", &takeVjp);
 }
