@@ -1170,6 +1170,16 @@ class Builder {
     std::unordered_set<DraftGraphBuilder *> effectfulGraphs_;
     // The function bodies and arms of a module, in the order they were built, are in
     // ModuleUnit::builtBodies.
+    //
+    // The resources each body was found to touch (design effects plan, step 5). A declaration's
+    // own clause is a promise, not a measurement: it is what the declaration asked its callers to
+    // believe, and the body is held to it. This is the measurement, kept here rather than written
+    // onto the signature, because a function type's resources take part in its text form and in
+    // its mangled name (core/type/text.cpp), so completing one after the bodies are built would
+    // change names that were already computed. What reads it is the promise check below and,
+    // through a callee, the next round of the measurement.
+    std::unordered_map<DraftGraphBuilder *, camel::core::sem::ResourceSignature>
+        inferredResources_;
     node_handle_t lastSyncedNode_{};
     size_t syntheticRefIndex_ = 0;
 
@@ -1971,6 +1981,25 @@ class Builder {
     // Once every body of the program is built: settles which graphs are effectful (a callee
     // may be written after its caller, in another module).
     void settleEffectfulGraphs();
+    // The resources a body touches, from what its nodes already publish: an operator's own
+    // signature, a callee's, and the signature of the function value a call goes through. Empty
+    // when the body touches nothing. `nullopt` when something in it cannot be determined -- a
+    // call through a signature that promises nothing, a resource the walk cannot place -- so a
+    // body is never measured as pure because the measurement gave up.
+    std::optional<camel::core::sem::ResourceSignature> footprintOf(DraftGraphBuilder *graph) const;
+    // Once every body is built: measures each one and settles the measurements against each other
+    // (a callee may be written after its caller, in another module). This reports nothing: it runs
+    // before the module-by-module reporting begins.
+    void measureInferredResources();
+    // Then holds each declaration of the current module to the clause it wrote: `uses` is an
+    // upper bound and `pure` promises the empty set, so a body that reaches past its clause is
+    // UsesPromiseViolated at the declaration. Reported with the other per-module diagnostics,
+    // while the bodies are still in hand.
+    void checkInferredResources();
+    // The report of one declaration whose body reaches past the clause it wrote.
+    void reportResourceViolation(
+        const compile_graph_ptr_t &graph, const camel::core::sem::ResourceSignature &promised,
+        const camel::core::sem::ResourceSignature &measured);
     // Then warns for each body of the current module.
     void reportDroppedEffectsOfBodies();
     // Reports EffectInRuleCondition: a rule's condition may not have an effect. The condition is
