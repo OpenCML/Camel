@@ -88,7 +88,8 @@ std::optional<TypeCode> typeCodeNamed(std::string_view name) {
 
 // ---- core.shape ------------------------------------------------------------------------------
 
-/// "float32|2,3", "-|2,-1" (unknown element type), "float32|?" (unknown rank).
+/// "float32|2,3", "-|2,-1" (unknown element type; an extent nobody stated is -1, the spelling this
+/// form has always used), "float32|?" (unknown rank).
 std::string encodeShape(const TensorShape &shape) {
     std::string out = shape.dtype ? camel::core::type::typeCodeToString(*shape.dtype) : "-";
     out += '|';
@@ -96,7 +97,7 @@ std::string encodeShape(const TensorShape &shape) {
         return out + "?";
     }
     for (size_t i = 0; i < shape.dims->size(); ++i) {
-        out += std::format("{}{}", i ? "," : "", (*shape.dims)[i]);
+        out += std::format("{}{}", i ? "," : "", (*shape.dims)[i].value_or(-1));
     }
     return out;
 }
@@ -124,7 +125,9 @@ std::optional<TensorShape> decodeShape(std::string_view text) {
         if (!extent) {
             return std::nullopt;
         }
-        shape.dims->push_back(*extent);
+        // -1 is the spelling this form gives an extent nobody stated; a real extent is never
+        // negative, so the two cannot be confused.
+        shape.dims->push_back(*extent < 0 ? std::nullopt : std::optional<int64_t>(*extent));
         dims = comma == std::string_view::npos ? std::string_view{} : dims.substr(comma + 1);
     }
     return shape;
@@ -405,8 +408,8 @@ std::string toString(const TensorShape &shape) {
     }
     out += " [";
     for (size_t i = 0; i < shape.dims->size(); ++i) {
-        const int64_t extent = (*shape.dims)[i];
-        out += (i ? ", " : "") + (extent < 0 ? std::string("?") : std::to_string(extent));
+        const std::optional<int64_t> extent = (*shape.dims)[i];
+        out += (i ? ", " : "") + (extent ? std::to_string(*extent) : std::string("?"));
     }
     return out + "]";
 }

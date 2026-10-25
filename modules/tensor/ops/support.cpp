@@ -183,15 +183,15 @@ type::Type *tensorOf(const TensorFacts &facts) {
     std::vector<ExtentForm> forms;
     if (facts.shape) {
         forms.reserve(facts.shape->size());
-        for (int64_t extent : *facts.shape) {
-            forms.push_back(
-                extent < 0 ? ExtentForm::unknown() : ExtentForm::constant(extent));
+        for (const std::optional<int64_t> &extent : *facts.shape) {
+            forms.push_back(extent ? ExtentForm::constant(*extent) : ExtentForm::unknown());
         }
     }
-    // The element type of a value is always in its type (design principles 5.1, plan section 5.1a):
-    // the deletion step made every spelling write it, so an operator whose result element type
-    // follows from none of its inputs has no type to answer with and the inference cannot get here
-    // with one unstated.
+    // Every array a value can have states its element type (design principles 5.1), so a result
+    // type built from the facts always has one: the element type is a precondition of this
+    // function, not something a program can leave out. The two branches that used to build the
+    // transitional type here (`numericUnknown` / `numericUnknownFromForms`, plan section 5.1a's
+    // table row `tensorOf(facts)`) are gone with it.
     ASSERT(facts.dtype.has_value(), "a tensor's element type is always in its type");
     if (!isSupportedTensorScalar(*facts.dtype)) {
         throw std::invalid_argument("Unsupported Tensor element type");
@@ -225,20 +225,22 @@ broadcast(const std::optional<StaticShape> &lhs, const std::optional<StaticShape
     const size_t rank = std::max(lhs->size(), rhs->size());
     StaticShape out(rank, 1);
     for (size_t i = 0; i < rank; ++i) {
-        const int64_t a = i < rank - lhs->size() ? 1 : (*lhs)[i - (rank - lhs->size())];
-        const int64_t b = i < rank - rhs->size() ? 1 : (*rhs)[i - (rank - rhs->size())];
+        const std::optional<int64_t> a =
+            i < rank - lhs->size() ? std::optional<int64_t>(1) : (*lhs)[i - (rank - lhs->size())];
+        const std::optional<int64_t> b =
+            i < rank - rhs->size() ? std::optional<int64_t>(1) : (*rhs)[i - (rank - rhs->size())];
         if (a == b) {
             out[i] = a;
         } else if (a == 1) {
             out[i] = b;
         } else if (b == 1) {
             out[i] = a;
-        } else if (a == kUnknownDim || b == kUnknownDim) {
+        } else if (!a || !b) {
             // One side unknown, the other known and != 1: the result must be the known extent.
-            out[i] = a == kUnknownDim ? b : a;
+            out[i] = !a ? b : a;
         } else {
             throw ShapeError(
-                "cannot broadcast extents " + std::to_string(a) + " and " + std::to_string(b));
+                "cannot broadcast extents " + std::to_string(*a) + " and " + std::to_string(*b));
         }
     }
     return out;
@@ -251,11 +253,11 @@ reduceShape(const std::optional<StaticShape> &input, std::optional<int64_t> axis
     }
     if (!axis) {
         if (keepDims) {
-            return StaticShape(input->size(), kUnknownDim);
+            return StaticShape(input->size(), std::nullopt);
         }
         return input->empty()
                    ? std::nullopt
-                   : std::optional<StaticShape>(StaticShape(input->size() - 1, kUnknownDim));
+                   : std::optional<StaticShape>(StaticShape(input->size() - 1, std::nullopt));
     }
     const auto rank = static_cast<int64_t>(input->size());
     int64_t a       = *axis < 0 ? *axis + rank : *axis;
@@ -315,13 +317,18 @@ bool anyTensorLike(const InferContext &ctx, size_t count) {
     return false;
 }
 
-std::string formatShape(std::span<const int64_t> shape) {
+std::string formatShape(std::span<const std::optional<int64_t>> shape) {
     std::string out = "[";
     for (size_t i = 0; i < shape.size(); ++i) {
         out += i ? ", " : "";
-        out += shape[i] == kUnknownDim ? std::string("?") : std::to_string(shape[i]);
+        out += shape[i] ? std::to_string(*shape[i]) : std::string("?");
     }
     return out + "]";
+}
+
+std::string formatShape(std::span<const int64_t> shape) {
+    const std::vector<std::optional<int64_t>> known(shape.begin(), shape.end());
+    return formatShape(std::span<const std::optional<int64_t>>(known));
 }
 
 } // namespace camel::tensor::ops

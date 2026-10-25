@@ -176,8 +176,9 @@ struct Data {
 
 int64_t numelOf(const StaticShape &shape) {
     int64_t n = 1;
-    for (int64_t e : shape) {
-        n *= e;
+    for (const std::optional<int64_t> &e : shape) {
+        // The evaluator's own shapes are read off the arrays it holds: every extent is a value.
+        n *= *e;
     }
     return n;
 }
@@ -189,16 +190,16 @@ int64_t linearIndex(const StaticShape &shape, std::span<const int64_t> coords) {
     }
     int64_t index = 0;
     for (size_t a = 0; a < shape.size(); ++a) {
-        if (coords[a] < 0 || coords[a] >= shape[a]) {
+        if (coords[a] < 0 || coords[a] >= *shape[a]) {
             return -1;
         }
-        index = index * shape[a] + coords[a];
+        index = index * *shape[a] + coords[a];
     }
     return index;
 }
 
 Data dataOf(const Array *t) {
-    Data d{t->dtype(), t->shapeVector(), {}};
+    Data d{t->dtype(), knownShape(t->shapeVector()), {}};
     d.values.reserve(t->numel());
     for (uint64_t k = 0; k < t->numel(); ++k) {
         switch (t->dtype()) {
@@ -217,7 +218,7 @@ Data dataOf(const Array *t) {
 }
 
 Array *tensorOf(const Data &d) {
-    Array *t = createTensor(d.dtype, d.shape, mm::autoSpace());
+    Array *t = createTensor(d.dtype, extentsOf(d.shape), mm::autoSpace());
     for (size_t k = 0; k < d.values.size(); ++k) {
         switch (d.dtype) {
         case TypeCode::Float32:
@@ -309,7 +310,7 @@ StaticShape randomShape(Rng &rng, size_t rank, int64_t maxExtent = 4) {
 StaticShape broadcastFrom(Rng &rng, const StaticShape &out) {
     const size_t drop = out.empty() ? 0 : static_cast<size_t>(rng.range(0, static_cast<int64_t>(out.size())));
     StaticShape s(out.begin() + static_cast<int64_t>(rng.chance(50) ? drop : 0), out.end());
-    for (int64_t &e : s) {
+    for (std::optional<int64_t> &e : s) {
         if (rng.chance(30)) {
             e = 1;
         }
@@ -847,7 +848,7 @@ Generator sliceCases() {
         const size_t rank   = static_cast<size_t>(rng.range(1, 3));
         const StaticShape s = randomShape(rng, rank, 9);
         const int64_t axis  = rng.range(-static_cast<int64_t>(rank), static_cast<int64_t>(rank) - 1);
-        const int64_t n     = s[static_cast<size_t>(axis < 0 ? axis + static_cast<int64_t>(rank) : axis)];
+        const int64_t n     = *s[static_cast<size_t>(axis < 0 ? axis + static_cast<int64_t>(rank) : axis)];
         Case c{Arg::tensor(randomData(rng, pickDtype(rng), s)), Arg::integerArg(axis),
                Arg::integerArg(rng.range(-n - 2, n + 2)), Arg::integerArg(rng.range(-n - 2, n + 2))};
         if (rng.chance(60)) {
@@ -1015,8 +1016,8 @@ Generator poolCases() {
         const int64_t kernel = rng.range(1, 3);
         const int64_t pad    = rng.range(0, kernel);
         StaticShape s = {rng.range(1, 2), rng.range(1, 2), rng.range(1, 6), rng.range(1, 6)};
-        s[2]          = std::max(s[2], kernel - 2 * pad);
-        s[3]          = std::max(s[3], kernel - 2 * pad);
+        s[2]          = std::max(*s[2], kernel - 2 * pad);
+        s[3]          = std::max(*s[3], kernel - 2 * pad);
         Case c{Arg::tensor(randomData(rng, TypeCode::Float32, s)), Arg::integerArg(kernel)};
         if (rng.chance(70)) {
             c.push_back(Arg::integerArg(rng.range(1, 3)));

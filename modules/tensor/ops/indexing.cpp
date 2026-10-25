@@ -46,7 +46,7 @@ std::optional<StaticShape> shapeOf(const InferContext &ctx, size_t i) {
 }
 
 bool fullyKnown(const StaticShape &shape) {
-    return std::ranges::none_of(shape, [](int64_t e) { return e == kUnknownDim; });
+    return std::ranges::none_of(shape, [](const std::optional<int64_t> &e) { return !e; });
 }
 
 /// `axis` normalized against `rank` (negative counts from the end); nullopt out of range.
@@ -90,10 +90,10 @@ std::vector<ExprId> delinearize(IndexBuilder &b, ExprId linear, const StaticShap
     for (size_t a = in.size(); a-- > 0;) {
         ExprId c = b.x().floorDiv(linear, b.x().constant(std::max<int64_t>(stride, 1)));
         if (a > 0) {
-            c = b.x().mod(c, b.x().constant(std::max<int64_t>(in[a], 1)));
+            c = b.x().mod(c, b.x().constant(std::max<int64_t>(*in[a], 1)));
         }
         coords[a] = c;
-        stride *= in[a];
+        stride *= *in[a];
     }
     return coords;
 }
@@ -131,7 +131,7 @@ std::vector<ExprId> reshapeCoords(
     }
     std::vector<int64_t> strides(out.size(), 1);
     for (size_t a = out.size(); a-- > 1;) {
-        strides[a - 1] = strides[a] * out[a];
+        strides[a - 1] = strides[a] * *out[a];
     }
     ExprId linear = b.x().constant(0);
     for (size_t a = 0; a < out.size(); ++a) {
@@ -365,18 +365,18 @@ std::optional<IndexedInstance> sliceIndexing(const InferContext &ctx) {
     if (!step || *step <= 0) {
         return std::nullopt;
     }
-    const int64_t extent = (*in)[*a];
+    const std::optional<int64_t> extent = (*in)[*a];
     const auto startRaw  = ctx.constInt(2);
     const auto stopRaw   = ctx.constInt(3);
     // The normalized value of a bound when it is fixed: a constant bound with a known extent.
     std::optional<int64_t> startNorm, stopNorm;
-    if (extent != kUnknownDim) {
+    if (extent.has_value()) {
         for (const auto &[raw, normalized] :
              {std::pair{startRaw, &startNorm}, std::pair{stopRaw, &stopNorm}}) {
             if (!raw) {
                 continue;
             }
-            const auto value = kernels::normalizeSliceBound(extent, *raw);
+            const auto value = kernels::normalizeSliceBound(*extent, *raw);
             if (!value) {
                 return std::nullopt; // the operator faults with SliceOutOfRange
             }
@@ -447,7 +447,7 @@ std::vector<ExprId> dimsOverTarget(
     std::vector<ExprId> dims;
     for (size_t j = 0; j < out.size(); ++j) {
         const bool written = target && j < target->size() && (*target)[j] >= 0;
-        const ExprId e     = written ? b.constant(std::format("t{}", j), shapeOperand, out[j], j)
+        const ExprId e     = written ? b.constant(std::format("t{}", j), shapeOperand, *out[j], j)
                                      : b.derived(std::format("t{}", j), out[j], kNoExpr);
         dims.push_back(b.dim(e));
     }
@@ -482,11 +482,11 @@ std::optional<IndexedInstance> reshapeIndexing(const InferContext &ctx) {
     StaticShape read = *in;
     std::optional<int64_t> open;
     if (!fullyKnown(*in)) {
-        if (in->empty() || (*in)[0] != kUnknownDim) {
+        if (in->empty() || (*in)[0].has_value()) {
             return std::nullopt;
         }
         for (size_t a = 1; a < in->size(); ++a) {
-            if ((*in)[a] == kUnknownDim) {
+            if (!(*in)[a].has_value()) {
                 return std::nullopt; // two open extents leave the element count unstated
             }
         }
@@ -495,7 +495,7 @@ std::optional<IndexedInstance> reshapeIndexing(const InferContext &ctx) {
         }
         int64_t rest = 1, count = 1;
         for (size_t a = 1; a < in->size(); ++a) {
-            rest *= (*in)[a];
+            rest *= *(*in)[a];
         }
         for (int64_t e : *target) {
             count *= e;
@@ -510,7 +510,7 @@ std::optional<IndexedInstance> reshapeIndexing(const InferContext &ctx) {
     }
     StaticShape out;
     try {
-        out = kernels::resolveReshape(read, *target);
+        out = knownShape(kernels::resolveReshape(extentsOf(read), *target));
     } catch (const std::exception &) {
         return std::nullopt;
     }
@@ -545,7 +545,7 @@ std::optional<IndexedInstance> flattenIndexing(const InferContext &ctx) {
     const auto split = static_cast<size_t>(*axis < 0 ? *axis + r : *axis);
     int64_t outer = 1, inner = 1;
     for (size_t d = 0; d < in->size(); ++d) {
-        (d < split ? outer : inner) *= (*in)[d];
+        (d < split ? outer : inner) *= *(*in)[d];
     }
     const StaticShape out = {outer, inner};
     IndexBuilder b;
@@ -604,17 +604,17 @@ std::optional<IndexedInstance> broadcastLikeIndexing(const InferContext &ctx) {
     const size_t shift = like->size() - g->size();
     std::vector<ExprId> coords(g->size());
     for (size_t j = 0; j < like->size(); ++j) {
-        const int64_t L = (*like)[j];
+        const std::optional<int64_t> L = (*like)[j];
         const ExprId d  = b.dim(b.extent(1, j, L));
         if (j < shift) {
             continue;
         }
-        const int64_t G = (*g)[j - shift];
+        const std::optional<int64_t> G = (*g)[j - shift];
         if (G == 1) {
             coords[j - shift] = b.x().constant(0);
-        } else if (G == kUnknownDim && L != 1) {
+        } else if (!G.has_value() && L != 1) {
             return std::nullopt; // g may be 1 (broadcast) or L (identity): Q9
-        } else if (G != kUnknownDim && L != kUnknownDim && G != L) {
+        } else if (G.has_value() && L.has_value() && G != L) {
             return std::nullopt; // does not broadcast: the kernel rejects it
         } else {
             coords[j - shift] = d;
@@ -650,11 +650,11 @@ std::optional<IndexedInstance> expandAxisIndexing(const InferContext &ctx) {
         StaticShape reduced = *like;
         reduced[*a]         = 1;
         int64_t gCount = 1, reducedCount = 1;
-        for (int64_t e : *g) {
-            gCount *= e;
+        for (const std::optional<int64_t> &e : *g) {
+            gCount *= *e;
         }
-        for (int64_t e : reduced) {
-            reducedCount *= e;
+        for (const std::optional<int64_t> &e : reduced) {
+            reducedCount *= *e;
         }
         if (gCount != reducedCount) {
             return std::nullopt;
@@ -675,7 +675,7 @@ std::optional<IndexedInstance> expandAxisIndexing(const InferContext &ctx) {
     }
     std::vector<ExprId> coords;
     for (size_t j = 0, k = 0; j < like->size(); ++j) {
-        const int64_t L = (*like)[j];
+        const std::optional<int64_t> L = (*like)[j];
         const ExprId d  = b.dim(b.extent(1, j, L));
         if (j == *a) {
             if (*keepDims) {
@@ -687,15 +687,15 @@ std::optional<IndexedInstance> expandAxisIndexing(const InferContext &ctx) {
             }
             continue;
         }
-        const int64_t G = (*g)[k++];
-        if (!*keepDims && (G == kUnknownDim || L == kUnknownDim || G != L)) {
+        const std::optional<int64_t> G = (*g)[k++];
+        if (!*keepDims && (!G.has_value() || !L.has_value() || G != L)) {
             // An extent is not known: the reshape is known to be the identity (and the map
             // fixed) only when g's extents are like's.
             return std::nullopt;
         }
         if (G == 1) {
             coords.push_back(b.x().constant(0));
-        } else if ((G == kUnknownDim && L != 1) || (G != kUnknownDim && L != kUnknownDim && G != L)) {
+        } else if ((!G.has_value() && L != 1) || (G.has_value() && L.has_value() && G != L)) {
             return std::nullopt;
         } else {
             coords.push_back(d);
@@ -814,7 +814,7 @@ std::optional<IndexedInstance> sumToIndexing(const InferContext &ctx) {
     const size_t shift = g->size() - like->size();
     std::vector<DimRole> roles(g->size(), DimRole::Reduction);
     for (size_t k = shift; k < g->size(); ++k) {
-        const int64_t L = (*like)[k - shift], G = (*g)[k];
+        const std::optional<int64_t> L = (*like)[k - shift], G = (*g)[k];
         if (L == G) {
             roles[k] = DimRole::Parallel;
         } else if (L != 1) {
@@ -853,8 +853,8 @@ std::optional<IndexedInstance> matmulIndexing(const InferContext &ctx) {
     }
     const bool av = A->size() == 1, bv = B->size() == 1;
     const size_t aBatch = A->size() - (av ? 1 : 2), bBatch = B->size() - (bv ? 1 : 2);
-    const int64_t Ka = A->back(), Kb = bv ? (*B)[0] : (*B)[B->size() - 2];
-    if (Ka != kUnknownDim && Kb != kUnknownDim && Ka != Kb) {
+    const std::optional<int64_t> Ka = A->back(), Kb = bv ? (*B)[0] : (*B)[B->size() - 2];
+    if (Ka.has_value() && Kb.has_value() && Ka != Kb) {
         return std::nullopt;
     }
     IndexBuilder b;
@@ -878,7 +878,7 @@ std::optional<IndexedInstance> matmulIndexing(const InferContext &ctx) {
     }
     const ExprId kA = b.extent(0, A->size() - 1, Ka);
     const ExprId kB = b.extent(1, bv ? 0 : B->size() - 2, Kb);
-    const ExprId k  = b.dim(Ka != kUnknownDim ? kA : kB, DimRole::Reduction);
+    const ExprId k  = b.dim(Ka.has_value() ? kA : kB, DimRole::Reduction);
     b.require(kA, Rel::Eq, kB);
     if (m) {
         ca.push_back(*m);

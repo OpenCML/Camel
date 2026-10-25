@@ -15,7 +15,7 @@
  *                 is the Camel type, floats are carried as float32),
  *       IntArray  a Camel int[] such as shape(x) with a dynamic batch (a 1-D
  *                 int64 ONNX tensor; `elements` holds the entries known
- *                 statically, kUnknownDim for the others),
+ *                 statically, an absent entry for the others),
  *       Aggregate a Camel tuple or struct (`camelType`) with some symbolic
  *                 elements, e.g. a model's parameters or its gradients. It
  *                 has no ONNX value of its own: `fields` holds its elements.
@@ -52,7 +52,7 @@ struct Value {
     std::optional<type::TypeCode> dtype;
     std::optional<tensor::StaticShape> shape;
     type::Type *camelType = nullptr; // Scalar: the Camel scalar type; Aggregate: tuple/struct type
-    std::vector<int64_t> elements;   // IntArray: known entries (kUnknownDim when dynamic)
+    std::vector<std::optional<int64_t>> elements; // IntArray: known entries (absent when dynamic)
     std::vector<Value> fields;       // Aggregate: the elements, in the type's order
     // Closure: a function value that exists only at export time. Plain: `slot` is the function
     // and `fields` its captured values. Hole: the result of the recursive call being abstracted.
@@ -83,8 +83,8 @@ struct Value {
     /// A symbolic Camel scalar of type `camelType` (int, float, or bool).
     static Value symbolicScalar(std::string name, type::Type *camelType);
 
-    /// A symbolic int[] whose statically known entries are given (kUnknownDim otherwise).
-    static Value symbolicIntArray(std::string name, std::vector<int64_t> elements) {
+    /// A symbolic int[] whose statically known entries are given (absent otherwise).
+    static Value symbolicIntArray(std::string name, std::vector<std::optional<int64_t>> elements) {
         Value v;
         v.kind     = Kind::Symbolic;
         v.form     = Form::IntArray;

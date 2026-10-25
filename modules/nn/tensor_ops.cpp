@@ -36,7 +36,8 @@ using namespace camel::tensor::ops;
 using camel::core::error::RuntimeDiag;
 using camel::core::error::throwRuntimeFault;
 namespace k      = camel::tensor::kernels;
-using camel::tensor::kUnknownDim;
+using camel::tensor::extentsOf;
+using camel::tensor::knownShape;
 using camel::tensor::StaticShape;
 using camel::tensor::Array;
 
@@ -52,8 +53,8 @@ bool known(const std::optional<StaticShape> &shape) {
     if (!shape) {
         return false;
     }
-    for (int64_t extent : *shape) {
-        if (extent == kUnknownDim) {
+    for (const std::optional<int64_t> &extent : *shape) {
+        if (!extent.has_value()) {
             return false;
         }
     }
@@ -111,9 +112,11 @@ std::optional<Type *> conv2dInfer(const InferContext &ctx) {
         return std::nullopt;
     }
     if (known(x.shape) && known(w.shape) && stride && pad) {
-        return tensorOf(TypeCode::Float32, k::conv2dShape(*x.shape, *w.shape, *stride, *pad));
+        return tensorOf(
+            TypeCode::Float32,
+            knownShape(k::conv2dShape(extentsOf(*x.shape), extentsOf(*w.shape), *stride, *pad)));
     }
-    StaticShape out(4, kUnknownDim);
+    StaticShape out(4, std::nullopt);
     if (x.shape) {
         out[0] = (*x.shape)[0];
     }
@@ -201,9 +204,10 @@ std::optional<Type *> poolInfer(const InferContext &ctx) {
     const auto pad    = optConstInt(ctx, 3, 0);
     if (known(x.shape) && kernel && stride && pad) {
         const k::Window2d window{*kernel, *kernel, *stride, *stride, *pad, *pad};
-        return tensorOf(TypeCode::Float32, k::pool2dShape(*x.shape, window));
+        return tensorOf(
+            TypeCode::Float32, knownShape(k::pool2dShape(extentsOf(*x.shape), window)));
     }
-    StaticShape out(4, kUnknownDim);
+    StaticShape out(4, std::nullopt);
     if (x.shape) {
         out[0] = (*x.shape)[0];
         out[1] = (*x.shape)[1];
@@ -239,7 +243,7 @@ IndexFn poolIndexing(bool max) {
         }
         const StaticShape &s = *x.shape;
         for (size_t a : {size_t{2}, size_t{3}}) {
-            if (s[a] != kUnknownDim && s[a] + 2 * *pad < *kernel) {
+            if (s[a].has_value() && *s[a] + 2 * *pad < *kernel) {
                 return std::nullopt; // the window does not fit: the kernel rejects it
             }
         }
@@ -251,12 +255,12 @@ IndexFn poolIndexing(bool max) {
         const ExprId N      = b.extent(0, 0, s[0]), C = b.extent(0, 1, s[1]);
         const ExprId H      = b.extent(0, 2, s[2]), W = b.extent(0, 3, s[3]);
         b.require(e.constant(1), Rel::Le, S);
-        auto outExtent = [&](ExprId in, int64_t known, const char *name) {
+        auto outExtent = [&](ExprId in, const std::optional<int64_t> &known, const char *name) {
             const ExprId def =
                 e.add(e.floorDiv(e.sub(e.add(in, e.scale(2, P)), K), S), e.constant(1));
             const std::optional<int64_t> value =
-                known == kUnknownDim ? std::nullopt
-                                     : std::optional((known + 2 * *pad - *kernel) / *stride + 1);
+                !known.has_value() ? std::nullopt
+                                   : std::optional((*known + 2 * *pad - *kernel) / *stride + 1);
             return b.derived(name, value, def);
         };
         const ExprId OH = outExtent(H, s[2], "oh"), OW = outExtent(W, s[3], "ow");
@@ -429,7 +433,7 @@ slot_t embeddingKernel(ArgsView &, ArgsView &norm, context::Context &) {
 
 std::optional<Type *> embeddingInfer(const InferContext &ctx) {
     const TensorFacts table = ctx.facts(0), idx = ctx.facts(1);
-    StaticShape out{kUnknownDim, kUnknownDim};
+    StaticShape out{std::nullopt, std::nullopt};
     if (idx.shape && idx.shape->size() == 1) {
         out[0] = (*idx.shape)[0];
     }

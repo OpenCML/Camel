@@ -31,7 +31,7 @@ std::optional<StaticShape> shapeFromArg(const InferContext &ctx, size_t index) {
     if (auto partial = ctx.partialInts(index)) {
         StaticShape shape;
         for (const auto &extent : *partial) {
-            shape.push_back(extent && *extent >= 0 ? *extent : kUnknownDim);
+            shape.push_back(extent && *extent >= 0 ? std::optional<int64_t>(*extent) : std::nullopt);
         }
         return shape;
     }
@@ -120,7 +120,7 @@ slot_t rangeKernel(ArgsView &, ArgsView &norm, context::Context &) {
 }
 
 std::optional<Type *> rangeInfer(const InferContext &) {
-    return tensorOf(TypeCode::Int64, StaticShape{kUnknownDim});
+    return tensorOf(TypeCode::Int64, StaticShape{std::nullopt});
 }
 
 slot_t eyeKernel(ArgsView &, ArgsView &norm, context::Context &) {
@@ -130,7 +130,7 @@ slot_t eyeKernel(ArgsView &, ArgsView &norm, context::Context &) {
 }
 
 std::optional<Type *> eyeInfer(const InferContext &ctx) {
-    const int64_t n = ctx.constInt(0).value_or(kUnknownDim);
+    const std::optional<int64_t> n = ctx.constInt(0);
     return tensorOf(TypeCode::Float32, StaticShape{n, n});
 }
 

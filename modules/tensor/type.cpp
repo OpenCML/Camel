@@ -12,6 +12,7 @@
 #include "dtype.h"
 
 #include "camel/core/type/composite/array.h"
+#include "camel/utils/assert.h"
 
 #include <optional>
 #include <span>
@@ -23,6 +24,25 @@ using type::ArrayType;
 using type::ExtentForm;
 using type::Type;
 using type::TypeCode;
+
+std::vector<int64_t> extentsOf(const StaticShape &shape) {
+    std::vector<int64_t> out;
+    out.reserve(shape.size());
+    for (const std::optional<int64_t> &extent : shape) {
+        ASSERT(extent.has_value(), "a shape the caller checked is known has every extent");
+        out.push_back(*extent);
+    }
+    return out;
+}
+
+StaticShape knownShape(std::vector<int64_t> extents) {
+    StaticShape out;
+    out.reserve(extents.size());
+    for (int64_t extent : extents) {
+        out.push_back(extent);
+    }
+    return out;
+}
 
 bool isTensorType(const Type *type) {
     // A tensor is a numeric array (plan section 5.2): the name `Tensor` is a spelling of the
@@ -57,7 +77,7 @@ TensorFacts tensorFactsOf(const Type *type) {
             StaticShape shape;
             shape.reserve(array->rank());
             for (const ExtentForm &form : array->extents()) {
-                shape.push_back(form.isConstant() ? form.constant() : kUnknownDim);
+                shape.push_back(form.isConstant() ? std::optional(form.constant()) : std::nullopt);
             }
             facts.shape = std::move(shape);
         }
@@ -75,7 +95,7 @@ TensorFacts tensorFactsOf(const Type *type) {
     if (isSupportedTensorScalar(elem->code())) {
         facts.dtype = elem->code();
     }
-    facts.shape = StaticShape(depth, kUnknownDim);
+    facts.shape = StaticShape(depth, std::nullopt);
     return facts;
 }
 
