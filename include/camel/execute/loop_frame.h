@@ -37,6 +37,13 @@ struct LoopFrameHost {
 
     slot_t initialState(size_t j) { return frame.get<slot_t>(loop.slots[j]); }
     slot_t stateValue() { return frame.get<slot_t>(loop.stateSlot); }
+    /// The declared type of the round's element port: the body's first port when the loop iterates
+    /// (ExecLoop::slots), which the builder gave the type of the round (ArrayType's
+    /// firstDimensionElement of the iterable, or an interval's integer).
+    const camel::core::type::Type *elementType() {
+        return frame.typeAt<camel::core::type::Type>(
+            loop.slots[loop.stateCount + (loop.hasCond ? loop.stateCount : 0)]);
+    }
     void setStateValue(slot_t value) {
         // The next round reads this value: it is a value, not a view of the element of this
         // round.
@@ -145,6 +152,9 @@ inline bool loopTest(camel::core::context::Frame &frame, const camel::runtime::E
     const int64_t round = fromSlot<int64_t>(frame.get<slot_t>(loop.roundSlot));
     bool stop           = false;
     slot_t element      = NullSlot;
+    // The body's ports: the element first (when the loop iterates), then the k of the state.
+    const size_t k     = loop.stateCount;
+    const size_t first = k + (loop.hasCond ? k : 0);
     if (loop.hasCond) {
         stop = !fromSlot<bool>(frame.get<slot_t>(loop.condResultSlot));
     }
@@ -182,10 +192,11 @@ inline bool loopTest(camel::core::context::Frame &frame, const camel::runtime::E
             if (static_cast<size_t>(round) >= array->size()) {
                 stop = true;
             } else {
-                // The round's element, along the first dimension: the element itself for a
-                // rank-1 array, the row for a higher-rank one (the core owns that rule for
-                // every array; Array::firstDimensionElement).
-                element = array->firstDimensionElement(static_cast<size_t>(round));
+                // The round's value, along the first dimension and in the form its declared type
+                // says: the element port is what the round must have the type of (loopRoundValue).
+                element = loopRoundValue(
+                    array, static_cast<size_t>(round),
+                    frame.typeAt<camel::core::type::Type>(loop.slots[first]));
             }
         }
     }
@@ -193,8 +204,6 @@ inline bool loopTest(camel::core::context::Frame &frame, const camel::runtime::E
         frame.set(loop.roundSlot, toSlot(int64_t{-1}));
         return true;
     }
-    const size_t k     = loop.stateCount;
-    const size_t first = k + (loop.hasCond ? k : 0);
     if (loop.iterates) {
         frame.set(loop.slots[first], element);
     }
