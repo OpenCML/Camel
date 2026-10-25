@@ -18,7 +18,7 @@ The module top level contains only declarations and no executable statements; ex
 
 | Declaration | Grammar | Section |
 |---|---|---|
-| Module | `module name` | [5.1](05_modules.md#51-module-declaration) |
+| Module | a file is a module, named after the file | [5.1](05_modules.md#51-a-modules-name) |
 | Import | `import (module \| (name \| { name, ... }) from module)` | [5.2](05_modules.md#52-imports) |
 | Export | `export (dataDecl \| typeDecl \| { name, ... })`; the `export` of a function is written before `func` | [5.3](05_modules.md#53-exports) |
 | Namespace | `namespace qualified-name { ... }` | [5.4](05_modules.md#54-namespaces) |
