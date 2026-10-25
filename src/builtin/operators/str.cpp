@@ -27,8 +27,9 @@ using namespace camel::core::type;
 using namespace camel::core::rtdata;
 
 /// The type whose own text a format specification formats when it is used on a numeric array:
-/// the array's element type (the element type follows the value: a declaration that fixes none,
-/// the numeric-unknown array, leaves the elements' type to the value the call holds). `nullptr`
+/// the array's element type (the element type follows the value: a declaration whose element is
+/// `Void`, the empty array literal's element, leaves the elements' type to the value the call
+/// holds). `nullptr`
 /// when there is none to format with, so the caller keeps its own refusal.
 Type *formatElementTypeOf(Type *type, const Array *value) {
     if (type->code() != TypeCode::Array) {

@@ -365,8 +365,8 @@ std::vector<int64_t> intListArg(ArgsView &args, size_t index, std::string_view o
         if (array->size() == 0) {
             return {};
         }
-        // The type may state no element type at all (`Tensor`, the numeric-unknown array: its
-        // element type is void, "a numeric scalar, which one is not fixed yet", design
+        // The type may state no element type at all (its element is `Void`, the "a numeric scalar,
+        // which one is not fixed yet" marker of design
         // principles 5.4) — the reading `isIntegerCode` already takes, which answers "yes" for
         // an unstated dtype and leaves the refusal to the kernel. A type that does fix an
         // element type is the exact one it says, so a concrete `f32[3]` is still refused here;

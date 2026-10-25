@@ -35,8 +35,9 @@ inline constexpr int64_t kUnknownDim = -1;
 
 using StaticShape = std::vector<int64_t>;
 
-/// True for an array whose element is a numeric scalar, and for the numeric-unknown array the
-/// alias `Tensor` hands out. A nested array (`f32[][]`) is not one of these: it is an array of
+/// True for an array whose element is a numeric scalar, and for an array whose element type
+/// nobody stated (`Void`, the empty array literal's element). A nested array (`f32[][]`) is not
+/// one of these: it is an array of
 /// arrays, the shape a tensor-like parameter also accepts.
 bool isTensorType(const type::Type *type);
 

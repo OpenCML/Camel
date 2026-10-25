@@ -240,7 +240,7 @@ std::string debugRunArrayTypeSelfTest() {
     Type *numericJoin = ArrayType::create(i64, shapeOf({3}))->unify(ArrayType::create(f32, shapeOf({3})));
     require(
         numericJoin == nullptr,
-        "int[3] + f32[3] unifies to the numeric-unknown array: " +
+        "int[3] + f32[3] has a common type: " +
             (numericJoin ? numericJoin->toString() : std::string("<null>")));
     Type *rankJoin = ArrayType::create(i64, shapeOf({3}))->unify(ArrayType::create(i64, shapeOf({3, 4})));
     require(

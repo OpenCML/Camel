@@ -376,7 +376,7 @@ Type *substituteTypeVars(Type *type, const type_bindings_t &bindings) {
         auto *array = static_cast<ArrayType *>(type);
         Type *elem  = substituteTypeVars(array->elemType(), bindings);
         // The shape belongs to the type: substituting the element type keeps the dimensions,
-        // the pack, the open rank and the numeric-unknown marker.
+        // the pack and the open rank.
         return elem == array->elemType() ? type : array->withElementType(elem);
     }
     case TypeCode::Tuple: {

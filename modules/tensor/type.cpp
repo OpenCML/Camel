@@ -25,8 +25,9 @@ using type::Type;
 using type::TypeCode;
 
 bool isTensorType(const Type *type) {
-    // A tensor is a numeric array (plan section 5.2): the alias `Tensor` is the numeric array
-    // whose element type is not fixed, and a numeric array a program writes (`f32[2, 3]`) is a
+    // A tensor is a numeric array (plan section 5.2): the name `Tensor` is a spelling of the
+    // array type (`Tensor<f32, [2, 3]>` is `f32[2, 3]`), and a numeric array a program writes
+    // (`f32[2, 3]`) is a
     // tensor too. One predicate answers for both spellings, and every entry point that takes a
     // tensor reads the type through it.
     return type::isNumericArrayType(type);

@@ -1873,7 +1873,7 @@ std::make_shared<StaticCheckedResolver>(
                                     norm[1]->code() != TypeCode::Int64)
                                     return nullopt;
                                 Type *elem = tt::as_ptr<ArrayType>(norm[0])->elemType();
-                                // An array whose element type is not fixed (`Tensor`) has no
+                                // An array whose element type nobody stated (its element is `Void`) has no
                                 // element type to name the value a subscript reads: this op
                                 // answers with the element type, and the module that owns
                                 // numeric arrays reads the element at the element type the
@@ -2327,7 +2327,7 @@ std::make_shared<StaticCheckedResolver>(
                                 }
                                 const auto &arrType = tt::as_ptr<ArrayType>(norm[0]);
                                 Type *elem         = arrType->elemType();
-                                // An array whose element type is not fixed (`Tensor`) is sliced by
+                                // An array whose element type nobody stated (its element is `Void`) is sliced by
                                 // the module that owns numeric arrays: it reads the elements at the
                                 // element type the value carries, while the core's slice is the
                                 // array of values whose elements the tangent space holds one slot
