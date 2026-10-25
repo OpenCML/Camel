@@ -922,7 +922,7 @@ timeout_ms = 60000
 
 [[tests]]
 name = "gpu_scope.host_effect_is_the_boundary"
-desc = "A host effect in a `#gpu` scope is the scope's boundary, not a refusal (plan 2.4, question 3): `println` written between two device operators stays on the host, and the scope is still one device unit around it. Before the ruling the same program stopped with 'cannot run on the device' on `:io/println`, and the effect could not be written at all. The effect in the body is part of the program: `--devices cpu` runs the whole scope on the host, writes no transfer at all, and still prints what the effect observes — nothing waits, so the run counts no synchronisation. Before the effect ran, the run printed `main`'s observation alone, and this entry is red on exactly that: the body's line is missing."
+desc = "A host effect in a `#gpu` scope is the scope's boundary, not a refusal (plan 2.4, question 3): `println` written between two device operators stays on the host, and the scope is still one device unit around it. Before the ruling the same program stopped with 'cannot run on the device' on `:io/println`, and the effect could not be written at all. The effect is a statement of the body's chain and the pass cuts the body into segments beside it, so the scope runs as two segments with the effect between them: a statement a segment replaces hands its place in the chain, and what that place carried, to the call that replaces it. `--devices cpu` runs the segments on the host, writes no transfer at all, and still prints what the effect observes — nothing waits, so the run counts no synchronisation. While the handover was missing the effect kept no edge to the exit, so the run printed `main`'s observation alone with the effect's transfer beside it, unwritten: this entry is red on exactly that, the body's line is missing."
 kind = "behavior"
 case = "../../../cases/modules/tiles/gpu_scope_host_effect.cml"
 args = ["--devices", "cpu", "${case}", "tiles::compile", "std::nvm"]
@@ -948,7 +948,7 @@ timeout_ms = 30000
 
 [[tests]]
 name = "gpu_scope.host_effect_synchronises"
-desc = "Where the host reads a value the device holds, the pass writes an explicit `download` there and the run waits there: `std::profile` counts the waits in `device_work.syncs` (waits, not values — `downloads`/`transfers` count values). The observation point of this program is the effect in the scope's body, whose `println` reads the segment's value, and it is the transfer the scope's boundary alone does not need. The numbers are the back end's only configuration: one device, one stream, the public synchronous path, so every transfer batch is one wait. The run counts 3 — the argument's upload, the value the effect reads, and the value `main` reads — where the same program counted 2 while the body's effect was dropped. `--devices cpu` runs the segment on the host and counts none of them; `to_host_bytes` carries both readings the host makes."
+desc = "Where the host reads a value the device holds, the pass writes an explicit `download` there and the run waits there: `std::profile` counts the waits in `device_work.syncs` (waits, not values — `downloads`/`transfers` count values). The observation point of this program is the effect in the scope's body, whose `println` reads the segment's value, and it is the transfer the scope's boundary alone does not need. The numbers are the back end's only configuration: one device, one stream, the public synchronous path, so every transfer batch is one wait. The run counts 3 — the argument's upload, the value the effect reads, and the value `main` reads — where the same program counted 2 while the call that replaced the segment's statements did not take the effect's place in the chain, which left the effect and its transfer outside the executed graph. `--devices cpu` runs the segment on the host and counts none of them; `to_host_bytes` carries both readings the host makes."
 kind = "behavior"
 case = "../../../cases/modules/tiles/gpu_scope_host_effect.cml"
 args = ["--devices", "0", "${case}", 'std::profile json="${test_tmp}/profile.json"', "tiles::compile", "std::nvm"]
@@ -969,6 +969,70 @@ assert(report.device_work.to_host_bytes === 20, JSON.stringify(report.device_wor
 }
 """
 timeout_ms = 60000
+
+[[tests]]
+name = "gpu_scope.unused_effect_outside_a_sync_block_does_not_run"
+desc = "An effectful expression written outside a sync block whose result nothing uses is not executed, and the compiler reports each one as EffectNotExecuted: evaluation follows the dependencies, and that is the language's own reading of its own program (design principles 3.1 and section 14, misreading 1), not a defect of the scope. The reading belongs to the program and not to the device, so it holds whether the scope is cut into segments or not — this entry is the run without `tiles::compile`, and it is red when a dropped effect runs (the run would print `never`) or when its warning is gone."
+kind = "behavior"
+case = "../../../cases/modules/tiles/gpu_scope_unused_effect.cml"
+args = ["--output-format", "json", "${case}", "std::nvm"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const diags = JSON.parse(input.stderr)
+assert(input.normalized.stdout === '12.0' + String.fromCharCode(10), JSON.stringify(input.normalized.stdout))
+assert(!input.stdout.includes('never'), input.stdout)
+const dropped = diags.filter((d) => d.data.name === 'SemanticDiag::EffectNotExecuted')
+assert(dropped.length === 1, JSON.stringify(diags.map((d) => d.data.name)))
+assert(dropped[0].message === "The call of 'println' has side effects but is never executed: nothing depends on it and it is not in a sync block.", dropped[0].message)
+assert(dropped[0].code === '0x03100004', dropped[0].code)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 30000
+
+[[tests]]
+name = "gpu_scope.unused_effect_stays_dropped_through_the_pass"
+desc = "The same program through `tiles::compile` (`--devices cpu`, so no transfer is written): the scope is cut into segments, and the effect written outside a sync block is still not executed and still reported as EffectNotExecuted. A segment's replaced statements hand their orderings to the call that replaces them; that handover keeps the program's order, and it does not make an effect nothing depends on reachable. Red when the pass executes the dropped effect, when it stops reporting it, or when it changes the program's line."
+kind = "behavior"
+case = "../../../cases/modules/tiles/gpu_scope_unused_effect.cml"
+args = ["--devices", "cpu", "--output-format", "json", "${case}", "tiles::compile", "std::nvm"]
+envs = ["CUDA_VISIBLE_DEVICES=-1"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const program = input.normalized.stdout.split(String.fromCharCode(10)).filter(Boolean).filter((line) => !line.startsWith('TILES_'))
+assert(JSON.stringify(program) === JSON.stringify(['12.0']), input.stdout)
+assert(!input.normalized.stdout.includes('never'), input.stdout)
+const dropped = JSON.parse(input.stderr).filter((d) => d.data.name === 'SemanticDiag::EffectNotExecuted')
+assert(dropped.length === 1, input.stderr)
+assert(dropped[0].message === "The call of 'println' has side effects but is never executed: nothing depends on it and it is not in a sync block.", dropped[0].message)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 30000
+
+[[tests]]
+name = "gpu_scope.arm_effect_runs_only_in_the_arm_taken"
+desc = "A `println` written in an arm of a `#gpu` scope runs only when the program takes that arm: the arm is a block of its own and the branch decides whether it runs, so a run that takes the first arm of one call and the second arm of the next prints each line once. The scope still runs on the device around the effects, and each arm is a segment of its own. An effect made an observable root would run in both arms, so both lines would be printed twice; that is the reading this entry pins (design principles 3.1, section 14, misreading 1)."
+kind = "behavior"
+case = "../../../cases/modules/tiles/gpu_scope_arm_effect.cml"
+args = ["--devices", "cpu", "${case}", "tiles::compile", "std::nvm"]
+envs = ["CUDA_VISIBLE_DEVICES=-1"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.split(String.fromCharCode(10)).filter(Boolean)
+const program = lines.filter((line) => !line.startsWith('TILES_'))
+assert(JSON.stringify(program) === JSON.stringify(['taken', '15.0', 'other arm', '15.0']), input.stdout)
+const row = lines.find((line) => line.startsWith('TILES_PLACEMENT ') && line.includes('"graph":"choose"'))
+assert(row, JSON.stringify(lines))
+const report = JSON.parse(row.slice('TILES_PLACEMENT '.length))
+assert(report.body === 'gpu-required' && report.body_fact === 'gpu', row)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 30000
 
 [[tests]]
 name = "gpu_scope.module_tag_propagates"
