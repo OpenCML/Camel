@@ -148,12 +148,15 @@ camel::core::type::TypeId typeIdOf(Type *type) {
     if (type == nullptr) {
         return camel::core::type::kNoTypeId;
     }
+    // An open signature is not a type yet; `closed()` gives the interned signature of its parts
+    // as they stand, so a graph records a type and not a builder's working object.
+    Type *frozen = type->closed();
     ASSERT(
-        type->isInterned(),
+        frozen->isInterned(),
         "A frozen graph node names a type the type table does not hold: every type a graph "
         "records must come from the table's interning path (TypeTable::intern), not from an "
         "object built beside it.");
-    return type->typeId();
+    return frozen->typeId();
 }
 
 struct GraphArenaLayout {

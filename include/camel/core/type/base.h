@@ -234,6 +234,14 @@ class Type {
     virtual std::string mangle() const;
     virtual Type *clone(bool deep = false) const;
 
+    /**
+     * The type a frozen graph records for this type: itself for every type that is a type. The
+     * one exception is an open signature (function.h), which a compiler still writes and which is
+     * not a type yet: its frozen form is the signature as it stands, interned (func.cpp). A graph
+     * names the type table's entry for a node's type, so this is what makes `typeIdOf` total.
+     */
+    virtual Type *closed() const { return const_cast<Type *>(this); }
+
     virtual bool equals(Type *type) const;
     /**
      * Least common type of `this` and `other`, used where control flow merges

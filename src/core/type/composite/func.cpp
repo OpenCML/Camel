@@ -341,6 +341,16 @@ Type *FunctionType::clone(bool deep /* = false */) const {
     return intern(copy);
 }
 
+Type *FunctionType::closed() const {
+    // An open signature is the function's identity while it is built, not a type yet: what a
+    // graph records for it is the signature as it stands, interned like any other. A graph is
+    // frozen after the builder is done, so the result type is the one the body decided.
+    if (!open_) {
+        return const_cast<FunctionType *>(this);
+    }
+    return intern(parts());
+}
+
 bool FunctionType::equals(Type *other) const { return typeEquals(this, other); }
 
 CastSafety FunctionType::castSafetyFrom(Type *sourceType) const {
