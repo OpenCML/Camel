@@ -993,6 +993,14 @@ performance notes record what running the whole layer on a shared host would cos
 the exclusion is that nothing notices a performance regression, so the
 measurement has one manual entry point:
 
+Three of those plans are also in the release gate's slow layer, where a plan file is named one by
+one: `perf.para_speedup`, whose guard is a property of one run rather than a stored number, and the
+count guards `perf.step_counts` and `perf.reduce_layout_counts`, which a 2026-10-25 ruling split out
+of `perf.step_budget` and `perf.reduce_layout`. What those three assert is a count or a property --
+the operator calls one round of the step issues, the blocks `sum_to` allocates -- and never a
+duration, which is what lets them ride a shared host; the measured halves of the two split plans
+stay here and run before a release.
+
 ```bash
 node scripts/perf-gate.mjs --list        # every plan of the directory, what each measures, and why it is in or out
 node scripts/perf-gate.mjs               # measure the gateable subset and compare with the baseline
