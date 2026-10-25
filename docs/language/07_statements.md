@@ -363,28 +363,26 @@ func main(): int sync {
 **常量值参数（`constas`）**：普通形参里可以写 `constas n: int`，它的值在编译期已知，是声明身份的一部分，而不是运行时的实参。
 
 ```cml
-import { Tensor, ones, sum } from tensor
-
-func total(constas n: int, x: Tensor<f32, [n]>): float {
-    return sum(x)
+func total(constas n: int, x: float[n]): float {
+    return loop acc = 0.0 for v in x do acc + v
 }
 
 func main(): int sync {
-    println(total(3, ones([3])))
-    println(total(5, ones([5])))
+    println(total(3, [1.0, 2.0, 3.0]))
+    println(total(5, [1.0, 2.0, 3.0, 4.0, 5.0]))
     return 0
 }
 ```
 
 ```text
-3.0
-5.0
+6.0
+15.0
 ```
 
 - **值进入实例键。** 每个不同的常量值实例化出一张子图（`total<3>`、`total<5>`），同一组类型和值只实例化一次；值与类型合起来才是键，只差一个字符串也是两个实例（`label<"w">`、`label<"h">`）。
 - **任意个、任意位置。** 一个声明可以有多个 `constas` 形参，位置在普通形参之间任意；调用把值写在它所在的位置（`place(1, 2)` 给 `x = 1`、`n = 2`）。每个值各自进入实例键。
 - **类型不止 `int`。** `string`、`int`、`float`、`bool` 等有编译期常量的类型都可以；值必须与形参类型相容。类型要写出来（`SemanticDiag::ConstasTypeRequired`）。`enum` 成员目前还不能作为编译期值传递（`SemanticDiag::ConstasValueNotConstant`），要等 `enum` 值有了编译期表示。
-- **值由函数体读取。** `n` 在实例体里是一个编译期常量：可以当类型里的具名维度（`Tensor<f32, [n]>`、`[n]`），可以当字段名（`t.[n]`），也可以当普通值用于算术、条件、打印。它不需要被任何类型读到：只有函数体读它也是合法的。
+- **值由函数体读取。** `n` 在实例体里是一个编译期常量：可以当类型里的具名维度（`f32[n]`），可以当字段名（`t.[n]`），也可以当普通值用于算术、条件、打印。它不需要被任何类型读到：只有函数体读它也是合法的。
 - **不是运行时参数。** 调用点要给出常量，但它不进入调用结点：实例的形参表里没有 `n`，调用只传其余的实参（`total(3, xs)` 的调用只有一个实参 `xs`）。
 - **值可以转手。** 一个 `constas` 值可以传给另一个 `constas` 参数，也可以来自 `static for` 绑定的字段名、`indices` 的位置这类编译期名字。`func columnOf(constas n: string, ..ts) { return column(n, ..ts) }` 合法：`tree_map` 正是这样把字段名和树一起交给 `column`。
 - **和剩余参数一起用。** `func column(constas n: string, ..ts)` 合法：值在展开前绑定，`ts` 得到剩下的实参。设计稿 3.1.1 的 `column` 今天可以写成
@@ -398,7 +396,7 @@ func main(): int sync {
   两个只差字符串的调用是两张图，各自取 `n` 命名的字段。
 - 带 `constas` 参数的声明**没有函数值**：常量必须在写调用时给出，不能赋给变量或作为实参传走（`SemanticDiag::ConstasFunctionNeedsCall`）。无体声明（C++ 算子的声明）也不能带 `constas`（`SemanticDiag::ConstasInNativeDeclaration`）。
 - 值必须是编译期常量（`SemanticDiag::ConstasValueNotConstant`）：运行期的值不行，因为它要选实例。目前常量可以是字面量、另一个 `constas` 值、`static for` 的 `n` 和 `indices` 的 `j` 这类编译期名字，以及一个纯函数在所有实参都是编译期常量时的调用（`label(first_field::<S>())`），编译期把它折叠成那个值；读不出来的调用按自己的名字拒绝（`SemanticDiag::FoldCallNotEvaluable`，其余 `FoldCall*` 诊断说明原因）。
-- `n` 只在实例体里绑定；函数体里的类型位置（`let z: Tensor<f32, [n]>`）还没有这个作用域。数组写法 `f32[n]` 同样可以。
+- `n` 只在实例体里绑定。具名维度写在形参的声明类型里（`x: f32[n]`）；函数体里的类型位置按"维度名由形参类型里第一次出现的那个绑定"来读，`let z: f32[n]` 在那里没有把实例的 `n` 带进来（`SemanticDiag::DimensionNameNotBound`）。
 
 **目前的限制**：泛型函数不能加标注；带上下文实参的泛型函数（`f<w>`）不能作值；带 `constas` 参数的函数不能作值，也不能和无体声明组合，`enum` 值还不能作为 `constas` 实参。设计稿 3.1.1 的 `column(constas n, ts)` 省写了类型，今天要写成 `column(constas n: string, ..ts)`。
 
@@ -494,12 +492,12 @@ func canonical(x: float, y: float): float {
 - **被调用的函数不继承**：`dot` 调用的函数仍按规范算法，除非它自己写了许可标签。内联之后各节点仍带各自的许可。
 - **`#strict` 撤销一切**：它标记的函数或块（连同其中的分支臂、循环体与 lambda）的有效许可为空集——默认的 `reassociate`、`contract` 不再可用，内层写下的许可也不生效。外层与内层同时写着时，`#strict` 优先。
 - **许可只是允许，不是要求**。CPU 后端（`std::nvm`、`std::fvm`、`std::jit`、`std::prl`、`std::cpp`）总是给出规范结果；以后的后端（如 Tiles）可以在有许可的节点上用别的算法。`std::opt` 默认使用 7.3 的默认许可，`std::opt safe_fp=true` 按 `#strict` 一样的策略工作。
-- 没有模块级的默认许可，也没有命令行或流水线开关；后端的入口（如 `tiles.run`）不接受许可。
+- 没有模块级的默认许可，也没有命令行或流水线开关；后端的入口（如 `tiles::run`）不接受许可。
 - 许可记在图的每个节点上，`std::rgir`、`std::gir` 在有许可的节点上显示 `numeric="..."`；`#strict` 是代码上的标签，出现在节点的 `attrs="strict"` 里。公共子表达式合并与张量的融合不把许可不同的节点合在一起。
 
 ### 7.6.2 标签：`#`
 
-`#` 不再开始注释（文件第一行的 `#!` 除外），而是**标签**（设计原则 6.2）。标签是与函数、类型同一个命名空间里的名字：在本模块声明、按名字导入、或用 `模块::标签` 限定。
+`#` 开始一个**标签**（设计原则 6.2）；文件第一行的 `#!` 到行末被忽略。标签是与函数、类型同一个命名空间里的名字：在本模块声明、按名字导入、或用 `模块::标签` 限定。
 
 标签在模块顶层声明，`on` 之后是它可以写的位置：
 
@@ -665,9 +663,9 @@ id
 - 实参只能是类型，个数必须与参数一致；不带实参使用是错误。
 - 右侧只能引用已经声明的类型，所以类型函数不能引用自身。
 - 可以 `export`，在别的模块里以 `模块::Pair<int>` 使用。
-- 模块类型（如 `Tensor<f32, const [2, 3]>`）的尖括号由该类型自己解释，实参可以是类型或 `const 数据`。
+- 模块类型的尖括号（写得出实参的那种）由该类型自己解释，实参可以是类型或 `const 数据`。
 
-类型表达式里保留、尚未实现的部分：类型运算 `&`、`\`、`+`、`-`、`^`，以及 `keyof`、`名字 of T`（`SemanticDiag::FeatureNotSupported` 或语法错误），它们的含义尚未决定。`typeof e` 已实现：它是一个完整的类型，取表达式 `e` 的值的类型，在使用这个类型的位置由编译器展开；`typeof` 不能嵌在更大的类型里（`typeof(1)[]` 报 `SemanticDiag::TypeOfNotWholeType`），操作数没有值（`void`）时报 `SemanticDiag::TypeOfNotAValue`。
+类型表达式里保留、含义尚未决定的部分：类型运算 `&`、`\`、`+`、`-`、`^`，以及 `keyof`、`名字 of T`（`SemanticDiag::FeatureNotSupported` 或语法错误）。`typeof e` 已实现：它是一个完整的类型，取表达式 `e` 的值的类型，在使用这个类型的位置由编译器展开；`typeof` 不能嵌在更大的类型里（`typeof(1)[]` 报 `SemanticDiag::TypeOfNotWholeType`），操作数没有值（`void`）时报 `SemanticDiag::TypeOfNotAValue`。
 
 ## 7.8 块
 
