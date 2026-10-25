@@ -1755,7 +1755,7 @@ head: (xs: T[]) => T
 last: (xs: T[]) => T
 tail: (xs: T[]) => T[]
 slice: <start: int, end: int> (xs: T[]) => T[]
-slice: (t: T[], axis: int, start: int, end: int, step?: int) => T[]
+slice: (t: T[], axis: int, start: int, end: int, step: int = 1, written: int = 3) => T[]
 concat: (xs: T[], ys: T[]) => T[]
 contains: <value: T> (xs: T[]) => bool
 contains: <sub: string> (s: string) => bool
