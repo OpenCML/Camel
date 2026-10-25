@@ -390,3 +390,17 @@ name = "tutorial.examples.03_exercise"
 desc = "The answer to the exercise of chapter 3: a function of two parameters, used from a pipe."
 case = "../../../docs/tutorial/examples/03_exercise.cml"
 golden = "golden/tutorial_examples/03_exercise.txt"
+
+# ---- Chapter 4 --------------------------------------------------------------------------------
+
+[[tests]]
+name = "tutorial.examples.04_guards"
+desc = "A `when` guard adds a condition to a case: the first arm whose guard holds is the one taken."
+case = "../../../docs/tutorial/examples/04_guards.cml"
+golden = "golden/tutorial_examples/04_guards.txt"
+
+[[tests]]
+name = "tutorial.examples.04_exercise"
+desc = "The answer to the exercise of chapter 4: an `if` is an expression, and a `match` on a string needs its default."
+case = "../../../docs/tutorial/examples/04_exercise.cml"
+golden = "golden/tutorial_examples/04_exercise.txt"
