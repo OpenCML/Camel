@@ -195,7 +195,7 @@ for (const m of readText(NODES).matchAll(/^CAMEL_NODE\((\w+), \w+\)\s*\/\/\s*(.*
     const production = kind[0].toLowerCase() + kind.slice(1)
     // A node kind is a production, or one alternative of one (named in NODE_OF).
     const NODE_OF = {
-        spreadValue: 'indexValue', restValue: 'indexValue', ifExpr: 'ctrlExpr', matchExpr: 'ctrlExpr', tryExpr: 'ctrlExpr',
+        restValue: 'indexValue', ifExpr: 'ctrlExpr', matchExpr: 'ctrlExpr', tryExpr: 'ctrlExpr',
         castExpr: 'unaryExpr', refData: 'primaryData', constData: 'typeOrData', refType: 'primaryType',
         parenType: 'primaryType', typeOfType: 'primaryType', typeAsType: 'primaryType',
         tupleParam: 'keyParamPair', strayPositional: 'indexValue',

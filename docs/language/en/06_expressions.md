@@ -25,7 +25,7 @@ An expression is a node on the graph, and its operands are its input edges. Whet
 - The elements of an array literal must have the same type. An element is **a position with an expected type** ([3.3.1](03_data_model.md#331-arrays)): with a context every element takes that type, so the elements of `let xs: float[] = [1, 2.0]` are `float`; with none, the number literals of one array take the widest kind (integer < decimal), so `[1, 2.0]` is a `float[]` (as Go's untyped constants do). The element type of the empty array `[]` comes from the context: `let xs: int[] = []`, `[] as Map<string, int>`.
 - The keys of a struct literal are identifiers. A field is such a position too: in `let p: P = { a: 1, b: 2.0 }` (`P = { a: float, b: float }`) the `1` is a `float`. A field written as a name is a variable, not converted: a type it does not fit is `SemanticDiag::DeclaredTypeMismatch`.
 - **A list comprehension** `[e for x in xs if c]` is `xs->filter<(x) => c>->map<(x) => e>`: `x` has the element type of `xs`, `if c` may be left out, and the result is an array of `e`. On the graph it is exactly what the two calls written out are (two operator nodes, each with the subgraph of its element function), so it has their properties: nothing is promised about the order of the elements (a parallel scheduler may compute them concurrently), and effects in `e` and `c` are treated as in the element functions of `map` and `filter` ([6.10](#610-higher-order-operators)). It nests, and it may stand wherever an expression may. A source that is not an array is `SemanticDiag::ComprehensionSourceRefused`.
-- The spread `...xs` is `SemanticDiag::ConstructNotSupported`. Write `concat(xs, ys)`.
+- **A spread is not in the language**: `...xs` written in a literal is an ordinary syntax error (`...` is written only in a relative module name, `import ...module`). To join arrays write `concat(xs, ys)`.
 
 ### 6.2.1 Formatted strings
 
@@ -383,7 +383,7 @@ A missing case, an extra case or a literal case mixed in is `SemanticDiag::Tagge
 
 **A `match` must have a default case.** A `match` without `case _` is the compile-time error `SemanticDiag::MatchWithoutDefault`, located at the `match`. Three shapes need none: a `match` on a `bool` that writes out both `case true` and `case false`, a `match` on a `T?` or `T!` with the fixed patterns above, and a `match` on an enum that names every variant. The compiler adds no arm the program does not write, so the arms on the graph correspond one to one to the `case`s in the source.
 
-Tuple patterns, struct patterns, and identifier patterns on values of ordinary types (`case n => ...`) are `SemanticDiag::ConstructNotSupported`; use an `if` chain, or take the members first and then match. Tuple and struct patterns of enum variants are implemented, but a field position takes only a name or `_`.
+Tuple patterns and struct patterns are not in the language: `case (...)` and `case {...}` are ordinary syntax errors. An identifier pattern on a value of an ordinary type (`case n => ...`) is `SemanticDiag::ConstructNotSupported`; use an `if` chain, or take the members first and then match. Tuple and struct patterns of enum variants are implemented, but a field position takes only a name or `_`.
 
 `try`/`catch`/`finally` is not part of Camel (it has no stable mapping onto the graph), and none of the three is a keyword: they are ordinary names, so a `try { ... }` written with them is an ordinary syntax error. An operation that may fail returns `T!`, handled with `!!`, `?->` and `case error e`.
 

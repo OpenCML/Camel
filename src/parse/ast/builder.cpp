@@ -1338,7 +1338,7 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
     setNodeTokenRangeByContext(dataList, context);
     *dataList << call;
     node_ptr_t valueDecl =
-        createNodeAs<DataDeclLoad>(false, UnpackType::Tuple, std::vector<Reference>{ref});
+        createNodeAs<DataDeclLoad>(false, std::vector<Reference>{ref});
     unwrapNodeAs<DataDeclLoad>(valueDecl)->setDoc(docOf(context));
     setNodeTokenRangeByContext(valueDecl, context);
     *valueDecl << typeList << dataList;
@@ -2213,17 +2213,12 @@ Value Builder::visitDataDecl(cst::DataDecl context, bool topLevel) {
     if (context->tok(TK::KwVar)) {
         isVar = true;
     }
-    // carrier : identList | parentIdents | bracedIdents | bracketIdents
-    UnpackType type          = UnpackType::Tuple;
+    // carrier : identList | parentIdents
+    // A parenthesized carrier destructures a tuple; the parser refuses `{` and `[` here, so a
+    // declaration never binds the fields of a struct or the elements of an array.
     cst::IdentList identList = context->get<cst::IdentList>();
     if (auto parent = context->get<cst::ParentIdents>()) {
         identList = parent->get<cst::IdentList>();
-    } else if (auto braced = context->get<cst::BracedIdents>()) {
-        type      = UnpackType::Struct;
-        identList = braced->get<cst::IdentList>();
-    } else if (auto bracket = context->get<cst::BracketIdents>()) {
-        type      = UnpackType::Array;
-        identList = bracket->get<cst::IdentList>();
     }
     vector<Reference> refs;
     std::vector<cst::IdentDef> bindingIdents;
@@ -2231,7 +2226,7 @@ Value Builder::visitDataDecl(cst::DataDecl context, bool topLevel) {
         refs.push_back(topLevel ? qualifyRef(Reference(ident->text())) : Reference(ident->text()));
         bindingIdents.push_back(ident);
     }
-    node_ptr_t dataDeclNode = createNodeAs<DataDeclLoad>(isVar, type, refs);
+    node_ptr_t dataDeclNode = createNodeAs<DataDeclLoad>(isVar, refs);
     setNodeTokenRangeByContext(dataDeclNode, context);
     unwrapNodeAs<DataDeclLoad>(dataDeclNode)->setDoc(docOf(context));
     if (context->get<cst::TypeList>()) {
@@ -2393,23 +2388,6 @@ Value Builder::visitRetStmt(cst::RetStmt context) {
 }
 
 /*
-indexValue   : '...'? dataExpr ;
-*/
-Value Builder::visitSpreadValue(cst::SpreadValue context) {
-    ENTER("IndexValue");
-    if (context->childCount() > 1) {
-        // `...xs` is in the grammar but spreading is not implemented. The marker used to be
-        // dropped, so that `[...xs, 4]` was built as the array of `xs` and 4.
-        diags_->of(SemanticDiag::ConstructNotSupported)
-            .at(rangeOf(context->firstToken()))
-            .commit("...", "spreading is not implemented");
-    }
-    node_ptr_t res = any2node(visitExpr(context->expr()));
-    LEAVE("IndexValue");
-    return res;
-}
-
-/*
 restValue : '..' dataExpr ;
 The argument is a compile-time tuple whose elements are the arguments (design principles 5.5);
 GCT keeps the marker and GIR expands it at the call.
@@ -2442,18 +2420,12 @@ Value Builder::visitKeyTypePair(cst::KeyTypePair context) {
 }
 
 /*
-keyValuePair : identDef ':' dataExpr | '...' dataExpr ;
+keyValuePair : identDef ':' dataExpr ;
 */
 Value Builder::visitKeyValuePair(cst::KeyValuePair context) {
     ENTER("KeyValuePair");
-    if (!context->get<cst::IdentDef>()) {
-        // `...s` in a struct literal or an argument list: in the grammar, not implemented. It
-        // used to dereference the missing key and crash the compiler.
-        diags_->of(SemanticDiag::ConstructNotSupported)
-            .at(rangeOf(context->firstToken()))
-            .commit("...", "spreading is not implemented");
-    }
-    // The error above stops compilation; a placeholder key keeps the rest of the file checked.
+    // A key is always a name; only a text that ends inside the pair leaves the node without one,
+    // and a placeholder key keeps the rest of the file checked.
     Reference ref(
         context->get<cst::IdentDef>() ? context->get<cst::IdentDef>()->text() : std::string("_"));
     node_ptr_t namedDataNode = createNodeAs<NamedDataLoad>(ref);
@@ -2775,10 +2747,8 @@ Value Builder::visitAngledValues(cst::AngledValues context) {
 
 /*
 pattern
-    : identRef
+    : identRef (identDef | enumTuplePattern | enumStructPattern)?
     | literal
-    | '(' (dataList | identList)? ','? ')'
-    | '{' (pairedValues | identList)? ','? '}'
     | '_' // wildcard
     ;
 */
@@ -2824,17 +2794,9 @@ Value Builder::visitPattern(cst::Pattern context) {
             *res << bound;
         }
     } else {
-        // Tuple and struct patterns are in the grammar, but what they destructure and bind
-        // has not been decided. They used to end in an internal error without a position.
-        const char *kind = context->get<cst::IdentRef>()          ? "an identifier pattern"
-                           : context->firstToken()->text() == "(" ? "a tuple pattern"
-                                                                  : "a struct pattern";
-        diags_->of(SemanticDiag::ConstructNotSupported)
-            .at(rangeOf(context->firstToken(), context->lastToken()))
-            .commit(
-                context->text(),
-                std::string(kind) + " is not implemented, only literal patterns and '_' are");
-        // The error above stops compilation; a wildcard keeps the rest of the file checked.
+        // A pattern is an identifier, a variant path, a literal or `_`. What the fields of a
+        // variant bind is read by the enum patterns above; the parser builds no other shape.
+        ASSERT(false, "a pattern of another shape reached the builder");
         res = createNodeAs<NullLoad>();
         setNodeTokenRangeByContext(res, context);
     }
@@ -5313,8 +5275,6 @@ Value Builder::visitLoopExpr(cst::LoopExpr context) {
 /// Any expression (what `dataExpr` derives).
 Value Builder::visitExpr(syn::Node context) {
     switch (context.kind()) {
-    case NK::SpreadValue:
-        return visitSpreadValue(cst::SpreadValue(context));
     case NK::RestValue:
         return visitRestValue(cst::RestValue(context));
     case NK::IfExpr:

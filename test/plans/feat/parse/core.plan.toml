@@ -154,3 +154,83 @@ expect_diagnostic_column = 29
 expect_output_contains = ["Unexpected '='; expected a name."]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
+
+[[tests]]
+name = "syntax.no_spread_in_array_literal"
+desc = "`...xs` in an array literal is not in the language: a spread is refused at the marker as an ordinary syntax error. It was a `ConstructNotSupported` while the form was still in the grammar, and before that the marker was dropped and the program printed an address."
+kind = "negative"
+case = "../../../cases/parse/syntax/no_spread_in_array_literal.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SyntaxDiag::UnexpectedToken"
+expect_diagnostic_code = "0x0200000A"
+expect_diagnostic_line = 11
+expect_diagnostic_column = 15
+expect_output_contains = ["Unexpected '...'"]
+expect_output_not_contains = ["never printed", "UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "syntax.no_spread_in_struct_literal"
+desc = "`...s` in a struct literal is not in the language: it is refused at the marker as an ordinary syntax error. It used to crash the compiler (null dereference), and afterwards it was a `ConstructNotSupported` while the form was still in the grammar."
+kind = "negative"
+case = "../../../cases/parse/syntax/no_spread_in_struct_literal.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SyntaxDiag::UnexpectedToken"
+expect_diagnostic_code = "0x0200000A"
+expect_diagnostic_line = 10
+expect_diagnostic_column = 15
+expect_output_contains = ["Unexpected '...'"]
+expect_output_not_contains = ["never printed", "UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "syntax.no_struct_destructuring"
+desc = "Destructuring a struct is not in the language: `let {x, y} = p` is refused at the `{` as an ordinary syntax error, and the name that has to stand there is asked for. It was a `ConstructNotSupported`, and before that a warning that dropped only the function using it."
+kind = "negative"
+case = "../../../cases/parse/syntax/no_struct_destructuring.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SyntaxDiag::UnexpectedToken"
+expect_diagnostic_code = "0x0200000A"
+expect_diagnostic_line = 11
+expect_diagnostic_column = 9
+expect_output_contains = ["Unexpected '{'"]
+expect_output_not_contains = ["never printed", "UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "syntax.no_tuple_pattern"
+desc = "A tuple pattern is not in the language: `case (1, 2)` is refused at the `(` as an ordinary syntax error, and a pattern is asked for. It was a `ConstructNotSupported` while the parser read the nesting so that the compiler could say so."
+kind = "negative"
+case = "../../../cases/parse/syntax/no_tuple_pattern.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SyntaxDiag::UnexpectedToken"
+expect_diagnostic_code = "0x0200000A"
+expect_diagnostic_line = 11
+expect_diagnostic_column = 14
+expect_output_contains = ["Unexpected '('; expected a pattern."]
+expect_output_not_contains = ["never printed", "UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "syntax.no_struct_pattern"
+desc = "A struct pattern is not in the language: `case { x: 1 }` is refused at the `{` as an ordinary syntax error, and a pattern is asked for. It was a `ConstructNotSupported` while the parser read the nesting so that the compiler could say so."
+kind = "negative"
+case = "../../../cases/parse/syntax/no_struct_pattern.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SyntaxDiag::UnexpectedToken"
+expect_diagnostic_code = "0x0200000A"
+expect_diagnostic_line = 11
+expect_diagnostic_column = 14
+expect_output_contains = ["Unexpected '{'; expected a pattern."]
+expect_output_not_contains = ["never printed", "UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000

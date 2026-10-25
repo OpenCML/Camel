@@ -57,7 +57,7 @@ CAMEL_NODE(ParentIdents, Other)        // '(' identList? ','? ')'
 CAMEL_NODE(BracedIdents, Other)        // '{' identList? ','? '}'
 CAMEL_NODE(BracketIdents, Other)       // '[' identList? ','? ']'
 CAMEL_NODE(KeyTypePair, Other)         // tagUse* identDef ':' typeExpr
-CAMEL_NODE(KeyValuePair, Other)        // identDef ':' dataExpr | '...' dataExpr
+CAMEL_NODE(KeyValuePair, Other)        // identDef ':' dataExpr
 CAMEL_NODE(KeyParamPair, Other)        // 'var'? identDef ':' typeExpr ('=' dataExpr)?
 CAMEL_NODE(DataList, Other)            // dataExpr (',' dataExpr)*
 CAMEL_NODE(IdentList, Other)           // identDef (',' identDef)*
@@ -75,7 +75,7 @@ CAMEL_NODE(AngledValues, Other)        // '<' argumentList? ','? '>'
 CAMEL_NODE(TypeArguments, Other)       // '::' '<' (typeList | namedTypeArgument (',' namedTypeArgument)*) ','? '>'
 CAMEL_NODE(TypeParams, Other)          // '::' '<' identDef (',' identDef)* ','? '>', after a declaration's name
 CAMEL_NODE(NamedTypeArgument, Other)   // IDENTIFIER '=' typeExpr
-CAMEL_NODE(Pattern, Other)             // identRef (identDef | enumTuplePattern | enumStructPattern)? | literal | '(' (dataList | identList)? ','? ')' | '{' (pairedValues | identList)? ','? '}' | '_'
+CAMEL_NODE(Pattern, Other)             // identRef (identDef | enumTuplePattern | enumStructPattern)? | literal | '_'
 CAMEL_NODE(EnumTuplePattern, Other)    // '(' (pattern (',' pattern)*)? ','? ')', after a variant path
 CAMEL_NODE(EnumStructPattern, Other)   // '{' (IDENTIFIER (':' pattern)? (',' ...)*)? ','? '}', after a variant path
 CAMEL_NODE(MatchCase, Other)           // 'case' pattern ('|' pattern)* whenClause? '=>' blockExpr
@@ -86,7 +86,6 @@ CAMEL_NODE(TypeList, Other)            // typeExpr (',' typeExpr)*
 CAMEL_NODE(IdentDef, Other)            // IDENTIFIER
 CAMEL_NODE(IdentRef, Other)            // (IDENTIFIER '::')* IDENTIFIER, where a name is required
 
-CAMEL_NODE(SpreadValue, Expr)          // '...' dataExpr (an indexValue with the marker)
 CAMEL_NODE(RestValue, Expr)            // '..' dataExpr (a rest argument, expanded at the call)
 CAMEL_NODE(IfExpr, Expr)               // 'if' logicalOrExpr 'then' blockExpr ('else' blockExpr)?
 CAMEL_NODE(MatchExpr, Expr)            // 'match' logicalOrExpr '{' matchCase+ '}'

@@ -2225,19 +2225,14 @@ The feature '{0}' is not supported yet.
 Check the documentation for supported features.
 ```
 
-**Example** (`test/cases/compile/not_supported/struct_unpacking.cml`, run as `camel test/cases/compile/not_supported/struct_unpacking.cml`)
+**Example** (`test/cases/compile/semantic/type_recursion_through_map.cml`, run as `camel -E short test/cases/compile/semantic/type_recursion_through_map.cml`)
 
 ```camel
-module struct_unpacking
+module type_recursion_through_map
 
-func helper(): int {
-    let p = { x: 1, y: 2 }
-    let {x, y} = p
-    return x + y
-}
+type Node = { children: Map<int, Node> }
 
-func main(): int sync {
-    println('never printed')
+func main(): int {
     return 0
 }
 ```

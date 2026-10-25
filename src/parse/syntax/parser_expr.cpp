@@ -706,30 +706,26 @@ void ParserImpl::parseLiteral() {
     close(m, NK::Literal);
 }
 
-/// indexValue : ('...' | '..')? dataExpr
-/// `...e` is a spread that is not implemented; `..e` is a rest argument (design principles 5.5).
+/// indexValue : '..'? dataExpr
+/// `..e` is a rest argument: the arguments left over, as a compile-time tuple (design
+/// principles 5.5). A spread `...e` is not in the language, so the `...` token is refused here
+/// like any other token that fits nothing.
 void ParserImpl::parseIndexValue() {
-    if (cur_ == TK::Ellipsis || cur_ == TK::DotDot) {
+    if (cur_ == TK::DotDot) {
         const size_t m = mark();
-        const bool rest = cur_ == TK::DotDot;
         bump();
         parseExpr();
-        return close(m, rest ? NK::RestValue : NK::SpreadValue);
+        return close(m, NK::RestValue);
     }
     parseExpr();
 }
 
-/// keyValuePair : identDef ':' dataExpr | '...' dataExpr
+/// keyValuePair : identDef ':' dataExpr
 void ParserImpl::parseKeyValuePair() {
     const size_t m = mark();
-    if (cur_ == TK::Ellipsis) {
-        bump();
+    parseIdentDef();
+    if (!panic_ && expect(TK::Colon)) {
         parseExpr();
-    } else {
-        parseIdentDef();
-        if (!panic_ && expect(TK::Colon)) {
-            parseExpr();
-        }
     }
     close(m, NK::KeyValuePair);
 }
@@ -1417,11 +1413,10 @@ void ParserImpl::parseMatchCase() {
     close(m, NK::MatchCase);
 }
 
-/// pattern : identRef (identDef | enumTuplePattern | enumStructPattern)? | literal
-///         | '(' (dataList | identList)? ','? ')' | '{' (pairedValues | identList)? ','? '}' | '_'
-/// A parenthesized pattern is read as a dataList (the first alternative, which every identList
-/// also is); a braced one as pairedValues when it starts with `name:` or `...`. A path with a
-/// `::` followed by `(` or `{` is an enum pattern: the variant and the fields it binds.
+/// pattern : identRef (identDef | enumTuplePattern | enumStructPattern)? | literal | '_'
+/// The fields of a variant are destructured by the enum pattern after its path (`::` followed by
+/// `(` or `{`): the variant and the fields it binds. A pattern of its own is a name, a literal or
+/// `_`; a `(` or a `{` here is refused like any other token that fits nothing.
 void ParserImpl::parsePattern() {
     const size_t m = mark();
     switch (cur_) {
@@ -1442,42 +1437,6 @@ void ParserImpl::parsePattern() {
     case TK::Underscore:
         bump();
         break;
-    case TK::LParen: {
-        bump();
-        {
-            Scope scope(*this, false);
-            if (cur_ != TK::RParen && cur_ != TK::Comma) {
-                parseDataList(TK::RParen);
-            }
-            eat(TK::Comma);
-        }
-        if (!panic_) {
-            expectListEnd(TK::RParen);
-        }
-        break;
-    }
-    case TK::LBrace: {
-        bump();
-        {
-            Scope scope(*this, false);
-            if (cur_ == TK::Ellipsis || pairStartsAt(0)) {
-                parsePairedValues(TK::RBrace);
-            } else if (cur_ == TK::Identifier) {
-                const size_t lm = mark();
-                parseIdentDef();
-                while (cur_ == TK::Comma && peek(1) != TK::RBrace && !panic_) {
-                    bump();
-                    parseIdentDef();
-                }
-                close(lm, NK::IdentList);
-            }
-            eat(TK::Comma);
-        }
-        if (!panic_) {
-            expectListEnd(TK::RBrace);
-        }
-        break;
-    }
     default:
         if (cur_ == TK::Integer || cur_ == TK::Real || cur_ == TK::String || cur_ == TK::MultiStr ||
             cur_ == TK::FString || cur_ == TK::KwTrue || cur_ == TK::KwFalse ||

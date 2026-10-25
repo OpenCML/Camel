@@ -131,7 +131,7 @@ typeParams         : '::' '<' identDef (',' identDef)* ','? '>'
 operatorName       : IDENTIFIER (OPERATOR | '[' ']')
 dataDecl           : ('let' | 'var') carrier (':' typeList)? '=' dataList
                      | 'let' '_' (':' typeList)? '=' dataList
-carrier            : identList | parentIdents | bracedIdents | bracketIdents
+carrier            : identList | parentIdents
 typeDecl           : frontMatter? 'type' identRef
                      ('=' | '<' identDef (',' identDef)* ','? ('>' '=' | '>='))
                      (typeExpr | STRING)
@@ -180,8 +180,8 @@ primaryData        : identRef | constasData | literal | arrayData | structData |
 constasData        : 'constas' identDef
 literal            : ('+' | '-')? INTEGER | ('+' | '-')? REAL | STRING | MULTI_STR | FSTRING
                      | 'true' | 'false' | 'null'
-indexValue         : ('...' | '..')? dataExpr
-keyValuePair       : identDef ':' dataExpr | '...' dataExpr
+indexValue         : '..'? dataExpr
+keyValuePair       : identDef ':' dataExpr
 pairedValues       : keyValuePair (',' keyValuePair)*
 argumentValues     : (keyValuePair | indexValue) (',' (keyValuePair | indexValue))*
 dataList           : dataExpr (',' dataExpr)*
@@ -208,8 +208,7 @@ staticLoopHeader   : 'for' (identDef | '_') (',' (identDef | '_'))* 'in'
                      ('fields' typeExpr | 'indices' dataExpr | dataExpr)
 typeCasePattern    : 'struct' | 'tuple' | 'func' | '#' 'leaf' | '_' | typeExpr
 matchCase          : 'case' pattern ('|' pattern)* whenClause? '=>' blockExpr
-pattern            : identRef (identDef | enumTuplePattern | enumStructPattern)? | literal
-                     | '(' (dataList | identList)? ','? ')' | '{' (pairedValues | identList)? ','? '}' | '_'
+pattern            : identRef (identDef | enumTuplePattern | enumStructPattern)? | literal | '_'
 enumTuplePattern   : '(' (pattern (',' pattern)*)? ','? ')'
 enumStructPattern  : '{' (IDENTIFIER (':' pattern)? ','?)* '}'
 loopExpr           : 'loop' loopState (',' loopState)* loopFor? loopWhile? 'do' blockExpr
@@ -263,7 +262,7 @@ factClause         : IDENTIFIER dataExpr
 |---|---|
 | `(` 开头：lambda 还是元组／括号表达式 | `(名字:`、`(var`，`(名字)` 或 `(名字, ...)` 且其后是 `=>`、`:`，或空表后跟 `=>`、`:` 时是 lambda |
 | 类型里的 `(` | `(名字:`、`(var`、空表后跟 `=>` 是函数类型；`(T)` 是括号类型；其余是元组类型 |
-| `{` 开头：结构体还是块 | `{ 名字 :`、`{ ...` 是结构体；`{}` 作分支臂、lambda 体时是空块，作语句时是空结构体 |
+| `{` 开头：结构体还是块 | `{ 名字 :` 是结构体；`{}` 作分支臂、lambda 体时是空块，作语句时是空结构体 |
 | 实参：位置实参还是具名实参 | 第一个 `名字 :` 起是具名实参 |
 | 类型之后的 `+` `-` `^` | 其后能开始一个类型时属于类型（`x as T + U` 是转换为类型 `T + U`） |
 | 一元 `-` | 永远是运算符；比 `^` 与 `->` 松；直接作用在数字上时给出负的字面量 |
