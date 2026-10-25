@@ -2339,6 +2339,18 @@ node_handle_t Builder::buildBranch(
                 setNodeType(joinNode, joinType);
             }
             if (unified == nullptr) {
+                // Two arrays whose element types do not unify have no common type either, and the
+                // element type of a value is part of its type (design principles 5.1): the join
+                // names the element type each arm gives, with the conversion that would make the
+                // two one, rather than only reporting that the arms disagree.
+                if (joinType->code() == TypeCode::Array && exitType->code() == TypeCode::Array) {
+                    diags_->of(SemanticDiag::BranchElementTypeMismatch)
+                        .atOrigin(gct->origin())
+                        .commit(
+                            tt::as_ptr<ArrayType>(joinType)->elemType()->toString(),
+                            tt::as_ptr<ArrayType>(exitType)->elemType()->toString());
+                    throw BuildAbortException();
+                }
                 diags_->of(SemanticDiag::BranchReturnTypeMismatch)
                     .atOrigin(gct->origin())
                     .commit(

@@ -76,10 +76,23 @@ slot_t exportKernel(ArgsView &, ArgsView &norm, Context &ctx) {
         const camel::onnx::Model model = camel::onnx::exportFunction(ctx, fn, examples, options);
         camel::onnx::writeModelFile(model, camel::utils::pathFromUtf8(path->toString()));
     } catch (const camel::onnx::ExportError &e) {
-        throwRuntimeFault(
+        // A refusal about the shape of a recursion names the recursive call it is about, so the
+        // fault is reported there and the call that asked for the export is kept beside it: the
+        // call says which export, the recursive call says what stopped it. Every other refusal
+        // keeps the position it had, the place the export was asked for.
+        const bool aboutRecursion = e.kind() == camel::onnx::ExportError::Kind::CallRemains &&
+                                    e.origin() != 0;
+        const auto origin = aboutRecursion
+                                ? static_cast<camel::source::origin_id_t>(e.origin())
+                                : camel::source::kInvalidOriginId;
+        throw camel::core::error::RuntimeFault(
             RuntimeDiag::RuntimeError,
-            std::string("onnx.export_model: ") + e.what() +
-                (e.location().empty() ? "" : " (at " + e.location() + ")"));
+            {std::string("onnx.export_model: ") + e.what() +
+             (e.location().empty() ? "" : " (at " + e.location() + ")")},
+            "",
+            nullptr,
+            camel::core::error::ExecutionSiteHint{
+                .cachedOrigin = origin, .keepRaiseSite = aboutRecursion});
     } catch (const std::runtime_error &e) {
         throwRuntimeFault(RuntimeDiag::RuntimeError, std::string("onnx.export_model: ") + e.what());
     }

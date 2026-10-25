@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-267 diagnostics: 250 errors, 17 warnings. 15 carry a machine-applicable edit, 252 say why they carry none.
+268 diagnostics: 251 errors, 17 warnings. 15 carry a machine-applicable edit, 253 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -236,6 +236,7 @@ prints one entry.
 | `0x030001E6` | [SemanticDiag::RangeStepZero](#rangestepzero) | Error | no |
 | `0x030001E7` | [SemanticDiag::StaticLoopSequenceNotKnown](#staticloopsequencenotknown) | Error | no |
 | `0x030001ED` | [SemanticDiag::TensorElementTypeRequired](#tensorelementtyperequired) | Error | no |
+| `0x030001EE` | [SemanticDiag::BranchElementTypeMismatch](#branchelementtypemismatch) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn | no |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn | no |
@@ -7783,6 +7784,41 @@ func main(): int sync {
     println(count(ints))
     println(count(floats))
     return 0
+}
+```
+
+### BranchElementTypeMismatch
+
+`0x030001EE` · Error · `SemanticDiag::BranchElementTypeMismatch`
+
+**Fix**
+
+None: choice: which arm takes the conversion, and in which element type, is the writer's to say
+
+**Message**
+
+```text
+The two arms of the branch have different element types: '{0}' and '{1}'. An array's element type is part of its type, and a number of one element type does not become a number of another by itself.
+```
+
+**Help**
+
+```text
+Give the two arms one element type: write the conversion on the arm that needs it -- f32(v) for a value, cast(v, 'float32') for a name -- or build both arms at the element type the value is to have, which is the element type a declaration writes. An int[] and an f32[] have no common type, so the join picks neither of the two and invents no third.
+```
+
+**Example** (`test/cases/compile/semantic/branch_element_type_mismatch.cml`, run as `camel test/cases/compile/semantic/branch_element_type_mismatch.cml`)
+
+```camel
+module semantic_branch_element_type_mismatch
+
+func pick(flag: bool, whole: int[], real: f32[]): int[] {
+    return if flag then whole else real
+}
+
+func main(): int sync {
+    let picked = pick(true, new([1, 2, 3] as int[]), new([f32(1.0), f32(2.0), f32(3.0)]))
+    return if picked[0] > 0 then 0 else 1
 }
 ```
 

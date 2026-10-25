@@ -963,12 +963,12 @@ expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F",
 
 [[tests]]
 name = "native.tensor_show_empty_array"
-desc = "The umbrella boundary: `show([])` has no candidate, because the empty array's element type (`Void[]`) binds no type variable of the one rule `func show::<A>(t: A[..])` (test/cases/modules/tensor's shape expectations record the same measurement). The refusal is at the call and the message lists the rule."
+desc = "The umbrella boundary: the empty array literal's element type is `void`, which binds the second rule's type variable to nothing, so no candidate applies and `show([])` is refused when the program is compiled, with the one candidate the declaration has. The C++ `TensorLike` resolver accepted the call and left it to the kernel to fault (docs/stdlib-conventions.cn.md 第 8 节)."
 kind = "negative"
 case = "../../../cases/compile/native/tensor_show_empty_array.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "tensor_show_empty_array.cml:12:5", "argument types: <> (void[])", "<tensor:show>: (t: A[..]) => void"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "tensor_show_empty_array.cml:15:5", "argument types: <> (void[])", "<tensor:show>: (t: A[..]) => void"]
 #  ---- The declarations of `pyplot` ----
 #
 # `pyplot:plot` has a fixed signature: four element types and two arities. The C++ module never

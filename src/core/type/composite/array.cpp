@@ -41,20 +41,12 @@ ArrayStorage arrayStorageFor(const Type *elementType) {
 }
 
 bool isCompactElementType(TypeCode code) {
-    switch (code) {
-    case TypeCode::Int32:
-    case TypeCode::Int64:
-    case TypeCode::Float32:
-    case TypeCode::Float64:
-    case TypeCode::Bool:
-    case TypeCode::BFloat16:
-    case TypeCode::Float16:
-    case TypeCode::Complex64:
-    case TypeCode::Complex128:
-        return true;
-    default:
-        return false;
-    }
+    // The scalar half of the pure-data predicate: the one table `isPureDataType` reads first
+    // (pure.h), so a scalar with a layout is exactly a scalar an array stores as a run of bytes and
+    // an interchange can name -- integers, floats of every width, bool and the two complex types.
+    // A struct or tuple of pure data is stored the same way and has a layout too (arrayStorageFor
+    // takes it), but an interchange has no dtype for an aggregate, so it is not a compact element.
+    return scalarDataLayout(code) != nullptr;
 }
 
 bool isNumericScalarTypeCode(TypeCode code) { return isCompactElementType(code); }

@@ -348,8 +348,13 @@ class Evaluator {
     callClosure(Activation &act, const Value &fn, const std::vector<Value> &args, size_t withCount);
     Value callLoopClosure(
         Activation &act, const Value &fn, const std::vector<Value> &args, size_t withCount);
-    /// Refuses a linear recursion for a condition it fails, at its recursive call.
-    [[noreturn]] void refuseLinear(const LinearFrame &f, std::string_view what);
+    /// Refuses a linear recursion for a condition it fails, at its recursive call. `kind` says what
+    /// the caller does with the refusal: the shape of a recursion that is not linear is a call the
+    /// pass that ran before the export should have removed (`CallRemains`), every other condition
+    /// is about the recursion itself.
+    [[noreturn]] void refuseLinear(
+        const LinearFrame &f, std::string_view what,
+        ExportError::Kind kind = ExportError::Kind::Other);
     Value mergeValues(Activation &act, const std::string &cond, const Value &a, const Value &b);
     Value evalEagerBranch(Activation &act, const Value &cond, std::span<const gc_node_ref_t> arms);
     std::optional<Value> probeSpecialClosure(Activation &act, gc_node_ref_t ref);
@@ -2475,8 +2480,10 @@ Value Evaluator::translateLinear(Activation &act, GCGraph *fn, std::vector<Value
         }
     }
     if (calls != 1) {
-        unsupported(
-            act,
+        // Refused at the recursive call it is about: the call the export started from is what the
+        // reader sees first otherwise, and it is not what stopped the export.
+        refuseLinear(
+            f,
             std::format(
                 "a recursion whose depth depends on the model input calls the function again "
                 "in {} places outside tail position; it can be exported as loops only with one "
@@ -2512,8 +2519,8 @@ Value Evaluator::translateLinear(Activation &act, GCGraph *fn, std::vector<Value
         f.cond   = fn->normInputsOf(brch).front();
     }
     if (deciding != 1) {
-        unsupported(
-            act,
+        refuseLinear(
+            f,
             deciding == 0
                 ? "a recursive call that is not in tail position is made on every path; a "
                   "linear recursion can be exported only when one if / else decides whether "
@@ -3062,7 +3069,8 @@ Value Evaluator::callClosure(
     }
 }
 
-void Evaluator::refuseLinear(const LinearFrame &f, std::string_view what) {
+void Evaluator::refuseLinear(
+    const LinearFrame &f, std::string_view what, ExportError::Kind kind) {
     // A condition on the function a recursion returns is reported at the recursive call, not
     // at the place where that function happens to be called (for a pullback: the
     // with_grad expression). Without a position there, the caller's node locates it.
@@ -3070,7 +3078,7 @@ void Evaluator::refuseLinear(const LinearFrame &f, std::string_view what) {
     const std::string text =
         isSourceName(graph) ? std::format("in '{}': {}", graph, what) : std::string(what);
     const uint64_t origin = f.fn->nodeOrigin(f.site);
-    throw ExportError(text, locationOf(origin), origin, ExportError::Kind::Other);
+    throw ExportError(text, locationOf(origin), origin, kind);
 }
 
 Value Evaluator::callLoopClosure(

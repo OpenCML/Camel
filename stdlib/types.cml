@@ -102,3 +102,34 @@ export func is_bool::<T>(): bool {
         case _ => false
     }
 }
+
+/// True when `T` is pure data: a number, `bool`, or a struct or tuple whose fields are all pure
+/// data.
+///
+/// Pure data is what a value can be stored as itself: the bytes contain the value and every read of
+/// them is the value again, because no field of the type is a reference. It is the element type an
+/// array is allocated and copied for, the element type `to_bytes` writes and `from_bytes` reads, and
+/// the element type the interchange with other frameworks names. A `string` holds a reference to
+/// its characters, an array holds a reference to its block, and a function, an enum and a tagged
+/// form hold something a copy of the bytes would not carry, so none of them is pure data.
+///
+/// The families are asked here as everywhere else: a number is pure data because `is_numeric` says
+/// so, and a struct or tuple is asked field by field.
+/// @example is_plain::<float>()    // true
+/// @example is_plain::<bool>()    // true
+/// @example is_plain::<(x: int, y: f32)>()    // true
+/// @example is_plain::<string>()    // false
+/// @example is_plain::<int[]>()    // false
+export func is_plain::<T>(): bool {
+    return match type T {
+        case struct | tuple => every_field_plain::<T>()
+        case _ => is_numeric::<T>() || is_bool::<T>()
+    }
+}
+
+// Every field of a struct or tuple is pure data. The walk over the fields is static, like every
+// other walk over a known shape: the answer is a constant of the instantiation and no field is read
+// when the program runs, so a type whose fields are pure data is settled when the call is compiled.
+func every_field_plain::<T>(): bool {
+    return static loop every = true for n, F in fields T do every && is_plain::<F>()
+}
