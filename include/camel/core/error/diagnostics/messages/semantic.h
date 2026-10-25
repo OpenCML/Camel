@@ -423,6 +423,18 @@ enum class SemanticDiag : uint32_t {
     // its condition are made at, so it is a value the compiler knows.
     RuleWithArgumentNotConstant = 0x0001F0,
 
+    // What the item-5 clearance named, where the rule itself can be said: 0x1F2 and up. The
+    // constructs with no ruling left the grammar and are ordinary syntax errors instead; these four
+    // are language rules, so each one names the rule rather than saying "not supported".
+    /// A type that mentions itself through a collection.
+    TypeAliasRecursionUnrepresented = 0x0001F2,
+    /// An `enum` written where a type is expected.
+    EnumWrittenWhereATypeIsExpected = 0x0001F3,
+    /// A struct comprehension that walks `indices`.
+    StructComprehensionWithoutFields = 0x0001F4,
+    /// An identifier pattern, or `error e`, over a type that is neither 'T?' nor 'T!'.
+    IdentifierPatternNeedsNullableOrErrorType = 0x0001F5,
+
     // Warnings
     IgnoredSideEffect = 0x100002,
     EffectNotExecuted = 0x100004,

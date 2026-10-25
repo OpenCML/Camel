@@ -1349,12 +1349,9 @@ std::any Builder::visitStaticComprehensionNode(const GCT::node_ptr_t &gct) {
     if (!sameShape && gct->comprehensionIsStruct() && generator->staticForIndices()) {
         // A struct comprehension names its fields from the walked type; positions have no
         // names, so there is nothing to name the fields.
-        diags_->of(SemanticDiag::ConstructNotSupported)
+        diags_->of(SemanticDiag::StructComprehensionWithoutFields)
             .atOrigin(generator->origin())
-            .commit(
-                "{ static for ... in indices ... }",
-                "a struct comprehension takes its field names from 'fields T'; write a "
-                "tuple comprehension '( static for ... in indices ... )' or walk 'fields T'");
+            .commit();
         throw BuildAbortException();
     }
     (void)visitStaticForNode(generator, &values, &shape);

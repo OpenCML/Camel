@@ -1620,9 +1620,9 @@ node_ptr_t Builder::visitTypeDecl(const AST::node_ptr_t &ast) {
         // nothing: `type Alias = Other` stays an alias for the type `Other` (structural).
         if (typeLoad->params().empty()) {
             // A type that mentions itself where a value of it would have to be held: a cycle
-            // that can never be built (design principles 5.2). Recursion through an array is
-            // allowed; through a map or a set it is legal by the rule but has no representation
-            // yet, so it is reported rather than left unresolved.
+            // that can never be built (design principles 5.2). Recursion through an array, a map,
+            // a set or an enum is admitted by the rule and needs a shape this compiler does not
+            // have, so it is named rather than left unresolved.
             TypeMention mention;
             findTypeMention(typeNode, typeLoad->ref().toString(), false, false, mention);
             if (mention.any) {
@@ -1634,13 +1634,9 @@ node_ptr_t Builder::visitTypeDecl(const AST::node_ptr_t &ast) {
                     throw BuildAbortException();
                 }
                 if (mention.viaOtherCollection) {
-                    diags_->of(SemanticDiag::FeatureNotSupported)
+                    diags_->of(SemanticDiag::TypeAliasRecursionUnrepresented)
                         .at(ast->load()->tokenRange())
-                        .commit(
-                            std::format(
-                                "a type that mentions itself through a map, a set or an enum "
-                                "('{}')",
-                                name));
+                        .commit(name);
                     throw BuildAbortException();
                 }
                 // Through an array: declareStructType puts the name in scope before the fields
@@ -1658,15 +1654,12 @@ node_ptr_t Builder::visitTypeDecl(const AST::node_ptr_t &ast) {
         if (mention.any) {
             const std::string name = typeLoad->ref().toString();
             if (!mention.directly) {
-                // Legal by the rule, but the representation cannot hold it yet (see the
-                // the report): say so instead of leaving the name unresolved.
-                diags_->of(SemanticDiag::FeatureNotSupported)
+                // A recursion the rule admits, whose shape this compiler does not have: the
+                // diagnostic names the rule and what to write instead of leaving the name
+                // unresolved.
+                diags_->of(SemanticDiag::TypeAliasRecursionUnrepresented)
                     .at(ast->load()->tokenRange())
-                    .commit(
-                        std::format(
-                            "a type that mentions itself through an array or another collection "
-                            "('{}')",
-                            name));
+                    .commit(name);
             } else {
                 diags_->of(SemanticDiag::ModuleTypeCycle)
                     .at(ast->load()->tokenRange())
@@ -5177,7 +5170,10 @@ node_ptr_t Builder::visitRefData(const AST::node_ptr_t &ast) {
 /*
 Type(TypeType type) :=
     StreamType | NullableType | TypeExpr | ArrayType | StructType | TupleType
-    | FuncType | SpecType | InferType | RefType | EnumType ;
+    | FuncType | SpecType | RefType | EnumType ;
+An `InferType` node never reaches this dispatch: it is the marker of a type left out of a
+lambda's parameter list, and the signature builders read it where it stands (design
+principles 5.9).
 */
 Type *Builder::visitType(const AST::node_ptr_t &ast) {
     ENTER("Type");
@@ -5222,21 +5218,15 @@ Type *Builder::visitType(const AST::node_ptr_t &ast) {
     case AST::TypeType::Spec:
         res = visitSpecType(ast);
         break;
-    case AST::TypeType::Infer:
-        res = visitInferType(ast);
-        break;
     case AST::TypeType::Ref:
         res = visitRefType(ast);
         break;
     case AST::TypeType::Enum:
         // An enum is declared, not written where a value of it is expected: its variants are
         // names of the module (`type Shape = enum {...}`), and a use is that name.
-        diags_->of(SemanticDiag::ConstructNotSupported)
+        diags_->of(SemanticDiag::EnumWrittenWhereATypeIsExpected)
             .at(ast->load()->tokenRange())
-            .commit(
-                "enum { ... }",
-                "an enum is declared in a type declaration, 'type Shape = enum { ... }', and "
-                "its type is written by the name it declares");
+            .commit();
         throw BuildAbortException();
     default:
         throw std::runtime_error("Unknown type type");
@@ -5640,10 +5630,10 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
             // position, and their values are not read by a type necessarily: the body may use
             // them (design principles 5.4).
             if (!signature) {
+                // The parser admits `constas` only in a declaration's own parameter list
+                // (`parseParentParams(true, true)`, the single call site in parser.cpp), so this
+                // is a compiler bug rather than anything a program can write.
                 ASSERT(false, "A constas parameter outside a function declaration.");
-                diags_->of(SemanticDiag::FeatureNotSupported)
-                    .at(paramLoad->tokenRange())
-                    .commit("a constas parameter outside a function declaration");
                 throw BuildAbortException();
             }
             if (paramPair->size() == 0) {
@@ -5666,11 +5656,10 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
             // A rest parameter is untyped and last (design principles 5.5); it stands in the
             // signature as a `void` parameter that no call passes a value for.
             if (!signature) {
-                // The parser admits `..` only in a function declaration's parameter list.
+                // The parser admits `..` only in a declaration's own parameter list
+                // (`parseParentParams(true, true)`, the single call site in parser.cpp), so this
+                // is a compiler bug rather than anything a program can write.
                 ASSERT(false, "A rest parameter outside a function declaration.");
-                diags_->of(SemanticDiag::FeatureNotSupported)
-                    .at(paramLoad->tokenRange())
-                    .commit("a rest parameter outside a function declaration");
                 throw BuildAbortException();
             }
             if (pi + 1 != normParams.size()) {
@@ -5782,17 +5771,6 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
         *defaultsOut = std::move(defaults);
     }
     return built;
-}
-
-/*
-InferType(Ref ref) ;
-*/
-Type *Builder::visitInferType(const AST::node_ptr_t &ast) {
-    ENTER("InferType");
-    diags_->of(SemanticDiag::FeatureNotSupported).at(ast->load()->tokenRange()).commit("InferType");
-    throw BuildAbortException();
-    LEAVE("InferType");
-    return nullptr;
 }
 
 // DESIGN-QUESTION(map-duplicate-keys): in an array literal written under `as Map<...>`, two

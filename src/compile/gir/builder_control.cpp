@@ -2042,17 +2042,14 @@ node_handle_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
             const GCT::node_ptr_t &boundCase = gct->at(i);
             if (boundCase->caseType() == GCT::CaseType::Bind ||
                 boundCase->caseType() == GCT::CaseType::Error) {
-                // The two patterns that bind are defined over `T?` / `T!` only. What an
-                // identifier pattern means over any other type has not been decided.
+                // The two patterns that bind are the fixed forms of `T?` and `T!` (design
+                // principles 3.8): over any other type there is no mark to take apart.
                 const bool isError = boundCase->caseType() == GCT::CaseType::Error;
-                diags_->of(SemanticDiag::ConstructNotSupported)
+                diags_->of(SemanticDiag::IdentifierPatternNeedsNullableOrErrorType)
                     .atOrigin(boundCase->origin())
                     .commit(
                         (isError ? "error " : "") + boundCase->binding(),
-                        std::string(isError ? "the pattern 'error e'" : "an identifier pattern") +
-                            " is implemented only for a value of type 'T?' or 'T!'; over '" +
-                            nodeTypeOf(condNode)->toString() +
-                            "' only literal patterns and '_' are");
+                        nodeTypeOf(condNode)->toString());
                 throw BuildAbortException();
             }
         }
