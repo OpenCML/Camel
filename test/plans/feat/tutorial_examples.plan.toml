@@ -61,7 +61,7 @@ args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
-# `warning[` is deliberately not excluded here: several chapter examples of chapter 6 have a warning
+# `warning[` is deliberately not excluded here: several chapter examples of chapter 10 have a warning
 # as their lesson. A `[Error]` in any stream is a failure for every entry that does not say otherwise.
 expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -115,20 +115,20 @@ golden = "golden/tutorial_examples/05_map_order.txt"
 
 [[tests]]
 name = "tutorial.examples.06_callee_decides"
-desc = "A callee that writes to its var parameter decides what runs and in what order; main only asks for the result. The dropped println is reported as a warning on standard error, which the page does not show."
+desc = "Chapter 10: a callee that writes to its var parameter decides what runs and in what order; main only asks for the result. The dropped println is reported as a warning on standard error, which the page does not show."
 case = "../../../docs/tutorial/examples/06_callee_decides.cml"
 golden = "golden/tutorial_examples/06_callee_decides.txt"
 expect_output_contains = ["SemanticDiag::EffectNotExecuted"]
 
 [[tests]]
 name = "tutorial.examples.06_sync_block"
-desc = "The same program with the effects inside a sync block: both printlns run, in the order they are written."
+desc = "Chapter 10: the same program with the effects inside a sync block -- both printlns run, in the order they are written."
 case = "../../../docs/tutorial/examples/06_sync_block.cml"
 golden = "golden/tutorial_examples/06_sync_block.txt"
 
 [[tests]]
 name = "tutorial.examples.06_sync_body"
-desc = "A function body marked sync: the call inside it is ordered, and only the value it returns is used outside. The dropped println is reported as a warning on standard error, which the page does not show."
+desc = "Chapter 10: a function body marked sync -- the call inside it is ordered, and only the value it returns is used outside. The dropped println is reported as a warning on standard error, which the page does not show."
 case = "../../../docs/tutorial/examples/06_sync_body.cml"
 golden = "golden/tutorial_examples/06_sync_body.txt"
 expect_output_contains = ["SemanticDiag::EffectNotExecuted"]
@@ -138,14 +138,14 @@ expect_output_contains = ["SemanticDiag::EffectNotExecuted"]
 # it in the block after the command).
 [[tests]]
 name = "tutorial.examples.06_unused_effect"
-desc = "An effect that nothing depends on does not run: the warning on standard error names the call that is dropped, and only the used value is printed."
+desc = "Chapter 10: an effect that nothing depends on does not run -- the warning on standard error names the call that is dropped, and only the used value is printed."
 case = "../../../docs/tutorial/examples/06_unused_effect.cml"
 golden = "golden/tutorial_examples/06_unused_effect.txt"
 expect_output_contains = ["SemanticDiag::EffectNotExecuted"]
 
 [[tests]]
 name = "tutorial.examples.06_var_order"
-desc = "Order between writes to a var parameter follows the callee's sync block, not the order the caller reads its results."
+desc = "Chapter 10: order between writes to a var parameter follows the callee's sync block, not the order the caller reads its results."
 case = "../../../docs/tutorial/examples/06_var_order.cml"
 golden = "golden/tutorial_examples/06_var_order.txt"
 
@@ -154,7 +154,7 @@ golden = "golden/tutorial_examples/06_var_order.txt"
 # is exactly the claim this plan exists to keep true.
 [[tests]]
 name = "tutorial.examples.06_let_to_var"
-desc = "A program the compiler rejects: an immutable value passed to a var parameter is an error at 11:10, and the un-synced write above it is a warning at 6:5."
+desc = "Chapter 10: a program the compiler rejects -- an immutable value passed to a var parameter is an error at 11:10, and the un-synced write above it is a warning at 6:5."
 kind = "behavior"
 case = "../../../docs/tutorial/examples/06_let_to_var.cml"
 backends = false
