@@ -1,0 +1,13 @@
+// The same two statements as 10_unused_effect.cml, in a sync body: now both run.
+// Run: camel docs/tutorial/examples/10_sync_body.cml
+module sync_body
+
+func greet(): int sync {
+    println('hello from greet')
+    return 1
+}
+
+func main(): int sync {
+    println(greet())
+    return 0
+}
