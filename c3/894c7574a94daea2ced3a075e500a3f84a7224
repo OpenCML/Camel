@@ -1,0 +1,1 @@
+h590 第四轮：counts.py 两处（:368/:377）规则文本改写（export_matrix 已有 --check，滞后即红门禁）；文件地图收进 7 个带 model.cml 的模型目录、40→47 条路径全解析、并写明哪些有生成器；test/tools/progen/README.md 补生成关系记录（重跑者与'无逐字比对'）。
