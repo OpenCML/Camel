@@ -514,3 +514,83 @@ name = "tutorial.examples.09_exercise"
 desc = "The answer to the exercise of chapter 9: one call now needs the other's result, which is what changes the graph."
 case = "../../../docs/tutorial/examples/09_exercise.cml"
 golden = "golden/tutorial_examples/09_exercise.txt"
+
+# ---- Chapter 10 -------------------------------------------------------------------------------
+
+# Three of this chapter's ten files warn on purpose: the warning is the lesson, and the page shows
+# it, so each of those entries asserts the diagnostic name rather than only the golden.
+[[tests]]
+name = "tutorial.examples.10_unused_effect"
+desc = "An effect whose result nothing needs: `greet`'s body is not a sync block, so its `println` does not run, and the warning names the call that is dropped."
+case = "../../../docs/tutorial/examples/10_unused_effect.cml"
+golden = "golden/tutorial_examples/10_unused_effect.txt"
+expect_output_contains = ["SemanticDiag::EffectNotExecuted"]
+
+[[tests]]
+name = "tutorial.examples.10_sync_body"
+desc = "The same two statements in a sync body: now both run, in the order they are written."
+case = "../../../docs/tutorial/examples/10_sync_body.cml"
+golden = "golden/tutorial_examples/10_sync_body.txt"
+
+[[tests]]
+name = "tutorial.examples.10_sync_block"
+desc = "A sync function body orders its own statements, and a `sync` block inside it orders what it contains. The warning names the effect nobody needs."
+case = "../../../docs/tutorial/examples/10_sync_block.cml"
+golden = "golden/tutorial_examples/10_sync_block.txt"
+expect_output_contains = ["SemanticDiag::EffectNotExecuted"]
+
+[[tests]]
+name = "tutorial.examples.10_var_order"
+desc = "A `var` and the order of its writes inside a sync body: a read takes the most recent write, which is what the chapter's picture draws."
+case = "../../../docs/tutorial/examples/10_var_order.cml"
+golden = "golden/tutorial_examples/10_var_order.txt"
+
+[[tests]]
+name = "tutorial.examples.10_write_nobody_reads"
+desc = "A write nobody reads is not executed, and outside a sync block nothing orders it after the print: the two warnings are the lesson."
+case = "../../../docs/tutorial/examples/10_write_nobody_reads.cml"
+golden = "golden/tutorial_examples/10_write_nobody_reads.txt"
+expect_output_contains = ["SemanticDiag::IgnoredSideEffect", "SemanticDiag::EffectNotExecuted"]
+
+[[tests]]
+name = "tutorial.examples.10_same_resource"
+desc = "Two effects on the same resource (`stdout`) keep the written order without a sync block."
+case = "../../../docs/tutorial/examples/10_same_resource.cml"
+golden = "golden/tutorial_examples/10_same_resource.txt"
+
+[[tests]]
+name = "tutorial.examples.10_resources"
+desc = "What a call touches: a resource of the module, a group of them, a handle type, and `uses` on a parameter."
+case = "../../../docs/tutorial/examples/10_resources.cml"
+golden = "golden/tutorial_examples/10_resources.txt"
+
+[[tests]]
+name = "tutorial.examples.10_pure_callback"
+desc = "`pure` in a function type is part of the requirement: `apply` accepts only a function that touches no resource, and `twice` says so in its signature."
+case = "../../../docs/tutorial/examples/10_pure_callback.cml"
+golden = "golden/tutorial_examples/10_pure_callback.txt"
+
+# The counter-example of the chapter: a function that prints cannot be passed where the signature
+# requires a pure one, so nothing is run and the error names the signature that would have matched.
+#
+# Its name and position are asserted from the output text rather than with `expect_diagnostic_name`
+# and its line and column: this diagnostic's message carries the available overloads on lines of its
+# own, so in the short format the run uses the `(name=..., code=...)` that the diagnostic assertions
+# read ends up on a later line than the position, and the one-line pattern they match against does
+# not see it. The page shows the same three lines the command prints.
+[[tests]]
+name = "tutorial.examples.10_pure_callback_wrong"
+desc = "A program the compiler refuses: a function that prints is passed where the signature requires a pure one, and the error names the position and the overload that would have matched."
+kind = "behavior"
+case = "../../../docs/tutorial/examples/10_pure_callback_wrong.cml"
+backends = false
+args = ["${case}"]
+expect_exit = 1
+expect_output_not_contains = []
+expect_output_contains = ["10_pure_callback_wrong.cml:16:18: [Error]: No matching function found", "(name=SemanticDiag::NoMatchingFunction, code=0x0300000F)", "apply: (f: (x: int) => int pure, x: int) => int"]
+
+[[tests]]
+name = "tutorial.examples.10_exercise"
+desc = "The answer to the exercise of chapter 10: a `var` written inside a sync block, and a callback whose signature says it is pure."
+case = "../../../docs/tutorial/examples/10_exercise.cml"
+golden = "golden/tutorial_examples/10_exercise.txt"
