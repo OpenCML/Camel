@@ -2800,6 +2800,28 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
 [[tests]]
+name = "array_take_grad.runtime.nvm"
+desc = "A row take of an array gathers whole rows, so its adjoint is the upstream gradient of those rows added back into the rows the indices named: the row scatter tangent/scatter_take_arr. Checked against adjoints written out by hand for a repeated index (xs[[0,2,0]] with weights 2,3,5 gives [7,0,3,0,0]), a plain pair ([0,3,0,0,2]) and a take of a take ([7,0,4,0,0]); the printed raw gradients are pinned too. `nonzero` is the summed squared distance to the zero array — 136.0 from the tree — so a rule that returned zeros prints 0.0 and fails. (grad built at run time)"
+kind = "behavior"
+case = "../../../cases/modules/autodiff/array_take_grad.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_exact = "[7.0, 0.0, 3.0, 0.0, 0.0]\n[0.0, 3.0, 0.0, 0.0, 2.0]\narray_take_grad repeated_d=0.0 pair_d=0.0 nested_d=0.0 nonzero=136.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "array_take_grad.macro.fvm"
+desc = "The same array row-take adjoints when std::macro builds the gradient ahead of time and the FastVM runs it: the row scatter is placed in the compiled gradient graph, not only in a graph built at run time."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/array_take_grad.cml"
+args = ["${case}", "std::macro", "${run_fvm}"]
+expect_exit = 0
+expect_stdout_exact = "[7.0, 0.0, 3.0, 0.0, 0.0]\n[0.0, 3.0, 0.0, 0.0, 2.0]\narray_take_grad repeated_d=0.0 pair_d=0.0 nested_d=0.0 nonzero=136.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
 name = "refuse_new_array"
 desc = "`new` has an adjoint: a tensor argument passes its gradient through. An array argument's adjoint would put the tensor's gradient back in an array of the same shape, and no operator here carries a gradient from a tensor into an array, so an array that depends on the differentiated parameter is refused at the new call (line 17), naming the operator and the array's type, instead of dropping the array's gradient. A constant array is not refused: it starts no gradient flow, so the call is never visited."
 kind = "negative"

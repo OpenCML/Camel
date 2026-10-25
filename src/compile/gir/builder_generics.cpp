@@ -27,6 +27,7 @@
 
 #include "camel/core/operator_traits.h"
 #include "camel/core/type/collection.h"
+#include "camel/core/type/composite/stream.h"
 #include "camel/core/type/other.h"
 
 #include <atomic>
@@ -127,6 +128,86 @@ data_ptr_t dataOfStaticValue(Type *type, slot_t value) {
     default:
         return nullptr;
     }
+}
+
+/// True when `part` is a proper part of `whole`: the type is built out of it -- an array's element
+/// type, a member of a tuple or of a struct, the type argument of a named type, a function's
+/// parameter or result -- and is not that same type. A recursive call that hands a generic
+/// function a type built out of the type its caller already instantiated asks for one instance per
+/// level (`T`, then `T[]`, then `T[][]`), and no level's key ever repeats.
+bool typeHasProperPart(Type *whole, Type *part) {
+    if (whole == nullptr || part == nullptr) {
+        return false;
+    }
+    const auto holds = [&](Type *member) {
+        return member != nullptr && (member->equals(part) || typeHasProperPart(member, part));
+    };
+    switch (whole->code()) {
+    case TypeCode::Array:
+        return holds(static_cast<ArrayType *>(whole)->elemType());
+    case TypeCode::Tuple: {
+        auto *tuple = static_cast<TupleType *>(whole);
+        for (size_t i = 0; i < tuple->size(); ++i) {
+            if (holds(tuple->typeAt(i))) {
+                return true;
+            }
+        }
+        return false;
+    }
+    case TypeCode::Stream:
+        return holds(static_cast<StreamType *>(whole)->elemType());
+    case TypeCode::Struct: {
+        auto *record = static_cast<StructType *>(whole);
+        if (record->named()) {
+            // A named type is its declaration and its type arguments: the fields are the
+            // declaration's, so only the arguments can be built out of another type.
+            for (size_t i = 0; i < record->typeArgCount(); ++i) {
+                if (holds(record->typeArgAt(i))) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        for (size_t i = 0; i < record->size(); ++i) {
+            if (holds(record->typeAt(i))) {
+                return true;
+            }
+        }
+        return false;
+    }
+    case TypeCode::Function: {
+        auto *function = static_cast<FunctionType *>(whole);
+        for (size_t i = 0; i < function->withTypesCount(); ++i) {
+            if (holds(function->withTypeAt(i))) {
+                return true;
+            }
+        }
+        for (size_t i = 0; i < function->normTypesCount(); ++i) {
+            if (holds(function->normTypeAt(i))) {
+                return true;
+            }
+        }
+        return function->hasExitType() && holds(function->exitType());
+    }
+    default:
+        break;
+    }
+    if (const CollectionType *collection = asCollectionTypeOrPrototype(whole)) {
+        for (size_t i = 0; i < collection->paramCount(); ++i) {
+            if (holds(collection->params()[i])) {
+                return true;
+            }
+        }
+        return false;
+    }
+    if (const EnumType *enumType = asEnumTypeOrPrototype(whole)) {
+        for (size_t i = 0; i < enumType->paramCount(); ++i) {
+            if (holds(enumType->params()[i])) {
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 } // namespace
@@ -1698,6 +1779,30 @@ compile_graph_ptr_t Builder::instantiateGeneric(
         typeText.empty() ? constasValues
                          : constasValues.empty() ? typeText : typeText + ", " + constasValues;
     const std::string instanceName = std::format("{}<{}>", tmpl->name, instanceTypes);
+    // A type argument built out of the one an instance on the call cycle already holds asks for
+    // an instance at every level (`T`, then `T[]`, then `T[][]`), so the family of instances has
+    // no fixed point and no count of them is what bounds it. This is refused where the growth
+    // first appears rather than by the count below, which stays as the bound of design principles
+    // 5.5 for the recursion whose type arguments are many but do not contain one another.
+    // Design principles 5.4: a named dimension is not such a growth -- it is not part of the
+    // instance key at all -- so only the types the key is made of are compared.
+    for (const GenericInstance &open : tmpl->instances) {
+        const auto state = bodyStates_.find(open.graph.get());
+        if (state == bodyStates_.end() || state->second != BodyState::Open) {
+            continue;
+        }
+        for (const auto &[name, type] : bindings) {
+            Type *earlier = findTypeBinding(open.bindings, name);
+            if (earlier == nullptr || earlier->equals(type) ||
+                !typeHasProperPart(type, earlier)) {
+                continue;
+            }
+            diags_->of(SemanticDiag::GenericTypeArgumentGrows)
+                .atOrigin(call->origin())
+                .commit(name, tmpl->name, earlier->toString(), type->toString());
+            throw BuildAbortException();
+        }
+    }
     if (tmpl->openInstances >= kMaxOpenInstancesOfOne ||
         instantiationDepth_ >= kMaxInstantiationDepth) {
         diags_->of(SemanticDiag::GenericInstantiationTooDeep)

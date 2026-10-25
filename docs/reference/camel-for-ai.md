@@ -1337,7 +1337,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 
 | `ComparisonAcrossLines` | This '>' is read as a comparison with the next line, which starts with {0}: two statements may have been joined into one. |
 
-**Semantic — errors** (`SemanticDiag`) — 195
+**Semantic — errors** (`SemanticDiag`) — 196
 
 | `Redeclaration` | Redeclaration of reference: '{0}'. |
 | `ModuleNotFound` | Module '{0}' not found. {1} |
@@ -1447,6 +1447,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `StaticTypeNotConcrete` | The type matched here is still '{0}' when the function is instantiated. |
 | `StaticMatchTooDeep` | The 'match type' bodies are nested {0} deep. |
 | `GenericInstantiationCycle` | The generic function '{0}' is instantiated with {1} while that same instance is being built, and its return type is not known yet. |
+| `GenericTypeArgumentGrows` | The recursive call makes the type argument '{0}' of the generic function '{1}' grow from '{2}' to '{3}': every instance's type argument would contain the one before it, so specialization never stops. |
 | `StaticForNotComposite` | The type '{0}' has no fields for a 'static for' to walk. |
 | `StaticAccessNotInternal` | A field cannot be taken from '{0}' by a compile-time key. |
 | `StaticAccessUnknownField` | The struct '{1}' has no field '{0}'. |
