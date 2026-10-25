@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-270 diagnostics: 253 errors, 17 warnings. 15 carry a machine-applicable edit, 255 say why they carry none.
+271 diagnostics: 254 errors, 17 warnings. 15 carry a machine-applicable edit, 256 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -189,6 +189,7 @@ prints one entry.
 | `0x030001AA` | [SemanticDiag::WhenUnknownName](#whenunknownname) | Error | no |
 | `0x030001AB` | [SemanticDiag::WhenTypeQueryNotConcrete](#whentypequerynotconcrete) | Error | no |
 | `0x030001AC` | [SemanticDiag::WhenConditionUnmet](#whenconditionunmet) | Error | no |
+| `0x030001AD` | [SemanticDiag::EffectInRuleCondition](#effectinrulecondition) | Error | no |
 | `0x030001B3` | [SemanticDiag::TypeOfNotAValue](#typeofnotavalue) | Error | no |
 | `0x030001B4` | [SemanticDiag::TypeOfNotWholeType](#typeofnotwholetype) | Error | no |
 | `0x030001B5` | [SemanticDiag::SameShapeComprehensionNotComposite](#sameshapecomprehensionnotcomposite) | Error | no |
@@ -6094,6 +6095,58 @@ func needs_float(x: float): float when is_float::<int>() {
 
 func main(): int sync {
     return int(needs_float(1.0))
+}
+```
+
+### EffectInRuleCondition
+
+`0x030001AD` · Error · `SemanticDiag::EffectInRuleCondition`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
+**Message**
+
+```text
+{0} has an effect, and it is inside the condition of the rule '{1}'.
+```
+
+**Help**
+
+```text
+A rule's condition decides whether the rule applies to a redex, and the engine evaluates it while it holds a session on the program being rewritten: a commit or a rewrite there acts inside that session, and a commit replaces the program the engine is reading. Keep the condition a predicate over the values the rule matched, and write the effect in the rule's right side or in the program around the rewrite.
+```
+
+**Example** (`test/cases/modules/rules/condition_rewrite.cml`, run as `camel test/cases/modules/rules/condition_rewrite.cml`)
+
+```camel
+module condition_rewrite
+
+import { Program, current } from graph
+import { rewrite } from rewrite
+
+rule add_zero(x: int) when publish_now() { x + 0 => x }
+rule drop_one(x: int) when true { x * 1 => x }
+
+func publish_now(): bool {
+    let p = current()
+    return match rewrite(p, [drop_one]) {
+        case error e => sync { println('inner error value: ', e.kind); return false }
+        case q => sync { return true }
+    }
+}
+
+func redex(x: int): int {
+    return x * 1 + 0
+}
+
+func main(): int sync {
+    let p = current()
+    return match rewrite(p, [add_zero]) {
+        case error e => sync { println('outer error value: ', e.kind); return 1 }
+        case q => sync { println('rewritten'); return 0 }
+    }
 }
 ```
 

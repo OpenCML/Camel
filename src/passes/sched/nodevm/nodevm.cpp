@@ -766,7 +766,8 @@ NodeVMSchedPass::apply(const camel::runtime::Program *program, std::ostream &os)
 
 slot_t NodeVMSchedPass::callGraph(
     const camel::runtime::Program *program, camel::runtime::GCGraph *graph,
-    std::span<const slot_t> arguments, std::span<const slot_t> withArguments) {
+    std::span<const slot_t> arguments, std::span<const slot_t> withArguments,
+    std::span<const slot_t> closure) {
     camel::execute::RunScope runScope(programs_, *context_, program);
     Frame *frame      = framePool_.acquire(graph);
     const auto ports  = graph->normPorts();
@@ -780,6 +781,16 @@ slot_t NodeVMSchedPass::callGraph(
         "callGraph needs one argument per with parameter.");
     for (size_t i = 0; i < withPorts.size(); ++i) {
         frame->set(graph->node(withPorts[i])->dataIndex, withArguments[i]);
+    }
+    // What the body captured where it was written. The frame's closure nodes are the only place
+    // they are read from, and nothing else writes them, so a caller that does not know them (it
+    // has the graph and not the function value) leaves them empty.
+    const auto closureNodes = graph->closureNodes();
+    ASSERT(
+        closure.empty() || closureNodes.size() == closure.size(),
+        "callGraph needs one closure value per capture of the graph.");
+    for (size_t i = 0; i < closureNodes.size() && i < closure.size(); ++i) {
+        frame->set(graph->node(closureNodes[i])->dataIndex, closure[i]);
     }
     return call(graph, frame, program);
 }

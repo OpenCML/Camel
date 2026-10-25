@@ -1,0 +1,35 @@
+/**
+ * A rule whose right side commits a graph transaction while the engine is applying the rule: the
+ * commit replaces the program the outer rewrite is reading, and the condition of the rule is a
+ * plain `true`, so the interleaving is written in the right side rather than in a condition.
+ */
+module commit_during_rewrite
+
+import { Program, Graph, Node, current, root, open, commit, add_constant, id } from graph
+import { rewrite } from rewrite
+
+rule add_zero(x: int) when true { x + 0 => publishes(x) }
+
+func publishes(x: int): int sync {
+    let p = current()
+    let t = open(p)
+    let n = add_constant(t, root(p), 1)
+    sync { println('added node ', id(n)) }
+    let published = commit(t)
+    return match published {
+        case error e => sync { println('inner error value: ', e.kind); return x }
+        case q => sync { println('inner ok'); return x }
+    }
+}
+
+func redex(x: int): int {
+    return x + 0
+}
+
+func main(): int sync {
+    let p = current()
+    return match rewrite(p, [add_zero]) {
+        case error e => sync { println('outer error value: ', e.kind, ' | ', e.message); return 1 }
+        case q => sync { println('rewritten'); return 0 }
+    }
+}

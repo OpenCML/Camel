@@ -1932,6 +1932,35 @@ class Builder {
     void settleEffectfulGraphs();
     // Then warns for each body of the current module.
     void reportDroppedEffectsOfBodies();
+    // Reports EffectInRuleCondition: a rule's condition may not have an effect. The condition is
+    // evaluated by the rewrite engine while it holds a session on the program it is rewriting, so
+    // a commit or a rewrite in it acts inside that session (see the diagnostic). The rule is a
+    // value of the module's top level, whose maker call the condition (and the effect) hangs
+    // below. Reported once per module, like the warnings above, so that the position and the
+    // module are the ones the rule is written in.
+    void reportEffectfulConditions();
+    // The condition graphs of the `rule ... when ...` declarations written in `graph`: a maker
+    // call the front end wrote for a rule whose head has no type parameters (the generic maker
+    // takes templates, whose bodies exist only per instance and are not written where the rule
+    // is, so a generic rule's condition is not seen here). `ownedByUnit` reads only the values of
+    // the current module, for the root graph, which holds the top levels of every module.
+    std::vector<compile_graph_ptr_t> ruleConditionsIn(
+        const compile_graph_ptr_t &graph, std::unordered_set<const void *> &visited,
+        bool ownedByUnit) const;
+    // The node of `graph` (or of a function it calls) that makes running the graph an effect,
+    // null when there is none. `inside` names the function the node was found in, or the graph
+    // itself. A call of an effectful function is not the effect: the effect is what that function
+    // does, which is what the report has to point at.
+    node_handle_t effectOfGraph(
+        const compile_graph_ptr_t &graph, std::unordered_set<const void *> &visited,
+        compile_graph_ptr_t &inside) const;
+    // Whether the node is one of the operators that do their work where a rule is written rather
+    // than while the condition runs (the rewrite module declares them impure to keep constant
+    // folding off them, which is not an effect of the condition).
+    bool isCompileTimeEffect(DraftGraphBuilder *graph, node_handle_t node) const;
+    // The conditions already reported, so that a condition reached twice (through the root graph
+    // and through the module that wrote it) is one error.
+    std::unordered_set<const void *> conditionsReported_;
     compile_graph_ptr_t buildDecoratedGraph(
         const std::string &funcName, const compile_graph_ptr_t &rawGraph,
         const std::vector<GCT::node_ptr_t> &annoNodes);

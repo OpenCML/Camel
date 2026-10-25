@@ -1387,7 +1387,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 
 | `ComparisonAcrossLines` | This '>' is read as a comparison with the next line, which starts with {0}: two statements may have been joined into one. |
 
-**Semantic — errors** (`SemanticDiag`) — 195
+**Semantic — errors** (`SemanticDiag`) — 196
 
 | `Redeclaration` | Redeclaration of reference: '{0}'. |
 | `ModuleNotFound` | Module '{0}' not found. {1} |
@@ -1532,6 +1532,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `WhenUnknownName` | '{0}' is not visible to the 'when' condition of '{1}'. |
 | `WhenTypeQueryNotConcrete` | The type query '{0}' cannot be answered for '{1}' in the 'when' condition of '{2}': the type still has a type variable. |
 | `WhenConditionUnmet` | No candidate of '{0}' applies to ({1}): every candidate's 'when' condition is false. Candidates: {2} |
+| `EffectInRuleCondition` | {0} has an effect, and it is inside the condition of the rule '{1}'. |
 | `WithArgumentUnknown` | '{0}' is not a 'with' parameter of '{1}'. |
 | `WithArgumentDuplicate` | The 'with' parameter '{0}' of '{1}' is given twice. |
 | `WithArgumentMissing` | The call gives no value for the 'with' parameter '{0}' of '{1}', and it has no default. |

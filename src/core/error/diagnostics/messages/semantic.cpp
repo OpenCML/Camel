@@ -1157,6 +1157,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::EffectInRuleCondition,
+            {
+                "EffectInRuleCondition",
+                "{0} has an effect, and it is inside the condition of the rule '{1}'.",
+                "A rule's condition decides whether the rule applies to a redex, and the engine evaluates it while it holds a session on the program being rewritten: a commit or a rewrite there acts inside that session, and a commit replaces the program the engine is reading. Keep the condition a predicate over the values the rule matched, and write the effect in the rule's right side or in the program around the rewrite.",
+            },
+        },
+        {
             SemanticDiag::WithArgumentUnknown,
             {
                 "WithArgumentUnknown",
