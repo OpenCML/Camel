@@ -28,8 +28,11 @@ using VjpFn = camel::core::VjpRule;
 
 // ---------------------------------------------------------------- helpers for rules
 
-/// The general tensor type used for gradient nodes.
-type::Type *vjpTensorType();
+/// The type a gradient node that is the gradient of `value` takes: that value's tangent type, which
+/// is the value's own type for anything a tensor kernel can read and the element type its kind
+/// states when its own type leaves it out. `nullptr` when the value has no tensor tangent, and the
+/// rule falls back to its other inputs.
+type::Type *vjpTensorType(const VjpBuilder &builder, vjp_node_t value);
 bool isTensorNode(const VjpBuilder &builder, vjp_node_t node);
 /// A Camel float (float64 or float32) node.
 bool isFloatNode(const VjpBuilder &builder, vjp_node_t node);
@@ -55,18 +58,22 @@ void requireVjpInputs(const VjpCall &call, size_t minimum, size_t maximum);
 
 /// Adds a tensor-typed operator node (shorthand for rules). `attrs` records an implementation
 /// choice the rule carries from the forward node (tensor.kernel on a matmul gradient). The result
-/// takes the type of the first input that states an element type; a rule whose result is shaped
-/// like a *particular* value states it with addTensorOperFor instead.
+/// takes the type of the first input that states an element type; an input that is an array stating
+/// none of its own takes its tangent type, and a rule whose inputs are all scalars builds a scalar
+/// node and gets the first input's tangent type. A rule that reaches none of those is refused by
+/// name: its node's value would be declared at an element type no tensor kernel can read. A rule
+/// whose result is shaped like a *particular* value states it with addTensorOperFor instead.
 vjp_node_t addTensorOper(
     VjpBuilder &builder,
     std::string_view uri,
     std::initializer_list<vjp_node_t> inputs,
     attr::AttrSetId attrs = attr::kNoAttrs);
 
-/// The same, for a node that is the gradient *of* `primal`: it takes that value's type. A gradient
-/// has the element type and the shape of the value it is the gradient of (design principles 9.9),
-/// and the value's type is where its element type is. Without this the rule would have to declare
-/// the gradient with the undetermined array `Tensor`, whose element type no tensor kernel can read.
+/// The same, for a node that is the gradient *of* `primal`: it takes that value's tangent type. A
+/// gradient has the element type and the shape of the value it is the gradient of (design
+/// principles 9.9), and that type is where its element type is. Without this the rule would have to
+/// declare the gradient with the undetermined array `Tensor`, whose element type no tensor kernel
+/// can read.
 vjp_node_t addTensorOperFor(
     VjpBuilder &builder,
     vjp_node_t primal,

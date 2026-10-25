@@ -1,14 +1,17 @@
 /**
  * Recursive linear-regression trainer used to stress tensor math together with state threading through sync recursion.
+ *
+ * Every tensor parameter and result states its element type: the values here are f32 (they come from
+ * `random` and `zeros`), so the element type is written in the signatures rather than left to a type
+ * in transition.
  */
 module linear_regression
 
 import {
-    Tensor,
     concat, ones, random, shape, show, sum, transpose, zeros
 } from tensor
 
-func mean_squared_error(y_pred: Tensor, y_true: Tensor): float {
+func mean_squared_error(y_pred: f32[?, ?], y_true: f32[?, 1]): float {
     let residuals = y_pred - y_true
     let squared_residuals = residuals ^ 2.0
     let total_squared_error = sum(squared_residuals)
@@ -16,16 +19,16 @@ func mean_squared_error(y_pred: Tensor, y_true: Tensor): float {
     return total_squared_error / float(num_of_samples)
 }
 
-with <weights: Tensor>
-func predict(X: Tensor): Tensor {
+with <weights: f32[?, ?]>
+func predict(X: f32[?, ?]): f32[?, ?] {
     let num_of_samples = shape(X)[0]
     let ones_col = ones([num_of_samples, 1])
     let X_with_bias = concat(X, ones_col, 1)  // axis=1
     return X_with_bias @ weights
 }
 
-with <X: Tensor, y: Tensor, lr: float>
-func update(var w: Tensor): Tensor {
+with <X: f32[?, ?], y: f32[?, 1], lr: float>
+func update(var w: f32[?, 1]): f32[?, 1] {
     let pred = X @ w
     let errors = pred - y
     var dw = transpose(X) @ errors
@@ -35,15 +38,15 @@ func update(var w: Tensor): Tensor {
     return w
 }
 
-with <X: Tensor, y: Tensor, lr: float, its: int>
-func train(weights: Tensor): Tensor {
+with <X: f32[?, ?], y: f32[?, 1], lr: float, its: int>
+func train(weights: f32[?, 1]): f32[?, 1] {
     let m = shape(X)[0]  // number of samples
     let n = shape(X)[1]  // number of features
 
     let ones_col = ones([m, 1])
     let X_bias = concat(X, ones_col, 1)  // axis=1
 
-    func train_step(i: int, w: Tensor): Tensor {
+    func train_step(i: int, w: f32[?, 1]): f32[?, 1] {
         return if i >= its then w else sync {
             var cur = w
             let nw = update<X_bias, y, lr>(cur)

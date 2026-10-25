@@ -164,7 +164,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "static_types"
-desc = "Refined tensor types: var bindings widen at the same rank (Q5 of docs/design/arrays-memory/plan.cn.md), branch joins unify, seeded random is reproducible, and a bare-`Tensor` result is read through a binding of its own."
+desc = "Refined tensor types: a var binding widens at the same rank (Q5 of docs/design/arrays-memory/plan.cn.md), a cell keeps its rank so a value of another rank gets a binding of its own, branch joins unify, and seeded random is reproducible."
 kind = "behavior"
 case = "../../../cases/modules/tensor/static_types.cml"
 args = ["${case}"]
@@ -172,7 +172,7 @@ expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
-assert(input.normalized.stdout.includes('static_types w_sum=5.0 pick=[3, 2] same_seed=true g=10.0'), 'unexpected static type results')
+assert(input.normalized.stdout.includes('static_types w_sum=2.0 pick=[3, 2] same_seed=true g=5.0'), 'unexpected static type results')
 }
 """
 timeout_ms = 10000
