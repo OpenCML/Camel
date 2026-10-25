@@ -361,12 +361,10 @@ class ParserImpl {
     void parseEnumTuplePattern();
     void parseEnumStructPattern();
     void parsePattern();
-    void parseTry();
     void parseLoop();
     void parseOr();
     void parseAnd();
     void parseNeg(bool underMinus);
-    void parseCatchClause();
     void parseIndexValue();
     void parseKeyValuePair();
     void parsePairedValues(TK closer);

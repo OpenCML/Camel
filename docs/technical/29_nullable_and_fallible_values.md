@@ -256,9 +256,10 @@ run time.
 
 ## 5. `try` / `catch`
 
-`try` is recognised by the parser only to explain itself: `TryCatchNotInLanguage` (0x64), at
-the `try` keyword, pointing to `!!`, `?->` and fault isolation. `raise` is untouched (undecided,
-design principles section 15).
+`try`, `catch` and `finally` are not keywords: they are ordinary names, and a `try { ... }` written
+with them is an ordinary syntax error. (Until the syntax closure of 2026-10-25 the parser read the
+form only to explain itself, with `TryCatchNotInLanguage`; that diagnostic is retired.) `raise` is
+untouched (undecided, design principles section 15).
 
 ## 6. Errors and faults
 

@@ -73,39 +73,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 10000
 
 [[tests]]
-name = "semantic.try_not_in_language"
-desc = "`try` / `catch` / `finally` is not part of the language (design principles 3.9): TryCatchNotInLanguage at `try`, pointing to `!!`, `?->`, `match` and fault isolation."
-kind = "negative"
-case = "../../../cases/compile/semantic/try_not_in_language.cml"
-args = ["${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::TryCatchNotInLanguage"
-expect_diagnostic_code = "0x03000074"
-expect_diagnostic_line = 9
-expect_diagnostic_column = 5
-expect_output_contains = ["'try'/'catch' is not part of Camel.", "'a !! b'", "'x ?-> f'", "case error e", "fault-isolation operator"]
-expect_output_not_contains = ["never printed", "UnknownInternalError"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 10000
-
-[[tests]]
-name = "semantic.try_not_in_language_json"
-desc = "The diagnostic for `try` in JSON: one error, stage typecheck, the range of the whole try expression, the file; stdout is nothing but the array."
+name = "semantic.not_keywords_are_names"
+desc = "`is`, `of`, `keyof`, `try`, `catch` and `finally` are not part of the language and are not keywords any more: they are ordinary names a program may bind and call, as `raise` already was (design principles 3.9; handover 5.00 \"语法层收口\" item 5). Writing the construct they used to head is an ordinary syntax error, not a dedicated diagnostic."
 kind = "behavior"
-case = "../../../cases/compile/semantic/try_not_in_language.cml"
-args = ["--output-format", "json", "${case}"]
-expect_exit = 1
-verify_script = """
-const diags = JSON.parse(input.stdout)
-assert(diags.length === 1, 'one diagnostic, got ' + diags.length)
-const d = diags[0]
-assert(d.severity === 'Error' && d.data.name === 'SemanticDiag::TryCatchNotInLanguage', d.severity + ' ' + d.data.name)
-assert(d.data.stage === 'typecheck', 'stage ' + d.data.stage)
-assert(d.range.start.line === 8 && d.range.start.character === 4 && d.range.end.line === 14, 'range ' + JSON.stringify(d.range))
-assert(d.data.modulePath.endsWith('try_not_in_language.cml'), 'file ' + d.data.modulePath)
-assert(input.stderr === '', 'stderr empty')
-"""
-normalizers = ["strip_ansi", "normalize_newlines"]
+case = "../../../cases/compile/semantic/not_keywords_are_names.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["22"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
 [[tests]]

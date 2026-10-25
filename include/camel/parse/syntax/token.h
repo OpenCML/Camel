@@ -60,7 +60,7 @@ constexpr bool isTrivia(TokenKind kind) {
 struct KeywordInfo {
     std::string_view text;
     TokenKind kind;
-    std::string_view group; // Declaration, Control, Type, Literal, Reserved
+    std::string_view group; // Declaration, Control, Type, Literal
 };
 const std::vector<KeywordInfo> &keywordTable();
 

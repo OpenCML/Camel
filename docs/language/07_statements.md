@@ -666,7 +666,7 @@ id
 - 可以 `export`，在别的模块里以 `模块::Pair<int>` 使用。
 - 模块类型的尖括号（写得出实参的那种）由该类型自己解释，实参可以是类型或 `const 数据`。
 
-类型表达式的类型运算 `&`、`\`、`+`、`-`、`^`，以及 `keyof`、`名字 of T` 报 `SemanticDiag::FeatureNotSupported` 或语法错误，它们的含义尚未决定。`typeof e` 是一个完整的类型，取表达式 `e` 的值的类型，在使用这个类型的位置由编译器展开；`typeof` 不能嵌在更大的类型里（`typeof(1)[]` 报 `SemanticDiag::TypeOfNotWholeType`），操作数没有值（`void`）时报 `SemanticDiag::TypeOfNotAValue`。
+类型表达式的类型运算 `&`、`\`、`+`、`-`、`^` 报 `SemanticDiag::FeatureNotSupported`，它们的含义尚未决定。`keyof` 与 `of` 不是关键字：`keyof T`、`名字 of T` 里的它们是普通的名字，写出来是语法错误。`typeof e` 是一个完整的类型，取表达式 `e` 的值的类型，在使用这个类型的位置由编译器展开；`typeof` 不能嵌在更大的类型里（`typeof(1)[]` 报 `SemanticDiag::TypeOfNotWholeType`），操作数没有值（`void`）时报 `SemanticDiag::TypeOfNotAValue`。
 
 ## 7.8 块
 
