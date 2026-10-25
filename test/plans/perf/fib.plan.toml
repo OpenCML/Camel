@@ -16,7 +16,7 @@
 # same build on the same machine, as the baseline page says.
 id = "perf.fib"
 order = 400
-tier = "slow"
+tier = "milestone"
 tags = ["perf", "fib"]
 
 [[tests]]

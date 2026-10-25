@@ -200,17 +200,18 @@ slot_t __builtin__var_new__(ArgsView &with, ArgsView &norm, Context &ctx) {
 
 slot_t __builtin__var_get__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Tuple *cell = variableOf(norm);
-    // The value leaves the variable: from here on something else may refer to it, so the
-    // variable no longer grows it in place (:op/assn_owned sets the mark again).
-    cell->setHoldsUnsharedArray(false);
+    // The value leaves the variable: from here on something else may refer to it. The memory plan
+    // reads this read (against:var/peek) as the fact that ends the proof that the variable's value
+    // has no other observer (docs/design/arrays-memory/README.cn.md 4.3.1).
     return cell->get<slot_t>(0);
 }
 
 // A read of a variable whose value goes only to operations that cannot keep it (the length,
 // an element of scalars, a comparison, ...) and that all run before the variable is written
 // again (Builder::markNonRetainingReads). The array cannot be referred to by anything but the
-// variable after such a read, so the read leaves the variable's mark (holdsUnsharedArray) as
-// it is; otherwise it is :var/get.
+// variable after such a read, so it does not end the proof that the variable's value has no
+// other observer: the memory plan reads it as the read that leaves the variable's own storage
+// reusable; :var/get is the read that ends it.
 slot_t __builtin__var_peek__(ArgsView &with, ArgsView &norm, Context &ctx) {
     return variableOf(norm)->get<slot_t>(0);
 }
@@ -219,8 +220,7 @@ slot_t __builtin__assn__(ArgsView &with, ArgsView &norm, Context &ctx) {
     slot_t rhs  = norm.slot(1);
     Tuple *cell = variableOf(norm);
     cell->set<slot_t>(0, rhs, static_cast<TupleType *>(norm.type(0)));
-    // The value stored may be referred to from elsewhere.
-    cell->setHoldsUnsharedArray(false);
+    // The value stored may be referred to from elsewhere: it is not one this variable made.
     return rhs;
 }
 
@@ -231,31 +231,30 @@ slot_t __builtin__assn__(ArgsView &with, ArgsView &norm, Context &ctx) {
 //     :op/assn_owned(xs, <the in-place form>(..., :var/take(xs)))
 //
 // The meaning is that of the rebinding (design principles 11.3): the operator returns a
-// new value and the variable is bound to it. :var/take hands the in-place form an array no one
-// else refers to: the variable's own array when the variable is its only holder (the mark set
-// by :op/assn_owned), otherwise a copy of it. The form changes that array and returns it, and
-// :op/assn_owned stores it and sets the mark, as nothing else refers to it. Between the two
-// nothing reads the variable: the three are one statement of a sync block.
+// new value and the variable is bound to it. :var/take hands the in-place form the variable's
+// own array and the variable keeps nothing; whether the form writes that array in place or
+// copies it is the memory plan's decision, made once and written into the execution plan
+// (docs/design/arrays-memory/README.cn.md 4.3.1). :op/assn_owned stores the result, which is
+// then the value this variable made. Between the two nothing reads the variable: the three are
+// one statement of a sync block.
 //
 // Collectors: the copy is a new object, and the in-place forms reorder the slots of an array
-// of numbers, which hold no references. The flag is a field of the cell (it moves with it).
+// of numbers, which hold no references.
 slot_t __builtin__var_take__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    Tuple *cell    = variableOf(norm);
-    auto *cellType = static_cast<TupleType *>(norm.type(0));
-    auto *arrType  = static_cast<ArrayType *>(cellType->typeAt(0));
-    Array *arr     = cell->get<Array *>(0);
-    if (cell->holdsUnsharedArray()) {
-        return toSlot(arr);
-    }
-    return toSlot(static_cast<Array *>(arr->clone(mm::autoSpace(), arrType)));
+    Tuple *cell        = variableOf(norm);
+    auto *cellType     = static_cast<TupleType *>(norm.type(0));
+    const slot_t value = cell->get<slot_t>(0);
+    // A real move: the cell keeps no reference to the value it handed out, so what the update
+    // operator holds is all there is of it, and the cell is filled again by the assignment that
+    // stores the result.
+    cell->set<slot_t>(0, NullSlot, cellType);
+    return value;
 }
 
 slot_t __builtin__assn_owned__(ArgsView &with, ArgsView &norm, Context &ctx) {
     const slot_t value = norm.slot(1);
     Tuple *cell        = variableOf(norm);
     cell->set<slot_t>(0, value, static_cast<TupleType *>(norm.type(0)));
-    // Made by :var/take and an in-place form for this variable: no one else refers to it.
-    cell->setHoldsUnsharedArray(true);
     return value;
 }
 

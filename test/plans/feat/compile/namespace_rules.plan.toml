@@ -304,8 +304,8 @@ expect_exit = 0
 expect_stdout_exact = "100\n"
 
 [[tests]]
-name = "ns.p23_graph_names"
-desc = "Row 21 (N8): graph names in the dump; a function of the entry module is shown without the module, an imported one with it (see ns.p01_rgir)."
+name = "ns.p01_graph_names"
+desc = "Row 21 (N8): graph names in the dump of the entry program p01_qualified.cml; a function of the entry module is shown without the module, an imported one with it (see ns.p01_rgir)."
 kind = "behavior"
 case = "../../../cases/compile/namespace_rules/p01_qualified.cml"
 args = ["${case}", "std::rgir"]

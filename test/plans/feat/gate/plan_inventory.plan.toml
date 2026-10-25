@@ -2,16 +2,16 @@ id = "gate.plan_inventory"
 order = 921
 tier = "fast"
 tags = ["feat", "tools", "gate"]
-desc = "Every plan file under test/plans has one of the four fates -- a fast target reaches it, SLOW_PLANS names it, FORBIDDEN names it, or it is a debug plan -- so no plan file's tests are silently UNKNOWN"
+desc = "Every plan file under test/plans has a layer -- a fast target reaches it, SLOW_PLANS names it, FORBIDDEN names it (its own file says `tier = \"milestone\"`), or it is a debug or milestone plan -- so no plan file's tests are silently UNKNOWN"
 
-# `scripts/plan-inventory.mjs` holds the three fate tables and the check that every plan file
-# belongs to one of them; `scripts/release-gate.mjs` imports the same module, so this entry and the
+# `scripts/plan-inventory.mjs` holds the tables and the check that every plan file
+# belongs to a layer; `scripts/release-gate.mjs` imports the same module, so this entry and the
 # gate's own first check are one implementation, not two.
 #
 # Why it is a fast-layer entry and not only a release-gate check: eight perf plans landed between
-# 2026-10-23 and 2026-10-24 without a fate, and the gate was unrunnable from then until the
+# 2026-10-23 and 2026-10-24 without a layer, and the gate was unrunnable from then until the
 # inventory stopped dying on the first problem (the 2026-10-25 rule). A plan that lands without a
-# fate must redden the commit that lands it, not the next release run weeks later. The check needs
+# layer must redden the commit that lands it, not the next release run weeks later. The check needs
 # no compiler and no install: it reads the tree and the tables.
 #
 # It fails naming every unclassified plan at once, and it fails when the tables name a file that
@@ -19,12 +19,12 @@ desc = "Every plan file under test/plans has one of the four fates -- a fast tar
 
 [[tests]]
 name = "gate.plan_inventory"
-desc = "Every plan file under test/plans is reached by a fast target, named in SLOW_PLANS, named in FORBIDDEN, or a debug plan; a file the tables name exists, and the walk examined at least one plan. The check prints every problem at once and exits 1."
+desc = "Every plan file under test/plans is reached by a fast target, named in SLOW_PLANS, named in FORBIDDEN, or a debug or milestone plan; a file the tables name exists, and the walk examined at least one plan. The check prints every problem at once and exits 1."
 kind = "behavior"
 tool = "node"
 case = "../../../../scripts/plan-inventory.mjs"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_contains = ["plan files, every one of them has a fate"]
+expect_stdout_contains = ["plan files, every one of them has a destination"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 30000

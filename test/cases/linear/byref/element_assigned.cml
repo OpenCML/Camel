@@ -1,7 +1,9 @@
 /**
  * A store into an element of a `var` array: the whole variable is rebound to the array with
- * that element changed (docs/design-principles.cn.md 3.5, 6.11). An array that is not shared
- * is changed in place; `arr` itself is not copied.
+ * that element changed (docs/design-principles.cn.md 3.5, 6.11). Whether the update reuses the
+ * storage of the array is decided for the update node when the execution plan is built, which
+ * asks the array's own count where it cannot prove the old value has no other observer; what
+ * the program sees is the array with that element changed.
  */
 module element_assigned
 

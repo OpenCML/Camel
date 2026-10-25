@@ -877,6 +877,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::GenericTypeArgumentGrows,
+            {
+                "GenericTypeArgumentGrows",
+                "The recursive call makes the type argument '{0}' of the generic function '{1}' grow from '{2}' to '{3}': every instance's type argument would contain the one before it, so specialization never stops.",
+                "The type arguments of a generic function are its instance key, so a call that hands it a type built out of the type it already has asks for a new instance at every level: 'f::<T>(x: T)' calling 'f([x])' makes 'T', then 'T[]', then 'T[][]'. No set of instances reaches a fixed point. Write the recursion so that its type argument is the same at every level, and take what changes as a value parameter.",
+            },
+        },
+        {
             SemanticDiag::StaticForNotComposite,
             {
                 "StaticForNotComposite",

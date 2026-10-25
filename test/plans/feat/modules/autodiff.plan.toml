@@ -1801,6 +1801,20 @@ assert(out === 'tensor([  1.935,   1.959,   1.951], dtype=float32) | tensor([  3
 timeout_ms = 12000
 
 [[tests]]
+name = "grad_function_values.reference"
+desc = "The gradients the four tests above pin are not the compiler agreeing with itself: grad_function_values_reference.py writes every loss again as a NumPy float64 function, differentiates it by central finite differences, runs grad_function_values.cml with the compiler under test, and compares what it printed. Its tolerance is 2e-3 relative to the largest element of the reference gradient, which is what float32 against float64 finite differences costs."
+kind = "behavior"
+tool = "python"
+case = "../../../cases/modules/autodiff/grad_function_values_reference.py"
+args = ["${case}", "values", "--check-camel", "${camel}"]
+skip_unless = ["${python}", "-c", "import numpy"]
+expect_exit = 0
+expect_stdout_contains = ["10 gradients checked, 0 wrong"]
+expect_output_not_contains = ["MISMATCH", "camel failed"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 120000
+
+[[tests]]
 name = "grad_function_values.macro"
 desc = "Gradients through calls of function values that are named or built elsewhere than at the call: (1) a closure called twice inside a second closure that captured it, (2) three closures deep, (3) a closure returned by a factory and called twice, (4) a factory closure capturing a tensor, (5) a closure passed to a function that calls it twice, (6) a named function passed, (7) a closure passed on through two functions, (8) a factory closure passed to a function, (9) a function taking a closure and returning one that captures it, (10) a lambda returning a lambda. In all but (6) a captured value depends on the differentiated parameter, so the gradient must also arrive through the capture. The expected gradients agree with central finite differences of an independent NumPy float64 version of each loss (grad_function_values_reference.py). Under: std::macro (grad built at compile time)."
 kind = "behavior"
@@ -2284,7 +2298,7 @@ timeout_ms = 20000
 [[tests]]
 name = "benchmark_gradients_vs_torch"
 # Slow layer: measured 8.3 s in the full serial run.
-tier = "slow"
+tier = "milestone"
 desc = "The training gradient of nine benchmark models (mlp, mlp_big, lenet, lenet_big, gru, gru_big, transformer, transformer4, transformer_big) against PyTorch float32 autograd on the benchmark weights and input (benchmarks/train.py --check): the gradient of mean(y * y) with respect to every weight, under std::macro std::nvm and under std::macro std::opt std::nvm, each weight within 1e-4 of the reference (max|diff| over the weight's largest gradient entry, floored at 1e-3 of the model's). 1e-4 is the benchmark's agreement tolerance; the worst of the nine measures 6.7e-06. This is the second of the two numerical comparisons (native execution against PyTorch), not the exported artifact against native execution. resnet and resnetbn are checked by the next four entries: a float32-against-float32 comparison is not a test of their rules."
 kind = "behavior"
 tool = "python"
@@ -2328,7 +2342,7 @@ timeout_ms = 900000
 [[tests]]
 name = "resnet_gradient_smooth_vs_torch64"
 # Slow layer: measured 6.3 s in the full serial run.
-tier = "slow"
+tier = "milestone"
 desc = "resnet with relu replaced by tanh on both sides (benchmarks/tools/grad_referee.py --activation tanh): Camel's gradient against PyTorch float64 autograd, every weight within 1e-4 (measured 1.4e-06). The rules of conv2d with stride and padding, the residual sum, the two axis means and the linear layer, with no kink for float32 rounding to cross."
 kind = "behavior"
 tool = "python"
@@ -2373,7 +2387,7 @@ timeout_ms = 300000
 [[tests]]
 name = "resnetbn_gradient_smooth_vs_torch64"
 # Slow layer: measured 14.5 s in the full serial run.
-tier = "slow"
+tier = "milestone"
 desc = "resnetbn (20 training-mode batch_norms) with relu replaced by tanh on both sides: Camel's gradient against PyTorch float64 autograd, each of the 62 weights that have a gradient within 1e-4 (measured 7.8e-06), the loss and the 40 running statistics the forward leaves agreeing to 2e-7. The 20 conv biases in front of a batch_norm have a gradient of exactly zero (float64: 1e-17); what float32 computes there is the rounding of a sum that cancels, and it is accepted within 1e-4 of the floor or when no farther from float64 than PyTorch float32 on the same weight (measured: Camel 2.7e-04 of the floor, that is 2.7e-07 of the model's largest gradient entry; PyTorch float32 1.0e-03). Whether exactly-zero gradients need a bound of their own is open (benchmarks/README.md, Gradient agreement)."
 kind = "behavior"
 tool = "python"
@@ -2400,7 +2414,7 @@ timeout_ms = 300000
 [[tests]]
 name = "resnet_gradient_relu_kinks_vs_torch64"
 # Slow layer: measured 21.1 s in the full serial run.
-tier = "slow"
+tier = "milestone"
 desc = "resnet as benchmarked, against PyTorch float64 autograd. The direct comparison is outside 1e-4 (3.1e-03 on stem_w; PyTorch float32 is 1.6e-03 from float64 on another weight) because the gradient is discontinuous where a relu input crosses zero and, of 8.9 million relu inputs, a few lie within float32 rounding of zero. The test requires that the gap is exactly that: Camel's gradient must be within 1e-4 of the float64 gradient recomputed with a few named relu decisions reversed, each of them a unit whose float64 input is within half the layer's float32/float64 forward drift of zero (measured: 2 units, inputs -3.9e-09 and +4.0e-08 in layers whose largest input is 3.4 and 5.3; residual 3.9e-07). A wrong rule is not explained by reversing such units and fails."
 kind = "behavior"
 tool = "python"
@@ -2432,7 +2446,7 @@ timeout_ms = 3600000
 [[tests]]
 name = "resnetbn_gradient_relu_kinks_vs_torch64"
 # Slow layer: measured 42.6 s in the full serial run.
-tier = "slow"
+tier = "milestone"
 desc = "resnetbn as benchmarked, against PyTorch float64 autograd, by the criterion of resnet_gradient_relu_kinks_vs_torch64. The direct comparison is 7.6e-02 for Camel and 9.5e-02 for PyTorch float32 (one reversed relu decision in a 4x4 plane behind a batch_norm moves single kernel-gradient entries by several percent, and everything upstream by a few thousandths); with 3 named relu decisions reversed (float64 inputs -3.8e-08, -1.8e-07, -2.4e-07) the float64 gradient is within 5.4e-06 of Camel's on the weights that have a gradient."
 kind = "behavior"
 tool = "python"
@@ -2796,6 +2810,28 @@ case = "../../../cases/modules/autodiff/array_slice_grad.cml"
 args = ["${case}", "std::macro", "${run_fvm}"]
 expect_exit = 0
 expect_stdout_exact = "[0.0, 2.0, 3.0, 0.0, 0.0]\n[0.0, 0.0, 5.0, 3.0, 2.0]\narray_slice_grad subscript_d=0.0 call_d=0.0 nested_d=0.0 roundtrip_d=0.0 reversed_d=0.0 stepped_d=0.0 nonzero=115.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "array_take_grad.runtime.nvm"
+desc = "A row take of an array gathers whole rows, so its adjoint is the upstream gradient of those rows added back into the rows the indices named: the row scatter tangent/scatter_take_arr. Checked against adjoints written out by hand for a repeated index (xs[[0,2,0]] with weights 2,3,5 gives [7,0,3,0,0]), a plain pair ([0,3,0,0,2]) and a take of a take ([7,0,4,0,0]); the printed raw gradients are pinned too. `nonzero` is the summed squared distance to the zero array — 136.0 from the tree — so a rule that returned zeros prints 0.0 and fails. (grad built at run time)"
+kind = "behavior"
+case = "../../../cases/modules/autodiff/array_take_grad.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_exact = "[7.0, 0.0, 3.0, 0.0, 0.0]\n[0.0, 3.0, 0.0, 0.0, 2.0]\narray_take_grad repeated_d=0.0 pair_d=0.0 nested_d=0.0 nonzero=136.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "array_take_grad.macro.fvm"
+desc = "The same array row-take adjoints when std::macro builds the gradient ahead of time and the FastVM runs it: the row scatter is placed in the compiled gradient graph, not only in a graph built at run time."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/array_take_grad.cml"
+args = ["${case}", "std::macro", "${run_fvm}"]
+expect_exit = 0
+expect_stdout_exact = "[7.0, 0.0, 3.0, 0.0, 0.0]\n[0.0, 3.0, 0.0, 0.0, 2.0]\narray_take_grad repeated_d=0.0 pair_d=0.0 nested_d=0.0 nonzero=136.0\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 

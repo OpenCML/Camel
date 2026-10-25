@@ -365,7 +365,7 @@ P4 的终点：
   `log_softmax` 的裁定）；
 - **值的元素类型总在类型里**；形状可以是 `?`（大小运行时才知道是值的事，不是类型的事）。
 
-删除步（作为 P4 之后的一次独立提交，或 P4 提交内最后一步，由计划的所有者定）：
+删除步（P4 合入 develop 之前完成，负责人 2026-10-25：不留过渡、不留技术债。过渡状态只能存在于翻转分支上，develop 上不出现别名 `Tensor`、`numericUnknown` 或本节依赖表里的任何一处）：
 1. `ArrayType::numericUnknown*` 与其标记 `numericUnknown_` 删除；`Tensor` 的 `Reference` 改为
    `Tensor<T>` 形式（元素类型参数必填，`Tensor<..>` 的 `applyArguments` 只接受类型参数 + 形状参数）；
 2. 签名里出现裸 `Tensor` 的诊断（`InvalidTypeArgument` 或新的语法诊断）；
@@ -388,6 +388,7 @@ P4 的终点：
 | `modules/tensor/ops/gradient_ops.cpp#tensorTangentType` | 判断过渡类型有没有切线 | 随钩子删除 |
 | `modules/onnx/emitter.cpp` 的 `Value::constant(..., numericUnknown())` | 数组常量当张量时的声明类型 | 改为值自己的数组类型 |
 | `src/core/rtdata/equality.cpp` 的 `registerContentComparableType` / `isRegisteredContentComparableType`，以及 `isContentComparableImpl` 里的 `isNumericUnknown()` 分支 | 让模块的 `Tensor` 类型与元素类型未定的数组参加整体比较 `==` | 随过渡类型删除：张量就是数组，走数组自己的比较；注册表整个删掉 |
+| `modules/tensor/ops/layout_ops.cpp` 的 `OpDef idx_take`（`.exports = {"__idx__"}`）与 `setVjp(defs, "idx_take", &takeVjp)` | 模块的 `Tensor` 值经它参加 `t[idx]`；核心 `:op/idx_take` 已对任意秩按第 0 维取行、带反向 | 删掉这份副本，`t[idx]` 只有核心一条规则；函数形式 `tensor::take` 保留；`export_matrix` 去掉 `tensor:idx_take` 一行；`take_rows`、`gather_grad_f64`、`discrete_zero`、`gather_discrete_index_zero` 四个用例的 `t[idx]` 落到核心 |
 | `src/compile/gir/builder_operators.cpp` 的 `var` 实参接管（普通实参与 `with` 实参各一处） | 形参的裸 `Tensor` 与实参值的数组拼法不是同一个类型，cell 的"内容类型必须相等"（`src/core/type/composite/tuple.cpp`）会拒 | 随标记删除：两侧是同一个类型，接管分支删掉（详见下一节） |
 
 **没有让新的消费者依赖它**：所有从 `TensorType` 迁过来的构造点走 `tensor::ops::tensorOf(...)`，元素类型
@@ -539,7 +540,7 @@ Array *rowCopy(mm::IAllocator &allocator, uint64_t row) const;
 
 一个"返回新数组"的算子可以在调用者写 `xs = xs->op(...)`（或 `xs = op(xs, ...)`）时**原地**完成，当且仅当：
 
-1. **编译器证明旧值不可观察**：`Builder::inPlaceRebindingOf` 只对"把结果赋回同一个变量"的重绑写法改写；变量单元持有的数组由 `holdsUnsharedArray` 标记，任何读（`let y = xs`、传参、放进容器）都会清掉标记；`take` 在标记仍在时返回原数组。`LOOP` 的状态在下一轮开始时旧值不可见，按批复第 4 条同样标记（已落地）。
+1. **编译器证明旧值不可观察**：`Builder::inPlaceRebindingOf` 只对"把结果赋回同一个变量"的重绑写法改写；这份证明在内存规划里一次定下、随执行计划交给各后端（`ExecPlan::storageReuseOf`）：值由本图所造、且此后没有会留下引用的读（`let y = xs`、传参、放进容器：`:var/get`）时，更新节点标为复用输入自身的存储（`Input`）；证明不了的格子交第二层的计数（`ByArrayCount`）；有观察者时标为拷贝（`Copy`）。只喂给留不下引用的读（`:var/peek`）不结束证明。`LOOP` 的状态在下一轮开始时旧值不可见，按批复第 4 条同样处理（已落地）。
 2. **运行时证明存储可写**：`Array::canWriteInPlace()`——紧凑、Camel 自有块、计数为 1、偏移 0、不是视图；内联数组没有块，恒为真。外部块永不原地（设计 11.3）。
 3. **算子允许**：结果与操作数 0 的元素类型和形状相同，且内核只做同下标读写（或压缩/重排自身）。
 

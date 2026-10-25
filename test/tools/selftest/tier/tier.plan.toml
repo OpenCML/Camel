@@ -1,8 +1,8 @@
 # Fixture of test/tools/selftest/run.mjs: the tier filter and the named-plan rule. The plan is
-# in the fast layer; one test overrides that to slow, one keeps the plan's layer, and one is the
-# debug layer. With this DIRECTORY as the target, `--tier fast` must run two tests, `--tier slow`
-# one, and `--tier all` three (never the debug test); with this FILE as the target, all four run
-# whatever `--tier` says.
+# in the fast layer; one test overrides that to slow, one to milestone, one keeps the plan's layer,
+# and one is the debug layer. With this DIRECTORY as the target, `--tier fast` must run two tests,
+# `--tier slow` one, `--tier milestone` one, and `--tier all` four (never the debug test); with this
+# FILE as the target, all five run whatever `--tier` says.
 id = "selftest.tier"
 order = 5
 tier = "fast"
@@ -31,7 +31,13 @@ tier = "slow"
 args = ["${case}", "echo", "tier.slow"]
 
 [[tests]]
+name = "tier.milestone"
+desc = "The milestone layer by its own declaration: only `--tier milestone` and `--tier all` select it, never `fast` or `slow`."
+tier = "milestone"
+args = ["${case}", "echo", "tier.milestone"]
+
+[[tests]]
 name = "tier.debug"
-desc = "The debug layer: only `--tier debug` selects it; fast, slow and all must not."
+desc = "The debug layer: only `--tier debug` selects it; fast, slow, milestone and all must not."
 tier = "debug"
 args = ["${case}", "echo", "tier.debug"]

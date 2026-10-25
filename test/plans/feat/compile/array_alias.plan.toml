@@ -1,7 +1,7 @@
-# P4's acceptance suite, not yet selected by any run: P4 (`Tensor` as an array alias) has not
-# landed, and a plan under test/plans/ that fails before it lands is a red gate. Move this file
-# to test/plans/feat/compile/array_alias.plan.toml in the P4 commit, where the `known_fail` marks
-# below (one per test) fail the run the moment P4 makes them pass, which is how they come off.
+# P4's acceptance suite: P4 (`Tensor` as an array alias) has not landed, so every test below
+# carries `known_fail` and the run reports XFAIL for each of them -- the fast layer walks the file
+# like any other plan under test/plans/, and a test that starts passing fails the run the moment
+# P4 lands, which is how the marks come off.
 id = "compile.array_alias"
 order = 343
 tier = "fast"

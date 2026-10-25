@@ -19,17 +19,22 @@ shared host (H142), so this tool:
 It is a measuring instrument, not a test: nothing here has a threshold, and it is not part of any
 plan. Use it on the Linux host; on Windows ``getrusage(RUSAGE_CHILDREN)`` is not available.
 
-Example (host, from the worktree root, CAMEL_HOME already set up):
+Example (Linux host, from the worktree root, with ``CAMEL_HOME`` set to the install to measure):
+the three pipelines of ``test/cases/facts/tensors_and_loops.cml`` that differ only in when the rules
+library is loaded -- ``control`` loads it before the seed, so the declaration epoch does not move
+under the measured pass; ``bump`` lets ``std::opt`` load it; ``fold`` loads nothing:
 
     python3 test/tools/facts-cost.py --reps 21 \
-      --case "bump=cost_many_tensor.cml test::facts_seed std::opt test::facts_check" \
-      --case "control=cost_many_tensor.cml test::facts_load_rules test::facts_seed std::opt test::facts_check" \
-      --case "fold=cost_many_tensor.cml test::facts_seed std::opt::fold test::facts_check" \
-      --baseline control --outdir /tmp/h158-tensor
+      --case "bump=test/cases/facts/tensors_and_loops.cml test::facts_seed std::opt test::facts_check" \
+      --case "control=test/cases/facts/tensors_and_loops.cml test::facts_load_rules test::facts_seed std::opt test::facts_check" \
+      --case "fold=test/cases/facts/tensors_and_loops.cml test::facts_seed std::opt::fold test::facts_check" \
+      --baseline control --outdir /tmp/facts-cost
 
 The camel binary is ``$CAMEL_HOME/bin/camel`` unless ``--camel`` says otherwise; the working
 directory is ``--root`` (default: the current directory), which is where the program paths in a
-case resolve. A case's arguments are split like a shell would split them.
+case resolve -- run from the worktree root, or name the root with ``--root``. A case's arguments are
+split like a shell would split them. ``--reps`` and ``--warmup`` decide how long the measurement
+takes; on a shared host the CPU figure this tool reads is the number to look at, not the wall time.
 """
 
 import argparse
