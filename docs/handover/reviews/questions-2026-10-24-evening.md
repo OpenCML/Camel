@@ -485,3 +485,18 @@ println(grow([1.0, 2.0], read_int()))
 - 打印器照旧写 `return v`。图统一以后 `var_param` 往返就是等价的，`f(): int sync { var v = 1; v = 2; v }` 这个形状补进往返用例的语料。
 
 **先后**：先做裁定 1，`print_and_recompile` 应该只剩 `var_param` 一条红；再做裁定 2，`var_param` 转绿。
+
+## slow-layer-composition
+
+**裁定：一种去向一个名字，分成三层：快层、慢层、里程碑层。没被采样到的生成副本归里程碑层，不归慢层**。
+
+1. **加 `milestone` 这一档**：
+   - `expandSweeps` 里那一行改成 `sampled.has(test) ? 'fast' : 'milestone'`；
+   - `FORBIDDEN` 列的整批计划（全套、GC 压力、progen、PyTorch 对比、计时）也标 `milestone`。这正是 `agents/test.md` General Policy 里"只在里程碑跑"的那一类，现在给它一个名字；
+   - `--tier slow` 选出来的就是发布闸门慢层跑的那一批（今天大约 381 条），`--tier milestone` 是里程碑整批，`--tier all` 是全部。
+   - 一个词只有一个意思：今天"慢层"同时指"闸门慢层"和"`--tier slow` 选出的约 3000 条"，这个歧义正是这页要问的事情的根源。
+2. **清单要看见生成副本**：`plan-inventory.mjs` 不再自己数 `[[tests]]`，改成调用 runner 自己的展开函数（`loadPlanTests` 加 `expandSweeps`），按展开后的结果检查每条用例的去向。清单和 runner 只有一套选择规则，不要再抄一份。展开后，`gc_poison_sweep` 的副本归 `fast`（采样到的）和 `milestone`（其余的），各有去向。
+3. **"只跑非生成用例"的口径不另开**：第 1 条做完，闸门慢层就是它。毒化覆盖靠快层的采样（每个源计划 1 条，有风险标签的 3 条）加里程碑整批。
+   - 这次规则条件那个缺陷，是在未采样的副本里才露出来的。所以 `modules/rewrite` 和 `stdlib/rules.cml` 的计划加上风险标签（比如 `rules`），让它们按 3 条采样。
+4. **跨层跳过检查：不加**。`known_fail` 的副本不生成是对的，同一个已知失败只记一次。闸门报告已经列出所有层的跳过项和已知失败项（`printSkipList`），在发布主机上答"没有"的前置条件，会作为跳过项被点名。这已经够了，不再新开守卫（5.00 暂停新的账本、守卫类任务）。
+5. **`gpu/tiles_transfer :: tree_expansion_autodiff_and_device_update` 红了却没人记**：由 GPU 车道复现并定位，写成报告或问题页。红的用例不能没人认领。
