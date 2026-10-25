@@ -180,7 +180,7 @@ golden = "golden/tutorial_examples/08_generics.txt"
 
 [[tests]]
 name = "tutorial.examples.09_errors"
-desc = "Errors as values: an error is returned, matched and carried on, while a fault inside the callee ends the program. The value dropped at the end of the file is reported as a warning on standard error, which the page does not show."
+desc = "Chapter 7: errors as values -- an error is returned, matched and carried on, while a fault inside the callee ends the program. The value dropped at the end of the file is reported as a warning on standard error, which the page does not show."
 case = "../../../docs/tutorial/examples/09_errors.cml"
 golden = "golden/tutorial_examples/09_errors.txt"
 expect_output_contains = ["SemanticDiag::UnusedFallibleValue"]
@@ -189,7 +189,7 @@ expect_output_contains = ["SemanticDiag::UnusedFallibleValue"]
 # and the runtime names the fault and its position.
 [[tests]]
 name = "tutorial.examples.09_fault"
-desc = "A fault: what was printed before it stays printed, the run ends with a non-zero exit code, and the diagnostic names the index and the length."
+desc = "Chapter 7: a fault -- what was printed before it stays printed, the run ends with a non-zero exit code, and the diagnostic names the index and the length."
 kind = "behavior"
 case = "../../../docs/tutorial/examples/09_fault.cml"
 expect_exit = 1
@@ -203,7 +203,7 @@ expect_output_contains = ["Index 5 is out of range for an array of length 3"]
 
 [[tests]]
 name = "tutorial.examples.10_nullable"
-desc = "A missing value is null: an int? is compared, matched, and printed, and the caller sees null rather than a default."
+desc = "Chapter 7: a missing value is null -- an int? is compared, matched, and printed, and the caller sees null rather than a default."
 case = "../../../docs/tutorial/examples/10_nullable.cml"
 golden = "golden/tutorial_examples/10_nullable.txt"
 
