@@ -1,0 +1,30 @@
+tip=d28c318fe H554 第十一轮：并 develop + 重剥 + 两条钉值 + 三份文档（35 → 34，新增红 0）
+
+数字
+- 合并线 gate-29：`total: 6381, pass: 6319, fail: 34, skip: 12, known failures: 16`（合并前这条线 35）。相对合并线，`docs/diagnostics.md` 因合并而"需重出"（`catalog.doc_is_generated` 转红）→ 已 `--write` 重出并 `--verify-doc` 逐字 `docs/diagnostics.md is up to date`（`279 codes`）→ 若不重跑闸门，实际应为 **33**（这一条我没复跑，如实）。
+- 已定位的两条**都清了**（gate-29 名单里已无它们）：`constant_fault_reached.simplify_fvm`（warn 钉值 `:12:15:` → **`:10:15:`**）、`rules.generic_condition_effect_at_instantiation`（note 串 `at 11:1]` → **`at 10:1]`**）。
+
+① 一次越界与修正（0 新增红）
+- `at 11:1]` 在 `rules_conditions.plan.toml` 里有 **2 处**，我按字符串替换把另一处（用例 `condition_generic_commit.cml`，测试 `rules.generic_condition_effect_is_refused`）也改了 → 那条转红。改成**按 `case =` 作用域**只改 `condition_generic_print.cml` 那条，另一处还原 → gate-29 名单里两条都不在。
+
+② 合并 develop（`3bda2d467`）与重剥
+- `--no-ff` 合并，1 处冲突：`docs/handover/questions/pass-name-position-synthetic.md`（作者答后已删）→ 接受删除。提交 `3d2b0459d`。
+- 随即跑 `node scripts/strip-module-declarations.mjs`，逐字：`dropped 'module fact_no_value' from test/cases/modules/rules/fact_no_value.cml` / `dropped 'module fact_with_value' from test/cases/modules/rules/fact_with_value.cml` / `strip-module-declarations: 2 declaration(s) dropped, 0 name(s) that follow their file, 0 file(s) rewritten` → 提交 `815bb458b`。**这脚本正是你要的可重复一步，这次真的自动接住了 develop 的两个新用例。**
+
+③ `docs/cli.md` 通则（作者点名的位置，一条一事，提交 `d28c318fe`）
+- 英文 `docs/cli.md` 与中文 `docs/cli.cn.md` 的"诊断格式"段同步加一条**通则**：**不是文件的来源一律用尖括号**（`<pipeline>`，将来 `<stdin>`），**圆括号只留给 `short` 诊断里路径前的模块名**（`(module)path:line:col`），并写明这种来源同样计行列、名字落在 `modulePath`（`moduleName` 是裸名 `pipeline`）。
+- 你要的两行读数：`node scripts/check-doc-links.mjs --citations` → `no unverified citation: 413 of 413 symbol citation(s) verified, 1939 path citation(s) across 4812 file(s)`；`--all` → `docs/handover/questions/entry-module-name-and-a-block-tag-before-a-type.md:17: '#54-命名空间': no heading with this anchor` + `1 broken link(s) in 253 document(s)`——**不是我这轮动过的文件**（我没碰它，也未擅自改别人的页），如实报给你。
+
+④ 两页已写并随 ③ 一起提交
+- `docs/handover/questions/pipeline-diagnostic-ranges.md`：逐条列清"哪些该有范围、哪些必须没有"（未知遍/参数类已落地；`PassNotProvidedByModule`/`PassNotExportedByModule` 该有但三条测试的两处断言未动；`PassesNeverRun`、模块加载失败、`PassInternalError` 必须保持无位置），含第十轮踩到的两处断言原文。
+- `docs/handover/questions/namespace-block-row-name.md`：命名空间块内图名 `Device::scaled` vs verifier 要的 `scaled`，含用例注释、verifier 与实测行名，三个选项与代价。
+- `<pipeline>` 实现与用例按裁定未动。
+
+⑤ `-Check all`：**8 run, 1 failed**。七条 exit 0，含新两条——`export-matrix`：`export_matrix.csv and export_matrix.md are what this generator produces (122 rows, 65 forward, 23 gradient, 34 none)`；**`model-generators` exit 1**（`python3 benchmarks/resnetbn/tools/gen_model_cml.py --check`，输出是生成的 Camel 源码差异，疑似需重出；resnetbn 那条你提过在翻转线上，故未擅动）。
+
+⑥ 脚本断言族与 develop 侧位置族（本轮都只拿到读数，未修，逐字如下，下一轮按此改）
+- `macro_body_effect_stage`：`FAIL: the macro body println is at line 8`（±1）。`python_binding.session`：`FAIL missing_name is at 9:12, and the report says 8:12`（报告的列没错、**行差 1**）。`fixes_apply`：`FAIL both situations report the same code (0x01000001): undefined vs 0x01000001`。`fusion_group.profile.none`：`FAIL: the report is the base commit's report, byte for byte apart from the measured numbers`。`dump_after_each_pass`：`pass dump: FAIL`。`compile_bench.smoke`：`chain-3/compile: exit 1`。`debugger.http_gateway`：`1 of 33 checks failed`。`docs.snippets_compile`：`docs/tutorial/17_teaching_a_law.en.md:92/166` 片段过期（合并没解决）。
+- develop 侧位置族 7 条读数与第十轮相同（`nullable_positions…`、`fold_fault…`、`captured_write_graph.warnings`、`failed_depth.error`、`failed_evaluation.error`、`check.lexical_limit_json`、`entry_args.missing_argument_json`）。
+- LSP 三条（`stdout does not start with "ok "`）+ `lsp.fstring` **环境**（`ModuleNotFoundError: No module named 'camel'`）。
+
+纪律：未推 origin；未碰 `docs/language/**` 散文；未碰其它工作树/分支；未在 Windows 构建。报告已附 `git notes --ref=handover`（HEAD），工作树干净。
