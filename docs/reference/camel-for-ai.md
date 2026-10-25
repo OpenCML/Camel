@@ -1336,7 +1336,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 
 | `ComparisonAcrossLines` | This '>' is read as a comparison with the next line, which starts with {0}: two statements may have been joined into one. |
 
-**Semantic — errors** (`SemanticDiag`) — 197
+**Semantic — errors** (`SemanticDiag`) — 200
 
 | `Redeclaration` | Redeclaration of reference: '{0}'. |
 | `ModuleNotFound` | Module '{0}' not found. {1} |
@@ -1535,6 +1535,9 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `StreamInContainer` | '{0}' cannot be the element of {1}: a stream is consumed once, while the elements of a container are read more than once. |
 | `NodeOfNotAParameter` | '{0}' is not a const parameter of the rule '{1}', so node_of({0}) names no node. |
 | `RuleConstParamNotMatched` | '{0}' is a `const` parameter of the rule '{1}', and the left side matches no constant for it. |
+| `RuleWithParameterUnbound` | '{0}' is a `with` parameter of the rule '{1}', it has no default, and the rule value here binds nothing for it. |
+| `RuleWithParameterGenericHead` | The rule '{0}' declares type parameters and `with` parameters together, which is not implemented yet. |
+| `RuleWithParameterOnASide` | The {0} side of the rule '{1}' reads the `with` parameter '{2}', which is not implemented yet. |
 
 **Semantic — warnings** (`SemanticDiag`) — 12
 
