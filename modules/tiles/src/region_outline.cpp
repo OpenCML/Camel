@@ -414,24 +414,59 @@ const runtime::Program *outlineRegions(
             }
             draft.setWithInputs(call, std::span(&fnNode, 1));
             // The members were statements of a chain (an operator written in an arm, a loop
-            // written in the body). The call takes the place of the first of them that was the
-            // head of that chain, so the segment keeps its order against the host statements
-            // around it; erasing the members then closes the chain over it.
+            // written in the body). The call takes their place in it, so the host statements
+            // written around the segment keep their order against it; erasing the members then
+            // closes the chains over the call. What a replaced statement was ordered by, and what
+            // it ordered, goes to the call in every kind that carries that order: the sync kind and
+            // the order kind (takeStatementPlace), and the control kind that still names the same
+            // pair beside the sync one while it exists (docs/design/effects/edges.cn.md 4,
+            // src/runtime/draft.cpp closeChainOver). An effect written around the segment is
+            // ordered by this edge alone, so a kind left behind takes the effect with it: with no
+            // edge to the graph it is not executed, and the statement it observed is not
+            // transferred either.
+            const auto isMember = [&](rt::gc_node_ref_t ref) {
+                return std::find(
+                           region.members.begin(), region.members.end(),
+                           static_cast<size_t>(ref)) != region.members.end();
+            };
+            std::vector<rt::gc_node_ref_t> controls;
             for (auto member : region.members) {
-                const auto ref   = static_cast<rt::gc_node_ref_t>(member);
-                const auto preds = graph->ctrlInputsOf(ref);
-                if (preds.empty())
-                    continue;
-                const bool head = std::none_of(
-                    preds.begin(), preds.end(), [&](rt::gc_node_ref_t pred) {
-                        return std::find(
-                                   region.members.begin(), region.members.end(),
-                                   static_cast<size_t>(pred)) != region.members.end();
-                    });
-                if (head) {
-                    draft.takeStatementPlace(ref, call);
-                    break;
+                const auto ref = static_cast<rt::gc_node_ref_t>(member);
+                for (auto pred : graph->ctrlInputsOf(ref)) {
+                    if (isMember(pred) ||
+                        std::find(controls.begin(), controls.end(), pred) != controls.end())
+                        continue;
+                    controls.push_back(pred);
                 }
+                draft.takeStatementPlace(ref, call);
+                // What the replaced statement ordered follows the call. Only its own place moves:
+                // a user keeps every other reference it has to the node (the graph's exit, a
+                // region's value, a branch's join), which the outline moves below with the values.
+                const std::vector<rt::gc_node_ref_t> users(
+                    graph->ctrlOutputsOf(ref).begin(), graph->ctrlOutputsOf(ref).end());
+                for (auto user : users) {
+                    if (isMember(user) || !draft.alive(user))
+                        continue;
+                    std::vector<rt::gc_node_ref_t> ordered(
+                        draft.ctrlInputsOf(user).begin(), draft.ctrlInputsOf(user).end());
+                    bool moved = false;
+                    for (auto &input : ordered) {
+                        if (input != ref)
+                            continue;
+                        input = call;
+                        moved = true;
+                    }
+                    if (moved)
+                        draft.setCtrlInputs(user, ordered);
+                }
+            }
+            for (auto pred : controls) {
+                auto ctrl = draft.ctrlInputsOf(call);
+                if (std::find(ctrl.begin(), ctrl.end(), pred) != ctrl.end())
+                    continue;
+                std::vector<rt::gc_node_ref_t> grown(ctrl.begin(), ctrl.end());
+                grown.push_back(pred);
+                draft.setCtrlInputs(call, grown);
             }
             for (size_t i = 0; i < region.outputs.size(); ++i) {
                 const auto old   = static_cast<rt::gc_node_ref_t>(region.outputs[i]);
