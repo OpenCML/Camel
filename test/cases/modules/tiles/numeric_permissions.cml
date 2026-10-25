@@ -1,25 +1,25 @@
 module tiles_numeric_permissions
-import { Tensor, reshape, sum } from tensor
+import { reshape, sum } from tensor
 import { source, inspect, run_preferred_resident, download } from tiles
 
-func strict(a: Tensor<f32>, b: Tensor<f32>, c: Tensor<f32>): Tensor<f32> { return a * b + c }
+func strict(a: f32[..], b: f32[..], c: f32[..]): f32[..] { return a * b + c }
 #[contract]
-func allowed(a: Tensor<f32>, b: Tensor<f32>, c: Tensor<f32>): Tensor<f32> { return a * b + c }
+func allowed(a: f32[..], b: f32[..], c: f32[..]): f32[..] { return a * b + c }
 #[contract]
-func reversed(a: Tensor<f32>, b: Tensor<f32>, c: Tensor<f32>): Tensor<f32> { return c + a * b }
+func reversed(a: f32[..], b: f32[..], c: f32[..]): f32[..] { return c + a * b }
 #[reassociate, approx_math, change_precision, finite_math]
-func other_permissions(a: Tensor<f32>, b: Tensor<f32>, c: Tensor<f32>): Tensor<f32> { return a * b + c }
+func other_permissions(a: f32[..], b: f32[..], c: f32[..]): f32[..] { return a * b + c }
 #[contract]
-func caller(a: Tensor<f32>, b: Tensor<f32>, c: Tensor<f32>): Tensor<f32> { return strict(a,b,c) }
-func add_only(a: Tensor<f32>, b: Tensor<f32>, c: Tensor<f32>): Tensor<f32> {
+func caller(a: f32[..], b: f32[..], c: f32[..]): f32[..] { return strict(a,b,c) }
+func add_only(a: f32[..], b: f32[..], c: f32[..]): f32[..] {
     let product = a * b
     #[contract] { return product + c }
 }
 #[contract]
-func multiply(a: Tensor<f32>, b: Tensor<f32>): Tensor<f32> { return a * b }
-func multiply_only(a: Tensor<f32>, b: Tensor<f32>, c: Tensor<f32>): Tensor<f32> { return multiply(a,b) + c }
+func multiply(a: f32[..], b: f32[..]): f32[..] { return a * b }
+func multiply_only(a: f32[..], b: f32[..], c: f32[..]): f32[..] { return multiply(a,b) + c }
 #[contract]
-func shared_product(a: Tensor<f32>, b: Tensor<f32>, c: Tensor<f32>): (Tensor<f32>, Tensor<f32>) {
+func shared_product(a: f32[..], b: f32[..], c: f32[..]): (f32[..], f32[..]) {
     let product = a * b
     return (product, product + c)
 }

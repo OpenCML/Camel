@@ -1,6 +1,6 @@
 8964908a12661168 ok test/cases/parse/constructs/comprehensions.cml
-797b713daaac6dd9 ok test/cases/parse/constructs/constas.cml
-4dfb24d23966aa96 ok test/cases/parse/constructs/constas_param.cml
+394dac63d54e1369 ok test/cases/parse/constructs/constas.cml
+d9d098e434889eb7 ok test/cases/parse/constructs/constas_param.cml
 394b0953c7a9de39 ok test/cases/parse/constructs/enum.cml
 00333688365c1dd8 ok test/cases/parse/constructs/fact.cml
 43208d9d90200f52 ok test/cases/parse/constructs/fstring.cml

@@ -2,14 +2,14 @@
  * What a `reassociate` rule is checked against: real equality on the finite values, and IEEE
  * equality, bit for bit, on the special ones (the rule on
  * `verification-report-surface-s0`, which corrected the method the library's
- * `tensor_f32_combine_mixed` was refused by).
+ * `tensor_combine_mixed` was refused by).
  *
  * `real_cancel` is that rule's equation with its coefficients fixed, `x*48 + x*(-47) => x*1`, and
  * the grants that rule asks for. The check draws `x = 1e+30`, where the left side loses five digits
  * to cancellation and the right side is the exact value -- the two element-type results are 27 ulps
  * of the result apart, far outside the 11 the reassociate contract allows, and they are one real
  * number. A reassociation is allowed to change the rounding, so the comparison is made in the
- * reference's precision and the rule is `sampled`; the line `refuted tensor_f32_combine_mixed` this
+ * reference's precision and the rule is `sampled`; the line `refuted tensor_combine_mixed` this
  * case's library twin used to print, with `1.0000041e+30` and `1e+30` as its two values, is the
  * method that rule withdrew.
  *

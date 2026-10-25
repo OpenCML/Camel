@@ -3,10 +3,7 @@
  */
 module tensor_smoke
 
-import {
-    Tensor,
-    add, concat, eye, matmul, ones, reshape, shape, sum, transpose
-} from tensor
+import { add, concat, eye, matmul, ones, reshape, shape, sum, transpose } from tensor
 
 func main(): int sync {
     let a = ones([2, 2])

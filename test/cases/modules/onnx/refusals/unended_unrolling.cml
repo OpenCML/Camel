@@ -13,7 +13,7 @@
  */
 module unended_unrolling
 
-import { Tensor, reshape, sum, tanh } from tensor
+import { reshape, sum, tanh } from tensor
 import { export_model } from onnx
 
 type P = { w: f32[..] }

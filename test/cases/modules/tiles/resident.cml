@@ -1,8 +1,8 @@
 module tiles_resident
-import { Tensor, reshape, zeros, sum, abs } from tensor
+import { reshape, zeros, sum, abs } from tensor
 import { Device, upload, download } from tiles
-func read(x: Device<Tensor<f32>>): Tensor<f32> { return download(x) }
-func churn(x: Tensor<f32>, count: int): float {
+func read(x: Device<f32[..]>): f32[..] { return download(x) }
+func churn(x: f32[..], count: int): float {
     return if count == 0 then 0.0 else
         sum(abs(download(upload(x)) - x)) + churn(x + 1.0, count - 1)
 }

@@ -52,7 +52,7 @@ supported" or "an object reference like the others".
 exporters meet the type through the path they already have for module types: an opaque
 GC-traced reference whose object answers `print`/`equals`/`clone`/`updateRefs` itself.
 Costs: the names `Map` and `Set` are visible only after an `import`; a module type could not
-take a type variable among its arguments (`Tensor<T>` was rejected where written), and
+take a type variable among its arguments (`T[..]` was rejected where written), and
 `Map<K, V>` over head-declared `K` and `V` is a hard requirement; and other modules (JSON) would have to share
 C++ classes with a `collections` module across `.cmo` boundaries loaded with `RTLD_LOCAL`.
 

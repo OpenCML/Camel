@@ -15,15 +15,15 @@
 #gpu
 module tiles_gpu_scope_module
 
-import { Tensor, reshape, sum } from tensor
+import { reshape, sum } from tensor
 
-func scaled(x: Tensor<f32, [3]>): Tensor<f32, [3]> {
+func scaled(x: f32[3]): f32[3] {
     let y = x * 2.0
     return y + 1.0
 }
 
 #cpu
-func kept(x: Tensor<f32, [3]>): Tensor<f32, [3]> {
+func kept(x: f32[3]): f32[3] {
     let y = x * 3.0
     return y - 1.0
 }

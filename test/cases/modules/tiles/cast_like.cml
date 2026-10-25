@@ -7,17 +7,17 @@
  * the f32 gradient of `sum(x)`.
  */
 module tiles_cast_like
-import { Tensor, reshape, sum, cast, abs } from tensor
+import { reshape, sum, cast, abs } from tensor
 import { grad } from autodiff
 import { inspect } from tiles
-with <x: Tensor<f32>>
+with <x: f32[..]>
 func with_cast(): float { return sum(cast(x, "float32")) }
-with <x: Tensor<f32>>
+with <x: f32[..]>
 func without_cast(): float { return sum(x) }
 func main(): int sync {
     let x = reshape([1.0, 2.0, 3.0] as f32[], [3])
-    let cast_grad = (v: Tensor<f32>): Tensor<f32> => grad(with_cast)<v>()
-    let plain_grad = (v: Tensor<f32>): Tensor<f32> => grad(without_cast)<v>()
+    let cast_grad = (v: f32[..]): f32[..] => grad(with_cast)<v>()
+    let plain_grad = (v: f32[..]): f32[..] => grad(without_cast)<v>()
     println(cast_grad(x))
     println(sum(abs(cast_grad(x) - reshape([1.0, 1.0, 1.0] as f32[], [3]))))
     println(inspect<cast_grad>(x))

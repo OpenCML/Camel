@@ -1,7 +1,7 @@
 module tiles_reject_effect
-import { Tensor, reshape } from tensor
+import { reshape } from tensor
 import { source } from tiles
-func noisy(x: Tensor<f32>): Tensor<f32> sync {
+func noisy(x: f32[..]): f32[..] sync {
     println("BODY MUST NOT EXECUTE")
     return x + x
 }

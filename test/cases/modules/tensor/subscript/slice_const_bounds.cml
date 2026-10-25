@@ -3,7 +3,7 @@
  * principles 3.9), as for the function form of slice.
  */
 module subscript_slice_const
-import { Tensor, reshape, sum } from tensor
+import { reshape, sum } from tensor
 
 func main(): int sync {
     println('ran')

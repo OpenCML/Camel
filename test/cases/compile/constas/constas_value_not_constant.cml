@@ -1,7 +1,7 @@
 module constas_value_not_constant
-import { Tensor, ones, sum } from tensor
+import { ones, sum } from tensor
 
-func total(constas n: int, x: Tensor<f32, [n]>): float {
+func total(constas n: int, x: f32[n]): float {
     return sum(x)
 }
 

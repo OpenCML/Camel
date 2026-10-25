@@ -92,7 +92,7 @@ template <k::ReduceOp Op> OpDef reduceAxisDef(std::string_view name, std::string
             {{"t", ParamKind::Tensor},
              {"axis", ParamKind::Int},
              {"keepdims", ParamKind::Bool, true}},
-        .resultDoc = "Tensor",
+        .resultDoc = "float[..]",
         .infer     = reduceAxisInfer(Op),
         .kernel    = &reduceAxisKernel<Op>,
         .traits    = {},
@@ -368,7 +368,7 @@ std::vector<OpDef> reductionOps() {
         .name      = "softmax",
         .exports   = {"softmax"},
         .params    = {{"t", ParamKind::Tensor}, {"axis", ParamKind::Int, true}},
-        .resultDoc = "Tensor",
+        .resultDoc = "float[..]",
         .infer     = softmaxInfer,
         .kernel    = &softmaxKernel,
         .traits    = {}});
@@ -376,7 +376,7 @@ std::vector<OpDef> reductionOps() {
         .name      = "log_softmax",
         .exports   = {"log_softmax"},
         .params    = {{"t", ParamKind::Tensor}, {"axis", ParamKind::Int, true}},
-        .resultDoc = "Tensor",
+        .resultDoc = "float[..]",
         .infer     = softmaxInfer,
         .kernel    = &logSoftmaxKernel,
         .traits    = {}});
@@ -385,7 +385,7 @@ std::vector<OpDef> reductionOps() {
         .exports = {"softmax_grad"},
         .params =
             {{"y", ParamKind::Tensor}, {"dy", ParamKind::Tensor}, {"axis", ParamKind::Int, true}},
-        .resultDoc = "Tensor",
+        .resultDoc = "float[..]",
         .infer     = floatLikeFirst,
         .kernel    = &softmaxGradKernel,
         .traits    = {}});
@@ -397,7 +397,7 @@ std::vector<OpDef> reductionOps() {
              {"gamma", ParamKind::Tensor},
              {"beta", ParamKind::Tensor},
              {"eps", ParamKind::Number, true}},
-        .resultDoc = "Tensor",
+        .resultDoc = "float[..]",
         .infer     = layerNormInfer,
         .kernel    = &layerNormKernel,
         .traits    = {}});

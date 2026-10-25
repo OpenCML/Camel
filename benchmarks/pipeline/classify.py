@@ -270,7 +270,7 @@ class Rules:
     macro_exception: bool = True
     # Deviation D1 (recorded in CLASSIFIER-RULES.md after the first run under the frozen rules):
     # the payload text carries the static type of each argument (`Tensor=...`), and passes that
-    # refine types change that text (`Tensor<float32, [2, 4]>=...`) without changing the value.
+    # refine types change that text (`float32[2, 4]=...`) without changing the value.
     # With this flag the type prefixes are removed before payloads are compared.
     payload_strip_types: bool = False
     # Deviations D2..D9 (owner's provisional rulings after the after-run; CLASSIFIER-RULES.md section 12).

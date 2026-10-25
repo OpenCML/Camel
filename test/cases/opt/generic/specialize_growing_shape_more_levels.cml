@@ -1,6 +1,6 @@
 module specialize_growing_shape_more_levels
 
-import { Tensor, new, concat, sum, shape } from tensor
+import { new, concat, sum, shape } from tensor
 
 // The growing-shape recursion of specialize_growing_shape.cml with the level bound at 24 instead
 // of 12. The type-only specialization of the callee stops on its own types, not on how many levels

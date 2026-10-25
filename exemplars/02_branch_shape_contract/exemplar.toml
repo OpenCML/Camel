@@ -1,5 +1,5 @@
 title = "Branch shape contract"
-summary = "Arms of different static shapes join to Tensor<float32, [?, ?]>; the product that needs a specific shape fails at run time, at the operator, with both extents."
+summary = "Arms of different static shapes join to float32[?, ?]; the product that needs a specific shape fails at run time, at the operator, with both extents."
 
 [[runs]]
 name = "dump"

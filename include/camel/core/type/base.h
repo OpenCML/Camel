@@ -88,7 +88,7 @@ enum class TypeCode : uint32_t {
     Complex64  = makeTypeCode(TypeFlag::Primitive | TypeFlag::GC_Traced, 0x011),
     Complex128 = makeTypeCode(TypeFlag::Primitive | TypeFlag::GC_Traced, 0x012),
     // Reduced-precision floating types (design principles 7.3): `bf16` and `f16`, the
-    // element types of `Tensor<bf16>` and `Tensor<f16>` and scalar types of the language as
+    // element types of `bf16[..]` and `f16[..]` and scalar types of the language as
     // well — a literal has one, and it has the written conversion, the arithmetic and the
     // comparisons of any other float (camel/core/rtdata/half.h). A value of one fits in a slot
     // as its two-byte pattern in the low half, computed on as f32 and rounded once on store.

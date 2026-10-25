@@ -5,7 +5,7 @@
  */
 module tensor_type
 
-import { Tensor, to_bytes } from tensor
+import { to_bytes } from tensor
 
 func main(): int sync {
     println(to_bytes('x'))

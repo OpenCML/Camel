@@ -5,8 +5,8 @@
  * Element type helpers shared by kernels, type inference, and serialization.
  *
  * There is no normalization here (design/arrays-memory plan 5.2): a tensor's
- * element type is the one the program wrote, so `Tensor<f64>` is f64 and
- * `Tensor<i32>` is i32. Promotion only picks one of the two operand types.
+ * element type is the one the program wrote, so `f64[..]` is f64 and
+ * `i32[..]` is i32. Promotion only picks one of the two operand types.
  */
 
 #include "dtype.h"
@@ -57,10 +57,10 @@ std::string elementTypeSpelling(TypeCode code) {
 
 TypeCode promoteTensorTypes(TypeCode lhs, TypeCode rhs) {
     if (!isSupportedTensorScalar(lhs)) {
-        throw std::invalid_argument("Unsupported Tensor dtype");
+        throw std::invalid_argument("Unsupported array element type");
     }
     if (!isSupportedTensorScalar(rhs)) {
-        throw std::invalid_argument("Unsupported Tensor dtype");
+        throw std::invalid_argument("Unsupported array element type");
     }
     // A reduced-precision type meets the wider float it is a subset of, or its own type. It
     // never meets the other reduced type or an integer: neither type holds every value of the

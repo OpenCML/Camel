@@ -6,7 +6,7 @@
 module autograd_linear_demo
 
 import { grad } from autodiff
-import { Tensor, ones, shape, sum, zeros } from tensor
+import { ones, shape, sum, zeros } from tensor
 import { sgd } from nn
 
 type Linear = {

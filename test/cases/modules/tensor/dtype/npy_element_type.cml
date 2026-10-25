@@ -7,7 +7,7 @@
 // (`test/cases/modules/nn/fixtures/checkpoint-v1/odd.npy`, element type int64, one extent of 2).
 module tensor_dtype_npy_element_type
 
-import { Tensor, load_npy, numel } from tensor
+import { load_npy, numel } from tensor
 
 func main(): int sync {
     let x = load_npy::<f32>('test/cases/modules/tensor/shape_types/x3.npy')
@@ -15,7 +15,7 @@ func main(): int sync {
     let labels = load_npy::<i64>('test/cases/modules/nn/fixtures/checkpoint-v1/odd.npy')
     println(numel(labels))
     // No type argument at the call: the declared type of the position fixes the element type.
-    let typed: Tensor<f32> = load_npy('test/cases/modules/tensor/shape_types/x3.npy')
+    let typed: f32[..] = load_npy('test/cases/modules/tensor/shape_types/x3.npy')
     println(numel(typed))
     return 0
 }

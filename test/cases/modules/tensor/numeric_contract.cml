@@ -5,10 +5,7 @@
  */
 module numeric_contract
 
-import {
-    Tensor, cast, reshape, relu, maximum, minimum, max, min, sum, softmax, exp, ones, full, concat,
-    abs
-} from tensor
+import { cast, reshape, relu, maximum, minimum, max, min, sum, softmax, exp, ones, full, concat, abs } from tensor
 
 /// vals where mask is 1 and NaN where mask is 0 (0 / 0 is NaN for tensors).
 /// The arrays are float[]; cast is the explicit conversion to the f32 the tensor math runs in.

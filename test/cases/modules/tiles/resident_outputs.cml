@@ -1,14 +1,14 @@
 module tiles_resident_outputs
-import { Tensor, reshape, sum, abs, zeros } from tensor
+import { reshape, sum, abs, zeros } from tensor
 import { Device, upload, download, run_preferred_resident } from tiles
-func step(x: Tensor<f32>): Tensor<f32> { return x + 1.0 }
-func identity(x: Tensor<f32>): Tensor<f32> { return x }
-type Result = { first: Tensor<f32>, rest: (Tensor<f32>, Tensor<f32>) }
-func results(x: Tensor<f32>): Result {
+func step(x: f32[..]): f32[..] { return x + 1.0 }
+func identity(x: f32[..]): f32[..] { return x }
+type Result = { first: f32[..], rest: (f32[..], f32[..]) }
+func results(x: f32[..]): Result {
     let y = x * 2.0
     return { first: y, rest: (x, y) }
 }
-func chain(x: Device<Tensor<f32>>, n: int): Device<Tensor<f32>> {
+func chain(x: Device<f32[..]>, n: int): Device<f32[..]> {
     return if n == 0 then x else chain(run_preferred_resident<step>(x), n - 1)
 }
 func main(): int sync {

@@ -1,12 +1,12 @@
-// A tensor type states the element type of the values it describes, so a signature that writes
-// the tensor name alone is refused where it is written, and the report says which spellings state
-// one: `Tensor<f32>` (any rank), `Tensor<f32, [2, 3]>`, or the array type itself (`f32[..]`,
-// `f32[2, 3]`). A signature that takes a tensor of any element type declares a type variable in
-// its head -- `func count::<T>(t: Tensor<T>)`, which is `func count::<T>(t: T[..])` -- and the
-// call's argument fixes it. That positive spelling is test/cases/loops/iterate_tensor.cml.
+// The old tensor name is no type at all (the arrays and memory plan, section 5.1): a program that
+// writes it writes an unknown name, and the report says so where it stands. The spellings that
+// state an element type are the array types -- `f32[..]` (any rank) and `f32[2, 3]` -- and a
+// signature that takes a tensor of any element type declares a type variable in its head
+// (`func count::<T>(t: T[..])`), whose call's argument fixes it. That positive spelling is
+// test/cases/loops/iterate_tensor.cml.
 module array_alias_bare_tensor
 
-import { Tensor, ones } from tensor
+import { ones } from tensor
 
 func count(t: Tensor): int {
     return len(t)

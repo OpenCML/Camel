@@ -6,7 +6,7 @@
 module matrix_factorization
 
 import { grad, with_grad } from autodiff
-import { Tensor, full, reshape, sum } from tensor
+import { full, reshape, sum } from tensor
 import { sgd } from nn
 
 type MatrixFactorization = {

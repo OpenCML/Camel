@@ -13,7 +13,7 @@
  * Checked by ort_slice_start.py.
  */
 module ort_slice_start
-import { Tensor, reshape, shape, slice, sum } from tensor
+import { reshape, shape, slice, sum } from tensor
 import { export_model } from onnx
 import { get_env } from env
 

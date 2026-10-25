@@ -3,7 +3,7 @@
  * variable holds when the callee runs is not known there.
  */
 module var_tensor_read_in_callee
-import { Tensor, reshape, sum } from tensor
+import { reshape, sum } from tensor
 import { with_grad } from autodiff
 
 type P = { p0: f64[..] }

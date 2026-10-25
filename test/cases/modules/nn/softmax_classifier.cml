@@ -6,7 +6,7 @@
 module softmax_classifier
 
 import { grad, with_grad } from autodiff
-import { Tensor, reshape, zeros } from tensor
+import { reshape, zeros } from tensor
 import { sgd, softmax_cross_entropy } from nn
 
 type Linear = {

@@ -1,12 +1,12 @@
 /**
  * A tail recursion whose depth depends on the model input and which returns the state together
- * with the number of steps, `(Tensor, int)`: forward as one ONNX Loop with the counter as an
+ * with the number of steps, `(f32[..], int)`: forward as one ONNX Loop with the counter as an
  * int64 output, and its gradient (with_grad of a loss over the returned state) as paired
  * Loops. Numbers are checked by ort_loop_values.py and ort_grad_loop_values.py; this program is
  * the one both export entries are compared on (pass_export.py equiv).
  */
 module export_loop_values
-import { Tensor, reshape, sum, tanh } from tensor
+import { reshape, sum, tanh } from tensor
 import { with_grad } from autodiff
 import { export_model } from onnx
 import { get_env } from env

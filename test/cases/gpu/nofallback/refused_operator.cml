@@ -4,14 +4,14 @@
 /// host. `test/cases/gpu/nofallback/host.cml` is the same program without the tag.
 module gpu_nofallback_refused_operator
 
-import { Tensor, tanh, reshape } from tensor
+import { tanh, reshape } from tensor
 
-func activate(x: Tensor<f32>): Tensor<f32> {
+func activate(x: f32[..]): f32[..] {
     return tanh(x)
 }
 
 #gpu
-func step(x: Tensor<f32>): Tensor<f32> {
+func step(x: f32[..]): f32[..] {
     return activate(x)
 }
 

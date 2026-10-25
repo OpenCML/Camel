@@ -10,7 +10,7 @@
  */
 module e9_branch_step
 
-import { Tensor, relu, mean, reshape, new } from tensor
+import { relu, mean, reshape, new } from tensor
 import { with_grad } from autodiff
 import { sgd, save_params } from nn
 import { get_env } from env

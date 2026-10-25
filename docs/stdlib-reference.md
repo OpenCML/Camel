@@ -1398,7 +1398,7 @@ The `f32` n by n identity matrix.
 #### `range`
 
 ```camel
-range: (start: int, stop?: int, step?: int) => Tensor<int64>
+range: (start: int, stop?: int, step?: int) => int64[..]
 ```
 
 The integer sequence start, start + step, ... below stop, as a rank-1 `int64` tensor: one
@@ -2050,7 +2050,7 @@ be `T` -- a file of another element type is a fault, never a conversion (design 
 5.5). `T` is `f32`, `f64`, `i32`, `i64` or `bool`, the element types the format's storage types
 (`'<f4'`, `'<f8'`, `'<i4'`, `'<i8'`, `'|b1'`) map to, exactly the type given. It is written at
 the call (`load_npy::<f32>(p)`) or taken from the type of the position the call stands in
-(`Tensor<f32, [3]>`, `f32[..]`); `T` is the one type variable no parameter mentions, so a call
+(`f32[3]`, `f32[..]`); `T` is the one type variable no parameter mentions, so a call
 that says neither is not a use of this operator.
 
 - With effects: reads a file.
@@ -5103,7 +5103,7 @@ The device holds a foreign resource (`tiles:device`) and the driver is ambient s
 #### `upload`
 
 ```camel
-upload: (value: Tensor<f32>) => Device<Tensor<f32>>
+upload: (value: f32[..]) => Device<f32[..]>
 ```
 
 Uploads every leaf of the value — a tensor, or a scalar of the element type it is written with,
@@ -5111,12 +5111,12 @@ alone or inside a tuple or a struct — and returns the same tree with each leaf
 `Device<...>`. A leaf of any other type is refused when the call is compiled.
 
 - With effects: transfers to the device.
-- Example: `upload(host)` gives `a Device<Tensor<f32>>`
+- Example: `upload(host)` gives `a Device<f32[..]>`
 
 #### `download`
 
 ```camel
-download: (value: Device<Tensor<f32>>) => Tensor<f32>
+download: (value: Device<f32[..]>) => f32[..]
 ```
 
 Downloads every device leaf of the value and returns the host value it came from. A tree with a
@@ -5425,7 +5425,7 @@ Drops this program's reference to the Python object `obj`.
 Neural-network primitives: 2-D convolution and its gradients, max and average pooling with
 their gradients, batch normalization, embedding, the fused softmax cross-entropy loss, the
 optimizers, and the checkpoint writer for a parameter tree. The operators work on the core
-`Tensor` type; nothing here needs PyTorch or a GPU.
+array type; nothing here needs PyTorch or a GPU.
 
 ### Convolution
 
@@ -5930,7 +5930,7 @@ needs neither the ONNX runtime nor a GPU; only a run of `export_model` writes a 
 #### `export_model`
 
 ```camel
-export_model: (fn: (x: Tensor<f32>) => void, example: Tensor<f32>, path: string) => void
+export_model: (fn: (x: f32[..]) => void, example: f32[..], path: string) => void
 ```
 
 Writes the ONNX model of `fn` applied to arguments like `example` to the file `path`, at the

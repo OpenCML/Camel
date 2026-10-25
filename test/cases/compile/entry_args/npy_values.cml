@@ -3,9 +3,9 @@
 // (src/runtime/draft_session.cpp, cloneStaticSlot).
 module entry_npy_values
 
-import { Tensor, numel, shape } from tensor
+import { numel, shape } from tensor
 
-func main(x: Tensor<f32, [2, 3]>, w: Tensor<f32, [3, 4]>): int sync {
+func main(x: f32[2, 3], w: f32[3, 4]): int sync {
     println(shape(x), numel(x), shape(w), numel(w))
     return 0
 }

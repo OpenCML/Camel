@@ -14,7 +14,7 @@
  */
 module concat_array_part
 
-import { Tensor, concat, reshape, sum } from tensor
+import { concat, reshape, sum } from tensor
 import { grad } from autodiff
 
 with <w: f64[..]>

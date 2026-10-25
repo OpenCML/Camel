@@ -4,7 +4,7 @@
  */
 module mlp_big
 
-import { Tensor, relu, mean } from tensor
+import { relu, mean } from tensor
 import { grad, with_grad } from autodiff
 import { sgd, save_params } from nn
 import { get_env } from env

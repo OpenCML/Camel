@@ -6,7 +6,7 @@
 module graph_autograd_multi_param_demo
 
 import { with_grad } from autodiff
-import { Tensor, ones, shape, sum, zeros } from tensor
+import { ones, shape, sum, zeros } from tensor
 import { sgd } from nn
 
 type LinearBias = {

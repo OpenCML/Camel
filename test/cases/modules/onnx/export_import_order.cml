@@ -6,7 +6,7 @@
 module export_import_order
 
 import { export_model } from onnx
-import { Tensor, random, ones, zeros, layer_norm, reshape, shape } from tensor
+import { random, ones, zeros, layer_norm, reshape, shape } from tensor
 import { get_env } from env
 
 func main(): int sync {

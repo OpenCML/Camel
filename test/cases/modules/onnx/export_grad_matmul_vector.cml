@@ -4,7 +4,7 @@
  * [-0.1339, -5.774, 3.692]; NumPy and the exported model on ONNX Runtime agree.
  */
 module export_grad_matmul_vector
-import { Tensor, reshape, sum, tanh } from tensor
+import { reshape, sum, tanh } from tensor
 import { with_grad } from autodiff
 import { export_model } from onnx
 import { get_env } from env

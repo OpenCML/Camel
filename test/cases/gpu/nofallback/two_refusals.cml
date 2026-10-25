@@ -5,14 +5,14 @@
 /// product has one that refuses this shape.
 module gpu_nofallback_two_refusals
 
-import { Tensor, reshape, sum, tanh } from tensor
+import { reshape, sum, tanh } from tensor
 
 #gpu
-func step(a: Tensor<f32, [2, 2]>, b: Tensor<f32, [2]>): Tensor<f32, [2]> {
+func step(a: f32[2, 2], b: f32[2]): f32[2] {
     helper(a, b)
 }
 
-func helper(a: Tensor<f32, [2, 2]>, b: Tensor<f32, [2]>): Tensor<f32, [2]> {
+func helper(a: f32[2, 2], b: f32[2]): f32[2] {
     tanh(a @ b)
 }
 
