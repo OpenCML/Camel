@@ -1051,18 +1051,23 @@ class Builder {
     /// `static` expansion -- joined by operations that are pure and cannot fail (the predicate
     /// design principles 3.4 names). Then it is evaluated and unrolled where it stands. The
     /// rounds are values (`a..b`, `range(a, b, step)`, an array literal or a constant array), or
-    /// the types at the positions of a compile-time tuple: `for x in ts` binds each position's
-    /// type, which is exactly what tells a `static loop` from an ordinary `loop` (the ordinary
-    /// one binds the element's value).
+    /// the elements of a compile-time tuple (`for x in ts`, where `ts` is the tuple of values the
+    /// expansion was given, a rest parameter included): there each round binds the element
+    /// `ts.[i]` itself, whose type is the type at that position -- which is exactly what tells a
+    /// `static loop` from an ordinary `loop` (the ordinary one binds an element of one type every
+    /// round).
     struct StaticSequence {
-        /// The type every round's value has, when the rounds are values.
+        /// The type every round's value has, when the rounds are compile-time constants.
         Type *elementType = nullptr;
-        /// Each round's value, a compile-time constant. Empty when the rounds are types.
+        /// Each round's value, a compile-time constant. Empty when the rounds are elements of a
+        /// tuple value.
         std::vector<data_ptr_t> values;
-        /// Each round's type, for a compile-time tuple. Empty when the rounds are values.
-        std::vector<Type *> types;
-        bool byTypes() const { return !types.empty(); }
-        size_t rounds() const { return types.empty() ? values.size() : types.size(); }
+        /// Each round's element, for a compile-time tuple: the value at that position (`ts.[i]`),
+        /// a node of the enclosing graph whose type is that position's type. Empty when the
+        /// rounds are compile-time constants.
+        std::vector<node_handle_t> elements;
+        bool byElements() const { return !elements.empty(); }
+        size_t rounds() const { return byElements() ? elements.size() : values.size(); }
     };
     /// The sequence of `for i in <序列>`, or nothing when the compiler cannot work it out. The
     /// operand is read, never built: a run-time expression leaves the number of rounds open, and
@@ -1790,6 +1795,14 @@ class Builder {
     // The value of the element `name` of the composite literal `literal`: a bound value, or
     // the value of the function of that name.
     node_handle_t elementNodeOf(const std::string &name, const GCT::node_ptr_t &literal);
+    /// The tags written on field `index` of the struct type `subject`, as a compile-time
+    /// `string[]`: the third thing the element of `fields T` gives, bound to the third name of
+    /// `(n, F, tags)`. Empty for a field with no tags, for a type that is not a named struct and
+    /// for a type declared by another module (the facts of a field live in the module that
+    /// declares the type, and reading a tag's value from Camel code waits for tag reflection --
+    /// design principles 6.2 and the handover's H51 Q5, which puts `(n, F, tags)` with it).
+    node_handle_t staticFieldTagsNode(
+        Type *subject, size_t index, const GCT::node_ptr_t &where);
     // functionValueOf, and FunctionNameAsValue when `name` has no single function value.
     node_handle_t
     namedValueOf(node_handle_t node, const std::string &name, const GCT::node_ptr_t &origin);

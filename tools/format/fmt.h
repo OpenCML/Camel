@@ -732,6 +732,14 @@ class Formatter {
 
     std::any visitStaticLoopExpr(cst::StaticLoopExpr context);
 
+    /// The names of a `static for` / `static loop` head, in the order written and comma-separated.
+    /// How many a head writes follows the element it walks (the ruling of 2026-10-25, H475): the
+    /// element of `fields T` is the triple (name, type, tags), every other element is one thing,
+    /// so `for n, F, tags in fields T`, `for n in fields T` and `for j in indices ts` are all
+    /// heads. Every name written is printed -- reading a fixed second name there printed nothing
+    /// for a head that has one and dropped the third of a head that has three.
+    std::string formatStaticHeadNames(syn::Node head);
+
     std::any visitTypeCasePattern(cst::TypeCasePattern context);
 
     std::any visitCatchClause(cst::CatchClause context);

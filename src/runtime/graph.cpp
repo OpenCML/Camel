@@ -140,17 +140,23 @@ Type *effectiveDraftNodeType(const GraphDraft &draft, const DraftNodeHeader &hea
     return nullptr;
 }
 
-/// The TypeId a node record stores for `type`: types outside the type table (open signatures,
-/// unions, type variables) are given one here (TypeTable::adopt), so every type a frozen graph
-/// names has an id.
+/// The TypeId a node record stores for `type`: the type's own id, which the type table handed out
+/// when it interned the type. A type has no identity but its structure, so this is the id every
+/// other occurrence of that type has too; a type the table does not hold is not named by a frozen
+/// graph, and the assertion (debug builds) is what says which path let one through.
 camel::core::type::TypeId typeIdOf(Type *type) {
     if (type == nullptr) {
         return camel::core::type::kNoTypeId;
     }
-    if (type->typeId() == camel::core::type::kNoTypeId) {
-        camel::core::type::TypeTable::instance().adopt(type);
-    }
-    return type->typeId();
+    // An open signature is not a type yet; `closed()` gives the interned signature of its parts
+    // as they stand, so a graph records a type and not a builder's working object.
+    Type *frozen = type->closed();
+    ASSERT(
+        frozen->isInterned(),
+        "A frozen graph node names a type the type table does not hold: every type a graph "
+        "records must come from the table's interning path (TypeTable::intern), not from an "
+        "object built beside it.");
+    return frozen->typeId();
 }
 
 struct GraphArenaLayout {

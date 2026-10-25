@@ -668,13 +668,17 @@ class ProofType final : public OtherType {
 /// the same reason. This file builds and prints it (proof.cpp holds those methods).
 
 ProofType *ProofType::get() {
+    // One object for the one `Proof` code, from the type table (see intern.h).
     static ProofType *instance = nullptr;
     static std::once_flag once;
     std::call_once(once, [] {
         const TypeCode code = registerOtherType("rewrite::Proof", TypeFlag::GC_Traced);
-        void *mem = mm::permSpace().alloc(sizeof(ProofType), alignof(ProofType));
-        ASSERT(mem != nullptr, "Failed to allocate ProofType from permSpace");
-        instance = new (mem) ProofType(code);
+        instance            = static_cast<ProofType *>(TypeTable::instance().internOther(
+            code, std::span<const uintptr_t>(), [&]() -> Type * {
+                void *mem = mm::permSpace().alloc(sizeof(ProofType), alignof(ProofType));
+                ASSERT(mem != nullptr, "Failed to allocate ProofType from permSpace");
+                return new (mem) ProofType(code);
+            }));
     });
     return instance;
 }
@@ -717,13 +721,17 @@ class CheckReportType final : public OtherType {
 };
 
 CheckReportType *CheckReportType::get() {
+    // One object for the one `CheckReport` code, from the type table (see intern.h).
     static CheckReportType *instance = nullptr;
     static std::once_flag once;
     std::call_once(once, [] {
         const TypeCode code = registerOtherType("rewrite::CheckReport", TypeFlag::GC_Traced);
-        void *mem = mm::permSpace().alloc(sizeof(CheckReportType), alignof(CheckReportType));
-        ASSERT(mem != nullptr, "Failed to allocate CheckReportType from permSpace");
-        instance = new (mem) CheckReportType(code);
+        instance            = static_cast<CheckReportType *>(TypeTable::instance().internOther(
+            code, std::span<const uintptr_t>(), [&]() -> Type * {
+                void *mem = mm::permSpace().alloc(sizeof(CheckReportType), alignof(CheckReportType));
+                ASSERT(mem != nullptr, "Failed to allocate CheckReportType from permSpace");
+                return new (mem) CheckReportType(code);
+            }));
     });
     return instance;
 }

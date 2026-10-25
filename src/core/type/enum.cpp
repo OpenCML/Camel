@@ -104,26 +104,15 @@ EnumType *EnumDecl::prototype() const {
 
 namespace {
 
-/// The interned instances, keyed by declaration and arguments, exactly as collection.cpp does:
-/// a type holding a type variable is not interned, because the declaration's binder and a use
-/// of it are different types.
-std::mutex enumMutex;
-std::unordered_map<std::string, EnumType *> &enumInstances() {
-    static std::unordered_map<std::string, EnumType *> instances;
-    return instances;
-}
-
-bool internable(std::span<Type *const> args) {
-    return std::all_of(args.begin(), args.end(), [](Type *arg) {
-        return arg != nullptr && !containsTypeVar(arg);
-    });
-}
-
-std::string instanceKey(const EnumDecl *decl, std::span<Type *const> args) {
-    std::string key = std::to_string(decl->id()) + "|";
+/// The intern key of an instance: its declaration and the canonical ids of its type arguments,
+/// exactly as a named struct's is (struct.cpp). The declaration decides which type it is, and an
+/// instance compares its arguments with `equals`, so the names in them are erased here.
+std::vector<uintptr_t> instanceKey(const EnumDecl *decl, std::span<Type *const> args) {
+    std::vector<uintptr_t> key;
+    key.reserve(1 + args.size());
+    key.push_back(reinterpret_cast<uintptr_t>(decl));
     for (Type *arg : args) {
-        key += arg->mangle();
-        key += '|';
+        key.push_back(typeKeyWord(TypeTable::instance().canonical(arg)));
     }
     return key;
 }
@@ -133,30 +122,23 @@ std::string instanceKey(const EnumDecl *decl, std::span<Type *const> args) {
 TypeCode EnumType::typeCode() { return registerOtherType("Enum", TypeFlag::GC_Traced); }
 
 Type *EnumType::hole() {
-    static Type *holeType = [] {
-        Type *type = Type::create(TypeCode::EnumHole);
-        TypeTable::instance().adopt(type);
-        return type;
-    }();
-    return holeType;
+    // One object for the one hole code, from the type table.
+    return Type::create(TypeCode::EnumHole);
 }
 
 EnumType *EnumType::get(EnumDecl *decl, std::span<Type *const> args) {
     if (args.size() > decl->params().size()) {
         return nullptr;
     }
-    if (args.empty() || !internable(args)) {
-        return new (allocTypeStorage<EnumType>(TypeStorageKind::Enum)) EnumType(decl, args);
-    }
-    std::lock_guard<std::mutex> lock(enumMutex);
-    auto &instances       = enumInstances();
-    const std::string key = instanceKey(decl, args);
-    if (auto it = instances.find(key); it != instances.end()) {
-        return it->second;
-    }
-    auto *type = new (allocTypeStorage<EnumType>(TypeStorageKind::Enum)) EnumType(decl, args);
-    instances.emplace(key, type);
-    return type;
+    // One object per declaration and canonical type arguments, from the type table (see intern.h):
+    // the instance of a declaration is one type with one id, as a named struct's is.
+    const std::vector<uintptr_t> key = instanceKey(decl, args);
+    std::vector<Type *> typeArgs(args.begin(), args.end());
+    return static_cast<EnumType *>(TypeTable::instance().intern(
+        TypeTable::Shape::Enum, key, [&]() -> Type * {
+            return new (allocTypeStorage<EnumType>(TypeStorageKind::Enum))
+                EnumType(decl, std::span<Type *const>(typeArgs));
+        }));
 }
 
 EnumType::EnumType(EnumDecl *decl, std::span<Type *const> args)

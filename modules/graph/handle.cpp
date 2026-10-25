@@ -4,6 +4,7 @@
 #include "handle.h"
 
 #include "camel/core/mm.h"
+#include "camel/core/type/intern.h"
 #include "camel/runtime/draft.h"
 #include "camel/runtime/program.h"
 #include "camel/utils/assert.h"
@@ -50,9 +51,15 @@ HandleType *HandleType::get(HandleKind kind) {
             const auto k = static_cast<HandleKind>(i);
             const TypeCode code =
                 registerOtherType(std::string("graph::") + handleKindName(k), TypeFlag::GC_Traced);
-            void *mem = mm::permSpace().alloc(sizeof(HandleType), alignof(HandleType));
-            ASSERT(mem != nullptr, "Failed to allocate HandleType from permSpace");
-            types[i] = new (mem) HandleType(code, k);
+            // One object per handle kind, from the type table (see intern.h): the kind is what
+            // `equals` compares, so it is what its entry is keyed by.
+            const uintptr_t parts[1] = {i};
+            types[i]                 = static_cast<HandleType *>(TypeTable::instance().internOther(
+                code, std::span<const uintptr_t>(parts, 1), [&]() -> Type * {
+                    void *mem = mm::permSpace().alloc(sizeof(HandleType), alignof(HandleType));
+                    ASSERT(mem != nullptr, "Failed to allocate HandleType from permSpace");
+                    return new (mem) HandleType(code, k);
+                }));
         }
     });
     return types[static_cast<size_t>(kind)];

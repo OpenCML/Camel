@@ -127,6 +127,13 @@ install it finds (`CAMEL_HOME`, else `out/latest`) against that build's stamp â€
 run must not measure another tree's binary â€” refusing (exit 2) when the stamp is missing or does
 not match this tree's sources.
 
+The two standard-library checkers among those static checks (`stdlib-reference.mjs --verify-ops`,
+`stdlib-declarations.mjs --check`) apply the same rule themselves, before they read a registry: an
+install that is not this tree's build is refused (exit 2, naming the install and its stamp) instead
+of being reported as differences between this tree's declarations and another install's operators.
+`--camel <path>` names the install such a run measures, passing the same check; the environment
+switch `CAMEL_EXE` is gone.
+
 It also never runs the eighteen plan files `agents/test.md` forbids on a shared host (GC stress
 and poison, progen, the PyTorch comparisons, the benchmarks): it prints them by name with the
 reason on every run, and refuses with a message naming the policy when asked for one --

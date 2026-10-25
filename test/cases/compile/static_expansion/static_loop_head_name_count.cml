@@ -1,0 +1,17 @@
+/**
+ * The element of `fields T` has three parts (name, type, tags), so a head may name three; a
+ * fourth name has nothing to be and is refused by name (the ruling of 2026-10-25, H475 item 4).
+ * Any number of names is read by the parser: how many fit is a question about the element, so the
+ * count is checked where the walked shape is known.
+ */
+module static_loop_head_name_count
+
+type Box = { low: int, high: int }
+
+func bad(b: Box): int {
+    return static loop acc = 0 for n, F, tags, extra in fields Box do acc + 1
+}
+
+func main(): int {
+    return bad({low: 1, high: 2})
+}
