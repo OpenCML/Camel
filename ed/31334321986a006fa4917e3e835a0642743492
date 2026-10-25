@@ -1,1 +1,1 @@
-三页送上 develop：grammar-snapshot-case-bare-tensor-golden.md（D1 的 operators.cml 裸 Tensor 改不了——它的快照 golden 只在装了 vscode-textmate/vscode-oniguruma 处可重画）、whole-reduction-element-type-residual-reds.md 与 tensor-reduction-element-type-code-half.md（归约元素类型的残红与 mean 的写法）。
+三页送上 develop：grammar-snapshot-case-bare-tensor-golden.md（D1 的 operators.cml 裸 Tensor 改不了——其快照 golden 只在装了 vscode-textmate/vscode-oniguruma 处可重画）、whole-reduction-element-type-residual-reds.md 与 tensor-reduction-element-type-code-half.md（归约元素类型残红与 mean 写法）。
