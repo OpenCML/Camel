@@ -1138,3 +1138,20 @@ Linux 包在 manylinux 里构建，用 auditwheel 修正标签，并在构建时
 1. **H7 车道把这条检查补上，排在它的第一位**：函数体推出的资源集合必须包含在签名写的 `uses` 里；写了 `pure` 的，推出的集合必须为空。违反时报一条具名诊断，点出签名写的资源和函数体多碰了的那个资源（以及碰它的那个调用）。递归按推断时的不动点处理。用例覆盖：多碰了一个模块资源、`pure` 函数里调用了打印、通过回调形参间接碰到资源。
 2. **第 10 章按目标写**：删掉"它能查的那些"，写成"手写的是承诺，函数体超出承诺就是编译错误"，配一个违反承诺的反例，在检查落地之前进待实现名单。
 3. 顺带：诊断注册表里"`0x1A7 is retired … The code is not reused`"、`CmlUnsupportedConstruct` 消息里的"(yet)"，按前面的裁定，空号不写原名，消息不写"暂时"。`std::cml` 往返是红线 5，它能打印的范围要按计划补全，不在消息里写"这一版还不行"。
+
+## P4 合入 develop
+
+张量并进数组合入了：`Tensor` 成为数组本身，模块的切片内核和"看是谁的数组再分派"的那段删了，标准库签名区写元素类型，梯度类型按"给用户的"与"机件内部的"拆开，所有生成物从合并后的树重新生成。按"过渡不进 develop"，合入时删除步已经做完。这是主线的一大步，收下。
+
+**随合并回到问题目录的十页旧问题**：`2026-10-25-in-place-decision-layer`、`after-the-tensor-deletion-four-open-points`、`dim-name-relaxation-and-element-type-change`、`discrete-gradient-and-rank-one-slice-ownership`、`grammar-snapshot-case-bare-tensor-golden`、`open-rank-round-type-and-the-value-a-round-hands-over`、`slice-function-form-and-what-the-core-answers`、`subscript-operator-choice-and-the-rank-two-refusal`、`tensor-gradient-structure-and-slice-adjoint`、`tensor-reduction-element-type-code-half`。这些是翻转线上的副本，随合并带了回来，本文件里同名的几节都已裁定。照原裁定执行，问题页删掉。
+
+## 2026-10-26-growing-shape-graph-count-after-the-merge
+
+**4 是对的**，并收下翻转线的说明：5 是删除元素类型开放的 `Tensor` 拼写之前的读数，多出的那个实例来自开放的元素类型被递归实参收窄，而且会随层数变化。删掉之后只剩声明本身和 `main` 调用的那一个实例，与层数无关。我在 `specialize-growing-shape-graph-floor-reads-five` 一节说"5 就是不动点"，那是对当时那棵树的读数，现在以 4 为准；`bounded.rgir` 与 `more_levels.bounded` 两条一起收。
+
+## plain-data-predicate-in-a-when-clause
+
+**修 `when` 的编译期求值，不把 `is_plain` 改成内建**：设计原则第 1 节的"只有一门语言"，以及 5.5 的"类型函数是在编译期运行的普通函数"。`when` 的求值发生在实例化时，类型实参已经是具体的；在这个时刻，调用一个只依赖类型实参和编译期常量的纯函数（包括里面的 `match type`、对字段的递归），就是把它按这些具体类型实例化再求值。泛型展开早就在做同样的事。现在求值器在"调用另一个用户函数"这一步停下，是求值器的缺口，不是语言的边界。
+- `is_plain` 留在 `stdlib/types.cml`，用 Camel 写。修好后 `to_bytes` 对纯数据的结构体、元组数组可以实例化，对其余类型给出干净的"没有适用的重载"。
+- `WhenConditionNotConstant` 只留给条件里真的读到运行期值的情况（比如读了一个非常量的实参）。
+- **`from_bytes` 用同一个谓词**：`from_bytes::<T>(b: Bytes, shape: int[]): T[..] when is_plain::<T>()` 一个声明，取代按元素类型注册的 7 个。它读的就是 `to_bytes` 写出的那种布局，也就是数据块里这个元素类型的布局，两个方向对称。`load_npy::<T>` 同理。
