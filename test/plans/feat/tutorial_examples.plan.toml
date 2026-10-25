@@ -418,3 +418,23 @@ name = "tutorial.examples.05_exercise"
 desc = "The answer to the exercise of chapter 5: a `loop` that adds the squares of the even numbers."
 case = "../../../docs/tutorial/examples/05_exercise.cml"
 golden = "golden/tutorial_examples/05_exercise.txt"
+
+# ---- Chapter 6 --------------------------------------------------------------------------------
+
+[[tests]]
+name = "tutorial.examples.06_collections"
+desc = "Structs, tuples, Map and Set: the shapes a program's data takes, and what each of them gives back."
+case = "../../../docs/tutorial/examples/06_collections.cml"
+golden = "golden/tutorial_examples/06_collections.txt"
+
+[[tests]]
+name = "tutorial.examples.06_equality"
+desc = "`==` compares two values by what they hold, not by where they are."
+case = "../../../docs/tutorial/examples/06_equality.cml"
+golden = "golden/tutorial_examples/06_equality.txt"
+
+[[tests]]
+name = "tutorial.examples.06_exercise"
+desc = "The answer to the exercise of chapter 6: counting with a map is a fold over `put`."
+case = "../../../docs/tutorial/examples/06_exercise.cml"
+golden = "golden/tutorial_examples/06_exercise.txt"
