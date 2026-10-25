@@ -170,15 +170,23 @@ def check(condition, message):
         raise SystemExit(1)
 
 
-def best_of(run, repeats, rounds=3):
-    """The fastest mean of `repeats` calls, in seconds: the least noisy number a plain loop of
-    this kind gives."""
+def fastest(run, calls):
+    """The cost of one call, in seconds: the smallest of `calls` single calls.
+
+    Preemption can make one call slower but never faster, so the smallest single call is the cost
+    of this work itself and does not follow what else the host is running. A mean of a fixed number
+    of calls does follow it, and unequally: one descheduling inside a round lifts a round of short
+    calls far more than a round of long ones. That is what this guard used to read -- across 23
+    read tables on this host the 1 MiB cell of the copy read 135.0-1199.3 us (the copy itself is
+    ~0.1 ms there), and the ratio of the two means fell to 3.83 under load, in this test
+    (docs/handover/reviews/questions-2026-10-24-evening.md, the
+    2026-10-25-python-binding-host-copy-bandwidth-guard answer).
+    """
     best = float("inf")
-    for _ in range(rounds):
+    for _ in range(calls):
         started = time.perf_counter()
-        for _ in range(repeats):
-            run()
-        best = min(best, (time.perf_counter() - started) / repeats)
+        run()
+        best = min(best, time.perf_counter() - started)
     return best
 
 
@@ -239,8 +247,17 @@ def main():
 
     # The claim "no copy" has a shape: the cost of the call does not grow with the array, while
     # the cost of copying the same bytes does. `memmove` is the copy this binding avoids, measured
-    # in the same process on the same bytes, so the two numbers are comparable.
+    # in the same process on the same bytes, so the two numbers are comparable. Both are the
+    # fastest single call, not a mean over a loop: a mean of a round of short calls is lifted by one
+    # descheduling far more than a mean of a round of long ones, which is how this guard came to
+    # read the host's scheduler instead of the copy.
     sizes = [1 << 20, 4 << 20, 16 << 20, 64 << 20]
+    # How many single calls each size is sampled with. The counts fall by about a third at each
+    # fourfold step, so every size samples 200-640 MiB of copying (20-64 ms at the ~10 GB/s this
+    # host copies at) and no size's round is short enough for one descheduling to set its number.
+    # Ten is the floor for 64 MiB: a handful of samples can all be preempted, and each of these is
+    # long enough that a preempted one is far above the fastest.
+    samples = {1 << 20: 200, 4 << 20: 60, 16 << 20: 20, 64 << 20: 10}
     print("size          pass-through (the binding)   memmove (a copy of the same bytes)")
     pass_through = {}
     copying = {}
@@ -255,8 +272,8 @@ def main():
         def copy(source=source, target=target, size=size):
             ctypes.memmove(target, source, size)
 
-        pass_through[size] = best_of(call, 20)
-        copying[size] = best_of(copy, 20)
+        pass_through[size] = fastest(call, samples[size])
+        copying[size] = fastest(copy, samples[size])
         print(
             f"{size / 2**20:>5.0f} MiB   {pass_through[size] * 1e6:>12.1f} us"
             f"              {copying[size] * 1e6:>10.1f} us"
@@ -267,11 +284,19 @@ def main():
         pass_through[largest] < 2 * copying[smallest],
         "handing over 64 MiB must cost less than copying 1 MiB, or the binding moves the bytes",
     )
+    # The two numbers are the fastest single call each, so this ratio no longer carries the host's
+    # scheduling delay in its denominator, while the sizes themselves stay 64x apart. Measured on
+    # this host: the means these replace read 3.83-99.31 over its 23 read tables of this test (the
+    # red that started this was 3.83, with the 1 MiB cell of the copy at 135.0-1199.3 us); the
+    # fastest single calls read 15.7-71.9 over seven runs at load ~100, where 64 MiB is copied at
+    # ~10 GB/s and 1 MiB at less than that. 8 is a little under half of the smallest of those.
     check(
-        copying[largest] > 4 * copying[smallest],
+        copying[largest] > 8 * copying[smallest],
         "64x the bytes must cost clearly more to copy, or the comparison above proves nothing "
-        "(the host's copy bandwidth varies, so this guard only proves the sizes were far enough "
-        "apart for the comparison to mean something; the claim itself is the check above)",
+        "(this guard only says the sizes were far enough apart for the claim above to mean "
+        "something; it goes red when the copy stops growing with the size -- with the two copy "
+        "buffers of one size, or a memmove handed fewer bytes than it is given -- and the claim "
+        "itself is the check above)",
     )
     print(
         f"therefore:    64 MiB by call {pass_through[largest] * 1e6:.1f} us, "
