@@ -1,6 +1,5 @@
 // Arrays and the higher-order operators map, filter, reduce and foreach.
 // Run: camel docs/tutorial/examples/05_arrays.cml
-module arrays
 
 func main(): int sync {
     let xs = 1..11    // [1, ..., 10]

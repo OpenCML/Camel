@@ -14,7 +14,6 @@
 // An effect whose result nothing needs: `greet`'s body is not a sync block, so its `println`
 // never runs.
 // Run: camel docs/tutorial/examples/10_unused_effect.cml
-module unused_effect
 
 func greet(): int {
     println('hello from greet')
@@ -56,7 +55,6 @@ help: Evaluation is driven by dependencies: outside a sync block an expression w
 ```cml
 // The same two statements as 10_unused_effect.cml, in a sync body: now both run.
 // Run: camel docs/tutorial/examples/10_sync_body.cml
-module sync_body
 
 func greet(): int sync {
     println('hello from greet')
@@ -90,7 +88,6 @@ hello from greet
 // A sync function body orders its own statements. What is written inside it -- an arm, a loop
 // body -- is ordered only if it says `sync` itself.
 // Run: camel docs/tutorial/examples/10_sync_block.cml
-module sync_block
 
 func report(second: bool): int sync {
     println('the body is a sync block')
@@ -139,7 +136,6 @@ six
 // A `var` and the order of its writes: in a sync body the statements run in the order written, a
 // read takes the value of the most recent write before it, and a write nobody reads does not run.
 // Run: camel docs/tutorial/examples/10_var_order.cml
-module var_order
 
 func bump(var counter: int): int sync {
     counter += 1
@@ -191,7 +187,6 @@ camel docs/tutorial/examples/10_var_order.cml
 // earlier uses of the variable. Both programs below print the same `1`: what the sync block adds is
 // the guarantee, not the value.
 // Run: camel docs/tutorial/examples/10_write_nobody_reads.cml
-module write_nobody_reads
 
 func unordered(): int {
     var c = 1
@@ -253,7 +248,6 @@ help: Evaluation is driven by dependencies: outside a sync block an expression w
 ```cml
 // Two effects on the same resource (stdout) keep the written order without a sync block.
 // Run: camel docs/tutorial/examples/10_same_resource.cml
-module same_resource
 
 func report(): int {
     return 5->println->println
@@ -291,7 +285,6 @@ camel docs/tutorial/examples/10_same_resource.cml
 // What a call touches: a resource of the module, a group of them, a handle type and `uses` on a
 // parameter. The bodies touch nothing -- a clause is a promise the compiler checks where it can.
 // Run: camel docs/tutorial/examples/10_resources.cml
-module resources
 
 resource db
 resource console = [db, stdout]
@@ -374,7 +367,6 @@ camel docs/tutorial/examples/10_resources.cml
 // `pure` in a function type is part of the requirement: what is compared is the resources the
 // argument's body infers against the empty set the parameter asks for, and `twice` touches nothing.
 // Run: camel docs/tutorial/examples/10_pure_callback.cml
-module pure_callback
 
 func apply(f: (x: int) => int pure, x: int): int {
     return f(x)
@@ -407,7 +399,6 @@ camel docs/tutorial/examples/10_pure_callback.cml
 // A counter-example: `noisy` prints, so the resources its body infers do not fit the empty set the
 // parameter asks for. The error names the signature that would have matched.
 // Run: camel docs/tutorial/examples/10_pure_callback_wrong.cml
-module pure_callback_wrong
 
 func apply(f: (x: int) => int pure, x: int): int {
     return f(x)
@@ -481,7 +472,6 @@ camel: 1 error
 // The answer to the exercise of chapter 10: a `var` written inside a sync block, and a callback
 // that has to be pure.
 // Run: camel docs/tutorial/examples/10_exercise.cml
-module exercise_effects
 
 func sum_upto(n: int): int sync {
     var total = 0

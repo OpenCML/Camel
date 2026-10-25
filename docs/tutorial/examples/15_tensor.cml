@@ -1,6 +1,5 @@
 // Tensors come from the `tensor` module.
 // Run: camel docs/tutorial/examples/15_tensor.cml
-module tensor_demo
 
 import { Tensor, ones, zeros, shape, sum, transpose } from tensor
 

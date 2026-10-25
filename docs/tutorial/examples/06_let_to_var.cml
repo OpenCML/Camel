@@ -1,6 +1,5 @@
 // Passing a let to a var parameter is a compile-time error.
 // Run: camel docs/tutorial/examples/06_let_to_var.cml
-module let_to_var
 
 func bump(var counter: int) {
     counter += 1

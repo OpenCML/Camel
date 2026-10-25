@@ -29,7 +29,6 @@ camel --version
 ```cml
 // The smallest program: `main` is the entry, and its body is a sync block.
 // Run: camel docs/tutorial/examples/01_hello.cml
-module hello
 
 func main(): int sync {
     println('Hello, Camel!')
@@ -60,7 +59,6 @@ Hello, Camel!
 ```cml
 // The smallest program: `main` is the entry, and its body is a sync block.
 // Run: camel docs/tutorial/examples/01_hello.cml
-module hello
 
 func main(): int sync {
     println('Hello, Camel!')
@@ -97,7 +95,6 @@ docs/tutorial/tools/render-graphs.mjs --check` 会重画一遍再和入库的图
 ```cml
 // The same shape as 01_hello.cml, with one expression that has more than one writing.
 // Run: camel docs/tutorial/examples/01_rewrite.cml
-module rewrite_hook
 
 func twice(x: int): int {
     return x * 2 + x * 2
@@ -123,7 +120,6 @@ camel docs/tutorial/examples/01_rewrite.cml
 ```cml
 // The same shape as 01_hello.cml, with one expression that has more than one writing.
 // Run: camel docs/tutorial/examples/01_rewrite.cml
-module rewrite_hook
 
 func twice(x: int): int {
     return x * 2 + x * 2
@@ -169,7 +165,6 @@ camel docs/tutorial/examples/01_rewrite.cml std::opt std::rgir
 ```cml
 // The answer to the exercise of chapter 1: a function of two parameters, and its value.
 // Run: camel docs/tutorial/examples/01_exercise.cml
-module exercise
 
 func area(w: int, h: int): int {
     return w * h

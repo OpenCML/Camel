@@ -1,7 +1,6 @@
 // Gradients: `grad` turns the graph of a function into the graph of its derivative.
 // The first `with` parameter is the weight it differentiates; `y` is data.
 // Run: camel docs/tutorial/examples/16_grad.cml std::macro
-module grad_demo
 
 import { grad, with_grad } from autodiff
 
