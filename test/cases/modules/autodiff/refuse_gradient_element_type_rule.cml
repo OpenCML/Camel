@@ -21,7 +21,7 @@ func pick_rule(xs: float[], i: int, dy: float): f32 {
     return f32(0.0)
 }
 
-#vjp<pick_rule>
+#vjp(pick_rule)
 func pick(xs: float[], i: int): float {
     return xs[i]
 }

@@ -1,19 +1,19 @@
 /**
  * What the third name of `fields T` reads back, by the type each tag parameter declares: a `bool`
- * argument comes back as a `bool` (`#flag<true>`), an `int` one as an `int` (`#width<8>`), a tag
+ * argument comes back as a `bool` (`#flag(true)`), an `int` one as an `int` (`#width(8)`), a tag
  * with no arguments as the empty record (`#leaf`), and a field with no tags as the empty record
  * too. Each round's `tags` is a compile-time value, so `tags.width.w` is both a value and the key
  * of an array, which only a compile-time value may be.
  */
 module tags_restore_readings
 
-tag flag<w: bool> on field
-tag width<w: int> on field
+tag flag(w: bool) on field
+tag width(w: int) on field
 tag leaf on field
 
 type Box = {
-    #flag<true> flagged: int,
-    #width<8> wide: int,
+    #flag(true) flagged: int,
+    #width(8) wide: int,
     plain: int,
 }
 
@@ -37,7 +37,7 @@ func bool_value(b: Box): int {
         })
 }
 
-/// The `int` of `#width<8>`, read as a value.
+/// The `int` of `#width(8)`, read as a value.
 func width_value(b: Box): int {
     return static loop acc = 0 for n, F, tags in fields Box do
         acc + (match type typeof(tags) {

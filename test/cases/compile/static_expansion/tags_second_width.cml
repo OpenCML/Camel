@@ -2,4 +2,4 @@
 /// carries two tags of that name through different modules.
 module tags_second_width
 
-export tag width<w: int> on field
+export tag width(w: int) on field

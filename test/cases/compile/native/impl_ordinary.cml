@@ -6,10 +6,10 @@
  */
 module impl_ordinary
 
-#op<':op/add_l'>
+#op(':op/add_l')
 func add_kernel(a: int, b: int): int
 
-#impl<add_kernel>
+#impl(add_kernel)
 export func add(a: int, b: int): int {
     return a - (0 - b)
 }

@@ -6,16 +6,16 @@
  */
 module tags_function_argument
 
-tag rule<f: func> on field
-tag width<w: int> on field
+tag rule(f: func) on field
+tag width(w: int) on field
 
 func twice(x: int): int {
     return x + x
 }
 
 type Box = {
-    #rule<twice> scaled: int,
-    #width<8> plain: int,
+    #rule(twice) scaled: int,
+    #width(8) plain: int,
 }
 
 func read(b: Box): int {

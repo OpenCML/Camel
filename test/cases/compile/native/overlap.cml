@@ -6,12 +6,12 @@
  */
 module native_overlap
 
-#op<':op/idx_arr'>
+#op(':op/idx_arr')
 export func pick::<T>(xs: T[], i: int): T
 
 // The same call: an array of some element type and an index. `T` and `U` are no help — every
 // call of one is a call of the other.
-#op<':op/idx_arr'>
+#op(':op/idx_arr')
 export func pick::<U>(xs: U[], i: int): U
 
 func main(): int sync {

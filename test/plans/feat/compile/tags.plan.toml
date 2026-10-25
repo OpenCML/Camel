@@ -2,7 +2,7 @@ id = "compile.tags"
 order = 226
 tier = "fast"
 tags = ["feat", "compile", "tags", "attributes", "semantics"]
-desc = "The tag mechanism of design principles 6.2: `tag name<params> on positions` declares a name of the module's entity namespace, `tag group = [a, b]` a group of tags, and `#name`, `#name<args>` and `#[a, b<v>]` write a tag before a function, a type declaration, a struct field or a block. Tags of `on nodes` become node attributes of the region they precede (an inner same-name tag with a parameter wins); tags of `on func`, `on type` and `on field` belong to the declaration and are printed by `camel inspect --tags` (the C++ query is tag::ofDeclaration / tag::ofField). A tag says through `read_by` which passes read it, and the pipeline warns when none of them is in it. Writing a tag where its declaration does not list it, an undeclared tag, a wrong number of arguments, a non-constant argument, an argument that is not of the kind its parameter declares, and a parameter of a kind a tag cannot carry yet are located errors at the tag."
+desc = "The tag mechanism of design principles 6.2: `tag name(params) on positions` declares a name of the module's entity namespace, `tag group = [a, b]` a group of tags, and `#name`, `#name(args)` and `#[a, b(v)]` write a tag before a function, a type declaration, a struct field or a block. A declaration declares type parameters and a condition the way a function does (`tag vjp::<F>(rule: F) on func when is_function::<F>()`). Tags of `on nodes` become node attributes of the region they precede (an inner same-name tag with a parameter wins); tags of `on func`, `on type` and `on field` belong to the declaration and are printed by `camel inspect --tags` (the C++ query is tag::ofDeclaration / tag::ofField). A tag says through `read_by` which passes read it, and the pipeline warns when none of them is in it. Writing a tag where its declaration does not list it, an undeclared tag, a wrong number of arguments, a non-constant argument, an argument that is not of the kind its parameter declares, and a parameter of a kind a tag cannot carry yet are located errors at the tag."
 
 [defaults]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -156,7 +156,7 @@ expect_output_contains = ["The argument 'n' of the tag 'width' is not a compile-
 
 [[tests]]
 name = "float_argument"
-desc = "A parameter declared `float` takes a real, carried as a real attribute: `#ratio<1.5>` is printed as written, and so is a second use with another value."
+desc = "A parameter declared `float` takes a real, carried as a real attribute: `#ratio(1.5)` is printed as written, and so is a second use with another value."
 kind = "behavior"
 case = "../../../cases/compile/tags/float.cml"
 args = ["inspect", "--tags", "${case}"]
@@ -200,7 +200,7 @@ expect_output_contains = ["The parameter 'w' of the tag 'width' is declared 'int
 
 [[tests]]
 name = "parameter_type"
-desc = "A parameter of a kind a tag cannot carry (here a function signature) is a located diagnostic at the use, not a value silently carried as something else."
+desc = "A parameter of a kind a tag cannot carry (here an array) is a located diagnostic at the use, not a value silently carried as something else."
 kind = "negative"
 case = "../../../cases/compile/tags/err_param_type.cml"
 args = ["${case}"]
@@ -208,29 +208,16 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TagParameterType"
 expect_diagnostic_line = 6
 expect_diagnostic_column = 2
-expect_output_contains = ["The parameter 'f' of the tag 'callback' is declared '(x: int) => int': a tag parameter is an int, a float, a bool, a string or a func."]
+expect_output_contains = ["The parameter 'xs' of the tag 'callback' is declared 'int[]': a tag parameter is an int, a float, a bool, a string, a concrete function type, or a type parameter the condition selects with is_function."]
 
 [[tests]]
 name = "func_parameter"
-desc = "A tag parameter may be declared `func` (design principles 6.2: `tag vjp<rule: func> on func`): `func` stands where the parameter's type stands, the tag is written with the name of a function as its argument on a field and on a function, and the program runs as if the tags were not there."
+desc = "A tag parameter may carry a function (design principles 6.2): the parameter is a type parameter the declaration's condition selects with `is_function::<F>()`, the tag is written with the name of a function as its argument on a field and on a function, and the program runs as if the tags were not there."
 kind = "behavior"
 case = "../../../cases/compile/tags/func_param.cml"
 args = ["${case}"]
 expect_exit = 0
 expect_stdout_exact = "42\n5\n"
-
-[[tests]]
-name = "function_is_not_a_parameter_kind"
-desc = "The one name of a tag parameter's function kind is `func`: a parameter declared `function` is a kind a tag cannot carry and the use is refused by name, so the old spelling cannot come back as a second name."
-kind = "negative"
-case = "../../../cases/compile/tags/err_function_alias.cml"
-args = ["${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::TagParameterType"
-expect_diagnostic_code = "0x0300016D"
-expect_diagnostic_line = 11
-expect_diagnostic_column = 6
-expect_output_contains = ["The parameter 'f' of the tag 'callback' is declared 'function': a tag parameter is an int, a float, a bool, a string or a func."]
 
 [[tests]]
 name = "old_annotation_form"
@@ -242,10 +229,10 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::InvalidAnnotation"
 expect_diagnostic_line = 4
 expect_diagnostic_column = 1
-expect_output_contains = ["an annotation takes '<...>' arguments, not '(...)'", "'#name', '#name<args>' or '#[a, b<v>]'"]
+expect_output_contains = ["an annotation takes '<...>' arguments, not '(...)'", "'#name', '#name(args)' or '#[a, b(v)]'"]
 [[tests]]
 name = "reads"
-desc = "`#reads<...>` names the tags a pass reads: the arguments are tag names, not values, any number of them are accepted, and the fact is the declaration's tuple, printed by `camel inspect --tags`."
+desc = "`#reads(...)` names the tags a pass reads: the arguments are tag names, not values, any number of them are accepted, and the fact is the declaration's tuple, printed by `camel inspect --tags`."
 kind = "behavior"
 case = "../../../cases/compile/tags/reads.cml"
 args = ["inspect", "--tags", "${case}"]
@@ -265,7 +252,7 @@ for (const line of [
 
 [[tests]]
 name = "reads_empty"
-desc = "`#reads<>` names no tag: the form takes at least one, and the diagnostic says how many are written."
+desc = "`#reads()` names no tag: the form takes at least one, and the diagnostic says how many are written."
 kind = "negative"
 case = "../../../cases/compile/tags/err_reads_empty.cml"
 args = ["${case}"]
@@ -277,7 +264,7 @@ expect_output_contains = ["The tag 'reads' takes 1 or more parameter(s), but 0 a
 
 [[tests]]
 name = "reads_undeclared"
-desc = "A name written in `#reads<...>` must be a declared tag: a typo is reported where it is written, not silently carried."
+desc = "A name written in `#reads(...)` must be a declared tag: a typo is reported where it is written, not silently carried."
 kind = "negative"
 case = "../../../cases/compile/tags/err_reads_undeclared.cml"
 args = ["${case}"]
@@ -289,7 +276,7 @@ expect_output_contains = ["No tag 'nowhere' is declared."]
 
 [[tests]]
 name = "reads_camel_pass_is_a_reader"
-desc = "A Camel pass that writes `#reads<marked>` is recorded as a reader of `marked`: a program whose tag names that pass reads the tag, so no `TagHasNoReader` warning is emitted."
+desc = "A Camel pass that writes `#reads(marked)` is recorded as a reader of `marked`: a program whose tag names that pass reads the tag, so no `TagHasNoReader` warning is emitted."
 kind = "behavior"
 case = "../../../cases/modules/rules/reads_target.cml"
 args = ["${case}", "reads_pass::apply", "std::nvm"]
@@ -546,7 +533,7 @@ expect_output_contains = ["A tag on the field 'a' of an unnamed struct type belo
 
 [[tests]]
 name = "tag_argument_named"
-desc = "A tag argument is positional: `#width<w: 8>` is refused at the argument, and the diagnostic shows the positional form `#tag<a, b>`."
+desc = "A tag argument is positional: `#width(w: 8)` is refused at the argument, and the diagnostic shows the positional form `#tag(a, b)`."
 kind = "negative"
 case = "../../../cases/compile/tags/tag_argument_named.cml"
 args = ["${case}"]

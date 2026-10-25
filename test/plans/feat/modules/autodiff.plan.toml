@@ -2641,7 +2641,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "vjp.cross_module.macro.nvm"
-desc = "A function declared with `#vjp<rule>` in one module is differentiated from another module: the declaration tag's graph reference is read from the frozen graph, so the rule (10 * dy) is used instead of the derivative of the body (20 and 10, not 16 and 4). The library is imported by two modules, so the second import is served by the module cache: a tag that did not survive it would lose its rule."
+desc = "A function declared with `#vjp(rule)` in one module is differentiated from another module: the declaration tag's graph reference is read from the frozen graph, so the rule (10 * dy) is used instead of the derivative of the body (20 and 10, not 16 and 4). The library is imported by two modules, so the second import is served by the module cache: a tag that did not survive it would lose its rule."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/vjp_cross_module.cml"
 args = ["${case}", "std::macro", "${run_nvm}"]
@@ -2673,7 +2673,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "vjp_old_annotation_removed"
-desc = "The old `@vjp<rule>` decorator is deleted: it is reported at the annotation as `SemanticDiag::InvalidAnnotation`, naming `#vjp<rule>`, not at the operator it used to resolve to."
+desc = "The old `@vjp<rule>` decorator is deleted: it is reported at the annotation as `SemanticDiag::InvalidAnnotation`, naming `#vjp(rule)`, not at the operator it used to resolve to."
 kind = "negative"
 case = "../../../cases/modules/autodiff/err_vjp_annotation.cml"
 args = ["${case}"]
@@ -2681,7 +2681,7 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::InvalidAnnotation"
 expect_diagnostic_line = 10
 expect_diagnostic_column = 1
-expect_output_contains = ["#vjp<rule>"]
+expect_output_contains = ["#vjp(rule)"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 

@@ -1,6 +1,6 @@
 /**
- * Two tags of one field written with the same name -- `#width<1>` of this module and
- * `#tags_second_width::width<2>` of the imported one -- would be a single field of the `tags`
+ * Two tags of one field written with the same name -- `#width(1)` of this module and
+ * `#tags_second_width::width(2)` of the imported one -- would be a single field of the `tags`
  * struct, because `tags` names a field by the tag alone. The reading therefore reports both
  * qualified names rather than keeping the first one and dropping the second.
  */
@@ -8,10 +8,10 @@ module tags_field_name_conflict
 
 import tags_second_width
 
-tag width<w: int> on field
+tag width(w: int) on field
 
 type Box = {
-    #width<1> #tags_second_width::width<2> marked: int,
+    #width(1) #tags_second_width::width(2) marked: int,
 }
 
 func read(b: Box): int {

@@ -9,7 +9,7 @@ func add(a: int, b: int): int {
     return a + b
 }
 
-#impl<>
+#impl()
 func add_with_kernel(a: int, b: int): int {
     return a + b
 }

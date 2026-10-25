@@ -1,5 +1,5 @@
 /**
- * `#impl<at>` names a body-less declaration of another module (generic_module): a kernel is the
+ * `#impl(at)` names a body-less declaration of another module (generic_module): a kernel is the
  * implementation detail of the function that keeps it, so the tag is refused
  * (ImplKernelForeign) rather than reaching into that module's operator.
  */
@@ -7,7 +7,7 @@ module impl_foreign
 
 import { at } from generic_module
 
-#impl<at>
+#impl(at)
 func first(xs: int[], i: int): int {
     return xs[i]
 }

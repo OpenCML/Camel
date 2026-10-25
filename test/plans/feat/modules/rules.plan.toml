@@ -465,7 +465,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 
 [[tests]]
 name = "rules.requires_permission_grants"
-desc = "A rule with `#requires<approx_math>` is applied only where the program grants the permission: `kept` carries `@numeric(approx_math)` and loses its product, `scaled` does not and keeps it. The requirement is compiled with the rule, not checked at run time."
+desc = "A rule with `#requires(approx_math)` is applied only where the program grants the permission: `kept` carries `@numeric(approx_math)` and loses its product, `scaled` does not and keeps it. The requirement is compiled with the rule, not checked at run time."
 kind = "behavior"
 case = "../../../cases/modules/rules/requires_target.cml"
 args = ["${case}", "counts::report_requires", "requires::apply", "counts::report_requires", "std::nvm"]
@@ -517,7 +517,7 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::RuleTagNotRequires"
 expect_diagnostic_line = 6
 expect_diagnostic_column = 2
-expect_output_contains = ["A rule may be preceded only by '#requires<...>', not by the tag 'fast'."]
+expect_output_contains = ["A rule may be preceded only by '#requires(...)', not by the tag 'fast'."]
 
 [[tests]]
 name = "rules.requires_outside_a_rule"
@@ -545,7 +545,7 @@ expect_output_contains = ["The tag 'requires' takes 1 parameter(s), but 0 argume
 
 [[tests]]
 name = "rules.requires_program_group"
-desc = "A requirement may name a group of permissions the program declares (`tag fast = [reassociate, contract]`): `#requires<fast>` is the union of its members, so the rule applies to `kept` (which grants `contract`) and not to `scaled` (`#strict`: no permission at all, the defaults included)."
+desc = "A requirement may name a group of permissions the program declares (`tag fast = [reassociate, contract]`): `#requires(fast)` is the union of its members, so the rule applies to `kept` (which grants `contract`) and not to `scaled` (`#strict`: no permission at all, the defaults included)."
 kind = "behavior"
 case = "../../../cases/modules/rules/requires_group_target.cml"
 args = ["${case}", "counts::report_requires", "requires_group::apply", "counts::report_requires", "std::nvm"]

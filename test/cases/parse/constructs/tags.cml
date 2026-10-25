@@ -9,7 +9,7 @@ export tag kernel on nodes
 export tag fast on func, nodes
 export tag readable on func, read_by std::opt
 tag pure = [kernel, fast]
-tag width<w: int> on type, field
+tag width(w: int) on type, field
 
 #kernel
 func marked(): int { return 1 }
@@ -17,9 +17,9 @@ func marked(): int { return 1 }
 #[pure]
 func grouped(): int { return 2 }
 
-#width<32>
+#width(32)
 type Bits = {
-    #width<8> low: int,
+    #width(8) low: int,
     high: int,
 }
 
