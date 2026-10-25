@@ -1,9 +1,9 @@
 /// A parameter of a kind a tag cannot carry: reported where the tag is written, not carried.
 module err_param_type
 
-tag callback<f: (x: int) => int> on type
+tag callback(xs: int[]) on type
 
-#callback<1>
+#callback(1)
 type T = { x: int }
 
 func main(): int { return 0 }

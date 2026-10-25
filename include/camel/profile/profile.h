@@ -100,6 +100,17 @@ void fusionGroup(
     std::string_view key, std::string_view name,
     std::span<const std::string_view> members, uint64_t ns);
 
+/// The marks of one execution plan, when it is built: how many update nodes it decided reuse the
+/// storage of the value they are given (layer 1), how many it left to the array's own count
+/// (layer 2), and how many it decided copy (layer 3) (docs/design/arrays-memory/README.cn.md
+/// 4.3.1). Every plan of the run reports its own marks; a plan built and never run counts too.
+void planUpdateMarks(size_t reuseInput, size_t byArrayCount, size_t copy) noexcept;
+/// An update operator asked the array itself whether its storage may be written where it is
+/// (Array::canWriteInPlace) and this is the answer: true when the only reference to a block the
+/// array owns is its own, so the update changed it there, false when the update copied. Asked at
+/// every update an in-place form runs.
+void arrayCountAnswer(bool inPlace) noexcept;
+
 /// One device kernel ran: `label` names it (the module's own label, "launch"), `ns` is what the
 /// device spent on it when the caller measured that (0 otherwise).
 void kernelLaunch(std::string_view label, uint64_t ns = 0);

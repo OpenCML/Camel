@@ -20,6 +20,7 @@
 #include "collection_tree.h"
 
 #include <algorithm>
+#include <shared_mutex>
 #include <vector>
 
 using namespace camel::core::type;
@@ -28,9 +29,21 @@ namespace camel::core::rtdata {
 
 namespace {
 
+/// The types a module declared content-comparable (camel/core/rtdata/equality.h). A vector, not
+/// a set: a program registers a handful of them and asks once per resolved comparison. The
+/// transition period's `Tensor` is its one entry, and both go when a tensor is an array.
+std::shared_mutex contentComparableMutex;
+std::vector<TypeCode> contentComparableTypes;
+
 bool isContentComparableImpl(const Type *type, std::vector<const Type *> &active) {
     if (type == nullptr) {
         return false;
+    }
+    // A type of a module whose values are arrays of numbers (the tensor module's `Tensor`): the
+    // core compares them by shape and element, as it does for an array, and the value carries
+    // the element type.
+    if (isRegisteredContentComparableType(type->code())) {
+        return true;
     }
     switch (type->code()) {
     case TypeCode::Int32:
@@ -64,6 +77,10 @@ bool isContentComparableImpl(const Type *type, std::vector<const Type *> &active
     bool handled = code == TypeCode::Array || code == TypeCode::Tuple || code == TypeCode::Struct;
     switch (code) {
     case TypeCode::Array:
+        // An array is comparable when its element type is: a program that writes an array writes
+        // the element type with it, so the elements alone decide. A module's own type whose
+        // values are arrays of numbers is registered as comparable above instead
+        // (`registerContentComparableType`).
         comparable =
             isContentComparableImpl(static_cast<const ArrayType *>(type)->elemType(), active);
         break;
@@ -134,6 +151,20 @@ bool isContentComparable(const Type *type) {
     return isContentComparableImpl(type, active);
 }
 
+void registerContentComparableType(TypeCode code) {
+    std::unique_lock lock(contentComparableMutex);
+    if (std::find(contentComparableTypes.begin(), contentComparableTypes.end(), code) ==
+        contentComparableTypes.end()) {
+        contentComparableTypes.push_back(code);
+    }
+}
+
+bool isRegisteredContentComparableType(TypeCode code) {
+    std::shared_lock lock(contentComparableMutex);
+    return std::find(contentComparableTypes.begin(), contentComparableTypes.end(), code) !=
+           contentComparableTypes.end();
+}
+
 namespace {
 
 /// One pair still to compare. Equality follows the shape of the data, so a value a million
@@ -149,6 +180,17 @@ struct EqualPair {
 /// returns true. Iterating the parts here instead is what this function avoids: the parts of a
 /// recursive enum are where the depth is.
 bool comparePair(slot_t a, slot_t b, const Type *type, std::vector<EqualPair> &pending) {
+    // A numeric array of a module (a tensor, whose element type its values carry): the whole
+    // comparison is the shape and then the elements, which only the array's own rule can read
+    // (design principles 4.2). No identity short-cut: an array that holds a NaN does not equal
+    // itself. The registered type is the transition period's `Tensor`; when a tensor is an array
+    // this branch and the registry it reads are deleted together.
+    if (isRegisteredContentComparableType(type->code())) {
+        if (a == NullSlot || b == NullSlot) {
+            return a == b;
+        }
+        return fromSlot<const Array *>(a)->equalsContent(fromSlot<const Array *>(b), type, true);
+    }
     switch (type->code()) {
     case TypeCode::Float32:
         return fromSlot<Float32>(a) == fromSlot<Float32>(b);
@@ -179,6 +221,13 @@ bool comparePair(slot_t a, slot_t b, const Type *type, std::vector<EqualPair> &p
         const Type *elemType = static_cast<const ArrayType *>(type)->elemType();
         if (lhs->size() != rhs->size()) {
             return false;
+        }
+        // A compact array keeps its elements as bytes, and an array whose element type the
+        // value carries (a tensor) has none to hand to the work list: both compare through the
+        // array's own rule, which reads each element as its dtype says (a NaN equals nothing,
+        // the two zeros are equal).
+        if (elemType == nullptr || lhs->isCompact() || rhs->isCompact()) {
+            return lhs->equalsContent(rhs, type, true);
         }
         // Not short-cut by identity: an array that holds a NaN does not equal itself.
         for (size_t i = 0; i < lhs->size(); ++i) {

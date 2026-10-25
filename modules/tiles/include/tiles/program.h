@@ -135,7 +135,10 @@ void schedule(
 // Rebind a cached launch plan to this invocation's host/resident allocation needs.
 void planStorage(Program &program, InputBindings bindings = InputBindings::Required);
 void validatePlan(const Program &program, InputBindings bindings = InputBindings::Required);
-std::string inspect(const Program &program);
+// The plan of a program, as JSON. `Deferred` reads a type-only template: the plan of a segment
+// the outline generated, whose invocation values the call that runs it binds (compileTypes).
+std::string inspect(
+    const Program &program, InputBindings bindings = InputBindings::Required);
 std::vector<std::byte> execute(std::shared_ptr<const Program> program);
 std::string benchmark(std::shared_ptr<const Program> program);
 std::string deviceInfo();

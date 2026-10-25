@@ -141,7 +141,7 @@ void makeLoopRegions(
 }
 } // namespace
 
-RegionDraft extractRegion(const rt::GCGraph &source, const Region &region) {
+RegionDraft extractRegion(const rt::GCGraph &source, const Segment &region) {
     require(!region.members.empty() && !region.outputs.empty(), "empty region or result");
     RegionDraft result{
         std::make_unique<rt::GraphDraft>(),

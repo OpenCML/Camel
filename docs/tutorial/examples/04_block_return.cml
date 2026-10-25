@@ -1,6 +1,5 @@
 // `return` inside a block gives the value of that block; it does not leave the function.
 // Run: camel docs/tutorial/examples/04_block_return.cml
-module block_return
 
 // The `if` is a statement whose value nobody uses, so the two `return`s have no effect.
 func wrong(x: int): string {

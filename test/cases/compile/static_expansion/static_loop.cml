@@ -32,7 +32,7 @@ func tupleFold(t: (int, int, int)): int {
 func nested(t: {p: {x: int, y: int}}): int {
     var sum = 0
     sync {
-        static for (n, F) in fields {p: {x: int, y: int}} => {
+        static for n, F in fields {p: {x: int, y: int}} => {
             let sub = t.[n]
             sum = sum + (static loop acc = 0 for m, G in fields F do acc + sub.[m])
         }

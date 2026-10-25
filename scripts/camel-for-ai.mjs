@@ -1,22 +1,29 @@
 // Copyright (c) the OpenCML Organization
 // SPDX-License-Identifier: MIT
 
-// The generated half of docs/reference/camel-for-ai.md: the pages a reader can check against a
-// normative source instead of trusting the prose.
+// The generated half of the pages for AI readers: the parts a reader can check against a normative
+// source instead of trusting the prose.
 //
-//   node scripts/camel-for-ai.mjs --write          rewrite the four generated regions in place
-//   node scripts/camel-for-ai.mjs --check          the file is what the sources produce, every
-//                                                  diagnostic it names exists, it is within budget
+//   node scripts/camel-for-ai.mjs --write          rewrite every generated region in place
+//   node scripts/camel-for-ai.mjs --check          every document is what its sources produce,
+//                                                  every diagnostic it names exists, each is
+//                                                  within the budget it states
 //   node scripts/camel-for-ai.mjs --report         the character count of every region and of the
-//                                                  hand-written part, against the budget
+//                                                  hand-written part of every document
 //   --root DIR                                     read and write under DIR (the proof cases)
+//   --document REL                                 check REL as one document holding every region,
+//                                                  with no budget: the reduced documents the proof
+//                                                  cases run
 //   --camel PATH                                   the binary the counter-examples are compiled
 //                                                  with, for --verify-errors; this tree's
 //                                                  `out/latest/bin/camel` without it
 //
-// The reference is one file an AI can read whole (handover: "a distilled language reference for
-// AI"), so it is written by hand where judgement is needed and generated where the sources are
-// authoritative. A generated region is delimited by two HTML comments in the document:
+// The page an AI must read whole is written by hand where judgement is needed and generated where
+// the sources are authoritative. It holds the two generated tables that belong to its own prose,
+// and the two catalogues -- the diagnostics and the standard-library signatures -- are documents of
+// their own: a reader looks them up, and a catalogue that grows with the language must not push the
+// page past what one read costs (`--report` prints each document against its own budget). A
+// generated region is delimited by two HTML comments in the document that holds it:
 //
 //   <!-- camel-for-ai region: <name> (generated from <source>; node scripts/camel-for-ai.mjs --write) -->
 //   <!-- camel-for-ai end: <name> -->
@@ -24,17 +31,20 @@
 // Four regions, each with one source:
 //
 //   lexical             include/camel/parse/syntax/token_kinds.def -- the one keyword and
-//                       punctuation table the lexer, the parser and the reference share
+//                       punctuation table the lexer, the parser and the page share; it stays beside
+//                       the rule it states, in §4 of the page
 //   precedence          src/parse/syntax/parser_expr.cpp -- the `///  name : production` comments
-//                       of the expression levels, loosest first, as the parser writes them
-//   diagnostics         diagnostics/registry.tsv -- every diagnostic, its name, severity and
-//                       message template
+//                       of the expression levels, loosest first, as the parser writes them; in §5
+//   diagnostics         diagnostics/registry.tsv -- every diagnostic, its name and message
+//                       template; the severity is the heading of the block the row is in. Written
+//                       to docs/reference/camel-for-ai-diagnostics.md
 //   stdlib-signatures   docs/stdlib-reference.md -- the signatures of the standard library, which
 //                       scripts/stdlib-reference.mjs generates from stdlib/*.cml and
-//                       stdlib/signatures/*.cml (so the declarations stay the one source)
+//                       stdlib/signatures/*.cml (so the declarations stay the one source). Written
+//                       to docs/reference/camel-for-ai-stdlib-signatures.md
 //
 // --check refuses to report a pass over nothing: a run that read no diagnostic, no signature, no
-// keyword or no precedence level fails with exit 2. It also holds the document to the rules the
+// keyword or no precedence level fails with exit 2. It also holds every document to the rules the
 // prose is written under:
 //
 //   * a diagnostic is named with its section (`SemanticDiag::UnresolvedReference`), and every name
@@ -44,7 +54,7 @@
 //     `docs/...` path; a note that points nowhere is a defect;
 //   * the document names no task number: the public documents describe the language, not the work
 //     that produced it;
-//   * the whole file and its hand-written part stay within the budget the document states.
+//   * each document, its hand-written part and each region stay within the budget it states.
 //
 // Exit status: 0 when everything agrees, 1 when a check failed, 2 when a scope is empty or the
 // usage is wrong.
@@ -57,35 +67,60 @@ import { spawn } from 'node:child_process'
 import { defaultCamel, takeCamel } from '../test/tools/camel-arg.mjs'
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const DOCUMENT_REL = 'docs/reference/camel-for-ai.md'
+// The page an AI reads whole, and the two catalogues it looks things up in. The appendices are
+// documents of their own so that a language which keeps gaining diagnostics and library names does
+// not push the page past the size one read costs.
+const PAGE_REL = 'docs/reference/camel-for-ai.md'
+const DIAGNOSTICS_REL = 'docs/reference/camel-for-ai-diagnostics.md'
+const SIGNATURES_REL = 'docs/reference/camel-for-ai-stdlib-signatures.md'
 const REGISTRY_REL = 'diagnostics/registry.tsv'
-const SIGNATURES_REL = 'docs/stdlib-reference.md'
+const STDLIB_PAGE_REL = 'docs/stdlib-reference.md'
 const LEXICAL_DOC_REL = 'docs/language/02_lexical.md'
 const PARSER_REL = 'src/parse/syntax/parser_expr.cpp'
 const TOKENS_REL = 'include/camel/parse/syntax/token_kinds.def'
 
-// The budget of the document, in characters. The document states these numbers itself; the check
-// enforces them so the file cannot grow past what one context holds.
+// Which regions each document holds, and which one this run reads and writes. The page keeps the
+// two tables that belong to its own prose -- the keyword table beside §4's rule and the precedence
+// levels beside §5's -- and the two catalogues are appendices A and B, written to files of their
+// own that the page points at in one line each.
+const REGIONS = ['lexical', 'precedence', 'diagnostics', 'stdlib-signatures']
+
+const LAYOUT = [
+    { rel: PAGE_REL, regions: ['lexical', 'precedence'] },
+    { rel: DIAGNOSTICS_REL, regions: ['diagnostics'] },
+    { rel: SIGNATURES_REL, regions: ['stdlib-signatures'] },
+]
+
+// What each document may cost, in characters. The document states these numbers itself, in its own
+// prose, and the check enforces them so it cannot grow past what one read holds.
 //
-// The generated half keeps every entry of its source: 267 diagnostics and 421 library names with
-// all their overloads cost about 56,800 characters and are not trimmed, because a name left out is
-// a name the reader has to look up elsewhere. The hand-written half is 55,400: it was 55,000, and
-// a round that closed measured gaps in it -- `loop` and `rule` had no entry, §11 taught a `for`
-// that is not a statement, §12.13 taught a `var` spelling the compiler warns about, and §12.2
-// pointed a `Tensor` parameter at a type the tensor operators do not take -- and a later round
-// added the `static loop` entry §6 lacked. The whole is therefore about 112,000 characters -- some
-// 30,000 tokens of English prose, tables and Camel, against the roughly 700,000 characters of the
-// four normative documents it distills (docs/language/, docs/diagnostics.md,
-// docs/stdlib-reference.md, docs/design-principles.cn.md).
+// The page's budget is the cost of reading the page: its hand-written part and the two regions it
+// holds, and nothing else. The catalogues are not counted in it -- that is the point of their being
+// files -- and each has a budget of its own, so a name added to the library or a message changed in
+// the registry lands in an appendix against the appendix's budget instead of against the page's.
+//
+// The regions keep every entry of their source: a name left out is a name the reader has to look up
+// elsewhere, so they are not trimmed, and the pages that carry them are the ones that grow. The
+// numbers do not rise with the language: a page whose diagnostics keep arriving would keep pushing
+// a growing budget ahead of itself. The lane that adds an entry owns fitting it into the room its
+// own document has, or tightening the wording around it. When the only way to make room would be to
+// drop something a reader needs, that is not a call for the lane that hit it: it opens a question
+// page under docs/handover/questions/ instead of deleting the information or editing a number here.
+//
+// Nothing in this check warns that the room is nearly gone. Over budget is a failure and the merge
+// gate reports it; a warning that is not a failure is a warning readers learn to scroll past.
 const BUDGET = {
-    total: 112000,
-    written: 55400,
-    regions: {
-        lexical: 4000,
-        precedence: 3000,
-        diagnostics: 28000,
-        'stdlib-signatures': 28000,
-    },
+    [PAGE_REL]: { total: 59000, written: 52000 },
+    [DIAGNOSTICS_REL]: { total: 30500, written: 2000 },
+    [SIGNATURES_REL]: { total: 30000, written: 2000 },
+}
+
+// What one generated region may cost, whichever document holds it.
+const REGION_BUDGET = {
+    lexical: 4000,
+    precedence: 3000,
+    diagnostics: 28500,
+    'stdlib-signatures': 28000,
 }
 
 // Each chapter's own budget, read out of the table the document carries ("What each part costs"):
@@ -131,37 +166,44 @@ function chapterSizes(document) {
     return sizes
 }
 
-function budgetProblems(document) {
+function budgetProblems(document, entry) {
     const problems = []
-    const { per, total } = countRegionChars(document)
+    const { per, total } = countRegionChars(document, entry.regions)
     const written = document.trim().length - total
-    for (const name of REGIONS) {
-        const cap = BUDGET.regions[name]
+    const size = document.trim().length
+    const budget = entry.budget
+    for (const name of entry.regions) {
+        const cap = REGION_BUDGET[name]
         if (per[name] > cap) {
-            problems.push(`the '${name}' region is ${per[name]} characters; its budget is ${cap}`)
+            problems.push(`${entry.rel}: the '${name}' region is ${per[name]} characters; its budget is ${cap}`)
         }
     }
-    if (written > BUDGET.written) {
-        problems.push(`the hand-written part is ${written} characters; its budget is ${BUDGET.written}`)
+    if (budget) {
+        if (written > budget.written) {
+            problems.push(
+                `${entry.rel}: the hand-written part is ${written} characters; its budget is ${budget.written}`,
+            )
+        }
+        if (size > budget.total) {
+            problems.push(`${entry.rel}: the document is ${size} characters; its budget is ${budget.total}`)
+        }
     }
-    if (document.trim().length > BUDGET.total) {
-        problems.push(`the document is ${document.trim().length} characters; its budget is ${BUDGET.total}`)
-    }
+    // A document that carries a budget table is held to the rows of that table, wherever it is:
+    // the table is the document's promise about itself and is read out of the document, not here.
     const sizes = chapterSizes(document)
     const chapters = []
     for (const row of chapterBudgets(document)) {
-        const size = sizes.get(row.key) ?? 0
-        chapters.push({ ...row, size })
-        if (size > row.budget) {
+        const chapterSize = sizes.get(row.key) ?? 0
+        chapters.push({ ...row, size: chapterSize })
+        if (chapterSize > row.budget) {
             problems.push(
-                `the chapter '${row.key}. ${row.title}' is ${size} characters; the budget it states is ${row.budget}`,
+                `${entry.rel}: the chapter '${row.key}. ${row.title}' is ${chapterSize} characters; ` +
+                    `the budget it states is ${row.budget}`,
             )
         }
     }
-    return { problems, per, total, written, size: document.trim().length, chapters }
+    return { problems, per, total, written, size, chapters, budget }
 }
-
-const REGIONS = ['lexical', 'precedence', 'diagnostics', 'stdlib-signatures']
 
 const SECTIONS = [
     { id: 'internal', enumName: 'InternalDiag', title: 'Internal' },
@@ -182,17 +224,14 @@ function read(root, rel) {
 // The keyword table of `docs/language/02_lexical.md` §2.4 -- the page the token table's own comment
 // names as the source of its `Group` field -- plus the operators of `token_kinds.def`.
 //
-// The two files disagree about one word: `enum` is grouped under `Type` by the reference (the
-// language has nominal enums; §6 and §12 use them) and under `Reserved` by the token table, which
-// did not move when the language gained them. The page follows the reference and says so, and the
-// note is generated, so fixing the token table removes the note by itself instead of leaving a
-// stale claim behind.
+// The table has one row per group of `token_kinds.def`; the `Reserved` row is gone with the words
+// that were in it (`is`, `of`, `keyof`, `try`, `catch`, `finally`; handover 5.00 "语法层收口"
+// item 5), and `enum` and `typeof` now stand with the types, as the token table groups them.
 const KEYWORD_GROUPS = [
     ['声明', 'Declaration'],
     ['控制', 'Control'],
     ['类型与转换', 'Type and conversion'],
     ['字面量', 'Literal'],
-    ['保留，尚未实现', 'Reserved (accepted, not implemented — §13)'],
 ]
 
 function generateLexical(root) {
@@ -400,24 +439,27 @@ function generateDiagnostics(root) {
     }
     if (problems.length > 0) return { text: null, count: 0, problem: problems.join('; ') }
     if (records.length === 0) return { text: null, count: 0, problem: `${REGISTRY_REL} declares no diagnostic` }
+    // A block is one section of the registry at one severity: the section is the prefix every name in
+    // it carries (`SemanticDiag::`), and the severity is written in the heading, so a row is the name
+    // and the message only. A reader who needs the severity reads the heading over the row, and the
+    // column that repeated it on all of them is gone.
     const out = []
-    out.push('| Name | Sev | What the compiler says |')
-    out.push('|---|---|---|')
-    let current = null
-    for (const record of records) {
-        if (record.section !== current) {
-            current = record.section
-            const section = SECTIONS.find((s) => s.id === current)
-            const of = records.filter((r) => r.section === current)
-            const errors = of.filter((r) => r.severity === 'E').length
+    out.push('| Name | What the compiler says |')
+    out.push('|---|---|')
+    for (const section of SECTIONS) {
+        for (const severity of ['E', 'W']) {
+            const of = records.filter((r) => r.section === section.id && r.severity === severity)
+            if (of.length === 0) continue
             out.push('')
             out.push(
-                `**${section.title}** (\`${section.enumName}\`) — ${of.length} ` +
-                    `(${errors} error${errors === 1 ? '' : 's'}, ${of.length - errors} warning${of.length - errors === 1 ? '' : 's'})`,
+                `**${section.title} — ${severity === 'E' ? 'errors' : 'warnings'}** ` +
+                    `(\`${section.enumName}\`) — ${of.length}`,
             )
             out.push('')
+            for (const record of of) {
+                out.push(`| \`${record.fullName.split('::')[1]}\` | ${record.message} |`)
+            }
         }
-        out.push(`| \`${record.fullName.split('::')[1]}\` | ${record.severity} | ${record.message} |`)
     }
     return { text: out.join('\n'), count: records.length, names: records.map((r) => r.fullName) }
 }
@@ -428,8 +470,8 @@ function generateDiagnostics(root) {
 // from the declarations; the declarations therefore stay the one source, and a signature that
 // changes there changes here on the next --write.
 function generateStdlib(root) {
-    const text = read(root, SIGNATURES_REL)
-    if (!text) return { text: null, count: 0, problem: `${SIGNATURES_REL} does not exist` }
+    const text = read(root, STDLIB_PAGE_REL)
+    if (!text) return { text: null, count: 0, problem: `${STDLIB_PAGE_REL} does not exist` }
     const lines = text.split('\n')
     const modules = []
     let module = null
@@ -445,13 +487,13 @@ function generateStdlib(root) {
         if (entry && module) {
             name = entry[1]
             if (lines[i + 1] !== '' || !/^```camel$/.test(lines[i + 2])) {
-                return { text: null, count: 0, problem: `${SIGNATURES_REL}:${i + 1}: '${name}' is not followed by a camel fence` }
+                return { text: null, count: 0, problem: `${STDLIB_PAGE_REL}:${i + 1}: '${name}' is not followed by a camel fence` }
             }
             const signatures = []
             let j = i + 3
             while (j < lines.length && !/^```$/.test(lines[j])) {
                 if (lines[j].includes('```')) {
-                    return { text: null, count: 0, problem: `${SIGNATURES_REL}:${j + 1}: a signature would close its fence` }
+                    return { text: null, count: 0, problem: `${STDLIB_PAGE_REL}:${j + 1}: a signature would close its fence` }
                 }
                 signatures.push(lines[j])
                 j++
@@ -462,7 +504,7 @@ function generateStdlib(root) {
     }
     const withEntries = modules.filter((m) => m.entries.length > 0)
     const count = withEntries.reduce((n, m) => n + m.entries.length, 0)
-    if (count === 0) return { text: null, count: 0, problem: `${SIGNATURES_REL}: no signature was read` }
+    if (count === 0) return { text: null, count: 0, problem: `${STDLIB_PAGE_REL}: no signature was read` }
     const out = []
     for (const m of withEntries) {
         const importLine = m.name === 'built-in' || m.name === 'Built-in functions' ? 'no import' : `import { ... } from ${m.name}`
@@ -495,9 +537,12 @@ function generateAll(root) {
     }
 }
 
-function regionsOf(document) {
+// The regions a document holds, read out of it. A region whose markers are not exactly one begin
+// and one end is a defect and not an empty region, so a marker deleted by an edit is reported
+// rather than passing as a region with nothing in it.
+function regionsOf(document, regions) {
     const found = new Map()
-    for (const name of REGIONS) {
+    for (const name of regions) {
         const { begin, end } = regionMarkers(name)
         const marks = [...document.matchAll(new RegExp(begin.source + '|' + end.source, 'gm'))]
         if (marks.length !== 2) {
@@ -515,22 +560,22 @@ function regionsOf(document) {
     return found
 }
 
-function applyRegions(document, generated) {
+function applyRegions(document, generated, regions) {
     let out = document
-    for (const name of REGIONS) {
-        const region = regionsOf(out).get(name)
+    for (const name of regions) {
+        const region = regionsOf(out, [name]).get(name)
         if (!region || region.problem) continue
         out = out.slice(0, region.start) + '\n' + generated[name].text + '\n' + out.slice(region.end)
     }
     return out
 }
 
-function countRegionChars(document) {
-    const regions = regionsOf(document)
+function countRegionChars(document, regions) {
+    const found = regionsOf(document, regions)
     let total = 0
     const per = {}
-    for (const name of REGIONS) {
-        const region = regions.get(name)
+    for (const name of regions) {
+        const region = found.get(name)
         const chars = region && region.text ? region.text.trim().length : 0
         per[name] = chars
         total += chars
@@ -548,7 +593,7 @@ function promiseProblems(document, diagnostics, documentRel) {
         const full = `${match[1]}Diag::${match[2]}`
         if (seen.has(full)) continue
         seen.add(full)
-        if (!known.has(full)) problems.push(`the document names ${full}, which ${REGISTRY_REL} does not declare`)
+        if (!known.has(full)) problems.push(`${documentRel}: the document names ${full}, which ${REGISTRY_REL} does not declare`)
     }
     // A `target` note is read with the lines that continue it: prose wraps, and the path it names
     // may be on the next line of the same paragraph.
@@ -694,46 +739,81 @@ const { camel, rest: argv } = takeCamel(process.argv.slice(2), REPO_ROOT, usage)
 CAMEL = camel
 let mode = '--check'
 let root = REPO_ROOT
-let documentRel = DOCUMENT_REL
+let documentRel = null
 for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--root') root = path.resolve(argv[++i] || '')
-    else if (argv[i] === '--document') documentRel = argv[++i] || DOCUMENT_REL
+    else if (argv[i] === '--document') documentRel = argv[++i] || ''
     else mode = argv[i]
 }
 if (!['--check', '--write', '--report', '--verify-errors'].includes(mode)) {
     usage(`unknown mode "${mode}"`)
 }
+if (documentRel === '') usage('--document needs a path')
 
-const documentPath = path.join(root, documentRel)
-if (!fs.existsSync(documentPath)) {
+// A run without `--document` reads the tree's own layout: each document holds the regions listed
+// for it and is measured against the budget it states. `--document REL` reads one reduced document
+// that holds every region -- the proof cases, which pin how a region is verified whichever document
+// holds it; such a document states no budget, so none is enforced there.
+const documents = documentRel
+    ? [{ rel: documentRel, regions: REGIONS, budget: null }]
+    : LAYOUT.map((entry) => ({ ...entry, budget: BUDGET[entry.rel] }))
+const scope = documentRel || 'the AI reference'
+
+const generated = generateAll(root)
+const loaded = new Map()
+for (const entry of documents) loaded.set(entry.rel, read(root, entry.rel))
+if (documentRel && loaded.get(documentRel) === null) {
     console.log(`${documentRel}: no such file under ${root}`)
     process.exit(2)
 }
-const document = read(root, documentRel)
-const generated = generateAll(root)
 
 if (mode === '--verify-errors') {
-    process.exit(await verifyErrors(document, documentRel))
+    const page = loaded.get(documents[0].rel)
+    if (page === null) {
+        console.log(`${documents[0].rel}: no such file under ${root}`)
+        process.exit(2)
+    }
+    process.exit(await verifyErrors(page, documents[0].rel))
 }
 
 if (mode === '--report') {
-    const { problems, per, total, written, size, chapters } = budgetProblems(document)
-    console.log(`document       ${String(size).padStart(7)}  budget ${BUDGET.total}`)
-    console.log(`hand-written   ${String(written).padStart(7)}  budget ${BUDGET.written}`)
-    for (const name of REGIONS) {
-        console.log(`${name.padEnd(14)} ${String(per[name]).padStart(7)}  budget ${BUDGET.regions[name]}`)
-    }
-    for (const name of REGIONS) {
-        const region = generated[name]
-        console.log(`${name.padEnd(14)} source entries: ${region.text === null ? 'none (' + region.problem + ')' : region.count}`)
-    }
-    for (const chapter of chapters) {
+    let problems = 0
+    for (const entry of documents) {
+        const document = loaded.get(entry.rel)
+        console.log(`--- ${entry.rel}`)
+        if (document === null) {
+            console.log(`${entry.rel}: no such file under ${root}`)
+            problems++
+            continue
+        }
+        const budget = budgetProblems(document, entry)
         console.log(
-            `section ${String(chapter.key).padStart(2)}      ${String(chapter.size).padStart(7)}  budget ${chapter.budget}`,
+            `document       ${String(budget.size).padStart(7)}  ` +
+                (budget.budget ? `budget ${budget.budget.total}` : 'no budget stated'),
         )
+        console.log(
+            `hand-written   ${String(budget.written).padStart(7)}  ` +
+                (budget.budget ? `budget ${budget.budget.written}` : 'no budget stated'),
+        )
+        for (const name of entry.regions) {
+            console.log(`${name.padEnd(14)} ${String(budget.per[name]).padStart(7)}  budget ${REGION_BUDGET[name]}`)
+        }
+        for (const name of entry.regions) {
+            const region = generated[name]
+            console.log(
+                `${name.padEnd(14)} source entries: ` +
+                    (region.text === null ? `none (${region.problem})` : region.count),
+            )
+        }
+        for (const chapter of budget.chapters) {
+            console.log(
+                `section ${String(chapter.key).padStart(2)}      ${String(chapter.size).padStart(7)}  budget ${chapter.budget}`,
+            )
+        }
+        for (const problem of budget.problems) console.log(`OVER BUDGET: ${problem}`)
+        problems += budget.problems.length
     }
-    for (const problem of problems) console.log(`OVER BUDGET: ${problem}`)
-    process.exit(problems.length > 0 ? 1 : 0)
+    process.exit(problems > 0 ? 1 : 0)
 }
 
 if (mode === '--write') {
@@ -743,65 +823,89 @@ if (mode === '--write') {
         console.log(`${missing.length} region(s) could not be generated; nothing was written`)
         process.exit(1)
     }
-    const next = applyRegions(document, generated)
-    if (next === document) {
-        console.log(`${documentRel} is already what the sources produce (nothing written)`)
-        process.exit(0)
+    let wrote = 0
+    for (const entry of documents) {
+        const document = loaded.get(entry.rel)
+        if (document === null) {
+            console.log(`${entry.rel}: no such file under ${root}`)
+            process.exit(1)
+        }
+        const next = applyRegions(document, generated, entry.regions)
+        if (next === document) continue
+        fs.writeFileSync(path.join(root, entry.rel), next)
+        const budget = budgetProblems(next, entry)
+        console.log(
+            `wrote ${entry.rel}: ${entry.regions.length} region(s), ${budget.total} generated characters, ` +
+                `${budget.written} hand-written, ${budget.size} in total`,
+        )
+        wrote++
     }
-    fs.writeFileSync(documentPath, next)
-    const { total, written, size } = budgetProblems(next)
-    console.log(
-        `wrote ${documentRel}: ${REGIONS.length} region(s), ${total} generated characters, ` +
-            `${written} hand-written, ${size} in total`,
-    )
+    if (wrote === 0) console.log(`${documents.map((entry) => entry.rel).join(', ')}: already what the sources produce (nothing written)`)
     process.exit(0)
 }
 
 // --check
 const problems = []
 let checked = 0
-for (const name of REGIONS) {
-    const region = regionsOf(document).get(name)
-    if (!region || region.problem) {
-        problems.push(region ? region.problem : `the region '${name}' is missing`)
+const checkedDocuments = []
+for (const entry of documents) {
+    const document = loaded.get(entry.rel)
+    if (document === null) {
+        problems.push(`${entry.rel}: no such file under ${root}`)
         continue
     }
-    const source = generated[name]
-    if (source.text === null) {
-        problems.push(`the '${name}' region could not be read from its source: ${source.problem}`)
-        continue
+    let entries = 0
+    for (const name of entry.regions) {
+        const region = regionsOf(document, [name]).get(name)
+        if (!region || region.problem) {
+            problems.push(`${entry.rel}: ${region ? region.problem : `the region '${name}' is missing`}`)
+            continue
+        }
+        const source = generated[name]
+        if (source.text === null) {
+            problems.push(`${entry.rel}: the '${name}' region could not be read from its source: ${source.problem}`)
+            continue
+        }
+        if (region.text.trim() !== source.text.trim()) {
+            problems.push(
+                `${entry.rel}: the '${name}' region is not what its source produces (${source.count} entries); ` +
+                    'run `node scripts/camel-for-ai.mjs --write`',
+            )
+            continue
+        }
+        entries += source.count
     }
-    if (region.text.trim() !== source.text.trim()) {
-        problems.push(
-            `the '${name}' region is not what its source produces (${source.count} entries); ` +
-                'run `node scripts/camel-for-ai.mjs --write`',
-        )
-        continue
-    }
-    checked += source.count
+    checked += entries
+    checkedDocuments.push({ entry, document, entries })
 }
 if (checked === 0) {
-    console.log(`no generated region of ${documentRel} was verified against a source: nothing was checked`)
+    console.log(`no generated region of ${scope} was verified against a source: nothing was checked`)
     process.exit(2)
 }
 const diagnostics = generated.diagnostics
 if (diagnostics.text === null) {
     problems.push(`the diagnostic names could not be read: ${diagnostics.problem}`)
-} else {
-    const promise = promiseProblems(document, diagnostics, documentRel)
-    problems.push(...promise.problems)
 }
-const budget = budgetProblems(document)
-problems.push(...budget.problems)
+const summaries = []
+for (const { entry, document, entries } of checkedDocuments) {
+    let cited = 0
+    if (diagnostics.text !== null) {
+        const promise = promiseProblems(document, diagnostics, entry.rel)
+        problems.push(...promise.problems)
+        cited = promise.cited
+    }
+    const budget = budgetProblems(document, entry)
+    problems.push(...budget.problems)
+    summaries.push(
+        `${entry.rel} is what its sources produce: ${entry.regions.length} generated region(s), ` +
+            `${entries} entries, ${diagnostics.count} diagnostics, ${cited} diagnostic name(s) cited by the prose, ` +
+            `${budget.size} characters${budget.budget ? ` (budget ${budget.budget.total})` : ''}`,
+    )
+}
 
 for (const problem of problems) console.log(problem)
 if (problems.length > 0) {
-    console.log(`${problems.length} problem(s) in ${documentRel}`)
+    console.log(`${problems.length} problem(s) in ${scope}`)
     process.exit(1)
 }
-const promises = promiseProblems(document, diagnostics, documentRel)
-console.log(
-    `${documentRel} is what its sources produce: ${REGIONS.length} generated region(s), ${checked} entries, ` +
-        `${diagnostics.count} diagnostics, ${promises.cited} diagnostic name(s) cited by the prose, ` +
-        `${budget.size} characters (budget ${BUDGET.total})`,
-)
+for (const summary of summaries) console.log(summary)

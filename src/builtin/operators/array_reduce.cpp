@@ -22,8 +22,8 @@
  * header.
  *
  * One executor per element type, and one body-less declaration per element type in
- * stdlib/array.cml: `#op<'array:sum_i'>` on the declaration whose `when` admits `i32` alone,
- * `#op<'array:sum_d'>` on the one whose `when` admits `float` alone, and so on for every element
+ * stdlib/array.cml: `#op('array:sum_i')` on the declaration whose `when` admits `i32` alone,
+ * `#op('array:sum_d')` on the one whose `when` admits `float` alone, and so on for every element
  * type the module's reductions are declared for (six numeric types for `sum`; those and `bool` and
  * `string` for `min` and `max`). The element type is therefore known where the executor is chosen:
  * the compiler asks each declaration's own `when` about the instance's element type

@@ -10,7 +10,7 @@ type Size = { w: float, h: float }
 
 /// The name of the first field of S.
 func first_field::<S>(): string {
-    return ( static for (n, _) in fields S => n ).[0]
+    return ( static for n, _ in fields S => n ).[0]
 }
 
 /// The first field of a value of S, read with the folded name.

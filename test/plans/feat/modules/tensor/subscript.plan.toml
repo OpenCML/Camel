@@ -188,3 +188,16 @@ expect_exit = 0
 expect_stdout_exact = "ran\n[3]\n9.0\n[4]\n[3]\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
+
+[[tests]]
+name = "slice_step_zero"
+desc = "The constant 0 step is refused where it is written (the ruling of 2026-10-25: any non-zero step is accepted, and only the constant 0 is refused): 0 names no position, so the subscript that writes it is a compile-time error and the program after it does not run."
+kind = "negative"
+case = "../../../../cases/modules/tensor/subscript/slice_step_zero.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
+expect_output_contains = ["a slice step must not be 0"]
+expect_output_not_contains = ["not reached"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000

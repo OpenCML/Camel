@@ -1422,8 +1422,11 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                             -> optional<Type *> {
                             // By content (design principles 4.2): both sides of one type,
                             // an array, a tuple or a struct, every part of which is itself
-                            // comparable (no function value, no tensor). Anything else has no
-                            // overload, which is a located compile-time error.
+                            // comparable (no function value), and a numeric array whose element
+                            // type its values carry (a tensor), which the module that declares
+                            // it registers as comparable. A primitive has its own entry above,
+                            // so it is not this one's business; anything else has no overload,
+                            // which is a located compile-time error.
                             const TypeCode code  = norm[0]->code();
                             const bool composite = code == TypeCode::Array ||
                                                    code == TypeCode::Struct ||
@@ -1431,7 +1434,8 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                                                     !tt::as_ptr<TupleType>(norm[0])->isCell() &&
                                                     !tt::as_ptr<TupleType>(norm[0])->isTagged());
                             // An enum compares by its variant and then its fields.
-                            const bool comparable = composite || asEnumType(norm[0]) != nullptr;
+                            const bool comparable = composite || asEnumType(norm[0]) != nullptr ||
+                                                    isRegisteredContentComparableType(code);
                             if (!comparable || !norm[0]->equals(norm[1]) ||
                                 !isContentComparable(norm[0])) {
                                 return nullopt;
@@ -1509,8 +1513,11 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                             -> optional<Type *> {
                             // By content (design principles 4.2): both sides of one type,
                             // an array, a tuple or a struct, every part of which is itself
-                            // comparable (no function value, no tensor). Anything else has no
-                            // overload, which is a located compile-time error.
+                            // comparable (no function value), and a numeric array whose element
+                            // type its values carry (a tensor), which the module that declares
+                            // it registers as comparable. A primitive has its own entry above,
+                            // so it is not this one's business; anything else has no overload,
+                            // which is a located compile-time error.
                             const TypeCode code  = norm[0]->code();
                             const bool composite = code == TypeCode::Array ||
                                                    code == TypeCode::Struct ||
@@ -1518,7 +1525,8 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                                                     !tt::as_ptr<TupleType>(norm[0])->isCell() &&
                                                     !tt::as_ptr<TupleType>(norm[0])->isTagged());
                             // An enum compares by its variant and then its fields.
-                            const bool comparable = composite || asEnumType(norm[0]) != nullptr;
+                            const bool comparable = composite || asEnumType(norm[0]) != nullptr ||
+                                                    isRegisteredContentComparableType(code);
                             if (!comparable || !norm[0]->equals(norm[1]) ||
                                 !isContentComparable(norm[0])) {
                                 return nullopt;
@@ -1528,8 +1536,11 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                 },
                 CAMEL_HALF_COMPARE("ne"),
             }),
-        // `===` and `!==` are not supported for now (design principles 4.2): the front end
-        // refuses them, so there is no operator behind them.
+        // `===` and `!==` are the elementwise comparison (design principles 4.2), so they are
+        // not here: their groups are `__strict_eq__` and `__strict_neq__`, built from the scalar
+        // entries of these two where this module exports its groups, and the tensor module adds
+        // the array entry to them. `==` and `!=` do not name them: the whole comparison is the
+        // reduction of the elementwise one, and a program gets it from this group alone.
         // <、<=、>、>=
         OperatorGroup::create(
             "__lt__",
@@ -2016,7 +2027,13 @@ std::make_shared<StaticCheckedResolver>(
                 {
                     ":op/idx_take",
                     // `t[idx]` with an int array takes the rows the indices name, in that
-                    // order (design principles 5.4; `take` in its function form).
+                    // order, along the first dimension -- for a rank-1 array the row is the
+                    // element (design principles 5.4; the `take` its function form names).
+                    // The result's shape is `[len(idx)] + shape(t)[1:]`: the length the index
+                    // array's own type states (`int[3]` names three rows, `int[]` a length
+                    // nobody fixed), then every dimension of the array but the first. A type
+                    // whose rank is open (`f32[..]`) fixes neither, so the rows taken are rows
+                    // again and the result is that same open-rank array.
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {2, {false, false}}},
                         "(arr: T[], indices: int[]) => T[]",
@@ -2025,28 +2042,23 @@ std::make_shared<StaticCheckedResolver>(
                             if (norm[0]->code() != TypeCode::Array ||
                                 norm[1]->code() != TypeCode::Array)
                                 return nullopt;
-                            const auto &indices = tt::as_ptr<ArrayType>(norm[1]);
+                            auto *const arr           = tt::as_ptr<ArrayType>(norm[0]);
+                            const auto *const indices = tt::as_ptr<ArrayType>(norm[1]);
                             if (indices->elemType()->code() != TypeCode::Int64)
                                 return nullopt;
-                            // This operator takes the element at each index, one slot
-                            // each, which is a rank-1 array's take. A numeric array is a
-                            // tensor, and a tensor of another rank -- or of open rank
-                            // (`Tensor<f64>` is `float[..]`, its runtime value deciding the
-                            // rank) -- is taken along its first dimension, rows at a time:
-                            // that is the tensor module's `tensor:idx_take`, which reads
-                            // the result's shape from the indices and carries `take`'s
-                            // adjoint. Declining those keeps the element take for the
-                            // arrays no module operator serves -- `int[]`, `float[]`, an
-                            // array of records -- and stops this operator from treating the
-                            // rows of a rank-2 tensor's first dimension as its slots.
-                            const auto &arr = tt::as_ptr<ArrayType>(norm[0]);
-                            const bool rowTake =
-                                isNumericArrayType(norm[0]) &&
-                                (arr->anyRank() || arr->rank() != 1);
-                            if (rowTake) {
+                            // The indices are a list of positions: a rank-1 array, or one whose
+                            // rank the type leaves open.
+                            if (!indices->anyRank() && indices->rank() != 1)
                                 return nullopt;
-                            }
-                            return norm[0];
+                            if (arr->anyRank())
+                                return norm[0];
+                            std::vector<ExtentForm> extents;
+                            extents.push_back(indices->rank() == 1
+                                                  ? indices->extents().front()
+                                                  : ExtentForm::unknown());
+                            const auto stated = arr->extents();
+                            extents.insert(extents.end(), stated.begin() + 1, stated.end());
+                            return ArrayType::create(arr->elemType(), extents);
                         }),
                 },
                 {
@@ -2843,6 +2855,29 @@ GlobalsBuiltinModule::GlobalsBuiltinModule(context_ptr_t ctx) : BuiltinModule(""
     }
     for (const auto &group : collectionGroups) {
         exportEntity(group->name(), group);
+    }
+    // `===` and `!==` (design principles 4.2): on a scalar they are `==` and `!=`, and on an
+    // array the tensor module exports an elementwise entry of its own into these groups. The
+    // scalar entries are taken from the groups that compare as a whole rather than written a
+    // second time, so a scalar type in one is in both; what is left out is the one entry that
+    // compares a composite as a whole, which is `==`'s alone.
+    for (const auto &[strict, whole] :
+         {std::pair<const char *, const char *>{"__strict_eq__", "__eq__"},
+          std::pair<const char *, const char *>{"__strict_neq__", "__neq__"}}) {
+        const auto &groups = getGlobalOperatorGroups();
+        const auto from    = std::find_if(groups.begin(), groups.end(), [&](const auto &group) {
+            return group->name() == whole;
+        });
+        std::vector<std::pair<std::string, resolver_ptr_t>> resolvers;
+        for (const auto &[uri, resolver] : (*from)->resolvers()) {
+            // A scalar entry has one fixed signature; the entry that compares a composite as a
+            // whole resolves per type and is not one of them.
+            if (resolver->fixedSignature() != nullptr) {
+                resolvers.push_back({uri, resolver});
+            }
+        }
+        exportEntity(
+            std::string(strict), OperatorGroup::create(std::string(strict), std::move(resolvers)));
     }
     // The operators over T? and T! (design principles 3.8).
     for (const auto &group : getTaggedOperatorGroups()) {

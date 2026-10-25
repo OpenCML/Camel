@@ -1,0 +1,14 @@
+// `==` compares two values by what they hold, not by where they are.
+// Run: camel docs/tutorial/examples/06_equality.cml
+
+type Point = { x: int, y: int }
+
+func main(): int sync {
+    let a: Point = { x: 3, y: 4 }
+    let b: Point = { x: 3, y: 4 }
+    println(a == b)
+    println((1, 'one') == (1, 'one'))
+    println([1, 2] == [1, 2])
+    println('ab' == 'ab')
+    return 0
+}

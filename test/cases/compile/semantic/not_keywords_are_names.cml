@@ -1,0 +1,22 @@
+/**
+ * `is`, `of`, `keyof`, `try`, `catch` and `finally` are not part of the language and are not
+ * keywords any more: they are ordinary names, as `raise` already was (design principles 3.9;
+ * handover 5.00 "语法层收口" item 5). A program may bind them, and a construct written with one
+ * is an ordinary syntax error rather than a dedicated diagnostic.
+ */
+module not_keywords_are_names
+
+func try(x: int): int {
+    return x + 1
+}
+
+func main(): int sync {
+    let catch = 2
+    let finally = 3
+    let is = 4
+    let of = 5
+    let keyof = 6
+    let total = try(1) + catch + finally + is + of + keyof
+    println(total)
+    return 0
+}

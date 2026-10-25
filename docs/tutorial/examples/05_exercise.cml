@@ -1,0 +1,9 @@
+// The answer to the exercise of chapter 5: a `loop` that adds the squares of the even numbers.
+// Run: camel docs/tutorial/examples/05_exercise.cml
+module exercise
+
+func main(): int sync {
+    let total = loop acc = 0 for x in 1..11 do if x % 2 == 0 then acc + x * x else acc
+    println(total)
+    return 0
+}

@@ -7,7 +7,6 @@
 
 #include "module.h"
 
-#include "expand.h"
 #include "operators.h"
 
 #include "camel/core/context/context.h"
@@ -21,10 +20,11 @@ using namespace camel::core::module;
 namespace {
 
 /// The declaration tag of a custom derivative rule (design principles 6.2, 8):
-/// `tag vjp<rule: func> on func`. Its fact is the graph reference of the rule function; the GIR
-/// builder keeps that graph in the reference table of the function's graph
-/// (kGraphRefRule), and this module reads it while it builds a gradient. No pipeline pass reads
-/// it, so it names no reader: it is read by the operators of this module.
+/// `export tag vjp::<F>(rule: F) on func when is_function::<F>()`. Its fact is the graph
+/// reference of the rule function; the GIR builder keeps that graph in the reference table of
+/// the function's graph (kGraphRefRule), and this module reads it while it builds a gradient.
+/// No pipeline pass reads it, so it names no reader: it is read by the operators of this
+/// module.
 constexpr std::string_view kVjpTag = "autodiff::vjp";
 
 void declareVjpTag() {
@@ -34,7 +34,11 @@ void declareVjpTag() {
     decl.ident  = "vjp";
     decl.name   = std::string(kVjpTag);
     decl.on     = camel::core::tag::Func;
-    decl.params.push_back({"rule", "func"});
+    // The rule's signature is not fixed: the tag carries whatever function the rule name
+    // denotes, and this module's operators are what read it, in the shape they build.
+    decl.typeParams.push_back("F");
+    decl.when = "is_function::<F>()";
+    decl.params.push_back({"rule", "F"});
     camel::core::tag::declare(std::move(decl));
 }
 
@@ -66,9 +70,6 @@ bool AutodiffModule::load() {
     context_->registerExecutorFactory("autodiff", [ctx = context_]() -> executor_ptr_t {
         return std::make_shared<AutodiffExecutor>(ctx);
     });
-    // The pass that builds a gradient at compile time (docs/design/gpu/plan.cn.md 2.6); a module
-    // registers its passes when it is loaded, before any pass runs.
-    camel::autodiff::registerExpandPass();
     loaded_ = true;
     return true;
 }

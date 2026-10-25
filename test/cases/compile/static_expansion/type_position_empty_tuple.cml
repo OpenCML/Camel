@@ -21,13 +21,13 @@ func describeTuple(e: ()): string {
 
 /** A comprehension over the empty tuple type has no round: the result is the empty tuple. */
 func noElements(): () {
-    return ( static for (n, F) in fields () => 0 )
+    return ( static for n, F in fields () => 0 )
 }
 
 /** The statement form expands `fields ()` zero times. */
 func zeroFields(): int {
     var rounds = 0
-    static for (n, F) in fields () => {
+    static for n, F in fields () => {
         rounds = rounds + 1
     }
     return rounds

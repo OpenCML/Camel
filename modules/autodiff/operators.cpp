@@ -159,7 +159,7 @@ void registerOperatorMetadata() {
     // grad and with_grad differentiate the graph of the function value they receive: on a
     // back end that lowered loops in a private copy they are handed the program's own graph, so
     // they refuse a loop there as everywhere else (OperatorTraits::readsGraphs; op-semantics
-    // 11.4). A custom rule is a declaration tag (`#vjp<rule>`), not an operator of this module.
+    // 11.4). A custom rule is a declaration tag (`#vjp(rule)`), not an operator of this module.
     for (const char *name : {"autodiff:grad", "autodiff:with_grad"}) {
         camel::core::OperatorTable::instance().set(
             name, {.pure = false, .readsGraphs = true, .macro = true});

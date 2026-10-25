@@ -41,12 +41,12 @@ export PATH="$CAMEL_HOME/bin:$PATH"
 
 ```bash
 cd editors/vscode
-npm install
+npm ci
 npm run package
 code --install-extension camel-lang-0.1.0.vsix
 ```
 
-`npm run package` 对照词法文法检查语法文件、编译 TypeScript 源码，并写出 `camel-lang-<版本>.vsix`。不安装而试用扩展：执行 `npm install` 与 `npm run compile` 后在 VS Code 中打开 `editors/vscode`，按 F5。
+`npm ci` 严格按 `package-lock.json` 安装；决定取词结果的两个包（`vscode-textmate`、`vscode-oniguruma`）在 `package.json` 里另外钉成精确版本，任何一次安装都不会偏离已记录的基准作用域。`npm run package` 对照词法文法检查语法文件、编译 TypeScript 源码，并写出 `camel-lang-<版本>.vsix`。不安装而试用扩展：执行 `npm ci` 与 `npm run compile` 后在 VS Code 中打开 `editors/vscode`，按 F5。
 
 扩展按以下顺序查找 `camel-ls`：设置项 `camel.server.path`，然后是 `$CAMEL_HOME/bin`，最后是 `PATH`。`camel`（用于运行命令）以同样的方式查找，设置项为 `camel.path`。找不到 `camel-ls` 时，扩展会报告它查找过的位置并指向该设置项；语法高亮不依赖服务器。
 
@@ -287,7 +287,7 @@ node scripts/test.js test/plans/feat/tools/grammar.plan.toml
 ```
 
 - `grammar.tables` 与 `grammar.files` 不需要安装任何东西。当词法文法增删了关键字、语法文法增删了字面记号、或编译器增删了内建类型名而语法文件没有跟上时，前者会失败。
-- `grammar.scopes.*` 用 VS Code 自己使用的库对一组程序分词，并把每个记号的作用域与 `test/plans/feat/tools/golden/grammar/` 下的基准文件比较。在 `editors/vscode` 中执行 `npm install` 之前，这些测试会被**跳过**。
+- `grammar.scopes.*` 用 VS Code 自己使用的库对一组程序分词，并把每个记号的作用域与 `test/plans/feat/tools/golden/grammar/` 下的基准文件比较。在 `editors/vscode` 中执行 `npm ci` 之前，这些测试会被**跳过**：只有这个目录装好了依赖，闸门才会跑它们。基准文件记的是**用例文件的文本**，所以用例改了（新增一条语法、把一个关键字退役）而基准没重出时，这六条会红；`test/tools/run-tests.mjs --update-golden` 就是重出它们的命令。
 
 有意修改语法文件之后，先查看新的作用域，再记录它们：
 

@@ -32,14 +32,26 @@ class Formatter {
     enum class QuotePreference { Single, Double };
     enum class CommentPreference { Hash, Slash };
 
-    // bool compact = false;
-    // unsigned int threshold = 80;
     std::string indent          = "    ";
     std::string newline         = "\n";
     bool preferSemis            = false;
     QuotePreference quotePrefer = QuotePreference::Single;
 
     std::string currentIndent = "";
+
+    /// The wrap width of a declaration head (handover 5.00 "格式化器", the ruling of 2026-10-25):
+    /// past this many columns the clauses of the head move to lines of their own.
+    static constexpr size_t wrapWidth = 80;
+
+    /// Whether the parameters of the declaration head being written go one per line. The second
+    /// half of the wrap rule; a declaration sets it from the width of the head it is about to
+    /// write, so it is false everywhere else (a lambda's parameters, a call's arguments).
+    bool paramsOnePerLine = false;
+
+    /// A declaration measures its head with one visit and writes it with a second one, and the
+    /// comments of the source must land in the second: with this set no visitor writes a comment
+    /// and none is marked written, so the measuring visit leaves the token stream untouched.
+    bool measureOnly = false;
 
     /// A token as the formatter needs it. `channel` is 0 for a token of the program and 2, 3, 4
     /// for a `#` line, a `//` comment and a block comment; `line` is zero-based.
@@ -105,6 +117,9 @@ class Formatter {
         return index < writtenComments.size() && writtenComments[index];
     }
     void markCommentWritten(size_t index) {
+        if (measureOnly) {
+            return;
+        }
         if (index < writtenComments.size()) {
             writtenComments[index] = true;
         }
@@ -138,7 +153,7 @@ class Formatter {
 
     /// Writes one comment, once, and nothing else: the caller owns the line ends around it.
     void writeCommentText(std::string &result, size_t index) {
-        if (commentWritten(index) || tokens[index].channel <= 1) {
+        if (measureOnly || commentWritten(index) || tokens[index].channel <= 1) {
             return;
         }
         markCommentWritten(index);
@@ -188,7 +203,7 @@ class Formatter {
 
     /// The comments that stand between a declaration's front matter - the tags and the annotations
     /// it writes on lines of its own - and the token the declaration goes on with: a doc comment
-    /// written between `#impl<...>` and `func` stands inside the declaration, in no gap a list or a
+    /// written between `#impl(...)` and `func` stands inside the declaration, in no gap a list or a
     /// range looks at, and it is the declaration's own comment as much as one written above the
     /// tag. `commentsBefore` writes the comments above the first token (above the tag); this writes
     /// the ones after the element that ends at `afterToken`, where the reader put them. Nothing is
@@ -654,9 +669,25 @@ class Formatter {
 
     std::any visitFuncDecl(cst::FuncDecl context);
     std::any visitWhenClause(cst::WhenClause context);
+
+    /// The head of a declaration: the signature, then its clauses (`uses`/`pure`, `when`). A head
+    /// wider than `wrapWidth` puts every clause on a line of its own, indented one level; the
+    /// caller decides beforehand whether the parameters go one per line too, and sets
+    /// `paramsOnePerLine` for that. The body follows on the same line as the last clause, so the
+    /// opening brace of a `when` head stays at the end of its line (handover 5.00, 2026-10-25).
+    std::string joinDeclClauses(
+        const std::string &signature, const std::vector<std::string> &clauses);
+
+    /// Whether a head of `length` columns at the current indentation is past the wrap width.
+    bool headExceedsWidth(size_t length) const {
+        return currentIndent.size() + length > wrapWidth;
+    }
     std::any visitRuleDecl(cst::RuleDecl context);
-    std::any visitAnalysisDecl(cst::AnalysisDecl context);
-    std::any visitAnalysisClause(cst::AnalysisClause context);
+    std::any visitFactDecl(cst::FactDecl context);
+    std::any visitFactBody(cst::FactBody context);
+    std::any visitFactCase(cst::FactCase context);
+    std::any visitFactPattern(cst::FactPattern context);
+    std::any visitFactClause(cst::FactClause context);
     std::any visitRuleContext(cst::RuleContext context);
     std::any visitTypeParams(cst::TypeParams context);
     std::any visitRuleBody(cst::RuleBody context);
@@ -742,8 +773,6 @@ class Formatter {
 
     std::any visitTypeCasePattern(cst::TypeCasePattern context);
 
-    std::any visitCatchClause(cst::CatchClause context);
-
     std::any visitCtrlExpr(syn::Node context);
 
     std::any visitAssignExpr(cst::AssignExpr context);
@@ -790,8 +819,6 @@ class Formatter {
     std::any visitKeyUnionDiffType(cst::KeyUnionDiffType context);
 
     std::any visitKeyInterType(cst::KeyInterType context);
-
-    std::any visitTypeUnit(cst::TypeUnit context);
 
     std::any visitArrayType(cst::ArrayType context);
 

@@ -103,7 +103,7 @@ reusable external verifier. Full field constraints and examples live in
 | Script | Description |
 |------|------|
 | `npm run test` | Main developer set: the **fast** layer of `smoke` and `feat/**`, in parallel |
-| `npm run test:all` | Full suite: every plan under `test/plans/`, fast and slow |
+| `npm run test:all` | Full suite: every plan under `test/plans/`, every layer but `debug` |
 | `npm run release-gate` | Release evidence: fast layer + the runnable slow plans by file + the static checks |
 | `npm run precommit:staged` | Format/update only files already staged for the current commit |
 
@@ -111,7 +111,10 @@ reusable external verifier. Full field constraints and examples live in
 
 `npm run release-gate` (`scripts/release-gate.mjs`) owns the release evidence a release decision
 needs, because `npm run test` is only the fast layer: a directory target drops every `tier =
-"slow"` test, and `gpu/**` / `perf/**` are in no gate target at all.
+"slow"` and every `tier = "milestone"` test, and `gpu/**` / `perf/**` are in no gate target at all.
+The layers and the plans the policy holds back for a milestone live in `scripts/plan-inventory.mjs`,
+which this gate imports: a `milestone` plan file is selected by `--tier milestone` and by nothing
+this gate runs.
 
 It runs, in order:
 

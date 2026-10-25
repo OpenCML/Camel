@@ -364,3 +364,27 @@ expect_diagnostic_column = 5
 expect_output_contains = ["This value has type 'f32[4]', which is not the declared type 'f32[2, 2]'."]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
+
+[[tests]]
+name = "named_dimension_makes_no_instance"
+desc = "A named dimension is not part of what an instance is keyed by (design principles 5.4): a function whose parameter is written `f32[n]` is not a generic function, and the graph of a program that calls it -- at a depth only the run knows -- holds the declaration itself and no instance of it, declared `(xs: f32[n], k: int) => f32`. The name is written once in the signature, so the compiler warns and the program still runs."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/grow_named_dimension.cml"
+args = ["${case}", "std::jgir"]
+envs = ["CAMEL_GROW_DEPTH=2"]
+expect_exit = 0
+expect_stderr_contains = ["DimensionNameUsedOnce"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const doc = JSON.parse(input.normalized.stdout)
+const names = doc.graphs.map((g) => g.name)
+assert(names.length === 3, `expected three graphs, got ${names.join(', ')}`)
+for (const name of names) {
+  assert(['__root__', 'main', 'grow'].includes(name), `unexpected graph '${name}'`)
+}
+const grow = doc.graphs.find((g) => g.name === 'grow')
+assert(grow && grow.signature === '(xs: f32[n], k: int) => f32', `grow is declared '${grow && grow.signature}'`)
+}
+"""
+timeout_ms = 8000

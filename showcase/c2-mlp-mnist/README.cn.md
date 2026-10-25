@@ -185,7 +185,7 @@ python showcase\c2-mlp-mnist\baseline\train_torch.py `
 最终形态。本示例把 `with_grad(loss)` 绑定在循环外，循环内
 `let (value, gradient) = loss_with_grad<m>(x, y)`。
 
-小规模配置已进计划 `test/plans/perf/showcase_c2.plan.toml`（`tier = "slow"`）：它用合成替身
+小规模配置已进计划 `test/plans/perf/showcase_c2.plan.toml`（`tier = "milestone"`）：它用合成替身
 跑 200 步、跑两边、检查上面那组容差，几秒完成（记录的那次 3.3 秒）。H10 的 fast/slow 分层
 已经落地，默认的 `npm run test` 跳过 slow 层，`npm run test:all`（或 `--tier all`）会跑到它。
 

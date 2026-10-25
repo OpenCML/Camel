@@ -7,17 +7,17 @@
 module comprehensions
 
 func doubled(t: {a: int, b: int}): {a: int, b: int} {
-    return { static for (n, F) in fields {a: int, b: int} => t.[n] * 2 }
+    return { static for n, F in fields {a: int, b: int} => t.[n] * 2 }
 }
 
 func shifted(t: (int, int)): (int, int) {
-    return ( static for (n, F) in fields (int, int) => t.[n] + 1 )
+    return ( static for n, F in fields (int, int) => t.[n] + 1 )
 }
 
 /** The block of a round is an ordinary block: `F` is usable as a type and the last statement
  * is the field's value. */
 func incremented(t: {a: int, b: int}): {a: int, b: int} {
-    return { static for (n, F) in fields {a: int, b: int} => {
+    return { static for n, F in fields {a: int, b: int} => {
         let v: F = t.[n]
         v + 1
     } }
@@ -25,13 +25,13 @@ func incremented(t: {a: int, b: int}): {a: int, b: int} {
 
 /** An empty shape has no round: the value is the empty struct. */
 func noFields(): {} {
-    return { static for (n, F) in fields {} => 0 }
+    return { static for n, F in fields {} => 0 }
 }
 
 /** An empty tuple has no round either: the value is the empty tuple. `fields` is followed by a
  * type position, so `` there is the empty tuple type (rule 1). */
 func noElements(): () {
-    return ( static for (n, F) in fields () => 0 )
+    return ( static for n, F in fields () => 0 )
 }
 
 func describeEmpty(e: {}): string {

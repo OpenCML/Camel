@@ -1,6 +1,6 @@
 id = "perf.reduce_layout"
 order = 425
-tier = "slow"
+tier = "milestone"
 tags = ["perf", "training", "reduction", "layout"]
 
 # The measured half of the plan. The 2026-10-25 rule on the eight perf plans that no layer

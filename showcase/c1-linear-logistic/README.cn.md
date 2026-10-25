@@ -110,7 +110,7 @@ python showcase/c1-linear-logistic/compare.py --profile standard   # 写 RESULTS
 
 ## 测试
 
-`test/plans/perf/showcase_c1.plan.toml`（`tier = "slow"`）跑 `--profile small`：512 行数据、
+`test/plans/perf/showcase_c1.plan.toml`（`tier = "milestone"`）跑 `--profile small`：512 行数据、
 200 步、batch 32，全流程约 5 秒（含两次 PyTorch 导入）。任一数值界限被越过时计划失败。
 
 ## 不提交的东西

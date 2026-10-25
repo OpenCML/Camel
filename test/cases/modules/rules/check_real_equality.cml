@@ -28,19 +28,19 @@ import { check } from rewrite
 
 /// `x*48 + x*(-47)` and `x*1` are two roundings of one real number: at the sample the check draws
 /// (`x = 1e+30`) the element-type results are `1.0000041e+30` and `1e+30`.
-#requires<reassociate, no_infs, no_signed_zeros>
+#requires(reassociate, no_infs, no_signed_zeros)
 rule real_cancel(x: f32) { x * 48.0 + x * (-47.0) => x * 1.0 }
 
 /// The same law with no grant for the infinities: at `x = 1e+30` the left side's two products
 /// overflow (`inf + -inf` is a NaN) where the right side is a zero.
-#requires<reassociate, no_signed_zeros>
+#requires(reassociate, no_signed_zeros)
 rule overflow_to_nan(x: f32) { x * 1e30 + x * (-1e30) => x * 0.0 }
 
 /// Two zeros of different sign.
-#requires<reassociate>
+#requires(reassociate)
 rule zero_sign(x: f32) { x * -0.0 => x * 0.0 }
 
-#requires<reassociate, no_signed_zeros>
+#requires(reassociate, no_signed_zeros)
 rule zero_sign_licensed(x: f32) { x * -0.0 => x * 0.0 }
 
 func main(): int sync {

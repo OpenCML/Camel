@@ -19,6 +19,7 @@
 #include "camel/core/module/module.h"
 #include "camel/core/operator_table.h"
 #include "camel/core/operator_traits.h"
+#include "camel/core/rtdata/equality.h"
 #include "camel/execute/entry_args.h"
 #include "camel/execute/executor.h"
 #include "camel/runtime/node_roles.h"
@@ -144,6 +145,11 @@ bool TensorModule::load() {
         return true;
     }();
     (void)refinerAdded;
+    // A tensor is a numeric array: `==` compares two of them by shape and by element, as it does
+    // for any array (design principles 4.2), and the core reaches that comparison through the
+    // array type itself -- a tensor's element type is written, so nothing has to be registered
+    // for it. The transition period's registration of the module's own tensor type went with
+    // `TensorType`, which the array spelling replaced.
     // A Tensor parameter of `main` given on the command line is a .npy file (the extension
     // may be left out, as in the layout nn.save_params writes). The tensor is checked against
     // the declared element type and shape, like `as`. A Tensor is a numeric array, so the

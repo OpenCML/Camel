@@ -31,7 +31,7 @@
 /// fold, merge or drop it.
 /// @effect reads the process-wide data-block counters
 /// @example std::mem::blocks().live    // 0 when no block is alive
-#op<':op/mem_blocks'>
+#op(':op/mem_blocks')
 export func std::mem::blocks(): { allocs: int, frees: int, live: int, bytes: int }
 
 // ---- conversions ----
@@ -43,114 +43,114 @@ export func std::mem::blocks(): { allocs: int, frees: int, live: int, bytes: int
 /// @pure
 /// @fails fault `InvalidNumberText` when x is a string that is not, as a whole, one integer (blanks and a trailing part included); fault `ConversionOutOfRange` when x is a string that is an integer beyond the range, or a float that is NaN, infinite or beyond the range; use parse_int to handle text in the program
 /// @example int(2.9)    // 2
-#op<':op/*tol'>
+#op(':op/*tol')
 export func int(x: i32): int
-#op<':op/*tol'>
+#op(':op/*tol')
 export func int(x: int): int
-#op<':op/*tol'>
+#op(':op/*tol')
 export func int(x: f32): int
-#op<':op/*tol'>
+#op(':op/*tol')
 export func int(x: float): int
-#op<':op/*tol'>
+#op(':op/*tol')
 export func int(x: string): int
-#op<':op/*tol'>
+#op(':op/*tol')
 export func int(x: bf16): int
-#op<':op/*tol'>
+#op(':op/*tol')
 export func int(x: f16): int
 
 /// The same as int.
 /// @pure
 /// @fails fault `InvalidNumberText` when x is a string that is not, as a whole, one integer; fault `ConversionOutOfRange` when x is a string that is an integer beyond the range, or an int or a float beyond the range of i32, or NaN
 /// @example i64('42')    // 42
-#op<':op/*tol'>
+#op(':op/*tol')
 export func i64(x: i32): int
-#op<':op/*tol'>
+#op(':op/*tol')
 export func i64(x: int): int
-#op<':op/*tol'>
+#op(':op/*tol')
 export func i64(x: f32): int
-#op<':op/*tol'>
+#op(':op/*tol')
 export func i64(x: float): int
-#op<':op/*tol'>
+#op(':op/*tol')
 export func i64(x: string): int
-#op<':op/*tol'>
+#op(':op/*tol')
 export func i64(x: bf16): int
-#op<':op/*tol'>
+#op(':op/*tol')
 export func i64(x: f16): int
 
 /// x as a 32-bit integer.
 /// @pure
 /// @fails fault `InvalidNumberText` when x is a string that is not, as a whole, one integer; fault `ConversionOutOfRange` when x is a string that is an integer beyond the range, or an int or a float beyond the range of i32, or NaN
 /// @example i32(7)    // 7
-#op<':op/*toi'>
+#op(':op/*toi')
 export func i32(x: i32): i32
-#op<':op/*toi'>
+#op(':op/*toi')
 export func i32(x: int): i32
-#op<':op/*toi'>
+#op(':op/*toi')
 export func i32(x: f32): i32
-#op<':op/*toi'>
+#op(':op/*toi')
 export func i32(x: float): i32
-#op<':op/*toi'>
+#op(':op/*toi')
 export func i32(x: string): i32
-#op<':op/*toi'>
+#op(':op/*toi')
 export func i32(x: bf16): i32
-#op<':op/*toi'>
+#op(':op/*toi')
 export func i32(x: f16): i32
 
 /// x as a 64-bit float.
 /// @pure
 /// @fails fault `InvalidNumberText` when x is a string that is not, as a whole, one number; fault `ConversionOutOfRange` when x is a string that is a number beyond the range of float (overflow or underflow); use parse_float to handle that in the program
 /// @example float(3)    // 3
-#op<':op/*tod'>
+#op(':op/*tod')
 export func float(x: i32): float
-#op<':op/*tod'>
+#op(':op/*tod')
 export func float(x: int): float
-#op<':op/*tod'>
+#op(':op/*tod')
 export func float(x: f32): float
-#op<':op/*tod'>
+#op(':op/*tod')
 export func float(x: float): float
-#op<':op/*tod'>
+#op(':op/*tod')
 export func float(x: string): float
-#op<':op/*tod'>
+#op(':op/*tod')
 export func float(x: bf16): float
-#op<':op/*tod'>
+#op(':op/*tod')
 export func float(x: f16): float
 
 /// The same as float.
 /// @pure
 /// @fails fault `InvalidNumberText` when x is a string that is not a number; fault `ConversionOutOfRange` when x is a string that is a number beyond the range of float (overflow or underflow)
 /// @example f64('2.5')    // 2.5
-#op<':op/*tod'>
+#op(':op/*tod')
 export func f64(x: i32): float
-#op<':op/*tod'>
+#op(':op/*tod')
 export func f64(x: int): float
-#op<':op/*tod'>
+#op(':op/*tod')
 export func f64(x: f32): float
-#op<':op/*tod'>
+#op(':op/*tod')
 export func f64(x: float): float
-#op<':op/*tod'>
+#op(':op/*tod')
 export func f64(x: string): float
-#op<':op/*tod'>
+#op(':op/*tod')
 export func f64(x: bf16): float
-#op<':op/*tod'>
+#op(':op/*tod')
 export func f64(x: f16): float
 
 /// x as a 32-bit float.
 /// @pure
 /// @fails fault `InvalidNumberText` when x is a string that is not a number; fault `ConversionOutOfRange` when x is a string that is a number beyond the range of f32 (overflow or underflow)
 /// @example f32(0.5)    // 0.5
-#op<':op/*tof'>
+#op(':op/*tof')
 export func f32(x: i32): f32
-#op<':op/*tof'>
+#op(':op/*tof')
 export func f32(x: int): f32
-#op<':op/*tof'>
+#op(':op/*tof')
 export func f32(x: f32): f32
-#op<':op/*tof'>
+#op(':op/*tof')
 export func f32(x: float): f32
-#op<':op/*tof'>
+#op(':op/*tof')
 export func f32(x: string): f32
-#op<':op/*tof'>
+#op(':op/*tof')
 export func f32(x: bf16): f32
-#op<':op/*tof'>
+#op(':op/*tof')
 export func f32(x: f16): f32
 
 /// x as a bf16: the nearest bf16 of x, rounding to nearest with ties to even, once. A bf16 is a
@@ -159,17 +159,17 @@ export func f32(x: f16): f32
 /// @pure
 /// @fails fault `InvalidNumberText` when x is a string that is not a number; fault `ConversionOutOfRange` when x is a string that is a number beyond the range of bf16 (overflow or underflow)
 /// @example bf16(0.5)    // 0.5
-#op<':op/*tobf'>
+#op(':op/*tobf')
 export func bf16(x: i32): bf16
-#op<':op/*tobf'>
+#op(':op/*tobf')
 export func bf16(x: int): bf16
-#op<':op/*tobf'>
+#op(':op/*tobf')
 export func bf16(x: f32): bf16
-#op<':op/*tobf'>
+#op(':op/*tobf')
 export func bf16(x: float): bf16
-#op<':op/*tobf'>
+#op(':op/*tobf')
 export func bf16(x: bf16): bf16
-#op<':op/*tobf'>
+#op(':op/*tobf')
 export func bf16(x: string): bf16
 
 /// x as an f16: the nearest f16 of x, rounding to nearest with ties to even, once. The same
@@ -177,78 +177,78 @@ export func bf16(x: string): bf16
 /// @pure
 /// @fails fault `InvalidNumberText` when x is a string that is not a number; fault `ConversionOutOfRange` when x is a string that is a number beyond the range of f16 (overflow or underflow)
 /// @example f16(0.5)    // 0.5
-#op<':op/*tof6'>
+#op(':op/*tof6')
 export func f16(x: i32): f16
-#op<':op/*tof6'>
+#op(':op/*tof6')
 export func f16(x: int): f16
-#op<':op/*tof6'>
+#op(':op/*tof6')
 export func f16(x: f32): f16
-#op<':op/*tof6'>
+#op(':op/*tof6')
 export func f16(x: float): f16
-#op<':op/*tof6'>
+#op(':op/*tof6')
 export func f16(x: f16): f16
-#op<':op/*tof6'>
+#op(':op/*tof6')
 export func f16(x: string): f16
 
 /// x as a 64-bit complex number: the real part is x and the imaginary part is zero. A c128
 /// keeps both parts as they are.
 /// @pure
 /// @example c64(2)    // 2+0i
-#op<':op/*toc'>
+#op(':op/*toc')
 export func c64(x: i32): c64
-#op<':op/*toc'>
+#op(':op/*toc')
 export func c64(x: int): c64
-#op<':op/*toc'>
+#op(':op/*toc')
 export func c64(x: f32): c64
-#op<':op/*toc'>
+#op(':op/*toc')
 export func c64(x: float): c64
-#op<':op/*toc'>
+#op(':op/*toc')
 export func c64(x: c64): c64
-#op<':op/*toc'>
+#op(':op/*toc')
 export func c64(x: c128): c64
 
 /// x as a 128-bit complex number: the real part is x and the imaginary part is zero.
 /// @pure
 /// @example c128(2)    // 2+0i
-#op<':op/*toz'>
+#op(':op/*toz')
 export func c128(x: i32): c128
-#op<':op/*toz'>
+#op(':op/*toz')
 export func c128(x: int): c128
-#op<':op/*toz'>
+#op(':op/*toz')
 export func c128(x: f32): c128
-#op<':op/*toz'>
+#op(':op/*toz')
 export func c128(x: float): c128
-#op<':op/*toz'>
+#op(':op/*toz')
 export func c128(x: c64): c128
-#op<':op/*toz'>
+#op(':op/*toz')
 export func c128(x: c128): c128
 
 /// x as text, as println writes it. A float is written as the shortest text that reads back as
 /// the same number: string(2.5) is '2.5', string(2.0) is '2.0'.
 /// @pure
 /// @example string(42)    // '42'
-#op<':op/*tos'>
+#op(':op/*tos')
 export func string(x: T): string
 
 /// The integer a text spells, or an error value.
 /// @pure
 /// @fails error `ParseError` when the text is not, as a whole, one integer (blanks are not skipped)
 /// @example parse_int('42') !! 0    // 42
-#op<':op/parse_int'>
+#op(':op/parse_int')
 export func parse_int(text: string): int!
 
 /// The number a text spells, or an error value.
 /// @pure
 /// @fails error `ParseError` when the text is not a number
 /// @example parse_float('2.5') !! 0.0    // 2.5
-#op<':op/parse_float'>
+#op(':op/parse_float')
 export func parse_float(text: string): float!
 
 /// An Error value of the given kind with the given message; the compiler adds the source
 /// position of the call. `throw error(...)` returns it from a function declared `T!`.
 /// @pure
 /// @example throw error('RangeError', 'too large')
-#op<':op/error_new'>
+#op(':op/error_new')
 export func error(kind: string, message: string): Error
 
 // ---- input and output ----
@@ -259,7 +259,7 @@ export func error(kind: string, message: string): Error
 /// also without a line end.
 /// @effect writes to standard output
 /// @example print('a', 1)    // a 1
-#op<':io/print'>
+#op(':io/print')
 export func print(x: T, ...rest: U...): T
 
 /// Writes the arguments, separated by spaces, and a line end, and gives back the first one (so
@@ -268,7 +268,7 @@ export func print(x: T, ...rest: U...): T
 /// one line end.
 /// @effect writes to standard output
 /// @example println('a', 1)    // a 1
-#op<':io/println'>
+#op(':io/println')
 export func println(x: T, ...rest: U...): T
 
 /// Writes the arguments, separated by spaces, and a line end, to standard error, and gives back
@@ -277,26 +277,26 @@ export func println(x: T, ...rest: U...): T
 /// arguments put in and one line end.
 /// @effect writes to standard error
 /// @example eprintln('a', 1)    // a 1
-#op<':io/eprintln'>
+#op(':io/eprintln')
 export func eprintln(x: T, ...rest: U...): T
 
 /// Writes prompt and reads one line from standard input.
 /// @effect reads standard input
 /// @example input('name: ')    // what the user typed
-#op<':io/input'>
+#op(':io/input')
 export func input(prompt: string): string
 
 /// Suspends the program for the given number of milliseconds.
 /// @effect waits
 /// @fails fault `InvalidArgument` when the duration is negative
 /// @example sleep(100)
-#op<'process:sleep'>
+#op('process:sleep')
 export func sleep(milliseconds: int): void
 
 /// Ends the program with the given exit code, after writing buffered output.
 /// @effect ends the program
 /// @example exit(2)
-#op<'process:exit'>
+#op('process:exit')
 export func exit(code: int): void
 
 // ---- strings ----
@@ -315,23 +315,23 @@ export func exit(code: int): void
 /// @pure
 /// @fails fault `FormatFailed` when the placeholders and the arguments do not fit
 /// @example '{} is {:.2f}'->format<'x', 2.5>    // 'x is 2.50'
-#op<':str/format'>
+#op(':str/format')
 with <...args: T...>
 export func format(fmt: string): string
 
 /// The strings of xs joined with sep between them.
 /// @pure
 /// @example ['a', 'b']->join<', '>    // 'a, b'
-#op<':str/join'>
+#op(':str/join')
 with <sep: string>
 export func join(xs: string[]): string
 
 /// The number of bytes of a string, or of the first dimension of an array of any rank.
 /// @pure
 /// @example len('h€')    // 4
-#op<':struct/len_*'>
+#op(':struct/len_*')
 export func len(x: string): int
-#op<':struct/len_*'>
+#op(':struct/len_*')
 export func len(x: T[..]): int
 
 // ---- arrays ----
@@ -347,14 +347,14 @@ export func len(x: T[..]): int
 /// @example range(0, 10, 3)     // [0, 3, 6, 9]
 /// @example range(10, 0, -3)    // [10, 7, 4, 1]
 /// @example-fragment the interval is written `a..b`; the stepped form is `range(a, b, step)`
-#op<':struct/range'>
+#op(':struct/range')
 export func range(start: int, end: int, step?: int): int[]
 
 /// The first element. An empty array has none: check len first.
 /// @pure
 /// @fails fault `IndexOutOfRange` when the array is empty
 /// @example head([1, 2, 3])    // 1
-#op<':struct/head_arr'>
+#op(':struct/head_arr')
 export func head(xs: T[]): T
 
 /// The last element. An empty array has none: check len first. Negative indices are not
@@ -363,13 +363,13 @@ export func head(xs: T[]): T
 /// @pure
 /// @fails fault `IndexOutOfRange` when the array is empty
 /// @example last([1, 2, 3])    // 3
-#op<':struct/last_arr'>
+#op(':struct/last_arr')
 export func last(xs: T[]): T
 
 /// The elements after the first; empty for an array of fewer than two elements.
 /// @pure
 /// @example tail([1, 2, 3])    // [2, 3]
-#op<':struct/tail_arr'>
+#op(':struct/tail_arr')
 export func tail(xs: T[]): T[]
 
 /// The elements from index start up to, not including, end. Both are positions from 0 to the
@@ -377,7 +377,7 @@ export func tail(xs: T[]): T[]
 /// range is. `take` and `drop` of the module `array` cut to the array instead.
 /// @pure
 /// @example [1, 2, 3, 4]->slice<1, 3>    // [2, 3]
-#op<':struct/slice_arr'>
+#op(':struct/slice_arr')
 with <start: int, end: int>
 export func slice(xs: T[]): T[]
 
@@ -390,20 +390,20 @@ export func slice(xs: T[]): T[]
 /// written where it used to count from the end.
 /// @pure
 /// @example [1, 2, 3, 4]->slice(0, 1, 3)    // [2, 3]
-#op<':op/slice_sub'>
+#op(':op/slice_sub')
 export func slice(t: T[], axis: int, start: int, end: int, step: int = 1, written: int = 3): T[]
 
 /// The elements of xs followed by those of ys, as a new array.
 /// @pure
 /// @example concat([1], [2, 3])    // [1, 2, 3]
-#op<':struct/concat_arr'>
+#op(':struct/concat_arr')
 export func concat(xs: T[], ys: T[]): T[]
 
 /// Whether an element of xs equals value, by the `==` of the element type (by content for
 /// arrays, tuples and structs).
 /// @pure
 /// @example [1, 2, 3]->contains<2>    // true
-#op<':struct/contains_arr'>
+#op(':struct/contains_arr')
 with <value: T>
 export func contains(xs: T[]): bool
 
@@ -411,7 +411,7 @@ export func contains(xs: T[]): bool
 /// string.
 /// @pure
 /// @example 'hello'->contains<'ell'>    // true
-#op<':struct/contains_str'>
+#op(':struct/contains_str')
 with <sub: string>
 export func contains(s: string): bool
 
@@ -420,7 +420,7 @@ export func contains(s: string): bool
 /// @pure
 /// @fails fault `InvalidArgument` when the lengths differ
 /// @example zip([1, 2], ['a', 'b'])    // [(1, 'a'), (2, 'b')]
-#op<':struct/zip'>
+#op(':struct/zip')
 export func zip(xs: T[], ys: U[]): (T, U)[]
 
 /// A new array: the elements of xs, then value. xs is unchanged; to add to a variable, bind it
@@ -428,14 +428,14 @@ export func zip(xs: T[], ys: U[]): (T, U)[]
 /// when nothing else refers to it, which cannot be observed).
 /// @pure
 /// @example [1, 2, 3]->append<4>    // [1, 2, 3, 4]
-#op<':struct/append_arr'>
+#op(':struct/append_arr')
 with <value: T>
 export func append(xs: T[]): T[]
 
 /// A new array: the elements of xs, then those of other. xs is unchanged.
 /// @pure
 /// @example [1, 2, 3]->extend<[4, 5]>    // [1, 2, 3, 4, 5]
-#op<':struct/extend_arr'>
+#op(':struct/extend_arr')
 with <other: T[]>
 export func extend(xs: T[]): T[]
 
@@ -450,28 +450,28 @@ export func extend(xs: T[]): T[]
 /// f applied to every element; the calls have no order among them.
 /// @effect what f does
 /// @example [1, 2, 3]->map<(x: int) => x * 2>    // [2, 4, 6]
-#op<':mark/map_arr'>
+#op(':mark/map_arr')
 with <f: (item: T) => U>
 export func map(xs: T[]): U[]
 
 /// The elements for which f is true, in order; the calls of f have no order among them.
 /// @effect what f does
 /// @example [1, 2, 3, 4]->filter<(x: int) => x % 2 == 0>    // [2, 4]
-#op<':mark/filter_arr'>
+#op(':mark/filter_arr')
 with <f: (item: T) => bool>
 export func filter(xs: T[]): T[]
 
 /// The elements combined from left to right: f(...f(f(initial, xs[0]), xs[1])..., xs[n-1]).
 /// @effect what f does
 /// @example [1, 2, 3]->reduce<(acc: int, x: int) => acc + x, 0>    // 6
-#op<':mark/reduce_arr'>
+#op(':mark/reduce_arr')
 with <f: (acc: U, item: T) => U, initial: U>
 export func reduce(xs: T[]): U
 
 /// Calls f for every element, in order.
 /// @effect what f does
 /// @example [1, 2, 3]->foreach<(x: int) => println(x)>
-#op<':mark/foreach_arr'>
+#op(':mark/foreach_arr')
 with <f: (item: T) => void>
 export func foreach(xs: T[]): void
 
@@ -479,7 +479,7 @@ export func foreach(xs: T[]): void
 /// type. The calls have no order among them, as for `map`.
 /// @effect what f does
 /// @example [1, 2, 3]->apply<(x: int) => x * 2>    // [2, 4, 6]
-#op<':mark/apply_arr'>
+#op(':mark/apply_arr')
 with <f: (item: T) => T>
 export func apply(xs: T[]): T[]
 
@@ -497,7 +497,7 @@ export func apply(xs: T[]): T[]
 /// @effect what f does
 /// @example attempt((x: int) => 10 / x, 0) !! -1    // -1: the division fault becomes an error value
 /// @example attempt((x: int) => 10 / x, 2) !! -1    // 5
-#op<':mark/isolate'>
+#op(':mark/isolate')
 export func attempt(f: (...args: A) => T, ...args: A): T!
 
 // ---- Map<K, V> and Set<T> ---------------------------------------------------------------------
@@ -510,66 +510,66 @@ export func attempt(f: (...args: A) => T, ...args: A): T!
 /// whose length is asked for, whatever its type.
 /// @pure
 /// @example len([('a', 1), ('b', 2)] as Map<string, int>)    // 2
-#op<':coll/len'>
+#op(':coll/len')
 export func len(x: Map<K, V>): int
-#op<':coll/len'>
+#op(':coll/len')
 export func len(x: Set<T>): int
 
 /// The value stored under key, or null when the map has no such key. `m[key]` is the same lookup.
 /// @pure
 /// @example ([('a', 1)] as Map<string, int>)->get<'z'> ?? 0    // 0 when the map has no 'z'
-#op<':coll/map_get'>
+#op(':coll/map_get')
 with <key: K>
 export func get(m: Map<K, V>): V?
 
 /// The value stored under key, or fallback when the map has no such key.
 /// @pure
 /// @example ([('a', 1)] as Map<string, int>)->get_or<'z', -1>    // -1 when the map has no 'z'
-#op<':coll/map_get_or'>
+#op(':coll/map_get_or')
 with <key: K, fallback: V>
 export func get_or(m: Map<K, V>): V
 
 /// A map with value stored under key; an existing entry of that key is replaced. m is unchanged.
 /// @pure
 /// @example ([('a', 1), ('b', 2)] as Map<string, int>)->put<'c', 3>    // {a: 1, b: 2, c: 3}
-#op<':coll/map_put'>
+#op(':coll/map_put')
 with <key: K, value: V>
 export func put(m: Map<K, V>): Map<K, V>
 
 /// A map without the entry of key, or a set without the element; a key or element that is not there changes nothing. The argument is unchanged.
 /// @pure
 /// @example ([('a', 1), ('b', 2)] as Map<string, int>)->remove<'a'>    // {b: 2}
-#op<':coll/remove'>
+#op(':coll/remove')
 with <key: K>
 export func remove(c: Map<K, V>): Map<K, V>
-#op<':coll/remove'>
+#op(':coll/remove')
 export func remove(c: Set<K>): Set<K>
 
 /// Whether a map has an entry of key, or a set has the element.
 /// @pure
 /// @example ([('a', 1)] as Map<string, int>)->has<'a'>    // true
-#op<':coll/has'>
+#op(':coll/has')
 with <key: K>
 export func has(c: Map<K, V>): bool
-#op<':coll/has'>
+#op(':coll/has')
 export func has(c: Set<K>): bool
 
 /// The keys of a map, in ascending order.
 /// @pure
 /// @example keys([('b', 2), ('a', 1)] as Map<string, int>)    // [a, b]
-#op<':coll/keys'>
+#op(':coll/keys')
 export func keys(m: Map<K, V>): K[]
 
 /// The values of a map, in the ascending order of their keys.
 /// @pure
 /// @example values([('b', 2), ('a', 1)] as Map<string, int>)    // [1, 2]
-#op<':coll/map_values'>
+#op(':coll/map_values')
 export func values(m: Map<K, V>): V[]
 
 /// The entries of a map as (key, value) tuples, in ascending order of the keys.
 /// @pure
 /// @example items([('b', 2), ('a', 1)] as Map<string, int>)    // [(a, 1), (b, 2)]
-#op<':coll/map_items'>
+#op(':coll/map_items')
 export func items(m: Map<K, V>): (K, V)[]
 
 /// The elements of a set as an array, in ascending order. The collection is `m`, the name the
@@ -577,49 +577,49 @@ export func items(m: Map<K, V>): (K, V)[]
 /// are listed.
 /// @pure
 /// @example items([3, 1, 2] as Set<int>)    // [1, 2, 3]
-#op<':coll/set_items'>
+#op(':coll/set_items')
 export func items(m: Set<T>): T[]
 
 /// A map with the entries of both maps; for a key in both, the entry of other is taken. Neither argument is changed.
 /// @pure
 /// @example merge([('a', 1), ('b', 2)] as Map<string, int>, [('b', 20), ('c', 30)] as Map<string, int>)    // {a: 1, b: 20, c: 30}
-#op<':coll/merge'>
+#op(':coll/merge')
 export func merge(m: Map<K, V>, other: Map<K, V>): Map<K, V>
 
 /// Whether value is an element of the set.
 /// @pure
 /// @example ([1, 2, 3] as Set<int>)->contains<9>    // false
-#op<':coll/set_contains'>
+#op(':coll/set_contains')
 with <value: T>
 export func contains(s: Set<T>): bool
 
 /// A set with value added; s is unchanged.
 /// @pure
 /// @example ([1, 2, 3] as Set<int>)->add<9>    // {1, 2, 3, 9}
-#op<':coll/set_add'>
+#op(':coll/set_add')
 with <value: T>
 export func add(s: Set<T>): Set<T>
 
 /// The set of the elements that are in either set.
 /// @pure
 /// @example union([1, 2, 3] as Set<int>, [3, 4] as Set<int>)    // {1, 2, 3, 4}
-#op<':coll/set_union'>
+#op(':coll/set_union')
 export func union(s: Set<T>, other: Set<T>): Set<T>
 
 /// The set of the elements that are in both sets.
 /// @pure
 /// @example intersect([1, 2, 3] as Set<int>, [3, 4] as Set<int>)    // {3}
-#op<':coll/set_intersect'>
+#op(':coll/set_intersect')
 export func intersect(s: Set<T>, other: Set<T>): Set<T>
 
 /// The set of the elements of s that are not in other.
 /// @pure
 /// @example difference([1, 2, 3] as Set<int>, [3, 4] as Set<int>)    // {1, 2}
-#op<':coll/set_difference'>
+#op(':coll/set_difference')
 export func difference(s: Set<T>, other: Set<T>): Set<T>
 
 /// Whether every element of s is an element of other.
 /// @pure
 /// @example is_subset([1, 2] as Set<int>, [1, 2, 3] as Set<int>)    // true
-#op<':coll/set_is_subset'>
+#op(':coll/set_is_subset')
 export func is_subset(s: Set<T>, other: Set<T>): bool

@@ -102,6 +102,16 @@ assert(Number(act[1]) === 2 && Number(act[2]) === 2, `unexpected relu/maximum re
 timeout_ms = 10000
 
 [[tests]]
+name = "broadcast_scalar_operand"
+desc = "The scalar side of a broadcasting operator: an f32 value whose type is its own beside a tensor, the round of a loop over a tensor whose shape is not fixed, and the tensor/literal controls."
+kind = "behavior"
+case = "../../../cases/modules/tensor/broadcast_scalar_operand.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["scalar param=18.0", "scalar local=18.0", "round loss=88.0", "round total=264.0", "round left=80.0", "round right=80.0", "round zeros=16.0", "tensor tensor=25.0", "tensor literal=5.0", "literal tensor=5.0"]
+timeout_ms = 10000
+
+[[tests]]
 name = "reductions"
 desc = "Axis reductions with keepdims, full reductions, and softmax/log_softmax along an axis."
 kind = "behavior"
@@ -436,6 +446,28 @@ matmul chain=16777216.0
 softmax equal=0.0
 softmax axis=[nan, nan, nan]
 """
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "nan_text_in_a_tensor"
+desc = "A NaN's text carries no sign, and the array's is the only print form (design principles 7.7, language reference 2.5.2): `inf - inf` is a NaN whose sign bit is set, and the printer hands the element to the C library, which writes `-nan` for it unless the value is made positive first. The same value writes `nan` as a scalar and in an f64 and an f32 array, and no program writes `tensor(` at all."
+kind = "behavior"
+case = "../../../cases/modules/tensor/nan_text_in_a_tensor.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = """scalar
+nan
+array
+[nan]
+tensor-f64
+[nan]
+tensor-f64-specials
+[nan, inf, -inf, -0.0, 0.0]
+tensor-f32
+[nan]
+"""
+expect_output_not_contains = ["-nan", "tensor("]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 

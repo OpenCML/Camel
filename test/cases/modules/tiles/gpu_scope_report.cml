@@ -1,0 +1,34 @@
+/// What a report operator reads when a pass has already cut the scope: the graph each exec call
+/// carries, one plan per segment, instead of the wrapper graph (docs/design/gpu/plan.cn.md
+/// 2.1-2.3, 2.5).
+///
+/// The wrapper is not a program of its own: its statements are the calls that run the segments,
+/// and a call with context arguments has no plan. The plan of a segment is the one the outline
+/// generated for it, from the types its parameters carry.
+///
+/// The same program without the pass is the whole-graph reading these operators have always
+/// given: one plan, one region analysis and one CUDA program for `pair`. With `tiles::compile`
+/// each reading is per segment, and the program it was asked about is the one the pass wrote.
+///
+/// Red when: a report operator reads the wrapper (a refusal, or the wrapper's own
+/// `context_arguments` exclusion), or a segment's plan is not the plan of that segment.
+module tiles_gpu_scope_report
+
+import { Tensor, reshape, sum } from tensor
+import { inspect, regions, source } from tiles
+
+#gpu
+func pair(x: Tensor<f32, [3]>): Tensor<f32, [3]> {
+    let y = x * 2.0
+    let z = y + 3.0
+    return z - 1.0
+}
+
+func main(): int sync {
+    let x = reshape([1.0, 2.0, 3.0] as f32[], [3])
+    println('inspect {}'->format<inspect<pair>(x)>)
+    println(regions<pair>())
+    println('source {}'->format<source<pair>(x)>)
+    println('value {}'->format<sum(pair(x))>)
+    return 0
+}

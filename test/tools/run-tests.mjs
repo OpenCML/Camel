@@ -406,6 +406,14 @@ function isSerial(plan, test) {
 function runProcess(command, args, { cwd, env, timeoutMs, marks, cpuReport = false }) {
     return new Promise((resolve) => {
         const started = performance.now()
+        // A test must not write into the tree it is testing. A Python harness that imports a module
+        // beside it (`test/cases/perf/reduce_layout.py` imports `step_budget.py`) leaves a
+        // `__pycache__` behind, and one left in a checkout makes the case ledger's answer depend on
+        // which test ran first -- the ledger reads the filesystem, so it sees a cache written this
+        // run. The interpreter is told not to write bytecode; a test that needs its own value sets
+        // `PYTHONDONTWRITEBYTECODE` in its `envs`, and that wins because those are already in `env`.
+        const childEnv = { ...(env || process.env) }
+        if (!('PYTHONDONTWRITEBYTECODE' in childEnv)) childEnv.PYTHONDONTWRITEBYTECODE = '1'
         let stdout = ''
         let stderr = ''
         let cpuReportText = ''
@@ -435,7 +443,7 @@ function runProcess(command, args, { cwd, env, timeoutMs, marks, cpuReport = fal
         try {
             child = spawn(command, args, {
                 cwd,
-                env,
+                env: childEnv,
                 stdio: cpuReport ? ['ignore', 'pipe', 'pipe', 'pipe'] : ['ignore', 'pipe', 'pipe'],
                 windowsHide: true,
                 // On POSIX a process group lets the timeout take the whole tree down; on Windows
@@ -522,9 +530,15 @@ const DEFAULT_JOBS = (() => {
     return Math.max(1, count || 1)
 })()
 
+// The layers are `fast`, `slow`, `milestone` and `all`: one name per destination, so "the slow
+// layer" is only ever the release gate's slow layer (the plans named in SLOW_PLANS, run in full)
+// and never the unsampled copies of a sweep. `milestone` is what only runs at a milestone: the
+// unsampled copies of a sweep and the plans the policy holds back (benchmarks, soaks, fuzzing,
+// PyTorch comparisons, progen). `all` is everything but `debug`.
+//
 // `debug` is not a layer of an ordinary run: it selects the plans that exercise views, data
 // blocks and the executor on a Debug build, where the view-escape assertion exists at all.
-const TIERS = new Set(['fast', 'slow', 'all', 'debug'])
+const TIERS = new Set(['fast', 'slow', 'milestone', 'all', 'debug'])
 
 function positiveInteger(value, what) {
     const parsed = Number(value)
@@ -1761,7 +1775,12 @@ function expandBackends(test) {
     }))
 }
 
-function loadPlanTests(planPath) {
+/**
+ * The tests of one plan file, own and backend-expanded. Exported because the plan inventory
+ * (`scripts/plan-inventory.mjs`) must see the same tests this runner selects: two readings of a
+ * plan file drift, one of them silently.
+ */
+export function loadPlanTests(planPath) {
     const doc = parseTomlFile(planPath)
     validatePlanSchema(doc, planPath)
     const planId = doc.id || path.basename(planPath, '.plan.toml')
@@ -1811,7 +1830,7 @@ function invalidPlan(planPath, error) {
  * later. Benchmarks and differential tests are left out, and so is a test that sets
  * `sweep = false`.
  */
-function expandSweeps(doc, planPath) {
+export function expandSweeps(doc, planPath) {
     const out = []
     for (const sweep of doc.sweeps || []) {
         if (!sweep.name || !Array.isArray(sweep.plans)) {
@@ -1821,8 +1840,8 @@ function expandSweeps(doc, planPath) {
         const scale = Number.isFinite(sweep.timeout_scale) ? sweep.timeout_scale : 1
         const prefix = sweep.skip_env_prefix || null
         // `fast_sample = N` keeps N tests per source plan in the fast layer and puts the rest in
-        // the slow one: the default developer run still checks the property against every plan,
-        // and the full sweep (every eligible test) is `--tier all` away. The
+        // the milestone layer: the default developer run still checks the property against every
+        // plan, and the full sweep (every eligible test) is `--tier milestone` away. The
         // sample prefers a test that runs the program to completion, since that is the one that
         // exercises the most of the collector; a plan of negative tests still contributes one.
         //
@@ -1862,7 +1881,8 @@ function expandSweeps(doc, planPath) {
             const sampled = new Set()
             if (sampleCount > 0) {
                 const preferred = eligible.filter(
-                    (test) => (test.expect_exit === undefined || test.expect_exit === 0) && test.tier !== 'slow'
+                    (test) => (test.expect_exit === undefined || test.expect_exit === 0) &&
+                        test.tier !== 'slow' && test.tier !== 'milestone'
                 )
                 for (const test of [...preferred, ...eligible]) {
                     if (sampled.size >= sampleCount) break
@@ -1879,7 +1899,7 @@ function expandSweeps(doc, planPath) {
                     verify_timeout_ms: (test.verify_timeout_ms || 5000) * scale,
                     __backendReference: test.__backendReference ? rename(test.__backendReference) : null,
                     __sweep: sweep.name,
-                    ...(sampleCount > 0 ? { tier: sampled.has(test) ? 'fast' : 'slow' } : {}),
+                    ...(sampleCount > 0 ? { tier: sampled.has(test) ? 'fast' : 'milestone' } : {}),
                 })
             }
         }
@@ -1888,22 +1908,29 @@ function expandSweeps(doc, planPath) {
 }
 
 /**
- * A test's layer: `tier` on the test first, then its plan. Only `slow` is special; anything else
- * (the old `smoke`/`feat`/`benchmark` labels included) is the fast layer, so a plan written
- * before the split still runs by default. `debug` is a third layer selected only by
- * `--tier debug`: a test that aborts when an assertion fires, or that is only meaningful with
- * assertions compiled in, lives there and is never part of an ordinary or `all` run.
+ * A test's layer: `tier` on the test first, then its plan. Only `slow` and `milestone` are named
+ * destinations; anything else (the old `smoke`/`feat`/`benchmark` labels included) is the fast
+ * layer, so a plan written before the split still runs by default. `milestone` is the layer that
+ * only runs at a milestone, either because the plan file says so or because a sweep left the copy
+ * unsampled. `debug` is a further layer selected only by `--tier debug`: a test that aborts when
+ * an assertion fires, or that is only meaningful with assertions compiled in, lives there and is
+ * never part of an ordinary or `all` run.
+ *
+ * Exported because the plan inventory (`scripts/plan-inventory.mjs`) asks the same question when it
+ * decides whether a plan's slow tests have a layer: a second copy of this rule would drift from it.
  */
-function testTier(plan, test) {
+export function testTier(plan, test) {
     const tier = test.tier !== undefined
         ? test.tier
         : plan.tier === 'slow'
             ? 'slow'
-            : plan.tier === 'debug'
-                ? 'debug'
-                : 'fast'
-    if (tier !== 'fast' && tier !== 'slow' && tier !== 'debug') {
-        throw new Error(`test '${test.name}' of ${plan.id || plan.__planPath}: tier must be 'fast', 'slow' or 'debug'`)
+            : plan.tier === 'milestone'
+                ? 'milestone'
+                : plan.tier === 'debug'
+                    ? 'debug'
+                    : 'fast'
+    if (tier !== 'fast' && tier !== 'slow' && tier !== 'milestone' && tier !== 'debug') {
+        throw new Error(`test '${test.name}' of ${plan.id || plan.__planPath}: tier must be 'fast', 'slow', 'milestone' or 'debug'`)
     }
     return tier
 }
@@ -2838,10 +2865,14 @@ async function main() {
     process.exit(exitCode)
 }
 
-main().catch((error) => {
-    console.error(error && error.stack ? error.stack : String(error))
-    if (fs.existsSync(TEST_SCRATCH_RUN)) {
-        console.error(`${COLORS.cyan}[INFO]${COLORS.reset} test scratch kept: ${TEST_SCRATCH_RUN}`)
-    }
-    process.exit(1)
-})
+// Only a command that names this file as its entry point starts a run: the plan inventory imports
+// `loadPlanTests` and `expandSweeps` from here, and importing a module must not run the tests.
+if (process.argv[1] && path.resolve(process.argv[1]) === __filename) {
+    main().catch((error) => {
+        console.error(error && error.stack ? error.stack : String(error))
+        if (fs.existsSync(TEST_SCRATCH_RUN)) {
+            console.error(`${COLORS.cyan}[INFO]${COLORS.reset} test scratch kept: ${TEST_SCRATCH_RUN}`)
+        }
+        process.exit(1)
+    })
+}

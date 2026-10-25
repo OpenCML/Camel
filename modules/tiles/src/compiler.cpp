@@ -25,7 +25,7 @@
 #include "tiles/device.h"
 #include "tiles/internal/access.h"
 #include "tiles/internal/capability.h"
-#include "tiles/internal/compiled_region.h"
+#include "tiles/internal/compiled_scope.h"
 #include "tiles/internal/kernel_ir.h"
 #include "tiles/program.h"
 #include <algorithm>
@@ -203,7 +203,8 @@ class Compiler {
             // shape (the rank-zero ruling), and `TensorType` is gone, so this side is taken.
             ty::Type *exact = node.dtype == DType::F64
                                   ? ty::Type::Float64()
-                                  : tensor::ops::tensorOf(ty::TypeCode::Float32, node.shape);
+                                  : tensor::ops::tensorOf(
+                                        ty::TypeCode::Float32, tensor::knownShape(node.shape));
             return {.type = exact, .tensor = append(std::move(node))};
         }
         if (type->code() == ty::TypeCode::Tuple || type->code() == ty::TypeCode::Struct) {
@@ -246,7 +247,8 @@ class Compiler {
             const size_t n = elements(node.shape);
             if (n)
                 node.data.assign(t->dataAs<float>(), t->dataAs<float>() + n);
-            auto *exact = tensor::ops::tensorOf(ty::TypeCode::Float32, node.shape);
+            auto *exact =
+                tensor::ops::tensorOf(ty::TypeCode::Float32, tensor::knownShape(node.shape));
             return {.type = exact, .tensor = append(std::move(node))};
         }
         auto constant = tensor::ops::constArgOf(slot, type);
@@ -355,7 +357,7 @@ class Compiler {
             if (facts.dtype != ty::TypeCode::Float32 || !facts.isStaticShape())
                 throw UnsupportedComputation(
                     "loop values require f64 scalars or static f32 tensors");
-            node.shape = *facts.shape;
+            node.shape = tensor::extentsOf(*facts.shape);
         }
         return {.type = type, .tensor = append(std::move(node))};
     }
@@ -673,9 +675,10 @@ class Compiler {
                         rt::fact::coreKinds().shape,
                         {&anchor, 1});
                     if (shape && shape->dtype == ty::TypeCode::Float32 && shape->dims &&
-                        std::all_of(shape->dims->begin(), shape->dims->end(), [](auto extent) {
-                            return extent >= 0;
-                        }))
+                        std::all_of(
+                            shape->dims->begin(),
+                            shape->dims->end(),
+                            [](const std::optional<int64_t> &extent) { return extent.has_value(); }))
                         knownResult = node->dataType();
                 }
                 out = operation(oper, args, indexed, knownResult);
@@ -886,7 +889,7 @@ class Compiler {
                 "operator '" + uri() + "' needs a statically known f32 tensor result",
                 uri(),
                 UnsupportedComputation::Reason::Shape);
-        Node n{.op = std::string(def->name), .shape = *result.shape};
+        Node n{.op = std::string(def->name), .shape = tensor::extentsOf(*result.shape)};
         if (n.op == "sum_to") {
             n.inputs = {tensorValue(args.at(0))};
             if (program.nodes[n.inputs[0]].shape == n.shape)
@@ -1083,7 +1086,7 @@ static Program compileInputs(
                         "type-only compilation requires static f32 tensor shapes",
                         {},
                         UnsupportedComputation::Reason::Shape);
-                input.shape = *facts.shape;
+                input.shape = tensor::extentsOf(*facts.shape);
             }
             const auto node = c.append(std::move(input));
             c.program.parameterInputs.push_back(node);

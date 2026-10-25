@@ -1,6 +1,6 @@
 id = "perf.showcase_c2_mlp_mnist"
 order = 900
-tier = "slow"
+tier = "milestone"
 tags = ["showcase", "slow", "c2", "mlp", "mnist"]
 
 # The small configuration of showcase/c2-mlp-mnist: a deterministic synthetic

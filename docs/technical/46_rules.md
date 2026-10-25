@@ -65,6 +65,14 @@ and is refused by the same diagnostic, by name. The hidden parameters are what
 `RuleSource::whenNodesStart` counts from, and the engine hands each of them the node its `const`
 parameter was bound to.
 
+The left side is what binds a `const` parameter, so a declaration that gives one of them no
+position to match a constant in is refused where it is written
+(`SemanticDiag::RuleConstParamNotMatched`): with no position on the left, the parameter is given no
+constant in the condition and its hidden node parameter is given no node, which the engine reports
+as an internal error at every match. The hidden node parameter exists whether the condition writes
+`node_of(c)` or not -- what the declaration must do is use the parameter on the left, as in
+`x * c`.
+
 `__rule` and `__rule_when` are operators of the module `rewrite` (`modules/rewrite`), which the
 declaration imports itself (with `graph.Node` for the condition). They make a `RuleObject` (type
 `Rule`): the name, the direction, the permissions the rule needs, a bit per `const` parameter and
@@ -82,12 +90,12 @@ declaration, not the rule's public surface.
 The context of a rule (`rule fuse<f, g>(...)`) is read by the grammar and refused by the compiler
 (`ConstructNotSupported`) until generics land (H38 item 5).
 
-A rule may state the numeric permissions it needs with `#requires<...>` before the declaration
+A rule may state the numeric permissions it needs with `#requires(...)` before the declaration
 (design principles 7.2): a rule that rewrites `x * c1 + x * c2` into `x * (c1 + c2)` is only
-correct where `reassociate` is allowed. `#requires<reassociate, contract>` names permissions; the
-core group `finite_math` names the four assumptions it groups, so `#requires<finite_math>` needs
+correct where `reassociate` is allowed. `#requires(reassociate, contract)` names permissions; the
+core group `finite_math` names the four assumptions it groups, so `#requires(finite_math)` needs
 all four, and a module may declare its own group of permissions (`tag fast = [reassociate,
-contract]`) and require `#requires<fast>`: the AST pre-pass expands same-module groups
+contract]`) and require `#requires(fast)`: the AST pre-pass expands same-module groups
 recursively into a `sem::PermissionMask`. A program may not declare a tag with the name of a
 core permission (`SemanticDiag::TagShadowsPermission`), because that name always means the
 core's permission and the declaration would never be read. The mask is the third argument of
@@ -132,8 +140,10 @@ calls a user function. A `<=>` rule gives two `Rule`s.
 | `why_not(r, rule, v)` | why `rule` did not fire at the value `v` |
 
 `rewrite` and `saturate` leave the functions that are the sides of rules (`__lhs`, `__rhs`, and
-`__when`) alone. The result is `Program!`; the errors are `RuleInvalid`, `RuleTwoWay`,
-`NoCostModel`, `RewriteInvalid`. A pass is
+`__when`) alone. The result is `Program!`; the errors are `RuleInvalid`, `RuleTwoWay` and
+`NoCostModel`. A rule's condition may not have an effect: a condition is evaluated while the engine
+holds a session on the program it is rewriting, so a rewrite or a commit there replaces the program
+the rewrite started from while it runs, and the rule is refused where it is written. A pass is
 a function `(p: Program) => Program!` (`camel prog.cml mod::pass std::nvm`):
 
 ```camel
@@ -325,27 +335,41 @@ matcher checking a `const` parameter's declared type) and `check_when.cml`. A ru
 in one module (`same_module_pass.cml`): the pass module is a program of its own, and the program
 it is also part of is built afterwards (H38 report §2.5).
 
-**`analysis`.** `analysis range: Interval { initial => …; join(a,b) => …; widen(a,b) => …; on (x +
-y) => range(x) + range(y) }` declares a lattice and its transfer clauses; it compiles to
-`range__initial`, `range__join`, `range__widen`, one pattern/clause pair per `on`, and the query
-`range(n: Node) => __analysis(…)`. The clause expression sees its pattern variables as `Node`s
-(like `when`); the fact type is restricted to trivial data, and the analysis becomes one
-`user.<module>.<analysis>` fact kind (Derived, scope Node, Anchors dependency). The facts are
-propagated in post-order, joined at JOIN nodes and across the writings of a value, cached per
-graph revision and per draft revision. Which of a clause's variables are values and which are
-facts was the open question the design's example left ambiguous; they are `Node`s, as the review
-of H38 decided.
+**`fact`.** `fact range: Interval match v { case const c => …; case x + y => range(x) + range(y);
+case _ => … } join Interval::union` declares a lattice and how a value's fact is read off the way it
+was built; it compiles to `range__initial`, `range__join`, one pattern/fact pair per `case`, and the
+query `range(n: Node) => __fact(…)`. `case _` is required and is what the fact is of a value no
+other case matched; the clauses after the body (`join` is required, `meet`, `widen` and `narrow`
+are optional) each take a binary function -- a function's name or a lambda -- and every clause
+without one is the join. The case expression sees its pattern variables as `Node`s (like `when`);
+the fact type is restricted to trivial data, and the fact becomes one `user.fact.<name>` fact kind
+(Derived, scope Node, Anchors dependency). The facts are propagated in post-order, merged at JOIN
+nodes and across the writings of a value, cached per graph revision and per draft revision. Which
+of a case's variables are values and which are facts was the open question the design's example
+left ambiguous; they are `Node`s, as the review of H38 decided.
 
-**`analysis` with parameters (H61).** `analysis pair(a: Node, b: Node): bool { … }` is the same
+**`fact` with parameters (H61).** `fact pair(a: Node, b: Node): bool match (a, b) { … }` is the same
 declaration with a parameter list: the parameters are pattern variables, so a rule's condition
 writes `pair(x, y)` and hands it the parts of the compound it is rewriting. The query compiles to
-`func pair(a: Node, b: Node): bool => __analysis('pair', …)` with one node argument per parameter;
-the engine answers the fact of the value those parts belong to — the value a user of the first
-part reads with exactly these parts as its operands and one of the `on` clauses matches, clauses
-in written order and values in node order. A declaration without parameters keeps the one-value
-form `range(n)`. There is no syntax that names the whole match.
+`func pair(a: Node, b: Node): bool => __fact('pair', …)` with one node argument per parameter; the
+engine answers the fact of the value those parts belong to — the value a user of the first part
+reads with exactly these parts as its operands and one of the cases matches, cases in written order
+and values in node order. A declaration without parameters keeps the one-value form `range(n)`.
+There is no syntax that names the whole match.
 
-**`#requires` (implemented, H2b).** `#requires<reassociate, finite_math>` before a rule resolves the
+**`fact` with `with` parameters (rewrite design 7.5).** `fact range::<T>(v: T): Interval` may also
+declare `with` parameters -- `fact range<limit: int = 5>(v: int): int` -- which the query writes out
+(`range<3>(x)`), each defaulting to the declaration's default. The arguments are part of what the
+fact is: they must be compile-time constants (a non-constant argument is a compile error), and the
+description, the fact kind (`user.fact.range<3>`) and the stored value are all keyed by the name
+and the arguments, so `range<3>(x)` and `range<5>(x)` are two facts, each computed and cached on
+its own. Every function the declaration generates -- `range__initial`, the `range__join` and its
+optional siblings, and each case's pattern and fact function -- carries the declaration's `with`
+parameters, so a clause or a case names one and reads the value the query wrote out
+(`join Interval::widen_after<widen_after>`), and the engine passes the query's arguments to them
+as the `with` arguments of the call.
+
+**`#requires` (implemented, H2b).** `#requires(reassociate, finite_math)` before a rule resolves the
 names to `sem::PermissionMask` -- `finite_math` expands to its four bits -- and fills the `needs`
 slot `Rule` already carries, so the engine and the check gate on it with no engine change. A name
 that is not a permission is a located `TagNotAPermission`, another tag before a rule is
@@ -384,9 +408,9 @@ libcamel function the module calls is exported without a hand edit; `rewrite` li
   declared numeric contract of each operator.
 - The condition is a function of the rule's parameters, not of the whole matched pattern: in
   `x + (a * b)` the parameter `a` is the multiplication's operand, not the multiplication node.
-  A fact about a compound is read by declaring an analysis over its parts (H61): `pair(x, y)`
+  A fact about a compound is read by declaring a `fact` over its parts (H61): `pair(x, y)`
   answers the fact of the value those parts belong to.
-- `analysis`: are a clause's variables values or nodes? They are `Node`s (the review of H38;
+- `fact`: are a case's variables values or nodes? They are `Node`s (the review of H38;
   implemented in H38b).
 
 

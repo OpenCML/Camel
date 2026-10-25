@@ -1,0 +1,22 @@
+// The wordcount tool of part one: read a text, count the words, print the counts as JSON.
+// Run: camel docs/tutorial/examples/08_wordcount.cml --arg path=docs/tutorial/examples/08_words.txt
+
+import { read_text } from fs
+import { split, to_lower, trim } from str
+import { encode } from json
+
+func words_of(text: string): string[] {
+    return text->split<' '>->map<(w: string): string => to_lower(trim(w))>->filter<(w: string): bool => w != ''>
+}
+
+func tally(words: string[]): Map<string, int> {
+    return words->reduce<(acc: Map<string, int>, w: string): Map<string, int> => acc->put<w, (acc[w] ?? 0) + 1>, [] as Map<string, int>>
+}
+
+func main(path: string): int sync {
+    let words = words_of(read_text(path))
+    let counts = tally(words)
+    println(len(words))
+    println(encode(counts))
+    return 0
+}

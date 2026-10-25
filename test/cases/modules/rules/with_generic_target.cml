@@ -1,0 +1,27 @@
+/**
+ * The program the rule of the design draft 1 is applied to: `x * 2` at two sites, `x * 3` and
+ * `x * 0`.
+ *
+ * Four shapes, so one run says everything the tests need: the rule bound to 2 fires at two values
+ * and both rewrites come from one instance, the same rule bound to 3 is a different instance and
+ * fires once, and the same rule bound to 0 matches `x * 0` and is refused by its condition -- the
+ * value is read in the pattern and in the condition, and the two bindings differ by the value.
+ */
+module with_generic_target
+
+/// x * 2: matched by the pattern `x * tile` when the rule is bound to 2, at the first of two sites.
+func wide(x: int): int { return x * 2 }
+
+/// x * 2 at a second site: the same instance serves both.
+func again(x: int): int { return x * 2 }
+
+/// x * 3: the shape of the same rule bound to 3, which is another instance.
+func thrice(x: int): int { return x * 3 }
+
+/// x * 0: the shape of the same rule bound to 0, whose condition then refuses to fire.
+func zeroed(x: int): int { return x * 0 }
+
+func main(): int sync {
+    println(wide(3), again(4), thrice(5), zeroed(6))
+    return 0
+}

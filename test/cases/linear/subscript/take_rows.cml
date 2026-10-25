@@ -1,0 +1,42 @@
+/**
+ * `t[idx]` with an int array takes the rows the indices name, in that order, along the first
+ * dimension (design principles 5.4). The result's shape is `[len(idx)] + shape(t)[1:]`, which is
+ * written at the declaration: the length the index array's type states, then every dimension of
+ * the array but the first. For a rank-1 array the row is the element, so a repeated index repeats
+ * its element.
+ *
+ * The functions below are the shape rule: `take` returns `f32[3]` from an `f32[5]` under an
+ * `int[3]`, `rowsOfRank2` returns `f32[3, 3]` from an `f32[2, 3]` under the same index, and
+ * `rowsOfRank3` returns `f32[2, 2, 2]` from an `f32[4, 2, 2]` under an `int[2]`. Every one of
+ * them is checked even though only `take` is called -- declaring `rowsOfRank2` to return
+ * `f32[2, 3]` is refused with "Return type 'f32[3, 3]' does not match the function's declared
+ * return type" -- so a take that returned its argument's type would not compile here.
+ */
+module linear_take_rows
+
+func take(xs: f32[5], idx: int[3]): f32[3] {
+    return xs[idx]
+}
+
+func rowsOfRank2(t: f32[2, 3], idx: int[3]): f32[3, 3] {
+    return t[idx]
+}
+
+func rowsOfRank3(t: f32[4, 2, 2], idx: int[2]): f32[2, 2, 2] {
+    return t[idx]
+}
+
+func anyRank(t: f32[..], idx: int[]): f32[..] {
+    return t[idx]
+}
+
+func main(): int sync {
+    let xs: f32[] = [1.0, 2.0, 3.0, 4.0, 5.0]
+    let raw = [4, 0, 4]
+    let idx = raw as int[3]
+    let rows: f32[3] = take(xs as f32[5], idx)
+    println(rows)
+    println(len(rows))
+    println(rows[1])
+    return 0
+}

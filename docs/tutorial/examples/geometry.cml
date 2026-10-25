@@ -1,0 +1,14 @@
+// A library module used by 08_modules.cml: a file is a module, and its name is the file's name.
+// Run: camel docs/tutorial/examples/08_modules.cml
+
+import { sqrt } from math
+
+export type Vec = { x: float, y: float }
+
+export func hypot(v: Vec): float {
+    return sqrt(v.x * v.x + v.y * v.y)
+}
+
+export func area(w: float, h: float): float {
+    return w * h
+}

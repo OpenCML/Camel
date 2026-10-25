@@ -1,0 +1,36 @@
+/// A tag written before `module` (design principles 13.4, docs/design/gpu/plan.cn.md 2.3) is the
+/// fact of the module: `#gpu module m` makes every top-level function of the module a `#gpu`
+/// function, and a fact a function writes itself is the inner one and wins.
+///
+/// `scaled` writes no tag and inherits the module's; `kept` writes `#cpu` and overrides it. The
+/// placement report tells the two apart, so the propagation cannot be confused with "every
+/// function of a tagged module becomes the tagged one".
+///
+/// The module's tag reaches `main` too: it is a top-level function like any other, and it does the
+/// host's work (building the input, printing), so it writes `#cpu` and opts out. Without that the
+/// module's own entry point would be asked to run on the device.
+///
+/// Red when: the module's tag reaches nothing (no `gpu-required` graph in the report), it
+/// overrides a function's own tag, or a function of another module is reached by it.
+#gpu
+module tiles_gpu_scope_module
+
+import { Tensor, reshape, sum } from tensor
+
+func scaled(x: Tensor<f32, [3]>): Tensor<f32, [3]> {
+    let y = x * 2.0
+    return y + 1.0
+}
+
+#cpu
+func kept(x: Tensor<f32, [3]>): Tensor<f32, [3]> {
+    let y = x * 3.0
+    return y - 1.0
+}
+
+#cpu
+func main(): int sync {
+    let x = reshape([1.0, 2.0, 3.0] as f32[], [3])
+    println('value {}'->format<sum(scaled(x)) + sum(kept(x))>)
+    return 0
+}

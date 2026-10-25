@@ -189,8 +189,8 @@ std::optional<Type *> layerNormInfer(const InferContext &ctx) {
         }
         bool fits = p->size() <= x->size();
         for (size_t d = 0; fits && d < p->size(); ++d) {
-            const int64_t want = (*x)[x->size() - p->size() + d], have = (*p)[d];
-            fits = want == kUnknownDim || have == kUnknownDim || want == have;
+            const std::optional<int64_t> want = (*x)[x->size() - p->size() + d], have = (*p)[d];
+            fits = !want.has_value() || !have.has_value() || want == have;
         }
         if (!fits) {
             throw ShapeError(std::format(
@@ -278,8 +278,8 @@ void meanAxisVjp(VjpBuilder &b, const VjpCall &call) {
 void extremumAxisVjp(VjpBuilder &b, const VjpCall &call) {
     requireVjpInputs(call, 2, 3);
     if (auto dy = b.gradientOf(call.output)) {
-        const vjp_node_t selected =
-            addTensorOper(b, "tensor:eq", {call.inputs[0], expandReduced(b, call, call.output)});
+        const vjp_node_t selected = addTensorOper(
+            b, "tensor:strict_eq", {call.inputs[0], expandReduced(b, call, call.output)});
         b.accumulateGradient(
             call.inputs[0],
             addTensorOper(b, "tensor:multiply", {expandReduced(b, call, *dy), selected}));

@@ -56,13 +56,30 @@ class NodeVMSchedPass : public RuntimeGraphSchedulePass {
     const camel::runtime::Program *
     apply(const camel::runtime::Program *program, std::ostream &os) override;
 
+    /// Runs `function`'s body with `arguments` for its ordinary parameters and `withArguments` for
+    /// its `with` parameters, and returns its value. This is the entry point for calling a function
+    /// *value*: what its body captured where it was written lives in the closure the value was made
+    /// with (`function->tuple()`), which only the holder of the value knows, so a caller that holds
+    /// the value has no way of leaving those captures empty. `callGraph` is the entry point below
+    /// it, for the graph of a function whose value the caller does not hold -- a graph a context
+    /// published for an instance, or the entry of a program -- and there the closure is the
+    /// caller's to pass, and empty when the caller has none.
+    slot_t callFunction(
+        ::Function *function, std::span<const slot_t> arguments,
+        std::span<const slot_t> withArguments = {});
+
     /// Runs `graph` of `program` once with `arguments` for its ordinary parameters, `withArguments`
-    /// for its `with` parameters, and returns its value. For a function written in Camel that a
-    /// native caller runs (a pass written in Camel); `program` must stay alive and rooted for the
-    /// call, and so must the arguments.
+    /// for its `with` parameters, `closure` for the values its body captured, and returns its
+    /// value. For a function written in Camel that a native caller runs (a pass written in Camel,
+    /// a rule's condition); `program` must stay alive and rooted for the call, and so must the
+    /// arguments. A body that captured values reads them from the closure nodes of its graph, which
+    /// only the caller can fill: a caller holding the function value passes `function->tuple()`
+    /// (what the indirect calls of the graph runtime do), and a caller that passes no closure
+    /// leaves them empty.
     slot_t callGraph(
         const camel::runtime::Program *program, camel::runtime::GCGraph *graph,
-        std::span<const slot_t> arguments, std::span<const slot_t> withArguments = {});
+        std::span<const slot_t> arguments, std::span<const slot_t> withArguments = {},
+        std::span<const slot_t> closure = {});
 
   private:
     __attribute__((noinline)) slot_t evalNativeOperator(

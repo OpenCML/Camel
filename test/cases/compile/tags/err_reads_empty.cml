@@ -1,10 +1,10 @@
 /**
- * `#reads<>` names no tag: the form takes at least one, so the use is reported with the number
+ * `#reads()` names no tag: the form takes at least one, so the use is reported with the number
  * it takes and the one written.
  */
 module err_reads_empty
 
-#reads<>
+#reads()
 func f(): int {
     return 0
 }

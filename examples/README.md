@@ -15,6 +15,14 @@ pass the program runs on the default back end; `camel x.cml std::prl` runs the s
 the parallel scheduler. The output of every example is the same on `std::nvm`, `std::fvm`,
 `std::jit` and `std::prl`.
 
+The tables below list programs that stand on their own: each one can be run as it is, and
+`test/plans/feat/examples.plan.toml` runs every one of them. A file that only makes sense as one
+step of a longer build is not listed. The two programs the
+[tutorial](../docs/tutorial/tutorial.en.md) builds step by step are here as their finished
+versions -- [`text/word_frequency.cml`](text/word_frequency.cml) for the word-count line and
+[`ml/train_linear.cml`](ml/train_linear.cml) for the fitting line -- while the intermediate
+versions appear only in the tutorial, beside the chapter that uses them.
+
 To learn the language step by step, read the [tutorial](../docs/tutorial/tutorial.en.md); for the
 details of a construct, see the [language reference](../docs/language/en/README.md). The library
 functions the examples call (`str`, `array`, `math`, `statistics` and the others) are listed with
@@ -96,7 +104,7 @@ by git.
 
 ## Other directories
 
-- [`python/`](python/): Camel used from Python. `python/rules/` is a Python project whose pricing rules are a Camel module (`pip install camel-lang`, then `python examples/python/rules/basket.py`); see [`python/rules/README.md`](python/rules/README.md) and [technical page 57](../docs/technical/57_python_bindings.md).
+- [`python/`](python/): Camel used from Python. `python/rules/` is a Python project whose pricing rules are a Camel module (`pip install camel-lang`, then `python examples/python/rules/basket.py`); see [`python/rules/README.md`](python/rules/README.md) and [technical page 57](../docs/technical/57_python_bindings.md). The test plan runs `basket.py` where the package is installed and skips it where it is not.
 - [`perf/`](perf/): `fibs.cml` times a recursive Fibonacci function with `perf.perfms` (`camel examples/perf/fibs.cml std::fvm`); its output is a measurement and differs from run to run.
 - [`tty/`](tty/): `snake.cml` is an interactive terminal game for manual exploration (`camel examples/tty/snake.cml`); see [`tty/README.md`](tty/README.md).
 
@@ -116,3 +124,7 @@ example's output, record it again:
 ```sh
 node test/tools/run-tests.mjs --update-golden test/plans/feat/examples.plan.toml
 ```
+
+The chapter examples beside the tutorial (`docs/tutorial/examples/`) are files too, and the same four
+back ends run them against `test/plans/feat/golden/tutorial_examples/`: the output a tutorial page
+shows is the output of the file the page names.

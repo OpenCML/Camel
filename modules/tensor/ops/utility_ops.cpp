@@ -89,11 +89,11 @@ std::optional<Type *> indexInfer(const InferContext &ctx) {
                     in.shape->size()));
         }
         for (size_t k = 0; k < indices; ++k) {
-            const auto index     = ctx.constInt(k + 1);
-            const int64_t extent = (*in.shape)[k];
-            if (index && extent != kUnknownDim && (*index < 0 || *index >= extent)) {
+            const auto index                   = ctx.constInt(k + 1);
+            const std::optional<int64_t> extent = (*in.shape)[k];
+            if (index && extent.has_value() && (*index < 0 || *index >= *extent)) {
                 throw std::invalid_argument(
-                    std::format("index {} is outside axis {} of extent {}", *index, k, extent));
+                    std::format("index {} is outside axis {} of extent {}", *index, k, *extent));
             }
         }
     }

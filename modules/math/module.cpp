@@ -29,7 +29,7 @@ namespace {
 void sqrtVjp(camel::core::VjpBuilder &builder, const camel::core::VjpCall &call) {
     using namespace camel::core;
     using namespace camel::core::rtdata;
-    if (!tangentTypeOf(builder.nodeType(call.inputs[0]))) {
+    if (!camel::core::machineryTangentTypeOf(builder.nodeType(call.inputs[0]))) {
         return;
     }
     if (auto dy = builder.gradientOf(call.output)) {

@@ -333,7 +333,7 @@ void Builder::reportImportNameConflicts() {
 }
 
 std::optional<std::string> Builder::nativeOperatorUri(const GCT::node_ptr_t &gct) {
-    // `#op<'module:function'>` names the operator when the name of the declaration is not the
+    // `#op('module:function')` names the operator when the name of the declaration is not the
     // name of the function: an operator of another module under a name of this one, or a
     // function whose name is not a Camel identifier (design principles 6.2, 6.4).
     const TagFacts tags = tagFactsOf(gct, camel::core::tag::Func);
