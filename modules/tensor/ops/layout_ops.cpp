@@ -373,39 +373,47 @@ std::vector<int64_t> intListArg(ArgsView &args, size_t index, std::string_view o
 }
 
 // `t[a:b]`, `t[a:b:s]`, `t[:b]`, `t[a:]`, `t[:]` on a tensor: the slice of the first axis
-// (design principles 5.4), a view sharing the block. A slice of another axis, and a step other
-// than 1, are views with strides, which need the multidimensional array representation of H17:
-// the type rule rejects them at the call instead of a copy standing in for the view.
+// (design principles 5.4), a view sharing the block when the step is 1. A slice of another axis
+// is a view with strides, which needs the multidimensional array representation of H17: the type
+// rule rejects it at the call instead of a copy standing in for the view. A step other than 1 is
+// not refused: the elements it names are the slice's value, and taking them copy is the same
+// value the strided view will be (5.4).
 slot_t sliceSubKernel(ArgsView &, ArgsView &norm, context::Context &) {
-    const Array *input  = tensorArg(norm, 0);
-    const int64_t start = intArg(norm, 1);
-    const int64_t step  = intArg(norm, 3);
-    const bool wroteEnd = (intArg(norm, 4) & 1) != 0;
+    const Array *input    = tensorArg(norm, 0);
+    const int64_t start   = intArg(norm, 1);
+    const int64_t end     = intArg(norm, 2);
+    const int64_t step    = intArg(norm, 3);
+    const int64_t written = intArg(norm, 4);
     if (input->rank() != 1) {
         reportShapeError(
             "[]",
             "a slice of a tensor of rank 1; a slice of another dimension is a view with "
             "strides, which needs the multidimensional array representation of H17");
     }
+    if (step == 0) {
+        throwRuntimeFault(RuntimeDiag::InvalidArgument, "[]", "a slice step must not be 0");
+    }
     const int64_t extent = input->dim(0);
-    const int64_t end    = wroteEnd ? intArg(norm, 2) : extent;
     // Bounds outside the axis are a located fault, as for an array's slice (design principles
-    // 3.9); checked before the kernel so the diagnostic is SliceOutOfRange.
-    if (start < 0 || start > extent || end < 0 || end > extent) {
+    // 3.9); checked before the kernel so the diagnostic is SliceOutOfRange. The one rule of
+    // which positions the slice takes is `subscriptSliceRange`, which the shape rule reads too.
+    const k::SubscriptSliceRange range =
+        k::subscriptSliceRange(extent, start, end, step, written);
+    if (!range.inRange) {
         throwRuntimeFault(
-            RuntimeDiag::SliceOutOfRange, start, end, "axis 0 of a tensor", extent);
+            RuntimeDiag::SliceOutOfRange, range.first, range.stop, "axis 0 of a tensor", extent);
     }
-    if (step != 1) {
-        throwRuntimeFault(
-            RuntimeDiag::InvalidArgument,
-            "[]",
-            "a slice step must be 1; a step other than 1 is a view with strides, which needs "
-            "the multidimensional array representation of H17");
+    if (range.step == 1) {
+        const int64_t count = range.count;
+        return runKernel("slice_sub", [&] {
+            return wrap(viewTensor(
+                input, std::span<const int64_t>(&count, 1), resultAllocator(), range.first));
+        });
     }
-    const int64_t count = end > start ? end - start : 0;
+    // The elements of a stepped slice are not contiguous, so the result is a copy and does not
+    // share the block (design principles 5.4: the value is the slice's, the sharing is H17's).
     return runKernel("slice_sub", [&] {
-        return wrap(viewTensor(
-            input, std::span<const int64_t>(&count, 1), resultAllocator(), start));
+        return wrap(k::subscriptSlice(input, range, resultAllocator()));
     });
 }
 
@@ -422,35 +430,38 @@ std::optional<Type *> sliceSubInfer(const InferContext &ctx) {
             "a slice of the first dimension of a tensor of rank 2 or more is a view with "
             "strides, which needs the multidimensional array representation of H17");
     }
-    // The slice is a view sharing the block, which fixes the step: strides are H17's.
+    // A slice with a step takes every step-th element of the first axis (design principles
+    // 5.4). The step is a value like any other: it need not be a constant, only a constant 0 is
+    // no slice at all, and a step the compiler does not know leaves the result's extent unknown.
     const auto step = ctx.constInt(3);
-    if (!step || *step != 1) {
-        throw ShapeError(
-            "a slice step other than the constant 1 is a view with strides, which needs the "
-            "multidimensional array representation of H17");
+    if (step && *step == 0) {
+        throw ShapeError("a slice step of 0 takes no element, whatever its bounds are");
     }
     const int64_t extent = (*in.shape)[0];
     const auto start     = ctx.constInt(1);
     const auto end       = ctx.constInt(2);
-    const auto wroteEnd  = ctx.constInt(4);
-    if (extent == kUnknownDim || !start || !wroteEnd) {
+    const auto written   = ctx.constInt(4);
+    if (extent == kUnknownDim || !start || !written || !step) {
         return tensorOf(in.dtype, StaticShape{kUnknownDim});
     }
-    const int64_t to = (*wroteEnd & 1) != 0 ? (end ? *end : kUnknownDim) : extent;
-    if (to == kUnknownDim) {
+    if ((*written & 1) != 0 && !end) {
+        // The end was written and is not a constant: how many elements the step names is a
+        // fact of the run, so the result's extent is not known here.
         return tensorOf(in.dtype, StaticShape{kUnknownDim});
     }
-    // Extent and bounds are known at compile time: an interval that leaves the axis is an
-    // error here (design principles 3.9).
-    if (*start < 0 || *start > extent || to < 0 || to > extent) {
+    // Extent, bounds and step are known at compile time: an interval that leaves the axis is an
+    // error here (design principles 3.9), and the extent of the result is what the step names.
+    const k::SubscriptSliceRange range =
+        k::subscriptSliceRange(extent, *start, end.value_or(0), *step, *written);
+    if (!range.inRange) {
         throw ShapeError(
             std::format(
                 "slice bounds {}..{} are outside the first dimension of extent {}",
-                *start,
-                to,
+                range.first,
+                range.stop,
                 extent));
     }
-    return tensorOf(in.dtype, StaticShape{to > *start ? to - *start : 0});
+    return tensorOf(in.dtype, StaticShape{range.count});
 }
 
 // take(t, indices): rows along the first axis, in the order the indices give.
@@ -715,9 +726,11 @@ void sliceVjp(VjpBuilder &b, const VjpCall &call) {
 
 // slice_sub(t, start, end, step, written): `t[a:b]` on a tensor. A slice is a selection of
 // indices along the first axis, so its adjoint is the zero-padded scatter of dy back into the
-// parent's shape at those same indices — `slice_grad` is that scatter. The forward operator
-// states a step of 1 (any other is refused at the call, before a gradient is built), and the
-// rule passes the step through so the adjoint follows the forward if that ever widens.
+// parent's shape at those same indices — `slice_grad` is that scatter, and the step is passed
+// through so the adjoint follows the forward one the program wrote. That scatter walks forwards
+// only, and the step of a subscript is an ordinary value of the graph rather than one of the
+// static slots this rule can read, so a step that is not positive is refused where the scatter
+// runs, by the kernel that cannot place the gradient.
 // `written` bit 0 says whether the end was written: when it was not, `t[a:]` ran to the extent,
 // which is `dim(t, 0)` here.
 void sliceSubVjp(VjpBuilder &b, const VjpCall &call) {

@@ -1,0 +1,84 @@
+/**
+ * What the third name of `fields T` reads back, by the type each tag parameter declares: a `bool`
+ * argument comes back as a `bool` (`#flag<true>`), an `int` one as an `int` (`#width<8>`), a tag
+ * with no arguments as the empty record (`#leaf`), and a field with no tags as the empty record
+ * too. Each round's `tags` is a compile-time value, so `tags.width.w` is both a value and the key
+ * of an array, which only a compile-time value may be.
+ */
+module tags_restore_readings
+
+tag flag<w: bool> on field
+tag width<w: int> on field
+tag leaf on field
+
+type Box = {
+    #flag<true> flagged: int,
+    #width<8> wide: int,
+    plain: int,
+}
+
+type Marked = { #leaf marked: int }
+
+/// The `bool`: this case selects only when the field of `tags.flag` is a `bool`.
+func bool_field(b: Box): int {
+    return static loop acc = 0 for n, F, tags in fields Box do
+        acc + (match type typeof(tags) {
+            case { flag: { w: bool } } => 1
+            case _ => 0
+        })
+}
+
+/// And the value it carries is the `true` that was written, not the 1 an integer would be.
+func bool_value(b: Box): int {
+    return static loop acc = 0 for n, F, tags in fields Box do
+        acc + (match type typeof(tags) {
+            case { flag: { w: bool } } => if tags.flag.w then 5 else 4
+            case _ => 0
+        })
+}
+
+/// The `int` of `#width<8>`, read as a value.
+func width_value(b: Box): int {
+    return static loop acc = 0 for n, F, tags in fields Box do
+        acc + (match type typeof(tags) {
+            case { width: { w: int } } => tags.width.w
+            case _ => 0
+        })
+}
+
+/// The same `int` where only a compile-time constant may go: the key of an array.
+func width_key(b: Box): int {
+    return static loop acc = 0 for n, F, tags in fields Box do
+        acc + (match type typeof(tags) {
+            case { width: { w: int } } => (1, 2, 3, 4, 5, 6, 7, 8, 9).[tags.width.w]
+            case _ => 0
+        })
+}
+
+/// A field with no tags is the empty record.
+func untagged_is_empty(b: Box): int {
+    return static loop acc = 0 for n, F, tags in fields Box do
+        acc + (match type typeof(tags) {
+            case {} => 1
+            case _ => 0
+        })
+}
+
+/// A tag with no arguments is the empty record too.
+func leaf_is_empty(m: Marked): int {
+    return static loop acc = 0 for n, F, tags in fields Marked do
+        acc + (match type typeof(tags.leaf) {
+            case {} => 1
+            case _ => 0
+        })
+}
+
+func main(): int sync {
+    println(bool_field({flagged: 1, wide: 2, plain: 3}))
+    println(bool_value({flagged: 1, wide: 2, plain: 3}))
+    println(width_value({flagged: 1, wide: 2, plain: 3}))
+    println(width_key({flagged: 1, wide: 2, plain: 3}))
+    println(untagged_is_empty({flagged: 1, wide: 2, plain: 3}))
+    println(leaf_is_empty({marked: 5}))
+    return 0
+}

@@ -101,6 +101,22 @@ expect_stdout_exact = "[5.0, 1.0, 5.0]\n3\n1.0\n"
 timeout_ms = 10000
 
 [[tests]]
+name = "subscript.step_zero_const"
+desc = "A subscript slice whose step is the constant 0 takes no element at all: refused where the step is written (design principles 5.4), as the step of a range is (4.2). A step that is not constant stays a fault of the run (subscript.step_zero)."
+kind = "negative"
+case = "../../../cases/linear/faults/subscript_step_zero_const.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::SliceStepZero"
+expect_diagnostic_code = "0x030001E9"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 20
+expect_output_contains = ["The slice 't[a:b:s]' has a step of 0"]
+expect_output_not_contains = ["not reached"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
 name = "subscript.take_index"
 desc = "An int-array subscript is take: an index outside the array is IndexOutOfRange with the index as written, and the first call (with a repeated index) prints its elements in the order given."
 kind = "negative"

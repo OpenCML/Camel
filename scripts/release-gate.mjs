@@ -66,7 +66,15 @@ import { parseTomlFile } from '../test/tools/toml-lite.mjs'
 // because the merge gate's fast layer runs the same check as a plan entry
 // (`test/plans/feat/gate/plan_inventory.plan.toml`); this script imports its tables instead of
 // keeping a second copy that could disagree with it.
-import { FAST_TARGETS, SLOW_PLANS, FORBIDDEN, planInventoryProblems, rel, walkPlans } from './plan-inventory.mjs'
+import {
+    FAST_TARGETS,
+    SLOW_PLANS,
+    FORBIDDEN,
+    caseLedgerProblems,
+    planInventoryProblems,
+    rel,
+    walkPlans,
+} from './plan-inventory.mjs'
 // The stamp rule the two stdlib checkers also apply, so the gate and a checker that reads the
 // install cannot disagree about what "this tree's build" means.
 import { refuseInstallNotOfThisTree } from './install-stamp.mjs'
@@ -359,16 +367,17 @@ async function main() {
         if (FORBIDDEN_BY_REL.has(file)) die(`internal error: '${file}' is both gated and forbidden; refusing to run`, 1)
     }
     // Every problem at once, from the one implementation of the inventory: a stale list entry (a
-    // slow plan that does not exist, a forbidden one that does not) and every plan file that has
-    // no fate. Printing the first one and dying hid the rest: eight perf plans had no fate, and the
-    // run named one of them, so the reader fixed one file per run and the list stayed a moving
-    // target.
-    const inventoryProblems = planInventoryProblems()
+    // slow plan that does not exist, a forbidden one that does not), every plan file that has no
+    // fate, and every file under test/cases that nothing reads. Printing the first one and dying
+    // hid the rest: eight perf plans had no fate, and the run named one of them, so the reader
+    // fixed one file per run and the list stayed a moving target.
+    const inventoryProblems = [...planInventoryProblems(), ...caseLedgerProblems()]
     if (inventoryProblems.length > 0) {
         for (const problem of inventoryProblems) console.error(`[gate] ${problem}`)
         die(
-            `the plan inventory has ${inventoryProblems.length} problem(s); every plan file must be reached by a ` +
-                'fast target, named in SLOW_PLANS, named in FORBIDDEN, or be a debug plan',
+            `the inventory has ${inventoryProblems.length} problem(s); every plan file must be reached by a ` +
+                'fast target, named in SLOW_PLANS, named in FORBIDDEN, or be a debug plan, and every file under ' +
+                'test/cases must be read by a plan or recorded in CASE_EXCEPTIONS with the reason it is kept',
             1,
         )
     }

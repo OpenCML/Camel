@@ -19,6 +19,7 @@
 #include "camel/core/module/module.h"
 #include "camel/core/operator_table.h"
 #include "camel/core/operator_traits.h"
+#include "camel/core/rtdata/equality.h"
 #include "camel/execute/entry_args.h"
 #include "camel/execute/executor.h"
 #include "camel/runtime/node_roles.h"
@@ -127,6 +128,14 @@ bool TensorModule::load() {
         return true;
     }();
     (void)refinerAdded;
+    // A tensor is a numeric array: `==` compares two of them by shape and by element, as it
+    // does for any array (design principles 4.2), which the core cannot know by itself because
+    // the type is this module's. Registered once, where the type itself is declared.
+    static const bool comparableAdded = [] {
+        camel::core::rtdata::registerContentComparableType(camel::tensor::TensorType::typeCode());
+        return true;
+    }();
+    (void)comparableAdded;
     // A Tensor parameter of `main` given on the command line is a .npy file (the extension
     // may be left out, as in the layout nn.save_params writes). The tensor is checked against
     // the declared element type and shape, like `as`.

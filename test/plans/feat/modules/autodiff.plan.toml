@@ -2753,6 +2753,18 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
+name = "slice_grad_negative_step"
+desc = "A slice that takes its elements backwards (`x[5:0:-2]`) has no adjoint here: the scatter the gradient is built from walks forwards only, so differentiating it is a fault that names the step instead of a gradient landing at the wrong elements. The step of a subscript is an ordinary value of the graph, not a static slot the rule can read, so the fault is raised where the scatter runs and carries no position of the program: a backwards adjoint is not implemented."
+kind = "negative"
+case = "../../../cases/modules/autodiff/slice_grad_negative_step.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::RuntimeError"
+expect_output_contains = ["slice_grad", "slice step must be positive"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
 name = "slice_grad_refuse_concat_array"
 desc = "concat's array part is continuous too: an array part that depends on the differentiated parameter is refused at the concat call (line 23), naming the operator, rather than being left out of the gradient. A constant array part is still skipped, not refused."
 kind = "negative"

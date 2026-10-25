@@ -704,6 +704,15 @@ int runCommand(int argc, char *argv[]) {
             } catch (DiagnosticsLimitExceededBaseException &e) {
                 const auto &diags = ctx->runtimeDiagSink();
                 diags->dump(os, useJsonFormat);
+                // The exception carries the diagnostic the limit stopped on, and that diagnostic
+                // is why the run failed. When the sink just dumped held it, the reason has been
+                // told; when it did not -- a limit reached while the program was being compiled,
+                // which the runtime sink has no place for -- the run failed with nothing said
+                // about why, and the limit names the diagnostic it stopped on. Standard error, so
+                // that a diagnostics array on standard output stays an array.
+                if (!diags->hasErrors()) {
+                    std::cerr << e.what() << std::endl;
+                }
                 return 1;
             }
 
@@ -739,11 +748,16 @@ int runCommand(int argc, char *argv[]) {
     } catch (DiagnosticsLimitExceededBaseException &e) {
         // The compile stopped at its error limit. Report the program's own modules, the ones
         // `module_failures.h` names; a pass library is not one of them (H198/H210).
-        camel_cli::reportModuleFailures(
-            ctx,
-            camel_cli::findModuleFailures(ctx, camel_cli::ModuleScope::ProgramDependencies),
-            os,
-            useJsonFormat);
+        const camel_cli::ModuleFailures failures =
+            camel_cli::findModuleFailures(ctx, camel_cli::ModuleScope::ProgramDependencies);
+        camel_cli::reportModuleFailures(ctx, failures, os, useJsonFormat);
+        // The exception carries the diagnostic the limit stopped on, and that diagnostic is why
+        // the run failed. The report above holds it when it reached the limit in one of the
+        // program's own modules; when it did not -- a diagnostic a sink the program does not own
+        // reached the limit on -- nothing has been said about why the run failed, and the limit
+        // names the diagnostic it stopped on. Standard error, where the note about the warnings a
+        // limit dropped also goes, so that a diagnostics array on standard output stays an array.
+        std::cerr << e.what() << std::endl;
         compileSummary(true);
         return 1;
     } catch (Diagnostic &d) {

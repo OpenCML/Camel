@@ -170,9 +170,13 @@ bool compileInto(const std::string &targetFile) {
             // to standard error before anything runs.
             st.ctx->dumpModuleWarnings(std::cerr, false);
         }
-    } catch (DiagnosticsLimitExceededBaseException &) {
-        // The compilation stopped at its error limit: the diagnostics are in the modules.
+    } catch (DiagnosticsLimitExceededBaseException &e) {
+        // The compilation stopped at its error limit: the diagnostics are in the modules. The
+        // exception carries the one the limit stopped on, and the modules hold it when it is one
+        // of theirs; when it is not, the dump below is empty, and a load that failed with no
+        // reason at all is what a reader of this output must never get.
         st.ctx->dumpAllModuleDiagnostics(std::cout, false);
+        std::cout << e.what() << std::endl;
     } catch (::Diagnostic &d) {
         std::cout << "Diagnostic error: " << d.toText() << std::endl;
     } catch (std::exception &e) {

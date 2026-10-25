@@ -190,35 +190,3 @@ expect_output_contains = ["Type 'int[]' does not support index access."]
 expect_output_not_contains = ["never printed", "42949672963"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
-
-[[tests]]
-name = "not_supported.strict_equal"
-desc = "`===` is rejected at the comparison (design principles 4.1); it used to compile and was false for two equal string literals."
-kind = "negative"
-case = "../../../cases/compile/not_supported/strict_equal.cml"
-args = ["${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ConstructNotSupported"
-expect_diagnostic_code = "0x0300001F"
-expect_diagnostic_line = 9
-expect_diagnostic_column = 13
-expect_output_contains = ["'===' is not supported: identity comparison is not part of the language for now"]
-expect_output_not_contains = ["never printed", "UnknownInternalError", "Warning"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 10000
-
-[[tests]]
-name = "not_supported.strict_not_equal"
-desc = "`!==` likewise."
-kind = "negative"
-case = "../../../cases/compile/not_supported/strict_not_equal.cml"
-args = ["${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ConstructNotSupported"
-expect_diagnostic_code = "0x0300001F"
-expect_diagnostic_line = 6
-expect_diagnostic_column = 13
-expect_output_contains = ["'!==' is not supported"]
-expect_output_not_contains = ["never printed", "UnknownInternalError", "Warning"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 10000

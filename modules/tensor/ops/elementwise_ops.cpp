@@ -30,7 +30,7 @@ constexpr std::string_view binaryName(k::BinaryOp op) {
 }
 
 constexpr std::string_view compareName(k::CompareOp op) {
-    constexpr std::string_view names[] = {"lt", "le", "gt", "ge", "eq", "ne"};
+    constexpr std::string_view names[] = {"lt", "le", "gt", "ge", "strict_eq", "strict_neq"};
     return names[static_cast<size_t>(op)];
 }
 
@@ -531,8 +531,11 @@ std::vector<OpDef> elementwiseOps() {
     defs.push_back(compareDef<k::CompareOp::LessEqual>("le", {"__le__"}));
     defs.push_back(compareDef<k::CompareOp::Greater>("gt", {"__gt__"}));
     defs.push_back(compareDef<k::CompareOp::GreaterEqual>("ge", {"__ge__"}));
-    defs.push_back(compareDef<k::CompareOp::Equal>("eq", {"__eq__"}));
-    defs.push_back(compareDef<k::CompareOp::NotEqual>("ne", {"__neq__"}));
+    // Equality and inequality of two arrays are elementwise (`===`, `!==`, design principles
+    // 4.2). The whole comparison is `==` and belongs to the core's operator, which reduces this
+    // one; there is no library operator named `eq` or `ne` beside them.
+    defs.push_back(compareDef<k::CompareOp::Equal>("strict_eq", {"__strict_eq__"}));
+    defs.push_back(compareDef<k::CompareOp::NotEqual>("strict_neq", {"__strict_neq__"}));
 
     defs.push_back(unaryDef<k::UnaryOp::Neg>("neg", {"__neg__", "neg"}));
     defs.push_back(unaryDef<k::UnaryOp::Abs>("abs", {"abs"}));
@@ -588,7 +591,7 @@ std::vector<OpDef> elementwiseOps() {
     setVjp(defs, "where", &whereVjp);
     setVjp(defs, "cast", &castVjp);
     // Comparisons are locally constant.
-    for (std::string_view name : {"lt", "le", "gt", "ge", "eq", "ne"}) {
+    for (std::string_view name : {"lt", "le", "gt", "ge", "strict_eq", "strict_neq"}) {
         setVjp(defs, name, &camel::core::noGradient);
     }
     return defs;

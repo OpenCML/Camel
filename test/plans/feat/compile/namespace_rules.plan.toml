@@ -313,6 +313,15 @@ expect_exit = 0
 expect_stdout_contains = ["lib::root", "lib::Tools::inc", "lib::Deep::Inner::three"]
 
 [[tests]]
+name = "ns.p23_graph_names.entry_module"
+desc = "Row 21 (N8), the other half: the function of the entry module carries no module in the dump even when a namespace holds a function of the same base name, so `f` and `N::f` are two nodes with those labels."
+kind = "behavior"
+case = "../../../cases/compile/namespace_rules/p23_graph_names.cml"
+args = ["${case}", "std::rgir"]
+expect_exit = 0
+expect_stdout_contains = ["label=\"f\"", "label=\"N::f\""]
+
+[[tests]]
 name = "ns.p33_reopen_using"
 desc = "Reopening a namespace block does not carry the `using namespace` of an earlier block of it (design principles 10.2): the first block uses `inc` unqualified, the second cannot."
 kind = "negative"
