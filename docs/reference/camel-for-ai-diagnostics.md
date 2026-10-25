@@ -267,7 +267,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 **Semantic — warnings** (`SemanticDiag`) — 12
 
 | `IgnoredSideEffect` | {0} is not in a sync block, and {1}. |
-| `EffectNotExecuted` | {0} has side effects but is never executed: nothing depends on it and it is not in a sync block. |
+| `EffectNotExecuted` | {0} has side effects but is never executed: {1}. |
 | `ExitInUnusedBranch` | This '{0}' gives the value of the '{1}' it is in, and nothing uses that value: it does not leave the function. |
 | `UnusedFallibleValue` | This value has type '{0}' and nothing uses it: an error it holds is lost{1}. |
 | `NullTestNeverNull` | {0} has type '{1}', which is never null: this test is always {2}. |

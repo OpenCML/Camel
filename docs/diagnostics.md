@@ -8286,13 +8286,13 @@ None: context: an effect reachable only from a branch that never runs; the repai
 **Message**
 
 ```text
-{0} has side effects but is never executed: nothing depends on it and it is not in a sync block.
+{0} has side effects but is never executed: {1}.
 ```
 
 **Help**
 
 ```text
-Evaluation is driven by dependencies: outside a sync block an expression whose result (or the variable it writes) nothing needs does not run. This is legal. To run it, put it in a sync block ('sync { ... }', or a function body 'func f(): T sync { ... }'), or use its result.
+Evaluation is driven by dependencies: an expression whose result (or the variable it writes) nothing needs does not run, and a sync block nothing needs does not run either, so the effects written directly in it do not run with it. This is legal. To run it, put it on a sync chain ('sync { ... }' in a function body, or use the block's value), or use its result.
 ```
 
 **Example** (`test/cases/compile/diag_json/dropped_effects_forward.cml`, run as `camel --output-format json test/cases/compile/diag_json/dropped_effects_forward.cml`)
