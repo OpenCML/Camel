@@ -163,15 +163,11 @@ void ParserImpl::parseKeyInterType() {
     }
 }
 
-/// typeUnit : (identDef 'of')? arrayType
+/// typeUnit : arrayType
+///
+/// `A of B` used to be read here and reported as not implemented; `of` is not a keyword of the
+/// language, so the form is an ordinary syntax error (handover 5.00 "语法层收口" item 5).
 void ParserImpl::parseTypeUnit() {
-    if (cur_ == TK::Identifier && peek(1) == TK::KwOf) {
-        const size_t m = mark();
-        parseIdentDef();
-        bump();
-        parseArrayType();
-        return close(m, NK::TypeUnit);
-    }
     parseArrayType();
 }
 
@@ -291,7 +287,7 @@ void ParserImpl::parsePrimaryType() {
         // The operand stops before an assignment: `let v: typeof a = b` declares `v`.
         const size_t m = mark();
         bump();
-        if (cur_ == TK::KwIf || cur_ == TK::KwMatch || cur_ == TK::KwTry) {
+        if (cur_ == TK::KwIf || cur_ == TK::KwMatch) {
             parseExpr();
         } else {
             parseLogicalOr();

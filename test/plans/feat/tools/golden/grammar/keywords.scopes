@@ -1,12 +1,15 @@
 >// Every keyword of the lexer in a position the parser accepts it in, where there is one.
 #^^ comment.line.double-slash.camel punctuation.definition.comment.camel
 #  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.double-slash.camel
->// `inner`, `outer`, `atomic` and `shared` are no longer keywords: they are ordinary names
+>// `inner`, `outer`, `atomic`, `shared`, `is`, `of`, `keyof`, `try`, `catch` and `finally` are
 #^^ comment.line.double-slash.camel punctuation.definition.comment.camel
-#  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.double-slash.camel
->// (H107), so they appear below as values.
+#  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.double-slash.camel
+>// not keywords: they are ordinary names (handover 5.00 "语法层收口" item 5), so they appear
 #^^ comment.line.double-slash.camel punctuation.definition.comment.camel
-#  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.double-slash.camel
+#  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.double-slash.camel
+>// below as values.
+#^^ comment.line.double-slash.camel punctuation.definition.comment.camel
+#  ^^^^^^^^^^^^^^^^^ comment.line.double-slash.camel
 >module keywords
 #^^^^^^ keyword.control.import.module.camel
 #       ^^^^^^^^ entity.name.namespace.module.camel
@@ -74,6 +77,28 @@
 #     ^^^ meta.type.definition.camel entity.name.type.camel
 #         ^ keyword.operator.assignment.camel
 #           ^^^^^^ support.type.primitive.camel
+>type Shape = enum { Circle(float), Rect { w: float, h: float }, Empty }
+#^^^^ meta.type.definition.camel storage.type.type.camel
+#     ^^^^^ meta.type.definition.camel entity.name.type.camel
+#           ^ keyword.operator.assignment.camel
+#             ^^^^ storage.type.type.camel
+#                  ^ meta.block.camel punctuation.section.block.begin.camel
+#                    ^^^^^^ meta.block.camel entity.name.function.call.camel
+#                          ^ meta.block.camel meta.parens.camel punctuation.section.parens.begin.camel
+#                           ^^^^^ meta.block.camel meta.parens.camel support.type.primitive.camel
+#                                ^ meta.block.camel meta.parens.camel punctuation.section.parens.end.camel
+#                                 ^ meta.block.camel punctuation.separator.comma.camel
+#                                        ^ meta.block.camel meta.block.camel punctuation.section.block.begin.camel
+#                                          ^ meta.block.camel meta.block.camel variable.other.property.camel
+#                                           ^ meta.block.camel meta.block.camel punctuation.separator.colon.camel
+#                                             ^^^^^ meta.block.camel meta.block.camel support.type.primitive.camel
+#                                                  ^ meta.block.camel meta.block.camel punctuation.separator.comma.camel
+#                                                    ^ meta.block.camel meta.block.camel variable.other.property.camel
+#                                                     ^ meta.block.camel meta.block.camel punctuation.separator.colon.camel
+#                                                       ^^^^^ meta.block.camel meta.block.camel support.type.primitive.camel
+#                                                             ^ meta.block.camel meta.block.camel punctuation.section.block.end.camel
+#                                                              ^ meta.block.camel punctuation.separator.comma.camel
+#                                                                      ^ meta.block.camel punctuation.section.block.end.camel
 >
 >let inner = 4
 #^^^ meta.declaration.let.camel storage.type.let.camel
@@ -119,21 +144,19 @@
 >}
 #^ meta.block.camel punctuation.section.block.end.camel
 >
->sync func effect(var target: int) {
-#^^^^ storage.modifier.sync.camel
-#     ^^^^ meta.function.definition.camel storage.type.function.camel
-#          ^^^^^^ meta.function.definition.camel entity.name.function.camel
-#                ^ meta.parens.camel punctuation.section.parens.begin.camel
-#                 ^^^ meta.parens.camel storage.modifier.var.camel
-#                     ^^^^^^ meta.parens.camel variable.parameter.camel
-#                           ^ meta.parens.camel punctuation.separator.colon.camel
-#                             ^^^ meta.parens.camel support.type.primitive.camel
-#                                ^ meta.parens.camel punctuation.section.parens.end.camel
-#                                  ^ meta.block.camel punctuation.section.block.begin.camel
->    wait target += 1
-#    ^^^^ meta.block.camel keyword.control.flow.camel
-#                ^^ meta.block.camel keyword.operator.assignment.compound.camel
-#                   ^ meta.block.camel constant.numeric.integer.decimal.camel
+>func effect(var target: int) {
+#^^^^ meta.function.definition.camel storage.type.function.camel
+#     ^^^^^^ meta.function.definition.camel entity.name.function.camel
+#           ^ meta.parens.camel punctuation.section.parens.begin.camel
+#            ^^^ meta.parens.camel storage.modifier.var.camel
+#                ^^^^^^ meta.parens.camel variable.parameter.camel
+#                      ^ meta.parens.camel punctuation.separator.colon.camel
+#                        ^^^ meta.parens.camel support.type.primitive.camel
+#                           ^ meta.parens.camel punctuation.section.parens.end.camel
+#                             ^ meta.block.camel punctuation.section.block.begin.camel
+>    target += 1
+#           ^^ meta.block.camel keyword.operator.assignment.compound.camel
+#              ^ meta.block.camel constant.numeric.integer.decimal.camel
 >}
 #^ meta.block.camel punctuation.section.block.end.camel
 >
@@ -204,12 +227,6 @@
 #                ^ meta.block.camel keyword.operator.assignment.camel
 #                         ^^ meta.block.camel keyword.operator.expression.camel
 #                            ^^^^^ meta.block.camel support.type.primitive.camel
->    let same = picked is int
-#    ^^^ meta.block.camel meta.declaration.let.camel storage.type.let.camel
-#        ^^^^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
-#             ^ meta.block.camel keyword.operator.assignment.camel
-#                      ^^ meta.block.camel keyword.operator.expression.camel
-#                         ^^^ meta.block.camel support.type.primitive.camel
 >    let kind: typeof picked = 4
 #    ^^^ meta.block.camel meta.declaration.let.camel storage.type.let.camel
 #        ^^^^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
@@ -217,41 +234,67 @@
 #              ^^^^^^ meta.block.camel keyword.operator.expression.camel
 #                            ^ meta.block.camel keyword.operator.assignment.camel
 #                              ^ meta.block.camel constant.numeric.integer.decimal.camel
->    try {
-#    ^^^ meta.block.camel keyword.control.exception.camel
-#        ^ meta.block.camel meta.block.camel punctuation.section.block.begin.camel
->        throw 'failed'
-#        ^^^^^ meta.block.camel meta.block.camel keyword.control.flow.camel
-#              ^ meta.block.camel meta.block.camel string.quoted.single.camel punctuation.definition.string.begin.camel
-#               ^^^^^^ meta.block.camel meta.block.camel string.quoted.single.camel
-#                     ^ meta.block.camel meta.block.camel string.quoted.single.camel punctuation.definition.string.end.camel
->    } catch e: Error {
-#    ^ meta.block.camel meta.block.camel punctuation.section.block.end.camel
-#      ^^^^^ meta.block.camel keyword.control.exception.camel
-#            ^ meta.block.camel variable.parameter.camel
-#             ^ meta.block.camel punctuation.separator.colon.camel
-#                     ^ meta.block.camel meta.block.camel punctuation.section.block.begin.camel
->        throw e
-#        ^^^^^ meta.block.camel meta.block.camel keyword.control.flow.camel
->    } finally {
-#    ^ meta.block.camel meta.block.camel punctuation.section.block.end.camel
-#      ^^^^^^^ meta.block.camel keyword.control.exception.camel
-#              ^ meta.block.camel meta.block.camel punctuation.section.block.begin.camel
->        return picked
-#        ^^^^^^ meta.block.camel meta.block.camel keyword.control.flow.camel
->    }
-#    ^ meta.block.camel meta.block.camel punctuation.section.block.end.camel
+>    let is = 8
+#    ^^^ meta.block.camel meta.declaration.let.camel storage.type.let.camel
+#        ^^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
+#           ^ meta.block.camel keyword.operator.assignment.camel
+#             ^ meta.block.camel constant.numeric.integer.decimal.camel
+>    let of = 9
+#    ^^^ meta.block.camel meta.declaration.let.camel storage.type.let.camel
+#        ^^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
+#           ^ meta.block.camel keyword.operator.assignment.camel
+#             ^ meta.block.camel constant.numeric.integer.decimal.camel
+>    let keyof = 10
+#    ^^^ meta.block.camel meta.declaration.let.camel storage.type.let.camel
+#        ^^^^^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
+#              ^ meta.block.camel keyword.operator.assignment.camel
+#                ^^ meta.block.camel constant.numeric.integer.decimal.camel
+>    let try = 11
+#    ^^^ meta.block.camel meta.declaration.let.camel storage.type.let.camel
+#        ^^^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
+#            ^ meta.block.camel keyword.operator.assignment.camel
+#              ^^ meta.block.camel constant.numeric.integer.decimal.camel
+>    let catch = 12
+#    ^^^ meta.block.camel meta.declaration.let.camel storage.type.let.camel
+#        ^^^^^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
+#              ^ meta.block.camel keyword.operator.assignment.camel
+#                ^^ meta.block.camel constant.numeric.integer.decimal.camel
+>    let finally = 13
+#    ^^^ meta.block.camel meta.declaration.let.camel storage.type.let.camel
+#        ^^^^^^^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
+#                ^ meta.block.camel keyword.operator.assignment.camel
+#                  ^^ meta.block.camel constant.numeric.integer.decimal.camel
+>    throw 'failed'
+#    ^^^^^ meta.block.camel keyword.control.flow.camel
+#          ^ meta.block.camel string.quoted.single.camel punctuation.definition.string.begin.camel
+#           ^^^^^^ meta.block.camel string.quoted.single.camel
+#                 ^ meta.block.camel string.quoted.single.camel punctuation.definition.string.end.camel
 >}
 #^ meta.block.camel punctuation.section.block.end.camel
 >
+>func generic::<T>(x: T, y: T, z: f32[..]): T {
+#^^^^ meta.function.definition.camel storage.type.function.camel
+#     ^^^^^^^ meta.function.definition.camel entity.name.function.camel
+#            ^^ punctuation.separator.namespace.camel
+#              ^ keyword.operator.comparison.camel
+#                ^ keyword.operator.comparison.camel
+#                 ^ meta.parens.camel punctuation.section.parens.begin.camel
+#                  ^ meta.parens.camel variable.parameter.camel
+#                   ^ meta.parens.camel punctuation.separator.colon.camel
+#                      ^ meta.parens.camel punctuation.separator.comma.camel
+#                        ^ meta.parens.camel variable.parameter.camel
+#                         ^ meta.parens.camel punctuation.separator.colon.camel
+#                            ^ meta.parens.camel punctuation.separator.comma.camel
+#                              ^ meta.parens.camel variable.parameter.camel
+#                               ^ meta.parens.camel punctuation.separator.colon.camel
+#                                 ^^^ meta.parens.camel support.type.primitive.camel
+#                                    ^ meta.parens.camel meta.brackets.camel punctuation.section.brackets.begin.camel
+#                                     ^^ meta.parens.camel meta.brackets.camel keyword.operator.compose.camel
+#                                       ^ meta.parens.camel meta.brackets.camel punctuation.section.brackets.end.camel
+#                                        ^ meta.parens.camel punctuation.section.parens.end.camel
+#                                         ^ punctuation.separator.colon.camel
+#                                             ^ meta.block.camel punctuation.section.block.begin.camel
 >    return x
 #    ^^^^^^ meta.block.camel keyword.control.flow.camel
 >}
 #^ meta.block.camel punctuation.section.block.end.camel
->
->// reserved by the lexer, used by no parser rule (a syntax error)
-#^^ comment.line.double-slash.camel punctuation.definition.comment.camel
-#  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.double-slash.camel
->enum keyof
-#^^^^ storage.type.type.camel
-#     ^^^^^ keyword.operator.expression.camel

@@ -335,8 +335,6 @@ class Walker {
             return walk(node.expr());
         case NK::MatchCase:
             return matchCase(cst::MatchCase(node));
-        case NK::CatchClause:
-            return catchClause(cst::CatchClause(node));
         case NK::MatchExpr:
             addRef(node.get<cst::IdentRef>(), RefKind::Value);
             for (const auto arm : node.all<cst::MatchCase>()) {
@@ -707,16 +705,6 @@ class Walker {
                 walkBody(last.node());
             }
         }
-        popScope();
-    }
-
-    void catchClause(cst::CatchClause ctx) {
-        pushScope(ScopeKind::Arm, rangeOf(ctx));
-        walk(ctx.type());
-        if (auto ident = ctx.get<cst::IdentDef>(); ident && nameOf(ident)) {
-            declare(DeclKind::Binding, nameOf(ident), rangeOf(ctx), rangeOf(ctx));
-        }
-        walkBlockBody(ctx.get<cst::StmtBlock>());
         popScope();
     }
 

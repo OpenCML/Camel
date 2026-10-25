@@ -1,7 +1,7 @@
 # 2. Lexical (proof case)
 
 A reduced copy of the keyword page, for the proof case: the generator reads the keyword table of
-§2.4 and compares it with the token table beside it, so the case needs a page with the same five rows
+§2.4 and compares it with the token table beside it, so the case needs a page with the same four rows
 and the same words.
 
 ## 2.4 Keywords
@@ -12,7 +12,6 @@ and the same words.
 | 控制 | `if` |
 | 类型与转换 | `as` |
 | 字面量 | `null` |
-| 保留 | `is` |
 
 ## 2.5 Literals
 

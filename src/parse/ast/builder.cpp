@@ -3306,15 +3306,10 @@ Value Builder::visitCtrlExpr(syn::Node context) {
     } break;
 
     default:
-        // TRY stmtBlock catchClause+ (FINALLY stmtBlock)?
-        // Not part of the language (design principles 1): its shape on the graph would
-        // depend on what the block contains. The diagnostic names what replaces it.
-        diags_->of(SemanticDiag::TryCatchNotInLanguage)
-            .at(rangeOf(context->firstToken(), context->lastToken()))
-            .commit();
-        // The error above stops compilation; a placeholder keeps the rest of the file checked.
-        ctrlNode = createNodeAs<NullLoad>();
-        setNodeTokenRangeByContext(ctrlNode, context);
+        // Every kind `visitExpr` sends here has a case above. `try`/`catch`/`finally` are not
+        // part of the language (design principles 3.9) and are not tokens any more, so the
+        // parser never builds a node for them (handover 5.00 "语法层收口" item 5).
+        throw std::runtime_error("Invalid control expression");
     }
     LEAVE("CtrlExpr");
     return ctrlNode;
@@ -3740,7 +3735,7 @@ Value Builder::visitNullableExpr(cst::NullableExpr context) {
 
 /*
 unaryExpr
-    : linkExpr ((AS | IS) typeExpr)?
+    : linkExpr (AS typeExpr)?
     | ('!' | '-' | '~') linkExpr
     ;
 */
@@ -3751,24 +3746,12 @@ Value Builder::visitUnaryExpr(syn::Node context) {
     switch (context.is(NK::CastExpr) ? 1 : 2) {
     case 1: {
         {
-            ReservedDataOp op;
-            if (context->tok(TK::KwAs)) {
-                op = ReservedDataOp::As;
-            } else if (context->tok(TK::KwIs)) {
-                op = ReservedDataOp::Is;
-            } else {
+            if (!context->tok(TK::KwAs)) {
                 throw std::runtime_error("Invalid unary operator: " + context->child(0)->text());
-            }
-            if (context->tok(TK::KwIs)) {
-                // There is no run-time type test. `x is T` used to be accepted with a warning
-                // and compiled as `x`.
-                diags_->of(SemanticDiag::ConstructNotSupported)
-                    .at(rangeOf(context->tok(TK::KwIs)))
-                    .commit("is", "the operator is not implemented");
             }
             node_ptr_t dataNode = any2node(visitExpr(context->expr()));
             node_ptr_t typeNode = any2node(visitType(context->type()));
-            res                 = createNodeAs<ReservedExprLoad>(op);
+            res                 = createNodeAs<ReservedExprLoad>(ReservedDataOp::As);
             setNodeTokenRangeByContext(res, context);
             *res << dataNode << typeNode;
             registerAstSemanticBundle(
@@ -3777,12 +3760,9 @@ Value Builder::visitUnaryExpr(syn::Node context) {
                     semanticPart(
                         camel::source::SemanticRole::Operator,
                         deriveAstAnchorOrigin(
-                            res,
-                            context->tok(TK::KwAs) ? context->tok(TK::KwAs)
-                                                   : context->tok(TK::KwIs),
-                            "ast.unary.keyword"),
+                            res, context->tok(TK::KwAs), "ast.unary.keyword"),
                         -1,
-                        context->tok(TK::KwAs) ? "as" : "is"),
+                        "as"),
                     semanticPart(
                         camel::source::SemanticRole::Receiver,
                         nodeOrigin(dataNode),
@@ -5015,25 +4995,6 @@ Value Builder::visitKeyInterType(cst::KeyInterType context) {
 /*
 typeUnit : (identDef OF)? arrayType ;
 */
-Value Builder::visitTypeUnit(cst::TypeUnit context) {
-    ENTER("TypeUnit");
-    node_ptr_t res = nullptr;
-    if (context->get<cst::IdentDef>()) {
-        // `name of T` used to end in an exception without a position.
-        diags_->of(SemanticDiag::ConstructNotSupported)
-            .at(rangeOf(context->firstToken(), context->lastToken()))
-            .commit(
-                context->get<cst::IdentDef>()->text() + " of ...",
-                "the 'of' type form is not implemented");
-        // The error above stops compilation; the type itself keeps the rest checked.
-        res = any2node(visitType(context->type()));
-    } else if (context->type()) {
-        res = any2node(visitType(context->type()));
-    }
-    LEAVE("TypeUnit");
-    return res;
-}
-
 /*
 arrayType
     : specType arrayDim+
@@ -5360,7 +5321,6 @@ Value Builder::visitExpr(syn::Node context) {
     case NK::MatchExpr:
     case NK::MatchTypeExpr:
     case NK::StaticForExpr:
-    case NK::TryExpr:
         return visitCtrlExpr(context);
     case NK::LoopExpr:
         return visitLoopExpr(cst::LoopExpr(context));
@@ -5433,8 +5393,6 @@ Value Builder::visitType(syn::Node context) {
         return visitKeyUnionDiffType(cst::KeyUnionDiffType(context));
     case NK::KeyInterType:
         return visitKeyInterType(cst::KeyInterType(context));
-    case NK::TypeUnit:
-        return visitTypeUnit(cst::TypeUnit(context));
     case NK::ArrayType:
         return visitArrayType(cst::ArrayType(context));
     case NK::ArrayDim:
