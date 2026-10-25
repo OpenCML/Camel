@@ -233,7 +233,7 @@ false
 
 `as` 不会不经检查地改变一个值的类型。`json::decode` 的结果是 `Json`，不能 `as` 成别的类型；已知形状的 JSON 用 `json::decode_as(s, [0])`，它在解码时检查形状，结果是 `T!`。
 
-数值之间的转换用 `float(x)` 等函数（[3.2](03_data_model.md#32-数值)）。`is` 不是关键字：`e is T` 里的 `is` 是一个普通的名字，写出来是语法错误（运行时没有类型信息）。后缀的非空断言 `x!` 报 `SemanticDiag::ConstructNotSupported`；用 `x ?? 默认值`。
+数值之间的转换用 `float(x)` 等函数（[3.2](03_data_model.md#32-数值)）。`is` 不是关键字：`e is T` 里的 `is` 是一个普通的名字，写出来是语法错误（运行时没有类型信息）。后缀的 `!` 不是语言里的写法：`T!` 的那个 `!` 属于类型，一个 `T?` 的值用 `x ?? 默认值` 取出来，所以 `x!` 是普通语法错误（在 `!` 处）。
 
 ## 6.8 `if` 与 `match`
 
@@ -379,7 +379,7 @@ func main(): int sync {
 
 缺分支、多分支或混入字面量分支是 `SemanticDiag::TaggedMatchCases`。
 
-**对 `enum` 的模式。** 被匹配的值是枚举时，模式写它的变体（[3.5](03_data_model.md#35-枚举-enum)）：`case Shape::Circle(r)`、`case Shape::Rect { w, h }`、`case Shape::Empty`、`case _`。元组变体要给全位置，结构体变体只写要绑定的字段（可改名、可简写），无数据的变体写它的限定名（`case Shape::Empty`；裸名字是绑定名，写成 `case Empty` 是 `EnumPatternMismatch`）。列全所有变体就不必写 `case _`；漏了变体又没有 `case _` 是 `SemanticDiag::EnumMatchNotExhaustive`，诊断列出漏掉的变体名；同一个变体写两次给 `EnumVariantCaseRepeated` 警告，`case _` 之后的臂给 `MatchCaseAfterWildcard` 警告，列全所有变体后还写 `case _` 给 `MatchWildcardRedundant` 警告。模式写在字段位置时给出"暂不支持"（`ConstructNotSupported`）。
+**对 `enum` 的模式。** 被匹配的值是枚举时，模式写它的变体（[3.5](03_data_model.md#35-枚举-enum)）：`case Shape::Circle(r)`、`case Shape::Rect { w, h }`、`case Shape::Empty`、`case _`。元组变体要给全位置，结构体变体只写要绑定的字段（可改名、可简写），无数据的变体写它的限定名（`case Shape::Empty`；裸名字是绑定名，写成 `case Empty` 是 `EnumPatternMismatch`）。列全所有变体就不必写 `case _`；漏了变体又没有 `case _` 是 `SemanticDiag::EnumMatchNotExhaustive`，诊断列出漏掉的变体名；同一个变体写两次给 `EnumVariantCaseRepeated` 警告，`case _` 之后的臂给 `MatchCaseAfterWildcard` 警告，列全所有变体后还写 `case _` 给 `MatchWildcardRedundant` 警告。字段位置只写名字或 `_`：嵌套模式（`case Shape::Circle(Shape::Square(x))`）是普通语法错误。
 
 **`match` 必须有默认分支。** 没有 `case _` 是编译期错误 `SemanticDiag::MatchWithoutDefault`，定位在 `match` 上。三种情形不必写：对 `bool` 写全了 `case true` 与 `case false`；对 `T?`、`T!` 用上面的固定模式；对枚举列全了所有变体。编译器不会追加程序里没有写的分支臂，所以图上的臂与源码里的 `case` 一一对应。
 

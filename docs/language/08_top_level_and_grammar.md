@@ -171,7 +171,7 @@ linkExpr           : negExpr (('->' | '?->') compExpr)*
 negExpr            : ('-' | '!' | '~') negPower | compExpr
 negPower           : ('-' | '!' | '~') negPower | compExpr ('^' negPower)?
 compExpr           : annoExpr ('..' annoExpr)*
-annoExpr           : accessExpr (indices | parentArgues | structData | angledValues | typeArguments | '!'
+annoExpr           : accessExpr (indices | parentArgues | structData | angledValues | typeArguments
 memberAccess       : '.' (IDENTIFIER | INTEGER | REAL | '[' dataExpr ']')
 accessExpr         : primaryData ('.' (IDENTIFIER | INTEGER | REAL | '[' dataExpr ']'))*
 shapeComp          : typeExpr '{' staticForExpr '}'
@@ -208,9 +208,13 @@ staticLoopHeader   : 'for' (identDef | '_') (',' (identDef | '_'))* 'in'
                      ('fields' typeExpr | 'indices' dataExpr | dataExpr)
 typeCasePattern    : 'struct' | 'tuple' | 'func' | '#' 'leaf' | '_' | typeExpr
 matchCase          : 'case' pattern ('|' pattern)* whenClause? '=>' blockExpr
-pattern            : identRef (identDef | enumTuplePattern | enumStructPattern)? | literal | '_'
-enumTuplePattern   : '(' (pattern (',' pattern)*)? ','? ')'
-enumStructPattern  : '{' (IDENTIFIER (':' pattern)? ','?)* '}'
+pattern            : 'error' identDef
+                     | identRef (enumTuplePattern | enumStructPattern)?
+                     | literal
+                     | '_'
+fieldPattern       : identRef | '_'
+enumTuplePattern   : '(' (fieldPattern (',' fieldPattern)*)? ','? ')'
+enumStructPattern  : '{' (IDENTIFIER (':' fieldPattern)? ','?)* '}'
 loopExpr           : 'loop' loopState (',' loopState)* loopFor? loopWhile? 'do' blockExpr
 loopState          : identDef '=' logicalOrExpr
 loopFor            : 'for' identDef 'in' logicalOrExpr

@@ -32,22 +32,6 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 10000
 
 [[tests]]
-name = "not_supported.non_null_assert"
-desc = "The postfix `!` is rejected at the operator; it used to be recorded and never read."
-kind = "negative"
-case = "../../../cases/compile/not_supported/non_null_assert.cml"
-args = ["${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ConstructNotSupported"
-expect_diagnostic_code = "0x0300001F"
-expect_diagnostic_line = 9
-expect_diagnostic_column = 14
-expect_output_contains = ["'!' is not supported: the postfix non-null assertion is not implemented."]
-expect_output_not_contains = ["never printed", "UnknownInternalError", "Warning"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 10000
-
-[[tests]]
 name = "semantic.duplicate_struct_field"
 desc = "A field written twice in a struct literal is an error at the second one; the later value used to be dropped, silently."
 kind = "negative"

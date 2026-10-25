@@ -2747,9 +2747,13 @@ Value Builder::visitAngledValues(cst::AngledValues context) {
 
 /*
 pattern
-    : identRef (identDef | enumTuplePattern | enumStructPattern)?
+    : 'error' identDef
+    | identRef (enumTuplePattern | enumStructPattern)?
     | literal
     | '_' // wildcard
+    ;
+fieldPattern
+    : identRef | '_'
     ;
 */
 Value Builder::visitPattern(cst::Pattern context) {
@@ -2767,15 +2771,8 @@ Value Builder::visitPattern(cst::Pattern context) {
         // value taken out of a `T?` / `T!`, `error e` binds the error of a failed `T!`. Both
         // are a reference node; `error e` carries the bound name as its child. Whether the
         // scrutinee has such a type is known to the graph builder only, which reports an
-        // identifier pattern over any other type as not implemented.
-        if (context->get<cst::IdentDef>() && context->get<cst::IdentRef>()->text() != "error") {
-            diags_->of(SemanticDiag::ConstructNotSupported)
-                .at(rangeOf(context->firstToken(), context->lastToken()))
-                .commit(
-                    context->get<cst::IdentRef>()->text() + " " +
-                        context->get<cst::IdentDef>()->text(),
-                    "the only pattern of two words is 'error e'");
-        }
+        // identifier pattern over any other type as not implemented. The parser reads the second
+        // word of a pattern only after `error` (`parsePattern`), so the name here is the error's.
         if (context->get<cst::EnumTuplePattern>() || context->get<cst::EnumStructPattern>() ||
             context->get<cst::IdentRef>()->text().find("::") != std::string::npos) {
             // A variant without fields is written by its qualified name (`case Shape::Empty`):
@@ -4144,11 +4141,9 @@ Value Builder::visitAnnoExpr(cst::AnnoExpr context) {
             }
             lhsNode = exprNode;
         } else {
-            // The postfix `!` (non-null assertion) used to be recorded and never read.
-            diags_->of(SemanticDiag::ConstructNotSupported)
-                .at(rangeOf(tokenOf(child)))
-                .commit("!", "the postfix non-null assertion is not implemented");
-            unwrapNodeAs<DataLoad>(lhsNode)->setNonNull(true);
+            // Every shape of an `annoExpr` is read above; the postfix `!` is not one of them any
+            // more (the parser refuses it: the mark belongs to a `T!`, not to a value).
+            ASSERT(false, "an annoExpr child of another shape reached the builder");
         }
     }
     LEAVE("AnnoExpr");
@@ -4719,13 +4714,9 @@ Value Builder::visitLiteral(cst::Literal context) {
         // Keep the trailing `i`: the literal's text is what the GCT reads the value from.
         type = LiteralType::Imaginary;
     } else if (context->tok(TK::String) || context->tok(TK::FString)) {
-        if (context->tok(TK::FString)) {
-            // An expression builds a formatted string (visitFStringData); a pattern needs a
-            // constant, and an interpolation is not one.
-            diags_->of(SemanticDiag::ConstructNotSupported)
-                .at(rangeOf(context->firstToken()))
-                .commit("`...`", "a formatted string is not a constant, so it cannot be a pattern");
-        }
+        // The text of a string constant, as a pattern takes it (`case 'x'`). The formatted
+        // strings of an expression go to visitFStringData (visitLiteralData), and the pattern
+        // production no longer takes one, so what arrives here is a plain string.
         data = data.substr(1, data.size() - 2); // Remove quotes
         type = LiteralType::String;
     } else if (context->tok(TK::MultiStr)) {
@@ -4760,19 +4751,13 @@ Value Builder::visitEnumPattern(cst::Pattern context, cst::IdentRef ref) {
     const auto bind = [&](cst::Pattern pattern, const std::string &name) {
         std::string binding;
         if (pattern->text() != "_") {
-            if (pattern->get<cst::IdentRef>() && !pattern->get<cst::EnumTuplePattern>() &&
-                !pattern->get<cst::EnumStructPattern>()) {
-                binding = pattern->get<cst::IdentRef>()->text();
-            } else {
-                // Nested patterns are read so that the message is about the language rather
-                // than about the grammar; what they would bind has not been decided.
-                diags_->of(SemanticDiag::ConstructNotSupported)
-                    .at(rangeOf(pattern->firstToken(), pattern->lastToken()))
-                    .commit(
-                        pattern->text(),
-                        "a nested pattern is not supported; write a name or '_' for each field and "
-                        "match inside the arm");
-            }
+            // A field is a `fieldPattern`: a name or `_`. The parser refuses a nested pattern and
+            // a literal where it is written (`parsePattern`), so a name is all that arrives.
+            ASSERT(
+                pattern->get<cst::IdentRef>() && !pattern->get<cst::EnumTuplePattern>() &&
+                    !pattern->get<cst::EnumStructPattern>(),
+                "a field pattern of another shape reached the builder");
+            binding = pattern->get<cst::IdentRef>()->text();
         }
         fields.push_back(EnumPatternField{name, binding});
     };

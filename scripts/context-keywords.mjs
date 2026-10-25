@@ -161,7 +161,7 @@ export const CONTEXT_KEYWORDS = [
         group: 'type',
         zh: '`match` 的 `case` 模式里，失败的那个 `T!` 取出来的错误：两个词的写法 `error e`',
         en: 'in a `case` pattern of a `match`: the error taken out of a failed `T!`, written as the two words `error e`',
-        evidence: ['if (context->get<cst::IdentDef>() && context->get<cst::IdentRef>()->text() != "error") {'],
+        evidence: ['const bool isError = atWord(0, "error");'],
     },
     {
         word: 'fields',

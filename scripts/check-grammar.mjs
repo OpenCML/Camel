@@ -100,6 +100,7 @@ const FOLDED = {
     accessExpr: 'parseAccess',
     memberAccess: 'parseAnno',
     primaryData: 'parsePrimary',
+    fieldPattern: 'parsePattern',
     indexValues: 'parseArguments',
     argumentList: 'parseArguments',
     typeExpr: 'parseType',

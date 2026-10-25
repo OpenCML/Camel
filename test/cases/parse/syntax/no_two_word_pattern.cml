@@ -1,0 +1,20 @@
+/**
+ * A pattern is one word: a name, a constant literal, `_`, a variant path, or the two words
+ * `error e`. `case a b` is not in the language, so the second word is refused where the `=>`
+ * belongs (line 11, column 16): `Expected '=>' before 'b'.` It was a `ConstructNotSupported`
+ * naming the one two-word pattern.
+ */
+module no_two_word_pattern
+
+func f(n: int): int {
+    return match n {
+        case a b => 1
+        case _ => 0
+    }
+}
+
+func main(): int sync {
+    println('never printed')
+    println(f(1))
+    return 0
+}

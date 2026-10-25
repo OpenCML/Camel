@@ -360,7 +360,8 @@ class ParserImpl {
     void parseTypeCasePattern();
     void parseEnumTuplePattern();
     void parseEnumStructPattern();
-    void parsePattern();
+    /// `fieldPosition` reads a `fieldPattern` (`identRef | '_'`) instead of a whole `pattern`.
+    void parsePattern(bool fieldPosition = false);
     void parseLoop();
     void parseOr();
     void parseAnd();

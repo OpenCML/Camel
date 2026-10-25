@@ -647,7 +647,7 @@
         { "name": "keyword.operator.assignment.camel", "match": "=" },
         { "name": "keyword.operator.arithmetic.camel", "match": "\\+|-|\\*|/|%|\\^|@" },
         { "name": "keyword.operator.bitwise.camel", "match": "~" },
-        { "comment": "T! (may have failed) and the postfix x!: directly after a type or an expression.", "name": "keyword.operator.type.camel", "match": "(?<=[A-Za-z_0-9)\\]>?!])!" },
+        { "comment": "The mark of a fallible type, T!: it follows a name, a `)` , a `]` or a `>` (int!, Map<string, int>!, int[3]!). A postfix x! is not a form of the language.", "name": "keyword.operator.type.camel", "match": "(?<=[A-Za-z_0-9)\\]>?!])!" },
         { "name": "keyword.operator.logical.camel", "match": "!" },
         { "comment": "Type operators: T? and A & B, A \\ B. '|' is not one: there are no union types, and the single pipe is the ordinary or operator (the pattern above).", "name": "keyword.operator.type.camel", "match": "\\?|&|\\\\" }
       ]
