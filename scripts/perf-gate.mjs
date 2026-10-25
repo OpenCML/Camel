@@ -346,9 +346,8 @@ function timeit(camel, backend, inline) {
     return argv
 }
 
-// The install this run measures: `--camel <path>` names it (main parses the argument), else
-// `$CAMEL_HOME/bin/camel`, else this tree's `out/latest/bin/camel`. One rule, in one place:
-// test/tools/camel-arg.mjs.
+// The install this run measures: `--camel <path>` names it (main parses the argument), else this
+// tree's `out/latest/bin/camel`. One rule, in one place: test/tools/camel-arg.mjs.
 let CAMEL = null
 
 function camelExe() {
@@ -1034,7 +1033,6 @@ function log(message) {
 function main() {
     const named = takeCamel(process.argv.slice(2), REPO_ROOT, usage)
     CAMEL = named.camel
-    const camelNamed = named.named
     const options = parseArgs(named.rest)
     const inventory = planInventory()
     if (reportInventoryProblems(inventory)) {
@@ -1058,14 +1056,12 @@ function main() {
             cases.push({ ...one, plan: plan.id, argv: () => one.argv(options.camel) })
         }
     }
-    // The child finds its stdlib from its own directory; setting CAMEL_HOME to the install this
-    // script measured keeps an exported CAMEL_HOME from pointing the child at a different build.
-    // A run that named its install (`--camel <path>`) keeps the environment it was given: the
-    // named path travels to every child as the argument it is, not as an exported variable.
+    // The child finds its stdlib from its own directory, so `CAMEL_HOME` is set to the install this
+    // run measured -- `--camel <path>`, else this tree's `out/latest`. An exported `CAMEL_HOME` does
+    // not decide which install is measured, and it does not travel into the children either: the
+    // install of a run is a property of the run, not of the shell it was started from.
     const env = { ...process.env }
-    if (!process.env.CAMEL_HOME && !camelNamed) {
-        env.CAMEL_HOME = installDir(options.camel)
-    }
+    env.CAMEL_HOME = installDir(options.camel)
     const revision = revisionInfo()
     const build = buildStamp(options.camel)
     const host = hostInfo()

@@ -353,7 +353,7 @@ SIZE_HELP = ("multiplies the number of functions and of statements of main (defa
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--camel", help="the install to measure: the `camel` binary to run, else "
-                                    "$CAMEL_HOME/bin/camel, else this tree's out/latest/bin/camel")
+                                    "this tree's out/latest/bin/camel")
     sub = ap.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("show")
     p.add_argument("--seed", type=int, required=True)

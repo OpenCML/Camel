@@ -540,7 +540,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap.add_argument("--ref-cap", type=float, default=300.0, help="the zero-pass run is killed after this")
     ap.add_argument("--jobs", type=int, default=4)
     ap.add_argument("--camel", default="", help="the install to measure: the `camel` binary to run, "
-                                               "else $CAMEL_HOME/bin/camel, else <repo>/out/latest/bin/camel")
+                                               "else <repo>/out/latest/bin/camel")
     ap.add_argument("--repo-root", default=os.environ.get("CAMEL_REPO_ROOT", ""),
                     help="repository root (default: two levels above this file, or $CAMEL_REPO_ROOT)")
     ap.add_argument("--bench-artifacts", default="", help="where the benchmark weights go (default <out>/bench-artifacts)")

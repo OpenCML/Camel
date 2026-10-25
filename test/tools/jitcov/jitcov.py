@@ -7,8 +7,8 @@
     jitcov.py [--corpus NAME=GLOB ...] [--progen 1-300] [--progen-size 1] [--jobs 4]
               [--timeout 20] [--out DIR] [--pipelines plain,inline,opt] [--camel PATH]
 
-Run from the repository root (the install `--camel <path>` names, else `CAMEL_HOME`, else
-out/latest). Every program is run twice per pipeline, under std::fvm and under std::jit, with
+Run from the repository root (the install `--camel <path>` names, else this tree's out/latest).
+Every program is run twice per pipeline, under std::fvm and under std::jit, with
 stats="file" given (see
 src/passes/sched/fastvm/fastvm_stats.cpp): the VM then writes, for every graph, whether the
 JIT compiled it, every construct that keeps it from being compiled, and how many of its
@@ -60,8 +60,8 @@ sys.path.insert(0, str(ROOT / 'test' / 'tools'))
 from camel_arg import camel_argument  # noqa: E402
 
 
-# The install this run measures: `--camel <path>` names it, else `$CAMEL_HOME/bin/camel`, else this
-# tree's `out/latest/bin/camel`. One rule, in one place: test/tools/camel_arg.py.
+# The install this run measures: `--camel <path>` names it, else this tree's
+# `out/latest/bin/camel`. One rule, in one place: test/tools/camel_arg.py.
 CAMEL, REST = camel_argument(sys.argv, ROOT)
 
 

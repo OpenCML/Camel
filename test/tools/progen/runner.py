@@ -111,7 +111,7 @@ def matrix(name: str = "full", backends: Optional[List[str]] = None) -> Dict[str
 
 
 # The install this run measures. `progen.py --camel <path>` sets it; with none it is
-# `$CAMEL_HOME/bin/camel`, else this tree's `out/latest/bin/camel`. One rule, in one place:
+# this tree's `out/latest/bin/camel`. One rule, in one place:
 # test/tools/camel_arg.py.
 CAMEL: Optional[str] = None
 

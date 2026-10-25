@@ -115,7 +115,9 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
-import { defaultCamel, refuseInstallNotOfThisTree } from './install-stamp.mjs'
+import { refuseInstallNotOfThisTree } from './install-stamp.mjs'
+// The one default for the install a tool measures with no `--camel`: this tree's `out/latest`.
+import { defaultCamel } from '../test/tools/camel-arg.mjs'
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const STDLIB_DIR = path.join(REPO_ROOT, 'stdlib')
