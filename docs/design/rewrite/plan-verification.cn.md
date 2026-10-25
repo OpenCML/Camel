@@ -328,7 +328,7 @@ S1 ──┬─► S2 ───────────────────�
   node scripts/test.js test/plans/feat/modules/verify_solver.plan.toml
   ```
   命名一个计划**文件**时它会全跑，与 `--tier` 无关——这正是"慢层留在批次点"要的形式。
-- **慢层的归属**：求解器证全库 69 条是分钟级。按 `docs/test-plans.md` 的层规则标 `tier = "slow"`，并在 `desc` 里写明时间为什么是固有的（"each rule is a solver query over its own two sides, and the library is 69 rules"）；批次点 `npm run release-gate` 用**计划文件**点名跑它（release-gate 的既有做法就是"按显式计划文件跑可跑的慢层"）。
+- **慢层的归属**：求解器证全库 69 条是分钟级。按 `docs/test-plans.md` 的层规则标 `tier = "milestone"`，并在 `desc` 里写明时间为什么是固有的（"each rule is a solver query over its own two sides, and the library is 69 rules"）；它在里程碑层跑，不进合并闸门与发布闸门的慢层。
 - **本地**：`CAMEL_Z3_VERIFY=OFF` 是默认，开发者循环不受影响；要跑证明的开发者用同一个计划文件。
 
 ## 5. 不做什么、风险
