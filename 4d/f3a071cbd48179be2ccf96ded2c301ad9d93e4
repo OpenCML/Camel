@@ -1,0 +1,22 @@
+tip=4df3a071c H554 第十二轮：8 项检查全绿 + 生成器修好 + 两条脚手架（34 → 31，新增红 0）
+
+数字
+- gate-30（合并后）：`total: 6381, pass: 6322, fail: 31, skip: 12, known failures: 16` —— 34 → **31**，逐名 **fixed 3 / new 0**。
+- `-Check all`：**8 run, 0 failed**（含我新接的 `export-matrix` 与你新接的 `model-generators`，后者本轮修好）。
+
+① `model-generators` 修好（改生成器，一字一行）
+- `benchmarks/resnetbn/tools/gen_model_cml.py` 的头注释块后补一个空行，让它产出与 `benchmarks/resnetbn/model.cml` 逐字节相同（文件现状为准）。读数：`python benchmarks/resnetbn/tools/gen_model_cml.py --check` → `model.cml is what this generator produces (274 lines)`，exit **0**。
+- 同类漏处核查：`benchmarks/**` 里另一个生成脚本 `benchmarks/compile/gen_modules.py` **没有 `--check`**（它按 `--modules/--shape/--funcs` 生成到 OUT_DIR，不是检入的 `.cml`），故 `benchmarks/**` 内没有第二处可核的生成物——**一处也不漏，如实报**。
+
+② 脚本断言族：修了两条（都是脚手架过期，产品未动，提交 `5334dafb6`）
+- `macro_body_effect_stage`：`test/cases/trans/effect_trace/effect_trace.py` 里 `"the macro body println is at line 8"` 与 `origin["line"] == 8` 是旧行号；用例 `macro_effect.cml` 的宏体 `println` 在**第 7 行** → 两处改成 7 → 该计划全绿。
+- `python_binding.session`：两处过期——绑定自带检查 `diagnostic.line == 9`（用例 `python_broken.cml` 的 `missing_name` 确在 **8:12**，编译器从头就对）与计划里钉的 `python_broken.cml:7:12` → 改成 `8:12` → 该计划全绿（`total: 1, pass: 1`）。
+- 余下 6 条家族读数（下一轮逐条读脚本再修）：`fixes_apply`（两种情况报同一个码 `0x01000001`，一个该是"未定义"）、`fusion_group.profile.none`（报告与基点逐字节相同、只差测量数字）、`dump_after_each_pass`（`pass dump: FAIL`）、`compile_bench.smoke`（`chain-3/compile: exit 1`）、`debugger.http_gateway`（33 项 1 项失败）、`docs.snippets_compile`（`docs/tutorial/17_teaching_a_law.en.md:92/166` 片段过期）、LSP 三条（`lsp.fstring` **环境**：`ModuleNotFoundError: No module named 'camel'`）。
+
+③ 合并与重剥：`--no-ff` 合 develop `1d39de6e2`，唯一冲突是**你已送上 develop 的** `gradient-refusal-named-call.md`（add/add，develop 那侧多 3 行）→ 取 develop 版本，提交 `4df3a071c`；随后 `node scripts/strip-module-declarations.mjs` 逐字 `0 declaration(s) dropped, 0 name(s) that follow their file, 0 file(s) rewritten`（develop 本轮没有带 `module` 声明的新用例）。
+
+④ 断链归属（只报不动）：`git log -1 --format="%h %an %s" -- docs/handover/questions/entry-module-name-and-a-block-tag-before-a-type.md` → `15044417b Zhenjie Wei Bring the expectations and the AST list in step with the merged, stripped tree` —— **是作者/你的页，我没动**，锚点 `#54-命名空间` 与 `docs/handover/questions` 里其它页的标题不一致。
+
+⑤ 余下 31 条的族谱：`grad_function_value_*` 12（页已在 develop）、`gpu_scope.module_tag_propagates`（页同上）、`json_data_of_a_pass_the_module_does_not_provide`（"范围约定"页同上）、develop 侧位置族 7 条（读数已有，按"先改测试两处断言、再改编译器"办）、脚本族余 6 条 + LSP 3 条 + 环境 1 条。
+
+纪律：未推 origin；未碰 `docs/language/**` 散文；未碰其它工作树/分支；未在 Windows 构建。报告已附 `git notes --ref=handover`（HEAD），工作树干净。
