@@ -1,0 +1,24 @@
+tip=5cd3ecaf5 H554 第十五轮：清 2 条（工具自判据 + 脚本正则），`fixes_apply` 查明产品是对的
+
+数字
+- gate-32（全量快层）：`total: 6382, pass: 6327, fail: 27, skip: 12, known failures: 16` —— 29 → **27**，逐名 **fixed 2 / new 0**。
+- `-Check all`：**8 run, 0 failed**。提交 `5cd3ecaf5`。
+
+① `entry_args.missing_argument_json` **已清**——错的一侧是**工具**，不是计划
+- 逐字前读数（每个后端都这样）：`std::fvm: FAIL exit 1, 1 diagnostic(s), RuntimeDiag::EntryArgumentMissing at stage run, line 5: No value was given for the parameters 'rate' and 'loud' of 'main'.`
+- 自判据在 `test/cases/compile/entry_args/missing.mjs:31-36`：`proc.status === 1 && diags.length === 1 && d.data.name === 'RuntimeDiag::EntryArgumentMissing' && d.data.stage === 'run' && d.range.start.line === 6 && …`。
+- 用例 `test/cases/compile/entry_args/scalars.cml` 少了一行声明后，该诊断实在**第 5 行**（读数自己就写着 `line 5`）→ 工具的自判据陈旧，于是它打印 `FAIL`，而计划又写着 `expect_output_not_contains = ["FAIL"]`——**"工具与计划互斥"的根因是工具那一侧**。改 `=== 6` → `=== 5`，两个计划合跑 `total: 108, pass: 107, fail: 1`（余下那条见 ④）。
+
+② `failed_depth.error` **已清**：脚本正则钉 `failed_depth\.cml:17:13`，而计划自己的 `expect_diagnostic_line = 15` 与实测 `15:13` 一致 → 正则改 `15:13`。
+
+③ `fixes_apply`（`LexicalDiag::InvalidNumberFormat` 的 `09` 没 fix）——**产品是对的，测试侧陈旧，按你说的"只报不动"**
+- 产品侧逐字：`src/parse/syntax/report.cpp:310-318` 在 `decimalOfLeadingZeroRun(text)` 有值时才挂 fix（标题 `write the number without its leading zero`）；该函数 `report.cpp:208-223` 的判定是——必须以 `0` 开头、全是数字、且 `077` 因"十进制 77 与八进制 63 两读"返回 `nullopt`；`09` 命中 `find_first_of("89")`，返回 `"9"`。**所以 `09` 应当有 fix，编译器确实给了。**
+- 失败的是测试侧：`test/cases/compile/diag_fixes/proof.mjs:442-450` 的 `withFix = covered.get(name)` 得到 `undefined`（`covered` 是该测试自己扫出来的"有 fix 的码"表）→ 下一轮读 `covered` 怎么建（扫哪些用例），是对齐它，不是改编译器。**这条我没动手。**
+
+④ `failed_evaluation.error`（读数，未修）：用例 stdout 逐字两行 `EFFECT boom`；运行器报 `Error: error missing: EFFECT boom`；而计划内两处自相矛盾——`expect_diagnostic_line = 17`（配合 `expect_diagnostic_name = RuntimeDiag::MacroEvaluationFailed`、code `0x0400000E`）与脚本正则 `failed_evaluation\.cml:19:13`。下一轮第一步：读运行器 `expect_diagnostic_*` 的期望串是怎么拼的（它的 `error missing: …` 文本来源），再决定 17/19 与 `EFFECT boom` 各归哪侧。
+
+⑤ LSP 三条（**未动，读数**）：`lsp.navigation` `expected "8:5-8:13" actual "6:5-6:13"`（**差 2 行**，26/104、18/66 大量同类）；`lsp.editing` 期望 `"function declaration"` 实得 `"none"`；计划在 `test/plans/feat/tools/lsp.plan.toml`，逐项断言在测试驱动里 → 下一轮先读驱动的期望来源（是内联字面量还是由用例现场算的），再按"先测试后产品"办。`lsp.fstring` **环境**（`ModuleNotFoundError: No module named 'camel'`）。
+
+⑥ `pass_dump.py:86-88`、`debugger.http_gateway` 那一项：**本轮没读全**（日志里 `got` 被截断、debugger 只报 `1 of 33`）→ 下一轮各自单计划跑一次、把整行打出来再定。其余读数（`compile_bench.smoke` 的 `chain-3/compile|passes|fvm: exit 1` + Markdown 缺一节、`fusion_group.profile.none`、`docs.snippets_compile` 两处片段、`captured_write_graph.warnings` 的 `39:20 | 58:13`、`check.lexical_limit_json` 的 `source positions retained`）同上轮报告，未变。
+
+纪律：未推 origin；`docs/language/**` 未动（等 `refusal-run-time-or-compile-time` 的答案）；未碰其它工作树/分支；未在 Windows 构建。工作树干净，报告已附 `git notes --ref=handover`（HEAD）。
