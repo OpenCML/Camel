@@ -227,13 +227,13 @@ golden = "golden/tutorial_examples/12_stdlib.txt"
 
 [[tests]]
 name = "tutorial.examples.13_graph"
-desc = "The program whose graph chapter 13 draws, run plainly: the result of the call it shows."
+desc = "Chapter 17: the program whose graph the chapter draws, run plainly -- the result of the call it shows."
 case = "../../../docs/tutorial/examples/13_graph.cml"
 golden = "golden/tutorial_examples/13_graph.txt"
 
 [[tests]]
 name = "tutorial.examples.14_passes"
-desc = "Four passes over one program: the same number whichever back end runs it."
+desc = "Chapter 17: four passes over one program -- the same number whichever back end runs it."
 case = "../../../docs/tutorial/examples/14_passes.cml"
 golden = "golden/tutorial_examples/14_passes.txt"
 
