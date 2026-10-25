@@ -1,0 +1,24 @@
+tip=TBD H554 第十四轮：拿到 `(at …)` 的实现读数，并发现它与"一次运行只报一条"的模型冲突 → 立页，未擅改产品
+
+数字
+- 本轮**没有清红**（29 保持，gate-31 `total: 6382, pass: 6325, fail: 29, skip: 12, known failures: 16`），**新增红 0**：因为你点名要的 12 条是产品行为改动，而读数显示它不能局部改（见 ②），我不做"改一半"的事。
+- `-Check all` 复跑见文末。
+
+① 你要的第一条读数：`(at …)` **不在渲染器里，在 autodiff 模块自己的文本里**
+- 拼装处：`modules/autodiff/pullback.cpp:149-163` 的 `whereIs(origin)`，注释逐字 `/// " (at file:line:column)" for a node origin, or nothing when it is unknown.`，格式串在 `:160`：`" (at {}:{}:{})"`（用 `fileForOrigin` + `resolveOrigin`，行列出 1 起）。
+- 使用处：`pullback.cpp:1394`、`:1414` 等把 `whereIs(draft_.nodeOrigin(id))` 拼进消息；消息本身由 `Backward::refusalReason(call)`（`:3304` 定义、`:994` 声明）逐调用拼出——它已经**是"这一次调用"的消息**（`"cannot differentiate through this call of a function value: "`）。
+- 抛出：`pullback.cpp:84` `throwRuntimeFault(RuntimeDiag::RuntimeError, "autodiff: " + message);`。
+- 真诊断文本逐字（一条，两处调用里只出现 10:13）：`…grad_function_value_branch.cml:10:13: [Error]: An error has occurred: autodiff: cannot differentiate through this call of a function value: which function it calls is not evident where it is called: the function is chosen by a branch at run time (at …/grad_function_value_branch.cml:10:13). A call of a function value is differentiated when the function is named, or built by a lambda, … (name=RuntimeDiag::RuntimeError, code=0x04000000)`。
+- **所以你的两个假设中"渲染器把关联位置内联进消息"不成立**：那是模块手写的文本，删掉它是一行的事，但它和 12 条用例的第二处断言绑在一起。
+
+② 裁定没覆盖的新语义 → **已立页，未自己定**：`docs/handover/questions/refusal-run-time-or-compile-time.md`
+- 冲突点：裁定要"每个被拒调用各报一条，和一次编译收集所有错误一致"，但今天拒绝是**运行期故障**（`throwRuntimeFault`），而 `docs/cli.cn.md:107`（英文同）明写"运行期故障总是在第一个故障处结束运行" → "每调用一条"与"运行即停"不能同时成立。
+- 页里给了三条路与代价：①把拒绝提前到编译期（每条被拒调用一条 + 关联位置，最贴合裁定，但要新增一项语义分析与 autodiff 的判定保持一致）；②仍留在运行期、但在停止前把每个被拒调用都报出来（与"运行即停"冲突）；③维持每次运行一条，裁定只兑现"消息"那一半（去掉 `(at …)`、位置进位置字段、选值处进 related）——**这一条只兑现一半，我按"写页不要自己定"没做**。
+
+③ 你另点的两条（按"先产品后测试"，本轮只落读数）
+- `fixes_apply`：`LexicalDiag::InvalidNumberFormat` 的 `09` 情形逐字 `with a fix: undefined`（`077` 情形无 fix 是对的）→ **产品侧没给这条 fix**，方向是修 fix 表，不是改测试。
+- `entry_args.missing_argument_json`：工具每个后端逐字打印 `std::fvm: FAIL exit 1, 1 diagnostic(s), RuntimeDiag::EntryArgumentMissing at stage run, line 5: No value was given for the parameters 'rate' and 'loud' of 'main'.`，而计划要 `std::fvm: EntryArgumentMissing` 且写了 `expect_output_not_contains = ["FAIL"]` → 工具与计划互相矛盾，先读 `test/cases/compile/entry_args/missing.mjs` 的自判据再定哪侧。
+
+④ 其余族状态不变（读数已在上一轮报告逐条写明）：脚本族余 5 条（`dump_after_each_pass` 的 `pass_dump.py:86-88` 断言已写 `span.startswith("10:")`、got 待读全；`fusion_group.profile.none`；`compile_bench.smoke` 的 `chain-3/*: exit 1`；`debugger.http_gateway` 33 之 1；`docs.snippets_compile` 两处片段需按真实输出手改）、LSP 三条（位置族，计划 `test/plans/feat/tools/lsp.plan.toml`）+ `lsp.fstring` 环境、develop 侧余 5 条。
+
+纪律：未推 origin；`docs/language/**` 未动（那句等 ② 的答案）；未碰其它工作树/分支；未在 Windows 构建。工作树干净（新页与报告随本轮提交；报告附 `git notes --ref=handover`）。
