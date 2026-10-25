@@ -2370,14 +2370,17 @@ Value Builder::visitTypeDecl(cst::TypeDecl context) {
 }
 
 /*
-retStmt    : (RETURN | THROW) dataList ;
+retStmt    : (RETURN | THROW | YIELD) dataList ;
 */
 Value Builder::visitRetStmt(cst::RetStmt context) {
     ENTER("RetStmt");
     // `throw e` returns an error value: an exit like `return`, whose value is the failed form
     // of the function's declared `T!` (design principles 3.9; the graph builder checks the
-    // declaration).
-    ExitType exitType   = context->tok(TK::KwThrow) ? ExitType::Throw : ExitType::Return;
+    // declaration). `yield e` is the third exit the production reads: it gives one element of
+    // the stream the function's head declares (design principles 5.4).
+    ExitType exitType   = context->tok(TK::KwThrow) ? ExitType::Throw
+                        : context->tok(TK::KwYield) ? ExitType::Yield
+                                                    : ExitType::Return;
     node_ptr_t exitNode = createNodeAs<ExitStmtLoad>(exitType);
     setNodeTokenRangeByContext(exitNode, context);
     if (context->get<cst::DataList>()) {

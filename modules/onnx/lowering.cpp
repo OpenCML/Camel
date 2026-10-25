@@ -625,6 +625,136 @@ Value lowerSlice(const LowerContext &ctx) {
         shape);
 }
 
+/**
+ * `:op/slice_sub`: the core's one slice -- the node both `t[a:b:s]` and `slice(t, axis, a, b, s)`
+ * build, for any rank and any axis (the author's ruling of 2026-10-25, design principles 5.4).
+ * Its words are the value, the axis, the two bounds, the step and the mask that says which
+ * bounds the source wrote (`src/compile/gct/builder.cpp` fills it; the subscript's lowering
+ * always writes 3, the function form leaves it out when the caller did). The mask is the core's
+ * bookkeeping about the source text rather than part of the slice: it is read here for the
+ * defaults -- step 1, both bounds written -- and never exported.
+ *
+ * ONNX Slice clamps a bound that leaves the axis, where Camel faults (design principles 3.9),
+ * and that difference is the whole difficulty of this lowering. So a written bound that is not
+ * a proved constant travels through `Add(b, Gather(zeros(extent + 1), b))`: the gathered zero
+ * leaves the value alone where the bound is legal, and where it is not, the gather reads outside
+ * its zeros and ONNX Runtime fails where the run faults -- and the `Add` is what keeps the guard
+ * in the graph at all. The guard's index domain is the axis' own legal range, so a backward
+ * slice's start (which must be a position the axis has) is guarded by `extent` zeros and its end
+ * (which may be one past the first element) by `extent + 1`. A constant bound needs no guard:
+ * the write site refused a negative or out-of-range one already.
+ *
+ * A bound is a position from the end only in ONNX's own reading of a negative index, which is
+ * nothing Camel has: the end of a backward slice is written as -1, ONNX's own "before the first
+ * element", exactly as the core's kernel reads it (`src/builtin/operators/struct.cpp`,
+ * `sliceRange`).
+ */
+Value lowerSliceSub(const LowerContext &ctx) {
+    Emitter &e = ctx.emitter();
+    if (!ctx.has(3)) {
+        throw ExportError(
+            std::format(
+                "':op/slice_sub': a slice node has at least 4 words (value, axis, start, end), "
+                "this one has {}",
+                ctx.size()));
+    }
+    const auto facts = ctx.facts(0);
+    if (!facts.shape) {
+        throw ExportError("':op/slice_sub' of a tensor of unknown rank is not supported");
+    }
+    const int64_t rank   = static_cast<int64_t>(facts.shape->size());
+    const int64_t rawAt  = ctx.constInt(1);
+    const int64_t at     = rawAt < 0 ? rawAt + rank : rawAt;
+    if (at < 0 || at >= rank) {
+        throw ExportError(
+            std::format(
+                "':op/slice_sub': the axis {} is out of range for rank {}", rawAt, rank));
+    }
+    // A step that is not a constant would change the result's rank at run time, which no ONNX
+    // Slice can do; a zero step is refused where the program is written, so it cannot be here.
+    const int64_t step = ctx.has(4) ? ctx.constInt(4) : 1;
+    if (step == 0) {
+        throw ExportError("':op/slice_sub': a slice step must not be 0");
+    }
+    const int64_t written    = ctx.has(5) ? ctx.constInt(5) : 3;
+    const bool wroteStart    = (written & 2) != 0;
+    const bool wroteEnd      = (written & 1) != 0;
+    const std::optional<int64_t> extent = (*facts.shape)[static_cast<size_t>(at)];
+    const int64_t zero[] = {0}, one[] = {1}, two[] = {2}, minusOne[] = {-1};
+    const auto int64Cast = intAttr("to", static_cast<int64_t>(elemTypeOf(TypeCode::Int64)));
+
+    // The extent as a one-element int64 tensor: the number now, or read from the value's shape
+    // when the axis' extent is not known at export time.
+    std::string extentVec;
+    if (extent.has_value()) {
+        const int64_t n[] = {*extent};
+        extentVec         = e.int64s(n);
+    } else {
+        const int64_t axisIndex[] = {at};
+        extentVec                 = e.node(
+            "Gather",
+            {e.node("Shape", {ctx.input(0)}), e.int64s(axisIndex)},
+            {intAttr("axis", 0)});
+    }
+    // The guard's index domain is the axis' own legal range of positions, held as zeros of that
+    // length: an index inside the domain gathers a zero, an index outside it reads past the end
+    // of the zeros and ONNX Runtime fails where the run faults. A forward slice's bounds are
+    // positions 0..extent (the end may be one past the last position, which is the axis' own
+    // extent), a backward slice's start is a position the axis has (0..extent - 1) while its end
+    // may be one before the first. ONNX reads a *negative* index from the end of the tensor,
+    // which no Camel bound ever is, so a negative index is pushed further out of range on that
+    // side instead of landing on a legal one.
+    const auto boundOf = [&](size_t index, bool isStart) {
+        const bool known    = ctx.arg(index).isConstant();
+        const int64_t value = known ? ctx.constInt(index) : 0;
+        const bool legal    = known && extent.has_value() && value >= 0 &&
+                           (isStart && step < 0 ? value < *extent : value <= *extent);
+        if (legal) {
+            const int64_t proved[] = {value};
+            return e.int64s(proved); // the write site proved it a position of the axis
+        }
+        const std::string length = isStart && step < 0
+                                       ? extentVec
+                                       : e.node("Add", {extentVec, e.int64s(one)});
+        const std::string zeros = e.node("Cast", {e.node("ConstantOfShape", {length})}, {int64Cast});
+        const std::string bound =
+            e.node("Unsqueeze", {ctx.input(index, TypeCode::Int64), e.int64s(zero)});
+        const std::string negative =
+            e.node("Cast", {e.node("Less", {bound, e.int64s(zero)})}, {int64Cast});
+        const std::string pushed = e.node(
+            "Sub",
+            {bound,
+             e.node(
+                 "Mul", {negative, e.node("Add", {length, e.int64s(two)})})});
+        return std::string(
+            e.node("Add", {bound, e.node("Gather", {zeros, pushed}, {intAttr("axis", 0)})}));
+    };
+    const std::string start =
+        wroteStart ? boundOf(2, true)
+                   : (step > 0 ? e.int64s(zero)
+                               : (extent.has_value()
+                                      ? e.int64s(std::vector<int64_t>{*extent - 1})
+                                      : e.node("Sub", {extentVec, e.int64s(one)})));
+    const std::string end = wroteEnd ? boundOf(3, false) : (step > 0 ? extentVec : e.int64s(minusOne));
+
+    // The length of the slice, when the extent and both bounds are known now.
+    std::optional<int64_t> length;
+    if (extent.has_value() && (wroteStart ? ctx.arg(2).isConstant() : true) &&
+        (wroteEnd ? ctx.arg(3).isConstant() : true)) {
+        const int64_t s = wroteStart ? ctx.constInt(2) : (step > 0 ? 0 : *extent - 1);
+        const int64_t n = wroteEnd ? ctx.constInt(3) : (step > 0 ? *extent : -1);
+        length          = step > 0 ? (s < n ? (n - s + step - 1) / step : 0)
+                                   : (s > n ? (s - n - step - 1) / (-step) : 0);
+    }
+    const int64_t axis[] = {at}, steps[] = {step};
+    auto shape = facts.shape.value_or(tensor::StaticShape{});
+    shape[static_cast<size_t>(at)] = length;
+    return Value::symbolic(
+        e.node("Slice", {ctx.input(0), start, end, e.int64s(axis), e.int64s(steps)}),
+        facts.dtype,
+        shape);
+}
+
 /// Reduction over one axis. Opset 18 moved `axes` from an attribute to an input for every
 /// reduction except ReduceSum (which moved at opset 13).
 LowerFn reduceAxisOp(std::string opType) {
@@ -1230,6 +1360,10 @@ LoweringRegistry::LoweringRegistry() {
         }
     }
     add(":op/idx_arr", lowerArrayIndex);
+    // The core's own slice: the node `t[a:b:s]` and `slice(t, axis, a, b, s)` both build. The
+    // module's `tensor:slice` above answers the calls the tensor module exports; this one answers
+    // every call the core's rule takes (any rank, any axis, any element type).
+    add(":op/slice_sub", lowerSliceSub, 10);
     addGradientLowerings(add);
     add("math:sqrt", scalarOp("Sqrt", 1));
 

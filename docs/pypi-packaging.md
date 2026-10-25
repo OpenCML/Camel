@@ -126,6 +126,28 @@ rollup 扫描 `modules/python/sdks/`，仅当同时满足：
 
 工作流 **`.github/workflows/build-pypi.yml`** 在矩阵 job 内执行 `npm run pypi:rollup`。典型 CI 镜像 **未** 提交 `modules/python/sdks/`，因此走 **「无 SDK 回退」**：每个 job 用 `setup-python` 的单一版本打 **一个** 与该解释器一致的 wheel。
 
+### 7.1 各平台 interop wheel 的 CPython 版本（Linux 是 3.11）
+
+`cp<mm>-cp<mm>-<platform>` 这只 wheel 里的 `_camel` 扩展是用**该解释器**编的，`python.cmo` 也链着它的
+`libpython`，所以它是**每个平台一只**，不是跨版本的一只。Linux job 里这个解释器是
+**`/usr/bin/python3.11`**（`dnf install python3.11-devel python3.11-pip`）：
+
+- 镜像自带的 `/opt/python/cp3*` 是**静态**解释器（`Py_ENABLE_SHARED=0`，`lib/` 下没有 `libpython3.x.so`），
+  而 `modules/python` 用 `pybind11::embed` 把解释器嵌进 `python.cmo`，CMake 的 `Development.Embed`
+  只认**共享** libpython。用 `/opt/python/cp310-cp310` 会在编译前就停：
+  `Could NOT find Python3 (missing: Python3_LIBRARIES Development.Embed)`。
+- 该频道**没有 python3.10 包**：`dnf list --available 'python3.10*'` →
+  `Error: No matching Packages to list`（只有 python36/38/39 与 3.11、3.12 的模块流）。
+  所以 **Linux 上的 CPython 3.10 只能装 `py3-none`**：`camel` 命令可用，`import camel` 会说明它需要
+  本次发布编了 interop wheel 的那个版本。
+
+要回到 5.37 item 7 的「稳定 ABI、一只覆盖 3.10+」：`bindings/python/module.cpp` 用的是**原始 C API**
+（没有 pybind11），`-DPy_LIMITED_API=0x030A0000` 下只剩 5 处报错——`PyTuple_SET_ITEM`、
+`PyTuple_GET_SIZE`、`PyTuple_GET_ITEM`，以及 2 处 `PyTypeObject` 成员访问；也就是扩展这一侧可以改。
+但 `modules/python`（`python.cmo`/`pyplot.cmo` 的 `pybind11::embed`）**改不了**：pybind11 不支持受限 API，
+`-DPy_LIMITED_API` 直接编译失败（`buffer_info.h` 里 `Py_buffer` 不可见）。结论：extension 可以 abi3，
+`python.cmo` 仍只能对着某一个解释器编。
+
 若要在 CI 中改为「按 sdks 多 wheel」，需在 job 中准备 `sdks/` 目录（下载 / 缓存 / 私有制品），并理解构建时间与磁盘成本会显著增加。
 
 推送 `v*` / `V*` 版本 tag 后，所有矩阵构建和 wheel 安装检查成功，工作流会自动发布到 **PyPI**。手动运行工作流时，`publish_to` 仍可选择 `none`（仅构建，默认）、`pypi` 或 `testpypi`；TestPyPI 只通过手动选择发布。

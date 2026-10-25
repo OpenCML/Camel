@@ -257,18 +257,20 @@ void extendArrayVjp(VjpBuilder &b, const VjpCall &call) {
         call.withInputs[0], b.addOper(tangentType, ":op/slice_sub", suffix));
 }
 
-// A slice of an array — `xs->slice<start, end>` (`:struct/slice_arr`) and `xs[a:b:s]`
-// (`:op/slice_sub`) — takes a range of positions, so its adjoint is an array of the parent's
-// length with the upstream gradient at those positions and the zero tangent everywhere else.
-// That is `:tangent/scatter_slice_arr`, the array counterpart of `tensor:slice_grad`. The
-// bounds, the step and the mask are passed through unchanged, so the reverse normalizes them
-// with the same code as the forward, a negative step included: it walks the positions backwards
-// and its gradient is placed in that same order. The tangent of an array is the array of its
-// elements' tangents (design principles 9.9), so the gradient of the result is already an array
-// of that element type and its elements are placed, not converted.
+// A slice of an array — `xs->slice<start, end>` (`:struct/slice_arr`), the subscript `xs[a:b:s]`
+// and the call `slice(xs, axis, a, b, s)` (`:op/slice_sub`, one node whichever spelling wrote it)
+// — takes a range of positions along one axis, so its adjoint is an array of the parent's shape
+// with the upstream gradient at those positions and the zero tangent everywhere else. That is
+// `:tangent/scatter_slice_arr`, the array counterpart of `tensor:slice_grad`. The axis, the
+// bounds, the step and the mask are passed through unchanged, so the reverse reads them with the
+// same code as the forward, a negative step included: it walks the positions backwards and its
+// gradient is placed in that same order. The tangent of an array is the array of its elements'
+// tangents (design principles 9.9), so the gradient of the result is already an array of that
+// element type and its elements are placed, not converted.
 void scatterSliceArray(
     VjpBuilder &b,
     const VjpCall &call,
+    vjp_node_t axis,
     vjp_node_t start,
     vjp_node_t end,
     vjp_node_t step,
@@ -282,12 +284,14 @@ void scatterSliceArray(
     if (!dy) {
         return;
     }
-    const std::array<vjp_node_t, 6> inputs{*dy, call.inputs[0], start, end, step, written};
+    const std::array<vjp_node_t, 7> inputs{
+        *dy, call.inputs[0], axis, start, end, step, written};
     b.accumulateGradient(
         call.inputs[0], b.addOper(tangentType, ":tangent/scatter_slice_arr", inputs));
 }
 
-// `xs->slice<start, end>`: the bounds are the call's two `with` inputs, and both are written.
+// `xs->slice<start, end>`: the bounds are the call's two `with` inputs, both written, and the
+// form slices the first axis -- the axis word a slice node carries is 0.
 void sliceArrayVjp(VjpBuilder &b, const VjpCall &call) {
     requireInputs(call, 1);
     if (call.withInputs.size() != 2) {
@@ -298,24 +302,39 @@ void sliceArrayVjp(VjpBuilder &b, const VjpCall &call) {
     }
     // The mask of a slice whose bounds are both written: bit 0 the end, bit 1 the start.
     scatterSliceArray(
-        b, call, call.withInputs[0], call.withInputs[1], staticInt(b, 1), staticInt(b, 3));
+        b,
+        call,
+        staticInt(b, 0),
+        call.withInputs[0],
+        call.withInputs[1],
+        staticInt(b, 1),
+        staticInt(b, 3));
 }
 
-// `xs[a:b:s]`: the two bounds, the step and the mask follow the value and the axis. The function
-// form `slice(xs, 0, a, b, s?)` is the same node with the two words a call has not, and for it
-// those words stand for "step 1, both bounds written" -- the same defaults the forward kernel
-// reads (design principles 5.4; the author's ruling of 2026-10-25: both spellings are one node
-// with one adjoint rule).
+// `xs[a:b:s]` and `slice(xs, axis, a, b, s)`: the value, the axis, the two bounds, the step and
+// the mask, in that order -- the one parameter table both spellings write (design principles 5.4;
+// the author's ruling of 2026-10-25: both spellings are one node with one adjoint rule). The axis
+// travels with the rest, so the adjoint scatters along the axis the forward took the elements
+// from, whatever the rank.
+//
+// A call of the function form that leaves the step, or the step and the mask, out is read here as
+// the forward kernel reads it: step 1, mask 3 ("both bounds written", the value the declaration
+// defaults them to). The subscript's lowering always writes all six words, so a node of four or
+// five is a function-form call -- and the adjoint answers every call the forward rule accepts
+// (`src/builtin/modules/globals.cpp`, `coreSliceFunctionResolver`), not only the six-word ones.
 void sliceSubArrayVjp(VjpBuilder &b, const VjpCall &call) {
-    if (call.inputs.size() < 4) {
+    if (call.inputs.size() < 4 || call.inputs.size() > 6) {
         throw std::runtime_error(std::format(
-            "Derivative of '{}' expects at least 4 inputs, got {}.",
+            "Derivative of '{}' expects 4 to 6 inputs (value, axis, start, end, step, written), "
+            "got {}.",
             call.uri,
             call.inputs.size()));
     }
-    const vjp_node_t step = call.inputs.size() >= 5 ? call.inputs[4] : staticInt(b, 1);
-    const vjp_node_t written = call.inputs.size() >= 6 ? call.inputs[5] : staticInt(b, 3);
-    scatterSliceArray(b, call, call.inputs[2], call.inputs[3], step, written);
+    const vjp_node_t step =
+        call.inputs.size() > 4 ? call.inputs[4] : staticInt(b, 1); // step left out: 1
+    const vjp_node_t written =
+        call.inputs.size() > 5 ? call.inputs[5] : staticInt(b, 3); // mask left out: both written
+    scatterSliceArray(b, call, call.inputs[1], call.inputs[2], call.inputs[3], step, written);
 }
 
 // ---- the rules of a gradient graph: the second derivative of an array expression ----
@@ -381,24 +400,23 @@ void scatterTakeArrayVjp(VjpBuilder &b, const VjpCall &call) {
     }
 }
 
-// `tangent/scatter_slice_arr(dx, like, start, end, step, written)`: the array of `like`'s length
-// whose sliced positions hold `dx`'s elements. The forward is a gather over a range, so the
+// `tangent/scatter_slice_arr(dx, like, axis, start, end, step, written)`: the array of `like`'s
+// shape whose sliced positions hold `dx`'s elements. The forward is a gather over a range, so the
 // gradient of `dx` is the same range of the upstream gradient: the slice operator with the same
-// bounds, step and mask. `like` gives only the length and the zero tangent of its elements, and
-// the bounds, the step and the mask only say where the positions are: shape and position are
-// discrete, so no gradient reaches any of them (design principles 9.9).
+// axis, bounds, step and mask. `like` gives only the shape and the zero tangent of its elements,
+// and the axis, the bounds, the step and the mask only say where the positions are: shape and
+// position are discrete, so no gradient reaches any of them (design principles 9.9).
 void scatterSliceArrayVjp(VjpBuilder &b, const VjpCall &call) {
-    requireInputs(call, 6);
+    requireInputs(call, 7);
     if (auto dy = b.gradientOf(call.output)) {
         if (b.isActive(call.inputs[0])) {
-            // A slice node's second argument is the axis, and this slice is of a rank-1 array: 0.
             const std::array<vjp_node_t, 6> slice{
                 *dy,
-                staticInt(b, 0),
                 call.inputs[2],
                 call.inputs[3],
                 call.inputs[4],
-                call.inputs[5]};
+                call.inputs[5],
+                call.inputs[6]};
             b.accumulateGradient(
                 call.inputs[0],
                 b.addOper(b.nodeType(call.inputs[0]), ":op/slice_sub", slice));

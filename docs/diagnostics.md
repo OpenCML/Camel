@@ -651,11 +651,13 @@ None: choice: a reserved word is not a name, and the name to use instead is the 
 Choose another name, for example '{0}_'.
 ```
 
-**Example** (`test/cases/parse/rulings/loop_is_keyword.cml`, run as `camel -E short test/cases/parse/rulings/loop_is_keyword.cml`)
+**Example** (`test/cases/compile/stream/yield_keyword.cml`, run as `camel test/cases/compile/stream/yield_keyword.cml`)
 
 ```camel
-func loop(i: int): int {
-    return i
+func main(): int sync {
+    let yield = 1
+    println(yield)
+    return 0
 }
 ```
 
@@ -2224,14 +2226,19 @@ The feature '{0}' is not supported yet.
 Check the documentation for supported features.
 ```
 
-**Example** (`test/cases/compile/semantic/type_recursion_through_map.cml`, run as `camel -E short test/cases/compile/semantic/type_recursion_through_map.cml`)
+**Example** (`test/cases/compile/stream/yield_lowering.cml`, run as `camel test/cases/compile/stream/yield_lowering.cml`)
 
 ```camel
-module type_recursion_through_map
+func count(n: int): int.. {
+    loop i = 0 while i < n do {
+        yield i
+        i + 1
+    }
+}
 
-type Node = { children: Map<int, Node> }
-
-func main(): int {
+func main(): int sync {
+    let s = count(3)
+    println(1)
     return 0
 }
 ```

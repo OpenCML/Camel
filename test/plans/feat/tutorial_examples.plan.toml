@@ -33,7 +33,7 @@ desc = "Every example beside the tutorial runs as the file it is: what a tutoria
 # another order instead of recording one. `06_let_to_var.cml` and `09_fault.cml` fail on purpose -- a
 # rejected program and a fault -- so what is pinned is the exit code, the diagnostic and the lines
 # printed before it. `shapes.cml` is a module with no `main`: running it as a program is refused, and
-# that refusal is its reading here; chapter 12 runs it by importing it. `13_graph.cml` has a second
+# that refusal is its reading here; chapter 8 runs it by importing it. `13_graph.cml` has a second
 # entry for the `std::rgir` dump that both its header and its page give, compared as graph shape rather
 # than as text, because the page's figure is a trimmed illustration of the dump and not the dump.
 #
@@ -53,6 +53,12 @@ desc = "Every example beside the tutorial runs as the file it is: what a tutoria
 # `timeout_ms` is 30 s for every entry: each is a chapter example whose run takes a fraction of a
 # second, which leaves a wide margin on a loaded host without hiding a program that hangs.
 
+#
+# Nineteen of the entries below name a file whose number is the first outline's, not this one: the
+# examples of the chapters that outline numbered 6 to 16, kept under the names they were written
+# with. Each one's `desc` opens with the chapter that teaches it today -- `06_sync_body.cml` is
+# chapter 10's example, `15_tensor.cml` is chapter 14's -- so a moved example can be told from a new
+# one at a glance, and the same is said of chapter 18's files at their own section below.
 [defaults]
 kind = "snapshot"
 snapshot_stream = "stdout"
@@ -61,7 +67,7 @@ args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
-# `warning[` is deliberately not excluded here: several chapter examples of chapter 6 have a warning
+# `warning[` is deliberately not excluded here: several chapter examples of chapter 10 have a warning
 # as their lesson. A `[Error]` in any stream is a failure for every entry that does not say otherwise.
 expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -115,20 +121,20 @@ golden = "golden/tutorial_examples/05_map_order.txt"
 
 [[tests]]
 name = "tutorial.examples.06_callee_decides"
-desc = "A callee that writes to its var parameter decides what runs and in what order; main only asks for the result. The dropped println is reported as a warning on standard error, which the page does not show."
+desc = "Chapter 10: a callee that writes to its var parameter decides what runs and in what order; main only asks for the result. The dropped println is reported as a warning on standard error, which the page does not show."
 case = "../../../docs/tutorial/examples/06_callee_decides.cml"
 golden = "golden/tutorial_examples/06_callee_decides.txt"
 expect_output_contains = ["SemanticDiag::EffectNotExecuted"]
 
 [[tests]]
 name = "tutorial.examples.06_sync_block"
-desc = "The same program with the effects inside a sync block: both printlns run, in the order they are written."
+desc = "Chapter 10: the same program with the effects inside a sync block -- both printlns run, in the order they are written."
 case = "../../../docs/tutorial/examples/06_sync_block.cml"
 golden = "golden/tutorial_examples/06_sync_block.txt"
 
 [[tests]]
 name = "tutorial.examples.06_sync_body"
-desc = "A function body marked sync: the call inside it is ordered, and only the value it returns is used outside. The dropped println is reported as a warning on standard error, which the page does not show."
+desc = "Chapter 10: a function body marked sync -- the call inside it is ordered, and only the value it returns is used outside. The dropped println is reported as a warning on standard error, which the page does not show."
 case = "../../../docs/tutorial/examples/06_sync_body.cml"
 golden = "golden/tutorial_examples/06_sync_body.txt"
 expect_output_contains = ["SemanticDiag::EffectNotExecuted"]
@@ -138,14 +144,14 @@ expect_output_contains = ["SemanticDiag::EffectNotExecuted"]
 # it in the block after the command).
 [[tests]]
 name = "tutorial.examples.06_unused_effect"
-desc = "An effect that nothing depends on does not run: the warning on standard error names the call that is dropped, and only the used value is printed."
+desc = "Chapter 10: an effect that nothing depends on does not run -- the warning on standard error names the call that is dropped, and only the used value is printed."
 case = "../../../docs/tutorial/examples/06_unused_effect.cml"
 golden = "golden/tutorial_examples/06_unused_effect.txt"
 expect_output_contains = ["SemanticDiag::EffectNotExecuted"]
 
 [[tests]]
 name = "tutorial.examples.06_var_order"
-desc = "Order between writes to a var parameter follows the callee's sync block, not the order the caller reads its results."
+desc = "Chapter 10: order between writes to a var parameter follows the callee's sync block, not the order the caller reads its results."
 case = "../../../docs/tutorial/examples/06_var_order.cml"
 golden = "golden/tutorial_examples/06_var_order.txt"
 
@@ -154,7 +160,7 @@ golden = "golden/tutorial_examples/06_var_order.txt"
 # is exactly the claim this plan exists to keep true.
 [[tests]]
 name = "tutorial.examples.06_let_to_var"
-desc = "A program the compiler rejects: an immutable value passed to a var parameter is an error at 11:10, and the un-synced write above it is a warning at 6:5."
+desc = "Chapter 10: a program the compiler rejects -- an immutable value passed to a var parameter is an error at 11:10, and the un-synced write above it is a warning at 6:5."
 kind = "behavior"
 case = "../../../docs/tutorial/examples/06_let_to_var.cml"
 backends = false
@@ -168,19 +174,19 @@ expect_output_contains = ["'k' is immutable and cannot be passed to a var parame
 
 [[tests]]
 name = "tutorial.examples.07_closures"
-desc = "Functions as values: a closure keeps what it captured, a counter keeps its own state, and a function value is passed and called."
+desc = "Chapter 11: functions as values -- a closure keeps what it captured, a counter keeps its own state, and a function value is passed and called."
 case = "../../../docs/tutorial/examples/07_closures.cml"
 golden = "golden/tutorial_examples/07_closures.txt"
 
 [[tests]]
 name = "tutorial.examples.08_generics"
-desc = "Generic functions and a generic struct, instantiated at int, string, a tuple and a user type."
+desc = "Chapter 12: generic functions and a generic struct, instantiated at int, string, a tuple and a user type."
 case = "../../../docs/tutorial/examples/08_generics.cml"
 golden = "golden/tutorial_examples/08_generics.txt"
 
 [[tests]]
 name = "tutorial.examples.09_errors"
-desc = "Errors as values: an error is returned, matched and carried on, while a fault inside the callee ends the program. The value dropped at the end of the file is reported as a warning on standard error, which the page does not show."
+desc = "Chapter 7: errors as values -- an error is returned, matched and carried on, while a fault inside the callee ends the program. The value dropped at the end of the file is reported as a warning on standard error, which the page does not show."
 case = "../../../docs/tutorial/examples/09_errors.cml"
 golden = "golden/tutorial_examples/09_errors.txt"
 expect_output_contains = ["SemanticDiag::UnusedFallibleValue"]
@@ -189,7 +195,7 @@ expect_output_contains = ["SemanticDiag::UnusedFallibleValue"]
 # and the runtime names the fault and its position.
 [[tests]]
 name = "tutorial.examples.09_fault"
-desc = "A fault: what was printed before it stays printed, the run ends with a non-zero exit code, and the diagnostic names the index and the length."
+desc = "Chapter 7: a fault -- what was printed before it stays printed, the run ends with a non-zero exit code, and the diagnostic names the index and the length."
 kind = "behavior"
 case = "../../../docs/tutorial/examples/09_fault.cml"
 expect_exit = 1
@@ -203,50 +209,50 @@ expect_output_contains = ["Index 5 is out of range for an array of length 3"]
 
 [[tests]]
 name = "tutorial.examples.10_nullable"
-desc = "A missing value is null: an int? is compared, matched, and printed, and the caller sees null rather than a default."
+desc = "Chapter 7: a missing value is null -- an int? is compared, matched, and printed, and the caller sees null rather than a default."
 case = "../../../docs/tutorial/examples/10_nullable.cml"
 golden = "golden/tutorial_examples/10_nullable.txt"
 
 [[tests]]
 name = "tutorial.examples.11_collections"
-desc = "Map, array and set operations on the same data: lookup with a default, insert, keys and values, and set union and difference."
+desc = "Chapter 6: map, array and set operations on the same data: lookup with a default, insert, keys and values, and set union and difference."
 case = "../../../docs/tutorial/examples/11_collections.cml"
 golden = "golden/tutorial_examples/11_collections.txt"
 
 [[tests]]
 name = "tutorial.examples.12_modules"
-desc = "A program split over two files: main imports the functions of shapes.cml and calls them."
+desc = "Chapter 8: a program split over two files -- main imports the functions of shapes.cml and calls them."
 case = "../../../docs/tutorial/examples/12_modules.cml"
 golden = "golden/tutorial_examples/12_modules.txt"
 
 [[tests]]
 name = "tutorial.examples.12_stdlib"
-desc = "The standard library the chapter uses: sort, unique, string formatting, min and max, array primitives, statistics, math."
+desc = "Chapter 8: the standard library the chapter uses -- sort, unique, string formatting, min and max, array primitives, statistics, math."
 case = "../../../docs/tutorial/examples/12_stdlib.cml"
 golden = "golden/tutorial_examples/12_stdlib.txt"
 
 [[tests]]
 name = "tutorial.examples.13_graph"
-desc = "The program whose graph chapter 13 draws, run plainly: the result of the call it shows."
+desc = "Chapter 17: the program whose graph the chapter draws, run plainly -- the result of the call it shows."
 case = "../../../docs/tutorial/examples/13_graph.cml"
 golden = "golden/tutorial_examples/13_graph.txt"
 
 [[tests]]
 name = "tutorial.examples.14_passes"
-desc = "Four passes over one program: the same number whichever back end runs it."
+desc = "Chapter 17: four passes over one program -- the same number whichever back end runs it."
 case = "../../../docs/tutorial/examples/14_passes.cml"
 golden = "golden/tutorial_examples/14_passes.txt"
 
 [[tests]]
 name = "tutorial.examples.15_model"
-desc = "A two-layer model run on the array the chapter loads from x.npy, with the argument the header and the page give."
+desc = "Chapter 16: a two-layer model run on the array the chapter loads from x.npy, with the argument the header and the page give."
 case = "../../../docs/tutorial/examples/15_model.cml"
 args = ["${case}", "--arg", "x=docs/tutorial/examples/x.npy", "${backend}"]
 golden = "golden/tutorial_examples/15_model.txt"
 
 [[tests]]
 name = "tutorial.examples.15_tensor"
-desc = "Tensors and shapes: shape, a sum, a matrix product and a transposed shape, printed by the model."
+desc = "Chapter 14: tensors and shapes -- shape, a sum, a matrix product and a transposed shape, printed by the model."
 case = "../../../docs/tutorial/examples/15_tensor.cml"
 golden = "golden/tutorial_examples/15_tensor.txt"
 
@@ -254,7 +260,7 @@ golden = "golden/tutorial_examples/15_tensor.txt"
 # gradient of the chapter's function at the point it picks.
 [[tests]]
 name = "tutorial.examples.16_grad"
-desc = "The gradient of a function: the derivative of the graph, evaluated, with `std::macro` expanded first as the header asks."
+desc = "Chapter 15: the gradient of a function -- the derivative of the graph, evaluated, with `std::macro` expanded first as the header asks."
 case = "../../../docs/tutorial/examples/16_grad.cml"
 args = ["${case}", "std::macro", "${backend}"]
 golden = "golden/tutorial_examples/16_grad.txt"

@@ -34,6 +34,19 @@ func main(): int sync {
     println(xs)
     println(xs[0] + xs[1])
 
+    // A compact `c64` element is eight bytes and is not one slot, so the class an array loop
+    // hoists is the slow one, which reads and writes the element through its bytes
+    // (`rtdata/array.h`, elementRead/elementWrite): a loop that took the eight bytes for a slot
+    // handed the complex operator the two f32 parts of 1 + 2i where a `Complex *` is due, and
+    // stored a pointer into the element's bytes.
+    let z0: c64 = 1 + 2i
+    let z1: c64 = 3 + 4i
+    let zs: c64[] = [z0, z1]
+    println(zs->map<(w: c64) => w * z>)
+    println(zs->map<(w: c64) => w + z0>)
+    println(zs->filter<(w: c64) => re(w) > 1.0>)
+    println(zs->reduce<(s: c64, w: c64) => s + w, c64(0)>)
+
     // A compact aggregate with a complex field: the tuple's bytes hold both parts, and the
     // array of tuples is one run of them.
     let ts = [(1 + 2i, 3), (3 + 4i, 5)]
