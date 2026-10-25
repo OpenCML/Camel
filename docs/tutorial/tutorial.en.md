@@ -27,6 +27,12 @@ Contents:
 [16 Taking gradients](#16-taking-gradients) ·
 [Where to go next](#where-to-go-next)
 
+Chapters already written to the new outline (Chinese and English together, each on its own page):
+[1 Five minutes to see the graph](01_five_minutes.en.md) ·
+[5 Arrays and loops](05_arrays_and_loops.en.md) ·
+[9 Evaluation by dependency](09_evaluation_by_dependency.en.md) ·
+[17 Teaching the compiler a law](17_teaching_a_law.en.md)
+
 ---
 
 ## 1. Your first program

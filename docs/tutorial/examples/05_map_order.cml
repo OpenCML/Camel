@@ -1,6 +1,6 @@
 // The elements of `map` have no agreed order of execution: do not put stateful calls in them.
-// Run: camel docs/tutorial/examples/05_map_order.cml            (sequential: the same output every run)
-//      camel docs/tutorial/examples/05_map_order.cml std::prl   (parallel: the order is not fixed)
+// Run: camel docs/tutorial/examples/05_map_order.cml
+//      camel docs/tutorial/examples/05_map_order.cml std::prl
 module map_order
 
 import { seed, randint } from random
