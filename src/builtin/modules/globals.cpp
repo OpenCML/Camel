@@ -260,9 +260,10 @@ std::optional<std::string> staticSliceRejection(const type_vec_t &norm, static_a
     if (array == nullptr) {
         return std::nullopt;
     }
-    if (const std::optional<int64_t> step = constantArg(statics, 4); step && *step == 0) {
-        return std::string("a slice step must not be 0");
-    }
+    // The constant 0 step is not refused here. The builder's own check refuses it with the named
+    // `SemanticDiag::SliceStepZero`, located at the step the program wrote
+    // (src/compile/gir/builder_operators.cpp), and a named diagnostic of the catalog outranks a
+    // message from this resolver: two answers to one constant would be two reports of one fault.
     // The bounds as the slice reads them: a bound the program did not write stands for the start
     // of the axis or its end, which the two-bit mask the lowering writes with the call says, and a
     // call that left the mask out wrote both bounds (3).
