@@ -1500,10 +1500,11 @@ timeout_ms = 30000
 name = "grad_expand.expanded_values_are_identical"
 kind = "differential"
 case = "../../cases/gpu/nofallback/grad_expand.cml"
-# The same program with the expansion in the pipeline: `step`'s gradient is the derived graph the
-# pass built while compiling. The whole normalized stdout — both gradients, both distances and
-# anything else the program printed — must be what the run without the pass printed.
-args = ["--devices", "cpu", "${case}", "autodiff::expand", "std::nvm"]
+# The same program with the expansion in the pipeline: `std::macro` is what expands a macro
+# operator (design principles 8), so `step`'s gradient is the derived graph built while compiling.
+# The whole normalized stdout — both gradients, both distances and anything else the program
+# printed — must be what the run without the pass printed.
+args = ["--devices", "cpu", "${case}", "std::macro", "std::nvm"]
 envs = ["CUDA_VISIBLE_DEVICES=-1"]
 expect_exit = 0
 compare_to = "grad_expand.runtime_operator_values"
@@ -1511,15 +1512,31 @@ compare_fields = ["stdout_normalized"]
 timeout_ms = 30000
 
 [[tests]]
+name = "grad_expand.missing_prerequisite_is_named"
+kind = "negative"
+case = "../../cases/gpu/nofallback/grad_expand.cml"
+# `tiles::compile` is the consumer of the derived graph, not its author: a scope that still holds
+# a macro operator is a pipeline defect, and the report says which pass carries the expansion.
+# Before the retraction the pass applied `autodiff::expand` itself, so this reading did not exist.
+args = ["--devices", "cpu", "${case}", "tiles::compile", "std::nvm"]
+envs = ["CUDA_VISIBLE_DEVICES=-1"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::GpuScopeMacroNotExpanded"
+expect_diagnostic_code = "0x040001A9"
+expect_output_contains = ["`#gpu` scope 'step'", "operator 'autodiff:with_grad'", "is a macro operator no pass has expanded", "put the pass 'std::macro' before this one"]
+timeout_ms = 30000
+
+[[tests]]
 name = "grad_expand.scope_sees_the_derived_graph"
 kind = "negative"
 case = "../../cases/gpu/nofallback/grad_expand.cml"
-# What the expansion moves: the scope no longer holds `autodiff:with_grad`, and it is refused for
-# an operator of the derived graph instead. The refusal can only name `tensor:broadcast_like` if
-# the derived graph was analysed as part of the scope, so it is the proof that the pass published
-# it. The report shows `grad(loss)` as a `#gpu` body: the derived graph inherits the primal's
-# placement, and the primal `loss` carries the tag (plan 2.3).
-args = ["--devices", "cpu", "${case}", "tiles::compile", "std::nvm"]
+# What the expansion moves: with `std::macro` before the pass the scope no longer holds
+# `autodiff:with_grad`, and it is refused for an operator of the derived graph instead. The
+# refusal can only name `tensor:broadcast_like` if the derived graph was analysed as part of the
+# scope, so it is the proof that the expansion published it. The report shows `grad(loss)` as a
+# `#gpu` body: the derived graph inherits the primal's placement, and the primal `loss` carries
+# the tag (plan 2.3).
+args = ["--devices", "cpu", "${case}", "std::macro", "tiles::compile", "std::nvm"]
 envs = ["CUDA_VISIBLE_DEVICES=-1"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::GpuScopeUnsupported"
@@ -1545,14 +1562,14 @@ timeout_ms = 30000
 name = "grad_expand.a_function_the_run_chooses_is_refused"
 kind = "negative"
 case = "../../cases/gpu/nofallback/grad_dynamic.cml"
-# The function is a parameter, so no expansion can build the derived graph while compiling, and
-# the scope cannot run the operator either. The refusal names the operator and the call site: the
-# diagnostic is at the `with_grad(body)` call in the scope (line 32, column 14).
+# The function is a parameter, so no pass can build the derived graph while compiling, and the
+# scope cannot run the operator either. The refusal names the operator and the call site: the
+# diagnostic is at the `with_grad(body)` call in the scope (line 35, column 14).
 args = ["--devices", "cpu", "${case}", "tiles::compile", "std::nvm"]
 envs = ["CUDA_VISIBLE_DEVICES=-1"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::GpuScopeUnsupported"
-expect_diagnostic_line = 32
+expect_diagnostic_line = 35
 expect_diagnostic_column = 14
 expect_output_contains = ["`#gpu` scope 'step'", "operator 'autodiff:with_grad'", "needs a function known at compile time"]
 timeout_ms = 30000
@@ -1561,40 +1578,44 @@ timeout_ms = 30000
 name = "grad_expand.untagged_graph_unchanged"
 kind = "behavior"
 case = "../../cases/gpu/nofallback/grad_expand_plain.cml"
-# A grad call site no scope covers: the pass must leave the operator alone, and the program is
-# dumped as a whole (`std::jgir`) so that every node, edge, attribute and reference is compared
-# against the next entry's run.
-args = ["--devices", "cpu", "${case}", "std::jgir"]
+# A grad call site no scope covers: `tiles::compile` leaves the operator alone (it is the
+# consumer of a derived graph, not its author), and the program is dumped as a whole (`std::jgir`)
+# so that every node, edge, attribute and reference is read. The reading is that the runtime
+# operator is still there and that no pass expanded it outside a scope.
+args = ["--devices", "cpu", "${case}", "tiles::compile", "std::jgir"]
 envs = ["CUDA_VISIBLE_DEVICES=-1"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
 const NL = String.fromCharCode(10)
 const text = input.normalized.stdout
-// No pass prints a report before this dump, so the document starts the output.
+// The pass prints one report line per graph before the dump, so the document starts after it.
 const at = text.startsWith('{') ? 0 : text.indexOf(NL + '{') + 1
 assert(at > 0 || text.startsWith('{'), `no jgir document in: ${text.slice(0, 400)}`)
 const dump = JSON.parse(text.slice(at))
 const step = dump.graphs.find((g) => g.name === 'step')
 assert(step, JSON.stringify(dump.graphs.map((g) => g.name)))
 assert(step.nodes.some((n) => n.label === 'autodiff:with_grad'), JSON.stringify(step.nodes))
-assert(!dump.graphs.some((g) => g.name.startsWith('grad(')), 'the operator was expanded outside a scope')
+assert(!dump.graphs.some((g) => g.name.startsWith('grad(')), 'a graph was expanded outside a scope')
+assert(!text.includes('macro operator no pass has expanded'), 'an untagged program was refused as a missing prerequisite')
 }
 """
 timeout_ms = 30000
 
 [[tests]]
-name = "grad_expand.untagged_graph_is_byte_identical"
-kind = "differential"
+name = "grad_expand.untagged_graph_keeps_the_runtime_operator"
+kind = "negative"
 case = "../../cases/gpu/nofallback/grad_expand_plain.cml"
-# The plan's acceptance for a program without the tag: with `autodiff::expand` in the pipeline the
-# dumped graph is byte-identical to the run without it. The expansion is the only difference
-# between the two pipelines.
-args = ["--devices", "cpu", "${case}", "autodiff::expand", "std::jgir"]
+# The same program without the dump: the reading is that the pass is silent where no scope covers
+# the call site, and that the run then reaches the runtime operator. What that operator answers is
+# its own business and is the same with or without `tiles::compile` in the pipeline: it refuses a
+# `Device<Tensor>` parameter, which is a value that carries no gradient channel. The pass may
+# neither expand the call site nor refuse it, so neither of its two messages may appear.
+args = ["--devices", "cpu", "${case}", "tiles::compile", "std::nvm"]
 envs = ["CUDA_VISIBLE_DEVICES=-1"]
-expect_exit = 0
-compare_to = "grad_expand.untagged_graph_unchanged"
-compare_fields = ["stdout_normalized"]
+expect_exit = 1
+expect_output_contains = ["RuntimeDiag::RuntimeError", "depends on a differentiated parameter", "Device<Tensor<float32, [2, 3]>>"]
+expect_output_not_contains = ["macro operator no pass has expanded", "cannot run on the device", "has no device program"]
 timeout_ms = 30000
 
 # --- Residency is derived from the graph (GPU design 3.2) --------------------------------------

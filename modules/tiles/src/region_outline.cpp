@@ -134,6 +134,9 @@ const runtime::Program *outlineRegions(
         struct ScopeRefusals {
             std::vector<Refusal> unsupported;
             std::vector<Refusal> noProgram;
+            // A macro operator (`grad`, `with_grad`) no pass expanded: the defect is the pipeline,
+            // and its repair is a pass, so it is its own group and its own diagnostic.
+            std::vector<Refusal> notExpanded;
         };
         std::vector<std::pair<rt::GCGraph *, ScopeRefusals>> refusals;
         const auto groupOf = [&](rt::GCGraph &graph) -> ScopeRefusals & {
@@ -156,6 +159,41 @@ const runtime::Program *outlineRegions(
                 const std::string name(
                     core::OperatorTable::instance().uri(oper));
                 const auto origin = graph->nodeOrigin(id);
+                // A macro operator (`grad`, `with_grad`) is not an operator the device cannot
+                // run: it should not be in the graph at all. The derived graph has to exist while
+                // the passes run, and the pass that builds it is `std::macro` (design principles
+                // 8), so a scope that still holds one is refused before anything is asked of the
+                // device (docs/design/gpu/plan.cn.md 2.6).
+                if (graph->node(id)->isMacro()) {
+                    auto &group = groupOf(*graph);
+                    // The function is the operator's ordinary operand; a call reads its callee as
+                    // a `with` argument, so both are looked at. A function only the run produces
+                    // names no graph, and no pass can expand the call that reads it: that is the
+                    // scope's own defect, not a missing pass.
+                    const auto operandIsKnown = [&](const auto &operands) {
+                        return std::any_of(
+                            operands.begin(), operands.end(), [&](rt::gc_node_ref_t operand) {
+                                return holdsStaticFunction(*graph, operand);
+                            });
+                    };
+                    const auto normOperands = graph->normInputsOf(id);
+                    bool expandable         = operandIsKnown(normOperands);
+                    if (!expandable)
+                        expandable = operandIsKnown(graph->withInputsOf(id));
+                    (expandable ? group.notExpanded : group.unsupported)
+                        .push_back({name,
+                                    expandable
+                                        ? "a prerequisite pass is missing"
+                                        : "needs a function known at compile time",
+                                    origin});
+                    continue;
+                }
+                // A host effect (`print`, `save_npy`, a file write) is the boundary of a device
+                // scope, not an operator the device must run: the pass leaves it on the host and
+                // the value it observes is downloaded there (docs/design/gpu/plan.cn.md 2.4).
+                const auto &table = core::OperatorTable::instance();
+                if (!table.isPure(oper) || table.hasExternalEffect(oper))
+                    continue;
                 if (!deviceCapable(oper)) {
                     // A device answer on the node itself is the operator having no device
                     // implementation; an untagged graph the scope reaches adds this operator to a
@@ -224,6 +262,17 @@ const runtime::Program *outlineRegions(
             };
             report(scope.unsupported, core::error::RuntimeDiag::GpuScopeUnsupported, false);
             report(scope.noProgram, core::error::RuntimeDiag::GpuScopeNoDeviceProgram, true);
+            if (!scope.notExpanded.empty()) {
+                // The repair is a pass, so the message names it. Reported last: it is about the
+                // pipeline, and the operators the device refuses are about the program.
+                auto diag = context.rtmDiags()->of(
+                    core::error::RuntimeDiag::GpuScopeMacroNotExpanded);
+                const auto origin = scope.notExpanded.front().origin;
+                if (origin != camel::source::kInvalidOriginId)
+                    diag.atOrigin(origin);
+                diag.commit(
+                    scopeNameOf(*graph), list(scope.notExpanded, false).first, "std::macro");
+            }
         }
         if (!refusals.empty())
             return program;

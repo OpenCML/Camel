@@ -287,6 +287,7 @@ prints one entry.
 | `0x04000187` | [RuntimeDiag::PassNotExportedByModule](#passnotexportedbymodule) | Error | no |
 | `0x040001A7` | [RuntimeDiag::GpuScopeNoDeviceProgram](#gpuscopenodeviceprogram) | Error | no |
 | `0x040001A8` | [RuntimeDiag::ValueWithNoDerivativeRule](#valuewithnoderivativerule) | Error | no |
+| `0x040001A9` | [RuntimeDiag::GpuScopeMacroNotExpanded](#gpuscopemacronotexpanded) | Error | no |
 | `0x0410000F` | [RuntimeDiag::PassesNeverRun](#passesneverrun) | Warn | no |
 | `0x04100015` | [RuntimeDiag::ConstantExpressionFaults](#constantexpressionfaults) | Warn | no |
 | `0x04100016` | [RuntimeDiag::TranslationLinksRuntime](#translationlinksruntime) | Warn | no |
@@ -9680,6 +9681,28 @@ func main(): int sync {
     return 0
 }
 ```
+
+### GpuScopeMacroNotExpanded
+
+`0x040001A9` · Error · `RuntimeDiag::GpuScopeMacroNotExpanded`
+
+**Fix**
+
+None: runtime: the fault is raised while the program runs, and the repair is in the program's logic
+
+**Message**
+
+```text
+`#gpu` scope '{0}': {1} is a macro operator no pass has expanded, so the derived graph does not exist when the scope is compiled; put the pass '{2}' before this one.
+```
+
+**Help**
+
+```text
+`grad` and `with_grad` build their derived graph ahead of time (`std::macro`), and only a graph that exists while the passes run is part of the scope's unit. Write the pass before `tiles::compile`, or move the call out of the `#gpu` scope.
+```
+
+*No example: no test small enough to show raises it.*
 
 ### PassesNeverRun
 
