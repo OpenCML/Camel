@@ -23,7 +23,16 @@ Camel's most central characteristic is that it is graph-native. Its other proper
 - **Not limited to AI.** What is modelled on the graph is the intent and dependencies of a computation; HPC and simulation workloads of all kinds fit equally. The outward statement of position: Camel is a graph-native general-purpose programming language, and AI is its foremost application area; it no longer calls itself a domain-specific language for AI. From the viewpoint of the paper, Camel does not itself carry CPU-intensive work; from the viewpoint of a general-purpose language, it must still have a certain generality. The two viewpoints coexist.
 - **Only one language.** Computing types from types, and generating code from the structure of a type, are written in the main language: a type is a compile-time value, and a type function is an ordinary function that runs at compile time, using the same constructs as the value level (see [Generics by structure](design/generic-structure/README.cn.md)). There is no separate type-level language (such as TypeScript's conditional types, mapped types and `infer`). Graph transformations, rules and schedules are likewise written in Camel itself.
 - **Shorthands may exist, but there is only one semantics.** A shorthand (such as a decorator) is a mechanism for library authors; it may exist, but it can only be another way of writing the same semantics and must not carry rules of its own.
-- **Red lines are few, and each has an enforcement mechanism;** everything else is a tendency or a quality requirement and is recorded as such. The current list of red lines is in section 4 of the [refactoring blueprint](design/blueprint/README.cn.md).
+- **Red lines are few, and each has an enforcement mechanism;** everything else is a tendency or a quality requirement and is recorded as such. The current list of red lines, each with the mechanism that enforces it:
+
+  1. A Camel program cannot build a structurally broken graph — whole-graph validation on commit.
+  2. A back end sees only a graph in the executable state (one writing per value, acyclic, correctly typed) — checks at the entry of the back ends and of the export passes.
+  3. A node that can fail or has an effect is not moved out of its control region — validation on commit.
+  4. A rule passes random testing before it is admitted; a fact satisfies the join and monotonicity laws — test tools enumerate the `rule` and `fact` declarations.
+  5. A graph and its source round-trip — round-trip tests over every test case and random program.
+  6. The result is determined (same input, same configuration, same result) — a fixed commit order for the parallel combinators; saturation and extraction decide by id; repeated runs are compared.
+  7. Numerical results are reproducible on one device (unless `nondeterministic` is granted) — bit-for-bit comparison over repeated runs.
+  8. A promise (`pure`, `uses`) is not violated — compiler checks.
 - **No compatibility cost is considered during the internal-testing stage.** An old form is deleted outright: no alias, no transition layer, and no diagnostic or note pointing to the new form; once deleted it is simply an unknown name or a syntax error.
 - **Our own libraries are written in Camel as far as possible**, to expose the language's shortcomings and absorb them into the core (see 10.4).
 

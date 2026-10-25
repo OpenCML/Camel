@@ -1117,7 +1117,7 @@ camel docs/tutorial/examples/16_grad.cml std::macro
 ## Where to go next
 
 - [Examples](../../examples/README.md): short programs organised by task — JSON, files, word-frequency counting, sorting, command-line tools, parallelism, simulation, training.
-- [Language reference](../language/en/README.md): the precise rules for every construct, and which forms are reserved and not yet implemented.
+- [Language reference](../language/en/README.md): the precise rules for every construct.
 - [Standard library reference](../stdlib-reference.md): every function of every module.
 - [Command line](../cli.md): all options, passes, diagnostic formats, resource limits; `camel --explain <diagnostic name>` explains one diagnostic.
 - [Design principles](../design-principles.en.md): why the language is the way it is.

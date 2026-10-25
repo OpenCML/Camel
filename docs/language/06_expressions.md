@@ -25,7 +25,7 @@ Camel 里几乎一切都是表达式：`if`、`match`、块、赋值都有值。
 - 数组字面量的元素类型必须相同。元素是**有期望类型的位置**（[3.3.1](03_data_model.md#331-数组)）：有上下文时每个元素取那个类型，`let xs: float[] = [1, 2.0]` 的元素都是 `float`；没有上下文时，同一个数组里的数字字面量取最宽的一种（整数 < 小数），所以 `[1, 2.0]` 是 `float[]`（与 Go 的无类型常量相同）。空数组 `[]` 的元素类型来自上下文：`let xs: int[] = []`、`[] as Map<string, int>`。
 - 结构体字面量的键是标识符。字段同样是有期望类型的位置：`let p: P = { a: 1, b: 2.0 }`（`P = { a: float, b: float }`）里 `1` 是 `float`。字段的值写成名字时是变量，不转换，类型不符就是 `SemanticDiag::DeclaredTypeMismatch`。
 - **列表推导** `[e for x in xs if c]` 就是 `xs->filter<(x) => c>->map<(x) => e>`：`x` 的类型是 `xs` 的元素类型，`if c` 可以省略，结果是 `e` 的数组。图上与手写这两个调用完全相同（两个算子节点，各带一张元素函数的子图），所以它的性质也相同：元素之间没有顺序约定（并行调度器可以并发地算），`e`、`c` 里的副作用与 `map`、`filter` 的元素函数里的一样处理（[6.10](#610-高阶算子)）。可以嵌套，也可以出现在任何需要表达式的位置。`xs` 不是数组是 `SemanticDiag::ComprehensionSourceRefused`。
-- 展开 `...xs` 保留，尚未实现（`SemanticDiag::ConstructNotSupported`）。写成 `concat(xs, ys)`。
+- 展开 `...xs` 报 `SemanticDiag::ConstructNotSupported`。写成 `concat(xs, ys)`。
 
 ### 6.2.1 格式化字符串
 
@@ -96,8 +96,8 @@ func main(): int sync {
   - 只配了前几个上下文参数时，剩下的仍是结果的上下文参数：`let above = clamp<0>` 之后写 `above<5>(9)`。已经配齐的函数不能再配（`g<2>` 是错误）。
   - `f` 必须是能由这些实参确定的一个函数。同名函数有多个时，取唯一一个接受这些上下文实参的；仍有多个时由所在位置的函数类型（形参）决定，都定不下来是 `SemanticDiag::PartialApplicationRefused`。
   - 图上它是一个携带了捕获值的函数值，与闭包同构：自己的一张子图，配好的实参通过端口进入，没有新增节点种类。
-  - 尚未支持：带 `var` 上下文参数的函数（`SemanticDiag::ConstructNotSupported`）、类型规则随实参变化的内建算子（如 `len`；`SemanticDiag::FunctionNameAsValue`）。这两种情形把调用写在 lambda 里。
-- 关键字实参 `f(a: 1)` 保留，尚未实现（`SemanticDiag::FeatureNotSupported`）。
+  - 带 `var` 上下文参数的函数（`SemanticDiag::ConstructNotSupported`）、类型规则随实参变化的内建算子（如 `len`；`SemanticDiag::FunctionNameAsValue`）。这两种情形把调用写在 lambda 里。
+- 关键字实参 `f(a: 1)` 报 `SemanticDiag::FeatureNotSupported`。
 - 同一个实参表里写两个带尖括号的调用（`f<a>(x), g<b>(y)`）会被读成比较；带尖括号的调用后面再接带尖括号的管道（`f<a>(x)->g<b>`）也可能如此。把它们分成两条语句。
 - 写在括号里的 lambda 可以直接调用：`((x: int): int => x + 1)(3)`；也可以直接写在 `->`、`?->` 的右边：`3->(x: int): int => x + 1`、`parse_int(s) ?-> (x: int): int => x * 2`。
 
@@ -121,7 +121,7 @@ total = 35
 ```
 
 - `x ?-> f` 见 [6.6](#66-空值与错误的运算符)。
-- `f..g`（函数组合）与 `?..` 保留，尚未实现，含义也没有确定：写了是 `SemanticDiag::ConstructNotSupported`。用 lambda：`(x: int): int => g(f(x))`。
+- `f..g`（函数组合）与 `?..` 的含义也没有确定：写了是 `SemanticDiag::ConstructNotSupported`。用 lambda：`(x: int): int => g(f(x))`。
 
 ## 6.6 空值与错误的运算符
 
@@ -233,7 +233,7 @@ false
 
 `as` 不会不经检查地改变一个值的类型。`json::decode` 的结果是 `Json`，不能 `as` 成别的类型；已知形状的 JSON 用 `json::decode_as(s, [0])`，它在解码时检查形状，结果是 `T!`。
 
-数值之间的转换用 `float(x)` 等函数（[3.2](03_data_model.md#32-数值)）。`e is T` 保留，尚未实现（运行时没有类型信息；`SemanticDiag::ConstructNotSupported`）。后缀的非空断言 `x!` 同样保留未实现；用 `x ?? 默认值`。
+数值之间的转换用 `float(x)` 等函数（[3.2](03_data_model.md#32-数值)）。`e is T` 报 `SemanticDiag::ConstructNotSupported`（运行时没有类型信息）。后缀的非空断言 `x!` 也一样；用 `x ?? 默认值`。
 
 ## 6.8 `if` 与 `match`
 
@@ -379,11 +379,11 @@ func main(): int sync {
 
 缺分支、多分支或混入字面量分支是 `SemanticDiag::TaggedMatchCases`。
 
-**对 `enum` 的模式。** 被匹配的值是枚举时，模式写它的变体（[3.5](03_data_model.md#35-枚举-enum)）：`case Shape::Circle(r)`、`case Shape::Rect { w, h }`、`case Shape::Empty`、`case _`。元组变体要给全位置，结构体变体只写要绑定的字段（可改名、可简写），无数据的变体写它的限定名（`case Shape::Empty`；裸名字是绑定名，写成 `case Empty` 是 `EnumPatternMismatch`）。列全所有变体就不必写 `case _`；漏了变体又没有 `case _` 是 `SemanticDiag::EnumMatchNotExhaustive`，诊断列出漏掉的变体名；同一个变体写两次给 `EnumVariantCaseRepeated` 警告，`case _` 之后的臂给 `MatchCaseAfterWildcard` 警告，列全所有变体后还写 `case _` 给 `MatchWildcardRedundant` 警告。第一版不支持嵌套模式（字段位置再写模式），给出"暂不支持"（`ConstructNotSupported`）。
+**对 `enum` 的模式。** 被匹配的值是枚举时，模式写它的变体（[3.5](03_data_model.md#35-枚举-enum)）：`case Shape::Circle(r)`、`case Shape::Rect { w, h }`、`case Shape::Empty`、`case _`。元组变体要给全位置，结构体变体只写要绑定的字段（可改名、可简写），无数据的变体写它的限定名（`case Shape::Empty`；裸名字是绑定名，写成 `case Empty` 是 `EnumPatternMismatch`）。列全所有变体就不必写 `case _`；漏了变体又没有 `case _` 是 `SemanticDiag::EnumMatchNotExhaustive`，诊断列出漏掉的变体名；同一个变体写两次给 `EnumVariantCaseRepeated` 警告，`case _` 之后的臂给 `MatchCaseAfterWildcard` 警告，列全所有变体后还写 `case _` 给 `MatchWildcardRedundant` 警告。模式写在字段位置时给出"暂不支持"（`ConstructNotSupported`）。
 
 **`match` 必须有默认分支。** 没有 `case _` 是编译期错误 `SemanticDiag::MatchWithoutDefault`，定位在 `match` 上。三种情形不必写：对 `bool` 写全了 `case true` 与 `case false`；对 `T?`、`T!` 用上面的固定模式；对枚举列全了所有变体。编译器不会追加程序里没有写的分支臂，所以图上的臂与源码里的 `case` 一一对应。
 
-元组模式、结构体模式，以及对普通类型的值的标识符模式（`case n => ...`）保留，尚未实现（`SemanticDiag::ConstructNotSupported`）；用 `if` 链或先取成员再匹配。枚举变体的元组、结构体模式已经实现，但字段位置只能写名字或 `_`。
+元组模式、结构体模式，以及对普通类型的值的标识符模式（`case n => ...`）报 `SemanticDiag::ConstructNotSupported`；用 `if` 链或先取成员再匹配。枚举变体的元组、结构体模式已经实现，但字段位置只能写名字或 `_`。
 
 `try`/`catch`/`finally` 不属于 Camel（它在图上没有稳定的映射）：写了得到 `SemanticDiag::TryCatchNotInLanguage`。可能失败的操作返回 `T!`，用 `!!`、`?->` 与 `case error e` 处理。
 
