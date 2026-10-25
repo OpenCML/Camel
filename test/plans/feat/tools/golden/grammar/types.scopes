@@ -96,20 +96,19 @@
 #                  ^ meta.brackets.camel punctuation.section.brackets.end.camel
 #                   ^ meta.brackets.camel punctuation.section.brackets.begin.camel
 #                    ^ meta.brackets.camel punctuation.section.brackets.end.camel
->type Shape = Tensor<f32, const [3, 4]>
+>type Shape = Tensor<f32, [3, 4]>
 #^^^^ meta.type.definition.camel storage.type.type.camel
 #     ^^^^^ meta.type.definition.camel entity.name.type.camel
 #           ^ keyword.operator.assignment.camel
 #                   ^ meta.angle-arguments.camel punctuation.definition.angle-arguments.begin.camel
 #                    ^^^ meta.angle-arguments.camel support.type.primitive.camel
 #                       ^ meta.angle-arguments.camel punctuation.separator.comma.camel
-#                         ^^^^^ meta.angle-arguments.camel storage.modifier.camel
-#                               ^ meta.angle-arguments.camel meta.brackets.camel punctuation.section.brackets.begin.camel
-#                                ^ meta.angle-arguments.camel meta.brackets.camel constant.numeric.integer.decimal.camel
-#                                 ^ meta.angle-arguments.camel meta.brackets.camel punctuation.separator.comma.camel
-#                                   ^ meta.angle-arguments.camel meta.brackets.camel constant.numeric.integer.decimal.camel
-#                                    ^ meta.angle-arguments.camel meta.brackets.camel punctuation.section.brackets.end.camel
-#                                     ^ meta.angle-arguments.camel punctuation.definition.angle-arguments.end.camel
+#                         ^ meta.angle-arguments.camel meta.brackets.camel punctuation.section.brackets.begin.camel
+#                          ^ meta.angle-arguments.camel meta.brackets.camel constant.numeric.integer.decimal.camel
+#                           ^ meta.angle-arguments.camel meta.brackets.camel punctuation.separator.comma.camel
+#                             ^ meta.angle-arguments.camel meta.brackets.camel constant.numeric.integer.decimal.camel
+#                              ^ meta.angle-arguments.camel meta.brackets.camel punctuation.section.brackets.end.camel
+#                               ^ meta.angle-arguments.camel punctuation.definition.angle-arguments.end.camel
 >type Lookup = Map<string, Set<i64>>
 #^^^^ meta.type.definition.camel storage.type.type.camel
 #     ^^^^^^ meta.type.definition.camel entity.name.type.camel
@@ -141,6 +140,22 @@
 #                   ^ meta.brackets.camel punctuation.section.brackets.begin.camel
 #                    ^ meta.brackets.camel punctuation.section.brackets.end.camel
 >
+>func or_else::<T>(x: T?, d: T): T {
+#^^^^ meta.function.definition.camel storage.type.function.camel
+#     ^^^^^^^ meta.function.definition.camel entity.name.function.camel
+#            ^^ punctuation.separator.namespace.camel
+#              ^ meta.angle-arguments.camel punctuation.definition.angle-arguments.begin.camel
+#                ^ meta.angle-arguments.camel punctuation.definition.angle-arguments.end.camel
+#                 ^ meta.parens.camel punctuation.section.parens.begin.camel
+#                  ^ meta.parens.camel variable.parameter.camel
+#                   ^ meta.parens.camel punctuation.separator.colon.camel
+#                      ^ meta.parens.camel keyword.operator.type.camel
+#                       ^ meta.parens.camel punctuation.separator.comma.camel
+#                         ^ meta.parens.camel variable.parameter.camel
+#                          ^ meta.parens.camel punctuation.separator.colon.camel
+#                             ^ meta.parens.camel punctuation.section.parens.end.camel
+#                              ^ punctuation.separator.colon.camel
+#                                  ^ meta.block.camel punctuation.section.block.begin.camel
 >    return x ?? d
 #    ^^^^^^ meta.block.camel keyword.control.flow.camel
 #             ^^ meta.block.camel keyword.operator.fallback.camel

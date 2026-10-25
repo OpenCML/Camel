@@ -130,24 +130,23 @@
 >}
 #^ meta.block.camel punctuation.section.block.end.camel
 >
->sync func assign(var x: int, var t: Tensor, u: Tensor) {
-#^^^^ storage.modifier.sync.camel
-#     ^^^^ meta.function.definition.camel storage.type.function.camel
-#          ^^^^^^ meta.function.definition.camel entity.name.function.camel
-#                ^ meta.parens.camel punctuation.section.parens.begin.camel
-#                 ^^^ meta.parens.camel storage.modifier.var.camel
-#                     ^ meta.parens.camel variable.parameter.camel
-#                      ^ meta.parens.camel punctuation.separator.colon.camel
-#                        ^^^ meta.parens.camel support.type.primitive.camel
-#                           ^ meta.parens.camel punctuation.separator.comma.camel
-#                             ^^^ meta.parens.camel storage.modifier.var.camel
-#                                 ^ meta.parens.camel variable.parameter.camel
-#                                  ^ meta.parens.camel punctuation.separator.colon.camel
-#                                          ^ meta.parens.camel punctuation.separator.comma.camel
-#                                            ^ meta.parens.camel variable.parameter.camel
-#                                             ^ meta.parens.camel punctuation.separator.colon.camel
-#                                                     ^ meta.parens.camel punctuation.section.parens.end.camel
-#                                                       ^ meta.block.camel punctuation.section.block.begin.camel
+>func assign(var x: int, var t: Tensor, u: Tensor) {
+#^^^^ meta.function.definition.camel storage.type.function.camel
+#     ^^^^^^ meta.function.definition.camel entity.name.function.camel
+#           ^ meta.parens.camel punctuation.section.parens.begin.camel
+#            ^^^ meta.parens.camel storage.modifier.var.camel
+#                ^ meta.parens.camel variable.parameter.camel
+#                 ^ meta.parens.camel punctuation.separator.colon.camel
+#                   ^^^ meta.parens.camel support.type.primitive.camel
+#                      ^ meta.parens.camel punctuation.separator.comma.camel
+#                        ^^^ meta.parens.camel storage.modifier.var.camel
+#                            ^ meta.parens.camel variable.parameter.camel
+#                             ^ meta.parens.camel punctuation.separator.colon.camel
+#                                     ^ meta.parens.camel punctuation.separator.comma.camel
+#                                       ^ meta.parens.camel variable.parameter.camel
+#                                        ^ meta.parens.camel punctuation.separator.colon.camel
+#                                                ^ meta.parens.camel punctuation.section.parens.end.camel
+#                                                  ^ meta.block.camel punctuation.section.block.begin.camel
 >    x = 1
 #      ^ meta.block.camel keyword.operator.assignment.camel
 #        ^ meta.block.camel constant.numeric.integer.decimal.camel

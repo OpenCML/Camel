@@ -7,21 +7,19 @@
 >// variables and sync for explicit
 #^^ comment.line.double-slash.camel punctuation.definition.comment.camel
 #  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.double-slash.camel
->sync func update(var target: int) {
-#^^^^ storage.modifier.sync.camel
-#     ^^^^ meta.function.definition.camel storage.type.function.camel
-#          ^^^^^^ meta.function.definition.camel entity.name.function.camel
-#                ^ meta.parens.camel punctuation.section.parens.begin.camel
-#                 ^^^ meta.parens.camel storage.modifier.var.camel
-#                     ^^^^^^ meta.parens.camel variable.parameter.camel
-#                           ^ meta.parens.camel punctuation.separator.colon.camel
-#                             ^^^ meta.parens.camel support.type.primitive.camel
-#                                ^ meta.parens.camel punctuation.section.parens.end.camel
-#                                  ^ meta.block.camel punctuation.section.block.begin.camel
->    wait target += 1
-#    ^^^^ meta.block.camel keyword.control.flow.camel
-#                ^^ meta.block.camel keyword.operator.assignment.compound.camel
-#                   ^ meta.block.camel constant.numeric.integer.decimal.camel
+>func update(var target: int) {
+#^^^^ meta.function.definition.camel storage.type.function.camel
+#     ^^^^^^ meta.function.definition.camel entity.name.function.camel
+#           ^ meta.parens.camel punctuation.section.parens.begin.camel
+#            ^^^ meta.parens.camel storage.modifier.var.camel
+#                ^^^^^^ meta.parens.camel variable.parameter.camel
+#                      ^ meta.parens.camel punctuation.separator.colon.camel
+#                        ^^^ meta.parens.camel support.type.primitive.camel
+#                           ^ meta.parens.camel punctuation.section.parens.end.camel
+#                             ^ meta.block.camel punctuation.section.block.begin.camel
+>    target += 1
+#           ^^ meta.block.camel keyword.operator.assignment.compound.camel
+#              ^ meta.block.camel constant.numeric.integer.decimal.camel
 >}
 #^ meta.block.camel punctuation.section.block.end.camel
 >
@@ -43,11 +41,10 @@
 #    ^^^^^^^ meta.block.camel entity.name.function.call.camel
 #           ^ meta.block.camel meta.parens.camel punctuation.section.parens.begin.camel
 #             ^ meta.block.camel meta.parens.camel punctuation.section.parens.end.camel
->    wait update(c)
-#    ^^^^ meta.block.camel keyword.control.flow.camel
-#         ^^^^^^ meta.block.camel entity.name.function.call.camel
-#               ^ meta.block.camel meta.parens.camel punctuation.section.parens.begin.camel
-#                 ^ meta.block.camel meta.parens.camel punctuation.section.parens.end.camel
+>    update(c)
+#    ^^^^^^ meta.block.camel entity.name.function.call.camel
+#          ^ meta.block.camel meta.parens.camel punctuation.section.parens.begin.camel
+#            ^ meta.block.camel meta.parens.camel punctuation.section.parens.end.camel
 >    println(c)
 #    ^^^^^^^ meta.block.camel entity.name.function.call.camel
 #           ^ meta.block.camel meta.parens.camel punctuation.section.parens.begin.camel

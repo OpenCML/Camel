@@ -18,11 +18,11 @@
 #    ^^^ meta.declaration.let.camel variable.other.constant.camel
 #        ^ keyword.operator.assignment.camel
 #          ^^^^^^ constant.numeric.integer.decimal.camel
->let oct = 0755
+>let oct = 0o755
 #^^^ meta.declaration.let.camel storage.type.let.camel
 #    ^^^ meta.declaration.let.camel variable.other.constant.camel
 #        ^ keyword.operator.assignment.camel
-#          ^^^^ constant.numeric.integer.octal.camel
+#          ^^^^^ constant.numeric.integer.octal.camel
 >let hex = 0xFF
 #^^^ meta.declaration.let.camel storage.type.let.camel
 #    ^^^ meta.declaration.let.camel variable.other.constant.camel

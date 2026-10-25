@@ -542,9 +542,9 @@
       ]
     },
     "angle-arguments": {
-      "comment": "angledValues / specType arguments: '<' directly after a name. The parser tells it from a comparison by adjacency (isAdjacent), and so does this rule. '>=' is one token and never closes the list.",
+      "comment": "angledValues / specType arguments: '<' directly after a name, or after the '::' that declares type parameters at the head (`func f::<T>`; design principles 5.5). The parser tells it from a comparison by adjacency (isAdjacent), and so does this rule. '>=' is one token and never closes the list.",
       "name": "meta.angle-arguments.camel",
-      "begin": "(?<=[A-Za-z_0-9])<(?!=)",
+      "begin": "(?:(?<=[A-Za-z_0-9])|(?<=::))<(?!=)",
       "beginCaptures": { "0": { "name": "punctuation.definition.angle-arguments.begin.camel" } },
       "end": "(>)(?!=)|(?=[)\\]};])",
       "endCaptures": { "1": { "name": "punctuation.definition.angle-arguments.end.camel" } },
