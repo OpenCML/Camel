@@ -1,0 +1,1 @@
+h590 第三轮：benchmarks/README.md:527 的死路径 resnetbn/tools/grad_envelope.py 修掉（230ffdeb2 同提交里已由 grad_referee.py 取代）；文件地图 40 条路径 40/40 解析、无遗漏。报告：地图覆盖度不足（46 个顶层条目只点名 12 个）、progen 与 showcase 两条生成关系无处记录、counts.py:368 的 'may lag HEAD' 标注已偏保守。
