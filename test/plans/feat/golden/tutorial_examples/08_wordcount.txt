@@ -1,0 +1,2 @@
+9
+{"brown":1,"dog":1,"fox":2,"lazy":1,"quick":1,"the":3}

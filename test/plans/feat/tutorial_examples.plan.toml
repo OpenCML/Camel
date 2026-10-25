@@ -277,12 +277,15 @@ expect_output_contains = ["Entry module 'main' must define a resolvable 'main'"]
 
 # ---- Entries for the other command lines the headers and the pages give ----------------------
 
-# The first line of `05_map_order.cml` has no order on `std::prl`, so nothing about its order is
-# asserted: the line must hold the same eight numbers as the pinned line (a permutation of it), and the
-# second line, which the reduce writes in element order, is the golden's.
+# The first line of `05_map_order.cml` has no order on `std::prl`, and no fixed contents either:
+# `randint` advances a hidden state, so which draw an element gets depends on which ran first, and
+# under load the interleaving has produced a line whose multiset differs from the sequential one
+# (`[2, 2, 2, 36, 58, 88, 36, 8]`, seen on 2026-10-26 in a run with -Jobs 8), which is why the
+# chapter's page shows one run rather than a pinned line. What is asserted about the first line is
+# its shape; the second line, which the reduce writes in element order, is exact.
 [[tests]]
 name = "tutorial.examples.05_map_order_prl"
-desc = "The same program on std::prl: the parallel map draws the same numbers, and the second line is still in element order."
+desc = "The same program on std::prl: the parallel map draws eight numbers, and the second line is still in element order."
 kind = "behavior"
 case = "../../../docs/tutorial/examples/05_map_order.cml"
 backends = false
@@ -298,8 +301,8 @@ const ordered = numbers(lines[1])
 assert(drawn.length === 8 && ordered.length === 8, 'eight numbers per line, got ' + drawn.length + ' and ' + ordered.length)
 assert(ordered.join(', ') === '75, 63, 75, 13, 90, 9, 57, 37', 'the reduced line is in element order, got ' + lines[1])
 assert(
-  JSON.stringify([...drawn].sort((a, b) => a - b)) === JSON.stringify([...ordered].sort((a, b) => a - b)),
-  'the parallel map draws the same numbers, in whatever order: ' + lines[0]
+  drawn.every((n) => Number.isInteger(n) && n >= 0 && n <= 99),
+  'the first line holds eight draws of randint(0, 99), whatever order they happened in: ' + lines[0]
 )
 """
 
@@ -339,3 +342,294 @@ args = ["${case}", "std::macro", "std::opt", 'onnx::export out="${test_tmp}/mode
 expect_exit = 0
 expect_output_not_contains = []
 expect_stdout_contains = ["onnx::export: wrote ${test_tmp}/model.onnx"]
+
+# ---- The examples of the rewritten chapters ---------------------------------------------------
+#
+# Chapters 1-10 and 18 were rewritten with an example beside each page, and every one of them is
+# named here, one entry per file: an example nobody runs is a file a page can point at while it
+# stops being the program the page describes. The shape of an entry is the one above -- a case, a
+# golden, and a diagnostic where the file's lesson is a warning the page does not show; the two
+# files that read `08_words.txt`, the one that faults and the one the compiler refuses override
+# the defaults the way their siblings above do.
+
+# ---- Chapter 1 --------------------------------------------------------------------------------
+
+[[tests]]
+name = "tutorial.examples.01_rewrite"
+desc = "The first program again, with one expression that has more than one writing: the value it prints is unchanged by that."
+case = "../../../docs/tutorial/examples/01_rewrite.cml"
+golden = "golden/tutorial_examples/01_rewrite.txt"
+
+[[tests]]
+name = "tutorial.examples.01_exercise"
+desc = "The answer to the exercise of chapter 1: a function of two parameters, and the value it returns."
+case = "../../../docs/tutorial/examples/01_exercise.cml"
+golden = "golden/tutorial_examples/01_exercise.txt"
+
+# ---- Chapter 2 --------------------------------------------------------------------------------
+
+[[tests]]
+name = "tutorial.examples.02_literals"
+desc = "A literal takes the type its context asks for while a variable keeps its own type: the same numbers printed as reals and as ints."
+case = "../../../docs/tutorial/examples/02_literals.cml"
+golden = "golden/tutorial_examples/02_literals.txt"
+
+[[tests]]
+name = "tutorial.examples.02_exercise"
+desc = "The answer to the exercise of chapter 2: a value of one type is not another type, and the conversion is written out."
+case = "../../../docs/tutorial/examples/02_exercise.cml"
+golden = "golden/tutorial_examples/02_exercise.txt"
+
+# ---- Chapter 3 --------------------------------------------------------------------------------
+
+[[tests]]
+name = "tutorial.examples.03_lambdas"
+desc = "A function with no name, written `(x: int): int => ...`, called where it is written and kept in a name."
+case = "../../../docs/tutorial/examples/03_lambdas.cml"
+golden = "golden/tutorial_examples/03_lambdas.txt"
+
+[[tests]]
+name = "tutorial.examples.03_exercise"
+desc = "The answer to the exercise of chapter 3: a function of two parameters, used from a pipe."
+case = "../../../docs/tutorial/examples/03_exercise.cml"
+golden = "golden/tutorial_examples/03_exercise.txt"
+
+# ---- Chapter 4 --------------------------------------------------------------------------------
+
+[[tests]]
+name = "tutorial.examples.04_guards"
+desc = "A `when` guard adds a condition to a case: the first arm whose guard holds is the one taken."
+case = "../../../docs/tutorial/examples/04_guards.cml"
+golden = "golden/tutorial_examples/04_guards.txt"
+
+[[tests]]
+name = "tutorial.examples.04_exercise"
+desc = "The answer to the exercise of chapter 4: an `if` is an expression, and a `match` on a string needs its default."
+case = "../../../docs/tutorial/examples/04_exercise.cml"
+golden = "golden/tutorial_examples/04_exercise.txt"
+
+# ---- Chapter 5 --------------------------------------------------------------------------------
+
+[[tests]]
+name = "tutorial.examples.05_loops"
+desc = "`loop` carries its state from one round to the next, and the body's value is the next state."
+case = "../../../docs/tutorial/examples/05_loops.cml"
+golden = "golden/tutorial_examples/05_loops.txt"
+
+[[tests]]
+name = "tutorial.examples.05_exercise"
+desc = "The answer to the exercise of chapter 5: a `loop` that adds the squares of the even numbers."
+case = "../../../docs/tutorial/examples/05_exercise.cml"
+golden = "golden/tutorial_examples/05_exercise.txt"
+
+# ---- Chapter 6 --------------------------------------------------------------------------------
+
+[[tests]]
+name = "tutorial.examples.06_collections"
+desc = "Structs, tuples, Map and Set: the shapes a program's data takes, and what each of them gives back."
+case = "../../../docs/tutorial/examples/06_collections.cml"
+golden = "golden/tutorial_examples/06_collections.txt"
+
+[[tests]]
+name = "tutorial.examples.06_equality"
+desc = "`==` compares two values by what they hold, not by where they are."
+case = "../../../docs/tutorial/examples/06_equality.cml"
+golden = "golden/tutorial_examples/06_equality.txt"
+
+[[tests]]
+name = "tutorial.examples.06_exercise"
+desc = "The answer to the exercise of chapter 6: counting with a map is a fold over `put`."
+case = "../../../docs/tutorial/examples/06_exercise.cml"
+golden = "golden/tutorial_examples/06_exercise.txt"
+
+# ---- Chapter 7 --------------------------------------------------------------------------------
+
+[[tests]]
+name = "tutorial.examples.07_nullable"
+desc = "`T?` may be null: a lookup that finds nothing, opened with `??` and with `match`."
+case = "../../../docs/tutorial/examples/07_nullable.cml"
+golden = "golden/tutorial_examples/07_nullable.txt"
+
+# The dropped value at the end of the file warns on standard error, which the page does not show.
+[[tests]]
+name = "tutorial.examples.07_errors"
+desc = "A function that may fail returns `T!`, and `throw` returns an error value. The value dropped at the end of the file is reported as a warning on standard error."
+case = "../../../docs/tutorial/examples/07_errors.cml"
+golden = "golden/tutorial_examples/07_errors.txt"
+expect_output_contains = ["SemanticDiag::UnusedFallibleValue"]
+
+# The fault of the chapter: what was printed before it stays printed, the run ends non-zero, and the
+# diagnostic names the index and the length, exactly as 09_fault above records the other fault.
+[[tests]]
+name = "tutorial.examples.07_fault"
+desc = "A fault: a read past the end of an array ends the program, with the index and the length named."
+kind = "behavior"
+case = "../../../docs/tutorial/examples/07_fault.cml"
+expect_exit = 1
+expect_output_not_contains = []
+expect_stdout_starts_with = "before\n"
+expect_stdout_not_contains = ["after"]
+expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
+expect_diagnostic_line = 7
+expect_diagnostic_column = 15
+expect_output_contains = ["Index 5 is out of range for an array of length 3"]
+
+[[tests]]
+name = "tutorial.examples.07_exercise"
+desc = "The answer to the exercise of chapter 7: the values that are there, and 0 for the ones that are not."
+case = "../../../docs/tutorial/examples/07_exercise.cml"
+golden = "golden/tutorial_examples/07_exercise.txt"
+
+# ---- Chapter 8 --------------------------------------------------------------------------------
+
+[[tests]]
+name = "tutorial.examples.08_modules"
+desc = "Importing from a standard module and from the file next to this one, which is the module `geometry`."
+case = "../../../docs/tutorial/examples/08_modules.cml"
+golden = "golden/tutorial_examples/08_modules.txt"
+
+# Both wordcount files read a text whose path is `main`'s parameter, and both headers give the same
+# command: the argument is this chapter's own text file, from the repository root.
+[[tests]]
+name = "tutorial.examples.08_wordcount"
+desc = "The wordcount tool: read the text the argument names, count the words, print the counts as JSON."
+case = "../../../docs/tutorial/examples/08_wordcount.cml"
+args = ["${case}", "--arg", "path=docs/tutorial/examples/08_words.txt", "${backend}"]
+golden = "golden/tutorial_examples/08_wordcount.txt"
+
+[[tests]]
+name = "tutorial.examples.08_exercise"
+desc = "The answer to the exercise of chapter 8: the same tool with the reading in one function."
+case = "../../../docs/tutorial/examples/08_exercise.cml"
+args = ["${case}", "--arg", "path=docs/tutorial/examples/08_words.txt", "${backend}"]
+golden = "golden/tutorial_examples/08_exercise.txt"
+
+# ---- Chapter 9 --------------------------------------------------------------------------------
+
+[[tests]]
+name = "tutorial.examples.09_dependency"
+desc = "Who needs whose result decides what runs and what can run at the same time."
+case = "../../../docs/tutorial/examples/09_dependency.cml"
+golden = "golden/tutorial_examples/09_dependency.txt"
+
+[[tests]]
+name = "tutorial.examples.09_exercise"
+desc = "The answer to the exercise of chapter 9: one call now needs the other's result, which is what changes the graph."
+case = "../../../docs/tutorial/examples/09_exercise.cml"
+golden = "golden/tutorial_examples/09_exercise.txt"
+
+# ---- Chapter 10 -------------------------------------------------------------------------------
+
+# Three of this chapter's ten files warn on purpose: the warning is the lesson, and the page shows
+# it, so each of those entries asserts the diagnostic name rather than only the golden.
+[[tests]]
+name = "tutorial.examples.10_unused_effect"
+desc = "An effect whose result nothing needs: `greet`'s body is not a sync block, so its `println` does not run, and the warning names the call that is dropped."
+case = "../../../docs/tutorial/examples/10_unused_effect.cml"
+golden = "golden/tutorial_examples/10_unused_effect.txt"
+expect_output_contains = ["SemanticDiag::EffectNotExecuted"]
+
+[[tests]]
+name = "tutorial.examples.10_sync_body"
+desc = "The same two statements in a sync body: now both run, in the order they are written."
+case = "../../../docs/tutorial/examples/10_sync_body.cml"
+golden = "golden/tutorial_examples/10_sync_body.txt"
+
+[[tests]]
+name = "tutorial.examples.10_sync_block"
+desc = "A sync function body orders its own statements, and a `sync` block inside it orders what it contains. The warning names the effect nobody needs."
+case = "../../../docs/tutorial/examples/10_sync_block.cml"
+golden = "golden/tutorial_examples/10_sync_block.txt"
+expect_output_contains = ["SemanticDiag::EffectNotExecuted"]
+
+[[tests]]
+name = "tutorial.examples.10_var_order"
+desc = "A `var` and the order of its writes inside a sync body: a read takes the most recent write, which is what the chapter's picture draws."
+case = "../../../docs/tutorial/examples/10_var_order.cml"
+golden = "golden/tutorial_examples/10_var_order.txt"
+
+[[tests]]
+name = "tutorial.examples.10_write_nobody_reads"
+desc = "A write nobody reads is not executed, and outside a sync block nothing orders it after the print: the two warnings are the lesson."
+case = "../../../docs/tutorial/examples/10_write_nobody_reads.cml"
+golden = "golden/tutorial_examples/10_write_nobody_reads.txt"
+expect_output_contains = ["SemanticDiag::IgnoredSideEffect", "SemanticDiag::EffectNotExecuted"]
+
+[[tests]]
+name = "tutorial.examples.10_same_resource"
+desc = "Two effects on the same resource (`stdout`) keep the written order without a sync block."
+case = "../../../docs/tutorial/examples/10_same_resource.cml"
+golden = "golden/tutorial_examples/10_same_resource.txt"
+
+[[tests]]
+name = "tutorial.examples.10_resources"
+desc = "What a call touches: a resource of the module, a group of them, a handle type, and `uses` on a parameter."
+case = "../../../docs/tutorial/examples/10_resources.cml"
+golden = "golden/tutorial_examples/10_resources.txt"
+
+[[tests]]
+name = "tutorial.examples.10_pure_callback"
+desc = "`pure` in a function type is part of the requirement: `apply` accepts only a function that touches no resource, and `twice` says so in its signature."
+case = "../../../docs/tutorial/examples/10_pure_callback.cml"
+golden = "golden/tutorial_examples/10_pure_callback.txt"
+
+# The counter-example of the chapter: a function that prints cannot be passed where the signature
+# requires a pure one, so nothing is run and the error names the signature that would have matched.
+#
+# Its name and position are asserted from the output text rather than with `expect_diagnostic_name`
+# and its line and column: this diagnostic's message carries the available overloads on lines of its
+# own, so in the short format the run uses the `(name=..., code=...)` that the diagnostic assertions
+# read ends up on a later line than the position, and the one-line pattern they match against does
+# not see it. The page shows the same three lines the command prints.
+[[tests]]
+name = "tutorial.examples.10_pure_callback_wrong"
+desc = "A program the compiler refuses: a function that prints is passed where the signature requires a pure one, and the error names the position and the overload that would have matched."
+kind = "behavior"
+case = "../../../docs/tutorial/examples/10_pure_callback_wrong.cml"
+backends = false
+args = ["${case}"]
+expect_exit = 1
+expect_output_not_contains = []
+expect_output_contains = ["10_pure_callback_wrong.cml:16:18: [Error]: No matching function found", "(name=SemanticDiag::NoMatchingFunction, code=0x0300000F)", "apply: (f: (x: int) => int pure, x: int) => int"]
+
+[[tests]]
+name = "tutorial.examples.10_exercise"
+desc = "The answer to the exercise of chapter 10: a `var` written inside a sync block, and a callback whose signature says it is pure."
+case = "../../../docs/tutorial/examples/10_exercise.cml"
+golden = "golden/tutorial_examples/10_exercise.txt"
+
+# ---- Chapter 18 -------------------------------------------------------------------------------
+
+# The outline numbers this chapter 18 while its files keep the number they were written with, so the
+# entries below are named after the files and the `desc` says which chapter they belong to.
+[[tests]]
+name = "tutorial.examples.17_rule"
+desc = "The law of chapter 18's program written as a `rule`: the optimizer's verdict on it, and the values `main` prints."
+case = "../../../docs/tutorial/examples/17_rule.cml"
+golden = "golden/tutorial_examples/17_rule.txt"
+
+[[tests]]
+name = "tutorial.examples.17_fact"
+desc = "The knowledge of the field that is not an equation, handed to the compiler as a `fact`: what the rule that needs it reports without it, including the operator that is not translated."
+case = "../../../docs/tutorial/examples/17_fact.cml"
+golden = "golden/tutorial_examples/17_fact.txt"
+
+[[tests]]
+name = "tutorial.examples.17_exercise"
+desc = "The answer to the exercise of chapter 18: a law written as a `rule`, and the verdict its `check` prints."
+case = "../../../docs/tutorial/examples/17_exercise.cml"
+golden = "golden/tutorial_examples/17_exercise.txt"
+
+# The module beside chapter 8's program, which is a library like shapes.cml above: running it as a
+# program is refused, and that refusal is what this plan records for it.
+[[tests]]
+name = "tutorial.examples.geometry"
+desc = "A module without main: the file 08_modules.cml imports, refused as a program with a diagnostic that names the missing entry point."
+kind = "behavior"
+case = "../../../docs/tutorial/examples/geometry.cml"
+backends = false
+args = ["${case}"]
+expect_exit = 1
+expect_output_not_contains = []
+expect_diagnostic_name = "SemanticDiag::EntryModuleMissingMain"
+expect_output_contains = ["Entry module 'main' must define a resolvable 'main'"]

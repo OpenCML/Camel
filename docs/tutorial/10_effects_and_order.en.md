@@ -384,12 +384,12 @@ What a wrong clause looks like (all compile errors):
 ## `pure`: touching no resource at all
 
 `pure` is the promise that a call touches no resource. Written in a **function type** it is a requirement: whoever
-passes a function in has to pass one that satisfies it. `apply` in
+passes a function in has to pass one that satisfies it, and satisfying it means **its own signature says `pure`**. `apply` in
 [`examples/10_pure_callback.cml`](examples/10_pure_callback.cml) accepts only a pure function:
 
 ```cml
-// `pure` in a function type is part of the requirement: `apply` accepts only a function that
-// touches no resource, and `twice` says so in its signature.
+// `pure` in a function type is part of the requirement: `apply` accepts only a function whose own
+// signature says `pure`, and `twice` says it.
 // Run: camel docs/tutorial/examples/10_pure_callback.cml
 module pure_callback
 
@@ -415,14 +415,14 @@ camel docs/tutorial/examples/10_pure_callback.cml
 8
 ```
 
-Pass a function that prints and the trouble is not a wrong value but a **signature that does not match** -- refused at
-the call ([`examples/10_pure_callback_wrong.cml`](examples/10_pure_callback_wrong.cml)):
+Pass a function whose signature does not say `pure` and the trouble is not a wrong value but a **signature that does
+not match** -- refused at the call ([`examples/10_pure_callback_wrong.cml`](examples/10_pure_callback_wrong.cml)):
 
 <!-- camel-snippet: counter-example: this program deliberately does not compile: the call is a mismatch, so the text block below is the diagnostic, not output -->
 
 ```cml
-// A counter-example: `noisy` prints, so it is not a pure function and cannot be passed where the
-// signature requires one. The error names the signature that would have matched.
+// A counter-example: `noisy` prints and its own signature does not say `pure`, so its type is not
+// what the requirement asks for. The error names the signature that would have matched.
 // Run: camel docs/tutorial/examples/10_pure_callback_wrong.cml
 module pure_callback_wrong
 
