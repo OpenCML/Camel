@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-266 diagnostics: 249 errors, 17 warnings. 15 carry a machine-applicable edit, 251 say why they carry none.
+267 diagnostics: 250 errors, 17 warnings. 15 carry a machine-applicable edit, 252 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -235,6 +235,7 @@ prints one entry.
 | `0x030001E5` | [SemanticDiag::RangeTwoArgumentsRemoved](#rangetwoargumentsremoved) | Error | no |
 | `0x030001E6` | [SemanticDiag::RangeStepZero](#rangestepzero) | Error | no |
 | `0x030001E7` | [SemanticDiag::StaticLoopSequenceNotKnown](#staticloopsequencenotknown) | Error | no |
+| `0x030001E8` | [SemanticDiag::SliceStepZero](#slicestepzero) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn | no |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn | no |
@@ -7734,6 +7735,39 @@ module static_loop_sequence_unknown
 
 func sumTo(n: int): int {
     return static loop acc = 0 for i in 0..n do acc + i
+}
+```
+
+### SliceStepZero
+
+`0x030001E8` · Error · `SemanticDiag::SliceStepZero`
+
+**Fix**
+
+None: choice: which step the slice takes is the writer's to say, and the message names both the stepped slice and the plain one
+
+**Message**
+
+```text
+The slice 't[a:b:s]' has a step of 0, so it takes no element at all, whatever its bounds are.
+```
+
+**Help**
+
+```text
+A slice takes every step-th element from its start, so the step decides which elements it has: with a positive step 'a', 'a + step', ... below 'b', and with a negative one backwards from the start. A step that does not move names no slice, so a constant step of 0 is refused where it is written (design principles 5.4). Give a non-zero step, or write 't[a:b]' when the step is 1. A step that is not constant is a fault of the run instead (RuntimeDiag::InvalidArgument).
+```
+
+**Example** (`test/cases/linear/faults/subscript_step_zero_const.cml`, run as `camel test/cases/linear/faults/subscript_step_zero_const.cml`)
+
+```camel
+module subscript_step_zero_const
+
+func main(): int sync {
+    let xs = [1, 2, 3, 4, 5, 6]
+    println(xs[0:6:0])
+    println('not reached')
+    return 0
 }
 ```
 
