@@ -11,8 +11,8 @@
 //                                                  hand-written part, against the budget
 //   --root DIR                                     read and write under DIR (the proof cases)
 //   --camel PATH                                   the binary the counter-examples are compiled
-//                                                  with, for --verify-errors; `$CAMEL_HOME/bin/camel`
-//                                                  or this tree's `out/latest/bin/camel` without it
+//                                                  with, for --verify-errors; this tree's
+//                                                  `out/latest/bin/camel` without it
 //
 // The reference is one file an AI can read whole (handover: "a distilled language reference for
 // AI"), so it is written by hand where judgement is needed and generated where the sources are
@@ -603,8 +603,8 @@ function counterExamples(document) {
 }
 
 // The binary `--verify-errors` compiles each counter-example with. `--camel <path>` names it (the
-// entry parses the argument); with none it is `$CAMEL_HOME/bin/camel`, else this tree's
-// `out/latest/bin/camel`. One rule, in one place: test/tools/camel-arg.mjs.
+// entry parses the argument); with none it is this tree's `out/latest/bin/camel`. One rule, in one
+// place: test/tools/camel-arg.mjs.
 let CAMEL = defaultCamel(REPO_ROOT)
 
 function runCamel(args, cwd) {
@@ -613,9 +613,11 @@ function runCamel(args, cwd) {
         // diagnostic the way the default text form prints it, so the short form is not read here.
         const env = { ...process.env }
         delete env.CAMEL_ERROR_FORMAT
-        // The child reads the standard library of the install it runs in, so a named `--camel`
-        // and its `CAMEL_HOME` are the same install; an exported `CAMEL_HOME` still wins.
-        env.CAMEL_HOME = process.env.CAMEL_HOME || path.dirname(path.dirname(CAMEL))
+        // The child reads the standard library of the install it runs in, so `CAMEL_HOME` is the
+        // root of the install this check measured -- `--camel <path>`, else this tree's
+        // `out/latest` -- and never an exported `CAMEL_HOME`, which would point the child at a
+        // different build than the one the check ran.
+        env.CAMEL_HOME = path.dirname(path.dirname(CAMEL))
         const child = spawn(CAMEL, args, { cwd, env, stdio: ['ignore', 'pipe', 'pipe'] })
         let stdout = ''
         let stderr = ''

@@ -29,8 +29,7 @@ These functions are in programs of their own (a<k>.cml beside p<k>.cml) and draw
 random stream, so the programs of the first two shapes are the same as before they were added.
 
 Usage: python var_pipelines.py [--seed N] [--programs N] [--keep DIR] [--warnings] [--camel PATH]
-The compiler is the install `--camel <path>` names, `$CAMEL_HOME` without it, else
-REPO_ROOT/out/latest.
+The compiler is the install `--camel <path>` names, else this tree's REPO_ROOT/out/latest.
 """
 
 from __future__ import annotations
@@ -49,8 +48,7 @@ REPO_ROOT = HERE.parents[3]
 sys.path.insert(0, str(REPO_ROOT / "test" / "tools"))
 from camel_arg import camel_from_argv  # noqa: E402
 
-# The install this case measures: `--camel <path>` names it, `$CAMEL_HOME/bin/camel` without it,
-# else this tree's `out/latest/bin/camel` (one rule, in one place: test/tools/camel_arg.py).
+# The install this case measures: `--camel <path>` names it, this tree's `out/latest/bin/camel` without it (one rule, in one place: test/tools/camel_arg.py).
 # `CAMEL_ARGV` is this process's arguments without the `--camel` pair.
 CAMEL, CAMEL_ARGV = camel_from_argv(REPO_ROOT)
 
@@ -279,8 +277,8 @@ def main() -> int:
     ap.add_argument("--warnings", action="store_true", help="also show compiler warnings of correct cells")
     args = ap.parse_args(CAMEL_ARGV)
     rng = random.Random(args.seed)
-    # The install this run measures: `--camel <path>` names it; without it `$CAMEL_HOME`, else this
-    # tree's `out/latest`. One rule, in one place: test/tools/camel_arg.py.
+    # The install this run measures: `--camel <path>` names it; without it this tree's
+    # `out/latest`. One rule, in one place: test/tools/camel_arg.py.
     home = str(Path(CAMEL).resolve().parents[1])
     exe = CAMEL
     bad = cells = 0

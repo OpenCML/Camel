@@ -9,8 +9,7 @@
 //   node scripts/check-doc-snippets.mjs --default-roots  the same, ignoring a script path argument
 //   node scripts/check-doc-snippets.mjs FILE DIR  check the given files and directories
 //   --camel PATH                                  the compiler the snippets are run with;
-//                                                 `$CAMEL_HOME/bin/camel`, else this tree's
-//                                                 `out/latest/bin/camel`, without it
+//                                                 this tree's `out/latest/bin/camel` without it
 //
 // A Camel fence is a fenced block tagged `camel` or `cml` (both tags are used in the tree).
 // The page itself is the source of truth for what the snippet means:
@@ -71,8 +70,8 @@ function usage(message) {
     process.exit(2)
 }
 
-// The compiler every snippet is run with: `--camel <path>` names it, else `$CAMEL_HOME/bin/camel`,
-// else this tree's `out/latest/bin/camel`. One rule, in one place: test/tools/camel-arg.mjs.
+// The compiler every snippet is run with: `--camel <path>` names it, else this tree's
+// `out/latest/bin/camel`. One rule, in one place: test/tools/camel-arg.mjs.
 const { camel: CAMEL, rest: ARGV } = takeCamel(process.argv.slice(2), ROOT, usage)
 
 // Directories that are records, not pages: they quote the old spelling to say what happened.
@@ -386,7 +385,10 @@ function runCamel(args, cwd) {
         // The test runner sets the short form for its own assertions; a snippet's text block is
         // written in the default text form, and warnings are part of what a page shows.
         delete env.CAMEL_ERROR_FORMAT
-        env.CAMEL_HOME = process.env.CAMEL_HOME || path.join(ROOT, 'out', 'latest')
+        // The snippet runs inside the install this check measured, so its standard library and its
+        // runtime library are that install's: `CAMEL_HOME` is the install root, not whatever the
+        // shell exported.
+        env.CAMEL_HOME = path.dirname(path.dirname(CAMEL))
         const child = spawn(CAMEL, args, {
             cwd,
             env,

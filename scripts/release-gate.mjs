@@ -28,13 +28,16 @@
 //                      for one (a positional target, `--include`, `--plan`, `--tier all`,
 //                      `--all`, or any directory that contains one).
 //
-// The gate does not build. It verifies the install it finds (`CAMEL_HOME`, else `out/latest`) -- both
-// that one exists and that its build stamp matches this tree's sources (H149) -- and refuses to
-// start otherwise, because a run against a missing or stale binary measures nothing. Build once
+// The gate does not build. It verifies the install it measures -- `--camel <path>`, else this
+// tree's `out/latest` -- both that one exists and that its build stamp matches this tree's sources,
+// and refuses to start otherwise, because a run against a missing or stale binary measures nothing.
+// The choice is made once, here, and handed to every layer as the same `--camel` argument, so no
+// layer resolves a default of its own and "checked A, measured B" cannot arise. Build once
 // (`npm run build`, or `camel-remote.ps1` without `-Plan`), then run:
 //
 //   npm run release-gate                     # every layer, the whole gate
 //   node scripts/release-gate.mjs --jobs 8
+//   node scripts/release-gate.mjs --camel out/debug/bin/camel --only static
 //   node scripts/release-gate.mjs --dry-run  # print the commands and the skip list, run nothing
 //   node scripts/release-gate.mjs --only slow # PARTIAL: one layer, for re-checking a phase
 //   node scripts/release-gate.mjs --include test/plans/feat/tools/lsp.plan.toml
@@ -64,6 +67,9 @@ import { parseTomlFile } from '../test/tools/toml-lite.mjs'
 // (`test/plans/feat/gate/plan_inventory.plan.toml`); this script imports its tables instead of
 // keeping a second copy that could disagree with it.
 import { FAST_TARGETS, SLOW_PLANS, FORBIDDEN, planInventoryProblems, rel, walkPlans } from './plan-inventory.mjs'
+// The stamp rule the two stdlib checkers also apply, so the gate and a checker that reads the
+// install cannot disagree about what "this tree's build" means.
+import { refuseInstallNotOfThisTree } from './install-stamp.mjs'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -80,17 +86,16 @@ const POLICY =
 // the gate's criterion is that exit code, not the text of the last line.
 //
 // `camel: true` marks a check that reads the install: the gate appends `--camel <the install it
-// found>` to its command line, because a check left to resolve its own default reads `out/latest`
-// while the gate may have found `CAMEL_HOME`'s install -- one run measuring two binaries, the
-// defect this gate exists to catch (the 2026-10-25 ruling, "the compiler of a run is an argument
-// everywhere"). `--verify-doc` reads the tree only, so it takes no install and names none:
-// an argument it never reads would claim a measurement it does not take.
+// picked>` to its command line, because a check left to resolve its own default would read
+// `out/latest` while the gate measured another install -- one run measuring two binaries, the
+// defect this gate exists to catch. `--verify-doc` reads the tree only, so it takes no install and
+// names none: an argument it never reads would claim a measurement it does not take.
 const STATIC_CHECKS = [
     { name: 'stdlib reference: declarations agree with the registered operators', args: ['scripts/stdlib-reference.mjs', '--verify-ops'], camel: true },
     { name: 'stdlib reference: docs/stdlib-reference.md is up to date', args: ['scripts/stdlib-reference.mjs', '--verify-doc'] },
     { name: 'diagnostics registry: the declarations and the generated code tables agree', args: ['scripts/diagnostics-catalog.mjs', '--check'] },
     { name: 'document links: no broken relative link', args: ['scripts/check-doc-links.mjs', '--all'] },
-    { name: 'document snippets: Camel fences compile and print what the page says', args: ['scripts/check-doc-snippets.mjs'] },
+    { name: 'document snippets: Camel fences compile and print what the page says', args: ['scripts/check-doc-snippets.mjs'], camel: true },
     { name: 'stdlib declarations: a migrated module stays migrated', args: ['scripts/stdlib-declarations.mjs', '--check'], camel: true },
     { name: 'std includes: no header borrowed through another header', args: ['scripts/check-std-includes.mjs'] },
 ]
@@ -106,6 +111,10 @@ const LAYERS = ['fast', 'slow', 'static']
 function usage() {
     console.log(`Usage: node scripts/release-gate.mjs [options]
 
+  --camel PATH    the install every layer measures: its bin/camel (default: this tree's
+                  out/latest). The environment does not choose it -- a layer's children get
+                  CAMEL_HOME set to this install's root -- and an install that is not this tree's
+                  build is refused before anything runs
   --jobs N        parallel width for the plan runs (default ${DEFAULT_JOBS}; 12 is known to make
                   gpu_preference.no_device.* time out on the shared host)
   --only LIST     comma-separated subset of fast,slow,static. A PARTIAL run, not a gate result
@@ -124,7 +133,7 @@ function die(message, code = 2) {
 }
 
 function parseArgs(argv) {
-    const options = { jobs: DEFAULT_JOBS, only: null, include: [], dryRun: false }
+    const options = { jobs: DEFAULT_JOBS, only: null, include: [], dryRun: false, camel: null }
     for (let i = 0; i < argv.length; i++) {
         const arg = argv[i]
         if (arg === '-h' || arg === '--help') {
@@ -132,6 +141,14 @@ function parseArgs(argv) {
             process.exit(0)
         } else if (arg === '--dry-run' || arg === '--list') {
             options.dryRun = true
+        } else if (arg === '--camel') {
+            const value = argv[++i]
+            if (!value) die('--camel needs the path of the install to measure')
+            options.camel = path.resolve(value)
+        } else if (arg.startsWith('--camel=')) {
+            const value = arg.slice('--camel='.length)
+            if (!value) die('--camel needs the path of the install to measure')
+            options.camel = path.resolve(value)
         } else if (arg === '--jobs') {
             const value = argv[++i]
             if (!value || !/^[1-9][0-9]*$/.test(value)) die('--jobs needs a positive integer')
@@ -190,47 +207,26 @@ function checkIncludes(include) {
     return [...new Set(extra)]
 }
 
-function findCamel() {
-    const homes = [process.env.CAMEL_HOME, path.join(ROOT, 'out', 'latest')].filter(Boolean)
-    for (const home of homes) {
-        for (const name of ['camel', 'camel.exe']) {
-            const candidate = path.join(home, 'bin', name)
-            if (fs.existsSync(candidate)) return candidate
-        }
+// The one install this run measures: the binary `--camel <path>` names, else this tree's
+// `out/latest/bin/camel`. Picked once, here. The environment does not choose it: `CAMEL_HOME` is
+// the install location's convention -- what the binary and an SDK user read to find the runtime
+// library -- and letting it pick would make the measured install depend on the shell. What the
+// chosen install's children read as `CAMEL_HOME` is its own root, set by each layer.
+function findCamel(named) {
+    if (named) return fs.existsSync(named) ? named : null
+    for (const name of ['camel', 'camel.exe']) {
+        const candidate = path.join(ROOT, 'out', 'latest', 'bin', name)
+        if (fs.existsSync(candidate)) return candidate
     }
     return null
 }
 
-// The gate never builds, and it never runs against an install it cannot prove: H149 found
-// `-NoBuild` silently reusing another revision's `out/latest`, and a gate that measured that
-// binary would report a tree nobody tested. `scripts/build-info.js check` compares the stamp's
-// content fingerprint with this tree (docs/, test/, scripts/ and benchmarks/ do not move it, so
-// a docs-only commit still passes); exit 4 there is the refusal. An install outside `out/`
-// carries no stamp this script can find, and the gate says so instead of pretending.
-function checkInstallStamp(camel) {
-    const home = path.dirname(path.dirname(camel))
-    const relative = path.relative(path.join(ROOT, 'out'), home)
-    if (relative.startsWith('..') || path.isAbsolute(relative)) {
-        console.log('[gate] build stamp: the install is outside out/, so its stamp cannot be checked; the caller owns staleness')
-        return
-    }
-    const tag = relative.split(path.sep)[0]
-    const check = spawnSync(process.execPath, ['scripts/build-info.js', 'check', '--tag', tag], {
-        cwd: ROOT,
-        encoding: 'utf8',
-        windowsHide: true,
-    })
-    if (check.status === 0) {
-        console.log(`[gate] build stamp: out/${tag} was built from this tree's sources`)
-        return
-    }
-    const detail = `${check.stdout || ''}${check.stderr || ''}`.trim()
-    console.error(detail ? `[gate] ${detail.replace(/\n/g, '\n[gate] ')}` : '[gate] build-info check failed')
-    die(
-        `the install at out/${tag} was not built from this tree (build-info exit ${check.status}).\n` +
-            '[gate] build once (`npm run build`), then run the gate; it never builds and never assumes.'
-    )
-}
+// The gate never builds, and it never runs against an install it cannot prove: `-NoBuild` once
+// silently reused another revision's `out/latest`, and a gate that measured that binary would
+// report a tree nobody tested. The check is `refuseInstallNotOfThisTree`, the same rule the stdlib
+// checkers apply to an install they are pointed at: the stamp travels inside the install, so an
+// install outside this tree's `out/` is compared with this tree's sources and refused the same way
+// rather than exempted.
 
 function git(...args) {
     const proc = spawnSync('git', args, { cwd: ROOT, encoding: 'utf8', windowsHide: true })
@@ -383,11 +379,16 @@ async function main() {
     console.log(`[gate] layers: ${layers.join(', ')}${partial ? ' -- PARTIAL RUN, not a gate result' : ''}`)
     if (partial) console.log('[gate] PARTIAL: a layer did not run; the missing results are unknown, not green.')
 
-    const fastArgv = [...FAST_TARGETS, '--tier', 'fast', '--jobs', String(options.jobs)]
+    // The install is picked once, before any command line is built, and every layer gets the same
+    // `--camel` argument: the plan layers set each test child's CAMEL_HOME to this install's root,
+    // the static checks read it, and nothing resolves a second default behind the gate's back.
+    const camel = findCamel(options.camel)
+    const camelArg = camel ? ['--camel', camel] : []
+    const fastArgv = [...FAST_TARGETS, '--tier', 'fast', '--jobs', String(options.jobs), ...camelArg]
     // A caller may name a plan the H154 list already has; report it as extra only when it is new.
     const extra = extraSlow.filter((file) => !SLOW_PLANS.includes(file))
     const slowPlans = [...SLOW_PLANS, ...extra]
-    const slowArgv = [...slowPlans, '--jobs', String(options.jobs)]
+    const slowArgv = [...slowPlans, '--jobs', String(options.jobs), ...camelArg]
 
     console.log('\n[gate] coverage')
     console.log(`[gate]   fast: ${FAST_TARGETS.join(' ')} (--tier fast: slow tests of those directories are the slow layer's)`)
@@ -399,30 +400,32 @@ async function main() {
     if (options.dryRun) {
         console.log('\n[gate] dry run: the commands')
         if (layers.includes('fast')) console.log(`[gate] $ ${[process.execPath, 'scripts/test.js', ...fastArgv].join(' ')}`)
-        if (layers.includes('slow')) for (const plan of slowPlans) console.log(`[gate] $ ${[process.execPath, 'scripts/test.js', plan].join(' ')}`)
+        if (layers.includes('slow')) for (const plan of slowPlans) console.log(`[gate] $ ${[process.execPath, 'scripts/test.js', plan, ...camelArg].join(' ')}`)
         if (layers.includes('static')) {
             // The install is resolved at run time; a dry run has none, and says which checks wait
             // for one rather than printing a command line that differs from the one that runs.
-            const camel = findCamel()
             for (const check of STATIC_CHECKS) {
                 const argv = check.camel && camel ? staticCheckArgv(check, camel) : check.args
                 console.log(`[gate] $ ${[process.execPath, ...argv].join(' ')}`)
                 if (check.camel && !camel) console.log('[gate]   (+ `--camel <install>` at run time; no install found now)')
             }
         }
+        if (!camel) console.log('[gate]   (+ `--camel <install>` on the plan layers at run time; no install found now)')
         console.log('[gate] dry run: nothing ran')
         return 0
     }
 
-    const camel = findCamel()
     if (!camel) {
         die(
-            'no built Camel: the gate verifies an existing install and never builds.\n' +
-                '[gate] build once (`npm run build`, or camel-remote.ps1 without -Plan), then run the gate.'
+            options.camel
+                ? `no camel binary at ${options.camel}: --camel names the install every layer measures`
+                : 'no built Camel: the gate verifies an existing install and never builds.\n' +
+                  '[gate] build once (`npm run build`, or camel-remote.ps1 without -Plan), then run the gate.'
         )
     }
     console.log(`[gate] compiler: ${camel}`)
-    checkInstallStamp(camel)
+    refuseInstallNotOfThisTree(camel, ROOT, 'release-gate.mjs')
+    console.log(`[gate] build stamp: ${path.dirname(path.dirname(camel))} was built from this tree's sources`)
 
     const phases = []
     if (layers.includes('fast')) {

@@ -208,6 +208,18 @@ function camelHome(build) {
     return path.join(REPO_ROOT, 'out', BUILDS[build].dir)
 }
 
+// The install a run measures: `--camel <path>` names it, else `out/<build>`. One install for the
+// whole run -- `${camel}`, what `preflightBuild` checks, and the root every test child reads as
+// `CAMEL_HOME` are all this -- and the environment never chooses it: `CAMEL_HOME` is the install
+// location's convention for the binary and the SDK, not a switch over what a run measures.
+function camelBinary(options) {
+    return options.camel || toolExecutable('camel', options.build)
+}
+
+function camelInstall(options) {
+    return path.dirname(path.dirname(camelBinary(options)))
+}
+
 function toolExecutable(tool, build) {
     const ext = IS_WINDOWS ? '.exe' : ''
     if (tool === 'node') return process.execPath
@@ -534,6 +546,10 @@ function parseArgs(argv) {
         // Which build the tests run against. `release` is out/latest; `debug` is out/debug.
         build: envBuild || 'release',
         buildExplicit: envBuild !== undefined,
+        // The install this run measures, named by `--camel <path>`. With none the build above
+        // decides (`out/<build>`); with one, it is this binary, its root is every child's
+        // `CAMEL_HOME`, and `--build` only still selects the layer the run addresses.
+        camel: null,
         // `--jobs` defaults to the processor count: one test per core, no more. `--jobs 1` gives
         // exactly the historical serial execution, which is how the runner's own self-test
         // compares parallel output with serial output.
@@ -570,6 +586,13 @@ function parseArgs(argv) {
             if (!Object.hasOwn(BUILDS, build)) throw new Error(`--build must be one of ${Object.keys(BUILDS).join(', ')}, got '${build}'`)
             options.build = build
             options.buildExplicit = true
+        } else if (arg === '--camel') {
+            if (i + 1 >= argv.length) throw new Error('--camel needs the path of the install to measure')
+            options.camel = path.resolve(process.cwd(), argv[++i])
+        } else if (arg.startsWith('--camel=')) {
+            const install = arg.slice('--camel='.length)
+            if (install === '') throw new Error('--camel needs the path of the install to measure')
+            options.camel = path.resolve(process.cwd(), install)
         } else if (arg === '--jobs' && i + 1 < argv.length) {
             options.jobs = positiveInteger(argv[++i], '--jobs')
         } else if (arg.startsWith('--jobs=')) {
@@ -591,24 +614,30 @@ function parseArgs(argv) {
 }
 
 /**
- * Refuse to run the debug layer against anything but a Debug binary. out/debug is written by
- * `collect-out.js debug` (the Debug build), and its absence is the common mistake; a binary left
- * there by another configuration is caught by its own --version line, which names the build.
+ * Refuse to run when the install this run measures is not built. `--camel <path>` names it; with
+ * none it is `out/<build>`, written by `collect-out.js <build>`. The debug layer additionally
+ * refuses anything but a Debug binary: a binary left there by another configuration is caught by
+ * its own --version line, which names the build.
  */
-function preflightBuild(build) {
-    const exe = toolExecutable('camel', build)
+function preflightBuild(options) {
+    const build = options.build
+    const exe = camelBinary(options)
     if (!fs.existsSync(exe)) {
         console.error(
             `${COLORS.red}[FAIL]${COLORS.reset} no ${BUILDS[build].label} binary at ${exe}`
         )
-        console.error(
-            `    Build it with the shared helper: pwsh -NoProfile -File ${path.join(path.dirname(REPO_ROOT), 'camel-build.ps1')} -Path ${REPO_ROOT} -Config ${BUILDS[build].label}`
-        )
-        console.error(`    The ${BUILDS[build].label} tier never falls back to out/latest.`)
+        if (options.camel) {
+            console.error('    --camel names the install this run measures; it must be a built install\'s bin/camel.')
+        } else {
+            console.error(
+                `    Build it with the shared helper: pwsh -NoProfile -File ${path.join(path.dirname(REPO_ROOT), 'camel-build.ps1')} -Path ${REPO_ROOT} -Config ${BUILDS[build].label}`
+            )
+            console.error(`    The ${BUILDS[build].label} tier never falls back to out/latest.`)
+        }
         process.exit(2)
     }
     if (build !== 'debug') return
-    const home = camelHome(build)
+    const home = camelInstall(options)
     const pathKey = IS_WINDOWS ? Object.keys(process.env).find((key) => key.toUpperCase() === 'PATH') || 'PATH' : 'PATH'
     const probe = spawnSync(exe, ['--version'], {
         cwd: REPO_ROOT,
@@ -642,13 +671,13 @@ function pythonExecutable() {
 }
 
 function loadVars(options) {
-    // Built-in variables; test/vars.toml may override them. `${camel}` is the compiler of the build
-    // under test, the same path the runner prints as `[INFO] camel executable` and records as
-    // `camel_exe` in summary.json: a plan that runs a program which starts a compiler names the
-    // install with `--camel ${camel}`, a command-line argument and never an environment switch.
+    // Built-in variables; test/vars.toml may override them. `${camel}` is the compiler of the run,
+    // the same path the runner prints as `[INFO] camel executable` and records as `camel_exe` in
+    // summary.json: a plan that runs a program which starts a compiler names the install with
+    // `--camel ${camel}`, a command-line argument and never an environment switch.
     const builtins = {
         python: pythonExecutable(),
-        camel: toolExecutable('camel', options.build),
+        camel: camelBinary(options),
     }
     if (!fs.existsSync(VARS_PATH)) return builtins
     return { ...builtins, ...parseTomlFile(VARS_PATH) }
@@ -1407,7 +1436,11 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
         return runnerErrorResult(casePath, test.__planError)
     }
     const toolName = test.tool || 'camel'
-    const toolExe = toolName === 'python' ? pythonExecutable() : toolExecutable(toolName, logContext.options.build)
+    const toolExe = toolName === 'python'
+        ? pythonExecutable()
+        : toolName === 'camel'
+            ? camelBinary(logContext.options)
+            : toolExecutable(toolName, logContext.options.build)
     if (!toolExe) {
         throw new Error(`unknown test tool: ${toolName}`)
     }
@@ -1442,7 +1475,10 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
         }
         env[text.slice(0, eq)] = text.slice(eq + 1)
     }
-    env.CAMEL_HOME = camelHome(logContext.options.build)
+    // Every test child reads the standard library and the runtime library of the install this run
+    // measures: `CAMEL_HOME` is set to that install's root here, whichever way the install was
+    // named.
+    env.CAMEL_HOME = camelInstall(logContext.options)
     // Windows commonly inherits `Path`; a second `PATH` key would hide the compiler paths.
     const pathKey = IS_WINDOWS ? Object.keys(env).find((key) => key.toUpperCase() === 'PATH') || 'PATH' : 'PATH'
     env[pathKey] = `${path.join(env.CAMEL_HOME, 'bin')}${path.delimiter}${env[pathKey] || ''}`
@@ -2627,7 +2663,7 @@ async function executePlans(plans, options, sharedVars, logDir) {
 
 async function main() {
     const options = parseArgs(process.argv.slice(2))
-    preflightBuild(options.build)
+    preflightBuild(options)
     // Writing golden files from several tests at once would make the content depend on which
     // test finished last; update-golden is a deliberate, serial maintenance run.
     if (options.updateGolden && options.jobs !== 1) {
@@ -2665,7 +2701,7 @@ async function main() {
     writeRunManifest(logDir, options, plans)
     const testCount = plans.reduce((count, plan) => count + plan.tests.length, 0)
 
-    console.log(`${COLORS.cyan}[INFO]${COLORS.reset} camel executable (${options.build}): ${toolExecutable('camel', options.build)}`)
+    console.log(`${COLORS.cyan}[INFO]${COLORS.reset} camel executable (${options.build}): ${camelBinary(options)}`)
     console.log(`${COLORS.cyan}[INFO]${COLORS.reset} discovered plans: ${plans.length}`)
     console.log(
         `${COLORS.cyan}[INFO]${COLORS.reset} tier: ${options.tier}, tests: ${testCount}, jobs: ${options.jobs}`
@@ -2727,7 +2763,7 @@ async function main() {
         JSON.stringify(
             {
                 generated_at: new Date().toISOString(),
-                camel_exe: toolExecutable('camel', options.build),
+                camel_exe: camelBinary(options),
                 build: options.build,
                 update_golden: options.updateGolden,
                 tier: options.tier,

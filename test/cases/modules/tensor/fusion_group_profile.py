@@ -61,8 +61,7 @@ PERCENT = re.compile(r"\b\d+(?:\.\d+)?%")
 BYTES = re.compile(r"\b\d+(?:\.\d+)?\s?(?:KiB|MiB|GiB|B)\b")
 
 
-# The install this case measures: `--camel <path>` names it; without it `$CAMEL_HOME/bin/camel`,
-# else this tree's `out/latest/bin/camel`. One rule, in one place: test/tools/camel_arg.py.
+# The install this case measures: `--camel <path>` names it; without it this tree's `out/latest/bin/camel`. One rule, in one place: test/tools/camel_arg.py.
 CAMEL, ARGV = camel_from_argv(REPO_ROOT)
 
 

@@ -126,17 +126,20 @@ It runs, in order:
    `check-std-includes`;
 
 then exits non-zero when any phase failed. It does not build: build once first, and it checks the
-install it finds (`CAMEL_HOME`, else `out/latest`) against that build's stamp — the rule that a
-run must not measure another tree's binary — refusing (exit 2) when the stamp is missing or does
-not match this tree's sources.
+install it measures against that build's stamp — the rule that a run must not measure another
+tree's binary — refusing (exit 2) when the stamp is missing or does not match this tree's sources.
+The install is chosen once, by `--camel <path>` or by this tree's `out/latest` when none is named,
+and the same `--camel` goes to every layer: the fast and slow plan layers set each test child's
+`CAMEL_HOME` to that install's root, and every static check that reads an install receives it too.
+An exported `CAMEL_HOME` does not choose the install — it is the install location's convention for
+the `camel` binary and for an SDK user — and a stamp travels inside the install it describes, so an
+install built by another tree is refused by that stamp whatever path it sits at.
 
 The two standard-library checkers among those static checks (`stdlib-reference.mjs --verify-ops`,
 `stdlib-declarations.mjs --check`) apply the same rule themselves, before they read a registry: an
 install that is not this tree's build is refused (exit 2, naming the install and its stamp) instead
 of being reported as differences between this tree's declarations and another install's operators.
-`--camel <path>` names the install such a run measures, passing the same check. The gate passes
-the install it found down to the two of them (`--camel <the install it verified>`), so one run
-cannot stamp-check one binary and read another.
+`--camel <path>` names the install such a run measures, passing the same check.
 
 It also never runs the plan files `agents/test.md` forbids on a shared host (GC stress
 and poison, progen, the PyTorch comparisons, the benchmarks): it prints them by name with the
@@ -145,7 +148,8 @@ reason on every run, and refuses with a message naming the policy when asked for
 of them. A skipped plan is unknown, not green. The debug layer (`--tier debug`) is out of scope
 for the same reason: it is never part of a Release gate.
 
-`--jobs N` (default 8), `--only fast|slow|static` (a PARTIAL run, for re-checking one layer),
+`--jobs N` (default 8), `--camel <path>` (the install every layer measures; this tree's
+`out/latest` without it), `--only fast|slow|static` (a PARTIAL run, for re-checking one layer),
 and `--dry-run` (print the commands and the skip list) are the only options.
 
 The staged pre-commit script delegates file selection to `scripts/format.js` and
