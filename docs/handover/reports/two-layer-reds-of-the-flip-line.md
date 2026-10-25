@@ -59,7 +59,7 @@ pass_export_equals_export_model` (two 120 s liveness kills and a cpu reading of 
 `PASS 25.50 s wall / 46.94 s cpu` there) and `poison:…rules.rules.tensor_saturation_keeps_values`
 (`PASS 313.05 ms`).
 
-### The one merge this line refused
+### The one merge this line refused, and the rehearsal that is now the rule
 
 `handover/h506-bare-tensor` (`887856c6b`, the tip at the time) was merged and **not landed**: the
 whole fast gate read `6219 / 5951 / fail 249 / skip 11 / known 8` against `fail 6` before it, with
@@ -72,7 +72,23 @@ inserted lines), the lane's develop merge took develop's side (`a41b28e8d`'s sec
 two implementations into a third one -- develop `09360763`, this line `f67fea29`, the lane
 `53619ff9`, the blend `47cbecf9`. The lane's work needs to sit on top of this line's `vjp.cpp`
 rather than beside it, so its branch has to start from a tip of this line and not from a develop
-merge of its own. The merge commit was `579d5ad57` and this line is back at `511711e49`.
+merge of its own. The merge commit was `579d5ad57`, kept as the record of an untested blend, and this
+line is back at `511711e49`.
+
+A later `git merge-tree --write-tree HEAD handover/h506-bare-tensor` on the lane's newer tip
+(`41be74f4e`) writes a tree whose `vjp.cpp` is the lane's `53619ff9` taken whole rather than a blend
+-- the merge base moved, so the same two branches resolve differently from one day to the next. That
+is the reason for the rule now in force here: **no lane is merged into this line before a rehearsal**
+-- `git merge-tree --write-tree` first, then the branch merged into a throwaway worktree and the
+whole fast gate run there. Only if the rehearsal's `fail` and its red names are no more than this
+line's own does the merge touch this line, and the rehearsal's reading goes in the report. The one
+exception is a tip already known to be bad, which is not merged at all.
+
+Two habits follow from the same episode: after any amend, reset or re-merge on this line, the
+helper's staging branch (`handover/h465-flip-integration` in `camel-work/Camel.git` on the host) has
+to be deleted before the next gate run, or it refuses the push as non-fast-forward while it still
+points at the old tip; and a refused merge is reported with the readings that refused it, not
+reworked into this line.
 
 ## 3. The three that only this line has
 
@@ -167,17 +183,18 @@ other lane landed -- the exact specialization count, the two re-recorded profile
 
 ## 5. The account's six readings, and the endpoint
 
-| layer | before this batch | at `511711e49` (measured) | once the bare-`Tensor` family is done (projected) |
+| layer | before this batch | at `511711e49` (measured) | the endpoint, written down |
 |---|---|---|---|
-| fast | `fail 9` (`c5c506e44`: 6218/6190) | **`fail 6`** (6219/6194 at `26bd1c6cc`; `511711e49` differs from it by this page only) = the six baseline names | **`fail 1`** -- `print_and_recompile` only |
+| fast | `fail 9` (`c5c506e44`: 6218/6190) | **`fail 6`** (6219/6194 at `26bd1c6cc`; `511711e49` differs from it by this page only) = the six baseline names | **`fail 1`** -- `print_and_recompile`, another open ruling, not this line's |
 | slow | 11 (`c5c506e44`) | **6** (re-checked entry by entry at `511711e49`: `debugger.dap_protocol` red, the three `poison:modules.rules` entries and the `gpu/tiles_transfer` entry green, the three fast-family entries and the two `gc_pacing` entries red) | **1** -- `debugger.dap_protocol`, red on develop too |
 
-What that means for the day this line lands: its reds are the ones develop is red on anyway, plus
-`print_and_recompile`, which is another open ruling and not this line's. Everything the flip
-integration itself introduced -- the crashes, the print form, the element type, the `var` cell, the
-type identity, the C++ cell marking, the stale specialization and profile records -- is green.
+The endpoint is 1 and 1: what this line lands red is `print_and_recompile` in the fast layer and
+`debugger.dap_protocol` in the slow layer, and develop is red on both of them as well. Everything
+the flip integration itself introduced -- the crashes, the print form, the element type, the `var`
+cell, the type identity, the C++ cell marking, the stale specialization and profile records -- is
+green.
 
 Two caveats on the table. The slow layer is a whole-tree selection and the measurement lane owns its
 full run; what is measured here is every entry of the eleven-entry account, plan by plan. And the
-bare-`Tensor` lane has not landed: its branch has to start from a tip of this line (section 2), so
-until it does, entries 6-8 and 10-11 of the slow layer and four of the fast layer's six stay red.
+bare-`Tensor` lane has not landed, and will be rehearsed before it does (section 2): until then,
+entries 6-8 and 10-11 of the slow layer and four of the fast layer's six stay red.
