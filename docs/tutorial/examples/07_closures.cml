@@ -1,6 +1,5 @@
 // Functions are values; lambdas capture variables by reference.
 // Run: camel docs/tutorial/examples/07_closures.cml
-module closures
 
 func inc(x: int): int { return x + 1 }
 func dbl(x: int): int { return x * 2 }

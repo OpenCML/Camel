@@ -34,7 +34,6 @@ follow the main line, the other road is building from source: [setup.en.md](../s
 ```cml
 // The smallest program: `main` is the entry, and its body is a sync block.
 // Run: camel docs/tutorial/examples/01_hello.cml
-module hello
 
 func main(): int sync {
     println('Hello, Camel!')
@@ -67,7 +66,6 @@ built (DOT is Graphviz's format; hand it to `dot` and you have a picture). What 
 ```cml
 // The smallest program: `main` is the entry, and its body is a sync block.
 // Run: camel docs/tutorial/examples/01_hello.cml
-module hello
 
 func main(): int sync {
     println('Hello, Camel!')
@@ -109,7 +107,6 @@ The second program writes a little more than it needs: the same multiplication t
 ```cml
 // The same shape as 01_hello.cml, with one expression that has more than one writing.
 // Run: camel docs/tutorial/examples/01_rewrite.cml
-module rewrite_hook
 
 func twice(x: int): int {
     return x * 2 + x * 2
@@ -136,7 +133,6 @@ optimization pass).
 ```cml
 // The same shape as 01_hello.cml, with one expression that has more than one writing.
 // Run: camel docs/tutorial/examples/01_rewrite.cml
-module rewrite_hook
 
 func twice(x: int): int {
     return x * 2 + x * 2
@@ -183,7 +179,6 @@ Answer [`examples/01_exercise.cml`](examples/01_exercise.cml):
 ```cml
 // The answer to the exercise of chapter 1: a function of two parameters, and its value.
 // Run: camel docs/tutorial/examples/01_exercise.cml
-module exercise
 
 func area(w: int, h: int): int {
     return w * h
