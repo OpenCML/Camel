@@ -55,8 +55,14 @@ camel docs/tutorial/examples/09_dependency.cml
 
 ## Dependencies on the graph
 
-Now print the graph. Below is the `total` part of what
-`camel docs/tutorial/examples/09_dependency.cml std::gir` prints (an excerpt):
+Draw the graph (`camel docs/tutorial/examples/09_dependency.cml std::rgir > dep.dot`, then
+`dot -Tsvg dep.dot -o dep.svg`; every picture in this book is drawn by the script chapter 1 names). The function
+`total` looks like this:
+
+![the subgraph of total: two calls that need nothing from each other, and an addition that needs both](images/09_dependency.svg)
+
+An excerpt of DOT is pasted only where the attributes have to be read one by one (what type each edge is). Below is
+the `total` part of what `camel docs/tutorial/examples/09_dependency.cml std::gir` prints:
 
 <!-- camel-snippet: graph-dump: the text block is one excerpt of std::gir's DOT, not the program's stdout -->
 

@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-281 diagnostics: 264 errors, 17 warnings. 15 carry a machine-applicable edit, 266 say why they carry none.
+280 diagnostics: 263 errors, 17 warnings. 15 carry a machine-applicable edit, 265 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -89,7 +89,6 @@ prints one entry.
 | `0x03000071` | [SemanticDiag::ThrowNotAnError](#thrownotanerror) | Error | no |
 | `0x03000072` | [SemanticDiag::TaggedTypeNesting](#taggedtypenesting) | Error | no |
 | `0x03000073` | [SemanticDiag::TaggedValueNotOpened](#taggedvaluenotopened) | Error | no |
-| `0x03000074` | [SemanticDiag::TryCatchNotInLanguage](#trycatchnotinlanguage) | Error | no |
 | `0x03000075` | [SemanticDiag::TaggedOperandMismatch](#taggedoperandmismatch) | Error | no |
 | `0x03000076` | [SemanticDiag::TaggedMatchCases](#taggedmatchcases) | Error | no |
 | `0x03000080` | [SemanticDiag::ImportedModuleHasErrors](#importedmodulehaserrors) | Error | no |
@@ -2694,44 +2693,6 @@ func main(): int sync {
     println('never printed')
     let r = parse_int('1')
     println(r.0)
-    return 0
-}
-```
-
-### TryCatchNotInLanguage
-
-`0x03000074` · Error · `SemanticDiag::TryCatchNotInLanguage`
-
-**Fix**
-
-None: choice: the repair is a decision only the writer can make
-
-**Message**
-
-```text
-'try'/'catch' is not part of Camel.
-```
-
-**Help**
-
-```text
-An operation that can fail returns a value of type 'T!'. Give a fallback with 'a !! b', hand an error on with 'x ?-> f', or inspect it with 'match r { case error e => ... case v => ... }'. Faults (division by zero, an index out of range) are not errors and end the program; isolating them is the job of the fault-isolation operator.
-```
-
-**Example** (`test/cases/compile/semantic/try_not_in_language.cml`, run as `camel test/cases/compile/semantic/try_not_in_language.cml`)
-
-```camel
-module try_not_in_language
-
-func main(): int sync {
-    println('never printed')
-    try {
-        println('body')
-    } catch e: int {
-        println('handler')
-    } finally {
-        println('cleanup')
-    }
     return 0
 }
 ```

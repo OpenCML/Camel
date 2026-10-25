@@ -365,14 +365,6 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
-            SemanticDiag::TryCatchNotInLanguage,
-            {
-                "TryCatchNotInLanguage",
-                "'try'/'catch' is not part of Camel.",
-                "An operation that can fail returns a value of type 'T!'. Give a fallback with 'a !! b', hand an error on with 'x ?-> f', or inspect it with 'match r {{ case error e => ... case v => ... }}'. Faults (division by zero, an index out of range) are not errors and end the program; isolating them is the job of the fault-isolation operator.",
-            },
-        },
-        {
             SemanticDiag::TaggedOperandMismatch,
             {
                 "TaggedOperandMismatch",

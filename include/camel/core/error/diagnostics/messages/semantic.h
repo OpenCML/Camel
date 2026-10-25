@@ -74,11 +74,13 @@ enum class SemanticDiag : uint32_t {
     FunctionNameAsValue = 0x000060,
     // Nullable and fallible values (design principles 3.8;
     // docs/technical/29_nullable_and_fallible_values.md).
+    // 0x000074 was TryCatchNotInLanguage: it named the `try`/`catch`/`finally` construct. Those
+    // words are not keywords any more (handover 5.00 "语法层收口" item 5), so writing one of them is
+    // an ordinary name or a syntax error and the diagnostic has no producer. The code is not reused.
     ThrowOutsideFallible  = 0x000070,
     ThrowNotAnError       = 0x000071,
     TaggedTypeNesting     = 0x000072,
     TaggedValueNotOpened  = 0x000073,
-    TryCatchNotInLanguage = 0x000074,
     TaggedOperandMismatch = 0x000075,
     TaggedMatchCases      = 0x000076,
     // Reporting several errors (0x80 and up, clear of the blocks above).

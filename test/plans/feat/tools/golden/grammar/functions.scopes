@@ -232,19 +232,18 @@
 #      ^ meta.angle-arguments.camel punctuation.definition.angle-arguments.begin.camel
 #       ^ meta.angle-arguments.camel constant.numeric.integer.decimal.camel
 #        ^ meta.angle-arguments.camel punctuation.definition.angle-arguments.end.camel
->export sync func core(x: int): int {
+>export func core(x: int): int {
 #^^^^^^ keyword.control.import.camel
-#       ^^^^ storage.modifier.sync.camel
-#            ^^^^ meta.function.definition.camel storage.type.function.camel
-#                 ^^^^ meta.function.definition.camel entity.name.function.camel
-#                     ^ meta.parens.camel punctuation.section.parens.begin.camel
-#                      ^ meta.parens.camel variable.parameter.camel
-#                       ^ meta.parens.camel punctuation.separator.colon.camel
-#                         ^^^ meta.parens.camel support.type.primitive.camel
-#                            ^ meta.parens.camel punctuation.section.parens.end.camel
-#                             ^ punctuation.separator.colon.camel
-#                               ^^^ support.type.primitive.camel
-#                                   ^ meta.block.camel punctuation.section.block.begin.camel
+#       ^^^^ meta.function.definition.camel storage.type.function.camel
+#            ^^^^ meta.function.definition.camel entity.name.function.camel
+#                ^ meta.parens.camel punctuation.section.parens.begin.camel
+#                 ^ meta.parens.camel variable.parameter.camel
+#                  ^ meta.parens.camel punctuation.separator.colon.camel
+#                    ^^^ meta.parens.camel support.type.primitive.camel
+#                       ^ meta.parens.camel punctuation.section.parens.end.camel
+#                        ^ punctuation.separator.colon.camel
+#                          ^^^ support.type.primitive.camel
+#                              ^ meta.block.camel punctuation.section.block.begin.camel
 >    return x + 3
 #    ^^^^^^ meta.block.camel keyword.control.flow.camel
 #             ^ meta.block.camel keyword.operator.arithmetic.camel
@@ -465,11 +464,10 @@
 #                                    ^ meta.block.camel meta.parens.camel punctuation.section.parens.end.camel
 #                                      ^^ meta.block.camel keyword.operator.comparison.camel
 #                                         ^ meta.block.camel constant.numeric.integer.decimal.camel
->    wait no_params()
-#    ^^^^ meta.block.camel keyword.control.flow.camel
-#         ^^^^^^^^^ meta.block.camel entity.name.function.call.camel
-#                  ^ meta.block.camel meta.parens.camel punctuation.section.parens.begin.camel
-#                   ^ meta.block.camel meta.parens.camel punctuation.section.parens.end.camel
+>    no_params()
+#    ^^^^^^^^^ meta.block.camel entity.name.function.call.camel
+#             ^ meta.block.camel meta.parens.camel punctuation.section.parens.begin.camel
+#              ^ meta.block.camel meta.parens.camel punctuation.section.parens.end.camel
 >    return lambda(direct)
 #    ^^^^^^ meta.block.camel keyword.control.flow.camel
 #           ^^^^^^ meta.block.camel entity.name.function.call.camel

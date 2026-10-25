@@ -1,6 +1,23 @@
-# Multi-arch native build + camel-lang wheel (one wheel per matrix cell; PEP 425 tags from job Python).
+# Multi-platform native build + camel-lang wheels.
+#
+# Two wheels come out of one native build, per platform (5.37 item 7):
+#   camel_lang-<ver>-<cp3XX>-<cp3XX>-<platform>.whl   body + the Python interop extension
+#   camel_lang-<ver>-py3-none-<platform>.whl          body only; installs on any Python 3
+# The interpreter cannot reach the binaries, so the Python version does not multiply the build.
 #
 # Runners (edit matrix.cfg if labels change): https://github.com/actions/runner-images
+#
+# --- Linux wheels are built inside manylinux_2_28 (5.37 item 1) ---
+# PyPI refuses a Linux wheel tagged with the build machine's own `linux_x86_64`:
+#   400 Binary wheel 'camel_lang-0.2.31-cp310-cp310-linux_x86_64.whl' has an unsupported
+#   platform tag 'linux_x86_64'
+# The tag was `linux_x86_64` because scripts/pypi-rollup.js took the first
+# `packaging.tags.sys_tags()` entry, and that first entry is the machine's own tag in
+# packaging >= 26 (21.3 gives manylinux_2_35_x86_64; 26.3 gives linux_x86_64). A publishable
+# tag is not just a rename either: the binaries have to link a glibc old enough for it, so the
+# compile happens in the manylinux_2_28 image (AlmaLinux 8, glibc 2.28) and `auditwheel repair`
+# is what determines the final tag. `scripts/check_wheel_tags.py` then fails this job if the
+# tag came out unpublishable, instead of leaving it to the index after the whole matrix ran.
 #
 # --- Trusted Publishing (OIDC, no long-lived PyPI tokens in GitHub) ---
 # 1) GitHub: Settings → Environments → create "pypi" and "testpypi" (optional: required reviewers).
@@ -11,10 +28,6 @@
 # 3) Actions → Run workflow → publish_to = pypi | testpypi (builds matrix, then OIDC upload).
 #    "none" = build only; artifacts on the run.
 # 4) Pushing v* / V* tags builds and publishes to PyPI after the full matrix succeeds.
-#    workflow_dispatch keeps the explicit none / pypi / testpypi selection above.
-#
-# Matrix: (OS/arch cfg × python-version). Each job runs `npm run pypi:rollup` with that interpreter only
-# (no modules/python/sdks on CI — rollup uses sys.base_prefix / sysconfig). Wheel tags from packaging.tags.
 
 name: Build and package (PyPI wheel)
 
@@ -40,50 +53,198 @@ concurrency:
 
 permissions:
   contents: read
-  # upload-artifact in build-wheel needs write; publish jobs set their own permissions block.
+  # upload-artifact in the build jobs needs write; publish jobs set their own permissions block.
   actions: write
 
-env:
-  # Instruction-set baseline of the published libcamel (cmake/Options.cmake, docs/build-options.en.md).
-  # Never `native` here: the wheel must run on CPUs other than the runner's.
-  # The owner's decision (2026-10-21, docs/design-principles 9.10): x86-64-v3, i.e. AVX2 and FMA.
-  # A wheel built for v3 refuses to start on a machine without AVX2 -- that is the accepted cost of
-  # the performance, and ci.yml builds and tests at the same level so CI tests what is shipped.
-  # The value is an x86-64 level: an arm64 matrix cell, once enabled, must override it (`baseline`).
-  CAMEL_TARGET_ARCH: x86-64-v3
-
 jobs:
-  build-wheel:
-    # Named explicitly: the default name would include every cfg field, so adding one to the matrix
-    # (msvc_runtime_version) would silently rename all eight checks.
-    name: build-wheel (${{ matrix.cfg.runner }}, ${{ matrix.cfg.slug }}, ${{ matrix.python-version }})
+  # ---------------------------------------------------------------------------------------
+  # Linux: one native build inside manylinux_2_28, four wheels (two per arch).
+  # ---------------------------------------------------------------------------------------
+  build-wheel-linux:
+    name: build-wheel (${{ matrix.cfg.slug }})
     strategy:
       fail-fast: false
       matrix:
         cfg:
-          - runner: ubuntu-latest
+          - runner: ubuntu-24.04
             slug: linux-x64
-          # - runner: ubuntu-24.04-arm
-          #   slug: linux-arm64
-          - runner: windows-latest
-            slug: win-x64
-            # What that image really has, not what Conan guesses: windows-latest is
-            # windows-2025-vs2026, i.e. Visual Studio 2026 (VS 18) with MSVC 14.51, so the runtime
-            # version is v145. `vswhere -all -products *` reports the IDE; see the profile step.
-            msvc_runtime_version: v145
-          # - runner: windows-11-arm
-          #   slug: win-arm64
-          # - runner: macos-latest
-          #   slug: macos-arm64
-          # - runner: macos-15-intel
-          #   slug: macos-x64
-        python-version: ["3.10", "3.11", "3.12", "3.13"]
+            container: quay.io/pypa/manylinux_2_28_x86_64
+            platform_tag: manylinux_2_28_x86_64
+            # Instruction-set baseline of the published libcamel (cmake/Options.cmake,
+            # docs/build-options.en.md). Never `native`: the wheel must run on CPUs other than
+            # the runner's. The owner's decision (2026-10-21, docs/design-principles 9.10):
+            # x86-64-v3, i.e. AVX2 and FMA. A wheel built for v3 refuses to start on a machine
+            # without AVX2 -- that is the accepted cost of the performance. It is an x86-64
+            # level, so the arm64 cell overrides it with `baseline`.
+            target_arch: x86-64-v3
+          - runner: ubuntu-24.04-arm
+            slug: linux-arm64
+            container: quay.io/pypa/manylinux_2_28_aarch64
+            platform_tag: manylinux_2_28_aarch64
+            target_arch: baseline
     runs-on: ${{ matrix.cfg.runner }}
-    timeout-minutes: 120
+    container: ${{ matrix.cfg.container }}
+    timeout-minutes: 240
 
     defaults:
       run:
         shell: bash
+
+    env:
+      CAMEL_TARGET_ARCH: ${{ matrix.cfg.target_arch }}
+      # The manylinux image's CPython 3.10, which is also the interpreter the build links
+      # against. Without this the rollup would probe whatever `python3` resolves to.
+      CAMEL_PYPI_PYTHON: /opt/python/cp310-cp310/bin/python
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install toolchain (manylinux_2_28)
+        # cmake 4.4 and patchelf 0.19 are already in the image; clang is not, and the image's
+        # AppStream carries clang 21.1.8, which satisfies the Clang >= 19 of docs/setup.en.md.
+        # Node comes from the AlmaLinux 8 nodejs:20 module rather than actions/setup-node: the
+        # module's build is made for this glibc and the runner's prebuilt Node is not.
+        run: |
+          dnf install -y clang clang-devel ninja-build
+          dnf module install -y nodejs:20
+          clang --version
+          ninja --version
+          cmake --version
+          node --version
+          python3 --version
+          major=$(clang -dumpversion | cut -d. -f1)
+          if [ "$major" -lt 19 ]; then
+            echo "::error::Clang >= 19 is required (docs/setup.en.md); found $(clang -dumpversion)"
+            exit 1
+          fi
+
+      - name: Select Clang, Conan and auditwheel
+        run: |
+          echo "CC=clang" >> "$GITHUB_ENV"
+          echo "CXX=clang++" >> "$GITHUB_ENV"
+          # auditwheel rewrites the RPATHs of the bundled libraries; the launcher's
+          # `$ORIGIN/../libs` is what the wheel relies on.
+          #
+          # setuptools and wheel are here for `pypi/camel-lang/pyproject.toml`, not for Conan.
+          # That file declares its license the PEP 639 way (`license = "MIT"`, a plain SPDX
+          # string), which setuptools learned to read in 77. The image's own setuptools is 65.5.1,
+          # and `pypi-rollup.js` packages with `pip wheel --no-build-isolation`, i.e. against
+          # whatever setuptools is installed here. Left at 65.5.1 the packaging step dies with
+          #
+          #   configuration error: `project.license` must be valid exactly by one definition
+          #   (2 matches found)
+          #   error: metadata-generation-failed
+          #
+          # after the whole native build has already succeeded.
+          "$CAMEL_PYPI_PYTHON" -m pip install --upgrade pip "setuptools>=77" wheel conan auditwheel
+          # Conan 2.33 has no `conan.__main__` -- `python -m conan` ends with "No module named
+          # conan.__main__; 'conan' is a package and cannot be directly executed" -- so the
+          # console script is the only way in. And scripts/common.js reaches Conan as
+          # `execSync('conan install ...')`, i.e. through /bin/sh, while the manylinux image
+          # keeps /opt/python/<abi>/bin off PATH: without the directory on PATH the build step
+          # dies at `/bin/sh: conan: command not found` long after this step looked fine.
+          # $GITHUB_PATH carries it to the later steps; the export covers this one.
+          echo "$(dirname "$CAMEL_PYPI_PYTHON")" >> "$GITHUB_PATH"
+          export PATH="$(dirname "$CAMEL_PYPI_PYTHON"):$PATH"
+          conan --version
+          "$CAMEL_PYPI_PYTHON" -m auditwheel --version
+
+      - name: Conan default profile
+        # The detected cppstd is 14 and taskflow 3.10.0 requires 17, so `conan install` would
+        # end with "Current cppstd (14) is lower than the required C++ standard (17)".
+        run: |
+          conan profile detect --force
+          profile="$(conan profile path default)"
+          python3 - "$profile" <<'EOF'
+          import re, sys
+          path = sys.argv[1]
+          text = open(path, encoding="utf-8").read()
+          text = re.sub(r"(?m)^compiler\.cppstd=.*$", "compiler.cppstd=23", text)
+          open(path, "w", encoding="utf-8", newline="\n").write(text)
+          print(text)
+          EOF
+          cat "$profile"
+
+      - name: Install npm dependencies (skip husky / postinstall conan wipe)
+        run: npm ci --ignore-scripts
+        env:
+          HUSKY: "0"
+
+      - name: Native Release build + both wheels
+        run: npm run pypi:rollup
+
+      - name: Repair the Linux wheels to manylinux (5.37 item 1)
+        # The rollup tags what it can honestly claim on this machine (`linux_x86_64`), and
+        # auditwheel is what knows which glibc the bundled libraries actually need. It is also
+        # what makes the tag publishable.
+        run: |
+          mkdir -p wheelhouse
+          "$CAMEL_PYPI_PYTHON" -m auditwheel repair \
+            --plat "${{ matrix.cfg.platform_tag }}" -w wheelhouse dist/pypi/*.whl
+          ls -la wheelhouse/
+
+      - name: Refuse an unpublishable tag (5.37 item 1)
+        # In the build step, so a wrong tag fails here and not at the index.
+        run: |
+          python3 scripts/check_wheel_tags.py \
+            --expect "${{ matrix.cfg.platform_tag }}" wheelhouse/*.whl
+
+      - name: Upload wheel artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: camel-lang-wheel-${{ matrix.cfg.slug }}
+          path: wheelhouse/*.whl
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------------------------
+  # Windows and macOS: the runner's own toolchain, no container.
+  # ---------------------------------------------------------------------------------------
+  build-wheel-native:
+    name: build-wheel (${{ matrix.cfg.runner }}, ${{ matrix.cfg.slug }})
+    strategy:
+      fail-fast: false
+      matrix:
+        cfg:
+          - runner: windows-latest
+            slug: win-x64
+            target_arch: x86-64-v3
+            platform_tag: win_amd64
+            # What that image really has, not what Conan guesses: windows-latest is
+            # windows-2025-vs2026, i.e. Visual Studio 2026 (VS 18) with MSVC 14.51, so the
+            # runtime version is v145. `vswhere -all -products *` reports the IDE.
+            msvc_runtime_version: v145
+          # - runner: macos-latest
+          #   slug: macos-arm64
+          #   target_arch: baseline
+          #   platform_tag: macosx_13_0_arm64
+          # NOT built yet (5.37 item 6 asks for it). What is missing is not the matrix cell:
+          # the tag policy in scripts/pypi-rollup.js already produces `macosx_13_0_arm64` from
+          # `sysconfig.get_platform()` with MACOSX_DEPLOYMENT_TARGET=13.0. What is missing is the
+          # bundling step. `delocate` has to copy the non-system libraries in and rewrite their
+          # load paths, and on arm64 that invalidates each binary's signature, so every rewritten
+          # Mach-O needs re-signing (`codesign --force --sign -`) and the wheel's `RECORD` needs
+          # rewriting for the files whose bytes changed -- pip checks those hashes when it
+          # installs. Until that is written and run once, a macOS wheel would ship a tag it
+          # cannot honour, and build-pypi.yml does not build one. ci.yml's macOS leg says the
+          # truth about this (see the comment on build-test-macos there).
+          #
+          # Windows arm64 is not published: few users. Intel Macs are not published either:
+          # Apple has stopped making them.
+    runs-on: ${{ matrix.cfg.runner }}
+    timeout-minutes: 180
+
+    defaults:
+      run:
+        shell: bash
+
+    env:
+      CAMEL_TARGET_ARCH: ${{ matrix.cfg.target_arch }}
+      # The deployment target the macOS wheel claims (5.37 item 6): a wheel tagged
+      # macosx_13_0_arm64 has to run on 13.0, so the build must not use a newer SDK's symbols.
+      MACOSX_DEPLOYMENT_TARGET: "13.0"
 
     steps:
       - name: Checkout
@@ -106,37 +267,7 @@ jobs:
         id: python
         uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version }}
-
-      # Ubuntu 24.04's unversioned `clang` package is Clang 18; docs/setup.en.md requires >= 19.
-      - name: Install toolchain (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential clang-19 cmake ninja-build
-          mkdir -p "$RUNNER_TEMP/clang-bin"
-          ln -sf /usr/bin/clang-19 "$RUNNER_TEMP/clang-bin/clang"
-          ln -sf /usr/bin/clang++-19 "$RUNNER_TEMP/clang-bin/clang++"
-          echo "$RUNNER_TEMP/clang-bin" >> "$GITHUB_PATH"
-
-      - name: Select Clang (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          echo "CC=clang" >> "$GITHUB_ENV"
-          echo "CXX=clang++" >> "$GITHUB_ENV"
-
-      - name: Verify Clang (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          clang --version
-          clang++ --version
-          ninja --version
-          cmake --version
-          major=$(clang -dumpversion | cut -d. -f1)
-          if [ "$major" -lt 19 ]; then
-            echo "::error::Clang >= 19 is required (docs/setup.en.md); found $(clang -dumpversion)"
-            exit 1
-          fi
+          python-version: "3.10"
 
       - name: Install LLVM, Ninja, CMake (Windows)
         if: runner.os == 'Windows'
@@ -195,10 +326,6 @@ jobs:
         # msvc_runtime_version (v145 here) and this step applies it. Conan maps v145 to Visual
         # Studio 18 and -vcvars_ver=14.5, which is what windows-2025-vs2026 installs; v143/v144
         # map to Visual Studio 17 and fail with "VS non-existing installation".
-        #
-        # Next time the image moves, do not read the error: run `vswhere -all -products *` for the
-        # installed Visual Studio and look at the MSVC toolset. VS 18 -> v145. VS 17 -> v143 with
-        # the 14.3x toolset, v144 with 14.4x. Then put that value on the matrix cell.
         env:
           MSVC_RUNTIME_VERSION: ${{ matrix.cfg.msvc_runtime_version || '' }}
         run: |
@@ -228,29 +355,169 @@ jobs:
         env:
           HUSKY: "0"
 
-      - name: Native Release build + wheel
+      - name: Native Release build + both wheels
         # Use the exact matrix interpreter; Windows shell lookup can break Python's -c probe.
         env:
           CAMEL_PYPI_PYTHON: ${{ steps.python.outputs.python-path }}
         run: npm run pypi:rollup
 
-      - name: Smoke-install wheel (same interpreter as build)
+      - name: Use dist/pypi directly when the platform needs no repair
+        # Windows: `win_amd64` is a publishable tag as it stands, so the rollup's output is the
+        # final artifact.
+        if: runner.os == 'Windows'
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install --force-reinstall dist/pypi/*.whl
-          python -c "import camel; import pathlib; print('ok', pathlib.Path(camel.__file__).resolve())"
+          mkdir -p wheelhouse
+          cp dist/pypi/*.whl wheelhouse/
+
+      - name: Refuse an unpublishable tag (5.37 item 1)
+        run: |
+          python scripts/check_wheel_tags.py \
+            --expect "${{ matrix.cfg.platform_tag }}" wheelhouse/*.whl
+
+      - name: Smoke-install the wheels (clean venv)
+        # 5.37 item 4: what a user does, not just `import camel`.
+        #
+        # `camel-lang` is named, not the file paths: the cell produces two wheels and it is pip's
+        # job to pick the one this interpreter can use. Passing both paths would ask pip to
+        # install both, which is not what a user does and not something it can do.
+        env:
+          CAMEL_PYPI_PYTHON: ${{ steps.python.outputs.python-path }}
+        run: |
+          python -m venv "$RUNNER_TEMP/smoke"
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            BIN="$RUNNER_TEMP/smoke/Scripts"
+          else
+            BIN="$RUNNER_TEMP/smoke/bin"
+          fi
+          "$BIN/python" -m pip install --upgrade pip
+          "$BIN/python" -m pip install --find-links wheelhouse camel-lang
+          "$BIN/python" -m pip list --format=freeze | grep -i camel
+          printf 'func main(): int sync {\n    println("Hello, Camel!")\n    return 0\n}\n' > "$RUNNER_TEMP/hello.cml"
+          "$BIN/camel" --version
+          "$BIN/camel" "$RUNNER_TEMP/hello.cml"
+          "$BIN/camel" "$RUNNER_TEMP/hello.cml" std::jit
+          "$BIN/python" -c "import camel; print('import camel ok', camel.__version__)"
+          "$BIN/camel-ls" --help || true
+          "$BIN/camel-format" --help || true
+          # No shell or .cmd wrapper is installed any more (5.37 item 2), and the entry points
+          # exec the bundled binaries rather than pointing at a site-packages layout.
+          if ls "$BIN"/../lib/python*/site-packages/camel/wrapper-dist 2>/dev/null; then
+            echo "::error::wrapper-dist is still installed"; exit 1
+          fi
 
       - name: Upload wheel artifact
         uses: actions/upload-artifact@v4
         with:
-          name: camel-lang-wheel-${{ matrix.cfg.slug }}-py${{ matrix.python-version }}
-          path: dist/pypi/*.whl
+          name: camel-lang-wheel-${{ matrix.cfg.slug }}
+          path: wheelhouse/*.whl
           if-no-files-found: error
 
+  # ---------------------------------------------------------------------------------------
+  # 5.37 item 4: the Linux wheels are smoke-tested where the user is -- two containers, each
+  # installed from the wheel alone. On the runner (not in the build container) because that is
+  # where Docker is.
+  # ---------------------------------------------------------------------------------------
+  smoke-linux:
+    name: smoke-install (${{ matrix.image }}, ${{ matrix.expect }})
+    needs: build-wheel-linux
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # The interpreter the interop wheel is built for: pip takes
+          # camel_lang-<ver>-cp310-cp310-manylinux_2_28_x86_64.whl, so `import camel` works.
+          - image: ubuntu:22.04
+            expect: interop
+          # Any other Python 3: pip takes camel_lang-<ver>-py3-none-manylinux_2_28_x86_64.whl,
+          # the `camel` command works, and `import camel` has to say why it cannot (5.37 item 7).
+          - image: python:3.12-slim
+            expect: body-only
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download the Linux wheels
+        uses: actions/download-artifact@v4
+        with:
+          path: wheels
+          pattern: camel-lang-wheel-linux-*
+          merge-multiple: true
+
+      - name: Show which wheel pip will take
+        run: ls -la wheels/
+
+      - name: Install from the wheel inside ${{ matrix.image }}
+        env:
+          EXPECT: ${{ matrix.expect }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/shared"
+          printf 'func main(): int sync {\n    println("Hello, Camel!")\n    return 0\n}\n' > "$RUNNER_TEMP/shared/hello.cml"
+          cat > "$RUNNER_TEMP/shared/smoke.sh" <<'SMOKE'
+          set -eu
+          # A clean container with nothing but the wheel: 5.37 item 4. `numpy` is what the
+          # interop path needs to show an array crossing.
+          if command -v apt-get >/dev/null 2>&1; then
+            apt-get update -qq && apt-get install -y -qq python3-pip python3-venv >/dev/null
+          fi
+          python3 -m pip install --quiet --find-links /wheels camel-lang
+          echo "--- installed ---"
+          python3 -m pip list 2>/dev/null | grep -i camel || true
+          python3 -m pip show -f camel-lang 2>/dev/null | sed -n '1,6p' || true
+          echo "--- camel --version ---"
+          camel --version
+          echo "--- camel hello.cml ---"
+          camel /shared/hello.cml
+          echo "--- camel hello.cml std::jit ---"
+          camel /shared/hello.cml std::jit
+
+          if [ "$EXPECT" = "interop" ]; then
+            python3 -m pip install --quiet numpy
+            python3 - <<'PY'
+          import importlib.metadata
+          import camel
+          import numpy
+
+          # The extension loaded, and the version comes from the distribution metadata rather
+          # than a literal in the package (5.37 item 3).
+          print("import camel ok:", camel.__file__)
+          print("camel.__version__ =", camel.__version__)
+          print("metadata version  =", importlib.metadata.version("camel-lang"))
+          assert camel.__version__ == importlib.metadata.version("camel-lang"), camel.__version__
+          print("numpy", numpy.__version__)
+
+          # The interop surface the wheel promises (H253).
+          for name in ("load", "Module", "Session", "CamelError"):
+              assert hasattr(camel, name), name
+          print("camel.load / Module / Session / CamelError present")
+          PY
+          else
+            echo "--- import camel must refuse, clearly (5.37 item 7) ---"
+            if python3 -c "import camel" 2>/tmp/importerr; then
+              echo "::error::import camel succeeded on a body-only wheel"; exit 1
+            fi
+            cat /tmp/importerr
+            grep -q "CPython 3.10 or newer" /tmp/importerr || {
+              echo "::error::the ImportError does not name the CPython version it needs"; exit 1; }
+            grep -qi "py3-none" /tmp/importerr || {
+              echo "::error::the ImportError does not name the wheel it came from"; exit 1; }
+            echo "the body-only wheel refuses import camel with the right message"
+          fi
+          SMOKE
+          docker run --rm \
+            -e EXPECT \
+            -v "$PWD/wheels:/wheels:ro" \
+            -v "$RUNNER_TEMP/shared:/shared:ro" \
+            "${{ matrix.image }}" \
+            bash /shared/smoke.sh
+
+  # ---------------------------------------------------------------------------------------
   # One publish job per index (gh-action-pypi-publish: multiple invocations per job are unsupported).
+  # ---------------------------------------------------------------------------------------
   publish-pypi:
     name: Publish to PyPI (trusted publishing)
-    needs: build-wheel
+    needs: [build-wheel-linux, build-wheel-native, smoke-linux]
     runs-on: ubuntu-latest
     if: >-
       success() &&
@@ -279,6 +546,10 @@ jobs:
           find wheels-merged -name '*.whl' -print0 | xargs -0 -I{} cp -f {} upload/
           ls -la upload/
 
+      - name: Refuse an unpublishable tag, on the set that is about to be uploaded
+        run: |
+          python3 scripts/check_wheel_tags.py upload/*.whl
+
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
@@ -286,7 +557,7 @@ jobs:
 
   publish-testpypi:
     name: Publish to TestPyPI (trusted publishing)
-    needs: build-wheel
+    needs: [build-wheel-linux, build-wheel-native, smoke-linux]
     runs-on: ubuntu-latest
     if: success() && github.event_name == 'workflow_dispatch' && github.event.inputs.publish_to == 'testpypi'
     environment:

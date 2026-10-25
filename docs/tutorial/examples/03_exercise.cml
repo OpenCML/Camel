@@ -1,0 +1,13 @@
+// The answer to the exercise of chapter 3: a function of two parameters, used from a pipe.
+// Run: camel docs/tutorial/examples/03_exercise.cml
+
+func max_of(a: int, b: int): int {
+    return if a > b then a else b
+}
+
+func main(): int sync {
+    let xs = [3, 9, 4]
+    println(max_of(3, 7))
+    println(xs->reduce<(acc: int, x: int): int => max_of(acc, x), xs[0]>)
+    return 0
+}

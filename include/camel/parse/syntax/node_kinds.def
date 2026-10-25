@@ -81,7 +81,6 @@ CAMEL_NODE(EnumStructPattern, Other)   // '{' (IDENTIFIER (':' pattern)? (',' ..
 CAMEL_NODE(MatchCase, Other)           // 'case' pattern ('|' pattern)* whenClause? '=>' blockExpr
 CAMEL_NODE(TypeCasePattern, Other)     // 'struct' | 'tuple' | '#' 'leaf' | '_'
 CAMEL_NODE(TypeCase, Other)            // 'case' typeCasePattern ('|' typeCasePattern)* '=>' blockExpr
-CAMEL_NODE(CatchClause, Other)         // 'catch' identDef ':' typeExpr stmtBlock
 CAMEL_NODE(MemberAccess, Other)        // '.' (IDENTIFIER | INTEGER | REAL), after a call, a binding or an index
 CAMEL_NODE(TypeList, Other)            // typeExpr (',' typeExpr)*
 CAMEL_NODE(IdentDef, Other)            // IDENTIFIER
@@ -94,7 +93,6 @@ CAMEL_NODE(MatchExpr, Expr)            // 'match' logicalOrExpr '{' matchCase+ '
 CAMEL_NODE(MatchTypeExpr, Expr)        // 'match' 'type' typeExpr '{' typeCase* '}'
 CAMEL_NODE(StaticForExpr, Expr)        // 'static' 'for' '(' identDef ',' identDef ')' 'in' 'fields' typeExpr '=>' blockExpr
 CAMEL_NODE(StaticLoopExpr, Expr)       // 'static' 'loop' loopState (',' loopState)* staticLoopHeader 'do' blockExpr
-CAMEL_NODE(TryExpr, Expr)              // 'try' stmtBlock catchClause+ ('finally' stmtBlock)?
 CAMEL_NODE(LoopExpr, Expr)             // 'loop' loopState (',' loopState)* loopFor? loopWhile? 'do' blockExpr
 CAMEL_NODE(LoopState, Other)           // identDef '=' logicalOrExpr
 CAMEL_NODE(LoopFor, Other)             // 'for' identDef 'in' logicalOrExpr
@@ -130,7 +128,6 @@ CAMEL_NODE(InterType, Type)            // diffType ('&' diffType)*
 CAMEL_NODE(DiffType, Type)             // keyUnionDiffType ('\\' keyUnionDiffType)*
 CAMEL_NODE(KeyUnionDiffType, Type)     // keyInterType (('+' | '-') keyInterType)*
 CAMEL_NODE(KeyInterType, Type)         // typeUnit ('^' typeUnit)*
-CAMEL_NODE(TypeUnit, Type)             // identDef 'of' arrayType
 CAMEL_NODE(ArrayType, Type)            // specType arrayDim+
 CAMEL_NODE(ArrayDim, Type)             // '[' (']' | arrayDimItem (',' arrayDimItem)*) ']'
                                        //   arrayDimItem: '?' | '..' identDef? | dataExpr

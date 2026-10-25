@@ -154,7 +154,6 @@ dataExpr           : ctrlExpr | loopExpr
 ctrlExpr           : 'if' logicalOrExpr 'then' blockExpr ('else' blockExpr)?
                      | 'match' identRef '{' matchCase+ '}'
                      | 'match' 'type' typeExpr '{' typeCase* '}'
-                     | 'try' stmtBlock catchClause+ ('finally' stmtBlock)?
 assignExpr         : logicalOrExpr (('=' | '+=' | '-=' | '*=' | '/=' | '%=' | '^=' | '@=' | '&='
                      | '|=') logicalOrExpr)?
 logicalOrExpr      : logicalAndExpr ('||' logicalAndExpr)*
@@ -167,7 +166,7 @@ additiveExpr       : multiplicativeExpr (('+' | '-') multiplicativeExpr)*
 multiplicativeExpr : powerExpr (('*' | '/' | '@' | '%') powerExpr)*
 powerExpr          : nullableExpr ('^' powerExpr)?
 nullableExpr       : unaryExpr (('??' | '!!') dataExpr)?
-unaryExpr          : linkExpr (('as' | 'is') typeExpr)?
+unaryExpr          : linkExpr ('as' typeExpr)?
 linkExpr           : negExpr (('->' | '?->') compExpr)*
 negExpr            : ('-' | '!' | '~') negPower | compExpr
 negPower           : ('-' | '!' | '~') negPower | compExpr ('^' negPower)?
@@ -217,13 +216,12 @@ loopExpr           : 'loop' loopState (',' loopState)* loopFor? loopWhile? 'do' 
 loopState          : identDef '=' logicalOrExpr
 loopFor            : 'for' identDef 'in' logicalOrExpr
 loopWhile          : 'while' logicalOrExpr
-catchClause        : 'catch' identDef ':' typeExpr stmtBlock
 typeExpr           : interType ('?' | '!' | '..')*
 interType          : diffType ('&' diffType)*
 diffType           : keyUnionDiffType ('\\' keyUnionDiffType)*
 keyUnionDiffType   : keyInterType (('+' | '-') keyInterType)*
 keyInterType       : typeUnit ('^' typeUnit)*
-typeUnit           : (identDef 'of')? arrayType
+typeUnit           : arrayType
 arrayType          : specType arrayDim+
 arrayDim           : '[' (']' | arrayDimItem (',' arrayDimItem)* ','?)? ']'
 arrayDimItem       : '?' | '..' identDef? | dataExpr

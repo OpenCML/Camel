@@ -28,6 +28,7 @@ and only host memory that is contiguous and of one lane.
 
 from __future__ import annotations
 
+from importlib.metadata import PackageNotFoundError, version as _distribution_version
 from pathlib import Path
 from typing import Any, Iterable, Sequence
 
@@ -39,7 +40,14 @@ from ._native import (  # noqa: F401  (re-exported: `camel.CamelError` and frien
     _camel,
 )
 
-__version__ = "0.2.30"
+# The distribution's version, not a second copy of it: a literal here drifted a release behind
+# (5.37), and the wheel is the only thing that knows what was published.
+try:
+    __version__ = _distribution_version("camel-lang")
+except PackageNotFoundError:
+    # A source checkout that was never installed: `pyproject.toml` is the only version there.
+    __version__ = "0.0.0+unknown"
+
 __author__ = "Zhenjie Wei"
 __author_email__ = "Kogler_S@outlook.com"
 __description__ = "Camel: A Next-Generation Language for AI and High-Performance Computing"

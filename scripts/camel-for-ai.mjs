@@ -224,17 +224,14 @@ function read(root, rel) {
 // The keyword table of `docs/language/02_lexical.md` §2.4 -- the page the token table's own comment
 // names as the source of its `Group` field -- plus the operators of `token_kinds.def`.
 //
-// The two files disagree about one word: `enum` is grouped under `Type` by the reference (the
-// language has nominal enums; §6 and §12 use them) and under `Reserved` by the token table, which
-// did not move when the language gained them. The page follows the reference and says so, and the
-// note is generated, so fixing the token table removes the note by itself instead of leaving a
-// stale claim behind.
+// The table has one row per group of `token_kinds.def`; the `Reserved` row is gone with the words
+// that were in it (`is`, `of`, `keyof`, `try`, `catch`, `finally`; handover 5.00 "语法层收口"
+// item 5), and `enum` and `typeof` now stand with the types, as the token table groups them.
 const KEYWORD_GROUPS = [
     ['声明', 'Declaration'],
     ['控制', 'Control'],
     ['类型与转换', 'Type and conversion'],
     ['字面量', 'Literal'],
-    ['保留', 'Reserved'],
 ]
 
 function generateLexical(root) {

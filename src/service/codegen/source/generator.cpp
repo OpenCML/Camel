@@ -800,9 +800,6 @@ string Generator::generateDataLoad(const AST::node_ptr_t &node) {
     case AST::DataType::MatchExpr:
         result = generateMatchExprLoad(node);
         break;
-    case AST::DataType::TryExpr:
-        result = generateTryExprLoad(node);
-        break;
     case AST::DataType::Literal:
         result = generateLiteralLoad(node);
         break;
@@ -1123,19 +1120,6 @@ string Generator::generateMatchExprLoad(const AST::node_ptr_t &node) {
         return "";
 
     string code = matchExprLoad->geneCode();
-    code += " ";
-    code += generateChildren(node);
-    return code;
-}
-
-string Generator::generateTryExprLoad(const AST::node_ptr_t &node) {
-    if (!node)
-        return "";
-    auto tryExprLoad = dynamic_pointer_cast<AST::TryExprLoad>(node->load());
-    if (!tryExprLoad)
-        return "";
-
-    string code = tryExprLoad->geneCode();
     code += " ";
     code += generateChildren(node);
     return code;

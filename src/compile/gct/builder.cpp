@@ -2247,9 +2247,6 @@ node_ptr_t Builder::visitData(const AST::node_ptr_t &ast) {
     case AST::DataType::StaticAccess:
         dataNode = visitStaticAccess(ast);
         break;
-    case AST::DataType::TryExpr:
-        dataNode = visitTryExpr(ast);
-        break;
     case AST::DataType::LoopExpr:
         dataNode = visitLoopExpr(ast);
         break;
@@ -2626,7 +2623,6 @@ enum ReservedDataOp {
     Bind, // Data obj, Data* args, NamedData* kwargs
     Comp, // Data lhs, Data rhs
     As, // Data lhs, Type rhs
-    Is, // Data lhs, Type rhs
     Access, // Data obj, RefData ref
 }
 ReservedExpr(ReservedDataOp op) := Data lhs, Any? rhs ;
@@ -3014,13 +3010,6 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
                 },
                 {nodeOrigin(dataNode)});
         }
-    } break;
-
-    case AST::ReservedDataOp::Is: {
-        diags_->of(SemanticDiag::FeatureNotSupported)
-            .at(ast->load()->tokenRange())
-            .commit("IS Operator");
-        res = visitData(lhsASTNode);
     } break;
 
     case AST::ReservedDataOp::Access: {
@@ -3672,19 +3661,6 @@ node_ptr_t Builder::visitShapeComprehension(const AST::node_ptr_t &ast) {
     *compNode << shapeNode;
     LEAVE("ShapeComprehension");
     return compNode;
-}
-
-/*
-
-
-*/
-node_ptr_t Builder::visitTryExpr(const AST::node_ptr_t &ast) {
-    ENTER("TryExpr");
-    ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for TryExpr");
-    diags_->of(SemanticDiag::FeatureNotSupported).at(ast->load()->tokenRange()).commit("TryExpr");
-    throw BuildAbortException();
-    LEAVE("TryExpr");
-    return nullptr;
 }
 
 template <typename T> inline data_ptr_t makeDataFromLiteral(const T &value) {

@@ -233,7 +233,7 @@ false
 
 `as` never changes the type of a value unchecked. The result of `json::decode` is a `Json`, which does not convert to another type with `as`; JSON of a known shape is decoded with `json::decode_as(s, [0])`, which checks the shape while decoding and gives a `T!`.
 
-Conversions between numbers use functions such as `float(x)` ([3.2](03_data_model.md#32-numbers)). `e is T` is `SemanticDiag::ConstructNotSupported` (there is no type information at run time). The postfix non-null assertion `x!` is the same; use `x ?? default`.
+Conversions between numbers use functions such as `float(x)` ([3.2](03_data_model.md#32-numbers)). `is` is not a keyword: the `is` of `e is T` is an ordinary name, and writing it is a syntax error (there is no type information at run time). The postfix non-null assertion `x!` is `SemanticDiag::ConstructNotSupported`; use `x ?? default`.
 
 ## 6.8 `if` and `match`
 
@@ -385,7 +385,7 @@ A missing case, an extra case or a literal case mixed in is `SemanticDiag::Tagge
 
 Tuple patterns, struct patterns, and identifier patterns on values of ordinary types (`case n => ...`) are `SemanticDiag::ConstructNotSupported`; use an `if` chain, or take the members first and then match. Tuple and struct patterns of enum variants are implemented, but a field position takes only a name or `_`.
 
-`try`/`catch`/`finally` is not part of Camel (it has no stable mapping onto the graph): writing it gives `SemanticDiag::TryCatchNotInLanguage`. An operation that may fail returns `T!`, handled with `!!`, `?->` and `case error e`.
+`try`/`catch`/`finally` is not part of Camel (it has no stable mapping onto the graph), and none of the three is a keyword: they are ordinary names, so a `try { ... }` written with them is an ordinary syntax error. An operation that may fail returns `T!`, handled with `!!`, `?->` and `case error e`.
 
 ### 6.8.3 `match type`
 

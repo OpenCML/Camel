@@ -185,7 +185,7 @@ class Builder {
     Value visitStaticForExpr(syntax::cst::StaticForExpr context);
     Value visitStaticLoopExpr(syntax::cst::StaticLoopExpr context);
     TypeCaseKind typeCaseKindOf(syntax::cst::TypeCasePattern pattern);
-    /// IfExpr, MatchExpr, MatchTypeExpr, TryExpr.
+    /// IfExpr, MatchExpr, MatchTypeExpr, StaticForExpr.
     Value visitCtrlExpr(syntax::Node context);
     Value visitLoopExpr(syntax::cst::LoopExpr context);
     Value visitAssignExpr(syntax::cst::AssignExpr context);
@@ -226,7 +226,6 @@ class Builder {
     Value visitDiffType(syntax::cst::DiffType context);
     Value visitKeyUnionDiffType(syntax::cst::KeyUnionDiffType context);
     Value visitKeyInterType(syntax::cst::KeyInterType context);
-    Value visitTypeUnit(syntax::cst::TypeUnit context);
     Value visitArrayType(syntax::cst::ArrayType context);
     Value visitArrayDim(syntax::cst::ArrayDim context);
     /// The extents and the pack one `[...]` was written with.

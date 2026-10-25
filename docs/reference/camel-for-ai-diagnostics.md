@@ -59,7 +59,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 
 | `ComparisonAcrossLines` | This '>' is read as a comparison with the next line, which starts with {0}: two statements may have been joined into one. |
 
-**Semantic — errors** (`SemanticDiag`) — 203
+**Semantic — errors** (`SemanticDiag`) — 202
 
 | `Redeclaration` | Redeclaration of reference: '{0}'. |
 | `ModuleNotFound` | Module '{0}' not found. {1} |
@@ -105,7 +105,6 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `ThrowNotAnError` | 'throw' takes an error value, not a value of type '{0}'. |
 | `TaggedTypeNesting` | The type '{0}' marks '{1}' twice. |
 | `TaggedValueNotOpened` | A value of type '{0}' cannot be used here: {1}. |
-| `TryCatchNotInLanguage` | 'try'/'catch' is not part of Camel. |
 | `TaggedOperandMismatch` | '{0}' cannot be applied here: {1}. |
 | `TaggedMatchCases` | This 'match' on a value of type '{0}' is not well formed: {1}. |
 | `ImportedModuleHasErrors` | Cannot import module '{0}': it has errors ({1}). |

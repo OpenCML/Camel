@@ -194,7 +194,6 @@
         { "include": "#with-parameters" },
         { "include": "#function-declaration" },
         { "include": "#type-declaration" },
-        { "include": "#catch-binding" },
         { "include": "#let-declaration" },
         { "include": "#var-declaration" }
       ]
@@ -303,14 +302,6 @@
         }
       ]
     },
-    "catch-binding": {
-      "comment": "catchClause: CATCH identDef ':' typeExpr stmtBlock",
-      "match": "\\b(catch)\\s+([A-Za-z_][A-Za-z_0-9]*)",
-      "captures": {
-        "1": { "name": "keyword.control.exception.camel" },
-        "2": { "name": "variable.parameter.camel" }
-      }
-    },
     "let-declaration": {
       "comment": "dataDecl: LET carrier (':' typeList)? '=' dataList. The names of the carrier are immutable bindings.",
       "name": "meta.declaration.let.camel",
@@ -385,10 +376,6 @@
           "match": "\\b(?:loop|while|do|for|in)\\b"
         },
         {
-          "name": "keyword.control.exception.camel",
-          "match": "\\b(?:try|catch|finally)\\b"
-        },
-        {
           "name": "keyword.control.flow.camel",
           "match": "\\b(?:return|throw)\\b"
         },
@@ -430,7 +417,7 @@
         },
         {
           "name": "keyword.operator.expression.camel",
-          "match": "\\b(?:as|is|of|typeof|constas|keyof)\\b"
+          "match": "\\b(?:as|typeof|constas)\\b"
         },
         {
           "name": "constant.language.boolean.camel",
