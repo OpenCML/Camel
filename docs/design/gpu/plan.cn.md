@@ -205,10 +205,11 @@ graph train_step [body placement=gpu]
 | 主机效果算子（`print`、文件写、`save_npy`） | 留主机，边界处一个显式 `download`（`syncs` 计数） |
 | 没有设备实现、也不是主机效果的算子 | 拒绝：`GpuScopeUnsupported`；闭包里的模块没有设备程序时是 `GpuScopeNoDeviceProgram` |
 
-落地状态要说清：**两半都已落地**（`#gpu` 里写 `println` 不再报 `GpuScopeUnsupported`，作用域照旧是一个设备单元；效果写在作用域体内时照常执行，观察点有一次显式传输）。**决定跑哪些节点的是执行计划**，所以修在那里：
+落地状态要说清：**两半都已落地**（`#gpu` 里写 `println` 不再报 `GpuScopeUnsupported`，作用域照旧是一个设备单元；效果写在作用域体内时照常执行，观察点有一次显式传输）。修的是**切分**，执行计划不动：
 
-- `src/execute/graph_runtime_support.cpp` 的 `computeExecutionOrder` 是**决定跑哪些节点的那一处**：执行计划从图的出口往回走，走到的节点才被排进计划。主机效果节点现在和出口一样是**根**（`observesOnItsOwn`：声明了外部效果或写了程序状态的算子），所以段被抽出去之后、效果到出口的那条链断掉时，它照样执行。
-- 传输侧不必改：效果读的那个值的 `tiles:download` **改之前就已经在图上**（`std::jgir` 里 `observed` 有它，`modules/tiles/src/graph_regions.cpp` 的 `analyzeRegions` 与 `regions.cpp` 的 `planRegionTransfers` 都不认识执行计划），缺的是执行；也验证过，把 `analyzeRegions` 里"效果也是可观察的根"（`RegionNode::output`，`regions.h` 的注释要求）标上，读数逐字不变。§3.6 的第 6 条要把这张表换成驻留结论，那时"效果是观察点"要在新口径里重新落。
+- 执行计划（`src/execute/graph_runtime_support.cpp` 的 `computeExecutionOrder`）从图的出口往回走，只认数据边、同步边与顺序边，"哪些节点要跑"不额外认别的根：同步块之外、结果没人用的带效应调用**本来就不执行**（设计原则 3.1），把它当根会改变整门语言的语义。所以段被抽出去之后，宿主语句到出口的那条链必须不断在段调用这里。
+- 断链的地方是切分：段把成员语句换成段调用，就要把被替换语句的**同步输入、顺序输入**原样接到替换它的节点上（`docs/design/effects/edges.cn.md` §4），并且它**排序过的**那些节点改由段调用排序。顺序在今天的图里由两种边并行携带到控制边退场为止（控制边与同步边同写一条顺序，`src/runtime/draft.cpp` 的 `closeChainOver`），所以两边都要接。实现在 `modules/tiles/src/region_outline.cpp`：段成员的控制前驱接到调用上，成员控制过的节点把该成员换成调用——只动这一份顺序引用，图的出口、区域的值、分支的 JOIN 这些引用留给遍下面按值替换，否则出口会被提前改成调用而不是它该有的值。
+- 切分不必另加"切点"：`partitionRegions` 的合并只沿**数据**输入进行，商图的无环判定按输入 + 顺序做（`RegionNode::order` 来自 `graph.ctrlInputsOf`），效果横在两个成员之间时那次合并被拒，段于是在效果处**自然分开**——`observed` 落地成两段（这一形状的读数：`device kernels` 3、`compiles` 2、`run_preferred_resident` 2 次）。效果读的那个值的 `tiles:download` 在那之前就已经在图上（`std::jgir` 里 `observed` 有它，`modules/tiles/src/graph_regions.cpp` 的 `analyzeRegions` 与 `regions.cpp` 的 `planRegionTransfers` 都不认识执行计划），缺的一直只是那条顺序边。§3.6 的第 6 条要把这张表换成驻留结论，那时"效果是观察点"要在新口径里重新落。
 
 改之前：`#gpu` 函数体里的 `println` **不执行**——效果节点和它读的那次 `download` 都不在执行计划里，所以那一次传输也没发生（有卡时 `to_host_bytes` 只有 12、`syncs` 2），`--devices cpu` 与有卡时都不打印；改之后：两种运行都打印。有卡时（一块卡、一条流，公共同步路径）`syncs` 从 2 变 3，**多出来的那一次就是观察点**：一次上传（`tiles:retain_preferred` 把实参送上卡）加两次下载（效果读的值、`main` 读回的返回值），`to_host_bytes` 从 12 变 20。`syncs` 数的是真实的等待（按值计的数是 `downloads`/`transfers`），所以钉数要在固定的流数下取；整程序最少 2 次——设备段的输入张量必须上传，体内**没有**效果的对照程序也是 2。`TILES_RESIDENCY` 读的是放置事实而不是遍插入的节点，所以它对 `observed` 照旧记 `downloads: 0`（效果节点带的是作用域的 `gpu` 事实）。传输节点在两种运行下都写出来，有没有设备是**运行时**决定：`--devices cpu` 下一次传输都不写、`syncs` 记 0，效果照样打印。
 
@@ -308,8 +309,8 @@ N31 :call  (N30, m) (x)                          [placement=gpu]
 
 - **目标**：`#gpu` 函数体（或块）里写的 `println`/文件写/`save_npy` 照常执行，位置在主机；遍在值的边界处插一个显式 `tiles:download`，`std::profile` 把那次等待数进 `device_work.syncs`。一个观察点一次：`#gpu` 体里一次 `println` 的读数是 `syncs: 1`。
 - **边界**：不改"效果不是拒绝"这一半（已落地）；不改 `--devices cpu` 下"不写任何传输"的行为；不做设备上的效果（没有这种算子）。
-- **依赖**：`handover/h556-gpu-effect` 已落地——效果是执行计划的根，落在 `src/execute/graph_runtime_support.cpp` 的 `computeExecutionOrder`，读数见 §2.4 的落地状态；机制上依赖 §3.6 的 G2-2 的观察点定义（本条是那一步的第一个用例）。
-- **验收读数**：`test/cases/modules/tiles/gpu_scope_host_effect.cml` 在 `tiles::compile` 下体内 `println` 有输出（改之前没有输出、`TILES_RESIDENCY` 记 `"downloads":0`）；有卡时计划条目 `gpu_scope.host_effect_synchronises` 读 `std::profile json=` 的 `device_work.syncs`（一块卡一条流：3，改之前 2）与 `to_host_bytes`（20，改之前 12）。设备无关的那一半：`camel --devices cpu <用例> tiles::compile std::nvm` 的 stdout 里有 `println` 的内容，计划条目 `gpu_scope.host_effect_is_the_boundary` 钉住它。
+- **依赖**：`handover/h556-gpu-effect` 与它的返工（`handover/h567-gpu-effect-rework`）已落地——修在**切分**（`modules/tiles/src/region_outline.cpp`：段的成员语句换成段调用时，把被替换语句的同步输入、顺序输入与它排序过的节点原样交给调用），执行计划不把效果当根（见 §2.4 的落地状态）；机制上依赖 §3.6 的 G2-2 的观察点定义（本条是那一步的第一个用例）。
+- **验收读数**：`test/cases/modules/tiles/gpu_scope_host_effect.cml` 在 `tiles::compile` 下体内 `println` 有输出（改之前没有输出、`TILES_RESIDENCY` 记 `"downloads":0`）；有卡时计划条目 `gpu_scope.host_effect_synchronises` 读 `std::profile json=` 的 `device_work.syncs`（一块卡一条流：3，改之前 2）与 `to_host_bytes`（20，改之前 12）。设备无关的那一半：`camel --devices cpu <用例> tiles::compile std::nvm` 的 stdout 里有 `println` 的内容，计划条目 `gpu_scope.host_effect_is_the_boundary` 钉住它。防回退两条（计划条目 `gpu_scope.unused_effect_outside_a_sync_block_does_not_run`、`gpu_scope.unused_effect_stays_dropped_through_the_pass`、`gpu_scope.arm_effect_runs_only_in_the_arm_taken`）：同步块之外没人用的 `println` 加不加 `tiles::compile` 都不执行、都报 `EffectNotExecuted`；分支没选中的臂里的 `println` 不执行。
 - **未决点**：问题页第 2 条（观察点与 `syncs` 的计数口径）。
 
 ---
