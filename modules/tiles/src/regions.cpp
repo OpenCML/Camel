@@ -23,7 +23,7 @@ template <class Visit> void forEachDependency(const RegionNode &node, Visit &&vi
 }
 } // namespace
 
-std::vector<Region> partitionRegions(const std::vector<RegionNode> &nodes) {
+std::vector<Segment> partitionRegions(const std::vector<RegionNode> &nodes) {
     const auto count = nodes.size();
     std::vector<std::vector<size_t>> users(count);
     for (size_t id = 0; id < count; ++id) {
@@ -123,9 +123,9 @@ std::vector<Region> partitionRegions(const std::vector<RegionNode> &nodes) {
                     changed = true;
                 }
     }
-    std::vector<Region> result;
+    std::vector<Segment> result;
     for (auto root : topological(group)) {
-        Region region;
+        Segment region;
         std::set<size_t> inputs, outputs;
         for (auto id : walk)
             if (group[id] == root && nodes[id].eligible) {
@@ -148,7 +148,7 @@ std::vector<Region> partitionRegions(const std::vector<RegionNode> &nodes) {
     return result;
 }
 RegionTransfers
-planRegionTransfers(const std::vector<RegionNode> &nodes, const std::vector<Region> &regions) {
+planRegionTransfers(const std::vector<RegionNode> &nodes, const std::vector<Segment> &regions) {
     const size_t host = regions.size();
     std::vector<size_t> owner(nodes.size(), host);
     for (size_t r = 0; r < regions.size(); ++r)

@@ -1,9 +1,9 @@
 // Copyright (c) the OpenCML Organization
 // SPDX-License-Identifier: MIT
 
-// Own static region artifacts in the core fact store and bind invocation inputs.
+// Own static scope artifacts in the core fact store and bind invocation inputs.
 
-#include "tiles/internal/compiled_region.h"
+#include "tiles/internal/compiled_scope.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/core/rtdata/tuple.h"
 #include "camel/runtime/facts.h"
@@ -16,10 +16,10 @@ namespace {
 // Graph id/revision and the declaration epoch are supplied by FactStore.
 // Changing the lowering policy must change this hash; device-specific machine
 // compilation remains in the backend's context-local source cache.
-constexpr uint64_t compiledRegionTarget = 0x74696c6573000004ULL;
-rt::fact::KindId compiledRegionKind() {
+constexpr uint64_t compiledScopeTarget = 0x74696c6573000004ULL;
+rt::fact::KindId compiledScopeKind() {
     static const auto kind = rt::fact::registerKind<std::shared_ptr<const Program>>(
-        {.key               = "tiles.compiled_region",
+        {.key               = "tiles.compiled_scope",
          .owner             = "tiles",
          .cls               = rt::fact::FactClass::Target,
          .scope             = rt::fact::Scope::Graph,
@@ -30,12 +30,12 @@ rt::fact::KindId compiledRegionKind() {
     return kind;
 }
 } // namespace
-bool hasCompiledRegion(Function *function, rt::fact::FactStore &facts) {
+bool hasCompiledScope(Function *function, rt::fact::FactStore &facts) {
     return function && function->graph() &&
            facts.get<std::shared_ptr<const Program>>(
-               compiledRegionKind(),
+               compiledScopeKind(),
                rt::fact::Anchor{function->program(), function->graph()},
-               compiledRegionTarget) != nullptr;
+               compiledScopeTarget) != nullptr;
 }
 Program compileTypes(Function *function, rt::fact::FactStore &facts) {
     if (!function || !function->graph())
@@ -43,27 +43,27 @@ Program compileTypes(Function *function, rt::fact::FactStore &facts) {
     // A template cannot specialize on closure values: their owner and current
     // contents belong to the invocation, never to the graph's long-lived fact.
     if (function->tuple() && function->tuple()->size())
-        throw UnsupportedComputation("type-only compilation requires a closure-free region");
+        throw UnsupportedComputation("type-only compilation requires a closure-free scope");
     const rt::fact::Anchor anchor{function->program(), function->graph()};
     if (auto cached = facts.get<std::shared_ptr<const Program>>(
-            compiledRegionKind(),
+            compiledScopeKind(),
             anchor,
-            compiledRegionTarget))
+            compiledScopeTarget))
         return **cached;
     auto program = compileRegionTemplate(function, facts);
     for (const auto &node : program.nodes)
         if (node.resident)
-            throw std::runtime_error("compiled region template retains a resident input");
+            throw std::runtime_error("compiled scope template retains a resident input");
     for (auto input : program.parameterInputs) {
         const auto &node = program.nodes.at(input);
         if (!node.data.empty() || node.scalarBits)
-            throw std::runtime_error("compiled region template retains invocation data");
+            throw std::runtime_error("compiled scope template retains invocation data");
     }
     facts.put(
-        compiledRegionKind(),
+        compiledScopeKind(),
         anchor,
         std::make_shared<const Program>(program),
-        compiledRegionTarget);
+        compiledScopeTarget);
     return program;
 }
 Program prepareProgram(
@@ -77,9 +77,9 @@ Program prepareProgram(
     if (function->tuple() && function->tuple()->size())
         return compile(function, arguments, facts);
     auto cached = facts.get<std::shared_ptr<const Program>>(
-        compiledRegionKind(),
+        compiledScopeKind(),
         anchor,
-        compiledRegionTarget);
+        compiledScopeTarget);
     if (!cached && !staticRegion)
         return compile(function, arguments, facts);
     Program program = cached ? **cached : compileTypes(function, facts);
