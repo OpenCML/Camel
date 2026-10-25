@@ -589,6 +589,17 @@ std::optional<IndexedInstance> unsqueezeIndexing(const InferContext &ctx) {
     return b.finish(allDims(b));
 }
 
+/// The two parameters of `sum_to` and `broadcast_like` are one element type:
+/// `::<T>(g: T[..], like: T[..])` (modules/tensor/ops/gradient_ops.cpp declares it, and the index
+/// declaration has to accept the same calls the signature does). A call whose two known element
+/// types differ is not a call the operator accepts, and a numeric conversion does not reach one
+/// (design principles 5.1). An element type that is not known on one side is not a disagreement.
+bool sameElementType(const InferContext &ctx) {
+    const auto lhs = ctx.facts(0).dtype;
+    const auto rhs = ctx.facts(1).dtype;
+    return !lhs || !rhs || *lhs == *rhs;
+}
+
 /**
  * broadcast_like(g, like): g (a tensor, or a number) broadcast to like's shape; like's
  * elements are not read. g's extent-1 axes read 0. No instance when an axis of g may or may
