@@ -205,7 +205,12 @@ graph train_step [body placement=gpu]
 | 主机效果算子（`print`、文件写、`save_npy`） | 留主机，边界处一个显式 `download`（`syncs` 计数） |
 | 没有设备实现、也不是主机效果的算子 | 拒绝：`GpuScopeUnsupported`；闭包里的模块没有设备程序时是 `GpuScopeNoDeviceProgram` |
 
-落地状态要说清：**"不拒绝"这一半已经落地**（`#gpu` 里写 `println` 不再报 `GpuScopeUnsupported`，作用域照旧是一个设备单元）；**"效果写在作用域体内时的那一次 `download`"还没有**——遍把段抽出去之后，体内的效果节点既不再执行、也没有传输给它，读数是 `TILES_RESIDENCY` 的 `downloads: 0` 与不打印。这一条已在 `docs/handover/reviews/questions-2026-10-24-evening.md` 里定为**错误、现在就修**——效果节点和图的输出、出口一样是**可观察的根**，决定执行的那一处要读它；取值处插一次跨边界的 `download`，`--devices cpu` 下整个作用域本就在主机上、不需要传输但**同样要打印**；本文其余部分（作用域、边界、`--devices cpu` 不改可编译集合）不受影响。另外，"观察点 download"本身只在**有设备**时才会被写出来（`region_outline.cpp` 里插传输的那一圈以 `device` 非空为条件），`--devices cpu` 下一次传输都不写、`syncs` 记 0。
+落地状态要说清：**两半都已落地**（`#gpu` 里写 `println` 不再报 `GpuScopeUnsupported`，作用域照旧是一个设备单元；效果写在作用域体内时照常执行，观察点有一次显式传输）。**决定跑哪些节点的是执行计划**，所以修在那里：
+
+- `src/execute/graph_runtime_support.cpp` 的 `computeExecutionOrder` 是**决定跑哪些节点的那一处**：执行计划从图的出口往回走，走到的节点才被排进计划。主机效果节点现在和出口一样是**根**（`observesOnItsOwn`：声明了外部效果或写了程序状态的算子），所以段被抽出去之后、效果到出口的那条链断掉时，它照样执行。
+- 传输侧不必改：效果读的那个值的 `tiles:download` **改之前就已经在图上**（`std::jgir` 里 `observed` 有它，`modules/tiles/src/graph_regions.cpp` 的 `analyzeRegions` 与 `regions.cpp` 的 `planRegionTransfers` 都不认识执行计划），缺的是执行；也验证过，把 `analyzeRegions` 里"效果也是可观察的根"（`RegionNode::output`，`regions.h` 的注释要求）标上，读数逐字不变。§3.6 的第 6 条要把这张表换成驻留结论，那时"效果是观察点"要在新口径里重新落。
+
+改之前：`#gpu` 函数体里的 `println` **不执行**——效果节点和它读的那次 `download` 都不在执行计划里，所以那一次传输也没发生（有卡时 `to_host_bytes` 只有 12、`syncs` 2），`--devices cpu` 与有卡时都不打印；改之后：两种运行都打印。有卡时（一块卡、一条流，公共同步路径）`syncs` 从 2 变 3，**多出来的那一次就是观察点**：一次上传（`tiles:retain_preferred` 把实参送上卡）加两次下载（效果读的值、`main` 读回的返回值），`to_host_bytes` 从 12 变 20。`syncs` 数的是真实的等待（按值计的数是 `downloads`/`transfers`），所以钉数要在固定的流数下取；整程序最少 2 次——设备段的输入张量必须上传，体内**没有**效果的对照程序也是 2。`TILES_RESIDENCY` 读的是放置事实而不是遍插入的节点，所以它对 `observed` 照旧记 `downloads: 0`（效果节点带的是作用域的 `gpu` 事实）。传输节点在两种运行下都写出来，有没有设备是**运行时**决定：`--devices cpu` 下一次传输都不写、`syncs` 记 0，效果照样打印。
 
 诊断形状：一条诊断列出作用域里**所有**不合格算子（URI + origin + 原因），给出两条出路（写 `#cpu` 块，或 `--devices cpu`），不让用户一条一条试。`--devices cpu` **不改变可编译集合**：支持面在编译期定死，`--devices cpu` 只决定"编出来的段在哪执行"（主机后端执行同一段图）。否则同一个程序在有无设备时编译结果不同，这就是"静默地为错的设备编译"。
 
@@ -289,7 +294,7 @@ N31 :call  (N30, m) (x)                          [placement=gpu]
 | 拒绝（S4） | `RuntimeDiag::GpuScopeUnsupported = 0x04000071`、`GpuScopeNoDeviceProgram = 0x040001A7`；`modules/tiles/include/tiles/internal/regions.h` 的 `gpuRefusal` 的三条原因串（`no device program for this operator` / `for this shape` / `the module provides none`）。用例 `test/cases/gpu/nofallback/refused_operator.cml`、`refused_shape.cml`、`two_refusals.cml`，计划条目 `nofallback.*` 与 `nofallback.one_diagnostic_lists_every_refused_operator` | 无 |
 | 图内区域：臂与循环体各自成段（S5a） | `modules/tiles/include/tiles/internal/regions.h` 的 `RegionNode::control` 与 `analyzeRegions(..., const GpuScopes *)`；`modules/tiles/src/region_outline.cpp` 用 `draft.setInsertRegion` 把段的调用写在成员所在的控制区域，`BRCH`/`JOIN`/`LOOP` 留主机。用例 `nofallback/branch.cml`、`loop.cml`，计划条目 `nofallback.branch_arms_are_segments`、`branch_segment_is_written_in_the_arm`、`branch_scope_returns_what_the_host_returns`、`loop_is_a_segment` | 循环条件读设备张量时每轮一次 `download`（G2-2） |
 | 派生图继承放置（S5b） | `modules/tiles/src/placement.cpp` 的 `calleeGraphOf` 把持有函数常量的 `Call` 也算作 callee；`RuntimeDiag::GpuScopeMacroNotExpanded = 0x040001A9`；`modules/tiles/src/region_pass.cpp` 的注释写明展开者是 `std::macro`。用例 `test/cases/gpu/nofallback/grad_expand.cml`、`grad_dynamic.cml`，计划条目 `grad_expand.*` 六条 | 无 |
-| 主机效果不是拒绝 | `modules/tiles/include/tiles/internal/regions.h` 的 `gpuRefusal` 注释"Unresolved types and index instances are not refusals … and neither are host effects nor the structural host code"；`modules/tiles/src/region_outline.cpp` 插传输那一圈以 `device` 非空为条件。计划条目 `gpu_scope.host_effect_is_the_boundary` | 体内效果的执行与那一次 `download`（G1-2） |
+| 主机效果不是拒绝 | `modules/tiles/include/tiles/internal/regions.h` 的 `gpuRefusal` 注释"Unresolved types and index instances are not refusals … and neither are host effects nor the structural host code"；`modules/tiles/src/region_outline.cpp` 插传输那一圈以 `device` 非空为条件。计划条目 `gpu_scope.host_effect_is_the_boundary`、`gpu_scope.host_effect_synchronises` | 无（体内效果的执行与那一次 `download` 已落地，见 G1-2） |
 
 #### G1-1 标签的落点收口：撤掉模块位置，命名空间块顶上
 
@@ -303,8 +308,8 @@ N31 :call  (N30, m) (x)                          [placement=gpu]
 
 - **目标**：`#gpu` 函数体（或块）里写的 `println`/文件写/`save_npy` 照常执行，位置在主机；遍在值的边界处插一个显式 `tiles:download`，`std::profile` 把那次等待数进 `device_work.syncs`。一个观察点一次：`#gpu` 体里一次 `println` 的读数是 `syncs: 1`。
 - **边界**：不改"效果不是拒绝"这一半（已落地）；不改 `--devices cpu` 下"不写任何传输"的行为；不做设备上的效果（没有这种算子）。
-- **依赖**：`handover/h556-gpu-effect`（工作树 `D:\Projects\Camel-wt\h556-gpu-effect` 已从 `origin/develop` 开出，正在改 `modules/tiles/src/graph_regions.cpp` 与 `src/runtime/draft.cpp` 三处，尚未提交）——本条是它的交付；机制上依赖 §3.6 的 G2-2 的观察点定义（本条是那一步的第一个用例）。
-- **验收读数**：`test/cases/modules/tiles/gpu_scope_host_effect.cml` 在 `tiles::compile` 下 `println` 有输出（今天的读数是**没有输出**、`TILES_RESIDENCY` 的 `"downloads":0`）；有卡时计划条目 `gpu_scope.host_effect_synchronises` 读 `std::profile json=` 的 `device_work.syncs >= 1` 与 `to_host_bytes >= 12`（今天只有 `kernels >= 1` 那一半成立）。设备无关的那一半今天就能取：`camel --devices cpu <用例> tiles::compile std::nvm` 的 stdout 里必须有 `println` 的内容。
+- **依赖**：`handover/h556-gpu-effect` 已落地——效果是执行计划的根，落在 `src/execute/graph_runtime_support.cpp` 的 `computeExecutionOrder`，读数见 §2.4 的落地状态；机制上依赖 §3.6 的 G2-2 的观察点定义（本条是那一步的第一个用例）。
+- **验收读数**：`test/cases/modules/tiles/gpu_scope_host_effect.cml` 在 `tiles::compile` 下体内 `println` 有输出（改之前没有输出、`TILES_RESIDENCY` 记 `"downloads":0`）；有卡时计划条目 `gpu_scope.host_effect_synchronises` 读 `std::profile json=` 的 `device_work.syncs`（一块卡一条流：3，改之前 2）与 `to_host_bytes`（20，改之前 12）。设备无关的那一半：`camel --devices cpu <用例> tiles::compile std::nvm` 的 stdout 里有 `println` 的内容，计划条目 `gpu_scope.host_effect_is_the_boundary` 钉住它。
 - **未决点**：问题页第 2 条（观察点与 `syncs` 的计数口径）。
 
 ---
