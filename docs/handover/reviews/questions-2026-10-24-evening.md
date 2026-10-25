@@ -752,3 +752,9 @@ println(grow([1.0, 2.0], read_int()))
 两处小改：
 - 第 10 章"图上哪一面"写"`sync` 是控制边"，按目标语言改成"同步块在图上是效应之间的同步边"；第 4 章、第 9 章凡是讲到控制边的地方同样处理。
 - 第 19 章用到的 `examples/python/rules/rules.cml`，先给它一个计划（装了 Python 包才跑，用 `skip_unless` 判断），再在正文里引用。
+
+## 标签形参只叫 `func`：收下，一处返工
+
+标签声明的形参列表接受关键字 `func`，`function` 别名删了，`func_param.cml` 也钉住了正向用法。收下。
+
+**返工**（与上次 `static_for_head_parenthesized` 同一类）：`test/cases/compile/tags/err_function_alias.cml` 专门钉"写 `function` 会被拒"，注释里还在讲 `function` 不是名字，等于给删掉的别名留了一份记录。`TagParameterType` 这条诊断本身要有负例，所以换一个与旧写法无关的不支持类型（比如 `tag t<xs: int[]> on field`），注释只说规则："标签形参是 `int`、`float`、`bool`、`string` 或 `func`"。文件名、计划条目一并改，不再出现 `function_alias`。
