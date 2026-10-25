@@ -301,6 +301,20 @@ class Array : public rtdata::Object {
     /// 11.3: another framework must not see the change).
     bool canWriteInPlace() const;
 
+    /// A second name for this array's storage, so that the references to it count the names that
+    /// can still observe it and "the only reference" (canWriteInPlace) means "no other name".
+    /// Handed out where a value gains such a name: a read that lets the value out of a variable,
+    /// a store into a variable's cell (the operators of the variable family call this).
+    ///
+    /// A compact array with a block of its own hands out a value over the same block, which
+    /// takes one more reference to it and copies nothing. One whose data is inline hands out a
+    /// copy of that data: two names for one inline storage would be two names for one array, and
+    /// the data fits the inline limit. An array no write could be seen through -- a slot array,
+    /// a view, an imported block, a shifted one -- is handed out as it is, and so is a block
+    /// several values already hold: nothing has to be counted to keep a write out of the other
+    /// names' sight.
+    Array *shareForSecondName(camel::core::mm::IAllocator &allocator);
+
     size_t size() const { return static_cast<size_t>(size_); }
     uint64_t numel() const { return numel_; }
     size_t rank() const { return rank_; }

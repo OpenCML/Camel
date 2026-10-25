@@ -45,6 +45,22 @@ Tuple *variableOf(ArgsView &norm) {
     return cell;
 }
 
+// The value a name hands out when another name for it exists. An array the two names could see a
+// write through hands out a share of its storage (Array::shareForSecondName), so the references
+// to that storage count the names and a write in place needs the only one. Everything else -- a
+// scalar, an array no write could be seen through -- is handed out as it is.
+slot_t shareForSecondName(slot_t value, const Type *valueType) {
+    if (valueType == nullptr || valueType->code() != TypeCode::Array) {
+        return value;
+    }
+    Array *array = rtdata::fromSlot<Array *>(value);
+    if (array == nullptr) {
+        return value;
+    }
+    Array *second = array->shareForSecondName(mm::autoSpace());
+    return second == array ? value : rtdata::toSlot(second);
+}
+
 // ---- Complex numbers (c64, c128) ---------------------------------------------------------
 //
 // The arithmetic is the one of the two IEEE parts in the width of the value. A c64 operand is
@@ -194,16 +210,22 @@ template <typename T> slot_t complexAssign(ArgsView &norm, TypeCode code, Comple
 
 slot_t __builtin__var_new__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Tuple *cell = Tuple::create(1, mm::autoSpace());
-    cell->set<slot_t>(0, norm.slot(0), TupleType::cell(norm.type(0)));
+    // The cell is a name of the value from here on, and the expression that gave it may be named
+    // elsewhere (a read of another variable, a `let` binding, an argument): the storage is
+    // counted for the new name (shareForSecondName).
+    cell->set<slot_t>(
+        0, shareForSecondName(norm.slot(0), norm.type(0)), TupleType::cell(norm.type(0)));
     return toSlot(cell);
 }
 
 slot_t __builtin__var_get__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Tuple *cell = variableOf(norm);
-    // The value leaves the variable: from here on something else may refer to it. The memory plan
-    // reads this read (against:var/peek) as the fact that ends the proof that the variable's value
-    // has no other observer (docs/design/arrays-memory/README.cn.md 4.3.1).
-    return cell->get<slot_t>(0);
+    // The value leaves the variable: from here on something else may refer to it, so what the
+    // read hands out is one of the names of the value and the storage is counted for it
+    // (shareForSecondName). The memory plan reads this read (against :var/peek) as the fact that
+    // ends the proof that the variable's value has no other observer
+    // (docs/design/arrays-memory/README.cn.md 4.3.1).
+    return shareForSecondName(cell->get<slot_t>(0), valueTypeOf(norm.type(0)));
 }
 
 // A read of a variable whose value goes only to operations that cannot keep it (the length,
@@ -217,10 +239,12 @@ slot_t __builtin__var_peek__(ArgsView &with, ArgsView &norm, Context &ctx) {
 }
 
 slot_t __builtin__assn__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    slot_t rhs  = norm.slot(1);
     Tuple *cell = variableOf(norm);
+    // The value stored is a name of its own from here on, and whatever named it before still
+    // does: the storage is counted for the new name (shareForSecondName), so a later write
+    // through it cannot be seen through the other one.
+    slot_t rhs = shareForSecondName(norm.slot(1), norm.type(1));
     cell->set<slot_t>(0, rhs, static_cast<TupleType *>(norm.type(0)));
-    // The value stored may be referred to from elsewhere: it is not one this variable made.
     return rhs;
 }
 

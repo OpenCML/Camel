@@ -1,0 +1,26 @@
+/**
+ * A value a closure captured and another name for it: the closure reads the cell of `v`, so the
+ * value it can see at the call is whatever the cell holds then, and the write to `v[0]` must not
+ * reach `big`'s array. The cell of `v` took the array as a second name of it, which the array's
+ * own count records, so the write copies and `big` keeps the value it was read as
+ * (docs/design-principles.cn.md 3.5, 6.11, 8.3).
+ */
+module var_alias_captured
+
+func make_array(): int[] {
+    return [
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    ]
+}
+
+func main(): int sync {
+    let big = make_array()
+    var v   = big
+    let f   = () => v[0]
+    v[0] = 9
+    println("big[0] =", big[0], " v[0] =", v[0], " f() =", f())
+    return 0
+}
