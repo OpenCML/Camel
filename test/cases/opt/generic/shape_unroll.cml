@@ -1,7 +1,8 @@
 /**
- * Shape specialization: `forward` is called with a tensor whose type carries its shape, so
- * std::opt specializes it to that type, folds `shape(x)` to a constant, and unrolls the
- * recursion over `shape(x)[1]` steps into straight-line code. The value must not change.
+ * Shape specialization: the extent a declaration leaves open (`x: f32[..]`) is not part of what a
+ * call instantiates, so `forward` keeps the type it writes and the recursion it calls is the one
+ * std::opt specializes to the shape the argument's type fixes: `shape(x)[1]` folds to a constant
+ * and the recursion is unrolled into straight-line instances. The value must not change.
  */
 module shape_unroll
 
