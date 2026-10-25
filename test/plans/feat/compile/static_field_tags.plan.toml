@@ -28,7 +28,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "static_field_tags_function_argument"
-desc = "A tag parameter of the kind `func` carries the function as its graph reference, an internal number with no value in the language: a `static` head that reads that field's tags is refused by name, and neither the number nor a string stands in for the function."
+desc = "A tag parameter that carries a function (a type parameter the condition selects with `is_function::<F>()`) carries the function as its graph reference, an internal number with no value in the language: a `static` head that reads that field's tags is refused by name, and neither the number nor a string stands in for the function."
 kind = "negative"
 case = "../../../cases/compile/static_expansion/tags_function_argument.cml"
 args = ["${case}"]
