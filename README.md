@@ -14,6 +14,7 @@
 [![Stars](https://img.shields.io/github/stars/OpenCML/Camel?style=social)](https://github.com/OpenCML/Camel/stargazers)
 
 [Why Camel](#why-camel) ·
+[Zen](#the-zen-of-camel) ·
 [A taste](#a-taste) ·
 [Quick start](#quick-start) ·
 [Tutorial](docs/tutorial/tutorial.en.md) ·
@@ -37,6 +38,19 @@ In Camel **the program is the graph**. What you write is the intent of the compu
 - **One program, many ways to run it**: interpreted, JIT-compiled, on a GPU, or exported to ONNX or C++, with the same meaning.
 
 These properties hold for every program where computation matters more than control flow. Training and deploying models is the most pressing of them, which is why AI is Camel's primary application, though not its only one. More in [Why Camel](docs/why.en.md).
+
+## The Zen of Camel
+
+1. **Let the graph speak.** All computation is a graph of intent.
+2. **Graphs are primitives, not artifacts.** Graphs are the native shape of intent, not a byproduct of code.
+3. **Every construct is a piece of the graph.** If a construct has no clear place on the graph, it does not belong in the language.
+4. **Async by nature, sync when explicit.** Order emerges from dependencies, not from syntax.
+5. **Execution is polymorphic and multi-staged.** Passes are functions, functions are graphs: compiling, optimizing and running are all stages of rewriting.
+6. **Keep code pure, let runtimes specialize.** Context is injected at runtime, not embedded in code.
+7. **One language, all the way down.** Types, rules and passes are all written in Camel itself.
+8. **Let compilers bear the burden.** Scheduling, mapping, fusing, and lowering — these are not your job.
+
+`camel --zen` prints them.
 
 ## Highlights
 

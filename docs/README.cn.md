@@ -14,6 +14,7 @@
 [![Stars](https://img.shields.io/github/stars/OpenCML/Camel?style=social)](https://github.com/OpenCML/Camel/stargazers)
 
 [为什么是 Camel](#为什么是-camel) ·
+[Camel 之禅](#camel-之禅) ·
 [先睹为快](#先睹为快) ·
 [快速开始](#快速开始) ·
 [教程](tutorial/tutorial.cn.md) ·
@@ -37,6 +38,19 @@ Camel 让**程序本身就是图**。你写下的是计算的意图与依赖，�
 - **一份程序，多种执行**：解释、JIT、GPU，或导出为 ONNX、C++，意思不变。
 
 这些性质对所有"计算比控制流更重要"的程序都成立。训练与部署模型是其中最迫切的一类，所以 AI 是 Camel 首要的应用场景，但不是唯一的。详见[为什么是 Camel](why.cn.md)。
+
+## Camel 之禅
+
+1. **Let the graph speak.** 一切计算都是一张表达意图的图。
+2. **Graphs are primitives, not artifacts.** 图是意图的原生形态，不是代码的副产品。
+3. **Every construct is a piece of the graph.** 每个语言构造都对应图上的一块；说不清它在图上是什么的构造，不该进语言。
+4. **Async by nature, sync when explicit.** 默认异步，同步要明写；先后来自依赖，不来自书写顺序。
+5. **Execution is polymorphic and multi-staged.** 遍是函数，函数是图；编译、优化、执行都是对图的分阶段重写。
+6. **Keep code pure, let runtimes specialize.** 上下文在运行时注入，不写死在代码里。
+7. **One language, all the way down.** 只有一门语言：类型、规则、遍都用 Camel 自己写。
+8. **Let compilers bear the burden.** 调度、映射、融合、降级是编译器的事，不是你的事。
+
+`camel --zen` 会打印它们。
 
 ## 亮点
 

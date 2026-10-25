@@ -7,20 +7,20 @@ The Zen of Camel
 2. Graphs are primitives, not artifacts.
     - Graphs are the native shape of intent, not a byproduct of code.
 
-3. Imperative for operators, declarative for structure.
-    - Code the 'what' declaratively, the 'how' imperatively.
+3. Every construct is a piece of the graph.
+    - If a construct has no clear place on the graph, it does not belong in the language.
 
 4. Async by nature, sync when explicit.
     - Order emerges from dependencies, not from syntax.
 
-5. Explicit dependencies, implicit parallelism.
-    - Parallelism is discovered, not programmed.
+5. Execution is polymorphic and multi-staged.
+    - Passes are functions, functions are graphs: compiling, optimizing and running are all stages of rewriting.
 
 6. Keep code pure, let runtimes specialize.
     - Context is injected at runtime, not embedded in code.
 
-7. Execution is polymorphic and multi-staged.
-    - Graphs can be interpreted, compiled, staged, rewritten.
+7. One language, all the way down.
+    - Types, rules and passes are all written in Camel itself.
 
 8. Let compilers bear the burden.
     - Scheduling, mapping, fusing, and lowering -- these are not your job.
