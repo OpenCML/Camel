@@ -72,8 +72,7 @@ function usage(message) {
 }
 
 // The compiler every snippet is run with: `--camel <path>` names it, else `$CAMEL_HOME/bin/camel`,
-// else this tree's `out/latest/bin/camel`. `CAMEL_EXE` is gone (the author's ruling, 2026-10-25).
-// One rule, in one place: test/tools/camel-arg.mjs.
+// else this tree's `out/latest/bin/camel`. One rule, in one place: test/tools/camel-arg.mjs.
 const { camel: CAMEL, rest: ARGV } = takeCamel(process.argv.slice(2), ROOT, usage)
 
 // Directories that are records, not pages: they quote the old spelling to say what happened.

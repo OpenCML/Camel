@@ -35,9 +35,8 @@ python test/tools/progen/progen.py fixed                         # the findings 
 ```
 
 - `--camel PATH`, before the subcommand (`progen.py --camel out/debug/bin/camel check`), is the
-  install every run measures. There is no environment switch for it: the author's ruling of
-  2026-10-25 replaced `CAMEL_EXE` with this argument, and `CAMEL_HOME` is the install location's
-  convention, not a per-run override.
+  install every run measures; without it the install is `$CAMEL_HOME`, else this tree's
+  `out/latest`. `CAMEL_HOME` is the install location's convention, not a per-run override.
 - `--features a,b,c` generates with only those constructs; `--features -macro,-env` removes
   some from the full set. The feature set is part of the random stream: the same seed with
   another feature set is another program.

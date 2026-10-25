@@ -30,10 +30,9 @@ PROGRAM = REPO_ROOT / "test" / "cases" / "trans" / "macro" / "basic.cml"
 GRAPH_DIFF = REPO_ROOT / "tools" / "graph-diff" / "graph_diff.py"
 
 
-# The install this case measures: `--camel <path>` names it (the author's ruling of 2026-10-25
-# replaced the `CAMEL_EXE` environment switch with that argument); without it,
-# `$CAMEL_HOME/bin/camel`, else this tree's `out/latest/bin/camel`. One rule, in one place:
-# test/tools/camel_arg.py. `ARGV` is this process's arguments without the `--camel` pair.
+# The install this case measures: `--camel <path>` names it; without it `$CAMEL_HOME/bin/camel`,
+# else this tree's `out/latest/bin/camel`. One rule, in one place: test/tools/camel_arg.py.
+# `ARGV` is this process's arguments without the `--camel` pair.
 CAMEL, ARGV = camel_from_argv(REPO_ROOT)
 
 

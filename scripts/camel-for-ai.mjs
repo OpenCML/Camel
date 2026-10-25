@@ -604,8 +604,7 @@ function counterExamples(document) {
 
 // The binary `--verify-errors` compiles each counter-example with. `--camel <path>` names it (the
 // entry parses the argument); with none it is `$CAMEL_HOME/bin/camel`, else this tree's
-// `out/latest/bin/camel`. `CAMEL_EXE` is gone (the author's ruling, 2026-10-25): an environment
-// switch does not name the compiler of a run. One rule, in one place: test/tools/camel-arg.mjs.
+// `out/latest/bin/camel`. One rule, in one place: test/tools/camel-arg.mjs.
 let CAMEL = defaultCamel(REPO_ROOT)
 
 function runCamel(args, cwd) {

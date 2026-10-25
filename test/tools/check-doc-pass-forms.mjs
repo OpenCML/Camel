@@ -189,9 +189,8 @@ function usage(message) {
 }
 
 // The compiler every specification is run through: `--camel <path>` names it, else
-// `$CAMEL_HOME/bin/camel`, else this tree's `out/latest/bin/camel`. `CAMEL_EXE` is gone (the
-// author's ruling, 2026-10-25): an environment switch does not name the compiler of a run. One
-// rule, in one place: test/tools/camel-arg.mjs.
+// `$CAMEL_HOME/bin/camel`, else this tree's `out/latest/bin/camel`. One rule, in one place:
+// test/tools/camel-arg.mjs.
 const { camel: CAMEL, rest: ARGV } = takeCamel(process.argv.slice(2), REPO_ROOT, usage)
 const LIST = ARGV.includes('--list')
 

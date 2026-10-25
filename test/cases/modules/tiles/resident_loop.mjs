@@ -17,9 +17,7 @@ import { takeCamel } from '../../../tools/camel-arg.mjs'
 const here = path.dirname(fileURLToPath(import.meta.url))
 const root = path.resolve(here, '../../../..')
 // The install this case measures: `--camel <path>` names it, `$CAMEL_HOME/bin/camel` without it,
-// else this tree's `out/latest/bin/camel`. The author's ruling of 2026-10-25 replaced the
-// `CAMEL_EXE` environment switch with that argument; one rule, in one place:
-// test/tools/camel-arg.mjs.
+// else this tree's `out/latest/bin/camel`. One rule, in one place: test/tools/camel-arg.mjs.
 function usage(message) {
     if (message) console.error(`resident_loop: ${message}`)
     console.error('usage: node test/cases/modules/tiles/resident_loop.mjs [--camel PATH]')

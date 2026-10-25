@@ -64,8 +64,7 @@ kind = "behavior"
 parallel = false
 tool = "node"
 case = "../../tools/para-speedup.mjs"
-# `${camel}` is the compiler of the build under test, named as an argument (the author's ruling of
-# 2026-10-25); `CAMEL_EXE` is gone and `CAMEL_HOME` stays the install location's convention.
+# `${camel}` is the compiler of the build under test, named as an argument (the author's ruling of 2026-10-25).
 args = ["${case}", "--camel", "${camel}"]
 expect_exit = 0
 expect_stdout_contains = ["para.speedup metric=pass_wall_and_child_cpu", "para.speedup serial backend=std::nvm", "para.speedup parallel backend=std::prl", "cpu_ms=", "concurrency=", "speedup=", "result=PASS"]

@@ -279,9 +279,8 @@ def main() -> int:
     ap.add_argument("--warnings", action="store_true", help="also show compiler warnings of correct cells")
     args = ap.parse_args(CAMEL_ARGV)
     rng = random.Random(args.seed)
-    # The install this run measures: `--camel <path>` names it (the author's ruling of 2026-10-25
-    # replaced the `CAMEL_EXE` environment switch with that argument); without it, `$CAMEL_HOME`,
-    # else this tree's `out/latest`. One rule, in one place: test/tools/camel_arg.py.
+    # The install this run measures: `--camel <path>` names it; without it `$CAMEL_HOME`, else this
+    # tree's `out/latest`. One rule, in one place: test/tools/camel_arg.py.
     home = str(Path(CAMEL).resolve().parents[1])
     exe = CAMEL
     bad = cells = 0

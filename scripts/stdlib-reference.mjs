@@ -19,8 +19,7 @@
 // over nothing is not a pass. A mode that needs a compiler is refused earlier (exit 2) when the
 // install it would measure is not this tree's build: the message names the install and its stamp,
 // and the run reads no operator from it (H149; `scripts/install-stamp.mjs` holds the rule that
-// `scripts/release-gate.mjs` applies too). `CAMEL_EXE` is gone (the author's ruling, 2026-10-25):
-// the environment does not name the compiler of a run, `--camel <path>` does.
+// `scripts/release-gate.mjs` applies too). `--camel <path>` names the compiler of a run.
 //
 // stdlib/signatures/<module>.cml declares the operators a C++ module exports (globals.cml: the
 // built-in ones), one body-less `export func` each, with a doc comment:
@@ -77,9 +76,8 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
 const SIGNATURE_DIR = path.join(REPO_ROOT, 'stdlib', 'signatures')
 
 // The install a run measures: `--camel <path>` (parsed in the main section below), else this tree's
-// `out/latest`. `CAMEL_EXE` is gone (the author's ruling, 2026-10-25): an environment switch is not
-// a parameter of the run, and the binary it named skipped the build stamp every install a run
-// measures has to pass.
+// `out/latest`. Every install a run measures passes the build stamp of `scripts/install-stamp.mjs`,
+// named there or not.
 let camelPath = null
 const STDLIB_DIR = path.join(REPO_ROOT, 'stdlib')
 const DOC_PATH = path.join(REPO_ROOT, 'docs', 'stdlib-reference.md')

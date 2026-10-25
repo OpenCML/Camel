@@ -1,13 +1,12 @@
 // Copyright (c) the OpenCML Organization
 // SPDX-License-Identifier: MIT
 
-// The `camel` binary a tool runs, named on the command line: one rule, in one place.
+// The `camel` binary a tool runs is named on the command line: one rule, in one place.
 //
-// The author's ruling of 2026-10-25 (docs/handover/reviews/questions-2026-10-24-evening.md,
-// "stdlib-declaration-check-measures-a-foreign-install"): an override that names the binary is a
-// command-line argument, `--camel <path>`, and not an environment variable -- `CAMEL_EXE` is gone.
-// `CAMEL_HOME` is the install location's convention and stays: with no `--camel` the binary is
-// `$CAMEL_HOME/bin/camel`, else this tree's `out/latest/bin/camel`.
+// `--camel <path>` (or `--camel=<path>`) names the install a run measures; with none it is
+// `$CAMEL_HOME/bin/camel`, else this tree's `out/latest/bin/camel`. `CAMEL_HOME` is the install
+// location's convention (the author's ruling of 2026-10-25): an explicitly named install is a
+// command-line argument, never an environment switch.
 //
 // A `--camel` with no value is a usage error: the caller's own `usage` prints (each tool owns its
 // text) and the run exits 2. It never falls back to the default -- the run that was asked to

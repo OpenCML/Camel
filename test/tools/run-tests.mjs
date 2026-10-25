@@ -645,8 +645,7 @@ function loadVars(options) {
     // Built-in variables; test/vars.toml may override them. `${camel}` is the compiler of the build
     // under test, the same path the runner prints as `[INFO] camel executable` and records as
     // `camel_exe` in summary.json: a plan that runs a program which starts a compiler names the
-    // install with `--camel ${camel}` (the author's ruling of 2026-10-25: an explicitly named
-    // install is a command-line argument, never an environment switch, and `CAMEL_EXE` is gone).
+    // install with `--camel ${camel}`, a command-line argument and never an environment switch.
     const builtins = {
         python: pythonExecutable(),
         camel: toolExecutable('camel', options.build),

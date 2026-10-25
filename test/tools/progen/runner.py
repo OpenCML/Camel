@@ -110,10 +110,9 @@ def matrix(name: str = "full", backends: Optional[List[str]] = None) -> Dict[str
     return cells
 
 
-# The install this run measures. `progen.py --camel <path>` sets it (the ruling of 2026-10-25: the
-# binary is named by a command-line argument, never by an environment switch, and `CAMEL_EXE` is
-# gone); with none it is `$CAMEL_HOME/bin/camel`, else this tree's `out/latest/bin/camel`. One rule,
-# in one place: test/tools/camel_arg.py.
+# The install this run measures. `progen.py --camel <path>` sets it; with none it is
+# `$CAMEL_HOME/bin/camel`, else this tree's `out/latest/bin/camel`. One rule, in one place:
+# test/tools/camel_arg.py.
 CAMEL: Optional[str] = None
 
 

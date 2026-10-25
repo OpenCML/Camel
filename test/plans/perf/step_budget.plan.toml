@@ -40,8 +40,7 @@ desc = "One profiled round of the d=256 step issues the pinned number of operato
 kind = "behavior"
 tool = "python"
 case = "../../cases/perf/step_budget.py"
-# `${camel}` is the compiler of the build under test, named as an argument (the author's ruling
-# of 2026-10-25): `CAMEL_EXE` is gone and `CAMEL_HOME` stays the install location's convention.
+# `${camel}` is the compiler of the build under test, named as an argument (the author's ruling of 2026-10-25).
 args = ["${case}", "count", "--camel", "${camel}"]
 expect_exit = 0
 expect_stdout_contains = ["step operator counts: PASS"]

@@ -40,10 +40,8 @@ ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "test" / "tools"))
 from camel_arg import camel_from_argv  # noqa: E402
 
-# The install this case measures: `--camel <path>` names it (the author's ruling of 2026-10-25
-# replaced the `CAMEL_EXE` environment switch with that argument); without it,
-# `$CAMEL_HOME/bin/camel`, else this tree's `out/latest/bin/camel`. One rule, in one place:
-# test/tools/camel_arg.py.
+# The install this case measures: `--camel <path>` names it; without it `$CAMEL_HOME/bin/camel`,
+# else this tree's `out/latest/bin/camel`. One rule, in one place: test/tools/camel_arg.py.
 EXE, ARGV = camel_from_argv(ROOT)
 CHECKER = ROOT / "test/tools/cml_roundtrip.py"
 PYTHON = sys.executable

@@ -1053,8 +1053,8 @@ wall clock is the host's, not the test's: `modules.autodiff/benchmark_gradients_
 - the built-in `${camel}` variable: the compiler of the build under test
   (`out/<tag>/bin/camel[.exe]`, the path the runner prints and records in `summary.json`). A test
   whose program starts a compiler names the install with `--camel ${camel}`: an explicitly named
-  install travels as a command-line argument, never as an environment switch, so `CAMEL_EXE` is
-  gone (the author's ruling of 2026-10-25, `docs/handover/reviews/questions-2026-10-24-evening.md`,
+  install travels as a command-line argument, never as an environment switch (the author's ruling of
+  2026-10-25, `docs/handover/reviews/questions-2026-10-24-evening.md`,
   "stdlib-declaration-check-measures-a-foreign-install"); `CAMEL_HOME` is the install location's
   convention and stays
 

@@ -131,8 +131,7 @@ The two standard-library checkers among those static checks (`stdlib-reference.m
 `stdlib-declarations.mjs --check`) apply the same rule themselves, before they read a registry: an
 install that is not this tree's build is refused (exit 2, naming the install and its stamp) instead
 of being reported as differences between this tree's declarations and another install's operators.
-`--camel <path>` names the install such a run measures, passing the same check; the environment
-switch `CAMEL_EXE` is gone.
+`--camel <path>` names the install such a run measures, passing the same check.
 
 It also never runs the eighteen plan files `agents/test.md` forbids on a shared host (GC stress
 and poison, progen, the PyTorch comparisons, the benchmarks): it prints them by name with the

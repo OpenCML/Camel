@@ -61,9 +61,7 @@ from camel_arg import camel_argument  # noqa: E402
 
 
 # The install this run measures: `--camel <path>` names it, else `$CAMEL_HOME/bin/camel`, else this
-# tree's `out/latest/bin/camel`. `CAMEL_EXE` is gone (the author's ruling, 2026-10-25): an
-# environment switch does not name the compiler of a run. One rule, in one place:
-# test/tools/camel_arg.py.
+# tree's `out/latest/bin/camel`. One rule, in one place: test/tools/camel_arg.py.
 CAMEL, REST = camel_argument(sys.argv, ROOT)
 
 
