@@ -1,0 +1,1 @@
+h587 并入翻转线：把 specialize_growing_shape.fold_specialize.bounded 的钉值按新读数重推（graphs 5→4）。定位到使 5→4 的是 640bd3d95（给 opt 族用例写上 acc: f64[..]），而非类型同一性那笔；少掉的 grow 正是'元素类型从不定变成已知'造出的实例，且旧钉值 5 随数组长度动（12 层 5 图/24 层 4 图），与它自己 desc 声称的不随长度动相反。新增 bounded.rgir（图名恰 grow,grow,main）与层数 24 的兄弟用例把'不随长度动'变成断言。
