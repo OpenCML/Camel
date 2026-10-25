@@ -47,7 +47,7 @@ last column below, which is read out of this table and measured against the chap
 | 10. Passes, the command line, the graph | how to run a program and look at its graph | 3,000 |
 | 11. Idioms | how Camel code is written when it is written by someone who knows | 3,600 |
 | 12. Common errors | the error, the diagnostic, the fix | 11,800 |
-| Appendix A. Diagnostics | name, severity, message — generated | 28,000 |
+| Appendix A. Diagnostics | name, severity, message — generated | 28,500 |
 | Appendix B. Standard library signatures | every exported name — generated | 28,000 |
 | Appendix C. Sources | which normative page each rule comes from | 1,800 |
 | — | generated, all four regions | 61,000 |

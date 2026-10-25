@@ -1,8 +1,8 @@
 /**
- * A `fact` whose clauses read a value of the module they are declared in: the clause
- * functions are values of that module, and the value is one they captured where they were
- * written. Every value's fact is that value times a thousand, so a reader of the fact reads the
- * capture and nothing else can be mistaken for it.
+ * A `fact` whose cases read a value of the module they are declared in: the case functions are
+ * values of that module, and the value is one they captured where they were written. Every
+ * value's fact is that value times a thousand, so a reader of the fact reads the capture and
+ * nothing else can be mistaken for it.
  */
 module fact_capture
 
@@ -15,11 +15,10 @@ func base_of(): int {
 
 let base = base_of()
 
-fact depth: int {
-    initial => base * 1000
-    join(a, b) => max(a, b)
-    on (const c: int) => base * 1000 + 1
-}
+fact depth: int match v {
+    case const c: int => base * 1000 + 1
+    case _            => base * 1000
+} join (a: int, b: int) => max(a, b)
 
 func nodes_of(p: Program, function: string): Node[] {
     let found = graphs(p)->filter<(g: Graph): bool => name(g) == function>
