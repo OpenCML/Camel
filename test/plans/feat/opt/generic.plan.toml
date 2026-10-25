@@ -262,7 +262,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "shape_unroll.simplify.rgir"
-desc = "std::opt specializes forward to its argument's static shape, folds shape(x) and unrolls the recursion: the specialized forward and everything it calls are branch-free."
+desc = "std::opt specializes the recursion to the shape the argument's type fixes, folds `shape(x)` and unrolls it into straight-line instances: `forward` keeps the open extent its declaration writes, the one instance it calls is an instance of the recursion, and that chain ends in a self-call (the fixed point) rather than in a copy per level."
 kind = "behavior"
 case = "../../../cases/opt/generic/shape_unroll.cml"
 args = ["${case}", "std::opt", "${run_rgir}"]
@@ -290,17 +290,25 @@ for (const line of input.normalized.stdout.split('\n')) {
     graphs[stack[stack.length - 1]].push([node[2], full])
   }
 }
+// The open extent a declaration writes is not a type argument: `forward(x: f32[..])` is the
+// instance its call takes, whatever shape the argument has, so the specialization is the
+// recursion it calls -- one instance per static key, and the call reuses the instance of its own
+// caller (the fixed point) instead of taking a copy per level.
+const forward = graphs['forward']
+assert(forward, `forward not in the dump: ${Object.keys(graphs)}`)
+assert(!forward.some(([k]) => k === 'BRCH'), `forward branches: ${JSON.stringify(forward)}`)
+// The extent a declaration leaves open is not a type argument either: the call does not create an
+// instance per shape the argument happens to have.
 const specialized = Object.keys(graphs).filter((name) => name.startsWith('forward$'))
-assert(specialized.length === 1, `expected one specialized forward, got ${specialized}`)
-const forward = graphs[specialized[0]]
-assert(!forward.some(([k]) => k === 'BRCH'), `specialized forward branches: ${JSON.stringify(forward)}`)
-// Reading E bounds the recursion in the types: a call inside an instance of the function it names
-// reuses that instance (the ruling of 2026-10-24 evening, item 3), so the chain the specialized
-// `forward` calls is not unrolled into straight-line leaves any more. The instance keeps the gate
-// and the chain reaches an instance that calls itself, which is the fixed point; what is asserted
-// here is that the chain is a leaf that computes straight-line, or one that ends in such a
-// self-call. The 8-copy count that used to make the chain finite is gone; nothing takes a copy per
-// level, and a chain that neither computes nor closes on itself would be an unbounded unrolling.
+assert(specialized.length === 0, `forward was specialized though its extent is open: ${specialized}`)
+const instances = forward.filter(([k]) => k === 'FUNC').map(([, c]) => c)
+assert(instances.length === 1, `expected one instance under forward, got ${JSON.stringify(instances)}`)
+assert(instances[0].startsWith('run$'), `forward calls ${instances[0]}, not an instance of the recursion`)
+// The recursion is unrolled into straight-line instances: one of them computes without branching
+// and without calling anything.
+const unrolled = Object.keys(graphs).filter(
+  (name) => name.startsWith('run$') && !graphs[name].some(([k]) => ['BRCH', 'FUNC', 'CALL'].includes(k)))
+assert(unrolled.length > 0, `no unrolled instance of the recursion in the dump: ${Object.keys(graphs)}`)
 const calleesOf = (name) => (graphs[name] || []).filter(([k]) => k === 'FUNC').map(([, c]) => c)
 const reachesSelfCall = (start) => {
   const seen = new Set()
