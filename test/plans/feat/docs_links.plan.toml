@@ -158,6 +158,42 @@ normalizers = ["normalize_newlines"]
 timeout_ms = 60000
 
 [[tests]]
+name = "docs.snippets_dump_excerpt_matches_up_to_renumbering"
+desc = "An excerpt does not compare node numbers (the author, 2026-10-25): the block below names the dump's nodes and its cluster differently, and one one-to-one renaming makes it a run of the dump, so the page holds."
+kind = "behavior"
+tool = "node"
+case = "../../../scripts/check-doc-snippets.mjs"
+args = ["${case}", "test/plans/feat/docs_links/fixture/snippets/dump_renumbered.md", "--camel", "${camel}"]
+expect_exit = 0
+expect_stdout_contains = ["no stale snippet in"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 60000
+
+[[tests]]
+name = "docs.snippets_dump_excerpt_different_operator_fails"
+desc = "The renaming is about numbers only: an excerpt that calls a node by the wrong operator occurs nowhere in the dump, however its numbers are renamed, and fails."
+kind = "behavior"
+tool = "node"
+case = "../../../scripts/check-doc-snippets.mjs"
+args = ["${case}", "test/plans/feat/docs_links/fixture/snippets/dump_content_differs.md", "--camel", "${camel}"]
+expect_exit = 1
+expect_stdout_contains = ["the graph differs from the text block", "occurs nowhere"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 60000
+
+[[tests]]
+name = "docs.snippets_dump_excerpt_number_may_not_be_reused"
+desc = "One page number may not become two dump numbers: an excerpt that writes one number on two different nodes has no one-to-one renaming and fails, so the rule is not a licence to drop a node."
+kind = "behavior"
+tool = "node"
+case = "../../../scripts/check-doc-snippets.mjs"
+args = ["${case}", "test/plans/feat/docs_links/fixture/snippets/dump_number_reused.md", "--camel", "${camel}"]
+expect_exit = 1
+expect_stdout_contains = ["the graph differs from the text block", "not one run of them"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 60000
+
+[[tests]]
 name = "docs.diagnostics_catalog"
 desc = "No two diagnostics share a code: the catalogue is the one place a code is written down, and a second name on a value means one of the two is never emitted."
 kind = "behavior"

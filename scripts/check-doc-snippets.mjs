@@ -44,7 +44,9 @@
 // and where it was built (`origin`, `span`, `srcfile`; see normalizeDump) lose their values, so
 // the checker's temporary file and the page's own example file compare equal, and the *presence*
 // of each attribute is still compared. A block that does not open the dump (`digraph ...`) is one
-// excerpt of it and has to appear in the dump as a contiguous run of lines; a whole dump is
+// excerpt of it and has to appear in the dump as a contiguous run of lines, up to renaming the node
+// and cluster numbers of one side one-to-one onto the other's (see DUMP_NUMBER; the prose names a
+// node by what it is, so a page whose graph is numbered differently still holds); a whole dump is
 // compared line by line. A `compile-only` fence is the marker for a text block that is not this
 // run's output at all, and is still compiled without comparing anything.
 //
@@ -147,21 +149,21 @@ const PENDING = [
         file: 'docs/tutorial/17_teaching_a_law.cn.md',
         key: 'fb4bb02afc482ac0',
         reason:
-            'chapter 17: the `fact` compiles now; what `check` prints for a law whose premise is a ' +
-            'fact\'s conclusion (rewrite design 8.1) is not implemented, and `std::opt` does not use a ' +
-            'module\'s own law yet, so this text\'s three graph dumps still draw the law\'s left side ' +
-            '(`-1` and `:op/mul_l`) where the page shows the law\'s `0 - x`, at ids the tree does not ' +
-            'number the same way',
+            'chapter 17: the step this page teaches -- hand the rule set to `std::opt` ' +
+            '(`rules: Rule[]`, ruled in std-opt-and-module-rules) -- is not implemented, and what ' +
+            '`check` prints for a law whose premise is a fact\'s conclusion (rewrite design 8.1) is ' +
+            'not implemented either, so the tree reads "no premise yet" where the page reads ' +
+            '"fired 8 of 8"',
     },
     {
         file: 'docs/tutorial/17_teaching_a_law.en.md',
         key: 'fb4bb02afc482ac0',
         reason:
-            'chapter 17: the `fact` compiles now; what `check` prints for a law whose premise is a ' +
-            'fact\'s conclusion (rewrite design 8.1) is not implemented, and `std::opt` does not use a ' +
-            'module\'s own law yet, so this text\'s three graph dumps still draw the law\'s left side ' +
-            '(`-1` and `:op/mul_l`) where the page shows the law\'s `0 - x`, at ids the tree does not ' +
-            'number the same way',
+            'chapter 17: the step this page teaches -- hand the rule set to `std::opt` ' +
+            '(`rules: Rule[]`, ruled in std-opt-and-module-rules) -- is not implemented, and what ' +
+            '`check` prints for a law whose premise is a fact\'s conclusion (rewrite design 8.1) is ' +
+            'not implemented either, so the tree reads "no premise yet" where the page reads ' +
+            '"fired 8 of 8"',
     },
     {
         file: 'docs/tutorial/17_teaching_a_law.cn.md',
@@ -635,6 +637,58 @@ function opensTheDump(pageLines) {
     return /^\s*digraph\b/.test(first)
 }
 
+// A node, a function cluster or an equivalence class is named by a letter and a number: `N03`,
+// `O04`, `F0D`, `C01`, and the `c1` that a saturation dump writes as a class label. The number is
+// an accident of the run -- the counter has drawn every node above it by the time this one is
+// numbered -- so the author's ruling of 2026-10-25 is that an excerpt does not compare numbers:
+// it matches when *some* one-to-one renaming of one side's numbers onto the other's makes it a run
+// of the dump. Everything between the numbers is still compared verbatim, so a different operator
+// or constant is still a difference, and two numbers of one side may not become one number of the
+// other (an excerpt that lost a node, or reads two nodes as one, would otherwise pass).
+const DUMP_NUMBER = /(?<![0-9A-Za-z])[NOFCc][0-9A-Fa-f]*[0-9][0-9A-Fa-f]*(?![0-9A-Za-z])/g
+
+// A dump line as the pieces between its numbers, so that two lines can be compared piece by piece.
+function splitDumpLine(line) {
+    const parts = []
+    let last = 0
+    for (const match of line.matchAll(DUMP_NUMBER)) {
+        parts.push(line.slice(last, match.index), match[0])
+        last = match.index + match[0].length
+    }
+    parts.push(line.slice(last))
+    return parts
+}
+
+function withoutDumpNumbers(line) {
+    return line.replace(DUMP_NUMBER, '<n>')
+}
+
+// Compare one excerpt line with one dump line under a renaming of the page's numbers onto the
+// dump's. `renaming` (page number -> dump number) and `taken` (dump number -> page number) are
+// carried across the lines of one candidate run, so the renaming is one-to-one and holds
+// throughout the excerpt. The odd positions of a split line are its numbers: the even ones are the
+// text, and they have to be equal.
+function matchDumpLineUnderRenaming(pageLine, actualLine, renaming, taken) {
+    const page = splitDumpLine(pageLine)
+    const actual = splitDumpLine(actualLine)
+    if (page.length !== actual.length) return false
+    for (let i = 0; i < page.length; i++) {
+        if (i % 2 === 0) {
+            if (page[i] !== actual[i]) return false
+            continue
+        }
+        const known = renaming.get(page[i])
+        if (known !== undefined) {
+            if (known !== actual[i]) return false
+            continue
+        }
+        if (taken.has(actual[i])) return false
+        renaming.set(page[i], actual[i])
+        taken.set(actual[i], page[i])
+    }
+    return true
+}
+
 function compareDump(actualText, pageText) {
     const actual = normalizeDump(actualText).split('\n')
     const page = normalizeDump(pageText).split('\n')
@@ -646,11 +700,23 @@ function compareDump(actualText, pageText) {
         }
         return null
     }
-    // An excerpt: the whole run of its lines must occur in the dump, in order and adjacent.
+    // An excerpt: some run of consecutive dump lines must match it, up to renaming the numbers of
+    // one side one-to-one onto the other's.
     for (let start = 0; start + page.length <= actual.length; start++) {
-        if (page.every((line, offset) => actual[start + offset] === line)) return null
+        const renaming = new Map()
+        const taken = new Map()
+        let matched = true
+        for (let offset = 0; offset < page.length; offset++) {
+            if (!matchDumpLineUnderRenaming(page[offset], actual[start + offset], renaming, taken)) {
+                matched = false
+                break
+            }
+        }
+        if (matched) return null
     }
-    const missing = page.findIndex((line) => !actual.includes(line))
+    const missing = page.findIndex(
+        (line) => !actual.some((other) => withoutDumpNumbers(other) === withoutDumpNumbers(line)),
+    )
     if (missing >= 0) {
         return (
             `the excerpt is not in the dump: its line ${missing + 1} ${JSON.stringify(page[missing])} ` +
@@ -658,9 +724,9 @@ function compareDump(actualText, pageText) {
         )
     }
     return (
-        `the excerpt's lines are all in the dump but are not one run of them: its first line ` +
-        `${JSON.stringify(page[0])} is at dump line ${actual.indexOf(page[0]) + 1}, and line 2 ` +
-        `${JSON.stringify(page[1])} is at dump line ${actual.indexOf(page[1]) + 1}`
+        `the excerpt's lines are all in the dump but are not one run of them, even after renaming ` +
+        `the numbers of one side one-to-one onto the other's (its first line is ` +
+        `${JSON.stringify(page[0])})`
     )
 }
 
@@ -985,6 +1051,18 @@ const exempted = []
 // one key each, not a wider rule.
 const pendingBehind = new Set()
 const pendingCaughtUp = []
+
+// What a snippet that was checked and did not fail did. A snippet whose key is in the pending list
+// is counted here too when it now passes: its occurrence has caught up (the entry stays only while
+// another occurrence of the same text is still behind), and leaving it out of every count would make
+// the summary's numbers hide it -- a dump that matches but shares its text with a pending snippet
+// would show up neither as compared nor as exempted.
+function countChecked(result) {
+    if (result.status === 'ran') ran++
+    else if (result.status === 'dumped') dumped++
+    else if (result.status === 'compiled') compiled++
+}
+
 for (const entry of results) {
     if (!entry) continue
     const result = entry.result
@@ -1002,17 +1080,14 @@ for (const entry of results) {
             exempted.push({ entry, pending, line, problems: result.problems })
         } else {
             pendingCaughtUp.push({ entry, pending, line })
+            countChecked(result)
         }
         continue
     }
     if (result.status === 'failed') {
         for (const problem of result.problems) problems.push(`${entry.rel}:${line}: ${problem}`)
-    } else if (result.status === 'ran') {
-        ran++
-    } else if (result.status === 'dumped') {
-        dumped++
-    } else if (result.status === 'compiled') {
-        compiled++
+    } else {
+        countChecked(result)
     }
 }
 
