@@ -337,7 +337,11 @@ struct Arg {
         case Kind::Tensor:
             return ops::tensorOf(data.dtype, data.shape);
         case Kind::Number:
-            return Type::Float64();
+            // A Camel float literal takes the element type of what it meets (design principles
+            // 5.1), and a tensor operator never sees one of another type: the tool hands the
+            // kernel and the declaration the same argument type, f32, so neither side reads the
+            // literal at a width the other does not have.
+            return Type::Float32();
         case Kind::Int:
             return Type::Int64();
         case Kind::Bool:
@@ -355,7 +359,9 @@ struct Arg {
             // argument is the element, and the kernel boxes it back (support.cpp's tensorArg).
             return ops::wrap(type(), tensorOf(data));
         case Kind::Number:
-            return camel::core::rtdata::toSlot(number);
+            // One float width in the whole tool: the slot is an f32 value because `type()` says
+            // the argument is f32, and the kernel reads the slot by the type it is given.
+            return camel::core::rtdata::toSlot(static_cast<float>(number));
         case Kind::Int:
             return camel::core::rtdata::toSlot(integer);
         case Kind::Bool:
@@ -1121,12 +1127,15 @@ void runOperator(
             continue;
         }
         // The result's shape: the kernel's, or when it faults the type rule's (the declaration
-        // must then fault too).
+        // must then fault too). A result of rank zero states its shape like any other: its type
+        // is the element type, so asking a type predicate for the array spelling is what left
+        // the declaration unasked. The facts answer for a rank-0 result as for a rank-2 one, and
+        // a scalar argument that is not such a result (sum and mean to a number) has the same
+        // empty shape it would fall back to.
         StaticShape outShape;
         if (kernelResult) {
             outShape = kernelResult->shape;
-        } else if (const TensorFacts facts = tensorFactsOf(resultType);
-                   isTensorType(resultType) && facts.isStaticShape()) {
+        } else if (const TensorFacts facts = tensorFactsOf(resultType); facts.isStaticShape()) {
             outShape = *facts.shape;
         } else if (!resultType || resultType->code() != TypeCode::Float64) {
             mismatch(c, "the kernel faults, the declaration gives an instance");
@@ -1222,6 +1231,11 @@ void queries(std::ostream &os) {
           {std::nullopt, Arg::integerArg(0), Arg::integerArg(0), Arg::integerArg(5), Arg::integerArg(0)});
     query(os, "reshape_unknown_input", "tensor:reshape", {T(StaticShape{-1, 4}), ints},
           {std::nullopt, Arg::intsArg({4, -1})});
+    // The target is written out, so the result's shape is fixed while the input's first extent is
+    // open: the instance is the target's, and the element count the operator compares is stated as
+    // a read that is valid only where the input holds it, a fault elsewhere.
+    query(os, "show_reshape_open_first_extent", "tensor:reshape", {T(StaticShape{-1}), ints},
+          {std::nullopt, Arg::intsArg({1})});
     query(os, "show_reshape", "tensor:reshape", {T(StaticShape{2, 6}), ints}, {std::nullopt, Arg::intsArg({3, -1})});
     query(os, "show_reshape_unit_axes", "tensor:reshape", {T(StaticShape{2, 1, 6}), ints},
           {std::nullopt, Arg::intsArg({1, 2, 6})});

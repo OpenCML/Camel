@@ -455,23 +455,62 @@ std::vector<ExprId> dimsOverTarget(
 }
 
 /**
- * reshape(x, shape): the elements in row-major order in a new shape. Both shapes known (the
- * target constant, one -1 resolved):
+ * reshape(x, shape): the elements in row-major order in a new shape. The target is constant, one
+ * -1 resolved:
  *
  *   domain   d_j < t_j over the result
  *   norm 0   the input coordinates of linear index l = sum stride_j * d_j:
  *            (l floordiv istride_0, (l floordiv istride_1) mod a_1, ...)
  *            or, when the shapes agree once their extent-1 axes are dropped, the matching dims
+ *
+ * The element count is what the operator compares: the input's against the target's. The target
+ * written out fixes the result's shape, so a rank the input states is enough for the maps, and
+ * the count is left to the run. A rank of zero is a rank: the input is then an array of no
+ * dimension, one element, and the kernel takes it as one -- so the type's array spelling is not
+ * asked for here. An open first extent is a single parameter the count pins; the read is valid
+ * exactly where the input holds the elements the target names, and elsewhere the operator faults
+ * (a reshape that changes the element count) before it reads anything.
  */
 std::optional<IndexedInstance> reshapeIndexing(const InferContext &ctx) {
     const auto in     = shapeOf(ctx, 0);
     const auto target = ctx.constInts(1);
-    if (!in || !fullyKnown(*in) || !target || !isTensorType(ctx.type(0))) {
+    if (!in || !target) {
         return std::nullopt;
+    }
+    // The input read as the shape the counts give: the extents as stated, with the first one the
+    // target's element count when the caller left it open.
+    StaticShape read = *in;
+    std::optional<int64_t> open;
+    if (!fullyKnown(*in)) {
+        if (in->empty() || (*in)[0] != kUnknownDim) {
+            return std::nullopt;
+        }
+        for (size_t a = 1; a < in->size(); ++a) {
+            if ((*in)[a] == kUnknownDim) {
+                return std::nullopt; // two open extents leave the element count unstated
+            }
+        }
+        if (std::ranges::any_of(*target, [](int64_t e) { return e < 0; })) {
+            return std::nullopt; // the -1 waits for the count the input does not state
+        }
+        int64_t rest = 1, count = 1;
+        for (size_t a = 1; a < in->size(); ++a) {
+            rest *= (*in)[a];
+        }
+        for (int64_t e : *target) {
+            count *= e;
+        }
+        if (rest <= 0 || count % rest != 0) {
+            // No extent makes the counts meet, or a known extent of 0 makes every value of the
+            // open one fit and the map would have to name an extent nothing states.
+            return std::nullopt;
+        }
+        open    = count / rest;
+        read[0] = *open;
     }
     StaticShape out;
     try {
-        out = kernels::resolveReshape(*in, *target);
+        out = kernels::resolveReshape(read, *target);
     } catch (const std::exception &) {
         return std::nullopt;
     }
@@ -480,7 +519,12 @@ std::optional<IndexedInstance> reshapeIndexing(const InferContext &ctx) {
         b.extent(0, a, (*in)[a]); // the input extents, for the text form and the cache
     }
     const auto dims = dimsOverTarget(b, out, target, 1);
-    b.instance.norm = {IndexBuilder::affine(reshapeCoords(b, *in, out, dims)), IndexBuilder::none()};
+    Access elemRead = IndexBuilder::affine(reshapeCoords(b, read, out, dims));
+    if (open) {
+        elemRead.valid     = {Constraint{b.extent(0, 0, (*in)[0]), Rel::Eq, b.x().constant(*open)}};
+        elemRead.onInvalid = OnInvalid::Fault;
+    }
+    b.instance.norm = {std::move(elemRead), IndexBuilder::none()};
     return b.finish(dims);
 }
 
