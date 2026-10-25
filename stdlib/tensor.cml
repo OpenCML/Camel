@@ -20,7 +20,7 @@
 
 module tensor
 
-import { is_numeric } from types
+import { is_numeric, is_plain } from types
 
 // Every signature here writes the element type of its operand as an explicit type variable of
 // the head -- `func f::<T>(x: T[..]) when is_numeric::<T>()` -- and the call site's argument type
@@ -30,6 +30,12 @@ import { is_numeric } from types
 // a numeric array whose element type the operation fixes (`ones` and `zeros` an f32 one, an
 // elementwise operator the promoted element type of its operands), and a `T[..]` parameter binds
 // `T` from it.
+//
+// The condition on the head is what the operation asks of the element type, not a habit: the
+// arithmetic and the layout of a tensor ask `is_numeric::<T>()`, and an operation that moves the
+// elements' own bytes without computing on them asks `is_plain::<T>()`, the element types a tensor
+// holds as a run of bytes. `to_bytes` is such an operation, so a `bool` tensor has its bytes like
+// any other pure-data tensor, and `from_bytes::<bool>` reads them back.
 //
 // A signature that returns a tensor of undeclared element type is gone as well: `load_npy`
 // declares the element type it expects, the call writes it (`load_npy::<f32>(p)`) or the type of
@@ -70,10 +76,12 @@ export func dim::<T>(t: T[..], axis: i32): int when is_numeric::<T>()
 // ---- binary form ----
 
 /// The elements of a tensor as little-endian bytes, in row-major order: the payload `from_bytes`
-/// reads back.
+/// reads back. The elements are the tensor's own bytes, so every pure-data element type has them:
+/// one byte an element for a `bool` tensor, four for an `f32` one and eight for an `f64` or `c64`
+/// one.
 /// @pure
 /// @example to_bytes(new([1.0, 2.0]))    // [0, 0, 128, 63, 0, 0, 0, 64]
-export func to_bytes::<T>(t: T[..]): Bytes when is_numeric::<T>()
+export func to_bytes::<T>(t: T[..]): Bytes when is_plain::<T>()
 
 /// Writes a tensor to a NumPy `.npy` file, replacing it.
 /// @effect writes a file

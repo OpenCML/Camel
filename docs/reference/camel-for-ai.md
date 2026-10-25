@@ -1900,7 +1900,7 @@ cast: (t: Tensor | number[], dtype: string) => Tensor
 load_npy: (path: string) => T[..]
 show: (t: A[..]) => void
 from_bytes: (bytes: Bytes, shape: int[]) => Tensor
-to_bytes: (t: T[..]) => Bytes when is_numeric::<T>()
+to_bytes: (t: T[..]) => Bytes when is_plain::<T>()
 save_npy: (t: T[..], path: string) => void when is_numeric::<T>()
 num_threads: () => int
 set_num_threads: (n: int) => void
@@ -1913,7 +1913,7 @@ seed: (seed: int) => void
 seed: (seed: i32) => void
 ```
 
-**`types`** — import { ... } from types — 8 name(s)
+**`types`** — import { ... } from types — 9 name(s)
 
 ```text
 is_integer: () => bool
@@ -1924,6 +1924,7 @@ is_ordered: () => bool
 is_function: () => bool
 is_string: () => bool
 is_bool: () => bool
+is_plain: () => bool
 ```
 
 **`array`** — import { ... } from array — 23 name(s)
