@@ -8,6 +8,9 @@
 //   node scripts/check-doc-snippets.mjs              check the reader-facing pages
 //   node scripts/check-doc-snippets.mjs --default-roots  the same, ignoring a script path argument
 //   node scripts/check-doc-snippets.mjs FILE DIR  check the given files and directories
+//   --camel PATH                                  the compiler the snippets are run with;
+//                                                 `$CAMEL_HOME/bin/camel`, else this tree's
+//                                                 `out/latest/bin/camel`, without it
 //
 // A Camel fence is a fenced block tagged `camel` or `cml` (both tags are used in the tree).
 // The page itself is the source of truth for what the snippet means:
@@ -54,18 +57,24 @@ import os from 'node:os'
 import path from 'node:path'
 import { spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
+import { takeCamel } from '../test/tools/camel-arg.mjs'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const JOBS = Math.max(1, Number(process.env.CAMEL_SNIPPET_JOBS || 8))
 const TIMEOUT_MS = Number(process.env.CAMEL_SNIPPET_TIMEOUT_MS || 15000)
 
-const CAMEL =
-    process.env.CAMEL_EXE ||
-    path.join(
-        process.env.CAMEL_HOME || path.join(ROOT, 'out', 'latest'),
-        'bin',
-        process.platform === 'win32' ? 'camel.exe' : 'camel',
+function usage(message) {
+    if (message) console.error(`check-doc-snippets: ${message}`)
+    console.error(
+        'usage: node scripts/check-doc-snippets.mjs [--default-roots] [--camel PATH] [FILE|DIR ...]',
     )
+    process.exit(2)
+}
+
+// The compiler every snippet is run with: `--camel <path>` names it, else `$CAMEL_HOME/bin/camel`,
+// else this tree's `out/latest/bin/camel`. `CAMEL_EXE` is gone (the author's ruling, 2026-10-25).
+// One rule, in one place: test/tools/camel-arg.mjs.
+const { camel: CAMEL, rest: ARGV } = takeCamel(process.argv.slice(2), ROOT, usage)
 
 // Directories that are records, not pages: they quote the old spelling to say what happened.
 const RECORDS = ['docs/handover/', 'docs/reviews/']
@@ -604,9 +613,8 @@ async function checkSnippet(documentAbs, snippet, lines, fences) {
 
 // ---- Main ----------------------------------------------------------------------------------
 
-const args = process.argv.slice(2).filter((arg) => !arg.startsWith('--'))
-const entries =
-    process.argv.includes('--default-roots') || args.length === 0 ? ['README.md', 'docs'] : args
+const args = ARGV.filter((arg) => !arg.startsWith('--'))
+const entries = ARGV.includes('--default-roots') || args.length === 0 ? ['README.md', 'docs'] : args
 // The H171 defect: the plan passed the script's own path, the scope came out empty, and the guard
 // reported a pass. A scope entry that does not exist and a scan of no document are now refusals.
 const missing = entries.filter((entry) => !fs.existsSync(path.resolve(ROOT, entry)))

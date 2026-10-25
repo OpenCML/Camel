@@ -83,7 +83,9 @@ desc = "The declaration files (stdlib/*.cml and stdlib/signatures/*.cml) list ex
 kind = "behavior"
 tool = "node"
 case = "../../../../scripts/stdlib-reference.mjs"
-args = ["${case}", "--verify-ops"]
+# `${camel}` is the compiler of the build under test, named as an argument (the author's ruling of
+# 2026-10-25); `CAMEL_EXE` is gone and `CAMEL_HOME` stays the install location's convention.
+args = ["${case}", "--verify-ops", "--camel", "${camel}"]
 expect_exit = 0
 expect_stdout_contains = ["the declarations agree with the"]
 normalizers = ["normalize_newlines"]
@@ -155,7 +157,7 @@ desc = "Every name the reference prints has a description and an @example, every
 kind = "behavior"
 tool = "node"
 case = "../../../../scripts/stdlib-reference.mjs"
-args = ["${case}", "--verify-docs"]
+args = ["${case}", "--verify-docs", "--camel", "${camel}"]
 expect_exit = 0
 expect_stdout_contains = ["every declared name has a description and an @example"]
 normalizers = ["normalize_newlines"]

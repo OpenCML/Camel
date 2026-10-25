@@ -42,9 +42,11 @@ from typing import Dict, List, Optional
 HERE = Path(__file__).resolve().parent
 REPO_ROOT = HERE.parents[2]
 sys.path.insert(0, str(REPO_ROOT / "benchmarks" / "pipeline"))
+sys.path.insert(0, str(REPO_ROOT / "test" / "tools"))
 import classify as bp_classify  # noqa: E402
 import pipelines as bp_pipelines  # noqa: E402
 import run as bp_run  # noqa: E402
+from camel_arg import default_camel  # noqa: E402
 
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
 
@@ -108,11 +110,15 @@ def matrix(name: str = "full", backends: Optional[List[str]] = None) -> Dict[str
     return cells
 
 
+# The install this run measures. `progen.py --camel <path>` sets it (the ruling of 2026-10-25: the
+# binary is named by a command-line argument, never by an environment switch, and `CAMEL_EXE` is
+# gone); with none it is `$CAMEL_HOME/bin/camel`, else this tree's `out/latest/bin/camel`. One rule,
+# in one place: test/tools/camel_arg.py.
+CAMEL: Optional[str] = None
+
+
 def camel_exe() -> str:
-    if os.environ.get("CAMEL_EXE"):
-        return os.environ["CAMEL_EXE"]
-    home = os.environ.get("CAMEL_HOME") or str(REPO_ROOT / "out" / "latest")
-    return str(Path(home) / "bin" / ("camel.exe" if os.name == "nt" else "camel"))
+    return CAMEL or default_camel(REPO_ROOT)
 
 
 def run_cell(source_path: Path, passes: List[str], env_values: dict, expected: List[str],

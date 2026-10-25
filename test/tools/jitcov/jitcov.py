@@ -5,10 +5,11 @@
 """How much of a set of programs std::jit compiles, and why it leaves the rest.
 
     jitcov.py [--corpus NAME=GLOB ...] [--progen 1-300] [--progen-size 1] [--jobs 4]
-              [--timeout 20] [--out DIR] [--pipelines plain,inline,opt]
+              [--timeout 20] [--out DIR] [--pipelines plain,inline,opt] [--camel PATH]
 
-Run from the repository root (CAMEL_EXE / CAMEL_HOME, else out/latest). Every program is run
-twice per pipeline, under std::fvm and under std::jit, with stats="file" given (see
+Run from the repository root (the install `--camel <path>` names, else `CAMEL_HOME`, else
+out/latest). Every program is run twice per pipeline, under std::fvm and under std::jit, with
+stats="file" given (see
 src/passes/sched/fastvm/fastvm_stats.cpp): the VM then writes, for every graph, whether the
 JIT compiled it, every construct that keeps it from being compiled, and how many of its
 bytecodes the interpreter ran.
@@ -55,11 +56,19 @@ DEFAULT_CORPORA = [
 ]
 
 
+sys.path.insert(0, str(ROOT / 'test' / 'tools'))
+from camel_arg import camel_argument  # noqa: E402
+
+
+# The install this run measures: `--camel <path>` names it, else `$CAMEL_HOME/bin/camel`, else this
+# tree's `out/latest/bin/camel`. `CAMEL_EXE` is gone (the author's ruling, 2026-10-25): an
+# environment switch does not name the compiler of a run. One rule, in one place:
+# test/tools/camel_arg.py.
+CAMEL, REST = camel_argument(sys.argv, ROOT)
+
+
 def camel_exe():
-    if os.environ.get('CAMEL_EXE'):
-        return os.environ['CAMEL_EXE']
-    home = os.environ.get('CAMEL_HOME') or str(ROOT / 'out' / 'latest')
-    return str(Path(home) / 'bin' / ('camel.exe' if os.name == 'nt' else 'camel'))
+    return CAMEL
 
 
 def seeds_of(text):
@@ -276,7 +285,7 @@ def main():
     ap.add_argument('--timeout', type=float, default=20)
     ap.add_argument('--limit', type=int, default=0, help='at most this many programs per corpus')
     ap.add_argument('--out', help='directory for summary.json and report.md')
-    args = ap.parse_args()
+    args = ap.parse_args(REST)
     args.jobs = min(args.jobs, 4)
 
     pipelines = [p for p in args.pipelines.split(',') if p]

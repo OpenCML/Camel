@@ -12,6 +12,10 @@
 //   node scripts/stdlib-reference.mjs --audit [--compile]
 //                                                   the gap of each module as a table; --compile also
 //                                                   compiles (needs a built compiler)
+//   [--camel <path>]                                the install a mode that needs a compiler
+//                                                   measures; this tree's out/latest/bin/camel
+//                                                   without it (CAMEL_HOME, when set, names the
+//                                                   install)
 //
 // A run that renders no entry or compares no registered operator is refused (exit 1): agreement
 // over nothing is not a pass.
@@ -65,6 +69,7 @@ import os from 'os'
 import path from 'path'
 import { spawn, spawnSync } from 'child_process'
 import { fileURLToPath } from 'url'
+import { defaultCamel } from '../test/tools/camel-arg.mjs'
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const SIGNATURE_DIR = path.join(REPO_ROOT, 'stdlib', 'signatures')
@@ -1366,9 +1371,15 @@ async function verifyDocs() {
 // failure is reported (a void call is a valid example of a writer such as save_params).
 // ---- checking against the registered operators --------------------------------------------
 
+// The install a mode that needs a compiler measures: `--camel <path>` names it (the main section
+// below parses the argument), else `$CAMEL_HOME/bin/camel`, else this tree's `out/latest/bin/camel`.
+// `CAMEL_EXE` is gone (the author's ruling, 2026-10-25): an environment switch does not name the
+// compiler of a run, and an explicitly named install is not exempt from the build stamp. One rule,
+// in one place: test/tools/camel-arg.mjs.
+let camelPath = null
+
 function camelExe() {
-    if (process.env.CAMEL_EXE) return process.env.CAMEL_EXE
-    return path.join(REPO_ROOT, 'out', 'latest', 'bin', process.platform === 'win32' ? 'camel.exe' : 'camel')
+    return camelPath || defaultCamel(REPO_ROOT)
 }
 
 function registeredOperators() {
@@ -1687,7 +1698,22 @@ function verifyOps() {
 
 // ---- main -----------------------------------------------------------------------------------
 
-const mode = process.argv[2] || '--verify-doc'
+const argv = process.argv.slice(2)
+const flags = []
+for (let i = 0; i < argv.length; i++) {
+    if (argv[i] === '--camel') {
+        if (i + 1 >= argv.length) {
+            console.log('--camel needs the path of the install to measure')
+            process.exit(2)
+        }
+        camelPath = path.resolve(argv[++i])
+    } else if (argv[i].startsWith('--camel=')) {
+        camelPath = path.resolve(argv[i].slice('--camel='.length))
+    } else {
+        flags.push(argv[i])
+    }
+}
+const mode = flags[0] || '--verify-doc'
 const bodyProblems = signatureBodyProblems()
 if (bodyProblems.length > 0) {
     for (const problem of bodyProblems) console.log(problem)
@@ -1716,7 +1742,7 @@ if (mode === '--write' || mode === '--verify-doc') {
     // What each module's documentation has, and what it does not: the table the task H189 asks
     // for, from the same parser the reference is generated with. `--compile` also compiles every
     // example (needs a built compiler).
-    const compile = process.argv.includes('--compile')
+    const compile = flags.includes('--compile')
     const rows = []
     let totals = { names: 0, entries: 0, noDoc: 0, noExample: 0, examples: 0, fragments: 0, compileBroken: 0 }
     for (const module of MODULES) {
@@ -1784,7 +1810,7 @@ if (mode === '--write' || mode === '--verify-doc') {
     }
     console.log(`the declarations agree with the ${checked} registered operator overloads`)
 } else {
-    console.log('usage: node scripts/stdlib-reference.mjs --write | --verify-doc | --verify-ops | --verify-docs | --audit [--compile]')
+    console.log('usage: node scripts/stdlib-reference.mjs --write | --verify-doc | --verify-ops | --verify-docs | --audit [--compile] [--camel PATH]')
     process.exit(2)
 }
 

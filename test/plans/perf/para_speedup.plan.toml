@@ -64,7 +64,9 @@ kind = "behavior"
 parallel = false
 tool = "node"
 case = "../../tools/para-speedup.mjs"
-args = ["${case}"]
+# `${camel}` is the compiler of the build under test, named as an argument (the author's ruling of
+# 2026-10-25); `CAMEL_EXE` is gone and `CAMEL_HOME` stays the install location's convention.
+args = ["${case}", "--camel", "${camel}"]
 expect_exit = 0
 expect_stdout_contains = ["para.speedup metric=pass_wall_and_child_cpu", "para.speedup serial backend=std::nvm", "para.speedup parallel backend=std::prl", "cpu_ms=", "concurrency=", "speedup=", "result=PASS"]
 # A host that cannot show the parallel side on more than one core skips this test with the reason
@@ -94,7 +96,7 @@ desc = "The parallel speed-up guard refuses to pass when the host cannot show th
 kind = "behavior"
 case = "../../tools/para-speedup.mjs"
 tool = "node"
-args = ["${case}", "--min-cores", "9999"]
+args = ["${case}", "--min-cores", "9999", "--camel", "${camel}"]
 expect_exit = 2
 expect_stdout_contains = ["REFUSED", "examined nothing"]
 # The refusal is decided before any child starts: 122 ms measured on the reference host.

@@ -9,7 +9,10 @@ desc = "Random programs with a reference output computed outside the compiler (t
 kind = "behavior"
 tool = "python"
 case = "../../../tools/progen/progen.py"
-args = ["${case}", "check"]
+# `${camel}` is the compiler of the build under test, named as an argument before the subcommand
+# (the author's ruling of 2026-10-25); `CAMEL_EXE` is gone and `CAMEL_HOME` stays the install
+# location's convention.
+args = ["${case}", "--camel", "${camel}", "check"]
 expect_exit = 0
 expect_stdout_contains = ["0 wrong", "PASS"]
 expect_output_not_contains = ["FAIL"]
@@ -36,7 +39,7 @@ desc = "The archived progen findings that are recorded as fixed (test/cases/opt/
 kind = "behavior"
 tool = "python"
 case = "../../../tools/progen/progen.py"
-args = ["${case}", "fixed"]
+args = ["${case}", "--camel", "${camel}", "fixed"]
 expect_exit = 0
 expect_stdout_contains = ["0 wrong", "PASS"]
 expect_output_not_contains = ["FAIL"]

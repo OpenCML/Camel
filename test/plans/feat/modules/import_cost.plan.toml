@@ -17,7 +17,9 @@ desc = "Every module imports cleanly (exit 0, no output, no file) and does no im
 kind = "behavior"
 tool = "node"
 case = "../../../tools/import-audit.mjs"
-args = ["${case}"]
+# `${camel}` is the compiler of the build under test, named as an argument (the author's ruling of
+# 2026-10-25); `CAMEL_EXE` is gone and `CAMEL_HOME` stays the install location's convention.
+args = ["${case}", "--camel", "${camel}"]
 expect_exit = 0
 expect_stdout_contains = ["import.audit modules=27 a=0 b=2 c=25", "import.audit pyplot", "import.audit python", "import.audit array ", "import.audit resolution", "import.audit declaration"]
 normalizers = ["strip_ansi", "normalize_newlines"]

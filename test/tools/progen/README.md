@@ -19,8 +19,8 @@ Findings are in [`test/cases/opt/progen/`](../../cases/opt/progen/README.md).
 
 ## Usage
 
-All commands run from the repository root; the compiler is `out/latest` unless `CAMEL_EXE` /
-`CAMEL_HOME` are set.
+All commands run from the repository root; the compiler is the install `--camel <path>` names,
+`$CAMEL_HOME` without it, and this tree's `out/latest` when neither is given.
 
 ```
 python test/tools/progen/progen.py show --seed 7                 # the program and its reference output
@@ -34,6 +34,10 @@ python test/tools/progen/progen.py findings                      # re-run the ar
 python test/tools/progen/progen.py fixed                         # the findings recorded as fixed
 ```
 
+- `--camel PATH`, before the subcommand (`progen.py --camel out/debug/bin/camel check`), is the
+  install every run measures. There is no environment switch for it: the author's ruling of
+  2026-10-25 replaced `CAMEL_EXE` with this argument, and `CAMEL_HOME` is the install location's
+  convention, not a per-run override.
 - `--features a,b,c` generates with only those constructs; `--features -macro,-env` removes
   some from the full set. The feature set is part of the random stream: the same seed with
   another feature set is another program.

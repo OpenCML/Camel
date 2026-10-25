@@ -88,7 +88,9 @@ kind = "behavior"
 parallel = false
 tool = "node"
 case = "../../tools/startup-cost.mjs"
-args = ["${case}"]
+# `${camel}` is the compiler of the build under test, named as an argument (the author's ruling of
+# 2026-10-25); `CAMEL_EXE` is gone and `CAMEL_HOME` stays the install location's convention.
+args = ["${case}", "--camel", "${camel}"]
 expect_exit = 0
 expect_stdout_contains = ["startup.cost metric=cpu_user_plus_system", "startup.cost version", "startup.cost imports_nothing", "startup.cost inspect_ops", "startup.cost imports_all", "declaration.cost declarations=", "per_declaration_us=", "total_ms=", "duplicates=0"]
 # The runner judges this entry on its own CPU time for the same reason the tool inside it

@@ -85,6 +85,7 @@ import os from 'os'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { declarationModules } from '../../scripts/stdlib-declarations.mjs'
+import { takeCamel } from './camel-arg.mjs'
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 const REGISTRY_ALL = path.join(REPO_ROOT, 'test', 'cases', 'modules', 'stdlib', 'registry_all.cml')
@@ -116,12 +117,22 @@ const WARMUPS = 2
 // the small ceilings are built on.
 const MIN_RUNS_PER_SAMPLE = 8
 
+// The install this run measures: `--camel <path>` names it (main parses the argument), else
+// `$CAMEL_HOME/bin/camel`, else this tree's `out/latest/bin/camel`. `CAMEL_EXE` is gone (the
+// author's ruling, 2026-10-25): an environment switch does not name the compiler of a run. One
+// rule, in one place: test/tools/camel-arg.mjs.
+let CAMEL = null
+
 function camelExe() {
-    if (process.env.CAMEL_EXE) {
-        return process.env.CAMEL_EXE
-    }
-    const home = process.env.CAMEL_HOME || path.join(REPO_ROOT, 'out', 'latest')
-    return path.join(home, 'bin', process.platform === 'win32' ? 'camel.exe' : 'camel')
+    return CAMEL
+}
+
+function usage(message) {
+    if (message) console.error(`startup-cost: ${message}`)
+    console.error(
+        'usage: node test/tools/startup-cost.mjs [--json] [--reps N] [--samples N] [--camel PATH]'
+    )
+    process.exit(2)
 }
 
 // The CPU time of every child reaped so far, in seconds, as RUSAGE_CHILDREN reports it: /proc
@@ -428,7 +439,9 @@ const DECLARATION_TOTAL_CEILING_MS = 12
 const DECLARATION_ROUNDS = 21
 
 function main() {
-    const args = process.argv.slice(2)
+    const named = takeCamel(process.argv.slice(2), REPO_ROOT, usage)
+    CAMEL = named.camel
+    const args = named.rest
     const json = args.includes('--json')
     const repsAt = args.indexOf('--reps')
     const runsPerSample = repsAt >= 0 ? Number(args[repsAt + 1]) : RUNS_PER_SAMPLE

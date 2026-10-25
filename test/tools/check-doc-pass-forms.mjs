@@ -150,7 +150,8 @@
  *     is set, which `tools/camel-remote.ps1` always does; without it the runner names the
  *     scratch directory it kept, whose `stdout.txt` holds the same lines.
  *
- *   CAMEL_EXE, CAMEL_HOME      the binary to run the specifications through
+ *   --camel PATH, CAMEL_HOME   the binary to run the specifications through: `--camel <path>` names
+ *                              it, else `$CAMEL_HOME/bin/camel`, else this tree's `out/latest`
  *   CAMEL_DOC_FORM_JOBS        parser invocations in parallel (default 8)
  *   CAMEL_DOC_FORM_BATCH       specifications decided by one invocation (default 8)
  *   CAMEL_DOC_FORM_TIMEOUT_MS  the documented limit for one invocation (default 30000); a
@@ -171,6 +172,7 @@ import path from 'node:path'
 import { spawn, spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { isRunnerOutput } from './runner-output.mjs'
+import { takeCamel } from './camel-arg.mjs'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = path.resolve(HERE, '..', '..')
@@ -178,16 +180,20 @@ const JOBS = Math.max(1, Number(process.env.CAMEL_DOC_FORM_JOBS || 8))
 const BATCH = Math.max(1, Number(process.env.CAMEL_DOC_FORM_BATCH || 8))
 const TIMEOUT_MS = Number(process.env.CAMEL_DOC_FORM_TIMEOUT_MS || 30000)
 const REPORT_ALL = Boolean(process.env.CAMEL_DOC_FORM_REPORT_ALL)
-const LIST = process.argv.includes('--list')
 const STARTED_AT = Date.now()
 
-const CAMEL =
-    process.env.CAMEL_EXE ||
-    path.join(
-        process.env.CAMEL_HOME || path.join(REPO_ROOT, 'out', 'latest'),
-        'bin',
-        process.platform === 'win32' ? 'camel.exe' : 'camel',
-    )
+function usage(message) {
+    if (message) console.error(`check-doc-pass-forms: ${message}`)
+    console.error('usage: node test/tools/check-doc-pass-forms.mjs [--list] [--selftest] [--camel PATH]')
+    process.exit(2)
+}
+
+// The compiler every specification is run through: `--camel <path>` names it, else
+// `$CAMEL_HOME/bin/camel`, else this tree's `out/latest/bin/camel`. `CAMEL_EXE` is gone (the
+// author's ruling, 2026-10-25): an environment switch does not name the compiler of a run. One
+// rule, in one place: test/tools/camel-arg.mjs.
+const { camel: CAMEL, rest: ARGV } = takeCamel(process.argv.slice(2), REPO_ROOT, usage)
+const LIST = ARGV.includes('--list')
 
 // A name no build registers: the pipeline is refused on it before any pass runs, so the
 // specifications before it are parsed and never executed.
@@ -399,7 +405,7 @@ function selftest() {
     )
 }
 
-if (process.argv.includes('--selftest')) {
+if (ARGV.includes('--selftest')) {
     selftest()
     process.exit(0)
 }
