@@ -251,7 +251,7 @@ enum class SemanticDiag : uint32_t {
     /// A constant is larger than the printer's max_literal_bytes.
     CmlBigConstant = 0x0001A6,
 
-    // Tensor element types (design/arrays-memory, P4 "element type exact"). 0x1A7 is retired: a
+    // Array element types (design/arrays-memory, P4 "element type exact"). 0x1A7 is retired: a
     // tensor keeps the element type it is written with, so nothing rewrites it and there is no
     // such diagnostic. The code is not reused.
 

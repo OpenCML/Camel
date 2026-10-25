@@ -1,6 +1,5 @@
 // The law of this program's arithmetic, written the way the compiler reads laws.
 // Run: camel docs/tutorial/examples/17_rule.cml
-module law
 
 import { check } from rewrite
 

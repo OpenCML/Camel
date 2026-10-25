@@ -1,7 +1,6 @@
 // Who needs whose result decides what runs, and what can run at the same time.
 // Run: camel docs/tutorial/examples/09_dependency.cml
 //      camel docs/tutorial/examples/09_dependency.cml std::gir
-module dependency
 
 func price(n: int): int {
     return n * 3

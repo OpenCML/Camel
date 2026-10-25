@@ -1,7 +1,7 @@
 /**
  * std::cpp translates scalar and string values only. The pass refuses at the operator use that
  * needs a tensor -- `tensor:ones` in `main`, line 16 -- and names the operator and the type of its
- * argument, instead of stopping with an internal error that names a node number; the Tensor-returning
+ * argument, instead of stopping with an internal error that names a node number; the array-returning
  * `scale` is never reached.
  */
 module refuse_tensor

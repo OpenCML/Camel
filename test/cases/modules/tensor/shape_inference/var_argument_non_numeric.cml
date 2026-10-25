@@ -1,6 +1,6 @@
 /**
- * A cell whose element type is not numeric cannot be written by a `var Tensor` parameter: the
- * declared `Tensor` only stands for numeric elements, so the widening that gives a cell its
+ * A cell whose element type is not numeric cannot be written by a `var f32[..]` parameter: the
+ * declared numeric array only stands for numeric elements, so the widening that gives a cell its
  * parameter's type leaves this one alone and the call is refused. Expected: a compile-time
  * error at the argument.
  */

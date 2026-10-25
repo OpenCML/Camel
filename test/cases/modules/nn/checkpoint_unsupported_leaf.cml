@@ -1,4 +1,4 @@
-// A checkpoint leaf whose type no checkpoint can hold. Before `Tensor` and the native array type
+// A checkpoint leaf whose type no checkpoint can hold. Before the module's tensor type and the native array type
 // became one type (H17 item 2), a written array (`[1.0, 2.0]`) was such a leaf: it was refused.
 // It is a tensor now, and a checkpoint holds tensors (`checkpoint_tensor.cml`), so the refusal is
 // gone for a flat numeric array and the case has to name a leaf that is still unholdable: an
