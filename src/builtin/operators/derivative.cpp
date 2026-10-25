@@ -290,18 +290,28 @@ void sliceArrayVjp(VjpBuilder &b, const VjpCall &call) {
 
 // `xs[a:b:s]` and `slice(xs, axis, a, b, s)`: the value, the axis, the two bounds, the step and
 // the mask, in that order -- the one parameter table both spellings write (design principles 5.4;
-// the author's ruling of 2026-10-25: both spellings are one node with one adjoint rule, and the
-// argument count no longer tells them apart). The axis travels with the rest, so the adjoint
-// scatters along the axis the forward took the elements from, whatever the rank.
+// the author's ruling of 2026-10-25: both spellings are one node with one adjoint rule). The axis
+// travels with the rest, so the adjoint scatters along the axis the forward took the elements
+// from, whatever the rank.
+//
+// A call of the function form that leaves the step, or the step and the mask, out is read here as
+// the forward kernel reads it: step 1, mask 3 ("both bounds written", the value the declaration
+// defaults them to). The subscript's lowering always writes all six words, so a node of four or
+// five is a function-form call -- and the adjoint answers every call the forward rule accepts
+// (`src/builtin/modules/globals.cpp`, `coreSliceFunctionResolver`), not only the six-word ones.
 void sliceSubArrayVjp(VjpBuilder &b, const VjpCall &call) {
-    if (call.inputs.size() != 6) {
+    if (call.inputs.size() < 4 || call.inputs.size() > 6) {
         throw std::runtime_error(std::format(
-            "Derivative of '{}' expects 6 inputs (value, axis, start, end, step, written), got {}.",
+            "Derivative of '{}' expects 4 to 6 inputs (value, axis, start, end, step, written), "
+            "got {}.",
             call.uri,
             call.inputs.size()));
     }
-    scatterSliceArray(
-        b, call, call.inputs[1], call.inputs[2], call.inputs[3], call.inputs[4], call.inputs[5]);
+    const vjp_node_t step =
+        call.inputs.size() > 4 ? call.inputs[4] : staticInt(b, 1); // step left out: 1
+    const vjp_node_t written =
+        call.inputs.size() > 5 ? call.inputs[5] : staticInt(b, 3); // mask left out: both written
+    scatterSliceArray(b, call, call.inputs[1], call.inputs[2], call.inputs[3], step, written);
 }
 
 // ---- the rules of a gradient graph: the second derivative of an array expression ----
