@@ -2,12 +2,16 @@ id = "examples"
 order = 910
 tier = "fast"
 tags = ["feat", "examples"]
-desc = "Every program of examples/ runs as its header says and prints the recorded output, on the four back ends"
+desc = "Every program under examples/ that can run on its own runs as its header says and prints the recorded output, on the four back ends"
 
-# One entry per program under examples/ (examples/perf prints timings and examples/tty is
-# interactive: neither is run here). Each entry runs on std::nvm, std::fvm, std::jit and
-# std::prl; the four agree on exit code and standard output, and the output is the golden
-# file's. The entries at the end run the other command lines the headers give.
+# One entry per program under examples/, except the three that no entry here can run:
+# examples/perf/fibs.cml prints timings, examples/tty/snake.cml is interactive, and
+# examples/models/naive-in-expert-out/accuracy.cml is the showcase's measurement harness (the plan
+# that runs that example, test/plans/feat/modules/naive_in_expert_out.plan.toml, runs its training
+# step). Each entry runs on std::nvm, std::fvm, std::jit and std::prl; the four agree on exit code
+# and standard output, and the output is the golden file's. The entries at the end run the other
+# command lines the headers give, and examples.python.rules_basket runs the Python project of
+# examples/python/rules, which needs `camel-lang` installed in the interpreter and skips without it.
 #
 # The programs under examples/files and examples/ml, and examples/text/log_filter.cml, write
 # their files into CAMEL_TEST_TMPDIR (the test's own scratch directory) when the runner sets it,
@@ -232,3 +236,21 @@ backends = false
 args = ["${case}", "std::macro", "std::opt", 'onnx::export out="${test_tmp}/tiny_model.onnx"']
 expect_stdout_contains = ["onnx::export: wrote ${test_tmp}/tiny_model.onnx"]
 expect_output_not_contains = ["model file written"]
+
+[[tests]]
+name = "examples.python.rules_basket"
+desc = "The command the header of examples/python/rules/rules.cml gives: the pricing rules are a Camel module, and basket.py prices a million baskets with them through the binding and checks the answer against the same rules in Python and in NumPy. The report's table and its agreement figure are pinned; its three timing lines are a measurement and are not. The entry skips unless the interpreter can import camel and numpy, which is what `pip install camel-lang` leaves behind; it is the only test here that needs a package from outside the tree."
+kind = "behavior"
+tool = "python"
+case = "../../../examples/python/rules/basket.py"
+args = ["${case}"]
+backends = false
+skip_unless = ["${python}", "-c", "import camel, numpy"]
+expect_exit = 0
+expect_stdout_contains = ["rules module: rules from <ROOT>/examples/python/rules/rules.cml", "     80.00     0.00%      9.90       89.90          89.90", "   2500.00    20.00%      0.00     2000.00        2000.00", "1,000,000 baskets, one NumPy array of f32 (4 MiB)", "agreement:    Camel against Python 0.00e+00, against NumPy 0.00e+00 (largest net total here is 239999)"]
+expect_output_not_contains = ["do not agree", "Traceback"]
+# The example prices a million baskets through the node VM, which is seconds of work where every
+# other entry here is a fraction of a second: 5.4 s measured on the shared Linux host, and skipped
+# wherever the package is not installed. The bound is its own because the CPU the run may use is a
+# quarter of it.
+timeout_ms = 60000

@@ -1884,22 +1884,22 @@ Entry module '{0}' must define a resolvable 'main' on the module root (__root__)
 Add a top-level main function or ensure it is registered as a direct root subgraph.
 ```
 
-**Example** (`test/cases/trans/library_module.cml`, run as `camel check -O short test/cases/trans/library_module.cml`)
+**Example** (`docs/tutorial/examples/shapes.cml`, run as `camel docs/tutorial/examples/shapes.cml`)
 
 ```camel
-// A library module: it defines no `main`. Translation passes (std::gir, std::jgir) and
-// `inspect -g` must still build and dump its graphs; only execution requires an entry.
-// The top-level value and the unexported helper make the root depend on more than one graph.
-let offset = 10
+// A library module used by 12_modules.cml.
+module shapes
 
-func square(x: int): int { return x * x }
+import { sqrt } from math
 
-export func shifted_square(x: int): int {
-    return square(x) + offset
+export type Vec = { x: float, y: float }
+
+export func hypot(v: Vec): float {
+    return sqrt(v.x * v.x + v.y * v.y)
 }
 
-export func classify(x: int): int {
-    return if x < 0 then -1 else 1
+export func area(w: float, h: float): float {
+    return w * h
 }
 ```
 
