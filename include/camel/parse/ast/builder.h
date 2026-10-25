@@ -70,6 +70,9 @@ class Builder {
     camel::source::source_file_id_t sourceFileId_ = camel::source::kInvalidSourceFileId;
 
     std::shared_ptr<ModuleLoad> module_ = std::make_shared<ModuleLoad>();
+    /// The tags written before `module` (`#gpu module m`, design principles 13.4), made by
+    /// visitModuleDecl and attached to the module node by visitProgram. Null when there are none.
+    node_ptr_t moduleTagUses_ = nullptr;
     std::vector<std::shared_ptr<ImportLoad>> imports_;
     std::shared_ptr<ExportLoad> export_ = std::make_shared<ExportLoad>();
     std::vector<std::string> namespaceStack_;
@@ -141,6 +144,10 @@ class Builder {
     /// The tag uses written before `context`, attached to `owner` as its next child, a
     /// RepeatedLoad("TagUse"); nothing when it has none.
     void addTagUses(const node_ptr_t &owner, const syntax::Node &context);
+    /// The tag uses written in `context` as one RepeatedLoad("TagUse"), or null when there are
+    /// none. A module's tags are made this way: their owner (the module node) exists only after
+    /// the declaration has been visited.
+    node_ptr_t tagUseListOf(const syntax::Node &context);
     Value visitNamespaceDecl(syntax::cst::NamespaceDecl context);
     /// `topLevel`: a declaration of the module or of a namespace block, whose names take the
     /// path of the enclosing namespaces (`namespace Config { let limit = 10 }` declares

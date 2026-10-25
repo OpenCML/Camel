@@ -1600,7 +1600,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `DimensionNameUsedOnce` | The dimension name '{0}' is written once in this signature, so it relates nothing. |
 | `TypeVariableUnused` | The type parameter '{0}' is declared at the head but never written in the signature. |
 
-**Run time and passes — errors** (`RuntimeDiag`) — 35
+**Run time and passes — errors** (`RuntimeDiag`) — 36
 
 | `RuntimeError` | An error has occurred: {0}. |
 | `DivisionByZero` | Attempted division by zero. |
@@ -1637,6 +1637,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `DeviceUnavailable` | CUDA device {0} was named by --devices but is not available: {1}. |
 | `GpuScopeUnsupported` | `#gpu` scope '{0}': {1} cannot run on the device ({2}). |
 | `GpuScopeNoDeviceProgram` | `#gpu` scope '{0}': {1} ({2}). |
+| `GpuScopeMacroNotExpanded` | `#gpu` scope '{0}': {1} is a macro operator no pass has expanded, so the derived graph does not exist when the scope is compiled; put the pass '{2}' before this one. |
 
 **Run time and passes — warnings** (`RuntimeDiag`) — 3
 

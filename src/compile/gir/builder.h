@@ -1485,6 +1485,10 @@ class Builder {
     /// Nodes). Resolved once per node and remembered. Reports a use that is wrong and throws
     /// BuildAbortException.
     TagFacts tagFactsOf(const GCT::node_ptr_t &gct, camel::core::tag::Position at);
+    /// The facts a tag written before `module` (`#gpu module m`, design principles 13.4) gives a
+    /// function declared at the top level of that module; empty for anything else. Read through
+    /// tagFactsOf, never directly: only there is the inner value made to win.
+    TagFacts moduleTagFactsOf(const GCT::node_ptr_t &gct);
     /// The facts of a list of uses (the tags of a block, of a field), each written at `at`.
     TagFacts tagFactsOfList(
         const std::vector<GCT::TagUse> &uses, camel::core::tag::Position at);

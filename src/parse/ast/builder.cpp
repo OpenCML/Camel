@@ -410,6 +410,12 @@ Value Builder::visitProgram(cst::Program context) {
 
     *root_ << stmts;
 
+    // The tags written before `module` (visitModuleDecl): the module's child, after the
+    // statements, so that the three children a module has always had keep their indices.
+    if (moduleTagUses_) {
+        *root_ << moduleTagUses_;
+    }
+
     LEAVE("Program");
     return root_;
 }
@@ -504,12 +510,16 @@ Value Builder::visitStmtList(cst::StmtList context) {
 }
 
 /*
-moduleDecl : MODULE identDef ;
+moduleDecl : frontMatter? MODULE identDef ;
 */
 Value Builder::visitModuleDecl(cst::ModuleDecl context) {
     ENTER("ModuleDecl");
     Reference ref(context->get<cst::IdentDef>()->text());
     module_->setRef(ref);
+    // The tags written before `module` (`#gpu module m`, design principles 13.4) are the module's
+    // facts; they are put on the module node by visitProgram, once it exists. The list is made
+    // only when there are uses, so a module that writes none has exactly the tree it had before.
+    moduleTagUses_ = tagUseListOf(context);
     LEAVE("ModuleDecl");
     return Value();
 }
@@ -1687,6 +1697,15 @@ std::vector<node_ptr_t> Builder::tagUsesOf(cst::TagUse context) {
 }
 
 void Builder::addTagUses(const node_ptr_t &owner, const syn::Node &context) {
+    if (node_ptr_t list = tagUseListOf(context)) {
+        *owner << list;
+    }
+}
+
+/// The tag uses written in `context`, as one repeated node, or null when there are none. Kept
+/// apart from addTagUses because a module's tags belong to a node (the module's) that is made
+/// after the declaration has been visited.
+node_ptr_t Builder::tagUseListOf(const syn::Node &context) {
     node_ptr_t list = nullptr;
     for (const auto tagUse : context->all<cst::TagUse>()) {
         for (const auto &use : tagUsesOf(tagUse)) {
@@ -1697,9 +1716,7 @@ void Builder::addTagUses(const node_ptr_t &owner, const syn::Node &context) {
             *list << use;
         }
     }
-    if (list) {
-        *owner << list;
-    }
+    return list;
 }
 
 Value Builder::visitFuncDecl(cst::FuncDecl context) {

@@ -20,26 +20,18 @@ class RegionPass final : public RuntimeGraphRewritePass {
     RegionPass(const core::context::context_ptr_t &context, RegionDeviceOps preferred)
         : RuntimeGraphRewritePass(context), preferred_(std::move(preferred)) {}
     const runtime::Program *apply(const runtime::Program *program, std::ostream &out) override {
-        // `tiles::compile` applies `autodiff::expand` to the scope graphs first
-        // (docs/design/gpu/plan-modules.cn.md 5, decision 2: a `#gpu` scope's expansion is
-        // triggered here, so the pipeline's spelling does not change and a user never writes the
-        // pass). Without it a `grad`/`with_grad` call inside a scope keeps its derived graph in
-        // the run, where no pass — this one included — ever sees it
-        // (docs/design/gpu/plan.cn.md 2.6). The pass is idempotent, and it changes nothing
-        // outside a `#gpu` scope, so the graphs of a program without the tag are byte-identical
-        // with and without it.
-        const auto expanded = applyRegisteredPass(program, "autodiff::expand", context_, out);
-        if (expanded.program == nullptr) {
-            // The expansion refused a scope (plan 2.6.3): its diagnostic is committed, and the
-            // program is left as it was rather than half-expanded.
-            return program;
-        }
-        program = expanded.program;
+        // A `#gpu` scope's gradient is not expanded here: `grad` and `with_grad` are macro
+        // operators, and the pass that builds their derived graph ahead of time is `std::macro`
+        // (design principles 8), which the pipeline writes before this one. This pass is a
+        // consumer of that work, never its author: a scope that still holds an unexpanded macro
+        // operator is refused and the message names `std::macro`
+        // (docs/design/gpu/plan.cn.md 2.6).
+        //
         // The placement decision this step pins: the report is the query's answer for every
         // graph, printed before any rewrite of this pass. It does not choose an executor; it
         // makes the answer observable, and a later step is where refusal and selection act on
-        // it. A derived graph the expansion just published is a graph like any other here, and
-        // the report shows the placement it inherited from its primal (plan 2.3).
+        // it. A derived graph the expansion published is a graph like any other here, and the
+        // report shows the placement it inherited from its primal (plan 2.3).
         out << placementReport(*program);
         // The residency conclusion of the same program (plan 3.2): which block each value lives
         // in, which values change class at a boundary, and what a call between two graphs of one

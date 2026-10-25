@@ -171,6 +171,7 @@ std::string positionsText(camel::core::tag::Positions positions) {
           camel::core::tag::Type,
           camel::core::tag::Field,
           camel::core::tag::Nodes,
+          camel::core::tag::Module,
           camel::core::tag::Param}) {
         if ((positions & position) == 0) {
             continue;
@@ -538,12 +539,17 @@ void Builder::addTagFacts(
     const bool allows = (decl->on & at) != 0;
     // A tag written before a function may be a tag of the function (its declaration) or of the
     // nodes of its body: the declaration lists which. Anywhere else only the written position.
+    // Before `module` (`#gpu module m`, design principles 13.4) the tag is the fact of every
+    // top-level function of that module, so it is read exactly as a function's own tag is; the
+    // propagation itself is in tagFactsOf.
     const bool asDeclaration = at == camel::core::tag::Func || at == camel::core::tag::Type ||
-                               at == camel::core::tag::Field;
+                               at == camel::core::tag::Field ||
+                               at == camel::core::tag::Module;
     const bool asNodes       = at == camel::core::tag::Nodes;
     const bool declaration   = allows && asDeclaration;
-    const bool nodes =
-        ((decl->on & camel::core::tag::Nodes) != 0) && (asNodes || (at == camel::core::tag::Func));
+    const bool nodes         = ((decl->on & camel::core::tag::Nodes) != 0) &&
+                       (asNodes || at == camel::core::tag::Func ||
+                        at == camel::core::tag::Module);
     if (!declaration && !nodes) {
         diags_->of(SemanticDiag::TagNotAtPosition)
             .atOrigin(use.origin)
@@ -618,11 +624,56 @@ Builder::TagFacts Builder::tagFactsOf(const GCT::node_ptr_t &gct, camel::core::t
         return it->second;
     }
     TagFacts facts;
+    // A tag written before `module` (`#gpu module m`, design principles 13.4) is the fact of
+    // every top-level function of that module: read first, so a fact the function writes itself
+    // is united over it and the inner value wins (the key's own rule). Only a function declared
+    // at the top level of the module is reached: a function written inside a body has the module
+    // as its scope anyway, and the module's tags are not its declaration's facts.
+    if (at == camel::core::tag::Func) {
+        const TagFacts outer = moduleTagFactsOf(gct);
+        if (outer.declaration != camel::core::attr::kNoAttrs ||
+            outer.nodes != camel::core::attr::kNoAttrs || outer.permissions != 0) {
+            facts.declaration = outer.declaration;
+            facts.nodes       = outer.nodes;
+            facts.permissions = outer.permissions;
+        }
+    }
     if (const auto *uses = GCT::Tree::of(gct)->tagUsesOf(gct); uses != nullptr) {
-        facts = tagFactsOfList(*uses, at);
+        const TagFacts own = tagFactsOfList(*uses, at);
+        // The function's own fact is the inner one for every key it writes.
+        facts.declaration = camel::core::attr::unite(facts.declaration, own.declaration);
+        facts.nodes       = camel::core::attr::unite(facts.nodes, own.nodes);
+        facts.permissions =
+            static_cast<camel::core::sem::PermissionMask>(facts.permissions | own.permissions);
     }
     tagFacts_[gct] = facts;
     return facts;
+}
+
+/// The facts a tag written before `module` gives a function declared at the top level of that
+/// module (design principles 13.4: a tag of a function, a block or a module). Empty for anything
+/// else: a nested function, a function of another module, or a module that carries no tags.
+Builder::TagFacts Builder::moduleTagFactsOf(const GCT::node_ptr_t &gct) {
+    const auto *tree = GCT::Tree::of(gct);
+    if (tree == nullptr) {
+        return {};
+    }
+    const GCT::node_ptr_t root = tree->root();
+    if (root == nullptr) {
+        return {};
+    }
+    bool topLevel = false;
+    for (size_t i = 0; i < root->size() && !topLevel; ++i) {
+        topLevel = root->at(i) == gct;
+    }
+    if (!topLevel) {
+        return {};
+    }
+    const auto *uses = tree->tagUsesOf(root);
+    if (uses == nullptr) {
+        return {};
+    }
+    return tagFactsOfList(*uses, camel::core::tag::Module);
 }
 
 void Builder::recordFieldTags(const GCT::node_ptr_t &decl) {

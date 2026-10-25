@@ -1,0 +1,50 @@
+/// What a `#gpu` scope is, as the compiler reads it without a device (docs/design/gpu/plan.cn.md
+/// 2.1-2.3, 2.5): the tag is a placement fact on the declaration and on every node written in
+/// the scope, and `tiles::compile` prints one `TILES_PLACEMENT` line per graph of the program.
+///
+/// `pair` is a `#gpu` body of three device operators: one device unit, and its nodes carry the
+/// fact. `empty` is a `#gpu` body whose only node is the port it returns: it is a device unit all
+/// the same, with no operator to run, which is not a defect and draws no warning (2.4, question
+/// 5). `accumulated` writes its device operators in a loop, so its segment is the loop's body
+/// (2.5). `kept` writes `#cpu` beside `#gpu` functions: the tag says where the code is to run,
+/// and nothing is refused for it.
+///
+/// The placement report is read here, not the plan: `tiles::inspect` asks the scheduler for a
+/// plan while the program runs, and a pipeline that has already compiled the segments cannot
+/// answer that (the same run reports 'operator context arguments are not supported yet' on the
+/// unmodified tree, so it is not what this case is about — `gpu_scope_inspect` reads the plans).
+///
+/// Red when: the tag is not read (`pair` is not a device unit, or its nodes are the host's), the
+/// empty scope is not a device unit, or a `#cpu` body is compiled as one.
+module tiles_gpu_scope_segments
+
+import { Tensor, reshape, sum } from tensor
+
+#gpu
+func pair(x: Tensor<f32, [3]>): Tensor<f32, [3]> {
+    let y = x * 2.0
+    let z = y + 3.0
+    return z - 1.0
+}
+
+#gpu
+func empty(x: Tensor<f32, [3]>): Tensor<f32, [3]> {
+    return x
+}
+
+#gpu
+func accumulated(x: Tensor<f32, [3]>): Tensor<f32, [3]> {
+    return loop y = x for k in [1, 2] do y + x
+}
+
+#cpu
+func kept(x: Tensor<f32, [3]>): Tensor<f32, [3]> {
+    let y = x * 2.0
+    return y + 3.0
+}
+
+func main(): int sync {
+    let x = reshape([1.0, 2.0, 3.0] as f32[], [3])
+    println('value {}'->format<sum(pair(x)) + sum(accumulated(x)) + sum(kept(x))>)
+    return 0
+}
