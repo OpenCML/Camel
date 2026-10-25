@@ -1,0 +1,31 @@
+tip=2b1bc8a75 H554 第六轮（下半）：export 族 8 条 + attempt 2 条清完（52 → 43，新增红 0）
+
+数字
+- **52 → 43**（gate-22：`total: 6366, pass: 6294, fail: 43, skip: 13, known failures: 16`；与 gate-21 逐名 **fixed 9 / new 0**）。注意 `skip` 由 12 变 13：新增的那条跳过是环境类 `skip_unless`（无失败转入跳过，逐名对比可证），不是把红藏起来。
+- `test/plans/feat/modules/onnx.plan.toml` 单跑已 **139/139**；`attempt.plan.toml` 单跑全绿。
+
+① `export_*` 族（8 条，同根因一次修完）
+- 6 条（`export_unsupported_op`、`export_impure_op`、`export_capability`、`export_ctrl_effect`、`export_ctrl_effect_in_callee`、`export_loop_values_array`）：用例短了 `module` 声明那一行，verifier 钉的位置整体下移 1。改前读数逐字 `Error: missing source position of the unsupported call` / `…of the impure call` / `…of the relu call` / `…of the println` / `…of the recursive call: 7`；改后钉值（`onnx.plan.toml`）：`export_unsupported.cml:15:45→14:45`、`export_impure:13:45→12:45`、`export_capability:15:12→14:12`、`export_ctrl_effect:14:5→13:5`、`export_ctrl_effect_callee:14:5→13:5`、`export_loop_values_array:12:68→11:68`。
+- `export_tree_recursion`：同一族但根因不同——钉值用了 `(at …)` 形式，而这条拒绝打印的是自己的位置 `export_tree_recursion.cml:16:5:`。改前 `Error: missing source position of the call: …export_tree_recursion.cml:16:5: [Error]: … a recursion whose depth depends on the model input call…` → 钉值改为 `export_tree_recursion[.]cml:16:5[:]` → 绿。
+- `pass_export_refusals_json`：**旧的是脚本不是 plan**。脚本 `test/cases/modules/onnx/pass_export.py:62-63` 的表钉 29/25，实测 `at export_train_step.cml:28:1`、`…:24:14`（plan 的钉值本来就是 28:1/24:14，我先误改成 27/23 又改回，最终只动脚本）→ 改脚本 29→28、25→24 → 绿。
+- 你提的两条翻转线用例（`resnetbn_train_step_export`、`pass_export_refusal_located.compute_nodes_over_limit`）不在我的失败名单里，未碰。
+
+② `attempt.*`（2 条）：`attempt.plan.toml:267` 的 `for (const line of [13,14,15,16,17])` → `[12,…,16]`（改动前读数 `Error: no diagnostic at line 17`）；`:354` 的 `at_11_12` → `at_10_12`（改动前 `output does not contain '…at_11_12…'`）→ 两条绿。
+
+③ 剩余 43 条里，本轮已拿到逐字读数、下一轮直接做的族（未清完，如实）
+- `constant_fault_untaken.fold_simplify_fvm`/`constant_fault_reached.simplify_fvm`/`constant_fault_untaken.simplify_jit`：verifier 打印的是诊断本身（`fold_constant_fault.cml:15:29: [Warn]…`、`fold_constant_fault_reached.cml:10:15: [Error]…`）→ 又一类"位置 ±1"，下一轮一次改完。
+- `docs.snippets_compile`（`stdout does not contain 'no stale snippet in'`）、`python_binding.session`（`stdout does not contain 'diagnostic: … SemanticDiag::UnresolvedReference code=0x0300000B'`）、`compile_bench.smoke`（`stdout does not start with "ok compile benchmark"`）、`debugger.http_gateway`/`dap_protocol`（`stdout does not start with "ok "`）：都是脚本自身断言失败，需逐个读脚本；下一轮按此顺序做，若确认是"线旧"就按你的 ④ 合 develop。
+- `graph`/`graph.attrs`：本轮没跑进含它们的 plan（`modules/graph.plan.toml`），gate-22 名单里仍在；下一轮补。
+
+④ 你要求的两个收尾项
+- **管线位置那 4 条写成问题页**：已写 `docs/handover/questions/pass-name-position-synthetic.md`（是什么／逐字证据／今天的读数／三个选项与代价／卡住什么；证据含 gate-11 起每轮都红、`line 0` vs `(pipeline):1:<col>`、JSON 的全零 range）。
+- `grad_function_value_*` 12 的重新判定与"是否线旧、要不要合 `origin/develop`"：**本轮未做**（预算全给了 export/attempt 两族与问题页），下一轮第一件事。
+
+检查器：本轮只改测试 plan／用例脚本（无 src、无 docs 正文），上一轮改后重跑的五个读数仍成立，全部 exit 0：
+- `diagnostics registry: 278 codes, every one with a name, a message and what it says about an edit (15 with one, 263 with a reason), no value used twice, and the emitted headers agree`
+- `docs/reference/camel-for-ai.md is what its sources produce: 4 generated region(s), 756 entries, 278 diagnostics, 34 diagnostic name(s) cited by the prose, 106375 characters (budget 112000)`
+- `no unverified citation: 413 of 413 symbol citation(s) verified, 1876 path citation(s) across 4803 file(s)`
+- `headers: every one of 1364 member files carries the two-line header (C/C++ 1086, Camel 44, scripts 234)`
+- `grammar: 130 productions, in step with the parser, the token table and the language reference`
+
+提交：`d1d7a23f0`（export 钉值/脚本）、`2b1bc8a75`（attempt 钉值）；问题页另提。纪律：未推 origin；未碰 `docs/language/**` 散文；未碰其它工作树/分支；未在 Windows 构建。
