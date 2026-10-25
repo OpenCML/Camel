@@ -8164,7 +8164,26 @@ The value bound to the `with` parameter '{0}' of the rule '{1}' is not a compile
 A rule's `with` value is part of what selects the instance the rule's sides and its condition are made at, so it is known while the program is compiled: write a literal, a constant, or a constant expression of an integer, real, bool or string type. A value the compiler cannot work out would need one instance for every value it could take.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/modules/rules/err_rule_with_not_constant.cml`, run as `camel test/cases/modules/rules/err_rule_with_not_constant.cml std::nvm`)
+
+```camel
+module err_rule_with_not_constant
+
+import { Program, graphs } from graph
+import { rewrite } from rewrite
+
+with <tile: int>
+rule add_tile(x: int) when tile > 0 { x + tile => x }
+
+/// The factor is a parameter of the function, so it is not known while the program is compiled.
+func apply(p: Program, tile: int): Program! {
+    return rewrite(p, [add_tile<tile>])
+}
+
+func main(): int sync {
+    return 0
+}
+```
 
 ### IgnoredSideEffect
 
