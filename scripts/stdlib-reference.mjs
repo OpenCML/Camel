@@ -12,13 +12,15 @@
 //   node scripts/stdlib-reference.mjs --audit [--compile]
 //                                                   the gap of each module as a table; --compile also
 //                                                   compiles (needs a built compiler)
-//   [--camel <path>]                                the install a mode that needs a compiler
-//                                                   measures; this tree's out/latest/bin/camel
-//                                                   without it (CAMEL_HOME, when set, names the
-//                                                   install)
+//   [--camel <path>]                                the install a mode that needs a compiler measures;
+//                                                   this tree's out/latest/bin/camel without it
 //
 // A run that renders no entry or compares no registered operator is refused (exit 1): agreement
-// over nothing is not a pass.
+// over nothing is not a pass. A mode that needs a compiler is refused earlier (exit 2) when the
+// install it would measure is not this tree's build: the message names the install and its stamp,
+// and the run reads no operator from it (H149; `scripts/install-stamp.mjs` holds the rule that
+// `scripts/release-gate.mjs` applies too). `CAMEL_EXE` is gone (the author's ruling, 2026-10-25):
+// the environment does not name the compiler of a run, `--camel <path>` does.
 //
 // stdlib/signatures/<module>.cml declares the operators a C++ module exports (globals.cml: the
 // built-in ones), one body-less `export func` each, with a doc comment:
@@ -69,10 +71,16 @@ import os from 'os'
 import path from 'path'
 import { spawn, spawnSync } from 'child_process'
 import { fileURLToPath } from 'url'
-import { defaultCamel } from '../test/tools/camel-arg.mjs'
+import { defaultCamel, refuseInstallNotOfThisTree } from './install-stamp.mjs'
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const SIGNATURE_DIR = path.join(REPO_ROOT, 'stdlib', 'signatures')
+
+// The install a run measures: `--camel <path>` (parsed in the main section below), else this tree's
+// `out/latest`. `CAMEL_EXE` is gone (the author's ruling, 2026-10-25): an environment switch is not
+// a parameter of the run, and the binary it named skipped the build stamp every install a run
+// measures has to pass.
+let camelPath = null
 const STDLIB_DIR = path.join(REPO_ROOT, 'stdlib')
 const DOC_PATH = path.join(REPO_ROOT, 'docs', 'stdlib-reference.md')
 const PROBE = path.join(REPO_ROOT, 'test', 'cases', 'modules', 'stdlib', 'registry_all.cml')
@@ -1217,7 +1225,11 @@ function runCamelCompile(file, cwd) {
     return new Promise((resolve) => {
         const env = { ...process.env }
         env.CAMEL_HOME = process.env.CAMEL_HOME || path.join(REPO_ROOT, 'out', 'latest')
-        const child = spawn(camelExe(), [file, 'std::gir'], { cwd, env, stdio: ['ignore', 'pipe', 'pipe'] })
+        const child = spawn(thisTreeCamel('a doc example'), [file, 'std::gir'], {
+            cwd,
+            env,
+            stdio: ['ignore', 'pipe', 'pipe']
+        })
         let output = ''
         child.stdout.on('data', (chunk) => (output += chunk))
         child.stderr.on('data', (chunk) => (output += chunk))
@@ -1371,19 +1383,23 @@ async function verifyDocs() {
 // failure is reported (a void call is a valid example of a writer such as save_params).
 // ---- checking against the registered operators --------------------------------------------
 
-// The install a mode that needs a compiler measures: `--camel <path>` names it (the main section
-// below parses the argument), else `$CAMEL_HOME/bin/camel`, else this tree's `out/latest/bin/camel`.
-// `CAMEL_EXE` is gone (the author's ruling, 2026-10-25): an environment switch does not name the
-// compiler of a run, and an explicitly named install is not exempt from the build stamp. One rule,
-// in one place: test/tools/camel-arg.mjs.
-let camelPath = null
+// The install a run measures: `--camel <path>` on the command line, else this tree's `out/latest`.
+// The stamp check runs once per process, the first time a mode actually needs the compiler, so
+// `--write` / `--verify-doc` / `--audit` -- which read the tree only -- need no install at all, and
+// a mode that compiles pays for one `build-info.js check` rather than one per example.
+let installChecked = false
 
-function camelExe() {
-    return camelPath || defaultCamel(REPO_ROOT)
+function thisTreeCamel(why) {
+    const exe = camelPath || defaultCamel(REPO_ROOT)
+    if (!installChecked) {
+        refuseInstallNotOfThisTree(exe, REPO_ROOT, `stdlib-reference.mjs (${why})`)
+        installChecked = true
+    }
+    return exe
 }
 
 function registeredOperators() {
-    const exe = camelExe()
+    const exe = thisTreeCamel('--verify-ops')
     const run = spawnSync(exe, ['inspect', '--ops', PROBE], { encoding: 'utf8', maxBuffer: 1 << 26 })
     // `spawnSync` reports a binary it could not start (`out/latest` never built, a stale install
     // from another tree) as `error`, with `status === null` and `stdout`/`stderr` both undefined:
@@ -1698,12 +1714,18 @@ function verifyOps() {
 
 // ---- main -----------------------------------------------------------------------------------
 
+const USAGE =
+    'usage: node scripts/stdlib-reference.mjs --write | --verify-doc | --verify-ops | --verify-docs | --audit [--compile] [--camel <path>]'
+
+// `--camel <path>` names the install a mode that needs a compiler measures; it is taken out of the
+// arguments here so the mode stays the first word that is not a flag.
 const argv = process.argv.slice(2)
 const flags = []
 for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--camel') {
         if (i + 1 >= argv.length) {
             console.log('--camel needs the path of the install to measure')
+            console.log(USAGE)
             process.exit(2)
         }
         camelPath = path.resolve(argv[++i])
@@ -1713,6 +1735,7 @@ for (let i = 0; i < argv.length; i++) {
         flags.push(argv[i])
     }
 }
+
 const mode = flags[0] || '--verify-doc'
 const bodyProblems = signatureBodyProblems()
 if (bodyProblems.length > 0) {
@@ -1810,7 +1833,7 @@ if (mode === '--write' || mode === '--verify-doc') {
     }
     console.log(`the declarations agree with the ${checked} registered operator overloads`)
 } else {
-    console.log('usage: node scripts/stdlib-reference.mjs --write | --verify-doc | --verify-ops | --verify-docs | --audit [--compile] [--camel PATH]')
+    console.log(USAGE)
     process.exit(2)
 }
 
