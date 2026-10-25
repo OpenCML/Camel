@@ -13,8 +13,8 @@ with <x: float>
 func repeated(): float { return sqrt(x) * sqrt(x) }
 with <x: float>
 func integer_root(n: int): float { return sqrt(n) * x }
-with <w: Tensor>
-func weighted(x: Tensor, variance: float): float { return sum(w * x * sqrt(variance)) }
+with <w: f32[..]>
+func weighted(x: f32[..], variance: float): float { return sum(w * x * f32(sqrt(variance))) }
 
 func main(): int sync {
     println('sqrt64={}'->format<with_grad(root)<4.0>()>)

@@ -14,7 +14,7 @@ import {
     transpose, reshape, flatten, unsqueeze, permute, concat, slice, pow
 } from tensor
 
-func check(name: string, f: <x: Tensor> () => float, df: <x: Tensor> () => Tensor, x: Tensor, v: Tensor): int sync {
+func check(name: string, f: <x: f32[..]> () => float, df: <x: f32[..]> () => f32[..], x: f32[..], v: f32[..]): int sync {
     let h = 0.001
     let analytic = sum(df<x>() * v)
     let numeric = (f<x + v * h>() - f<x - v * h>()) / (2.0 * h)
@@ -27,60 +27,60 @@ func check(name: string, f: <x: Tensor> () => float, df: <x: Tensor> () => Tenso
 }
 
 // ---- weights
-func w34(): Tensor { return new([[0.3, -1.2, 0.5, 2.0], [1.1, 0.4, -0.7, 0.2], [-0.5, 0.9, 1.3, -0.1]] as f32[][]) }
-func w4(): Tensor { return new([0.7, -0.3, 1.5, 0.2] as f32[]) }
-func w3(): Tensor { return new([1.0, -2.0, 0.5] as f32[]) }
-func w31(): Tensor { return new([[2.0], [3.0], [1.5]] as f32[][]) }
-func w5(): Tensor { return new([0.4, -0.8, 1.2, 0.3, -0.6] as f32[]) }
-func w5b(): Tensor { return new([-0.2, 0.5, 0.9, -1.1, 0.7] as f32[]) }
-func w45(): Tensor { return new([[0.2, -0.1, 0.4, 0.3, -0.5], [0.6, 0.1, -0.2, 0.8, 0.3], [-0.3, 0.5, 0.2, -0.4, 0.9], [0.1, 0.7, -0.6, 0.2, 0.4]] as f32[][]) }
+func w34(): f32[..] { return new([[0.3, -1.2, 0.5, 2.0], [1.1, 0.4, -0.7, 0.2], [-0.5, 0.9, 1.3, -0.1]] as f32[][]) }
+func w4(): f32[..] { return new([0.7, -0.3, 1.5, 0.2] as f32[]) }
+func w3(): f32[..] { return new([1.0, -2.0, 0.5] as f32[]) }
+func w31(): f32[..] { return new([[2.0], [3.0], [1.5]] as f32[][]) }
+func w5(): f32[..] { return new([0.4, -0.8, 1.2, 0.3, -0.6] as f32[]) }
+func w5b(): f32[..] { return new([-0.2, 0.5, 0.9, -1.1, 0.7] as f32[]) }
+func w45(): f32[..] { return new([[0.2, -0.1, 0.4, 0.3, -0.5], [0.6, 0.1, -0.2, 0.8, 0.3], [-0.3, 0.5, 0.2, -0.4, 0.9], [0.1, 0.7, -0.6, 0.2, 0.4]] as f32[][]) }
 
 // ---- elementwise
-with <x: Tensor>
+with <x: f32[..]>
 func arith(): float { return sum((x * x * 3.0 + x * w4() - x / w31() + 2.0 / (x * x + 1.0) - x) * w34()) }
-with <x: Tensor>
+with <x: f32[..]>
 func bcast_rhs(): float { return sum(w34() * x + w34() / (x * x + 1.0) - x) }
-with <x: Tensor>
+with <x: f32[..]>
 func powers(): float { return sum(pow(exp(x), 2.5) * w34() + pow(2.0, x)) }
-with <x: Tensor>
+with <x: f32[..]>
 func unary(): float { return sum((sigmoid(x) + tanh(x) * relu(x) + exp(x) / 4.0 + neg(x) * abs(x)) * w34()) }
-with <x: Tensor>
+with <x: f32[..]>
 func roots(): float { return sum((sqrt(exp(x)) + rsqrt(exp(x)) + log(exp(x) + 1.0)) * w34()) }
-with <x: Tensor>
+with <x: f32[..]>
 func smooth(): float { return sum((gelu(x) + erf(x)) * w34()) }
-with <x: Tensor>
+with <x: f32[..]>
 func select(): float { return sum((maximum(x, x * 0.2) + minimum(x, w4()) + where(x > 0.0, x * x, x * 3.0)) * w34()) }
 
 // ---- reductions
-with <x: Tensor>
+with <x: f32[..]>
 func reduce_axes(): float { return sum(sum(x, 1) * w3()) + sum(sum(x, 0, true) * w4()) + mean(x) * 3.0 + sum(mean(x, 1) * w3()) }
-with <x: Tensor>
+with <x: f32[..]>
 func extrema(): float { return sum(max(x, 1) * w3()) + sum(min(x, 0, true) * w4()) }
-with <x: Tensor>
+with <x: f32[..]>
 func soft(): float { return sum(softmax(x) * w34()) + sum(softmax(x, 0) * w34()) + sum(log_softmax(x) * w34()) }
-with <x: Tensor>
+with <x: f32[..]>
 func norm_x(): float { return sum(layer_norm(x, w4() + 1.0, w4()) * w34()) }
-with <g: Tensor>
+with <g: f32[..]>
 func norm_gamma(): float { return sum(layer_norm(w34(), g, w4()) * w34()) }
-with <b: Tensor>
+with <b: f32[..]>
 func norm_beta(): float { return sum(layer_norm(w34(), w4() + 1.0, b) * w34()) }
 
 // ---- linear algebra
-with <x: Tensor>
+with <x: f32[..]>
 func mm_lhs(): float { return sum(matmul(x, w45()) * w5()) }
-with <w: Tensor>
+with <w: f32[..]>
 func mm_rhs(): float { return sum(matmul(w34(), w) * matmul(w34(), w45())) }
-with <w: Tensor>
+with <w: f32[..]>
 func mm_batch_rhs(): float { return sum(matmul(reshape(concat(w34(), w34() * 2.0, 0), [2, 3, 4]), w)) }
-with <x: Tensor>
+with <x: f32[..]>
 func mm_vec(): float { return sum(matmul(x, w45()) * w5b()) + sum(matmul(w34(), x) * w3()) }
-with <x: Tensor>
+with <x: f32[..]>
 func lin(): float { return sum(linear(x, w45(), w5()) * matmul(w34(), w45())) }
-with <b: Tensor>
+with <b: f32[..]>
 func lin_bias(): float { return sum(tanh(linear(w34(), w45(), b)) * matmul(w34(), w45())) }
 
 // ---- layout
-with <x: Tensor>
+with <x: f32[..]>
 func layout(): float {
     let t = transpose(x) * transpose(w34())
     let r = reshape(x, [2, 6]) * reshape(w34(), [2, 6])
@@ -88,7 +88,7 @@ func layout(): float {
     let p = permute(reshape(x, [3, 2, 2]), [2, 0, 1]) * permute(reshape(w34(), [3, 2, 2]), [2, 0, 1])
     return sum(t) + sum(r) + sum(flatten(u) * reshape(w34(), [1, 12])) + sum(p)
 }
-with <x: Tensor>
+with <x: f32[..]>
 func pieces(): float {
     let c = concat(x, x * x, 0) * concat(w34(), w34(), 0)
     let d = concat(x, w34(), 1)

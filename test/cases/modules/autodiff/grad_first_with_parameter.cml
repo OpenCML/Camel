@@ -27,8 +27,8 @@ func point_loss(y: float): float {
 }
 
 // The gradient is a tensor of the weight's shape: x.
-with <w: Tensor>
-func dot(x: Tensor): float {
+with <w: f64[..]>
+func dot(x: f64[..]): float {
     return sum(w * x)
 }
 

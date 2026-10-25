@@ -6,14 +6,14 @@ import { grad } from autodiff
 // function is named or built for it anywhere grad can look. The differentiated value is the
 // first `with` parameter; the function is ordinary data. The first of the two calls is the one
 // reported.
-with <p: Tensor>
-func loss(f: (t: Tensor) => Tensor): float {
+with <p: f64[..]>
+func loss(f: (t: f64[..]) => f64[..]): float {
     let a = f(p)
     return sum(f(a) * p)
 }
 
 func main(): int sync {
     let x = reshape([0.5, 0.25, -0.35], [3])
-    println(grad(loss)<x>((t: Tensor): Tensor => tanh(t)))
+    println(grad(loss)<x>((t: f64[..]): f64[..] => tanh(t)))
     return 0
 }
