@@ -105,6 +105,9 @@ class Builder {
     /// The import of the maker a generic rule needs (`__rule_generic`) was made: a rule whose head
     /// declares type parameters carries its templates and is made by that maker alone.
     bool genericRuleImportAdded_ = false;
+    /// The import of `rewrite.Rule` was made: the function a rule with `with` parameters is
+    /// written as gives a `Rule`, and the type is named in its signature.
+    bool ruleTypeImportAdded_ = false;
     /// The import of `graph.Node` for a rule condition was made: a condition whose parameters are
     /// all `const` names values, not nodes, and does not need it.
     bool whenNodeImportAdded_ = false;

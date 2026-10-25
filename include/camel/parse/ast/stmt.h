@@ -95,6 +95,12 @@ class FuncDeclLoad : public StmtLoad {
     const std::vector<std::string> &declaredIn() const { return declaredIn_; }
     void setDeclaredIn(std::vector<std::string> path) { declaredIn_ = std::move(path); }
 
+    /// The function the compiler writes for a rule that declares `with` parameters: the rule's
+    /// own parameters, and a call of it (`name<value>`) is what gives the `Rule` (design
+    /// principles 5.5). A program never writes one; the rule declaration does.
+    bool ruleBinding() const { return ruleBinding_; }
+    void setRuleBinding() { ruleBinding_ = true; }
+
     const std::string toString() const override {
         return "FuncDecl: " + ref_.toString() +
                (operatorSymbol_.empty() ? std::string() : " (operator " + operatorSymbol_ + ")") +
@@ -106,6 +112,7 @@ class FuncDeclLoad : public StmtLoad {
     Reference ref_;
     std::string operatorSymbol_;
     std::vector<std::string> declaredIn_;
+    bool ruleBinding_ = false;
 };
 
 class TypeDeclLoad : public StmtLoad {

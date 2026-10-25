@@ -35,12 +35,14 @@ bool ParserImpl::atRuleDecl(uint32_t n) const {
     return tree_.tokens_.text(i) == "rule";
 }
 
-/// ruleDecl : frontMatter? 'export'? IDENTIFIER identDef typeParams? ruleContext? parentParams
-///            whenClause? '{' ruleBody '}'
+/// ruleDecl : frontMatter? ('with' angledParams)? 'export'? IDENTIFIER identDef typeParams?
+///            ruleContext? parentParams whenClause? '{' ruleBody '}'
 /// The first IDENTIFIER is the name `rule`; the condition, when there is one, is the `whenClause`
 /// between the parameters and the body. The parameters are the pattern variables; `const x: T`
 /// only matches a constant. The tags before it are the rule's requirements (`#requires<reassociate>`,
-/// design principles 7.2); the AST reads them from the tree.
+/// design principles 7.2); the AST reads them from the tree. The `with` parameters are written
+/// where a function writes its own, before `export` (design principles 4.4, 5.5): the rule's
+/// context parameters, with the same defaults a function's have.
 /// The condition is part of the signature, so it is written between the parameters and the body,
 /// in the one position the parser reads it in (design principles 4.4; 
 /// `docs/handover/reviews/questions-2026-10-23.md`, 「复核：泛型规则族落地」): a `when` after
@@ -53,6 +55,9 @@ void ParserImpl::parseRuleDecl() {
 }
 
 void ParserImpl::parseRuleDeclRest(size_t m) {
+    if (eat(TK::KwWith)) {
+        parseAngledParams();
+    }
     eat(TK::KwExport);
     bump(); // `rule`
     parseIdentDef();

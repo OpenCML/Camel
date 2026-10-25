@@ -166,6 +166,19 @@ class Node {
         flags_ |= kFlagB;
     }
 
+    /// FUNC: the function a rule with `with` parameters is written as (design principles 5.5).
+    /// Its `with` parameters are the rule's, its body makes the `Rule`, and a use of its name as
+    /// a value -- `name<value>`, or `name` alone with every parameter defaulted -- is a call of
+    /// it, not a function value, so the graph builder reads this mark where the name is used.
+    bool ruleBinding() const {
+        check(NodeKind::FUNC);
+        return (flags_ & kFlagC) != 0;
+    }
+    void setRuleBinding() {
+        check(NodeKind::FUNC);
+        flags_ |= kFlagC;
+    }
+
     /// DECL: whether a function is declared (else a type).
     bool isFunc() const {
         check(NodeKind::DECL);
@@ -512,9 +525,10 @@ class Node {
         const EnumCase *enumCase;
     };
 
-    // The meaning of the two kind-specific flags is given with each accessor above.
+    // The meaning of the kind-specific flags is given with each accessor above.
     static constexpr uint8_t kFlagA    = 1 << 0;
     static constexpr uint8_t kFlagB    = 1 << 1;
+    static constexpr uint8_t kFlagC    = 1 << 2;
     static constexpr uint8_t kAttached = 1 << 7; // the node is the child of a node
 
     explicit Node(NodeKind kind) : kind_(kind) { payload_.number = 0; }
