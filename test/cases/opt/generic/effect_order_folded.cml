@@ -23,7 +23,7 @@ func main(): int sync {
     println('start')
     let labels = [3, 1, 4]
     let n = 3
-    func one_hot(i: int, acc: Tensor): Tensor {
+    func one_hot(i: int, acc: f32[..]): f32[..] {
         return if i >= n then acc else sync {
             let row = reshape((0..10 == labels[i]) * 1.0, [1, 10])
             let next = if i == 0 then row else concat(acc, row, 0)
