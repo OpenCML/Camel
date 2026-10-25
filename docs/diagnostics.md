@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-270 diagnostics: 253 errors, 17 warnings. 15 carry a machine-applicable edit, 255 say why they carry none.
+271 diagnostics: 254 errors, 17 warnings. 15 carry a machine-applicable edit, 256 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -239,6 +239,7 @@ prints one entry.
 | `0x030001E9` | [SemanticDiag::SliceStepZero](#slicestepzero) | Error | no |
 | `0x030001EA` | [SemanticDiag::TagFieldNameAmbiguous](#tagfieldnameambiguous) | Error | no |
 | `0x030001EB` | [SemanticDiag::TagFunctionArgumentNotReadable](#tagfunctionargumentnotreadable) | Error | no |
+| `0x030001EC` | [SemanticDiag::GenericTypeArgumentGrows](#generictypeargumentgrows) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn | no |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn | no |
@@ -2397,17 +2398,37 @@ Instantiating the generic function '{0}' with {1} is refused: {2}.
 Each call of a generic function with a new set of types builds a new subgraph. A generic function that calls itself with ever larger types never stops doing so.
 ```
 
-**Example** (`test/cases/compile/generics/err_deep.cml`, run as `camel test/cases/compile/generics/err_deep.cml`)
+**Example** (`test/cases/compile/generics/err_deep_types.cml`, run as `camel test/cases/compile/generics/err_deep_types.cml`)
 
 ```camel
-module err_deep
+module err_deep_types
 
-func grow::<T>(x: T, n: int): int {
-    return if n <= 0 then 0 else grow([x], n - 1)
+func churn::<T>(x: T, k: int): int {
+    let anF32: f32 = 1.0
+    let anF64: f64 = 1.0
+    let anI32: i32 = 1
+    let anI64: i64 = 1
+    let aBf16: bf16 = 1.0
+    let aF16: f16 = 1.0
+    let aBool = true
+    let aString = 's'
+    let aC64: c64 = 1 - 2i
+    let aC128: c128 = 1 + 2i
+    return if k <= 0 then 0
+           else if k == 1 then churn(anF32, k - 1)
+           else if k == 2 then churn(anF64, k - 1)
+           else if k == 3 then churn(anI32, k - 1)
+           else if k == 4 then churn(anI64, k - 1)
+           else if k == 5 then churn(aBf16, k - 1)
+           else if k == 6 then churn(aF16, k - 1)
+           else if k == 7 then churn(aBool, k - 1)
+           else if k == 8 then churn(aString, k - 1)
+           else if k == 9 then churn(aC64, k - 1)
+           else churn(aC128, k - 1)
 }
 
 func main(): int sync {
-    println(grow(1, 3))
+    println(churn(0, 3))
     return 0
 }
 ```
@@ -7914,6 +7935,41 @@ func read(b: Box): int {
 
 func main(): int sync {
     println(read({scaled: 1, plain: 2}))
+    return 0
+}
+```
+
+### GenericTypeArgumentGrows
+
+`0x030001EC` · Error · `SemanticDiag::GenericTypeArgumentGrows`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
+**Message**
+
+```text
+The recursive call makes the type argument '{0}' of the generic function '{1}' grow from '{2}' to '{3}': every instance's type argument would contain the one before it, so specialization never stops.
+```
+
+**Help**
+
+```text
+The type arguments of a generic function are its instance key, so a call that hands it a type built out of the type it already has asks for a new instance at every level: 'f::<T>(x: T)' calling 'f([x])' makes 'T', then 'T[]', then 'T[][]'. No set of instances reaches a fixed point. Write the recursion so that its type argument is the same at every level, and take what changes as a value parameter.
+```
+
+**Example** (`test/cases/compile/generics/err_deep.cml`, run as `camel test/cases/compile/generics/err_deep.cml`)
+
+```camel
+module err_deep
+
+func grow::<T>(x: T, n: int): int {
+    return if n <= 0 then 0 else grow([x], n - 1)
+}
+
+func main(): int sync {
+    println(grow(1, 3))
     return 0
 }
 ```
