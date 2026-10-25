@@ -8,8 +8,10 @@
 #include "camel/runtime/draft.h"
 #include <cstddef>
 #include <memory>
+#include <span>
 #include <string>
 #include <vector>
+class Function;
 namespace camel::runtime {
 class GCGraph;
 namespace fact {
@@ -115,9 +117,28 @@ void registerRegionTestPasses(
 slot_t testNativeCall(ArgsView &with, ArgsView &norm, core::context::Context &context);
 slot_t testCompiledCall(ArgsView &with, ArgsView &norm, core::context::Context &context);
 
+/// The calls this module writes for a segment of a cut scope: the operators that call the graph
+/// of the function value they receive (`OperatorTraits::callsGraphs`, op-semantics 11.4), which
+/// are the ones `RegionDeviceOps` names and `outlineRegions` writes. A report operator asked
+/// about a graph a pass has cut reads these calls, never the wrapper: each one carries the graph
+/// of its segment as its context argument, and the wrapper is not a program of its own.
+bool isRegionExec(core::OperId oper);
+struct RegionSegment {
+    // The call to the segment, in the graph that holds it.
+    runtime::gc_node_ref_t call = 0;
+    // The graph the call carries. Never null: a call without one is not a segment call.
+    Function *graph = nullptr;
+};
+// The segments a graph a pass has cut is made of, in graph order; empty for a graph no pass has
+// cut. `RegionSegment::graph` is the `Function` the call carries, out of the graph's static
+// values, so the caller keeps them rooted (a `NoCollectionScope` covers a report).
+std::vector<RegionSegment> regionSegments(const runtime::GCGraph &graph);
+
 // Inspect one function graph without executing it or initializing CUDA. This is
-// candidate analysis with extracted drafts, not automatic graph execution.
+// candidate analysis with extracted drafts, not automatic graph execution. `segments` are the
+// calls `regionSegments` found: a scope a pass has already cut reports them as segments of their
+// own, and never as nodes the region analysis excluded.
 std::string inspectRegions(
     const runtime::Program &program, const runtime::GCGraph &graph,
-    runtime::fact::FactStore &facts);
+    runtime::fact::FactStore &facts, std::span<const RegionSegment> segments = {});
 } // namespace camel::tiles
