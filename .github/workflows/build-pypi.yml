@@ -180,10 +180,26 @@ jobs:
         # The rollup tags what it can honestly claim on this machine (`linux_x86_64`), and
         # auditwheel is what knows which glibc the bundled libraries actually need. It is also
         # what makes the tag publishable.
+        #
+        # `--exclude libcamel.so` (H604): the wheel already carries its own libcamel at
+        # `camel/.cmlenv/libs/libcamel.so`, which is the copy the launcher loads (`$ORIGIN/libs`
+        # comes first in its RUNPATH), and every `.cmo` in `.cmlenv/stdlib` has `libcamel.so` as
+        # NEEDED. Left alone, auditwheel vendors a *second* copy as
+        # `camel_lang.libs/libcamel-<hash>.so`, renames its SONAME and rewrites the `.cmo` files
+        # to need the renamed one. Two libcamel copies are then resident in one process (measured:
+        # `LD_DEBUG=libs` prints `calling init` for both), each with its own operator registry,
+        # type codes and allocator-visible globals, and every program that imports a module dies
+        # in teardown -- `camel hello.cml` printed `Hello, root!` and then
+        # `double free or corruption (!prev)`, exit 134, on std::nvm, std::fvm and std::jit alike,
+        # and larger examples (examples/algorithms/merge_sort.cml) segfaulted outright. Excluding
+        # it keeps one copy: the `.cmo` files keep NEEDED `libcamel.so`, which the already-loaded
+        # object satisfies by SONAME, and all four smoke runs exit 0. The wheel also loses the
+        # 19.3 MB duplicate (18.8 MB -> 12.7 MB compressed).
         run: |
           mkdir -p wheelhouse
           "$CAMEL_PYPI_PYTHON" -m auditwheel repair \
-            --plat "${{ matrix.cfg.platform_tag }}" -w wheelhouse dist/pypi/*.whl
+            --plat "${{ matrix.cfg.platform_tag }}" --exclude libcamel.so \
+            -w wheelhouse dist/pypi/*.whl
           ls -la wheelhouse/
 
       - name: Refuse an unpublishable tag (5.37 item 1)
@@ -392,7 +408,12 @@ jobs:
           "$BIN/python" -m pip install --upgrade pip
           "$BIN/python" -m pip install --find-links wheelhouse camel-lang
           "$BIN/python" -m pip list --format=freeze | grep -i camel
-          printf 'func main(): int sync {\n    println("Hello, Camel!")\n    return 0\n}\n' > "$RUNNER_TEMP/hello.cml"
+          # This program imports a stdlib module on purpose (H604). A program that imports
+          # nothing loads no `.cmo` at all and cannot see a defect in the module path: the wheel
+          # that carried two copies of libcamel ran `println("Hello, Camel!")` and exited 0, and
+          # died on every program that imported anything (`camel hello.cml` with
+          # `import { whoami } from process` printed its line and then aborted, exit 134).
+          printf 'module main\n\nimport { sqrt } from math\n\nfunc main() sync {\n    println(string(sqrt(2.0)))\n    return 0\n}\n' > "$RUNNER_TEMP/hello.cml"
           "$BIN/camel" --version
           "$BIN/camel" "$RUNNER_TEMP/hello.cml"
           "$BIN/camel" "$RUNNER_TEMP/hello.cml" std::jit
@@ -453,7 +474,9 @@ jobs:
           EXPECT: ${{ matrix.expect }}
         run: |
           mkdir -p "$RUNNER_TEMP/shared"
-          printf 'func main(): int sync {\n    println("Hello, Camel!")\n    return 0\n}\n' > "$RUNNER_TEMP/shared/hello.cml"
+          # The same program the native smoke uses, and for the same reason: it imports a stdlib
+          # module, so the run reaches the `.cmo` path where the duplicate-library defect lived.
+          printf 'module main\n\nimport { sqrt } from math\n\nfunc main() sync {\n    println(string(sqrt(2.0)))\n    return 0\n}\n' > "$RUNNER_TEMP/shared/hello.cml"
           cat > "$RUNNER_TEMP/shared/smoke.sh" <<'SMOKE'
           set -eu
           # A clean container with nothing but the wheel: 5.37 item 4. `numpy` is what the
