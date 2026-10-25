@@ -77,7 +77,7 @@ func main(): int sync {
 
 | 环节 | 位置 |
 |---|---|
-| 留下 with 参数的产生点 | `region_outline.cpp`：`addOperNode(type, run, device->executeUri, …)` + `setWithInputs(call, {fnNode})`；GIR 上是 `N06 Function(graph=pair/tiles.region/0) -> N07 tiles:run_preferred_resident [type="WITH"]`（`tiles::compile std::gir`） |
+| 留下 with 参数的产生点 | `region_outline.cpp`：`addOperNode(type, run, device->executeUri, …)` + `setWithInputs(call, {fnNode})`，段图 `pair/tiles.region/0` 被绑成上下文实参。`tiles::compile std::gir` 的 dump 里是 `Function(graph=pair/tiles.region/0) -> tiles:run_preferred_resident [type="WITH"]`（dump 的 `N0x` 是程序范围的标号，不是节点 id）；两条独立读数把它指到 `pair` 的**节点 5**：崩溃信息的内层正是 "pair node 5"，而 `regions<pair>()` 的 `excluded` 里是 `{"node":5,"reason":"context_arguments"}` |
 | 拒绝的产生点 | `compiler.cpp` 的 `Frame::eval`，`case rt::GCNodeKind::Oper`：`if (!g->withInputsOf(id).empty()) throw UnsupportedComputation("operator context arguments are not supported yet")`；该异常按契约是能力缺失（`tiles/internal/capability.h` 首行："Capability misses are dispatch decisions; compiler/runtime faults are not"） |
 | 消费点 | `modules/tiles/src/module.cpp` 的 `checked()`：把 `std::exception` 变成 `RuntimeDiag::RuntimeError`，于是内部措辞 "not supported yet" 直接到用户面前（`region_outline.cpp` 的 `#gpu` 拒绝路径遇到空 `oper()` 时兜成 `<region>`，同一处缺口） |
 | 为什么 pass 自己不失败 | `region_outline.cpp` 只对段图调 `compileTypes(fn)`；段图里没有 with 参数。运行期的 exec 节点编译的是段（`compiled_region.cpp` 的 `prepareProgram(…, staticRegion=true)`） |
