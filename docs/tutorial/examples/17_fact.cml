@@ -1,0 +1,28 @@
+// The knowledge of your field that is not an equation, handed to the compiler.
+// Run: camel docs/tutorial/examples/17_fact.cml
+module domain
+
+import { check } from rewrite
+import { abs } from math
+
+// A `fact` says what the compiler may rely on for a value: a square is never negative. The match
+// reads how the value was built; `join` says how the two writings of one value are merged.
+fact nonnegative(v: int): bool match v {
+    case const c => c >= 0
+    case x * x   => true
+    case _       => false
+} join (lhs: bool, rhs: bool) => lhs | rhs
+
+// The law holds only where the fact does: on a value that is never negative, `abs` changes nothing.
+rule abs_of_nonnegative(x: int) when nonnegative(x) { abs(x) => x }
+
+func squared(x: int): int {
+    return abs(x * x)
+}
+
+func main(): int sync {
+    // `check` samples the law together with its premise, so the fact decides where it may fire.
+    println(check([abs_of_nonnegative], 100, 1))
+    println(squared(-3))
+    return 0
+}

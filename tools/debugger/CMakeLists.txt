@@ -33,6 +33,9 @@ target_include_directories(camel-debugger_objects PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${CMAKE_SOURCE_DIR}/modules/rewrite
+    # The decision every handler of a diagnostics limit makes after it has dumped what it holds,
+    # for the command line and the debugger alike (tools/camel-cli/diag_limit.h).
+    ${CMAKE_SOURCE_DIR}/tools/camel-cli
 )
 target_link_libraries(camel-debugger_objects PRIVATE httplib::httplib nlohmann_json::nlohmann_json)
 set_target_properties(camel-debugger PROPERTIES RUNTIME_OUTPUT_NAME camel-db)

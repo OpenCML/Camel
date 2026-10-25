@@ -51,7 +51,7 @@ var count = 0
   let a, b = 1, 'x'
   ```
 
-  结构体解构 `let { x, y } = p` 与数组解构 `let [a, b] = xs` 保留，尚未实现（`SemanticDiag::FeatureNotSupported`）；用 `p.x`、`xs[0]`。
+  结构体解构 `let { x, y } = p` 与数组解构 `let [a, b] = xs` 报 `SemanticDiag::FeatureNotSupported`；用 `p.x`、`xs[0]`。
 - **`let _ = e` 有意丢弃 `e` 的值。** `_` 不是名字：它不绑定任何东西，所以同一个块里可以写任意多次，也不能读它。表达式与任何 `let` 的初值一样求值（在同步块里按顺序）。这是表明有意忽略一个 `T!` 的写法（[7.1](#71-表达式语句)）。只有这一种写法：`var _`、在多个名字中间写 `_` 都是语法错误。
 - 模块顶层的 `let` 是全局常量，顶层的 `var` 可以被函数读写，包括被导入的函数读写它所在模块的（[5.3](05_modules.md#53-导出)）。**顶层的声明与书写顺序无关，只看依赖**：`let area = pi * r * r` 可以写在 `let pi` 之前；顶层的值之间成环是 `SemanticDiag::ModuleValueCycle`（[5.6](05_modules.md#56-模块的加载)）。函数体里的局部 `let` 仍是先声明后使用。
 
@@ -363,42 +363,40 @@ func main(): int sync {
 **常量值参数（`constas`）**：普通形参里可以写 `constas n: int`，它的值在编译期已知，是声明身份的一部分，而不是运行时的实参。
 
 ```cml
-import { Tensor, ones, sum } from tensor
-
-func total(constas n: int, x: Tensor<f32, [n]>): float {
-    return sum(x)
+func total(constas n: int, x: float[n]): float {
+    return loop acc = 0.0 for v in x do acc + v
 }
 
 func main(): int sync {
-    println(total(3, ones([3])))
-    println(total(5, ones([5])))
+    println(total(3, [1.0, 2.0, 3.0]))
+    println(total(5, [1.0, 2.0, 3.0, 4.0, 5.0]))
     return 0
 }
 ```
 
 ```text
-3.0
-5.0
+6.0
+15.0
 ```
 
 - **值进入实例键。** 每个不同的常量值实例化出一张子图（`total<3>`、`total<5>`），同一组类型和值只实例化一次；值与类型合起来才是键，只差一个字符串也是两个实例（`label<"w">`、`label<"h">`）。
 - **任意个、任意位置。** 一个声明可以有多个 `constas` 形参，位置在普通形参之间任意；调用把值写在它所在的位置（`place(1, 2)` 给 `x = 1`、`n = 2`）。每个值各自进入实例键。
 - **类型不止 `int`。** `string`、`int`、`float`、`bool` 等有编译期常量的类型都可以；值必须与形参类型相容。类型要写出来（`SemanticDiag::ConstasTypeRequired`）。`enum` 成员目前还不能作为编译期值传递（`SemanticDiag::ConstasValueNotConstant`），要等 `enum` 值有了编译期表示。
-- **值由函数体读取。** `n` 在实例体里是一个编译期常量：可以当类型里的具名维度（`Tensor<f32, [n]>`、`[n]`），可以当字段名（`t.[n]`），也可以当普通值用于算术、条件、打印。它不需要被任何类型读到：只有函数体读它也是合法的。
+- **值由函数体读取。** `n` 在实例体里是一个编译期常量：可以当类型里的具名维度（`f32[n]`），可以当字段名（`t.[n]`），也可以当普通值用于算术、条件、打印。它不需要被任何类型读到：只有函数体读它也是合法的。
 - **不是运行时参数。** 调用点要给出常量，但它不进入调用结点：实例的形参表里没有 `n`，调用只传其余的实参（`total(3, xs)` 的调用只有一个实参 `xs`）。
 - **值可以转手。** 一个 `constas` 值可以传给另一个 `constas` 参数，也可以来自 `static for` 绑定的字段名、`indices` 的位置这类编译期名字。`func columnOf(constas n: string, ..ts) { return column(n, ..ts) }` 合法：`tree_map` 正是这样把字段名和树一起交给 `column`。
 - **和剩余参数一起用。** `func column(constas n: string, ..ts)` 合法：值在展开前绑定，`ts` 得到剩下的实参。设计稿 3.1.1 的 `column` 今天可以写成
 
   ```cml
   func column(constas n: string, ..ts): (int, int) {
-      return ( static for (j) in indices ts => ts.[j].[n] )
+      return ( static for j in indices ts => ts.[j].[n] )
   }
   ```
 
   两个只差字符串的调用是两张图，各自取 `n` 命名的字段。
 - 带 `constas` 参数的声明**没有函数值**：常量必须在写调用时给出，不能赋给变量或作为实参传走（`SemanticDiag::ConstasFunctionNeedsCall`）。无体声明（C++ 算子的声明）也不能带 `constas`（`SemanticDiag::ConstasInNativeDeclaration`）。
 - 值必须是编译期常量（`SemanticDiag::ConstasValueNotConstant`）：运行期的值不行，因为它要选实例。目前常量可以是字面量、另一个 `constas` 值、`static for` 的 `n` 和 `indices` 的 `j` 这类编译期名字，以及一个纯函数在所有实参都是编译期常量时的调用（`label(first_field::<S>())`），编译期把它折叠成那个值；读不出来的调用按自己的名字拒绝（`SemanticDiag::FoldCallNotEvaluable`，其余 `FoldCall*` 诊断说明原因）。
-- `n` 只在实例体里绑定；函数体里的类型位置（`let z: Tensor<f32, [n]>`）还没有这个作用域。数组写法 `f32[n]` 同样可以。
+- `n` 只在实例体里绑定。具名维度写在形参的声明类型里（`x: f32[n]`）；函数体里的类型位置按"维度名由形参类型里第一次出现的那个绑定"来读，`let z: f32[n]` 在那里没有把实例的 `n` 带进来（`SemanticDiag::DimensionNameNotBound`）。
 
 **目前的限制**：泛型函数不能加标注；带上下文实参的泛型函数（`f<w>`）不能作值；带 `constas` 参数的函数不能作值，也不能和无体声明组合，`enum` 值还不能作为 `constas` 实参。设计稿 3.1.1 的 `column(constas n, ts)` 省写了类型，今天要写成 `column(constas n: string, ..ts)`。
 
@@ -494,27 +492,28 @@ func canonical(x: float, y: float): float {
 - **被调用的函数不继承**：`dot` 调用的函数仍按规范算法，除非它自己写了许可标签。内联之后各节点仍带各自的许可。
 - **`#strict` 撤销一切**：它标记的函数或块（连同其中的分支臂、循环体与 lambda）的有效许可为空集——默认的 `reassociate`、`contract` 不再可用，内层写下的许可也不生效。外层与内层同时写着时，`#strict` 优先。
 - **许可只是允许，不是要求**。CPU 后端（`std::nvm`、`std::fvm`、`std::jit`、`std::prl`、`std::cpp`）总是给出规范结果；以后的后端（如 Tiles）可以在有许可的节点上用别的算法。`std::opt` 默认使用 7.3 的默认许可，`std::opt safe_fp=true` 按 `#strict` 一样的策略工作。
-- 没有模块级的默认许可，也没有命令行或流水线开关；后端的入口（如 `tiles.run`）不接受许可。
+- 没有模块级的默认许可，也没有命令行或流水线开关；后端的入口（如 `tiles::run`）不接受许可。
 - 许可记在图的每个节点上，`std::rgir`、`std::gir` 在有许可的节点上显示 `numeric="..."`；`#strict` 是代码上的标签，出现在节点的 `attrs="strict"` 里。公共子表达式合并与张量的融合不把许可不同的节点合在一起。
 
 ### 7.6.2 标签：`#`
 
-`#` 不再开始注释（文件第一行的 `#!` 除外），而是**标签**（设计原则 6.2）。标签是与函数、类型同一个命名空间里的名字：在本模块声明、按名字导入、或用 `模块::标签` 限定。
+`#` 开始一个**标签**（设计原则 6.2）；文件第一行的 `#!` 到行末被忽略。标签是与函数、类型同一个命名空间里的名字：在本模块声明、按名字导入、或用 `模块::标签` 限定。
 
 标签在模块顶层声明，`on` 之后是它可以写的位置：
 
 ```cml
 export tag kernel on nodes                  // 写在块、函数或类型之前，属于其中的节点
 export tag fast on func, nodes              // 也属于函数的声明
-export tag width<w: int> on type, field     // 带参数，参数是编译期值
+export tag width(w: int) on type, field     // 带参数，参数是编译期值
+export tag vjp::<F>(rule: F) on func when is_function::<F>()   // 形参是函数：实参是一个函数，事实还原成那个函数
 tag finite = [kernel, fast]                 // 标签组：成员一起生效
 ```
 
-位置有 `func`（函数声明）、`type`（类型声明）、`field`（结构体字段）、`nodes`（区域内写下的节点）与 `param`（保留）。`read_by` 说明哪些遍读取这个标签，流水线里一个都没有时，在写下标签的地方报告一条警告；只有声明自己读取标签事实的遍（内置的 GIR/JSON 输出遍与 `std::opt`，模块遍如 `tiles::compile`、`tensor::fuse`）才算读取者；用 Camel 写的遍也可以在函数上用 `#reads<标签, ...>` 声明自己读哪些标签，与 `read_by` 同样算数。程序不得声明与核心许可（以及 `finite_math`、`strict`）同名的标签（如 `tag reassociate`）：那样的名字始终指核心的标签，声明永远读不到，`SemanticDiag::TagShadowsPermission` 在声明处拒绝。
+位置有 `func`（函数声明）、`type`（类型声明）、`field`（结构体字段）、`nodes`（区域内写下的节点）与 `param`（保留）。`read_by` 说明哪些遍读取这个标签，流水线里一个都没有时，在写下标签的地方报告一条警告；只有声明自己读取标签事实的遍（内置的 GIR/JSON 输出遍与 `std::opt`，模块遍如 `tiles::compile`、`tensor::fuse`）才算读取者；用 Camel 写的遍也可以在函数上用 `#reads(标签, ...)` 声明自己读哪些标签，与 `read_by` 同样算数。程序不得声明与核心许可（以及 `finite_math`、`strict`）同名的标签（如 `tag reassociate`）：那样的名字始终指核心的标签，声明永远读不到，`SemanticDiag::TagShadowsPermission` 在声明处拒绝。
 
 语言核心自带一组**数值许可标签**（设计原则 7.2），不必导入，写在 `on nodes`：`reassociate`、`contract`、`approx_math`、`change_precision`、`no_nans`、`no_infs`、`no_signed_zeros`、`flush_subnormals`、`nondeterministic`（允许结果随调度变化，如浮点原子加），以及把它们前四项合在一起的组 `finite_math`；`strict`（7.4）也是核心的标签，写在 `on func, nodes`。`#contract` 落在节点的许可列上（dump 里的 `numeric="..."`），`#strict` 落在节点的属性集里（`attrs="strict"`），读者通过同一个查询（`camel/core/tags.h` 的 `permissionsOf` / `effectivePermissions`）取得许可：`effectivePermissions` 对 `#strict` 返回空集。默认值见 7.3：`reassociate` 与 `contract` 本来就允许，其余要写明才生效。
 
-规则的声明之前可以写 `#requires<许可, ...>`：实参是许可名、核心的组 `finite_math`，或本模块用 `tag 名字 = [许可, ...]` 声明的组（成员递归展开，组名等于其中各许可的并集）。规则只在节点所在的数值策略满足这些许可时才被应用（[46 规则](../technical/46_rules.md)）。要求写成普通的标签、写成未声明的名字，或者在规则之外写 `#requires`，都是定位到该处的错误，不会静默放过。
+规则的声明之前可以写 `#requires(许可, ...)`：实参是许可名、核心的组 `finite_math`，或本模块用 `tag 名字 = [许可, ...]` 声明的组（成员递归展开，组名等于其中各许可的并集）。规则只在节点所在的数值策略满足这些许可时才被应用（[46 规则](../technical/46_rules.md)）。要求写成普通的标签、写成未声明的名字，或者在规则之外写 `#requires`，都是定位到该处的错误，不会静默放过。
 
 `#` 有三种写法，可以写在函数、类型声明、结构体字段或块之前：
 
@@ -528,9 +527,9 @@ func matmul(a: T, b: T): T { ... }
 <!-- camel-snippet: fragment: the tag forms are illustrative; width is a tag a module declares -->
 
 ```cml
-#width<32>
+#width(32)
 type Packed = {
-    #width<8> a: int,
+    #width(8) a: int,
     b: int,
 }
 
@@ -543,25 +542,25 @@ func main(): int {
 }
 ```
 
-`#name`、`#name<实参>` 与 `#[a, b<v>]`（标签组）。标签的参数是编译期值：字面量、顶层常量或函数名。实参必须是声明的形参类型所指的那种常量——`int`、`float`、`bool`、`string`，或 `func` 的实参（函数名）；浮点实参按位记为 real 属性，`1.5` 就打印为 `1.5`。写到声明没有列出的位置是错误，位置在标签上。参数个数与声明的参数不符、实参不是编译期值、实参的种别与形参声明的类型不符（`SemanticDiag::TagArgumentType`）、形参的类型标签还载不了（`SemanticDiag::TagParameterType`），也都在标签上报告。
+`#name`、`#name(实参)` 与 `#[a, b(v)]`（标签组）。标签的参数是编译期值：字面量、顶层常量或函数名。实参必须是声明的形参类型所指的那种常量——`int`、`float`、`bool`、`string`，或者函数（形参写成满足 `is_function` 的类型参数，或具体的函数类型）；浮点实参按位记为 real 属性，`1.5` 就打印为 `1.5`。写到声明没有列出的位置是错误，位置在标签上。参数个数与声明的参数不符、实参不是编译期值、实参的种别与形参声明的类型不符（`SemanticDiag::TagArgumentType`）、形参的类型标签还载不了（`SemanticDiag::TagParameterType`），也都在标签上报告。
 
 `on nodes` 的标签是**节点的属性**（`camel/core/node_attrs.h`）：写在前面的标签对那个函数体或块里写下的节点生效，与外面同名的标签按属性的合并规则累积，内层带参数的标签取内层的值。`on func`、`on type`、`on field` 的标签属于声明本身，C++ 模块用 `tag::factsOf` 一处读取（标签、许可、读者；`tag::ofDeclaration` / `tag::ofField` 仍在）；在 Camel 代码里读它们要等泛型的第一阶段。
 
-形参类型还可以是 `func`：这时实参是一个函数名，标签的事实是那个函数的**图引用**（`attr::graphRef`），不是函数值。GIR 构建器把该图记进函数图的引用表（`kGraphRefRule`），于是冻结后的图直接指向这个函数，运行期不必再按名字解析，也不需要闭包捕获；因此 `func` 实参只能是程序里的静态函数，载不了捕获了外围值的闭包。自动微分模块就是这样声明 `export tag vjp<rule: func> on func` 的：`#vjp<rule>` 写在函数声明之前，调用这个函数时用规则而不是函数体的导数（[26 自动微分](../technical/26_autodiff_as_graph_rewrite.md)）。`@vjp<rule>` 在标注处报 `SemanticDiag::InvalidAnnotation`，应写 `#vjp<rule>`。
+形参也可以是一个函数：声明成类型参数，加上条件 `when is_function::<F>()`，与遍的签名 `opt::<F>(f: F): F! when is_function::<F>()` 是同一种写法；签名固定时直接写具体的函数类型 `(x: T) => R`。实参是一个函数，标签的事实就是那个函数本身（还原成那个函数），不是它的名字，也不是任何内部记号；它的签名是否合用，由读这个标签的一方在贴的位置检查。自动微分模块就是这样声明 `export tag vjp::<F>(rule: F) on func when is_function::<F>()` 的：`#vjp(rule)` 写在函数声明之前，调用这个函数时用规则而不是函数体的导数（[26 自动微分](../technical/26_autodiff_as_graph_rewrite.md)）。
 
-**`#impl<f>`：Camel 函数体是语义，原生内核是执行**（设计原则 10.4）。它写在带函数体的函数声明之前：
+**`#impl(f)`：Camel 函数体是语义，原生内核是执行**（设计原则 10.4）。它写在带函数体的函数声明之前：
 
 ```cml
-#op<':op/add_l'>
+#op(':op/add_l')
 func add_kernel(a: int, b: int): int          // 本模块的无体声明，内核
 
-#impl<add_kernel>
+#impl(add_kernel)
 export func add(a: int, b: int): int {
     return a - (0 - b)                        // 语义（Camel 定义）
 }
 ```
 
-- 语法是 `#impl<内核名>`：一个参数，取名字而不是值，因为无体声明没有函数值可传。
+- 语法是 `#impl(内核名)`：一个参数，取名字而不是值，因为无体声明没有函数值可传。
 - `f` 必须是**同一模块**的无体声明。按设计它是这个模块的私有声明（不导出：内核是实现细节，不是模块接口），写在函数同一个模块里。别的模块的声明（`SemanticDiag::ImplKernelForeign`）、没有声明的名字（`ImplKernelUnknown`）、带函数体的函数（`ImplKernelNotBodyless`）、以及写在无体声明自己身上的 `#impl`（`ImplOnBodylessDeclaration`）都被拒绝，`#impl` 也不能写在 lambda、类型、字段或块上（标签位置错误）。拥有 `.cmo` 的模块（`stdlib/tensor.cml` 之于 `tensor.cmo`）同样可以声明内核并写下定义：`.cml` 与同名 `.cmo` 是**同一个模块**（H94），声明模块可以有函数体（语言作者的裁定，2026-10-23，`docs/handover/reviews/questions-2026-10-23.md`「## impl-kernel-site」：「选 (a)，而且取宽的那一种：声明模块可以有函数体，`DeclarationModuleHasBody` 删除」）。
 - **泛型函数可以带 `#impl`**：内核是一条同样带类型参数的无体声明（`sum_kernel::<T>`），按 H228「一个算子、按类型的执行器」在实例化时选执行器——声明里的固定规则按签名匹配，带类型参数的规则用该实例的类型求解。某个 `T` 没有执行器时，这个实例就执行函数体：函数体本来就是语义，结果相同；`std::profile` 标出它走的是哪条路（`docs/handover/reviews/questions-2026-10-23.md`「## impl-kernel-site」：「泛型函数可以带 `#impl`」）。
 - **签名必须一致**：`with` 与普通参数的个数、类型和 `var` 标记相同，结果类型相同，内核没有 `constas` 参数；不一致报 `ImplSignatureMismatch`。
@@ -575,10 +574,10 @@ export func add(a: int, b: int): int {
       }
   }
 
-  #op<':op/add_i'>
+  #op(':op/add_i')
   func add_kernel::<T>(a: T, b: T): T when is_armed::<T>()   // 只实现 i32 的实例
 
-  #impl<add_kernel>
+  #impl(add_kernel)
   func add::<T>(a: T, b: T): T { return a - (0 - b) }        // int 的实例没有执行器，走函数体
   ```
 
@@ -600,13 +599,13 @@ export func add(a: int, b: int): int {
       }
   }
 
-  #op<':op/add_i'>
+  #op(':op/add_i')
   func add_kernel::<T>(a: T, b: T): T when is_armed::<T>()   // i32 的实例走 :op/add_i
 
-  #op<':op/add_f'>
+  #op(':op/add_f')
   func add_kernel::<T>(a: T, b: T): T when is_f32::<T>()     // f32 的实例走 :op/add_f
 
-  #impl<add_kernel>
+  #impl(add_kernel)
   export func add::<T>(a: T, b: T): T {
       return a + b                                           // 两族之外的实例走这里
   }
@@ -667,7 +666,7 @@ id
 - 可以 `export`，在别的模块里以 `模块::Pair<int>` 使用。
 - 模块类型的尖括号由该类型自己解释，实参可以是类型或 `const 数据`；数值数组的另一种拼写 `Tensor<f32, [2, 3]>` 的尖括号由数组类型自己解释（形状实参不写 `const`：`Tensor<f32, const [2, 3]>` 报 `SemanticDiag::InvalidTypeArgument`）。
 
-类型表达式里保留、尚未实现的部分：类型运算 `&`、`\`、`+`、`-`、`^`，以及 `keyof`、`名字 of T`（`SemanticDiag::FeatureNotSupported` 或语法错误），它们的含义尚未决定。`typeof e` 已实现：它是一个完整的类型，取表达式 `e` 的值的类型，在使用这个类型的位置由编译器展开；`typeof` 不能嵌在更大的类型里（`typeof(1)[]` 报 `SemanticDiag::TypeOfNotWholeType`），操作数没有值（`void`）时报 `SemanticDiag::TypeOfNotAValue`。
+类型表达式的类型运算 `&`、`\`、`+`、`-`、`^`，以及 `keyof`、`名字 of T` 报 `SemanticDiag::FeatureNotSupported` 或语法错误，它们的含义尚未决定。`typeof e` 是一个完整的类型，取表达式 `e` 的值的类型，在使用这个类型的位置由编译器展开；`typeof` 不能嵌在更大的类型里（`typeof(1)[]` 报 `SemanticDiag::TypeOfNotWholeType`），操作数没有值（`void`）时报 `SemanticDiag::TypeOfNotAValue`。
 
 ## 7.8 块
 

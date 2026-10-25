@@ -176,7 +176,7 @@ func moments::<P>(params: P) {
 // A tree of zeros of the same shape as `t`, with the same leaf types.
 func zeros_tree::<P>(t: P) {
     return match type P {
-        case struct | tuple => P { static for (n, _) in fields P => zeros_tree(t.[n]) }
+        case struct | tuple => P { static for n, _ in fields P => zeros_tree(t.[n]) }
         case _ => zero_leaf(t)
     }
 }
@@ -201,7 +201,7 @@ func zero_leaf::<L>(x: L) {
 // One `sgd` step of a whole tree: `p - rate * g` at every leaf.
 func sgd_tree::<P, G>(p: P, g: G, rate: float) {
     return match type P {
-        case struct | tuple => P { static for (n, _) in fields P => sgd_tree(p.[n], g.[n], rate) }
+        case struct | tuple => P { static for n, _ in fields P => sgd_tree(p.[n], g.[n], rate) }
         case _ => sgd_leaf(p, g, rate)
     }
 }
@@ -253,7 +253,7 @@ func adam_update::<P, G>(
 // parameters alone).
 func decay_tree::<P>(p: P, rate_decay: float) {
     return match type P {
-        case struct | tuple => P { static for (n, _) in fields P => decay_tree(p.[n], rate_decay) }
+        case struct | tuple => P { static for n, _ in fields P => decay_tree(p.[n], rate_decay) }
         case _ => decay_leaf(p, rate_decay)
     }
 }
@@ -288,7 +288,7 @@ func decay_value_leaf::<T>(x: T[..], rate_decay: float) when is_float::<T>() {
 func adam_tree::<P, G, M, V>(p: P, g: G, m: M, v: V, c: Rates) {
     return match type P {
         case struct | tuple =>
-            P { static for (n, _) in fields P => adam_tree(p.[n], g.[n], m.[n], v.[n], c) }
+            P { static for n, _ in fields P => adam_tree(p.[n], g.[n], m.[n], v.[n], c) }
         case _ => adam_leaf(p, g, m, v, c)
     }
 }

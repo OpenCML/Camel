@@ -54,193 +54,193 @@ export func sqrt(x: float): float
 /// exactly, so -0 becomes +0 and no value of either type rounds (design principles 7.3).
 /// @pure
 /// @example abs(-3)    // 3
-#op<'math:abs_i'>
+#op('math:abs_i')
 export func abs(x: i32): i32
-#op<'math:abs_l'>
+#op('math:abs_l')
 export func abs(x: int): int
-#op<'math:abs_f'>
+#op('math:abs_f')
 export func abs(x: f32): f32
-#op<'math:abs_d'>
+#op('math:abs_d')
 export func abs(x: float): float
-#op<'math:abs_c'>
+#op('math:abs_c')
 export func abs(x: c64): f32
-#op<'math:abs_z'>
+#op('math:abs_z')
 export func abs(x: c128): float
-#op<'math:abs_bf'>
+#op('math:abs_bf')
 export func abs(x: bf16): bf16
-#op<'math:abs_f6'>
+#op('math:abs_f6')
 export func abs(x: f16): f16
 
 /// The real part of a complex number.
 /// @pure
 /// @example re(3+4i)    // 3.0
-#op<'math:re_c'>
+#op('math:re_c')
 export func re(x: c64): f32
-#op<'math:re_z'>
+#op('math:re_z')
 export func re(x: c128): float
 
 /// The imaginary part of a complex number.
 /// @pure
 /// @example im(3+4i)    // 4.0
-#op<'math:im_c'>
+#op('math:im_c')
 export func im(x: c64): f32
-#op<'math:im_z'>
+#op('math:im_z')
 export func im(x: c128): float
 
 /// The conjugate of a complex number: the imaginary part is negated.
 /// @pure
 /// @example conj(3+4i)    // 3-4i
-#op<'math:conj_c'>
+#op('math:conj_c')
 export func conj(x: c64): c64
-#op<'math:conj_z'>
+#op('math:conj_z')
 export func conj(x: c128): c128
 
 /// e raised to the power x.
 /// @pure
 /// @example exp(0.0)    // 1
-#op<'math:exp_f'>
+#op('math:exp_f')
 export func exp(x: f32): f32
-#op<'math:exp_d'>
+#op('math:exp_d')
 export func exp(x: float): float
-#op<'math:exp_c'>
+#op('math:exp_c')
 export func exp(x: c64): c64
-#op<'math:exp_z'>
+#op('math:exp_z')
 export func exp(x: c128): c128
 
 /// exp(x) - 1, accurate for x near 0.
 /// @pure
 /// @example expm1(0.0)    // 0
-#op<'math:expm1_f'>
+#op('math:expm1_f')
 export func expm1(x: f32): f32
-#op<'math:expm1_d'>
+#op('math:expm1_d')
 export func expm1(x: float): float
 
 /// The natural logarithm. log(0.0) is -inf, the logarithm of a negative number is NaN.
 /// @pure
 /// @example log(1.0)    // 0
-#op<'math:log_f'>
+#op('math:log_f')
 export func log(x: f32): f32
-#op<'math:log_d'>
+#op('math:log_d')
 export func log(x: float): float
 
 /// The logarithm to base 2.
 /// @pure
 /// @example log2(8.0)    // 3
-#op<'math:log2_f'>
+#op('math:log2_f')
 export func log2(x: f32): f32
-#op<'math:log2_d'>
+#op('math:log2_d')
 export func log2(x: float): float
 
 /// The logarithm to base 10.
 /// @pure
 /// @example log10(1000.0)    // 3
-#op<'math:log10_f'>
+#op('math:log10_f')
 export func log10(x: f32): f32
-#op<'math:log10_d'>
+#op('math:log10_d')
 export func log10(x: float): float
 
 /// log(1 + x), accurate for x near 0.
 /// @pure
 /// @example log1p(0.0)    // 0
-#op<'math:log1p_f'>
+#op('math:log1p_f')
 export func log1p(x: f32): f32
-#op<'math:log1p_d'>
+#op('math:log1p_d')
 export func log1p(x: float): float
 
 /// x raised to the power y. pow(0.0, 0.0) is 1; a negative x with a fractional y gives NaN.
 /// @pure
 /// @example pow(2.0, 10.0)    // 1024
-#op<'math:pow_f'>
+#op('math:pow_f')
 export func pow(x: f32, y: f32): f32
-#op<'math:pow_d'>
+#op('math:pow_d')
 export func pow(x: float, y: float): float
 
 /// The square root of x*x + y*y, without overflow in the squares.
 /// @pure
 /// @example hypot(3.0, 4.0)    // 5
-#op<'math:hypot_f'>
+#op('math:hypot_f')
 export func hypot(x: f32, y: f32): f32
-#op<'math:hypot_d'>
+#op('math:hypot_d')
 export func hypot(x: float, y: float): float
 
 /// The sine of x, x in radians.
 /// @pure
 /// @example sin(0.0)    // 0
-#op<'math:sin_f'>
+#op('math:sin_f')
 export func sin(x: f32): f32
-#op<'math:sin_d'>
+#op('math:sin_d')
 export func sin(x: float): float
 
 /// The cosine of x, x in radians.
 /// @pure
 /// @example cos(0.0)    // 1
-#op<'math:cos_f'>
+#op('math:cos_f')
 export func cos(x: f32): f32
-#op<'math:cos_d'>
+#op('math:cos_d')
 export func cos(x: float): float
 
 /// The tangent of x, x in radians.
 /// @pure
 /// @example tan(0.0)    // 0
-#op<'math:tan_f'>
+#op('math:tan_f')
 export func tan(x: f32): f32
-#op<'math:tan_d'>
+#op('math:tan_d')
 export func tan(x: float): float
 
 /// The arc sine, in radians; NaN outside -1 to 1.
 /// @pure
 /// @example asin(1.0)    // 1.5708
-#op<'math:asin_f'>
+#op('math:asin_f')
 export func asin(x: f32): f32
-#op<'math:asin_d'>
+#op('math:asin_d')
 export func asin(x: float): float
 
 /// The arc cosine, in radians; NaN outside -1 to 1.
 /// @pure
 /// @example acos(1.0)    // 0
-#op<'math:acos_f'>
+#op('math:acos_f')
 export func acos(x: f32): f32
-#op<'math:acos_d'>
+#op('math:acos_d')
 export func acos(x: float): float
 
 /// The arc tangent, in radians.
 /// @pure
 /// @example atan(1.0)    // 0.785398
-#op<'math:atan_f'>
+#op('math:atan_f')
 export func atan(x: f32): f32
-#op<'math:atan_d'>
+#op('math:atan_d')
 export func atan(x: float): float
 
 /// The angle of the point (x, y) in radians, between -pi and pi. Note the order: y first.
 /// @pure
 /// @example atan2(1.0, 1.0)    // 0.785398
-#op<'math:atan2_f'>
+#op('math:atan2_f')
 export func atan2(y: f32, x: f32): f32
-#op<'math:atan2_d'>
+#op('math:atan2_d')
 export func atan2(y: float, x: float): float
 
 /// The hyperbolic sine.
 /// @pure
 /// @example sinh(0.0)    // 0
-#op<'math:sinh_f'>
+#op('math:sinh_f')
 export func sinh(x: f32): f32
-#op<'math:sinh_d'>
+#op('math:sinh_d')
 export func sinh(x: float): float
 
 /// The hyperbolic cosine.
 /// @pure
 /// @example cosh(0.0)    // 1
-#op<'math:cosh_f'>
+#op('math:cosh_f')
 export func cosh(x: f32): f32
-#op<'math:cosh_d'>
+#op('math:cosh_d')
 export func cosh(x: float): float
 
 /// The hyperbolic tangent.
 /// @pure
 /// @example tanh(0.0)    // 0
-#op<'math:tanh_f'>
+#op('math:tanh_f')
 export func tanh(x: f32): f32
-#op<'math:tanh_d'>
+#op('math:tanh_d')
 export func tanh(x: float): float
 
 // ---- rounding ----
@@ -248,33 +248,33 @@ export func tanh(x: float): float
 /// The largest whole number not above x, as a float.
 /// @pure
 /// @example floor(-2.5)    // -3
-#op<'math:floor_f'>
+#op('math:floor_f')
 export func floor(x: f32): f32
-#op<'math:floor_d'>
+#op('math:floor_d')
 export func floor(x: float): float
 
 /// The smallest whole number not below x, as a float.
 /// @pure
 /// @example ceil(2.1)    // 3
-#op<'math:ceil_f'>
+#op('math:ceil_f')
 export func ceil(x: f32): f32
-#op<'math:ceil_d'>
+#op('math:ceil_d')
 export func ceil(x: float): float
 
 /// The nearest whole number, halves away from zero, as a float.
 /// @pure
 /// @example round(2.5)    // 3
-#op<'math:round_f'>
+#op('math:round_f')
 export func round(x: f32): f32
-#op<'math:round_d'>
+#op('math:round_d')
 export func round(x: float): float
 
 /// x without its fraction (rounded toward zero), as a float.
 /// @pure
 /// @example trunc(-2.7)    // -2
-#op<'math:trunc_f'>
+#op('math:trunc_f')
 export func trunc(x: f32): f32
-#op<'math:trunc_d'>
+#op('math:trunc_d')
 export func trunc(x: float): float
 
 // ---- comparing ----
@@ -287,21 +287,21 @@ export func trunc(x: float): float
 /// @pure
 /// @example min(3, 5)    // 3
 /// @example min('b', 'a')    // 'a'
-#op<'math:min_i'>
+#op('math:min_i')
 export func min(a: i32, b: i32): i32
-#op<'math:min_l'>
+#op('math:min_l')
 export func min(a: int, b: int): int
-#op<'math:min_f'>
+#op('math:min_f')
 export func min(a: f32, b: f32): f32
-#op<'math:min_d'>
+#op('math:min_d')
 export func min(a: float, b: float): float
-#op<'math:min_s'>
+#op('math:min_s')
 export func min(a: string, b: string): string
-#op<'math:min_b'>
+#op('math:min_b')
 export func min(a: bool, b: bool): bool
-#op<'math:min_bf'>
+#op('math:min_bf')
 export func min(a: bf16, b: bf16): bf16
-#op<'math:min_f6'>
+#op('math:min_f6')
 export func min(a: f16, b: f16): f16
 
 /// The larger of two values of one ordered type. For numbers this is the IEEE 754 maximum: a
@@ -312,62 +312,62 @@ export func min(a: f16, b: f16): f16
 /// @pure
 /// @example max(3, 5)    // 5
 /// @example max('a', 'b')    // 'b'
-#op<'math:max_i'>
+#op('math:max_i')
 export func max(a: i32, b: i32): i32
-#op<'math:max_l'>
+#op('math:max_l')
 export func max(a: int, b: int): int
-#op<'math:max_f'>
+#op('math:max_f')
 export func max(a: f32, b: f32): f32
-#op<'math:max_d'>
+#op('math:max_d')
 export func max(a: float, b: float): float
-#op<'math:max_s'>
+#op('math:max_s')
 export func max(a: string, b: string): string
-#op<'math:max_b'>
+#op('math:max_b')
 export func max(a: bool, b: bool): bool
-#op<'math:max_bf'>
+#op('math:max_bf')
 export func max(a: bf16, b: bf16): bf16
-#op<'math:max_f6'>
+#op('math:max_f6')
 export func max(a: f16, b: f16): f16
 
 /// x held between lo and hi: lo when x is below, hi when above. A NaN x stays NaN.
 /// @pure
 /// @fails fault `InvalidArgument` when lo is above hi, or a bound is NaN
 /// @example clamp(15, 0, 10)    // 10
-#op<'math:clamp_i'>
+#op('math:clamp_i')
 export func clamp(x: i32, lo: i32, hi: i32): i32
-#op<'math:clamp_l'>
+#op('math:clamp_l')
 export func clamp(x: int, lo: int, hi: int): int
-#op<'math:clamp_f'>
+#op('math:clamp_f')
 export func clamp(x: f32, lo: f32, hi: f32): f32
-#op<'math:clamp_d'>
+#op('math:clamp_d')
 export func clamp(x: float, lo: float, hi: float): float
 
 /// -1, 0 or 1 by the sign of x, in the type of x. The sign of a NaN is NaN.
 /// @pure
 /// @example sign(-2.5)    // -1
-#op<'math:sign_i'>
+#op('math:sign_i')
 export func sign(x: i32): i32
-#op<'math:sign_l'>
+#op('math:sign_l')
 export func sign(x: int): int
-#op<'math:sign_f'>
+#op('math:sign_f')
 export func sign(x: f32): f32
-#op<'math:sign_d'>
+#op('math:sign_d')
 export func sign(x: float): float
 
 /// Whether x is a NaN.
 /// @pure
 /// @example is_nan(inf - inf)    // true
-#op<'math:is_nan_f'>
+#op('math:is_nan_f')
 export func is_nan(x: f32): bool
-#op<'math:is_nan_d'>
+#op('math:is_nan_d')
 export func is_nan(x: float): bool
 
 /// Whether x is positive or negative infinity.
 /// @pure
 /// @example is_inf(1.0)    // false
-#op<'math:is_inf_f'>
+#op('math:is_inf_f')
 export func is_inf(x: f32): bool
-#op<'math:is_inf_d'>
+#op('math:is_inf_d')
 export func is_inf(x: float): bool
 
 // ---- integers ----
@@ -376,43 +376,43 @@ export func is_inf(x: float): bool
 /// @pure
 /// @fails fault `InvalidArgument` when the result does not fit the type (the smallest integer with itself or with 0)
 /// @example gcd(12, 18)    // 6
-#op<'math:gcd_i'>
+#op('math:gcd_i')
 export func gcd(a: i32, b: i32): i32
-#op<'math:gcd_l'>
+#op('math:gcd_l')
 export func gcd(a: int, b: int): int
 
 /// The least common multiple, never negative; 0 when either argument is 0.
 /// @pure
 /// @fails fault `InvalidArgument` when the result does not fit the type
 /// @example lcm(4, 6)    // 12
-#op<'math:lcm_i'>
+#op('math:lcm_i')
 export func lcm(a: i32, b: i32): i32
-#op<'math:lcm_l'>
+#op('math:lcm_l')
 export func lcm(a: int, b: int): int
 
 /// The digits of x in base 2 with the prefix 0b; a negative number is shown as its 64-bit
 /// two's complement.
 /// @pure
 /// @example bin(5)    // '0b101'
-#op<'math:bin_i'>
+#op('math:bin_i')
 export func bin(x: i32): string
-#op<'math:bin_l'>
+#op('math:bin_l')
 export func bin(x: int): string
 
 /// The digits of x in base 8 with the prefix 0o.
 /// @pure
 /// @example oct(8)    // '0o10'
-#op<'math:oct_i'>
+#op('math:oct_i')
 export func oct(x: i32): string
-#op<'math:oct_l'>
+#op('math:oct_l')
 export func oct(x: int): string
 
 /// The digits of x in base 16, in upper case, with the prefix 0x.
 /// @pure
 /// @example hex(255)    // '0xFF'
-#op<'math:hex_i'>
+#op('math:hex_i')
 export func hex(x: i32): string
-#op<'math:hex_l'>
+#op('math:hex_l')
 export func hex(x: int): string
 
 // ---- bits ----
@@ -442,33 +442,33 @@ export func shr(x: int, count: int): int
 /// The bits set in both a and b.
 /// @pure
 /// @example bit_and(12, 10)    // 8
-#op<'math:bit_and_i'>
+#op('math:bit_and_i')
 export func bit_and(a: i32, b: i32): i32
-#op<'math:bit_and_l'>
+#op('math:bit_and_l')
 export func bit_and(a: int, b: int): int
 
 /// The bits set in a or in b.
 /// @pure
 /// @example bit_or(12, 10)    // 14
-#op<'math:bit_or_i'>
+#op('math:bit_or_i')
 export func bit_or(a: i32, b: i32): i32
-#op<'math:bit_or_l'>
+#op('math:bit_or_l')
 export func bit_or(a: int, b: int): int
 
 /// The bits set in exactly one of a and b.
 /// @pure
 /// @example bit_xor(12, 10)    // 6
-#op<'math:bit_xor_i'>
+#op('math:bit_xor_i')
 export func bit_xor(a: i32, b: i32): i32
-#op<'math:bit_xor_l'>
+#op('math:bit_xor_l')
 export func bit_xor(a: int, b: int): int
 
 /// Every bit of x inverted; the same as the operator ~.
 /// @pure
 /// @example bit_not(0)    // -1
-#op<'math:bit_not_i'>
+#op('math:bit_not_i')
 export func bit_not(x: i32): i32
-#op<'math:bit_not_l'>
+#op('math:bit_not_l')
 export func bit_not(x: int): int
 
 

@@ -15,10 +15,10 @@
 module check_bound
 import { check } from rewrite
 
-#requires<reassociate>
+#requires(reassociate)
 rule wrong_reassociate(x: float) { x * 2.0 => x * 2.000000001 }
 
-#requires<change_precision>
+#requires(change_precision)
 rule wrong_precision(x: float) { x * 2.0 => x * 2.000000001 }
 
 func main(): int sync {

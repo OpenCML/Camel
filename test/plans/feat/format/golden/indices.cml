@@ -5,5 +5,5 @@ func sum(t: (int, int)): int {
 }
 
 func positions(t: (int, string)): (int, int) {
-    return (static for (j) in indices t => j)
+    return (static for j in indices t => j)
 }

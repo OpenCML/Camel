@@ -3,26 +3,26 @@ module format_tag_below_doc
 /// The sum, documented above its tag rather than below it.
 ///
 /// The comment, the tag and the declaration stand in the order a reader writes them, which is the
-/// order the rest of the standard library writes (the description, then the `#op<...>` line, then
+/// order the rest of the standard library writes (the description, then the `#op(...)` line, then
 /// the declaration). The formatter keeps it, and the reference reader reads the description
 /// through the tag, because the tag belongs to the declaration the comment describes.
 /// @example add(19, 23)    // 42
-#op<':op/add_l'>
+#op(':op/add_l')
 func add_kernel(a: int, b: int): int
 
 /// The sum, documented above its tag.
-#impl<add_kernel>
+#impl(add_kernel)
 export func add(a: int, b: int): int {
     return a - (0 - b)
 }
 
 /// The difference, documented above its tag, with a blank line between the comment and the tag.
 
-#op<':op/sub_l'>
+#op(':op/sub_l')
 func sub_kernel(a: int, b: int): int
 
 /// The difference, documented above its tag, with a blank line between the tag and the declaration.
-#impl<sub_kernel>
+#impl(sub_kernel)
 
 export func sub(a: int, b: int): int {
     return a + (0 - b)

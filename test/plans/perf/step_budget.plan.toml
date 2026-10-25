@@ -1,6 +1,6 @@
 id = "perf.step_budget"
 order = 424
-tier = "slow"
+tier = "milestone"
 tags = ["perf", "training", "budget"]
 
 # The measured half of the plan. The 2026-10-25 rule on the eight perf plans that no layer

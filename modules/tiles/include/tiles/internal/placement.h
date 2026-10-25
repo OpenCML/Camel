@@ -68,6 +68,12 @@ bool hasPlacementFact(const runtime::GCGraph &graph);
 /// Whether any graph of `program` carries the placement fact.
 bool hasPlacementFact(const runtime::Program &program);
 
+/// Whether `node` holds a function the compiler can see: a DATA node whose static slot is a
+/// `Function` value. This is the operand an expansion pass can act on — a `grad` call whose
+/// function is such a constant is a call the pipeline could have expanded before this pass, while
+/// a function value only the run produces cannot be expanded by any pass.
+bool holdsStaticFunction(const runtime::GCGraph &graph, runtime::gc_node_ref_t node);
+
 /// The graph a call node reaches, whether it names it (`Func`) or holds it as a value (`Call`).
 /// Null when the node is not a call, or when the callee is a value only the run knows: that call
 /// reaches no one graph, so no placement answer (and no residency answer) can name its unit.

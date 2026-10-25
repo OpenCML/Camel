@@ -9,7 +9,7 @@ type Point = { x: int, y: int }
 type Pair = (int, int)
 
 func first_field::<S>(): string {
-    return ( static for (n, _) in fields S => n ).[0]
+    return ( static for n, _ in fields S => n ).[0]
 }
 
 func label(constas k: string): string {

@@ -304,13 +304,22 @@ expect_exit = 0
 expect_stdout_exact = "100\n"
 
 [[tests]]
-name = "ns.p23_graph_names"
-desc = "Row 21 (N8): graph names in the dump; a function of the entry module is shown without the module, an imported one with it (see ns.p01_rgir)."
+name = "ns.p01_graph_names"
+desc = "Row 21 (N8): graph names in the dump of the entry program p01_qualified.cml; a function of the entry module is shown without the module, an imported one with it (see ns.p01_rgir)."
 kind = "behavior"
 case = "../../../cases/compile/namespace_rules/p01_qualified.cml"
 args = ["${case}", "std::rgir"]
 expect_exit = 0
 expect_stdout_contains = ["lib::root", "lib::Tools::inc", "lib::Deep::Inner::three"]
+
+[[tests]]
+name = "ns.p23_graph_names.entry_module"
+desc = "Row 21 (N8), the other half: the function of the entry module carries no module in the dump even when a namespace holds a function of the same base name, so `f` and `N::f` are two nodes with those labels."
+kind = "behavior"
+case = "../../../cases/compile/namespace_rules/p23_graph_names.cml"
+args = ["${case}", "std::rgir"]
+expect_exit = 0
+expect_stdout_contains = ["label=\"f\"", "label=\"N::f\""]
 
 [[tests]]
 name = "ns.p33_reopen_using"

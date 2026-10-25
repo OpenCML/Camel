@@ -20,7 +20,7 @@ bool hasRule(const camel::runtime::GCGraph *graph) {
     if (program == nullptr || graph == nullptr || graph->ruleGraphs().empty()) {
         return nullptr;
     }
-    // The first graph the declaration names is the rule (`#vjp<rule>` has one parameter).
+    // The first graph the declaration names is the rule (`#vjp(rule)` has one parameter).
     camel::runtime::GCGraph *ruleGraph = program->graph(graph->ruleGraphs().front());
     if (ruleGraph == nullptr) {
         return nullptr;

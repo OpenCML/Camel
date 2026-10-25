@@ -188,7 +188,7 @@ class Formatter {
 
     /// The comments that stand between a declaration's front matter - the tags and the annotations
     /// it writes on lines of its own - and the token the declaration goes on with: a doc comment
-    /// written between `#impl<...>` and `func` stands inside the declaration, in no gap a list or a
+    /// written between `#impl(...)` and `func` stands inside the declaration, in no gap a list or a
     /// range looks at, and it is the declaration's own comment as much as one written above the
     /// tag. `commentsBefore` writes the comments above the first token (above the tag); this writes
     /// the ones after the element that ends at `afterToken`, where the reader put them. Nothing is
@@ -655,8 +655,11 @@ class Formatter {
     std::any visitFuncDecl(cst::FuncDecl context);
     std::any visitWhenClause(cst::WhenClause context);
     std::any visitRuleDecl(cst::RuleDecl context);
-    std::any visitAnalysisDecl(cst::AnalysisDecl context);
-    std::any visitAnalysisClause(cst::AnalysisClause context);
+    std::any visitFactDecl(cst::FactDecl context);
+    std::any visitFactBody(cst::FactBody context);
+    std::any visitFactCase(cst::FactCase context);
+    std::any visitFactPattern(cst::FactPattern context);
+    std::any visitFactClause(cst::FactClause context);
     std::any visitRuleContext(cst::RuleContext context);
     std::any visitTypeParams(cst::TypeParams context);
     std::any visitRuleBody(cst::RuleBody context);

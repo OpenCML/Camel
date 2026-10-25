@@ -130,7 +130,7 @@ export func embedding_table_grad(table: f32[..], indices: f32[..], dy: f32[..]):
 /// @fails fault `RuntimeError` when a label is outside `[0, classes)`
 /// @example softmax_cross_entropy(logits, target)    // a float
 export func softmax_cross_entropy(logits: f32[..], target: f32[..]): float
-#op<'nn:softmax_cross_entropy_labels'>
+#op('nn:softmax_cross_entropy_labels')
 export func softmax_cross_entropy(logits: f32[..], target: f32[..] | number[]): float
 
 /// The gradient of `softmax_cross_entropy` with respect to `logits`, scaled by `dy`; the result is
@@ -140,7 +140,7 @@ export func softmax_cross_entropy(logits: f32[..], target: f32[..] | number[]): 
 /// @fails fault `RuntimeError` when a label is outside `[0, classes)`
 /// @example softmax_cross_entropy_grad(logits, target, 1.0)    // like logits
 export func softmax_cross_entropy_grad(logits: f32[..], target: f32[..], dy: number): f32[..]
-#op<'nn:softmax_cross_entropy_labels_grad'>
+#op('nn:softmax_cross_entropy_labels_grad')
 export func softmax_cross_entropy_grad(logits: f32[..], target: f32[..] | number[], dy: number): f32[..]
 
 // ---- optimizers ----

@@ -7,7 +7,7 @@ export rule int32_combine(x: i32, const c1: i32, const c2: i32) {
 } when isI32(c1) && isI32(c2)
 ```
 
-1. **按类型复制的规则**：`int32_*`、`int64_*`、`float32_*`… 每条定律为每种元素类型写一遍，与 `array::sum` 的四个重载是同一个问题。规则的形参也按 5.5 自动绑定类型变量，一条规则覆盖所有类型：`rule sub_self(x: T) { x - x => 0 }`，字面量在实例里取 `T`。只对某类类型成立的（浮点要 `#requires<no_nans, no_infs>`，整数回绕下精确成立），用 `#requires` 或类型谓词表达，不靠复制。
+1. **按类型复制的规则**：`int32_*`、`int64_*`、`float32_*`… 每条定律为每种元素类型写一遍，与 `array::sum` 的四个重载是同一个问题。规则的形参也按 5.5 自动绑定类型变量，一条规则覆盖所有类型：`rule sub_self(x: T) { x - x => 0 }`，字面量在实例里取 `T`。只对某类类型成立的（浮点要 `#requires(no_nans, no_infs)`，整数回绕下精确成立），用 `#requires` 或类型谓词表达，不靠复制。
 2. **`when isI32(c1) && isI32(c2)` 是多余的守卫**：形参已经写了 `const c1: i32`，"这个常量是 i32"应当由匹配器按形参类型检查，不由每条规则自己再查一遍。`isI32` 一类的辅助函数随之删除；"畸形图（`add_i` 带 `int` 常量）不匹配"由匹配器的类型检查保证。
 3. **`i32(0)`**：随 H228 的字面量取型写成 `0`。
 4. 重写后规则条数应大幅下降，`check` 的随机检验按实例类型覆盖每种类型（检验的覆盖不随条数减少）。
@@ -23,7 +23,7 @@ func combineSameSign32(c1: Node, c2: Node): bool {
 
 5. **`when` 里的 `const` 形参应当就是那个常量值**，类型是形参声明的类型，而不是 `Node`。这样守卫直接写在值上，不需要 `constant(c, f32(0.0))` 取值、也不需要两层 `match … case null`：
    ```camel
-   #requires<reassociate>
+   #requires(reassociate)
    export rule combine(x: T, const c1: T, const c2: T) {
        x * c1 + x * c2 => x * (c1 + c2)
    } when is_finite(c1) && is_finite(c2) && c1 != 0 && sign(c1) == sign(c2) && is_finite(c1 + c2)
@@ -36,6 +36,6 @@ func combineSameSign32(c1: Node, c2: Node): bool {
 
 方向对，用例扎实（每条规则的触发次数、改写前后的代价、守卫挡住的程序、三个后端逐位一致）。**一处返工，优先**：
 
-1. **精度规则不带任何许可**：这些规则改变结果的位（变得更准），按 v2 8.10 必须由 `refine_accuracy` 门控、默认不授予、`#strict` 下不适用。报告说"引擎还没有这个许可"——**那就先加上它**，而不是让规则在没有许可的情况下生效：今天任何程序（包括写了 `#strict` 的）只要流水线里有 `rules::accuracy`，结果就可能改变，这违反数值契约（第 7 节）。加许可是许可表里加一项、`#requires<refine_accuracy>` 写到这些规则上、`check` 对它们验证"误差不大于左边"而不是逐位相等。
+1. **精度规则不带任何许可**：这些规则改变结果的位（变得更准），按 v2 8.10 必须由 `refine_accuracy` 门控、默认不授予、`#strict` 下不适用。报告说"引擎还没有这个许可"——**那就先加上它**，而不是让规则在没有许可的情况下生效：今天任何程序（包括写了 `#strict` 的）只要流水线里有 `rules::accuracy`，结果就可能改变，这违反数值契约（第 7 节）。加许可是许可表里加一项、`#requires(refine_accuracy)` 写到这些规则上、`check` 对它们验证"误差不大于左边"而不是逐位相等。
 2. `float_log1p` 与 `f32_log1p` 按类型各写一条：随 v2 第 1 步（规则的类型参数）合并为一条 `rule log1p::<T>(x: T) when is_float::<T>()`。
 3. `rules::fusion` 只有 sigmoid 一条、并列出缺的机制（融合的 logsumexp、乘加、融合区域、多根 QKV）——如实，好；这些随 v2 第 3、4 步与 8.9 补上，杀手级示例的"Camel + 规则"一行以它们为准。

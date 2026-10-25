@@ -27,6 +27,7 @@
 #include "camel/utils/scope.h"
 
 #include <charconv>
+#include <map>
 #include <numeric>
 
 #define DEBUG_LEVEL -1
@@ -588,13 +589,6 @@ struct StaticExpansionScope {
     ~StaticExpansionScope() { --depth; }
 };
 
-/// The empty record: one object per build, interned by its (empty) field list, so every `{}` the
-/// third name of `fields T` gives is the same type.
-data_ptr_t emptyRecord() {
-    StructDataFactory empty;
-    return empty.build();
-}
-
 /// The tag a fact on a field belongs to: its attribute key is the tag's qualified name, and the
 /// declaration is where the name the program writes and the parameters its arguments were
 /// written for are read.
@@ -612,31 +606,11 @@ std::string tagFieldName(camel::core::attr::AttrKey key, const camel::core::tag:
     return std::string(camel::core::attr::keyName(key));
 }
 
-/// One argument of a tag as the compile-time value the program reads it as. The argument was
-/// checked against the kind its parameter declares when the tag was written, so the mapping back
-/// is by that kind: an integer as an `int`, a real as a `float`, a symbol or a graph reference as
-/// a `string`. A value of a kind no argument makes here (flags) is the empty record.
-data_ptr_t tagArgumentValue(const camel::core::attr::Value &value) {
-    switch (value.kind) {
-    case camel::core::attr::ValueKind::Int:
-        return std::make_shared<LongData>(value.integer);
-    case camel::core::attr::ValueKind::Float:
-        return std::make_shared<DoubleData>(value.real);
-    case camel::core::attr::ValueKind::Symbol:
-    case camel::core::attr::ValueKind::Graph:
-        return std::make_shared<StringData>(value.text);
-    default:
-        return emptyRecord();
-    }
-}
+} // namespace
 
-/// The record of a tag's arguments: one field per argument, named by the parameter it was
-/// written for (`w` for `#width<8>` under `tag width<w: int>`). A tag with no arguments is the
-/// empty record; several arguments were kept as a tuple and are separated here. A tag whose
-/// arguments do not line up with its parameters one for one (a variadic one) names the extra
-/// ones by position.
-data_ptr_t tagArgumentsRecord(
-    const camel::core::tag::Decl *decl, camel::core::attr::AttrValueId id) {
+camel::core::data::data_ptr_t Builder::tagArgumentsRecord(
+    const camel::core::tag::Decl *decl, const std::string &qualified,
+    camel::core::attr::AttrValueId id, const GCT::node_ptr_t &head) {
     const camel::core::attr::Value value = camel::core::attr::value(id);
     std::vector<camel::core::attr::AttrValueId> items;
     if (value.kind == camel::core::attr::ValueKind::Tuple) {
@@ -648,18 +622,16 @@ data_ptr_t tagArgumentsRecord(
     for (size_t i = 0; i < items.size(); ++i) {
         const std::string name =
             decl != nullptr && i < decl->params.size() ? decl->params[i].name : std::to_string(i);
-        record.add(name, tagArgumentValue(camel::core::attr::value(items[i])));
+        record.add(name, tagArgumentValue(decl, qualified, i, items[i], head));
     }
     return record.build();
 }
 
-} // namespace
-
 node_handle_t Builder::staticFieldTagsNode(
-    Type *subject, size_t index, const GCT::node_ptr_t &where) {
+    Type *subject, size_t index, const GCT::node_ptr_t &where, const GCT::node_ptr_t &head) {
     // The tags written on the field, as a compile-time struct: one field per tag, named by the
     // tag, whose value is the record of that tag's arguments. A field of
-    // `type Box = { #width<8> low: int, high: int }` under `tag width<w: int>` gives
+    // `type Box = { #width(8) low: int, high: int }` under `tag width(w: int)` gives
     // `{ width: { w: 8 } }` for `low` and `{}` for `high`, so `tags.width.w` reads the value where
     // the round's type has that field, `fields typeof(tags)` walks the names, and each round's
     // `tags` has the type its own field's tags make. The facts of a field are kept by the module
@@ -676,9 +648,22 @@ node_handle_t Builder::staticFieldTagsNode(
                 decl->shortName() != decl->name()) {
                 facts = module_->fieldTags(Reference(decl->shortName()), index);
             }
+            // `tags` names a field by the tag alone, so two tags of one name would be one field
+            // of the record: the second one is reported rather than dropped by the factory.
+            std::map<std::string, std::string> written;
             for (const camel::core::attr::Attr &entry : camel::core::attr::entries(facts)) {
                 const camel::core::tag::Decl *tagDecl = tagOf(entry.key);
-                tags.add(tagFieldName(entry.key, tagDecl), tagArgumentsRecord(tagDecl, entry.value));
+                const std::string qualified(std::string(camel::core::attr::keyName(entry.key)));
+                const std::string name = tagFieldName(entry.key, tagDecl);
+                const auto first       = written.find(name);
+                if (first != written.end()) {
+                    diags_->of(SemanticDiag::TagFieldNameAmbiguous)
+                        .atOrigin(head->origin())
+                        .commit(name, first->second, qualified);
+                    throw BuildAbortException();
+                }
+                written.emplace(name, qualified);
+                tags.add(name, tagArgumentsRecord(tagDecl, qualified, entry.value, head));
             }
         }
     }
@@ -766,7 +751,7 @@ node_handle_t Builder::visitStaticForNode(
         // The third name of `(n, F, tags)`: the field's tags, a compile-time value like `n`.
         node_handle_t tagsNode{};
         if (!byIndices && tagsName != "_") {
-            tagsNode = staticFieldTagsNode(subject, i, body);
+            tagsNode = staticFieldTagsNode(subject, i, body, gct);
         }
         staticValueScopes_.emplace_back();
         if (valueName != "_") {
@@ -1144,7 +1129,7 @@ node_handle_t Builder::visitStaticLoopNode(const GCT::node_ptr_t &gct) {
 
     // The names of the head are declared once, together (as for a run-time loop). The walked
     // entry's name `n` (`j`) is one of them for this purpose: `static loop n = ..., ... for
-    // (n, F)` would read the state where it meant the field.
+    // n, F` would read the state where it meant the field.
     {
         std::unordered_set<std::string> names;
         if (valueName != "_") {
@@ -1209,7 +1194,7 @@ node_handle_t Builder::visitStaticLoopNode(const GCT::node_ptr_t &gct) {
         // The third name of `(n, F, tags)`: the field's tags, a compile-time value like `n`.
         node_handle_t tagsNode{};
         if (bindsRoundType && tagsName != "_") {
-            tagsNode = staticFieldTagsNode(subject, i, body);
+            tagsNode = staticFieldTagsNode(subject, i, body, gct);
         }
         staticValueScopes_.emplace_back();
         if (valueName != "_" && bindsRoundValue && (indexNode != nullptr || byFields)) {
@@ -1490,7 +1475,7 @@ node_handle_t Builder::visitStaticAccessNode(const GCT::node_ptr_t &gct) {
 
     // The key is a compile-time constant: a literal, the `n` of an enclosing `static for`, a
     // name bound once to a constant (`let first = ( static for ... ).[0]`), or an expression
-    // whose value is known at build time (`( static for (n, F) in fields S => n ).[0]` in the
+    // whose value is known at build time (`( static for n, F in fields S => n ).[0]` in the
     // library is such an expression: a comprehension over the field names, indexed at 0).
     const auto keyOfData = [](const data_ptr_t &data) -> std::optional<std::string> {
         if (auto text = std::dynamic_pointer_cast<StringData>(data)) {

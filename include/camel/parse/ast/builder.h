@@ -70,6 +70,9 @@ class Builder {
     camel::source::source_file_id_t sourceFileId_ = camel::source::kInvalidSourceFileId;
 
     std::shared_ptr<ModuleLoad> module_ = std::make_shared<ModuleLoad>();
+    /// The tags written before `module` (`#gpu module m`, design principles 13.4), made by
+    /// visitModuleDecl and attached to the module node by visitProgram. Null when there are none.
+    node_ptr_t moduleTagUses_ = nullptr;
     std::vector<std::shared_ptr<ImportLoad>> imports_;
     std::shared_ptr<ExportLoad> export_ = std::make_shared<ExportLoad>();
     std::vector<std::string> namespaceStack_;
@@ -92,16 +95,19 @@ class Builder {
     Value visitExportDecl(syntax::cst::ExportDecl context);
     Value visitUsingNamespaceDecl(syntax::cst::UsingNamespaceDecl context);
     Value visitRuleDecl(syntax::cst::RuleDecl context);
-    Value visitAnalysisDecl(syntax::cst::AnalysisDecl context);
+    Value visitFactDecl(syntax::cst::FactDecl context);
     /// The import of the module `rewrite` that rule declarations need was made.
     bool ruleImportAdded_ = false;
-    /// The imports an analysis declaration needs (`__analysis`, `graph.Node`) were made.
-    bool analysisImportAdded_ = false;
+    /// The imports a fact declaration needs (`__fact`, `graph.Node`) were made.
+    bool factImportAdded_ = false;
     /// The imports a rule condition needs (`__rule_when`, `graph.Node`) were made.
     bool whenImportAdded_ = false;
     /// The import of the maker a generic rule needs (`__rule_generic`) was made: a rule whose head
     /// declares type parameters carries its templates and is made by that maker alone.
     bool genericRuleImportAdded_ = false;
+    /// The import of `rewrite.Rule` was made: the function a rule with `with` parameters is
+    /// written as gives a `Rule`, and the type is named in its signature.
+    bool ruleTypeImportAdded_ = false;
     /// The import of `graph.Node` for a rule condition was made: a condition whose parameters are
     /// all `const` names values, not nodes, and does not need it.
     bool whenNodeImportAdded_ = false;
@@ -127,7 +133,7 @@ class Builder {
     Value visitTagDecl(syntax::cst::TagDecl context);
     /// The permission groups the program declares (`tag fast = [reassociate, contract]`), by
     /// the name they are declared with, expanded to the permissions their members grant. A
-    /// `#requires<fast>` written in the same program can name one of them (design principles
+    /// `#requires(fast)` written in the same program can name one of them (design principles
     /// 7.2: a permission is a tag, and a group of permissions is a tag too). Built before the
     /// declarations are visited, because a rule's requirement is read while it is parsed.
     void collectProgramPermissionGroups(syntax::cst::Program program);
@@ -141,6 +147,10 @@ class Builder {
     /// The tag uses written before `context`, attached to `owner` as its next child, a
     /// RepeatedLoad("TagUse"); nothing when it has none.
     void addTagUses(const node_ptr_t &owner, const syntax::Node &context);
+    /// The tag uses written in `context` as one RepeatedLoad("TagUse"), or null when there are
+    /// none. A module's tags are made this way: their owner (the module node) exists only after
+    /// the declaration has been visited.
+    node_ptr_t tagUseListOf(const syntax::Node &context);
     Value visitNamespaceDecl(syntax::cst::NamespaceDecl context);
     /// `topLevel`: a declaration of the module or of a namespace block, whose names take the
     /// path of the enclosing namespaces (`namespace Config { let limit = 10 }` declares

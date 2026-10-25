@@ -78,7 +78,7 @@
 # average is printed beside the medians rather than assumed away, and why the unit is CPU time.
 id = "perf.startup"
 order = 401
-tier = "slow"
+tier = "milestone"
 tags = ["perf", "startup"]
 
 [[tests]]

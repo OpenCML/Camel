@@ -4767,8 +4767,8 @@ not fire at a value. A rule that stops a rewrite without changing the program is
 and `strict` restricts the float rules to the ones that hold bit for bit.
 
 The module also exports the reserved groups the language's own `rule`, `rule` with `when`, and
-`analysis` declarations compile to (`rewrite:rule`, `rewrite:rule_when`,
-`rewrite:analysis`). They have no callable Camel name, so they are not declared here and
+`fact` declarations compile to (`rewrite:rule`, `rewrite:rule_when`,
+`rewrite:fact`). They have no callable Camel name, so they are not declared here and
 `inspect --ops` hides them from the name comparison.
 
 #### `rewrite`
@@ -4781,7 +4781,7 @@ rewrite: (p: Program, rules: Rule[], strict: bool) => Program!
 Applies `rules` to `p` until no rule changes the program, and gives the rewritten program.
 
 - With effects: runs the rules' functions.
-- Failure: error value `RuleInvalid` when a rule does not compile; error value `RuleTwoWay` when a rule is applied in a direction it does not allow; error value `RewriteInvalid` when a rewrite cannot be carried out.
+- Failure: error value `RuleInvalid` when a rule does not compile; error value `RuleTwoWay` when a rule is applied in a direction it does not allow.
 - Example: `rewrite(p, rules)` gives `the rewritten program`
 
 #### `saturate`
@@ -4795,7 +4795,7 @@ Applies the rearranging rules too, for at most `rounds` rounds, and gives the sm
 writing of the value it finds.
 
 - With effects: runs the rules' functions.
-- Failure: error value `RuleInvalid` when a rule does not compile; error value `RewriteInvalid` when a rewrite cannot be carried out.
+- Failure: error value `RuleInvalid` when a rule does not compile.
 - Example: `saturate(p, rules, 20)` gives `the smallest writing found`
 
 #### `extract`
@@ -4807,7 +4807,7 @@ extract: (p: Program, cost: string) => Program!
 Extracts the program `p` in the cost model named `cost` (for example `"size"`).
 
 - With effects: rewrites the program and runs the cost model.
-- Failure: error value `NoCostModel` when there is no cost model named `cost`; error value `RewriteInvalid` when the extraction cannot be carried out.
+- Failure: error value `NoCostModel` when there is no cost model named `cost`.
 - Example: `extract(p, 'size')` gives `the extracted program`
 
 #### `check`
@@ -4992,7 +4992,7 @@ the shortest chain between two values, and `explain_all` every rewrite that was 
 is off unless it is asked for, so a plain application pays nothing for it.
 
 - With effects: runs the rules' functions, and nothing else.
-- Failure: error value `RuleInvalid` when a rule does not compile; error value `RuleTwoWay` when a rule is applied in a direction it does not allow; error value `RewriteInvalid` when a rewrite cannot be carried out.
+- Failure: error value `RuleInvalid` when a rule does not compile; error value `RuleTwoWay` when a rule is applied in a direction it does not allow.
 - Example: `let rs: Rule[] = []; p->run<rs>` gives `the run`
 
 #### `explain`

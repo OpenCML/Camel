@@ -1029,6 +1029,35 @@ void Array::ensureBlock() {
     noteBlockHeld(block);
 }
 
+Array *Array::shareForSecondName(camel::core::mm::IAllocator &allocator) {
+    // A write through one name is visible through another only when the two names are the same
+    // storage. An array no write can reach -- a slot array (canWriteInPlace is false for it), a
+    // view, an imported block, one shifted from its block's start -- hands itself out.
+    if (!isCompact() || view_ || offset_ != 0) {
+        return this;
+    }
+    const std::span<const int64_t> extents(extents_, rank_);
+    if (block_ == nullptr) {
+        // Inline data: two names for one inline storage would be two names for one array, so the
+        // second name gets its own copy of the data. It stays inline (the bytes fit the limit),
+        // so no block is made and each name is the storage of its own value again.
+        Array *second = createCompact(allocator, elemType_, extents, nullptr, 0, false, false);
+        if (numel_ > 0) {
+            std::memcpy(second->dataPtr_, dataPtr_, byteSize());
+        }
+        return second;
+    }
+    if (!block_->camelOwned()) {
+        return this; // an imported block is never written in place (design principles 11.3)
+    }
+    if (!block_->unique()) {
+        return this; // several values already hold the block: it is not alone, and stays so
+    }
+    // The block is this value's alone: the second name is a value over the same block, so the
+    // block's references count the names and the next write that needs the only one copies.
+    return createCompact(allocator, elemType_, extents, block_, offset_, false, false);
+}
+
 void Array::releaseBlock() noexcept {
     if (block_ != nullptr) {
         Block *block = block_;
@@ -1093,6 +1122,22 @@ bool Array::compactEqualsElements(const Array *other, bool deep) const {
         }
         return true;
     }
+    // A float array compares by value as well (design principles 7.3): a NaN equals nothing and
+    // the two zeros are equal, where a memcmp compares the bit patterns. Every element is read
+    // as the number its dtype says, exactly (getAsDouble widens f32, bf16 and f16 without a
+    // loss), so this is the rule the scalar `==` of the same type follows.
+    const bool ieeeFloat = elemTypeCode_ == TypeCode::Float32 ||
+                           elemTypeCode_ == TypeCode::Float64 ||
+                           elemTypeCode_ == TypeCode::BFloat16 ||
+                           elemTypeCode_ == TypeCode::Float16;
+    if (ieeeFloat) {
+        for (uint64_t i = 0; i < numel_; ++i) {
+            if (!(getAsDouble(i) == other->getAsDouble(i))) {
+                return false;
+            }
+        }
+        return true;
+    }
     return byteSize() == 0 || std::memcmp(dataPtr_, other->dataPtr_, byteSize()) == 0;
 }
 
@@ -1104,7 +1149,14 @@ bool Array::equals(
     if (!rtdata::isOfSameCls(this, other)) {
         return false;
     }
-    const auto *rhs = reinterpret_cast<const Array *>(other);
+    return equalsContent(reinterpret_cast<const Array *>(other), typeInfo, deep);
+}
+
+bool Array::equalsContent(
+    const Array *rhs, const type::Type *typeInfo, bool deep) const {
+    if (!rtdata::isOfSameCls(this, rhs)) {
+        return false;
+    }
     if (!sameShape(rhs)) {
         return false;
     }

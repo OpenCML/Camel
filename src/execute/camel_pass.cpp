@@ -226,6 +226,11 @@ class CamelPass final : public GraphIRPass {
         }
         NodeVMSchedPass vm(context_);
         const slot_t argument = camel::core::rtdata::toSlot(const_cast<Program *>(program));
+        // What the pass body captured is not reached through a function value here: a library
+        // function is looked up as a program, and its entry graph computes the values of its module
+        // and binds them before it calls the function, so the captures are filled before the body
+        // runs. There is no closure left for this caller to pass, and the entry graph, not a
+        // function value, is what `callGraph` is for.
         const slot_t result   = vm.callGraph(
             tool->program,
             tool->graph,
@@ -302,7 +307,7 @@ void registerCamelPass(
     descriptor.make = [module, function, params](const context_ptr_t &ctx, const PassArgs &args) {
         return std::make_unique<CamelPass>(ctx, module, function, params, args);
     };
-    // A Camel pass says which tags it reads with `#reads<...>` on its function: that is what
+    // A Camel pass says which tags it reads with `#reads(...)` on its function: that is what
     // makes a tag's facts read, exactly as a C++ module's `read_by` does (design principles
     // 6.2). The module is the one the pass was compiled from (already in the context).
     try {

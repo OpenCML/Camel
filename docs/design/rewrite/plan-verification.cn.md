@@ -52,7 +52,7 @@
 
 ### 1.2 今天的报告词汇（逐字，探针实测）
 
-三条用途各一行（无许可、`#requires<finite_math>`、`#requires<reassociate>`**不带守卫**、`#requires<refine_accuracy>`、`#requires<nondeterministic>`、带 `when`、张量各一条；探针规则见附录 A）：
+三条用途各一行（无许可、`#requires(finite_math)`、`#requires(reassociate)`**不带守卫**、`#requires(refine_accuracy)`、`#requires(nondeterministic)`、带 `when`、张量各一条；探针规则见附录 A）：
 
 ```
 ok plain: 100 samples agree, fired 8 of 8
@@ -90,7 +90,7 @@ FAIL narrow_mul_div: the two sides differ at (-2147483648): 0 and -2147483648
 
 ### 1.4 今天的许可表达与它隐含的前提映射
 
-许可写在规则声明前：`#requires<...>`，解析在 `src/parse/ast/builder.cpp`（第 869 行起），名字必须是核心的许可标签，否则报 `SemanticDiag::TagNotAPermission`（今天是负向用例 `rules.requires_unknown` 等 5 条）。
+许可写在规则声明前：`#requires(...)`，解析在 `src/parse/ast/builder.cpp`（第 869 行起），名字必须是核心的许可标签，否则报 `SemanticDiag::TagNotAPermission`（今天是负向用例 `rules.requires_unknown` 等 5 条）。
 
 | 许可 | 今天读成什么 | 8.1 要它读成什么 |
 |---|---|---|
@@ -109,7 +109,7 @@ FAIL narrow_mul_div: the two sides differ at (-2147483648): 0 and -2147483648
 ### 1.5 `when` 与 `fact` 今天的位置
 
 - **`when`**：有实现，编译成第三个函数 `name__when(params)`（`docs/technical/46_rules.md` 第 6 节）。`check` 对它只有一个处置：值路径跳过，只跑引擎路径，报告 `ok name: the condition selects the instances, fired k of m`。**条件从不被当成前提**，因为采样值上无法求值。
-- **`fact`**：今天的名字是 `analysis`。`modules/rewrite/analysis.cpp` 与 `modules/rewrite/module.cpp#analysisKernel`（注册名 `"analysis"`）实现的是设计稿第 7.5 节**之前**的形态；`src/parse/ast/builder.cpp` 里已经把它算出来的东西叫 `fact` 函数（`range__on0_fact`），但**声明面仍是 `analysis`**。两件第 8 节的事今天都没有：8.1 的"`fact` 的结论作为前提"，以及 8.6 的"没有函数体的 `fact` 是一张由规则填写的关系表"（`fact dominates(a, b): bool join or` 那种写法）。`test/plans/feat/modules/rules.plan.toml` 里的 `rules.analysis_reads_a_fact_in_when`、`rules.analysis_takes_the_parts_of_a_compound`、`rules.node_of_reaches_a_const_parameter` 三条覆盖的是这个旧名字下的行为，今天全绿。
+- **`fact`**：`modules/rewrite/fact.cpp` 与 `modules/rewrite/module.cpp#factKernel`（注册名 `"fact"`）实现的是设计稿第 7.5 节**之前**的形态；`src/parse/ast/builder.cpp` 里已经把它算出来的东西叫 `fact` 函数（`range__on0_fact`），声明面也已经叫 `fact`。两件第 8 节的事今天都没有：8.1 的"`fact` 的结论作为前提"，以及 8.6 的"没有函数体的 `fact` 是一张由规则填写的关系表"（`fact dominates(a, b): bool join (a: bool, b: bool) => a | b` 那种写法）。`test/plans/feat/modules/rules.plan.toml` 里的 `rules.fact_reads_a_fact_in_when`、`rules.fact_takes_the_parts_of_a_compound`、`rules.node_of_reaches_a_const_parameter` 三条覆盖的就是它的行为，今天全绿。
 
 ### 1.6 `explain` / `why_not` 的报告面
 
@@ -146,7 +146,7 @@ FAIL narrow_mul_div: the two sides differ at (-2147483648): 0 and -2147483648
 | `f32` | 14 | `float32_combine`、`f32_log1p`、`f32_expm1` |
 | 张量（`Tensor<int>` / `Tensor<f32>`） | 15 | `tensor_f32_combine`、`tensor_i64_distribute`、`tensor_log_softmax_of_softmax` |
 
-带许可的 21 条：`#requires<reassociate>` 7 条、`#requires<reassociate, no_infs>` 3 条、`#requires<reassociate, no_infs, no_signed_zeros>` 6 条、`#requires<refine_accuracy>` 5 条。其余 48 条按 `docs/design-principles.cn.md` 第 7.3 节的默认值不需要许可，走 `kNoPermissions` 的按位比较路径。**21 条带许可的规则里 16 条同时带 `when` 守卫**——正好是 `reassociate` 族那 16 条（7 + 3 + 6），所以今天这 16 条一次值比较都没做（§1.1 末尾）。剩下 5 条 `refine_accuracy` 规则走误差路径。今天是**按规则条数**而不是按规则语义挑路径的，这一点决定了第一步该把"每条规则都有一条值比较或一条证明"当成硬要求。
+带许可的 21 条：`#requires(reassociate)` 7 条、`#requires(reassociate, no_infs)` 3 条、`#requires(reassociate, no_infs, no_signed_zeros)` 6 条、`#requires(refine_accuracy)` 5 条。其余 48 条按 `docs/design-principles.cn.md` 第 7.3 节的默认值不需要许可，走 `kNoPermissions` 的按位比较路径。**21 条带许可的规则里 16 条同时带 `when` 守卫**——正好是 `reassociate` 族那 16 条（7 + 3 + 6），所以今天这 16 条一次值比较都没做（§1.1 末尾）。剩下 5 条 `refine_accuracy` 规则走误差路径。今天是**按规则条数**而不是按规则语义挑路径的，这一点决定了第一步该把"每条规则都有一条值比较或一条证明"当成硬要求。
 
 算子的书写是类型化的模式（`:op/add_l`、`:op/add_i`、`:op/add_f`、`:op/add_d` 一类的后缀 `_l`/`_i`/`_f`/`_d`）。整数 `+ - *` 与一元 `-` **回绕**（`include/camel/standalone/num.h#wrapMul` 一族的无符号重解释）；整数 `/` 与 `%` 在除数为 0 时**故障**，除数为 `-1` 时按无符号回绕（`include/camel/utils/int_div.h#quotient`、`#remainder`）。这三条正是翻译器到 SMT 位向量的直接依据——**没有任何未定义行为**，所以翻译是忠实的，不需要 C 语义那样的"UB 即自由"处理。
 
@@ -172,7 +172,7 @@ FAIL narrow_mul_div: the two sides differ at (-2147483648): 0 and -2147483648
 | G7 | `refine_accuracy` 走误差比路径，措辞是 `FAIL … is less accurate` | "右边不比左边差"的误差界命题 | 报告 + 翻译器 | 与 G5 同文件 / 同上 / 串在 G5 后 |
 | G8 | `nondeterministic` → `checkable=false` → `unchecked`（第四个字） | 只能 `sampled`，且要写明原因 | 报告 | 与 G1 同文件 / 同 G1 / 串在 G1 上 |
 | G9 | `when` 无法在采样值上求值，值路径整条跳过 | `when` 作前提 | 翻译器 | 1 文件（前提与条件图） / 1 次 / 与 G5 并行 |
-| G10 | `fact`（今天的 `analysis`）与判定无关 | `fact` 的结论作前提 | 翻译器 + 声明面 | 1 文件；`analysis` → `fact` 的更名是另一条工作，不在本计划 / 与 G9 同批 / 与 G9 并行 |
+| G10 | `fact` 与判定无关 | `fact` 的结论作前提 | 翻译器 + 声明面 | 1 文件；声明面的更名由另一条工作完成，不在本计划 / 与 G9 同批 / 与 G9 并行 |
 | G11 | 泛型规则在 `check` 里直接 `continue` | 每个实例分别证明 | 翻译器 + 报告 | 1 文件（枚举元组、取实例）+ 报告每行带元组 / 1 次 / 与 G5、G9 并行 |
 | G12 | 报告无格式契约，`FAIL` 混装两种处境 | 反例要可复现、命题种类要显式 | 报告 | 与 G1 同文件 / 同 G1 / 串在 G1 后 |
 | G13 | 没有任何东西记录 69 条规则的判定 | 每条规则都有标注 | 报告 + CI | 1 份生成物 + `test/plan-selection.json` 1 条 / 1 次 / 串在 G1–G12 后 |
@@ -246,8 +246,8 @@ FAIL narrow_mul_div: the two sides differ at (-2147483648): 0 and -2147483648
   - `reassociate`/`contract` → **实数模型**，命题种类 `real equality`（落到选项 A 还是 C，见问题文件 1 的选项 A/C）。
   - `refine_accuracy` → **误差界命题**，命题种类 `error bound`。
 - **红前用例**（两条，覆盖许可的两种处境）：
-  1. **库里的真形状**：`float_combine`（`#requires<reassociate>` **且带** `when combineSameSign(c1, c2)`）今天逐字 `ok float_combine: the condition selects the instances, fired 2 of 64`——一次值比较都没做。计划断言 `proved float_combine, class real equality`——今天红。
-  2. **不带守卫的许可规则**（探针形状）：`#requires<reassociate>` 的 `x * c1 + x * c2 => x * (c1 + c2)` 不带 `when` 时今天逐字 `FAIL reassoc: the two sides differ at (-inf, 7, -1): -nan and -inf`（`reassociate` 不含 `no_infs`，所以样本里有 `-inf`）。按 8.1 它应当是"实数上相等"，今天却是 `FAIL`——**同一条规则在"有守卫"与"无守卫"下今天给出两种互不相干的报告**，这本身就是要把许可与 `when` 合成一张前提表（§1.4 末）的理由。计划断言这两条都得到 `proved …, class real equality`——今天两条都红。
+  1. **库里的真形状**：`float_combine`（`#requires(reassociate)` **且带** `when combineSameSign(c1, c2)`）今天逐字 `ok float_combine: the condition selects the instances, fired 2 of 64`——一次值比较都没做。计划断言 `proved float_combine, class real equality`——今天红。
+  2. **不带守卫的许可规则**（探针形状）：`#requires(reassociate)` 的 `x * c1 + x * c2 => x * (c1 + c2)` 不带 `when` 时今天逐字 `FAIL reassoc: the two sides differ at (-inf, 7, -1): -nan and -inf`（`reassociate` 不含 `no_infs`，所以样本里有 `-inf`）。按 8.1 它应当是"实数上相等"，今天却是 `FAIL`——**同一条规则在"有守卫"与"无守卫"下今天给出两种互不相干的报告**，这本身就是要把许可与 `when` 合成一张前提表（§1.4 末）的理由。计划断言这两条都得到 `proved …, class real equality`——今天两条都红。
 - **验收**：
   ```
   camel test/cases/modules/rules/verify_licences.cml std::nvm
@@ -328,7 +328,7 @@ S1 ──┬─► S2 ───────────────────�
   node scripts/test.js test/plans/feat/modules/verify_solver.plan.toml
   ```
   命名一个计划**文件**时它会全跑，与 `--tier` 无关——这正是"慢层留在批次点"要的形式。
-- **慢层的归属**：求解器证全库 69 条是分钟级。按 `docs/test-plans.md` 的层规则标 `tier = "slow"`，并在 `desc` 里写明时间为什么是固有的（"each rule is a solver query over its own two sides, and the library is 69 rules"）；批次点 `npm run release-gate` 用**计划文件**点名跑它（release-gate 的既有做法就是"按显式计划文件跑可跑的慢层"）。
+- **慢层的归属**：求解器证全库 69 条是分钟级。按 `docs/test-plans.md` 的层规则标 `tier = "milestone"`，并在 `desc` 里写明时间为什么是固有的（"each rule is a solver query over its own two sides, and the library is 69 rules"）；它在里程碑层跑，不进合并闸门与发布闸门的慢层。
 - **本地**：`CAMEL_Z3_VERIFY=OFF` 是默认，开发者循环不受影响；要跑证明的开发者用同一个计划文件。
 
 ## 5. 不做什么、风险
@@ -338,7 +338,7 @@ S1 ──┬─► S2 ───────────────────�
 1. **不做张量规则的翻译**（第一步按任务书只做标量）；15 条张量规则标 `sampled` 并写原因。`f16`/`bf16` 的宽度**要**在覆盖集里留位（8.1 明列），但今天没有规则用到它们，所以实现在 S3 的最后而不是第一步。
 2. **不做带区域的模式**（分支、循环上的模式）与**调用外部函数的条件**——8.1 自己就把它们列进"覆盖不到"。
 3. **不改语义让验证通过**。`refuted` 的规则按 8.1 **不得入库**，这条是闸门；本计划只提供判定，不提供豁免。
-4. **不把 `analysis` 更名成 `fact`**。第 7.5 节的 `fact` 是另一条工作；本计划只在 `fact` 的前提这一项上留出接口（S4），并明确 S4 的验收用今天的 `analysis` 形态也能跑。
+4. **不含声明面的更名**。第 7.5 节的 `fact` 更名由另一条工作完成；本计划只在 `fact` 的前提这一项上留出接口（S4），并明确 S4 的验收在今天的 `fact` 形态下也能跑。
 5. **不让求解器进 `camel` 的运行时**，也不因为验证就需要新的遍参数。
 
 **风险**：
@@ -353,7 +353,7 @@ S1 ──┬─► S2 ───────────────────�
 
 1. **许可到前提的三种读法**：`reassociate`/`contract` 证"实数上相等"还是"按位相等"；`refine_accuracy` 的误差界成真时叫不叫 `proved`；`nondeterministic` 与今天的第四个字 `unchecked` 怎么合并。见 `docs/handover/reviews/questions-2026-10-23.md`（§verification-licence-to-precondition）`。
 2. **判定落在哪个面上**：任务书说"`stdlib/rules.cml` 每条规则都有标注"，标注写进规则语言、写成生成物、还是只在运行时报告里出现；`CheckReport` 每行带什么；覆盖不到的规则标什么、CI 要不要把 `refuted` 当硬失败。见 `docs/handover/reviews/questions-2026-10-23.md`（§verification-verdict-surface）`。
-3. **`approx_math` 作为许可的前提是什么**：`src/core/operator_semantics.cpp#rewriteErrorBound` 里没有这个位，8.1 也没说。今天的处置是"它不影响容差"，所以带 `#requires<approx_math>` 的规则按 `kNoPermissions` 的按位比较路径处理——这是不是作者要的，需要确认。出处：`include/camel/core/operator_semantics.h#Permission` 有这个位、`src/core/operator_semantics.cpp#rewriteErrorBound` 没有这个分支、`src/core/operator_semantics.cpp#parsePermission` 认这个名字。**本计划不裁定，按今天的读法落地并在报告里写明。**
+3. **`approx_math` 作为许可的前提是什么**：`src/core/operator_semantics.cpp#rewriteErrorBound` 里没有这个位，8.1 也没说。今天的处置是"它不影响容差"，所以带 `#requires(approx_math)` 的规则按 `kNoPermissions` 的按位比较路径处理——这是不是作者要的，需要确认。出处：`include/camel/core/operator_semantics.h#Permission` 有这个位、`src/core/operator_semantics.cpp#rewriteErrorBound` 没有这个分支、`src/core/operator_semantics.cpp#parsePermission` 认这个名字。**本计划不裁定，按今天的读法落地并在报告里写明。**
 4. **一个 `refuted` 的规则应当怎样退出标准库**：8.1 说"不得入库"，但今天的库是 69 条手写的规则，没有自动化的入/出库流程。是加一个 `refuted ⇒ 移除该规则` 的闸门，还是只让 CI 红、由人来改？出处：8.1 的报告那一条；`test/plan-selection.json` 把 `stdlib/rules.cml` 映到 5 个计划。
 
 ## 附录 A：测量命令与逐字输出
@@ -401,13 +401,13 @@ import { check } from rewrite
 import { Tensor } from tensor
 
 rule plain(x: float) { x * 1.0 => x }
-#requires<finite_math>
+#requires(finite_math)
 rule finite(x: float, const c1: float, const c2: float) { x * c1 + x * c2 => x * (c1 + c2) }
-#requires<reassociate>
+#requires(reassociate)
 rule reassoc(x: float, const c1: float, const c2: float) { x * c1 + x * c2 => x * (c1 + c2) }
-#requires<refine_accuracy>
+#requires(refine_accuracy)
 rule accurate(x: float) { x + 1.0 => x }
-#requires<nondeterministic>
+#requires(nondeterministic)
 rule anywhere(x: float, const c: float) { x * c => c * x }
 rule guarded(x: int, const c: int) { x * c => x } when c == 1
 rule tensor_law(x: Tensor<f32>) { x + x => x * 2.0 }

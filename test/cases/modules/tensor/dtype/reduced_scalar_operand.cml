@@ -1,0 +1,42 @@
+/**
+ * A scalar operand beside a reduced-precision tensor.
+ *
+ * Beside a tensor a literal takes the tensor's element type (design principles 5.1), so the scalar
+ * in `b * 2.0` is a bf16 and the product is computed in f32 and rounded once into bf16. The
+ * operand is read where it lies, as the two-byte pattern of its own type - the same bytes an
+ * element of the type occupies in an array (camel/core/rtdata/half.h) - so the value the operator
+ * reads is the value the program wrote. Left in a wider member of the operand's storage it is not
+ * that value: the operand is the number written only as its own pattern, and every line below
+ * answered with the element 9.18e-40, the pattern 0x0001, instead.
+ *
+ * A value of another type beside the tensor is converted into the element type once, and needs no
+ * numeric permission: the program wrote both types (design principles 7.2-7.3).
+ *
+ *   b = bf16[1, 2, 3, 4]        h = f16[1, 2, 3, 4]
+ *   sum(b * 2.0)   20           sum(h * 2.0)   20
+ *   sum(b * 0.5)    5           sum(h * 0.5)    5
+ *   sum(b + 2.0)   18
+ *   sum(b - 1.0)    6
+ *   sum(b / 2.0)    5
+ *   sum(b * a)     20           sum(h * a)     20      a: f32 = 2.0
+ *   sum(where(b > 2.0, b, 0.0)) 7
+ */
+module tensor_dtype_reduced_scalar_operand
+
+import { Tensor, cast, reshape, sum, where } from tensor
+
+func main(): int sync {
+    let x = reshape([1.0, 2.0, 3.0, 4.0] as f32[], [4])
+    let b = cast(x, 'bf16')
+    let h = cast(x, 'f16')
+    let a: f32 = 2.0
+    
+    println(sum(b * 2.0), sum(b * 0.5), sum(b + 2.0), sum(b - 1.0), sum(b / 2.0))
+    println(sum(h * 2.0), sum(h * 0.5), sum(h + 2.0), sum(h - 1.0))
+    println(sum(b * a), sum(h * a))
+    println(sum(where(b > 2.0, b, 0.0)), sum(where(h > 2.0, h, 0.0)))
+    
+    // The same lines with the tensor on the right: the scalar is read by the same rule.
+    println(sum(2.0 * b), sum(2.0 + b), sum(2.0 - b))
+    return 0
+}

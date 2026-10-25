@@ -1,0 +1,33 @@
+// Who needs whose result decides what runs, and what can run at the same time.
+// Run: camel docs/tutorial/examples/09_dependency.cml
+//      camel docs/tutorial/examples/09_dependency.cml std::gir
+module dependency
+
+func price(n: int): int {
+    return n * 3
+}
+
+func tax(n: int): int {
+    return n / 10
+}
+
+// Neither call needs the other's result, and the addition needs both.
+func total(n: int): int {
+    return price(n) + tax(n)
+}
+
+func spare(n: int): int {
+    return n + 1
+}
+
+// The result of `spare` is used by nothing, so the call is not part of what this function
+// computes.
+func total_with_a_spare(n: int): int {
+    spare(n)
+    return total(n)
+}
+
+func main(): int sync {
+    println(total(10), total_with_a_spare(10))
+    return 0
+}

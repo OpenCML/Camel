@@ -1,0 +1,32 @@
+id = "gate.case_ledger"
+order = 922
+tier = "fast"
+tags = ["feat", "tools", "gate"]
+desc = "Every file under test/cases is read by code -- a plan that names it, an import of another case, a harness or a tool that opens it -- or it is recorded in CASE_EXCEPTIONS with the reason it is kept. A name in a comment or in a `desc` is not a read"
+
+# The case ledger: the extension of the accounting above from plan files to cases. A case no code
+# reaches cannot fail, so a change that breaks it is invisible while the tree keeps paying for it;
+# one such file had gone wrong before anyone noticed.
+#
+# It lives in `scripts/plan-inventory.mjs` beside the tables, and `scripts/release-gate.mjs` imports
+# the same module, so this entry and the gate's own check are one implementation, not two.
+#
+# Why it is a fast-layer entry: a case that lands with nothing that reads it must redden the commit
+# that lands it, not the next census. The check needs no compiler and no install: it reads the tree,
+# the plans and the tables.
+#
+# It fails naming every unread case at once, and it also fails when the module it is in cannot list
+# the tree, when test/cases holds no case at all, and when an entry of CASE_EXCEPTIONS names a file
+# that does not exist or that something reads again.
+
+[[tests]]
+name = "gate.case_ledger"
+desc = "Every file under test/cases is read by code -- a plan's value, a module a plan names, an import of another reached case, a path a harness or a tool builds -- or CASE_EXCEPTIONS records the reason it is kept. The check prints every problem at once and exits 1."
+kind = "behavior"
+tool = "node"
+case = "../../../../scripts/plan-inventory.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["case files, every one of them is read by code or recorded with a reason"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 30000

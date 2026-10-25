@@ -1,7 +1,7 @@
 module static_for_not_composite
 
 func walk(t: int) {
-    static for (n, F) in fields int => {
+    static for n, F in fields int => {
         println(n, t)
     }
 }

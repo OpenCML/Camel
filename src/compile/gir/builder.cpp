@@ -741,7 +741,7 @@ compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
             graph->draft().flags() | camel::runtime::kGraphFlagMacro));
     }
     buildFuncBody(gct, graph, funcType, name, tags);
-    // A declaration tag whose argument names a function (`#vjp<cube_rule>`) keeps that graph
+    // A declaration tag whose argument names a function (`#vjp(cube_rule)`) keeps that graph
     // in the reference table of the function's graph: the fact is a graph reference, and the
     // reader finds it in the frozen graph (GCGraph::ruleGraphs).
     attachRuleGraphs(graph, tags.declaration);
@@ -869,7 +869,7 @@ FunctionType *Builder::completeLambdaSignature(
             type = wanted;
         }
         if (i < withCount) {
-            factory.addWithArg(nameAt(i), type, funcType->withIsVarAt(i));
+            factory.addWithArg(nameAt(i), type, funcType->withIsVarAt(i), funcType->withNeedsValueAt(i));
         } else {
             factory.addNormArg(nameAt(i), type, funcType->normIsVarAt(i - withCount));
         }

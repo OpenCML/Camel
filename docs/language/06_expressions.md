@@ -25,7 +25,7 @@ Camel 里几乎一切都是表达式：`if`、`match`、块、赋值都有值。
 - 数组字面量的元素类型必须相同。元素是**有期望类型的位置**（[3.3.1](03_data_model.md#331-数组)）：有上下文时每个元素取那个类型，`let xs: float[] = [1, 2.0]` 的元素都是 `float`；没有上下文时，同一个数组里的数字字面量取最宽的一种（整数 < 小数），所以 `[1, 2.0]` 是 `float[]`（与 Go 的无类型常量相同）。空数组 `[]` 的元素类型来自上下文：`let xs: int[] = []`、`[] as Map<string, int>`。
 - 结构体字面量的键是标识符。字段同样是有期望类型的位置：`let p: P = { a: 1, b: 2.0 }`（`P = { a: float, b: float }`）里 `1` 是 `float`。字段的值写成名字时是变量，不转换，类型不符就是 `SemanticDiag::DeclaredTypeMismatch`。
 - **列表推导** `[e for x in xs if c]` 就是 `xs->filter<(x) => c>->map<(x) => e>`：`x` 的类型是 `xs` 的元素类型，`if c` 可以省略，结果是 `e` 的数组。图上与手写这两个调用完全相同（两个算子节点，各带一张元素函数的子图），所以它的性质也相同：元素之间没有顺序约定（并行调度器可以并发地算），`e`、`c` 里的副作用与 `map`、`filter` 的元素函数里的一样处理（[6.10](#610-高阶算子)）。可以嵌套，也可以出现在任何需要表达式的位置。`xs` 不是数组是 `SemanticDiag::ComprehensionSourceRefused`。
-- 展开 `...xs` 保留，尚未实现（`SemanticDiag::ConstructNotSupported`）。写成 `concat(xs, ys)`。
+- 展开 `...xs` 报 `SemanticDiag::ConstructNotSupported`。写成 `concat(xs, ys)`。
 
 ### 6.2.1 格式化字符串
 
@@ -66,9 +66,9 @@ func main(): int sync {
 - **`xs[idx]` 是 `take`**：`idx` 的类型必须是 `int[]`，结果是 `idx` 各位置上的元素，按 `idx` 的顺序；同一个位置出现两次就取两次。越界与负数都是故障 `RuntimeDiag::IndexOutOfRange`。结果是一份新数组，不是视图（[5.4](../design-principles.cn.md)）。
 - **切片沿第一维，左闭右开**：`xs[a:b]` 是位置 `a` 到 `b-1`。`a` 省略表示从头，`b` 省略表示到末尾，`xs[:]` 是整个数组；`s` 是步长。切片是**共用数据块的视图**（[5.4](../design-principles.cn.md)），不复制元素。
   - 两端都是 0 到 `len(xs)` 之间的位置（`b` 可以等于长度，表示取到最后一个）；负数或越界是故障 `RuntimeDiag::SliceOutOfRange`，与下标越界一致（[3.9](../design-principles.cn.md)）。`b < a` 是空数组，不是故障。长度在编译期已知而边界是常量时，越界是编译期错误（[3.9](../design-principles.cn.md)）。
-  - 步长目前只支持 `s == 1`。步长不为 1 的切片是带步长的视图，需要 H17 的数组表示，所以现在是故障 `RuntimeDiag::InvalidArgument`（张量上是编译期错误），诊断里点名 H17；要一份拷贝写 `slice(xs, 0, a, b, s)`。
-  - 元素是对象的数组（`[[1, 2], [3, 4]]` 这类）按行复制，槽数组没有可共用的数据块（H17 记录）。
-- **多维下标**：`xs[:, 0]`、`xs[a:b, c]` 的语法已经接受，但它的视图要沿其余维取坐标，同样需要 H17 的数组表示；现在写它会得到编译期错误 `SemanticDiag::ConstructNotSupported`，诊断里点名 H17，并提示先用 `take` 或逐维取。
+  - 步长写在第二个冒号之后：`xs[a:b:s]`，得到的仍是共用数据块的视图；要一份拷贝写 `slice(xs, 0, a, b, s)`。
+  - 元素是对象的数组（`[[1, 2], [3, 4]]` 这类）按行复制，槽数组没有可共用的数据块。
+- **多维下标**：`xs[:, 0]`、`xs[a:b, c]` 沿各维取坐标，得到视图；某一维整个取用 `:`（[5.4](../design-principles.cn.md)）。
 - **字符串下标按码点**：`s[i]` 是第 `i` 个码点，结果是只含这一个字符的字符串（`'中文'[0]` 是 `'中'`）；越界同样是故障。要数值用 `str` 模块的 `codepoints`（见 [标准库参考](../stdlib-reference.md)）。
 
 ## 6.4 调用
@@ -96,8 +96,8 @@ func main(): int sync {
   - 只配了前几个上下文参数时，剩下的仍是结果的上下文参数：`let above = clamp<0>` 之后写 `above<5>(9)`。已经配齐的函数不能再配（`g<2>` 是错误）。
   - `f` 必须是能由这些实参确定的一个函数。同名函数有多个时，取唯一一个接受这些上下文实参的；仍有多个时由所在位置的函数类型（形参）决定，都定不下来是 `SemanticDiag::PartialApplicationRefused`。
   - 图上它是一个携带了捕获值的函数值，与闭包同构：自己的一张子图，配好的实参通过端口进入，没有新增节点种类。
-  - 尚未支持：带 `var` 上下文参数的函数（`SemanticDiag::ConstructNotSupported`）、类型规则随实参变化的内建算子（如 `len`；`SemanticDiag::FunctionNameAsValue`）。这两种情形把调用写在 lambda 里。
-- 关键字实参 `f(a: 1)` 保留，尚未实现（`SemanticDiag::FeatureNotSupported`）。
+  - 带 `var` 上下文参数的函数（`SemanticDiag::ConstructNotSupported`）、类型规则随实参变化的内建算子（如 `len`；`SemanticDiag::FunctionNameAsValue`）。这两种情形把调用写在 lambda 里。
+- 关键字实参 `f(a: 1)` 报 `SemanticDiag::FeatureNotSupported`。
 - 同一个实参表里写两个带尖括号的调用（`f<a>(x), g<b>(y)`）会被读成比较；带尖括号的调用后面再接带尖括号的管道（`f<a>(x)->g<b>`）也可能如此。把它们分成两条语句。
 - 写在括号里的 lambda 可以直接调用：`((x: int): int => x + 1)(3)`；也可以直接写在 `->`、`?->` 的右边：`3->(x: int): int => x + 1`、`parse_int(s) ?-> (x: int): int => x * 2`。
 
@@ -121,7 +121,7 @@ total = 35
 ```
 
 - `x ?-> f` 见 [6.6](#66-空值与错误的运算符)。
-- `f..g`（函数组合）与 `?..` 保留，尚未实现，含义也没有确定：写了是 `SemanticDiag::ConstructNotSupported`。用 lambda：`(x: int): int => g(f(x))`。
+- `f..g` 是函数组合：`(f..g)(x)` 即 `g(f(x))`，与管道 `x->f->g` 同向；两边是整数时 `a..b` 是左闭右开的区间，得到 `int[]`，带步长写 `range(a, b, step)`。`for i in 0..n` 由编译器融合，不物化数组。`..` 比 `->` 紧：`x->f..g` 读作 `x->(f..g)`。
 
 ## 6.6 空值与错误的运算符
 
@@ -211,14 +211,16 @@ false
 
 ### 6.7.3 比较
 
-- `==`、`!=`：数值、`bool`、`string`、`Map`、`Set`，以及数组、元组、结构体，两边类型必须相同（否则是编译期错误 `SemanticDiag::NoMatchingFunction`，不做转换）。
+- `==`、`!=`：数值、`bool`、`string`、`Map`、`Set`，以及数组、元组、结构体、张量，两边类型必须相同（否则是编译期错误 `SemanticDiag::NoMatchingFunction`，不做转换），结果是 `bool`。
   - **数组、元组、结构体按内容逐个比较**，递归进行：`[1, 2] == [1, 2]`、`(1, 'a') == (1, 'a')`、两个字段都相等的结构体，结果都是 `true`；长度不同的数组不相等。
-  - 元素类型本身要能比较：数值、`bool`、`string`、`Map`、`Set`、`T?`、`T!`，以及由它们组成的数组、元组、结构体。含函数值的（`[f] == [f]`）不能比较，是带位置的编译期错误；张量不在此列。
+  - **整体比较就是逐元素比较再归约成一个 `bool`**：`a == b` 是形状相同、并且逐元素相等处处成立（见 [4.2](../design-principles.cn.md)）。数值数组（`f32[]`、`f32[..]` 这类）也一样，结果同样是 `bool`。
+  - 元素类型本身要能比较：数值、`bool`、`string`、`Map`、`Set`、`T?`、`T!`，以及由它们组成的数组、元组、结构体。含函数值的（`[f] == [f]`）不能比较，是带位置的编译期错误。
   - 浮点元素按浮点的规则：含 `nan` 的数组不等于它自己，`[0.0] == [-0.0]`。
   - `T?`、`T!` 本身（不在数组、元组、结构体里）仍然没有 `==`，先用 `??`、`!!` 或 `match` 拆开。
+- **`===`、`!==` 是逐元素的相等与不等**：`a === b` 对两个数组逐个元素比较，得到同形状的 `bool` 数组：`[1, 2, 3] === [1, 2, 4]` 是 `[true, true, false]`；`a !== b` 是它的逐元素否定。形状规则与别的逐元素运算相同（形状不能广播是带位置的运行期错误）。标量上 `===` 就是 `==`（`1 === 1`、`'a' === 'a'`）。
+  - 与 `<`、`>`、`<=`、`>=` 一样，它在数值数组上定义：`f32[]`、`f32[..]`、`int[]`，元素类型是数值的数组。整体比较（上一条）在任何元素类型能比较的数组上都有定义。
 - **`x == null`、`x != null`** 对 `T?` 类型的 `x` 有定义，两边顺序不限，得到 `bool`：它判断 `x` 的标记，不是比较两个值（与 `??` 分支所依据的是同一个节点）。它是普通的表达式：`let has = x != null`。可空的函数值也可以这样与 `null` 比较。一个永远不为空的值（`int`、`T!`、已经收窄成 `T` 的名字）与 `null` 比较也可以写，结果是固定的（`==` 恒为 `false`，`!=` 恒为 `true`），编译器给出警告 `SemanticDiag::NullTestNeverNull`，这个值本身不求值。两个 `T?` 互相比较仍是 `SemanticDiag::NoMatchingFunction`；两个函数值不能比较。
-- `<`、`>`、`<=`、`>=`：数值与 `string`（按码点顺序）。比较不能连写：`1 < 2 < 3` 是类型错误。
-- `===`、`!==` 暂不支持：词法上认得这两个记号，写了是带位置的编译期错误 `SemanticDiag::ConstructNotSupported`。比较值用 `==`、`!=`。
+- `<`、`>`、`<=`、`>=`：数值与 `string`（按码点顺序）；**数值数组上逐元素比较**，得到同形状的 `bool` 数组。比较不能连写：`1 < 2 < 3` 是类型错误。
 
 ### 6.7.4 类型转换 `as`
 
@@ -226,11 +228,12 @@ false
 
 - 进入可空或可能出错的形式：`5 as int?`、`null as int?`、`v as int!`（目标类型已知的位置不必写，见 [3.4](03_data_model.md)）；
 - 构造映射与集合：`[...] as Map<K, V>`、`[...] as Set<T>`；
+- 模块类型的检查式转换：在转换处检查该类型自己的条件。
 - 数组的检查式转换：`a as f32[4]`，形状在转换处检查；`Tensor<f32, [3]>` 是数值数组的另一种拼写（过渡期保留），`t as Tensor<f32, [3]>` 是同一种转换。
 
 `as` 不会不经检查地改变一个值的类型。`json::decode` 的结果是 `Json`，不能 `as` 成别的类型；已知形状的 JSON 用 `json::decode_as(s, [0])`，它在解码时检查形状，结果是 `T!`。
 
-数值之间的转换用 `float(x)` 等函数（[3.2](03_data_model.md#32-数值)）。`e is T` 保留，尚未实现（运行时没有类型信息；`SemanticDiag::ConstructNotSupported`）。后缀的非空断言 `x!` 同样保留未实现；用 `x ?? 默认值`。
+数值之间的转换用 `float(x)` 等函数（[3.2](03_data_model.md#32-数值)）。`e is T` 报 `SemanticDiag::ConstructNotSupported`（运行时没有类型信息）。后缀的非空断言 `x!` 也一样；用 `x ?? 默认值`。
 
 ## 6.8 `if` 与 `match`
 
@@ -376,11 +379,11 @@ func main(): int sync {
 
 缺分支、多分支或混入字面量分支是 `SemanticDiag::TaggedMatchCases`。
 
-**对 `enum` 的模式。** 被匹配的值是枚举时，模式写它的变体（[3.5](03_data_model.md#35-枚举-enum)）：`case Shape::Circle(r)`、`case Shape::Rect { w, h }`、`case Shape::Empty`、`case _`。元组变体要给全位置，结构体变体只写要绑定的字段（可改名、可简写），无数据的变体写它的限定名（`case Shape::Empty`；裸名字是绑定名，写成 `case Empty` 是 `EnumPatternMismatch`）。列全所有变体就不必写 `case _`；漏了变体又没有 `case _` 是 `SemanticDiag::EnumMatchNotExhaustive`，诊断列出漏掉的变体名；同一个变体写两次给 `EnumVariantCaseRepeated` 警告，`case _` 之后的臂给 `MatchCaseAfterWildcard` 警告，列全所有变体后还写 `case _` 给 `MatchWildcardRedundant` 警告。第一版不支持嵌套模式（字段位置再写模式），给出"暂不支持"（`ConstructNotSupported`）。
+**对 `enum` 的模式。** 被匹配的值是枚举时，模式写它的变体（[3.5](03_data_model.md#35-枚举-enum)）：`case Shape::Circle(r)`、`case Shape::Rect { w, h }`、`case Shape::Empty`、`case _`。元组变体要给全位置，结构体变体只写要绑定的字段（可改名、可简写），无数据的变体写它的限定名（`case Shape::Empty`；裸名字是绑定名，写成 `case Empty` 是 `EnumPatternMismatch`）。列全所有变体就不必写 `case _`；漏了变体又没有 `case _` 是 `SemanticDiag::EnumMatchNotExhaustive`，诊断列出漏掉的变体名；同一个变体写两次给 `EnumVariantCaseRepeated` 警告，`case _` 之后的臂给 `MatchCaseAfterWildcard` 警告，列全所有变体后还写 `case _` 给 `MatchWildcardRedundant` 警告。模式写在字段位置时给出"暂不支持"（`ConstructNotSupported`）。
 
 **`match` 必须有默认分支。** 没有 `case _` 是编译期错误 `SemanticDiag::MatchWithoutDefault`，定位在 `match` 上。三种情形不必写：对 `bool` 写全了 `case true` 与 `case false`；对 `T?`、`T!` 用上面的固定模式；对枚举列全了所有变体。编译器不会追加程序里没有写的分支臂，所以图上的臂与源码里的 `case` 一一对应。
 
-元组模式、结构体模式，以及对普通类型的值的标识符模式（`case n => ...`）保留，尚未实现（`SemanticDiag::ConstructNotSupported`）；用 `if` 链或先取成员再匹配。枚举变体的元组、结构体模式已经实现，但字段位置只能写名字或 `_`。
+元组模式、结构体模式，以及对普通类型的值的标识符模式（`case n => ...`）报 `SemanticDiag::ConstructNotSupported`；用 `if` 链或先取成员再匹配。枚举变体的元组、结构体模式已经实现，但字段位置只能写名字或 `_`。
 
 `try`/`catch`/`finally` 不属于 Camel（它在图上没有稳定的映射）：写了得到 `SemanticDiag::TryCatchNotInLanguage`。可能失败的操作返回 `T!`，用 `!!`、`?->` 与 `case error e` 处理。
 
@@ -402,11 +405,11 @@ match type 类型 {
 ```
 
 - `struct` 匹配结构体；`tuple` 匹配**普通**元组；`func` 匹配函数类型；`#leaf` 匹配其余所有类型（标量、`string`、数组、函数、`T?`、`T!`、单元格等）。`struct` 和 `tuple` 是 [R3 内部节点](../design/generic-structure/README.cn.md)的两种形状：`T?`、`T!` 是带标记的元组，和可变单元格一样落在 `#leaf`，不算 `tuple`。
-- 类型位置写一个类型名就是**身份模式**：`case int`、`case Tensor<f32, [..]>`、`case MyStruct`、`case T`。身份是**精确**的：`case float` 不选 `int`（`float` 与 `f64` 是同一个类型，`int` 与 `i64` 也是；`int` 与 `i32` 不是）；`case f32` 不选 `f64`；`case MyStruct` 按声明的名字选，不选另一个字段形状相同的结构体；`case T` 在实例化时先代入 `T` 的绑定，所以它选的正是那个类型。形状与身份可以写在同一个 case 里（`case tuple | MyStruct`），按书写顺序判断：前面的 case 已经选中的类型，后面的同一身份是 `SemanticDiag::StaticMatchPatternCannotMatch`。
+- 类型位置写一个类型名就是**身份模式**：`case int`、`case Json`、`case MyStruct`、`case T`。身份是**精确**的：`case float` 不选 `int`（`float` 与 `f64` 是同一个类型，`int` 与 `i64` 也是；`int` 与 `i32` 不是）；`case f32` 不选 `f64`；`case MyStruct` 按声明的名字选，不选另一个字段形状相同的结构体；`case T` 在实例化时先代入 `T` 的绑定，所以它选的正是那个类型。形状与身份可以写在同一个 case 里（`case tuple | MyStruct`），按书写顺序判断：前面的 case 已经选中的类型，后面的同一身份是 `SemanticDiag::StaticMatchPatternCannotMatch`。
 - `_` 与 `#leaf` 一样匹配一切，只作为“兜底”写法；两者都必须是最后一个 case。`case struct | tuple` 用 `|` 合并几种形状。`case int` 写在 `case #leaf` 之前是正常的；写在 `#leaf`/`_` 之后是 `SemanticDiag::StaticMatchUnreachableCase`。
 - `match type` 后面是类型位置：紧跟的 `(` 一律读作类型的开头，所以 `match type () { ... }` 匹配空元组类型；函数类型要再包一层括号，写成 `match type ((x: int) => int) { ... }`。`case` 后面也是类型位置，同样的规则：`case (int, int)`、`case ()` 是元组，函数类型写成 `case ((x: int) => int)`。
 - 身份模式里的类型名在这里解析：未知的名字是 `SemanticDiag::UnresolvedTypeReference`；`void` 和 `typeof` 表达式的值不是一个类型身份，是 `SemanticDiag::StaticMatchPatternCannotMatch`。同一个 case 里写了两次同一个类型，也是 `StaticMatchPatternCannotMatch`。
-- 没有 case 命中时是 `SemanticDiag::StaticMatchNotExhaustive`；`#leaf`/`_` 后面还有 case 是 `SemanticDiag::StaticMatchUnreachableCase`。`match type` 比较具体类型名：`case int`、`case MyStruct` 是这个构造的一部分，标量类型不再只能走 `#leaf`。
+- 没有 case 命中时是 `SemanticDiag::StaticMatchNotExhaustive`；`#leaf`/`_` 后面还有 case 是 `SemanticDiag::StaticMatchUnreachableCase`。`match type` 比较具体类型名：`case int`、`case MyStruct` 是这个构造的一部分，标量类型直接写类型名。
 - 选中的分支直接成为当前位置的直线代码，运行时没有分支节点。分支的值就是整个 `match type` 的值；空分支的值为 `void`。
 - 泛型函数的返回类型可以省略，由每个实例选中的分支推出（返回类型推断）。如果递归调用回到**同一个类型实例**、而该实例的返回类型还没有推出，报 `SemanticDiag::GenericInstantiationCycle`；递归到严格更小的类型参数则照常先完成子实例。
 
@@ -422,20 +425,20 @@ func duplicate::<T>(t: T) {
 
 ### 6.8.4 `static for` 与 `t.[n]`
 
-`static for (n, F) in fields T => 块` 把 `T` 的**字段表**在实例化时展开（[5.5](../design-principles.cn.md)）：每个字段执行一次块，展开出的代码直接成为当前位置的直线代码，运行时没有循环节点。
+`static for n, F in fields T => 块` 把 `T` 的**字段表**在实例化时展开（[5.5](../design-principles.cn.md)）：每个字段执行一次块，展开出的代码直接成为当前位置的直线代码，运行时没有循环节点。
 
 - `T` 必须是具体类型，而且是 [R3 内部节点](../design/generic-structure/README.cn.md)：结构体或**普通**元组。`T?`、`T!`、可变单元格、标量、数组和函数都是叶子，报 `SemanticDiag::StaticForNotComposite`；先用 `match type` 处理它们。
-- `n` 是字段名；元组的字段名是十进制下标（`"0"`、`"1"`，……），按声明顺序。`F` 是字段类型。两者只在块内可见；`F` 可以写在类型位置（`let x: F`），不能当值用。其中任何一个写成 `_` 表示这一轮不绑定它，与 `match` 的 `_` 同义：`static for (n, _) in fields T => e` 只取字段名，`static for (_, F) in fields T => e` 只取字段类型（`_` 不是名字，块里写 `_` 仍然未定义）。
+- `n` 是字段名；元组的字段名是十进制下标（`"0"`、`"1"`，……），按声明顺序。`F` 是字段类型。两者只在块内可见；`F` 可以写在类型位置（`let x: F`），不能当值用。其中任何一个写成 `_` 表示这一轮不绑定它，与 `match` 的 `_` 同义：`static for n, _ in fields T => e` 只取字段名，`static for _, F in fields T => e` 只取字段类型（`_` 不是名字，块里写 `_` 仍然未定义）。
 - `fields` 后面也是类型位置：紧跟的 `(` 一律读作类型的开头，所以空元组直接写 `fields ()`，不需要先 `type EmptyTuple = ()`；函数类型要再包一层括号，写成 `fields ((x: int) => int)`。
 - 字段按声明顺序展开，每个字段的块有独立的块作用域。空结构体或空元组展开零次，块一次也不建。
 - `static for` 作为语句时块的值总是被丢弃，整个构造的值是 `void`；需要值的位置写 comprehension 形式（见下）。
-- `t.[n]` 取结构体的字段或元组的元素，`n` 必须是编译期常量：字符串或整数字面量、外层 `static for` 的 `n`/`j`、绑定了常量的 `let` 名字（`let first = …; t.[first]`；`var` 不算，它可以在访问前改掉）、一个编译期能算出常量的表达式（如 `( static for (n, F) in fields S => n ).[0]`），或者一个纯函数在所有实参都是编译期常量时的调用（`t.[first_field::<S>()]`），编译期把它折叠成那个值。函数体在编译期读不出来时按调用自己的名字拒绝（`SemanticDiag::FoldCallNotEvaluable`，其余 `FoldCall*` 诊断说明停在哪一步）。只有选中的那个字段建进图里（一个 `ACCS`），运行时不选择字段，所以运行期的值不能当键（`SemanticDiag::StaticAccessNotConstant`）。
+- `t.[n]` 取结构体的字段或元组的元素，`n` 必须是编译期常量：字符串或整数字面量、外层 `static for` 的 `n`/`j`、绑定了常量的 `let` 名字（`let first = …; t.[first]`；`var` 不算，它可以在访问前改掉）、一个编译期能算出常量的表达式（如 `( static for n, F in fields S => n ).[0]`），或者一个纯函数在所有实参都是编译期常量时的调用（`t.[first_field::<S>()]`），编译期把它折叠成那个值。函数体在编译期读不出来时按调用自己的名字拒绝（`SemanticDiag::FoldCallNotEvaluable`，其余 `FoldCall*` 诊断说明停在哪一步）。只有选中的那个字段建进图里（一个 `ACCS`），运行时不选择字段，所以运行期的值不能当键（`SemanticDiag::StaticAccessNotConstant`）。
 - 结构体没有这个字段报 `SemanticDiag::StaticAccessUnknownField`；元组的下标越界（或键不是下标）报 `SemanticDiag::StaticAccessIndexOutOfRange`；目标不是结构体或普通元组报 `SemanticDiag::StaticAccessNotInternal`。`t.["0"]` 与 `t.[0]` 对元组是同一个元素。
 - 字段的值被丢弃时（`t.[n];` 单独成句），只检查字段，不建 `ACCS`；目标表达式仍然求值，以保留它的副作用。
 
 ```cml
 func show::<T>(t: T) {
-    static for (n, F) in fields T => {
+    static for n, F in fields T => {
         print(n, t.[n])
     }
 }
@@ -445,13 +448,13 @@ func first(t: (int, float)) {
 }
 ```
 
-**`indices`：按元组的位置展开。** `static for (j) in indices ts => 块` 把元组值 `ts` 的**位置**在实例化时展开：每个位置执行一次块，`j` 是这一轮的位置（`int`），轮数是元组的元数。
+**`indices`：按元组的位置展开。** `static for j in indices ts => 块` 把元组值 `ts` 的**位置**在实例化时展开：每个位置执行一次块，`j` 是这一轮的位置（`int`），轮数是元组的元数。
 
 - `ts` 必须是元组类型（普通元组；`T?`、`T!`、可变单元格是叶子）。不是元组时报 `SemanticDiag::StaticIndicesNotTuple`；类型还没具体化时报 `SemanticDiag::StaticTypeNotConcrete`。轮数在实例化时由 `ts` 的类型确定。
 - **操作数只用来取类型。** 操作数是编译期元组（剩余参数的 `ts`，或元组推导式）时不建容器结点：`indices ts` 不建 `FILL`，块里的 `ts.[j]` 直接取元素结点、不建 `ACCS`。运行期元组变量或参数本来就有自己的结点，`indices` 不会为它再建一个。
 - `j` 可以当值用（例如 `print(j)` 或参与计算），也可以当 `t.[j]` 的键：每轮它都是编译期常量。块里再声明同名变量仍会遮蔽它，此时当键报 `SemanticDiag::StaticAccessNotConstant`（与 `fields` 的 `n` 相同）。
-- `indices` 只绑定一个名字（没有 `F`）；元素的类型由 `ts` 的类型给出，目前不另给名字。写 `static for (j, F) in indices ts` 是语法错误。
-- `indices` 只遍历元组：结构体有字段名，用 `fields T`。`{ static for (j) in indices ts => e }` 没有字段名可给，报 `SemanticDiag::ConstructNotSupported`；需要值的位置写 `( static for (j) in indices ts => e )`。
+- `indices` 只绑定一个名字（没有 `F`）；元素的类型由 `ts` 的类型给出，目前不另给名字。写 `static for j, F in indices ts` 是语法错误。
+- `indices` 只遍历元组：结构体有字段名，用 `fields T`。`{ static for j in indices ts => e }` 没有字段名可给，报 `SemanticDiag::ConstructNotSupported`；需要值的位置写 `( static for j in indices ts => e )`。
 - 图与手写的展开相同：生成器本身没有节点。编译期元组的 `ts.[j]` 直接是元素结点，与手写的 `ts.[0]`、`ts.[1]` 的选择相同；运行期元组值的 `ts.[j]` 仍建一个 `ACCS`。
 
 ```cml
@@ -460,28 +463,28 @@ func sum(t: (int, int, int)): int {
 }
 
 func positions(t: (int, string)): (int, int) {
-    return ( static for (j) in indices t => j )
+    return ( static for j in indices t => j )
 }
 ```
 
-**Comprehension：把各轮的值装回同一形状。** `static for` 也可以写在需要值的位置：`{ static for (n, F) in fields T => e }` 得到一个结构体，`( static for (n, F) in fields T => e )` 得到一个元组，字段或元素与 `T` 同名、同序，每个来自一轮的值。
+**Comprehension：把各轮的值装回同一形状。** `static for` 也可以写在需要值的位置：`{ static for n, F in fields T => e }` 得到一个结构体，`( static for n, F in fields T => e )` 得到一个元组，字段或元素与 `T` 同名、同序，每个来自一轮的值。
 
 - 块的**值就是那一轮的值**：与语句形式不同，这里不丢弃。块里可以用 `let`，最后一句话的值就是字段的值；没有值（空块，或以一条没有值的语句结尾）报 `SemanticDiag::StaticComprehensionVoidElement`。
 - 每个字段/元素的**类型取自那一轮的值**，不强制等于 `F`：`F` 是 `int` 而值是 `float` 时结果字段就是 `float`。字段名与顺序仍来自 `T` 的声明顺序，所以 `tree_map` 这类改变叶子类型、保持形状的展开可以直接写。
-- **同一形状写成 `T { ... }`**：`T { static for (n, F) in fields T => e }` 用一个类型 `T` 同时给出字段名和种类（结构体或元组），所以 `case struct | tuple` 一个分支就够。`T` 必须与生成器遍历的类型是同一个类型，否则报 `SemanticDiag::SameShapeComprehensionMismatch`；`T` 是叶子（没有字段）时报 `SemanticDiag::SameShapeComprehensionNotComposite`。`{ ... }` 与 `( ... )` 仍分别只装结构体和元组。
+- **同一形状写成 `T { ... }`**：`T { static for n, F in fields T => e }` 用一个类型 `T` 同时给出字段名和种类（结构体或元组），所以 `case struct | tuple` 一个分支就够。`T` 必须与生成器遍历的类型是同一个类型，否则报 `SemanticDiag::SameShapeComprehensionMismatch`；`T` 是叶子（没有字段）时报 `SemanticDiag::SameShapeComprehensionNotComposite`。`{ ... }` 与 `( ... )` 仍分别只装结构体和元组。
 - 空结构体、空元组没有轮次，结果是 `{}` / `()`（一个零槽的 `FILL`）。
 - 图上是直线代码：每轮按声明顺序建出它读的 `ACCS`，comprehension 本身没有节点。元组推导式的结果先保持为编译期元组：只被 `indices`、`..` 或 `.[j]` 使用时元素保持独立、不建 `FILL`；作为值用（打印、返回、赋给运行期位置）时，在使用处一个 `FILL` 把各轮的值装回同形状。结构体推导式总是装成一个 `FILL`。`t.[n].[m]` 里对父的访问只建一次，内层各字段共用同一个 `ACCS`，因此与 C++ `tree_map` 对同一棵树建出的图相同。
-- `{ static for ... }` 在需要块的位置（`case struct => { ... }`、`if c then { ... }`）也读作 comprehension，所以语句形式不能再套一层花括号：直接写 `static for (n, F) in fields T => 块`。
+- `{ static for ... }` 在需要块的位置（`case struct => { ... }`、`if c then { ... }`）也读作 comprehension，所以语句形式不能再套一层花括号：直接写 `static for n, F in fields T => 块`。
 - 要把各轮的值折成一个结果（而不是装回同一形状），用 [6.8.5](#685-static-loop) 的 `static loop`。
 
 ```cml
 func doubled(t: {a: int, b: int}): {a: int, b: int} {
-    return { static for (n, F) in fields {a: int, b: int} => t.[n] * 2 }
+    return { static for n, F in fields {a: int, b: int} => t.[n] * 2 }
 }
 
 func rebuild::<T>(t: T) {
     return match type T {
-        case struct | tuple => T { static for (n, F) in fields T => rebuild(t.[n]) }
+        case struct | tuple => T { static for n, F in fields T => rebuild(t.[n]) }
         case _ => t
     }
 }
@@ -500,7 +503,7 @@ static loop 名字 = 初值 (, 名字 = 初值)* for 名字 (, 名字)* in (fiel
    | x in 序列               // 按序列的元素走：见下
 ```
 
-头与 `static for` 的不同：`static loop` 的头就是普通 `loop` 的 `for 名字 in 序列`，不写括号（同一件事一种写法）；`fields` 与 `indices` 各绑定它自己的那些名字，见下。
+头与 `static for` 相同（同一件事一种写法）：两者都是普通 `loop` 的 `for 名字 in 序列` 那一段，不写括号；`fields` 与 `indices` 各绑定它自己的那些名字，见下。
 
 - 状态头与 [6.8.6](#686-loop) 的 `loop` 相同：一个名字时循环的值就是这个值；几个名字时循环体给出按书写顺序的元组，循环的值也是这个元组。状态的名字只在循环体内可见；初值在循环所在处求值一次，其中看不到状态的名字。名字不能重复（`SemanticDiag::LoopNameRepeated`）。
 - 循环体每轮的值就是下一轮的状态，其类型必须是状态的类型（能自动装入的除外，如 `int` 进入 `int?`），否则是 `SemanticDiag::LoopBodyTypeMismatch`。空结构体或空元组一轮也不展开，循环的值是初值。
@@ -567,7 +570,7 @@ let found    = loop hit = -1 for x in xs while hit < 0 do if x > 9 then x else h
   - **数组**：元素本身，`a..b` 就是一个数组。
   - **字符串**：按码点，每个元素是只含这个字符的字符串，与 `s[i]` 相同（11.1）：`for c in '中文'` 的两轮是 `'中'`、`'文'`；多字节的字符按一个码点算一次。
   - **映射**：`(键, 值)` 元组，按键的顺序（11.3 的遍历顺序，与 `items(m)` 相同），不是插入顺序：`for kv in m` 取到的键严格递增，元组用 `kv.0`、`kv.1` 取出。
-  - **张量**：张量是数值数组（`Tensor<f32, [2, 3]>` 与 `f32[2, 3]` 写的是同一个类型），遍历与数组同一条规则：沿第一维，每个元素是去掉第一维后的子数组（与这一维上的一段共享同一份数据，不复制）：rank 2 的 `f32[2, 3]` 给出两个 `f32[3]`，rank 1 给出元素本身（`sum(x)` 是它的数）。元素类型未定的 `Tensor` 给出的元素仍是这个类型。rank 0 的数组没有第一维，不是序列。
+  - **张量**：张量是数值数组（`Tensor<f32, [2, 3]>` 与 `f32[2, 3]` 写的是同一个类型），遍历与数组同一条规则：沿第一维，每个元素是去掉第一维后的子数组（与这一维上的一段共享同一份数据，不复制）：rank 2 的 `f32[2, 3]` 给出两个 `f32[3]`，rank 1 给出元素本身（`sum(x)` 是它的数）。元素类型未定的 `Tensor` 给出的元素仍是这个类型；维数不定的 `f32[..]` 给出的元素还是 `f32[..]`。rank 0 的数组没有第一维，不是序列。
   空数组、空字符串、空映射、第一维为 0 的数组一轮都不执行，循环的值是初值。**`while c`** 在条件成立时继续；条件是 `bool`（`SemanticDiag::LoopConditionNotBool`）。两者都写时，每一轮先看条件，再取下一个元素：条件不成立或元素取完即结束。至少写其中一个。
 - **没有 `break` 与 `continue`**：提前结束写成 `while` 条件，跳过一轮的其余部分写成 `if`。
 - **作用域**：初值与序列在循环所在处求值一次，其中看不到循环头的名字；条件看得到状态的名字，循环体看得到状态的名字与 `for` 的名字。循环头的名字不能重复（`SemanticDiag::LoopNameRepeated`）。条件与循环体看得到外面的名字，读到的是循环开始时的值（`var` 每轮读其当前值）。
@@ -755,7 +758,7 @@ DivisionByZero at main.cml:1:38
 | 4 | `&&` | 左结合；是分支，右侧只在需要时求值 |
 | 4a | `\|` | 左结合，两边都求值 |
 | 4b | `&` | 左结合，两边都求值 |
-| 5 | `==` `!=`（`===` `!==` 暂不支持） | |
+| 5 | `==` `!=` `===` `!==` | 整体比较与逐元素比较（见 [6.7.3](#673-比较)） |
 | 6 | `<` `>` `<=` `>=` | |
 | 7 | `+` `-` | 左结合 |
 | 8 | `*` `/` `%` `@` | 左结合 |

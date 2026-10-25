@@ -6,7 +6,22 @@
 The resnetbn model is mechanical — 20 conv+batch_norm layers with the running statistics
 threaded as a second struct — so the Camel source is generated from the same block table
 as models.py's _resnetbn_weights to keep names in lockstep.
+
+The file is generated whole, the stateful training harness included (train_loop,
+save_trained, train_stateful, and the third callback of `run_training`): that harness is the
+protocol `benchmarks/common/camel_bench.cml` requires of every model, not a local variant of
+this one, so it is emitted from here like the rest.
+
+    python tools/gen_model_cml.py > ../model.cml    regenerate the file
+    python tools/gen_model_cml.py --check          the file is what this generator produces
 """
+
+from __future__ import annotations
+
+import difflib
+import io
+import sys
+from pathlib import Path
 
 BLOCKS = [
     ("b11", 1, False),
@@ -39,8 +54,8 @@ def bn_args(prefix, bn):
     return f"{prefix}_bn_g, {prefix}_bn_b, s.{bn}_bn_rm, s.{bn}_bn_rv"
 
 
-def main():
-    p = print
+def main(out=print):
+    p = out
     p("""/**
  * Camel implementation of the `resnetbn` benchmark (T4, see benchmarks/README.md): the
  * literal ResNet-18 — RESNET (E6) with training-mode batch_norm after every conv (the
@@ -56,7 +71,8 @@ import { grad, with_grad } from autodiff
 import { conv2d, batch_norm_train, sgd, save_params } from nn
 import { get_env } from env
 import { export_model } from onnx
-import { weight, bench_input, run_benchmark, run_training } from camel_bench
+import { now } from time
+import { weight, bench_input, run_benchmark, run_training, warm_count, step_count, log_step, log_final } from camel_bench
 """)
 
     p("type Resnet = {")
@@ -156,6 +172,36 @@ func dump_grads(m: Resnet, s: BnStats, x: f32[..], dir: string): int sync {
 }
 """)
 
+    # The stateful protocol `run_training` times (see log_step): every step starts from the
+    # parameters and the running statistics the step before it produced.
+    p("""/// The stateful training loop: step `i` starts from the parameters and the running statistics
+/// step `i - 1` produced. Returns both after step `total - 1`.
+func train_loop(m: Resnet, s: BnStats, x: f32[..], i: int, warm: int, total: int, t0: float): (Resnet, BnStats) {
+    return if i >= total then (m, s) else sync {
+        let start = now()
+        let r = step(m, x, s)
+        let elapsed = now() - start
+        let logged = log_step(i, warm, t0, elapsed, r.0)
+        return train_loop(r.1, r.2, x, i + 1, warm, total, t0)
+    }
+}
+
+func save_trained(m: Resnet, s: BnStats, dir: string): int sync {
+    save_params(m, dir)
+    save_params(s, dir)
+    return 0
+}
+
+/// Runs the stateful loop and reports the loss at the final parameters and statistics; saves
+/// them when CAMEL_BENCH_PARAMS names a directory.
+func train_stateful(m: Resnet, s: BnStats, x: f32[..]): int sync {
+    let trained = train_loop(m, s, x, 0, warm_count(), step_count(), now())
+    let reported = log_final(loss<trained.0>(x, trained.1))
+    let dir = get_env('CAMEL_BENCH_PARAMS')
+    return if dir != '' then save_trained(trained.0, trained.1, dir) else 0
+}
+""")
+
     p("func main(): int sync {")
     p("    let m = {")
     entries = []
@@ -171,11 +217,41 @@ func dump_grads(m: Resnet, s: BnStats, x: f32[..], dir: string): int sync {
     p("    }")
     p("""    let workload = get_env('CAMEL_BENCH_WORKLOAD')
     return if workload == 'train_export' then export_step(m, s, get_env('CAMEL_BENCH_EXPORT')) else if workload == 'train' then run_training(
-        (x: f32[..]): float => { return train_step(m, s, x) },
-        (x: f32[..], dir: string): int => { return dump_grads(m, s, x, dir) }
+(x: f32[..]): float => { return train_step(m, s, x) },
+        (x: f32[..], dir: string): int => { return dump_grads(m, s, x, dir) },
+        (x: f32[..]): int => { return train_stateful(m, s, x) }
     ) else run_benchmark((x: f32[..]): f32[..] => { return forward<m>(x, s).0 })
 }""")
 
 
+MODEL_CML = Path(__file__).resolve().parent.parent / "model.cml"
+
+
+def generated_text() -> str:
+    buf = io.StringIO()
+    main(lambda line="": buf.write(line + "\n"))
+    return buf.getvalue()
+
+
+def check(path: Path = MODEL_CML) -> int:
+    """The file is exactly what this generator produces; exit 1 and name every line that is not."""
+    generated = generated_text()
+    actual = path.read_text(encoding="utf-8")
+    if generated == actual:
+        print(f"{path.name} is what this generator produces ({len(actual.splitlines())} lines)")
+        return 0
+    print(f"{path.name} is not what this generator produces; run "
+          f"`python tools/gen_model_cml.py > ../{path.name}`", file=sys.stderr)
+    for line in difflib.unified_diff(actual.splitlines(), generated.splitlines(),
+                                     f"../{path.name}", "generated", lineterm=""):
+        print(line, file=sys.stderr)
+    return 1
+
+
 if __name__ == "__main__":
+    if sys.argv[1:] == ["--check"]:
+        sys.exit(check())
+    elif sys.argv[1:]:
+        print("usage: python tools/gen_model_cml.py [--check]", file=sys.stderr)
+        sys.exit(2)
     main()

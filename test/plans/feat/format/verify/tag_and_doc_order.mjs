@@ -23,7 +23,7 @@ function fail(message) {
 
 /// The comments and the tag lines of a Camel source, in order, with the line each one stands on. A
 /// comment is `//` (and `///`) to the end of its line, or `/* ... */` whole; a tag is a line whose
-/// first non-blank character is `#` (the `#tag<...>` front matter of a declaration). A string
+/// first non-blank character is `#` (the `#tag(...)` front matter of a declaration). A string
 /// literal is skipped, so a `#` or a `//` inside one is not read as either.
 function itemsOf(text) {
     const found = []

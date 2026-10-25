@@ -644,7 +644,9 @@ slot_t NodeVMSchedPass::call(
                 operator_t opFunc =
                     currPlan->resolvedOpers[nodeRef].load(std::memory_order_relaxed);
                 if (!opFunc) {
-                    const std::string uri(body->uri());
+                    // The plan names the operator: an update node whose storage must not be
+                    // reused runs the plain form of the operator it names (4.3.1).
+                    const std::string uri(currPlan->operatorUriFor(nodeRef));
                     auto found = context_->execMgr().find(uri);
                     if (found) {
                         opFunc = camel::profile::profiledOperator(uri, *found);
@@ -746,6 +748,25 @@ slot_t NodeVMSchedPass::call(
             framePool_.release(rootFrame);
         }
         throw;
+    } catch (...) {
+        // Every other exception a native operator throws leaves this device the same way a fault
+        // does, and it has to leave with its frames. `FactQueryNoValue` is the one that reaches
+        // here in practice: a fact query inside a rule's condition that names parts no value has
+        // throws it, and whoever evaluates the condition catches it and answers "this rule does
+        // not apply here" (modules/rewrite/module.cpp, callWhen), so it is an ordinary outcome of
+        // a condition, not a fault. Measured with the pool's own counters on a case whose
+        // condition asks a two-parameter fact: a graph that runs to the end leaves 0 frames
+        // outstanding, and the same graph with one such query left 4 -- one per unwinding
+        // activation, because only the two clauses above released. The pool is a stack allocator
+        // whose top is the next frame's address, so a frame that is not released leaves the top
+        // above a frame that is still in use and the next acquire hands that frame out twice; the
+        // slots of the two activations then overwrite each other.
+        currRecursionDepth_--;
+        releaseTailFrames(tailLow, tailHigh);
+        if (rootFrame) {
+            framePool_.release(rootFrame);
+        }
+        throw;
     }
 }
 
@@ -764,9 +785,33 @@ NodeVMSchedPass::apply(const camel::runtime::Program *program, std::ostream &os)
     return nullptr;
 }
 
+slot_t NodeVMSchedPass::callFunction(
+    ::Function *function, std::span<const slot_t> arguments,
+    std::span<const slot_t> withArguments) {
+    ASSERT(function != nullptr, "callFunction needs a function value.");
+    ASSERT(
+        function->program() != nullptr && function->graph() != nullptr,
+        "callFunction needs a function value with a body.");
+    // The captures are read from the value immediately before the call: making the closure vector
+    // allocates, and a collection between reading the tuple and reaching the frame would move what
+    // the slots name. Nothing in between is a safepoint, and the value is the caller's, held where
+    // the caller's roots keep it up to date.
+    ::Tuple *captured = function->tuple();
+    std::vector<slot_t> closure;
+    if (captured != nullptr) {
+        closure.reserve(captured->size());
+        for (size_t i = 0; i < captured->size(); ++i) {
+            closure.push_back(captured->get<slot_t>(i));
+        }
+    }
+    return callGraph(
+        function->program(), function->graph(), arguments, withArguments, closure);
+}
+
 slot_t NodeVMSchedPass::callGraph(
     const camel::runtime::Program *program, camel::runtime::GCGraph *graph,
-    std::span<const slot_t> arguments, std::span<const slot_t> withArguments) {
+    std::span<const slot_t> arguments, std::span<const slot_t> withArguments,
+    std::span<const slot_t> closure) {
     camel::execute::RunScope runScope(programs_, *context_, program);
     Frame *frame      = framePool_.acquire(graph);
     const auto ports  = graph->normPorts();
@@ -780,6 +825,16 @@ slot_t NodeVMSchedPass::callGraph(
         "callGraph needs one argument per with parameter.");
     for (size_t i = 0; i < withPorts.size(); ++i) {
         frame->set(graph->node(withPorts[i])->dataIndex, withArguments[i]);
+    }
+    // What the body captured where it was written. The frame's closure nodes are the only place
+    // they are read from, and nothing else writes them, so a caller that does not know them (it
+    // has the graph and not the function value) leaves them empty.
+    const auto closureNodes = graph->closureNodes();
+    ASSERT(
+        closure.empty() || closureNodes.size() == closure.size(),
+        "callGraph needs one closure value per capture of the graph.");
+    for (size_t i = 0; i < closureNodes.size() && i < closure.size(); ++i) {
+        frame->set(graph->node(closureNodes[i])->dataIndex, closure[i]);
     }
     return call(graph, frame, program);
 }

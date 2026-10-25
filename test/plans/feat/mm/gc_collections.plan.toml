@@ -1,6 +1,6 @@
 id = "mm.gc_collections"
 order = 369
-tier = "slow"
+tier = "milestone"
 tags = ["feat", "mm", "gc", "collections", "map", "set"]
 desc = "Maps and sets under collection stress: a table keeps its keys and values alive and follows them when they move (docs/technical/31_map_and_set.md, section 5; docs/technical/24_gc_verification_guide.md)."
 

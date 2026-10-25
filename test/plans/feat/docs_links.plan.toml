@@ -15,11 +15,17 @@ desc = "The relative links of the reader-facing documents point at files and hea
 #
 # scripts/check-doc-snippets.mjs compiles every `cml`/`camel` fence of the reader-facing pages
 # with `camel <file> std::gir`, runs the fences that carry a command and a `text` block, and
-# compares stdout, the exit code and the diagnostic name. A fence that is deliberately a
-# fragment, a counter-example, a graph dump or compile-only carries an HTML comment marker
-# with a reason. Cost: 211 snippets in about 2 s on the Linux build host, with 8 workers; each
-# snippet runs in its own process because every fence can declare its own module and entry.
-# Task reports and dated reviews are records and are not scanned.
+# compares stdout, the exit code and the diagnostic name. A `graph-dump` fence is compared too:
+# the graph pass prints the dump on stdout and the block is checked against it, after `origin`,
+# `span` and `srcfile` -- the attributes that say where the file was, not what the graph is -- lose
+# their values; a block that does not open the dump is one excerpt of it and must appear in the dump
+# as a contiguous run of lines. A fence that is deliberately a fragment, a counter-example, a graph
+# dump or compile-only carries an HTML comment marker with a reason. A snippet that a page written
+# against the target language shows before the tree can compile it is registered in the script's
+# pending list instead: the page carries no mark, the run prints the entry and its reason, and the
+# list only shrinks. Cost: 296 snippets in about 5 s
+# on the Linux build host, with 8 workers; each snippet runs in its own process because every fence
+# can declare its own module and entry. Task reports and dated reviews are records and are not scanned.
 #
 # scripts/check-doc-links.mjs --citations covers what a link checker cannot see: a `*.md` path
 # cited in a code comment, a `.cml` comment, a plan description or README prose is not a Markdown
@@ -136,6 +142,54 @@ case = "../../../scripts/check-doc-snippets.mjs"
 args = ["${case}", "--default-roots", "--camel", "${camel}"]
 expect_exit = 0
 expect_stdout_contains = ["no stale snippet in"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 60000
+
+[[tests]]
+name = "docs.snippets_dump_is_compared"
+desc = "A `graph-dump` fence's text block is checked against the dump the graph pass prints: a page whose dump is not its program's graph fails, naming the first line that differs."
+kind = "behavior"
+tool = "node"
+case = "../../../scripts/check-doc-snippets.mjs"
+args = ["${case}", "test/plans/feat/docs_links/fixture/snippets/dump_stale.md", "--camel", "${camel}"]
+expect_exit = 1
+expect_stdout_contains = ["the graph differs from the text block", "line 2:"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 60000
+
+[[tests]]
+name = "docs.snippets_dump_excerpt_matches_up_to_renumbering"
+desc = "An excerpt does not compare node numbers (the author, 2026-10-25): the block below names the dump's nodes and its cluster differently, and one one-to-one renaming makes it a run of the dump, so the page holds."
+kind = "behavior"
+tool = "node"
+case = "../../../scripts/check-doc-snippets.mjs"
+args = ["${case}", "test/plans/feat/docs_links/fixture/snippets/dump_renumbered.md", "--camel", "${camel}"]
+expect_exit = 0
+expect_stdout_contains = ["no stale snippet in"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 60000
+
+[[tests]]
+name = "docs.snippets_dump_excerpt_different_operator_fails"
+desc = "The renaming is about numbers only: an excerpt that calls a node by the wrong operator occurs nowhere in the dump, however its numbers are renamed, and fails."
+kind = "behavior"
+tool = "node"
+case = "../../../scripts/check-doc-snippets.mjs"
+args = ["${case}", "test/plans/feat/docs_links/fixture/snippets/dump_content_differs.md", "--camel", "${camel}"]
+expect_exit = 1
+expect_stdout_contains = ["the graph differs from the text block", "occurs nowhere"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 60000
+
+[[tests]]
+name = "docs.snippets_dump_excerpt_number_may_not_be_reused"
+desc = "One page number may not become two dump numbers: an excerpt that writes one number on two different nodes has no one-to-one renaming and fails, so the rule is not a licence to drop a node."
+kind = "behavior"
+tool = "node"
+case = "../../../scripts/check-doc-snippets.mjs"
+args = ["${case}", "test/plans/feat/docs_links/fixture/snippets/dump_number_reused.md", "--camel", "${camel}"]
+expect_exit = 1
+expect_stdout_contains = ["the graph differs from the text block", "not one run of them"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 60000
 

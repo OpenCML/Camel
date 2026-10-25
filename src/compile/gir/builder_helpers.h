@@ -447,11 +447,12 @@ inline bool hasDirectDataDependency(node_handle_t lhs, node_handle_t rhs) {
 inline bool shouldAddSyncCtrlLink(node_handle_t from, node_handle_t to) {
     // Only the exact, local skip: the predecessor is already a direct data input of the target,
     // so the edge would say nothing new. This is not a count of control users and cannot be one.
-    // Whether a value is shared -- whether `:var/take` copies -- is answered at run time by the
-    // cell's own `holdsUnsharedArray` mark (`:op/assn_owned` sets it, `:var/get` and `:op/assn`
-    // clear it, `:var/peek` leaves it), and a control edge carries order, not a use (design
-    // principles 3.3, 3.4). The transitive reduction over such edges lives in `std::opt::order`;
-    // measured that adding or removing one changes no copy.
+    // Whether a value is shared -- whether the storage of the value a variable holds may be
+    // reused by an update -- is decided by the execution plan from the graph itself: a read that
+    // keeps the value ends the proof (`:var/get`), a read that cannot (`:var/peek`) leaves it
+    // standing, and a control edge carries order, not a use (design principles 3.3, 3.4). The
+    // transitive reduction over such edges lives in `std::opt::order`; measured that adding or
+    // removing one changes no decision.
     return linkCheek(from, to) && !hasDirectDataDependency(from, to);
 }
 

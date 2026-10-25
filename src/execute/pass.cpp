@@ -1612,7 +1612,7 @@ passesNeverRunWarning(const std::vector<std::string> &passes, const context_ptr_
 
 namespace {
 
-/// The Camel passes of the pipeline that declare `#reads<...>` on their function, by the tag
+/// The Camel passes of the pipeline that declare `#reads(...)` on their function, by the tag
 /// they name: a pass written in Camel reads tags by saying so, the counterpart of a C++
 /// module's `read_by` (design principles 6.2). The module is loaded here because the warning
 /// is computed before the pipeline builds the passes.
@@ -1713,7 +1713,7 @@ std::vector<Diagnostic> tagsNeverReadWarnings(
     const auto camelReaders = declaredReadersOf(passes, ctx);
     for (const auto &use : ctx->tagUses()) {
         // The passes the tag's declaration names, and the Camel passes that say with
-        // `#reads<...>` that they read it.
+        // `#reads(...)` that they read it.
         std::vector<std::string> readers;
         for (const std::string &reader : use.readBy) {
             // Only a pass that declared itself a reader of tag facts counts: a name that

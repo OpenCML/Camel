@@ -29,7 +29,7 @@ namespace camel::runtime {
 struct RuleSource {
     std::string name;
     uint16_t id = 0;
-    /// The numeric permissions the rule needs (`#requires<...>`).
+    /// The numeric permissions the rule needs (`#requires(...)`).
     camel::core::sem::PermissionMask needs = camel::core::sem::kNoPermissions;
     /// `<=>`: the rule holds both ways.
     bool bidirectional = false;

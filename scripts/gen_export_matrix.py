@@ -13,9 +13,16 @@ and emits a matrix: operator x (forward lowering? min opset) x (gradient
 lowering? min opset). Numbers in the opset column are the minimum ONNX opset
 version of the emitted op(s), as registered at the add() call.
 
-Outputs (paper appendix material):
-  artifacts export_matrix.csv  (full table)
-  export_matrix.md             (markdown, grouped: both / forward-only / no lowering)
+Outputs (paper appendix material, committed at the repository root):
+  export_matrix.csv  (full table)
+  export_matrix.md   (markdown, grouped: both / forward-only / no lowering)
+
+    python3 scripts/gen_export_matrix.py           regenerate both files
+    python3 scripts/gen_export_matrix.py --check   both files are what this generator
+                                                  produces, compared byte for byte (LF):
+                                                  `.gitattributes` pins `* text=auto eol=lf`
+                                                  for this tree, so a CRLF file is a mismatch
+                                                  here, not an equivalent spelling
 
 The OpDef scan is textual (`.name = "..."` literals); operators registered via
 variables instead of literals are missed and counted in the summary line only.
@@ -23,6 +30,7 @@ variables instead of literals are missed and counted in the summary line only.
 
 from __future__ import annotations
 
+import difflib
 import re
 import sys
 from pathlib import Path
@@ -51,7 +59,8 @@ def scan_opdefs() -> set[str]:
     return uris
 
 
-def main() -> int:
+def collect():
+    """The matrix rows: (uri, forward lowering, gradient lowering), `absent` for no lowering."""
     fwd = scan_lowerings(REPO / "modules" / "onnx" / "lowering.cpp")
     grad = scan_lowerings(REPO / "modules" / "onnx" / "lowering_grad.cpp")
     universe = scan_opdefs() | set(fwd) | set(grad)
@@ -59,17 +68,27 @@ def main() -> int:
     rows = []
     for uri in sorted(universe):
         rows.append((uri, fwd.get(uri) if uri in fwd else "absent", grad.get(uri) if uri in grad else "absent"))
+    return rows
 
-    out_csv = REPO / "export_matrix.csv"
-    with out_csv.open("w", newline="") as f:
-        f.write("operator,forward_lowering_min_opset,gradient_lowering_min_opset\n")
-        for uri, f_, g in rows:
-            show = lambda v: "" if v == "absent" else ("1" if v is None else str(v))
-            f.write(f"{uri},{show(f_)},{show(g)}\n")
 
+def summarize(rows):
+    """(forward lowerings, gradient lowerings, the URIs with neither)."""
     n_fwd = sum(1 for _, f_, _ in rows if f_ != "absent")
     n_grad = sum(1 for _, _, g in rows if g != "absent")
     none = [u for u, f_, g in rows if f_ == "absent" and g == "absent"]
+    return n_fwd, n_grad, none
+
+
+def render_csv(rows) -> str:
+    lines = ["operator,forward_lowering_min_opset,gradient_lowering_min_opset"]
+    for uri, f_, g in rows:
+        show = lambda v: "" if v == "absent" else ("1" if v is None else str(v))
+        lines.append(f"{uri},{show(f_)},{show(g)}")
+    return "\n".join(lines) + "\n"
+
+
+def render_md(rows) -> str:
+    n_fwd, n_grad, none = summarize(rows)
 
     def fv(v):
         if v == "absent":
@@ -90,14 +109,58 @@ def main() -> int:
     md.append("|---|---|---|")
     for uri, f_, g in rows:
         md.append(f"| `{uri}` | {fv(f_)} | {fv(g)} |")
-    out_md = REPO / "export_matrix.md"
-    # LF on every platform, as .gitattributes stores it: the doc checks compare bytes, and a
-    # Windows run would otherwise write CRLF into a file the repository keeps at LF.
-    out_md.write_text("\n".join(md) + "\n", encoding="utf-8", newline="\n")
-    print(f"wrote {out_csv} ({len(rows)} rows) and {out_md}")
+    return "\n".join(md) + "\n"
+
+
+# `* text=auto eol=lf` is the tree's line-ending rule, so both files are written with `\n` on
+# every platform and `--check` compares the bytes: a CRLF file is a mismatch, not an equivalent.
+LF = {"encoding": "utf-8", "newline": "\n"}
+
+
+def main() -> int:
+    rows = collect()
+    (REPO / "export_matrix.csv").write_text(render_csv(rows), **LF)
+    (REPO / "export_matrix.md").write_text(render_md(rows), **LF)
+    n_fwd, n_grad, none = summarize(rows)
+    print(f"wrote {REPO / 'export_matrix.csv'} ({len(rows)} rows) and {REPO / 'export_matrix.md'}")
     print(f"  forward lowerings: {n_fwd}, gradient lowerings: {n_grad}, none: {len(none)}")
     return 0
 
 
+def check() -> int:
+    """Both committed files are exactly what this generator produces; exit 1 and name every
+    line that is not."""
+    rows = collect()
+    produced = [("export_matrix.csv", render_csv(rows)), ("export_matrix.md", render_md(rows))]
+    mismatched = 0
+    for name, text in produced:
+        actual = (REPO / name).read_bytes()
+        if actual == text.encode("utf-8"):
+            continue
+        mismatched += 1
+        print(f"{name} is not what this generator produces; run "
+              f"`python3 scripts/gen_export_matrix.py`", file=sys.stderr)
+        diff = list(difflib.unified_diff(actual.decode("utf-8").splitlines(), text.splitlines(),
+                                         f"../{name}", "generated", lineterm=""))
+        if diff:
+            for line in diff:
+                print(line, file=sys.stderr)
+        else:
+            print(f"  every line agrees but the bytes do not: {name} is not written with this "
+                  f"tree's line endings (LF; .gitattributes `* text=auto eol=lf`, "
+                  f"{len(actual)} bytes against {len(text.encode('utf-8'))})", file=sys.stderr)
+    if mismatched:
+        return 1
+    n_fwd, n_grad, none = summarize(rows)
+    print(f"export_matrix.csv and export_matrix.md are what this generator produces "
+          f"({len(rows)} rows, {n_fwd} forward, {n_grad} gradient, {len(none)} none)")
+    return 0
+
+
 if __name__ == "__main__":
+    if sys.argv[1:] == ["--check"]:
+        sys.exit(check())
+    elif sys.argv[1:]:
+        print("usage: python3 scripts/gen_export_matrix.py [--check]", file=sys.stderr)
+        sys.exit(2)
     sys.exit(main())

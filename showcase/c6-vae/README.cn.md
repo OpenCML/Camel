@@ -100,7 +100,7 @@ python showcase/c6-vae/compare.py --profile standard   # 写 RESULTS.md
 
 ## 测试
 
-`test/plans/perf/showcase_c6.plan.toml`（`tier = "slow"`）跑 `--profile small`：1024 行、
+`test/plans/perf/showcase_c6.plan.toml`（`tier = "milestone"`）跑 `--profile small`：1024 行、
 200 步、batch 32，整条计划约 6 秒（主要是两次 PyTorch 导入）。数值越界即失败。
 
 ## 不提交的东西
