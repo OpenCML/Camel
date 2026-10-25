@@ -27,8 +27,8 @@
 //                       punctuation table the lexer, the parser and the reference share
 //   precedence          src/parse/syntax/parser_expr.cpp -- the `///  name : production` comments
 //                       of the expression levels, loosest first, as the parser writes them
-//   diagnostics         diagnostics/registry.tsv -- every diagnostic, its name, severity and
-//                       message template
+//   diagnostics         diagnostics/registry.tsv -- every diagnostic, its name and message
+//                       template; the severity is the heading of the block the row is in
 //   stdlib-signatures   docs/stdlib-reference.md -- the signatures of the standard library, which
 //                       scripts/stdlib-reference.mjs generates from stdlib/*.cml and
 //                       stdlib/signatures/*.cml (so the declarations stay the one source)
@@ -68,7 +68,7 @@ const TOKENS_REL = 'include/camel/parse/syntax/token_kinds.def'
 // enforces them so the file cannot grow past what one context holds.
 //
 // The generated half keeps every entry of its source: 267 diagnostics and 421 library names with
-// all their overloads cost about 56,800 characters and are not trimmed, because a name left out is
+// all their overloads cost about 55,700 characters and are not trimmed, because a name left out is
 // a name the reader has to look up elsewhere. The hand-written half is 55,400: it was 55,000, and
 // a round that closed measured gaps in it -- `loop` and `rule` had no entry, §11 taught a `for`
 // that is not a statement, §12.13 taught a `var` spelling the compiler warns about, and §12.2
@@ -77,6 +77,18 @@ const TOKENS_REL = 'include/camel/parse/syntax/token_kinds.def'
 // 30,000 tokens of English prose, tables and Camel, against the roughly 700,000 characters of the
 // four normative documents it distills (docs/language/, docs/diagnostics.md,
 // docs/stdlib-reference.md, docs/design-principles.cn.md).
+//
+// These numbers do not rise with the diagnostics: the file is read whole, so its budget is the
+// context one read costs, and a language whose diagnostics keep arriving would keep pushing a
+// growing budget ahead of itself. So the lane that adds a diagnostic owns keeping the whole file
+// inside them -- it either fits the room the file has, or it tightens the wording around the entry
+// it adds, the way a rule is stated once and a generated region carries a field only if no other
+// part of the file already says it. When the only way to make room would be to drop something a
+// reader needs, that is not a call for the lane that hit it: it opens a question page under
+// docs/handover/questions/ instead of deleting the information or editing a number here.
+//
+// Nothing in this check warns that the room is nearly gone. Over budget is a failure and the merge
+// gate reports it; a warning that is not a failure is a warning readers learn to scroll past.
 const BUDGET = {
     total: 112000,
     written: 55400,
@@ -400,24 +412,27 @@ function generateDiagnostics(root) {
     }
     if (problems.length > 0) return { text: null, count: 0, problem: problems.join('; ') }
     if (records.length === 0) return { text: null, count: 0, problem: `${REGISTRY_REL} declares no diagnostic` }
+    // A block is one section of the registry at one severity: the section is the prefix every name in
+    // it carries (`SemanticDiag::`), and the severity is written in the heading, so a row is the name
+    // and the message only. A reader who needs the severity reads the heading over the row, and the
+    // column that repeated it on all of them is gone.
     const out = []
-    out.push('| Name | Sev | What the compiler says |')
-    out.push('|---|---|---|')
-    let current = null
-    for (const record of records) {
-        if (record.section !== current) {
-            current = record.section
-            const section = SECTIONS.find((s) => s.id === current)
-            const of = records.filter((r) => r.section === current)
-            const errors = of.filter((r) => r.severity === 'E').length
+    out.push('| Name | What the compiler says |')
+    out.push('|---|---|')
+    for (const section of SECTIONS) {
+        for (const severity of ['E', 'W']) {
+            const of = records.filter((r) => r.section === section.id && r.severity === severity)
+            if (of.length === 0) continue
             out.push('')
             out.push(
-                `**${section.title}** (\`${section.enumName}\`) — ${of.length} ` +
-                    `(${errors} error${errors === 1 ? '' : 's'}, ${of.length - errors} warning${of.length - errors === 1 ? '' : 's'})`,
+                `**${section.title} — ${severity === 'E' ? 'errors' : 'warnings'}** ` +
+                    `(\`${section.enumName}\`) — ${of.length}`,
             )
             out.push('')
+            for (const record of of) {
+                out.push(`| \`${record.fullName.split('::')[1]}\` | ${record.message} |`)
+            }
         }
-        out.push(`| \`${record.fullName.split('::')[1]}\` | ${record.severity} | ${record.message} |`)
     }
     return { text: out.join('\n'), count: records.length, names: records.map((r) => r.fullName) }
 }
