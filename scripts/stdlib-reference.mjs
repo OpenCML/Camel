@@ -70,7 +70,9 @@ import os from 'os'
 import path from 'path'
 import { spawn, spawnSync } from 'child_process'
 import { fileURLToPath } from 'url'
-import { defaultCamel, refuseInstallNotOfThisTree } from './install-stamp.mjs'
+import { refuseInstallNotOfThisTree } from './install-stamp.mjs'
+// The one default for the install a tool measures with no `--camel`: this tree's `out/latest`.
+import { defaultCamel } from '../test/tools/camel-arg.mjs'
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const SIGNATURE_DIR = path.join(REPO_ROOT, 'stdlib', 'signatures')
@@ -1221,9 +1223,13 @@ async function exampleSource(module, entries, entry, code, asStatement = false) 
 
 function runCamelCompile(file, cwd) {
     return new Promise((resolve) => {
+        const exe = thisTreeCamel('a doc example')
         const env = { ...process.env }
-        env.CAMEL_HOME = process.env.CAMEL_HOME || path.join(REPO_ROOT, 'out', 'latest')
-        const child = spawn(thisTreeCamel('a doc example'), [file, 'std::gir'], {
+        // A doc example compiles inside the install this run measured, so its standard library and
+        // its runtime library are that install's: `CAMEL_HOME` is the install root, not whatever
+        // the shell exported.
+        env.CAMEL_HOME = path.dirname(path.dirname(exe))
+        const child = spawn(exe, [file, 'std::gir'], {
             cwd,
             env,
             stdio: ['ignore', 'pipe', 'pipe']

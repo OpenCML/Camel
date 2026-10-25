@@ -253,8 +253,7 @@ def expected_products(cell: dict) -> dict:
 
 
 def camel_exe() -> str:
-    # The install this case measures: `--camel <path>` names it; without it `$CAMEL_HOME/bin/camel`,
-    # else this tree's `out/latest/bin/camel`. One rule, in one place: test/tools/camel_arg.py.
+    # The install this case measures: `--camel <path>` names it; without it this tree's `out/latest/bin/camel`. One rule, in one place: test/tools/camel_arg.py.
     return CAMEL
 
 

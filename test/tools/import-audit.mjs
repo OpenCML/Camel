@@ -245,7 +245,7 @@ function scanModule(module) {
 }
 
 // The install this run measures: `--camel <path>` names it (main parses the argument), else
-// `$CAMEL_HOME/bin/camel`, else this tree's `out/latest/bin/camel`. One rule, in one place:
+// this tree's `out/latest/bin/camel`. One rule, in one place:
 // test/tools/camel-arg.mjs.
 let CAMEL = defaultCamel(REPO_ROOT)
 
@@ -533,7 +533,7 @@ function main(argv) {
         return failures.length === 0 ? 0 : 1
     }
     if (!fs.existsSync(CAMEL)) {
-        throw new Error(`no camel binary at ${CAMEL}: build this tree once, or pass --camel <path> or set CAMEL_HOME`)
+        throw new Error(`no camel binary at ${CAMEL}: build this tree once, or pass --camel <path>`)
     }
 
     const rows = []

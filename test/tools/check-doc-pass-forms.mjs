@@ -150,8 +150,8 @@
  *     is set, which `tools/camel-remote.ps1` always does; without it the runner names the
  *     scratch directory it kept, whose `stdout.txt` holds the same lines.
  *
- *   --camel PATH, CAMEL_HOME   the binary to run the specifications through: `--camel <path>` names
- *                              it, else `$CAMEL_HOME/bin/camel`, else this tree's `out/latest`
+ *   --camel PATH               the binary to run the specifications through: `--camel <path>`
+ *                              names it, else this tree's `out/latest/bin/camel`
  *   CAMEL_DOC_FORM_JOBS        parser invocations in parallel (default 8)
  *   CAMEL_DOC_FORM_BATCH       specifications decided by one invocation (default 8)
  *   CAMEL_DOC_FORM_TIMEOUT_MS  the documented limit for one invocation (default 30000); a
@@ -188,9 +188,8 @@ function usage(message) {
     process.exit(2)
 }
 
-// The compiler every specification is run through: `--camel <path>` names it, else
-// `$CAMEL_HOME/bin/camel`, else this tree's `out/latest/bin/camel`. One rule, in one place:
-// test/tools/camel-arg.mjs.
+// The compiler every specification is run through: `--camel <path>` names it, else this tree's
+// `out/latest/bin/camel`. One rule, in one place: test/tools/camel-arg.mjs.
 const { camel: CAMEL, rest: ARGV } = takeCamel(process.argv.slice(2), REPO_ROOT, usage)
 const LIST = ARGV.includes('--list')
 

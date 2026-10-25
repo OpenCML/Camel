@@ -118,7 +118,7 @@ const WARMUPS = 2
 const MIN_RUNS_PER_SAMPLE = 8
 
 // The install this run measures: `--camel <path>` names it (main parses the argument), else
-// `$CAMEL_HOME/bin/camel`, else this tree's `out/latest/bin/camel`. One rule, in one place:
+// this tree's `out/latest/bin/camel`. One rule, in one place:
 // test/tools/camel-arg.mjs.
 let CAMEL = null
 

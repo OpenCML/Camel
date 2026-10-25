@@ -124,7 +124,7 @@ const DEFAULT_ROUNDS = 1
 const CHILD_TIMEOUT_MS = 600000
 
 // The install this run measures: `--camel <path>` names it (main parses the argument), else
-// `$CAMEL_HOME/bin/camel`, else this tree's `out/latest/bin/camel`. One rule, in one place:
+// this tree's `out/latest/bin/camel`. One rule, in one place:
 // test/tools/camel-arg.mjs.
 function usage(message) {
     if (message) console.error(`para-speedup: ${message}`)
