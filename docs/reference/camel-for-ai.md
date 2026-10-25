@@ -47,7 +47,7 @@ last column below, which is read out of this table and measured against the chap
 | 10. Passes, the command line, the graph | how to run a program and look at its graph | 3,000 |
 | 11. Idioms | how Camel code is written when it is written by someone who knows | 3,600 |
 | 12. Common errors | the error, the diagnostic, the fix | 11,800 |
-| Appendix A. Diagnostics | name, severity, message — generated | 28,000 |
+| Appendix A. Diagnostics | name, severity, message — generated | 28,500 |
 | Appendix B. Standard library signatures | every exported name — generated | 28,000 |
 | Appendix C. Sources | which normative page each rule comes from | 1,800 |
 | — | generated, all four regions | 61,000 |
@@ -1336,7 +1336,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 
 | `ComparisonAcrossLines` | This '>' is read as a comparison with the next line, which starts with {0}: two statements may have been joined into one. |
 
-**Semantic — errors** (`SemanticDiag`) — 200
+**Semantic — errors** (`SemanticDiag`) — 202
 
 | `Redeclaration` | Redeclaration of reference: '{0}'. |
 | `ModuleNotFound` | Module '{0}' not found. {1} |
@@ -1505,6 +1505,8 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `SameShapeComprehensionNotComposite` | {0} is not a struct or a tuple, so it has no shape to fill. |
 | `SameShapeComprehensionMismatch` | The shape {0} is filled from the fields of {1}. |
 | `StaticMatchPatternCannotMatch` | The identity pattern '{0}' cannot select a type here: {1}. |
+| `FactArgumentNotConstant` | The argument '{0}' of a fact is not a compile-time constant of type '{1}'. |
+| `FactCaseDefaultMissing` | The fact '{0}' has no 'case _', so nothing says what it is for a value no other case matched. |
 | `FoldCallArgumentNotConstant` | The call of '{0}' cannot be evaluated at build time: {1}. |
 | `FoldCallHasEffects` | The call of '{0}' cannot be evaluated at build time: {1}. |
 | `FoldCallTooDeep` | The call of '{0}' cannot be evaluated at build time: {1}. |

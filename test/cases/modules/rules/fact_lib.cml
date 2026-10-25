@@ -1,9 +1,9 @@
 /**
- * `analysis` (rewrite design 4): a fact computed for every value and read by name in a rule
+ * `fact` (rewrite design 7.5): a fact computed for every value and read by name in a rule
  * condition.
  *
  * `depth` counts how many additions a value is under: a constant is 1, an addition is one more
- * than the deepest operand, and any other operator (a product) joins its operands. `sign` is the
+ * than the deepest operand, and any other operator (a product) merges its operands. `sign` is the
  * value of a constant. The rule `mul_one` reads `sign` in its `when`, so it rewrites `x * y` to
  * `x` only when the constant is 1: a permission-free rule whose condition is a fact, not a shape
  * test, and one that would be wrong for every other constant.
@@ -15,26 +15,24 @@
  *
  * `report` reads `depth` of the frozen graphs of the target functions (`sum`, `mixed`), which is
  * the evaluation over a published program (and stores the fact of each node under the kind
- * `user.analysis.depth`), and counts products; `apply` rewrites the target with the rule. The
- * test reads the numbers before and after `apply`.
+ * `user.fact.depth`), and counts products; `apply` rewrites the target with the rule. The test
+ * reads the numbers before and after `apply`.
  */
-module analysis_lib
+module fact_lib
 import { Program, Node, Graph, graphs, nodes, op, op_name, name } from graph
 import { max } from math
 import { rewrite } from rewrite
 
-analysis depth: int {
-    initial => 0
-    join(a, b) => max(a, b)
-    on (const c: int) => 1
-    on (x + y) => max(depth(x), depth(y)) + 1
-}
+fact depth: int match v {
+    case const c: int => 1
+    case x + y   => max(depth(x), depth(y)) + 1
+    case _       => 0
+} join max
 
-analysis sign: int {
-    initial => 0
-    join(a, b) => max(a, b)
-    on (const c: int) => c
-}
+fact sign: int match v {
+    case const c: int => c
+    case _       => 0
+} join max
 
 rule mul_one(y: int, x: int) when sign(y) == 1 { x * y => x }
 

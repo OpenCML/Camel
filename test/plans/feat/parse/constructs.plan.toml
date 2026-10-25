@@ -5,8 +5,8 @@ tags = ["feat", "parse", "constructs"]
 desc = "The parser's construct corpus: one small case for each construct the grammar supports that the older parse cases did not exercise on their own. The AST snapshot (frontend.ast_snapshot) hashes exactly the cases under test/cases/parse, so a construct that no case here writes is a construct the snapshot no longer covers (H188)."
 
 # Every case is also a program that compiles and runs, so the construct it is about is exercised
-# from the parse tree through GCT to the value, not only hashed by the AST snapshot. `analysis`
-# declares alone: an analysis is a fact for rules and a pass module, not a function that ordinary
+# from the parse tree through GCT to the value, not only hashed by the AST snapshot. A `fact`
+# declares alone: a fact is knowledge for rules and a pass module, not a function that ordinary
 # code calls.
 
 [defaults]
@@ -69,10 +69,10 @@ expect_exit = 0
 expect_stdout_contains = ["2 4", "4 5", "11 21"]
 
 [[tests]]
-name = "constructs.analysis"
-desc = "`analysis name: type { ... }` with the `initial`, `join` and `on` clauses, including a pattern clause (`on (x + y) => ...`) and two clauses of one kind."
+name = "constructs.fact"
+desc = "`fact name: type match v { ... } join f`: the cases that say what the fact is (a `const` case and a pattern case) and the clause that says how two facts are merged."
 kind = "behavior"
-case = "../../../cases/parse/constructs/analysis.cml"
+case = "../../../cases/parse/constructs/fact.cml"
 args = ["${case}"]
 expect_exit = 0
 

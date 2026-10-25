@@ -49,7 +49,7 @@ fact nonnegative(v: int): bool match v {
     case const c => c >= 0
     case x - y   => false
     case _       => true
-} join or
+} join (lhs: bool, rhs: bool) => lhs || rhs
 ```
 
 ```bash
@@ -117,7 +117,7 @@ fact nonnegative(v: int): bool match v {
     case const c => c >= 0
     case x - y   => false
     case _       => true
-} join or
+} join (lhs: bool, rhs: bool) => lhs || rhs
 ```
 
 ```bash
@@ -192,7 +192,7 @@ fact nonnegative(v: int): bool match v {
     case const c => c >= 0
     case x - y   => false
     case _       => true
-} join or
+} join (lhs: bool, rhs: bool) => lhs || rhs
 ```
 
 ```bash
@@ -263,7 +263,7 @@ fact nonnegative(v: int): bool match v {
     case const c => c >= 0
     case x - y   => false
     case _       => true
-} join or
+} join (lhs: bool, rhs: bool) => lhs || rhs
 ```
 
 ```bash
@@ -327,7 +327,7 @@ fact nonnegative(v: int): bool match v {
     case const c => c >= 0
     case x * x   => true
     case _       => false
-} join or
+} join (lhs: bool, rhs: bool) => lhs || rhs
 
 // The law holds only where the fact does: on a value that is never negative, `abs` changes nothing.
 rule abs_of_nonnegative(x: int) when nonnegative(x) { abs(x) => x }
@@ -356,7 +356,7 @@ sampled abs_of_nonnegative: proposition equality, evidence samples 100, fired 8 
 
 `fact` 的头写明它给哪个类型算哪一项知识（这里是 `int` 的 `nonnegative`）；主体是一个 `match`，但它读的
 是值**在图上是怎样构造出来的**：平方构造出来的值非负、常量可以在编译期判掉，其余写 `case _`。`join` 说
-一个值有两种写法时，两者的知识怎么合并（这里 `or`：任一种写法说它非负，就非负）。
+一个值有两种写法时，两者的知识怎么合并（这里 `(lhs, rhs) => lhs || rhs`：任一种写法说它非负，就非负）。
 
 `fact` 与 `rule` 一起，是把"我这门领域里成立的东西"交给编译器的两个入口：`rule` 给等价，`fact` 给前提。
 它们的完整规则见语言参考第 8 章。

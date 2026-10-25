@@ -12,8 +12,8 @@
  *
  * The callable operators are declared in `stdlib/rewrite.cml` (handover H183; `run`, H226); this
  * file keeps their kernels, the executor and their purity. The reserved groups the language's
- * `rule` and `analysis` declarations compile to (`__rule`, `__rule_when`, `__rule_generic`,
- * `__analysis`) have no callable Camel name, so they stay exported from here.
+ * `rule` and `fact` declarations compile to (`__rule`, `__rule_when`, `__rule_generic`,
+ * `__fact`) have no callable Camel name, so they stay exported from here.
  */
 
 #include "checkreport.h"
@@ -3785,7 +3785,7 @@ class RewriteExecutor final : public Executor {
             {"check_reason", checkReasonKernel},
             {"check_coverage", checkCoverageKernel},
             {"check_coverage_table", coverageTableKernel},
-            {"analysis", camel::rewritemod::analysisKernel},
+            {"fact", camel::rewritemod::analysisKernel},
         };
     }
 };
@@ -3863,35 +3863,42 @@ class RewriteModule final : public BuiltinModule {
                               return std::nullopt;
                           return RuleType::get();
                       })}}));
-        // `__analysis` (rewrite design 4): the compiled form of an `analysis` declaration. Its
-        // arity is 4 + k + 3n: name, initial, join, widen, the k pattern variables the query was
-        // called with (one node, `n`, in the one-value form), then for each `on` clause its
-        // pattern function, its fact function and the mask of its `const` parameters.
+        // `__fact` (rewrite design 7.5): the compiled form of a `fact` declaration. Its arity is
+        // 7 + w + k + 3n: the name, the five functions the fact is made of (initial, join, meet,
+        // widen, narrow), the number w of `with` arguments the query was written with, those
+        // arguments, the k nodes the query was written on (one, `n`, in the one-value form), then
+        // for each case its pattern function, its fact function and the mask of its `const`
+        // parameters.
         exportEntity(
-            "__analysis",
+            "__fact",
             OperatorGroup::create(
-                "__analysis",
-                {{"rewrite:analysis",
+                "__fact",
+                {{"rewrite:fact",
                   DynamicFuncTypeResolver::create(
                       {{0, {}}, {-1, {}}},
-                      "(name: string, initial: F, join: F, widen: F, node: Node, ...) => T",
+                      "(name: string, initial: F, join: F, meet: F, widen: F, narrow: F, "
+                      "withCount: int, ...) => T",
                       [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
                           -> std::optional<Type *> {
-                          if (norm.size() < 5 || norm[0]->code() != TypeCode::String) {
+                          if (norm.size() < 8 || norm[0]->code() != TypeCode::String) {
                               return std::nullopt;
                           }
-                          for (size_t i = 1; i < 4; ++i) {
+                          for (size_t i = 1; i < 6; ++i) {
                               if (norm[i]->code() != TypeCode::Function) {
                                   return std::nullopt;
                               }
                           }
-                          // The query's pattern variables come first, one `Node` each; the `on`
-                          // descriptions follow as triples that begin with a function.
-                          size_t at = 4;
-                          while (at < norm.size() && HandleType::is(norm[at], HandleKind::Node)) {
+                          if (norm[6]->code() != TypeCode::Int64) {
+                              return std::nullopt;
+                          }
+                          // The cases follow the queried nodes as triples that begin with a
+                          // function. A `with` argument is a compile-time value and a queried
+                          // node is a node, so neither begins one.
+                          size_t at = 7;
+                          while (at < norm.size() && norm[at]->code() != TypeCode::Function) {
                               ++at;
                           }
-                          if (at == 4 || at >= norm.size() || (norm.size() - at) % 3 != 0) {
+                          if (at >= norm.size() || (norm.size() - at) % 3 != 0) {
                               return std::nullopt;
                           }
                           for (size_t i = at; i < norm.size(); i += 3) {
@@ -3919,8 +3926,8 @@ class RewriteModule final : public BuiltinModule {
         context_->registerExecutorFactory("rewrite", [ctx = context_]() {
             return std::make_shared<RewriteExecutor>(ctx);
         });
-        // The readers are pure, and so is what builds a rule: making a rule value changes nothing
-        // outside the program. The makers and `analysis` are declared below with the fact that
+// The readers are pure, and so is what builds a rule: making a rule value changes nothing
+        // outside the program. The makers and `fact` are declared below with the fact that
         // keeps a pass from folding them, which is a different question from the effect.
         camel::core::OperatorTable::instance().declare(
             "rewrite",
@@ -3945,15 +3952,16 @@ class RewriteModule final : public BuiltinModule {
              {"check_evidence", true},
              {"check_reason", true},
              {"check_coverage", true},
-             {"check_coverage_table", true}});
-        // What builds a rule and what compiles an analysis declaration has no effect on anything
-        // outside the program: the rule value it makes is the program's own, and the facts an
-        // analysis installs are the declaration's. What is true of them is that a pass may not
-        // fold them away: the value of a rule holds the functions of its sides, which a static
-        // area does not trace, and the facts of an analysis are installed where the program
-        // writes the declaration.
+{"check_coverage_table", true},
+             {"fact", true}});
+        // What builds a rule and what compiles a fact declaration has no effect on anything
+        // outside the program: the rule value it makes is the program's own, and the facts a
+        // fact declaration installs are the declaration's. What is true of them is that a pass
+        // may not fold them away: the value of a rule holds the functions of its sides, which a
+        // static area does not trace, and a fact declaration's facts are installed where the
+        // program writes the declaration.
         camel::core::OperatorTable::instance().declareUnfoldable(
-            "rewrite", {"rule", "rule_when", "rule_generic", "analysis"});
+            "rewrite", {"rule", "rule_when", "rule_generic", "fact"});
         loaded_ = true;
         return true;
     }

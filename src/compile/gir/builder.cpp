@@ -869,7 +869,7 @@ FunctionType *Builder::completeLambdaSignature(
             type = wanted;
         }
         if (i < withCount) {
-            factory.addWithArg(nameAt(i), type, funcType->withIsVarAt(i));
+            factory.addWithArg(nameAt(i), type, funcType->withIsVarAt(i), funcType->withNeedsValueAt(i));
         } else {
             factory.addNormArg(nameAt(i), type, funcType->normIsVarAt(i - withCount));
         }

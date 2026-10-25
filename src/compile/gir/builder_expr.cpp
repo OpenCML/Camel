@@ -1359,6 +1359,22 @@ node_handle_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
         }
         return written;
     };
+    const auto refuseNonConstant = [&](size_t slot, const Argument &argument) {
+        if (argumentSignature == nullptr || slot >= argumentSignature->withTypesCount() ||
+            !argumentSignature->withNeedsValueAt(slot)) {
+            return;
+        }
+        if (argument.node != nullptr && constantOfNode(argument.node) != nullptr) {
+            return;
+        }
+        const GCT::node_ptr_t &expr = argument.expr;
+        diags_->of(SemanticDiag::FactArgumentNotConstant)
+            .atOrigin(expr != nullptr && expr->origin() != 0 ? expr->origin() : gct->origin())
+            .commit(
+                std::string(argumentSignature->argNameAt(slot)),
+                argumentSignature->withTypeAt(slot)->toString());
+        throw BuildAbortException();
+    };
     for (size_t i = 1; i < gct->size(); i++) {
         const size_t slot = slotOf(i - 1);
         Type *wanted      = argumentSignature && slot < argumentSignature->withTypesCount()
@@ -1394,6 +1410,7 @@ node_handle_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
                 continue;
             }
             inputs.push_back({visitOperand(gct->at(i), gct), gct->at(i), name});
+            refuseNonConstant(slot, inputs.back());
             continue;
         }
         any res              = visit(gct->at(i));

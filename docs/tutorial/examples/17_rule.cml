@@ -36,4 +36,4 @@ fact nonnegative(v: int): bool match v {
     case const c => c >= 0
     case x - y   => false
     case _       => true
-} join or
+} join (lhs: bool, rhs: bool) => lhs || rhs

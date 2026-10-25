@@ -133,7 +133,7 @@ const UNDERIVABLE_OPERATORS = new Set([
   '__rule',
   '__rule_when',
   '__rule_generic',
-  '__analysis',
+  '__fact',
 ])
 
 // Modules that register operators but are deliberately not verified, each with the fact that
