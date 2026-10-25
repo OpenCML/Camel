@@ -1,0 +1,11 @@
+// A pinned reading, not a wish: the postfix non-null assertion is a named refusal
+// ("'!' is not supported: the postfix non-null assertion is not implemented"), so a value of a
+// nullable type is not unwrapped with `x!`. The generator state machine reads the yielded
+// element out of a slot that is not nullable at all.
+module non_null_assertion_not_implemented
+
+func main(): int sync {
+    let x: int? = 5
+    println(x!)
+    return 0
+}

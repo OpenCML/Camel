@@ -565,3 +565,26 @@ expect_output_contains = ["generators"]
 expect_output_not_contains = ["UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
+[[tests]]
+name = "stream.cell_from_null_stays_void"
+desc = "A `var` whose first value is `null` does not take a type from a later assignment: it stays `void`, and reading it as a `T?` is refused. The generator state machine may not keep a lifted local as a `null`-valued cell -- every cell it makes carries a value the graph can type."
+kind = "behavior"
+case = "../../../cases/compile/stream/probe_var_null.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["has type 'void'"]
+expect_output_not_contains = ["UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "stream.non_null_assertion_not_implemented"
+desc = "The postfix non-null assertion `x!` is a named refusal, so a nullable value is not unwrapped with it. The generator state machine reads the yielded element out of a slot that is not nullable at all."
+kind = "behavior"
+case = "../../../cases/compile/stream/probe_unwrap_nullable.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["'!' is not supported"]
+expect_output_not_contains = ["UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000

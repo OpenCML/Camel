@@ -1,0 +1,13 @@
+// A pinned reading, not a wish: a `var` whose first value is `null` does not take a type from
+// a later assignment -- it stays `void`, and `v ?? 0` is refused ("its left side has type
+// 'void', which is not a 'T?'"). The generator state machine therefore may not keep a lifted
+// local as a `null`-valued cell: every cell it makes carries a value the graph can type (a
+// dominating declaration's initializer, a parameter's argument, or an array's element).
+module cell_from_null_stays_void
+
+func main(): int sync {
+    var v = null
+    v = 5
+    println(v ?? 0)
+    return 0
+}
