@@ -808,7 +808,7 @@ case = "../../../cases/modules/onnx/pass_export.py"
 args = ["${case}", "refuse"]
 skip_unless = ["${python}", "-c", "import json"]
 expect_exit = 0
-expect_stdout_contains = ["stage pass:onnx::export at export_train_step.cml:29:1 file written: False", "stage pass:onnx::export at export_train_step.cml:25:14 file written: False", "at export_nontail_recursion.cml:12:80 file written: False", "onnx::export refuse: PASS"]
+expect_stdout_contains = ["stage pass:onnx::export at export_train_step.cml:29:1 file written: False", "stage pass:onnx::export at export_train_step.cml:25:14 file written: False", "at export_nontail_recursion.cml:12:87 file written: False", "onnx::export refuse: PASS"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 60000
 
@@ -2056,8 +2056,11 @@ const url = await import('url')
 const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
 const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
 const model = readOnnxModel(path.join(input.test_tmp, 'export_var_compound.onnx'))
+// `s += float(sum(x))`: sum answers f32 (its element type) and `s` is f64, so the conversion the
+// case writes is a real one and the graph carries its Cast after the ReduceSum. The Identity the
+// exporter appends to every graph output (exporter.cpp, appendIdentity) is filtered out here.
 const ops = model.ops.filter((o) => o !== 'Identity').join(' ')
-assert(ops === 'Cast ReduceSum Add Mul Sub Cast Mul Add', `the chain of the float variable and nothing for the integer one, got ${model.ops}`)
+assert(ops === 'Cast ReduceSum Cast Add Mul Sub Cast Mul Add', `the chain of the float variable and nothing for the integer one, got ${model.ops}`)
 }
 """
 timeout_ms = 8000
@@ -2078,8 +2081,9 @@ const url = await import('url')
 const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
 const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
 const model = readOnnxModel(path.join(input.test_tmp, 'pass_export_var_compound.onnx'))
+// The same chain as export_var_compound: `float(sum(x))` is f32 -> f64 after the ReduceSum.
 const ops = model.ops.filter((o) => o !== 'Identity').join(' ')
-assert(ops === 'Cast ReduceSum Add Mul Sub Cast Mul Add', `the chain of the float variable and nothing for the integer one, got ${model.ops}`)
+assert(ops === 'Cast ReduceSum Cast Add Mul Sub Cast Mul Add', `the chain of the float variable and nothing for the integer one, got ${model.ops}`)
 }
 """
 timeout_ms = 8000
