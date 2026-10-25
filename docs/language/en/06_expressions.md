@@ -213,7 +213,7 @@ false
 
 - `==`, `!=`: numbers, `bool`, `string`, `Map`, `Set`, and arrays, tuples, structs and tensors, with the same type on both sides (anything else is the compile-time error `SemanticDiag::NoMatchingFunction`; nothing is converted). The result is a `bool`.
   - **Arrays, tuples and structs compare by content**, element by element and recursively: `[1, 2] == [1, 2]`, `(1, 'a') == (1, 'a')` and two structs whose fields are equal are all `true`; arrays of different lengths are not equal.
-  - **The whole comparison is the element-wise one, reduced to a `bool`**: `a == b` is "the shapes are the same and the elements are equal everywhere" (see [4.2](../design-principles.cn.md)). Numeric arrays (`f32[]` and `Tensor<f32>`) answer a `bool` the same way: neither writing the element type in the type nor the module that provides the operator changes the result.
+  - **The whole comparison is the element-wise one, reduced to a `bool`**: `a == b` is "the shapes are the same and the elements are equal everywhere" (see [4.2](../../design-principles.en.md)). Numeric arrays (`f32[]` and `Tensor<f32>`) answer a `bool` the same way: neither writing the element type in the type nor the module that provides the operator changes the result.
   - The element type must itself be comparable: numbers, `bool`, `string`, `Map`, `Set`, `T?`, `T!`, and arrays, tuples and structs of those. A value with a function in it (`[f] == [f]`) cannot be compared, which is a located compile-time error.
   - Float elements follow the rules of floats: an array that holds a `nan` does not equal itself, and `[0.0] == [-0.0]`.
   - A `T?` or `T!` by itself (not inside an array, tuple or struct) still has no `==`; open it first with `??`, `!!` or `match`.
