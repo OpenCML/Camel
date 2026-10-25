@@ -553,3 +553,10 @@ semantic	RuleWithParameterUnbound	0x0001DD	error	'{0}' is a `with` parameter of 
 #/ The value bound to a rule's `with` parameter is part of what selects the instance its sides and
 # its condition are made at, so it is a value the compiler knows.
 semantic	RuleWithArgumentNotConstant	0x0001F0	error	The value bound to the `with` parameter '{0}' of the rule '{1}' is not a compile-time constant of the type '{2}'.	A rule's `with` value is part of what selects the instance the rule's sides and its condition are made at, so it is known while the program is compiled: write a literal, a constant, or a constant expression of an integer, real, bool or string type. A value the compiler cannot work out would need one instance for every value it could take.	none: choice: the repair is a decision only the writer can make
+#
+# The resource clause's promise (design effects plan 4.3, step 5): the resources a body infers
+# have to be within what its signature promises. The resource group above is 0x1A0-0x1A4, and
+# 0x1A5-0x1A6 are `std::cml` and 0x1A7 is retired, so this one is appended at the end of the
+# semantic space instead of being placed next to a group that has no room left.
+#/ The resources a body uses are not within what its `pure`/`uses` signature promises.
+semantic	UsesPromiseViolated	0x0001F1	error	'{0}' does not keep its resource promise: {1}.	A signature is a promise the compiler checks against the resources the function uses. 'uses' is an upper bound, so every resource the body uses must be named there, and 'pure' promises the empty set; a 'var' parameter is a resource by itself, and so is a capture. Change the body so that it no longer reaches for it, or change the signature to name it.	none: choice: the repair is a decision only the writer can make

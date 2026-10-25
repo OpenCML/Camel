@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-280 diagnostics: 263 errors, 17 warnings. 15 carry a machine-applicable edit, 265 say why they carry none.
+281 diagnostics: 264 errors, 17 warnings. 15 carry a machine-applicable edit, 266 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -246,6 +246,7 @@ prints one entry.
 | `0x030001ED` | [SemanticDiag::TensorElementTypeRequired](#tensorelementtyperequired) | Error | no |
 | `0x030001EE` | [SemanticDiag::BranchElementTypeMismatch](#branchelementtypemismatch) | Error | no |
 | `0x030001F0` | [SemanticDiag::RuleWithArgumentNotConstant](#rulewithargumentnotconstant) | Error | no |
+| `0x030001F1` | [SemanticDiag::UsesPromiseViolated](#usespromiseviolated) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn | no |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn | no |
@@ -8232,6 +8233,28 @@ func main(): int sync {
     return 0
 }
 ```
+
+### UsesPromiseViolated
+
+`0x030001F1` · Error · `SemanticDiag::UsesPromiseViolated`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
+**Message**
+
+```text
+'{0}' does not keep its resource promise: {1}.
+```
+
+**Help**
+
+```text
+A signature is a promise the compiler checks against the resources the function uses. 'uses' is an upper bound, so every resource the body uses must be named there, and 'pure' promises the empty set; a 'var' parameter is a resource by itself, and so is a capture. Change the body so that it no longer reaches for it, or change the signature to name it.
+```
+
+*No example: no test small enough to show raises it.*
 
 ### IgnoredSideEffect
 

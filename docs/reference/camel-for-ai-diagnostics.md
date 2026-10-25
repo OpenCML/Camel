@@ -59,7 +59,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 
 | `ComparisonAcrossLines` | This '>' is read as a comparison with the next line, which starts with {0}: two statements may have been joined into one. |
 
-**Semantic — errors** (`SemanticDiag`) — 202
+**Semantic — errors** (`SemanticDiag`) — 203
 
 | `Redeclaration` | Redeclaration of reference: '{0}'. |
 | `ModuleNotFound` | Module '{0}' not found. {1} |
@@ -263,6 +263,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `RuleConstParamNotMatched` | '{0}' is a `const` parameter of the rule '{1}', and the left side matches no constant for it. |
 | `RuleWithParameterUnbound` | '{0}' is a `with` parameter of the rule '{1}', it has no default, and the rule value here binds nothing for it. |
 | `RuleWithArgumentNotConstant` | The value bound to the `with` parameter '{0}' of the rule '{1}' is not a compile-time constant of the type '{2}'. |
+| `UsesPromiseViolated` | '{0}' does not keep its resource promise: {1}. |
 
 **Semantic — warnings** (`SemanticDiag`) — 12
 
