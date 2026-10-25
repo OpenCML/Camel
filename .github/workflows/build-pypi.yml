@@ -127,7 +127,19 @@ jobs:
           echo "CXX=clang++" >> "$GITHUB_ENV"
           # auditwheel rewrites the RPATHs of the bundled libraries; the launcher's
           # `$ORIGIN/../libs` is what the wheel relies on.
-          "$CAMEL_PYPI_PYTHON" -m pip install --upgrade pip conan auditwheel
+          #
+          # setuptools and wheel are here for `pypi/camel-lang/pyproject.toml`, not for Conan.
+          # That file declares its license the PEP 639 way (`license = "MIT"`, a plain SPDX
+          # string), which setuptools learned to read in 77. The image's own setuptools is 65.5.1,
+          # and `pypi-rollup.js` packages with `pip wheel --no-build-isolation`, i.e. against
+          # whatever setuptools is installed here. Left at 65.5.1 the packaging step dies with
+          #
+          #   configuration error: `project.license` must be valid exactly by one definition
+          #   (2 matches found)
+          #   error: metadata-generation-failed
+          #
+          # after the whole native build has already succeeded.
+          "$CAMEL_PYPI_PYTHON" -m pip install --upgrade pip "setuptools>=77" wheel conan auditwheel
           # Conan 2.33 has no `conan.__main__` -- `python -m conan` ends with "No module named
           # conan.__main__; 'conan' is a package and cannot be directly executed" -- so the
           # console script is the only way in. And scripts/common.js reaches Conan as
