@@ -1,0 +1,18 @@
+// The answer to the exercise of chapter 2: a value of one type is not another type.
+// Run: camel docs/tutorial/examples/02_exercise.cml
+
+func to_fahrenheit(c: float): float {
+    return c * 9.0 / 5.0 + 32.0
+}
+
+func main(): int sync {
+    let c = 100.0
+    println(to_fahrenheit(c))
+    println(`${to_fahrenheit(37.0):.1f}`)
+
+    // Two variables of different types do not meet: the conversion is written out.
+    let n = 3
+    let ratio = 1.5
+    println(float(n) * ratio)
+    return 0
+}
