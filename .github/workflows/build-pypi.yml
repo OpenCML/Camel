@@ -91,10 +91,18 @@ jobs:
         shell: bash
 
     env:
+      # The wheel build links `python.cmo` against CPython (modules/python embeds the
+      # interpreter through pybind11::embed), and CMake's `Development.Embed` component cannot be
+      # satisfied without a *shared* libpython. The image's own /opt/python trees are standalone
+      # builds -- Py_ENABLE_SHARED=0, and no libpython at all under their `lib/` -- so
+      # the interpreter this job builds for comes from the distribution: python3.11-devel
+      # (AlmaLinux 8 AppStream) provides /usr/bin/python3.11 and /usr/lib64/libpython3.11.so.
+      # There is no python3.10 package at all here ("dnf list --available 'python3.10*'" ->
+      # "Error: No matching Packages to list"), which is why the Linux interop wheel is cp311 and
+      # not cp310; docs/pypi-packaging.md 7.1 records the reading and what the stable-ABI route
+      # would still need.
       CAMEL_TARGET_ARCH: ${{ matrix.cfg.target_arch }}
-      # The manylinux image's CPython 3.10, which is also the interpreter the build links
-      # against. Without this the rollup would probe whatever `python3` resolves to.
-      CAMEL_PYPI_PYTHON: /opt/python/cp310-cp310/bin/python
+      CAMEL_PYPI_PYTHON: /usr/bin/python3.11
 
     steps:
       - name: Checkout
@@ -108,7 +116,7 @@ jobs:
         # Node comes from the AlmaLinux 8 nodejs:20 module rather than actions/setup-node: the
         # module's build is made for this glibc and the runner's prebuilt Node is not.
         run: |
-          dnf install -y clang clang-devel ninja-build
+          dnf install -y clang clang-devel ninja-build python3.11-devel python3.11-pip
           dnf module install -y nodejs:20
           clang --version
           ninja --version
@@ -143,9 +151,12 @@ jobs:
           # Conan 2.33 has no `conan.__main__` -- `python -m conan` ends with "No module named
           # conan.__main__; 'conan' is a package and cannot be directly executed" -- so the
           # console script is the only way in. And scripts/common.js reaches Conan as
-          # `execSync('conan install ...')`, i.e. through /bin/sh, while the manylinux image
-          # keeps /opt/python/<abi>/bin off PATH: without the directory on PATH the build step
-          # dies at `/bin/sh: conan: command not found` long after this step looked fine.
+          # `execSync('conan install ...')`, i.e. through /bin/sh, so the directory the console
+          # script was installed into has to be on PATH: the manylinux image kept
+          # /opt/python/<abi>/bin off it, and the build step then died at
+          # `/bin/sh: conan: command not found` long after this step looked fine. With
+          # /usr/bin/python3.11 that directory is /usr/bin, which is already on PATH; the two
+          # lines stay because the interpreter is a matrix-level choice, not a fixed one.
           # $GITHUB_PATH carries it to the later steps; the export covers this one.
           echo "$(dirname "$CAMEL_PYPI_PYTHON")" >> "$GITHUB_PATH"
           export PATH="$(dirname "$CAMEL_PYPI_PYTHON"):$PATH"
@@ -447,12 +458,20 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # The interpreter the interop wheel is built for: pip takes
-          # camel_lang-<ver>-cp310-cp310-manylinux_2_28_x86_64.whl, so `import camel` works.
-          - image: ubuntu:22.04
+          # The interpreter the interop wheel is built for -- 3.11, the only CPython in the build
+          # image with a shared libpython. pip takes
+          # camel_lang-<ver>-cp311-cp311-manylinux_2_28_x86_64.whl, so `import camel` works and an
+          # array crosses through DLPack.
+          - image: python:3.11-slim
             expect: interop
-          # Any other Python 3: pip takes camel_lang-<ver>-py3-none-manylinux_2_28_x86_64.whl,
-          # the `camel` command works, and `import camel` has to say why it cannot (5.37 item 7).
+          # The version the Linux release cannot build an interop wheel for (docs/pypi-packaging.md
+          # 7.1: the image has no python3.10 package at all). pip takes
+          # camel_lang-<ver>-py3-none-manylinux_2_28_x86_64.whl, the `camel` command works, and
+          # `import camel` has to say why it cannot (5.37 item 7).
+          - image: ubuntu:22.04
+            expect: body-only
+          # A third version, so the same body-only wheel is shown installing on an interpreter
+          # with no relation to the build image.
           - image: python:3.12-slim
             expect: body-only
     steps:
@@ -521,8 +540,8 @@ jobs:
               echo "::error::import camel succeeded on a body-only wheel"; exit 1
             fi
             cat /tmp/importerr
-            grep -q "CPython 3.10 or newer" /tmp/importerr || {
-              echo "::error::the ImportError does not name the CPython version it needs"; exit 1; }
+            grep -q "interop wheel" /tmp/importerr || {
+              echo "::error::the ImportError does not say which wheel carries the extension"; exit 1; }
             grep -qi "py3-none" /tmp/importerr || {
               echo "::error::the ImportError does not name the wheel it came from"; exit 1; }
             echo "the body-only wheel refuses import camel with the right message"

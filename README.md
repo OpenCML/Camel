@@ -124,7 +124,7 @@ The rules behind this table are in the [design principles](docs/design-principle
 pip install camel-lang
 ```
 
-This puts the `camel` command on your `PATH`, and `import camel` in Python. Wheels are published for Linux (x64, arm64), macOS (Apple silicon) and Windows (x64). The `camel` command installs on any Python 3; calling Camel from Python needs CPython 3.10 or newer.
+This puts the `camel` command on your `PATH`, and `import camel` in Python. Wheels are published for Linux (x64, arm64), macOS (Apple silicon) and Windows (x64). The `camel` command installs on any Python 3; calling Camel from Python needs the CPython version this release built its interop wheel for, and that wheel's file name says which it is (`cp311`, `cp313`, ...). There is one interop wheel per platform rather than one for every Python version, so install camel-lang with that interpreter.
 
 ### Build from source
 
