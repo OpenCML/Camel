@@ -12,6 +12,7 @@
 #include "builder_support.h"
 
 #include "camel/compile/gir/static_function.h"
+#include "camel/core/data/composite/struct.h"
 #include "camel/core/numeric_convert.h"
 #include "camel/core/operator_names.h"
 #include "camel/core/rtdata/string.h"
@@ -1476,6 +1477,28 @@ node_handle_t Builder::visitAccsNode(const GCT::node_ptr_t &gct) {
         ASSERT(false, "Unexpected target type in ACCS node.");
     }
 
+    // A member read of a compile-time struct value is that field's value, known here as well: the
+    // third name of `fields T` binds such a value (Builder::staticFieldTagsNode builds a field's
+    // tags as a compile-time struct), and `tags.width.w` has to be a compile-time constant -- it
+    // may be the key of a `t.[…]` or a type argument in turn. The read stays in the graph, because
+    // the printing pass spells it and recompiling has to give the same graph back; the value it
+    // reads is recorded where the compiler keeps one, as `std::opt` folds the same access. A field
+    // whose value has another type than the type declares keeps its read alone.
+    data_ptr_t readConstant = nullptr;
+    if (!gct->accessByIndex() && tgtType->code() == TypeCode::Struct) {
+        if (const data_ptr_t subject = constantOfNode(tgtNode);
+            subject != nullptr && subject->type() != nullptr &&
+            subject->type()->code() == TypeCode::Struct) {
+            if (const auto object = std::dynamic_pointer_cast<StructData>(subject);
+                object != nullptr && object->resolved()) {
+                if (const data_ptr_t field = object->get(gct->accessKey());
+                    field != nullptr && field->type() != nullptr && field->type() == elemType) {
+                    readConstant = field;
+                }
+            }
+        }
+    }
+
     node_handle_t accsNode{};
     if (gct->accessByIndex()) {
         accsNode = currGraph_->addAccsNode(elemType, static_cast<uint32_t>(gct->accessIndex()));
@@ -1484,6 +1507,9 @@ node_handle_t Builder::visitAccsNode(const GCT::node_ptr_t &gct) {
     }
     linkNodes(LinkType::Norm, tgtNode, accsNode);
     registerNodeOrigin(context_, accsNode, gct, "gir.accs");
+    if (readConstant != nullptr) {
+        rememberConstant(accsNode, readConstant);
+    }
     LEAVE("ACCS");
     return accsNode;
 }
