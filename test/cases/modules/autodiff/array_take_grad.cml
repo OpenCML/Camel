@@ -1,0 +1,62 @@
+// The gradient of a row take of an array: `xs[idx]` gathers whole rows, so its adjoint is the
+// upstream gradient of those rows added back into the rows the indices named -- the row scatter
+// `tangent/scatter_take_arr`, the array counterpart of the tensor's `take_grad`. A row named
+// twice accumulates both gradients. Every expected adjoint below is written out by hand from the
+// forward expression, and `nonzero` is the summed squared distance between the three gradients
+// and the zero array: it is 136.0 from the tree, so a rule that returned zeros would print 0.0
+// and the case would fail, and a scatter that placed a row's gradient at the wrong row, or that
+// wrote a repeated row instead of adding it, changes the distances below.
+//
+//   xs[[0, 2, 0]] = [x0, x2, x0] with weights 2, 3, 5 -> row0 = 2 + 5, row2 = 3
+//   xs[[4, 1]]    = [x4, x1]     with weights 2, 3    -> row4 = 2, row1 = 3
+//   (xs[[2, 0]])[[0, 1]] = [x2, x0] with weights 4, 7 -> row2 = 4, row0 = 7
+import { grad } from autodiff
+
+with <xs: float[]>
+func repeated(): float {
+    let raw = [0, 2, 0]
+    let r = xs[raw as int[3]]
+    return r[0] * 2.0 + r[1] * 3.0 + r[2] * 5.0
+}
+
+with <xs: float[]>
+func pair(): float {
+    let raw = [4, 1]
+    let r = xs[raw as int[2]]
+    return r[0] * 2.0 + r[1] * 3.0
+}
+
+with <xs: float[]>
+func ofTake(): float {
+    let raw = [2, 0]
+    let r = xs[raw as int[2]]
+    let here = [0, 1]
+    let s = r[here as int[2]]
+    return s[0] * 4.0 + s[1] * 7.0
+}
+
+func square(v: float): float {
+    return v * v
+}
+
+// The squared distance between a gradient of five elements and an expected adjoint, written out
+// element by element: the language has no array arithmetic that could hide a mistake in it.
+func distance(g: float[], e0: float, e1: float, e2: float, e3: float, e4: float): float {
+    return square(g[0] - e0) + square(g[1] - e1) + square(g[2] - e2) + square(g[3] - e3) + square(g[4] - e4)
+}
+
+func main(): int sync {
+    let xs = [1.0, 2.0, 3.0, 4.0, 5.0]
+    let g1 = grad(repeated)<xs>()
+    let g2 = grad(pair)<xs>()
+    let g3 = grad(ofTake)<xs>()
+    let nonzero = distance(g1, 0.0, 0.0, 0.0, 0.0, 0.0) + distance(g2, 0.0, 0.0, 0.0, 0.0, 0.0) + distance(g3, 0.0, 0.0, 0.0, 0.0, 0.0)
+    println(g1)
+    println(g2)
+    'array_take_grad repeated_d={:.1f} pair_d={:.1f} nested_d={:.1f} nonzero={:.1f}'->format<
+        distance(g1, 7.0, 0.0, 3.0, 0.0, 0.0),
+        distance(g2, 0.0, 3.0, 0.0, 0.0, 2.0),
+        distance(g3, 7.0, 0.0, 4.0, 0.0, 0.0),
+        nonzero>->println
+    return 0
+}

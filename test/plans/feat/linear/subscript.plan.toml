@@ -90,6 +90,17 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
+name = "subscript.take_rows"
+desc = "An int-array subscript is take: the rows the indices name along the first dimension, in that order, a repeated index repeating its row (design principles 5.4). The result's shape is `[len(idx)] + shape(t)[1:]` -- a function returning `f32[3]` from an `f32[5]` under an `int[3]`, and `f32[3, 3]` from an `f32[2, 3]`, states it at the declaration -- and every back end agrees."
+kind = "behavior"
+case = "../../../cases/linear/subscript/take_rows.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+expect_exit = 0
+expect_stdout_exact = "[5.0, 1.0, 5.0]\n3\n1.0\n"
+timeout_ms = 10000
+
+[[tests]]
 name = "subscript.take_index"
 desc = "An int-array subscript is take: an index outside the array is IndexOutOfRange with the index as written, and the first call (with a repeated index) prints its elements in the order given."
 kind = "negative"

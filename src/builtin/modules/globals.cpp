@@ -1709,7 +1709,13 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                 {
                     ":op/idx_take",
                     // `t[idx]` with an int array takes the rows the indices name, in that
-                    // order (design principles 5.4; `take` in its function form).
+                    // order, along the first dimension -- for a rank-1 array the row is the
+                    // element (design principles 5.4; the `take` its function form names).
+                    // The result's shape is `[len(idx)] + shape(t)[1:]`: the length the index
+                    // array's own type states (`int[3]` names three rows, `int[]` a length
+                    // nobody fixed), then every dimension of the array but the first. A type
+                    // whose rank is open (`f32[..]`) fixes neither, so the rows taken are rows
+                    // again and the result is that same open-rank array.
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {2, {false, false}}},
                         "(arr: T[], indices: int[]) => T[]",
@@ -1718,10 +1724,25 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                             if (norm[0]->code() != TypeCode::Array ||
                                 norm[1]->code() != TypeCode::Array)
                                 return nullopt;
-                            const auto &indices = tt::as_ptr<ArrayType>(norm[1]);
+                            auto *const arr           = tt::as_ptr<ArrayType>(norm[0]);
+                            const auto *const indices = tt::as_ptr<ArrayType>(norm[1]);
                             if (indices->elemType()->code() != TypeCode::Int64)
                                 return nullopt;
-                            return norm[0];
+                            // The indices are a list of positions: a rank-1 array, or one whose
+                            // rank the type leaves open.
+                            if (!indices->openRank() && indices->rank() != 1)
+                                return nullopt;
+                            if (arr->openRank())
+                                return norm[0];
+                            std::vector<ExtentForm> extents;
+                            extents.push_back(indices->rank() == 1
+                                                  ? indices->extents().front()
+                                                  : ExtentForm::unknown());
+                            const auto stated = arr->extents();
+                            extents.insert(extents.end(), stated.begin() + 1, stated.end());
+                            return arr->isNumericUnknown()
+                                       ? ArrayType::numericUnknownFromForms(extents)
+                                       : ArrayType::create(arr->elemType(), extents);
                         }),
                 },
                 {
