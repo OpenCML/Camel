@@ -180,7 +180,7 @@ golden = "golden/tutorial_examples/07_closures.txt"
 
 [[tests]]
 name = "tutorial.examples.08_generics"
-desc = "Generic functions and a generic struct, instantiated at int, string, a tuple and a user type."
+desc = "Chapter 12: generic functions and a generic struct, instantiated at int, string, a tuple and a user type."
 case = "../../../docs/tutorial/examples/08_generics.cml"
 golden = "golden/tutorial_examples/08_generics.txt"
 
