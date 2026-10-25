@@ -224,9 +224,12 @@ TypeCode operandType(const Operand &lhs, const Operand &rhs) {
     return promoteTensorTypes(lhs.dtype, rhs.dtype);
 }
 
-/// Result type of a binary operator: `Div` and `Pow` produce a float, f64 when a tensor operand
-/// is f64, f32 otherwise (an integer tensor's division has always produced f32). A bf16 or f16
-/// tensor keeps its element type: the operator computes in f32 and the store rounds once.
+/// Result type of a binary operator: `Div` and `Pow` produce a float, f64 when an operand's
+/// element type is f64, f32 otherwise (an integer tensor's division has always produced f32). A
+/// bf16 or f16 tensor keeps its element type: the operator computes in f32 and the store rounds
+/// once. The element type `operandType` settled decides it: an argument is an array or a value by
+/// what it holds, and a rank of zero is a rank like any other, so neither the `scalar` flag (which
+/// a rank-0 array shares with a value) nor a rank test may re-decide the width here.
 TypeCode binaryResultType(BinaryOp op, const Operand &lhs, const Operand &rhs) {
     const TypeCode base = operandType(lhs, rhs);
     if (!binaryProducesFloat(op)) {
@@ -235,11 +238,7 @@ TypeCode binaryResultType(BinaryOp op, const Operand &lhs, const Operand &rhs) {
     if (isReducedFloatTensorType(base)) {
         return base;
     }
-    if ((!lhs.scalar && lhs.dtype == TypeCode::Float64) ||
-        (!rhs.scalar && rhs.dtype == TypeCode::Float64)) {
-        return TypeCode::Float64;
-    }
-    return TypeCode::Float32;
+    return base == TypeCode::Float64 ? TypeCode::Float64 : TypeCode::Float32;
 }
 
 template <typename To> void convertBuffer(const Operand &src, To *dst) {
