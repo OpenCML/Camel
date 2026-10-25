@@ -43,5 +43,9 @@ slot_t __tangent_scatter_add_arr__(
 // The reverse of a slice: the gradient placed back in the range the slice took, zeros elsewhere.
 slot_t __tangent_scatter_slice_arr__(
     ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+// The reverse of a row take (`t[idx]`): the gradient of the rows the indices name added back
+// into the rows they were taken from, the rest of the array left at its zero tangent.
+slot_t __tangent_scatter_take_arr__(
+    ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __tangent_init_arr__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __tangent_last_arr__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
