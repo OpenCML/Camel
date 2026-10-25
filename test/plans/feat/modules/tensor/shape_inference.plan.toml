@@ -172,7 +172,7 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ReturnNeedsConversion"
 expect_diagnostic_line = 9
 expect_diagnostic_column = 5
-expect_output_contains = ["element .0 of the value ('(a, sum(x), b)') has type 'f32[..]', which is less exact than 'f32[3]'", "element .2 of the value", "'a as f32[3]', 'b as f32[3]'"]
+expect_output_contains = ["element .0 of the value ('(a, float(sum(x)), b)') has type 'f32[..]', which is less exact than 'f32[3]'", "element .2 of the value", "'a as f32[3]', 'b as f32[3]'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 

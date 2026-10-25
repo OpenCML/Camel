@@ -13,7 +13,7 @@ module slice_axis_computed_bounds
 import { reshape, sum } from tensor
 
 func row(a: f32[3, ?]): float {
-    return sum(a)
+    return float(sum(a))
 }
 
 func f(x: f32[3, 4], i: int): float {

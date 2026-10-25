@@ -24,7 +24,7 @@ import { grad } from autodiff
 
 with <xs: float[][]>
 func loss(): float {
-    return sum(concat(xs, reshape([10.0, 20.0], [1, 2]), 0))
+    return float(sum(concat(xs, reshape([10.0, 20.0], [1, 2]), 0)))
 }
 
 func main(): int sync {

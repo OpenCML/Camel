@@ -16,7 +16,7 @@ with <m: P>
 func loss(x: f64[], var acc: f64[]): float sync {
     let a = acc * 1.0
     acc = a * 0.5 + x
-    return sum(m.p0 * x) + sum(a)
+    return float(sum(m.p0 * x)) + float(sum(a))
 }
 
 func main(): int sync {

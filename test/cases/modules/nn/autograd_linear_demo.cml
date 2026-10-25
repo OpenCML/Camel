@@ -19,7 +19,7 @@ func mse_loss(X: f32[..]): float {
     let errors = pred - y
     let squared = errors * errors
     let m = shape(X)[0]
-    return sum(squared) / float(m)
+    return float(sum(squared)) / float(m)
 }
 
 func init(): Linear {

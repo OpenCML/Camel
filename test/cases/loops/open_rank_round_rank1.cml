@@ -11,7 +11,7 @@ module open_rank_round_rank1
 import { sum } from tensor
 
 func total(x: f32[..]): float {
-    return loop s = 0.0 for v in x do s + sum(v)
+    return loop s = 0.0 for v in x do s + float(sum(v))
 }
 
 func main(): int sync {

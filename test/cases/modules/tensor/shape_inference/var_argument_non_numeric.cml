@@ -9,7 +9,7 @@ import { sum } from tensor
 
 func step(var t: f64[], d: float): float sync {
     t = t + d
-    return sum(t)
+    return float(sum(t))
 }
 
 func main(): int sync {

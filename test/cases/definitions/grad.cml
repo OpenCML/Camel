@@ -11,29 +11,29 @@ import tensor_definitions
 func w(): f32[..] { return new([[0.3, -1.2, 0.5, 2.0], [1.1, 0.4, -0.7, 0.2], [-0.5, 0.9, 1.3, -0.1]] as f32[][]) }
 
 with <x: f32[..]>
-func op_softmax(): float { return sum(softmax(x, 1) * w()) }
+func op_softmax(): float { return float(sum(softmax(x, 1) * w())) }
 with <x: f32[..]>
-func def_softmax(): float { return sum(tensor_definitions::softmax(x, 1) * w()) }
+func def_softmax(): float { return float(sum(tensor_definitions::softmax(x, 1) * w())) }
 with <x: f32[..]>
-func op_softmax0(): float { return sum(softmax(x, 0) * w()) }
+func op_softmax0(): float { return float(sum(softmax(x, 0) * w())) }
 with <x: f32[..]>
-func def_softmax0(): float { return sum(tensor_definitions::softmax(x, 0) * w()) }
+func def_softmax0(): float { return float(sum(tensor_definitions::softmax(x, 0) * w())) }
 with <x: f32[..]>
-func op_log_softmax(): float { return sum(log_softmax(x, 1) * w()) }
+func op_log_softmax(): float { return float(sum(log_softmax(x, 1) * w())) }
 with <x: f32[..]>
-func def_log_softmax(): float { return sum(tensor_definitions::log_softmax(x, 1) * w()) }
+func def_log_softmax(): float { return float(sum(tensor_definitions::log_softmax(x, 1) * w())) }
 with <x: f32[..]>
-func op_mean(): float { return mean(x * w()) }
+func op_mean(): float { return float(mean(x * w())) }
 with <x: f32[..]>
-func def_mean(): float { return tensor_definitions::mean(x * w()) }
+func def_mean(): float { return float(tensor_definitions::mean(x * w())) }
 with <x: f32[..]>
-func op_relu(): float { return sum(relu(x) * w()) }
+func op_relu(): float { return float(sum(relu(x) * w())) }
 with <x: f32[..]>
-func def_relu(): float { return sum(tensor_definitions::relu(x) * w()) }
+func def_relu(): float { return float(sum(tensor_definitions::relu(x) * w())) }
 with <x: f32[..]>
-func op_sigmoid(): float { return sum(sigmoid(x) * w()) }
+func op_sigmoid(): float { return float(sum(sigmoid(x) * w())) }
 with <x: f32[..]>
-func def_sigmoid(): float { return sum(tensor_definitions::sigmoid(x) * w()) }
+func def_sigmoid(): float { return float(sum(tensor_definitions::sigmoid(x) * w())) }
 
 func compare(name: string, da: <x: f32[..]> () => f32[..], db: <x: f32[..]> () => f32[..], x: f32[..]): int sync {
     let a = da<x>()

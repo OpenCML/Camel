@@ -9,7 +9,7 @@ import { grad } from autodiff
 with <p: f64[..]>
 func loss(f: (t: f64[..]) => f64[..]): float {
     let a = f(p)
-    return sum(f(a) * p)
+    return float(sum(f(a) * p))
 }
 
 func main(): int sync {

@@ -1,14 +1,16 @@
 // An element count is a shape, not data whose gradient is dropped: the definition graph of
-// `tensor_definitions::mean` is `sum(x) / (numel(x) as float)`, and differentiating it must use
-// `numel(x)` as a constant shape count. The gradient of the mean is 1/n per element, so its sum
-// is 1.0 (design principles 9.9, 5.4).
+// `tensor_definitions::mean` is the sum and the division in f64 with one rounding into the element
+// type, and differentiating it must use `numel(x)` as a constant shape count. The gradient of the
+// mean is 1/n per element, so its sum is 1.0 (design principles 9.9, 5.4). The mean of an f32
+// tensor answers f32 (the element type, not the f64 the accumulator holds), so the caller asks for
+// the f64 it prints.
 import { grad } from autodiff
 import { new, sum } from tensor
 import tensor_definitions
 
 with <x: f32[..]>
 func mean_of(): float {
-    return tensor_definitions::mean(x)
+    return float(tensor_definitions::mean(x))
 }
 
 func main(): int sync {

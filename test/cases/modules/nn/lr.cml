@@ -8,7 +8,7 @@ import { concat, ones, random, shape, sum, transpose, zeros } from tensor
 func mean_squared_error(y_pred: f32[?, ?], y_true: f32[?, ?]): float {
     let residuals = y_pred - y_true
     let squared_residuals = residuals ^ 2.0
-    let total_squared_error = sum(squared_residuals)
+    let total_squared_error = float(sum(squared_residuals))
     let num_of_samples = shape(y_pred)[0]
     return total_squared_error / float(num_of_samples)
 }
