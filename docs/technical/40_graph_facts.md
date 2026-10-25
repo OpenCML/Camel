@@ -39,7 +39,7 @@ The core's kinds (`core_facts.h`):
 | `core.instance` | Node | ii | the index instance of an OPER node whose operator declares one (`instanceOf`), or "none" |
 | `core.reorder` | Node | ii | what its reduction may do (`reorderFreedomOf`) |
 | `core.effects` | Graph | ii | the effect summary through calls and loops (`effectSummaryOf`) |
-| `core.loopDomain` | CrossGraph | ii | a LOOP node and the graph that holds its body region: the form, `t < len(xs)` with the extent when the array is a constant, the element port (design 11.3) |
+| `core.loopDomain` | CrossGraph | ii | a LOOP node and the graph that holds its body region: the form, `t < len(xs)` with the extent — `shape[0]`, the rows of a constant array — and the element port (design 11.3) |
 | `core.permissions` | Node | i | the permissions granted to the node |
 | `core.resources` | Node | ii | what the node does to resources (`resourcesOf`, `docs/technical/41_resources_and_definitions.md`), at the nodes that touch any |
 

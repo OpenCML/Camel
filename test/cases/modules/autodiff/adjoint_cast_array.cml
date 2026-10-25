@@ -1,0 +1,43 @@
+/**
+ * The adjoint of `cast` on a numeric array (design principles 9.9). `cast(xs, 'float32')`
+ * accepts a numeric array (`Tensor | number[]`) and returns a tensor; an array's tangent is the
+ * array of its elements' tangents, so the adjoint is the tensor's gradient cast back to the
+ * element type of the array. Until the flip this program was refused by name at the cast call,
+ * and the rule before the refusal dropped the gradient and the pass materialized the array's
+ * zero -- the program printed `[0.0, 0.0, 0.0]` for a loss whose gradient is [1, 1, 1]. The
+ * commit that removed the refusal rewrote its case, which now asserts the gradient the rule
+ * builds.
+ *
+ * Hand adjoints, written out from the forward expressions:
+ *   t = cast(xs, 'float32'), loss = sum(t) with xs = [1.0, 2.0, 3.0]:
+ *       d loss / d xs = [1.0, 1.0, 1.0]
+ *   t = cast(w, 'float32'), loss = sum(t * cast([2.0, 3.0, 4.0], 'float32')) with w = [3, 4, 5]:
+ *       d loss / d w  = [2.0, 3.0, 4.0]   (exact: the f32 the cast stores is these values)
+ * Both gradients are printed with `{}`, so each is compared with its adjoint element by element.
+ */
+module adjoint_cast_array
+
+import { cast, sum } from tensor
+import { grad } from autodiff
+
+with <xs: float[]>
+func plain(): float {
+    let t = cast(xs, 'float32')
+    return sum(t)
+}
+
+with <w: float[]>
+func weighted(): float {
+    let t = cast(w, 'float32')
+    let c = cast([2.0, 3.0, 4.0] as f64[], 'float32')
+    return sum(t * c)
+}
+
+func main(): int sync {
+    let xs = [1.0, 2.0, 3.0]
+    let g  = grad(plain)<xs>()
+    let w  = [3.0, 4.0, 5.0]
+    let gw = grad(weighted)<w>()
+    'adjoint_cast_array g={} gw={}'->format<g, gw>->println
+    return 0
+}

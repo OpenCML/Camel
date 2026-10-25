@@ -8,7 +8,7 @@ import {
 } from tensor
 
 /// Plain Tensor parameters hide the static shapes, so the conflict surfaces at runtime.
-func add(a: Tensor, b: Tensor): Tensor {
+func add(a: f32[..], b: f32[..]): f32[..] {
     return a + b
 }
 

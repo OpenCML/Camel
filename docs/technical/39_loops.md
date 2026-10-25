@@ -45,9 +45,10 @@ body. Both `EXEC`s carry the numeric permissions in force where the loop is writ
 
 1. The first values and the sequence are built where the loop is; they do not see the names of
    the head. Their types are the state types; `null` and `[]` give none
-   (`LoopStateWithoutType`). A sequence that is not an array (a string, a map, a tensor) is
+   (`LoopStateWithoutType`). A sequence that is not an array (a string, a map) is
    turned into its array of elements by the `__iter__` operator the sequence's type resolves,
-   and any other type is `LoopSequenceNotIterable`; see section 2a.
+   and any other type is `LoopSequenceNotIterable`; see section 2a. A tensor is a numeric array,
+   so it takes the core's own path and no module takes part in it.
 2. The condition and the body are regions of the current graph (`LoopCond`, `LoopBody`), built
    where they are written like the arms of a branch (`Builder::buildArm`). Their ports (the
    state; the body the element first) are Port nodes of the graph that belong to the region and
@@ -87,33 +88,45 @@ graph, each with its own result and ports, and autodiff rewrites them in place.
 N2A [label="LOOP while cond=main.loop2.cond body=main.loop2.body", type="LOOP", ...];
 ```
 
-## 2a. The elements of a string, a map and a tensor
+## 2a. The elements of an array, a string and a map
 
-`for x in xs` takes the elements of an array, a string, a map or a tensor (design principles
-3.10, 11.1, 11.3). The builder keeps one form: a sequence that is not an array is converted to
-its array of elements once, where the loop is, by the compiler-internal operator group
-`__iter__`. The overload is chosen by the type of the sequence, as for any operator, so the
-builder names no type and each module owns its own elements:
+`for x in xs` takes the elements of an array, a string or a map (design principles 3.10, 11.1,
+11.3). An array of any rank is the core's own: `t[i]` takes the i-th along the first dimension
+(5.4), so the round of a rank-1 array is its element and the round of a higher-rank one is the
+row one dimension shorter. The type states it once
+(`ArrayType::firstDimensionElement`) and every reader asks it: the builder gives the element port
+that type, I18 checks the port against it, and the executors take one such value a round
+(`Array::firstDimensionElement`). No module takes part in a `for` over an array, so the iterable
+position holds the array itself.
+
+A sequence that is not an array is converted to its array of elements once, where the loop is, by
+the compiler-internal operator group `__iter__`. The overload is chosen by the type of the
+sequence, as for any operator, so the builder names no type and each module owns its own elements:
 
 | Sequence | Operator | Elements | Order |
 | --- | --- | --- | --- |
-| `T[]` | none (already an array) | `T` | as written |
+| `T[]`, `T[m, n]` and any other array | none: the core's rule, the first dimension | `T` at rank 1, the row `T[n]` at rank 2 | first dimension |
 | `string` | `:struct/iter_str` | `string` (one code point each, as `s[i]`) | code points |
 | `Map<K, V>` | `:coll/map_items` | `(K, V)` | keys ascending (11.3) |
-| `Tensor` | `tensor:iter` | sub-tensor with the first dimension dropped | first dimension |
 
-The tensor overload is default-imported by the tensor module (`__iter__` starts with `__`), so
-a program that imports `tensor` gets it without naming anything; a rank-0 tensor is rejected
-when its shape is known (and is a runtime fault otherwise), and a `Tensor` whose rank is
-unknown gives elements of type `Tensor`. A `Set` has no overload (it is not iterated by `for`
-today; the question is in the H4b report).
+A `Set` has no overload (it is not iterated by `for` today; the question is in the H4b report).
+A sequence whose declared type is an array but whose value has no dimension is refused where the
+loop reads it (`loopTest`: a value with no dimension has no first dimension to iterate over); a
+`Tensor` whose rank is unknown gives elements of the same open-rank array, one dimension fewer.
 
-The result is that the LOOP node's iterable port is always an array, and every consumer sees
-one form: `LoopView::iterable()` is the array of elements (an OPER node when a conversion was
-made), the element port has its element type (I18), `driveLoopRounds`
-(`include/camel/execute/loop_driver.h`) takes one element per round from it. No back end
-has iteration code of its own, and `std::cpp` handles the string conversion (`rt::chars`)
-while maps and tensors stay untranslated types there.
+The result is that the LOOP node's iterable port is always an array, and every consumer sees one
+form: `LoopView::iterable()` is the array of elements (an OPER node when a conversion was made),
+the element port has its element type (I18), `driveLoopRounds`
+(`include/camel/execute/loop_driver.h`) takes one element per round from it. No back end has
+iteration code of its own, and `std::cpp` handles the string conversion (`rt::chars`) while maps
+stay untranslated types there.
+
+A numeric array used to ask the tensor module for its elements (`tensor:iter`, one row a round);
+the author's ruling of 2026-10-24 (`docs/handover/reviews/questions-2026-10-24-evening.md`
+section `loop-domain-through-the-tensor-iterator`) moved that rule into the core, for every
+array, because a `for` over an array is core semantics and the operator in between hid a constant
+array's row count from `core.loopDomain` (`docs/technical/40_graph_facts.md`, the fact is
+`shape[0]`). The module's `iter` goes away with the P4 alias (one thing, one spelling).
 
 ## 3. Consumers: `camel/runtime/loop.h`
 

@@ -8,6 +8,6 @@ import { Tensor, reshape } from tensor
 import { export_model } from onnx
 
 func main(): int sync {
-    export_model((a: Tensor, b: Tensor): Tensor => a + b, reshape([1.0, 2.0], [2]), 'tmp/test/onnx/refusal_arity.onnx')
+    export_model((a: float[..], b: float[..]): float[..] => a + b, reshape([1.0, 2.0], [2]), 'tmp/test/onnx/refusal_arity.onnx')
     return 0
 }

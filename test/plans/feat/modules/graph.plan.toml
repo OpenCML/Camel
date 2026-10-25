@@ -469,12 +469,12 @@ timeout_ms = 10000
 
 [[tests]]
 name = "facts_of_graphs_and_nodes"
-desc = "A graph that only computes has no external effect, one that prints has; the shape of a tensor value; no permissions are granted."
+desc = "A graph that only computes has no external effect, one that prints has; the shape of a tensor value, which every numeric array states now (its element type and its extents, `?` for an extent nobody fixed); no permissions are granted."
 kind = "behavior"
 case = "../../../cases/modules/graph_facts.cml"
 args = ["${case}", "std::nvm"]
 expect_exit = 0
-expect_stdout_exact = "false\ntrue\ntrue\ntrue\n[-, -, f32 [2, 3]]\n[0, 0, 0, 0, 0]\n"
+expect_stdout_exact = "false\ntrue\ntrue\ntrue\n[f32 [?], int [?], f32 [2, 3]]\n[0, 0, 0, 0, 0]\n"
 timeout_ms = 10000
 
 # Written (`var`) slots: both passes leave the nodes whose value may be written in place alone.

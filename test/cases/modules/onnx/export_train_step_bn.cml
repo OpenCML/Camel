@@ -7,36 +7,42 @@
  */
 module export_train_step_bn
 
-import { Tensor, relu, mean, reshape, flatten, new } from tensor
+import { Tensor, cast, relu, mean, reshape, flatten, new } from tensor
 import { with_grad } from autodiff
 import { conv2d, batch_norm_train, sgd } from nn
 import { export_model } from onnx
 import { get_env } from env
 
 type CnnBn = {
-    conv1_w: Tensor, conv1_b: Tensor, bn1_g: Tensor, bn1_b: Tensor,
-    conv2_w: Tensor, conv2_b: Tensor, bn2_g: Tensor, bn2_b: Tensor,
-    fc_w: Tensor, fc_b: Tensor
+    conv1_w: float[..], conv1_b: float[..], bn1_g: float[..], bn1_b: float[..],
+    conv2_w: float[..], conv2_b: float[..], bn2_g: float[..], bn2_b: float[..],
+    fc_w: float[..], fc_b: float[..]
 }
 
-type BnStats = { bn1_rm: Tensor, bn1_rv: Tensor, bn2_rm: Tensor, bn2_rv: Tensor }
+type BnStats = { bn1_rm: float[..], bn1_rv: float[..], bn2_rm: float[..], bn2_rv: float[..] }
 
 with <m: CnnBn>
-func forward(x: Tensor, s: BnStats): (Tensor, BnStats) {
+func forward(x: float[..], s: BnStats): (float[..], BnStats) {
     let r1 = batch_norm_train(conv2d(x, m.conv1_w, m.conv1_b, 1, 1), m.bn1_g, m.bn1_b, s.bn1_rm, s.bn1_rv, 0.1, 0.00001)
     let h1 = relu(r1.0)
     let r2 = batch_norm_train(conv2d(h1, m.conv2_w, m.conv2_b, 1, 1), m.bn2_g, m.bn2_b, s.bn2_rm, s.bn2_rv, 0.1, 0.00001)
     let g = mean(mean(relu(r2.0), 2), 2)
-    return (flatten(g) @ m.fc_w + m.fc_b, {bn1_rm: r1.1, bn1_rv: r1.2, bn2_rm: r2.1, bn2_rv: r2.2})
+    // The running statistics come back at the element type the kernel keeps them in (f32), while
+    // this model works in f64, so each is converted where the value is stored (design principles
+    // 7.4: the element type is exact, and a conversion is written).
+    return (flatten(g) @ m.fc_w + m.fc_b, {
+        bn1_rm: cast(r1.1, 'float64'), bn1_rv: cast(r1.2, 'float64'),
+        bn2_rm: cast(r2.1, 'float64'), bn2_rv: cast(r2.2, 'float64')
+    })
 }
 
 with <m: CnnBn>
-func loss(x: Tensor, s: BnStats): float {
+func loss(x: float[..], s: BnStats): float {
     let r = forward<m>(x, s)
     return mean(r.0 * r.0)
 }
 
-func step(m: CnnBn, s: BnStats, x: Tensor): (float, CnnBn, BnStats) {
+func step(m: CnnBn, s: BnStats, x: float[..]): (float, CnnBn, BnStats) {
     let vg = with_grad(loss)<m>(x, s)
     let r = forward<m>(x, s)
     return (vg.0, sgd(m, vg.1, 0.01), r.1)

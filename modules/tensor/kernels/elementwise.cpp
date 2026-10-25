@@ -224,9 +224,12 @@ TypeCode operandType(const Operand &lhs, const Operand &rhs) {
     return promoteTensorTypes(lhs.dtype, rhs.dtype);
 }
 
-/// Result type of a binary operator: `Div` and `Pow` produce a float, f64 when a tensor operand
-/// is f64, f32 otherwise (an integer tensor's division has always produced f32). A bf16 or f16
-/// tensor keeps its element type: the operator computes in f32 and the store rounds once.
+/// Result type of a binary operator: `Div` and `Pow` produce a float, f64 when an operand's
+/// element type is f64, f32 otherwise (an integer tensor's division has always produced f32). A
+/// bf16 or f16 tensor keeps its element type: the operator computes in f32 and the store rounds
+/// once. The element type `operandType` settled decides it: an argument is an array or a value by
+/// what it holds, and a rank of zero is a rank like any other, so neither the `scalar` flag (which
+/// a rank-0 array shares with a value) nor a rank test may re-decide the width here.
 TypeCode binaryResultType(BinaryOp op, const Operand &lhs, const Operand &rhs) {
     const TypeCode base = operandType(lhs, rhs);
     if (!binaryProducesFloat(op)) {
@@ -235,11 +238,7 @@ TypeCode binaryResultType(BinaryOp op, const Operand &lhs, const Operand &rhs) {
     if (isReducedFloatTensorType(base)) {
         return base;
     }
-    if ((!lhs.scalar && lhs.dtype == TypeCode::Float64) ||
-        (!rhs.scalar && rhs.dtype == TypeCode::Float64)) {
-        return TypeCode::Float64;
-    }
-    return TypeCode::Float32;
+    return base == TypeCode::Float64 ? TypeCode::Float64 : TypeCode::Float32;
 }
 
 template <typename To> void convertBuffer(const Operand &src, To *dst) {
@@ -300,6 +299,18 @@ template <typename T> T applyBinary(BinaryOp op, T a, T b) {
         return maximum(a, b); // IEEE 754-2019 maximum (minmax.h)
     case BinaryOp::Min:
         return minimum(a, b);
+    case BinaryOp::Mod:
+        if constexpr (camel::core::rtdata::is_reduced_float_v<T>) {
+            // A reduced element type computes in f32 and rounds once when it is stored, the one
+            // arithmetic path of a bf16 or f16 value (dtype.h), like + - * / and pow.
+            return static_cast<T>(std::fmod(static_cast<float>(a), static_cast<float>(b)));
+        } else if constexpr (std::is_floating_point_v<T>) {
+            // The language's `%` is the truncated remainder (camel::utils::remainder, int_div.h):
+            // on a floating element type that is fmod, the same definition, not a floor.
+            return static_cast<T>(std::fmod(a, b));
+        } else {
+            return static_cast<T>(a % b);
+        }
     }
     return T{};
 }
@@ -403,6 +414,9 @@ void binaryTyped(BinaryOp op, const BroadcastPlan &plan, const T *a, const T *b,
         break;
     case BinaryOp::Min:
         run([](T x, T y) { return applyBinary(BinaryOp::Min, x, y); });
+        break;
+    case BinaryOp::Mod:
+        run([](T x, T y) { return applyBinary(BinaryOp::Mod, x, y); });
         break;
     default:
         // A new operator adds its loop above rather than falling back to the runtime switch.

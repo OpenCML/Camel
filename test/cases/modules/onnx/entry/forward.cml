@@ -8,6 +8,6 @@ module forward
 
 import { Tensor, tanh } from tensor
 
-func main(x: Tensor<f32, [?, 3]>, w: Tensor<f32, [3, 4]>): Tensor {
+func main(x: Tensor<f32, [?, 3]>, w: Tensor<f32, [3, 4]>): f32[..] {
     return tanh(x @ w)
 }

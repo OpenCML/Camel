@@ -110,18 +110,18 @@ const out = input.normalized.stdout
 const line = (l) => assert(out.includes(l + '\n'), `missing: ${l}`)
 const num = (re, what) => { const m = out.match(re); assert(m, `missing ${what}`); return Number(m[1]) }
 for (const l of [
-  'FACTS seeded core.shape 13', 'FACTS seeded core.instance 5', 'FACTS seeded core.reorder 2',
+  'FACTS seeded core.shape 18', 'FACTS seeded core.instance 5', 'FACTS seeded core.reorder 2',
   'FACTS seeded core.effects 6', 'FACTS seeded core.loopDomain 2', 'FACTS seeded core.resources 4',
   'FACTS graph layer valid=6 revalidated=0 stale=0', 'FACTS graph total valid=4 revalidated=0 stale=0',
-  'FACTS graph count valid=2 revalidated=0 stale=0', 'FACTS graph twice valid=7 revalidated=0 stale=0',
-  'FACTS graph main valid=2 revalidated=0 stale=9', 'FACTS graph __root__ valid=0 revalidated=0 stale=2',
+  'FACTS graph count valid=2 revalidated=0 stale=0', 'FACTS graph twice valid=8 revalidated=0 stale=0',
+  'FACTS graph main valid=6 revalidated=0 stale=9', 'FACTS graph __root__ valid=0 revalidated=0 stale=2',
   // The kinds of main, fact by fact: the conservative rule reads declarations and the graph, so
-  // every such fact on main is stale; a shape is about its node's own version, so the two nodes
+  // every such fact on main is stale; a shape is about its node's own version, so the six nodes
   // inlining left in place keep theirs and the three it touched do not.
   'FACTS graph kind main core.effects valid=0 revalidated=0 stale=1',
   'FACTS graph kind main core.instance valid=0 revalidated=0 stale=2',
   'FACTS graph kind main core.resources valid=0 revalidated=0 stale=3',
-  'FACTS graph kind main core.shape valid=2 revalidated=0 stale=3',
+  'FACTS graph kind main core.shape valid=6 revalidated=0 stale=3',
   'FACTS gone 0',
   '60.0',
 ]) line(l)
@@ -161,7 +161,7 @@ const revision = (prefix, graph) => num(new RegExp(`FACTS ${prefix} revision ${g
 // fact may depend on how an operator is declared, so any new declaration invalidates it.
 const readsDeclarations = new Set(['core.instance', 'core.reorder', 'core.effects'])
 for (const l of [
-  'FACTS graph main valid=0 revalidated=0 stale=11', 'FACTS gone 0', '60.0',
+  'FACTS graph main valid=0 revalidated=0 stale=15', 'FACTS gone 0', '60.0',
 ]) line(l)
 
 // Why: the graphs the case asserts about did not change, but std::opt's algebra phase loads the
@@ -215,7 +215,7 @@ const num = (re, what) => { const m = out.match(re); assert(m, `missing ${what}`
 const revision = (prefix, graph) => num(new RegExp(`FACTS ${prefix} revision ${graph} (\\d+)`), `${prefix} revision of ${graph}`)
 const readsDeclarations = new Set(['core.instance', 'core.reorder', 'core.effects'])
 for (const l of [
-  'FACTS graph main valid=0 revalidated=0 stale=11', 'FACTS gone 0', '60.0',
+  'FACTS graph main valid=0 revalidated=0 stale=15', 'FACTS gone 0', '60.0',
 ]) line(l)
 const seedEpoch = num(/FACTS epoch seed=(\d+)/, 'seed epoch')
 const checkEpoch = num(/FACTS epoch check=(\d+)/, 'check epoch')
@@ -256,13 +256,13 @@ verify_script = """
 const out = input.normalized.stdout
 const line = (l) => assert(out.includes(l + '\n'), `missing: ${l}`)
 for (const l of [
-  'FACTS exported core.shape 13', 'FACTS exported core.reorder 2', 'FACTS exported core.effects 6',
-  'FACTS exported core.permissions 1', 'FACTS text round trip 22/22',
-  'FACTS imported stored 21', 'FACTS imported matches the graph 1',
-  'FACTS loaded equal to a fresh computation 21/21',
-  'FACTS reloaded main graph changed 6', 'FACTS reloaded __root__ graph changed 1',
+  'FACTS exported core.shape 18', 'FACTS exported core.reorder 2', 'FACTS exported core.effects 6',
+  'FACTS exported core.permissions 1', 'FACTS text round trip 27/27',
+  'FACTS imported stored 26', 'FACTS imported matches the graph 1',
+  'FACTS loaded equal to a fresh computation 26/26',
+  'FACTS reloaded main graph changed 10', 'FACTS reloaded __root__ graph changed 1',
   'FACTS reloaded layer stored 5', 'FACTS reloaded total stored 3', 'FACTS reloaded total matches the graph 1',
-  'FACTS reloaded twice stored 5', 'FACTS reloaded count stored 1',
+  'FACTS reloaded twice stored 6', 'FACTS reloaded count stored 1',
   '60.0',
 ]) line(l)
 assert(!/FACTS reloaded (layer|total|twice|count)\S* graph changed/.test(out), 'unchanged graphs load')

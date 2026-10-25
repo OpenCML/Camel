@@ -1,0 +1,23 @@
+/**
+ * A recursion that changes the element type of its argument along the call cycle: the parameter
+ * is written with a type variable and a dimension name (`T[n]`), and every level passes the array
+ * wrapped in one more array, so the element type of the argument is a different concrete type at
+ * every level (`f32[2]`, then `f32[2][1]`, then `f32[2][1][1]`, ...).
+ *
+ * The ruling of 2026-10-24 evening (recursion-specialization-fixed-point-followups, item 2):
+ * along a call cycle whose key differs, an extent and a dimension name are widened to `?`, but a
+ * different element type cannot be instantiated into infinitely many concrete types and is
+ * reported as a compile error (design principles 5.5).
+ */
+module specialize_element_type_nest
+
+import { get_env } from env
+
+func nest::<T>(xs: T[n], k: int): int {
+    return if k <= 0 then len(xs) else nest([xs], k - 1)
+}
+
+func main(): int sync {
+    println(nest([1.0, 2.0], int(get_env('H476_NEST_DEPTH'))))
+    return 0
+}

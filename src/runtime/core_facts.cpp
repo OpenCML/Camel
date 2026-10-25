@@ -88,7 +88,8 @@ std::optional<TypeCode> typeCodeNamed(std::string_view name) {
 
 // ---- core.shape ------------------------------------------------------------------------------
 
-/// "float32|2,3", "-|2,-1" (unknown element type), "float32|?" (unknown rank).
+/// "float32|2,3", "-|2,-1" (unknown element type; an extent nobody stated is -1, the spelling this
+/// form has always used), "float32|?" (unknown rank).
 std::string encodeShape(const TensorShape &shape) {
     std::string out = shape.dtype ? camel::core::type::typeCodeToString(*shape.dtype) : "-";
     out += '|';
@@ -96,7 +97,7 @@ std::string encodeShape(const TensorShape &shape) {
         return out + "?";
     }
     for (size_t i = 0; i < shape.dims->size(); ++i) {
-        out += std::format("{}{}", i ? "," : "", (*shape.dims)[i]);
+        out += std::format("{}{}", i ? "," : "", (*shape.dims)[i].value_or(-1));
     }
     return out;
 }
@@ -124,7 +125,9 @@ std::optional<TensorShape> decodeShape(std::string_view text) {
         if (!extent) {
             return std::nullopt;
         }
-        shape.dims->push_back(*extent);
+        // -1 is the spelling this form gives an extent nobody stated; a real extent is never
+        // negative, so the two cannot be confused.
+        shape.dims->push_back(*extent < 0 ? std::nullopt : std::optional<int64_t>(*extent));
         dims = comma == std::string_view::npos ? std::string_view{} : dims.substr(comma + 1);
     }
     return shape;
@@ -223,15 +226,28 @@ std::optional<EffectSummary> decodeEffects(std::string_view text) {
 
 // ---- core.loopDomain -------------------------------------------------------------------------
 
-/// The element count of the DATA node `node` when it is a constant array of the static area.
+/// The number of elements a `for` takes along the first dimension of the array `node` holds as a
+/// constant: `shape[0]`, which is the element count of a rank-1 array and the row count of a
+/// higher-rank one (design principles 5.4: `t[i]` takes the i-th along the first dimension). The
+/// author's ruling of 2026-10-24 (docs/handover/reviews/questions-2026-10-24-evening.md section
+/// loop-domain-through-the-tensor-iterator) states it once: "`core.loopDomain`'s `extent` is
+/// `shape[0]`, the rows of a constant array and the element count at rank 1, and every reader
+/// shares that one fact". A numeric array is the tensor kind and the `for` takes its elements
+/// itself, so the iterable of a loop over an array is the array, and its length is read where the
+/// value is written.
 std::optional<int64_t> constantLength(const GCGraph &graph, gc_node_ref_t node) {
     const GCNode *n = graph.node(node);
+    if (n == nullptr) {
+        return std::nullopt;
+    }
     if (n->kind != GCNodeKind::Data || n->dataIndex >= 0 || graph.staticArea() == nullptr ||
         n->dataType() == nullptr || n->dataType()->code() != TypeCode::Array) {
         return std::nullopt;
     }
-    const auto *array =
-        camel::core::rtdata::fromSlot<::Array *>(graph.staticArea()->get<slot_t>(size_t(-n->dataIndex)));
+    const auto *array = camel::core::rtdata::fromSlot<::Array *>(
+        graph.staticArea()->get<slot_t>(size_t(-n->dataIndex)));
+    // `size()` is the first dimension (`extents_[0]`), the number of rows the loop walks, for an
+    // array of any rank (runtime/rtdata/array.h).
     return array ? std::optional<int64_t>(static_cast<int64_t>(array->size())) : std::nullopt;
 }
 
@@ -392,8 +408,8 @@ std::string toString(const TensorShape &shape) {
     }
     out += " [";
     for (size_t i = 0; i < shape.dims->size(); ++i) {
-        const int64_t extent = (*shape.dims)[i];
-        out += (i ? ", " : "") + (extent < 0 ? std::string("?") : std::to_string(extent));
+        const std::optional<int64_t> extent = (*shape.dims)[i];
+        out += (i ? ", " : "") + (extent ? std::to_string(*extent) : std::string("?"));
     }
     return out + "]";
 }

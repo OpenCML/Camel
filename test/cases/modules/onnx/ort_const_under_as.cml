@@ -19,26 +19,26 @@ import { Tensor, reshape, sum, tanh } from tensor
 import { with_grad } from autodiff
 import { export_model } from onnx
 
-func affine(x: Tensor<f32, [2, 3]>): Tensor {
+func affine(x: Tensor<f32, [2, 3]>): f32[..] {
     let w = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[], [2, 3]) as Tensor<f32, [2, 3]>
     let k = reshape([0.5, -0.5, 0.25, -0.25, 1.5, -1.5] as f32[], [6]) as Tensor<f32, [?]>
     return x * w + reshape(k, [2, 3])
 }
 
-func checked(x: Tensor): Tensor {
+func checked(x: f32[..]): f32[..] {
     let y = tanh(x) as Tensor<f32, [2, 3]>
     let z = (y * 2.0) as Tensor<f32, [?, 3]>
     return z + 1.0
 }
 
-with <x: Tensor>
+with <x: f32[..]>
 func loss(): float {
     let w = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[], [2, 3]) as Tensor<f32, [2, 3]>
     let y = (x * x) as Tensor<f32, [2, 3]>
     return sum(y * w)
 }
 
-func step(x: Tensor): (float, Tensor) {
+func step(x: f32[..]): (float, f32[..]) {
     return with_grad(loss)<x>()
 }
 

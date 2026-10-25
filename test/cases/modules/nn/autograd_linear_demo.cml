@@ -10,11 +10,11 @@ import { Tensor, ones, shape, sum, zeros } from tensor
 import { sgd } from nn
 
 type Linear = {
-    weight: Tensor
+    weight: f32[..]
 }
 
-with <layer: Linear, y: Tensor>
-func mse_loss(X: Tensor): float {
+with <layer: Linear, y: f32[..]>
+func mse_loss(X: f32[..]): float {
     let pred = X @ layer.weight
     let errors = pred - y
     let squared = errors * errors
@@ -26,7 +26,7 @@ func init(): Linear {
     return { weight: zeros([2, 1]) }
 }
 
-func train(layer: Linear, X: Tensor, y: Tensor, steps: int): Linear {
+func train(layer: Linear, X: f32[..], y: f32[..], steps: int): Linear {
     let loss_grad = grad(mse_loss)
     let grads = loss_grad<layer, y>(X)
     return if steps == 0 then layer else train(sgd(layer, grads, 0.01), X, y, steps - 1)

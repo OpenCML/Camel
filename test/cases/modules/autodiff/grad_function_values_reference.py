@@ -166,6 +166,18 @@ def compare(rows: list[str], losses: list, refs: list) -> int:
     return 1 if bad else 0
 
 
+def gradient_rows(text: str) -> list[str]:
+    """The printed gradients, one bracketed row each.
+
+    `tensor([...], dtype=...)` is the spelling a tensor value had; the arrays print their elements
+    as an array, `[...]` on a line of its own. The case prints one gradient per line either way.
+    """
+    rows = re.findall(r"tensor\(\[([^\]]*)\]", text)
+    if rows:
+        return rows
+    return re.findall(r"^\[([^\[\]]*)\]$", text, re.MULTILINE)
+
+
 def main() -> int:
     suite = "values"
     args = sys.argv[1:]
@@ -175,7 +187,7 @@ def main() -> int:
     refs = [fd(f, X) for f in losses]
     if len(args) == 2 and args[0] == "--check":
         text = open(args[1], encoding="utf-8").read()
-        return compare(re.findall(r"tensor\(\[([^\]]*)\]", text), losses, refs)
+        return compare(gradient_rows(text), losses, refs)
     if len(args) == 2 and args[0] == "--check-camel":
         env = {**os.environ}
         env.setdefault("CAMEL_HOME", str(HERE.parents[3] / "out" / "latest"))
@@ -185,7 +197,7 @@ def main() -> int:
         if proc.returncode != 0:
             print(f"camel failed: {(proc.stdout + proc.stderr)[-400:]}")
             return 1
-        return compare(re.findall(r"tensor\(\[([^\]]*)\]", proc.stdout), losses, refs)
+        return compare(gradient_rows(proc.stdout), losses, refs)
     for f, ref in zip(losses, refs):
         print(f.__name__, np.array2string(ref, precision=6))
     return 0

@@ -18,27 +18,27 @@ import { now } from time
 import { weight, bench_input, run_benchmark, run_training, warm_count, step_count, log_step, log_final } from camel_bench
 
 type Block = {
-    ln1_gamma: Tensor, ln1_beta: Tensor,
-    q_w: Tensor, q_b: Tensor, k_w: Tensor, k_b: Tensor,
-    v_w: Tensor, v_b: Tensor, o_w: Tensor, o_b: Tensor,
-    ln2_gamma: Tensor, ln2_beta: Tensor,
-    ffn1_w: Tensor, ffn1_b: Tensor, ffn2_w: Tensor, ffn2_b: Tensor
+    ln1_gamma: f32[..], ln1_beta: f32[..],
+    q_w: f32[..], q_b: f32[..], k_w: f32[..], k_b: f32[..],
+    v_w: f32[..], v_b: f32[..], o_w: f32[..], o_b: f32[..],
+    ln2_gamma: f32[..], ln2_beta: f32[..],
+    ffn1_w: f32[..], ffn1_b: f32[..], ffn2_w: f32[..], ffn2_b: f32[..]
 }
 
 /// [B, S, D] -> [B, H, S, D / H]
-func split_heads(t: Tensor, heads: int): Tensor {
+func split_heads(t: f32[..], heads: int): f32[..] {
     let dims = shape(t)
     return permute(reshape(t, [dims[0], dims[1], heads, dims[2] / heads]), [0, 2, 1, 3])
 }
 
 /// [B, H, S, Dh] -> [B, S, H * Dh]
-func merge_heads(t: Tensor): Tensor {
+func merge_heads(t: f32[..]): f32[..] {
     let dims = shape(t)
     return reshape(permute(t, [0, 2, 1, 3]), [dims[0], dims[2], dims[1] * dims[3]])
 }
 
 with <m: Block>
-func attention(x: Tensor): Tensor {
+func attention(x: f32[..]): f32[..] {
     let heads = 8
     let q = split_heads(x @ m.q_w + m.q_b, heads)
     let k = split_heads(x @ m.k_w + m.k_b, heads)
@@ -49,7 +49,7 @@ func attention(x: Tensor): Tensor {
 }
 
 with <m: Block>
-func forward(x: Tensor): Tensor {
+func forward(x: f32[..]): f32[..] {
     let h = x + attention<m>(layer_norm(x, m.ln1_gamma, m.ln1_beta))
     let f = gelu(layer_norm(h, m.ln2_gamma, m.ln2_beta) @ m.ffn1_w + m.ffn1_b)
     return h + (f @ m.ffn2_w + m.ffn2_b)
@@ -57,19 +57,19 @@ func forward(x: Tensor): Tensor {
 
 // Training workload (train.py): loss mean(y^2), one SGD step with lr 0.01.
 with <m: Block>
-func loss(x: Tensor): float {
+func loss(x: f32[..]): float {
     let y = forward<m>(x)
     return mean(y * y)
 }
 
-func train_step(m: Block, x: Tensor): float sync {
+func train_step(m: Block, x: f32[..]): float sync {
     let vg = with_grad(loss)<m>(x)
     let next = sgd(m, vg.1, 0.01)
     return vg.0
 }
 
 /// The training step as a function of the parameters: the loss and the updated parameters.
-func step(m: Block, x: Tensor): (float, Block) {
+func step(m: Block, x: f32[..]): (float, Block) {
     let vg = with_grad(loss)<m>(x)
     return (vg.0, sgd(m, vg.1, 0.01))
 }
@@ -80,14 +80,14 @@ func export_step(m: Block, path: string): int sync {
     return 0
 }
 
-func dump_grads(m: Block, x: Tensor, dir: string): int sync {
+func dump_grads(m: Block, x: f32[..], dir: string): int sync {
     save_params(grad(loss)<m>(x), dir)
     return 0
 }
 
 /// The stateful training loop: step `i` starts from the parameters step `i - 1` produced.
 /// Returns the parameters after step `total - 1`.
-func train_loop(m: Block, x: Tensor, i: int, warm: int, total: int, t0: float): Block {
+func train_loop(m: Block, x: f32[..], i: int, warm: int, total: int, t0: float): Block {
     return if i >= total then m else sync {
         let start = now()
         let r = step(m, x)
@@ -104,7 +104,7 @@ func save_trained(m: Block, dir: string): int sync {
 
 /// Runs the stateful loop and reports the loss at the final parameters; saves them when
 /// CAMEL_BENCH_PARAMS names a directory.
-func train_stateful(m: Block, x: Tensor): int sync {
+func train_stateful(m: Block, x: f32[..]): int sync {
     let trained = train_loop(m, x, 0, warm_count(), step_count(), now())
     let reported = log_final(loss<trained>(x))
     let dir = get_env('CAMEL_BENCH_PARAMS')
@@ -122,8 +122,8 @@ func main(): int sync {
     }
     let workload = get_env('CAMEL_BENCH_WORKLOAD')
     return if workload == 'train_export' then export_step(m, get_env('CAMEL_BENCH_EXPORT')) else if workload == 'train' then run_training(
-        (x: Tensor): float => { return train_step(m, x) },
-        (x: Tensor, dir: string): int => { return dump_grads(m, x, dir) },
-        (x: Tensor): int => { return train_stateful(m, x) }
-    ) else run_benchmark((x: Tensor): Tensor => forward<m>(x))
+        (x: f32[..]): float => { return train_step(m, x) },
+        (x: f32[..], dir: string): int => { return dump_grads(m, x, dir) },
+        (x: f32[..]): int => { return train_stateful(m, x) }
+    ) else run_benchmark((x: f32[..]): f32[..] => forward<m>(x))
 }

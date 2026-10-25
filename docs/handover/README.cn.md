@@ -44,7 +44,7 @@
   `pwsh -NoProfile -File D:\Projects\Camel-wt\camel-remote.ps1 -Path D:\Projects\Camel-wt\<任务> -Plan <计划文件或目录> -Jobs 8`。
   产物在主机 `out/latest/bin/`。不要在本机跑 `npm run build`、`cmake` 或 `node scripts/test.js`。
 - 测试分两层（H10）：日常与合入前跑 `fast` 层（`smoke` 加 `feat/**`）；慢层（PyTorch 对照、GC 压力、投毒扫描、性能基准）只在发布前，或改动确实触及 GC、内存管理、数值内核时按需跑。
-- 只跑某个目标时：**目录**目标默认只跑 `fast` 层，要看慢测试加 `--tier all`；直接点名**计划文件**则整个计划都跑（点名就是意图）。`--changed` 的基线默认 `origin/develop`，可用 `CAMEL_TEST_BASE` 覆盖。分层规则见 `docs/test-plans.md`。
+- 只跑某个目标时：**目录**目标默认只跑 `fast` 层，要看慢测试加 `--tier all`；直接点名**计划文件**则整个计划都跑（点名就是意图）。**层与目标是两件事**：目标写 `.` **不是整棵树**——前导点被剥掉后是空名，落到 `feat`，即 `test/plans/feat`（只 feat、不含 `smoke`）；整棵树写 `all`（`-Plan all`、`--all` 或 `test/plans`）。`--changed` 的基线默认 `origin/develop`，可用 `CAMEL_TEST_BASE` 覆盖。分层规则见 `docs/test-plans.md`。
 - **先手动跑，再写测试**（`AGENTS.md`）：新功能先在主机上用 `camel x.cml` 看清输出与诊断，再把确认过的行为写成测试。
 - 工作中只跑相关的测试计划；**任务结束前在主机上跑一次快速层**（`smoke` + `feat/**`）与相关计划。
 - **验收**：快速层必须全绿；`skip` 不是失败；基线是零——没有“已知失败名单”，任何一条红都要由变红的分支解释。

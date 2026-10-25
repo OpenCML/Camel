@@ -77,13 +77,12 @@ bool isContentComparableImpl(const Type *type, std::vector<const Type *> &active
     bool handled = code == TypeCode::Array || code == TypeCode::Tuple || code == TypeCode::Struct;
     switch (code) {
     case TypeCode::Array:
-        // An array whose element type is not written yet (`Tensor`, the array spelling of a
-        // numeric array) compares by content: every element the value holds is a number, and
-        // the value carries the element type its comparison reads. This arm is the transition
-        // period's and is deleted with the marking: an array a program writes fixes its element
-        // type, and then the elements alone decide whether it is comparable.
-        comparable = static_cast<const ArrayType *>(type)->isNumericUnknown() ||
-                     isContentComparableImpl(static_cast<const ArrayType *>(type)->elemType(), active);
+        // An array is comparable when its element type is: a program that writes an array writes
+        // the element type with it, so the elements alone decide. A module's own type whose
+        // values are arrays of numbers is registered as comparable above instead
+        // (`registerContentComparableType`).
+        comparable =
+            isContentComparableImpl(static_cast<const ArrayType *>(type)->elemType(), active);
         break;
     case TypeCode::Tuple: {
         const auto *tuple = static_cast<const TupleType *>(type);

@@ -18,6 +18,20 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 10000
 
 [[tests]]
+name = "semantic.branch_element_type_mismatch"
+desc = "Two arrays whose element types differ have no common type: an array's element type is part of its type and no number becomes a number of another element type by itself, so the branch is refused and the report names the element type each arm gives with the conversion that would make the two one."
+kind = "negative"
+case = "../../../cases/compile/semantic/branch_element_type_mismatch.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::BranchElementTypeMismatch"
+expect_diagnostic_code = "0x030001EE"
+expect_diagnostic_line = 10
+expect_diagnostic_column = 12
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
 name = "semantic.decorator_nonfunc_return"
 desc = "Rejects decorators that return data instead of a callable compatible with the decorated function."
 kind = "negative"

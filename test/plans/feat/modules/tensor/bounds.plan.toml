@@ -65,12 +65,12 @@ timeout_ms = 10000
 
 [[tests]]
 name = "unknown_runtime"
-desc = "With an unknown extent (a tensor loaded at run time) the checks move to run time: an empty slice inside the extent is shape [0], and an index outside the extent is a run-time error of the idx operator."
+desc = "With an unknown extent (a tensor loaded at run time) the checks move to run time: an empty slice inside the extent is shape [0], and an index outside the extent is a run-time error of the subscript, reported as for any array."
 kind = "behavior"
 case = "../../../../cases/modules/tensor/bounds/unknown_runtime.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["ran", "[0]", "idx: tensor index out of bounds"]
+expect_output_contains = ["ran", "[0]", "Index 8 is out of range for an array of length 3."]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
 

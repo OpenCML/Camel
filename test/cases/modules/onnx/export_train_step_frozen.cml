@@ -13,16 +13,16 @@ import { sgd } from nn
 import { export_model } from onnx
 import { get_env } from env
 
-type Mlp = { w1: Tensor, b1: Tensor, w2: Tensor, b2: Tensor }
+type Mlp = { w1: float[..], b1: float[..], w2: float[..], b2: float[..] }
 
 with <m: Mlp>
-func loss(x: Tensor): float {
+func loss(x: float[..]): float {
     let h = relu(x @ stop_gradient(m.w1) + m.b1)
     let y = h @ m.w2 + m.b2
     return mean(y * y)
 }
 
-func step(m: Mlp, x: Tensor): (float, Mlp) {
+func step(m: Mlp, x: float[..]): (float, Mlp) {
     let vg = with_grad(loss)<m>(x)
     return (vg.0, sgd(m, vg.1, 0.01))
 }

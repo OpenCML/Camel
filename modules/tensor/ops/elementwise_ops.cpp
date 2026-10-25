@@ -25,7 +25,7 @@ namespace {
 
 constexpr std::string_view binaryName(k::BinaryOp op) {
     constexpr std::string_view names[] =
-        {"add", "subtract", "multiply", "divide", "pow", "maximum", "minimum"};
+        {"add", "subtract", "multiply", "divide", "pow", "maximum", "minimum", "mod"};
     return names[static_cast<size_t>(op)];
 }
 
@@ -45,7 +45,7 @@ template <k::BinaryOp Op> slot_t binaryKernel(ArgsView &, ArgsView &norm, contex
         k::ScalarOperand lhsScalar{}, rhsScalar{};
         const k::Operand lhs = operandArg(norm, 0, lhsScalar);
         const k::Operand rhs = operandArg(norm, 1, rhsScalar);
-        return wrap(k::binary(Op, lhs, rhs, resultAllocator()));
+        return wrap(norm.resultType(), k::binary(Op, lhs, rhs, resultAllocator()));
     });
 }
 
@@ -54,13 +54,13 @@ template <k::CompareOp Op> slot_t compareKernel(ArgsView &, ArgsView &norm, cont
         k::ScalarOperand lhsScalar{}, rhsScalar{};
         const k::Operand lhs = operandArg(norm, 0, lhsScalar);
         const k::Operand rhs = operandArg(norm, 1, rhsScalar);
-        return wrap(k::compare(Op, lhs, rhs, resultAllocator()));
+        return wrap(norm.resultType(), k::compare(Op, lhs, rhs, resultAllocator()));
     });
 }
 
 template <k::UnaryOp Op> slot_t unaryKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel(unaryName(Op), [&] {
-        return wrap(k::unary(Op, tensorArg(norm, 0), resultAllocator()));
+        return wrap(norm.resultType(), k::unary(Op, tensorArg(norm, 0), resultAllocator()));
     });
 }
 
@@ -122,13 +122,19 @@ operandType(const InferContext &ctx, const TensorFacts &lhs, const TensorFacts &
     if (!ctx.sourceLevel() || isConstantScalar(ctx, scalarIndex)) {
         return computed;
     }
+    // A refusal names the writing that fits either intent: the operand is converted to the
+    // element type, and a scalar the program meant to read out of the array is reduced to one. The
+    // second spelling is what a `for` round of an open-rank array needs -- the round is the array
+    // itself and not its element, so the conversion of the scalar operand alone would leave the
+    // program the author meant to write without a way to say it.
     throw std::invalid_argument(
         "the scalar operand has type '" + scalar->toString() + "', but the tensor's element "
         "type is '" +
         typeCodeToString(*tensor.dtype) +
         "': a tensor operator computes in its element type, and there "
         "is no implicit conversion between numeric types (write the conversion, " +
-        typeCodeToString(computed) + "(value))");
+        typeCodeToString(computed) +
+        "(value); a scalar read out of the array is written sum(v) or an explicit conversion)");
 }
 
 InferFn binaryInfer(bool producesFloat) {
@@ -228,7 +234,7 @@ slot_t whereKernel(ArgsView &, ArgsView &norm, context::Context &) {
         const k::Operand cond = k::Operand::of(tensorArg(norm, 0));
         const k::Operand lhs  = operandArg(norm, 1, lhsScalar);
         const k::Operand rhs  = operandArg(norm, 2, rhsScalar);
-        return wrap(k::where(cond, lhs, rhs, resultAllocator()));
+        return wrap(norm.resultType(), k::where(cond, lhs, rhs, resultAllocator()));
     });
 }
 
@@ -271,7 +277,7 @@ slot_t castKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("cast", [&] {
         Array *input = tensorArg(norm, 0, true);
         const TypeCode target = dtypeFromName(stringArg(norm, 1));
-        return wrap(k::cast(input, target, resultAllocator()));
+        return wrap(norm.resultType(), k::cast(input, target, resultAllocator()));
     });
 }
 
@@ -490,28 +496,20 @@ void whereVjp(VjpBuilder &b, const VjpCall &call) {
 }
 
 // cast(t, dtype): the gradient returns to t's dtype. `cast` also accepts a numeric array, and a
-// float array is a continuous value with a tangent (design principles 9.9): its adjoint would be
-// the elements of dy in t's dtype, which no operator of this module builds from a tensor's
-// gradient, so an array that depends on a differentiated input is refused by name instead of being
-// dropped -- the refusal `new`, `reshape` and `concat` make for the same reason.
+// numeric array is a tensor here (a tensor is a numeric array: `isTensorType` is
+// `isNumericArrayType`), so its gradient is that array's, taken back to the width its own type
+// states by `tensor:cast_like` rather than refused -- the array's gradient used to be dropped
+// silently because `castVjp` answered the *output's* width and the accumulator refused a gradient
+// of another element type than the value's. A container `cast` converts but cannot carry a
+// gradient back into is refused by name while it depends on a differentiated parameter
+// (`hasTensorAdjoint`).
 void castVjp(VjpBuilder &b, const VjpCall &call) {
     requireVjpInputs(call, 2, 2);
-    if (!isTensorNode(b, call.inputs[0])) {
-        if (b.isActive(call.inputs[0])) {
-            refuseVjp(
-                call,
-                "its input is a numeric array of type '" + b.nodeType(call.inputs[0])->toString() +
-                    "', not a tensor, and this module has no operator that carries a tensor's "
-                    "gradient back into an array; the array's gradient would be dropped silently. "
-                    "Cast a differentiable tensor (a parameter, a slice of one) instead of an "
-                    "array");
-        }
-        return;
-    }
     if (auto dy = b.gradientOf(call.output); dy) {
-        b.accumulateGradient(
-            call.inputs[0],
-            addTensorOper(b, "tensor:cast_like", {*dy, call.inputs[0]}));
+        if (!hasTensorAdjoint(b, call, call.inputs[0], "its input")) {
+            return;
+        }
+        b.accumulateGradient(call.inputs[0], tensorCastTo(b, call.inputs[0], *dy));
     }
 }
 
@@ -526,6 +524,11 @@ std::vector<OpDef> elementwiseOps() {
     defs.push_back(binaryDef<k::BinaryOp::Pow>("pow", {"__pow__", "pow"}));
     defs.push_back(binaryDef<k::BinaryOp::Max>("maximum", {"maximum"}));
     defs.push_back(binaryDef<k::BinaryOp::Min>("minimum", {"minimum"}));
+    // `%` over numeric arrays. It is the element type's own operator, applied elementwise: a
+    // bf16 or f16 array computes in f32 and rounds once, the same path as + - * / and pow, so
+    // reduced precision is not a reason to refuse it (design principles 7.3). Two scalars never
+    // reach this definition (binaryInfer), so the scalar `%` is unchanged.
+    defs.push_back(binaryDef<k::BinaryOp::Mod>("mod", {"__mod__", "mod"}));
 
     defs.push_back(compareDef<k::CompareOp::Less>("lt", {"__lt__"}));
     defs.push_back(compareDef<k::CompareOp::LessEqual>("le", {"__le__"}));

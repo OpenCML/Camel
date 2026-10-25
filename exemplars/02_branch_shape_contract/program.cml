@@ -10,7 +10,7 @@ module branch_shape_contract
 import { Tensor, zeros, ones } from tensor
 import { get_env } from env
 
-func pick(flag: bool): Tensor {
+func pick(flag: bool): f32[..] {
     return if flag then zeros([2, 3]) else ones([3, 2])
 }
 

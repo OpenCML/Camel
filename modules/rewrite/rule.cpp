@@ -4,23 +4,29 @@
 #include "rule.h"
 
 #include "camel/core/mm.h"
+#include "camel/core/type/intern.h"
 #include "camel/utils/assert.h"
 
 #include <mutex>
 #include <ostream>
+#include <span>
 
 namespace camel::rewritemod {
 
 using namespace camel::core::type;
 
 RuleType *RuleType::get() {
+    // One object for the one `Rule` code, from the type table (see intern.h).
     static RuleType *instance = nullptr;
     static std::once_flag once;
     std::call_once(once, [] {
         const TypeCode code = registerOtherType("rewrite::Rule", TypeFlag::GC_Traced);
-        void *mem           = mm::permSpace().alloc(sizeof(RuleType), alignof(RuleType));
-        ASSERT(mem != nullptr, "Failed to allocate RuleType from permSpace");
-        instance = new (mem) RuleType(code);
+        instance            = static_cast<RuleType *>(TypeTable::instance().internOther(
+            code, std::span<const uintptr_t>(), [&]() -> Type * {
+                void *mem = mm::permSpace().alloc(sizeof(RuleType), alignof(RuleType));
+                ASSERT(mem != nullptr, "Failed to allocate RuleType from permSpace");
+                return new (mem) RuleType(code);
+            }));
     });
     return instance;
 }

@@ -1,0 +1,17 @@
+/**
+ * The row form `t[idx]` on the same rank-1 value whose length is stated, so that `std::gir` prints
+ * a graph small enough to read whole: the core's `:op/idx_take` answers it (a rank-1 array, not
+ * the module's `tensor:idx_take`, which answers another rank or an open rank). See
+ * slice_one_node.cml.
+ */
+module slice_node_take
+
+import { Tensor, reshape } from tensor
+
+func main(): int sync {
+    let x = reshape([1.0, 2.0, 3.0, 4.0] as f32[], [4])
+    let rows = [0, 2] as int[]
+    let d = x[rows]
+    println(d)
+    return 0
+}

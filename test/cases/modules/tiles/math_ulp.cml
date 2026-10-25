@@ -6,8 +6,8 @@ func exponential(x: Tensor<f32>): Tensor<f32> { return exp(x) }
 func logarithm(x: Tensor<f32>): Tensor<f32> { return log(x) }
 func main(): int sync {
     let folder = get_env('TILES_TEST_OUT')
-    let x = load_npy(folder + '/exp.npy') as Tensor<f32>
-    let y = load_npy(folder + '/log.npy') as Tensor<f32>
+    let x = load_npy::<f32>(folder + '/exp.npy') as Tensor<f32>
+    let y = load_npy::<f32>(folder + '/log.npy') as Tensor<f32>
     save_npy(download(run_preferred_resident<exponential>(x)), folder + '/exp_result.npy')
     save_npy(download(run_preferred_resident<logarithm>(y)), folder + '/log_result.npy')
     println(inspect<exponential>(x))

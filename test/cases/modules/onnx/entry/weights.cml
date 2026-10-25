@@ -11,11 +11,11 @@ type Linear = { w: Tensor<f32, [3, 4]>, b: Tensor<f32, [4]> }
 type Model = { fc: Linear }
 
 with <p: Linear>
-func linear(x: Tensor): Tensor {
+func linear(x: f32[..]): f32[..] {
     return x @ p.w + p.b
 }
 
 with <p: Model>
-func main(x: Tensor<f32, [?, 3]>): Tensor {
+func main(x: Tensor<f32, [?, 3]>): f32[..] {
     return x->linear<p.fc>->tanh
 }

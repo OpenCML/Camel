@@ -375,7 +375,12 @@ Loaded loadValue(const std::string &text, Type *declared, const std::string &wha
     if (const EntryArgumentLoader loader = findLoader(declared->code())) {
         Type *valueType    = declared;
         const slot_t value = loader(text, declared, valueType);
-        return rooted(value, valueType ? valueType : declared);
+        if (value != NullSlot) {
+            return rooted(value, valueType ? valueType : declared);
+        }
+        // NullSlot is the loader saying it does not take this type: a Tensor is a numeric array,
+        // and the loader that reads a .npy file does not take the other arrays, which are
+        // reported by the message below instead of by the loader's own.
     }
     refuse(
         std::format(
@@ -440,8 +445,11 @@ void saveValue(slot_t value, Type *valueType, const std::string &path, const std
         break;
     }
     if (const EntryResultSaver saver = findSaver(valueType->code())) {
-        (void)saver(value, valueType, path);
-        return;
+        // An empty path is the saver saying it does not write this type (see saveValue's
+        // counterpart of the loader's NullSlot above).
+        if (!saver(value, valueType, path).empty()) {
+            return;
+        }
     }
     throw std::runtime_error(
         std::format(

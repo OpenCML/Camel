@@ -15,15 +15,15 @@ import { with_grad } from autodiff
 import { export_model } from onnx
 import { get_env } from env
 
-type P = { w: Tensor, b: Tensor }
+type P = { w: f32[..], b: f32[..] }
 
 with <m: P>
-func loss(x: Tensor): float {
+func loss(x: f32[..]): float {
     let h = tanh(x @ transpose(m.w) + m.b)
     return sum(mean(h * h, 0))
 }
 
-func step(w: Tensor, b: Tensor, x: Tensor): (Tensor, Tensor, Tensor) {
+func step(w: f32[..], b: f32[..], x: f32[..]): (float[..], f32[..], f32[..]) {
     let m = { w: w, b: b }
     let vg = with_grad(loss)<m>(x)
     return (reshape([vg.0], [1]), vg.1.w, vg.1.b)
@@ -35,11 +35,11 @@ func main(): int sync {
         let w = reshape([0.5, -0.25, 0.75, 1.0, -0.5, 0.25, 0.125, 0.375, -0.625] as f32[], [3, 3])
         let b = reshape([0.1, -0.2, 0.3] as f32[], [3])
         let x = reshape([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9] as f32[], [3, 3])
-        export_model((w: Tensor, b: Tensor, x: Tensor): (Tensor, Tensor, Tensor) => step(w, b, x), (w, b, x), get_env('ONNX_OUT'), [0])
+        export_model((w: f32[..], b: f32[..], x: f32[..]): (float[..], f32[..], f32[..]) => step(w, b, x), (w, b, x), get_env('ONNX_OUT'), [0])
         println('exported')
         return 0
     } else sync {
-        let r = step(load_npy(get_env('W')), load_npy(get_env('B')), load_npy(get_env('X')))
+        let r = step(load_npy::<f32>(get_env('W')), load_npy::<f32>(get_env('B')), load_npy::<f32>(get_env('X')))
         save_npy(r.0, get_env('OUT0'))
         save_npy(r.1, get_env('OUT1'))
         save_npy(r.2, get_env('OUT2'))

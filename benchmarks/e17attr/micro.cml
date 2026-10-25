@@ -19,15 +19,15 @@ import { conv2d, sgd } from nn
 import { get_env } from env
 import { now } from time
 
-func lin(x: Tensor, w: Tensor): float {
+func lin(x: f32[..], w: f32[..]): float {
     return mean(x @ w)
 }
 
-func conv_s1_p2(x: Tensor, w: Tensor, b: Tensor): float {
+func conv_s1_p2(x: f32[..], w: f32[..], b: f32[..]): float {
     return mean(conv2d(x, w, b, 1, 2))
 }
 
-func conv_s1_p0(x: Tensor, w: Tensor, b: Tensor): float {
+func conv_s1_p0(x: f32[..], w: f32[..], b: f32[..]): float {
     return mean(conv2d(x, w, b, 1, 0))
 }
 
@@ -51,8 +51,8 @@ func main(): int sync {
     set_num_threads(int(get_env('CAMEL_BENCH_THREADS')))
     let dir = get_env('MICRO_DIR')
     let op = get_env('MICRO_OP')
-    let x = load_npy(dir + '/x.npy')
-    let w = load_npy(dir + '/w.npy')
+    let x = load_npy::<f32>(dir + '/x.npy')
+    let w = load_npy::<f32>(dir + '/w.npy')
     if op == 'lin' then sync {
         let step = (): float => { return with_grad(lin)(x, w).0 }
         let first = step()
@@ -66,7 +66,7 @@ func main(): int sync {
         let warmed = warm(step, int(get_env('CAMEL_BENCH_WARMUP')) - 1)
         return timed(step, int(get_env('CAMEL_BENCH_REPS')))
     } else sync {
-        let b = load_npy(dir + '/b.npy')
+        let b = load_npy::<f32>(dir + '/b.npy')
         let step = if op == 'conv_s1_p2' then (): float => { return with_grad(conv_s1_p2)(x, w, b).0 }
                    else (): float => { return with_grad(conv_s1_p0)(x, w, b).0 }
         let first = step()

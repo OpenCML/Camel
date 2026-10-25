@@ -1,0 +1,40 @@
+/**
+ * The gradient of a loop over an array of records that own tensors, checked against a finite
+ * difference of the value itself. `loop_grad_iterable_tensors` compares the array's gradient with
+ * the one of the same model written as a tuple; this case asks the other question — is the
+ * gradient that reaches the records' tensors the true derivative of the loss, or a dropped (zero)
+ * one that a tuple comparison could still leave looking right? `loss` is read twice: once
+ * differentiated (`grad`) and once as a plain value around s = 0.25, and the two must agree to
+ * 1e-6. A gradient dropped at the loop prints d=0.0 against a non-zero fd and fails.
+ *
+ *   h0 = x        h1 = h0 @ (I + d0 * s)        h2 = h1 @ (I + d1 * 2s)
+ *   f  = sum(h2)  df/ds = sum(h0 @ d0 @ (I + 2 d1 s)) + sum(h1 @ 2 d1)
+ */
+module loop_grad_record_tensor_fd
+
+import { Tensor, reshape, sum } from tensor
+import { abs } from math
+import { grad } from autodiff
+
+type Block = { w: Tensor<f32, [4, 4]> }
+
+with <s: float>
+func loss(): float {
+    let one = reshape([1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0] as f32[], [4, 4])
+    let d0 = reshape([0.3, 0.0, 0.0, 0.0, 0.0, 0.2, 0.0, 0.0, 0.0, 0.0, 0.4, 0.0, 0.0, 0.0, 0.0, 0.1] as f32[], [4, 4])
+    let d1 = reshape([0.1, 0.0, 0.0, 0.0, 0.0, 0.3, 0.0, 0.0, 0.0, 0.0, 0.2, 0.0, 0.0, 0.0, 0.0, 0.2] as f32[], [4, 4])
+    let blocks: Block[] = [{ w: one + d0 * f32(s) }, { w: one + d1 * f32(2.0 * s) }]
+    let x = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0] as f32[], [4, 4])
+    let h = loop h = x for b in blocks do h @ b.w
+    return sum(h)
+}
+
+func main(): int sync {
+    let d = grad(loss)<0.25>()
+    let hi = loss<0.2505>()
+    let lo = loss<0.2495>()
+    let fd = (hi - lo) / 1.0e-3
+    'loop_grad_record_tensor_fd d={:.6f} fd={:.6f} gap={:.9f}'
+        ->format<d, fd, abs(d - fd)>->println
+    return 0
+}

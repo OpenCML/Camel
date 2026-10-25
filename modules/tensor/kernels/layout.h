@@ -99,6 +99,14 @@ Array *takeGrad(
     const Array *input, std::span<const int64_t> indices, const Array *dy,
     mm::IAllocator &allocator);
 
+/// One row's gradient added back at the index it was taken from: `acc` with `row` added where
+/// `index` puts it, in the tensor's own shape and element type. This is `takeGrad` for a single
+/// index and an accumulator that is already a gradient, which is what a loop's rounds need: a
+/// round of `for row in t` takes the row `index` of the first dimension, so its gradient goes back
+/// to that row (design principles 5.4).
+Array *rowAddAt(
+    const Array *acc, int64_t index, const Array *row, mm::IAllocator &allocator);
+
 /// One-hot rows: a float32 tensor of shape [labels.size(), classes] with element
 /// [i, labels[i]] = 1 and every other element 0.
 Array *

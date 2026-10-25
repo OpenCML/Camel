@@ -1,0 +1,21 @@
+// The round of an open-rank array is an array, and the round of a value whose runtime rank is 1
+// is the array of no dimension holding the element (open_rank_round_rank1.cml). Such a value has
+// no first dimension to take elements from, so it is not a sequence: iterating it is refused
+// where the inner `for` reads it and runs no round (docs/technical/39_loops.md 2a; the language
+// reference's "a rank-0 array has no first dimension and is not a sequence",
+// docs/language/en/06_expressions.md).
+module open_rank_round_iterate_round
+
+import { Tensor } from tensor
+
+func rounds(x: Tensor<f32>): int {
+    return loop c = 0 for v in x do (
+        c + (loop d = 0 for u in v do d + 1)
+    )
+}
+
+func main(): int sync {
+    let x: f32[] = [1.0, 2.0, 3.0]
+    println(rounds(x))
+    return 0
+}

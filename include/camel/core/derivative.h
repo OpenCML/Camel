@@ -15,10 +15,29 @@
  *   - a tangent space per type code: the tangent type of a value, how two
  *     tangents add, and what the zero tangent is.
  *
- * Composite types (structs, tuples, arrays) have no entry: tangentTypeOf
- * derives theirs from their element types, dropping elements without a
- * tangent (so the gradient of a model struct is a struct of the same shape
- * holding its trainable members). The builtin scalar
+ * Composite types (structs, tuples, arrays) have no entry: the two questions
+ * below derive their answers from their element types. Which of the two a
+ * caller asks is decided by *who the answer is for*, not by the aggregate's
+ * shape (the author's ruling of 2026-10-25 on
+ * discrete-tuple-tangent-space-and-machinery-aggregates):
+ *
+ *   - `gradientTypeOf` answers for the user: the gradient type of the
+ *     parameter `P` a `grad`/`with_grad` call differentiates, which is what the
+ *     call hands back and what `grad of P` names. A number and a boolean are
+ *     their own gradient (the value zero), a `string` and a function have none,
+ *     and a struct or a tuple has one exactly when every member has, the
+ *     member's gradient standing in its place -- a discrete member (`i64[..]`,
+ *     an integer scalar) is kept at its own type and its gradient is the zero
+ *     of that shape and element type, so the parameter tree and the gradient
+ *     tree pair structurally. A struct and a tuple answer by the same rule.
+ *   - `machineryTangentTypeOf` answers for the machinery: the tangent of a
+ *     value the transform itself carries (a loop's state, a captured tuple, an
+ *     aggregate on the reverse tape). The user never sees those, and only the
+ *     members that need a gradient are kept, a discrete member and a function
+ *     member being dropped. That is an implementation choice, not a language
+ *     rule; see `keepsInTangent` in src/core/derivative.cpp.
+ *
+ * The builtin scalar
  * operators and types register here from the builtin module; tensor, nn and
  * math register their own when loaded.
  */
@@ -30,6 +49,7 @@
 #include "camel/core/type/base.h"
 #include "camel/runtime/graph.h"
 
+#include <deque>
 #include <optional>
 #include <shared_mutex>
 #include <span>
@@ -130,12 +150,28 @@ struct TangentSpace {
     /// Tangent type of a value of the primal type, or nullptr when that value has no tangent
     /// (e.g. an integer tensor). Null means the tangent type is the primal type itself.
     type::Type *(*tangentType)(type::Type *primal) = nullptr;
+    /// The values of the code this space answers for, or null when it answers for all of them.
+    /// Two kinds share the array code: a tensor is a numeric array, and an array of structs,
+    /// tuples or arrays is an array of values the core holds one slot each. Their tangents are
+    /// different things -- a tensor's is the tensor itself, summed and zeroed by `tensor:add`
+    /// and `tensor:zeros_like`, an array of values' is the array of its elements' tangents,
+    /// summed and zeroed by `:tangent/add_arr` and `:tangent/zeros_arr` -- so a module that
+    /// registers for a shared code declares which of its values it owns, and the space it
+    /// displaces stays in place for the rest (design principles 9.9, `ArrayType`).
+    bool (*owns)(const type::Type *type) = nullptr;
     /// Operator adding two tangents: (a, b) => a + b.
     std::string addUri;
     /// The zero tangent as a constant, for types that have one (scalars).
     std::optional<slot_t> zero;
     /// Otherwise, an operator producing the zero tangent of a primal value: (x) => 0.
     std::string zerosLikeUri;
+    /// Operator taking one element's tangent back into a tangent of the whole value:
+    /// (acc, index, element) => `acc` with `element` added where `index` puts it. This is the
+    /// reverse of taking a value apart along its outermost dimension, which is what a round of a
+    /// loop over an array is, and it has to agree with the kind's own reading of that dimension:
+    /// an array whose elements the core holds one slot each scatters a slot, a tensor scatters a
+    /// row of its own dtype (design principles 9.9).
+    std::string scatterUri;
 };
 
 class DerivativeRegistry {
@@ -147,9 +183,13 @@ class DerivativeRegistry {
     /// The rule of `uri`, or nullptr.
     VjpRule findRule(std::string_view uri) const;
 
-    /// Registers (or replaces) the tangent space of the values of type code `code`.
+    /// Registers a tangent space for the values of type code `code`. A space that owns all of
+    /// them (no `owns` predicate) replaces what is registered for the code; a space that owns
+    /// some of them is added in front of it, and answers only for the values it owns. A code has
+    /// one space that owns all of it and any number that own a subset, in registration order.
     void setTangentSpace(type::TypeCode code, TangentSpace space);
-    /// The tangent space of `type`'s code, or nullptr when values of that type have no tangent.
+    /// The tangent space of `type`: the most recently registered space of its code that owns it,
+    /// or nullptr when values of that type have no tangent.
     const TangentSpace *findTangentSpace(const type::Type *type) const;
 
     /// Registers a predicate for the values of type code `code` that says they are discrete (an
@@ -171,19 +211,36 @@ class DerivativeRegistry {
 
     mutable std::shared_mutex mutex_;
     std::unordered_map<std::string, VjpRule, StringHash, std::equal_to<>> rules_;
-    std::unordered_map<type::TypeCode, TangentSpace> tangents_;
+    std::unordered_map<type::TypeCode, std::deque<TangentSpace>> tangents_;
     std::unordered_map<type::TypeCode, bool (*)(const type::Type *)> discrete_;
 };
 
-/// Tangent type of values of type `primal`, or nullptr when they have no tangent.
-type::Type *tangentTypeOf(type::Type *primal);
+/// The gradient type of the parameter `P` a user differentiates: what `grad` and `with_grad` hand
+/// back, and what `grad of P` names. A number and a boolean are their own gradient, with the value
+/// zero; a `string` and a function have none; and a struct or a tuple has one exactly when every
+/// member has, the member's gradient standing in its place. The two aggregate shapes answer by the
+/// same rule, so a tuple model `with <m: (f32[..], int)>` gets `(f32[..], int)` back with the
+/// `int` at zero. Null when the parameter has no gradient at all.
+type::Type *gradientTypeOf(type::Type *parameter);
 
-/// True for structs and tuples, whose tangents are handled element by element.
+/// Tangent type of a value the *machinery* carries -- a loop's state, a captured tuple, an
+/// aggregate on the reverse tape -- or null when the value carries no gradient. Only the members
+/// that need a gradient are kept; a discrete member (whose gradient is zero whatever the program
+/// does) and a function member are dropped. The user never sees these aggregates: this is the
+/// transform's own choice, and `grad`/`with_grad` answer with `gradientTypeOf` instead.
+type::Type *machineryTangentTypeOf(type::Type *primal);
+
+/// True for structs and tuples, whose gradients and tangents are handled element by element.
 bool isAggregate(const type::Type *t);
 size_t aggregateSize(type::Type *aggregate);
 type::Type *aggregateElement(type::Type *aggregate, size_t index);
-/// Position of element `index` of an aggregate in its tangent, or nullopt when the element has no
-/// tangent.
-std::optional<size_t> tangentElementIndex(type::Type *aggregate, size_t index);
+/// Position of element `index` of an aggregate in the gradient `gradientTypeOf` names: the
+/// element's own place, or nullopt when the aggregate has no gradient. Every element of an
+/// aggregate that has a gradient has one, so this is the element's index (or nothing at all).
+std::optional<size_t> gradientElementIndex(type::Type *aggregate, size_t index);
+/// Position of element `index` of an aggregate in the tangent the machinery carries
+/// (`machineryTangentTypeOf`), or nullopt when that tangent does not keep the element (a discrete
+/// member, a function member, a member with no tangent).
+std::optional<size_t> machineryTangentElementIndex(type::Type *aggregate, size_t index);
 
 } // namespace camel::core

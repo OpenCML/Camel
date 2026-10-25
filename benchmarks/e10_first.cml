@@ -8,7 +8,7 @@ module e10_first
 import { grad } from autodiff
 import { Tensor, relu, mean, reshape } from tensor
 
-func fwd(w1: Tensor, b1: Tensor, w2: Tensor, b2: Tensor, x: Tensor): Tensor {
+func fwd(w1: float[..], b1: float[..], w2: float[..], b2: float[..], x: float[..]): float[..] {
     let h = relu(x @ w1 + b1)
     return h @ w2 + b2
 }

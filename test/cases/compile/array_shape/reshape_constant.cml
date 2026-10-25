@@ -1,0 +1,13 @@
+// A constant `reshape` folds to the array it names, and its extent is the shape it was folded to
+// (design principles 5.4): the folded constant is read for its own shape, with no pass through
+// the call that made it.
+module array_shape_reshape_constant
+
+import { reshape, shape, numel } from tensor
+
+func main(): int sync {
+    let b = reshape([1.0, 2.0, 3.0, 4.0] as f32[], [2, 2])
+    println(shape(b))
+    println(numel(b))
+    return 0
+}

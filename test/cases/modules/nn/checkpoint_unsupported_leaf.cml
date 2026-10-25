@@ -1,7 +1,13 @@
+// A checkpoint leaf whose type no checkpoint can hold. Before `Tensor` and the native array type
+// became one type (H17 item 2), a written array (`[1.0, 2.0]`) was such a leaf: it was refused.
+// It is a tensor now, and a checkpoint holds tensors (`checkpoint_tensor.cml`), so the refusal is
+// gone for a flat numeric array and the case has to name a leaf that is still unholdable: an
+// array of arrays, whose elements are themselves arrays.
 module checkpoint_unsupported_leaf
 import { save_tree } from ckpt
 
 func main(): int sync {
-    save_tree('out/never', { weights: [1.0, 2.0], step: 3 })
+    let rows: f64[][] = [[1.0, 2.0], [3.0, 4.0]]
+    save_tree('out/never', { weights: rows, step: 3 })
     return 0
 }

@@ -843,11 +843,11 @@ func greet(): int sync {
 }
 ```
 
-**2. `Tensor` with no import.** `Tensor` is the type name the `tensor` module exports, so it is
-imported; without that the name is unknown and the compiler answers
-`SemanticDiag::UnresolvedTypeReference`. **Wrong:**
+**2. `Tensor` with no import.** `Tensor` is the `tensor` module's name for the numeric array whose
+element type is not fixed, so it is imported; without that the name is unknown and the compiler
+answers `SemanticDiag::UnresolvedTypeReference`. **Wrong:**
 
-<!-- camel-snippet: counter-example: Tensor is the tensor module's type name and has to be imported -->
+<!-- camel-snippet: counter-example: Tensor is a name the tensor module exports and has to be imported -->
 
 ```camel
 func f(x: Tensor): int {
@@ -855,19 +855,20 @@ func f(x: Tensor): int {
 }
 ```
 
-**Write instead** — import the name and build values with the module's functions: a shaped array is
-a different type, so `f32[2, 3]` is six floats and the tensor operators do not take it.
+**Write instead** — import the name and build values with the module's functions: `Tensor<f32, [2, 3]>`
+and `f32[2, 3]` write one type, so the tensor operators take either spelling. A bare `Tensor`
+parameter is on its way out (**target**, `docs/design-principles.cn.md` §5.4).
 
 ```camel
 import tensor
 import { Tensor } from tensor
 
-func twice(x: Tensor): float {
+func twice(x: f32[..]): float {
     return tensor::sum(tensor::multiply(x, 2.0))
 }
 
 func main(): int sync {
-    println(twice(tensor::new([1.0, 2.0])))
+    println(twice(tensor::new([1.0, 2.0] as f32[])))
     return 0
 }
 ```

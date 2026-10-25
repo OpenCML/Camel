@@ -915,60 +915,60 @@ kind = "negative"
 case = "../../../cases/compile/native/tensor_arity.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "tensor_arity.cml:12:18", "argument types: <> (Tensor<float32, [?, ?]>, int)", "<tensor:numel>: (t: Tensor) => int"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "tensor_arity.cml:12:18", "argument types: <> (f32[?, ?], int)", "<tensor:numel>: (t: T[..]) => int"]
 
 [[tests]]
 name = "native.tensor_wrong_type"
-desc = "A `string` where the declaration of `to_bytes` says `Tensor`: refused at the call against the declared parameter name, and the computed operators of the same module are untouched."
+desc = "A `string` where the declaration of `to_bytes` takes a numeric array: refused at the call against the declared parameter name, and the computed operators of the same module are untouched."
 kind = "negative"
 case = "../../../cases/compile/native/tensor_type.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "tensor_type.cml:11:21", "argument types: <> (string)", "<tensor:to_bytes>: (t: Tensor) => Bytes"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "tensor_type.cml:11:21", "argument types: <> (string)", "<tensor:to_bytes>: (t: T[..]) => Bytes"]
 #  ---- The declaration of `show` ----
 #
 # `show` is the last zero-syntax name of the inventory: its result is fixed `void`, and its
-# umbrella parameter (`TensorLike`: a tensor or any array) is two declarations, one per accepted
-# type. The C++ module keeps the kernel, the traits, the semantics and the resources; it no
-# longer exports the group, so the declaration is the module's signature for the name.
-# `show([])` is the boundary: the empty array binds the type variable, so the call is still
-# accepted and still faults in the kernel, exactly as before the migration.
+# umbrella parameter (`TensorLike`: a tensor or any array) is one declaration over `A[..]`, whose
+# element type the argument binds. The C++ module keeps the kernel, the traits, the semantics and
+# the resources; it no longer exports the group, so the declaration is the module's signature for
+# the name. `show([])` is the boundary: the empty array's element type binds no type variable, so
+# the call has no candidate and is refused at the call.
 
 [[tests]]
 name = "native.tensor_show_declaration_import"
-desc = "`show`'s two declarations are what an importer sees: the tensor rule and the array rule both type-check and both reach the C++ operator, printing in the module's layout; the marker line proves the program ran to the end."
+desc = "`show`'s declaration is what an importer sees: the tensor call and the array call both type-check against the one rule `func show::<A>(t: A[..])` and both reach the C++ operator, printing the array form (the single print form of the 2026-10-24 ruling: the value's own shape in brackets, each element in the shortest text of its own type); the marker line proves the program ran to the end."
 kind = "behavior"
 case = "../../../cases/compile/native/tensor_show_declaration_import.cml"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_exact = "tensor([[      1.,       2.]], dtype=float32)\ntensor([      3.,       4.], dtype=float32)\n7\n"
+expect_stdout_exact = "[[1.0, 2.0]]\n[3.0, 4.0]\n7\n"
 
 [[tests]]
 name = "native.tensor_show_wrong_arity"
-desc = "Both declarations of `tensor:show` take one ordinary argument: a second one is refused at the call, and the two overloads the message lists are the declarations' — `stdlib/tensor.cml`, not the C++ module."
+desc = "The declaration of `tensor:show` takes one ordinary argument: a second one is refused at the call, and the overload the message lists is the declaration's — `stdlib/tensor.cml`, not the C++ module."
 kind = "negative"
 case = "../../../cases/compile/native/tensor_show_arity.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "tensor_show_arity.cml:12:5", "argument types: <> (Tensor<float32, [?, ?]>, int)", "<tensor:show>: (t: Tensor) => void", "<tensor:show>: (t: A[]) => void"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "tensor_show_arity.cml:12:5", "argument types: <> (f32[?, ?], int)", "<tensor:show>: (t: A[..]) => void"]
 
 [[tests]]
 name = "native.tensor_show_wrong_type"
-desc = "A `string` where the declarations of `tensor:show` accept a tensor or an array: refused at the call against the declared types, and the listed overloads are the declaration's two rules."
+desc = "A `string` where the declaration of `tensor:show` accepts an array of any element type: refused at the call against the declared type, and the listed overload is the declaration's one rule."
 kind = "negative"
 case = "../../../cases/compile/native/tensor_show_type.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "tensor_show_type.cml:11:5", "argument types: <> (string)", "<tensor:show>: (t: Tensor) => void", "<tensor:show>: (t: A[]) => void"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "tensor_show_type.cml:11:5", "argument types: <> (string)", "<tensor:show>: (t: A[..]) => void"]
 
 [[tests]]
 name = "native.tensor_show_empty_array"
-desc = "The umbrella boundary: `show([])` binds the second rule's type variable to the empty array's element type, so the call is accepted as it was under the C++ `TensorLike` resolver, and the kernel faults with `Unsupported Tensor element type.` — the declaration narrows nothing (H175, docs/stdlib-conventions.cn.md 第 8 节)."
+desc = "The umbrella boundary: the empty array literal's element type is `void`, which binds the second rule's type variable to nothing, so no candidate applies and `show([])` is refused when the program is compiled, with the one candidate the declaration has. The C++ `TensorLike` resolver accepted the call and left it to the kernel to fault (docs/stdlib-conventions.cn.md 第 8 节)."
 kind = "negative"
 case = "../../../cases/compile/native/tensor_show_empty_array.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["RuntimeDiag::RuntimeError", "tensor_show_empty_array.cml:12:5", "show: Unsupported Tensor element type."]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "tensor_show_empty_array.cml:15:5", "argument types: <> (void[])", "<tensor:show>: (t: A[..]) => void"]
 #  ---- The declarations of `pyplot` ----
 #
 # `pyplot:plot` has a fixed signature: four element types and two arities. The C++ module never

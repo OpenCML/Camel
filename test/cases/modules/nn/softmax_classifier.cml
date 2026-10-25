@@ -10,8 +10,8 @@ import { Tensor, reshape, zeros } from tensor
 import { sgd, softmax_cross_entropy } from nn
 
 type Linear = {
-    weight: Tensor,
-    bias: Tensor
+    weight: f32[..],
+    bias: f32[..]
 }
 
 type Classifier = {
@@ -19,21 +19,21 @@ type Classifier = {
 }
 
 with <layer: Linear>
-func linear(x: Tensor): Tensor {
+func linear(x: f32[..]): f32[..] {
     return (x @ layer.weight) + layer.bias
 }
 
 with <model: Classifier>
-func logits(x: Tensor): Tensor {
+func logits(x: f32[..]): f32[..] {
     return x->linear<model.head>
 }
 
-func classifier_loss(logits_value: Tensor, target: Tensor): float {
+func classifier_loss(logits_value: f32[..], target: f32[..]): float {
     return softmax_cross_entropy(logits_value, target)
 }
 
 with <model: Classifier>
-func model_loss(x: Tensor, target: Tensor): float {
+func model_loss(x: f32[..], target: f32[..]): float {
     let pred = x->logits<model>
     return classifier_loss(pred, target)
 }
@@ -47,7 +47,7 @@ func init(): Classifier {
     }
 }
 
-func train(model: Classifier, x: Tensor, target: Tensor, steps: int): Classifier {
+func train(model: Classifier, x: f32[..], target: f32[..], steps: int): Classifier {
     return if steps == 0 then model else train(sgd(model, grad(model_loss)<model>(x, target), 0.5), x, target, steps - 1)
 }
 

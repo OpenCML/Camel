@@ -17,32 +17,32 @@ module ort_duplicate_outputs
 import { Tensor, reshape, sum, tanh } from tensor
 import { export_model } from onnx
 
-type Run = { state: Tensor, steps: int }
+type Run = { state: f32[..], steps: int }
 
-func twice(h: Tensor): (Tensor, Tensor) {
+func twice(h: f32[..]): (f32[..], f32[..]) {
     return (tanh(h), tanh(h))
 }
 
-func repeated(h: Tensor, k: int): (Run, Run) {
+func repeated(h: f32[..], k: int): (Run, Run) {
     let r: Run = { state: tanh(h), steps: k }
     return (r, r)
 }
 
-func constants(h: Tensor): (float, float) {
+func constants(h: f32[..]): (float, float) {
     return (1.5, 1.5)
 }
 
-func computed(h: Tensor): (float, float) {
+func computed(h: f32[..]): (float, float) {
     let s = sum(h)
     return (s, s)
 }
 
 func main(): int sync {
     let ex = reshape([1.0, -2.0, 0.5, 1.5] as f32[], [2, 2])
-    export_model((x: Tensor): (Tensor, Tensor) => twice(x), ex, 'twice.onnx')
-    export_model((x: Tensor): (Run, Run) => repeated(x, 2), ex, 'repeated.onnx')
-    export_model((x: Tensor): (float, float) => constants(x), ex, 'constants.onnx')
-    export_model((x: Tensor): (float, float) => computed(x), ex, 'computed.onnx')
+    export_model((x: f32[..]): (f32[..], f32[..]) => twice(x), ex, 'twice.onnx')
+    export_model((x: f32[..]): (Run, Run) => repeated(x, 2), ex, 'repeated.onnx')
+    export_model((x: f32[..]): (float, float) => constants(x), ex, 'constants.onnx')
+    export_model((x: f32[..]): (float, float) => computed(x), ex, 'computed.onnx')
     println('exported')
     return 0
 }

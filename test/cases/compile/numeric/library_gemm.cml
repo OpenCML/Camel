@@ -10,18 +10,19 @@
 module library_gemm
 
 import { Tensor, reshape, sum } from tensor
+import { is_numeric } from types
 
-func plain(x: Tensor, w: Tensor): Tensor {
+func plain::<T>(x: T[..], w: T[..]): T[..] when is_numeric::<T>() {
     return x @ w
 }
 
 #[reassociate]
-func reordered(x: Tensor, w: Tensor): Tensor {
+func reordered::<T>(x: T[..], w: T[..]): T[..] when is_numeric::<T>() {
     return x @ w
 }
 
 #[reassociate, change_precision]
-func relaxed(x: Tensor, w: Tensor): Tensor {
+func relaxed::<T>(x: T[..], w: T[..]): T[..] when is_numeric::<T>() {
     return x @ w
 }
 

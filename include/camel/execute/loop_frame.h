@@ -15,6 +15,7 @@
 #pragma once
 
 #include "camel/core/context/frame.h"
+#include "camel/core/error/runtime.h"
 #include "camel/core/rtdata/aggregate.h"
 #include "camel/execute/loop_driver.h"
 #include "camel/profile/profile.h"
@@ -36,6 +37,15 @@ struct LoopFrameHost {
 
     slot_t initialState(size_t j) { return frame.get<slot_t>(loop.slots[j]); }
     slot_t stateValue() { return frame.get<slot_t>(loop.stateSlot); }
+    /// The declared type of the round's element port: the body's first port when the loop iterates
+    /// (ExecLoop::slots), which the builder gave the type of the round (ArrayType's
+    /// firstDimensionElement of the iterable, or an interval's integer). A round hands over a value
+    /// of this type: what a value is at run time follows the type it is declared with
+    /// (loopRoundValue).
+    const camel::core::type::Type *elementType() {
+        return frame.typeAt<camel::core::type::Type>(
+            loop.slots[loop.stateCount + (loop.hasCond ? loop.stateCount : 0)]);
+    }
     void setStateValue(slot_t value) {
         // The next round reads this value: it is a value, not a view of the element of this
         // round.
@@ -144,6 +154,9 @@ inline bool loopTest(camel::core::context::Frame &frame, const camel::runtime::E
     const int64_t round = fromSlot<int64_t>(frame.get<slot_t>(loop.roundSlot));
     bool stop           = false;
     slot_t element      = NullSlot;
+    // The body's ports: the element first (when the loop iterates), then the k of the state.
+    const size_t k     = loop.stateCount;
+    const size_t first = k + (loop.hasCond ? k : 0);
     if (loop.hasCond) {
         stop = !fromSlot<bool>(frame.get<slot_t>(loop.condResultSlot));
     }
@@ -165,11 +178,24 @@ inline bool loopTest(camel::core::context::Frame &frame, const camel::runtime::E
                 element = toSlot(from + static_cast<int64_t>(round));
             }
         } else {
-            const ::Array *array = frame.get<::Array *>(loop.iterableSlot);
+            ::Array *array = frame.get<::Array *>(loop.iterableSlot);
+            // The sequence is an array, or it is not. The slot's declared type says `Array` for a
+            // `Tensor` whose rank is not fixed, and such a value may turn out to have no
+            // dimension: a value with no dimension is the element itself (the rank-zero ruling,
+            // docs/handover/reviews/questions-2026-10-23.md), stored as the scalar it is rather
+            // than as an array, and the round an array of open rank hands over is the array of no
+            // dimension holding the element (loopRoundValue). Neither has a first dimension to
+            // take elements from, so neither is a sequence: refused here, where the loop reads its
+            // sequence, rather than taken as a loop of no round at all (requireFirstDimension).
+            requireFirstDimension(array, loop.origin);
             if (static_cast<size_t>(round) >= array->size()) {
                 stop = true;
             } else {
-                element = array->getSlot(static_cast<size_t>(round));
+                // The round's value: what a round hands over follows the type its port declares,
+                // and that port is the element port (loopRoundValue).
+                element = loopRoundValue(
+                    array, static_cast<size_t>(round),
+                    frame.typeAt<camel::core::type::Type>(loop.slots[first]));
             }
         }
     }
@@ -177,8 +203,6 @@ inline bool loopTest(camel::core::context::Frame &frame, const camel::runtime::E
         frame.set(loop.roundSlot, toSlot(int64_t{-1}));
         return true;
     }
-    const size_t k     = loop.stateCount;
-    const size_t first = k + (loop.hasCond ? k : 0);
     if (loop.iterates) {
         frame.set(loop.slots[first], element);
     }

@@ -40,7 +40,8 @@ slot_t comparison(ArgsView &norm, const std::function<bool(float, float)> &op) {
     return toSlot(Bool(op(operand<Half>(norm, 0), operand<Half>(norm, 1))));
 }
 
-/// `acc op= x`, in the same one arithmetic path: the cell keeps its element type.
+/// `acc op= x`, in the same one arithmetic path: the cell keeps its element type. What the write
+/// gives is the version of the variable: the cell itself, holding what was written.
 template <typename Half>
 slot_t assign(ArgsView &norm, const std::function<float(float, float)> &op) {
     Tuple *cell = variableOf(norm);
@@ -48,7 +49,7 @@ slot_t assign(ArgsView &norm, const std::function<float(float, float)> &op) {
     const float rhs = operand<Half>(norm, 1);
     const slot_t result = halfFromFloat<Half>(op(lhs, rhs));
     cell->set<slot_t>(0, result);
-    return result;
+    return toSlot(cell);
 }
 
 template <typename Half> float divide(float lhs, float rhs) {

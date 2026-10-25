@@ -1341,7 +1341,7 @@ expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.stdout
-const at = text.indexOf('{"schema":1')
+const at = text.indexOf('{"schema":2')
 assert(at >= 0, `no region table in: ${text}`)
 let depth = 0, end = -1
 for (let i = at; i < text.length; i++) {
@@ -1427,7 +1427,7 @@ verify_script = """
 ({ input, assert }) => {
 const NL = String.fromCharCode(10)
 const text = input.normalized.stdout
-const at = text.indexOf('{"schema":1')
+const at = text.indexOf('{"schema":2')
 assert(at >= 0, `no region table in: ${text}`)
 let depth = 0, end = -1
 for (let i = at; i < text.length; i++) {

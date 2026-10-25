@@ -21,22 +21,22 @@ Type *resultType(TypeCode dtype, const InferContext &ctx) {
             if (extent < 0)
                 throw ShapeError("binary tensor shape cannot contain negative extents");
         }
-        shape = *values;
+        shape = knownShape(*values);
     } else if (auto values = ctx.partialInts(1)) {
         shape = StaticShape{};
         for (const auto &value : *values) {
             if (value && *value < 0)
                 throw ShapeError("binary tensor shape cannot contain negative extents");
-            shape->push_back(value.value_or(kUnknownDim));
+            shape->push_back(value);
         }
     }
-    return TensorType::get(dtype, shape);
+    return tensorOf(dtype, shape);
 }
 
 template <TypeCode DType> slot_t fromBytesKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("from_bytes", [&] {
         const auto shape = shapeArg(norm, 1);
-        return wrap(tensorFromLittleEndian(
+        return wrap(norm.resultType(), tensorFromLittleEndian(
             norm.get<core::rtdata::BytesObject *>(0)->view(),
             DType,
             shape,

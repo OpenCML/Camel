@@ -66,7 +66,7 @@ def main(out=print):
  */
 module resnetbn
 
-import { Tensor, relu, mean, flatten } from tensor
+import { relu, mean, flatten } from tensor
 import { grad, with_grad } from autodiff
 import { conv2d, batch_norm_train, sgd, save_params } from nn
 import { get_env } from env
@@ -78,25 +78,25 @@ import { weight, bench_input, run_benchmark, run_training, warm_count, step_coun
     p("type Resnet = {")
     fields = []
     for f in CONV_FIELDS:
-        fields.append(f"    {f}: Tensor")
+        fields.append(f"    {f}: f32[..]")
         if f.endswith("_b") and f != "fc_b":
             bn = f[:-2]
-            fields[-1] += f", {bn}_bn_g: Tensor, {bn}_bn_b: Tensor"
+            fields[-1] += f", {bn}_bn_g: f32[..], {bn}_bn_b: f32[..]"
     p(",\n".join(fields))
     p("}\n")
 
     p("type BnStats = {")
-    p(",\n".join(f"    {bn}_bn_rm: Tensor, {bn}_bn_rv: Tensor" for bn in BN_NAMES))
+    p(",\n".join(f"    {bn}_bn_rm: f32[..], {bn}_bn_rv: f32[..]" for bn in BN_NAMES))
     p("}\n")
 
     # block helpers: each returns the activation followed by the new running stats of its BNs.
-    p("""func block(x: Tensor, c1w: Tensor, c1b: Tensor, g1: Tensor, b1: Tensor, rm1: Tensor, rv1: Tensor, c2w: Tensor, c2b: Tensor, g2: Tensor, b2: Tensor, rm2: Tensor, rv2: Tensor): (Tensor, Tensor, Tensor, Tensor, Tensor) {
+    p("""func block(x: f32[..], c1w: f32[..], c1b: f32[..], g1: f32[..], b1: f32[..], rm1: f32[..], rv1: f32[..], c2w: f32[..], c2b: f32[..], g2: f32[..], b2: f32[..], rm2: f32[..], rv2: f32[..]): (f32[..], f32[..], f32[..], f32[..], f32[..]) {
     let r1 = batch_norm_train(conv2d(x, c1w, c1b, 1, 1), g1, b1, rm1, rv1)
     let r2 = batch_norm_train(conv2d(relu(r1.0), c2w, c2b, 1, 1), g2, b2, rm2, rv2)
     return (relu(r2.0 + x), r1.1, r1.2, r2.1, r2.2)
 }
 
-func block_ds(x: Tensor, c1w: Tensor, c1b: Tensor, g1: Tensor, b1: Tensor, rm1: Tensor, rv1: Tensor, c2w: Tensor, c2b: Tensor, g2: Tensor, b2: Tensor, rm2: Tensor, rv2: Tensor, dsw: Tensor, dsb: Tensor, gd: Tensor, bd: Tensor, rmd: Tensor, rvd: Tensor): (Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor) {
+func block_ds(x: f32[..], c1w: f32[..], c1b: f32[..], g1: f32[..], b1: f32[..], rm1: f32[..], rv1: f32[..], c2w: f32[..], c2b: f32[..], g2: f32[..], b2: f32[..], rm2: f32[..], rv2: f32[..], dsw: f32[..], dsb: f32[..], gd: f32[..], bd: f32[..], rmd: f32[..], rvd: f32[..]): (f32[..], f32[..], f32[..], f32[..], f32[..], f32[..], f32[..]) {
     let r1 = batch_norm_train(conv2d(x, c1w, c1b, 2, 1), g1, b1, rm1, rv1)
     let r2 = batch_norm_train(conv2d(relu(r1.0), c2w, c2b, 1, 1), g2, b2, rm2, rv2)
     let rd = batch_norm_train(conv2d(x, dsw, dsb, 2, 0), gd, bd, rmd, rvd)
@@ -105,7 +105,7 @@ func block_ds(x: Tensor, c1w: Tensor, c1b: Tensor, g1: Tensor, b1: Tensor, rm1: 
 """)
 
     p("""with <m: Resnet>
-func forward(x: Tensor, s: BnStats): (Tensor, BnStats) {""")
+func forward(x: f32[..], s: BnStats): (f32[..], BnStats) {""")
     p("    let r_stem = batch_norm_train(conv2d(x, m.stem_w, m.stem_b, 1, 1), m.stem_bn_g, m.stem_bn_b, s.stem_bn_rm, s.stem_bn_rv)")
     prev = "relu(r_stem.0)"
     for nm, _, ds in BLOCKS:
@@ -138,12 +138,12 @@ func forward(x: Tensor, s: BnStats): (Tensor, BnStats) {""")
 // like every other activation — the timing protocol starts every step from the same
 // weights and statistics, as in E6).
 with <m: Resnet>
-func loss(x: Tensor, s: BnStats): float {
+func loss(x: f32[..], s: BnStats): float {
     let r = forward<m>(x, s)
     return mean(r.0 * r.0)
 }
 
-func train_step(m: Resnet, s: BnStats, x: Tensor): float sync {
+func train_step(m: Resnet, s: BnStats, x: f32[..]): float sync {
     let vg = with_grad(loss)<m>(x, s)
     let next = sgd(m, vg.1, 0.01)
     return vg.0
@@ -151,7 +151,7 @@ func train_step(m: Resnet, s: BnStats, x: Tensor): float sync {
 
 /// The training step as a function of the parameters, the input and the running
 /// statistics: the loss, the updated parameters and the updated statistics.
-func step(m: Resnet, x: Tensor, s: BnStats): (float, Resnet, BnStats) {
+func step(m: Resnet, x: f32[..], s: BnStats): (float, Resnet, BnStats) {
     let vg = with_grad(loss)<m>(x, s)
     let r = forward<m>(x, s)
     return (vg.0, sgd(m, vg.1, 0.01), r.1)
@@ -164,7 +164,7 @@ func export_step(m: Resnet, s: BnStats, path: string): int sync {
     return 0
 }
 
-func dump_grads(m: Resnet, s: BnStats, x: Tensor, dir: string): int sync {
+func dump_grads(m: Resnet, s: BnStats, x: f32[..], dir: string): int sync {
     save_params(grad(loss)<m>(x, s), dir)
     let r = forward<m>(x, s)
     save_params(r.1, dir)
@@ -176,7 +176,7 @@ func dump_grads(m: Resnet, s: BnStats, x: Tensor, dir: string): int sync {
     # parameters and the running statistics the step before it produced.
     p("""/// The stateful training loop: step `i` starts from the parameters and the running statistics
 /// step `i - 1` produced. Returns both after step `total - 1`.
-func train_loop(m: Resnet, s: BnStats, x: Tensor, i: int, warm: int, total: int, t0: float): (Resnet, BnStats) {
+func train_loop(m: Resnet, s: BnStats, x: f32[..], i: int, warm: int, total: int, t0: float): (Resnet, BnStats) {
     return if i >= total then (m, s) else sync {
         let start = now()
         let r = step(m, x, s)
@@ -194,7 +194,7 @@ func save_trained(m: Resnet, s: BnStats, dir: string): int sync {
 
 /// Runs the stateful loop and reports the loss at the final parameters and statistics; saves
 /// them when CAMEL_BENCH_PARAMS names a directory.
-func train_stateful(m: Resnet, s: BnStats, x: Tensor): int sync {
+func train_stateful(m: Resnet, s: BnStats, x: f32[..]): int sync {
     let trained = train_loop(m, s, x, 0, warm_count(), step_count(), now())
     let reported = log_final(loss<trained.0>(x, trained.1))
     let dir = get_env('CAMEL_BENCH_PARAMS')
@@ -217,10 +217,10 @@ func train_stateful(m: Resnet, s: BnStats, x: Tensor): int sync {
     p("    }")
     p("""    let workload = get_env('CAMEL_BENCH_WORKLOAD')
     return if workload == 'train_export' then export_step(m, s, get_env('CAMEL_BENCH_EXPORT')) else if workload == 'train' then run_training(
-        (x: Tensor): float => { return train_step(m, s, x) },
-        (x: Tensor, dir: string): int => { return dump_grads(m, s, x, dir) },
-        (x: Tensor): int => { return train_stateful(m, s, x) }
-    ) else run_benchmark((x: Tensor): Tensor => { return forward<m>(x, s).0 })
+(x: f32[..]): float => { return train_step(m, s, x) },
+        (x: f32[..], dir: string): int => { return dump_grads(m, s, x, dir) },
+        (x: f32[..]): int => { return train_stateful(m, s, x) }
+    ) else run_benchmark((x: f32[..]): f32[..] => { return forward<m>(x, s).0 })
 }""")
 
 

@@ -23,13 +23,13 @@ import { export_model } from onnx
 import { weight } from camel_bench
 
 type LoraMlp = {
-    fc1_w: Tensor, fc1_b: Tensor, fc1_lora_a: Tensor, fc1_lora_b: Tensor,
-    fc2_w: Tensor, fc2_b: Tensor, fc2_lora_a: Tensor, fc2_lora_b: Tensor,
-    fc3_w: Tensor, fc3_b: Tensor, fc3_lora_a: Tensor, fc3_lora_b: Tensor
+    fc1_w: f32[..], fc1_b: f32[..], fc1_lora_a: f32[..], fc1_lora_b: f32[..],
+    fc2_w: f32[..], fc2_b: f32[..], fc2_lora_a: f32[..], fc2_lora_b: f32[..],
+    fc3_w: f32[..], fc3_b: f32[..], fc3_lora_a: f32[..], fc3_lora_b: f32[..]
 }
 
 with <m: LoraMlp>
-func forward(x: Tensor): Tensor {
+func forward(x: f32[..]): f32[..] {
     let scale = 2.0
     let h1 = relu(x @ stop_gradient(m.fc1_w) + ((x @ m.fc1_lora_b) @ m.fc1_lora_a) * scale + stop_gradient(m.fc1_b))
     let h2 = relu(h1 @ stop_gradient(m.fc2_w) + ((h1 @ m.fc2_lora_b) @ m.fc2_lora_a) * scale + stop_gradient(m.fc2_b))
@@ -39,7 +39,7 @@ func forward(x: Tensor): Tensor {
 /// Cross-entropy against one-hot targets, composed from primitive tensor ops
 /// (same as lora_mlp.cml's loss_ce).
 with <m: LoraMlp>
-func loss_ce(x: Tensor, target: Tensor): float {
+func loss_ce(x: f32[..], target: f32[..]): float {
     let y = forward<m>(x)
     return mean(sum(target * neg(log_softmax(y, 1)), 1))
 }
@@ -50,7 +50,7 @@ func ce_lr(): float sync {
     return if v == '' then 0.05 else float(v)
 }
 
-func step_ce(m: LoraMlp, x: Tensor, target: Tensor, lr: float): (float, LoraMlp) {
+func step_ce(m: LoraMlp, x: f32[..], target: f32[..], lr: float): (float, LoraMlp) {
     let vg = with_grad(loss_ce)<m>(x, target)
     return (vg.0, sgd(m, vg.1, lr))
 }
@@ -59,8 +59,8 @@ func loop_ce(m: LoraMlp, i: int, steps: int, nb: int, lr: float): LoraMlp {
     return if i >= steps then m else sync {
         let bi = '{}'->format<i % nb>
         let dir = get_env('CAMEL_FT_BATCHES')
-        let x = load_npy(dir + '/batch_' + bi + '.npy')
-        let t = load_npy(dir + '/target_' + bi + '.npy')
+        let x = load_npy::<f32>(dir + '/batch_' + bi + '.npy')
+        let t = load_npy::<f32>(dir + '/target_' + bi + '.npy')
         let vg = step_ce(m, x, t, lr)
         'CAMEL_BENCH step={} loss={}'->format<i, vg.0>->println
         return loop_ce(vg.1, i + 1, steps, nb, lr)
@@ -80,11 +80,11 @@ func load(): LoraMlp {
 
 func do_export_ce(m: LoraMlp): int sync {
     let dir = get_env('CAMEL_FT_BATCHES')
-    let x = load_npy(dir + '/batch_0.npy')
-    let t = load_npy(dir + '/target_0.npy')
+    let x = load_npy::<f32>(dir + '/batch_0.npy')
+    let t = load_npy::<f32>(dir + '/target_0.npy')
     let lr = ce_lr()
     export_model(
-        (mm: LoraMlp, xx: Tensor, tt: Tensor): (float, LoraMlp) => step_ce(mm, xx, tt, lr),
+        (mm: LoraMlp, xx: f32[..], tt: f32[..]): (float, LoraMlp) => step_ce(mm, xx, tt, lr),
         (m, x, t),
         get_env('CAMEL_BENCH_EXPORT')
     )

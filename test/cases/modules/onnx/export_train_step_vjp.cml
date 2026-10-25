@@ -14,24 +14,24 @@ import { get_env } from env
 
 // A hard sign with a straight-through gradient scaled by 0.5: the rule, not the body, is what
 // the gradient uses.
-func hard_sign_rule(x: Tensor, dy: Tensor): Tensor {
+func hard_sign_rule(x: f32[..], dy: f32[..]): f32[..] {
     return dy * 0.5
 }
 
 #vjp(hard_sign_rule)
-func hard_sign(x: Tensor): Tensor {
+func hard_sign(x: f32[..]): f32[..] {
     return where(x > 0.0, x * 0.0 + 1.0, x * 0.0 - 1.0)
 }
 
-type P = { w: Tensor, b: Tensor }
+type P = { w: f32[..], b: f32[..] }
 
 with <m: P>
-func loss(x: Tensor): float {
+func loss(x: f32[..]): float {
     let h = hard_sign(x @ m.w + m.b)
     return sum(tanh(h + x @ m.w) * h)
 }
 
-func step(m: P, x: Tensor): (float, P) {
+func step(m: P, x: f32[..]): (float, P) {
     let vg = with_grad(loss)<m>(x)
     return (vg.0, sgd(m, vg.1, 0.1))
 }

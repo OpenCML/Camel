@@ -1,11 +1,11 @@
 module shape_as_runtime_mismatch
 import { Tensor, ones, sum, load_npy } from tensor
-func f(b: Tensor<[4]>): float {
+func f(b: Tensor<f32, [4]>): float {
     return sum(b)
 }
 func main(): int sync {
     println('ran')
-    let t = load_npy('test/cases/modules/tensor/shape_types/x3.npy')
-    println(f(t as Tensor<[4]>))
+    let t = load_npy::<f32>('test/cases/modules/tensor/shape_types/x3.npy')
+    println(f(t as Tensor<f32, [4]>))
     return 0
 }

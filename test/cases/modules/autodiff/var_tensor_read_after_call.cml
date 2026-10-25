@@ -6,15 +6,15 @@ module var_tensor_read_after_call
 import { Tensor, reshape, sum } from tensor
 import { with_grad } from autodiff
 
-type P = { p0: Tensor }
+type P = { p0: f64[] }
 
-func push(v: Tensor, var acc: Tensor): int sync {
+func push(v: f64[], var acc: f64[]): int sync {
     acc = v
     return 0
 }
 
 with <m: P>
-func loss(x: Tensor, var acc: Tensor): float sync {
+func loss(x: f64[], var acc: f64[]): float sync {
     push(m.p0 * x, acc)
     let b = acc * 1.0
     return sum(m.p0 * x) + sum(b)

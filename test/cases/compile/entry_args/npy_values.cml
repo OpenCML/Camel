@@ -1,0 +1,11 @@
+// A parameter bound from a .npy file reads the file's own shape: what the loader produces is a
+// static value of the entry graph, and the clone that puts it there keeps every dimension
+// (src/runtime/draft_session.cpp, cloneStaticSlot).
+module entry_npy_values
+
+import { Tensor, numel, shape } from tensor
+
+func main(x: Tensor<f32, [2, 3]>, w: Tensor<f32, [3, 4]>): int sync {
+    println(shape(x), numel(x), shape(w), numel(w))
+    return 0
+}

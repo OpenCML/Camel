@@ -7,18 +7,18 @@ module struct_covariance
 
 import { Tensor, reshape, sum } from tensor
 
-type Layer = { w: Tensor, b: Tensor }
+type Layer = { w: f64[..], b: f64[..] }
 
 with <l: Layer>
-func apply(x: Tensor): Tensor {
+func apply(x: f64[..]): f64[..] {
     return x @ l.w + l.b
 }
 
-func total(ts: Tensor[]): float {
+func total(ts: f64[..][]): float {
     return sum(ts[0]) + sum(ts[1])
 }
 
-func first(pair: (Tensor, Tensor)): Tensor {
+func first(pair: (f64[..], f64[..])): f64[..] {
     return pair.0
 }
 

@@ -302,9 +302,9 @@ const runtime::Program *outlineRegions(
             const uint32_t where = whereOf(region);
             for (auto value : region.inputs) {
                 if (std::find(
-                        analysis.transfers.uploads.begin(),
-                        analysis.transfers.uploads.end(),
-                        value) == analysis.transfers.uploads.end())
+                        analysis.residency.uploads.begin(),
+                        analysis.residency.uploads.end(),
+                        value) == analysis.residency.uploads.end())
                     continue;
                 const auto found = uploadControl.find(value);
                 if (found == uploadControl.end()) {
@@ -318,7 +318,7 @@ const runtime::Program *outlineRegions(
             }
         }
         if (device) {
-            for (auto value : analysis.transfers.uploads) {
+            for (auto value : analysis.residency.uploads) {
                 const auto input  = static_cast<rt::gc_node_ref_t>(value);
                 const auto found  = uploadControl.find(value);
                 draft.setInsertRegion(found == uploadControl.end() ? 0 : found->second);
@@ -385,8 +385,14 @@ const runtime::Program *outlineRegions(
                 extracted.parameters.begin(),
                 extracted.parameters.end());
             if (device) {
-                for (auto &arg : args)
-                    arg = resident.at(arg);
+                // A parameter the conclusion wrote nothing for is already where the segment runs:
+                // it keeps the source value, and the segment reads it in place (a call between two
+                // graphs of one class moves nothing, `tiles/internal/residency.h`).
+                for (auto &arg : args) {
+                    const auto found = resident.find(arg);
+                    if (found != resident.end())
+                        arg = found->second;
+                }
                 if (region.outputs.size() == 1)
                     type = residentType(type);
                 else {
@@ -490,9 +496,9 @@ const runtime::Program *outlineRegions(
                 if (device) {
                     resident.emplace(old, replacement);
                     if (std::find(
-                            analysis.transfers.downloads.begin(),
-                            analysis.transfers.downloads.end(),
-                            old) != analysis.transfers.downloads.end()) {
+                            analysis.residency.downloads.begin(),
+                            analysis.residency.downloads.end(),
+                            old) != analysis.residency.downloads.end()) {
                         auto *hostType      = graph->node(old)->dataType();
                         const auto download = transferAggregate(
                             draft,
