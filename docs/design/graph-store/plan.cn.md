@@ -16,7 +16,7 @@
 
 ### 1.1 方法与探针
 
-用预编译的 `D:\Projects\Camel\out\latest\bin\camel.exe`（`CAMEL_HOME` 指向该目录）对下列探针跑 `std::jgir`、`std::gir`、`std::gir_regions`、`std::opt`、`std::cpp`，并读 `include/camel/runtime/graph.h`、`draft.h`、`src/compile/gir/builder*.cpp`、`src/passes/trans/json/gir.cpp` 与 `src/passes/trans/cpp/*`。探针在 `D:\Temp\cmlprobe`，不随仓库提交；关键源码抄在附录 A。任务里提到的 `#resource`/`#gpu`：本树没有 `#resource`；`@gpu` 是 GPU 用例里的装饰器（`test/cases/modules/tiles/gpu_decorator.cml`），装饰器是编译期变换（6.1），变换后的图没有它的痕迹，本计划按 `#tag { }` 块与节点标签的同一机制处理，GPU 分支本身不在本次范围。
+用预编译的 `D:\Projects\Camel\out\latest\bin\camel.exe`（`CAMEL_HOME` 指向该目录）对下列探针跑 `std::jgir`、`std::gir`、`std::gir_regions`、`std::opt`、`std::cpp`，并读 `include/camel/runtime/graph.h`、`draft.h`、`src/compile/gir/builder*.cpp`、`src/passes/trans/json/gir.cpp` 与 `src/passes/trans/cpp/*`。探针在 `D:\Temp\cmlprobe`，不随仓库提交；关键源码抄在附录 A。任务里提到的 `#resource`/`#gpu`：本树没有 `#resource`；放置只写 `#gpu` 标签（`@gpu` 装饰器与显式运行算子已删除），标签是声明或节点上的编译期事实（6.2），本计划按标签的同一机制处理，GPU 分支本身不在本次范围。
 
 | 探针 | 覆盖 | dump 里看到的事实 |
 |---|---|---|
