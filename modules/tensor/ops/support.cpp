@@ -14,6 +14,7 @@
 #include "camel/core/mm.h"
 #include "camel/core/rtdata/string.h"
 #include "camel/core/type/composite/array.h"
+#include "camel/utils/assert.h"
 
 namespace camel::tensor::ops {
 
@@ -187,13 +188,11 @@ type::Type *tensorOf(const TensorFacts &facts) {
                 extent < 0 ? ExtentForm::unknown() : ExtentForm::constant(extent));
         }
     }
-    if (!facts.dtype) {
-        // Every array a value can have states its element type (design principles 5.1): an
-        // operator whose result element type follows from none of its inputs has no type to
-        // answer with, and the inference must say so rather than build an array whose element
-        // type nobody fixes.
-        throw std::invalid_argument("Tensor element type is not stated");
-    }
+    // The element type of a value is always in its type (design principles 5.1, plan section 5.1a):
+    // the deletion step made every spelling write it, so an operator whose result element type
+    // follows from none of its inputs has no type to answer with and the inference cannot get here
+    // with one unstated.
+    ASSERT(facts.dtype.has_value(), "a tensor's element type is always in its type");
     if (!isSupportedTensorScalar(*facts.dtype)) {
         throw std::invalid_argument("Unsupported Tensor element type");
     }
