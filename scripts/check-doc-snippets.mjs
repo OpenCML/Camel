@@ -30,12 +30,23 @@
 //
 //   <!-- camel-snippet: fragment: continues the function above -->
 //   <!-- camel-snippet: counter-example: the two returns do not leave the function -->
-//   <!-- camel-snippet: graph-dump: the text block is std::rgir's DOT, not stdout -->
+//   <!-- camel-snippet: graph-dump: the text block is one excerpt of std::rgir's DOT -->
 //   <!-- camel-snippet: compile-only: the text block is a grammar, not output -->
 //
 // `fragment` and `counter-example` are not compiled. A `counter-example` must also say so on
 // the page: the fence or the paragraph before it has to contain `counter-example`, `wrong`,
 // `反例`, `错误`, `does not compile` or `is an error`. A marker without a reason is an error.
+//
+// A `graph-dump` fence is a text block like any other: the graph pass prints the dump on stdout,
+// and the block is compared with it (a dump is the assertion that the reader's program is drawn
+// this way, so it must be able to fail). Two normalisations make that comparison a comparison of
+// the graph and not of the machine it was drawn on: the attributes that carry where the file was
+// and where it was built (`origin`, `span`, `srcfile`; see normalizeDump) lose their values, so
+// the checker's temporary file and the page's own example file compare equal, and the *presence*
+// of each attribute is still compared. A block that does not open the dump (`digraph ...`) is one
+// excerpt of it and has to appear in the dump as a contiguous run of lines; a whole dump is
+// compared line by line. A `compile-only` fence is the marker for a text block that is not this
+// run's output at all, and is still compiled without comparing anything.
 //
 // A page is written against the target language, so a snippet that the tree cannot compile yet is
 // not marked on the page: it is registered in PENDING below, keyed by the page and the snippet's
@@ -116,7 +127,9 @@ const EXCERPTS = [
 //   * an entry without a reason, or with a key that is not 16 hex digits, is refused before
 //     anything is compiled;
 //   * an entry whose snippet now compiles -- and prints what its `text` block says, when it has
-//     one -- must be deleted, because the exemption outlived the gap;
+//     one, a graph dump included -- must be deleted, because the exemption outlived the gap. One
+//     key can stand for several occurrences of the same text, and the entry is stale only when
+//     every one of them has caught up: the reason is below `pendingBehind`;
 //   * an entry that matches no snippet of the scanned scope is refused, so an edit to the page (or
 //     to the fence grouping) cannot orphan an exemption quietly, and an entry cannot be added for
 //     a snippet that does not exist. This rule is applied under `--default-roots` only: a run over
@@ -134,15 +147,21 @@ const PENDING = [
         file: 'docs/tutorial/17_teaching_a_law.cn.md',
         key: 'fb4bb02afc482ac0',
         reason:
-            'chapter 17: the `fact` compiles now; the text block is what `check` prints for a law ' +
-            'whose premise is a fact\'s conclusion (rewrite design 8.1), which is not implemented',
+            'chapter 17: the `fact` compiles now; what `check` prints for a law whose premise is a ' +
+            'fact\'s conclusion (rewrite design 8.1) is not implemented, and `std::opt` does not use a ' +
+            'module\'s own law yet, so this text\'s three graph dumps still draw the law\'s left side ' +
+            '(`-1` and `:op/mul_l`) where the page shows the law\'s `0 - x`, at ids the tree does not ' +
+            'number the same way',
     },
     {
         file: 'docs/tutorial/17_teaching_a_law.en.md',
         key: 'fb4bb02afc482ac0',
         reason:
-            'chapter 17: the `fact` compiles now; the text block is what `check` prints for a law ' +
-            'whose premise is a fact\'s conclusion (rewrite design 8.1), which is not implemented',
+            'chapter 17: the `fact` compiles now; what `check` prints for a law whose premise is a ' +
+            'fact\'s conclusion (rewrite design 8.1) is not implemented, and `std::opt` does not use a ' +
+            'module\'s own law yet, so this text\'s three graph dumps still draw the law\'s left side ' +
+            '(`-1` and `:op/mul_l`) where the page shows the law\'s `0 - x`, at ids the tree does not ' +
+            'number the same way',
     },
     {
         file: 'docs/tutorial/17_teaching_a_law.cn.md',
@@ -303,7 +322,8 @@ function fileNameOf(fence, fallback) {
 // or when it is the entry (`func main`) of the file just named.
 //
 // `fragment` and `counter-example` fences are not snippets. `graph-dump` and `compile-only`
-// fences are: they are compiled, but the `text` block after them is not compared with stdout.
+// fences are: a dump is compiled and its `text` block is compared with the dump (see the header),
+// and a compile-only fence is compiled with its block left alone.
 function buildSnippets(lines, fences) {
     const snippets = []
     for (let i = 0; i < fences.length; i++) {
@@ -461,8 +481,17 @@ function parseCommand(fence) {
     return null
 }
 
-// The transliteration passes print the graph instead of running the program: their `text`
-// block is a dump, not stdout, so it is compiled but not compared.
+// A graph pass prints the graph on stdout instead of running the program, so a `text` block after
+// one of them is the dump, and is compared with it (see the header). The other passes here produce
+// something that is not the program's stdout either -- `std::cpp` prints generated source,
+// `onnx::export` writes a file -- and a block after one of those is still compiled and left alone:
+// only a dump has an output on the page that the check can compare.
+const PRINTS_A_GRAPH = /^(std::(?:rgir|gir|jgir|agir|argir)|.*::(?:rgir|gir|jgir))/
+
+function printsAGraph(passes) {
+    return passes.some((pass) => PRINTS_A_GRAPH.test(pass))
+}
+
 function isGraphDump(passes) {
     return passes.some((pass) =>
         /^(std::(?:rgir|gir|jgir|cpp|agir|argir)|onnx::export|.*::(?:rgir|gir|jgir))/.test(pass),
@@ -566,6 +595,75 @@ function compareText(actual, expected) {
     return 'output differs'
 }
 
+// ---- Graph dumps ---------------------------------------------------------------------------
+//
+// A dump is compared line by line after the attributes that belong to the machine, not to the
+// graph, lose their values. All three come from one place in the emitter
+// (GraphVizDumpPass::debugOriginAttr), and there are exactly three:
+//
+//   * `origin=<n>` -- an offset of the file the compiler read. The checker writes the fence into a
+//     temporary file and the page's dump was drawn from the tutorial's own example file, where the
+//     same program sits at other offsets (this is also why the value moves with any edit above it);
+//   * `span="l:c-l:c"` -- that offset resolved against the source text, so it moves for the same
+//     reason;
+//   * `srcfile="..."` -- the path of that file.
+//
+// The placeholder keeps the attribute: a dump that gained or lost one of them is a different dump
+// and stays a difference. Everything else in the block is compared verbatim, node and edge
+// identity included, because that is the graph.
+const DUMP_LOCATION_ATTRS = [
+    [/\borigin=\d+/g, 'origin=<origin>'],
+    [/\bspan="\d+:\d+-\d+:\d+"/g, 'span="<span>"'],
+    [/\bsrcfile="(?:[^"\\]|\\.)*"/g, 'srcfile="<srcfile>"'],
+]
+
+function normalizeDump(text) {
+    let out = text
+        .replace(/\r\n/g, '\n')
+        .split('\n')
+        .map((line) => line.replace(/\s+$/, ''))
+        .join('\n')
+        .replace(/\n+$/, '')
+    for (const [pattern, replacement] of DUMP_LOCATION_ATTRS) out = out.replace(pattern, replacement)
+    return out
+}
+
+// A block that opens the dump is the whole dump; anything else is one excerpt of it, and the
+// ruling for an excerpt is that its lines appear in the output one after another.
+function opensTheDump(pageLines) {
+    const first = pageLines.find((line) => line.trim() !== '') || ''
+    return /^\s*digraph\b/.test(first)
+}
+
+function compareDump(actualText, pageText) {
+    const actual = normalizeDump(actualText).split('\n')
+    const page = normalizeDump(pageText).split('\n')
+    if (opensTheDump(page)) {
+        for (let i = 0; i < Math.max(actual.length, page.length); i++) {
+            if (actual[i] !== page[i]) {
+                return `line ${i + 1}: page says ${JSON.stringify(page[i] ?? '<end>')}, the dump printed ${JSON.stringify(actual[i] ?? '<end>')}`
+            }
+        }
+        return null
+    }
+    // An excerpt: the whole run of its lines must occur in the dump, in order and adjacent.
+    for (let start = 0; start + page.length <= actual.length; start++) {
+        if (page.every((line, offset) => actual[start + offset] === line)) return null
+    }
+    const missing = page.findIndex((line) => !actual.includes(line))
+    if (missing >= 0) {
+        return (
+            `the excerpt is not in the dump: its line ${missing + 1} ${JSON.stringify(page[missing])} ` +
+            `occurs nowhere in the ${actual.length} line(s) of the dump`
+        )
+    }
+    return (
+        `the excerpt's lines are all in the dump but are not one run of them: its first line ` +
+        `${JSON.stringify(page[0])} is at dump line ${actual.indexOf(page[0]) + 1}, and line 2 ` +
+        `${JSON.stringify(page[1])} is at dump line ${actual.indexOf(page[1]) + 1}`
+    )
+}
+
 // ---- One snippet ---------------------------------------------------------------------------
 
 function writeSnippet(snippet, tempDir) {
@@ -629,15 +727,27 @@ async function checkSnippet(documentAbs, snippet, lines, fences) {
             return { status: 'failed', problems, ms: compiled.ms }
         }
 
-        if (compileOnly || !after || isGraphDump(passes)) {
-            return { status: 'compiled', ms: compiled.ms, graphDump: Boolean(after) && !compileOnly && isGraphDump(passes) }
+        // A dump is compared like any other text block: the graph pass writes the dump to stdout, so
+        // it takes the run path below. A marker decides: `graph-dump` says the block is a dump and is
+        // compared, `compile-only` says it is not this run's output and is left alone. Without a
+        // marker a fence that names a graph pass is a dump, since that is what such a fence prints;
+        // and a dump without a block has nothing to compare.
+        const dump = Boolean(after) && (marked ? marked.kind === 'graph-dump' : printsAGraph(passes))
+
+        if (!dump && (compileOnly || !after || isGraphDump(passes))) {
+            return { status: 'compiled', ms: compiled.ms, dump }
         }
 
         if (!written.entry.entry) {
             return {
                 status: 'failed',
-                problems: ['declares an output but has no func main to print it'],
+                problems: [
+                    dump
+                        ? 'a graph dump is compared with the program that prints it, so the fence needs func main (with a generated one the dump would show a function the page never wrote)'
+                        : 'declares an output but has no func main to print it',
+                ],
                 ms: compiled.ms,
+                dump,
             }
         }
 
@@ -678,28 +788,34 @@ async function checkSnippet(documentAbs, snippet, lines, fences) {
                 problems.push(`expected exit code ${want}, got ${ran.code}: ${firstDiagnostic(ran)}`)
             }
             const pageText = after.output.body.join('\n')
-            const hasLocation = /-->\s/.test(pageText)
-            let difference
-            if (errorDiagnostic && hasLocation) {
-                // The text block is the whole run: the lines printed before the fault, then the
-                // located diagnostic. Compare all of it (the path is normalised).
-                difference = compareText(ran.stdout, pageText)
-            } else if (errorDiagnostic) {
-                // A truncated diagnostic: the page keeps the lines printed before it and names
-                // the diagnostic, but leaves out the location and the help.
-                difference = compareText(beforeDiagnostic(ran.stdout), expected.expected)
+            if (dump) {
+                const difference = compareDump(ran.stdout, pageText)
+                if (difference) problems.push(`the graph differs from the text block: ${difference}`)
             } else {
-                // A warning goes to standard error; stdout is the part after the block.
-                difference = compareText(ran.stdout, expected.expected)
-            }
-            if (difference) problems.push(`output differs from the text block: ${difference}`)
-            for (const entry of expected.diagnostics) {
-                if (!new RegExp(`${entry.severity}\\[${entry.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\]`).test(`${ran.stdout}\n${ran.stderr}`)) {
-                    problems.push(`the text block promises ${entry.severity}[${entry.name}], which was not reported`)
+                const hasLocation = /-->\s/.test(pageText)
+                let difference
+                if (errorDiagnostic && hasLocation) {
+                    // The text block is the whole run: the lines printed before the fault, then the
+                    // located diagnostic. Compare all of it (the path is normalised).
+                    difference = compareText(ran.stdout, pageText)
+                } else if (errorDiagnostic) {
+                    // A truncated diagnostic: the page keeps the lines printed before it and names
+                    // the diagnostic, but leaves out the location and the help.
+                    difference = compareText(beforeDiagnostic(ran.stdout), expected.expected)
+                } else {
+                    // A warning goes to standard error; stdout is the part after the block.
+                    difference = compareText(ran.stdout, expected.expected)
+                }
+                if (difference) problems.push(`output differs from the text block: ${difference}`)
+                for (const entry of expected.diagnostics) {
+                    if (!new RegExp(`${entry.severity}\\[${entry.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\]`).test(`${ran.stdout}\n${ran.stderr}`)) {
+                        problems.push(`the text block promises ${entry.severity}[${entry.name}], which was not reported`)
+                    }
                 }
             }
         }
-        return { status: problems.length > 0 ? 'failed' : 'ran', problems, ms: compiled.ms + ran.ms }
+        if (problems.length > 0) return { status: 'failed', problems, ms: compiled.ms + ran.ms, dump }
+        return { status: dump ? 'dumped' : 'ran', ms: compiled.ms + ran.ms, dump }
     } finally {
         fs.rmSync(tempDir, { recursive: true, force: true })
     }
@@ -838,14 +954,35 @@ await Promise.all(Array.from({ length: Math.min(JOBS, checkedSnippets.length || 
 
 let compiled = 0
 let ran = 0
-let graphDumps = 0
+let dumped = 0
+// A dump that fails is exempted by its pending entry like any other snippet ahead of the tree, so
+// it never reaches the counters below; without this one the summary would report only the dumps
+// that match and the reader could not tell how many were compared.
+let dumpsAhead = 0
 const pendingUsed = new Map()
 const exempted = []
-// A page may show one program at several points (chapter 17 shows the same file four times), so one
-// key can stand for several snippets and they need not be at the same stage: a page whose first
-// stage prints its text block and whose later stages dump a graph has one snippet behind the tree
-// and three ahead of nothing. An entry speaks for the gap as long as one snippet of its key is
-// still behind it, and is stale only when every snippet of that key has caught up.
+// A page may show one program at several points (chapter 17 shows the same program text at four
+// points, each with a text block), so one key can stand for several snippets and they need not be at
+// the same stage. An entry speaks for the text its key is made of: while one snippet of that key is
+// still behind the tree the text is ahead of the tree, and the entry is what exempts that snippet.
+// The criterion is "every snippet of the key has caught up", not "one of them has":
+//
+//   * "a snippet of the key that compiles makes the entry stale" asks for the entry to be deleted
+//     while another snippet of the same text is still failing. The occurrences that "compile" need
+//     not have been asserted at all: chapter 17's three graph dumps were compiled with their text
+//     blocks left alone, so they counted as caught up and asked for the entry to be deleted, while
+//     the run's own text block was still failing. Deleting it turns that failure red with nothing
+//     changed in the tree, and the only way out would have been to weaken the page -- which is why
+//     the dumps are compared now (see the header), and why the criterion is the whole key's;
+//   * it cannot keep an entry past its gap: every occurrence is re-checked on every run, so the
+//     moment the last lagging one catches up the entry is reported stale. No occurrence can catch up
+//     unseen -- each is compiled, and each is run and compared when it has a text block.
+//
+// What the criterion does not do is aim an entry at one occurrence: the entry exempts a failure of
+// any snippet of its key, including one whose reason was written for another occurrence. That
+// exemption prints the first problem under the reason (see the exempted lines of the output), so it
+// is visible rather than silent; a page whose occurrences are that far apart wants two entries with
+// one key each, not a wider rule.
 const pendingBehind = new Set()
 const pendingCaughtUp = []
 for (const entry of results) {
@@ -861,6 +998,7 @@ for (const entry of results) {
             // make the gate red. Once it compiles (and prints its text block, if it has one) the
             // entry must go: the list is a record of the gap, and the gap closes.
             pendingBehind.add(pending)
+            if (result.dump) dumpsAhead++
             exempted.push({ entry, pending, line, problems: result.problems })
         } else {
             pendingCaughtUp.push({ entry, pending, line })
@@ -871,12 +1009,12 @@ for (const entry of results) {
         for (const problem of result.problems) problems.push(`${entry.rel}:${line}: ${problem}`)
     } else if (result.status === 'ran') {
         ran++
+    } else if (result.status === 'dumped') {
+        dumped++
     } else if (result.status === 'compiled') {
         compiled++
-        if (result.graphDump) graphDumps++
     }
 }
-compiled += ran
 
 // An entry that matched no snippet is refused under the default roots: the page changed, the fence
 // grouping changed, or the entry was written for a snippet that is not there. Each case needs a
@@ -933,8 +1071,9 @@ if (problems.length > 0) {
 }
 console.log(
     `no stale snippet in ${scanned.length} reader-facing document(s): ` +
-        `${checkedSnippets.length} snippet(s), ${compiled} compiled, ${ran} ran their text block, ` +
-        `${graphDumps} graph dump(s) compiled only, ${marked.length} marked incomplete, ` +
+        `${checkedSnippets.length} snippet(s), ${compiled} compiled only, ${ran} ran their text block, ` +
+        `${dumped} graph dump(s) compared and matching, ${dumpsAhead} compared and exempted as ahead of the tree, ` +
+        `${marked.length} marked incomplete, ` +
         `${exempted.length} pending snippet(s) exempted (${PENDING.length} of at most ${PENDING_MAX} entries in the list), ` +
         `${excerpts.length} excerpt(s) on design/technical pages ` +
         `(${skippedFiles.length} generated/dated reference(s) allowlisted; ` +
