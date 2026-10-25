@@ -1,0 +1,1 @@
+h590 第五轮：判定 progen 生成物**不可加 --check**——归档 47 个程序的版本记录停在 1/2/3 而无版本 15 个，今天 generate.py VERSION=6，同 seed 重画是另一个程序（程序体差 229 行），检查上线即 47/47 全红；并删掉 counts.py:15 的 NOTES.md 死指向（git log --all 两种查法皆空，从未存在）。
