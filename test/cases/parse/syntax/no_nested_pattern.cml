@@ -1,0 +1,21 @@
+/**
+ * A field position of an enum pattern takes a name or `_`, so a nested pattern is not in the
+ * language: `case Shape::Circle(0.0)` is an ordinary syntax error (line 14, column 28) at what
+ * stands where a field name belongs. It was a `ConstructNotSupported` while the parser read the
+ * nesting so that the compiler could say so.
+ */
+type Shape = enum {
+    Circle(float),
+    Empty,
+}
+
+func f(s: Shape): float {
+    return match s {
+        case Shape::Circle(0.0) => 1.0
+        case Shape::Empty => 0.0
+    }
+}
+
+func main(): void sync {
+    println(f(Shape::Empty))
+}

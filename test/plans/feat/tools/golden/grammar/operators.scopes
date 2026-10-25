@@ -1,6 +1,6 @@
->// Operators and punctuation: every literal token of antlr/OpenCML.g4.
+>// Operators and punctuation: the tokens of the parser grammar (include/camel/parse/syntax/token_kinds.def).
 #^^ comment.line.double-slash.camel punctuation.definition.comment.camel
-#  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.double-slash.camel
+#  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.double-slash.camel
 >module operators
 #^^^^^^ keyword.control.import.module.camel
 #       ^^^^^^^^^ entity.name.namespace.module.camel
@@ -355,31 +355,39 @@
 #                         ^ meta.block.camel meta.brackets.camel punctuation.separator.colon.camel
 #                          ^ meta.block.camel meta.brackets.camel constant.numeric.integer.decimal.camel
 #                           ^ meta.block.camel meta.brackets.camel punctuation.section.brackets.end.camel
->    let all = [...xs, 1]
+>    let all = [1, 2, 3]
 #    ^^^ meta.block.camel meta.declaration.let.camel storage.type.let.camel
 #        ^^^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
 #            ^ meta.block.camel keyword.operator.assignment.camel
 #              ^ meta.block.camel meta.brackets.camel punctuation.section.brackets.begin.camel
-#               ^^^ meta.block.camel meta.brackets.camel keyword.operator.spread.camel
-#                    ^ meta.block.camel meta.brackets.camel punctuation.separator.comma.camel
-#                      ^ meta.block.camel meta.brackets.camel constant.numeric.integer.decimal.camel
-#                       ^ meta.block.camel meta.brackets.camel punctuation.section.brackets.end.camel
->    let merged = { ...base, x: 1 }
+#               ^ meta.block.camel meta.brackets.camel constant.numeric.integer.decimal.camel
+#                ^ meta.block.camel meta.brackets.camel punctuation.separator.comma.camel
+#                  ^ meta.block.camel meta.brackets.camel constant.numeric.integer.decimal.camel
+#                   ^ meta.block.camel meta.brackets.camel punctuation.separator.comma.camel
+#                     ^ meta.block.camel meta.brackets.camel constant.numeric.integer.decimal.camel
+#                      ^ meta.block.camel meta.brackets.camel punctuation.section.brackets.end.camel
+>    let merged = { x: 1, y: 2 }
 #    ^^^ meta.block.camel meta.declaration.let.camel storage.type.let.camel
 #        ^^^^^^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
 #               ^ meta.block.camel keyword.operator.assignment.camel
 #                 ^ meta.block.camel meta.block.camel punctuation.section.block.begin.camel
-#                   ^^^ meta.block.camel meta.block.camel keyword.operator.spread.camel
-#                          ^ meta.block.camel meta.block.camel punctuation.separator.comma.camel
-#                            ^ meta.block.camel meta.block.camel variable.other.property.camel
-#                             ^ meta.block.camel meta.block.camel punctuation.separator.colon.camel
-#                               ^ meta.block.camel meta.block.camel constant.numeric.integer.decimal.camel
-#                                 ^ meta.block.camel meta.block.camel punctuation.section.block.end.camel
->    spread(...xs)
-#    ^^^^^^ meta.block.camel entity.name.function.call.camel
-#          ^ meta.block.camel meta.parens.camel punctuation.section.parens.begin.camel
-#           ^^^ meta.block.camel meta.parens.camel keyword.operator.spread.camel
-#                ^ meta.block.camel meta.parens.camel punctuation.section.parens.end.camel
+#                   ^ meta.block.camel meta.block.camel variable.other.property.camel
+#                    ^ meta.block.camel meta.block.camel punctuation.separator.colon.camel
+#                      ^ meta.block.camel meta.block.camel constant.numeric.integer.decimal.camel
+#                       ^ meta.block.camel meta.block.camel punctuation.separator.comma.camel
+#                         ^ meta.block.camel meta.block.camel variable.other.property.camel
+#                          ^ meta.block.camel meta.block.camel punctuation.separator.colon.camel
+#                            ^ meta.block.camel meta.block.camel constant.numeric.integer.decimal.camel
+#                              ^ meta.block.camel meta.block.camel punctuation.section.block.end.camel
+>    let tail = concat(all, ..xs)
+#    ^^^ meta.block.camel meta.declaration.let.camel storage.type.let.camel
+#        ^^^^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
+#             ^ meta.block.camel keyword.operator.assignment.camel
+#               ^^^^^^ meta.block.camel entity.name.function.call.camel
+#                     ^ meta.block.camel meta.parens.camel punctuation.section.parens.begin.camel
+#                         ^ meta.block.camel meta.parens.camel punctuation.separator.comma.camel
+#                           ^^ meta.block.camel meta.parens.camel keyword.operator.compose.camel
+#                               ^ meta.block.camel meta.parens.camel punctuation.section.parens.end.camel
 >}
 #^ meta.block.camel punctuation.section.block.end.camel
 >

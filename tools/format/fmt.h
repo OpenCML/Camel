@@ -711,8 +711,6 @@ class Formatter {
 
     std::any visitModifiers(cst::Modifiers context);
 
-    std::any visitSpreadValue(cst::SpreadValue context);
-
     std::any visitRestValue(cst::RestValue context);
 
     std::any visitKeyTypePair(cst::KeyTypePair context);

@@ -2040,23 +2040,22 @@ None: context: the construct is not built here, so the program has to be restruc
 The grammar accepts this construct, but the compiler does not implement it. Remove it; nothing in the language replaces it yet.
 ```
 
-**Example** (`test/cases/compile/enum/err_nested_pattern.cml`, run as `camel -E short test/cases/compile/enum/err_nested_pattern.cml`)
+**Example** (`test/cases/compile/not_supported/pattern_identifier.cml`, run as `camel test/cases/compile/not_supported/pattern_identifier.cml`)
 
 ```camel
-type Shape = enum {
-    Circle(float),
-    Empty,
-}
+module pattern_identifier
 
-func f(s: Shape): float {
-    return match s {
-        case Shape::Circle(0.0) => 1.0
-        case Shape::Empty => 0.0
+func f(n: int): int {
+    return match n {
+        case other => 1
+        case _ => 0
     }
 }
 
-func main(): void sync {
-    println(f(Shape::Empty))
+func main(): int sync {
+    println('never printed')
+    println(f(1))
+    return 0
 }
 ```
 
@@ -2227,19 +2226,19 @@ The feature '{0}' is not supported yet.
 Check the documentation for supported features.
 ```
 
-**Example** (`test/cases/compile/not_supported/struct_unpacking.cml`, run as `camel test/cases/compile/not_supported/struct_unpacking.cml`)
+**Example** (`test/cases/compile/stream/yield_lowering.cml`, run as `camel test/cases/compile/stream/yield_lowering.cml`)
 
 ```camel
-module struct_unpacking
-
-func helper(): int {
-    let p = { x: 1, y: 2 }
-    let {x, y} = p
-    return x + y
+func count(n: int): int.. {
+    loop i = 0 while i < n do {
+        yield i
+        i + 1
+    }
 }
 
 func main(): int sync {
-    println('never printed')
+    let s = count(3)
+    println(1)
     return 0
 }
 ```

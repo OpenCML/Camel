@@ -11,13 +11,16 @@
 //                  of the "operators", "punctuation" or "brackets" rules;
 //   built-in types the "builtin-types" rule lists exactly the names that
 //                  src/compile/gct/builder.cpp puts in the root type scope.
+//   contextual     the "contextual-keywords" rule names exactly the contextual keywords of
+//                  scripts/context-keywords.mjs (the table of the language reference, 02, 2.4.1),
+//                  each with a scope, and none of them is a reserved keyword.
 //
 // No dependencies: the patterns of those rules are plain enough to be read as JavaScript
 // regular expressions. Run from anywhere: node editors/vscode/scripts/check-grammar.mjs
 
 import fs from 'node:fs'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const EXT_ROOT = path.dirname(HERE)
@@ -26,6 +29,10 @@ const REPO_ROOT = path.resolve(EXT_ROOT, '..', '..')
 const TOKENS = path.join(REPO_ROOT, 'include', 'camel', 'parse', 'syntax', 'token_kinds.def')
 const TYPE_SCOPE = path.join(REPO_ROOT, 'src', 'compile', 'gct', 'builder.cpp')
 const GRAMMAR = path.join(EXT_ROOT, 'syntaxes', 'camel.tmLanguage.json')
+// The one table of the contextual keywords, shared with scripts/check-grammar.mjs and with the
+// language reference (02, 2.4.1). Imported rather than copied: the words of this grammar, of the
+// generator's quoted literals and of the page are then the same list.
+const CONTEXT_TABLE = path.join(REPO_ROOT, 'scripts', 'context-keywords.mjs')
 
 const errors = []
 const notes = []
@@ -192,6 +199,65 @@ if (sourceTypes.length === 0) {
 }
 
 // ---------------------------------------------------------------------------------------------
+// Contextual keywords
+// ---------------------------------------------------------------------------------------------
+
+const contextWords = []
+const contextScopes = new Set()
+const contextRule = repository['contextual-keywords']
+if (!fs.existsSync(CONTEXT_TABLE)) {
+    errors.push(`${rel(CONTEXT_TABLE)} does not exist: it is the one table of the contextual keywords`)
+} else {
+    const table = await import(pathToFileURL(CONTEXT_TABLE).href)
+    const entries = table.CONTEXT_KEYWORDS || []
+    if (entries.length === 0) {
+        errors.push(`${rel(CONTEXT_TABLE)} has no CONTEXT_KEYWORDS; the check below would compare two empty sets`)
+    }
+    if (!contextRule) {
+        errors.push('the grammar has no "contextual-keywords" rule')
+    } else {
+        for (const pattern of contextRule.patterns || []) {
+            // Each pattern names its words in its comment, in the fixed form
+            // "contextual keyword(s): 'a', 'b' — where they are keywords".
+            const named = /^contextual keywords?: ((?:'[a-z_]+'(?:, )?)+)/.exec(pattern.comment || '')
+            if (!named) {
+                errors.push(
+                    `"contextual-keywords" pattern ${JSON.stringify(pattern.match || pattern)} does not name its words in a comment of the form "contextual keywords: 'a', 'b" —`
+                )
+                continue
+            }
+            const words = [...named[1].matchAll(/'([a-z_]+)'/g)].map((m) => m[1])
+            const names = [pattern.name, ...Object.values(pattern.captures || {}).map((c) => c.name)].filter(Boolean)
+            if (names.length === 0) {
+                errors.push(`"contextual-keywords" pattern ${JSON.stringify(pattern.match)} has no scope name`)
+            }
+            names.forEach((name) => contextScopes.add(name))
+            for (const word of words) {
+                if (!pattern.match.includes(word)) {
+                    errors.push(
+                        `"contextual-keywords" pattern names '${word}' in its comment, and the pattern does not match it: ${JSON.stringify(pattern.match)}`
+                    )
+                }
+                if (lexerKeywords.includes(word)) {
+                    errors.push(`the "contextual-keywords" rule names '${word}', which is a reserved keyword token of ${rel(TOKENS)}`)
+                }
+                contextWords.push(word)
+            }
+        }
+    }
+    for (const entry of entries) {
+        if (!contextWords.includes(entry.word)) {
+            errors.push(`contextual keyword '${entry.word}' of ${rel(CONTEXT_TABLE)} is matched by no pattern of the grammar's "contextual-keywords" rule`)
+        }
+    }
+    for (const word of contextWords) {
+        if (!entries.some((entry) => entry.word === word)) {
+            errors.push(`the grammar's "contextual-keywords" rule names '${word}', which ${rel(CONTEXT_TABLE)} does not list`)
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
 
 for (const note of notes) console.log(`note: ${note}`)
 if (errors.length > 0) {
@@ -200,10 +266,12 @@ if (errors.length > 0) {
     process.exit(1)
 }
 console.log(
-    `grammar check passed: ${lexerKeywords.length} keywords, ${parserLiterals.length} operator and punctuation tokens, ${grammarTypes.length} built-in types`
+    `grammar check passed: ${lexerKeywords.length} keywords, ${new Set(contextWords).size} contextual keywords, ` +
+        `${parserLiterals.length} operator and punctuation tokens, ${grammarTypes.length} built-in types`
 )
 if (process.argv.includes('--list')) {
     console.log(`keywords: ${lexerKeywords.join(' ')}`)
+    console.log(`contextual keywords: ${[...new Set(contextWords)].join(' ')} (scopes: ${[...contextScopes].join(', ')})`)
     console.log(`tokens: ${parserLiterals.join(' ')}`)
     console.log(`types: ${grammarTypes.join(' ')}`)
 }
