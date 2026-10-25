@@ -2856,14 +2856,13 @@ timeout_ms = 8000
 
 [[tests]]
 name = "slice_grad_negative_step"
-desc = "A slice that takes its elements backwards (`x[5:0:-2]`) has no adjoint here: the scatter the gradient is built from walks forwards only, so differentiating it is a fault that names the step instead of a gradient landing at the wrong elements. The step of a subscript is an ordinary value of the graph, not a static slot the rule can read, so the fault is raised where the scatter runs and carries no position of the program: a backwards adjoint is not implemented."
-kind = "negative"
+desc = "A slice that takes its elements backwards (`x[5:0:-2]`) differentiates: the core's slice adjoint scatters the gradient back through the same step, so the three elements the slice took (`x[5]`, `x[3]`, `x[1]`) receive the values they were multiplied by and no other element does -- the sum of the gradient is 3.0 for a loss that multiplies them by ones. The first extent is open, so the step is not statically known and the slice runs rather than being refused at the call."
+kind = "behavior"
 case = "../../../cases/modules/autodiff/slice_grad_negative_step.cml"
 args = ["${case}", "${run_nvm}"]
-expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::RuntimeError"
-expect_output_contains = ["slice_grad", "slice step must be positive"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+expect_exit = 0
+expect_stdout_exact = "3.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
 [[tests]]

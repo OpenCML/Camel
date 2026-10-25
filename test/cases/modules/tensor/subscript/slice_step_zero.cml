@@ -1,6 +1,8 @@
 /**
- * A subscript slice of a tensor whose step is the constant 0 takes no element at all, so it is
- * refused where it is written (design principles 5.4), as the step of a range is (4.2).
+ * A subscript slice of a tensor whose first extent is stated and whose step is not the constant 1
+ * is a view with strides, which needs the multidimensional array representation of H17: the step
+ * is refused where it is written, the zero step included (design principles 5.4). Both `[]` forms
+ * are answered by the core alone, so nothing falls back to the module that owns tensors.
  */
 module subscript_slice_step_zero
 import { Tensor, reshape, shape } from tensor
