@@ -190,17 +190,28 @@ graph train_step [body placement=gpu]
   N2  :nn/sgd (m, N1.1, 0.01)  [placement=gpu]  // 原地写 m 的设备块
 ```
 
-### 2.4 拒绝：不支持的算子与主机效果
+### 2.4 拒绝：不支持的算子与无法确定放置的节点
 
 `deviceCapable(oper)` = 在 `operations()` 表里 ∧ pure ∧ 无外部效果。H218 已经用它拒绝 `#gpu` 作用域并报 `RuntimeDiag::GpuScopeUnsupported = 0x000071`；G1 把判定扩到：
 
 - 传递闭包里的**每个**被调图（不只是作用域自己的图）；
-- 主机效果算子（`print`/`println`、文件写、`save_npy`）——它们不是"设备做不到的算子"，但同样不能在设备段里执行；
-- 作用域里**无法确定放置**的节点（老代码/第三方建图没有盖章）。
+- 作用域里**无法确定放置**的节点（老代码/第三方建图没有盖章）。落地上这一条的形态要说清：`stampNode` 让**每一种**节点创建时都写 `currentAttrs_`，作用域对被调图又是传递闭包（§2.3），所以"节点没有自己的事实"一律由作用域回答（设备），不存在第三种"不知道"的状态；一个作用域**给不出去处**的节点，就是既没有放置事实、也没有设备程序的那一个，它以 `GpuScopeNoDeviceProgram`（闭包里的模块不提供设备程序）报出。
+
+**主机效果不是拒绝，是作用域边界**（第 3 问的裁定，取代本文初稿的"一律拒绝"）：`print`/`println`、文件写、`save_npy` 这类效果算子**不参与设备段**，它们放在**主机**上，观察点由遍插一个**显式的 `download`** 节点，`std::profile` 的 `syncs` 把它数出来。理由：作用域承诺的是"这一段计算在哪跑"，不是"这一段程序没有主机观察"；效果算子没有设备实现，但它也不需要设备实现——它是段与主机之间的那一次传输。所以：
+
+| 作用域里的节点 | 处置 |
+|---|---|
+| 有设备实现的纯算子 | 进段，在设备上跑 |
+| 主机效果算子（`print`、文件写、`save_npy`） | 留主机，边界处一个显式 `download`（`syncs` 计数） |
+| 没有设备实现、也不是主机效果的算子 | 拒绝：`GpuScopeUnsupported`；闭包里的模块没有设备程序时是 `GpuScopeNoDeviceProgram` |
+
+落地状态要说清：**"不拒绝"这一半已经落地**（`#gpu` 里写 `println` 不再报 `GpuScopeUnsupported`，作用域照旧是一个设备单元）；**"效果写在作用域体内时的那一次 `download`"还没有**——遍把段抽出去之后，体内的效果节点既不再执行、也没有传输给它，读数是 `TILES_RESIDENCY` 的 `downloads: 0` 与不打印。这一条挂在 `docs/handover/questions/gpu-scope-in-body-host-effect.md` 上等裁定；本文其余部分（作用域、边界、`--devices cpu` 不改可编译集合）不受影响。另外，"观察点 download"本身只在**有设备**时才会被写出来（`region_outline.cpp` 里插传输的那一圈以 `device` 非空为条件），`--devices cpu` 下一次传输都不写、`syncs` 记 0。
 
 诊断形状：一条诊断列出作用域里**所有**不合格算子（URI + origin + 原因），给出两条出路（写 `#cpu` 块，或 `--devices cpu`），不让用户一条一条试。`--devices cpu` **不改变可编译集合**：支持面在编译期定死，`--devices cpu` 只决定"编出来的段在哪执行"（主机后端执行同一段图）。否则同一个程序在有无设备时编译结果不同，这就是"静默地为错的设备编译"。
 
 `#gpu` 写了而流水线里没有 `tiles::compile`：沿用 9.4 的 `SemanticDiag::TagHasNoReader = 0x100160` 警告。两边合起来，任何"标签被忽略"的情形都至少有一条诊断。
+
+空作用域（`#gpu` 块里没有设备算子、全被常量折叠掉）**不加警告**（第 5 问）：那不是写错，`tiles::inspect` 显示 0 个段就够了；"标签没有读者"仍按上面那一条报。
 
 ### 2.5 图内区域：分支、循环、调用的切分
 
@@ -222,26 +233,22 @@ graph step [body placement=gpu]
   LOOP (state, k)                  // 主机；LoopBody 是一个段
 ```
 
-### 2.6 派生图在编译期：一个必需的展开遍
+### 2.6 派生图在编译期：`std::macro`，不新增遍
 
-上面"作用域覆盖它的梯度"在今天的机制下**不成立**，这是写这份计划时最重要的发现：`grad`/`with_grad` 是**运行期**算子，`modules/autodiff/operators.cpp::gradFunction` 在算子执行时才调用 `buildGradientGraph` 建出派生图。流水线遍在那之前就跑完了，所以派生图：
+本文初稿这里写着"派生图只在运行期建、遍看不见，所以要新增一个展开遍 `autodiff::expand`"。**那个读数不成立，撤回**：`grad`、`with_grad`、`vjp` 在 `modules/autodiff/operators.cpp` 里登记为 **macro 算子**（`.macro = true`），`f` 编译期可知时，流水线里的 **`std::macro` 已经在编译期把它展开成导数图**（`pullback.cpp` 的 `macroCallee`），后面的遍都看得见它。教程第 16 节写的也是这个。
 
-- 不会被任何遍（包括 `tiles::compile`）看见，因此不会被编译；
-- 在解释器里执行，于是**反向永远在主机上**——验收第六项"含反向"直接失败。
+所以"作用域覆盖它的梯度"是这样成立的：
 
-决定（G1 的一部分，见 §7 的 S5b）：
-
-1. 新增模块遍 `autodiff::expand`。它在 `tiles::compile` **之前**运行：对每个 `grad(f)` / `with_grad(f)` 调用点，若 `f` 静态可知（命名函数或静态闭包常量），就在编译期调用 `buildGradientGraph` 建出派生图（需要时给 draft 组加一个 draft 版本，把派生图连同它的 program 挂到同一 session），把调用点换成"持有该图的函数常量"——和运行期算子产生的值形状相同：一个 `Function` 值，`with` 参数在调用点绑定，而不是在图里固化。
-2. 派生图继承 primal 的放置（§2.3 的两条），因此和 primal 一起进同一个单元（§4.1）。
-3. 作用域里 `f` **不**静态可知的 `grad`（函数值来自参数、返回值或运行期计算）→ 编译期报错，`GpuScopeUnsupported 0x000071`，消息点名 `grad`/`with_grad` 与该调用点，说清"`#gpu` 作用域里的梯度需要编译期可知的函数"。
-4. `#gpu` 之外完全不变：没有 `autodiff::expand` 时 `grad` 仍按运行期构建，解释执行。
-5. `tiles::compile` 在 `#gpu` 作用域里看到未展开的 `grad`/`with_grad`（遍没有跑）→ 报"缺少前置遍"，消息里**点名 `autodiff::expand`**（本仓库对前置遍的既有做法：库的诊断点名缺少的遍，流水线永远是显式的）。这条诊断**先于** §2.4 的"不支持的算子"：前者有明确的修法（加一个遍），后者只是"这个算子放不上去"。
+1. **不新增任何遍。** `#gpu` 作用域里的梯度，靠流水线里 `std::macro` 在 `tiles::compile` **之前**展开。`tiles::compile` 是这件事的**消费者，不是作者**：它不调用任何展开遍，也不改变流水线的写法。
+2. **派生图继承 primal 的放置**（§2.3 的两条）：派生图创建时抄 primal 图 body 区域 0 的 attrs，VJP 新建的节点从它的 primal 节点抄 `tiles.placement`。因此派生图与 primal 一起进同一个单元（§4.1），`TILES_PLACEMENT` 里能看到它 `body=gpu-required`。
+3. `tiles::compile` 在作用域里看到**未展开**的 `grad`/`with_grad`（函数操作数是编译期可知的函数常量，说明缺的是遍）→ 报"缺少前置遍"，消息里**点名 `std::macro`**（`RuntimeDiag::GpuScopeMacroNotExpanded`；本仓库对前置遍的既有做法：库的诊断点名缺少的遍，流水线永远是显式的）。这条诊断**先于** §2.4 的"不支持的算子"：前者有明确的修法（加一个遍），后者只是"这个算子放不上去"。
+4. 作用域里 `f` **编译期不可知**的 `grad`（函数值来自参数、返回值或运行期计算）→ 编译期报错，`GpuScopeUnsupported 0x000071`，消息点名 `grad`/`with_grad` 与该调用点，说清"`#gpu` 作用域里的梯度需要编译期可知的函数"。这一条不是缺遍：任何遍都展开不了它。
+5. `#gpu` 之外完全不变：不在作用域里的 `grad` 仍按运行期构建、解释执行。
 
 ```gir
-# 展开前
-N30 :autodiff/with_grad  (DATA(Function loss))   [placement=gpu]
-N31 :call  (N30, m) (x)                          [placement=gpu]
-# 展开后
+# 展开前（流水线里没有 std::macro）
+N30 :autodiff/with_grad  (DATA(Function loss))   [placement=gpu]   → 报缺前置遍，点名 std::macro
+# 展开后（流水线：std::macro tiles::compile）
 graph d(loss)          body attrs={tiles.placement=gpu}     // primal 的放置抄过来
   PORT m, x
   … 反向节点，类型由 §5.2 的规则给出 …
@@ -249,7 +256,7 @@ N30 :DATA(Function(d(loss)))                     [placement=gpu]   // 函数常�
 N31 :call  (N30, m) (x)                          [placement=gpu]
 ```
 
-这个遍是 H49 里**唯一**新增的遍；它不改变语言，也不改变 `grad` 的语义（值相同），只是把"什么时候建派生图"从运行期移到编译期，让"编译整段"这件事对反向也成立。
+这条撤回**不改变**本文其余部分：作用域、传播、段落、单元的定义都不动，S5b 因此只剩"放置的继承"与"缺少前置遍"的诊断，不依赖张量并进数组。
 
 ### 2.7 G1 的文件、测试与门禁
 

@@ -23,7 +23,7 @@ namespace attr = camel::core::attr;
 
 /// The graph of the function constant a node holds, or nullptr when the node is not one or holds
 /// no function: a DATA node whose static slot is a `Function` value (a named function, or the
-/// derived graph `autodiff::expand` leaves at a grad call site).
+/// derived graph an expansion pass leaves at a grad call site).
 const runtime::GCGraph *functionGraphOf(const runtime::GCGraph &graph, runtime::gc_node_ref_t id) {
     const runtime::GCNode *node = graph.node(id);
     if (node == nullptr || node->kind != runtime::GCNodeKind::Data || node->dataIndex >= 0) {
@@ -119,6 +119,10 @@ void addCounts(nlohmann::json &entry, const Counts &counts) {
 
 } // namespace
 
+bool holdsStaticFunction(const runtime::GCGraph &graph, runtime::gc_node_ref_t node) {
+    return functionGraphOf(graph, node) != nullptr;
+}
+
 const runtime::GCGraph *calleeGraphOf(
     const runtime::Program &program, const runtime::GCGraph &graph, runtime::gc_node_ref_t id) {
     // A caller reaches this for every node of a scope graph, not only for the calls it looks at:
@@ -130,10 +134,10 @@ const runtime::GCGraph *calleeGraphOf(
     if (graph.node(id)->kind == runtime::GCNodeKind::Func) {
         return program.calleeOf(graph, id);
     }
-    // The call reads its callee as a value: `autodiff::expand` replaces the grad operator at the
-    // call site with the function constant of the derived graph (docs/design/gpu/plan.cn.md 2.6),
-    // and a call through it is a call to that graph, exactly as a written call to a named
-    // function is. A value that is not a constant names no one graph: the run chooses the callee.
+    // The call reads its callee as a value: `std::macro` replaces the grad operator at the call
+    // site with the function constant of the derived graph (docs/design/gpu/plan.cn.md 2.6), and a
+    // call through it is a call to that graph, exactly as a written call to a named function is.
+    // A value that is not a constant names no one graph: the run chooses the callee.
     for (const runtime::gc_node_ref_t operand : graph.withInputsOf(id)) {
         if (const runtime::GCGraph *callee = functionGraphOf(graph, operand)) {
             return callee;

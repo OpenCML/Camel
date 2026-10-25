@@ -6,5 +6,4 @@ add_camel_module(
     operators.cpp
     pullback.cpp
     rules.cpp
-    expand.cpp
 )
