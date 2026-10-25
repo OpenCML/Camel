@@ -1208,28 +1208,28 @@ timeout_ms = 30000
 
 [[tests]]
 name = "gpu_scope.a_function_the_device_refuses_names_the_operator"
-desc = "A report operator on a function the device back end refuses: `source<noisy>` where `noisy` prints. The reading is a dispatch decision and not a fault, so the diagnostic names the operator the user called ('tiles:source') and what it could not serve ('noisy' and the effectful operator inside it), as `RuntimeDiag::InvalidArgument` (0x04000034) — a named diagnostic with a code, not the `RuntimeError` that said 'An error has occurred'. The effect is still not executed, and the message the earlier entry pinned is preserved inside it. Red when a capability miss is reported as a runtime fault, when the operator is not named, or when the effect runs."
+desc = "A report operator on a function the device back end refuses: `source<noisy>` where `noisy` prints. The reading is a dispatch decision and not a fault, so `RuntimeDiag::GraphNoDeviceProgram` (0x040001AA) names the operator that asked ('tiles:source'), the graph it asked for ('noisy') and what the back end said (the effectful operator inside it) — a named diagnostic with a code, not the `RuntimeError` that said 'An error has occurred', and not a `#gpu` scope, which this graph is not. The effect is still not executed, and the message the earlier entry pinned is preserved inside it. Red when a capability miss is reported as a runtime fault, when the operator or the graph is not named, or when the effect runs."
 kind = "negative"
 case = "../../../cases/modules/tiles/reject_effect.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_code = "0x04000034"
-expect_output_contains = ["Invalid argument of 'tiles:source'", "the device back end has no program for 'noisy'", "unsupported or effectful operator ':io/println'"]
+expect_diagnostic_name = "RuntimeDiag::GraphNoDeviceProgram"
+expect_diagnostic_code = "0x040001AA"
+expect_output_contains = ["'tiles:source' has no device program for 'noisy'", "unsupported or effectful operator ':io/println'"]
 expect_output_not_contains = ["RuntimeDiag::RuntimeError", "BODY MUST NOT EXECUTE"]
 timeout_ms = 30000
 
 [[tests]]
 name = "gpu_scope.a_run_without_a_device_names_its_own_configuration"
-desc = "`benchmark` on a whole graph in a run that has no device (`--devices cpu`): the report needs the device to compile and run the plan, so this is a capability miss again — the diagnostic names the operator ('tiles:benchmark') and the run's own configuration ('the run selected the host only (--devices cpu)'), as `RuntimeDiag::InvalidArgument` (0x04000034). Red when a run that says it has no device is reported as a runtime fault."
+desc = "`benchmark` on a whole graph in a run that has no device (`--devices cpu`): the report needs the device to compile and run the plan, so this is a capability miss again — `RuntimeDiag::DeviceNotSelected` (0x040001AB) names the operator ('tiles:benchmark') and the run's own configuration, which the message carries verbatim ('the run selected the host only (--devices cpu)'). `DeviceUnavailable` is the other shape of this: there the run named a device that must exist. Red when a run that says it has no device is reported as a runtime fault."
 kind = "negative"
 case = "../../../cases/modules/tiles/gpu_scope_benchmark.cml"
 args = ["--devices", "cpu", "${case}"]
 envs = ["CUDA_VISIBLE_DEVICES=-1"]
 expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_code = "0x04000034"
-expect_output_contains = ["Invalid argument of 'tiles:benchmark'", "the run selected the host only (--devices cpu)"]
+expect_diagnostic_name = "RuntimeDiag::DeviceNotSelected"
+expect_diagnostic_code = "0x040001AB"
+expect_output_contains = ["No device to run 'tiles:benchmark' on", "the run selected the host only (--devices cpu)"]
 expect_output_not_contains = ["RuntimeDiag::RuntimeError"]
 timeout_ms = 30000
 

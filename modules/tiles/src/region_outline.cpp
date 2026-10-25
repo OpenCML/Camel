@@ -74,7 +74,7 @@ runtime::gc_node_ref_t transferAggregate(
 
 const runtime::Program *outlineRegions(
     core::context::Context &context, const runtime::Program *program, runtime::GCGraph *root,
-    operator_t run, const std::string &uri, size_t &count, const RegionDeviceOps *device,
+    operator_t run, const std::string &uri, size_t &count, const SegmentDeviceOps *device,
     bool refuseGpuScopes) {
     namespace rt = runtime;
     if (device &&
@@ -96,7 +96,7 @@ const runtime::Program *outlineRegions(
     // covered graph is that region's segment, not a reason to fall back to the host (2.5), so the
     // scope map is built before the analysis and answers it.
     const GpuScopes scopes(*program);
-    std::unordered_map<rt::GCGraph *, RegionAnalysis> analyses;
+    std::unordered_map<rt::GCGraph *, SegmentAnalysis> analyses;
     for (auto *graph : graphs) {
         analyses.emplace(graph, analyzeRegions(*program, *graph, context.facts(), &scopes));
     }
@@ -110,7 +110,7 @@ const runtime::Program *outlineRegions(
         const auto *scope = scopes.scopeOf(graph);
         return std::string((scope == nullptr ? &graph : scope)->name());
     };
-    const auto regionInScope = [&](rt::GCGraph &graph, const Region &region) {
+    const auto regionInScope = [&](rt::GCGraph &graph, const Segment &region) {
         if (!refuseGpuScopes)
             return false;
         for (const auto member : region.members) {
@@ -289,7 +289,7 @@ const runtime::Program *outlineRegions(
         // Where a segment runs: the control region of its members (docs/design/gpu/plan.cn.md 2.5). An operator
         // written in an arm runs only when that arm is taken, so its call, its uploads and its
         // downloads are written there too; writing them in the body would run the untaken arm.
-        const auto whereOf = [&](const Region &region) {
+        const auto whereOf = [&](const Segment &region) {
             return region.members.empty()
                        ? 0u
                        : control.controlOf(static_cast<rt::gc_node_ref_t>(region.members.front()));
@@ -536,7 +536,7 @@ const runtime::Program *outlineRegions(
 }
 bool isRegionExec(core::OperId oper) {
     // An operator that calls the graph of the function value it receives is one this module
-    // writes for a segment (`RegionDeviceOps::execute`, op-semantics 11.4). The module's own
+    // writes for a segment (`SegmentDeviceOps::execute`, op-semantics 11.4). The module's own
     // namespace is the guard: another module's graph-calling operator is not a segment of a
     // Tiles scope.
     const auto &table = core::OperatorTable::instance();

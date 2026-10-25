@@ -38,7 +38,7 @@ struct RegionNode {
     // 2.5), and the node that owns it (BRCH, JOIN, LOOP) stays on the host.
     uint32_t control = 0;
 };
-struct Region {
+struct Segment {
     std::vector<size_t> members; // In dependency order, independent of source node numbering.
     std::vector<size_t> inputs;
     std::vector<size_t> outputs;
@@ -46,7 +46,7 @@ struct Region {
 // Includes CPU nodes in cycle checks. Unreachable nodes are excluded. The caller marks
 // all observable roots (including effect/control roots) and all dependency edge kinds.
 // The result contains node IDs only: no GC pointers or references to the source graph.
-std::vector<Region> partitionRegions(const std::vector<RegionNode> &nodes);
+std::vector<Segment> partitionRegions(const std::vector<RegionNode> &nodes);
 struct ResidentEdge {
     size_t value, producer, consumer;
 };
@@ -58,7 +58,7 @@ struct RegionTransfers {
 // All regions share one target. IDs denote immutable source values; CPU consumers
 // can require a download while another region retains the same resident value.
 RegionTransfers
-planRegionTransfers(const std::vector<RegionNode> &nodes, const std::vector<Region> &regions);
+planRegionTransfers(const std::vector<RegionNode> &nodes, const std::vector<Segment> &regions);
 struct RegionDraft {
     std::unique_ptr<runtime::GraphDraft> graph;
     std::vector<size_t> parameters; // Source IDs; constant boundary values are embedded.
@@ -66,10 +66,10 @@ struct RegionDraft {
 };
 // Source and static values must remain rooted; use under NoCollectionScope until
 // encoding/attaching the graph. The returned draft is not a GC root by itself.
-RegionDraft extractRegion(const runtime::GCGraph &source, const Region &region);
+RegionDraft extractRegion(const runtime::GCGraph &source, const Segment &region);
 
-struct RegionAnalysis {
-    std::vector<Region> regions;
+struct SegmentAnalysis {
+    std::vector<Segment> regions;
     std::vector<std::string> exclusions;
     RegionTransfers transfers;
 };
@@ -78,7 +78,7 @@ struct RegionAnalysis {
 /// (docs/design/gpu/plan.cn.md 2.4, 2.5): the arm or the loop it is written in is where it runs, so it becomes a
 /// segment of that region. Without `scopes` — every graph outside a device scope — the analysis
 /// is the one the pass has always taken.
-RegionAnalysis analyzeRegions(
+SegmentAnalysis analyzeRegions(
     const runtime::Program &program, const runtime::GCGraph &graph,
     runtime::fact::FactStore &facts, const GpuScopes *scopes = nullptr);
 std::string loopEligibility(
@@ -95,12 +95,12 @@ bool deviceCapable(core::OperId oper);
 /// instances are not refusals (a run with the actual arguments may still produce a program), and
 /// neither are host effects nor the structural host code (branches, calls, loop bodies).
 const char *gpuRefusal(
-    const runtime::GCGraph &graph, const RegionAnalysis &analysis, runtime::gc_node_ref_t id);
-struct RegionDeviceOps {
+    const runtime::GCGraph &graph, const SegmentAnalysis &analysis, runtime::gc_node_ref_t id);
+struct SegmentDeviceOps {
     operator_t upload, execute, download;
     std::string uploadUri = "tiles:upload", executeUri, downloadUri = "tiles:download";
 };
-void registerRegionPass(RegionDeviceOps preferred);
+void registerRegionPass(SegmentDeviceOps preferred);
 // Rewrites the graphs reachable from `root`, a graph of `program`, and returns the program of
 // the rewritten graphs (`program` itself when no region was outlined, `count` is 0 then); null
 // executor produces ordinary CPU CALL nodes. Non-null executors use the supplied stable
@@ -110,16 +110,16 @@ void registerRegionPass(RegionDeviceOps preferred);
 const runtime::Program *outlineRegions(
     core::context::Context &context, const runtime::Program *program, runtime::GCGraph *root,
     operator_t executor, const std::string &uri, size_t &count,
-    const RegionDeviceOps *device = nullptr, bool refuseGpuScopes = false);
+    const SegmentDeviceOps *device = nullptr, bool refuseGpuScopes = false);
 // Register semantic-equivalence checks by naming them in a pipeline; no variable gates them.
 void registerRegionTestPasses(
-    operator_t run, RegionDeviceOps device, RegionDeviceOps host, RegionDeviceOps preferred);
+    operator_t run, SegmentDeviceOps device, SegmentDeviceOps host, SegmentDeviceOps preferred);
 slot_t testNativeCall(ArgsView &with, ArgsView &norm, core::context::Context &context);
 slot_t testCompiledCall(ArgsView &with, ArgsView &norm, core::context::Context &context);
 
 /// The calls this module writes for a segment of a cut scope: the operators that call the graph
 /// of the function value they receive (`OperatorTraits::callsGraphs`, op-semantics 11.4), which
-/// are the ones `RegionDeviceOps` names and `outlineRegions` writes. A report operator asked
+/// are the ones `SegmentDeviceOps` names and `outlineRegions` writes. A report operator asked
 /// about a graph a pass has cut reads these calls, never the wrapper: each one carries the graph
 /// of its segment as its context argument, and the wrapper is not a program of its own.
 bool isRegionExec(core::OperId oper);

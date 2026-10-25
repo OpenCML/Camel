@@ -14,10 +14,10 @@
 namespace camel::tiles {
 namespace {
 class RegionPass final : public RuntimeGraphRewritePass {
-    RegionDeviceOps preferred_;
+    SegmentDeviceOps preferred_;
 
   public:
-    RegionPass(const core::context::context_ptr_t &context, RegionDeviceOps preferred)
+    RegionPass(const core::context::context_ptr_t &context, SegmentDeviceOps preferred)
         : RuntimeGraphRewritePass(context), preferred_(std::move(preferred)) {}
     const runtime::Program *apply(const runtime::Program *program, std::ostream &out) override {
         // A `#gpu` scope's gradient is not expanded here: `grad` and `with_grad` are macro
@@ -52,7 +52,7 @@ class RegionPass final : public RuntimeGraphRewritePass {
     }
 };
 } // namespace
-void registerRegionPass(RegionDeviceOps preferred) {
+void registerRegionPass(SegmentDeviceOps preferred) {
     registerModulePass("tiles::compile", [preferred](const core::context::context_ptr_t &context) {
         return std::make_unique<RegionPass>(context, preferred);
     });

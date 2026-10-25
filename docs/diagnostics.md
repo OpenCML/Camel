@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-277 diagnostics: 260 errors, 17 warnings. 15 carry a machine-applicable edit, 262 say why they carry none.
+279 diagnostics: 262 errors, 17 warnings. 15 carry a machine-applicable edit, 264 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -293,6 +293,8 @@ prints one entry.
 | `0x040001A7` | [RuntimeDiag::GpuScopeNoDeviceProgram](#gpuscopenodeviceprogram) | Error | no |
 | `0x040001A8` | [RuntimeDiag::ValueWithNoDerivativeRule](#valuewithnoderivativerule) | Error | no |
 | `0x040001A9` | [RuntimeDiag::GpuScopeMacroNotExpanded](#gpuscopemacronotexpanded) | Error | no |
+| `0x040001AA` | [RuntimeDiag::GraphNoDeviceProgram](#graphnodeviceprogram) | Error | no |
+| `0x040001AB` | [RuntimeDiag::DeviceNotSelected](#devicenotselected) | Error | no |
 | `0x0410000F` | [RuntimeDiag::PassesNeverRun](#passesneverrun) | Warn | no |
 | `0x04100015` | [RuntimeDiag::ConstantExpressionFaults](#constantexpressionfaults) | Warn | no |
 | `0x04100016` | [RuntimeDiag::TranslationLinksRuntime](#translationlinksruntime) | Warn | no |
@@ -9918,6 +9920,97 @@ None: runtime: the fault is raised while the program runs, and the repair is in 
 ```
 
 *No example: no test small enough to show raises it.*
+
+### GraphNoDeviceProgram
+
+`0x040001AA` · Error · `RuntimeDiag::GraphNoDeviceProgram`
+
+**Fix**
+
+None: runtime: the report is raised while the program runs, and the repair is in the program's logic
+
+**Message**
+
+```text
+'{0}' has no device program for '{1}': {2}.
+```
+
+**Help**
+
+```text
+The device back end has no program for this graph, so the operator that asked for one cannot be served by it. Name a graph the device can serve, or let the host run it: outside a `#gpu` scope a graph the device cannot serve is the host's, and `--devices cpu` runs the whole program there.
+```
+
+**Example** (`test/cases/modules/tiles/reject_effect.cml`, run as `camel test/cases/modules/tiles/reject_effect.cml`)
+
+```camel
+module tiles_reject_effect
+import { Tensor, reshape } from tensor
+import { source } from tiles
+func noisy(x: Tensor<f32>): Tensor<f32> sync {
+    println("BODY MUST NOT EXECUTE")
+    return x + x
+}
+func main(): int sync {
+    let x = reshape([1.0, 2.0] as f32[], [2])
+    println(source<noisy>(x))
+    return 0
+}
+```
+
+### DeviceNotSelected
+
+`0x040001AB` · Error · `RuntimeDiag::DeviceNotSelected`
+
+**Fix**
+
+None: runtime: the report is raised while the program runs, and the repair is in the program's logic
+
+**Message**
+
+```text
+No device to run '{0}' on: {1}.
+```
+
+**Help**
+
+```text
+Name a device this machine has (--devices <ordinal>), or drop the operator that needs one: a report operator on a scope a pass has cut needs no device, and `available()` says what this machine can serve.
+```
+
+**Example** (`test/cases/modules/tiles/gpu_scope_benchmark.cml`, run as `CUDA_VISIBLE_DEVICES=-1 camel --devices cpu test/cases/modules/tiles/gpu_scope_benchmark.cml`)
+
+```camel
+/// `tiles::benchmark` on a scope a pass has cut: what is left to measure is the plan of each
+/// segment (docs/design/gpu/plan.cn.md 2.1-2.3, 2.5). The values a segment's inputs take are
+/// bound by the call that runs it, while the scope runs; a report made before that call has none,
+/// and samples taken from inputs nothing wrote would measure values that are not the program's.
+/// The report says so instead of taking them.
+///
+/// Without the pass the same call is the whole-graph reading, and it needs a device: the plan of
+/// one program is compiled and run there. On a run with no device the operator names the run's
+/// own configuration instead of reporting a fault, which is what `--devices cpu` gets.
+///
+/// Red when: the report runs the segments with inputs it does not have, times the wrapper, or
+/// says the runtime broke where the run has no device.
+module tiles_gpu_scope_benchmark
+
+import { Tensor, reshape } from tensor
+import { benchmark } from tiles
+
+#gpu
+func pair(x: Tensor<f32, [3]>): Tensor<f32, [3]> {
+    let y = x * 2.0
+    let z = y + 3.0
+    return z - 1.0
+}
+
+func main(): int sync {
+    let x = reshape([1.0, 2.0, 3.0] as f32[], [3])
+    println(benchmark<pair>(x))
+    return 0
+}
+```
 
 ### PassesNeverRun
 

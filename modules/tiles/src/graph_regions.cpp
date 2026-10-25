@@ -187,7 +187,7 @@ bool deviceCapable(core::OperId oper) {
            !table.hasExternalEffect(oper);
 }
 const char *
-gpuRefusal(const rt::GCGraph &graph, const RegionAnalysis &analysis, rt::gc_node_ref_t id) {
+gpuRefusal(const rt::GCGraph &graph, const SegmentAnalysis &analysis, rt::gc_node_ref_t id) {
     if (id >= analysis.exclusions.size())
         return "";
     const std::string &reason = analysis.exclusions[id];
@@ -219,7 +219,7 @@ gpuRefusal(const rt::GCGraph &graph, const RegionAnalysis &analysis, rt::gc_node
     // operator's business.
     return "";
 }
-RegionAnalysis analyzeRegions(
+SegmentAnalysis analyzeRegions(
     const rt::Program &graphs, const rt::GCGraph &graph, rt::fact::FactStore &facts,
     const GpuScopes *scopes) {
     std::vector<RegionNode> nodes(graph.nodeCount());

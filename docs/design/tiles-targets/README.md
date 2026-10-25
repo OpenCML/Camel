@@ -94,7 +94,7 @@ uses preferred resident execution without test output or CUDA initialization
 during rewriting. This is the static-shape region implementation; symbolic
 shape compilation and cost-based target selection remain pending.
 
-Static region launch/source templates are now `tiles.compiled_region` target
+Static region launch/source templates are now `tiles.compiled_scope` target
 facts anchored on the actual extracted callee, with the core graph lineage,
 transitive revision and declaration epoch supplying invalidation. Draft commits
 preserve those identities for unchanged callees. A CUDA lowering-policy hash
