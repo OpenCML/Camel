@@ -1,0 +1,30 @@
+tip=5f241408b H554 第六轮（上半）：清掉两族 6 条（58 → 52，新增红 0）
+
+数字
+- **58 → 52**（gate-21：`total: 6366, pass: 6286, fail: 52, skip: 12, known failures: 16`；与 gate-20 逐名对比 **fixed 6 / new 0**）。
+- 本轮已清：`dropped_effects` 3 条、`when_import.*` 3 条。相关 plan 单跑 `test/plans/feat/compile/diag_json.plan.toml` + `when_import.plan.toml` → `total: 32, pass: 30, fail: 2`（剩的两条是下面归因的 `*_stage`）。
+
+① 已清族（命令 + 逐字读数 + 定位到行）
+- `dropped_effects`（3 条：`dropped_effects`、`dropped_effects_outside_sync`、`dropped_effects_forward`）：用例丢掉 `module` 声明那一行后，位置整体下移 1。改前 → 改后逐字：
+  `Error: dropped effects: 30 The call of 'println' | 31 …` ↔ 期望表从 `"31 The call of 'println'"` 起 → `test/plans/feat/compile/diag_json.plan.toml:275-281` 的 `want` 表整体改为 30–36（7 条）；
+  `Error: warnings: SemanticDiag::EffectNotExecuted@11 @20 @33` ↔ `const want = [13, 22, 35].map(…)` → `[11, 20, 33]`；
+  `Error: warnings: …@7 @8` ↔ `const want = [8, 9].map(…)` → `[7, 8]`。改后三条全 `[PASS]`。
+- `when_import.not_predicate` / `not_imported` / `ambiguous`：fixture 是 `test/cases/compile/when_import/predicates.cml` 与 `predicates_other.cml`，**模块名就是文件名**（`module when_import_predicates` 已随本支删除）。改前 → 改后：期望串 `'when_import_predicates'` → `'predicates'`、`'when_import_predicates_other'` → `'predicates_other'`（`when_import.plan.toml:56,66,76` 共 3 行）→ 三条全 `[PASS]`。同类根因（"名字还是旧的声明名"）一次改完，未逐条磨。
+
+② 非本支 / 需另做（一行证据后停手）
+- `unknown_pass_stage`、`pass_parameter_stage`、`camel_pass_parameter_unknown`、`camel_pass_parameter_wrong_type`：**gate-11 至 gate-21 每轮都红**（逐日志计数 gate-11/12/13/14 各 3）→ 非本轮所致；读数为合成管线位置（预期 `line 0, column 30/26`，实际 `(pipeline):1:30`）与 `unknown_pass_stage` 的 `Error: no source range`。属"管线位置"既有缺陷，停手。
+- `export_*` 7 条 + `pass_export_refusals_json`：verifier 读数逐字 `Error: missing source position of the relu call`（`export_capability`）、`expected exit 0, got 1`（`pass_export_refusals_json`）——还没定位到行，下一轮第一族就做它（先读 `test/plans/feat/modules/onnx.plan.toml` 与 `collections/numeric_permissions/tagged/tags` 的 `export_*` 块）。
+- `graph`/`graph.attrs`、`constant_fault_*` 4、`attempt.bad_calls`/`attempt.translate.cpp`、`debugger.http_gateway`/`dap_protocol`、`python_binding.session`、`compile_bench.smoke`、`docs.snippets_compile`：本轮只跑到 `[INFO] verification exited 1` / `expected exit 0, got 1`，未定位到行，下一轮逐族给逐字读数。
+
+③ 本轮未动（如实）
+- `grad_function_value_*` 12 的重新判定：未开始（下一轮第一步：先读作者切线裁定与 12 条的断言，判断属切线/离散语义还是消息位置与描述不符）。
+- `docs.snippets_compile` 是否"线旧"、以及合一次 develop（`4dbed334b`）：未做（下一轮按你的 ④ 执行，`--no-ff`，不碰别人族）。
+
+五个检查器（逐字，改后重跑，全部 exit 0）
+- `diagnostics registry: 278 codes, every one with a name, a message and what it says about an edit (15 with one, 263 with a reason), no value used twice, and the emitted headers agree`
+- `docs/reference/camel-for-ai.md is what its sources produce: 4 generated region(s), 756 entries, 278 diagnostics, 34 diagnostic name(s) cited by the prose, 106375 characters (budget 112000)`
+- `no unverified citation: 413 of 413 symbol citation(s) verified, 1876 path citation(s) across 4803 file(s)`
+- `headers: every one of 1364 member files carries the two-line header (C/C++ 1086, Camel 44, scripts 234)`
+- `grammar: 130 productions, in step with the parser, the token table and the language reference`
+
+提交：`5f241408b`（effect 位置 −1 + 谓词 fixture 按文件名）。纪律：未推 origin；未碰 `docs/language/**` 散文；未碰其它工作树/分支；未在 Windows 构建。
