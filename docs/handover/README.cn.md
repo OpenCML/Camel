@@ -209,7 +209,7 @@
 2. **流的 `yield`**：`T..` 类型已经能解析，生成器里的 `yield e` 还没有。`tee` 是库函数，不进词法。
 3. **模块位置的标签**（H49 第 1 问）：源码里给 `module` 贴标签的写法，以及标签声明的 `on module`。
 4. **标签形参类型写 `func`**：标签声明的形参列表接受关键字 `func`，`function` 这个别名删掉。
-5. **清理保留字**：`is`、`of`、`keyof`、`finally`、`catch` 这些没有裁定含义的关键字不再保留，写了就是普通的名字或语法错误；展开 `...xs`、结构体和数组解构同样处理，删掉只为指路而存在的 `ConstructNotSupported`/`FeatureNotSupported`。**例外是 `try`**：设计原则 4.x 写明"`try`/`catch` 不进语言，写了应得到一条诊断，指向 `!!`、`?->` 与故障隔离"，所以 `try … catch` 仍然认出来并报 `TryCatchNotInLanguage`（5.36 第 4 条里"删掉 `TryCatchNotInLanguage`"那半句作废）。`throw`、`namespace`、`using`、`typeof`、`constas` 都是现行语法，保留。
+5. **清理保留字**：`is`、`of`、`keyof`、`finally`、`catch` 这些没有裁定含义的关键字不再保留，写了就是普通的名字或语法错误；展开 `...xs`、结构体和数组解构同样处理，删掉只为指路而存在的 `ConstructNotSupported`/`FeatureNotSupported`。**例外是 `try`**：设计原则 3.9 写明"`try`/`catch` 不进语言，写了应得到一条诊断，指向 `!!`、`?->` 与故障隔离"，所以 `try … catch` 仍然认出来并报 `TryCatchNotInLanguage`（5.36 第 4 条里"删掉 `TryCatchNotInLanguage`"那半句作废）。`throw`、`namespace`、`using`、`typeof`、`constas` 都是现行语法，保留。
 6. **格式化器**：超宽的 `when`/`uses` 另起一行（见下面"格式化器"一条），新语法（`fact`、`yield`、模块标签）都要能格式化。
 7. **给插件的交付物**：完成后在 `docs/language/02_lexical.md`（中英文）给出最终的关键字表与上下文关键字表（`rule`、`fact`、`when`、`uses`、`pure`、`yield`、`tag`、`on` 等只在特定位置是关键字的词），分组写清；仓库里 `editors/vscode/` 的 TextMate 文法与它的快照用例同步更新。负责人照这张表改插件，表里的词与文法逐个对得上。
 
