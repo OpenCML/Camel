@@ -59,6 +59,28 @@ resolveSourceRange(const SourceRange &range, const camel::source::source_context
     return std::nullopt;
 }
 
+// ---- Exception classes ----
+DiagnosticsLimitExceededBaseException::DiagnosticsLimitExceededBaseException(const Diagnostic &d)
+    : diagnostic_(d) {
+    // One line: severity, the place, and what the diagnostic says. The name is included because it
+    // is what tells a reader which check refused, where a message that is prose may not.
+    text_ = to_string(diagnostic_.severity);
+    if (!diagnostic_.name.empty()) {
+        text_ += "[" + diagnostic_.name + "]";
+    }
+    const std::string path = diagnosticPath(diagnostic_);
+    if (const auto place = resolveSourceRange(diagnostic_.range, diagnostic_.sourceContext)) {
+        text_ += " at ";
+        text_ += path.empty() ? "<no file>" : path;
+        text_ += std::format(":{}:{}", place->start.line + 1, place->start.character + 1);
+    } else if (!path.empty()) {
+        text_ += " in " + path;
+    }
+    if (!diagnostic_.message.empty()) {
+        text_ += ": " + diagnostic_.message;
+    }
+}
+
 // ---- Warning policy ----
 namespace {
 std::mutex &warningPolicyMutex() {
@@ -608,7 +630,7 @@ void Diagnostics::checkLimits() {
 
     // Total cap: after push, size must not exceed total_limit (when configured).
     if (config_.hasTotalLimit() && static_cast<int>(storage_.size()) > config_.total_limit) {
-        throw DiagnosticsTotalLimitExceededException(config_.total_limit);
+        throw DiagnosticsTotalLimitExceededException(config_.total_limit, ref);
     }
 
     // Per-severity cap: count already includes the diagnostic just pushed (no +1).
@@ -617,7 +639,7 @@ void Diagnostics::checkLimits() {
         const int limit = config_.getSeverityLimit(ref.severity);
         const size_t n  = countBySeverityInternal(ref.severity);
         if (static_cast<int>(n) > limit) {
-            throw DiagnosticsLimitExceededException(ref.severity, static_cast<size_t>(limit));
+            throw DiagnosticsLimitExceededException(ref.severity, static_cast<size_t>(limit), ref);
         }
     }
 }
