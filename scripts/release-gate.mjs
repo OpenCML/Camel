@@ -46,9 +46,9 @@
 // A skipped plan is UNKNOWN, never green. This is the accounting H154 §6 and `agents/test.md`
 // ask for, printed on every run:
 //
-//   * the 26 policy-forbidden plan files (23 whole plans + 3 plans with forbidden slow entries)
-//     -- the 200 cases H154 §2 measured, plus the perf cases that landed after that measurement,
-//     not run, not claimed;
+//   * the 25 policy-forbidden plan files (21 whole plans + 4 plans whose forbidden tests are the
+//     slow ones) -- 200 slow cases today: the 193 H154 §2 measured across its 18 files, plus the
+//     seven the perf plans that landed afterwards add -- not run, not claimed;
 //   * the debug layer (`--tier debug`, a Debug build) -- never part of a Release gate.
 //
 // Exit codes: 0 every selected phase passed; 1 a phase failed; 2 refused or not runnable
