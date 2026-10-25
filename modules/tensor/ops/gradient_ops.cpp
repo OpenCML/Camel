@@ -212,7 +212,10 @@ InferFn gradientLikeTyped(size_t index) {
     return [index](const InferContext &ctx) -> std::optional<Type *> {
         const auto &like  = ctx.facts(index);
         const auto &other = ctx.facts(index == 0 ? 1 : 0);
-        const bool otherIsNumber = other.shape && other.shape->empty();
+        // A number is an operand with no shape to spread: a rank-0 value, or one whose shape the
+        // facts do not pin down. Only a pair of tensors with known shapes of different element
+        // types is provably mixed.
+        const bool otherIsNumber = !other.shape || other.shape->empty();
         if (like.dtype && other.dtype && *like.dtype != *other.dtype && !otherIsNumber) {
             return std::nullopt;
         }
