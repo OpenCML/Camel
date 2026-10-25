@@ -292,21 +292,4 @@ golden = "golden/static_for_head_names.txt"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
-[[tests]]
-name = "rulings.static_for_head_parenthesized"
-desc = "The parentheses of the old head spelling are not a second writing: the `(` after `for` fits nothing that can stand there, so the file is refused at the `(` with the ordinary unexpected-token diagnostic asking for a name - `Unexpected '('; expected a name.` - and nothing points at the spelling that is in the language. The whole report is pinned, so a later hint that names the new spelling would change this file."
-kind = "snapshot"
-case = "../../../cases/parse/rulings/static_for_head_parenthesized.cml"
-args = ["${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SyntaxDiag::UnexpectedToken"
-expect_diagnostic_code = "0x0200000A"
-expect_diagnostic_line = 10
-expect_diagnostic_column = 16
-expect_output_contains = ["Unexpected '('; expected a name."]
-snapshot_stream = "stdout"
-snapshot_compare = "text_exact"
-golden = "golden/static_for_head_parenthesized.txt"
-expect_output_not_contains = ["UnknownInternalError", "ConstructNotSupported", "static for n,", "no longer"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 8000
+

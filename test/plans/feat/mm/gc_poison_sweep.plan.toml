@@ -24,6 +24,10 @@ plan that only parses or computes scalars needs one safepoint poisoned to catch 
 or a missing root. The default developer run therefore poisons a safepoint in every plan; the
 full sweep of every test is `npm run test:all` / `--tier all` (the unsampled copies are the slow
 layer, and `--tier all` adds the sampled fast ones).
+
+The plans of the rewrite module and of the standard rule libraries keep three samples as well
+(`rules`): a rule's condition decides which nodes a rewrite matches, and a defect in one of those
+conditions is invisible in the copies a single sample leaves unrun.
 """
 
 [[sweeps]]
@@ -38,5 +42,8 @@ fast_sample = 1
 # others keep one. `iterators` is the tag a plan may use for an iterator-shaped program; the
 # plans that exist today carry collections/closures/loops/collect/higher_order instead, and
 # `comprehension` is an iteration written as an expression.
-risk_tags = ["collections", "closures", "iterators", "comprehension", "loops", "collect", "higher_order"]
+# `rules` is the tag of the plans that exercise the rewrite module and the standard rule
+# libraries: a rule's condition decides which nodes a rewrite matches, and a defect in one of
+# those conditions is invisible in the copies a single sample leaves unrun.
+risk_tags = ["collections", "closures", "iterators", "comprehension", "loops", "collect", "higher_order", "rules"]
 risk_sample = 3

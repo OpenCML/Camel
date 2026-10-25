@@ -19,6 +19,17 @@ namespace camel::core::rtdata {
 /// what it is built from is (`Tree<int>` is: its payload is an int and itself).
 bool isContentComparable(const camel::core::type::Type *type);
 
+/// Declares a type of a module whose values the core compares by content although it does not
+/// know the type's representation: an array of numbers whose element type its values carry.
+/// The module that declares such a type registers it where it registers the type (the tensor
+/// module registers `Tensor`), and `==` then has one meaning for it as for any array (design
+/// principles 4.2): the same shape, and elementwise equality everywhere.
+void registerContentComparableType(camel::core::type::TypeCode code);
+
+/// Whether `code` was declared that way. The operator that resolves `==` asks this to accept
+/// the type, and the runtime reaches the type's own comparison through the value.
+bool isRegisteredContentComparableType(camel::core::type::TypeCode code);
+
 /// `==` for one pair of values of `type`.
 bool valuesEqualByContent(slot_t a, slot_t b, const camel::core::type::Type *type);
 

@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-266 diagnostics: 249 errors, 17 warnings. 15 carry a machine-applicable edit, 251 say why they carry none.
+267 diagnostics: 250 errors, 17 warnings. 15 carry a machine-applicable edit, 252 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -235,6 +235,7 @@ prints one entry.
 | `0x030001E5` | [SemanticDiag::RangeTwoArgumentsRemoved](#rangetwoargumentsremoved) | Error | no |
 | `0x030001E6` | [SemanticDiag::RangeStepZero](#rangestepzero) | Error | no |
 | `0x030001E7` | [SemanticDiag::StaticLoopSequenceNotKnown](#staticloopsequencenotknown) | Error | no |
+| `0x030001E8` | [SemanticDiag::RuleConstParamNotMatched](#ruleconstparamnotmatched) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn | no |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn | no |
@@ -7734,6 +7735,55 @@ module static_loop_sequence_unknown
 
 func sumTo(n: int): int {
     return static loop acc = 0 for i in 0..n do acc + i
+}
+```
+
+### RuleConstParamNotMatched
+
+`0x030001E8` · Error · `SemanticDiag::RuleConstParamNotMatched`
+
+**Fix**
+
+None: choice: the position that matches the constant is the writer's to write
+
+**Message**
+
+```text
+'{0}' is a `const` parameter of the rule '{1}', and the left side matches no constant for it.
+```
+
+**Help**
+
+```text
+A `const` parameter means the left side matches a constant there: in the rule r(x: int, const c: int), whose sides are x * c and x, the left side matches the constant through c. The left side is what binds the parameter, and a `const` parameter it does not use leaves the rule saying nothing about the program -- its condition has no node to reach through node_of either.
+```
+
+**Example** (`test/cases/modules/rules/const_param_unbound.cml`, run as `camel test/cases/modules/rules/const_param_unbound.cml const_param_unbound::apply std::nvm`)
+
+```camel
+module const_param_unbound
+
+import { Program, Node, type_of, type_name } from graph
+import { rewrite } from rewrite
+
+func typeText(n: Node): string {
+    return match type_of(n) {
+        case null => ''
+        case t => type_name(t)
+    }
+}
+
+rule drop_by_shape(x: int, const c: int) when typeText(node_of(c)) == 'int' { x + 1 => x }
+
+export func apply(p: Program): Program! {
+    return rewrite(p, [drop_by_shape])
+}
+
+func shifted(a: int): int { return a + 1 }
+
+func main(): int sync {
+    println(shifted(41))
+    return 0
 }
 ```
 

@@ -1541,6 +1541,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::RuleConstParamNotMatched,
+            {
+                "RuleConstParamNotMatched",
+                "'{0}' is a `const` parameter of the rule '{1}', and the left side matches no constant for it.",
+                "A `const` parameter means the left side matches a constant there: in the rule r(x: int, const c: int), whose sides are x * c and x, the left side matches the constant through c. The left side is what binds the parameter, and a `const` parameter it does not use leaves the rule saying nothing about the program -- its condition has no node to reach through node_of either.",
+            },
+        },
+        {
             SemanticDiag::IgnoredSideEffect,
             {
                 "IgnoredSideEffect",

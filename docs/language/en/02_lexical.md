@@ -181,7 +181,7 @@ The long form of the same call is still written `'{} + {} = {}'->format<1, 2, 1 
 |---|---|
 | `+` `-` `*` `/` `%` `^` `@` | Arithmetic: addition, subtraction, multiplication, division, remainder, power, matrix multiplication |
 | `==` `!=` `<` `>` `<=` `>=` | Comparison |
-| `===` `!==` | Reserved, not supported for now (compile-time error) |
+| `===` `!==` | Element-wise equality and inequality: two arrays compare element by element and give a `bool` array of the same shape; on a scalar they are `==` and `!=` (see [6.7.3](06_expressions.md#673-comparison)) |
 | `&&` `\|\|` `!` | Logical and, or, not; `&&` and `\|\|` are branches (the right side is evaluated only when needed), reserved, and cannot be overloaded |
 | `&` `\|` | And, or with both sides evaluated; ordinary operators, which can be overloaded |
 | `~` | Bitwise not |
