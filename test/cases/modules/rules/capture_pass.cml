@@ -1,0 +1,19 @@
+/**
+ * A pass written in Camel whose body reads a value of its own module: the function the pass runs
+ * is a value of that module, and the value is one it captured where it was written. The pass also
+ * takes a `with` parameter, which is bound from the command line.
+ */
+module capture_pass
+
+import { Program } from graph
+
+func base_of(): int {
+    return 7
+}
+
+let base = base_of()
+
+with <label: string> export func report(p: Program): Program! sync {
+    println('base ', base, ' label ', label)
+    return p
+}

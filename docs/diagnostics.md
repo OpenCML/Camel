@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-273 diagnostics: 256 errors, 17 warnings. 15 carry a machine-applicable edit, 258 say why they carry none.
+276 diagnostics: 259 errors, 17 warnings. 15 carry a machine-applicable edit, 261 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -226,6 +226,7 @@ prints one entry.
 | `0x030001DA` | [SemanticDiag::ImplKernelForeign](#implkernelforeign) | Error | no |
 | `0x030001DB` | [SemanticDiag::ImplSignatureMismatch](#implsignaturemismatch) | Error | no |
 | `0x030001DC` | [SemanticDiag::ImplKernelNotBodyless](#implkernelnotbodyless) | Error | no |
+| `0x030001DD` | [SemanticDiag::RuleWithParameterUnbound](#rulewithparameterunbound) | Error | no |
 | `0x030001DE` | [SemanticDiag::NodeOfNotAParameter](#nodeofnotaparameter) | Error | no |
 | `0x030001DF` | [SemanticDiag::OverloadParameterNames](#overloadparameternames) | Error | no |
 | `0x030001E0` | [SemanticDiag::WhenDeclarationOverlap](#whendeclarationoverlap) | Error | no |
@@ -241,6 +242,8 @@ prints one entry.
 | `0x030001EA` | [SemanticDiag::TagFieldNameAmbiguous](#tagfieldnameambiguous) | Error | no |
 | `0x030001EB` | [SemanticDiag::TagFunctionArgumentNotReadable](#tagfunctionargumentnotreadable) | Error | no |
 | `0x030001EC` | [SemanticDiag::GenericTypeArgumentGrows](#generictypeargumentgrows) | Error | no |
+| `0x030001EE` | [SemanticDiag::RuleWithParameterGenericHead](#rulewithparametergenerichead) | Error | no |
+| `0x030001EF` | [SemanticDiag::RuleWithParameterOnASide](#rulewithparameteronaside) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn | no |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn | no |
@@ -7442,6 +7445,42 @@ func main(): int sync {
 }
 ```
 
+### RuleWithParameterUnbound
+
+`0x030001DD` · Error · `SemanticDiag::RuleWithParameterUnbound`
+
+**Fix**
+
+None: choice: the parameter and the value bound to it are the writer's to write
+
+**Message**
+
+```text
+'{0}' is a `with` parameter of the rule '{1}', it has no default, and the rule value here binds nothing for it.
+```
+
+**Help**
+
+```text
+A rule whose declaration writes `with` parameters is a function of them, and only `name<value>` gives the `Rule`: `tile_matmul<64>` binds `tile` there. An unbound parameter is not the same as an unset one - the rule value would carry no value for the rule's condition to read - so the use is refused rather than a rule made that cannot match. Write the binding where the rule value is written (`tile_matmul<64>`), or give the parameter a default in the declaration (`with <tile: int = 16>`), which binds it wherever the name is used as it is.
+```
+
+**Example** (`test/cases/modules/rules/err_rule_with_unbound.cml`, run as `camel test/cases/modules/rules/err_rule_with_unbound.cml std::nvm`)
+
+```camel
+module err_rule_with_unbound
+import { Program } from graph
+import { rewrite } from rewrite
+
+with <shift: int>
+rule add_shift(x: int) { x + 0 => x }
+
+export func apply(p: Program): Program! {
+    let rules = [add_shift]
+    return rewrite(p, rules)
+}
+```
+
 ### NodeOfNotAParameter
 
 `0x030001DE` · Error · `SemanticDiag::NodeOfNotAParameter`
@@ -8026,6 +8065,66 @@ func main(): int sync {
     println(grow(1, 3))
     return 0
 }
+```
+
+### RuleWithParameterGenericHead
+
+`0x030001EE` · Error · `SemanticDiag::RuleWithParameterGenericHead`
+
+**Fix**
+
+None: context: the construct is not built here, so the program has to be restructured and there is no one text to write
+
+**Message**
+
+```text
+The rule '{0}' declares type parameters and `with` parameters together, which is not implemented yet.
+```
+
+**Help**
+
+```text
+A generic rule's sides are instantiated for the types of the call, one instance per type, and a `with` value is bound once, where the rule value is written (rewrite design 2 (second version) 1). The two are not bound together yet: a rule with `with` parameters is written over the types it is used with (one rule per element type), and the value it takes is then a parameter of that rule or a `const` parameter the left side matches.
+```
+
+**Example** (`test/cases/modules/rules/err_rule_with_generic_head.cml`, run as `camel test/cases/modules/rules/err_rule_with_generic_head.cml std::nvm`)
+
+```camel
+module err_rule_with_generic_head
+import { Program } from graph
+
+with <tile: int>
+rule tiled::<T>(x: T) when tile > 0 { x + 0 => x }
+```
+
+### RuleWithParameterOnASide
+
+`0x030001EF` · Error · `SemanticDiag::RuleWithParameterOnASide`
+
+**Fix**
+
+None: context: the construct is not built here, so the rule has to be written differently and there is no one text to write
+
+**Message**
+
+```text
+The {0} side of the rule '{1}' reads the `with` parameter '{2}', which is not implemented yet.
+```
+
+**Help**
+
+```text
+A rule's `with` parameter is a value, and both sides of a rule are read as patterns: the left side is matched against the program -- an operator, a constant or one of the rule's own parameters, in the order it writes them -- and the right side is built from those same terms, with a term of constants evaluated when the rule fires. Neither pattern holds a value the caller gives, so what a side reads has to be written into it. Write the value as a constant of the side it belongs in, or read it in the condition (`when`), which is called with it.
+```
+
+**Example** (`test/cases/modules/rules/err_rule_with_left_read.cml`, run as `camel test/cases/modules/rules/err_rule_with_left_read.cml std::nvm`)
+
+```camel
+module err_rule_with_left_read
+import { Program } from graph
+
+with <tile: int>
+rule add_tiled(x: int) { x + tile => x }
 ```
 
 ### IgnoredSideEffect

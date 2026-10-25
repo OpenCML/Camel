@@ -200,7 +200,10 @@ struct Frame {
 
     slot_t call(size_t functionIndex, std::span<const slot_t> args) {
         ::Function *fn = definition->roots[functionIndex]->getAs<::Function>();
-        return vm->callGraph(fn->program(), fn->graph(), args);
+        // A clause is a function value of the module the analysis is declared in: what its body
+        // captured where it was written is in the closure the value was made with, and calling it
+        // by its graph alone would leave those captures empty.
+        return vm->callFunction(fn, args);
     }
     slot_t initialValue() { return call(definition->initial, {}); }
     slot_t joinValues(slot_t a, slot_t b) {

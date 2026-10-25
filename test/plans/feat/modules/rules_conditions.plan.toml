@@ -75,6 +75,56 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 10000
 
 [[tests]]
+name = "rules.generic_condition_effect_is_refused"
+desc = "The question page's program: the same rule and the same condition as `condition_commit.cml`, under a head that declares a type parameter. The declaration carries templates instead of two functions, so the condition is not a function of the rule's object, and the check reads the template: the effect the condition calls is refused at the rule's own declaration, with the rule's definition named as related information. The module does not load."
+kind = "negative"
+case = "../../../cases/modules/rules/condition_generic_commit.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::EffectInRuleCondition"
+expect_diagnostic_code = "0x030001AD"
+expect_diagnostic_line = 17
+expect_diagnostic_column = 32
+expect_output_contains = ["The call of 'println' in the function 'publish_now' has an effect, and it is inside the condition of the rule 'add_zero'", "[the rule 'add_zero' is declared here at 12:1]"]
+expect_output_not_contains = ["PassInternalError", "RewriteConflict", "added node"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.generic_condition_effect_at_instantiation"
+desc = "A generic rule whose condition calls a generic function: which candidate the call takes is decided by the type arguments of the instance, so the effect is only known when the instance is made, and the rule's declaration has no effect written in it to find. The instance is checked, and the run reaches the program instead of ending in an internal error: before this check the same program died with `PassInternalError` while the engine held a session on the program."
+kind = "behavior"
+case = "../../../cases/modules/rules/condition_generic_print.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["rewritten"]
+expect_output_not_contains = ["PassInternalError", "internal error", "RewriteConflict"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.analysis_clause_reads_the_value_it_captured"
+desc = "An analysis whose clauses read a value of the module they are declared in: every value's fact is that value (times a thousand, so nothing else can be mistaken for it). A clause is a function value of the module, and the value is one it captured where it was written; a call that passes the graph alone reads the capture as an empty slot and the reader then reads a number nothing computed."
+kind = "behavior"
+case = "../../../cases/modules/rules/analysis_capture_target.cml"
+args = ["${case}", "analysis_capture::report", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "depth  35002\n4\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.pass_body_reads_the_value_it_captured"
+desc = "A pass written in Camel whose body reads a value of its own module and takes a `with` parameter: the pass is run through the entry of its module's program, which computes the module's values and binds them before it calls the pass, so the body reads the capture and the parameter. This is the third of the call sites that hand a function its execution: the other two hold a function value and pass its closure."
+kind = "behavior"
+case = "../../../cases/modules/rules/capture_pass_target.cml"
+args = ["${case}", "capture_pass::report label=p", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "base  7  label  p\ntarget ok\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
 name = "rules.interleaved_transaction_is_not_a_rewrite_conflict"
 desc = "The other interleaving, with no rule condition and no rule's right side in it: a graph transaction commits a new program and the rewrite of the program it started from runs after it. That session does not write anything of its own over the new program, so no conflict is reported and the run succeeds; a conflict of two writes of one program is the graph module's to report, not the rewrite module's."
 kind = "behavior"

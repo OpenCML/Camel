@@ -73,10 +73,12 @@ bool isConstantLike(const GCGraph &graph, gc_node_ref_t ref) {
     return value.known || value.maybe;
 }
 
+/// Whether a call of the operator is a value the pass may fold or drop. An operator that must run
+/// where the program writes it is not one, whatever its effect.
 bool isPureOperNode(const GCGraph &graph, gc_node_ref_t ref) {
     const GCNode *node = graph.node(ref);
     return node && node->kind == GCNodeKind::Oper && node->hasPayload() &&
-           OperatorTable::instance().isPure(graph.nodeBodyAs<GCOperBody>(ref)->oper);
+           OperatorTable::instance().mayBeRecomputed(graph.nodeBodyAs<GCOperBody>(ref)->oper);
 }
 
 } // namespace

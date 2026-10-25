@@ -464,6 +464,24 @@ void Builder::orderAfterLastWriter(node_handle_t variable, node_handle_t node) {
 }
 
 std::any Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
+    std::any resolved = resolveDRefNode(gct);
+    // The name of a rule's binding function is not a function value: the rule is not a `Rule`
+    // until its `with` parameters are bound, and the name is what binds them (design principles
+    // 5.5). So a use of it as a value is the call `name()`, whatever it was written beside: the
+    // angled values of `name<value>` are taken here too (`boundWithArgs_`). Where the name is the
+    // callee of a call or of a binding, the visit is left alone: the call is made there, with the
+    // arguments it has.
+    if (ruleBindingCallee_ || resolved.type() != typeid(node_handle_t)) {
+        return resolved;
+    }
+    node_handle_t node = any_cast<node_handle_t>(resolved);
+    if (isRuleBindingTarget(node)) {
+        return ruleBindingValueOf(node, gct);
+    }
+    return resolved;
+}
+
+std::any Builder::resolveDRefNode(const GCT::node_ptr_t &gct) {
     if (const auto oper = tree_->operRefOf(gct); oper.has_value()) {
         // A DREF the compiler made for an operator it knows by id: the group is the built-in
         // module's, which registered it; no name of the program takes part.
@@ -1278,8 +1296,12 @@ node_handle_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
     genericCalleeAllowed_ =
         std::exchange(genericCalleeAllowed_, false) &&
         (gct->at(0)->type() == GCT::NodeKind::DREF || gct->at(0)->type() == GCT::NodeKind::TAPP);
-    any targetNodeRes     = visit(gct->at(0));
-    genericCalleeAllowed_ = false;
+    // The callee of a binding is a name: `name<value>` binds the parameters of `name`
+    // (visitDRefNode), it does not make the rule value that early.
+    const bool outerRuleBindingCallee = std::exchange(ruleBindingCallee_, true);
+    any targetNodeRes                 = visit(gct->at(0));
+    ruleBindingCallee_                = outerRuleBindingCallee;
+    genericCalleeAllowed_             = false;
     // As in visitLinkNode: a lambda written in place gives its graph.
     node_handle_t targetNode = valueNodeOf(targetNodeRes);
     // Whether the value bound here is the callee of the call being built (`withArgsOfCall_`).
@@ -1391,6 +1413,16 @@ node_handle_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
     // statement it is written in (1.6). Its span is derived where the binding is used as a
     // value (partialApplicationOf), so an ordinary `f<w>(x)` allocates nothing extra.
     boundWithOrigin_.try_emplace(targetNode, gct);
+    if (!ruleBindingCallee_ && isRuleBindingTarget(targetNode)) {
+        // `name<value>` where the name is the function a rule with `with` parameters is written
+        // as: the values bind the rule's parameters and the value is the `Rule` (design
+        // principles 5.5). What `f<w>` makes of a function -- a function value that has the
+        // parameters left -- is not what a rule's name stands for, so this is a call and not a
+        // partial application.
+        node_handle_t value = ruleBindingValueOf(targetNode, gct);
+        LEAVE("WITH");
+        return value;
+    }
     LEAVE("WITH");
     return targetNode;
 }

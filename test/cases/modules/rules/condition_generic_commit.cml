@@ -1,0 +1,39 @@
+/**
+ * The same condition as `condition_commit.cml`, under a head that declares a type parameter: the
+ * rule carries templates instead of two functions, so the condition is built once per type tuple
+ * and the declaration has no condition function to read. The effect is in the function the
+ * condition calls, and the rule may not have it either way.
+ */
+module condition_generic_commit
+
+import { Program, Graph, Node, current, root, open, commit, add_constant, id } from graph
+import { rewrite } from rewrite
+
+rule add_zero::<T>(x: T) when publish_now() { x + 0 => x }
+
+func publish_now(): bool {
+    let p = current()
+    return match do_publish(p) {
+        case error e => sync { println('inner error value: ', e.kind); return false }
+        case q => sync { return true }
+    }
+}
+
+func do_publish(p: Program): Program! sync {
+    let t = open(p)
+    let n = add_constant(t, root(p), 1)
+    println('added node ', id(n))
+    return commit(t)
+}
+
+func redex(x: int): int {
+    return x * 1 + 0
+}
+
+func main(): int sync {
+    let p = current()
+    return match rewrite(p, [add_zero]) {
+        case error e => sync { println('outer error value: ', e.kind); return 1 }
+        case q => sync { println('rewritten'); return 0 }
+    }
+}

@@ -405,9 +405,12 @@ enum class SemanticDiag : uint32_t {
     // rule (-stream-type-surface) names arrays, maps and sets; a tuple
     // is not a container in that sense - its items are taken apart once - and a function signature
     // may take and give a stream.
-    StreamInContainer        = 0x0001E3,
-    NodeOfNotAParameter      = 0x0001DE,
-    RuleConstParamNotMatched = 0x0001E8,
+    StreamInContainer            = 0x0001E3,
+    NodeOfNotAParameter          = 0x0001DE,
+    RuleConstParamNotMatched     = 0x0001E8,
+    RuleWithParameterUnbound     = 0x0001DD,
+    RuleWithParameterGenericHead = 0x0001EE,
+    RuleWithParameterOnASide     = 0x0001EF,
 
     // Warnings
     IgnoredSideEffect = 0x100002,

@@ -1,0 +1,12 @@
+/** The `with` parameters of a rule declaration, as the formatter writes them (design principles 5.5). */
+module with_format
+
+with <tile: int, scale: float = 1.0, shift: int = 2>
+export rule tiled(x: int) when tile > 0 { x + 0 => x * 2 }
+
+with <tile: int>
+rule plain(x: int, const c: int) when tile > 0 && c > 0 { x * c => x }
+
+func main(): int sync {
+    return 0
+}

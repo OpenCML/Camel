@@ -1624,7 +1624,11 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                                      gct->at(0)->type() == GCT::NodeKind::TAPP;
     const bool outerWithArgsOfCall = withArgsOfCall_;
     withArgsOfCall_                = gct->at(0)->type() == GCT::NodeKind::WITH;
-    any targetNodeRes              = visit(gct->at(0));
+    // The callee of a call is a name: a rule's binding function called here is called, not made
+    // the `Rule` its name gives (visitDRefNode).
+    const bool outerRuleBindingCallee = std::exchange(ruleBindingCallee_, true);
+    any targetNodeRes                 = visit(gct->at(0));
+    ruleBindingCallee_                = outerRuleBindingCallee;
     withArgsOfCall_                = outerWithArgsOfCall;
     genericCalleeAllowed_          = false;
     // The callee may be a lambda written in place (`((x: int): int => x + 1)(3)`,

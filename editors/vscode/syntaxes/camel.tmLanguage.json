@@ -238,7 +238,7 @@
       }
     },
     "with-parameters": {
-      "comment": "funcDecl: (WITH angledParams)? ... FUNC",
+      "comment": "funcDecl: (WITH angledParams)? ... FUNC; ruleDecl: (WITH angledParams)? 'export'? RULE ...",
       "name": "meta.with-parameters.camel",
       "begin": "\\b(with)\\s*(<)",
       "beginCaptures": {

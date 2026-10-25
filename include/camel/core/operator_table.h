@@ -183,6 +183,12 @@ struct OperatorTraits {
     /// constants is evaluated ahead of time by `std::macro`, and the result is materialised as a
     /// constant. `grad` and `with_grad` declare it; an ordinary operator does not.
     bool macro = false;
+    /// Its calls may be evaluated ahead of time and their results kept as values (the foldable
+    /// fact of the record). False for an operator that must run where the program writes it,
+    /// though running it has no effect: a rule's value holds the functions of its sides, and an
+    /// `analysis` installs the facts of its declaration, and neither is a value a pass may
+    /// compute, move, merge or drop.
+    bool foldable = true;
 };
 
 /**
@@ -297,6 +303,15 @@ class OperatorTable {
         std::string_view protocol,
         std::initializer_list<std::pair<std::string_view, bool>> operators);
 
+    /// Declares the operators `protocol:name` that are pure and may not be folded: running one has
+    /// no effect, and no pass may compute a call of it ahead of time, keep its result as a
+    /// constant, move it, merge it with an identical call or drop it. `rewrite` declares its rule
+    /// makers and its `analysis` this way: what they make holds the functions of the rule's sides,
+    /// which the collector does not trace, and installing the facts of a declaration is the
+    /// declaration itself.
+    void declareUnfoldable(
+        std::string_view protocol, std::initializer_list<std::string_view> operators);
+
     // ---- Queries --------------------------------------------------------------------------
 
     /// Declared traits of the operator, or nullopt when nobody declared it.
@@ -306,6 +321,14 @@ class OperatorTable {
     /// True when the operator is declared pure.
     bool isPure(OperId id) const;
     bool isPure(std::string_view uri) const;
+
+    /// True when a call of the operator may be computed by the compiler or a pass itself and its
+    /// result treated as a value: it has no effect, and it is foldable (isPure and the foldable
+    /// fact). False for every operator that has an effect, and for a pure one that must run where
+    /// the program writes it (declareUnfoldable). A pass that folds, moves, merges or drops a
+    /// call asks this, not isPure.
+    bool mayBeRecomputed(OperId id) const;
+    bool mayBeRecomputed(std::string_view uri) const;
 
     /// True when execution can invoke function inputs. Lock-free.
     bool callsGraphs(OperId id) const {
@@ -414,6 +437,12 @@ class OperatorTable {
 
     /// The names of the declared groups, in the order they were first declared.
     std::vector<std::string> groups() const;
+
+    /// The URIs of the overloads declared for the group `group`, in declaration order, and empty
+    /// when no group of that name was declared. The group name is the one the language writes for
+    /// it (`println`), so a reader of a program's text can tell whether a name is an operator and
+    /// what its overloads are.
+    std::vector<std::string> groupOperators(std::string_view group) const;
 
     /// The types one group registered: every type the fixed signature of one of its overloads
     /// mentions (its `with` parameters, its ordinary parameters and its result), each once, in
