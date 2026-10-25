@@ -34,8 +34,7 @@ enum class SemanticDiag : uint32_t {
     ReturnTypeMismatch          = 0x000011,
     ElementTypeMismatch         = 0x000012,
     CallingIncompleteFunction   = 0x000013,
-    // 0x000014 was ClosureCaptureAfterSelfCall, replaced by CaptureAfterRecursiveCall: with
-    // function bodies built when first needed it is only met in recursion.
+    // 0x000014: empty. The number is not reused.
     ImportNameNotExported = 0x000015,
     // A literal the type it is given cannot hold: out of range, truncated (a decimal literal
     // in an integer type), or not a value of that type at all (a text that is not a number).
@@ -53,10 +52,9 @@ enum class SemanticDiag : uint32_t {
     InvalidTypeArgument         = 0x000020,
     ArgumentNeedsConversion     = 0x000021,
     ReturnNeedsConversion       = 0x000022,
-    // 0x000023 was LiteralOutOfRange, merged into LiteralNotRepresentable (0x000016).
-    // 0x000025 was ImportCycle: modules may import each other (design principles 10.1).
-    // 0x000026 was ImportedFunctionUsesModuleValue: a function of another module may use the
-    // top level of its own module since every module builds into one root graph.
+    // 0x000023: empty. The number is not reused.
+    // 0x000025: empty. The number is not reused.
+    // 0x000026: empty. The number is not reused.
     ImportNameConflict = 0x000027,
     // An error: the construct it reports is not compiled, so a program that uses it must not
     // run. It used to be a warning (0x100000), and the declaration that used the feature was
@@ -74,9 +72,7 @@ enum class SemanticDiag : uint32_t {
     FunctionNameAsValue = 0x000060,
     // Nullable and fallible values (design principles 3.8;
     // docs/technical/29_nullable_and_fallible_values.md).
-    // 0x000074 was TryCatchNotInLanguage: it named the `try`/`catch`/`finally` construct. Those
-    // words are not keywords any more (handover 5.00 "语法层收口" item 5), so writing one of them is
-    // an ordinary name or a syntax error and the diagnostic has no producer. The code is not reused.
+    // 0x000074: empty. The number is not reused.
     ThrowOutsideFallible  = 0x000070,
     ThrowNotAnError       = 0x000071,
     TaggedTypeNesting     = 0x000072,
