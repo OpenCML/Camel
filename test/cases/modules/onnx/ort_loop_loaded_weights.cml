@@ -1,9 +1,9 @@
 /**
  * A loop whose depth depends on the model input, with weights READ FROM A FILE into a captured
  * struct: the forward (state, counter) and the gradient of a loss over the state with respect
- * to the weights, exported with a dynamic batch axis. The declared type of the weights says
- * nothing (`{ w: Tensor }`); the export gives the captured constant the element type and shape
- * its value has. Without that the body of the loop knew less about the weights than the place
+ * to the weights, exported with a dynamic batch axis. The declared type of the weights states
+ * the element type and no extent (`{ w: f32[..] }`); the export gives the captured constant the
+ * shape its value has. Without that the body of the loop knew less about the weights than the place
  * calling it, and the export's simplification unrolled the recursion until it ran out of
  * memory ("Runtime draft encoding failed to allocate ... bytes").
  *

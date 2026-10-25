@@ -1,5 +1,5 @@
 /**
- * The refusal of `var_argument_non_numeric` on the `with` side: a `with <var t: Tensor>`
+ * The refusal of `var_argument_non_numeric` on the `with` side: a `with <var acc: f64[]>`
  * parameter may write only a numeric element, so a cell holding a `string[]` is not given the
  * declared parameter type and the call is refused at the argument.
  * Expected: a compile-time error at the argument.

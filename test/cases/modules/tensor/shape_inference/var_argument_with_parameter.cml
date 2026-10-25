@@ -1,7 +1,7 @@
 /**
  * A `with` parameter declared `var` takes the caller's variable, so a variable whose value is a
- * numeric array with a stated element type and unstated extents passes to a `with <var t: Tensor>`
- * parameter exactly as it does to an ordinary `var Tensor` parameter: the declared parameter type
+ * numeric array with a stated element type and unstated extents passes to a `with <var acc: f64[]>`
+ * parameter exactly as it does to an ordinary `var acc: f64[]` parameter: the declared parameter type
  * is the bound of what the callee may store through the cell.
  * Expected output: 1.0 1.0
  */
