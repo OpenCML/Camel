@@ -6,8 +6,26 @@ By the end of this chapter you will have run your first Camel program and seen t
 show you: **your function is a graph**, and **the compiler rewrites that graph without changing the result**.
 The question this book keeps asking starts here: **what is this code on the graph?**
 
-First get `camel`: build it from source as [setup.en.md](../setup.en.md) describes, put `out/latest/bin` on
-`PATH`, and check that `camel --version` prints a version. The commands below all run from the repository root.
+## Why Camel
+
+Most languages write a program as instructions for a machine to follow one after another. What a compiler, a
+parallel runtime, automatic differentiation and a GPU backend actually need is a graph: what is to be computed, and
+what depends on what. In other languages that graph can only be recovered from the code after the fact, and what
+comes back is a broken graph that has lost the meaning of side effects. Camel makes **the program itself the
+graph**: what you write is the computation and its dependencies, and the order is written only where it matters —
+so the graph is not guessed at, and rewriting the graph is rewriting your program. Why the language puts AI first
+is in [Why Camel](../why.en.md).
+
+## Getting `camel` first
+
+```bash
+pip install camel-lang
+camel --version
+```
+
+That puts `camel` on your `PATH`, and you are ready for the commands below. To work on the language itself, or to
+follow the main line, the other road is building from source: [setup.en.md](../setup.en.md) (it builds into
+`out/latest/bin`). The examples below live in the repository, and the commands run from its root.
 
 ## The first program
 
@@ -35,16 +53,16 @@ Hello, Camel!
 - One `.cml` file is one module, and `module hello` names it (the name may be left out).
 - The program starts at `main`. The `int` it returns is the process exit code, so this one returns `0`.
 - The **`sync`** after the return type says the body is a **sync block**: the statements written directly in it
-  run in the order they are written. Chapter 10 explains why it is needed; for now remember "a function that
-  prints has `sync` in front of its body".
+  run in the order they are written. Why is it needed? Camel computes only the results that are **needed**, and
+  "it printed" is a result nobody needs; `sync` makes this body run in the order it is written. The detail is
+  chapter 10's; for now remember "a function that prints has `sync` in front of its body".
 - A newline separates statements; no semicolons are needed.
 
 ## Your function is a graph
 
-Put `std::gir` at the end of the command line: the program does not run, and the compiler prints the graph it
-built. What you write after the file name is a **pass**, and `std::gir` is the pass that prints the graph.
-
-<!-- camel-snippet: graph-dump: the text block is std::gir's DOT, not the program's stdout -->
+Put `std::rgir` at the end of the command line: the program does not run, and the compiler **draws** the graph it
+built (DOT is Graphviz's format; hand it to `dot` and you have a picture). What you write after the file name is a
+**pass**, and `std::rgir` is the pass that draws the graph.
 
 ```cml
 // The smallest program: `main` is the entry, and its body is a sync block.
@@ -58,42 +76,30 @@ func main(): int sync {
 ```
 
 ```bash
-camel docs/tutorial/examples/01_hello.cml std::gir
+camel docs/tutorial/examples/01_hello.cml std::rgir > hello.dot
+dot -Tsvg hello.dot -o hello.svg
 ```
 
-```text
-digraph GraphIR {
-    subgraph cluster_F01 {
-        label="main";
-        O01 [label="EXIT", type="EXIT"];
-        N00 [label="Hello, Camel!", type="DATA", origin=35, span="5:12-5:27", srcfile="docs/tutorial/examples/01_hello.cml", value_type="string"];
-        N01 [label=":io/println", type="OPER", origin=36, span="5:4-5:11", srcfile="docs/tutorial/examples/01_hello.cml", value_type="string"];
-        N02 [label="0", type="DATA", origin=37, span="6:11-6:12", srcfile="docs/tutorial/examples/01_hello.cml", value_type="int"];
-        N03 [label="GATE", type="GATE", value_type="int"];
-        N03 -> O01 [label="0", type="EXIT"];
-        N00 -> N01 [label="0|0", type="NORM"];
-        N02 -> N03 [label="0|0", type="NORM"];
-        N01 -> N03 [label="0|0", type="CTRL"];
-    }
-    O00 [label="EXIT", type="EXIT"];
-    N04 [label="Function(graph=main, tupleSlots=0)", type="DATA", origin=33, span="4:0-7:1", srcfile="docs/tutorial/examples/01_hello.cml", value_type="() => int"];
-    N05 [label="CALL", type="CALL", value_type="int"];
-    N05 -> O00 [label="0", type="EXIT"];
-    N04 -> N05 [label="0|0", type="WITH"];
-}
-```
+![The subgraph of main, and the entry calling it](images/01_hello.svg)
 
-Reading this against the source:
+Reading this against the source (circles are values, diamonds are operators or gates):
 
-- `cluster_F01` is the **subgraph of `main`**. There is no "what line 5 does" in a graph, only nodes and edges.
-- `N00` is the string constant, `N01` is the `:io/println` operator, and the **data edge** `N00 -> N01` says
-  "this string is its argument".
-- `N02` is `0` and `N03` is the exit gate `GATE`: `N02 -> N03` says the value of `main` is `0`.
-- The edge `N01 -> N03` is of type **`CTRL`**: **a sync block is a sync edge between effects on the graph**.
-  `println` is an effect, and this edge puts it before the exit — that is, before `return 0` — which is exactly
-  what `sync` does. Take `sync` away and neither the edge nor `println` is there (chapters 9 and 10).
-- The last three lines are the entry itself: `Function(graph=main)` is the subgraph `main`, `CALL` is the entry
-  calling it, and the `WITH` edge joins the two.
+- The large box is the **subgraph of `main`**. There is no "what line 5 does" in a graph, only nodes and edges.
+- The circle labelled `Hello, Camel!` is the string constant and the diamond labelled `:io/println` is the
+  `println` operator; the **data edge** between them says "this string is its argument".
+- The circle labelled `0` is the returned value and the diamond labelled `GATE` is the exit gate: `0` reaches the
+  gate, and the gate's output is the value of `main`.
+- The edge from `println` to `GATE` is a **sync edge** (`std::rgir` draws it dashed with an empty arrowhead):
+  **a sync block is a sync edge between effects on the graph**. It puts `println` before the exit — that is, before
+  `return 0` — which is exactly what `sync` does. Take `sync` away and neither the edge nor `println` is there
+  (chapters 9 and 10).
+- The pair of nodes below is the entry itself: the diamond labelled `CALL` is the entry calling `main`, and its
+  input is the subgraph `main`.
+
+Every picture in this book is drawn from an example by a script: [`tools/render-graphs.mjs`](tools/render-graphs.mjs).
+What it draws goes into [`images/`](images/), and beside each picture is a `.dot` of the same name — the picture is
+drawn from it. `node docs/tutorial/tools/render-graphs.mjs --check` draws them again and compares, so a picture
+cannot drift away from the example it came from.
 
 ## The compiler rewrites the graph
 
@@ -123,10 +129,9 @@ camel docs/tutorial/examples/01_rewrite.cml
 12
 ```
 
-The answer is right, but the program says more than it needs to. Add `std::opt` (the optimization pass) and look
-at the graph again:
-
-<!-- camel-snippet: graph-dump: the text block is one excerpt of std::opt std::gir's DOT, not the program's stdout -->
+The answer is right, but the program says more than it needs to. Here is what the function `twice` looks like on the
+graph: the left picture is it as it comes out of the compiler, the right one is it after `std::opt` (the
+optimization pass).
 
 ```cml
 // The same shape as 01_hello.cml, with one expression that has more than one writing.
@@ -144,27 +149,18 @@ func main(): int sync {
 ```
 
 ```bash
-camel docs/tutorial/examples/01_rewrite.cml std::opt std::gir
+camel docs/tutorial/examples/01_rewrite.cml std::rgir
+camel docs/tutorial/examples/01_rewrite.cml std::opt std::rgir
 ```
 
-```text
-        subgraph cluster_F02 {
-            label="twice";
-            F02 [label="ARGS", type="ARGS"];
-            O02 [label="EXIT", type="EXIT"];
-            N00 [label="x", type="PORT", param_name="x", param_kind="normal", param_index="0", value_type="int"];
-            N01 [label="4", type="DATA", value_type="int"];
-            N02 [label=":op/mul_l", type="OPER", origin=92, span="5:17-5:18", srcfile="docs/tutorial/examples/01_rewrite.cml", value_type="int"];
-            F02 -> N00 [label="0", type="NORM_PORT"];
-            N02 -> O02 [label="0", type="EXIT"];
-            N00 -> N02 [label="0|0", type="NORM"];
-            N01 -> N02 [label="0|1", type="NORM"];
-        }
-```
+| before `std::opt` | after `std::opt` |
+| --- | --- |
+| ![two multiplications and an addition](images/01_twice_before.svg) | ![one multiplication by the constant 4](images/01_twice_after.svg) |
 
-That is the `twice` part of `main` in the output (an excerpt). `x * 2 + x * 2` is gone: there is one
-multiplication node and one constant `4`. The compiler merged the two multiplications at the graph level, and
-**the result did not change** — `camel docs/tutorial/examples/01_rewrite.cml` still prints `12`.
+On the left there are two multiplication nodes and an addition node, both constants being `2`; on the right one
+multiplication node is left and the constant is `4`. `x * 2 + x * 2` is gone: `2 + 2` is worked out as `4` first,
+and the two multiplications become one. The compiler merged them at the graph level, and **the result did not
+change** — `camel docs/tutorial/examples/01_rewrite.cml` still prints `12`.
 
 A program is not a list that says "do this, then that"; it is a graph of **who needs whose result**. And a graph
 can be rewritten, before you ever run it. That is what makes Camel different from other languages, and it is the
@@ -178,8 +174,9 @@ sync edge between effects; optimization replaces the graph with a smaller graph 
 ## Exercise
 
 Write a function `area(w: int, h: int): int` that returns their product, and print `area(3, 4)` from `main`. Then
-add `std::gir` and find in your graph: the two `PORT` nodes `w` and `h`, the one `OPER` node that multiplies, and
-the two data edges that join them.
+draw it (`camel docs/tutorial/examples/01_exercise.cml std::rgir > area.dot`, then `dot -Tsvg area.dot -o area.svg`)
+and find in your graph: the two `PORT` nodes `w` and `h`, the one `OPER` node that multiplies, and the two data
+edges that join them.
 
 Answer [`examples/01_exercise.cml`](examples/01_exercise.cml):
 

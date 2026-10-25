@@ -5,8 +5,22 @@
 读完这一章你会跑起第一个 Camel 程序，并且看到两件别的语言不会给你看的事：**你的函数是一张图**，
 **编译器会改写这张图，而结果不变**。全书要一直带着的问题从现在开始：**这段代码在图上是什么？**
 
-先拿到 `camel`：按 [setup.cn.md](../setup.cn.md) 从源码构建，把 `out/latest/bin` 加进 `PATH`，
-`camel --version` 能打印版本就可以开始。下面的命令都从仓库根目录执行。
+## 为什么是 Camel
+
+大多数语言把程序写成给机器一步步执行的指令；可是编译器、并行运行时、自动微分、GPU 后端真正需要的是一张图，
+它要说清要算什么、谁依赖谁。别的语言里，这张图只能事后从代码里恢复出来，恢复出来的图会断开，也会漏掉副作用的
+含义。Camel 让**程序本身就是图**：你写下的是计算的意图与依赖，先后顺序只在需要时才写——所以图不用猜，改写图
+就是改写你的程序。为什么这门语言把 AI 作为首要的应用场景，写在[为什么是 Camel](../why.cn.md) 里。
+
+## 先拿到 camel
+
+```bash
+pip install camel-lang
+camel --version
+```
+
+装完 `camel` 就在 `PATH` 上，可以开始下面的命令了。想参与这门语言的开发、或者要跟最新的主线，另一条路是从源码
+构建：[setup.cn.md](../setup.cn.md)（构建到 `out/latest/bin`）。下面的例子都在仓库里，命令都从仓库根目录执行。
 
 ## 第一个程序
 
@@ -33,16 +47,15 @@ Hello, Camel!
 
 - 一个 `.cml` 文件是一个模块，`module hello` 给它起名（名字可以省略）。
 - 程序从 `main` 开始。它返回的 `int` 是进程的退出码，所以这里返回 `0`。
-- 返回类型后面的 **`sync`** 表示这个函数体是**同步块**：它直接写着的语句按书写顺序执行。第 10 章讲为什么
-  需要它；现在只要记住"要打印的函数，函数体前写 `sync`"。
+- 返回类型后面的 **`sync`** 表示这个函数体是**同步块**：它直接写着的语句按书写顺序执行。为什么需要它？
+  Camel 只算**被需要**的结果，而"打印出来"这个结果没人要；`sync` 让这个函数体照写下的顺序执行。
+  细节留给第 10 章；现在只要记住"要打印的函数，函数体前写 `sync`"。
 - 语句之间换行即可，不需要分号。
 
 ## 你的函数是一张图
 
-把 `std::gir` 写在命令行最后：程序不会运行，编译器把它编译出的图打印出来。文件名后面写的东西叫**遍**，
-`std::gir` 是一个只负责把图打印出来的遍。
-
-<!-- camel-snippet: graph-dump: the text block is std::gir's DOT, not the program's stdout -->
+把 `std::rgir` 写在命令行最后：程序不会运行，编译器把它编译出的图**画出来**（DOT 是 Graphviz 的格式，交给 `dot`
+就是一张图）。文件名后面写的东西叫**遍**，`std::rgir` 是只负责把图画出来的遍。
 
 ```cml
 // The smallest program: `main` is the entry, and its body is a sync block.
@@ -56,42 +69,26 @@ func main(): int sync {
 ```
 
 ```bash
-camel docs/tutorial/examples/01_hello.cml std::gir
+camel docs/tutorial/examples/01_hello.cml std::rgir > hello.dot
+dot -Tsvg hello.dot -o hello.svg
 ```
 
-```text
-digraph GraphIR {
-    subgraph cluster_F01 {
-        label="main";
-        O01 [label="EXIT", type="EXIT"];
-        N00 [label="Hello, Camel!", type="DATA", origin=35, span="5:12-5:27", srcfile="docs/tutorial/examples/01_hello.cml", value_type="string"];
-        N01 [label=":io/println", type="OPER", origin=36, span="5:4-5:11", srcfile="docs/tutorial/examples/01_hello.cml", value_type="string"];
-        N02 [label="0", type="DATA", origin=37, span="6:11-6:12", srcfile="docs/tutorial/examples/01_hello.cml", value_type="int"];
-        N03 [label="GATE", type="GATE", value_type="int"];
-        N03 -> O01 [label="0", type="EXIT"];
-        N00 -> N01 [label="0|0", type="NORM"];
-        N02 -> N03 [label="0|0", type="NORM"];
-        N01 -> N03 [label="0|0", type="CTRL"];
-    }
-    O00 [label="EXIT", type="EXIT"];
-    N04 [label="Function(graph=main, tupleSlots=0)", type="DATA", origin=33, span="4:0-7:1", srcfile="docs/tutorial/examples/01_hello.cml", value_type="() => int"];
-    N05 [label="CALL", type="CALL", value_type="int"];
-    N05 -> O00 [label="0", type="EXIT"];
-    N04 -> N05 [label="0|0", type="WITH"];
-}
-```
+![main 的子图，以及入口对它的调用](images/01_hello.svg)
 
-对着源码读这张图：
+对着源码读这张图（圆是值，菱形是算子或门）：
 
-- `cluster_F01` 是 **`main` 的子图**。图里没有"第 5 行做了什么"，只有节点和边。
-- `N00` 是字符串常量，`N01` 是 `:io/println` 这个算子，`N00 -> N01` 这条**数据边**说的是"这条字符串是它的
-  实参"。
-- `N02` 是 `0`，`N03` 是出口的门 `GATE`：`N02 -> N03` 说明 `main` 的值是 `0`。
-- `N01 -> N03` 这条边的类型是 **`CTRL`**：**同步块在图上是效应之间的同步边**。`println` 是效应，
-  这条边把它排在出口之前，也就是排在 `return 0` 之前——`sync` 做的正是这件事。把 `sync` 去掉，
-  这条边和 `println` 就都不在了（第 9、10 章）。
-- 最外面那三行是入口自己：`Function(graph=main)` 是 `main` 这张子图，`CALL` 是入口对它的调用，
-  `WITH` 边把两者连起来。
+- 上面那个大框是 **`main` 的子图**。图里没有"第 5 行做了什么"，只有节点和边。
+- 写着 `Hello, Camel!` 的圆是字符串常量，写着 `:io/println` 的菱形是 `println` 这个算子，
+  两者之间的**数据边**说的是"这条字符串是它的实参"。
+- 写着 `0` 的圆是返回值，写着 `GATE` 的菱形是出口的门：`0` 走到门，门的输出就是 `main` 的值。
+- `println` 到 `GATE` 的那条边是**同步边**（`std::rgir` 画成虚线、空心箭头）：**同步块在图上是效应之间的同步边**。
+  这条边把 `println` 排在出口之前，也就是排在 `return 0` 之前——`sync` 做的正是这件事。把 `sync` 去掉，这条边和
+  `println` 就都不在了（第 9、10 章）。
+- 最下面那一对节点是入口自己：写着 `CALL` 的菱形是入口对 `main` 的调用，它的输入是 `main` 这张子图。
+
+本书里的图都由脚本从例子生成：[`tools/render-graphs.mjs`](tools/render-graphs.mjs)。生成物在
+[`images/`](images/) 下，每张图旁边有一个同名的 `.dot`——图就是从它画出来的；`node
+docs/tutorial/tools/render-graphs.mjs --check` 会重画一遍再和入库的图比对，图和例子不会悄悄走散。
 
 ## 编译器会改写图
 
@@ -120,9 +117,8 @@ camel docs/tutorial/examples/01_rewrite.cml
 12
 ```
 
-结果是对的，但这份程序写得比它需要的多。加上 `std::opt`（优化遍）再看一次图：
-
-<!-- camel-snippet: graph-dump: the text block is one excerpt of std::opt std::gir's DOT, not the program's stdout -->
+结果是对的，但这份程序写得比它需要的多。看一下 `twice` 这个函数在图上的样子：左边是它刚编译出来的样子，
+右边是加上 `std::opt`（优化遍）之后。
 
 ```cml
 // The same shape as 01_hello.cml, with one expression that has more than one writing.
@@ -140,27 +136,17 @@ func main(): int sync {
 ```
 
 ```bash
-camel docs/tutorial/examples/01_rewrite.cml std::opt std::gir
+camel docs/tutorial/examples/01_rewrite.cml std::rgir
+camel docs/tutorial/examples/01_rewrite.cml std::opt std::rgir
 ```
 
-```text
-        subgraph cluster_F02 {
-            label="twice";
-            F02 [label="ARGS", type="ARGS"];
-            O02 [label="EXIT", type="EXIT"];
-            N00 [label="x", type="PORT", param_name="x", param_kind="normal", param_index="0", value_type="int"];
-            N01 [label="4", type="DATA", value_type="int"];
-            N02 [label=":op/mul_l", type="OPER", origin=92, span="5:17-5:18", srcfile="docs/tutorial/examples/01_rewrite.cml", value_type="int"];
-            F02 -> N00 [label="0", type="NORM_PORT"];
-            N02 -> O02 [label="0", type="EXIT"];
-            N00 -> N02 [label="0|0", type="NORM"];
-            N01 -> N02 [label="0|1", type="NORM"];
-        }
-```
+| `std::opt` 之前 | `std::opt` 之后 |
+| --- | --- |
+| ![两个乘法加一个加法](images/01_twice_before.svg) | ![一个乘法乘常量 4](images/01_twice_after.svg) |
 
-上面是那份输出里 `main` 中 `twice` 这一段（节选）。`x * 2 + x * 2` 不见了：现在只有一个乘法节点和一个
-常量 `4`。编译器在图这一层把两个乘法合成了一份，**结果不变**——`camel docs/tutorial/examples/01_rewrite.cml`
-仍然打印 `12`。
+左边是两个乘法节点加一个加法节点，两个常量都是 `2`；右边只剩一个乘法节点，常量变成 `4`。`x * 2 + x * 2` 不见了：
+`2 + 2` 先算成 `4`，两个乘法合成一个。编译器在图这一层把两个乘法合成了一份，**结果不变**——
+`camel docs/tutorial/examples/01_rewrite.cml` 仍然打印 `12`。
 
 程序不是一张写着"先做这个、再做那个"的清单，而是一张**谁要谁的结果**的图；既然是图，就可以被改写，
 而改写可以发生在你运行它之前。这就是 Camel 与别的语言最不一样的地方，也是这本教程后面每一章都要回到的
@@ -174,7 +160,8 @@ camel docs/tutorial/examples/01_rewrite.cml std::opt std::gir
 ## 练习
 
 写一个有两个参数的函数 `area(w: int, h: int): int`，返回它们的乘积，并在 `main` 里打印 `area(3, 4)`。
-然后加上 `std::gir`，在你的图里找到：`w`、`h` 这两个 `PORT` 节点，做乘法的那一个 `OPER` 节点，
+然后把它画出来（`camel docs/tutorial/examples/01_exercise.cml std::rgir > area.dot`，再
+`dot -Tsvg area.dot -o area.svg`），在你的图里找到：`w`、`h` 这两个 `PORT` 节点，做乘法的那一个 `OPER` 节点，
 以及把这些连起来的两条数据边。
 
 参考答案 [`examples/01_exercise.cml`](examples/01_exercise.cml)：
