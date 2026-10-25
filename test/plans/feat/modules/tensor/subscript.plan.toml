@@ -198,7 +198,36 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::SliceStepZero"
 expect_diagnostic_code = "0x030001E9"
+expect_diagnostic_line = 11
+expect_diagnostic_column = 25
 expect_output_contains = ["The slice 't[a:b:s]' has a step of 0"]
 expect_output_not_contains = ["not reached"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+# A slice along an axis that is not the first: the core's own function form, called without the
+# module's `slice` in scope, so the core's rule is the one that answers. The type the call has is
+# what the parameter it is passed to states, which is how a static extent is observed in this
+# language (the same idiom as si_computed_slice, whose computed axis keeps `?` and whose diagnostic
+# is unchanged).
+[[tests]]
+name = "slice_axis_constant_bounds"
+desc = "A slice of `m: f32[3, 4]` along axis 1 with the constant bounds 1 and 3 is an `f32[3, 2]`: the axis the slice does not cut keeps its stated length and the axis it cuts states the two positions the bounds and the step give it, so `row(a: Tensor<f32, [3, 2]>)` takes it with no conversion (the author's ruling of 2026-10-25, point A)."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/subscript/slice_axis_constant_bounds.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "39.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "slice_axis_computed_bounds"
+desc = "The same slice with a computed bound is an `f32[3, ?]`: the cut axis is `?` because only the run knows how long it is, and the axis the slice does not cut still keeps its stated length, so `row(a: Tensor<f32, [3, ?]>)` takes it with no conversion. The old rule said `f32[?, ?]`, which this call would be refused for as less exact."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/subscript/slice_axis_computed_bounds.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "54.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000

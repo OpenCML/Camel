@@ -957,7 +957,7 @@ Reference defaultImportNamespace(const std::string &path) {
 }
 
 /*
-DataDecl(bool isVar, UnpackType type, Ref[] refs) : Type* type, Data* value;
+DataDecl(bool isVar, Ref[] refs) : Type* type, Data* value;
 */
 node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
     ENTER("DataDecl");
@@ -976,126 +976,105 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
     // program: in a sync block the initializer keeps its place in the block's order.
     node_ptr_t res = makeExec(false, true);
 
-    // Handle different unpacking types
-    switch (dataDeclLoad->unpackType()) {
-    case AST::UnpackType::Struct: {
-        // Struct unpacking is not supported; log diagnostics and throw an exception
-        diags_->of(SemanticDiag::FeatureNotSupported)
-            .at(ast->load()->tokenRange())
-            .commit("Struct Unpacking");
-        throw BuildAbortException();
-    } break;
+    // The declaration binds one name, several names, or the elements of a tuple (the
+    // parenthesized carrier). A struct or an array carrier is not in the language: the
+    // parser refuses it, so no declaration reaches here with one.
+    if (refs.size() == dataNodes->size()) {
+        for (size_t i = 0; i < refs.size(); ++i) {
+            const auto &ref         = refs[i];
+            const auto &dataASTNode = dataNodes->atAs<AST::DataLoad>(i);
+            // The declared type first: an array literal takes the form of its elements
+            // from it (visitDataInto).
+            Type *declaredType = nullptr;
+            if (i < typeNodes->size()) {
+                declaredType = visitType(typeNodes->atAs<AST::TypeLoad>(i));
+            }
+            bool enteredLiteral = false;
+            node_ptr_t dataNode = declaredType != nullptr
+                                      ? visitDataInto(dataASTNode, declaredType, enteredLiteral)
+                                      : visitData(dataASTNode);
 
-    case AST::UnpackType::Array: {
-        // Array unpacking is not supported; log diagnostics and throw an exception
-        diags_->of(SemanticDiag::FeatureNotSupported)
-            .at(ast->load()->tokenRange())
-            .commit("Array Unpacking");
-        throw BuildAbortException();
-    } break;
+            // Validate the identifier
+            if (!validateIdent(ref.ident())) {
+                diags_->of(SemanticDiag::ReservedIdentifier)
+                    .at(dataDeclLoad->tokenRange())
+                    .commit();
+                throw BuildAbortException();
+            }
 
-    case AST::UnpackType::Tuple: {
-        if (refs.size() == dataNodes->size()) {
-            for (size_t i = 0; i < refs.size(); ++i) {
-                const auto &ref         = refs[i];
-                const auto &dataASTNode = dataNodes->atAs<AST::DataLoad>(i);
-                // The declared type first: an array literal takes the form of its elements
-                // from it (visitDataInto).
-                Type *declaredType = nullptr;
-                if (i < typeNodes->size()) {
-                    declaredType = visitType(typeNodes->atAs<AST::TypeLoad>(i));
+            if (i < typeNodes->size() && !enteredLiteral) {
+                dataNode = declaredValue(dataNode, declaredType, ast);
+            }
+
+            // Ensure the data node is of type Data
+            ASSERT(
+                dataASTNode->type() == AST::LoadType::Data,
+                "A declaration requires Data type nodes");
+            // Create a reference node and link the data node to it. A value of a
+            // namespace block is named with its namespaces (`Config::limit`).
+            node_ptr_t nRefNode = tree_->makeNRef(ref.toString());
+            *nRefNode << dataNode;
+            setOriginFromOrigin(
+                context_,
+                nRefNode,
+                findBindingOrigin(context_, ast, i),
+                camel::source::OriginKind::GctNode,
+                "gct.nref");
+            if (refs.size() == 1) {
+                res = nRefNode;
+            } else {
+                // `let a, b = 1, 2` binds every name: only the last one used to be kept.
+                *res << nRefNode;
+            }
+        }
+    } else {
+        if (dataNodes->size() == 1) {
+            // If there is only one data node, process it as a reference and access node
+            const auto &dataASTNode = dataNodes->atAs<AST::DataLoad>(0);
+            node_ptr_t dataNode     = visitData(dataASTNode);
+
+            if (typeNodes->size() > 0) {
+                const auto &typeASTNode = typeNodes->atAs<AST::TypeLoad>(0);
+                Type *type              = nullptr;
+                {
+                    type = visitType(typeASTNode);
                 }
-                bool enteredLiteral = false;
-                node_ptr_t dataNode = declaredType != nullptr
-                                          ? visitDataInto(dataASTNode, declaredType, enteredLiteral)
-                                          : visitData(dataASTNode);
+                dataNode = declaredValue(dataNode, type, ast);
+            }
 
-                // Validate the identifier
+            const string id     = std::to_string(idIndex_++);
+            node_ptr_t nRefNode = tree_->makeNRef(id);
+            node_ptr_t dRefNode = tree_->makeDRef(id);
+            *nRefNode << dataNode;
+            *res << nRefNode;
+            for (size_t i = 0; i < refs.size(); ++i) {
+                const auto &ref = refs[i];
                 if (!validateIdent(ref.ident())) {
                     diags_->of(SemanticDiag::ReservedIdentifier)
                         .at(dataDeclLoad->tokenRange())
                         .commit();
                     throw BuildAbortException();
                 }
-
-                if (i < typeNodes->size() && !enteredLiteral) {
-                    dataNode = declaredValue(dataNode, declaredType, ast);
-                }
-
-                // Ensure the data node is of type Data
-                ASSERT(
-                    dataASTNode->type() == AST::LoadType::Data,
-                    "Tuple unpacking requires Data type nodes");
-                // Create a reference node and link the data node to it. A value of a
-                // namespace block is named with its namespaces (`Config::limit`).
                 node_ptr_t nRefNode = tree_->makeNRef(ref.toString());
-                *nRefNode << dataNode;
+                node_ptr_t accsNode = tree_->makeAccs(i);
+                *accsNode << tree_->clone(dRefNode);
+                *nRefNode << accsNode;
                 setOriginFromOrigin(
                     context_,
                     nRefNode,
                     findBindingOrigin(context_, ast, i),
                     camel::source::OriginKind::GctNode,
                     "gct.nref");
-                if (refs.size() == 1) {
-                    res = nRefNode;
-                } else {
-                    // `let a, b = 1, 2` binds every name: only the last one used to be kept.
-                    *res << nRefNode;
-                }
+                *res << nRefNode;
             }
         } else {
-            if (dataNodes->size() == 1) {
-                // If there is only one data node, process it as a reference and access node
-                const auto &dataASTNode = dataNodes->atAs<AST::DataLoad>(0);
-                node_ptr_t dataNode     = visitData(dataASTNode);
-
-                if (typeNodes->size() > 0) {
-                    const auto &typeASTNode = typeNodes->atAs<AST::TypeLoad>(0);
-                    Type *type              = nullptr;
-                    {
-                        type = visitType(typeASTNode);
-                    }
-                    dataNode = declaredValue(dataNode, type, ast);
-                }
-
-                const string id     = std::to_string(idIndex_++);
-                node_ptr_t nRefNode = tree_->makeNRef(id);
-                node_ptr_t dRefNode = tree_->makeDRef(id);
-                *nRefNode << dataNode;
-                *res << nRefNode;
-                for (size_t i = 0; i < refs.size(); ++i) {
-                    const auto &ref = refs[i];
-                    if (!validateIdent(ref.ident())) {
-                        diags_->of(SemanticDiag::ReservedIdentifier)
-                            .at(dataDeclLoad->tokenRange())
-                            .commit();
-                        throw BuildAbortException();
-                    }
-                    node_ptr_t nRefNode = tree_->makeNRef(ref.toString());
-                    node_ptr_t accsNode = tree_->makeAccs(i);
-                    *accsNode << tree_->clone(dRefNode);
-                    *nRefNode << accsNode;
-                    setOriginFromOrigin(
-                        context_,
-                        nRefNode,
-                        findBindingOrigin(context_, ast, i),
-                        camel::source::OriginKind::GctNode,
-                        "gct.nref");
-                    *res << nRefNode;
-                }
-            } else {
-                // If the number of data nodes does not match, log diagnostics and throw an
-                // exception
-                diags_->of(SemanticDiag::TupleUnpackingCountMismatch)
-                    .at(ast->load()->tokenRange())
-                    .commit();
-                throw BuildAbortException();
-            }
+            // If the number of data nodes does not match, log diagnostics and throw an
+            // exception
+            diags_->of(SemanticDiag::TupleUnpackingCountMismatch)
+                .at(ast->load()->tokenRange())
+                .commit();
+            throw BuildAbortException();
         }
-    } break;
-    default:
-        // If the unpacking type is unknown, throw an exception
-        ASSERT(false, "Unknown unpack type in DataDecl");
     }
 
     // If it's a variable declaration, create a variable node and link the result node to it

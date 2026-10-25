@@ -78,17 +78,20 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
 
 [[tests]]
-name = "format.pattern_empty_snapshot"
-desc = "Formats empty tuple and struct match patterns using CST-only parsing."
-kind = "snapshot"
+name = "format.pattern_empty_refused"
+desc = "Empty tuple and struct match patterns are refused with the parser's diagnostic instead of formatted: a pattern is an identifier, a variant path, a literal or `_`, so `case ()` and `case {}` are ordinary syntax errors (the formatter parses before it writes, and it must not format what the parser refuses)."
+kind = "negative"
 tool = "camel-format"
 case = "../../../cases/format/pattern_empty.cml"
 args = ["${case}"]
-expect_exit = 0
-snapshot_stream = "stdout"
-snapshot_compare = "text_exact"
-golden = "./golden/pattern_empty.cml"
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+expect_exit = 1
+expect_diagnostic_name = "SyntaxDiag::UnexpectedToken"
+expect_diagnostic_code = "0x0200000A"
+expect_diagnostic_line = 3
+expect_diagnostic_column = 29
+expect_output_contains = ["Unexpected '('; expected a pattern."]
+expect_output_not_contains = ["UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
 [[tests]]

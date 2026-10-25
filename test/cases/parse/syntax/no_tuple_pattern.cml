@@ -1,0 +1,17 @@
+/**
+ * A tuple pattern is not in the language: `case (1, 2)` is refused at the `(` (line 11,
+ * column 14) as an ordinary syntax error. It was a `ConstructNotSupported` while the form was
+ * still in the grammar; the parser read the nesting so that the compiler could say so.
+ */
+module syntax_no_tuple_pattern
+
+func main(): int sync {
+    let t = (1, 2)
+    let r = match t {
+        case (1, 2) => 1
+        case _ => 0
+    }
+    println('never printed')
+    println(r)
+    return 0
+}

@@ -1,0 +1,17 @@
+/**
+ * Destructuring an array is not in the language: `let [a, b] = xs` is refused at the `[` as an
+ * ordinary syntax error (line 9, column 9), where the name being declared belongs. The array
+ * carrier the parser used to read is gone with the struct and array carriers.
+ */
+module no_array_destructuring
+
+func f(xs: int[]): int {
+    let [a, b] = xs
+    return a + b
+}
+
+func main(): int sync {
+    println('never printed')
+    println(f([1, 2]))
+    return 0
+}

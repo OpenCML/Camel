@@ -341,7 +341,7 @@ parallel, result in position order), `xs->reduce<f, init>` and `xs->foreach<f>` 
 16  negExpr             - ! ~                              prefix
 17  negPower            - ! ~ ^                            prefix, right
 18  compExpr            ..                                 repeat, left
-19  annoExpr            !                                  repeat, left
+19  annoExpr            -                                  repeat, left
 ```
 
 The production of each level, as `src/parse/syntax/parser_expr.cpp` writes it above the
@@ -366,7 +366,7 @@ linkExpr           : negExpr (('->' | '?->') compExpr)*
 negExpr            : ('-' | '!' | '~') negPower | compExpr
 negPower           : ('-' | '!' | '~') negPower | compExpr ('^' negPower)?
 compExpr           : annoExpr ('..' annoExpr)*
-annoExpr           : accessExpr (indices | parentArgues | structData | angledValues | typeArguments | '!' | memberAccess)*
+annoExpr           : accessExpr (indices | parentArgues | structData | angledValues | typeArguments | memberAccess)*
 ```
 <!-- camel-for-ai end: precedence -->
 

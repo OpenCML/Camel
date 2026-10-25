@@ -26,8 +26,6 @@ enum class TagPosition : uint8_t {
     Param = 1u << 4,
 };
 
-enum class UnpackType { Array, Tuple, Struct };
-
 enum class ExitType { Yield, Raise, Return, Throw };
 
 class StmtLoad : public Load {
@@ -62,18 +60,16 @@ class StmtLoad : public Load {
 
 class DataDeclLoad : public StmtLoad {
   public:
-    DataDeclLoad(bool isVar, UnpackType type, const std::vector<Reference> &refs)
-        : StmtLoad(StmtType::Data), isVar_(isVar), type_(type), refs_(refs) {}
+    DataDeclLoad(bool isVar, const std::vector<Reference> &refs)
+        : StmtLoad(StmtType::Data), isVar_(isVar), refs_(refs) {}
     const std::string toString() const override;
 
     bool isVar() const { return isVar_; }
-    UnpackType unpackType() const { return type_; }
     const std::vector<Reference> &refs() const { return refs_; }
     const std::string geneCode() const override;
 
   private:
     bool isVar_;
-    UnpackType type_;
     std::vector<Reference> refs_;
 };
 

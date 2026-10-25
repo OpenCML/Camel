@@ -160,7 +160,6 @@ class Builder {
     Value visitResourceDecl(syntax::cst::ResourceDecl context);
     Value visitResourceClause(syntax::cst::ResourceClause context);
     Value visitRetStmt(syntax::cst::RetStmt context);
-    Value visitSpreadValue(syntax::cst::SpreadValue context);
     Value visitRestValue(syntax::cst::RestValue context);
     Value visitKeyTypePair(syntax::cst::KeyTypePair context);
     Value visitKeyValuePair(syntax::cst::KeyValuePair context);

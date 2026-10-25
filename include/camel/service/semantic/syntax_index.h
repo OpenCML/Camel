@@ -150,7 +150,7 @@ struct TokenInfo {
 };
 
 /// Direct positional arguments of a syntactically named call. Nested expressions
-/// keep their whole range; named arguments and arguments after a spread are omitted.
+/// keep their whole range; named arguments and arguments after a rest argument are omitted.
 struct CallSite {
     std::vector<Range> positional;
 };
