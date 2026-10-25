@@ -508,7 +508,7 @@ A tag is declared at the top level of a module; after `on` come the positions it
 export tag kernel on nodes                  // before a block, function or type: the nodes in it
 export tag fast on func, nodes              // also the function's own declaration
 export tag width<w: int> on type, field     // with parameters, which are compile-time values
-export tag vjp<rule: F> on func when is_function::<F>()   // a function parameter: the argument is a function, and the fact restores to that function
+export tag vjp<rule: function> on func      // a function parameter: the argument is a function, and the fact restores to that function
 tag finite = [kernel, fast]                 // a group: its members apply together
 ```
 
@@ -545,7 +545,7 @@ func main(): int {
 
 A tag of `on nodes` is a **node attribute** (`camel/core/node_attrs.h`): a tag written before a function body or a block holds for the nodes written in it, it accumulates with same-name tags outside by the attribute's combine rule, and an inner same-name tag with a parameter takes the inner value. A tag of `on func`, `on type` and `on field` belongs to the declaration itself: a C++ module reads it in one query, `tag::factsOf` (tags, permissions and readers; `tag::ofDeclaration` / `tag::ofField` remain); reading it from Camel code waits for the first stage of generics.
 
-A parameter may also be a function: it is declared as a type parameter with the condition `when is_function::<F>()`, the same spelling as a pass's signature `opt::<F>(f: F): F! when is_function::<F>()`. Its argument is a function, and the tag's fact is that function itself (the argument restores to the function), not its name and not an internal handle; whether its signature fits is checked by the tag's reader where the tag is written. The autodiff module declares `export tag vjp<rule: F> on func when is_function::<F>()` this way: `#vjp<rule>` before a function declaration makes calls of that function use the rule instead of the derivative of its body ([26 Autodiff](../../technical/26_autodiff_as_graph_rewrite.md)).
+A parameter may also be a function: its type is the built-in `function` (any function, [3.1](03_data_model.md#31-types-at-a-glance)), or a concrete function type `(x: T) => R` when the signature is fixed. Its argument is a function, and the tag's fact is that function itself (the argument restores to the function), not its name and not an internal handle; whether its signature fits is checked by the tag's reader where the tag is written. The autodiff module declares `export tag vjp<rule: function> on func` this way: `#vjp<rule>` before a function declaration makes calls of that function use the rule instead of the derivative of its body ([26 Autodiff](../../technical/26_autodiff_as_graph_rewrite.md)).
 
 **`#impl<f>`: the Camel body is the semantics, the native kernel is the execution** (design principles 10.4). It is written before a function declaration that has a body:
 
