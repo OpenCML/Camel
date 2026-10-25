@@ -19,27 +19,27 @@ import { sqrt } from math
 import { weight } from camel_bench
 
 type Block = {
-    ln1_gamma: Tensor, ln1_beta: Tensor,
-    q_w: Tensor, q_b: Tensor, k_w: Tensor, k_b: Tensor,
-    v_w: Tensor, v_b: Tensor, o_w: Tensor, o_b: Tensor,
-    ln2_gamma: Tensor, ln2_beta: Tensor,
-    ffn1_w: Tensor, ffn1_b: Tensor, ffn2_w: Tensor, ffn2_b: Tensor
+    ln1_gamma: f32[..], ln1_beta: f32[..],
+    q_w: f32[..], q_b: f32[..], k_w: f32[..], k_b: f32[..],
+    v_w: f32[..], v_b: f32[..], o_w: f32[..], o_b: f32[..],
+    ln2_gamma: f32[..], ln2_beta: f32[..],
+    ffn1_w: f32[..], ffn1_b: f32[..], ffn2_w: f32[..], ffn2_b: f32[..]
 }
 
 /// [B, S, D] -> [B, H, S, D / H]
-func split_heads(t: Tensor, heads: int): Tensor {
+func split_heads(t: f32[..], heads: int): f32[..] {
     let dims = shape(t)
     return permute(reshape(t, [dims[0], dims[1], heads, dims[2] / heads]), [0, 2, 1, 3])
 }
 
 /// [B, H, S, Dh] -> [B, S, H * Dh]
-func merge_heads(t: Tensor): Tensor {
+func merge_heads(t: f32[..]): f32[..] {
     let dims = shape(t)
     return reshape(permute(t, [0, 2, 1, 3]), [dims[0], dims[2], dims[1] * dims[3]])
 }
 
 with <m: Block>
-func attention(x: Tensor): Tensor {
+func attention(x: f32[..]): f32[..] {
     let heads = 4
     let q = split_heads(x @ m.q_w + m.q_b, heads)
     let k = split_heads(x @ m.k_w + m.k_b, heads)
@@ -50,20 +50,20 @@ func attention(x: Tensor): Tensor {
 }
 
 with <m: Block>
-func forward(x: Tensor): Tensor {
+func forward(x: f32[..]): f32[..] {
     let h = x + attention<m>(layer_norm(x, m.ln1_gamma, m.ln1_beta))
     let f = gelu(layer_norm(h, m.ln2_gamma, m.ln2_beta) @ m.ffn1_w + m.ffn1_b)
     return h + (f @ m.ffn2_w + m.ffn2_b)
 }
 
 with <m: Block>
-func loss(x: Tensor): float {
+func loss(x: f32[..]): float {
     let y = forward<m>(x)
     return mean(y * y)
 }
 
 /// One training step: the loss and the updated parameters (as exported to ONNX).
-func step(m: Block, x: Tensor): (float, Block) {
+func step(m: Block, x: f32[..]): (float, Block) {
     let vg = with_grad(loss)<m>(x)
     return (vg.0, sgd(m, vg.1, 0.01))
 }

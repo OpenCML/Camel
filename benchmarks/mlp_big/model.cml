@@ -13,13 +13,13 @@ import { now } from time
 import { weight, bench_input, run_benchmark, run_training, warm_count, step_count, log_step, log_final } from camel_bench
 
 type Mlp = {
-    fc1_w: Tensor, fc1_b: Tensor,
-    fc2_w: Tensor, fc2_b: Tensor,
-    fc3_w: Tensor, fc3_b: Tensor
+    fc1_w: f32[..], fc1_b: f32[..],
+    fc2_w: f32[..], fc2_b: f32[..],
+    fc3_w: f32[..], fc3_b: f32[..]
 }
 
 with <m: Mlp>
-func forward(x: Tensor): Tensor {
+func forward(x: f32[..]): f32[..] {
     let h1 = relu(x @ m.fc1_w + m.fc1_b)
     let h2 = relu(h1 @ m.fc2_w + m.fc2_b)
     return h2 @ m.fc3_w + m.fc3_b
@@ -27,19 +27,19 @@ func forward(x: Tensor): Tensor {
 
 // Training workload (train.py): loss mean(y^2), one SGD step with lr 0.01.
 with <m: Mlp>
-func loss(x: Tensor): float {
+func loss(x: f32[..]): float {
     let y = forward<m>(x)
     return mean(y * y)
 }
 
-func train_step(m: Mlp, x: Tensor): float sync {
+func train_step(m: Mlp, x: f32[..]): float sync {
     let vg = with_grad(loss)<m>(x)
     let next = sgd(m, vg.1, 0.01)
     return vg.0
 }
 
 /// The training step as a function of the parameters: the loss and the updated parameters.
-func step(m: Mlp, x: Tensor): (float, Mlp) {
+func step(m: Mlp, x: f32[..]): (float, Mlp) {
     let vg = with_grad(loss)<m>(x)
     return (vg.0, sgd(m, vg.1, 0.01))
 }
@@ -50,14 +50,14 @@ func export_step(m: Mlp, path: string): int sync {
     return 0
 }
 
-func dump_grads(m: Mlp, x: Tensor, dir: string): int sync {
+func dump_grads(m: Mlp, x: f32[..], dir: string): int sync {
     save_params(grad(loss)<m>(x), dir)
     return 0
 }
 
 /// The stateful training loop: step `i` starts from the parameters step `i - 1` produced.
 /// Returns the parameters after step `total - 1`.
-func train_loop(m: Mlp, x: Tensor, i: int, warm: int, total: int, t0: float): Mlp {
+func train_loop(m: Mlp, x: f32[..], i: int, warm: int, total: int, t0: float): Mlp {
     return if i >= total then m else sync {
         let start = now()
         let r = step(m, x)
@@ -74,7 +74,7 @@ func save_trained(m: Mlp, dir: string): int sync {
 
 /// Runs the stateful loop and reports the loss at the final parameters; saves them when
 /// CAMEL_BENCH_PARAMS names a directory.
-func train_stateful(m: Mlp, x: Tensor): int sync {
+func train_stateful(m: Mlp, x: f32[..]): int sync {
     let trained = train_loop(m, x, 0, warm_count(), step_count(), now())
     let reported = log_final(loss<trained>(x))
     let dir = get_env('CAMEL_BENCH_PARAMS')
@@ -89,8 +89,8 @@ func main(): int sync {
     }
     let workload = get_env('CAMEL_BENCH_WORKLOAD')
     return if workload == 'train_export' then export_step(m, get_env('CAMEL_BENCH_EXPORT')) else if workload == 'train' then run_training(
-        (x: Tensor): float => { return train_step(m, x) },
-        (x: Tensor, dir: string): int => { return dump_grads(m, x, dir) },
-        (x: Tensor): int => { return train_stateful(m, x) }
-    ) else run_benchmark((x: Tensor): Tensor => forward<m>(x))
+        (x: f32[..]): float => { return train_step(m, x) },
+        (x: f32[..], dir: string): int => { return dump_grads(m, x, dir) },
+        (x: f32[..]): int => { return train_stateful(m, x) }
+    ) else run_benchmark((x: f32[..]): f32[..] => forward<m>(x))
 }

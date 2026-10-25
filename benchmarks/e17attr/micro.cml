@@ -19,15 +19,15 @@ import { conv2d, sgd } from nn
 import { get_env } from env
 import { now } from time
 
-func lin(x: Tensor, w: Tensor): float {
+func lin(x: f32[..], w: f32[..]): float {
     return mean(x @ w)
 }
 
-func conv_s1_p2(x: Tensor, w: Tensor, b: Tensor): float {
+func conv_s1_p2(x: f32[..], w: f32[..], b: f32[..]): float {
     return mean(conv2d(x, w, b, 1, 2))
 }
 
-func conv_s1_p0(x: Tensor, w: Tensor, b: Tensor): float {
+func conv_s1_p0(x: f32[..], w: f32[..], b: f32[..]): float {
     return mean(conv2d(x, w, b, 1, 0))
 }
 
