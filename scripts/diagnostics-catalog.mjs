@@ -42,7 +42,10 @@
 import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
-import { parseTomlFile } from '../test/tools/toml-lite.mjs'
+// The runner's own reading of a plan file: which tests it holds, what `[defaults]` gives them, and
+// which of them it marks `known_fail`. The examples below are taken from that reading, so the
+// reference page and the suite cannot disagree about what a test is.
+import { loadPlanTests } from '../test/tools/run-tests.mjs'
 
 const DEFAULT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const REGISTRY_REL = 'diagnostics/registry.tsv'
@@ -451,13 +454,13 @@ function walk(dir, predicate, out = []) {
 function loadTests(root) {
     const tests = []
     for (const planPath of walk(path.join(root, 'test', 'plans'), (f) => f.endsWith('.plan.toml')).sort()) {
-        let plan
+        let read
         try {
-            plan = parseTomlFile(planPath)
+            read = loadPlanTests(planPath)
         } catch {
             continue
         }
-        for (const test of plan.tests || []) tests.push({ ...test, planPath })
+        for (const test of read.tests) tests.push({ ...test, planPath })
     }
     return tests
 }
@@ -466,14 +469,27 @@ function stripLeadingComment(source) {
     return source.replace(/^\s*\/\*[\s\S]*?\*\/\s*/, '')
 }
 
+// The entry as its author wrote it, for the loose name search below: the runner's own bookkeeping
+// (`__planPath`, `__backend`, `__knownFail`, ...) names no diagnostic and is not part of what the
+// entry declares.
+function declaredFields(test) {
+    return JSON.stringify(test, (key, value) => (key.startsWith('__') ? undefined : value))
+}
+
 function exampleFor(entry, tests, root) {
     const candidates = []
     for (const test of tests) {
+        // An example must be a program that passes: a test the runner marks `known_fail` on the
+        // back end it runs fails on purpose, and showing it would show the reader a program that
+        // fails. The mark is the plan's own `known_fail` -- the runner expands an entry into one
+        // test per back end and sets `__knownFail` on each -- so this reads the declaration the
+        // suite runs by and not a second one.
+        if (test.__knownFail) continue
         if (!test.case || (test.tool && test.tool !== 'camel')) continue
         const exact =
             test.expect_diagnostic_name === entry.fullName ||
             test.expect_diagnostic_code === hex8(entry.code)
-        const loose = !exact && new RegExp(`\\b${entry.name}\\b`).test(JSON.stringify(test))
+        const loose = !exact && new RegExp(`\\b${entry.name}\\b`).test(declaredFields(test))
         if (!exact && !loose) continue
         const casePath = path.resolve(path.dirname(test.planPath), test.case)
         if (!casePath.endsWith('.cml') || !fs.existsSync(casePath)) continue
