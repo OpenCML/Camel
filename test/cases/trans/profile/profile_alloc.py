@@ -118,8 +118,12 @@ def main() -> int:
         blocks = sum(row["alloc_blocks"] for row in doc["operator_rows"])
         check(blocks == alloc["inside_blocks"], f"the rows sum to the aggregate ({blocks} vs {alloc['inside_blocks']})")
         line = text_value(out, "allocations per step")
+        # The step row counts the entries into the allocator, and an operator execution no longer
+        # allocates the type objects it asks the type table for: the row reads two calls where it
+        # read four before those types were interned. The block payload and the payload bytes are
+        # the loop's own one block of 4096 bytes and do not move with the count.
         check(
-            line.startswith("4.0 calls (1.0 block payloads, 4.0 KiB payload"),
+            line.startswith("2.0 calls (1.0 block payloads, 4.0 KiB payload"),
             f"the text step row reports one 4 KiB block (got {line!r})",
         )
         check(

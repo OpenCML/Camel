@@ -5,8 +5,8 @@ PROFILE camel
  run <time>
  operator calls 55 (time inside them: <time>, <pct> of the run)
  measurement overhead <time> per operator call or allocation (one timestamp pair)
- allocations 115 calls (0 block payloads), <bytes> requested, <time> inside the allocators
- inside operator calls: 101 calls (0 block payloads, <bytes>), <time>; the rows below
+ allocations 54 calls (0 block payloads), <bytes> requested, <time> inside the allocators
+ inside operator calls: 40 calls (0 block payloads, <bytes>), <time>; the rows below
  device kernels 0
  transfers 0 in all: host->device <bytes>, device->host <bytes>
  synchronisations 0
@@ -16,7 +16,7 @@ steps - the loop at test/cases/modules/tensor/fusion_group_none.cml:30:26: 3 rou
  kernels per step 0.00 (max 0)
  transfers per step 0.00 (0 host->device, 0 device->host, max 0 bytes)
  syncs per step 0.00 (max 0)
- allocations per step 27.0 calls (0.0 block payloads, <bytes> payload, <time> in the allocators)
+ allocations per step 9.0 calls (0.0 block payloads, <bytes> payload, <time> in the allocators)
  wall per step median <time>, mean <time>, min <time>, max <time>
 
 operators (device, calls, total, first call, mean after the first, share of operator time,
@@ -26,13 +26,13 @@ operators (device, calls, total, first call, mean after the first, share of oper
  cpu :op/lt_l 4 <time> <time> <time> <pct> <time> (<pct>) 0 0 <bytes>
  cpu :str/format 1 <time> <time> - <pct> <time> (<pct>) 1 0 <bytes>
  cpu autodiff:with_grad 1 <time> <time> - <pct> <time> (<pct>) 7 0 <bytes>
- cpu tensor:add 5 <time> <time> <time> <pct> <time> (<pct>) 15 0 <bytes>
- cpu tensor:broadcast_like 3 <time> <time> <time> <pct> <time> (<pct>) 9 0 <bytes>
- cpu tensor:multiply 18 <time> <time> <time> <pct> <time> (<pct>) 54 0 <bytes>
- cpu tensor:subtract 3 <time> <time> <time> <pct> <time> (<pct>) 9 0 <bytes>
+ cpu tensor:add 5 <time> <time> <time> <pct> <time> (<pct>) 5 0 <bytes>
+ cpu tensor:broadcast_like 3 <time> <time> <time> <pct> <time> (<pct>) 3 0 <bytes>
+ cpu tensor:multiply 18 <time> <time> <time> <pct> <time> (<pct>) 18 0 <bytes>
+ cpu tensor:subtract 3 <time> <time> <time> <pct> <time> (<pct>) 3 0 <bytes>
  cpu tensor:sum 5 <time> <time> <time> <pct> <time> (<pct>) 0 0 <bytes>
  cpu tensor:sum_to 9 <time> <time> <time> <pct> <time> (<pct>) 0 0 <bytes>
- cpu tensor:zeros 2 <time> <time> <time> <pct> <time> (<pct>) 6 0 <bytes>
+ cpu tensor:zeros 2 <time> <time> <time> <pct> <time> (<pct>) 3 0 <bytes>
 
 hints - loops that run on the host element by element
  test/cases/modules/tensor/fusion_group_none.cml:30:26 (main) - element-wise loop

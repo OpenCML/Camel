@@ -823,7 +823,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "specialize_growing_shape.fold_specialize.bounded"
-desc = "The program after std::opt::fold std::opt::specialize holds one type specialization of the recursion (99 graphs in all: the branch arms and what they call; a recursive call inside an instance of the function it names keeps the caller's parameters instead of taking a copy, so no extent makes the copies grow without end), and still prints the zero-pass output. The count is no longer a bound: the eight-copy limit this used to assert was truncation stops nothing now (the ruling of 2026-10-24 evening, item 3), and the reading is the fixed point -- one specialization, not a shape cut to a count."
+desc = "The program after std::opt::fold std::opt::specialize holds exactly one type specialization of the recursion and exactly five graphs, and still prints the zero-pass output. Neither count moves with the array length: a recursive call inside an instance of the function it names keeps the caller's parameters instead of taking a copy, so no extent makes the copies grow without end, and the single instance is the recursion's fixed point."
 kind = "behavior"
 case = "../../../cases/opt/generic/specialize_growing_shape.cml"
 args = ["${case}", "std::opt::fold", "std::opt::specialize", "std::stats", "std::fvm"]
@@ -834,7 +834,7 @@ async ({ input, assert }) => {
 const out = input.normalized.stdout.trim()
 const stats = JSON.parse(out.match(/GRAPH_STATS (\{.*\})/)[1])
 assert(stats.specializations === 1, `expected one type specialization, got ${stats.specializations}`)
-assert(stats.graphs > 5 && stats.graphs <= 120, `unexpected graph count: ${stats.graphs}`)
+assert(stats.graphs === 5, `unexpected graph count: ${stats.graphs}`)
 assert(out.endsWith('[12, 2]\n36.0'), `unexpected output: ${out}`)
 }
 """
