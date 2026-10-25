@@ -1209,45 +1209,45 @@ void queries(std::ostream &os) {
     Type *const integer = Type::Int64();
     Type *const ints    = camel::core::type::ArrayType::create(Type::Int64());
     // Q9: an extent that may or may not be 1 against another: no instance until specialized.
-    query(os, "broadcast_unknown_both", "tensor:add", {T(StaticShape{-1, 3}), T(StaticShape{-1, 3})}, {});
-    query(os, "broadcast_unknown_vs_known", "tensor:add", {T(StaticShape{-1, 3}), T(StaticShape{4, 3})}, {});
-    query(os, "show_broadcast_unknown_alone", "tensor:add", {T(StaticShape{-1, 3}), T(StaticShape{3})}, {});
-    query(os, "show_broadcast_unknown_vs_one", "tensor:add", {T(StaticShape{-1, 3}), T(StaticShape{1, 3})}, {});
+    query(os, "broadcast_unknown_both", "tensor:add", {T(StaticShape{std::nullopt, 3}), T(StaticShape{std::nullopt, 3})}, {});
+    query(os, "broadcast_unknown_vs_known", "tensor:add", {T(StaticShape{std::nullopt, 3}), T(StaticShape{4, 3})}, {});
+    query(os, "show_broadcast_unknown_alone", "tensor:add", {T(StaticShape{std::nullopt, 3}), T(StaticShape{3})}, {});
+    query(os, "show_broadcast_unknown_vs_one", "tensor:add", {T(StaticShape{std::nullopt, 3}), T(StaticShape{1, 3})}, {});
     query(os, "unknown_rank", "tensor:add", {T(std::nullopt), T(StaticShape{3})}, {});
-    query(os, "show_relu_unknown_extents", "tensor:relu", {T(StaticShape{-1, -1})}, {});
+    query(os, "show_relu_unknown_extents", "tensor:relu", {T(StaticShape{std::nullopt, std::nullopt})}, {});
     query(os, "sum_axis_axis_not_constant", "tensor:sum_axis", {T(StaticShape{2, 3}), integer}, {});
-    query(os, "show_sum_axis_unknown_extents", "tensor:sum_axis", {T(StaticShape{-1, -1, 4}), integer},
+    query(os, "show_sum_axis_unknown_extents", "tensor:sum_axis", {T(StaticShape{std::nullopt, std::nullopt, 4}), integer},
           {std::nullopt, Arg::integerArg(-2)});
     query(os, "permute_not_constant", "tensor:permute", {T(StaticShape{2, 3}), ints}, {});
-    query(os, "slice_unknown_extent", "tensor:slice", {T(StaticShape{-1, 3}), integer, integer, integer},
+    query(os, "slice_unknown_extent", "tensor:slice", {T(StaticShape{std::nullopt, 3}), integer, integer, integer},
           {std::nullopt, Arg::integerArg(0), Arg::integerArg(0), Arg::integerArg(2)});
     query(os, "slice_unknown_extent_negative", "tensor:slice",
-          {T(StaticShape{-1, 3}), integer, integer, integer},
+          {T(StaticShape{std::nullopt, 3}), integer, integer, integer},
           {std::nullopt, Arg::integerArg(0), Arg::integerArg(-1), Arg::integerArg(2)});
-    query(os, "show_slice", "tensor:slice", {T(StaticShape{-1, 7}), integer, integer, integer, integer},
+    query(os, "show_slice", "tensor:slice", {T(StaticShape{std::nullopt, 7}), integer, integer, integer, integer},
           {std::nullopt, Arg::integerArg(1), Arg::integerArg(1), Arg::integerArg(-1), Arg::integerArg(2)});
     query(os, "slice_out_of_range", "tensor:slice", {T(StaticShape{5}), integer, integer, integer},
           {std::nullopt, Arg::integerArg(0), Arg::integerArg(2), Arg::integerArg(6)});
     query(os, "slice_step_zero", "tensor:slice", {T(StaticShape{5}), integer, integer, integer, integer},
           {std::nullopt, Arg::integerArg(0), Arg::integerArg(0), Arg::integerArg(5), Arg::integerArg(0)});
-    query(os, "reshape_unknown_input", "tensor:reshape", {T(StaticShape{-1, 4}), ints},
+    query(os, "reshape_unknown_input", "tensor:reshape", {T(StaticShape{std::nullopt, 4}), ints},
           {std::nullopt, Arg::intsArg({4, -1})});
     // The target is written out, so the result's shape is fixed while the input's first extent is
     // open: the instance is the target's, and the element count the operator compares is stated as
     // a read that is valid only where the input holds it, a fault elsewhere.
-    query(os, "show_reshape_open_first_extent", "tensor:reshape", {T(StaticShape{-1}), ints},
+    query(os, "show_reshape_open_first_extent", "tensor:reshape", {T(StaticShape{std::nullopt}), ints},
           {std::nullopt, Arg::intsArg({1})});
-    query(os, "show_reshape", "tensor:reshape", {T(StaticShape{2, 6}), ints}, {std::nullopt, Arg::intsArg({3, -1})});
+    query(os, "show_reshape", "tensor:reshape", {T(StaticShape{2, 6}), ints}, {std::nullopt, Arg::intsArg({3, std::nullopt})});
     query(os, "show_reshape_unit_axes", "tensor:reshape", {T(StaticShape{2, 1, 6}), ints},
           {std::nullopt, Arg::intsArg({1, 2, 6})});
-    query(os, "show_matmul_batched", "tensor:matmul", {T(StaticShape{-1, 2, 3, 4}), T(StaticShape{4, -1})}, {});
-    query(os, "matmul_batch_q9", "tensor:matmul", {T(StaticShape{-1, 3, 4}), T(StaticShape{-1, 4, 5})}, {});
+    query(os, "show_matmul_batched", "tensor:matmul", {T(StaticShape{std::nullopt, 2, 3, 4}), T(StaticShape{4, std::nullopt})}, {});
+    query(os, "matmul_batch_q9", "tensor:matmul", {T(StaticShape{std::nullopt, 3, 4}), T(StaticShape{std::nullopt, 4, 5})}, {});
     query(os, "matmul_mixed_dtypes", "tensor:matmul", {T(StaticShape{3, 4}), T(StaticShape{4, 5}, TypeCode::Int64)}, {});
-    query(os, "show_transpose", "tensor:transpose", {T(StaticShape{-1, 3, 5})}, {});
+    query(os, "show_transpose", "tensor:transpose", {T(StaticShape{std::nullopt, 3, 5})}, {});
     query(os, "show_sum_to", "tensor:sum_to", {T(StaticShape{4, 2, 3}), T(StaticShape{2, 1})}, {});
     query(os, "show_max_pool2d", "nn:max_pool2d", {T(StaticShape{1, 2, 5, 5}), integer, integer, integer},
           {std::nullopt, Arg::integerArg(3), Arg::integerArg(2), Arg::integerArg(1)});
-    query(os, "show_avg_pool2d_unknown_extents", "nn:avg_pool2d", {T(StaticShape{1, 2, -1, -1}), integer},
+    query(os, "show_avg_pool2d_unknown_extents", "nn:avg_pool2d", {T(StaticShape{1, 2, std::nullopt, std::nullopt}), integer},
           {std::nullopt, Arg::integerArg(2)});
 }
 

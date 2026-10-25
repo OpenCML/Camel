@@ -448,7 +448,7 @@ std::string Emitter::constantOperand(const Value &value, std::optional<TypeCode>
         }
         TensorValue tv;
         tv.type = elemTypeOf(target);
-        tv.dims = tensor::extentsOf(*facts.shape);
+        tv.dims = tensor::kernelExtents(*facts.shape);
         if (t->dtype() == target) {
             tv.raw.assign(t->rawData(), t->rawData() + t->byteSize());
         } else {

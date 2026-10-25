@@ -120,7 +120,8 @@ std::optional<Type *> reshapeInfer(const InferContext &ctx) {
         }
         if (open == 1 && fullyKnown(in.shape)) {
             try {
-                return tensorOf(in.dtype, knownShape(k::resolveReshape(extentsOf(*in.shape), probe)));
+                return tensorOf(
+                    in.dtype, knownShape(k::resolveReshape(kernelExtents(*in.shape), probe)));
             } catch (const std::exception &) {
                 // No value fits: left to reshape to report when it runs.
             }
@@ -129,7 +130,7 @@ std::optional<Type *> reshapeInfer(const InferContext &ctx) {
     }
     if (fullyKnown(in.shape)) {
         return tensorOf(
-            in.dtype, knownShape(k::resolveReshape(extentsOf(*in.shape), *target)));
+            in.dtype, knownShape(k::resolveReshape(kernelExtents(*in.shape), *target)));
     }
     StaticShape shape;
     shape.reserve(target->size());
@@ -168,7 +169,8 @@ std::optional<Type *> flattenInfer(const InferContext &ctx) {
     const TensorFacts in = ctx.facts(0);
     const auto axis      = ctx.has(1) ? ctx.constInt(1) : std::optional<int64_t>(1);
     if (fullyKnown(in.shape) && axis) {
-        return tensorOf(in.dtype, knownShape(flattenShape(extentsOf(*in.shape), *axis)));
+        return tensorOf(
+            in.dtype, knownShape(flattenShape(kernelExtents(*in.shape), *axis)));
     }
     return tensorOf(in.dtype, StaticShape{std::nullopt, std::nullopt});
 }
@@ -230,7 +232,8 @@ std::optional<Type *> permuteInfer(const InferContext &ctx) {
     const TensorFacts in = ctx.facts(0);
     auto perm            = ctx.constInts(1);
     if (in.shape && perm) {
-        return tensorOf(in.dtype, knownShape(k::permuteShape(extentsOf(*in.shape), *perm)));
+        return tensorOf(
+            in.dtype, knownShape(k::permuteShape(kernelExtents(*in.shape), *perm)));
     }
     return tensorOf(
         in.dtype,

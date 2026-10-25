@@ -36,7 +36,7 @@ using namespace camel::tensor::ops;
 using camel::core::error::RuntimeDiag;
 using camel::core::error::throwRuntimeFault;
 namespace k      = camel::tensor::kernels;
-using camel::tensor::extentsOf;
+using camel::tensor::kernelExtents;
 using camel::tensor::knownShape;
 using camel::tensor::StaticShape;
 using camel::tensor::Array;
@@ -114,7 +114,7 @@ std::optional<Type *> conv2dInfer(const InferContext &ctx) {
     if (known(x.shape) && known(w.shape) && stride && pad) {
         return tensorOf(
             TypeCode::Float32,
-            knownShape(k::conv2dShape(extentsOf(*x.shape), extentsOf(*w.shape), *stride, *pad)));
+            knownShape(k::conv2dShape(kernelExtents(*x.shape), kernelExtents(*w.shape), *stride, *pad)));
     }
     StaticShape out(4, std::nullopt);
     if (x.shape) {
@@ -205,7 +205,7 @@ std::optional<Type *> poolInfer(const InferContext &ctx) {
     if (known(x.shape) && kernel && stride && pad) {
         const k::Window2d window{*kernel, *kernel, *stride, *stride, *pad, *pad};
         return tensorOf(
-            TypeCode::Float32, knownShape(k::pool2dShape(extentsOf(*x.shape), window)));
+            TypeCode::Float32, knownShape(k::pool2dShape(kernelExtents(*x.shape), window)));
     }
     StaticShape out(4, std::nullopt);
     if (x.shape) {

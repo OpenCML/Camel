@@ -35,11 +35,20 @@ std::vector<int64_t> extentsOf(const StaticShape &shape) {
     return out;
 }
 
+std::vector<int64_t> kernelExtents(const StaticShape &shape) {
+    std::vector<int64_t> out;
+    out.reserve(shape.size());
+    for (const std::optional<int64_t> &extent : shape) {
+        out.push_back(extent.value_or(-1));
+    }
+    return out;
+}
+
 StaticShape knownShape(std::vector<int64_t> extents) {
     StaticShape out;
     out.reserve(extents.size());
     for (int64_t extent : extents) {
-        out.push_back(extent);
+        out.push_back(extent < 0 ? std::nullopt : std::optional<int64_t>(extent));
     }
     return out;
 }

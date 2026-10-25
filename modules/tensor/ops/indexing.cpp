@@ -510,7 +510,7 @@ std::optional<IndexedInstance> reshapeIndexing(const InferContext &ctx) {
     }
     StaticShape out;
     try {
-        out = knownShape(kernels::resolveReshape(extentsOf(read), *target));
+        out = knownShape(kernels::resolveReshape(kernelExtents(read), *target));
     } catch (const std::exception &) {
         return std::nullopt;
     }

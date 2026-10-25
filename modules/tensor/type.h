@@ -35,11 +35,18 @@ namespace type = camel::core::type;
 /// `kUnknownDim = -1` is `std::nullopt`).
 using StaticShape = std::vector<std::optional<int64_t>>;
 
-/// The plain extents of a shape whose every extent is known, for the kernel shape helpers, which
-/// take extents and not the facts' entries. The callers check the shape first.
+/// The plain extents of a shape whose every extent is known, for a caller that needs numbers with
+/// no way to say unknown (an array is created from them, a program's shape is written into). The
+/// callers check the shape first.
 std::vector<int64_t> extentsOf(const StaticShape &shape);
 
-/// The facts' shape of a kernel shape helper's result: every extent it answers is a value.
+/// The same extents in the kernel shape helpers' own spelling (modules/tensor/kernels/layout.h):
+/// an extent nobody stated is `-1` there, which is how a kernel carries an unknown extent through
+/// a permutation or a reshape.
+std::vector<int64_t> kernelExtents(const StaticShape &shape);
+
+/// The facts' shape of a kernel shape helper's result: a negative extent is that helper saying the
+/// extent is unknown, so the entry is absent here.
 StaticShape knownShape(std::vector<int64_t> extents);
 
 /// True for an array whose element is a numeric scalar, and for an array whose element type
