@@ -1,6 +1,6 @@
 id = "perf.training_steps"
 order = 420
-tier = "slow"
+tier = "milestone"
 tags = ["perf", "training", "gpu"]
 
 # The benchmarks of the GPU work (design docs/design/gpu/README.cn.md 5.6 and 7): what a

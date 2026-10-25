@@ -1,6 +1,6 @@
 id = "perf.showcase_c1_linear_logistic"
 order = 901
-tier = "slow"
+tier = "milestone"
 tags = ["showcase", "slow", "c1", "linear", "logistic"]
 
 # The small configuration of showcase/c1-linear-logistic: deterministic synthetic data,

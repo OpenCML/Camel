@@ -1,6 +1,6 @@
 id = "perf.gemm_canonical_shapes"
 order = 422
-tier = "slow"
+tier = "milestone"
 tags = ["perf", "tensor", "gemm"]
 
 # The canonical GEMM's rate at the d=256 step's shapes, one thread, printed per shape and per round

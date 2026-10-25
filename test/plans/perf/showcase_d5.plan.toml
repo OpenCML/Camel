@@ -1,6 +1,6 @@
 id = "perf.showcase_d5_tree_lstm"
 order = 903
-tier = "slow"
+tier = "milestone"
 tags = ["showcase", "slow", "d5", "tree-lstm", "recursion"]
 
 # The small configuration of showcase/d5-tree-lstm: 256 four-leaf trees, a recursive
