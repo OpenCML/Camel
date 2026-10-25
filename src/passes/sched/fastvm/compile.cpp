@@ -497,7 +497,10 @@ static bytecode_vec_t compileRuntimeGraph(
 
         case camel::runtime::GCNodeKind::Oper: {
             const auto *operBody = graph->nodeBodyAs<camel::runtime::GCOperBody>(runtimeNodeIndex);
-            const std::string uri(operBody->uri());
+            // The plan names the operator: an update node whose storage must not be reused runs
+            // the plain form of the operator it names (docs/design/arrays-memory/README.cn.md
+            // 4.3.1).
+            const std::string uri(plan.operatorUriFor(runtimeNodeIndex));
 
             if (opt.enableInlineOperators) {
                 const auto &inlineOpMap = getSupportedInlineOperatorsMap();

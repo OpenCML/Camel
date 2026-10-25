@@ -644,7 +644,9 @@ slot_t NodeVMSchedPass::call(
                 operator_t opFunc =
                     currPlan->resolvedOpers[nodeRef].load(std::memory_order_relaxed);
                 if (!opFunc) {
-                    const std::string uri(body->uri());
+                    // The plan names the operator: an update node whose storage must not be
+                    // reused runs the plain form of the operator it names (4.3.1).
+                    const std::string uri(currPlan->operatorUriFor(nodeRef));
                     auto found = context_->execMgr().find(uri);
                     if (found) {
                         opFunc = camel::profile::profiledOperator(uri, *found);

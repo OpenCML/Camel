@@ -354,6 +354,12 @@ class OperatorTable {
     /// The in-place form of the operator `uri`, or nullopt when it has none.
     std::optional<std::string> inPlaceForm(std::string_view uri) const;
 
+    /// The operator an in-place form stands for: the form of `uri` whose result it computes by
+    /// changing the first argument (`:op/set_index` for `:op/set_index_in_place`), or nullopt
+    /// when `uri` is not an in-place form. The text lives in the table's symbol storage, so the
+    /// view stays valid; a node whose storage must not be reused runs this form instead.
+    std::optional<std::string_view> plainForm(std::string_view uri) const;
+
     /// Declares that the operator `uri` may return one of its operands, changed in place, when
     /// the compiler hands it a value no one else holds (design principles 11.3; the block must
     /// also be unshared and Camel-owned at run time, Array::canWriteInPlace). One fact, written
@@ -541,6 +547,9 @@ class OperatorTable {
         std::unique_ptr<TypeFolder> folder;
         /// The in-place form (setInPlaceForm); kEmptySym when there is none.
         SymId inPlace = kEmptySym;
+        /// What this operator is the in-place form of (setInPlaceForm, written on the form's own
+        /// entry); kEmptySym for every operator that is not one.
+        SymId plain = kEmptySym;
         /// The operator may return its operand (declareReusesOperand): an elementwise operator
         /// that writes into an operand it owns, rather than allocating a result.
         bool reusesOperand = false;

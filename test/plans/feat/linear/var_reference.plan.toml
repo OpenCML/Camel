@@ -1291,12 +1291,19 @@ expect_stdout = "[9, 2, 3]\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
-# A path assignment on a `var` array does not copy. The graph says so: the store is the
-# rebinding in place -- `:op/assn_owned(arr, :op/set_index_in_place(:var/take(arr), 0, 9))` --
-# which is the shape `src/builtin/operators/ops.cpp` documents for `xs = xs->sort`, and the
-# copying form (`:op/set_index`) is nowhere in it. Whether the array is copied is decided by
-# the cell's "not shared" mark when:var/take runs; `element_assigned_copy` and
-# `path_assigned.allocs` show the copy that follows a read, counted with `std::mem::blocks()`.
+# A path assignment on a `var` array keeps the shape of a rebinding in place: the store is
+# `:op/assn_owned(arr, :op/set_index_in_place(:var/take(arr), 0, 9))`, the shape
+# `src/builtin/operators/ops.cpp` documents for `xs = xs->sort`, and the copying form
+# (`:op/set_index`) is nowhere in the graph. Whether the update copies is decided for the update
+# node, once, when the execution plan is built (docs/design/arrays-memory/README.cn.md 4.3.1),
+# and the back end runs the operator the plan names: the plan marks the node to reuse the storage
+# of the value it is given when it proves that value is the variable's own and nothing has read it
+# since; to ask the array's own count when the cell is one this graph does not declare (a `var`
+# parameter, a captured cell) and every use the graph can see leaves the value alone; and to copy
+# otherwise -- after a read that may keep the value, on a value another party made, and for a
+# captured cell this graph reads, since the count cannot see a second name for one array.
+# `element_assigned_copy` and `path_assigned.allocs` show the copy that follows a read, counted
+# with `std::mem::blocks()`.
 [[tests]]
 name = "element_assigned.in_place_form"
 desc = "The lowering of `arr[0] = 9` on a `var` array is the in-place rebinding: :op/set_index_in_place takes its array from :var/take of the cell, and :op/assn_owned stores the result in that cell. The copying form :op/set_index is not in the graph."

@@ -550,8 +550,8 @@ void Builder::rejectNameWithoutValue(
 }
 
 void Builder::markNonRetainingReads() {
-    // A read `r` of a variable becomes `:var/peek`, which leaves the variable's sole-reference
-    // mark set (Tuple::holdsUnsharedArray), when the array it reads can be referred to by
+    // A read `r` of a variable becomes `:var/peek`, which leaves the proof that the variable's
+    // value has no other observer standing, when the array it reads can be referred to by
     // nothing but the variable once the users of `r` have run, and they all run before the
     // variable can be written again. Then the next `acc = acc->append<v>` may still change the
     // array in place: nobody can see the difference. The conditions, every one required:

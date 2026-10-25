@@ -1,12 +1,12 @@
-// A path assignment on an unshared `var` array does not copy (design principles 3.5, 10.5).
+// A path assignment on a `var` array does not copy (design principles 3.5, 10.5).
 // `std::mem::blocks()` counts the numeric array blocks allocated, so the writes can be asked
 // instead of argued: the array is 40 ints (320 bytes), past the 256 bytes an array may keep in
-// its value, so it has a block of its own. The first write copies once — the cell is not
-// marked as owning its array when it is filled (`:var/new` sets no mark) — and every write
-// after it allocates nothing, in straight-line code and in a loop. A read of the variable
-// (`let kept = v`) takes the array out of the cell's keeping, so the write after it copies, and
-// `kept` keeps the value it was read as. The last loop is the control: a read in every round
-// makes every round's write copy, so the counter is not always zero.
+// its value, so it has a block of its own. The first write copies once — the value in the cell
+// is not one this variable's own update made, so the plan marks that update to copy — and every
+// write after it allocates nothing, in straight-line code and in a loop. A read of the variable
+// (`let kept = v`) ends the proof that the old value has no other observer, so the write after it
+// copies, and `kept` keeps the value it was read as. The last loop is the control: a read in
+// every round makes every round's write copy, so the counter is not always zero.
 //
 // The array is made by a call, not written as a literal here, so that its construction is
 // chained to the statement that reads the blocks: a call is a statement in the sync chain, while
