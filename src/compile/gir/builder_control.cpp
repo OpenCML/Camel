@@ -337,6 +337,95 @@ bool holdsStatedLength(const ArrayType *type, const ArrayData *array) {
     return !length.has_value() || static_cast<int64_t>(array->raw().size()) == *length;
 }
 
+/// One element of a nested literal, with what the GCT kept for it where it was written (its
+/// exact value and its position; nullptr for an element it kept nothing for).
+using LiteralLeaf = std::pair<data_ptr_t, const GCT::Tree::LiteralElement *>;
+
+/// The shape a nested array literal writes, one length per level, and its elements in the order
+/// the flattened value holds them (`[[a, b], [c, d]]` is [2, 2] over a b c d). False when a level
+/// is not one shape — a row beside an element, or rows of different lengths — which is no rank-N
+/// array (design principles 5.1, 5.4).
+bool flattenLiteral(
+    const GCT::Tree *tree, const data_ptr_t &data, std::vector<int64_t> &lengths,
+    std::vector<LiteralLeaf> &leaves) {
+    const auto array = std::dynamic_pointer_cast<ArrayData>(data);
+    if (array == nullptr) {
+        return false;
+    }
+    const auto &raw = array->raw();
+    lengths.push_back(static_cast<int64_t>(raw.size()));
+    if (raw.empty()) {
+        return true;
+    }
+    const auto *written = tree != nullptr ? tree->literalElementsOf(data) : nullptr;
+    const bool rows     = std::dynamic_pointer_cast<ArrayData>(raw.front()) != nullptr;
+    std::vector<int64_t> rowShape;
+    for (size_t index = 0; index < raw.size(); ++index) {
+        const bool isRow = std::dynamic_pointer_cast<ArrayData>(raw[index]) != nullptr;
+        if (isRow != rows) {
+            return false;
+        }
+        if (!rows) {
+            leaves.emplace_back(raw[index], literalElementAt(written, index));
+            continue;
+        }
+        std::vector<int64_t> sub;
+        std::vector<LiteralLeaf> subLeaves;
+        if (!flattenLiteral(tree, raw[index], sub, subLeaves)) {
+            return false;
+        }
+        if (index == 0) {
+            rowShape = sub;
+        } else if (sub != rowShape) {
+            return false;
+        }
+        // Every row's elements are elements of the one array, in row-major order: the walk keeps
+        // them all, not the ones of the first row (`[[a, b], [c, d]]` is a b c d).
+        leaves.insert(leaves.end(), subLeaves.begin(), subLeaves.end());
+    }
+    lengths.insert(lengths.end(), rowShape.begin(), rowShape.end());
+    return true;
+}
+
+/// Whether the array literal `data` writes the shape `type` states: a position that states a rank
+/// of its own (`f32[2, 2]`) takes one array written over that many levels, each level as long as
+/// the extent the position states (`?` leaves the length to the literal). A flat literal is not
+/// an `f32[2, 2]` — it is an `f32[4]` — and nothing reshapes it to fit (design principles 5.1,
+/// 5.4). A rank-1 position keeps the rule a literal's elements decide. `lengths` and `leaves` are
+/// the walk compositeDataInType builds the value from.
+bool arrayLiteralFitsShape(
+    const GCT::Tree *tree, const ArrayType *type, const data_ptr_t &data,
+    std::vector<int64_t> *lengths = nullptr, std::vector<LiteralLeaf> *leaves = nullptr) {
+    const auto array = std::dynamic_pointer_cast<ArrayData>(data);
+    if (array == nullptr) {
+        return false;
+    }
+    const std::span<const ExtentForm> extents = type->extents();
+    if (extents.size() < 2) {
+        return holdsStatedLength(type, array.get());
+    }
+    std::vector<int64_t> written;
+    std::vector<LiteralLeaf> flattened;
+    if (!flattenLiteral(tree, data, written, flattened)) {
+        return false;
+    }
+    if (written.size() != extents.size()) {
+        return false;
+    }
+    for (size_t level = 0; level < written.size(); ++level) {
+        if (extents[level].isConstant() && extents[level].constant() != written[level]) {
+            return false;
+        }
+    }
+    if (lengths != nullptr) {
+        *lengths = std::move(written);
+    }
+    if (leaves != nullptr) {
+        *leaves = std::move(flattened);
+    }
+    return true;
+}
+
 /// Whether the composite literal `data` can be given `type`: the walk of compositeDataInType,
 /// unchanged, for the positions a literal may enter (design principles 5.1). The two must agree;
 /// a literal this accepts is converted by compositeDataInType, which reports what does not fit.
@@ -354,7 +443,10 @@ bool compositeEntersIn(const data_ptr_t &data, Type *type, const GCT::node_ptr_t
         if (elemType == nullptr || array == nullptr) {
             return false;
         }
-        if (!holdsStatedLength(arrayType, array.get())) {
+        const GCT::Tree *tree = origin != nullptr ? GCT::Tree::of(origin) : nullptr;
+        std::vector<int64_t> lengths;
+        std::vector<LiteralLeaf> leaves;
+        if (!arrayLiteralFitsShape(tree, arrayType, data, &lengths, &leaves)) {
             return false;
         }
         if (array->raw().empty()) {
@@ -362,8 +454,17 @@ bool compositeEntersIn(const data_ptr_t &data, Type *type, const GCT::node_ptr_t
             // zero, took it — which the check above decided.
             return true;
         }
-        const auto *written =
-            origin != nullptr ? GCT::Tree::of(origin)->literalElementsOf(data) : nullptr;
+        if (arrayType->extents().size() >= 2) {
+            // The elements of the shape the literal writes, in the order the flattened value
+            // holds them (design principles 5.1, 5.4).
+            for (const LiteralLeaf &leaf : leaves) {
+                if (!elementEntersIn(leaf.first, elemType, origin, writtenValueOf(leaf.second))) {
+                    return false;
+                }
+            }
+            return true;
+        }
+        const auto *written = tree != nullptr ? tree->literalElementsOf(data) : nullptr;
         for (size_t index = 0; index < array->raw().size(); ++index) {
             if (!elementEntersIn(
                     array->raw()[index],
@@ -698,7 +799,10 @@ Builder::compositeDataInType(const data_ptr_t &data, Type *type, const GCT::node
         if (elemType == nullptr || array == nullptr) {
             return nullptr;
         }
-        if (!holdsStatedLength(arrayType, array.get())) {
+        const GCT::Tree *tree = origin != nullptr ? GCT::Tree::of(origin) : nullptr;
+        std::vector<int64_t> lengths;
+        std::vector<LiteralLeaf> leaves;
+        if (!arrayLiteralFitsShape(tree, arrayType, data, &lengths, &leaves)) {
             return nullptr;
         }
         // The exact value each element was written as, when the GCT kept them (a composite
@@ -712,6 +816,24 @@ Builder::compositeDataInType(const data_ptr_t &data, Type *type, const GCT::node
             // that has elements keeps their join, so this branch only covers `[]`, and a
             // position that states a length other than zero did not take it (the check above).
             return ArrayData::create(elemType);
+        }
+        if (arrayType->extents().size() >= 2) {
+            // A position that states a rank of its own takes the nested literal as one array of
+            // the shape the literal writes, whose elements are the elements of that shape in
+            // row-major order (design principles 5.1, 5.4) — the array is one value, not an
+            // array of its rows.
+            ArrayDataFactory factory;
+            factory.setElemType(elemType);
+            factory.setExtents(lengths);
+            for (const LiteralLeaf &leaf : leaves) {
+                data_ptr_t converted =
+                    literalElementInType(leaf.first, elemType, origin, leaf.second);
+                if (converted == nullptr) {
+                    return nullptr;
+                }
+                factory.add(converted);
+            }
+            return factory.build();
         }
         const auto *written =
             origin != nullptr ? GCT::Tree::of(origin)->literalElementsOf(data) : nullptr;
@@ -846,7 +968,8 @@ data_ptr_t Builder::compositeWithHolesInType(
         const auto array      = std::dynamic_pointer_cast<ArrayData>(data);
         Type *elemType        = arrayType != nullptr ? arrayType->elemType() : nullptr;
         if (array == nullptr || elemType == nullptr || elemType->code() == TypeCode::Void ||
-            !holdsStatedLength(arrayType, array.get())) {
+            !arrayLiteralFitsShape(
+                origin != nullptr ? GCT::Tree::of(origin) : nullptr, arrayType, data)) {
             return nullptr;
         }
         const std::vector<Type *> holeTypes = holeTypesByIndex();

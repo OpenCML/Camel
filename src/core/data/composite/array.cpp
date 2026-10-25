@@ -15,6 +15,7 @@ using namespace camel::core::error;
 
 struct ArrayDataFactory::Impl {
     Type *elemType = nullptr;
+    std::vector<ExtentForm> extents;
     std::vector<size_t> holeIndices;
     std::vector<data_ptr_t> data;
 };
@@ -82,10 +83,28 @@ ArrayDataFactory &ArrayDataFactory::setElemType(Type *elemType) {
     return *this;
 }
 
+ArrayDataFactory &ArrayDataFactory::setExtents(std::span<const int64_t> extents) {
+    impl_->extents.clear();
+    impl_->extents.reserve(extents.size());
+    for (const int64_t extent : extents) {
+        impl_->extents.push_back(ExtentForm::constant(extent));
+    }
+    return *this;
+}
+
 std::shared_ptr<ArrayData> ArrayDataFactory::build() {
-    ArrayTypeFactory typeFactory;
-    typeFactory.setElemType(impl_->elemType ? impl_->elemType : Type::Void());
-    Type *type = typeFactory.build();
+    Type *type = nullptr;
+    if (impl_->extents.empty()) {
+        ArrayTypeFactory typeFactory;
+        typeFactory.setElemType(impl_->elemType ? impl_->elemType : Type::Void());
+        type = typeFactory.build();
+    } else {
+        // The shape the literal writes is the value's own shape, so the elements are one array
+        // of that many dimensions rather than the array of the elements they were written as
+        // (design principles 5.1, 5.4: a nested literal at an `f32[2, 2]` position).
+        type = ArrayType::create(
+            impl_->elemType ? impl_->elemType : Type::Void(), impl_->extents);
+    }
     return std::shared_ptr<ArrayData>(new ArrayData(type, std::move(impl_->data)));
 }
 

@@ -322,6 +322,13 @@ class Builder {
     /// element becomes the element type exactly; an element that is not a literal keeps its
     /// type (the GIR builder reports it if it does not fit).
     node_ptr_t visitArrayInto(const AST::node_ptr_t &ast, Type *arrayType, bool &entered);
+    /// A nested array literal at a position that states a rank of its own (`let b: f32[2, 2] =
+    /// [[1.0, 2.0], [3.0, 4.0]]`): the brackets the literal writes are the dimensions of one
+    /// array, so the value is a rank-N constant of that shape instead of an array of its rows
+    /// (design principles 5.1, 5.4). A literal whose written shape is not the shape the position
+    /// states — a flat `[1.0, 2.0, 3.0, 4.0]` is an `f32[4]`, not an `f32[2, 2]` — is reported
+    /// and refused here: nothing is reshaped to fit.
+    node_ptr_t visitRankedArrayInto(const AST::node_ptr_t &ast, Type *arrayType, bool &entered);
     /// The struct literal `ast` built with every field in the type its position gives it
     /// (`let p: P = { a: 1, b: 2.0 }`). Only when the literal writes exactly the fields of
     /// `structType`: any other shape is left to the ordinary build, which reports it.

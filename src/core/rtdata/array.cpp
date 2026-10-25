@@ -1195,14 +1195,17 @@ rtdata::Object *Array::clone(
     ASSERT(typeInfo && typeInfo->code() == TypeCode::Array, "Type must be ArrayType");
     const auto *arrayType            = static_cast<const type::ArrayType *>(typeInfo);
     const type::TypeCode elemTypeCode = arrayType->elemTypeCode();
-    Array *copy = createSlots(allocator, size_, capacity_);
+    // A slot array of any rank keeps its shape: `size_` is the first extent only, so a rank-2
+    // value copied over it would come out as its first row (design principles 5.4). Every element
+    // is `numel_`, which is `size_` for the rank-1 arrays this has always copied.
+    Array *copy = createSlotsRank(allocator, std::span<const int64_t>(extents_, rank_), capacity_);
     copy->elemTypeCode_ = elemTypeCode;
     copy->elemType_     = arrayType->elemType();
     const rtdata::Object *const *srcArr =
         reinterpret_cast<const rtdata::Object *const *>(dataPtr_);
 
     if (type::isGCTraced(elemTypeCode) && fixedArray_ == nullptr) {
-        for (size_t i = 0; i < size_; ++i) {
+        for (size_t i = 0; i < numel_; ++i) {
             const rtdata::Object *oriRef = srcArr[i];
             rtdata::Object *stored       = nullptr;
             if (oriRef != nullptr) {
@@ -1224,9 +1227,9 @@ rtdata::Object *Array::clone(
         copy->dataPtr_ = reinterpret_cast<std::byte *>(copy->fixedArray_->data());
         camel::core::mm::writeBarrier(copy, arrayType, copy->fixedArray_, arrayType);
     } else {
-        std::memcpy(copy->inlineData_, dataPtr_, size_ * sizeof(slot_t));
+        std::memcpy(copy->inlineData_, dataPtr_, numel_ * sizeof(slot_t));
         if (type::isGCTraced(elemTypeCode)) {
-            for (size_t i = 0; i < size_; ++i) {
+            for (size_t i = 0; i < numel_; ++i) {
                 camel::core::mm::writeBarrier(
                     copy, arrayType, copy->inlineData_[i], arrayType->elemType());
             }

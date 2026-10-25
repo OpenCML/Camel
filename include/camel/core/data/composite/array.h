@@ -5,7 +5,9 @@
 
 #include "camel/core/data/composite/composite.h"
 
+#include <cstdint>
 #include <memory>
+#include <span>
 
 namespace camel::core::data {
 
@@ -55,6 +57,11 @@ class ArrayDataFactory {
     /// array of that type, and its computed elements are holes to be filled later; without it
     /// the type is the one the elements unify to.
     ArrayDataFactory &setElemType(type::Type *elemType);
+    /// The shape the literal writes, when it writes one level per dimension (`[[a, b], [c, d]]`
+    /// is [2, 2]): the array is built as one rank-N array of that shape instead of an array of
+    /// its elements (design principles 5.1, 5.4). Left unset, the shape is the elements' own
+    /// (`elemType[]`), which is what a literal with no stated rank is.
+    ArrayDataFactory &setExtents(std::span<const int64_t> extents);
     std::shared_ptr<ArrayData> build();
 
   private:

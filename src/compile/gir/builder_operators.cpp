@@ -2305,7 +2305,9 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                     if (binding == ExtentBinding::Mismatch) {
                         diags_->of(SemanticDiag::DimensionMismatch)
                             .atOrigin(inputs[i].expr->origin())
-                            .commit(label, mismatch);
+                            .commit(
+                                "Argument " + label, mismatch,
+                                "the dimensions the earlier arguments bound do not allow it");
                         throw BuildAbortException();
                     }
                     namedArgs.push_back({&inputs[i], &types, i, param, types[i]});
