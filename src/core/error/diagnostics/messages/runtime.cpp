@@ -293,6 +293,14 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
             },
         },
         {
+            RuntimeDiag::GpuScopeMacroNotExpanded,
+            {
+                "GpuScopeMacroNotExpanded",
+                "`#gpu` scope '{0}': {1} is a macro operator no pass has expanded, so the derived graph does not exist when the scope is compiled; put the pass '{2}' before this one.",
+                "`grad` and `with_grad` build their derived graph ahead of time (`std::macro`), and only a graph that exists while the passes run is part of the scope's unit. Write the pass before `tiles::compile`, or move the call out of the `#gpu` scope.",
+            },
+        },
+        {
             RuntimeDiag::PassesNeverRun,
             {
                 "PassesNeverRun",

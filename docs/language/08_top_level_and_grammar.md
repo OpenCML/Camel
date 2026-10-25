@@ -2,7 +2,7 @@
 
 [English](en/08_top_level_and_grammar.md) | 中文
 
-本章描述程序的顶层结构，给出文法概要，并汇总文法接受但尚未实现的写法。完整的文法在 [8.5](#85-完整文法)，它由解析器源码生成。
+本章描述程序的顶层结构，给出文法概要。完整的文法在 [8.5](#85-完整文法)，它由解析器源码生成。
 
 ---
 
@@ -104,7 +104,7 @@ stmtList           : stmt (SEP? stmt)* SEP?
 stmtBlock          : 'sync'? '{' stmtList? '}'
 blockExpr          : stmtBlock | dataExpr
 moduleName         : ('.' | '..' | '...')? IDENTIFIER ('.' IDENTIFIER)* ('::' IDENTIFIER)*
-moduleDecl         : 'module' identDef
+moduleDecl         : frontMatter? 'module' identDef
 importDecl         : 'import' (moduleName ('as' identDef)? | (importItem | bracedImports) 'from'
 bracedImports      : '{' (importItem (',' importItem)*)? ','? '}'
 importItem         : identDef ('as' identDef)?

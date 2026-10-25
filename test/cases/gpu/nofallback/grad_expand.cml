@@ -1,19 +1,20 @@
 /**
- * A gradient written inside a `#gpu` scope: the derived graph has to be built at compile time,
- * or the scope holds a runtime operator no pass ever sees.
+ * A gradient written inside a `#gpu` scope: the derived graph has to exist while the passes run,
+ * or the scope holds a macro operator no pass ever sees.
  *
- * `grad`/`with_grad` build the derived graph while they run (`autodiff::gradFunction`), long
- * after every pass has finished, so a `#gpu` scope that asks for a gradient hands the scope an
- * operator the device has no program for: `autodiff:with_grad` is not in the device capability
- * table, and the scope would be refused with
+ * `grad`/`with_grad` are macro operators (design principles 8): the pipeline's `std::macro`
+ * expands the call into the derived graph while the program is compiled. With `tiles::compile`
+ * and no `std::macro` before it, the scope still holds `autodiff:with_grad` — the operator whose
+ * job is to build a graph, in a graph that is being compiled — so the pass reports the missing
+ * prerequisite and names the pass that carries it (docs/design/gpu/plan.cn.md 2.6):
  *
- *   `#gpu` scope 'step': operator 'autodiff:with_grad' has no device program (the module
- *   provides none).
+ *   `#gpu` scope 'step': operator 'autodiff:with_grad' is a macro operator no pass has
+ *   expanded, ...; put the pass 'std::macro' before this one.
  *
- * (docs/design/gpu/plan.cn.md 2.6, the finding that decides the expansion pass). `tiles::compile`
- * applies `autodiff::expand` to the scope graphs first, so the call site becomes a function
- * constant holding `grad(loss)`: the scope then holds that graph, whose operators the device is
- * asked about instead — a refusal, if one comes, names a tensor operator of the backward pass.
+ * The repair is the pipeline, not the program: `loss` is a named function, so the derived graph
+ * can be built while compiling. With `std::macro` in the pipeline the call site becomes a
+ * function constant holding `grad(loss)`, and the scope holds that graph instead: a refusal, if
+ * one comes, names a tensor operator of the backward pass.
  *
  * Both the primal `loss` and the scope function `step` carry the tag, so the derived graph
  * inherits the primal's placement (plan 2.3): the report shows `grad(loss)` as a `#gpu` body.
@@ -23,10 +24,11 @@
  * time) and `step_host` asks for it outside any scope (the operator at run time): both paths
  * print the same value, and the plan's own entry compares the two runs.
  *
- * Red when: the expansion does not run (the scope is refused with `autodiff:with_grad` instead of
- * a tensor operator of the derived graph), the derived graph does not inherit the primal's
- * placement (the report does not show `grad(loss)` as a `#gpu` body), or the expansion changes
- * the value (the run with the pass prints another gradient than the run without it).
+ * Red when: the missing prerequisite is not reported (the scope compiles with the macro operator
+ * still in it), the expansion does not run (the scope is refused with `autodiff:with_grad`
+ * instead of a tensor operator of the derived graph), the derived graph does not inherit the
+ * primal's placement (the report does not show `grad(loss)` as a `#gpu` body), or the expansion
+ * changes the value (the run with the pass prints another gradient than the run without it).
  */
 module gpu_grad_expand
 

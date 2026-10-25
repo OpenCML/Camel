@@ -436,6 +436,12 @@ node_ptr_t Builder::visitModule(const AST::node_ptr_t &ast) {
 
     node_ptr_t root = makeExec();
 
+    // The tags written before `module` (`#gpu module m`, design principles 13.4) are kept beside
+    // the module node, like the tags of a function beside the function; the GIR builder reads
+    // them for each top-level function of this module. A module that writes none has no such
+    // child at all.
+    attachTagUses(root, ast);
+
     // The namespaces the module declares, and the `using namespace` of its top level, which
     // apply to the whole module whatever their position (design principles 10.2).
     ownNamespaces_.clear();

@@ -389,6 +389,7 @@ P4 的终点：
 | `modules/onnx/emitter.cpp` 的 `Value::constant(..., numericUnknown())` | 数组常量当张量时的声明类型 | 改为值自己的数组类型 |
 | `src/core/rtdata/equality.cpp` 的 `registerContentComparableType` / `isRegisteredContentComparableType`，以及 `isContentComparableImpl` 里的 `isNumericUnknown()` 分支 | 让模块的 `Tensor` 类型与元素类型未定的数组参加整体比较 `==` | 随过渡类型删除：张量就是数组，走数组自己的比较；注册表整个删掉 |
 | `modules/tensor/ops/layout_ops.cpp` 的 `OpDef idx_take`（`.exports = {"__idx__"}`）与 `setVjp(defs, "idx_take", &takeVjp)` | 模块的 `Tensor` 值经它参加 `t[idx]`；核心 `:op/idx_take` 已对任意秩按第 0 维取行、带反向 | 删掉这份副本，`t[idx]` 只有核心一条规则；函数形式 `tensor::take` 保留；`export_matrix` 去掉 `tensor:idx_take` 一行；`take_rows`、`gather_grad_f64`、`discrete_zero`、`gather_discrete_index_zero` 四个用例的 `t[idx]` 落到核心 |
+| `stdlib/rules.cml` 的 `tensor_f32_*`、`tensor_i64_*` 一族规则（约 13 条） | 张量是单独的类型，标量的代数律管不到它，于是每条律再抄一份 `Tensor<f32>` 版本 | 删掉这一族；标量那条律推广到数值数组（逐元素成立，元素与数组共用同一条律，写法由 H232 的车道定），同一条代数律只写一次 |
 | `src/compile/gir/builder_operators.cpp` 的 `var` 实参接管（普通实参与 `with` 实参各一处） | 形参的裸 `Tensor` 与实参值的数组拼法不是同一个类型，cell 的"内容类型必须相等"（`src/core/type/composite/tuple.cpp`）会拒 | 随标记删除：两侧是同一个类型，接管分支删掉（详见下一节） |
 
 **没有让新的消费者依赖它**：所有从 `TensorType` 迁过来的构造点走 `tensor::ops::tensorOf(...)`，元素类型

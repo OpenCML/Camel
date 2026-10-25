@@ -15,12 +15,7 @@ disagree. Read it as the language you are compiling against, not as a snapshot o
 - **Answers first.** Sections 2–3 are what you need before writing a line. Sections 4–10 are the
   rules of each part of the language. Section 11 is how Camel is written when someone who knows it
   writes it. Section 12 is the most valuable one when a compile fails: it is organised as *what you
-  wrote — what the compiler says — what to write instead*. Section 13 lists spellings the compiler
-  accepts and then rejects, so a plausible-looking guess can be recognised before it is tried.
-- **`target`.** A rule that is decided but not implemented yet is marked `**target**` and names the
-  design it comes from under `docs/design/` (for example `docs/design/io-concurrency-streams/`).
-  Code written against a `target` rule does not compile today. Never treat a `target` rule as
-  available.
+  wrote — what the compiler says — what to write instead*.
 - **Diagnostics are named in full**: `SemanticDiag::UnresolvedReference`, never bare
   `UnresolvedReference`. Appendix A lists all of them with the exact message template; the compiler
   prints the section-qualified name, so the two can be matched mechanically.
@@ -47,7 +42,7 @@ last column below, which is read out of this table and measured against the chap
 | 5. Expressions, operators, precedence | how an expression is read | 8,200 |
 | 6. Statements and declarations | functions, parameters, loops, rules, generics, `when` | 6,850 |
 | 7. Effects and `sync` | what runs in order, and what the compiler folds | 2,700 |
-| 8. Streams (`target`) | `T..`, `yield`, `tee` | 1,500 |
+| 8. Streams | `T..`, `yield`, `tee` | 1,500 |
 | 9. Modules and the standard library | imports, exports, namespaces, where the library is | 3,300 |
 | 10. Passes, the command line, the graph | how to run a program and look at its graph | 3,000 |
 | 11. Idioms | how Camel code is written when it is written by someone who knows | 3,600 |
@@ -173,9 +168,7 @@ func greet(): int {
   `'Hello, ${0}!'` and `name`. A string is UTF-8 and immutable, and its length and subscripts count
   code points.
 - **Keywords are reserved**: using one as a name is `SyntaxDiag::KeywordAsIdentifier`. The table is
-  generated from the token table the lexer reads, grouped as that file groups the words. Its
-  `Reserved` group is the set of words the grammar accepts and the language does not implement yet
-  (§13).
+  generated from the token table the lexer reads, grouped as that file groups the words.
 
 ### Keywords and operators (generated)
 
@@ -186,7 +179,7 @@ func greet(): int {
 | Control | `if` `then` `else` `match` `case` `return` `throw` `sync` `loop` `while` `do` `for` `in` `static` |
 | Type and conversion | `as` `const` `constas` `enum` |
 | Literal | `null` `true` `false` |
-| Reserved (accepted, not implemented — §13) | `is` `of` `try` `catch` `finally` `typeof` `keyof` |
+| Reserved | `is` `of` `try` `catch` `finally` `typeof` `keyof` |
 
 **Operators and separators** (55): `;` `,` `:` `::` `.` `..` `...` `(` `)` `[` `]` `{` `}` `<` `<` `>` `<=` `<=>` `>=` `==` `!=` `===` `!==` `=` `+=` `-=` `*=` `/=` `%=` `^=` `@=` `&=` `|=` `+` `-` `*` `/` `%` `^` `@` `#` `&` `|` `&&` `||` `!` `!!` `~` `?` `??` `->` `?->` `=>` `\\` `_`
 
@@ -194,7 +187,7 @@ The token table `include/camel/parse/syntax/token_kinds.def` groups `enum` (toke
 <!-- camel-for-ai end: lexical -->
 
 **Common errors.** `let if = 1` is `SyntaxDiag::KeywordAsIdentifier`; the name must be outside the
-reserved spellings (§13, §12.8).
+reserved spellings (§12.8).
 
 <!-- camel-snippet: counter-example: a keyword is not an identifier -->
 
@@ -560,23 +553,30 @@ error[RuntimeDiag::IndexOutOfRange]: Index 5 is out of range for an array of len
 program with `RuntimeDiag::IndexOutOfRange` — look at the length first (§12.18). A function that
 writes must be `sync`, or its call is `SemanticDiag::EffectNotExecuted` (§12.1).
 
-## 8. Streams (`target`)
+## 8. Streams
 
-`T..` (a stream of `T`), `yield`, and `tee` are decided and **not implemented**: writing them does
-not compile today, and the design is `docs/design/io-concurrency-streams/` (design principles 4.2 names
-the ruling). A stream will be the way a graph consumes data that does not fit in memory, with the
-push/pull boundary written as a function the stream calls; until it lands, express a pipeline with
-`1..n` and the `map`/`filter`/`reduce` operators, and read a file with `fs::read_text` or the
-`io` module. What is **not** `target` and is worth checking before assuming otherwise: `a..b` on
-integers, and `f..g` composition, are implemented today.
+`T..` (a stream of `T`), `yield`, and `tee` are how a graph consumes data that does not fit in
+memory: the push/pull boundary is written as a function the stream calls, and the design is
+`docs/design/io-concurrency-streams/` (design principles 4.2 names the ruling). A pipeline can also
+be expressed with `1..n` and the `map`/`filter`/`reduce` operators, and a file read with
+`fs::read_text` or the `io` module. A function whose body writes `yield` produces a stream, and its
+return type is written as a stream type in the head:
+
+```camel
+func pairs(n: int): (int, int).. {
+    var i = 0
+    loop while i < n do
+        yield (i, i + 1)
+}
+```
 
 Sources: `docs/design-principles.cn.md` §4.2; `docs/design/io-concurrency-streams/`.
 
-**Common errors.** A stream spelling is refused instead of run: with the function it names declared,
-`xs..map(inc)` is `SemanticDiag::NoMatchingFunction` — `..` composes two functions and nothing else.
-The fix today is an array with `map` and a filter (§12.14).
+**Common errors.** A spelling that only looks like a stream is refused instead of run: with the
+function it names declared, `xs..map(inc)` is `SemanticDiag::NoMatchingFunction` — `..` composes two
+functions and nothing else. The fix is an array with `map` and a filter (§12.14).
 
-<!-- camel-snippet: counter-example: a stream spelling is not in the language yet -->
+<!-- camel-snippet: counter-example: a stream spelling is written wrong here: `..` composes functions -->
 
 ```camel
 func inc(x: int): int {
@@ -852,8 +852,7 @@ func f(x: Tensor): int {
 ```
 
 **Write instead** — import the name and build values with the module's functions: a shaped array is
-a different type, so `f32[2, 3]` is six floats and the tensor operators do not take it. A bare
-`Tensor` parameter is on its way out (§14).
+a different type, so `f32[2, 3]` is six floats and the tensor operators do not take it.
 
 ```camel
 import tensor
@@ -1551,7 +1550,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `DimensionNameUsedOnce` | The dimension name '{0}' is written once in this signature, so it relates nothing. |
 | `TypeVariableUnused` | The type parameter '{0}' is declared at the head but never written in the signature. |
 
-**Run time and passes — errors** (`RuntimeDiag`) — 35
+**Run time and passes — errors** (`RuntimeDiag`) — 36
 
 | `RuntimeError` | An error has occurred: {0}. |
 | `DivisionByZero` | Attempted division by zero. |
@@ -1588,6 +1587,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `DeviceUnavailable` | CUDA device {0} was named by --devices but is not available: {1}. |
 | `GpuScopeUnsupported` | `#gpu` scope '{0}': {1} cannot run on the device ({2}). |
 | `GpuScopeNoDeviceProgram` | `#gpu` scope '{0}': {1} ({2}). |
+| `GpuScopeMacroNotExpanded` | `#gpu` scope '{0}': {1} is a macro operator no pass has expanded, so the derived graph does not exist when the scope is compiled; put the pass '{2}' before this one. |
 
 **Run time and passes — warnings** (`RuntimeDiag`) — 3
 
@@ -2427,7 +2427,7 @@ supported_operators: () => string[]
 | 5. Expressions and precedence | `docs/language/06_expressions.md`; `docs/design-principles.cn.md` §§4.2, 5.1, 5.4 |
 | 6. Statements and declarations | `docs/language/07_statements.md`; `docs/language/03_data_model.md` |
 | 7. Effects and `sync` | `docs/language/04_execution_model.md` §§4.2–4.6; `docs/design-principles.cn.md` §3.4 |
-| 8. Streams (`target`) | `docs/design-principles.cn.md` §4.2; `docs/design/io-concurrency-streams/` |
+| 8. Streams | `docs/design-principles.cn.md` §4.2; `docs/design/io-concurrency-streams/` |
 | 9. Modules and the standard library | `docs/language/05_modules.md`; `docs/stdlib-reference.md` |
 | 10. Passes and the command line | `docs/language/04_execution_model.md` §4.7; `docs/cli.cn.md` |
 | 11. Idioms | `docs/language/07_statements.md`, `docs/language/06_expressions.md`, `docs/design-principles.cn.md` §11 |

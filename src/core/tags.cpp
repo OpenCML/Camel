@@ -223,15 +223,17 @@ void declareStandardTags() {
                                         : std::nullopt;
                 };
             };
-        // `#gpu` (design principles 13.4): the function or block it marks is asked to run on
+        // `#gpu` (design principles 13.4): the function, block or module it marks is asked to run on
         // the device. It is a standard tag, so the placement label needs no import; the fact
-        // is on the declaration and on every node written in the scope. The pass that reads
-        // it is `tiles::compile`, which also registers itself as its reader; a pipeline
+        // is on the declaration and on every node written in the scope. Written before `module`
+        // it is the whole module's placement and reaches each of its top-level functions, which
+        // a fact written on the function itself overrides (the inner value wins). The pass that
+        // reads it is `tiles::compile`, which also registers itself as its reader; a pipeline
         // without that pass warns that the label has no reader (9.4).
         Decl gpu;
         gpu.name   = "gpu";
         gpu.ident  = "gpu";
-        gpu.on     = static_cast<Positions>(Func | Nodes);
+        gpu.on     = static_cast<Positions>(Func | Nodes | Module);
         gpu.readBy = {"tiles::compile"};
         gpu.key    = placement;
         gpu.value  = placementValue("gpu");
@@ -243,7 +245,7 @@ void declareStandardTags() {
         Decl cpu;
         cpu.name   = "cpu";
         cpu.ident  = "cpu";
-        cpu.on     = static_cast<Positions>(Func | Nodes);
+        cpu.on     = static_cast<Positions>(Func | Nodes | Module);
         cpu.readBy = {"tiles::compile"};
         cpu.key    = placement;
         cpu.value  = placementValue("cpu");
@@ -410,6 +412,8 @@ std::string_view positionName(Position position) {
         return "field";
     case Nodes:
         return "nodes";
+    case Module:
+        return "module";
     case Param:
         return "param";
     default:
@@ -429,6 +433,9 @@ std::optional<Position> positionFromName(std::string_view name) {
     }
     if (name == "nodes") {
         return Nodes;
+    }
+    if (name == "module") {
+        return Module;
     }
     if (name == "param") {
         return Param;

@@ -1117,7 +1117,7 @@ camel docs/tutorial/examples/16_grad.cml std::macro
 ## 接下来
 
 - [示例集](../../examples/README.cn.md)：按任务组织的短程序——JSON、文件、词频统计、排序、命令行工具、并行、仿真、训练。
-- [语言参考](../language/README.md)：每个构造的精确规则，以及哪些写法保留而尚未实现。
+- [语言参考](../language/README.md)：每个构造的精确规则。
 - [标准库参考](../stdlib-reference.md)：每个模块的每个函数。
 - [命令行](../cli.cn.md)：全部选项、遍、诊断格式、资源上限；`camel --explain <诊断名>` 解释一条诊断。
 - [设计原则](../design-principles.cn.md)：语言为什么是这个样子。

@@ -1,16 +1,18 @@
 /**
- * The same gradient program without a tag: `autodiff::expand` must leave it exactly as it is.
+ * A gradient program with no tag: `tiles::compile` must leave it exactly as it is.
  *
- * The expansion only rewrites a `grad`/`with_grad` call site inside a `#gpu` scope, because that
- * is the case where no pass would otherwise ever see the derived graph
- * (docs/design/gpu/plan.cn.md 2.6). Outside a scope the operator keeps building its gradient at
- * run time, and the plan's requirement is that nothing else moves: the graph a program without
- * the tag compiles to is byte-identical with and without the pass.
+ * A `#gpu` scope is what makes a macro call site the pass's business, because the pass is what
+ * promises the device runs the whole scope (docs/design/gpu/plan.cn.md 2.6). Outside a scope the
+ * operator keeps building its gradient at run time, and the plan's requirement is that nothing
+ * else moves: the graph a program without the tag compiles to keeps the runtime operator, and the
+ * pass neither expands it nor refuses it.
  *
- * The two runs of `std::jgir` this pairs with (`grad_expand.untagged_graph_unchanged` and
- * `grad_expand.untagged_graph_is_byte_identical`) compare the whole dumped document, so any
- * difference the pass made anywhere — a node, an attribute, an edge, a reference — fails the
- * pair.
+ * The entries this pairs with (`grad_expand.untagged_graph_unchanged` and
+ * `grad_expand.untagged_graph_keeps_the_runtime_operator`) read that the operator is still in the
+ * dumped graph, and that the pipeline adds no message of its own. What the run then answers is the
+ * runtime's own: the derivative of `loss` turns on `m.x`, which `tiles::compile` has made a
+ * resident value, and a resident value carries no gradient channel - the same answer the run gives
+ * with the pass absent from the pipeline.
  */
 module gpu_grad_expand_plain
 

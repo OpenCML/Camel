@@ -275,10 +275,19 @@ moduleName : ('.' | '..' | '...')? IDENTIFIER ('.' IDENTIFIER)* ;
 any Formatter::visitModuleName(cst::ModuleName context) { return context->text(); }
 
 /*
-moduleDecl : MODULE identDef ;
+moduleDecl : frontMatter? MODULE identDef ;
 */
 any Formatter::visitModuleDecl(cst::ModuleDecl context) {
-    return "module " + any_cast<string>(visitIdentDef(context->get<cst::IdentDef>()));
+    string result;
+    // The tags written before the declaration (`#gpu module m`): a module carries the placement of
+    // the functions it declares (design principles 13.4, 6.2), so the tag stands before the
+    // keyword, one per line, and the formatter writes it back where the reader put it.
+    for (const auto &tagUse : context->all<cst::TagUse>()) {
+        result += any_cast<string>(visitTagUse(tagUse)) +
+                  commentsInFrontMatter(tagUse->lastToken()->index());
+    }
+    result += "module " + any_cast<string>(visitIdentDef(context->get<cst::IdentDef>()));
+    return result;
 }
 
 /*

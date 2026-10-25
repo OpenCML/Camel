@@ -2,7 +2,7 @@
 
 English | [中文](../08_top_level_and_grammar.md)
 
-This chapter describes the top-level structure of a program, gives a summary of the grammar, and collects the constructs that the grammar accepts but that are not implemented. The complete grammar is in [8.5](#85-the-complete-grammar); it is generated from the source of the parser.
+This chapter describes the top-level structure of a program and gives a summary of the grammar. The complete grammar is in [8.5](#85-the-complete-grammar); it is generated from the source of the parser.
 
 ---
 
@@ -104,7 +104,7 @@ stmtList           : stmt (SEP? stmt)* SEP?
 stmtBlock          : 'sync'? '{' stmtList? '}'
 blockExpr          : stmtBlock | dataExpr
 moduleName         : ('.' | '..' | '...')? IDENTIFIER ('.' IDENTIFIER)* ('::' IDENTIFIER)*
-moduleDecl         : 'module' identDef
+moduleDecl         : frontMatter? 'module' identDef
 importDecl         : 'import' (moduleName ('as' identDef)? | (importItem | bracedImports) 'from'
 bracedImports      : '{' (importItem (',' importItem)*)? ','? '}'
 importItem         : identDef ('as' identDef)?

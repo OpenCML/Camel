@@ -73,6 +73,7 @@ enum Position : uint8_t {
     Field      = 1u << 2, // before a field of a struct type
     Nodes      = 1u << 3, // on a function or a block: the nodes written in it
     Param      = 1u << 4, // before a function parameter (not written yet: H2b)
+    Module     = 1u << 5, // before `module`: the module's top-level functions (design principles 13.4)
 };
 using Positions = uint8_t;
 
