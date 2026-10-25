@@ -365,7 +365,7 @@ P4 的终点：
   `log_softmax` 的裁定）；
 - **值的元素类型总在类型里**；形状可以是 `?`（大小运行时才知道是值的事，不是类型的事）。
 
-删除步（作为 P4 之后的一次独立提交，或 P4 提交内最后一步，由计划的所有者定）：
+删除步（P4 合入 develop 之前完成，负责人 2026-10-25：不留过渡、不留技术债。过渡状态只能存在于翻转分支上，develop 上不出现别名 `Tensor`、`numericUnknown` 或本节依赖表里的任何一处）：
 1. `ArrayType::numericUnknown*` 与其标记 `numericUnknown_` 删除；`Tensor` 的 `Reference` 改为
    `Tensor<T>` 形式（元素类型参数必填，`Tensor<..>` 的 `applyArguments` 只接受类型参数 + 形状参数）；
 2. 签名里出现裸 `Tensor` 的诊断（`InvalidTypeArgument` 或新的语法诊断）；

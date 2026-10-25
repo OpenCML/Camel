@@ -277,25 +277,3 @@ analysisClause     : IDENTIFIER '=>' dataExpr
 | `src/parse/syntax/` | 词法分析器与解析器 |
 | `docs/Camel.asdl` | 抽象语法树的结构定义 |
 | `docs/diagnostics.md` | 全部诊断的目录（由脚本生成） |
-
-## 8.6 保留但尚未实现的写法
-
-下列写法文法接受（或关键字已保留），编译器明确拒绝。它们的含义多数尚未决定，不要依赖。
-
-| 写法 | 得到的诊断 | 现在的替代写法 |
-|---|---|---|
-| 展开 `[...xs, y]`、`{ ...p, x: 1 }`、`f(...args)` | `ConstructNotSupported` | `concat(xs, [y])`；逐个写出字段 |
-| `e is T` | `ConstructNotSupported` | 无（运行时没有类型信息） |
-| 非空断言 `x!` | `ConstructNotSupported` | `x ?? 默认值`、`match` |
-| `f ?.. g` | `ConstructNotSupported` | 无 |
-| `f..g` | 组合的结果不能被调用（`ArgumentsMismatch`） | `(x: T) => g(f(x))` |
-| `try { } catch e: T { } finally { }` | `SemanticDiag::TryCatchNotInLanguage`（不属于语言） | `T!` 与 `!!`、`?->`、`case error e` |
-| 元组模式、结构体模式；对普通类型的标识符模式 | `ConstructNotSupported` | `if` 链；先取成员 |
-| 结构体解构 `let { x, y } = p`、数组解构 `let [a, b] = xs` | `SemanticDiag::FeatureNotSupported` | `p.x`、`xs[0]`（元组解构可用） |
-| 切片下标切的是第一维以外的维度 `xs[:, 0]`、`xs[a:b, c]` | `SemanticDiag::ConstructNotSupported`（诊断里点名 H17） | 先用 `take` 取行，或一次只切一维 |
-| 切片下标的步长不是 1 `xs[a:b:s]` | 数组是运行时 `RuntimeDiag::InvalidArgument`，张量是编译期的 `ArgumentsRejected`（都点名 H17） | `xs->slice<0, a, b, s>` |
-| 类型运算 `A & B`、`A \ B`、`A + B`、`A - B`、`A ^ B` | `FeatureNotSupported` | 无 |
-| `名字 of T` | `FeatureNotSupported` | 无 |
-| `keyof` | 语法错误 | 无 |
-
-此外有一处“能写出来但目前用不了”：带函数类型的声明 `let f: (x: int) => int = g`。
