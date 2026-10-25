@@ -406,6 +406,14 @@ function isSerial(plan, test) {
 function runProcess(command, args, { cwd, env, timeoutMs, marks, cpuReport = false }) {
     return new Promise((resolve) => {
         const started = performance.now()
+        // A test must not write into the tree it is testing. A Python harness that imports a module
+        // beside it (`test/cases/perf/reduce_layout.py` imports `step_budget.py`) leaves a
+        // `__pycache__` behind, and one left in a checkout makes the case ledger's answer depend on
+        // which test ran first -- the ledger reads the filesystem, so it sees a cache written this
+        // run. The interpreter is told not to write bytecode; a test that needs its own value sets
+        // `PYTHONDONTWRITEBYTECODE` in its `envs`, and that wins because those are already in `env`.
+        const childEnv = { ...(env || process.env) }
+        if (!('PYTHONDONTWRITEBYTECODE' in childEnv)) childEnv.PYTHONDONTWRITEBYTECODE = '1'
         let stdout = ''
         let stderr = ''
         let cpuReportText = ''
@@ -435,7 +443,7 @@ function runProcess(command, args, { cwd, env, timeoutMs, marks, cpuReport = fal
         try {
             child = spawn(command, args, {
                 cwd,
-                env,
+                env: childEnv,
                 stdio: cpuReport ? ['ignore', 'pipe', 'pipe', 'pipe'] : ['ignore', 'pipe', 'pipe'],
                 windowsHide: true,
                 // On POSIX a process group lets the timeout take the whole tree down; on Windows

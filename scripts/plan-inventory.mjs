@@ -247,6 +247,15 @@ export const CASE_EXCEPTIONS = [
 ]
 
 const CASE_ROOT = 'test/cases'
+// A case is a file of the repository, and a bytecode cache is not: the interpreter writes
+// `__pycache__` beside a Python module it imports, it is in `.gitignore` (so no commit carries
+// one), and it appears and disappears with whoever last imported the module -- including in a
+// checkout a gate reuses, where it survives `git clean -fd` because it is ignored. The walk below
+// reads the filesystem, so it sees such a file; the thing that reads it is the interpreter that
+// wrote it, which is not a plan. Interpreter caches that are hidden directories (`.pytest_cache`,
+// `.mypy_cache`) are already skipped with the hidden files, and no other directory of this kind
+// exists in the tree.
+const PYTHON_CACHE = /(^|\/)__pycache__\//
 const CASE_REFERENCE_KEYS = new Set(['case', 'verify_script_path', 'compare_to', 'golden', 'args', 'envs', 'plans'])
 
 // A plan is an index of the cases it runs, and `test/plan-selection.json` is an index of the
@@ -272,6 +281,15 @@ function walkTreeFiles(dir) {
     }
     walk(path.join(ROOT, dir), dir)
     return out
+}
+
+// The files of `test/cases` that are cases: the walk above reads what the filesystem holds, and the
+// ledger judges what the repository holds, so a hidden file (the directory's own bookkeeping) and a
+// bytecode cache (the interpreter's) are not cases.
+function caseTreeFiles() {
+    return walkTreeFiles(CASE_ROOT)
+        .filter((file) => !PYTHON_CACHE.test(file) && !baseOf(file).startsWith('.'))
+        .sort()
 }
 
 // A path under `test/cases`, written the way the plans write it: `path.resolve` and
@@ -346,9 +364,7 @@ export function caseLedgerProblems() {
     }
     const tracked = listed.stdout.split('\0').filter(Boolean)
 
-    const files = walkTreeFiles(CASE_ROOT)
-        .filter((file) => !baseOf(file).startsWith('.'))
-        .sort()
+    const files = caseTreeFiles()
     const caseFiles = files.filter((file) => !file.endsWith('.plan.toml'))
     const treePlans = files.filter((file) => file.endsWith('.plan.toml'))
     if (caseFiles.length === 0) {
@@ -612,7 +628,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
         process.exit(1)
     }
     console.log(`plan-inventory: ${examined} plan files, every one of them has a fate`)
-    const cases = walkTreeFiles(CASE_ROOT).filter((file) => !file.endsWith('.plan.toml')).length
+    const cases = caseTreeFiles().filter((file) => !file.endsWith('.plan.toml')).length
     console.log(
         `plan-inventory: ${cases} case files, every one of them is read by a plan or recorded with a reason ` +
             `(${CASE_EXCEPTIONS.length} recorded)`,
