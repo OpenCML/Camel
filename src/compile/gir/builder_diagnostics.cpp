@@ -399,6 +399,199 @@ void Builder::reportDroppedEffects(const compile_graph_ptr_t &graph, bool report
     }
 }
 
+std::vector<compile_graph_ptr_t> Builder::ruleConditionsIn(
+    const compile_graph_ptr_t &graph, std::unordered_set<const void *> &visited,
+    bool ownedByUnit) const {
+    std::vector<compile_graph_ptr_t> conditions;
+    if (graph == nullptr || !visited.insert(graph.get()).second) {
+        return conditions;
+    }
+    const runtime::GraphDraft &draft = graph->draft();
+    for (draft_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
+        if (!draft.alive(id)) {
+            continue;
+        }
+        if (ownedByUnit && id < rootNodeOwners_.size() && rootNodeOwners_[id] != unit_) {
+            // Another module's top-level value: its own pass over the root graph reports it.
+            continue;
+        }
+        const node_handle_t node = draft.ref(id);
+        if (nodeIsKind(node, runtime::GCNodeKind::Func)) {
+            // A rule written inside a function: its maker call is in that function's graph.
+            std::vector<compile_graph_ptr_t> inner =
+                ruleConditionsIn(graph->funcTarget(node), visited, false);
+            for (compile_graph_ptr_t &found : inner) {
+                conditions.push_back(std::move(found));
+            }
+            continue;
+        }
+        if (!nodeIsKind(node, runtime::GCNodeKind::Oper)) {
+            continue;
+        }
+        const auto &op = graph->operTarget(node);
+        if (op == nullptr || op->uri() != "rewrite:rule_when") {
+            continue;
+        }
+        // The condition is the argument that is one of the rule's functions: the front end names
+        // it `<rule>__when`, and the other two are `<rule>__lhs` and `<rule>__rhs`. A rule value
+        // is a constant, so its sides are static function values (a direct call of the side, or
+        // the value the call passes).
+        const auto conditionOf = [&](node_handle_t argument) -> compile_graph_ptr_t {
+            Type *type = nodeTypeOf(argument);
+            if (type == nullptr || type->code() != TypeCode::Function) {
+                return nullptr;
+            }
+            if (nodeIsKind(argument, runtime::GCNodeKind::Fill)) {
+                // A function value whose body captured values: the node fills the captures into
+                // the value it holds, which is its first ordinary input (`gc.fill`).
+                const auto held = normInputsOf(argument);
+                if (held.empty()) {
+                    return nullptr;
+                }
+                argument = nodeDraftOf(argument)->ref(held.front());
+                type     = nodeTypeOf(argument);
+                if (type == nullptr || type->code() != TypeCode::Function) {
+                    return nullptr;
+                }
+            }
+            if (nodeIsKind(argument, runtime::GCNodeKind::Func)) {
+                return graph->funcTarget(argument);
+            }
+            const std::optional<slot_t> value = staticValueOf(argument);
+            if (!value.has_value()) {
+                return nullptr;
+            }
+            auto *function = camel::core::rtdata::fromSlot<StaticFunction *>(*value);
+            return function != nullptr ? function->graph() : nullptr;
+        };
+        for (draft_node_ref_t ref : draft.normInputsOf(id)) {
+            const compile_graph_ptr_t condition = conditionOf(draft.ref(ref));
+            if (condition == nullptr || !std::string_view(condition->name()).ends_with("__when")) {
+                continue;
+            }
+            conditions.push_back(condition);
+        }
+    }
+    return conditions;
+}
+
+bool Builder::isCompileTimeEffect(DraftGraphBuilder *graph, node_handle_t node) const {
+    if (!nodeIsKind(node, runtime::GCNodeKind::Oper)) {
+        return false;
+    }
+    const auto &op = graph->operTarget(node);
+    if (op == nullptr) {
+        return false;
+    }
+    // The operators that build a rule and the one that compiles an `analysis` declaration are
+    // declared impure so that constant folding leaves them where they are written (rewrite
+    // module), and what they do happens where the rule is written, not while the engine holds a
+    // session. Reading a fact in a condition is what an analysis is for: the condition is a
+    // query over the redex, and only the effects that act while the condition runs matter here.
+    const std::string_view uri = op->uri();
+    return uri == "rewrite:rule" || uri == "rewrite:rule_when" || uri == "rewrite:rule_generic" ||
+           uri == "rewrite:analysis";
+}
+
+node_handle_t Builder::effectOfGraph(
+    const compile_graph_ptr_t &graph, std::unordered_set<const void *> &visited,
+    compile_graph_ptr_t &inside) const {
+    if (graph == nullptr || !visited.insert(graph.get()).second) {
+        return nullptr;
+    }
+    const runtime::GraphDraft &draft = graph->draft();
+    // The calls of the graph come first: what the graph itself does is a closer answer than what
+    // a function it calls does.
+    std::vector<compile_graph_ptr_t> calls;
+    for (draft_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
+        if (!draft.alive(id)) {
+            continue;
+        }
+        const node_handle_t node = draft.ref(id);
+        if (nodeIsKind(node, runtime::GCNodeKind::Func)) {
+            if (const compile_graph_ptr_t callee = graph->funcTarget(node); callee != nullptr) {
+                calls.push_back(callee);
+            }
+            continue;
+        }
+        if (isEffectNode(graph.get(), node)) {
+            if (!isCompileTimeEffect(graph.get(), node)) {
+                inside = graph;
+                return node;
+            }
+        }
+    }
+    for (const compile_graph_ptr_t &callee : calls) {
+        if (const node_handle_t node = effectOfGraph(callee, visited, inside); node != nullptr) {
+            return node;
+        }
+    }
+    return nullptr;
+}
+
+void Builder::reportEffectfulConditions() {
+    // A rule of a module's top level is a value of the root graph, and one written inside a
+    // function is in that function's graph; the bodies of the module are still here (the dropped
+    // effects of the same step clear them). The root graph holds the top levels of every module,
+    // so a rule reported from it is the one `unit_` wrote (`rootNodeOwners_`).
+    std::vector<compile_graph_ptr_t> roots = unit_->builtBodies;
+    roots.push_back(rootGraph_);
+    auto sourceContext = context_ ? context_->sourceContext() : nullptr;
+    std::unordered_set<const void *> searched;
+    for (const compile_graph_ptr_t &graph : roots) {
+        std::vector<compile_graph_ptr_t> conditions =
+            ruleConditionsIn(graph, searched, graph == rootGraph_);
+        for (const compile_graph_ptr_t &condition : conditions) {
+            if (!conditionsReported_.insert(condition.get()).second) {
+                continue;
+            }
+            std::unordered_set<const void *> walked;
+            compile_graph_ptr_t inside;
+            const node_handle_t effect = effectOfGraph(condition, walked, inside);
+            if (effect == nullptr) {
+                continue;
+            }
+            std::string subject;
+            switch (nodeKindOf(effect)) {
+            case runtime::GCNodeKind::Oper:
+                subject = std::format("The call of '{}'", inside->operTarget(effect)->name());
+                break;
+            case runtime::GCNodeKind::Func:
+                subject = std::format("The call of '{}'", inside->funcTarget(effect)->name());
+                break;
+            case runtime::GCNodeKind::Join:
+                subject = "The branch";
+                break;
+            case runtime::GCNodeKind::Loop:
+                subject = "The loop";
+                break;
+            default:
+                subject = "The effect";
+                break;
+            }
+            if (inside != condition) {
+                // Inside a function the condition calls: the position of the effect is in that
+                // function, and the report says which one so that the condition is still found.
+                subject = std::format("{} in the function '{}'", subject, inside->name());
+            }
+            // The name the rule is written with: the condition is `<rule>__when`, possibly
+            // qualified by the module it is written in.
+            std::string rule = std::string(condition->name());
+            if (const size_t scope = rule.rfind("::"); scope != std::string::npos) {
+                rule = rule.substr(scope + 2);
+            }
+            if (const size_t side = rule.rfind("__when"); side != std::string::npos) {
+                rule.resize(side);
+            }
+            camel::source::origin_id_t origin = nodeDraftOf(effect)->nodeOrigin(nodeIdOf(effect));
+            if (origin == camel::source::kInvalidOriginId && sourceContext) {
+                origin = sourceContext->debugMap().graphOrigin(inside->graphId());
+            }
+            diags_->of(SemanticDiag::EffectInRuleCondition).atOrigin(origin).commit(subject, rule);
+        }
+    }
+}
+
 void Builder::reportUnusedFallibleValues() {
     // Design principles 3.9: a `T!` that is evaluated and that nothing takes is a warning,
     // because the error it may hold is lost without a trace. On the graph "evaluated and
