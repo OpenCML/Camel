@@ -16,7 +16,7 @@ on:
         type: boolean
         default: false
       macos:
-        description: "Also run the macOS arm64 leg (Apple toolchain signal; the wheel workflow already builds there)"
+        description: "Also run the macOS arm64 leg (Apple toolchain signal; the wheel workflow does not build macOS wheels yet)"
         type: boolean
         default: false
 
@@ -57,8 +57,9 @@ jobs:
       msvc_runtime_version: ${{ matrix.cfg.msvc_runtime_version || '' }}
 
   # Opt-in: `experimental` means it never decides the run, and it is the most expensive runner.
-  # build-pypi.yml already builds and smoke-installs wheels on macOS, so this leg is for the case
-  # where a macOS-only compiler problem has to be told apart from a wheel-build problem.
+  # build-pypi.yml does **not** build macOS wheels yet (5.37 item 6: the bundling step, where
+  # `delocate` has to copy the libraries in and re-sign what it rewrote, is still to be written;
+  # see the note in that workflow's matrix), so this leg is the only macOS signal there is.
   build-test-macos:
     name: Build and test (macos-arm64)
     if: github.event_name == 'workflow_dispatch' && inputs.macos

@@ -5,21 +5,26 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "camel-lang"
 version = "0.2.32"
-description = "Camel: A Next-Generation Language for AI and High-Performance Computing"
+description = "A graph-native general-purpose programming language, with AI as its primary application"
 license = "MIT"
 license-files = ["LICENSE"]
 keywords = ["language", "camel", "ai", "dsl", "graph", "opencml"]
 authors = [{ name = "Zhenjie Wei", email = "kogler_s@outlook.com" }]
 maintainers = [{ name = "Zhenjie Wei", email = "kogler_s@outlook.com" }]
 readme = "README.md"
+# The `camel` command, the runtime and the standard library do not depend on the interpreter, so
+# the body-only wheel (`py3-none-<platform>`) installs on any Python 3. 5.37 asks for >=3.8.
+requires-python = ">=3.8"
 classifiers = [
-    "Development Status :: 1 - Planning",
+    "Development Status :: 3 - Alpha",
     "Operating System :: Microsoft :: Windows",
-    "Operating System :: MacOS",
+    # No `Operating System :: MacOS` until a macOS wheel is built and uploaded: a classifier
+    # that names a platform with no distribution on it is the same overstatement the old
+    # `MacOS` line was (5.37 item 3, and item 6's macOS wheel is still to be built).
     "Operating System :: POSIX :: Linux",
     "Programming Language :: Other",
+    "Programming Language :: Python :: 3 :: Only",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
-    "Topic :: Scientific/Engineering :: Human Machine Interfaces",
     "Topic :: Software Development :: Compilers",
     "Topic :: Software Development :: Interpreters",
 ]
@@ -30,16 +35,26 @@ Documentation = "https://docs.opencml.com"
 Repository = "https://github.com/OpenCML/Camel"
 Issues = "https://github.com/OpenCML/Camel/issues"
 
-# .cmlenv mirrors out/<tag>/ in full; wrapper-dist/* is one launcher per bin tool (.cmd per .exe on Windows)
+# One entry point per tool binary the wheel carries under camel/.cmlenv/bin/. They exec that
+# binary (src/camel_cli.py), so there is no shell or .cmd wrapper and no CAMEL_HOME to set.
 [project.scripts]
-cpm = "camel.cli:cpm"
+camel = "camel_cli:camel"
+camel-ls = "camel_cli:ls"
+camel-db = "camel_cli:debugger"
+camel-format = "camel_cli:formatter"
 
 [tool.setuptools]
 include-package-data = true
-# script-files injected by pypi-rollup before wheel build; keep empty in git
-script-files = []
+# Explicit, so that the console entry points' module (a top-level module, see src/camel_cli.py)
+# is installed beside the package and `src/` stays a src-layout.
+packages = ["camel"]
+py-modules = ["camel_cli"]
+
+[tool.setuptools.package-dir]
+"" = "src"
 
 [tool.setuptools.package-data]
-# .cmlenv mirrors out/<tag>/: bin/, libs/, stdlib/, include/ and -- since H253 -- python/, which
-# holds the CPython extension module. One level for the first four, two for python/.
+# .cmlenv mirrors out/<tag>/: bin/, libs/, stdlib/, include/ and -- in the interop wheel only --
+# python/, which holds the CPython extension module. One level for the first four, two for
+# python/.
 camel = [".cmlenv/*", ".cmlenv/*/*"]
