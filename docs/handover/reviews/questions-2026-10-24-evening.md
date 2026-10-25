@@ -366,3 +366,11 @@ println(grow([1.0, 2.0], read_int()))
 2. **inventory 检查进合并闸门的 fast 层**：新计划落地时如果没有归类，就在那次提交上变红，而不是等到有人跑 release gate。这就治住了"第 9 个计划又弄坏工具"。
 
 **返工**：`--camel <path>` 取代 `CAMEL_EXE` 只做了两条脚本。按"一类事一条规则"，`CAMEL_EXE` 在其余脚本里也一并删掉、改成 `--camel`（`camel-for-ai.mjs`、`check-doc-snippets.mjs`、`perf-gate.mjs`、`test/tools/check-doc-pass-forms.mjs`、`import-audit.mjs`、`para-speedup.mjs`、`jitcov.py`、`progen/README.md`）。另外 `stdlib-reference.mjs` 等处的注释"`CAMEL_EXE` is gone (the author's ruling …)"删掉——代码只描述现在怎么做，不记录已不存在的写法。
+
+## 返工：代码注释不引用裁定（camel-arg 合入后的抽查）
+
+`CAMEL_EXE` 已全部改为 `--camel`，两种语言各一个辅助函数（`test/tools/camel-arg.mjs`、`camel_arg.py`），`--camel` 不带值时报用法错误、不回退默认，`CAMEL_HOME` 照旧作为安装位置。这一批没有问题，收下。
+
+**返工**（在 H242 与 P4 的间隙做，不占这两块的子代理）：注释里写"the author's ruling of 2026-10-25"、"(the author's ruling…)"这类话的，删掉引用，只留规则本身。比如 `camel-arg.mjs` 开头一句改成"`CAMEL_HOME` is the install location's convention: an explicitly named install is a command-line argument, never an environment switch."。src、stdlib、scripts、test/tools、include 里这类引用一共约百处，一次扫完。
+
+**理由**：仓库将公开，代码只描述现在怎么做、为什么这样做；谁在哪天裁定的，记在 `docs/handover/reviews/`。引用裁定的注释读者核实不了，裁定被取代后也没人会去改它。
