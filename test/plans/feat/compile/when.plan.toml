@@ -274,3 +274,38 @@ expect_diagnostic_line = 16
 expect_output_contains = ["is_positive(0)", "every candidate's 'when' condition is false"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
+
+[[tests]]
+name = "when.plain_struct"
+desc = "A predicate whose fold recurses over a field's own type is answered: `is_plain::<T>()` walks `fields T` and asks `is_plain::<F>()` about each field, so a struct of plain fields is plain and the declaration it guards applies."
+kind = "behavior"
+case = "../../../cases/compile/when/plain_struct.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "plain\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "when.plain_nested"
+desc = "The same fold one field deep: the struct holds a struct, so the nested call is folded with the field's own type bound rather than left open."
+kind = "behavior"
+case = "../../../cases/compile/when/plain_nested.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "plain\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "when.plain_struct_false"
+desc = "The recursion's false side: a field whose type is not plain makes the struct not plain, so the guarded declaration is inapplicable and the call site lists `is_plain::<T>()`."
+kind = "negative"
+case = "../../../cases/compile/when/plain_struct_false.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::WhenConditionUnmet"
+expect_diagnostic_line = 16
+expect_output_contains = ["is_plain::<T>()", "every candidate's 'when' condition is false"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000

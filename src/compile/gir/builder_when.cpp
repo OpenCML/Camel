@@ -274,7 +274,32 @@ class GctConstantEvaluator {
     }
 
     Type *bound(Type *type) const {
-        return camel::core::type::substituteTypeVars(type, vars_);
+        return camel::core::type::substituteTypeVars(type, effectiveBindings());
+    }
+
+    /// The type bindings in force while the body is walked: the function's own type parameters,
+    /// plus the names the walk bound as it went (`match type` and `static loop ... for i, F in
+    /// fields T` bind the type the round is on). A nested call is folded with these, so the
+    /// field a predicate recurses over -- `is_plain::<F>()` inside `static loop` over
+    /// `fields T` -- is the concrete field's own type and its instance is the one asked about.
+    /// The loop's own name wins over an outer one of the same name, which is the scope the body
+    /// is read in.
+    camel::core::type::type_bindings_t effectiveBindings() const {
+        camel::core::type::type_bindings_t all = vars_;
+        for (const auto &entry : typeEnv_) {
+            bool replaced = false;
+            for (auto &outer : all) {
+                if (outer.first == entry.first) {
+                    outer.second = entry.second;
+                    replaced     = true;
+                    break;
+                }
+            }
+            if (!replaced) {
+                all.emplace_back(entry.first, entry.second);
+            }
+        }
+        return all;
     }
 
     data_ptr_t eval(const GCT::node_ptr_t &node) {
@@ -686,8 +711,8 @@ class GctConstantEvaluator {
         if (callResolver_ != nullptr) {
             return callResolver_(
                 node, callee, args,
-                [this](const GCT::node_ptr_t &expression) { return eval(expression); }, vars_,
-                depth_);
+                [this](const GCT::node_ptr_t &expression) { return eval(expression); },
+                effectiveBindings(), depth_);
         }
         fail(
             EvalProblem::Construct, name,
