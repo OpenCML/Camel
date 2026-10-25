@@ -233,7 +233,7 @@ false
 
 `as` 不会不经检查地改变一个值的类型。`json::decode` 的结果是 `Json`，不能 `as` 成别的类型；已知形状的 JSON 用 `json::decode_as(s, [0])`，它在解码时检查形状，结果是 `T!`。
 
-数值之间的转换用 `float(x)` 等函数（[3.2](03_data_model.md#32-数值)）。`e is T` 报 `SemanticDiag::ConstructNotSupported`（运行时没有类型信息）。后缀的非空断言 `x!` 也一样；用 `x ?? 默认值`。
+数值之间的转换用 `float(x)` 等函数（[3.2](03_data_model.md#32-数值)）。`is` 不是关键字：`e is T` 里的 `is` 是一个普通的名字，写出来是语法错误（运行时没有类型信息）。后缀的非空断言 `x!` 报 `SemanticDiag::ConstructNotSupported`；用 `x ?? 默认值`。
 
 ## 6.8 `if` 与 `match`
 
@@ -385,7 +385,7 @@ func main(): int sync {
 
 元组模式、结构体模式，以及对普通类型的值的标识符模式（`case n => ...`）报 `SemanticDiag::ConstructNotSupported`；用 `if` 链或先取成员再匹配。枚举变体的元组、结构体模式已经实现，但字段位置只能写名字或 `_`。
 
-`try`/`catch`/`finally` 不属于 Camel（它在图上没有稳定的映射）：写了得到 `SemanticDiag::TryCatchNotInLanguage`。可能失败的操作返回 `T!`，用 `!!`、`?->` 与 `case error e` 处理。
+`try`/`catch`/`finally` 不属于 Camel（它在图上没有稳定的映射），它们也不是关键字：这三个词是普通的名字，用它们写出的 `try { ... }` 是普通的语法错误。可能失败的操作返回 `T!`，用 `!!`、`?->` 与 `case error e` 处理。
 
 ### 6.8.3 `match type`
 

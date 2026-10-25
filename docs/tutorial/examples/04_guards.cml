@@ -1,0 +1,15 @@
+// A `when` guard adds a condition to a case; the first arm that matches is taken.
+// Run: camel docs/tutorial/examples/04_guards.cml
+
+func label(n: int): string {
+    return match n {
+        case 1 when n > 0 => 'one, positive'
+        case 1 => 'one'
+        case _ => 'other'
+    }
+}
+
+func main(): int sync {
+    println(label(1), label(2), label(0))
+    return 0
+}

@@ -1,0 +1,29 @@
+// A function that may fail returns T!; `throw` returns an error value.
+// Run: camel docs/tutorial/examples/07_errors.cml
+
+func safe_div(a: int, b: int): int! {
+    return if b == 0 then {
+        throw error('DivByZero', 'the divisor is zero')
+    } else {
+        return a / b
+    }
+}
+
+func inc(x: int): int { return x + 1 }
+
+func describe(r: int!): string {
+    return match r {
+        case error e => e.kind + ': ' + e.message
+        case v => 'ok ' + string(v)
+    }
+}
+
+func main(): int sync {
+    println(safe_div(9, 3) !! -1)            // 3
+    println(safe_div(9, 0) !! -1)            // -1: the substitute
+    println(describe(safe_div(8, 2) ?-> inc))
+    println(describe(safe_div(8, 0) ?-> inc))
+    println(parse_int('12') !! 0, parse_int('twelve') !! 0)
+    println(safe_div(1, 0))
+    return 0
+}

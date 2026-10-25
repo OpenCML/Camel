@@ -62,7 +62,6 @@ bool ParserImpl::startsExpr(TK kind) const {
     case TK::Tilde:
     case TK::KwIf:
     case TK::KwMatch:
-    case TK::KwTry:
     case TK::KwLoop:
     case TK::KwSync:
         return true;
@@ -75,7 +74,6 @@ bool ParserImpl::startsExpr(TK kind) const {
 /// ctrlExpr : 'if' logicalOrExpr 'then' blockExpr ('else' blockExpr)?
 ///          | 'match' identRef '{' matchCase+ '}'
 ///          | 'match' 'type' typeExpr '{' typeCase* '}'
-///          | 'try' stmtBlock catchClause+ ('finally' stmtBlock)?
 void ParserImpl::parseExpr() {
     Depth depth(*this);
     if (depth.tooDeep()) {
@@ -87,8 +85,6 @@ void ParserImpl::parseExpr() {
         return parseIf();
     case TK::KwMatch:
         return parseMatch();
-    case TK::KwTry:
-        return parseTry();
     case TK::KwLoop:
         return parseLoop();
     case TK::KwStatic:
@@ -297,7 +293,7 @@ void ParserImpl::parseNullable() {
     }
 }
 
-/// unaryExpr : linkExpr (('as' | 'is') typeExpr)?
+/// unaryExpr : linkExpr ('as' typeExpr)?
 /// (The prefix operators `-`, `!` and `~` are taken by negExpr, under `->`.)
 /// The right side is always a type, and the type reads its
 /// own marks: `x as int..` is a conversion to the stream type. A number or a name written
@@ -306,7 +302,7 @@ void ParserImpl::parseNullable() {
 void ParserImpl::parseUnary() {
     const size_t m = mark();
     parseLink();
-    if ((cur_ == TK::KwAs || cur_ == TK::KwIs) && !panic_) {
+    if (cur_ == TK::KwAs && !panic_) {
         bump();
         const uint32_t opToken = prev_;
         parseType();
@@ -1543,24 +1539,6 @@ void ParserImpl::parseEnumStructPattern() {
     close(m, NK::EnumStructPattern);
 }
 
-/// The `try` of ctrlExpr (reserved: the AST builder reports it as not part of the language).
-void ParserImpl::parseTry() {
-    const size_t m = mark();
-    bump();
-    parseStmtBlock();
-    if (!panic_ && cur_ != TK::KwCatch) {
-        unexpected({e(TK::KwCatch)});
-    }
-    while (cur_ == TK::KwCatch && !panic_) {
-        parseCatchClause();
-    }
-    if (cur_ == TK::KwFinally && !panic_) {
-        bump();
-        parseStmtBlock();
-    }
-    close(m, NK::TryExpr);
-}
-
 /// loopExpr : 'loop' loopState (',' loopState)* loopFor? loopWhile? 'do' blockExpr
 /// loopState : identDef '=' logicalOrExpr
 /// loopFor : 'for' identDef 'in' logicalOrExpr
@@ -1621,20 +1599,6 @@ void ParserImpl::parseLoop() {
         parseBlockExpr();
     }
     close(m, NK::LoopExpr);
-}
-
-/// catchClause : 'catch' identDef ':' typeExpr stmtBlock
-void ParserImpl::parseCatchClause() {
-    const size_t m = mark();
-    bump();
-    parseIdentDef();
-    if (!panic_ && expect(TK::Colon)) {
-        parseType();
-        if (!panic_) {
-            parseStmtBlock();
-        }
-    }
-    close(m, NK::CatchClause);
 }
 
 } // namespace camel::parse::syntax

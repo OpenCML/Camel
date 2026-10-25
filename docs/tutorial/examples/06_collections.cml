@@ -1,0 +1,27 @@
+// Structs, tuples, Map and Set: the shapes a program's data takes.
+// Run: camel docs/tutorial/examples/06_collections.cml
+
+type Point = { x: int, y: int }
+
+func main(): int sync {
+    // A struct names its fields; a tuple is positional and carries no names.
+    let a: Point = { x: 3, y: 4 }
+    println(a, a.x + a.y)
+    let pair = (1, 'one')
+    println(pair, pair.0, pair.1)
+
+    // Map<K, V> and Set<T> are built in; both are made from an array with `as`.
+    let ages = [('bob', 31), ('alice', 28)] as Map<string, int>
+    println(ages)                              // printed in key order
+    println(ages['alice'] ?? 0, ages['carol'] ?? 0)
+
+    let more = ages->put<'carol', 45>->remove<'bob'>
+    println(more, len(more))
+    println(ages)                              // unchanged: every operation returns a new value
+    println(keys(more), values(more))
+
+    let seen = [3, 1, 2, 3, 1] as Set<int>
+    println(seen, seen->contains<2>, seen->contains<9>)
+    println(union(seen, [9] as Set<int>), intersect(seen, [1, 9] as Set<int>))
+    return 0
+}

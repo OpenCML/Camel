@@ -303,7 +303,6 @@ class Builder {
     /// the number of names it wrote, both for the message.
     void checkStaticHeadNames(const AST::node_ptr_t &ast, const std::string &shape, size_t named);
     node_ptr_t visitStaticAccess(const AST::node_ptr_t &ast);
-    node_ptr_t visitTryExpr(const AST::node_ptr_t &ast);
     node_ptr_t visitLiteral(const AST::node_ptr_t &ast);
     node_ptr_t visitArrayData(const AST::node_ptr_t &ast);
     /// `[e for x in xs if c]`: `xs->filter<(x) => c>->map<(x) => e>` (design principles

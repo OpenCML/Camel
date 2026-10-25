@@ -20,7 +20,6 @@ enum class DataType {
     StaticFor,
     StaticLoop,
     StaticAccess,
-    TryExpr,
     LoopExpr,
     Literal,
     Array,
@@ -100,8 +99,7 @@ enum class ReservedDataOp {
     Bind,
     Instantiate,
     Comp,
-    As,
-    Is
+    As
 };
 
 std::string to_string(DataType type);
@@ -353,14 +351,6 @@ class MatchCaseLoad : public DataLoad {
             camel::core::error::InternalDiag::UnknownInternalError)
             .commit("MatchCaseLoad::geneCode() not implemented");
     }
-};
-
-class TryExprLoad : public DataLoad {
-  public:
-    TryExprLoad() : DataLoad(DataType::TryExpr) {}
-
-    const std::string toString() const override { return "TryExpr" + this->status(); }
-    const std::string geneCode() const override;
 };
 
 /// loop S1 = INIT1, ..., Sk = INITk (for BINDER in SEQUENCE)? (while CONDITION)? do BODY
