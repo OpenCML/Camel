@@ -41,13 +41,16 @@ camel::core::OperId operIdOf(const GraphDraft &draft, gc_node_ref_t id) {
     return reinterpret_cast<const GCOperBody *>(draft.payloadOf(id).data())->oper;
 }
 
+/// Whether the pass may treat a call of the operator as a value of its own: fold it, move it,
+/// merge it with an identical call or drop it. An operator that must run where the program writes
+/// it is not one, whatever its effect (a rule's value and an `analysis` are pure and unfoldable).
 bool isPureOper(const GraphDraft &draft, gc_node_ref_t id) {
     const auto *h = draft.header(id);
     if (!h || h->kind != GCNodeKind::Oper) {
         return false;
     }
     const auto *body = reinterpret_cast<const GCOperBody *>(draft.payloadOf(id).data());
-    return camel::core::OperatorTable::instance().isPure(body->oper);
+    return camel::core::OperatorTable::instance().mayBeRecomputed(body->oper);
 }
 
 bool isValueOnly(const GraphDraft &draft, gc_node_ref_t id) {

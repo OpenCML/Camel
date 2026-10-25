@@ -226,6 +226,11 @@ class CamelPass final : public GraphIRPass {
         }
         NodeVMSchedPass vm(context_);
         const slot_t argument = camel::core::rtdata::toSlot(const_cast<Program *>(program));
+        // What the pass body captured is not reached through a function value here: a library
+        // function is looked up as a program, and its entry graph computes the values of its module
+        // and binds them before it calls the function, so the captures are filled before the body
+        // runs. There is no closure left for this caller to pass, and the entry graph, not a
+        // function value, is what `callGraph` is for.
         const slot_t result   = vm.callGraph(
             tool->program,
             tool->graph,

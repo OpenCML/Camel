@@ -1,0 +1,34 @@
+/**
+ * An `analysis` whose clauses read a value of the module they are declared in: the clause
+ * functions are values of that module, and the value is one they captured where they were
+ * written. Every value's fact is that value times a thousand, so a reader of the fact reads the
+ * capture and nothing else can be mistaken for it.
+ */
+module analysis_capture
+
+import { Program, Node, Graph, graphs, nodes, name } from graph
+import { max } from math
+
+func base_of(): int {
+    return 7
+}
+
+let base = base_of()
+
+analysis depth: int {
+    initial => base * 1000
+    join(a, b) => max(a, b)
+    on (const c: int) => base * 1000 + 1
+}
+
+func nodes_of(p: Program, function: string): Node[] {
+    let found = graphs(p)->filter<(g: Graph): bool => name(g) == function>
+    return nodes(found[0])
+}
+
+export func report(p: Program): Program! sync {
+    let ns = nodes_of(p, 'sum')
+    let total = loop running = 0 for n in ns do running + depth(n)
+    println('depth ', total)
+    return p
+}

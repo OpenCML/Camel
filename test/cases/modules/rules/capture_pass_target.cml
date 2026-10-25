@@ -1,0 +1,9 @@
+/**
+ * The program the `capture_pass` pass runs over.
+ */
+module capture_pass_target
+
+func main(): int sync {
+    println('target ok')
+    return 0
+}

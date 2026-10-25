@@ -535,6 +535,11 @@ void Builder::settleGenericRuleMaker(
     const uint64_t ruleId = registerGenericRule(
         *context_, static_cast<void *>(this), std::move(name), typeParameterNames(sides[0]),
         sides[0], sides[1], sides.size() == 3 ? sides[2] : nullptr);
+    if (GenericRuleEntry *entry = genericRuleEntry(*context_, ruleId); entry != nullptr) {
+        // Where the rule is written: a report about its condition points here from wherever the
+        // instance that revealed the effect is made.
+        entry->where = call->origin();
+    }
     const data_ptr_t idValue =
         tt::as_shared<Data>(std::make_shared<PrimaryData<int64_t>>(static_cast<int64_t>(ruleId)));
     const node_handle_t idNode = currGraph_->addStaticDataNode(idValue);
@@ -610,6 +615,10 @@ bool Builder::instantiateRuleTemplates(
         why = said.empty() ? "the condition has no operator for this type" : said;
         return false;
     }
+    // The instance is made and nobody asked whether making it was allowed: a condition that writes
+    // an effect is a mistake of the rule wherever it stands, and the type arguments are what
+    // revealed this one (the effect of a call whose candidate the types decide).
+    reportEffectInRuleInstance(entry, when);
     return true;
 }
 

@@ -324,26 +324,20 @@ bool callWhen(const WhenCall &call, const camel::runtime::Match &match) {
         whenProgram != nullptr && whenGraph != nullptr,
         "A condition is a function of a rule value or the graph of an instance.");
     // The condition is a function *value*: what its body captured where the rule was written (a
-    // rule of the module, a value of the program) lives in the closure the value was made with,
-    // and the frame of the condition reads its captures from the closure nodes of its graph. A
-    // call that passes the arguments alone leaves them empty, and the condition then reads a
-    // captured value as null. An instance's condition is a graph the context published, with no
-    // function value behind it: what it captured was bound when the instance was made (`when` is
-    // null there).
-    std::vector<slot_t> closure;
-    if (const Tuple *captured = when != nullptr ? when->tuple() : nullptr; captured != nullptr) {
-        closure.reserve(captured->size());
-        for (size_t i = 0; i < captured->size(); ++i) {
-            closure.push_back(captured->get<slot_t>(i));
-        }
-    }
+    // rule of the module, a value of the program) lives in the closure the value was made with, and
+    // the frame of the condition reads its captures from the closure nodes of its graph. An
+    // instance's condition is a graph the context published, with no function value behind it: what
+    // it captured was bound when the instance was made (`when` is null there).
     const slot_t result = [&]() -> slot_t {
         try {
+            if (when != nullptr) {
+                return call.vm->callFunction(when, args);
+            }
             // The graphs of a program are read and written by the node VM (its value slots), so it
             // takes them without `const`; an instance's condition graph is the context's, and no
             // other reader holds it.
             return call.vm->callGraph(
-                whenProgram, const_cast<camel::runtime::GCGraph *>(whenGraph), args, {}, closure);
+                whenProgram, const_cast<camel::runtime::GCGraph *>(whenGraph), args);
         } catch (const camel::core::error::FactQueryNoValue &) {
             // A fact query inside the condition named parts that are no value's operands: the
             // condition is false -- this rule does not apply here -- and not a failure of the pass.
@@ -3925,18 +3919,12 @@ class RewriteModule final : public BuiltinModule {
         context_->registerExecutorFactory("rewrite", [ctx = context_]() {
             return std::make_shared<RewriteExecutor>(ctx);
         });
-        // The readers are pure. `__rule` is not: constant folding would build the rule at
-        // compile time and keep it in a static area, where the collector does not trace the
-        // functions it holds. `__analysis` compiles an `analysis` declaration at macro time and
-        // installs its facts, so it is effectful as well; it was the one operator of the module
-        // whose purity was never declared, which nothing noticed while no program imported the
-        // module (handover H173).
+        // The readers are pure, and so is what builds a rule: making a rule value changes nothing
+        // outside the program. The makers and `analysis` are declared below with the fact that
+        // keeps a pass from folding them, which is a different question from the effect.
         camel::core::OperatorTable::instance().declare(
             "rewrite",
-            {{"rule", false},
-             {"rule_when", false},
-             {"rule_generic", false},
-             {"name", true},
+            {{"name", true},
              {"two_way", true},
              {"needs", true},
              {"consts", true},
@@ -3957,8 +3945,15 @@ class RewriteModule final : public BuiltinModule {
              {"check_evidence", true},
              {"check_reason", true},
              {"check_coverage", true},
-             {"check_coverage_table", true},
-             {"analysis", false}});
+             {"check_coverage_table", true}});
+        // What builds a rule and what compiles an analysis declaration has no effect on anything
+        // outside the program: the rule value it makes is the program's own, and the facts an
+        // analysis installs are the declaration's. What is true of them is that a pass may not
+        // fold them away: the value of a rule holds the functions of its sides, which a static
+        // area does not trace, and the facts of an analysis are installed where the program
+        // writes the declaration.
+        camel::core::OperatorTable::instance().declareUnfoldable(
+            "rewrite", {"rule", "rule_when", "rule_generic", "analysis"});
         loaded_ = true;
         return true;
     }
