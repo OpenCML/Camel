@@ -17,6 +17,7 @@ namespace camel::core::error {
 
 enum class SemanticDiag : uint32_t {
     // Errors
+    // 0x0001E5 vacant
     Redeclaration               = 0x000001,
     ModuleNotFound              = 0x000002,
     ReservedIdentifier          = 0x000003,

@@ -38,6 +38,7 @@ syntax	LambdaParametersNeedParentheses	0x000012	error	A lambda's parameters need
 # Warnings (severity bits = Warn).
 syntax	ComparisonAcrossLines	0x100001	warn	This '>' is read as a comparison with the next line, which starts with {0}: two statements may have been joined into one.	A '>' after a space, at the end of a line, is the comparison operator, and the expression goes on with the next line. The '>' that closes '<...>' arguments touches the last argument; a chain of comparisons (a < b > c) is never what a program means.	none: choice: the text to write instead is the writer's
 # Errors
+# 0x0001E5 vacant
 semantic	Redeclaration	0x000001	error	Redeclaration of reference: '{0}'.	Each identifier must be declared only once in its scope.	none: choice: the second declaration or the first has to be renamed or removed
 semantic	ModuleNotFound	0x000002	error	Module '{0}' not found. {1}	Check if the module path is correct or add the directory to search paths.	none: choice: the module path and the search roots are the writer's
 semantic	ReservedIdentifier	0x000003	error	Identifiers starting and ending with double underscores are reserved for internal use.	Avoid using names like '__example__'; choose different identifiers. To overload an operator, write 'func operator +(a: V, b: V): V'.	none: choice: the reserved word cannot be used as a name, and the name to use instead is the writer's
