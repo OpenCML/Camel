@@ -253,25 +253,17 @@ vjp_node_t tensorCastTo(VjpBuilder &builder, vjp_node_t value, vjp_node_t gradie
     return floatGradientAtWidth(builder, value, gradient);
 }
 
-/// A gradient of `value` at the element type `value` states, and unchanged when it already is:
-/// `sum_to` and `broadcast_like` read their gradient operand at the target's element type
-/// (`gradientLikeTyped` in gradient_ops.cpp), while the gradient operators whose kernels compute
-/// in f32 only declare f32 (`gradientLike`, same file): a gradient that reaches a rule as f32
-/// where the value it is the gradient of is f64 is a pair the signature refuses, and the rule
-/// that produced it states the conversion (vjp.h, tensorCastTo). A node whose type leaves the
-/// element out takes no conversion here, the same as in the accumulator.
+/// A gradient of `value` at the element type `value` states. `sum_to` and `broadcast_like` read
+/// their gradient operand at the target's element type (`gradientLikeTyped` in gradient_ops.cpp),
+/// while the gradient operators whose kernels compute in f32 only declare f32 (`gradientLike`, same
+/// file) -- and what a signature refuses is the *fact* a pass computed, not the type the rule wrote:
+/// the accumulator's gradient node is a value the rule itself is building, so its declared type can
+/// still say the two agree while the operator that fills it answers f32. The conversion is therefore
+/// stated for every gradient these two operators receive, which is what design principles 9.9 asks
+/// of the rule that produced the gradient (vjp.h, tensorCastTo). A value whose type leaves the
+/// element type out takes none, as in the accumulator.
 vjp_node_t tensorGradientAtElementType(
     VjpBuilder &builder, vjp_node_t value, vjp_node_t gradient) {
-    type::Type *valueType    = builder.nodeType(value);
-    type::Type *gradientType = builder.nodeType(gradient);
-    if (!statesTensorElementType(valueType) || !statesTensorElementType(gradientType)) {
-        return gradient;
-    }
-    const TensorFacts valueFacts    = tensorFactsOf(valueType);
-    const TensorFacts gradientFacts = tensorFactsOf(gradientType);
-    if (!valueFacts.dtype || !gradientFacts.dtype || *valueFacts.dtype == *gradientFacts.dtype) {
-        return gradient;
-    }
     return tensorCastTo(builder, value, gradient);
 }
 
