@@ -62,14 +62,31 @@ func publish_now(): bool {
 
 在第 1 或第 2 条落地之前，泛型条件里的效应既没有诊断，也没有准确的名字。
 
-## 三、诊断的位置只有一个
+## 三、检查的范围里，分析（`analysis`）不算条件的效应
+
+第一版检查把 `rewrite:analysis` 也算成条件的效应，于是条件里读一条事实的规则全成了编译错误：
+`test/cases/modules/rules/analysis_reads_a_fact_in_when.cml`、`analysis_takes_the_parts_of_a_compound.cml`、
+`parts_query_ignores_the_order_of_a_commutative_operator.cml`、
+`fact_query_that_finds_nothing_leaves_the_rule_out.cml` 四条用例（五种后端）一起失败，报的是
+
+```
+The call of '__analysis' in the function 'analysis_lib::sign' has an effect, and it is inside the condition of the rule 'mul_one'.
+```
+
+`rewrite:analysis` 与 `rewrite:rule` / `rule_when` / `rule_generic` 之所以是"不纯"，改写模块里的注释写的是
+**为了不让常量折叠搬动它们**（折叠会把规则或分析装进静态区），不是"求值条件时有外部效应"。而"在条件里读一条事实"
+正是 `analysis` 的用途（rewrite 设计 4），把条件写成对 redex 的查询。所以检查现在**跳过这四个算子**：它们做的事发生在
+规则被写下的地方，不发生在引擎持着会话的时候。这条界线（"不纯是为了不被折叠"与"求值时有外部效应"在算子表里是同一个
+标志）要不要在算子表里分开表示，请裁定；分开之后检查就不用再点名这四个 URI。
+
+## 四、诊断的位置只有一个
 
 要求是"在规则定义处报错"并且"点出那个效应所在的位置"。一条诊断只有一个位置，两者只能取一个：
 现在是**取效应自己的位置**（`15:18` 那个 `rewrite`），并在消息里点名规则与它所在的那个函数
 （"…in the function 'publish_now' … of the rule 'add_zero'"）。若希望位置取规则定义处、效应位置写进消息，
 需要说一声：把源位置渲染进消息目前没有现成的接口。
 
-## 四、同一处闭包缺口还在别处
+## 五、同一处闭包缺口还在别处
 
 `callWhen` 修好之后，同样"只传图、不传函数值"的调用还有两处，条件或函数体一旦捕获了值，读到的就是空：
 
