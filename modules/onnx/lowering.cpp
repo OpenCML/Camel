@@ -755,6 +755,79 @@ Value lowerSliceSub(const LowerContext &ctx) {
         shape);
 }
 
+/**
+ * The reverse of the core's slice: `tangent/scatter_slice_arr(dx, like, axis, start, end, step,
+ * written)` is an array of `like`'s shape whose sliced positions hold `dx` and whose other
+ * positions are zero. A forward slice gathers a range, so its adjoint writes that same range into
+ * an array of zeros, and ONNX says exactly that with `Pad` of `dx`: as many zeros before the axis
+ * as the slice skipped and as many after it as the slice left, which is the value's shape again.
+ * Nothing has to be added to the zeros, because the padded `dx` already fills the range.
+ *
+ * The step is the constant 1, and the counts come from the bounds the source wrote: `start` zeros
+ * before the axis and `extent - end` after it. A bound the program did not write counts nothing --
+ * the start of the axis is nothing before it and its end is nothing after it -- so a slice that
+ * runs to the end of an extent only the run knows still exports. A stepped reverse slice names
+ * positions a range does not (`a`, `a + step`, ...), which `Pad` cannot write, and it is refused
+ * here with that reason rather than exported as a wrong array.
+ */
+Value lowerScatterSliceArr(const LowerContext &ctx) {
+    Emitter &e = ctx.emitter();
+    if (ctx.size() < 7) {
+        throw ExportError(
+            std::format(
+                "':tangent/scatter_slice_arr': a scatter node has seven words (the gradient, the "
+                "value the slice came from, the axis, the two bounds, the step and the mask), this "
+                "one has {}",
+                ctx.size()));
+    }
+    const auto facts = ctx.facts(1);
+    if (!facts.shape) {
+        throw ExportError(
+            "':tangent/scatter_slice_arr' of a value of unknown rank is not supported");
+    }
+    const int64_t rank  = static_cast<int64_t>(facts.shape->size());
+    const int64_t rawAt = ctx.constInt(2);
+    const int64_t at    = rawAt < 0 ? rawAt + rank : rawAt;
+    if (at < 0 || at >= rank) {
+        throw ExportError(
+            std::format(
+                "':tangent/scatter_slice_arr': the axis {} is out of range for rank {}",
+                rawAt,
+                rank));
+    }
+    const int64_t step = ctx.constInt(5);
+    if (step != 1) {
+        throw ExportError(
+            std::format(
+                "':tangent/scatter_slice_arr': the adjoint of a slice whose step is {} is not "
+                "supported: the positions a step names are not the range ONNX Pad writes",
+                step));
+    }
+    const int64_t written = ctx.constInt(6);
+    const int64_t before  = (written & 2) != 0 ? ctx.constInt(3) : 0;
+    int64_t after         = 0;
+    if ((written & 1) != 0) {
+        const std::optional<int64_t> extent = (*facts.shape)[static_cast<size_t>(at)];
+        if (!extent.has_value()) {
+            throw ExportError(
+                "':tangent/scatter_slice_arr': the slice's end is a constant but the axis' extent "
+                "is not known at export time, so the zeros after the slice are not either");
+        }
+        after = *extent - ctx.constInt(4);
+    }
+    std::vector<int64_t> pads(static_cast<size_t>(2 * rank), 0);
+    pads[static_cast<size_t>(at)]        = before;
+    pads[static_cast<size_t>(at + rank)] = after;
+    // Pad-11 takes the counts as an input (which is also where a computed count would go);
+    // before that they are the `pads` attribute.
+    if (ctx.opset() >= 11) {
+        return Value::symbolic(
+            e.node("Pad", {ctx.input(0), e.int64s(pads)}), facts.dtype, facts.shape);
+    }
+    return Value::symbolic(
+        e.node("Pad", {ctx.input(0)}, {ints("pads", pads)}), facts.dtype, facts.shape);
+}
+
 /// Reduction over one axis. Opset 18 moved `axes` from an attribute to an input for every
 /// reduction except ReduceSum (which moved at opset 13).
 LowerFn reduceAxisOp(std::string opType) {
@@ -1364,6 +1437,9 @@ LoweringRegistry::LoweringRegistry() {
     // module's `tensor:slice` above answers the calls the tensor module exports; this one answers
     // every call the core's rule takes (any rank, any axis, any element type).
     add(":op/slice_sub", lowerSliceSub, 10);
+    // The same operator's adjoint, which a training step's backward pass builds (the scatter is
+    // the reverse of the forward slice, not a gradient operator of ONNX).
+    add(":tangent/scatter_slice_arr", lowerScatterSliceArr, 10);
     addGradientLowerings(add);
     add("math:sqrt", scalarOp("Sqrt", 1));
 

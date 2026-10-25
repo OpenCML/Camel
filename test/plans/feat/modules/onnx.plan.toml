@@ -1810,6 +1810,32 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 120000
 
 [[tests]]
+name = "export_core_slice_grad"
+desc = "The reverse of the core's own slice exports too: `:tangent/scatter_slice_arr`, the adjoint the backward pass builds beside `:op/slice_sub`, is lowered as the zeros of the value's shape with the slice's positions written, so a training step whose loss slices exports whole -- the slice's own gradient used to be the only part of that path with no ONNX form."
+kind = "behavior"
+case = "../../../cases/modules/onnx/ort_core_slice_grad.cml"
+args = ["${case}"]
+envs = ["ONNX_OUT=${test_tmp}/export_core_slice_grad.onnx"]
+expect_exit = 0
+expect_stdout_contains = ["exported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "ort_core_slice_grad"
+desc = "The gradient the reverse of the core's slice writes, run on ONNX Runtime: the model of ort_core_slice_grad.cml is run for three (w, x) pairs and both of its outputs (the loss and `d loss / d x`) are compared with the analytic values -- `w` at the two positions the slice took, zero elsewhere -- within 1e-6, so the comparison does not go through Camel's own backward pass."
+kind = "behavior"
+tool = "python"
+case = "../../../cases/modules/onnx/ort_core_slice_grad.py"
+args = ["${case}"]
+skip_unless = ["${python}", "-c", "import numpy, onnx, onnxruntime"]
+expect_exit = 0
+expect_stdout_contains = ["ort core slice grad: 0 failing", "PASS"]
+expect_output_not_contains = ["FAIL"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 120000
+
+[[tests]]
 name = "ort_slice_bounds"
 desc = "A slice whose end depends on the model input (x[0 : int(sum(x))]) exported alone and inside a branch on the data: on ONNX Runtime, ends within [-n, n] give the NumPy slice (negative ones counted from the end) and ends outside make the run fail, as Camel faults (design principles 3.9). The ONNX Slice alone clamps, so each bound the exporter cannot prove in range goes through a Gather guard; it used to return the clamped slice."
 kind = "behavior"
