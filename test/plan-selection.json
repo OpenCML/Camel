@@ -291,6 +291,11 @@
             "plans": ["feat/docs_headers.plan.toml"]
         },
         {
+            "comment": "The plan inventory: feat/gate/plan_inventory runs scripts/plan-inventory.mjs -- the one implementation of the four fates a plan file can have and of the check that every plan file has one, which the release gate imports rather than restating. A new plan that lands without a fate must redden the commit that lands it, so this is the fast-layer entry for that check, and a change to the tables or the check selects it.",
+            "paths": ["scripts/plan-inventory.mjs"],
+            "plans": ["feat/gate/plan_inventory.plan.toml"]
+        },
+        {
             "comment": "The other build/dev scripts (build.js, format.js, collect-out.js, ...): every plan runs the binary they build, but no plan reads them. Smoke is the smallest check that the toolchain still produces a working camel. scripts/perf-gate.mjs is covered here too: smoke does not run a perf plan.",
             "paths": ["scripts/"],
             "plans": ["smoke"]

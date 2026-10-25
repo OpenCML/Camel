@@ -23,7 +23,7 @@
 //                      included, whatever `--tier` says; that is the only honest way to reach
 //                      them, and a directory target would silently drop them again;
 //   3. static checks-- the seven tree/compiler checks a release has to pass;
-//   4. the policy  -- the 19 plans in FORBIDDEN are never run. The gate prints them by name,
+//   4. the policy  -- the plans in FORBIDDEN are never run. The gate prints them by name,
 //                      with the reason and the policy, and refuses (exit 2) when a caller asks
 //                      for one (a positional target, `--include`, `--plan`, `--tier all`,
 //                      `--all`, or any directory that contains one).
@@ -46,8 +46,9 @@
 // A skipped plan is UNKNOWN, never green. This is the accounting H154 §6 and `agents/test.md`
 // ask for, printed on every run:
 //
-//   * the 19 policy-forbidden plan files (16 whole plans + 3 plans with forbidden slow entries)
-//     -- the 200 cases H154 §2 measured, not run, not claimed;
+//   * the 25 policy-forbidden plan files (21 whole plans + 4 plans whose forbidden tests are the
+//     slow ones) -- 200 slow cases today: the 193 H154 §2 measured across its 18 files, plus the
+//     seven the perf plans that landed afterwards add -- not run, not claimed;
 //   * the debug layer (`--tier debug`, a Debug build) -- never part of a Release gate.
 //
 // Exit codes: 0 every selected phase passed; 1 a phase failed; 2 refused or not runnable
@@ -58,72 +59,17 @@ import path from 'node:path'
 import { spawn, spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { parseTomlFile } from '../test/tools/toml-lite.mjs'
+// The three fates and the check that every plan file has one live in `scripts/plan-inventory.mjs`,
+// because the merge gate's fast layer runs the same check as a plan entry
+// (`test/plans/feat/gate/plan_inventory.plan.toml`); this script imports its tables instead of
+// keeping a second copy that could disagree with it.
+import { FAST_TARGETS, SLOW_PLANS, FORBIDDEN, planInventoryProblems, rel, walkPlans } from './plan-inventory.mjs'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const PLANS_ROOT = path.join(ROOT, 'test', 'plans')
 
 // H147 and H154 both used 8. `-Jobs 12` makes `gpu_preference.no_device.*` hit spurious 10 s
 // timeouts on the shared host; the gate does not expose a way to forget that.
 const DEFAULT_JOBS = 8
-
-// The fast layer. `smoke` + `feat` are what `npm run test` walks; `gpu/profile` is fast-tier but
-// under `gpu/`, which neither the fast target nor the slow list reaches -- it would otherwise be
-// as invisible as the rest of `gpu/**` was before H154.
-const FAST_TARGETS = ['smoke', 'test/plans/feat', 'test/plans/gpu/profile.plan.toml']
-
-// The slow layer, by explicit plan file (H154 §3). Eleven files: six fast plans whose slow tests
-// are runnable, and five whole slow plans. Every other slow test is in FORBIDDEN below.
-const SLOW_PLANS = [
-    'test/plans/feat/parse/frontend.plan.toml',
-    'test/plans/feat/trans/cpp.plan.toml',
-    'test/plans/feat/modules/random.plan.toml',
-    'test/plans/feat/tools/lsp.plan.toml',
-    'test/plans/feat/linear/var_reference.plan.toml',
-    'test/plans/feat/tools/debugger.plan.toml',
-    'test/plans/feat/mm/gc_pacing.plan.toml',
-    'test/plans/feat/mm/gc_soak.plan.toml',
-    'test/plans/gpu/tiles.plan.toml',
-    'test/plans/gpu/tiles_rows.plan.toml',
-    'test/plans/gpu/tiles_transfer.plan.toml',
-]
-
-// Never run. `agents/test.md`, General Policy: the full suite, the GC poison sweep, the GC
-// stress plans (`gc.collection_trees_*`, `gc_elder_*`), the progen random-program checks, the
-// PyTorch comparisons and the perf/timeit plans are milestone-only -- by the coordinator, on a
-// quiet machine -- and the shared host is not one. H154 §2 measured 200 cases here.
-//
-// A file in this list is named as a whole plan when the whole plan is excluded, and as a plan
-// with excluded slow entries when only some of its tests are excluded: the runner cannot select
-// a test by name, so naming such a file would start the forbidden tests too (H154 §2, the ONNX
-// row). Both kinds are skipped entirely, which is why the list has 19 entries for 200 cases.
-const FORBIDDEN = [
-    // The benchmark/timeit plans: the machine's load is part of what they measure.
-    { file: 'test/plans/perf/fib.plan.toml', reason: 'benchmark (`kind = "benchmark"`): measures the machine load' },
-    { file: 'test/plans/perf/para.plan.toml', reason: 'benchmark (`kind = "benchmark"`): measures the machine load' },
-    { file: 'test/plans/perf/startup.plan.toml', reason: 'benchmark: measures the machine load' },
-    { file: 'test/plans/perf/training_steps.plan.toml', reason: 'GPU training benchmark: measures the machine load' },
-    // The other perf plans: minutes-long soaks and fuzzing, or a PyTorch comparison.
-    { file: 'test/plans/perf/gc.plan.toml', reason: 'GC soak: minutes long, GB-scale live set (agents/test.md)' },
-    { file: 'test/plans/perf/collections_fuzz.plan.toml', reason: 'random-program fuzzing and differential, minutes long (agents/test.md)' },
-    { file: 'test/plans/perf/showcase_c1.plan.toml', reason: 'PyTorch comparison (`skip_unless` torch; agents/test.md)' },
-    { file: 'test/plans/perf/showcase_c2.plan.toml', reason: 'PyTorch comparison (`skip_unless` torch; agents/test.md)' },
-    { file: 'test/plans/perf/showcase_c6.plan.toml', reason: 'PyTorch comparison (`skip_unless` torch; agents/test.md)' },
-    { file: 'test/plans/perf/showcase_d5.plan.toml', reason: 'PyTorch comparison (`skip_unless` torch; agents/test.md)' },
-    // GC stress and poison: every case sets CAMEL_GC_STRESS_*, CAMEL_GC_POISON or CAMEL_GC_VERIFY.
-    { file: 'test/plans/feat/mm/gc.plan.toml', reason: 'GC stress + poison (`CAMEL_GC_STRESS_*`, `CAMEL_GC_POISON=1`)' },
-    { file: 'test/plans/feat/mm/gc_collections.plan.toml', reason: 'collection stress (`CAMEL_GC_STRESS_ALLOC` + `CAMEL_GC_VERIFY=both`)' },
-    { file: 'test/plans/feat/mm/gc_elder_exhaustion.plan.toml', reason: 'elder-generation exhaustion (`gc_elder_*`; agents/test.md)' },
-    { file: 'test/plans/feat/opt/progen.plan.toml', reason: 'progen random-program check (agents/test.md)' },
-    { file: 'test/plans/gpu/tiles_regions.plan.toml', reason: 'region run under GC stress (`CAMEL_GC_STRESS_SAFEPOINT=1` + `CAMEL_GC_VERIFY`)' },
-    // Files whose slow entries are forbidden; the whole file is skipped (the runner cannot select
-    // a test by name, so naming the file would start the forbidden tests).
-    { file: 'test/plans/feat/modules/autodiff.plan.toml', reason: 'its 5 slow tests compare against PyTorch (`*_vs_torch64`)' },
-    {
-        file: 'test/plans/feat/modules/onnx.plan.toml',
-        reason: 'its 4 slow tests: 2 PyTorch comparisons + 2 that cannot be selected apart from them (H154 §2)',
-    },
-    { file: 'test/plans/feat/linear/jit_framed.plan.toml', reason: 'its 2 slow tests are GC stress (`CAMEL_GC_STRESS_SAFEPOINT` + `CAMEL_GC_VERIFY`)' },
-]
 
 const POLICY =
     'agents/test.md, General Policy: the full suite, GC poison sweep, GC stress plans, progen, ' +
@@ -132,15 +78,27 @@ const POLICY =
 
 // The static checks, in the order a release reads them. Each one exits non-zero on a defect;
 // the gate's criterion is that exit code, not the text of the last line.
+//
+// `camel: true` marks a check that reads the install: the gate appends `--camel <the install it
+// found>` to its command line, because a check left to resolve its own default reads `out/latest`
+// while the gate may have found `CAMEL_HOME`'s install -- one run measuring two binaries, the
+// defect this gate exists to catch (the 2026-10-25 ruling, "the compiler of a run is an argument
+// everywhere"). `--verify-doc` reads the tree only, so it takes no install and names none:
+// an argument it never reads would claim a measurement it does not take.
 const STATIC_CHECKS = [
-    { name: 'stdlib reference: declarations agree with the registered operators', args: ['scripts/stdlib-reference.mjs', '--verify-ops'] },
+    { name: 'stdlib reference: declarations agree with the registered operators', args: ['scripts/stdlib-reference.mjs', '--verify-ops'], camel: true },
     { name: 'stdlib reference: docs/stdlib-reference.md is up to date', args: ['scripts/stdlib-reference.mjs', '--verify-doc'] },
     { name: 'diagnostics registry: the declarations and the generated code tables agree', args: ['scripts/diagnostics-catalog.mjs', '--check'] },
     { name: 'document links: no broken relative link', args: ['scripts/check-doc-links.mjs', '--all'] },
     { name: 'document snippets: Camel fences compile and print what the page says', args: ['scripts/check-doc-snippets.mjs'] },
-    { name: 'stdlib declarations: a migrated module stays migrated', args: ['scripts/stdlib-declarations.mjs', '--check'] },
+    { name: 'stdlib declarations: a migrated module stays migrated', args: ['scripts/stdlib-declarations.mjs', '--check'], camel: true },
     { name: 'std includes: no header borrowed through another header', args: ['scripts/check-std-includes.mjs'] },
 ]
+
+// The command line of one static check, with the install this gate found when the check reads one.
+function staticCheckArgv(check, camel) {
+    return check.camel ? [...check.args, '--camel', camel] : check.args
+}
 
 const ANSI = /\u001b\[[0-9;]*[A-Za-z]/g
 const LAYERS = ['fast', 'slow', 'static']
@@ -158,10 +116,6 @@ function usage() {
 
 The gate runs the fast layer, the slow layer by explicit plan file (never by tier or directory),
 the static checks, then exits non-zero if any of them failed. It never builds: build once first.`)
-}
-
-function rel(abs) {
-    return path.relative(ROOT, abs).split(path.sep).join('/')
 }
 
 function die(message, code = 2) {
@@ -211,66 +165,7 @@ function parseArgs(argv) {
     return options
 }
 
-function walkPlans(entry) {
-    const abs = path.resolve(ROOT, entry)
-    if (!fs.existsSync(abs)) return null
-    if (fs.statSync(abs).isFile()) return abs.endsWith('.plan.toml') ? [abs] : null
-    const out = []
-    const walk = (dir) => {
-        for (const name of fs.readdirSync(dir).sort()) {
-            const child = path.join(dir, name)
-            if (fs.statSync(child).isDirectory()) walk(child)
-            else if (name.endsWith('.plan.toml')) out.push(child)
-        }
-    }
-    walk(abs)
-    return out
-}
-
 const FORBIDDEN_BY_REL = new Map(FORBIDDEN.map((entry) => [entry.file, entry]))
-
-// Every plan file of the tree belongs to one of four fates: a fast target runs its fast tests, a
-// SLOW_PLANS entry runs it in full, FORBIDDEN names it as skipped by policy, or the debug layer is
-// out of the release gate and says so. A plan outside those four would have tests that no layer
-// runs and no line calls UNKNOWN; the list would keep saying "200 cases skipped" while the tree
-// grew. This used to be unchecked (H185): a renamed FORBIDDEN file was printed as skipped, and a
-// new slow plan under feat/ vanished from both layers.
-function planInventoryProblems() {
-    const problems = []
-    for (const entry of FORBIDDEN) {
-        if (!fs.existsSync(path.join(ROOT, entry.file))) {
-            problems.push(`the forbidden plan '${entry.file}' does not exist; the skip list is stale`)
-        }
-    }
-    const slowSet = new Set(SLOW_PLANS)
-    const forbiddenSet = new Set(FORBIDDEN.map((entry) => entry.file))
-    const fastReaches = (key) =>
-        FAST_TARGETS.some((target) => {
-            if (target === 'smoke') return key.startsWith('test/plans/smoke/')
-            if (target.endsWith('.plan.toml')) return key === target
-            return key === target || key.startsWith(`${target}/`)
-        })
-    for (const abs of walkPlans('test/plans') ?? []) {
-        const key = rel(abs)
-        if (slowSet.has(key) || forbiddenSet.has(key)) continue
-        const plan = parseTomlFile(abs)
-        const planTier = plan.tier ?? 'fast'
-        if (planTier === 'debug') continue
-        const slowTests = (plan.tests ?? []).filter((test) => (test.tier ?? planTier) === 'slow').length
-        if (!fastReaches(key)) {
-            problems.push(
-                `${key}: no layer reaches it (not a fast target, a SLOW_PLANS file, FORBIDDEN, or a debug plan); ` +
-                    `its ${plan.tests?.length ?? 0} test(s), ${slowTests} slow, are UNKNOWN, not green`,
-            )
-        } else if (slowTests > 0) {
-            problems.push(
-                `${key}: ${slowTests} slow test(s) but the fast layer runs only its fast tests and SLOW_PLANS ` +
-                    'does not name it; those tests are UNKNOWN, not green',
-            )
-        }
-    }
-    return problems
-}
 
 function checkIncludes(include) {
     const extra = []
@@ -438,14 +333,15 @@ async function runPlanPhase(label, argv) {
     return { label, ok, code: result.code, seconds: result.seconds, summary }
 }
 
-async function runStaticPhase() {
+async function runStaticPhase(camel) {
     console.log(`\n[gate] ===== static checks (${STATIC_CHECKS.length}) =====`)
     const results = []
     for (let i = 0; i < STATIC_CHECKS.length; i++) {
         const check = STATIC_CHECKS[i]
+        const argv = staticCheckArgv(check, camel)
         console.log(`[gate] static ${i + 1}/${STATIC_CHECKS.length}: ${check.name}`)
-        console.log(`[gate] $ ${[process.execPath, ...check.args].join(' ')}`)
-        const result = await runStreamed([process.execPath, ...check.args])
+        console.log(`[gate] $ ${[process.execPath, ...argv].join(' ')}`)
+        const result = await runStreamed([process.execPath, ...argv])
         const ok = result.code === 0
         console.log(`[gate] static ${i + 1}/${STATIC_CHECKS.length}: ${ok ? 'PASS' : `FAIL (exit ${result.code})`}`)
         results.push({ name: check.name, ok, code: result.code })
@@ -466,12 +362,19 @@ async function main() {
     for (const file of [...SLOW_PLANS, ...FAST_TARGETS]) {
         if (FORBIDDEN_BY_REL.has(file)) die(`internal error: '${file}' is both gated and forbidden; refusing to run`, 1)
     }
-    for (const file of SLOW_PLANS) {
-        if (!fs.existsSync(path.join(ROOT, file))) die(`the slow plan '${file}' does not exist; the gate list is stale`, 1)
-    }
+    // Every problem at once, from the one implementation of the inventory: a stale list entry (a
+    // slow plan that does not exist, a forbidden one that does not) and every plan file that has
+    // no fate. Printing the first one and dying hid the rest: eight perf plans had no fate, and the
+    // run named one of them, so the reader fixed one file per run and the list stayed a moving
+    // target (H500).
     const inventoryProblems = planInventoryProblems()
     if (inventoryProblems.length > 0) {
-        for (const problem of inventoryProblems) die(problem, 1)
+        for (const problem of inventoryProblems) console.error(`[gate] ${problem}`)
+        die(
+            `the plan inventory has ${inventoryProblems.length} problem(s); every plan file must be reached by a ` +
+                'fast target, named in SLOW_PLANS, named in FORBIDDEN, or be a debug plan',
+            1,
+        )
     }
 
     const identity = treeIdentity()
@@ -497,7 +400,16 @@ async function main() {
         console.log('\n[gate] dry run: the commands')
         if (layers.includes('fast')) console.log(`[gate] $ ${[process.execPath, 'scripts/test.js', ...fastArgv].join(' ')}`)
         if (layers.includes('slow')) for (const plan of slowPlans) console.log(`[gate] $ ${[process.execPath, 'scripts/test.js', plan].join(' ')}`)
-        if (layers.includes('static')) for (const check of STATIC_CHECKS) console.log(`[gate] $ ${[process.execPath, ...check.args].join(' ')}`)
+        if (layers.includes('static')) {
+            // The install is resolved at run time; a dry run has none, and says which checks wait
+            // for one rather than printing a command line that differs from the one that runs.
+            const camel = findCamel()
+            for (const check of STATIC_CHECKS) {
+                const argv = check.camel && camel ? staticCheckArgv(check, camel) : check.args
+                console.log(`[gate] $ ${[process.execPath, ...argv].join(' ')}`)
+                if (check.camel && !camel) console.log('[gate]   (+ `--camel <install>` at run time; no install found now)')
+            }
+        }
         console.log('[gate] dry run: nothing ran')
         return 0
     }
@@ -520,7 +432,7 @@ async function main() {
         phases.push(await runPlanPhase('slow layer', ['scripts/test.js', ...slowArgv]))
     }
     if (layers.includes('static')) {
-        phases.push(await runStaticPhase())
+        phases.push(await runStaticPhase(camel))
     }
 
     console.log('\n[gate] ===== summary =====')

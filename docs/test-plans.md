@@ -995,6 +995,14 @@ performance notes record what running the whole layer on a shared host would cos
 the exclusion is that nothing notices a performance regression, so the
 measurement has one manual entry point:
 
+Three of those plans are also in the release gate's slow layer, where a plan file is named one by
+one: `perf.para_speedup`, whose guard is a property of one run rather than a stored number, and the
+count guards `perf.step_counts` and `perf.reduce_layout_counts`, which a 2026-10-25 ruling split out
+of `perf.step_budget` and `perf.reduce_layout`. What those three assert is a count or a property --
+the operator calls one round of the step issues, the blocks `sum_to` allocates -- and never a
+duration, which is what lets them ride a shared host; the measured halves of the two split plans
+stay here and run before a release.
+
 ```bash
 node scripts/perf-gate.mjs --list        # every plan of the directory, what each measures, and why it is in or out
 node scripts/perf-gate.mjs               # measure the gateable subset and compare with the baseline
@@ -1052,6 +1060,13 @@ wall clock is the host's, not the test's: `modules.autodiff/benchmark_gradients_
 - the implicit `${test_tmp}` variable, described under "Test scratch"
 - the built-in `${python}` variable: the active virtual environment's interpreter, else `python`
   on Windows and `python3` elsewhere (`test/vars.toml` may override it)
+- the built-in `${camel}` variable: the compiler of the build under test
+  (`out/<tag>/bin/camel[.exe]`, the path the runner prints and records in `summary.json`). A test
+  whose program starts a compiler names the install with `--camel ${camel}`: an explicitly named
+  install travels as a command-line argument, never as an environment switch (the author's ruling of
+  2026-10-25, `docs/handover/reviews/questions-2026-10-24-evening.md`,
+  "stdlib-declaration-check-measures-a-foreign-install"); `CAMEL_HOME` is the install location's
+  convention and stays
 
 Rules:
 

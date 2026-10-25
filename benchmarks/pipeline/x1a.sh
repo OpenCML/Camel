@@ -4,7 +4,8 @@
 #
 #   benchmarks/pipeline/x1a.sh <out-dir> [run.py options, e.g. --jobs 10 --shard 0/4]
 #
-# Needs a built Camel (out/latest/bin/camel, or CAMEL_EXE) and Python >= 3.11. numpy is needed
+# Needs a built Camel (out/latest/bin/camel, or `--camel <path>` in the run.py options) and Python
+# >= 3.11. numpy is needed
 # for the benchmark models (weights are generated into <out-dir>/bench-artifacts) and numpy +
 # onnxruntime (+ onnx for the checker) for the ONNX cells; without onnxruntime those cells are
 # classified UNDECIDED. Set PYTHON to choose the interpreter. The repository root is the

@@ -641,9 +641,15 @@ function pythonExecutable() {
     return IS_WINDOWS ? 'python' : 'python3'
 }
 
-function loadVars() {
-    // Built-in variables; test/vars.toml may override them.
-    const builtins = { python: pythonExecutable() }
+function loadVars(options) {
+    // Built-in variables; test/vars.toml may override them. `${camel}` is the compiler of the build
+    // under test, the same path the runner prints as `[INFO] camel executable` and records as
+    // `camel_exe` in summary.json: a plan that runs a program which starts a compiler names the
+    // install with `--camel ${camel}`, a command-line argument and never an environment switch.
+    const builtins = {
+        python: pythonExecutable(),
+        camel: toolExecutable('camel', options.build),
+    }
     if (!fs.existsSync(VARS_PATH)) return builtins
     return { ...builtins, ...parseTomlFile(VARS_PATH) }
 }
@@ -2650,7 +2656,7 @@ async function main() {
         console.log(`${COLORS.cyan}[INFO]${COLORS.reset} --update-golden writes golden files: running serially (--jobs 1)`)
         options.jobs = 1
     }
-    const sharedVars = loadVars()
+    const sharedVars = loadVars(options)
     const namedPlans = options.targets.filter((target) => {
         try {
             return fs.statSync(target).isFile() && !options.layeredPlans.has(path.resolve(target))

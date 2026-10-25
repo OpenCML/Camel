@@ -52,6 +52,7 @@ import fs from 'fs'
 import os from 'os'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import { defaultCamel, takeCamel } from './camel-arg.mjs'
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 const REGISTRY_ALL = path.join(REPO_ROOT, 'test', 'cases', 'modules', 'stdlib', 'registry_all.cml')
@@ -243,12 +244,17 @@ function scanModule(module) {
     return { file, hits }
 }
 
-function camelExe() {
-    if (process.env.CAMEL_EXE) {
-        return process.env.CAMEL_EXE
-    }
-    const home = process.env.CAMEL_HOME || path.join(REPO_ROOT, 'out', 'latest')
-    return path.join(home, 'bin', process.platform === 'win32' ? 'camel.exe' : 'camel')
+// The install this run measures: `--camel <path>` names it (main parses the argument), else
+// `$CAMEL_HOME/bin/camel`, else this tree's `out/latest/bin/camel`. One rule, in one place:
+// test/tools/camel-arg.mjs.
+let CAMEL = defaultCamel(REPO_ROOT)
+
+function usage(message) {
+    if (message) console.error(`import-audit: ${message}`)
+    console.error(
+        'usage: node test/tools/import-audit.mjs [--json] [--no-scan] [--scan-only] [--reps N] [--camel PATH]',
+    )
+    process.exit(2)
 }
 
 function caseDir() {
@@ -315,7 +321,7 @@ function probeModule(module, reps) {
         let first = null
         for (let i = 0; i < reps + 1; i++) {
             const started = process.hrtime.bigint()
-            const run = runOnce([camelExe(), file, 'std::nvm'], { cwd: dir })
+            const run = runOnce([CAMEL, file, 'std::nvm'], { cwd: dir })
             timing.push(Number(process.hrtime.bigint() - started) / 1e6)
             if (i === 0) {
                 first = run
@@ -326,7 +332,7 @@ function probeModule(module, reps) {
         const createdExcept = created.filter((name) => !name.startsWith('import_only_'))
         const timed = timing.slice(1).sort((a, b) => a - b)
         const median = timed[Math.floor(timed.length / 2)]
-        const phaseRun = runOnce([camelExe(), file, 'std::nvm'], {
+        const phaseRun = runOnce([CAMEL, file, 'std::nvm'], {
             cwd: dir,
             env: { CAMEL_TIME_PHASES: '-' },
         })
@@ -368,7 +374,7 @@ function baselineWall(reps) {
         let first = null
         for (let i = 0; i < reps + 1; i++) {
             const started = process.hrtime.bigint()
-            const run = runOnce([camelExe(), IMPORTS_NOTHING, 'std::nvm'], { cwd: dir })
+            const run = runOnce([CAMEL, IMPORTS_NOTHING, 'std::nvm'], { cwd: dir })
             timing.push(Number(process.hrtime.bigint() - started) / 1e6)
             if (i === 0) {
                 first = run
@@ -396,7 +402,7 @@ function resolutionCost(reps) {
         const file = importOnlyProgram(dir, 'math')
         const sample = (env) => {
             const started = process.hrtime.bigint()
-            const run = runOnce([camelExe(), file, 'std::nvm'], {
+            const run = runOnce([CAMEL, file, 'std::nvm'], {
                 cwd: dir,
                 env: { ...env, CAMEL_TIME_PHASES: '-' },
             })
@@ -421,7 +427,7 @@ function resolutionCost(reps) {
             includes.push(sample({}))
         }
         // `-I` is a command-line search root: the same lookup, one root per flag.
-        const includeArgv = [camelExe(), file, 'std::nvm']
+        const includeArgv = [CAMEL, file, 'std::nvm']
         for (const extra of extraDirs.slice(0, 3)) {
             includeArgv.push('-I', extra)
         }
@@ -457,7 +463,7 @@ function declarationCost(reps) {
             const file = importOnlyProgram(dir, module)
             const samples = []
             for (let i = 0; i < reps; i++) {
-                const run = runOnce([camelExe(), file, 'std::nvm'], {
+                const run = runOnce([CAMEL, file, 'std::nvm'], {
                     cwd: dir,
                     env: { CAMEL_TIME_PHASES: '-' },
                 })
@@ -494,6 +500,9 @@ function declarationCost(reps) {
 }
 
 function main(argv) {
+    const { camel, rest } = takeCamel(argv, REPO_ROOT, usage)
+    CAMEL = camel
+    argv = rest
     const asJson = argv.includes('--json')
     const skipScan = argv.includes('--no-scan')
     const scanOnly = argv.includes('--scan-only')
@@ -523,8 +532,8 @@ function main(argv) {
         }
         return failures.length === 0 ? 0 : 1
     }
-    if (!fs.existsSync(camelExe())) {
-        throw new Error(`no camel binary at ${camelExe()}: set CAMEL_HOME or CAMEL_EXE`)
+    if (!fs.existsSync(CAMEL)) {
+        throw new Error(`no camel binary at ${CAMEL}: build this tree once, or pass --camel <path> or set CAMEL_HOME`)
     }
 
     const rows = []

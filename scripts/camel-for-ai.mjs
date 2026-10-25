@@ -10,6 +10,9 @@
 //   node scripts/camel-for-ai.mjs --report         the character count of every region and of the
 //                                                  hand-written part, against the budget
 //   --root DIR                                     read and write under DIR (the proof cases)
+//   --camel PATH                                   the binary the counter-examples are compiled
+//                                                  with, for --verify-errors; `$CAMEL_HOME/bin/camel`
+//                                                  or this tree's `out/latest/bin/camel` without it
 //
 // The reference is one file an AI can read whole (handover: "a distilled language reference for
 // AI"), so it is written by hand where judgement is needed and generated where the sources are
@@ -51,6 +54,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import os from 'node:os'
 import { spawn } from 'node:child_process'
+import { defaultCamel, takeCamel } from '../test/tools/camel-arg.mjs'
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const DOCUMENT_REL = 'docs/reference/camel-for-ai.md'
@@ -598,13 +602,10 @@ function counterExamples(document) {
     return found
 }
 
-const CAMEL =
-    process.env.CAMEL_EXE ||
-    path.join(
-        process.env.CAMEL_HOME || path.join(REPO_ROOT, 'out', 'latest'),
-        'bin',
-        process.platform === 'win32' ? 'camel.exe' : 'camel',
-    )
+// The binary `--verify-errors` compiles each counter-example with. `--camel <path>` names it (the
+// entry parses the argument); with none it is `$CAMEL_HOME/bin/camel`, else this tree's
+// `out/latest/bin/camel`. One rule, in one place: test/tools/camel-arg.mjs.
+let CAMEL = defaultCamel(REPO_ROOT)
 
 function runCamel(args, cwd) {
     return new Promise((resolve) => {
@@ -612,7 +613,9 @@ function runCamel(args, cwd) {
         // diagnostic the way the default text form prints it, so the short form is not read here.
         const env = { ...process.env }
         delete env.CAMEL_ERROR_FORMAT
-        env.CAMEL_HOME = process.env.CAMEL_HOME || path.join(REPO_ROOT, 'out', 'latest')
+        // The child reads the standard library of the install it runs in, so a named `--camel`
+        // and its `CAMEL_HOME` are the same install; an exported `CAMEL_HOME` still wins.
+        env.CAMEL_HOME = process.env.CAMEL_HOME || path.dirname(path.dirname(CAMEL))
         const child = spawn(CAMEL, args, { cwd, env, stdio: ['ignore', 'pipe', 'pipe'] })
         let stdout = ''
         let stderr = ''
@@ -637,7 +640,7 @@ async function verifyErrors(document, documentRel) {
         return 2
     }
     if (!fs.existsSync(CAMEL)) {
-        console.log(`no compiler at ${CAMEL}: the counter-examples cannot be verified (build first, or set CAMEL_EXE)`)
+        console.log(`no compiler at ${CAMEL}: the counter-examples cannot be verified (build first, or pass --camel <path>)`)
         return 2
     }
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'camel-for-ai-errors-'))
@@ -676,7 +679,17 @@ async function verifyErrors(document, documentRel) {
 
 // ---- entry ------------------------------------------------------------------------------------
 
-const argv = process.argv.slice(2)
+function usage(message) {
+    if (message) console.log(`camel-for-ai: ${message}`)
+    console.log(
+        'usage: node scripts/camel-for-ai.mjs --check | --write | --report | --verify-errors ' +
+            '[--root DIR] [--document REL] [--camel PATH]',
+    )
+    process.exit(2)
+}
+
+const { camel, rest: argv } = takeCamel(process.argv.slice(2), REPO_ROOT, usage)
+CAMEL = camel
 let mode = '--check'
 let root = REPO_ROOT
 let documentRel = DOCUMENT_REL
@@ -686,10 +699,7 @@ for (let i = 0; i < argv.length; i++) {
     else mode = argv[i]
 }
 if (!['--check', '--write', '--report', '--verify-errors'].includes(mode)) {
-    console.log(
-        'usage: node scripts/camel-for-ai.mjs --check | --write | --report | --verify-errors [--root DIR] [--document REL]',
-    )
-    process.exit(2)
+    usage(`unknown mode "${mode}"`)
 }
 
 const documentPath = path.join(root, documentRel)

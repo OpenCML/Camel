@@ -3,6 +3,11 @@ order = 425
 tier = "slow"
 tags = ["perf", "training", "reduction", "layout"]
 
+# The measured half of the plan.  The 2026-10-25 ruling on the eight perf plans that no layer
+# reached split the plan in two: the count guard (`reduce_layout.count`, which asserts counts and
+# properties and no duration) is `perf.reduce_layout_counts`, in the release gate's slow layer, and
+# this file keeps the measurement and is in that gate's FORBIDDEN list -- it runs before a release.
+#
 # One operator of the d=256 step, measured on its own.  The step budget
 # (perf.step_budget) cannot resolve a two-millisecond row on the reference host, so a change to a
 # reduction or a layout kernel is priced here instead: `test/cases/perf/reduce_layout.py` generates
@@ -10,12 +15,6 @@ tags = ["perf", "training", "reduction", "layout"]
 # expand_axis, permute/permute_inverse, transpose, sum_axis), each running a single expression's
 # forward and backward, and reads the operator's own row of `std::profile`.
 #
-#   reduce_layout.count   The guard, and it pins properties rather than durations: the operator
-#                         calls of a round are the pinned ones; `sum_to` allocates exactly one
-#                         block per call (its output), so the fast path may not add a temporary;
-#                         the printed checksum is the pinned one, so a change to the order or the
-#                         accumulation type of a reduction fails here instead of passing behind a
-#                         rounding bound; and the same program one round longer prints it too.
 #   reduce_layout.ops     The measurement.  Each shape is profiled `SAMPLES` times and the least
 #                         contended round of those runs gives every row of that shape its numbers,
 #                         so a row's time and the round it is divided by come from one run; every
@@ -25,42 +24,6 @@ tags = ["perf", "training", "reduction", "layout"]
 #                         null control, so each row carries two independent estimates of one number
 #                         and their ratio is the instrument's own resolution.  The table is printed
 #                         and no duration is asserted.
-
-[[tests]]
-name = "reduce_layout.count"
-desc = "The reductions and layout operators the d=256 step issues, one program per shape: each round issues the pinned number of calls (one sum_to, one expand_axis, two permute, two transpose, one sum_axis), sum_to allocates one block per call and nothing for the identity case, and the reduction's pinned checksum does not move with the round count."
-kind = "behavior"
-tool = "python"
-case = "../../cases/perf/reduce_layout.py"
-args = ["${case}", "count"]
-expect_exit = 0
-expect_stdout_contains = ["reduce layout counts: PASS"]
-expect_output_not_contains = ["FAIL"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-# The cost bound is this test's own CPU time (user + system), and the timeout below is its liveness
-# bound, by the author's ruling of 2026-10-23 (docs/handover/reviews/questions-2026-10-23.md,
-# "declaration-cost-gate" (a)):
-#
-#   "改量 CPU 时间，不量墙钟。共享主机上的墙钟随负载漂移 ... 进程的 CPU 时间（用户态 + 内核态）基本
-#    不随负载变"
-#
-#
-# Neither entry of this plan asserts a duration (see the header: the table is printed, not
-# gated), so what the runner bounds is their cost, which is fixed work. Measured on the Linux
-# host (32 threads; the 1-minute load read 76.41/76.92/80.97 and 85.69/91.25/84.56), both
-# entries at two run lengths:
-#
-#   reduce_layout.count    8.69 s CPU / 21.09 s wall   (nine perf plans, -Jobs 8)
-#   reduce_layout.count    8.57 s CPU / 19.13 s wall   (those plans beside more, second window)
-#   reduce_layout.ops     40.54 s CPU / 92.09 s wall   (first window)
-#   reduce_layout.ops     40.01 s CPU / 83.12 s wall   (second window)
-#
-# The CPU figures spread 1.4 % between the windows where the wall clock spreads 10 %. Each
-# 1.63x that entry's higher reading rounded up to the next 1000 ms -- the headroom the four resnet
-# referees of feat/modules/autodiff.plan.toml took -- and 1.65-1.73x the busiest reading seen.
-# The timeouts below stay; by the ruling above they are now only the liveness bounds.
-cpu_budget_ms = 15000
-timeout_ms = 600000
 
 [[tests]]
 name = "reduce_layout.ops"
@@ -73,8 +36,23 @@ expect_exit = 0
 expect_stdout_contains = ["reduce layout ops: PASS", "sum_to", "ns/call"]
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-# 1.63x the 40.54 s CPU read above (the higher of 40.54 s and 40.01 s) rounded up: 1.65x the
-# busiest. The timeout below stays as the liveness bound (the ruling quoted on
-# reduce_layout.count above).
+# The cost bound is this test's own CPU time (user + system), and the timeout below is its liveness
+# bound, by the author's ruling of 2026-10-23 (docs/handover/reviews/questions-2026-10-23.md,
+# "declaration-cost-gate" (a)):
+#
+#   "改量 CPU 时间，不量墙钟。共享主机上的墙钟随负载漂移 ... 进程的 CPU 时间（用户态 + 内核态）基本
+#    不随负载变"
+#
+#
+# This entry asserts no duration (see the header: the table is printed, not gated), so what the
+# runner bounds is its cost, which is fixed work. Measured on the Linux host (32 threads; the
+# 1-minute load read 76.41/76.92/80.97 and 85.69/91.25/84.56), at two run lengths:
+#
+#   reduce_layout.ops     40.54 s CPU / 92.09 s wall   (first window)
+#   reduce_layout.ops     40.01 s CPU / 83.12 s wall   (second window)
+#
+# The CPU figures spread 1.4 % between the windows where the wall clock spreads 10 %. The budget is
+# 67 s: 1.63x the higher reading rounded up to the next 1000 ms -- the headroom the four resnet
+# referees of feat/modules/autodiff.plan.toml took. The timeout below stays as the liveness bound.
 cpu_budget_ms = 67000
 timeout_ms = 1800000

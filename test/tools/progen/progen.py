@@ -36,6 +36,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from generate import DEFAULT_FEATURES, FEATURES, generate, parse_features  # noqa: E402
 from model import emit, emit_modules  # noqa: E402
 from reduce import Reducer  # noqa: E402
+import runner  # noqa: E402
 from runner import BACKENDS, BAD, matrix, run_program, signature  # noqa: E402
 
 
@@ -351,6 +352,8 @@ SIZE_HELP = ("multiplies the number of functions and of statements of main (defa
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--camel", help="the install to measure: the `camel` binary to run, else "
+                                    "$CAMEL_HOME/bin/camel, else this tree's out/latest/bin/camel")
     sub = ap.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("show")
     p.add_argument("--seed", type=int, required=True)
@@ -403,6 +406,10 @@ def main(argv=None):
     p = sub.add_parser("features")
     p.set_defaults(fn=lambda a: print("\n".join(f"{k:<10} {v}" for k, v in FEATURES.items())) or 0)
     args = ap.parse_args(argv)
+    # Every `camel` this run starts is the one `--camel` names (one rule, in one place:
+    # test/tools/camel_arg.py); a run that measured another install is what the ruling of
+    # 2026-10-25 refuses, so the switch is an argument and never an environment variable.
+    runner.CAMEL = args.camel
     return args.fn(args)
 
 

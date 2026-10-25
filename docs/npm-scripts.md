@@ -116,8 +116,11 @@ needs, because `npm run test` is only the fast layer: a directory target drops e
 It runs, in order:
 
 1. the fast layer -- `smoke`, `feat/**`, and the fast-tier `gpu/profile` plan at `--tier fast`;
-2. the slow layer -- eleven explicit plan files (the runnable set), named one by one:
-   naming a file is what makes its slow tests run. It never takes a directory or `--tier all`;
+2. the slow layer -- fourteen explicit plan files (the runnable set), named one by one:
+   naming a file is what makes its slow tests run. It never takes a directory or `--tier all`.
+   Three of them are perf plans whose tests assert counts and properties, never a duration:
+   `perf.para_speedup` and the count guards `perf.step_counts` and `perf.reduce_layout_counts`
+   (the measured halves of `perf.step_budget` and `perf.reduce_layout` stay in the skip list);
 3. the seven static checks: `stdlib-reference --verify-ops`, `--verify-doc`, `diagnostics-catalog
    --check`, `check-doc-links --all`, `check-doc-snippets`, `stdlib-declarations --check`,
    `check-std-includes`;
@@ -131,10 +134,11 @@ The two standard-library checkers among those static checks (`stdlib-reference.m
 `stdlib-declarations.mjs --check`) apply the same rule themselves, before they read a registry: an
 install that is not this tree's build is refused (exit 2, naming the install and its stamp) instead
 of being reported as differences between this tree's declarations and another install's operators.
-`--camel <path>` names the install such a run measures, passing the same check; the environment
-switch `CAMEL_EXE` is gone.
+`--camel <path>` names the install such a run measures, passing the same check. The gate passes
+the install it found down to the two of them (`--camel <the install it verified>`), so one run
+cannot stamp-check one binary and read another.
 
-It also never runs the eighteen plan files `agents/test.md` forbids on a shared host (GC stress
+It also never runs the plan files `agents/test.md` forbids on a shared host (GC stress
 and poison, progen, the PyTorch comparisons, the benchmarks): it prints them by name with the
 reason on every run, and refuses with a message naming the policy when asked for one --
 `--tier all`, `--all`, `--suite`, or an `--include` / positional target that is, or contains, one

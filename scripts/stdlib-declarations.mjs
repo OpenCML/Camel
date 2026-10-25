@@ -108,8 +108,8 @@
 // install whose `out/<tag>/build-info.json` does not match this tree (exit 2, naming the install
 // and its stamp) instead of reporting the differences between this tree's declarations and another
 // tree's registry -- the shape H149 guards, one rule with `scripts/release-gate.mjs`. `--camel
-// <path>` names the install to measure (this tree's `out/latest/bin/camel` without it); an explicit
-// path passes the same check, and `CAMEL_EXE` is gone (the author's ruling, 2026-10-25).
+// <path>` names the install to measure (this tree's `out/latest/bin/camel` without it), passing the
+// same check.
 
 import fs from 'node:fs'
 import path from 'node:path'

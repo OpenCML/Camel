@@ -339,3 +339,57 @@ println(grow([1.0, 2.0], read_int()))
 1. **要拒绝**：直接跑的这两条脚本与 release gate 用同一条规则——取注册表之前跑 `build-info.js check`，安装不是本树的构建就拒绝（exit 2，消息说量的是哪个安装、它的戳是什么），不报 144 条"差异"。一条规则到处一样，不靠文档提醒。
 2. **覆盖开关不豁免**：显式指定的二进制同样要过戳检查——"量的不是本树"的错误与是怎么指定的无关。`CAMEL_EXE` 这类环境变量开关按项目约定不设，改成命令行参数（`--camel <path>`）；`CAMEL_HOME` 是安装位置的约定，照旧。
 3. 已提交的"报告量了哪个安装、一处问题算一条"保留——摘要行与孤立的 `\r` 不再算成 problem 是对的。
+
+## a-frozen-node-names-its-type-by-typeid
+
+根因找得准：类型有了**对象身份**，并且被写进了图。原则与函数值一样——**类型没有身份，只有结构**：同一个类型在任何地方是同一个 id。修在根上，不在读的那几处各自改成 `typeEquals`。
+
+1. **一个类型一个 id**：所有类型都经类型表构造（自底向上的 hash-consing：分量先驻留，复合类型按分量的 id 作键——今天 `intern()` 按分量地址作键，分量驻留之后这就是结构键）。开放签名、联合、类型变量也一样进表；类型变量的身份是它的绑定处（哪个声明的第几个），不是对象。`TypeTable::adopt` 删除——"给手上的对象发一个 id"正是身份泄漏的入口；绕过类型表构造类型的地方（`tensorOf` 返回非驻留对象之类）全部改走表。
+2. **名字不进身份**：plan 3.2 让包名、维度名进驻留键（打印与诊断要保留它们），而 `equals` 忽略它们。所以表里每个类型同时记下它的**规范 id**（擦掉名字后的那个类型的 id）。图的不变式、`nodeContentHash`、`contentHash`、`sameContent`、e-graph 的表达式类都用规范 id；打印与诊断用带名字的那个。这样不需要另写结构哈希——规范 id 就是结构哈希。
+3. 于是问题 2 的回答是"比 id"，但比的是规范 id；问题 3 的回答是"同一个类型的两份就是同一个内容"。`contentHash` 里混入的四个裸指针改成各自的规范 id。
+4. 验收：probe 3、4 那两处不必改成 `typeEquals`（改回比 id 也绿）；`export_fold` 不靠 probe 1、2 也回到亚秒；加一条检查——冻结图里出现的每个 type id 都来自表的驻留路径（调试构建断言）。
+
+## release-gate-inventory-eight-perf-plans-unclassified
+
+选 **B**（逐条定命运），外加机制上两处小改；不做目录通配——每个计划的命运单独写出理由，这是这份清单的用处。
+
+| 计划 | 命运 |
+|---|---|
+| `para_speedup` | `SLOW_PLANS`（照 perf-para-gate 选 B） |
+| `step_budget`、`reduce_layout` | **拆文件**：只断言计数与性质的守卫（`step.count`、`reduce_layout.count`）移到各自的计划文件进 `SLOW_PLANS`；测量那半留在原文件进 `FORBIDDEN`（发布前测量） |
+| `instruction_counts`、`instruction_counts_load` | `FORBIDDEN`：要特权容器与 `perf`，`_load` 还要人为诱导负载 |
+| `gemm_canonical_shapes`、`gemm_threads` | `FORBIDDEN`：速率曲线，只做发布前测量 |
+| `showcase_d4` | `FORBIDDEN`：与 Python 的逐行对比属于测量，与 showcase 同族一致 |
+
+机制：
+1. inventory 收集完所有问题再一起报（不在第一条就 `die`），一次看到全部未分类的计划。
+2. **inventory 检查进合并闸门的 fast 层**：新计划落地时如果没有归类，就在那次提交上变红，而不是等到有人跑 release gate。这就治住了"第 9 个计划又弄坏工具"。
+
+**返工**：`--camel <path>` 取代 `CAMEL_EXE` 只做了两条脚本。按"一类事一条规则"，`CAMEL_EXE` 在其余脚本里也一并删掉、改成 `--camel`（`camel-for-ai.mjs`、`check-doc-snippets.mjs`、`perf-gate.mjs`、`test/tools/check-doc-pass-forms.mjs`、`import-audit.mjs`、`para-speedup.mjs`、`jitcov.py`、`progen/README.md`）。另外 `stdlib-reference.mjs` 等处的注释"`CAMEL_EXE` is gone (the author's ruling …)"删掉——代码只描述现在怎么做，不记录已不存在的写法。
+
+## 返工：代码注释不引用裁定（camel-arg 合入后的抽查）
+
+`CAMEL_EXE` 已全部改为 `--camel`，两种语言各一个辅助函数（`test/tools/camel-arg.mjs`、`camel_arg.py`），`--camel` 不带值时报用法错误、不回退默认，`CAMEL_HOME` 照旧作为安装位置。这一批没有问题，收下。
+
+**返工**（在 H242 与 P4 的间隙做，不占这两块的子代理）：注释里写"the author's ruling of 2026-10-25"、"(the author's ruling…)"这类话的，删掉引用，只留规则本身。比如 `camel-arg.mjs` 开头一句改成"`CAMEL_HOME` is the install location's convention: an explicitly named install is a command-line argument, never an environment switch."。src、stdlib、scripts、test/tools、include 里这类引用一共约百处，一次扫完。
+
+**理由**：仓库将公开，代码只描述现在怎么做、为什么这样做；谁在哪天裁定的，记在 `docs/handover/reviews/`。引用裁定的注释读者核实不了，裁定被取代后也没人会去改它。
+
+## step-elementwise-not-named-by-the-perf-fates-ruling
+
+**裁定：按判据，就是 lane 的读法**。`step.count` 与 `step.elementwise` 都只断言计数，都进 `step_counts.plan.toml`（`SLOW_PLANS`）；`step.budget` 留在原文件（`FORBIDDEN`）。上一条裁定括号里的守卫名只是举例，起作用的是判据"只断言计数与性质、不断言时间"。照字面去做，会让一条计数守卫没有任何一层跑它，这和裁定的本意相反。已落地的那样就对，不用改。
+
+## release-gate-verifies-one-install-and-the-plan-layers-measure-another
+
+**裁定：一次运行只有一个安装，闸门选定它，再显式交给每一层。不选 A、B、C 中的任何一个**。
+
+1. **只选一次**：闸门用 `--camel <path>` 选安装，不给就用本树的 `out/latest`。查戳用的函数和 stdlib 检查器是同一个（`refuseInstallNotOfThisTree`）。"装在 `out/` 之外的安装查不了戳，由调用者负责"这条豁免删掉：安装自己带着戳，在哪儿都能查。发布闸门查的就是本树，别的树建出来的安装直接拒绝。
+2. **交给每一层**：
+   - `scripts/test.js` 与 `test/tools/run-tests.mjs` 加 `--camel`。给了它，每个计划测试子进程的 `CAMEL_HOME` 就设成这个安装的根目录，`preflightBuild` 也查这个二进制；不给就照旧用 `out/<build>`。
+   - `check-doc-snippets.mjs` 改用 `takeCamel`（上一条返工本来也点了它）。
+   - 闸门把选好的安装用 `--camel` 传给 fast、slow 两层和全部静态检查。这样就不存在"查的是 A、量的是 B"，读法 A 要拦的那种不一致根本无从产生，所以也不用新加一处拒绝。
+3. **默认值只有一个**：测试与检查工具挑安装时不读 `CAMEL_HOME`，没给 `--camel` 时一律用本树的 `out/latest`。`camel-arg.mjs` 的 `defaultCamel` 与 `install-stamp.mjs` 的那个合成一个函数，放在一处。这一条更正我上次那句"`CAMEL_HOME` 照旧"，它的意思是：`CAMEL_HOME` 是 `camel` 二进制和 SDK 用户找运行库的约定（`init.h`、`dll_path.h`、C++ 产物里的说明），工具不拿它来决定量哪个安装；工具只在启动子进程时把它设成选中安装的根目录。让环境变量决定量哪个二进制，就是另一种环境开关。
+
+**理由**：规则统一，一次运行的"被测安装"只有一个来源，每一层都从参数拿到它。现在三处各有各的默认值（闸门优先 `CAMEL_HOME`，计划两层用 `out/<build>`，检查器用 `out/latest`），读法 A、B、C 都是在三个默认之间打补丁。
+
+**返工追加**（并入上一条"代码注释不引用裁定"的返工，同一次扫完）：注释里的内部任务编号（如 `H185`、`H154 §3`）也删掉，只写规则和理由。src、stdlib、scripts、test/tools、include 里约 580 处，分布在 139 个文件。例如 `plan-inventory.mjs` 的 `SLOW_PLANS` 注释：只写"三个 perf 计划在慢层，因为它们只断言计数与性质"，不写哪天哪条裁定。仓库将公开，读者看不到这些编号。
