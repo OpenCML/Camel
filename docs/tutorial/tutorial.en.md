@@ -35,6 +35,7 @@ Chapters already written to the new outline (Chinese and English together, each 
 [5 Arrays and loops](05_arrays_and_loops.en.md) ·
 [6 Structs, tuples, maps and sets](06_aggregates.en.md) ·
 [7 Missing and failing](07_missing_and_failure.en.md) ·
+[8 Modules, the standard library, and a small tool](08_modules_and_stdlib.en.md) ·
 [9 Evaluation by dependency](09_evaluation_by_dependency.en.md) ·
 [17 Teaching the compiler a law](17_teaching_a_law.en.md)
 

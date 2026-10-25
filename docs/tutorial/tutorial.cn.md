@@ -35,6 +35,7 @@ Camel 是图原生的通用编程语言：程序只表达计算意图——要�
 [5 数组与循环](05_arrays_and_loops.cn.md) ·
 [6 结构体、元组、映射与集合](06_aggregates.cn.md) ·
 [7 缺失与失败](07_missing_and_failure.cn.md) ·
+[8 模块、标准库与一个小工具](08_modules_and_stdlib.cn.md) ·
 [9 按依赖求值](09_evaluation_by_dependency.cn.md) ·
 [17 教编译器一条定律](17_teaching_a_law.cn.md)
 
