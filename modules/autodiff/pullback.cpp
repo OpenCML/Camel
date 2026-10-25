@@ -604,10 +604,10 @@ bool carriesGradient(Type *type) {
         return false;
     }
     if (type->code() == TypeCode::Array) {
-        // An array's gradient is carried as the array of its elements' gradients; a kind whose
-        // values share the array code states one of its own (`Tensor` is a numeric array whose
-        // element type is not fixed yet, so there is no element tangent to build one from).
-        return tangentTypeOf(type) != nullptr;
+        // An array's gradient is carried as the array of its elements' gradients, and an array
+        // whose element has no tangent has none (an integer array's element, or an element
+        // nobody stated): the lookup above is the answer.
+        return true;
     }
     if (isAggregate(type)) {
         for (size_t i = 0; i < aggregateSize(type); ++i) {

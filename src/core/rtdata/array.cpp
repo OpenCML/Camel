@@ -1283,7 +1283,7 @@ void Array::print(std::ostream &os, const type::Type *typeInfo) const {
             return;
         }
         // The declared element type is what the elements print by, unless the declaration does
-        // not fix one: `Tensor` is the numeric-unknown array, and the elements of a value of that
+        // not fix one (its element is `Void`), and the elements of a value of that
         // type print by the element type the value holds (plan section 5.4). A tensor is an array
         // and prints like one, `[1, 2, 3]` and `[[1, 2], [3, 4]]`, with no `tensor(...)` wrapper.
         const type::Type *elemType = static_cast<const type::ArrayType *>(typeInfo)->elemType();
@@ -1294,8 +1294,8 @@ void Array::print(std::ostream &os, const type::Type *typeInfo) const {
         printArray(os, elemType, 0, flatIndex);
         return;
     }
-    // The declared type does not say this is an array (it may be the numeric-unknown array's
-    // spelling, or a scalar the checker left unresolved): print the array the value is, from the
+    // The declared type does not say this is an array (it may be a scalar the checker left
+    // unresolved): print the array the value is, from the
     // element type the value holds.
     uint64_t flatIndex = 0;
     printArray(os, elemType_, 0, flatIndex);

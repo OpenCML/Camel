@@ -493,10 +493,10 @@ bool isModuleOwned(Type *type) {
 }
 
 /// The zero tangent of a value whose tangent type a module owns: the module says how to make it
-/// (`zeros_like`, `add`), and the registry passes that operator's URI on. This is also the zero
-/// of the numeric-unknown array (`Tensor`): its element type is the `Void` marker rather than a
-/// type whose tangent exists, so there is nothing to descend into, and `tensor:zeros_like` reads
-/// the element type the value actually has (the element type follows the value).
+/// (`zeros_like`, `add`), and the registry passes that operator's URI on. An array whose element
+/// type states no tangent of its own (an array of `Void`, the empty array literal's type) has
+/// nothing to descend into, and `tensor:zeros_like` reads the element type the value actually has
+/// (the element type follows the value).
 slot_t moduleZeroTangent(Context &ctx, Type *primalType, Type *tangentType, slot_t primal);
 // The zero tangent of a value of primal type `primalType`, whose tangent type is
 // `tangentType`. `primal` is the primal value: an array's zero has the array's length, and a
@@ -505,8 +505,8 @@ slot_t moduleZeroTangent(Context &ctx, Type *primalType, Type *tangentType, slot
 // A type a module owns (a tensor, a numeric array) is not built here at all: its zero is the
 // module's own operator (`tensor:zeros_like`), which answers at the value's dtype and shape.
 // Recursing into a tensor's element type would take the numbers out of the tensor's arithmetic
-// -- and for the numeric-unknown array `Tensor` there is no element type to recurse into, which
-// is the "zero tangent is not defined for tangent type 'void'" fault.
+// -- and an array of `Void` has no element type to recurse into, which is the "zero tangent is
+// not defined for tangent type 'void'" fault.
 slot_t zeroTangent(Context &ctx, Type *primalType, Type *tangentType, slot_t primal) {
     if (isModuleOwned(primalType)) {
         return moduleZeroTangent(ctx, primalType, tangentType, primal);
@@ -557,10 +557,11 @@ slot_t zeroTangent(Context &ctx, Type *primalType, Type *tangentType, slot_t pri
     case TypeCode::Array: {
         auto *tangentArray = tt::as_ptr<ArrayType>(tangentType);
         auto *primalArray  = tt::as_ptr<ArrayType>(primalType);
-        // An array whose element type is `Void` is the numeric-unknown array (`Tensor`): `Void` is
-        // the "numeric, element type not fixed yet" marker, not a type whose tangent exists, so
-        // there is no element to take the zero of. The zero of such a value is its kind's own
-        // zero, made from the value (`tensor:zeros_like`), and the element type follows the value
+        // An array whose element type is `Void` is an array whose element type nobody stated (the
+        // empty array literal's type): `Void` is the "a numeric scalar, which one is not fixed"
+        // marker, not a type whose tangent exists, so there is no element to take the zero of. The
+        // zero of such a value is its kind's own zero, made from the value
+        // (`tensor:zeros_like`), and the element type follows the value
         // (docs/handover/reviews/questions-2026-10-23.md, rank-zero-tensor and
         // unstated-element-type-scalar-and-print): zeroing the elements one by one is not the
         // answer, and doing it refused with "a zero tangent is not defined for tangent type
@@ -659,9 +660,9 @@ slot_t addTangent(Context &ctx, Type *tangentType, slot_t lhsSlot, slot_t rhsSlo
     }
     case TypeCode::Array: {
         auto *arrayType = tt::as_ptr<ArrayType>(tangentType);
-        // As in zeroTangent: the numeric-unknown array's element type is the `Void` marker, so its
-        // two tangents are added by the kind's own operator (`tensor:add`), which reads the
-        // element type the values actually have.
+        // As in zeroTangent: an array whose element type is the `Void` marker has no element type
+        // to add along, so its two tangents are added by the kind's own operator (`tensor:add`),
+        // which reads the element type the values actually have.
         if (arrayType->elemType() != nullptr &&
             arrayType->elemType()->code() == TypeCode::Void) {
             const auto *space =
@@ -814,9 +815,9 @@ slot_t __tangent_scatter_slice_arr__(ArgsView &with, ArgsView &norm, Context &ct
                 range.count));
     }
     Array *result = Array::create(mm::autoSpace(), like->size());
-    // An array whose tangent's element type is `Void` — the numeric-unknown array, `Tensor` — has
-    // no element type to take a zero from; its kind's own zero reads the element type the value
-    // actually has, and every position the slice does not take holds that zero.
+    // An array whose tangent's element type is `Void` has no element type to take a zero from;
+    // its kind's own zero reads the element type the value actually has, and every position the
+    // slice does not take holds that zero.
     if (tangentArray->elemType() != nullptr &&
         tangentArray->elemType()->code() == TypeCode::Void) {
         slot_t zero = moduleZeroTangent(ctx, primalType, tangentType, rtdata::toSlot(like));

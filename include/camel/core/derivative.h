@@ -173,16 +173,6 @@ class DerivativeRegistry {
     /// or nullptr when values of that type have no tangent.
     const TangentSpace *findTangentSpace(const type::Type *type) const;
 
-    /// Registers the tangent type of values of type code `code` whose tangent the core cannot
-    /// work out from the type itself, leaving that code's space (its add and zero operators) as
-    /// it is. `Tensor` is a numeric array whose element type is not fixed yet: its code is
-    /// `Array`, and no element type is there to take a tangent from, so the module that owns the
-    /// kind states one. A code that states nothing answers through its space alone.
-    void setTangentType(type::TypeCode code, type::Type *(*fn)(type::Type *));
-    /// The tangent type `code` states for `type`'s values, or nullptr when it states none or
-    /// answers "no tangent".
-    type::Type *statedTangentType(type::Type *type) const;
-
     /// Registers a predicate for the values of type code `code` that says they are discrete (an
     /// integer or a boolean held by a module type, such as a tensor of integers): their
     /// derivative is zero by definition (design principles 9.9), even though they have no
@@ -203,7 +193,6 @@ class DerivativeRegistry {
     mutable std::shared_mutex mutex_;
     std::unordered_map<std::string, VjpRule, StringHash, std::equal_to<>> rules_;
     std::unordered_map<type::TypeCode, std::deque<TangentSpace>> tangents_;
-    std::unordered_map<type::TypeCode, type::Type *(*)(type::Type *)> tangentTypes_;
     std::unordered_map<type::TypeCode, bool (*)(const type::Type *)> discrete_;
 };
 

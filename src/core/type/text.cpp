@@ -415,14 +415,11 @@ std::vector<TextItem> typeParts(const Type *type, bool mangle) {
     switch (type->code()) {
     case TypeCode::Array: {
         const auto *array = static_cast<const ArrayType *>(type);
-        if (array->isNumericUnknown()) {
-            if (mangle) {
-                return {literal("Array_Tensor_" + array->shapeMangle())};
-            }
-            if (array->extents().empty() && array->anyRank() && array->packName().empty()) {
-                return {literal("Tensor")};
-            }
-            return {literal("Tensor<" + array->tensorShapeText() + ">")};
+        // The name that awaits its element type prints as the name the author wrote, so the
+        // report about it names what is on the page. The name is deleted once no program writes
+        // it (docs/design/arrays-memory/plan.cn.md section 5.1a).
+        if (isElementTypeOpenArray(array)) {
+            return {literal("Tensor")};
         }
         if (mangle) {
             return {
@@ -545,7 +542,6 @@ bool sameType(const Type *a, const Type *b) {
             // dimension here; dimension names are signature metadata, as parameter names are
             // for function types (this is what the tensor type's equality did before).
             if (lhs->anyRank() != rhs->anyRank() ||
-                lhs->isNumericUnknown() != rhs->isNumericUnknown() ||
                 lhs->extents().size() != rhs->extents().size()) {
                 return false;
             }

@@ -42,8 +42,8 @@ size_t arrayElementSize(TypeCode code);
 /// (ints, floats, bool).
 bool isCompactElementType(TypeCode code);
 
-/// True for the element type codes the numeric-unknown array (`Tensor`) accepts: the compact
-/// numeric scalars and the complex numbers (design principles 5.4, plan section 5.1).
+/// True for the element type codes a numeric array accepts: the compact numeric scalars and the
+/// complex numbers (design principles 5.4).
 bool isNumericScalarTypeCode(TypeCode code);
 
 /**
@@ -87,10 +87,6 @@ class ArrayTypeFactory {
  * compact storage is empty + no open rank only for the element-denoting result of pack
  * substitution, which is not an ArrayType. A negative constant extent cannot be normalized and
  * is refused at construction (the caller reports it as an invalid type argument).
- *
- * `numericUnknown()` marks the numeric-unknown array (`Tensor`): the element type is not fixed
- * yet but is known to be a numeric scalar, and it is what makes `Tensor` one ArrayType instead
- * of a second type system (plan sections 3.1 and 5.1).
  */
 class ArrayType : public CompositeType {
     friend class ArrayTypeFactory;
@@ -114,17 +110,14 @@ class ArrayType : public CompositeType {
     create(Type *elemType, std::span<const ExtentForm> extents, std::string_view pack = {});
 
     /// An anonymous open-rank array: `T[..]`, or `T[prefix, ..]` when a prefix is given (the
-    /// spelling a bare `..` produces; the plan keeps it for printing `Tensor<f32>`).
+    /// spelling a bare `..` produces).
     static ArrayType *openRank(Type *elemType, std::span<const ExtentForm> prefix = {});
 
-    /// The numeric-unknown array `Tensor`: element type not fixed, but a numeric scalar. With
-    /// no extents it is `Tensor` (any rank); with extents it is `Tensor<[...]>`.
-    static ArrayType *numericUnknown(std::span<const int64_t> extents = {}, std::string_view pack = {});
-    /// The same numeric-unknown array whose shape is written over dimension names: the extents
-    /// are kept as the linear forms they were written as, so a named extent keeps its name
-    /// (design principles 5.4). A shape argument fixes the rank; no shape is any rank.
-    static ArrayType *
-    numericUnknownFromForms(std::span<const ExtentForm> extents, std::string_view pack = {});
+    /// The object a name that still has to be given an element type is bound to (`Tensor`, before
+    /// its arguments are applied): the open-rank array whose element type nobody stated. It
+    /// denotes no value — the element type of a value is always in its type — and `applyArguments`
+    /// is what turns it into one (docs/design/arrays-memory/plan.cn.md section 5.1a).
+    static ArrayType *elementTypeOpen();
 
     /// create() with the factory's element type.
     static ArrayType *fromFactory(ArrayTypeFactory &factory);
@@ -141,9 +134,6 @@ class ArrayType : public CompositeType {
     size_t rank() const { return extents_.size(); }
     /// True when the rank is open (`T[..]`, `T[3, ..rest]`).
     bool anyRank() const { return anyRank_; }
-    /// The numeric-unknown array (`Tensor`) marker. (The factory is `numericUnknown()`; a
-    /// member of the same name would make `array->numericUnknown()` ambiguous with it.)
-    bool isNumericUnknown() const { return numericUnknown_; }
 
     /// This type with another element type, shape and flags unchanged.
     ArrayType *withElementType(Type *elemType) const;
@@ -152,26 +142,23 @@ class ArrayType : public CompositeType {
     /// 5.4: `t[i]` takes the i-th along the first dimension, one row when it has more than one).
     /// One dimension fewer: the element itself for a rank-1 array, `T[d1, ...]` for `T[d0, d1,
     /// ...]`, the element type for a nested array (`T[]` of `T[][]`), and the same open-rank
-    /// array when the rank is open (`T[..]`, and the bare `Tensor`, own their elements the same
-    /// way). `for x in xs` takes these for every array of every rank, and the core owns the rule
-    /// (the ruling of 2026-10-24, docs/handover/reviews/questions-2026-10-24-evening.md section
-    /// loop-domain-through-the-tensor-iterator): the builder states the element port with it, the
-    /// loop interface checks the port against it, and the executors take one of these a round.
+    /// array when the rank is open. `for x in xs` takes these for every array of every rank, and
+    /// the core owns the rule (the ruling of 2026-10-24, docs/handover/reviews/questions-2026-10-24-evening.md
+    /// section loop-domain-through-the-tensor-iterator): the builder states the element port with
+    /// it, the loop interface checks the port against it, and the executors take one of these a
+    /// round.
     Type *firstDimensionElement() const;
 
     /// The bracket text of the shape: `[]`, `[3, 4]`, `[?, 3]`, `[3, ..rest]`, `[..]`.
     std::string shapeText() const;
-    /// The same in the tensor module's spelling, where an unknown dimension is written (`[?]`,
-    /// not `[]`); `Tensor<[?]>` and `int[]` are the two spellings the same extent has.
-    std::string tensorShapeText() const;
     /// The shape for the mangled name: rank (`any` or a number) and constant extents; dimension
     /// names and pack names do not appear, because they do not take part in equality.
     std::string shapeMangle() const;
 
     virtual Type *resolve(const type_vec_t &typeList) const override;
-    /// `Tensor<f32>`, `Tensor<f32, [2, 3]>`, `Tensor<[n, 784]>`: the numeric array reads the
-    /// arguments of its own alias (docs/design/arrays-memory/plan.cn.md section 5), so the two
-    /// spellings of one type are one type and `Name<args...>` needs no second path.
+    /// `Tensor<f32>`, `Tensor<f32, [2, 3]>`, `Tensor<T, [n, 784]>`: the array a name that requires
+    /// an element type is applied to (docs/design/arrays-memory/plan.cn.md section 5.1a), so the
+    /// two spellings of one type are one type and `Name<args...>` needs no second path.
     virtual const Type *
     applyArguments(std::span<const TypeArgument> arguments, std::string &error) const override;
     virtual bool resolved() const override;
@@ -187,8 +174,8 @@ class ArrayType : public CompositeType {
     /// (they are `?`); what `var` bindings hold. A named pack is dropped.
     virtual Type *widened() const override;
     /// A literal beside a numeric array is an element of it (`x * 2.0` with `x: f32[3]`), so it
-    /// takes the array's element type (design principles 5.1). An array whose element type
-    /// nobody fixed (`Tensor`) gives none.
+    /// takes the array's element type (design principles 5.1). An array whose element type is a
+    /// name nobody gave yet gives none.
     virtual Type *literalOperandType() const override;
 
     std::string_view packName() const override;
@@ -200,21 +187,16 @@ class ArrayType : public CompositeType {
   private:
     // Private constructor: called by the factory or create.
     ArrayType(
-        Type *elemType, std::vector<ExtentForm> extents, bool anyRank,
-        const std::string *packName, bool numericUnknown);
+        Type *elemType, std::vector<ExtentForm> extents, bool anyRank, const std::string *packName);
 
     /// Interned construction after normalization and validation.
     static ArrayType *make(
-        Type *elemType, std::vector<ExtentForm> extents, bool anyRank, std::string_view pack,
-        bool numericUnknown);
-    /// The shape text; `tensorSpelling` writes `[?]` where the array spelling writes `[]`.
-    std::string shapeText(bool tensorSpelling) const;
+        Type *elemType, std::vector<ExtentForm> extents, bool anyRank, std::string_view pack);
 
     Type *elemType_;        // Element type pointer (used by the type system).
     TypeCode elemTypeCode_; // Element type code (used at runtime).
     std::vector<ExtentForm> extents_;
     bool anyRank_;
-    bool numericUnknown_;
     const std::string *packName_; // interned, nullptr for an anonymous pack or no pack
 };
 
@@ -223,16 +205,19 @@ class ArrayType : public CompositeType {
 /// its own kind of type (plan section 5.3).
 const ArrayType *asArrayType(const Type *type);
 
-/// True for an array whose element is a numeric scalar, or is not fixed yet but is known to be
-/// one (the numeric-unknown array, `Tensor`): the arrays a tensor operator takes. A nested array
-/// (`f32[][]`) is an array of arrays, not one numeric array, and is not one of these.
+/// True for an array whose element is a numeric scalar: the arrays a tensor operator takes. A
+/// nested array (`f32[][]`) is an array of arrays, not one numeric array, and is not one of these.
 bool isNumericArrayType(const Type *type);
 
 /// True for the type of an array literal written with no element type at all (`[]`): its element
-/// type is `Void` — and nobody wrote one, so every position it stands in fixes it. The
-/// numeric-unknown array's element type is `Void` as well (that it is numeric is the marker, and
-/// it is what the alias `Tensor` hands out), and it is a complete type of its own: it is not one
-/// of these (design principles 5.1, 5.2).
+/// type is `Void` — and nobody wrote one, so every position it stands in fixes it (design
+/// principles 5.1, 5.2).
 bool isUntypedArrayType(const Type *type);
+
+/// True for the object a name that requires an element type is bound to (`ArrayType::elementTypeOpen()`):
+/// the open-rank array whose element type nobody stated. It is the one untyped array that is not
+/// the literal's (the literal states one unknown dimension, not an open rank), so it is what a
+/// spelling that leaves the element type out holds.
+bool isElementTypeOpenArray(const Type *type);
 
 } // namespace camel::core::type

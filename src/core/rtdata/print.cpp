@@ -235,7 +235,7 @@ void printValueImpl(std::ostream &os, slot_t data, Type *type, size_t arrayLimit
         case TypeCode::Array: {
             const auto *array = fromSlot<const Array *>(v);
             // What the elements print by, and how many parts the value has, are the value's own:
-            // a declaration that fixes no element type (`Tensor` is the numeric-unknown array,
+            // a declaration that fixes no element type (its element is `Void`,
             // and a nested one leaves its element open too) says `Void`, and the elements of such
             // a value print by the element type the value holds; the parts are the extents, not
             // the extent of dimension 0 (`Array::size()`), which is what `Array::print` does for

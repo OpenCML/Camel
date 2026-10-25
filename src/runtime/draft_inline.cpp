@@ -105,8 +105,8 @@ camel::core::type::Type *instanceParameterType(
     }
     const auto *actualArray = asArrayType(actual);
 
-    // The element position is where a declaration's type variable sits — including the
-    // numeric-unknown element `Tensor` spells, and the element position nobody wrote (`[]`).
+    // The element position is where a declaration's type variable sits, and where the element
+    // nobody wrote sits too (`[]`, whose element is `Void`).
     // The shape is not a type variable, whatever the argument's own shape is.
     Type *element = formalArray->elemType();
     if (!relaxNames && (element == nullptr || containsTypeVar(element) ||

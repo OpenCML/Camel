@@ -1,5 +1,9 @@
-// A bare `Tensor` is the numeric array whose element type is not fixed (plan Q6): any numeric
-// array fits, whatever its rank and element type, and `len` reads its first dimension.
+// A tensor type states the element type of the values it describes, so a signature that writes
+// the tensor name alone is refused where it is written, and the report says which spellings state
+// one: `Tensor<f32>` (any rank), `Tensor<f32, [2, 3]>`, or the array type itself (`f32[..]`,
+// `f32[2, 3]`). A signature that takes a tensor of any element type declares a type variable in
+// its head -- `func count::<T>(t: Tensor<T>)`, which is `func count::<T>(t: T[..])` -- and the
+// call's argument fixes it. That positive spelling is test/cases/loops/iterate_tensor.cml.
 module array_alias_bare_tensor
 
 import { Tensor, ones } from tensor

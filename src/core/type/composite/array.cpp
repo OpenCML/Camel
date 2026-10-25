@@ -102,15 +102,12 @@ ArrayType *ArrayTypeFactory::build() {
 }
 
 ArrayType::ArrayType(
-    Type *elemType, std::vector<ExtentForm> extents, bool anyRank, const std::string *packName,
-    bool numericUnknown)
+    Type *elemType, std::vector<ExtentForm> extents, bool anyRank, const std::string *packName)
     : CompositeType(TypeCode::Array), elemType_(elemType), elemTypeCode_(elemType->code()),
-      extents_(std::move(extents)), anyRank_(anyRank), numericUnknown_(numericUnknown),
-      packName_(packName) {}
+      extents_(std::move(extents)), anyRank_(anyRank), packName_(packName) {}
 
 ArrayType *ArrayType::make(
-    Type *elemType, std::vector<ExtentForm> extents, bool anyRank, std::string_view pack,
-    bool numericUnknown) {
+    Type *elemType, std::vector<ExtentForm> extents, bool anyRank, std::string_view pack) {
     if (!elemType) {
         elemType = Type::Void();
     }
@@ -143,7 +140,7 @@ ArrayType *ArrayType::make(
     for (const ExtentForm &form : extents) {
         hasNames = hasNames || form.hasNames();
     }
-    const uintptr_t flags = static_cast<uintptr_t>((anyRank ? 1u : 0u) | (numericUnknown ? 2u : 0u));
+    const uintptr_t flags = static_cast<uintptr_t>(anyRank ? 1u : 0u);
     // The element type is a component like any other, so it enters the key by id; the object
     // holds the very object it was asked for, which is what a caller that prints the type sees.
     const uintptr_t words[4] = {
@@ -160,7 +157,7 @@ ArrayType *ArrayType::make(
             typeCodeToString(element->code()),
             sizeof(ArrayType)));
         void *mem = allocTypeStorage<ArrayType>(TypeStorageKind::Array);
-        return new (mem) ArrayType(element, forms, anyRank, packName, numericUnknown);
+        return new (mem) ArrayType(element, forms, anyRank, packName);
     };
     if (!hasNames) {
         return static_cast<ArrayType *>(TypeTable::instance().intern(
@@ -197,7 +194,7 @@ ArrayType *ArrayType::create(Type *elemType) {
     }
     // One object per element type and shape (camel/core/type/intern.h): every `int[]` a program
     // writes, every array a rule infers, and every re-encoding of a graph share it.
-    return make(elemType, {}, false, {}, false);
+    return make(elemType, {}, false, {});
 }
 
 ArrayType *ArrayType::create(Type *elemType, std::span<const int64_t> extents) {
@@ -206,39 +203,19 @@ ArrayType *ArrayType::create(Type *elemType, std::span<const int64_t> extents) {
     for (int64_t extent : extents) {
         forms.push_back(ExtentForm::constant(extent));
     }
-    return make(elemType, std::move(forms), false, {}, false);
+    return make(elemType, std::move(forms), false, {});
 }
 
 ArrayType *ArrayType::create(
     Type *elemType, std::span<const ExtentForm> extents, std::string_view pack) {
-    return make(
-        elemType, std::vector<ExtentForm>(extents.begin(), extents.end()), false, pack, false);
+    return make(elemType, std::vector<ExtentForm>(extents.begin(), extents.end()), false, pack);
 }
 
 ArrayType *ArrayType::openRank(Type *elemType, std::span<const ExtentForm> prefix) {
-    return make(
-        elemType, std::vector<ExtentForm>(prefix.begin(), prefix.end()), true, {}, false);
+    return make(elemType, std::vector<ExtentForm>(prefix.begin(), prefix.end()), true, {});
 }
 
-ArrayType *ArrayType::numericUnknown(std::span<const int64_t> extents, std::string_view pack) {
-    std::vector<ExtentForm> forms;
-    forms.reserve(extents.size());
-    for (int64_t extent : extents) {
-        forms.push_back(ExtentForm::constant(extent));
-    }
-    // Bare `Tensor` is any rank; a shape argument fixes the rank.
-    const bool anyRank = extents.empty() || !pack.empty();
-    return make(Type::Void(), std::move(forms), anyRank, pack, true);
-}
-
-ArrayType *
-ArrayType::numericUnknownFromForms(std::span<const ExtentForm> extents, std::string_view pack) {
-    // As numericUnknown: a shape argument fixes the rank and no shape is any rank. The forms are
-    // kept as they were written, so an extent written over a dimension name keeps its name.
-    std::vector<ExtentForm> forms(extents.begin(), extents.end());
-    const bool anyRank = forms.empty() || !pack.empty();
-    return make(Type::Void(), std::move(forms), anyRank, pack, true);
-}
+ArrayType *ArrayType::elementTypeOpen() { return openRank(nullptr); }
 
 ArrayType *ArrayType::fromFactory(ArrayTypeFactory &factory) { return create(factory.elemType_); }
 
@@ -248,15 +225,10 @@ std::string_view ArrayType::packName() const {
     return packName_ == nullptr ? std::string_view() : std::string_view(*packName_);
 }
 
-std::string ArrayType::shapeText() const { return shapeText(false); }
-
-std::string ArrayType::tensorShapeText() const { return shapeText(true); }
-
-std::string ArrayType::shapeText(bool tensorSpelling) const {
+std::string ArrayType::shapeText() const {
     // `T[?]` is printed `T[]`: the unknown single dimension is spelled with empty brackets, so
-    // every `int[]` program keeps the text it had before dimensions moved into this type. The
-    // tensor module spells it `[?]`.
-    if (!tensorSpelling && !anyRank_ && extents_.size() == 1 && extents_[0].isUnknown()) {
+    // every `int[]` program keeps the text it had before dimensions moved into this type.
+    if (!anyRank_ && extents_.size() == 1 && extents_[0].isUnknown()) {
         return "[]";
     }
     std::string text = "[";
@@ -287,12 +259,12 @@ std::string ArrayType::shapeMangle() const {
 }
 
 ArrayType *ArrayType::withElementType(Type *elemType) const {
-    if (!elemType || elemType == elemType_ || numericUnknown_) {
-        // The element of the numeric-unknown array is not a type this array states; only its
-        // shape is. Nothing to rewrite.
+    if (!elemType || elemType == elemType_) {
+        // Nothing states another element type: an array whose element type is still a name (the
+        // object `elementTypeOpen()` hands out) keeps it, and so does a type asking for its own.
         return const_cast<ArrayType *>(this);
     }
-    return make(elemType, extents_, anyRank_, packName(), numericUnknown_);
+    return make(elemType, extents_, anyRank_, packName());
 }
 
 Type *ArrayType::firstDimensionElement() const {
@@ -305,8 +277,7 @@ Type *ArrayType::firstDimensionElement() const {
     if (anyRank_) {
         // Open rank: a dimension dropped from "at least n" leaves an open rank with the rest of
         // the prefix, which is the type `iterInfer` gave the same value.
-        return numericUnknown_ ? numericUnknownFromForms(rest, packName())
-                               : openRank(elemType_, rest);
+        return openRank(elemType_, rest);
     }
     if (rest.empty()) {
         // Rank 1: the first dimension's elements are the elements themselves — a scalar is not a
@@ -314,18 +285,22 @@ Type *ArrayType::firstDimensionElement() const {
         // nested array's `T[][]` is one dimension of `T[]`.
         return elemType_;
     }
-    return numericUnknown_ ? numericUnknownFromForms(rest, packName())
-                           : create(elemType_, rest, packName());
+    return create(elemType_, rest, packName());
 }
 
 const Type *
 ArrayType::applyArguments(std::span<const TypeArgument> arguments, std::string &error) const {
-    // `Tensor` is this numeric array written with a module type's name, so its arguments are the
-    // array type's own: one element type, then one shape (docs/design/arrays-memory/plan.cn.md
-    // section 5). `Tensor<f32>` is `f32[..]` (a rank nobody fixed),
-    // `Tensor<f32, [2, 3]>` is `f32[2, 3]`, and `Tensor<[3]>` is the numeric array whose
-    // element type is not fixed yet. Every spelling the old tensor type accepted keeps its
-    // meaning here, so a program that writes one does not change.
+    // The array a name that requires an element type is bound to (`elementTypeOpen()`) reads the
+    // arguments of that name: one element type and then one shape. `Tensor<f32>` is `f32[..]` (a
+    // rank nobody fixed) and `Tensor<f32, [2, 3]>` is `f32[2, 3]`, so the two spellings of one
+    // type are one type. The element type is required: the element type of a value is always in
+    // its type (docs/design/arrays-memory/plan.cn.md section 5.1a), so a spelling that leaves it
+    // out denotes nothing.
+    if (!isElementTypeOpenArray(this)) {
+        error = "an array that states its element type takes no type arguments: write the element "
+                "type and the shape as the type itself, 'f32[2, 3]'";
+        return nullptr;
+    }
     Type *elemType = nullptr;
     std::vector<ExtentForm> extents;
     bool hasShape = false;
@@ -336,10 +311,12 @@ ArrayType::applyArguments(std::span<const TypeArgument> arguments, std::string &
                         "Tensor<dtype, [d0, d1, ...]> (or dtype[d0, d1, ...])";
                 return nullptr;
             }
-            // The element of a numeric array is a numeric scalar (array.h): exactly the type
-            // written, because the array stores it and the kernels dispatch on it.
+            // The element of a numeric array is a numeric scalar (array.h), or a type variable the
+            // signature binds at the call: `func f::<T>(x: Tensor<T>)` is `T[..]`, and the call
+            // gives `T` the element type its argument has. The written type is kept exactly,
+            // because the array stores it and the kernels dispatch on it.
             const TypeCode code = argument.type->code();
-            if (!isNumericScalarTypeCode(code)) {
+            if (!isNumericScalarTypeCode(code) && code != TypeCode::TypeVar) {
                 error = "the element type of a Tensor is a numeric scalar (i32, i64, f32, f64, "
                         "bf16, f16, bool, c64 or c128), not '" +
                         typeCodeToString(code) + "'";
@@ -384,38 +361,30 @@ ArrayType::applyArguments(std::span<const TypeArgument> arguments, std::string &
         }
         hasShape = true;
     }
+    if (elemType == nullptr) {
+        // The element type is what the name exists to be given: a spelling that states only a
+        // shape answers no question about the element type of a value, and the element type of a
+        // value is always in its type.
+        error = "a Tensor needs its element type: write 'Tensor<f32>' or 'Tensor<f32, [2, 3]>', "
+                "or name the array type itself ('f32[..]', 'f32[2, 3]')";
+        return nullptr;
+    }
     if (!hasShape) {
-        // `Tensor<f32>`: no shape is stated, so nothing fixes the rank (`f32[..]`). A Tensor
-        // with no argument at all does not come here: the builder hands back the type itself.
-        return elemType != nullptr ? openRank(elemType) : const_cast<ArrayType *>(this);
+        // `Tensor<f32>`: no shape is stated, so nothing fixes the rank (`f32[..]`).
+        return openRank(elemType);
     }
     if (extents.empty()) {
         // Every dimension is removed, and a type with no dimension is its element type (the
         // rank-zero rule, docs/handover/reviews/questions-2026-10-23.md): `Tensor<f32, []>`
-        // is `f32`, the scalar. A spelling that states no element type has nothing left to
-        // denote, and says which two spellings do.
-        if (elemType == nullptr) {
-            error = "a Tensor with no dimension is its element type, and this spelling states "
-                    "no element type: write 'Tensor<f32, []>', which is 'f32', or give the "
-                    "shape a dimension";
-            return nullptr;
-        }
+        // is `f32`, the scalar.
         return elemType;
     }
-    if (elemType != nullptr) {
-        return create(elemType, std::span<const ExtentForm>(extents));
-    }
-    return numericUnknownFromForms(std::span<const ExtentForm>(extents));
+    return create(elemType, std::span<const ExtentForm>(extents));
 }
 
 Type *ArrayType::resolve(const type_vec_t &typeList) const {
     ASSERT(typeList.size() > 0, "Type list is empty");
     ASSERT(!resolved(), "ArrayType is already resolved");
-    if (numericUnknown_) {
-        // The element of the numeric-unknown array is not fixed by construction; only its
-        // shape is. An array literal never has this type.
-        return const_cast<ArrayType *>(this);
-    }
 
     Type *newElemType = elemType_;
     for (const auto &type : typeList) {
@@ -460,35 +429,17 @@ Type *ArrayType::clone(bool deep /* = false */) const {
 bool ArrayType::equals(Type *other) const { return typeEquals(this, other); }
 
 // Least common type at a branch join. A rank or pack difference leaves the rank unknown; a
-// common rank keeps the extents both sides state and makes the others unknown. The element
-// type follows the same rule, and two different numeric element types become the numeric
-// unknown array (`Tensor`), as the tensor module's unify did (plan section 3.3).
+// common rank keeps the extents both sides state and makes the others unknown. The element type
+// follows the same rule: two numeric element types that have no common type have no common array
+// either, because the element type of a value is always in its type (design principles 5.1).
 Type *ArrayType::unify(Type *other) const {
     if (other == nullptr || other->code() != TypeCode::Array) {
         return nullptr;
     }
     const auto *rhs = static_cast<const ArrayType *>(other);
-    Type *elem     = nullptr;
-    bool elemUnknown = false;
-    if (numericUnknown_ || rhs->numericUnknown_) {
-        const ArrayType *concrete = numericUnknown_ ? rhs : this;
-        if (!concrete->numericUnknown_ &&
-            !isNumericScalarTypeCode(concrete->elemTypeCode_)) {
-            return nullptr;
-        }
-        elemUnknown = true;
-    } else {
-        elem = elemType_->unify(rhs->elemType_);
-        if (elem == nullptr) {
-            if (isNumericScalarTypeCode(elemTypeCode_) &&
-                isNumericScalarTypeCode(rhs->elemTypeCode_)) {
-                // Both are numbers but of different element types: no implicit conversion, so
-                // the common type says only "numeric".
-                elemUnknown = true;
-            } else {
-                return nullptr;
-            }
-        }
+    Type *elem     = elemType_->unify(rhs->elemType_);
+    if (elem == nullptr) {
+        return nullptr;
     }
     const bool sameSkeleton =
         anyRank_ == rhs->anyRank_ && extents_.size() == rhs->extents_.size();
@@ -507,13 +458,12 @@ Type *ArrayType::unify(Type *other) const {
         anyRank = anyRank_;
     } else {
         // The ranks differ, so only "an array of this element type" is common; its rank is
-        // unknown (`int[..]`), the counterpart of the tensor type's any-rank unify.
+        // unknown (`int[..]`).
         anyRank = true;
     }
-    const Type *elemType = elemUnknown ? Type::Void() : elem;
     return make(
-        const_cast<Type *>(elemType), std::move(forms), anyRank,
-        anyRank && sameSkeleton ? packName() : std::string_view(), elemUnknown);
+        elem, std::move(forms), anyRank,
+        anyRank && sameSkeleton ? packName() : std::string_view());
 }
 
 // Converting a value to its own type is legal and does nothing (design principles 5.1). From a
@@ -523,6 +473,11 @@ CastSafety ArrayType::castSafetyFrom(Type *sourceType) const {
     if (sourceType == nullptr) {
         return CastSafety::Forbidden;
     }
+    if (isElementTypeOpenArray(this)) {
+        // No value has this type: it is a name still waiting for its element type, and nothing
+        // converts into it.
+        return CastSafety::Forbidden;
+    }
     if (assignableFrom(sourceType)) {
         return CastSafety::Safe;
     }
@@ -530,15 +485,9 @@ CastSafety ArrayType::castSafetyFrom(Type *sourceType) const {
         return CastSafety::Forbidden;
     }
     const auto *source = static_cast<const ArrayType *>(sourceType);
-    // Element types: a numeric-unknown target accepts any numeric source; a concrete target
-    // refuses a source it already knows cannot fit, and defers the numeric-unknown source to
-    // the runtime check.
-    if (numericUnknown_) {
-        if (!source->numericUnknown_ && !isNumericScalarTypeCode(source->elemTypeCode_)) {
-            return CastSafety::Forbidden;
-        }
-    } else if (elemTypeCode_ != TypeCode::Void && !source->numericUnknown_ &&
-               !elemType_->assignableFrom(source->elemType_)) {
+    // Element types: a target refuses a source it already knows cannot fit; an element type the
+    // source states as a name (nothing does today) is left to the runtime check.
+    if (elemTypeCode_ != TypeCode::Void && !elemType_->assignableFrom(source->elemType_)) {
         return CastSafety::Forbidden;
     }
     // Shapes: equal ranks are required when this type fixes one; a constant extent the source
@@ -569,10 +518,9 @@ CastSafety ArrayType::castSafetyFrom(Type *sourceType) const {
     return CastSafety::Unsafe;
 }
 
-// The runtime half of the checked conversion: the shape (and, for the numeric-unknown array,
-// the element type) is checked against the type the program declared. After the tensor alias the
-// array is where a numeric array states its shape, and these diagnostics are its own: they say
-// `the array has shape [2, 3]`, which is what the value is.
+// The runtime half of the checked conversion: the shape is checked against the type the program
+// declared. After the tensor alias the array is where a numeric array states its shape, and these
+// diagnostics are its own: they say `the array has shape [2, 3]`, which is what the value is.
 slot_t ArrayType::castSlotFrom(slot_t value, Type *sourceType) const {
     const CastSafety safety = castSafetyFrom(sourceType);
     ASSERT(safety != CastSafety::Forbidden, "castSlotFrom only allowed when the cast is not forbidden");
@@ -588,13 +536,9 @@ slot_t ArrayType::castSlotFrom(slot_t value, Type *sourceType) const {
     if (array == nullptr) {
         refuse("the value is null");
     }
-    if (numericUnknown_) {
-        if (!isNumericScalarTypeCode(array->dtype())) {
-            refuse("the array has element type " + typeCodeToString(array->dtype()));
-        }
-    } else if (elemTypeCode_ != TypeCode::Void && array->dtype() != elemTypeCode_) {
-        // The static element type is exact for every array but the numeric-unknown one; the
-        // check costs one comparison and makes an unsafe conversion honest.
+    if (elemTypeCode_ != TypeCode::Void && array->dtype() != elemTypeCode_) {
+        // The static element type is exact; the check costs one comparison and makes an unsafe
+        // conversion honest.
         refuse("the array has element type " + typeCodeToString(array->dtype()));
     }
     std::string actual = "[";
@@ -627,25 +571,23 @@ slot_t ArrayType::castSlotFrom(slot_t value, Type *sourceType) const {
 }
 
 // Arrays have no element mutation, so they accept arrays of assignable element types
-// (e.g. Tensor<float32>[] where Tensor[] is expected) whose shape this type permits.
+// (e.g. `int[]` where `f64[]` is expected when an int is assignable to an f64) whose shape this
+// type permits.
 bool ArrayType::assignableFrom(Type *sourceType) const {
     if (this == sourceType) {
         return true;
+    }
+    if (isElementTypeOpenArray(this)) {
+        // No value has this type: it is a name still waiting for its element type, and it takes
+        // nothing (design principles 5.1: the element type of a value is in its type).
+        return false;
     }
     if (!sourceType || sourceType->code() != TypeCode::Array) {
         return false;
     }
     const auto *source = static_cast<const ArrayType *>(sourceType);
-    if (numericUnknown_) {
-        // Every numeric scalar is accepted; another numeric-unknown array is already numeric.
-        if (!source->numericUnknown_ && !isNumericScalarTypeCode(source->elemTypeCode_)) {
-            return false;
-        }
-    } else if (elemTypeCode_ != TypeCode::Void) {
-        // A numeric-unknown source does not promise the exact element type this type states.
-        if (source->numericUnknown_ || !elemType_->assignableFrom(source->elemType_)) {
-            return false;
-        }
+    if (elemTypeCode_ != TypeCode::Void && !elemType_->assignableFrom(source->elemType_)) {
+        return false;
     }
     if (!anyRank_) {
         // A fixed rank accepts only that rank, with the extents this type states; an extent
@@ -677,12 +619,8 @@ bool ArrayType::assignableFrom(Type *sourceType) const {
 // a `var` parameter cannot break assignability) and every dimension value is forgotten. A
 // named pack is dropped, since the dimensions it stood for are no longer stated.
 Type *ArrayType::widened() const {
-    Type *elem = elemType_;
-    bool changed = false;
-    if (!numericUnknown_) {
-        elem    = elemType_->widened();
-        changed = elem != elemType_;
-    }
+    Type *elem  = elemType_->widened();
+    bool changed = elem != elemType_;
     std::vector<ExtentForm> forms;
     forms.reserve(extents_.size());
     for (const ExtentForm &form : extents_) {
@@ -694,16 +632,13 @@ Type *ArrayType::widened() const {
     if (!changed) {
         return const_cast<ArrayType *>(this);
     }
-    return make(elem, std::move(forms), anyRank_, {}, numericUnknown_);
+    return make(elem, std::move(forms), anyRank_, {});
 }
 
 Type *ArrayType::literalOperandType() const {
     // A literal beside a numeric array is an element of it (`x * 2.0` with `x: f32[3]` is the f32
     // product), so it takes the element type (design principles 5.1). An array whose element type
-    // nobody fixed (`Tensor`) gives none, and a nested array is not one numeric array.
-    if (numericUnknown_ || elemType_ == nullptr) {
-        return nullptr;
-    }
+    // nobody stated gives none, and a nested array is not one numeric array.
     const bool numeric = isNumericScalar(elemTypeCode_) || isComplex(elemTypeCode_);
     return numeric ? elemType_ : nullptr;
 }
@@ -753,8 +688,7 @@ ArrayType::withExtentValues(const ExtentValues &values, const ExtentPacks &packs
     if (!anyRank && forms.empty()) {
         return elemType_;
     }
-    return make(elemType_, std::move(forms), anyRank, anyRank ? packName() : std::string_view(),
-                numericUnknown_);
+    return make(elemType_, std::move(forms), anyRank, anyRank ? packName() : std::string_view());
 }
 
 namespace camel::core::type {
@@ -768,11 +702,7 @@ const ArrayType *asArrayType(const Type *type) {
 
 bool isNumericArrayType(const Type *type) {
     const ArrayType *array = asArrayType(type);
-    if (array == nullptr) {
-        return false;
-    }
-    // The numeric-unknown array has no element type to read; that it is numeric is the marker.
-    return array->isNumericUnknown() || isNumericScalarTypeCode(array->elemTypeCode());
+    return array != nullptr && isNumericScalarTypeCode(array->elemTypeCode());
 }
 
 bool isUntypedArrayType(const Type *type) {
@@ -780,10 +710,18 @@ bool isUntypedArrayType(const Type *type) {
     if (array == nullptr || array->elemType() == nullptr) {
         return false;
     }
-    // The numeric-unknown array's element type is `Void` too — it means "numeric, not fixed yet"
-    // rather than "nobody wrote one" — and it is a complete type of its own, not the `[]` whose
-    // element type every position it stands in fixes.
-    return array->elemType()->code() == TypeCode::Void && !array->isNumericUnknown();
+    // The element type is `Void`: nobody wrote one, so every position the type stands in fixes it.
+    return array->elemType()->code() == TypeCode::Void;
+}
+
+bool isElementTypeOpenArray(const Type *type) {
+    const ArrayType *array = asArrayType(type);
+    if (array == nullptr || !isUntypedArrayType(array)) {
+        return false;
+    }
+    // The array literal states one unknown dimension (`Void[]`); the object a name that requires
+    // an element type is bound to states an open rank and no prefix at all.
+    return array->anyRank() && array->extents().empty() && array->packName().empty();
 }
 
 } // namespace camel::core::type

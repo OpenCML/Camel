@@ -1304,8 +1304,7 @@ The declarations written here are the operators whose signature is fixed. The on
 type or shape follows their arguments — elementwise arithmetic, the reshaping operators, the
 axis forms of a reduction — cannot be written as a declaration; they are implemented in
 `modules/tensor` and listed in `stdlib/signatures/tensor.cml`, whose entries this page renders
-under the same sections (design principles 6.4). `show`'s umbrella parameter
-— a tensor, or any array — is written as one declaration per accepted type.
+under the same sections (design principles 6.4).
 
 ### Creation
 
@@ -1765,7 +1764,6 @@ an `int64` tensor of shape [labels, classes].
 
 ```camel
 shape: (t: T[..]) => int[] when is_numeric::<T>()
-shape: (t: Tensor) => int[]
 ```
 
 The extents of a tensor, in order.
@@ -1777,7 +1775,6 @@ The extents of a tensor, in order.
 
 ```camel
 numel: (t: T[..]) => int when is_numeric::<T>()
-numel: (t: Tensor) => int
 ```
 
 The number of elements in a tensor: the product of its extents.
@@ -1790,8 +1787,6 @@ The number of elements in a tensor: the product of its extents.
 ```camel
 dim: (t: T[..], axis: int) => int when is_numeric::<T>()
 dim: (t: T[..], axis: i32) => int when is_numeric::<T>()
-dim: (t: Tensor, axis: int) => int
-dim: (t: Tensor, axis: i32) => int
 ```
 
 The extent of one axis; a negative axis counts from the last one (`-1` is the last axis).
@@ -2048,8 +2043,7 @@ that says neither is not a use of this operator.
 #### `show`
 
 ```camel
-show: (t: Tensor) => void
-show: (t: A[]) => void
+show: (t: A[..]) => void
 ```
 
 Prints t to the console, in the module's layout.
@@ -2079,7 +2073,6 @@ passes the stored values through without rounding, so it needs no numeric permis
 
 ```camel
 to_bytes: (t: T[..]) => Bytes when is_numeric::<T>()
-to_bytes: (t: Tensor) => Bytes
 ```
 
 The elements of a tensor as little-endian bytes, in row-major order: the payload `from_bytes`
@@ -2092,7 +2085,6 @@ reads back.
 
 ```camel
 save_npy: (t: T[..], path: string) => void when is_numeric::<T>()
-save_npy: (t: Tensor, path: string) => void
 ```
 
 Writes a tensor to a NumPy `.npy` file, replacing it.

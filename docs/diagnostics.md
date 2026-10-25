@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-266 diagnostics: 249 errors, 17 warnings. 15 carry a machine-applicable edit, 251 say why they carry none.
+267 diagnostics: 250 errors, 17 warnings. 15 carry a machine-applicable edit, 252 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -235,6 +235,7 @@ prints one entry.
 | `0x030001E5` | [SemanticDiag::RangeTwoArgumentsRemoved](#rangetwoargumentsremoved) | Error | no |
 | `0x030001E6` | [SemanticDiag::RangeStepZero](#rangestepzero) | Error | no |
 | `0x030001E7` | [SemanticDiag::StaticLoopSequenceNotKnown](#staticloopsequencenotknown) | Error | no |
+| `0x030001ED` | [SemanticDiag::TensorElementTypeRequired](#tensorelementtyperequired) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn | no |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn | no |
@@ -1514,20 +1515,19 @@ Check the number and types of arguments to ensure they match one of the availabl
 **Example** (`test/cases/compile/array_alias/type_text.cml`, run as `camel test/cases/compile/array_alias/type_text.cml ${backend}`)
 
 ```camel
-// What the alias prints as (plan section 5.4): `Tensor<f32>` is `f32[..]`, `Tensor<[3]>` keeps
-// the `Tensor` spelling for an element nobody fixed, and `Tensor<f32, [2, 3]>` is `f32[2, 3]`.
-// The candidate list of a refused call is where the text is visible.
+// The printed form of each spelling: `Tensor<f32>` is `f32[..]` and `Tensor<f32, [2, 3]>` is
+// `f32[2, 3]`. The candidate list of a refused call is where the text is visible.
 module array_alias_type_text
 
 import { Tensor } from tensor
 
-func takes(a: Tensor<f32>, b: Tensor<[3]>, c: Tensor<f32, [2, 3]>): int {
+func takes(a: Tensor<f32>, b: Tensor<f32, [2, 3]>): int {
     return 0
 }
 
 func main(): int sync {
     let s: string[] = ["a"]
-    println(takes(s, s, s))
+    println(takes(s, s))
     return 0
 }
 ```
@@ -7737,6 +7737,52 @@ module static_loop_sequence_unknown
 
 func sumTo(n: int): int {
     return static loop acc = 0 for i in 0..n do acc + i
+}
+```
+
+### TensorElementTypeRequired
+
+`0x030001ED` · Error · `SemanticDiag::TensorElementTypeRequired`
+
+**Fix**
+
+None: choice: which element type the value has is the writer's to say, and the help names both spellings
+
+**Message**
+
+```text
+The type '{0}' states no element type: a tensor's element type is part of its type, so this spelling is not a type of a value.
+```
+
+**Help**
+
+```text
+Every tensor type writes its element type: 'Tensor<f32>' (a rank nobody fixes yet), 'Tensor<f32, [2, 3]>', or the array type itself, 'f32[..]' and 'f32[2, 3]'. A signature that takes a tensor of any element type declares a type variable in its head and writes it as the element type -- 'func f::<T>(x: Tensor<T>)', which is the same type as 'func f::<T>(x: T[..])' -- and the call's argument fixes that type variable, so the body sees the element type the call bound. A shape written without an element type ('Tensor<[3]>') leaves the same question open.
+```
+
+**Example** (`test/cases/compile/array_alias/bare_tensor.cml`, run as `camel test/cases/compile/array_alias/bare_tensor.cml ${backend}`)
+
+```camel
+// A tensor type states the element type of the values it describes, so a signature that writes
+// the tensor name alone is refused where it is written, and the report says which spellings state
+// one: `Tensor<f32>` (any rank), `Tensor<f32, [2, 3]>`, or the array type itself (`f32[..]`,
+// `f32[2, 3]`). A signature that takes a tensor of any element type declares a type variable in
+// its head -- `func count::<T>(t: Tensor<T>)`, which is `func count::<T>(t: T[..])` -- and the
+// call's argument fixes it. That positive spelling is test/cases/loops/iterate_tensor.cml.
+module array_alias_bare_tensor
+
+import { Tensor, ones } from tensor
+
+func count(t: Tensor): int {
+    return len(t)
+}
+
+func main(): int sync {
+    let ints: int[3] = [1, 2, 3]
+    let floats: f32[2, 3] = ones([2, 3])
+    println(count(ints))
+    println(count(floats))
+    return 0
 }
 ```
 

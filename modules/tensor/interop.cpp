@@ -190,8 +190,8 @@ std::vector<int64_t> parseIntArray(const Array *array, const type::Type *arrayTy
         if (array->size() == 0) {
             return {}; // `[]`: no element to take a type from
         }
-        // The type states no element type (`Tensor`, the numeric-unknown array: void means "a
-        // numeric scalar, which one is not fixed yet", design principles 5.4), so the type
+        // The type states no element type (its element is `Void`, the "a numeric scalar, which one
+        // is not fixed yet" marker of design principles 5.4), so the type
         // cannot say whether this is an integer list. The value can: read its own element type
         // and refuse here when it is not integer, instead of refusing the unstated spelling.
         elemCode = array->dtype();

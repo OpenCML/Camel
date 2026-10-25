@@ -7,9 +7,12 @@
 module tensor_iterate
 
 import { Tensor, new, sum, shape, zeros } from tensor
+import { is_numeric } from types
 
-// The rank is unknown here (`Tensor`), so the element type is `Tensor` as well.
-func countRows(t: Tensor): int {
+// The element type of the parameter is a type variable of the head; writing the tensor name
+// requires it. The call binds it to the element type of the argument, and the rank stays open
+// (`Tensor<T>` is `T[..]`), so the body counts the rows of any rank.
+func countRows::<T>(t: Tensor<T>): int when is_numeric::<T>() {
     return loop c = 0 for row in t do c + 1
 }
 

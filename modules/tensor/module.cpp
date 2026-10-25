@@ -85,10 +85,12 @@ TensorModule::TensorModule(context_ptr_t ctx) : BuiltinModule("tensor", ctx) {
     camel::tensor::registerMulNegFusion();
     camel::tensor::ops::registerTensorOps();
     camel::tensor::passes::registerTensorPasses();
-    // `Tensor` is the numeric array whose element type is not fixed, and the arguments of the
-    // spelling are read by the array type itself (docs/design/arrays-memory/plan.cn.md section
-    // 5.1, ArrayType::applyArguments): one type with two spellings.
-    exportType(Reference("Tensor"), camel::core::type::ArrayType::numericUnknown());
+    // `Tensor` is the array type's name for the open-rank array whose element type the spelling has
+    // to give, and the arguments of the spelling are read by the array type itself
+    // (docs/design/arrays-memory/plan.cn.md section 5.1a, ArrayType::applyArguments): one type
+    // with two spellings. The name is still exported so that a program which writes it is told to
+    // write the element type, and it is deleted once no program does.
+    exportType(Reference("Tensor"), camel::core::type::ArrayType::elementTypeOpen());
     const auto binary = camel::tensor::ops::fromBytesOperatorGroup();
     exportEntity(Reference("from_bytes"), binary);
     exportEntity(Reference(std::vector<std::string>{"Tensor"}, "from_bytes"), binary);
@@ -172,11 +174,13 @@ bool TensorModule::load() {
                 const slot_t value =
                     camel::core::rtdata::toSlot(static_cast<camel::core::rtdata::Object *>(t));
                 // The value the file holds is a numeric array whose dtype and shape the file
-                // names; the declared type is what it has to fit. The source type is the
-                // numeric-unknown array, so the check reads the value's own shape and element
-                // type even when the declared type states a shape of its own.
+                // names; the declared type is what it has to fit. The source type of the checked
+                // conversion states the declared element type with the rank left open, so the
+                // check reads the value's own dtype and shape and reports the fault at the call.
                 (void)declared->castSlotFrom(
-                    value, camel::core::type::ArrayType::numericUnknown());
+                    value,
+                    camel::core::type::ArrayType::openRank(
+                        camel::core::type::asArrayType(declared)->elemType()));
                 const auto dims = t->shapeSpan();
                 camel::core::type::Type *elem = camel::core::type::Type::create(t->dtype());
                 valueType = dims.empty() ? elem : camel::core::type::ArrayType::create(elem, dims);
