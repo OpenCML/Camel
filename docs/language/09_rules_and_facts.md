@@ -302,7 +302,7 @@ export func apply(p: Program): Program! {
 
 - **不同的实参是不同的两项事实**：引擎按"事实 + 实参"分别计算与缓存，`capped<3>` 与 `capped` 各有一份值，写下一个实参不改变别处读到的那一项事实。
 - **实参必须是编译期常量**：一项事实的值只由程序与写出来的实参决定，所有规则看到同一个答案。写出不是常量的实参会被拒（`SemanticDiag::FactArgumentNotConstant`）。
-- **查询写在匹配一个值的地方**：事实按函数调用查询，但写在规则的条件（`when`）或另一项事实的主体里（[9.5](#95-事实)）——那里才有"值在图上是怎样构造出来的"可匹配。普通函数体里没有这个构造，`capped(y)` 写在那里不是一次查询（`SemanticDiag::NoMatchingFunction`）。
+- **查询的实参**：设计稿 7.5 的头 `fact range::<T>(v: T)` 让参数是一个**值**，所以 `range(y)` 与 `when` 里的查询是同一种写法。今天的实现把查询签成 `名字: (v: Node) => 事实类型`（参数是**节点**），于是查询要写在有节点可用的地方：规则的条件（`when`）、另一项事实的主体（[9.5](#95-事实)），或者任何拿到 `Node` 的函数；普通函数体里只有一个**值**的时候（`capped(y)`，`y: int`）它不是一次查询——`SemanticDiag::NoMatchingFunction`，帮助里列出 `capped: (v: Node) => int`（见 [9.8](#98-尚未实现的形态)）。
 
 反例：事实的实参写了规则的形参 `y`，它不是常量。
 
@@ -403,6 +403,7 @@ distance (camel ./fired.cml fired::simplify std::gir):
 | 规则的右边读 `with` 参数 | `SemanticDiag::RuleWithParameterOnASide`，消息里写着"not implemented yet" |
 | 类型参数与 `with` 参数同时写在一条规则上 | `SemanticDiag::RuleWithParameterGenericHead` |
 | 命令行 `std::opt rules=[law::negate]`，源码 `f->std::opt<rules: [negate]>` | `SemanticDiag::ParamArgumentUnknown`；源码里的 `std::opt` 这个名字今天还解析不到 |
+| 事实查询的实参是一个**值**（设计稿 7.5 的头 `fact range::<T>(v: T)` 下的 `range(y)`，`y: T`） | 今天的查询签名是 `名字: (v: Node) => 事实类型`；值的实参是 `SemanticDiag::NoMatchingFunction`（帮助里列出 `(v: Node) => …`） |
 
 ## 相关文档
 

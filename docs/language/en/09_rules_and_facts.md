@@ -302,7 +302,7 @@ export func apply(p: Program): Program! {
 
 - **Different arguments are different facts**: the engine computes and caches by "fact + arguments", so `capped<3>` and `capped` each have a value of their own, and writing one argument does not change the fact read elsewhere.
 - **An argument must be a compile-time constant**: the value of a fact is decided by the program and by the arguments as written, so that every rule sees one answer. An argument that is not a constant is refused (`SemanticDiag::FactArgumentNotConstant`).
-- **A query is written where a value is matched**: a fact is queried like a function call, but in a rule's condition (`when`) or in the body of another fact ([9.5](#95-facts)) — that is where "how the value was built in the graph" is available. An ordinary function body has no such construction, and `capped(y)` written there is not a query (`SemanticDiag::NoMatchingFunction`).
+- **The argument of a query**: the head of design 7.5, `fact range::<T>(v: T)`, makes the parameter a **value**, so `range(y)` and a query inside a `when` are one spelling. Today's implementation signs the query `name: (v: Node) => fact type` (the parameter is a **node**), so a query is written where a node is at hand: a rule's condition (`when`), the body of another fact ([9.5](#95-facts)), or any function that has a `Node`; an ordinary function body with only a **value** (`capped(y)`, `y: int`) is not a query — `SemanticDiag::NoMatchingFunction`, whose help lists `capped: (v: Node) => int` (see [9.8](#98-forms-that-are-not-implemented)).
 
 Counter-example: the argument of the fact is the rule's parameter `y`, which is not a constant.
 
@@ -403,6 +403,7 @@ These forms are all ruled ([rules language v2](../../design/rewrite/v2.cn.md), s
 | the right side of a rule reading a `with` parameter | `SemanticDiag::RuleWithParameterOnASide`, whose message says "not implemented yet" |
 | type parameters and `with` parameters on one rule | `SemanticDiag::RuleWithParameterGenericHead` |
 | `std::opt rules=[law::negate]` on the command line, `f->std::opt<rules: [negate]>` in source | `SemanticDiag::ParamArgumentUnknown`; the name `std::opt` does not resolve in source today either |
+| the argument of a fact query is a **value** (`range(y)` with `y: T`, under the head `fact range::<T>(v: T)` of design 7.5) | today's query signature is `name: (v: Node) => fact type`; a value argument is `SemanticDiag::NoMatchingFunction` (whose help lists `(v: Node) => …`) |
 
 ## Related documents
 

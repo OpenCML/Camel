@@ -71,10 +71,14 @@ sampled negate: proposition equality, evidence samples 100, fired 8 of 8, covera
   试了 8 次、8 次两边相等；最后 `(x * -1) = (0 - x)` 是它对这条定律的理解。
 - `check` 的判定是**抽样**：它给出反例就说明定律错了，它不报错只是说没抽到反例。
 
-## 让 `std::opt` 用上它
+## 把定律交给优化器
 
-定律写在你自己的模块里，就是这个模块交给优化器的东西：`std::opt` 把标准库那批定律与你的定律放在
-一起，用在你的程序上。同一个文件在 `std::opt` 之后是这样：
+一条 `rule` 是一个**值**，不会自己进任何遍：模块里写下的规则不被收集（[语言参考 9.4](../language/09_rules_and_facts.md)）。
+`std::opt` 用的是标准库那批定律（`stdlib/rules.cml`）；要把自己写的定律也交给它，写法是把规则集**显式**传进去：
+Camel 里写 `f->std::opt<rules: [negate]>`，命令行写 `std::opt rules=[law::negate]`。今天的 `std::opt` 还没有
+`rules` 参数（写它会得到 `SemanticDiag::ParamArgumentUnknown`），所以今天要让自己的定律生效，就写一条自己的遍再交给
+命令行——上面 `check([negate], …)` 就是"显式交出去"的例子。下面这份文件交给 `std::opt` 时，`negated` 这一半
+**没有变**：`x * -1` 原样留着，因为这条定律是你的，优化器不知道它。
 
 <!-- camel-snippet: graph-dump: the text block is one excerpt of std::opt std::gir's DOT, not the program's stdout -->
 
@@ -126,28 +130,27 @@ camel docs/tutorial/examples/17_rule.cml std::opt std::gir
 
 ```text
             label="negated";
-            F04 [label="ARGS", type="ARGS"];
-            O04 [label="EXIT", type="EXIT"];
-            N06 [label="x", type="PORT", param_name="x", param_kind="normal", param_index="0", value_type="int"];
-            N07 [label="0", type="DATA", value_type="int"];
-            N08 [label=":op/sub_l", type="OPER", origin=1930, span="10:13-10:14", srcfile="docs/tutorial/examples/17_rule.cml", value_type="int"];
-            F04 -> N06 [label="0", type="NORM_PORT"];
-            N08 -> O04 [label="0", type="EXIT"];
-            N07 -> N08 [label="0|0", type="NORM"];
-            N06 -> N08 [label="0|1", type="NORM"];
+            F0D [label="ARGS", type="ARGS"];
+            O0D [label="EXIT", type="EXIT"];
+            N33 [label="x", type="PORT", param_name="x", param_kind="normal", param_index="0", value_type="int"];
+            N34 [label="-1", type="DATA", origin=2078, span="10:15-10:17", srcfile="docs/tutorial/examples/17_rule.cml", value_type="int"];
+            N35 [label=":op/mul_l", type="OPER", origin=2079, span="10:13-10:14", srcfile="docs/tutorial/examples/17_rule.cml", value_type="int"];
+            F0D -> N33 [label="0", type="NORM_PORT"];
+            N35 -> O0D [label="0", type="EXIT"];
+            N33 -> N35 [label="0|0", type="NORM"];
+            N34 -> N35 [label="0|1", type="NORM"];
         }
 ```
 
-源码里 `negated` 写的是 `x * -1`，图里现在是 `0 - x`（`N07` 是常量 `0`，`N08` 是做减法的 `:op/sub_l`）：
-**你的定律在你的程序上用上了**。运行结果不变（`negated(7)` 还是 `-7`）——这就是第 1 章那句话的另一半：
-改写可以来自你写的定律。
+`negated` 还是 `x * -1`（`:op/mul_l`，常量 `-1`），运行结果不变（`negated(7)` 还是 `-7`）——这是"定律没有自己
+进去"的读数。要让它在图上生效，就把它显式交出去：`check` 是这样，规则集进 `std::opt` 也是这样（`std::opt rules=[…]`）。
 
 这条定律只在事实成立的地方用：`x` 是非负的计数时，`x * -1` 才允许写成 `0 - x`。这个事实写在文件的
 末尾，下一节讲它。
 
 ## 编译器自己的那批定律
 
-`std::opt` 手里除了你写的定律，还有标准库那一批：`x * 3 + x * 5` 这类式子标准库早就认识。同一份程序，
+`std::opt` 手里是标准库那一批（你写的那条不在里面）：`x * 3 + x * 5` 这类式子标准库早就认识。同一份程序，
 `combined` 这一段在
 `camel docs/tutorial/examples/17_rule.cml std::opt std::gir` 之后是（节选）：
 
