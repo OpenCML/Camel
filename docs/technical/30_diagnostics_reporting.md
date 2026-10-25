@@ -247,6 +247,47 @@ New codes: take a number that `--check` accepts, add the table entry, run `--wri
 use: syntax `0x01`-`0x0B`; run time `0x30`-`0x3B` for operator and module faults; semantic
 `0x80` and up for multi-error reporting.
 
+### One value twice, at a merge
+
+Two lanes cut from the same `develop` each add a diagnostic and each take "the next free number" of
+their section: both get the same value, and each tree passes `--check` on its own. The duplicate
+exists only in the merge, where `--check` names the two lines and leaves the repair to a person --
+edit the number, re-emit the generated files, run the gate again, once per lane and per merge.
+
+`scripts/diagnostics-renumber.mjs` is that repair, and it is deliberately a script of its own. The
+catalog runs inside the build (`CMakeLists.txt` makes its `--check` a dependency of
+`libcamel_objects`) and has no git dependency at all (`test/cases/diagnostics/registry_proof.mjs`
+drives it through `--root` on a scratch tree), while this one reads a baseline out of git and writes
+a repair that a person decides on. Keeping the two apart also keeps the catalog's promise intact:
+it still refuses every collision it meets and still repairs nothing.
+
+```
+node scripts/diagnostics-renumber.mjs          report; exit 1 when a new declaration takes a
+                                               value the baseline already published
+node scripts/diagnostics-renumber.mjs --write  blank those numbers, then run the catalog's --write
+--base <ref>        the baseline the tree is being merged into (default origin/develop)
+--base-file <path>  read the baseline registry from a file where there is no git to read it from
+--root <dir>        read and write under DIR, as `diagnostics-catalog.mjs --root DIR` does
+```
+
+- **Only new declarations move.** A declaration the baseline publishes keeps the value it was
+  published with: that number left the repository (a released binary, a test, a page), and moving it
+  to get past a collision rewrites what was published. A tree that changes one is refused, not
+  repaired.
+- **No value is computed here.** The declarations keep no number and `diagnostics-catalog.mjs
+  --write` assigns the next free value of their section and severity, in registry order. There is
+  one numbering rule in the repository and this is not a second one.
+- **Collisions are compared per section and value**, exactly as `--check` compares them: one value
+  in two sections is not a collision, because the printed code carries the section's type byte
+  (`DiagType` in `base.h`). Sections keep their own numbers, and a repair lands in the right band.
+- **It reports by default.** Renumbering a lane's declaration after its author has cited the value
+  in a test is a decision about that lane, and the merge person is the one who makes it: the report
+  names each pair, and the work is done with an explicit `--write`.
+
+At a merge: merge the lane and run `--check`; when it names a collision, run this tool to see it
+listed, run it with `--write` to repair it (the same run re-emits the headers, the tables and the
+reference page through the catalog), run `--check` again, then the gate.
+
 ### Which codes carry a fix, and how the first set was chosen
 
 The registry's seventh column says, for every declaration, `edit` when the report attaches a
