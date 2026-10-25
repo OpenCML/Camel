@@ -1025,3 +1025,11 @@ println(grow([1.0, 2.0], read_int()))
 4. **语法收口里还没落地的**：`yield`、删 `module` 声明、清理保留字，以及格式化器的折行。
 
 基准与工具目录的整理，排在这些之后。
+
+## 2026-10-26-nan-text-in-the-rewrite-counterexample
+
+**修，现在修**，`modules/rewrite` 对这条车道放开。但不要在三处各套一个 `withoutNaNSign`：反例里的数值一律走语言自己的数值文本函数（`floatText`，也就是 `string`/`println` 用的那一个，最短且能往返，NaN 不带符号），这样反例文本和程序打印出来的文本是同一条规则。张量样本按"数组的形式"打印。`rules.plan.toml:193` 的期望改成 `nan`，翻转线上的同一条一起改。
+
+## 2026-10-26-tensor-print-element-text-digits
+
+**选项 2：develop 上不动，等 P4 合入**。`tensor(…, dtype=…)` 这种带对齐的形式已经裁定要随 `Tensor` 一起消失，翻转线上已经换成数组形式，元素也已经走最短且能往返的文本。现在在 develop 上重写它，P4 合入时就会和那次改动正面冲突，等于同一件事改两遍。`-nan` 那一处已经修了，可以保留，因为它很小，合入时自然被取代。
