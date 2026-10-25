@@ -327,6 +327,7 @@ bool ParserImpl::startsStmt(TK kind) const {
     case TK::KwExport:
     case TK::KwReturn:
     case TK::KwThrow:
+    case TK::KwYield:
     case TK::At:
     case TK::Hash:
     case TK::KwStatic:
@@ -461,6 +462,7 @@ void ParserImpl::parseStmt() {
         return parseUsingNamespaceDecl();
     case TK::KwReturn:
     case TK::KwThrow:
+    case TK::KwYield:
         return parseRetStmt();
     case TK::KwFunc:
     case TK::KwWith:
@@ -1214,7 +1216,7 @@ bool ParserImpl::atResourceDecl(uint32_t n) const {
     return atWord(n, "resource") && peek(n + 1) == TK::Identifier;
 }
 
-/// retStmt : ('return' | 'throw') dataList
+/// retStmt : ('return' | 'throw' | 'yield') dataList
 void ParserImpl::parseRetStmt() {
     const size_t m = mark();
     bump();
