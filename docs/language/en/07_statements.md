@@ -365,7 +365,7 @@ func main(): int sync {
 ```cml
 import { Tensor, ones, sum } from tensor
 
-func total(constas n: int, x: Tensor<f32, [n]>): float {
+func total(constas n: int, x: Tensor<f32, [n]>): f32 {
     return sum(x)
 }
 

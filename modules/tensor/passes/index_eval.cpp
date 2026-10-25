@@ -916,13 +916,19 @@ Generator unsqueezeCases() {
 Generator broadcastLikeCases() {
     return [](Rng &rng) {
         const StaticShape like = randomShape(rng, static_cast<size_t>(rng.range(0, 4)));
+        // `broadcast_like` is ::<T>(g: T[..], like: T[..]) (gradient_ops.cpp), and its first
+        // operand may also be a number of that same element type: the generator writes one
+        // element type for the call, since two of them is the mixed caller to fix, not a call
+        // the operator accepts. The number is a `float` (an f32 tensor's scalar operand turns
+        // into one), so a number operand comes with an f64 `like`.
+        const TypeCode t = rng.chance(15) ? TypeCode::Float64 : pickDtype(rng, false);
         Case c;
-        if (rng.chance(15)) {
+        if (t == TypeCode::Float64) {
             c.push_back(Arg::num(static_cast<double>(randomFloat(rng))));
         } else {
-            c.push_back(Arg::tensor(randomData(rng, pickDtype(rng, false), broadcastFrom(rng, like))));
+            c.push_back(Arg::tensor(randomData(rng, t, broadcastFrom(rng, like))));
         }
-        c.push_back(Arg::tensor(randomData(rng, TypeCode::Float32, like)));
+        c.push_back(Arg::tensor(randomData(rng, t, like)));
         return c;
     };
 }
