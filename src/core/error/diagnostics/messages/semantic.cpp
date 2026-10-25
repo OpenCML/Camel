@@ -821,6 +821,22 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::TagFieldNameAmbiguous,
+            {
+                "TagFieldNameAmbiguous",
+                "Two tags on this field are written '{0}': '{1}' and '{2}'.",
+                "The `tags` struct names one field per tag, by the tag's own name, so two tags of one name would be one field of the record. Rename one of them, or write only one of the two.",
+            },
+        },
+        {
+            SemanticDiag::TagFunctionArgumentNotReadable,
+            {
+                "TagFunctionArgumentNotReadable",
+                "The tag '{0}' takes a function for its parameter '{1}', and a 'static' head cannot give a function value yet.",
+                "A 'func' parameter carries the function as its graph reference: an internal number, not a value the language has. Do not read the tags of this field at a 'static' head; a 'func' argument stays a fact for a pass that reads the tag after the program is compiled.",
+            },
+        },
+        {
             SemanticDiag::StaticMatchNotExhaustive,
             {
                 "StaticMatchNotExhaustive",

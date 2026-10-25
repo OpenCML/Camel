@@ -1,0 +1,51 @@
+id = "compile.static_field_tags"
+order = 342
+tier = "fast"
+tags = ["feat", "compile", "generics", "static"]
+desc = "The third name of `fields T` -- a field's tags as a compile-time struct -- restores each argument as the type its tag parameter declares (`bool` as a `bool`, `int` as an `int`, no arguments as `{}`), refuses a function argument rather than exposing its graph reference, and names both qualified tags when two tags of one field are written with the same name."
+
+[[tests]]
+name = "static_field_tags_restore"
+desc = "The `tags` struct of a round restores each argument by the type its parameter declares: `#flag<true>` under `flag<w: bool> on field` has type `bool` (the case `{ flag: { w: bool } }` selects and the value it carries is `true`), `#width<8>` under `width<w: int>` reads as 8 both as a value and as the key of an array, a field with no tags and a tag with no arguments are both the empty record, and every reading is identical under `std::fvm` and `std::nvm`."
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/tags_restore_readings.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "1\n5\n8\n9\n1\n1\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "static_field_tags_restore_nvm"
+desc = "The same readings under the other scheduler: `std::nvm` gives the same numbers as `std::fvm`, so the restoration is the compiler's and not one backend's."
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/tags_restore_readings.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "1\n5\n8\n9\n1\n1\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "static_field_tags_function_argument"
+desc = "A tag parameter of the kind `function` carries the function as its graph reference, an internal number with no value in the language: a `static` head that reads that field's tags is refused by name, and neither the number nor a string stands in for the function."
+kind = "negative"
+case = "../../../cases/compile/static_expansion/tags_function_argument.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::TagFunctionArgumentNotReadable"
+expect_stdout_contains = ["The tag 'main::rule' takes a function for its parameter 'f', and a 'static' head cannot give a function value yet.", "carries the function as its graph reference: an internal number, not a value the language has"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "static_field_tags_name_conflict"
+desc = "Two tags of one field are written with the same name (`#width<1>` and `#tags_second_width::width<2>`): the reading reports both qualified names rather than keeping the first one and dropping the second."
+kind = "negative"
+case = "../../../cases/compile/static_expansion/tags_field_name_conflict.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::TagFieldNameAmbiguous"
+expect_stdout_contains = ["Two tags on this field are written 'width': 'main::width' and 'tags_second_width::width'.", "Rename one of them, or write only one of the two."]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000

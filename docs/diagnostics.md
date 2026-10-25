@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-266 diagnostics: 249 errors, 17 warnings. 15 carry a machine-applicable edit, 251 say why they carry none.
+268 diagnostics: 251 errors, 17 warnings. 15 carry a machine-applicable edit, 253 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -235,6 +235,8 @@ prints one entry.
 | `0x030001E5` | [SemanticDiag::RangeTwoArgumentsRemoved](#rangetwoargumentsremoved) | Error | no |
 | `0x030001E6` | [SemanticDiag::RangeStepZero](#rangestepzero) | Error | no |
 | `0x030001E7` | [SemanticDiag::StaticLoopSequenceNotKnown](#staticloopsequencenotknown) | Error | no |
+| `0x030001E8` | [SemanticDiag::TagFieldNameAmbiguous](#tagfieldnameambiguous) | Error | no |
+| `0x030001E9` | [SemanticDiag::TagFunctionArgumentNotReadable](#tagfunctionargumentnotreadable) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn | no |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn | no |
@@ -7734,6 +7736,101 @@ module static_loop_sequence_unknown
 
 func sumTo(n: int): int {
     return static loop acc = 0 for i in 0..n do acc + i
+}
+```
+
+### TagFieldNameAmbiguous
+
+`0x030001E8` · Error · `SemanticDiag::TagFieldNameAmbiguous`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
+**Message**
+
+```text
+Two tags on this field are written '{0}': '{1}' and '{2}'.
+```
+
+**Help**
+
+```text
+The `tags` struct names one field per tag, by the tag's own name, so two tags of one name would be one field of the record. Rename one of them, or write only one of the two.
+```
+
+**Example** (`test/cases/compile/static_expansion/tags_field_name_conflict.cml`, run as `camel test/cases/compile/static_expansion/tags_field_name_conflict.cml`)
+
+```camel
+module tags_field_name_conflict
+
+import tags_second_width
+
+tag width<w: int> on field
+
+type Box = {
+    #width<1> #tags_second_width::width<2> marked: int,
+}
+
+func read(b: Box): int {
+    return static loop acc = 0 for n, F, tags in fields Box do
+        acc + 1
+}
+
+func main(): int sync {
+    println(read({marked: 3}))
+    return 0
+}
+```
+
+### TagFunctionArgumentNotReadable
+
+`0x030001E9` · Error · `SemanticDiag::TagFunctionArgumentNotReadable`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
+**Message**
+
+```text
+The tag '{0}' takes a function for its parameter '{1}', and a 'static' head cannot give a function value yet.
+```
+
+**Help**
+
+```text
+A 'func' parameter carries the function as its graph reference: an internal number, not a value the language has. Do not read the tags of this field at a 'static' head; a 'func' argument stays a fact for a pass that reads the tag after the program is compiled.
+```
+
+**Example** (`test/cases/compile/static_expansion/tags_function_argument.cml`, run as `camel test/cases/compile/static_expansion/tags_function_argument.cml`)
+
+```camel
+module tags_function_argument
+
+tag rule<f: function> on field
+tag width<w: int> on field
+
+func twice(x: int): int {
+    return x + x
+}
+
+type Box = {
+    #rule<twice> scaled: int,
+    #width<8> plain: int,
+}
+
+func read(b: Box): int {
+    return static loop acc = 0 for n, F, tags in fields Box do
+        acc + (match type typeof(tags) {
+            case { width: { w: int } } => tags.width.w
+            case _ => 0
+        })
+}
+
+func main(): int sync {
+    println(read({scaled: 1, plain: 2}))
+    return 0
 }
 ```
 

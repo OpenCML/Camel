@@ -32,6 +32,7 @@
 #include <vector>
 
 #include "builder_helpers.h"
+#include "camel/core/data/composite/struct.h"
 #include "camel/core/data/primary.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/error/diagnostics/messages/semantic.h"
@@ -49,13 +50,20 @@ namespace {
 /// declared `func`, a function of the program (carried as its graph reference).
 enum class ArgKind { Int, Float, Bool, String, Func, Other };
 
-ArgKind kindOfDeclaredType(std::string_view type) {
+/// The type a tag parameter is declared with, as it is compared: letters lowercased and spaces
+/// dropped, so `Int` and `int ` are the same declaration.
+std::string foldedType(std::string_view type) {
     std::string t;
     for (const char c : type) {
         if (!std::isspace(static_cast<unsigned char>(c))) {
             t += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
         }
     }
+    return t;
+}
+
+ArgKind kindOfDeclaredType(std::string_view type) {
+    const std::string t = foldedType(type);
     if (t == "int" || t == "int8" || t == "int16" || t == "int32" || t == "int64" || t == "i8" ||
         t == "i16" || t == "i32" || t == "i64" || t == "u8" || t == "u16" || t == "u32" ||
         t == "u64" || t == "uint" || t == "integer") {
@@ -75,6 +83,46 @@ ArgKind kindOfDeclaredType(std::string_view type) {
         return ArgKind::Func;
     }
     return ArgKind::Other;
+}
+
+/// The compile-time kind a tag parameter restores to, read from the type name the declaration
+/// writes. The language's own names are `int` (i64) and `float` (f64), and their explicit
+/// spellings name the same objects, so a parameter restores as the type it names and not as the
+/// kind the fact happens to be stored in. A name the compile-time value layer has no kind for is
+/// `Other`: only the declaration decides, never the storage.
+enum class RestoredKind { Int64, Int32, Float64, Float32, Bool, String, Func, Other };
+
+RestoredKind restoredKindOf(std::string_view type) {
+    const std::string t = foldedType(type);
+    if (t == "int" || t == "int64" || t == "i64" || t == "integer") {
+        return RestoredKind::Int64;
+    }
+    if (t == "int32" || t == "i32") {
+        return RestoredKind::Int32;
+    }
+    if (t == "float" || t == "float64" || t == "f64" || t == "double" || t == "real") {
+        return RestoredKind::Float64;
+    }
+    if (t == "float32" || t == "f32") {
+        return RestoredKind::Float32;
+    }
+    if (t == "bool" || t == "boolean") {
+        return RestoredKind::Bool;
+    }
+    if (t == "string" || t == "str" || t == "text") {
+        return RestoredKind::String;
+    }
+    if (t == "func" || t == "function") {
+        return RestoredKind::Func;
+    }
+    return RestoredKind::Other;
+}
+
+/// The empty record: one object per build, interned by its (empty) field list, so every `{}` a
+/// tag with no arguments gives is the same type.
+data_ptr_t emptyRecord() {
+    camel::core::data::StructDataFactory empty;
+    return empty.build();
 }
 
 ArgKind kindOfValue(camel::core::type::TypeCode code) {
@@ -362,6 +410,59 @@ Builder::tagValueOf(const camel::core::tag::Decl &decl, const GCT::TagUse &use) 
         items.push_back(valueOf(arg));
     }
     return camel::core::attr::tuple(items);
+}
+
+camel::core::data::data_ptr_t Builder::tagArgumentValue(
+    const camel::core::tag::Decl *decl, const std::string &qualified, size_t index,
+    camel::core::attr::AttrValueId id, const GCT::node_ptr_t &head) {
+    using camel::core::attr::ValueKind;
+    const camel::core::attr::Value value = camel::core::attr::value(id);
+    const RestoredKind declared =
+        decl != nullptr && index < decl->params.size() ? restoredKindOf(decl->params[index].type)
+                                                       : RestoredKind::Other;
+    switch (declared) {
+    case RestoredKind::Bool:
+        // The fact of a boolean argument is the 0 or 1 an integer holds (attr keeps no boolean
+        // kind): the parameter's declared type is what says the program reads it back as a bool.
+        return std::make_shared<camel::core::data::BoolData>(value.integer != 0);
+    case RestoredKind::Int64:
+        return std::make_shared<camel::core::data::LongData>(value.integer);
+    case RestoredKind::Int32:
+        return std::make_shared<camel::core::data::IntData>(static_cast<int32_t>(value.integer));
+    case RestoredKind::Float64:
+        return std::make_shared<camel::core::data::DoubleData>(value.real);
+    case RestoredKind::Float32:
+        return std::make_shared<camel::core::data::FloatData>(static_cast<float>(value.real));
+    case RestoredKind::String:
+        return std::make_shared<camel::core::data::StringData>(value.text);
+    case RestoredKind::Func:
+    case RestoredKind::Other:
+        break;
+    }
+    if (declared == RestoredKind::Func || value.kind == ValueKind::Graph) {
+        // The argument is the graph reference of a function of the program: an internal number
+        // the language has no value for. Until the reading can give that function itself, the
+        // reading is refused here rather than given the decimal text of the id.
+        diags_->of(SemanticDiag::TagFunctionArgumentNotReadable)
+            .atOrigin(head->origin())
+            .commit(
+                qualified,
+                decl != nullptr && index < decl->params.size() ? decl->params[index].name
+                                                               : std::string("?"));
+        throw BuildAbortException();
+    }
+    // A tag this does not know, or a parameter type the compile-time value layer has no kind
+    // for: the stored kind is all there is to go by.
+    switch (value.kind) {
+    case ValueKind::Int:
+        return std::make_shared<camel::core::data::LongData>(value.integer);
+    case ValueKind::Float:
+        return std::make_shared<camel::core::data::DoubleData>(value.real);
+    case ValueKind::Symbol:
+        return std::make_shared<camel::core::data::StringData>(value.text);
+    default:
+        return emptyRecord();
+    }
 }
 
 std::optional<compile_graph_ptr_t> Builder::functionGraphNamed(const std::string &written) {

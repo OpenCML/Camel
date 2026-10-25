@@ -159,6 +159,10 @@ enum class SemanticDiag : uint32_t {
     RuleTagNotRequires     = 0x00016C,
     TagParameterType       = 0x00016D,
     TagShadowsPermission   = 0x00016E,
+    /// Two tags of one field are written with the same name.
+    TagFieldNameAmbiguous = 0x0001E8,
+    /// A tag argument is a function, which a `static` head has no value for.
+    TagFunctionArgumentNotReadable = 0x0001E9,
     // Static expansion (design principles 5.5): 0x170 and up.
     StaticMatchNotExhaustive       = 0x000170,
     StaticMatchUnreachableCase     = 0x000171,
