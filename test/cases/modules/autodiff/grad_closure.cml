@@ -6,7 +6,7 @@
  * The printed gradients were checked against central finite differences (float64).
  */
 module grad_closure
-import { Tensor, reshape, sum, tanh } from tensor
+import { reshape, sum, tanh } from tensor
 import { grad } from autodiff
 
 // 1. the reproducer: a let-bound lambda capturing a value computed from the parameter

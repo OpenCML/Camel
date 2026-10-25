@@ -52,7 +52,7 @@ using RuleWithArguments = std::vector<camel::core::data::data_ptr_t>;
 struct GenericRuleInstance {
     /// The tuple, in the order of the rule's type parameters.
     std::vector<camel::core::type::Type *> types;
-    /// The tuple as the library writes it (`int`, `i32`, `Tensor<f32, [3]>`), for the reports.
+    /// The tuple as the library writes it (`int`, `i32`, `f32[3]`), for the reports.
     std::string typeText;
     /// The `with` values this instance was made for, as the key they stand for, and as the library
     /// writes them for the reports. Empty when the rule declares no `with` parameter.

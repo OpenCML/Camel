@@ -21,14 +21,16 @@ enum class TypeType {
     Struct,
     Func,
     Spec,
-    Unit,
     Infer,
-    Data,
     Ref,
     Enum
 };
 
-enum class TypeOp { Inter, Diff, KeyUnion, KeyInter, KeyDiff, Specialize, TypeOf };
+/// What a `TypeExprLoad` does, and `typeof` is the only one left. The reserved type operators
+/// (`A & B`, `A \ B`, `A + B`, `A ^ B`) and the older spelling of specialization had codes here;
+/// they are not in the language, so writing one where a type is expected is an ordinary syntax
+/// error and no load carries them.
+enum class TypeOp { TypeOf };
 
 std::string to_string(TypeType type);
 std::string to_string(TypeOp op);
@@ -120,7 +122,7 @@ class ArrayTypeLoad : public TypeLoad {
     std::vector<DimGroup> dims_;
 };
 
-/// A `[extent, ...]` written as a type argument (`Tensor<f32, [n, 4]>`): a shape, not a type.
+/// A `[extent, ...]` written as a type argument (`f32[n, 4]`): a shape, not a type.
 class ArrayDimLoad : public TypeLoad {
   public:
     explicit ArrayDimLoad(DimGroup dim) : TypeLoad(TypeType::ArrayDim), dim_(std::move(dim)) {}
@@ -194,30 +196,10 @@ class ResourceClauseLoad : public Load {
     std::vector<Reference> uses_;
 };
 
-class UnitTypeLoad : public TypeLoad {
-  public:
-    UnitTypeLoad(Reference ref) : TypeLoad(TypeType::Unit), ref_(ref) {}
-    const std::string toString() const override { return "UnitType"; }
-    const std::string geneCode() const override;
-
-  private:
-    Reference ref_;
-};
-
 class InferTypeLoad : public TypeLoad {
   public:
     InferTypeLoad(Reference ref) : TypeLoad(TypeType::Infer), ref_(ref) {}
     const std::string toString() const override { return "InferType"; }
-    const std::string geneCode() const override;
-
-  private:
-    Reference ref_;
-};
-
-class DataTypeLoad : public TypeLoad {
-  public:
-    DataTypeLoad(Reference ref) : TypeLoad(TypeType::Data), ref_(ref) {}
-    const std::string toString() const override { return "DataType: " + ref_.toString(); }
     const std::string geneCode() const override;
 
   private:

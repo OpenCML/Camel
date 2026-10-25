@@ -36,9 +36,8 @@ Array *tensorArg(ArgsView &args, size_t index, bool allowArray) {
             // section rank-zero-tensor): a rank-0 result stays an array only where the type it is
             // read by says so (wrap), so a value like this is a value with no dimension and not an
             // argument that went missing. The message says what the value is rather than calling it
-            // a null argument (the author's ruling of 2026-10-25 on
-            // no-dimension-value-in-an-array-typed-slot: the transition-period bare `Tensor` is
-            // that gap, and no mechanism is built for it).
+            // a null argument (the author's ruling of 2026-10-25, section
+            // no-dimension-value-in-an-array-typed-slot).
             throwRuntimeFault(
                 RuntimeDiag::RuntimeError, "Tensor argument holds a value with no dimension");
         }
@@ -49,7 +48,7 @@ Array *tensorArg(ArgsView &args, size_t index, bool allowArray) {
     }
     // Rank zero is the element type itself (the rank-zero ruling,
     // docs/handover/reviews/questions-2026-10-23.md): the value of a rank-0 tensor is a scalar
-    // slot, and the type says so — `Tensor<f32, []>` is `f32`, not an array. A kernel that reads
+    // slot, and the type says so — `f32` is `f32`, not an array. A kernel that reads
     // the tensor reads an array of no dimension, so the scalar is boxed here; wrap() takes the
     // same value back out of a kernel's result, where the declared result type says the element.
     // Without this a gradient handed to `tensor:sum_to` or a broadcast reached the kernel as the
@@ -62,7 +61,7 @@ Array *tensorArg(ArgsView &args, size_t index, bool allowArray) {
             ArrayType::create(Type::create(argType->code()), std::span<const int64_t>{}));
         return box;
     }
-    throwRuntimeFault(RuntimeDiag::RuntimeError, "Expected Tensor argument");
+    throwRuntimeFault(RuntimeDiag::RuntimeError, "Expected an array argument");
 }
 
 kernels::Operand operandArg(ArgsView &args, size_t index, kernels::ScalarOperand &storage) {
@@ -189,9 +188,7 @@ type::Type *tensorOf(const TensorFacts &facts) {
     }
     // Every array a value can have states its element type (design principles 5.1), so a result
     // type built from the facts always has one: the element type is a precondition of this
-    // function, not something a program can leave out. The two branches that used to build the
-    // transitional type here (`numericUnknown` / `numericUnknownFromForms`, plan section 5.1a's
-    // table row `tensorOf(facts)`) are gone with it.
+    // function, not something a program can leave out.
     ASSERT(facts.dtype.has_value(), "a tensor's element type is always in its type");
     if (!isSupportedTensorScalar(*facts.dtype)) {
         throw std::invalid_argument("Unsupported Tensor element type");

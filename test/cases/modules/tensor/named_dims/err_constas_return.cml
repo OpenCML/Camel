@@ -1,8 +1,8 @@
 module named_dims_err_constas_return
-import { Tensor, ones } from tensor
+import { ones } from tensor
 // A return type uses the names its parameters bound; it binds none.
-func bad(x: Tensor<f32>): Tensor<f32, [n]> {
-    return x as Tensor<f32, [?]>
+func bad(x: f32[..]): f32[n] {
+    return x as f32[?]
 }
 func main(): int sync {
     println(bad(ones([3])))

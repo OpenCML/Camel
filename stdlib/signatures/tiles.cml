@@ -30,14 +30,14 @@
 /// alone or inside a tuple or a struct — and returns the same tree with each leaf wrapped in
 /// `Device<...>`. A leaf of any other type is refused when the call is compiled.
 /// @effect transfers to the device
-/// @example upload(host)    // a Device<Tensor<f32>>
-export func upload(value: Tensor<f32>): Device<Tensor<f32>>
+/// @example upload(host)    // a Device<f32[..]>
+export func upload(value: f32[..]): Device<f32[..]>
 
 /// Downloads every device leaf of the value and returns the host value it came from. A tree with a
 /// leaf that is not a device value is refused when the call is compiled.
 /// @effect transfers from the device
 /// @example download(resident)    // the tensor resident holds
-export func download(value: Device<Tensor<f32>>): Tensor<f32>
+export func download(value: Device<f32[..]>): f32[..]
 
 /// Runs the function through the device path the pipeline prepared for it — the device when a
 /// program can be made for it, the host otherwise — and answers the resident form of its result.

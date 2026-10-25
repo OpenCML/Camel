@@ -15,10 +15,10 @@
 module check_rejected_softmax
 
 import { check } from rewrite
-import { Tensor, exp, softmax, sum } from tensor
+import { exp, softmax, sum } from tensor
 
 #requires(refine_accuracy)
-rule tensor_softmax_naive(x: Tensor<f32, [3]>, const axis: int) {
+rule tensor_softmax_naive(x: f32[3], const axis: int) {
     exp(x) / sum(exp(x), axis, true) => softmax(x, axis)
 }
 

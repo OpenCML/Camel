@@ -1,5 +1,5 @@
 /**
- * Named struct values exported to ONNX. `type Run = { state: Tensor, steps: int }` is nominal:
+ * Named struct values exported to ONNX. `type Run = { state: f32[..], steps: int }` is nominal:
  * an anonymous struct value enters it by field name (design principles 5.2), the same order is
  * an identity (no value moves) and another order is a copy into the declaration's order. Both
  * conversions are exported, never refused:
@@ -20,7 +20,7 @@
  */
 module ort_struct_casts
 
-import { Tensor, reshape, sum, tanh } from tensor
+import { reshape, sum, tanh } from tensor
 import { export_model } from onnx
 
 type Run = { state: f32[..], steps: int }

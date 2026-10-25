@@ -4835,7 +4835,7 @@ Value Builder::visitEnumType(cst::EnumType context) {
 
 /*
 typeExpr
-    : interType ('?' | '!' | '..')*
+    : arrayType ('?' | '!' | '..')*
     ;
 */
 Value Builder::visitTypeExpr(cst::TypeExpr context) {
@@ -4857,94 +4857,6 @@ Value Builder::visitTypeExpr(cst::TypeExpr context) {
     return lhsNode;
 }
 
-/*
-interType
-    : diffType ('&' diffType)*
-    ;
-*/
-Value Builder::visitInterType(cst::InterType context) {
-    ENTER("InterType");
-    node_ptr_t lhsNode = any2node(visitType(context->type(0)));
-    for (size_t i = 1; i < context->types().size(); ++i) {
-        node_ptr_t rhsNode      = any2node(visitType(context->type(i)));
-        node_ptr_t typeExprNode = createNodeAs<TypeExprLoad>(TypeOp::Inter);
-        setNodeTokenRangeByContext(typeExprNode, context->type(i));
-        *typeExprNode << lhsNode << rhsNode;
-        lhsNode = typeExprNode;
-    }
-    LEAVE("InterType");
-    return lhsNode;
-}
-
-/*
-diffType
-    : keyUnionDiffType ('\\' keyUnionDiffType)*
-    ;
-*/
-Value Builder::visitDiffType(cst::DiffType context) {
-    ENTER("DiffType");
-    node_ptr_t lhsNode = any2node(visitType(context->type(0)));
-    for (size_t i = 1; i < context->types().size(); ++i) {
-        node_ptr_t rhsNode      = any2node(visitType(context->type(i)));
-        node_ptr_t typeExprNode = createNodeAs<TypeExprLoad>(TypeOp::Diff);
-        setNodeTokenRangeByContext(typeExprNode, context->type(i));
-        *typeExprNode << lhsNode << rhsNode;
-        lhsNode = typeExprNode;
-    }
-    LEAVE("DiffType");
-    return lhsNode;
-}
-
-/*
-keyUnionDiffType
-    : keyInterType (('+' | '-') keyInterType)*
-    ;
-*/
-Value Builder::visitKeyUnionDiffType(cst::KeyUnionDiffType context) {
-    ENTER("KeyUnionDiffType");
-    node_ptr_t lhsNode = any2node(visitType(context->type(0)));
-    for (size_t i = 1; i < context->types().size(); ++i) {
-        TypeOp op;
-        string strOp = context->child(i * 2 - 1)->text();
-        if (strOp == "+") {
-            op = TypeOp::KeyUnion;
-        } else if (strOp == "-") {
-            op = TypeOp::KeyDiff;
-        } else {
-            throw std::runtime_error("Invalid key union diff operator: " + strOp);
-        }
-        node_ptr_t rhsNode      = any2node(visitType(context->type(i)));
-        node_ptr_t typeExprNode = createNodeAs<TypeExprLoad>(op);
-        setNodeTokenRangeByContext(typeExprNode, context->type(i));
-        *typeExprNode << lhsNode << rhsNode;
-        lhsNode = typeExprNode;
-    }
-    LEAVE("KeyUnionDiffType");
-    return lhsNode;
-}
-
-/*
-keyInterType
-    : typeUnit ('^' typeUnit)*
-    ;
-*/
-Value Builder::visitKeyInterType(cst::KeyInterType context) {
-    ENTER("KeyInterType");
-    node_ptr_t lhsNode = any2node(visitType(context->type(0)));
-    for (size_t i = 1; i < context->types().size(); ++i) {
-        node_ptr_t rhsNode      = any2node(visitType(context->type(i)));
-        node_ptr_t typeExprNode = createNodeAs<TypeExprLoad>(TypeOp::KeyInter);
-        setNodeTokenRangeByContext(typeExprNode, context->type(i));
-        *typeExprNode << lhsNode << rhsNode;
-        lhsNode = typeExprNode;
-    }
-    LEAVE("KeyInterType");
-    return lhsNode;
-}
-
-/*
-typeUnit : (identDef OF)? arrayType ;
-*/
 /*
 arrayType
     : specType arrayDim+
@@ -5333,14 +5245,6 @@ Value Builder::visitType(syn::Node context) {
     switch (context.kind()) {
     case NK::TypeExpr:
         return visitTypeExpr(cst::TypeExpr(context));
-    case NK::InterType:
-        return visitInterType(cst::InterType(context));
-    case NK::DiffType:
-        return visitDiffType(cst::DiffType(context));
-    case NK::KeyUnionDiffType:
-        return visitKeyUnionDiffType(cst::KeyUnionDiffType(context));
-    case NK::KeyInterType:
-        return visitKeyInterType(cst::KeyInterType(context));
     case NK::ArrayType:
         return visitArrayType(cst::ArrayType(context));
     case NK::ArrayDim:

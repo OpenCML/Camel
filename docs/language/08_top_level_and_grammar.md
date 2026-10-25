@@ -219,12 +219,7 @@ loopExpr           : 'loop' loopState (',' loopState)* loopFor? loopWhile? 'do' 
 loopState          : identDef '=' logicalOrExpr
 loopFor            : 'for' identDef 'in' logicalOrExpr
 loopWhile          : 'while' logicalOrExpr
-typeExpr           : interType ('?' | '!' | '..')*
-interType          : diffType ('&' diffType)*
-diffType           : keyUnionDiffType ('\\' keyUnionDiffType)*
-keyUnionDiffType   : keyInterType (('+' | '-') keyInterType)*
-keyInterType       : typeUnit ('^' typeUnit)*
-typeUnit           : arrayType
+typeExpr           : arrayType ('?' | '!' | '..')*
 arrayType          : specType arrayDim+
 arrayDim           : '[' (']' | arrayDimItem (',' arrayDimItem)* ','?)? ']'
 arrayDimItem       : '?' | '..' identDef? | dataExpr
@@ -268,7 +263,7 @@ factClause         : IDENTIFIER dataExpr
 | 类型里的 `(` | `(名字:`、`(var`、空表后跟 `=>` 是函数类型；`(T)` 是括号类型；其余是元组类型 |
 | `{` 开头：结构体还是块 | `{ 名字 :` 是结构体；`{}` 作分支臂、lambda 体时是空块，作语句时是空结构体 |
 | 实参：位置实参还是具名实参 | 第一个 `名字 :` 起是具名实参 |
-| 类型之后的 `+` `-` `^` | 其后能开始一个类型时属于类型（`x as T + U` 是转换为类型 `T + U`） |
+| 类型之后的 `+` `-` `^` | 属于表达式：转型止于类型，`x as T + U` 是 `(x as T) + U` |
 | 一元 `-` | 永远是运算符；比 `^` 与 `->` 松；直接作用在数字上时给出负的字面量 |
 
 相关文件：

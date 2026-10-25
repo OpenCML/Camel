@@ -238,7 +238,7 @@ inline bool collectConversionGaps(
         // (design principles 5.4: an array whose shape is unknown entering a position that
         // declares one is converted explicitly; camel/core/type/composite/array.cpp). The gap is
         // the whole value: one `as` reaches it, whatever is left open inside it. Without this
-        // branch a call like `f(t)` with `t: Tensor` and `b: Tensor<[3]>` was refused as
+        // branch a call like `f(t)` with `t: Tensor` and `b: f32[3]` was refused as
         // "no matching function" with the overload list, which says less than the conversion to
         // write (ruling 2026-10-24 evening, h450 item 2).
         if (want->castSafetyFrom(have) != CastSafety::Unsafe) {

@@ -3,9 +3,7 @@
  */
 module broadcast_ops
 
-import {
-    Tensor, reshape, range, cast, where, maximum, relu, sum, shape
-} from tensor
+import { reshape, range, cast, where, maximum, relu, sum, shape } from tensor
 
 func main(): int sync {
     let col = reshape([1.0, 2.0, 3.0], [3, 1])

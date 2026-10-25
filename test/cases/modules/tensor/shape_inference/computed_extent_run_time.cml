@@ -1,10 +1,10 @@
 module shape_inference_computed_extent_run_time
-import { Tensor, reshape, sum } from tensor
+import { reshape, sum } from tensor
 // [n, 3] typed [2, 3] from a [6] input: another n is reshape's error when it runs.
-func exact(a: Tensor<f32, [2, 3]>): float {
+func exact(a: f32[2, 3]): float {
     return sum(a)
 }
-func g(y: Tensor<f32, [6]>, n: int): float {
+func g(y: f32[6], n: int): float {
     return exact(reshape(y, [n, 3]))
 }
 func main(): int sync {

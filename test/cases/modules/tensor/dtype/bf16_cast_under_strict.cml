@@ -11,11 +11,11 @@
  */
 module tensor_dtype_bf16_cast_under_strict
 
-import { Tensor, new, cast, to_bytes } from tensor
+import { new, cast, to_bytes } from tensor
 import { to_array } from bytes
 
 #[strict, change_precision]
-func shrink(x: Tensor<f32>): Tensor<bf16> {
+func shrink(x: f32[..]): bf16[..] {
     return cast(x, 'bf16')
 }
 

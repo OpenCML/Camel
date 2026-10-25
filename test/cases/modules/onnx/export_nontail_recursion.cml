@@ -3,7 +3,7 @@
  * exportable sense, because two branches decide whether the function calls itself.
  */
 module export_nontail_recursion
-import { Tensor, reshape, sum } from tensor
+import { reshape, sum } from tensor
 import { export_model } from onnx
 import { get_env } from env
 

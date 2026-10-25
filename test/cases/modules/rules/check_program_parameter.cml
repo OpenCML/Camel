@@ -9,12 +9,12 @@
  * which is what the two reports below differ in.
  */
 module check_program_parameter
-
+import tensor
 import { check } from rewrite
 import { current, Program } from graph
-import { Tensor } from tensor
 
-type Vec = Tensor<f32, [3]>
+
+type Vec = f32[3]
 
 rule add_zero(x: int) { x + 0 => x }
 rule sum_swap::<T>(a: T, b: T) { a + b => b + a }

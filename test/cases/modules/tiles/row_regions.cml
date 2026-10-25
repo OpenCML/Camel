@@ -1,20 +1,20 @@
 module tiles_row_regions
-import { Tensor, random, seed, exp, sum, mean, max, sqrt, abs, reshape } from tensor
+import { random, seed, exp, sum, mean, max, sqrt, abs, reshape } from tensor
 import { inspect, run_preferred_resident, download } from tiles
-func softmax(x: Tensor<f32>): Tensor<f32> {
+func softmax(x: f32[..]): f32[..] {
     let e = exp(x - max(x, 1, true))
     return e / sum(e, 1, true)
 }
-func normalize(x: Tensor<f32>, scale: Tensor<f32>, bias: Tensor<f32>): Tensor<f32> {
+func normalize(x: f32[..], scale: f32[..], bias: f32[..]): f32[..] {
     let centered = x - mean(x, 1, true)
     let variance = mean(centered * centered, 1, true)
     return centered / sqrt(variance + 0.00001) * scale + bias
 }
-func reused(x: Tensor<f32>): Tensor<f32> {
+func reused(x: f32[..]): f32[..] {
     let centered = x - mean(x, 1, true)
     return centered + centered * centered
 }
-func ordered_fallback(x: Tensor<f32>): Tensor<f32> {
+func ordered_fallback(x: f32[..]): f32[..] {
     return x * 0.0 + sum(x, 1, true)
 }
 func main(): int sync {

@@ -19,7 +19,7 @@
 module c2_mlp_mnist
 
 // == imports ==
-import { Tensor, abs, argmax, cast, load_npy, numel, relu, set_num_threads, shape, slice, sum, take } from tensor
+import { abs, argmax, cast, load_npy, numel, relu, set_num_threads, shape, slice, sum, take } from tensor
 import { with_grad } from autodiff
 import { adam, adam_state, softmax_cross_entropy } from nn
 import { load_tree, save_tree } from ckpt

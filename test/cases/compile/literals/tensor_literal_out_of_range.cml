@@ -3,9 +3,9 @@
 /// error at the expression, not a product that silently reads as `inf`.
 module tensor_literal_out_of_range
 
-import { Tensor, reshape, sum } from tensor
+import { reshape, sum } from tensor
 
-func scale(x: Tensor<f32, [3]>): Tensor<f32, [3]> {
+func scale(x: f32[3]): f32[3] {
     return x * 1.0e40
 }
 

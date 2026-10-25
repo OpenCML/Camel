@@ -29,4 +29,4 @@
 /// @effect writes a file and reads the function's graph
 /// @fails fault `RuntimeError` when the graph cannot be translated (a call that remains, an operator without an ONNX lowering, a dtype or shape the exporter cannot name), or when the target runtime rejects a node
 /// @example export_model(fn, example, "/tmp/model.onnx")
-export func export_model(fn: (x: Tensor<f32>) => void, example: Tensor<f32>, path: string): void
+export func export_model(fn: (x: f32[..]) => void, example: f32[..], path: string): void

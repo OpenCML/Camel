@@ -23,7 +23,7 @@
  * Checked by ort_core_slice.py.
  */
 module ort_core_slice
-import { Tensor, reshape, sum } from tensor
+import { reshape, sum } from tensor
 import { export_model } from onnx
 import { get_env } from env
 

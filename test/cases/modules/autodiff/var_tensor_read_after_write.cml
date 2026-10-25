@@ -4,7 +4,7 @@
  * gradient through `acc` (the true gradient of p0 is 2 * x) without any sign of it.
  */
 module var_tensor_read_after_write
-import { Tensor, reshape, sum } from tensor
+import { reshape, sum } from tensor
 import { with_grad } from autodiff
 
 type P = { p0: f64[] }

@@ -3,16 +3,16 @@
 /// host because the loop is a statement. `repeat_host` is the same program without the tag.
 module gpu_nofallback_loop
 
-import { Tensor, reshape, sum } from tensor
+import { reshape, sum } from tensor
 import { regions } from tiles
 
 #gpu
-func repeat(x: Tensor<f32, [3]>): Tensor<f32, [3]> sync {
+func repeat(x: f32[3]): f32[3] sync {
     let y = loop a = x for k in [1, 2] do a * 2.0
     return y
 }
 
-func repeat_host(x: Tensor<f32, [3]>): Tensor<f32, [3]> sync {
+func repeat_host(x: f32[3]): f32[3] sync {
     let y = loop a = x for k in [1, 2] do a * 2.0
     return y
 }

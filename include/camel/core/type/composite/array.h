@@ -156,7 +156,7 @@ class ArrayType : public CompositeType {
     std::string shapeMangle() const;
 
     virtual Type *resolve(const type_vec_t &typeList) const override;
-    /// `Tensor<f32>`, `Tensor<f32, [2, 3]>`, `Tensor<T, [n, 784]>`: the array a name that requires
+    /// `f32[..]`, `f32[2, 3]`, `T[n, 784]`: the array a name that requires
     /// an element type is applied to (docs/design/arrays-memory/plan.cn.md section 5.1a), so the
     /// two spellings of one type are one type and `Name<args...>` needs no second path.
     virtual const Type *

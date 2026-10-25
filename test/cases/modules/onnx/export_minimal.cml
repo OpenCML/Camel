@@ -6,7 +6,7 @@
  */
 module export_minimal
 
-import { Tensor, reshape } from tensor
+import { reshape } from tensor
 import { export_model } from onnx
 import { get_env } from env
 

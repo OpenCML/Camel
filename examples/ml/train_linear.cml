@@ -4,7 +4,7 @@
 module train_linear
 
 import { grad } from autodiff
-import { Tensor, reshape, shape, sum } from tensor
+import { reshape, shape, sum } from tensor
 import { sgd } from nn
 
 type Linear = { weight: f32[..] }

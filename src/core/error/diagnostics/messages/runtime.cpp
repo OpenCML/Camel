@@ -48,7 +48,7 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
             RuntimeDiag::TensorDimensionMismatch,
             {
                 "TensorDimensionMismatch",
-                "Tensor shape mismatch in '{0}': {1}.",
+                "Array shape mismatch in '{0}': {1}.",
                 "Check the shapes of all operands involved in the operation and ensure they are compatible for broadcasting or direct computation.",
             },
         },

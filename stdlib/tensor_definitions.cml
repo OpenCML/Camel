@@ -20,14 +20,14 @@
  */
 module tensor_definitions
 
-import { Tensor, max, sum, exp, log, maximum, numel } from tensor
+import { max, sum, exp, log, maximum, numel } from tensor
 
 /// tensor:softmax along `axis` (negative counts from the end), made stable by subtracting the
 /// maximum: m = max(x, axis) (IEEE maximum: a NaN gives NaN), e = exp(x - m) (an f32
 /// subtraction, then exp within its bound), s = sum(e, axis) (from +0 in f64, in ascending
 /// order, rounded to f32 once), and e / s (an f32 division, not a multiplication by 1 / s).
 /// A tensor without elements is its own result (there is no lane to normalize).
-export func softmax(x: Tensor<f32>, axis: int): Tensor<f32> {
+export func softmax(x: f32[..], axis: int): f32[..] {
     if numel(x) == 0 then {
         return x
     } else {
@@ -40,7 +40,7 @@ export func softmax(x: Tensor<f32>, axis: int): Tensor<f32> {
 /// tensor:log_softmax along `axis`: (x - m) - log(s) with m the maximum and s the sum of
 /// exp(x - m) as in softmax (f32 steps; log within its bound). A tensor without elements is
 /// its own result.
-export func log_softmax(x: Tensor<f32>, axis: int): Tensor<f32> {
+export func log_softmax(x: f32[..], axis: int): f32[..] {
     if numel(x) == 0 then {
         return x
     } else {
@@ -51,16 +51,16 @@ export func log_softmax(x: Tensor<f32>, axis: int): Tensor<f32> {
 
 /// tensor:mean of a whole tensor: its sum (from +0 in f64, in row-major order) divided by the
 /// number of its elements, in f64. A tensor without elements is a fault.
-export func mean(x: Tensor<f32>): float {
+export func mean(x: f32[..]): float {
     return sum(x) / (numel(x) as float)
 }
 
 /// tensor:relu: maximum(x, +0) (design principles 7.7): a NaN gives NaN, -0 gives +0.
-export func relu(x: Tensor<f32>): Tensor<f32> {
+export func relu(x: f32[..]): f32[..] {
     return maximum(x, 0.0)
 }
 
 /// tensor:sigmoid: 1 / (1 + exp(-x)), each step in f32 (exp within its bound).
-export func sigmoid(x: Tensor<f32>): Tensor<f32> {
+export func sigmoid(x: f32[..]): f32[..] {
     return 1.0 / (1.0 + exp(-x))
 }

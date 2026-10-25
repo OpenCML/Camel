@@ -46,7 +46,7 @@ AST 不是“每个节点都有完备字段成员”的面向对象树，而是�
 | 控制 | `IfExprLoad` `MatchExprLoad` `MatchCaseLoad` | 表达条件与模式分支 |
 | 表达式 | `UnaryExprLoad` `BinaryExprLoad` `ReservedExprLoad` `RefDataLoad` `LiteralLoad` | 表达运算、调用、访问、字面量、引用 |
 | 复合值 | `ArrayDataLoad` `StructDataLoad` `TupleDataLoad` `FuncDataLoad` | 表达聚合值与函数值 |
-| 类型 | `FuncTypeLoad` `TypeExprLoad` `SpecTypeLoad` `ArrayTypeLoad` `TupleTypeLoad` `StructTypeLoad` `RefTypeLoad` | 表达类型构造和类型运算 |
+| 类型 | `FuncTypeLoad` `TypeExprLoad` `SpecTypeLoad` `ArrayTypeLoad` `TupleTypeLoad` `StructTypeLoad` `RefTypeLoad` | 表达类型构造（`TypeExprLoad` 即 `typeof`；类型运算已不在语言里） |
 
 ### 2.3 AST 的稳定语义锚点
 

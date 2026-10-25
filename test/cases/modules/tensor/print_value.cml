@@ -2,14 +2,14 @@
  * What `println` writes for an array value: the value's own extents, and the element type the
  * declaration fixes or the type the value holds.
  *
- * `probe` takes a `Tensor`: the declaration fixes no element type (the numeric-unknown array), so
+ * `probe` takes an array: the declaration fixes no element type (the numeric-unknown array), so
  * the elements print by the type the value carries and the shape prints as the value's own. A
  * rank-2 value prints nested and complete, one bracket level per dimension; a rank-2 value whose
  * declaration names the element type does not collapse to its first extent either.
  */
 module tensor_print_value
 
-import { Tensor, ones, zeros, shape, numel, reshape, argmin, tanh, new, sum } from tensor
+import { ones, zeros, shape, numel, reshape, argmin, tanh, new, sum } from tensor
 import { is_numeric } from types
 
 func forward(x: f32[..]): f32[..] {
@@ -32,7 +32,7 @@ func by_declaration(label: string, xs: f32[][]): string sync {
 }
 
 func main(): int sync {
-    // A value the declaration does not type: a `Tensor` parameter.
+    // A value the declaration does not type: an array parameter whose element type is unstated.
     let rows = reshape([2.0, 0.0, 0.0, 2.0, 0.0, 0.0], [2, 3])
     let a = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [2, 3])
     let b = reshape([1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0], [3, 4])

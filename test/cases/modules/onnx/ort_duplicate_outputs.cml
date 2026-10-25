@@ -14,7 +14,7 @@
  */
 module ort_duplicate_outputs
 
-import { Tensor, reshape, sum, tanh } from tensor
+import { reshape, sum, tanh } from tensor
 import { export_model } from onnx
 
 type Run = { state: f32[..], steps: int }

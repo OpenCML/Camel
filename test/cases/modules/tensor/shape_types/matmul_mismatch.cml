@@ -1,6 +1,6 @@
 module shape_matmul_mismatch
-import { Tensor, zeros, ones, reshape, sum, tanh, load_npy } from tensor
-func f(x: Tensor<f32, [2, 3]>, w: Tensor<f32, [4, 5]>): Tensor<f32> {
+import { zeros, ones, reshape, sum, tanh, load_npy } from tensor
+func f(x: f32[2, 3], w: f32[4, 5]): f32[..] {
     return x @ w
 }
 func main(): int sync {
