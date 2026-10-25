@@ -622,6 +622,14 @@ CI 的触发不改（只在 `v*` 标签与手动触发时运行，不花 runner 
 4. **冒烟测试按用户的样子来**：在干净的环境里（Linux 用 `ubuntu:22.04` 与 `python:3.12-slim` 两个容器，Windows 用一个新的虚拟环境）只做 `pip install <wheel>`，然后跑 `camel --version`、`camel hello.cml`、`camel hello.cml std::jit`，以及一段 `import camel` 加 NumPy 调用一个模块函数。任何一步失败，工作流就失败。
 5. **发布**：可信发布已经登记好，能换到令牌。第 1 条做完后，打一个标签走一遍完整发布，在报告里贴出 PyPI 页面上的版本和文件列表，以及在一台没有构建环境的机器上 `pip install camel-lang` 之后跑通 `hello.cml` 的记录。
 
+6. **平台范围扩大（负责人 2026-10-25："至少支持 mac"）**：发布的 wheel 与 CI 覆盖下面四个平台，每次发布都构建、冒烟测试、上传：
+   - Linux x64（`manylinux_2_28_x86_64`）、Linux arm64（`manylinux_2_28_aarch64`，`ubuntu-24.04-arm` 运行器）；
+   - macOS arm64（Apple Silicon，`macos-latest`）：用 `delocate` 把依赖的动态库打进包、修正装载路径（macOS 上对应 auditwheel 的工具），部署目标写明（如 `MACOSX_DEPLOYMENT_TARGET=13.0`），二进制按 macOS 的要求做 ad-hoc 签名，保证从 pip 装上就能运行；
+   - Windows x64。
+   arm64 两格的指令集基线用 `baseline`（`x86-64-v3` 只适用于 x86-64）。Intel Mac 与 Windows arm64 暂不发布：前者苹果已停产，后者用户很少；以后有需要再加一格，不另作设计。`ci.yml` 里 macOS 那一腿的注释说"wheel 工作流已经在 macOS 上构建"，实际矩阵里 macOS 是注释掉的，随本条改成真实情况，并把 macOS 那一腿从可选改成每次发布都跑。
+7. **每个平台一个 wheel，不再按 Python 版本各建一遍**：现在 2 个平台 × 4 个 Python 版本 = 8 次完整的原生构建，平台扩到四个就是 16 次。`camel` 二进制、运行库与标准库与 Python 版本无关，只有 Python 扩展模块与版本有关。评估让扩展模块只用 CPython 的稳定 ABI（Limited API，`abi3`，最低 3.10），做得到就每个平台一个 `cp310-abi3` 的 wheel；做不到，就每个平台只做一次原生构建，扩展模块按版本单独编译后分别装进各自的 wheel。报告里写明选了哪条、为什么。
+8. **JIT 在 arm64 上**：`std::jit` 现在只有 x86-64 的代码生成器，arm64 上由 `std::fvm` 的字节码解释器执行，结果相同、速度不同，并在 `-v` 日志里说明一次。这一点照实写进安装与命令行文档。aarch64 的代码生成器另立任务，排在 P4 与 GPU 之后，不挡发布。
+
 人手：单独一条小车道，不占 H242 与 P4。
 
 ### 5.0 调度

@@ -9,7 +9,7 @@
 [![CI](https://github.com/OpenCML/Camel/actions/workflows/ci.yml/badge.svg)](https://github.com/OpenCML/Camel/actions/workflows/ci.yml)
 [![Version](https://img.shields.io/github/v/tag/OpenCML/Camel?label=version&color=blue)](https://github.com/OpenCML/Camel/tags)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Platforms](https://img.shields.io/badge/platforms-Linux%20%7C%20Windows-lightgrey.svg)](docs/setup.en.md)
+[![Platforms](https://img.shields.io/badge/platforms-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey.svg)](docs/setup.en.md)
 [![VS Code](https://img.shields.io/visual-studio-marketplace/v/Kogler7.open-cml-extension?label=VS%20Code&logo=visualstudiocode)](https://marketplace.visualstudio.com/items?itemName=Kogler7.open-cml-extension)
 [![Stars](https://img.shields.io/github/stars/OpenCML/Camel?style=social)](https://github.com/OpenCML/Camel/stargazers)
 
@@ -126,7 +126,7 @@ The rules behind this table are in the [design principles](docs/design-principle
 pip install camel-lang
 ```
 
-This puts the `camel` command on your `PATH`, and `import camel` in Python (Linux x64 and Windows x64, Python 3.10–3.13).
+This puts the `camel` command on your `PATH`, and `import camel` in Python. Wheels are published for Linux (x64, arm64), macOS (Apple silicon) and Windows (x64), for Python 3.10 and later.
 
 ### Build from source
 
@@ -138,7 +138,7 @@ npm install          # npm packages and the C++ dependencies (needs network acce
 npm run build        # Release build into out/latest
 ```
 
-Put `out/latest/bin` on your `PATH` and set `CAMEL_HOME` to `out/latest`. CI builds and tests Linux x64 and Windows x64.
+Put `out/latest/bin` on your `PATH` and set `CAMEL_HOME` to `out/latest`. CI builds and tests Linux (x64, arm64), macOS (Apple silicon) and Windows (x64).
 
 ### Hello, Camel
 
