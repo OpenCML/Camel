@@ -22,7 +22,7 @@ import { grad } from autodiff
 with <x: f32[..]>
 func probe(): float {
     let a = reshape(x, [6])
-    return sum(a[1:4])
+    return float(sum(a[1:4]))
 }
 
 func main(): int sync {
