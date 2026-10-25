@@ -1,0 +1,5 @@
+/// A second module that declares a tag named `width` on a field, for the reading of a field that
+/// carries two tags of that name through different modules.
+module tags_second_width
+
+export tag width(w: int) on field

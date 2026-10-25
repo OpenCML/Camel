@@ -360,7 +360,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "tag_with_argument.error"
-desc = "The standard #macro tag declares no parameter: #macro<1> is SemanticDiag::TagArgumentCount at the tag name (6:2)."
+desc = "The standard #macro tag declares no parameter: #macro(1) is SemanticDiag::TagArgumentCount at the tag name (6:2)."
 kind = "behavior"
 case = "../../../cases/trans/macro/tag_with_argument.cml"
 args = ["${case}", "std::macro"]

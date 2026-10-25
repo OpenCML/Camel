@@ -188,7 +188,7 @@ BN_EPS = 1e-5
 
 def _bn_train(x: np.ndarray, w: W, nm: str) -> np.ndarray:
     """Training-mode batch_norm (PyTorch semantics): the normalize uses the BIASED batch
-    variance; the running variance blends in the UNBIASED one (see tools/bn_semantics.py)."""
+    variance; the running variance blends in the UNBIASED one (see resnetbn/tools/bn_semantics.py)."""
     mu = x.mean(axis=(0, 2, 3))
     var = x.var(axis=(0, 2, 3))  # biased (divide by M)
     xhat = (x - mu[None, :, None, None]) / np.sqrt(var[None, :, None, None] + BN_EPS)

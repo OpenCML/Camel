@@ -1,0 +1,33 @@
+/**
+ * A `println` written in an arm of a `#gpu` scope runs only when the program takes that arm. The
+ * arm is a block of its own and the branch decides whether it runs, so a run that takes the first
+ * arm of one call and the second arm of the next prints each line once
+ * (docs/design/effects/edges.cn.md 2: a node is executed when the result depends on it along the
+ * data or sync edges, and a branch's edge into an arm is one of those dependencies).
+ *
+ * It is the reading that keeps an effect from being an observable root of the graph: an effect made
+ * a root would run in both arms, so `taken` and `other arm` would each be printed twice.
+ *
+ * Output: `taken`, `15.0`, `other arm`, `15.0`.
+ */
+module tiles_gpu_scope_arm_effect
+
+import { Tensor, reshape, sum } from tensor
+
+#gpu
+func choose(flag: bool, x: Tensor<f32, [3]>): Tensor<f32, [3]> sync {
+    let y = x * 2.0
+    if flag then sync {
+        println('taken')
+    } else sync {
+        println('other arm')
+    }
+    return y + 1.0
+}
+
+func main(): int sync {
+    let x = reshape([1.0, 2.0, 3.0] as f32[], [3])
+    println(sum(choose(true, x)))
+    println(sum(choose(false, x)))
+    return 0
+}

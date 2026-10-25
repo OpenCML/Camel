@@ -1,0 +1,30 @@
+/**
+ * A read that lets the value out of the variable, and then a write through the variable: `let
+ * kept = v` takes the array out of the cell's keeping (`:var/get`), so `kept` and the cell are
+ * two names. The write to `v[0]` in the callee copies, and `kept` keeps the value it was read as
+ * (docs/design-principles.cn.md 3.5, 6.11).
+ */
+module var_alias_read_then_param
+
+func make_array(): int[] {
+    return [
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    ]
+}
+
+func touch(var xs: int[]): int sync {
+    xs[0] = 9
+    return 0
+}
+
+func main(): int sync {
+    let big  = make_array()
+    var v    = big
+    let kept = v
+    touch(v)
+    println("kept[0] =", kept[0], " v[0] =", v[0])
+    return 0
+}

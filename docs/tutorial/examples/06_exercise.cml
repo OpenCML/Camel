@@ -1,0 +1,12 @@
+// The answer to the exercise of chapter 6: counting with a map is a fold over `put`.
+// Run: camel docs/tutorial/examples/06_exercise.cml
+
+func tally(words: string[]): Map<string, int> {
+    return words->reduce<(acc: Map<string, int>, w: string): Map<string, int> => acc->put<w, (acc[w] ?? 0) + 1>, [] as Map<string, int>>
+}
+
+func main(): int sync {
+    let counts = tally(['fig', 'pear', 'fig', 'apple', 'fig'])
+    println(counts, counts['fig'], counts['cherry'] ?? 0)
+    return 0
+}

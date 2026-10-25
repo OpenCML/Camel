@@ -7,7 +7,7 @@ module bytes
 
 import { from_array } from bytes
 
-#op<'bytes:size'>
+#op('bytes:size')
 export func size(content: Bytes): int
 
 type Box = { a: int }

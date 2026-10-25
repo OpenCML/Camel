@@ -378,8 +378,8 @@ void meanAxisVjp(VjpBuilder &b, const VjpCall &call) {
 void extremumAxisVjp(VjpBuilder &b, const VjpCall &call) {
     requireVjpInputs(call, 2, 3);
     if (auto dy = b.gradientOf(call.output)) {
-        const vjp_node_t selected =
-            addTensorOper(b, "tensor:eq", {call.inputs[0], expandReduced(b, call, call.output)});
+        const vjp_node_t selected = addTensorOper(
+            b, "tensor:strict_eq", {call.inputs[0], expandReduced(b, call, call.output)});
         b.accumulateGradient(
             call.inputs[0],
             addTensorOper(b, "tensor:multiply", {expandReduced(b, call, *dy), selected}));

@@ -191,3 +191,16 @@ expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
 expect_output_contains = ["a slice step other than the constant 1", "H17"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
+
+[[tests]]
+name = "slice_step_zero"
+desc = "A subscript slice of a tensor whose first extent is stated and whose step is not the constant 1 is a view with strides, refused at compile time and naming H17 (design principles 5.4): the zero step is refused like any other, and the program after it does not run."
+kind = "negative"
+case = "../../../../cases/modules/tensor/subscript/slice_step_zero.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
+expect_output_contains = ["a slice step other than the constant 1", "H17"]
+expect_output_not_contains = ["not reached"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000

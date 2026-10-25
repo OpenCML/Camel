@@ -1147,8 +1147,8 @@ LoweringRegistry::LoweringRegistry() {
     add("tensor:le", compareOp("LessOrEqual", false));
     add("tensor:gt", compareOp("Greater", false));
     add("tensor:ge", compareOp("GreaterOrEqual", false));
-    add("tensor:eq", compareOp("Equal", false));
-    add("tensor:ne", compareOp("Equal", true));
+    add("tensor:strict_eq", compareOp("Equal", false));
+    add("tensor:strict_neq", compareOp("Equal", true));
 
     // Elementwise unary.
     add("tensor:neg", sameTypeOp("Neg", 1));

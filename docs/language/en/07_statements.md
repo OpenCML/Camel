@@ -51,7 +51,7 @@ var count = 0
   let a, b = 1, 'x'
   ```
 
-  Struct destructuring `let { x, y } = p` and array destructuring `let [a, b] = xs` are reserved, not implemented (`SemanticDiag::FeatureNotSupported`); use `p.x`, `xs[0]`.
+  Struct destructuring `let { x, y } = p` and array destructuring `let [a, b] = xs` are `SemanticDiag::FeatureNotSupported`; use `p.x`, `xs[0]`.
 - **`let _ = e` drops the value of `e` on purpose.** `_` is not a name: nothing is bound, so it can be written any number of times in one block, and it cannot be read. The expression is evaluated like the initial value of any `let` (in a sync block, in order). It is the way to say that a `T!` is ignored deliberately ([7.1](#71-expression-statements)). Only this form exists: `var _`, and `_` among several names, are syntax errors.
 - A `let` at the module top level is a global constant; a top-level `var` can be read and written by functions, also by an imported function of the module that declares it ([5.3](05_modules.md#53-exports)). **The top-level declarations do not depend on the order they are written in, only on what they use**: `let area = pi * r * r` may come before `let pi`; top-level values that depend on each other are `SemanticDiag::ModuleValueCycle` ([5.6](05_modules.md#56-loading-modules)). A local `let` in a function body is still declared before it is used.
 
@@ -363,42 +363,40 @@ func main(): int sync {
 **Constant value parameters (`constas`)**: among the ordinary parameters a declaration may write `constas n: int`. Its value is known at compile time and is part of the declaration's identity, not a runtime argument.
 
 ```cml
-import { Tensor, ones, sum } from tensor
-
-func total(constas n: int, x: Tensor<f32, [n]>): f32 {
-    return sum(x)
+func total(constas n: int, x: float[n]): float {
+    return loop acc = 0.0 for v in x do acc + v
 }
 
 func main(): int sync {
-    println(total(3, ones([3])))
-    println(total(5, ones([5])))
+    println(total(3, [1.0, 2.0, 3.0]))
+    println(total(5, [1.0, 2.0, 3.0, 4.0, 5.0]))
     return 0
 }
 ```
 
 ```text
-3.0
-5.0
+6.0
+15.0
 ```
 
 - **The value enters the instance key.** Every distinct constant instantiates a subgraph (`total<3>`, `total<5>`); the same types and value instantiate once. Types and values together are the key: two calls that differ only in a string are two instances (`label<"w">`, `label<"h">`).
 - **Any number, any position.** A declaration may take several `constas` parameters, at any position among the ordinary ones; the call writes each value at its parameter's position (`place(1, 2)` binds `x = 1`, `n = 2`). Each value is its own part of the instance key.
 - **The type is not limited to `int`.** `string`, `int`, `float`, `bool` and any other type with compile-time constants work; the value must be compatible with the parameter's type. The type must be written (`SemanticDiag::ConstasTypeRequired`). An `enum` member cannot be passed as a compile-time value yet (`SemanticDiag::ConstasValueNotConstant`) until `enum` values have a compile-time representation.
-- **The body reads the value.** Inside an instance `n` is a compile-time constant: it can be a named dimension in a type (`Tensor<f32, [n]>`, `[n]`), a field name (`t.[n]`), or an ordinary value in arithmetic, conditions and printing. No type has to read it: a body that is the only reader is legal.
+- **The body reads the value.** Inside an instance `n` is a compile-time constant: it can be a named dimension in a type (`f32[n]`), a field name (`t.[n]`), or an ordinary value in arithmetic, conditions and printing. No type has to read it: a body that is the only reader is legal.
 - **It is not a runtime parameter.** The call gives the constant, but it does not enter the call node: the instance's parameter list has no `n`, and the call passes only the other arguments (`total(3, xs)` has one argument, `xs`).
 - **A value can be handed on.** A `constas` value may be passed to another `constas` parameter, and it may come from a compile-time name such as the field name `static for` binds or a position of `indices`. `func columnOf(constas n: string, ..ts) { return column(n, ..ts) }` is legal: this is how `tree_map` hands the field name and the trees to `column`.
 - **It combines with a rest parameter.** `func column(constas n: string, ..ts)` is legal: the value is bound before the expansion and `ts` takes the arguments left over. The `column` of design note 3.1.1 can be written today as
 
   ```cml
   func column(constas n: string, ..ts): (int, int) {
-      return ( static for (j) in indices ts => ts.[j].[n] )
+      return ( static for j in indices ts => ts.[j].[n] )
   }
   ```
 
   Two calls that differ only in the string are two graphs, each reading the field its value names.
 - A declaration with a `constas` parameter **has no function value**: the constant must be written at the call, so it cannot be assigned or passed on (`SemanticDiag::ConstasFunctionNeedsCall`). A body-less declaration (the declaration of a C++ operator) cannot take one (`SemanticDiag::ConstasInNativeDeclaration`).
 - The value must be a compile-time constant (`SemanticDiag::ConstasValueNotConstant`): a runtime value cannot select an instance. Constants today are literals, another `constas` value, compile-time names such as the `n` of `static for` and the `j` of `indices`, and a call of a pure function whose arguments are compile-time constants (`label(first_field::<S>())`), which the compiler folds to its value; a call it cannot read at build time is refused by its own name (`SemanticDiag::FoldCallNotEvaluable`, and the other `FoldCall*` diagnostics).
-- `n` is bound only inside the instance body; a type position in the body (`let z: Tensor<f32, [n]>`) has no such scope yet. The array spelling `f32[n]` works as well.
+- `n` is bound only inside the instance body. A named dimension is written in the declared type of a parameter (`x: f32[n]`); a type position in the body reads a dimension name as bound by the first plain occurrence in a parameter type, so `let z: f32[n]` there does not bring the instance's `n` in (`SemanticDiag::DimensionNameNotBound`).
 
 **Current restrictions**: a generic function cannot be decorated; a generic function with context arguments bound (`f<w>`) cannot be a value; a function with a `constas` parameter cannot be a value, cannot be combined with a body-less declaration, and an `enum` value cannot yet be a `constas` argument. The design note's `column(constas n, ts)` omits the type; today it is written `column(constas n: string, ..ts)`.
 
@@ -494,28 +492,29 @@ func canonical(x: float, y: float): float {
 - **A called function does not inherit them**: the functions `dot` calls keep the canonical algorithm unless they carry their own permission tags. After inlining every node keeps its own permissions.
 - **`#strict` takes everything away**: the function or block it marks (with the branch arms, loop bodies and lambdas inside it) has the empty set as its effective permissions -- the default `reassociate` and `contract` are gone, and an inner grant has no effect. When both are written, `#strict` wins.
 - **A permission allows, it never requires.** The CPU back ends (`std::nvm`, `std::fvm`, `std::jit`, `std::prl`, `std::cpp`) always give the canonical results; later back ends (Tiles, for example) may use other algorithms on the nodes that have a permission. `std::opt` uses the defaults of 7.3; `std::opt safe_fp=true` works under the same policy as `#strict`.
-- There is no module-wide default and no command-line or pipeline switch; a back end's entry point (such as `tiles.run`) takes no permissions.
+- There is no module-wide default and no command-line or pipeline switch; a back end's entry point (such as `tiles::run`) takes no permissions.
 - The permissions are recorded on every node of the graph: `std::rgir` and `std::gir` show `numeric="..."` on the nodes that have any. `#strict` is a tag of the code and appears as `attrs="strict"` on its nodes. Common-subexpression merging and tensor fusion do not merge nodes with different permissions.
-- **The old `@numeric(permission, ...)` spelling is gone**: it is now `SemanticDiag::InvalidAnnotation` at the annotation, naming the tag form that replaced it (`#[reassociate]`); an empty `@numeric()` and any `@name(args)` are rejected the same way.
+- **`@numeric(permission, ...)` is `SemanticDiag::InvalidAnnotation` at the annotation**, naming the tag form to write instead (`#[reassociate]`); an empty `@numeric()` and any `@name(args)` are rejected the same way.
 
 ### 7.6.2 Tags: `#`
 
-`#` no longer starts a comment (the `#!` of the first line aside): it writes a **tag** (design principles 6.2). A tag is a name in the same namespace as functions and types: declared in this module, imported by name, or qualified as `module::tag`.
+`#` writes a **tag** (design principles 6.2); the `#!` of the first line is ignored to the end of the line. A tag is a name in the same namespace as functions and types: declared in this module, imported by name, or qualified as `module::tag`.
 
 A tag is declared at the top level of a module; after `on` come the positions it may be written at:
 
 ```cml
 export tag kernel on nodes                  // before a block, function or type: the nodes in it
 export tag fast on func, nodes              // also the function's own declaration
-export tag width<w: int> on type, field     // with parameters, which are compile-time values
+export tag width(w: int) on type, field     // with parameters, which are compile-time values
+export tag vjp::<F>(rule: F) on func when is_function::<F>()   // a function parameter: the argument is a function, and the fact restores to that function
 tag finite = [kernel, fast]                 // a group: its members apply together
 ```
 
-The positions are `func` (a function declaration), `type` (a type declaration), `field` (a struct field), `nodes` (the nodes written in the region) and `param` (reserved). `read_by` says which passes read the tag; when none of them is in the pipeline a warning is reported where the tag is written. Only a pass that declares itself a reader of tag facts counts: the core dump passes and `std::opt`, and module passes such as `tiles::compile` and `tensor::fuse`; a pass written in Camel can declare the tags it reads with `#reads<tag, ...>` on its function, which counts like `read_by`. A program may not declare a tag with the name of a core permission (nor `finite_math` or `strict`; `tag reassociate`, for one): that name always means the core's tag, so the declaration would never be read, and `SemanticDiag::TagShadowsPermission` refuses it at the declaration.
+The positions are `func` (a function declaration), `type` (a type declaration), `field` (a struct field), `nodes` (the nodes written in the region) and `param` (reserved). `read_by` says which passes read the tag; when none of them is in the pipeline a warning is reported where the tag is written. Only a pass that declares itself a reader of tag facts counts: the core dump passes and `std::opt`, and module passes such as `tiles::compile` and `tensor::fuse`; a pass written in Camel can declare the tags it reads with `#reads(tag, ...)` on its function, which counts like `read_by`. A program may not declare a tag with the name of a core permission (nor `finite_math` or `strict`; `tag reassociate`, for one): that name always means the core's tag, so the declaration would never be read, and `SemanticDiag::TagShadowsPermission` refuses it at the declaration.
 
 The core carries a set of **numeric permission tags** (design principles 7.2), written without an import and `on nodes`: `reassociate`, `contract`, `approx_math`, `change_precision`, `no_nans`, `no_infs`, `no_signed_zeros`, `flush_subnormals`, `nondeterministic` (allows results that vary with the schedule, such as floating-point atomics), and the group `finite_math` that holds the first four of those assumptions; `strict` (7.4) is a core tag too, written `on func, nodes`. `#contract` lands in the node's permission column (the `numeric="..."` of a dump) and `#strict` in its attribute set (`attrs="strict"`); readers get permissions through one query (`permissionsOf` / `effectivePermissions` in `camel/core/tags.h`), and `effectivePermissions` returns the empty set for `#strict`. The defaults are those of 7.3: `reassociate` and `contract` are allowed anyway, the others still have to be written.
 
-A rule declaration may be preceded by `#requires<permission, ...>`: the arguments are permission names, the core's group `finite_math`, or a group the module declares with `tag name = [permission, ...]` (members are expanded recursively, and the group name means the union of its permissions). The engine applies the rule only where the numeric policy of the nodes allows those permissions ([46 Rules](../../technical/46_rules.md)). A requirement that names an ordinary tag, an undeclared name, or `#requires` outside a rule is a located error, never a silent pass.
+A rule declaration may be preceded by `#requires(permission, ...)`: the arguments are permission names, the core's group `finite_math`, or a group the module declares with `tag name = [permission, ...]` (members are expanded recursively, and the group name means the union of its permissions). The engine applies the rule only where the numeric policy of the nodes allows those permissions ([46 Rules](../../technical/46_rules.md)). A requirement that names an ordinary tag, an undeclared name, or `#requires` outside a rule is a located error, never a silent pass.
 
 There are three forms of `#`, written before a function, a type declaration, a struct field or a block:
 
@@ -525,9 +524,9 @@ There are three forms of `#`, written before a function, a type declaration, a s
 #kernel
 func matmul(a: T, b: T): T { ... }
 
-#width<32>
+#width(32)
 type Packed = {
-    #width<8> a: int,
+    #width(8) a: int,
     b: int,
 }
 
@@ -540,25 +539,25 @@ func main(): int {
 }
 ```
 
-`#name`, `#name<arguments>` and `#[a, b<v>]` (a group). A tag's arguments are compile-time values: a literal, a top-level constant or a function name. Each argument must be a constant of the kind its parameter declares — `int`, `float`, `bool`, `string`, or a function name for `func`; a real is carried as a real attribute by its bits and `1.5` prints as `1.5`. Writing a tag where its declaration does not list it is an error, located at the tag. So are a wrong number of arguments, an argument that is not a compile-time value, an argument whose kind is not the declared one (`SemanticDiag::TagArgumentType`), and a parameter of a kind a tag cannot carry yet (`SemanticDiag::TagParameterType`).
+`#name`, `#name(arguments)` and `#[a, b(v)]` (a group). A tag's arguments are compile-time values: a literal, a top-level constant or a function name. Each argument must be a constant of the kind its parameter declares — `int`, `float`, `bool`, `string`, or a function (a parameter that is a type parameter satisfying `is_function`, or a concrete function type); a real is carried as a real attribute by its bits and `1.5` prints as `1.5`. Writing a tag where its declaration does not list it is an error, located at the tag. So are a wrong number of arguments, an argument that is not a compile-time value, an argument whose kind is not the declared one (`SemanticDiag::TagArgumentType`), and a parameter of a kind a tag cannot carry yet (`SemanticDiag::TagParameterType`).
 
 A tag of `on nodes` is a **node attribute** (`camel/core/node_attrs.h`): a tag written before a function body or a block holds for the nodes written in it, it accumulates with same-name tags outside by the attribute's combine rule, and an inner same-name tag with a parameter takes the inner value. A tag of `on func`, `on type` and `on field` belongs to the declaration itself: a C++ module reads it in one query, `tag::factsOf` (tags, permissions and readers; `tag::ofDeclaration` / `tag::ofField` remain); reading it from Camel code waits for the first stage of generics.
 
-A parameter may also be declared `func`: its argument is then a function name, and the tag's fact is the **graph reference** of that function (`attr::graphRef`), not a function value. The GIR builder keeps that graph in the reference table of the function's graph (`kGraphRefRule`), so the frozen graph names the function directly; it is not resolved by name again at run time and no closure captures it. A `func` argument is therefore a static function of the program, never a closure over the surrounding scope. The autodiff module declares `export tag vjp<rule: func> on func` this way: `#vjp<rule>` before a function declaration makes calls of that function use the rule instead of the derivative of its body ([26 Autodiff](../../technical/26_autodiff_as_graph_rewrite.md)). The old `@vjp<rule>` annotation is gone: it is reported at the annotation as `SemanticDiag::InvalidAnnotation`, naming `#vjp<rule>`.
+A parameter may also be a function: it is declared as a type parameter with the condition `when is_function::<F>()`, the same spelling as a pass's signature `opt::<F>(f: F): F! when is_function::<F>()`; when the signature is fixed, write the concrete function type `(x: T) => R`. Its argument is a function, and the tag's fact is that function itself (the argument restores to the function), not its name and not an internal handle; whether its signature fits is checked by the tag's reader where the tag is written. The autodiff module declares `export tag vjp::<F>(rule: F) on func when is_function::<F>()` this way: `#vjp(rule)` before a function declaration makes calls of that function use the rule instead of the derivative of its body ([26 Autodiff](../../technical/26_autodiff_as_graph_rewrite.md)).
 
-**`#impl<f>`: the Camel body is the semantics, the native kernel is the execution** (design principles 10.4). It is written before a function declaration that has a body:
+**`#impl(f)`: the Camel body is the semantics, the native kernel is the execution** (design principles 10.4). It is written before a function declaration that has a body:
 
 ```cml
-#op<':op/add_l'>
+#op(':op/add_l')
 func add_kernel(a: int, b: int): int          // a body-less declaration of this module, the kernel
 
-#impl<add_kernel>
+#impl(add_kernel)
 export func add(a: int, b: int): int {
     return a - (0 - b)                        // the semantics (the Camel definition)
 }
 ```
 
-- The syntax is `#impl<kernel name>`: one argument, a name rather than a value, because a body-less declaration has no function value to pass.
+- The syntax is `#impl(kernel name)`: one argument, a name rather than a value, because a body-less declaration has no function value to pass.
 - `f` must be a body-less declaration of **the same module**. By design it is a private declaration of that module (not exported: the kernel is an implementation detail, not part of the module interface), written beside the function. A declaration of another module (`SemanticDiag::ImplKernelForeign`), a name no declaration brings (`ImplKernelUnknown`), a function that has a body (`ImplKernelNotBodyless`), and `#impl` on the body-less declaration itself (`ImplOnBodylessDeclaration`) are all refused, and `#impl` cannot be written on a lambda, a type, a field or a block (tag-position error). A module that owns a `.cmo` (as `stdlib/tensor.cml` does for `tensor.cmo`) may declare its kernel and write the definition just the same: a `.cml` and a `.cmo` of the same name are **one module** (H94), and a declaration module may hold bodies (the language author's ruling of 2026-10-23, `docs/handover/reviews/questions-2026-10-23.md`, 「## impl-kernel-site」： 「选 (a)，而且取宽的那一种：声明模块可以有函数体，`DeclarationModuleHasBody` 删除」).
 - **A generic function may carry `#impl`**: the kernel is a body-less declaration with the function's own type parameters (`sum_kernel::<T>`), and by H228 ("one operator, per-type executors") the executor is chosen at instantiation — a fixed rule of the declaration matches by signature, and a rule declared with type parameters is solved with the instance's types. When a `T` has no executor, that instance runs the function body: the body is the semantics, so the result is the same, and `std::profile` shows which path it took (`docs/handover/reviews/questions-2026-10-23.md`, 「## impl-kernel-site」: 「泛型函数可以带 `#impl`」).
 - **The signatures must agree**: the same number of `with` and normal parameters, the same types and `var` marks, the same result type, and no `constas` parameter on the kernel; otherwise `ImplSignatureMismatch`.
@@ -572,10 +571,10 @@ export func add(a: int, b: int): int {
       }
   }
 
-  #op<':op/add_i'>
+  #op(':op/add_i')
   func add_kernel::<T>(a: T, b: T): T when is_armed::<T>()   // implements the i32 instances alone
 
-  #impl<add_kernel>
+  #impl(add_kernel)
   func add::<T>(a: T, b: T): T { return a - (0 - b) }        // an int instance has no executor: it runs the body
   ```
 
@@ -597,13 +596,13 @@ export func add(a: int, b: int): int {
       }
   }
 
-  #op<':op/add_i'>
+  #op(':op/add_i')
   func add_kernel::<T>(a: T, b: T): T when is_armed::<T>()   // an i32 instance takes :op/add_i
 
-  #op<':op/add_f'>
+  #op(':op/add_f')
   func add_kernel::<T>(a: T, b: T): T when is_f32::<T>()     // an f32 instance takes :op/add_f
 
-  #impl<add_kernel>
+  #impl(add_kernel)
   export func add::<T>(a: T, b: T): T {
       return a + b                                           // an instance outside both families runs this
   }
@@ -664,7 +663,7 @@ id
 - It can be `export`ed, and is used in another module as `module::Pair<int>`.
 - The angle brackets of a module type are interpreted by the type itself, and the arguments can be types or `const data`; the angle brackets of `Tensor<f32, [2, 3]>`, another spelling of a numeric array, are interpreted by the array type itself (a shape argument is written without `const`: `Tensor<f32, const [2, 3]>` is `SemanticDiag::InvalidTypeArgument`).
 
-The parts of type expressions that are reserved and not implemented: the type operations `&`, `\`, `+`, `-`, `^`, and `keyof`, `name of T` (`SemanticDiag::FeatureNotSupported` or a syntax error); their meaning is not yet decided. `typeof e` is implemented: it is a whole type, the type of the value of `e`, expanded by the compiler where the type is used. It cannot be nested inside a larger type (`typeof(1)[]` is `SemanticDiag::TypeOfNotWholeType`), and an operand with no value (`void`) is `SemanticDiag::TypeOfNotAValue`.
+The type operations `&`, `\`, `+`, `-`, `^` report `SemanticDiag::FeatureNotSupported`; their meaning is not yet decided. `keyof` and `of` are not keywords: the ones in `keyof T` and `name of T` are ordinary names, and writing them is a syntax error. `typeof e` is a whole type, the type of the value of `e`, expanded by the compiler where the type is used. It cannot be nested inside a larger type (`typeof(1)[]` is `SemanticDiag::TypeOfNotWholeType`), and an operand with no value (`void`) is `SemanticDiag::TypeOfNotAValue`.
 
 ## 7.8 Blocks
 

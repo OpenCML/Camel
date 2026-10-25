@@ -858,15 +858,43 @@ timeout_ms = 10000
 
 [[tests]]
 name = "growing_recursion"
-desc = "A generic function that calls itself with an ever larger type is refused after a bounded number of nested instances instead of never terminating."
+desc = "A generic function that calls itself with a type built out of the type it was given (`T`, then `T[]`, then `T[][]`) asks for one instance per level: the type argument of every instance contains the one before it, so the family of instances never reaches a fixed point. The call is refused where the growth first appears -- the recursive call at the first level that grows -- with its own diagnostic, not by the count of instances being built (design principles 5.5)."
 kind = "negative"
 case = "../../../cases/compile/generics/err_deep.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::GenericInstantiationTooDeep"
+expect_diagnostic_name = "SemanticDiag::GenericTypeArgumentGrows"
 expect_diagnostic_line = 4
 expect_diagnostic_column = 34
-expect_output_contains = ["8 instances of it are already being built inside one another"]
+expect_output_contains = ["grow from 'int' to 'int[]'", "': every instance's type argument would contain the one before it, so specialization never stops.", "name=SemanticDiag::GenericTypeArgumentGrows, code=0x030001EC"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "growing_type_argument_dimension"
+desc = "The same growth with a type variable and a dimension name in the parameter (`T[n]`) and the array wrapped in one more array at every level: the instance being built holds `float` and the call the refusal lands on asks for `float[n]`, a type built out of it. The refusal is at the recursive call and, unlike the count bound, it needs no depth to be reached -- the growth is refused as soon as it appears."
+kind = "negative"
+case = "../../../cases/compile/generics/err_nest_element_type.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::GenericTypeArgumentGrows"
+expect_diagnostic_line = 15
+expect_diagnostic_column = 40
+expect_output_contains = ["type argument 'T' of the generic function 'nest'", "grow from 'float' to 'float[n]'", "': every instance's type argument would contain the one before it, so specialization never stops.", "name=SemanticDiag::GenericTypeArgumentGrows, code=0x030001EC"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "instantiation_count_bound"
+desc = "The bound of design principles 5.5 stays as the fallback for the recursion the growth check does not describe: every arm hands `churn` a value of a different scalar type, so there are many instance keys and no type argument is built out of the one an open instance holds (nothing here is refused as `GenericTypeArgumentGrows`), and what stops the program is how many instances of one function may be built inside one another. A scalar type is a leaf, so no arm's type argument contains another's, and the refusal lands on the arm whose key is the ninth one requested."
+kind = "negative"
+case = "../../../cases/compile/generics/err_deep_types.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::GenericInstantiationTooDeep"
+expect_diagnostic_line = 31
+expect_diagnostic_column = 32
+expect_output_contains = ["8 instances of it are already being built inside one another", "name=SemanticDiag::GenericInstantiationTooDeep, code=0x03000055"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 

@@ -1,0 +1,31 @@
+/**
+ * A `var` name and another name for the same value: `var v = big` makes the cell of `v` a name
+ * of the array `big` is (a read, not a copy), so the value has two names. What a write through
+ * one of them may reach is decided by the value's own count, which counts the names that can
+ * still read it: the write in the callee (a `var` parameter points at the caller's cell) copies,
+ * and `big` keeps the value it was read as (docs/design-principles.cn.md 3.5, 6.11;
+ * docs/technical/18_sync_control_semantics.md).
+ */
+module var_alias_through_param
+
+func make_array(): int[] {
+    return [
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    ]
+}
+
+func touch(var xs: int[]): int sync {
+    xs[0] = 9
+    return 0
+}
+
+func main(): int sync {
+    let big = make_array()
+    var v   = big
+    touch(v)
+    println("big[0] =", big[0], " v[0] =", v[0])
+    return 0
+}

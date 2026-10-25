@@ -27,6 +27,7 @@
 #include <memory>
 #include <mutex>
 #include <span>
+#include <string_view>
 #include <vector>
 
 namespace camel::runtime {
@@ -99,6 +100,27 @@ struct ExecLoop {
     uint32_t stateSlotsOffset       = 0;
     const gc_data_idx_t *stateSlots = nullptr; // k slots, by component (stateComponents only)
     uint64_t origin = 0;
+};
+
+/// What the memory plan decided about an update node's storage: an "returns a new value" update
+/// (a path assignment, a rebinding like `xs = xs->sort`) either reuses the storage of the value it
+/// is given or copies, and the decision is made once, here, from the graph
+/// (docs/design/arrays-memory/README.cn.md 4.3.1). Every back end runs the node the plan names for
+/// it (ExecPlan::operatorUriFor) instead of deciding for itself.
+enum class StorageReuse : uint8_t {
+    /// Not an update node: the plan decided nothing about it.
+    None = 0,
+    /// The plan proved the old value has no other observer -- the cell holds a value this same
+    /// variable's own update made, and nothing read the cell since: the update reuses the input's
+    /// storage.
+    Input = 1,
+    /// The cell escapes (a `var` parameter's or a captured cell): the plan cannot prove it here,
+    /// so the update asks the array itself at run time (Array::canWriteInPlace): the only
+    /// reference to a block it owns is written in place, anything else is copied.
+    ByArrayCount = 2,
+    /// The old value has an observer the plan can see (a read of the cell that keeps the value),
+    /// or its origin is unknown: the update copies.
+    Copy = 3,
 };
 
 /// What a back end does at a position of the plan for a loop that starts or goes on there.
@@ -192,6 +214,29 @@ class ExecPlan {
     /// until then (resolving an operator can import a module, and an unknown one is a fault of
     /// the run, not of the plan). Written by the back ends that run the graph node by node.
     mutable std::unique_ptr<std::atomic<operator_t>[]> resolvedOpers;
+
+    /// ---- In-place updates: where the decision lives (docs/design/arrays-memory/README.cn.md 4.3.1) -------------------
+    //
+    // An update node is an OPER node that names the in-place form of an operator and takes its
+    // array from `:var/take` of a variable's cell (Builder::pathAssignmentOf,
+    // Builder::inPlaceRebindingOf). The plan decides, once, whether the update reuses the storage
+    // of the value it is given (StorageReuse), and every back end follows: a node the plan marks
+    // Copy runs the plain form of the operator (operatorUriFor), which copies; the two forms that
+    // reuse the storage run the in-place form, which asks the array itself where the plan could
+    // not prove it (StorageReuse::ByArrayCount).
+    std::vector<StorageReuse> storageReuseAt; // by topo index; None for every other node
+    StorageReuse storageReuseOf(gc_node_ref_t ref) const {
+        const size_t index = ref < topoIndexByRef.size() ? topoIndexByRef[ref] : kNotInPlan;
+        return index == kNotInPlan || index >= storageReuseAt.size() ? StorageReuse::None
+                                                                    : storageReuseAt[index];
+    }
+    /// How many update nodes the plan decided each way.
+    size_t storageReuseCount(StorageReuse decision) const;
+
+    /// The operator a back end runs for the OPER node `ref`: the URI the node names, or -- for an
+    /// update node the plan marked Copy -- the plain (copying) form of the in-place form it names
+    /// (OperatorTable::plainForm). The text lives in the operator table, so the view stays valid.
+    std::string_view operatorUriFor(gc_node_ref_t ref) const;
     /// What FastVM records about the code it made for this version: where its bytecode starts and
     /// how long it is (each stored plus one; 0 is "not compiled"), the JIT entry, flags, and how
     /// often an indirect call from it was made. Only FastVM reads and writes it.

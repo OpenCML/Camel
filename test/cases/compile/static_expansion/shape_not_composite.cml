@@ -4,7 +4,7 @@ module shape_not_composite
 type N = int
 
 func build(t: int) {
-    return N { static for (n, F) in fields N => t }
+    return N { static for n, F in fields N => t }
 }
 
 func main(): int sync {

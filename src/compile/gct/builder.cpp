@@ -436,6 +436,12 @@ node_ptr_t Builder::visitModule(const AST::node_ptr_t &ast) {
 
     node_ptr_t root = makeExec();
 
+    // The tags written before `module` (`#gpu module m`, design principles 13.4) are kept beside
+    // the module node, like the tags of a function beside the function; the GIR builder reads
+    // them for each top-level function of this module. A module that writes none has no such
+    // child at all.
+    attachTagUses(root, ast);
+
     // The namespaces the module declares, and the `using namespace` of its top level, which
     // apply to the whole module whatever their position (design principles 10.2).
     ownNamespaces_.clear();
@@ -624,7 +630,7 @@ node_ptr_t Builder::visitModule(const AST::node_ptr_t &ast) {
                 if (node->nativeDeclaration()) {
                     // The declaration keeps what makes it one: no body, so the graph builder
                     // makes an operator rule of it instead of a graph (handover step 1),
-                    // and its tag uses go with it (`#op<'module:function'>`; design principles
+                    // and its tag uses go with it (`#op('module:function')`; design principles
                     // 6.2).
                     declNode->setNativeDeclaration();
                     if (const auto *uses = tree_->tagUsesOf(node); uses != nullptr) {
@@ -1170,7 +1176,8 @@ void Builder::checkOperatorDeclaration(
 FuncDecl(Ref ref) : FuncAnno* anno, FuncData ;
 */
 /*
-tagDecl : 'export'? 'tag' identDef angledParams? 'on' tagPositions ('read_by' tagReaders)?
+tagDecl : 'export'? 'tag' identDef typeParams? parentParams? 'on' tagPositions
+            ('read_by' tagReaders)? whenClause?
         | 'export'? 'tag' identDef '=' bracketIdents ;
 The tag is registered here, before any type is declared (visitModule), so that a `#` use reads
 it. It lowers to no node: a tag is a compile-time name, not a value of the program (design
@@ -1196,6 +1203,8 @@ void Builder::visitTagDecl(const AST::node_ptr_t &ast) {
     for (const auto &param : decl->params()) {
         tag.params.push_back({param.name, param.type});
     }
+    tag.typeParams = decl->typeParams();
+    tag.when       = decl->when();
     for (const auto &alias : decl->aliases()) {
         tag.aliases.push_back(alias);
     }
@@ -1502,6 +1511,12 @@ node_ptr_t Builder::visitFuncDecl(const AST::node_ptr_t &ast) {
     }
     funcDeclPending_    = true;
     node_ptr_t funcNode = visitFuncData(funcDataNode);
+    if (declLoad->ruleBinding()) {
+        // The function a rule with `with` parameters is written as: a use of its name as a value
+        // is the call that binds them and gives the `Rule`, not a function value (design
+        // principles 5.5). The graph builder reads the mark from the FUNC node.
+        funcNode->setRuleBinding();
+    }
 
     // Decorator annotations are lowered to ANNO nodes attached after FUNC payload.
     // Each ANNO node owns one lowered GCT expression (currently lowered from funcAnno -> Data).
@@ -2232,9 +2247,6 @@ node_ptr_t Builder::visitData(const AST::node_ptr_t &ast) {
     case AST::DataType::StaticAccess:
         dataNode = visitStaticAccess(ast);
         break;
-    case AST::DataType::TryExpr:
-        dataNode = visitTryExpr(ast);
-        break;
     case AST::DataType::LoopExpr:
         dataNode = visitLoopExpr(ast);
         break;
@@ -2421,21 +2433,15 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
         LEAVE("BinaryExpr");
         return res;
     }
-    case AST::BinaryDataOp::StrictEq:
+    case AST::BinaryDataOp::StrictEq: {
+        // `a === b` is the elementwise equality (design principles 4.2): the group holding the
+        // scalar comparison, which the tensor module also exports its array entry into. The
+        // whole comparison is `==`, the reduction of this one, and is a different group.
+        opNode = tree_->makeDRef("__strict_eq__");
+    } break;
     case AST::BinaryDataOp::StrictNeq: {
-        // Design principles 4.1: `===` is not supported for now (and `!==` with it). It
-        // used to compile and compared objects, so two equal string literals were unequal.
-        // Located at the whole comparison (the range of the node itself is its right side).
-        auto range  = ast->load()->tokenRange();
-        range.start = lhsASTNode->load()->tokenRange().start;
-        diags_->of(SemanticDiag::ConstructNotSupported)
-            .at(range)
-            .commit(
-                binaryExpr->op() == AST::BinaryDataOp::StrictEq ? "===" : "!==",
-                "identity comparison is not part of the language for now; compare values "
-                "with '==' and '!='");
-        throw BuildAbortException();
-    }
+        opNode = tree_->makeDRef("__strict_neq__");
+    } break;
     case AST::BinaryDataOp::Index: {
         // `t[a:b]` is the slice operator, `t[i]` the index operator; the table gives `[]` the
         // index operator, so the slice is named here (design principles 5.4).
@@ -2617,7 +2623,6 @@ enum ReservedDataOp {
     Bind, // Data obj, Data* args, NamedData* kwargs
     Comp, // Data lhs, Data rhs
     As, // Data lhs, Type rhs
-    Is, // Data lhs, Type rhs
     Access, // Data obj, RefData ref
 }
 ReservedExpr(ReservedDataOp op) := Data lhs, Any? rhs ;
@@ -3005,13 +3010,6 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
                 },
                 {nodeOrigin(dataNode)});
         }
-    } break;
-
-    case AST::ReservedDataOp::Is: {
-        diags_->of(SemanticDiag::FeatureNotSupported)
-            .at(ast->load()->tokenRange())
-            .commit("IS Operator");
-        res = visitData(lhsASTNode);
     } break;
 
     case AST::ReservedDataOp::Access: {
@@ -3663,19 +3661,6 @@ node_ptr_t Builder::visitShapeComprehension(const AST::node_ptr_t &ast) {
     *compNode << shapeNode;
     LEAVE("ShapeComprehension");
     return compNode;
-}
-
-/*
-
-
-*/
-node_ptr_t Builder::visitTryExpr(const AST::node_ptr_t &ast) {
-    ENTER("TryExpr");
-    ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for TryExpr");
-    diags_->of(SemanticDiag::FeatureNotSupported).at(ast->load()->tokenRange()).commit("TryExpr");
-    throw BuildAbortException();
-    LEAVE("TryExpr");
-    return nullptr;
 }
 
 template <typename T> inline data_ptr_t makeDataFromLiteral(const T &value) {
@@ -5695,7 +5680,7 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
             diags_->of(SemanticDiag::DuplicateParameter).at(paramLoad->tokenRange()).commit(name);
             throw BuildAbortException();
         }
-        factory.addWithArg(name, type, isVar);
+        factory.addWithArg(name, type, isVar, paramLoad->isConstas());
     }
 
     // Process normal parameters

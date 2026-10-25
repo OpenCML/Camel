@@ -194,7 +194,6 @@
         { "include": "#with-parameters" },
         { "include": "#function-declaration" },
         { "include": "#type-declaration" },
-        { "include": "#catch-binding" },
         { "include": "#let-declaration" },
         { "include": "#var-declaration" }
       ]
@@ -238,7 +237,7 @@
       }
     },
     "with-parameters": {
-      "comment": "funcDecl: (WITH angledParams)? ... FUNC",
+      "comment": "funcDecl: (WITH angledParams)? ... FUNC; ruleDecl: (WITH angledParams)? 'export'? RULE ...",
       "name": "meta.with-parameters.camel",
       "begin": "\\b(with)\\s*(<)",
       "beginCaptures": {
@@ -302,14 +301,6 @@
           }
         }
       ]
-    },
-    "catch-binding": {
-      "comment": "catchClause: CATCH identDef ':' typeExpr stmtBlock",
-      "match": "\\b(catch)\\s+([A-Za-z_][A-Za-z_0-9]*)",
-      "captures": {
-        "1": { "name": "keyword.control.exception.camel" },
-        "2": { "name": "variable.parameter.camel" }
-      }
     },
     "let-declaration": {
       "comment": "dataDecl: LET carrier (':' typeList)? '=' dataList. The names of the carrier are immutable bindings.",
@@ -385,10 +376,6 @@
           "match": "\\b(?:loop|while|do|for|in)\\b"
         },
         {
-          "name": "keyword.control.exception.camel",
-          "match": "\\b(?:try|catch|finally)\\b"
-        },
-        {
           "name": "keyword.control.flow.camel",
           "match": "\\b(?:return|throw)\\b"
         },
@@ -430,7 +417,7 @@
         },
         {
           "name": "keyword.operator.expression.camel",
-          "match": "\\b(?:as|is|of|typeof|constas|keyof)\\b"
+          "match": "\\b(?:as|typeof|constas)\\b"
         },
         {
           "name": "constant.language.boolean.camel",
@@ -542,9 +529,9 @@
       ]
     },
     "angle-arguments": {
-      "comment": "angledValues / specType arguments: '<' directly after a name. The parser tells it from a comparison by adjacency (isAdjacent), and so does this rule. '>=' is one token and never closes the list.",
+      "comment": "angledValues / specType arguments: '<' directly after a name, or after the '::' that declares type parameters at the head (`func f::<T>`; design principles 5.5). The parser tells it from a comparison by adjacency (isAdjacent), and so does this rule. '>=' is one token and never closes the list.",
       "name": "meta.angle-arguments.camel",
-      "begin": "(?<=[A-Za-z_0-9])<(?!=)",
+      "begin": "(?:(?<=[A-Za-z_0-9])|(?<=::))<(?!=)",
       "beginCaptures": { "0": { "name": "punctuation.definition.angle-arguments.begin.camel" } },
       "end": "(>)(?!=)|(?=[)\\]};])",
       "endCaptures": { "1": { "name": "punctuation.definition.angle-arguments.end.camel" } },

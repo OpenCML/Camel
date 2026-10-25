@@ -1,0 +1,22 @@
+/**
+ * The value bound to a rule's `with` parameter is part of what selects the instance the rule's
+ * sides are made at, so it is a value the compiler knows. A binding whose value is not known until
+ * the program runs would need one instance for every value it could take, so it is refused where
+ * the binding is written (design principles 5.4, 5.5; rewrite design 2 (second version) 1).
+ */
+module err_rule_with_not_constant
+
+import { Program, graphs } from graph
+import { rewrite } from rewrite
+
+with <tile: int>
+rule add_tile(x: int) when tile > 0 { x + tile => x }
+
+/// The factor is a parameter of the function, so it is not known while the program is compiled.
+func apply(p: Program, tile: int): Program! {
+    return rewrite(p, [add_tile<tile>])
+}
+
+func main(): int sync {
+    return 0
+}

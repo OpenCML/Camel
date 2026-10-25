@@ -9,10 +9,10 @@
  */
 module array_sort_redeclaration
 
-#op<':op/add_i'>
+#op(':op/add_i')
 func dup_sort(xs: i32[]): i32[]
 
-#op<':op/add_l'>
+#op(':op/add_l')
 func dup_sort(xs: i32[]): i32[]
 
 func main(): int sync {

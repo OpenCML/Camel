@@ -1,0 +1,30 @@
+// A `var` and the order of its writes: in a sync body the statements run in the order written, a
+// read takes the value of the most recent write before it, and a write nobody reads does not run.
+// Run: camel docs/tutorial/examples/10_var_order.cml
+module var_order
+
+func bump(var counter: int): int sync {
+    counter += 1
+    return counter
+}
+
+func twice(): int sync {
+    var c = 0
+    bump(c)
+    bump(c)
+    return c
+}
+
+func latest(): int sync {
+    var c = 1
+    c = 2
+    let before = c
+    c = 3
+    return before
+}
+
+func main(): int sync {
+    println(twice())
+    println(latest())
+    return 0
+}

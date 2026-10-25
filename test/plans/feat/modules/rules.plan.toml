@@ -465,7 +465,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 
 [[tests]]
 name = "rules.requires_permission_grants"
-desc = "A rule with `#requires<approx_math>` is applied only where the program grants the permission: `kept` carries `@numeric(approx_math)` and loses its product, `scaled` does not and keeps it. The requirement is compiled with the rule, not checked at run time."
+desc = "A rule with `#requires(approx_math)` is applied only where the program grants the permission: `kept` carries `@numeric(approx_math)` and loses its product, `scaled` does not and keeps it. The requirement is compiled with the rule, not checked at run time."
 kind = "behavior"
 case = "../../../cases/modules/rules/requires_target.cml"
 args = ["${case}", "counts::report_requires", "requires::apply", "counts::report_requires", "std::nvm"]
@@ -517,7 +517,7 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::RuleTagNotRequires"
 expect_diagnostic_line = 6
 expect_diagnostic_column = 2
-expect_output_contains = ["A rule may be preceded only by '#requires<...>', not by the tag 'fast'."]
+expect_output_contains = ["A rule may be preceded only by '#requires(...)', not by the tag 'fast'."]
 
 [[tests]]
 name = "rules.requires_outside_a_rule"
@@ -545,7 +545,7 @@ expect_output_contains = ["The tag 'requires' takes 1 parameter(s), but 0 argume
 
 [[tests]]
 name = "rules.requires_program_group"
-desc = "A requirement may name a group of permissions the program declares (`tag fast = [reassociate, contract]`): `#requires<fast>` is the union of its members, so the rule applies to `kept` (which grants `contract`) and not to `scaled` (`#strict`: no permission at all, the defaults included)."
+desc = "A requirement may name a group of permissions the program declares (`tag fast = [reassociate, contract]`): `#requires(fast)` is the union of its members, so the rule applies to `kept` (which grants `contract`) and not to `scaled` (`#strict`: no permission at all, the defaults included)."
 kind = "behavior"
 case = "../../../cases/modules/rules/requires_group_target.cml"
 args = ["${case}", "counts::report_requires", "requires_group::apply", "counts::report_requires", "std::nvm"]
@@ -559,21 +559,21 @@ assert(input.normalized.stdout === expected, `stdout was: ${JSON.stringify(input
 timeout_ms = 10000
 
 [[tests]]
-name = "rules.analysis_reads_a_fact_in_when"
-desc = "An `analysis` (rewrite design 4) compiles to functions and a fact kind: `depth` counts the additions a value is under (initial 0, a constant 1, an addition one more than the deepest operand, any other operator the join of its operands) and `sign` is the value of a constant. `report` reads `depth` of the frozen graphs of the target (sum 3, mixed 2) and counts products; the rule `mul_one` reads `sign(y)` in its `when`, where `y` is a pattern variable and so a node of the draft (a `const` parameter is the constant's value in a condition, rewrite design 2 (second version) 1), so it rewrites x * 1 but not x * 2; the second report shows the rewritten program."
+name = "rules.fact_reads_a_fact_in_when"
+desc = "A `fact` (rewrite design 7.5) compiles to functions and a fact kind: `depth` counts the additions a value is under (a `case _` of 0, a constant 1, an addition one more than the deepest operand, any other operator the merged fact of its operands) and `sign` is the value of a constant. `report` reads `depth` of the frozen graphs of the target (sum 3, mixed 2) and counts products; the rule `mul_one` reads `sign(y)` in its `when`, where `y` is a pattern variable and so a node of the draft (a `const` parameter is the constant's value in a condition, rewrite design 2 (second version) 1), so it rewrites x * 1 but not x * 2; the second report shows the rewritten program."
 kind = "behavior"
-case = "../../../cases/modules/rules/analysis_target.cml"
-args = ["${case}", "analysis_lib::report", "analysis_lib::apply", "analysis_lib::report", "std::nvm"]
+case = "../../../cases/modules/rules/fact_target.cml"
+args = ["${case}", "fact_lib::report", "fact_lib::apply", "fact_lib::report", "std::nvm"]
 expect_exit = 0
 expect_stdout_contains = ["sum 3 mixed 2 one 1 two 1\nsum 3 mixed 2 one 0 two 1\n4 7 7 14\n"]
 timeout_ms = 20000
 
 [[tests]]
-name = "rules.analysis_takes_the_parts_of_a_compound"
-desc = "A declaration with parameters (`analysis mul_by_one(a: Node, b: Node): bool`) is a multi-parameter query: a rule's condition hands it the parts of the compound, and the fact is the one of the value whose parts they are (rewrite design 4.1-4.2). `mul_one_by_parts` rewrites `x * 1` to `x` because `mul_by_one(x, node_of(c))` reads `sign(y) == 1` through the `x * y` clause; `x * 2` keeps its product because the query answers false. The coefficient is a `const` parameter, so its node is reached with `node_of(c)` (rule-language design v2, section 1: `const c` is the constant's value in a condition, and `node_of(c)` is the node), and the two parts are a factor and a node rather than two values pinned by shape. The first report prints one product in each function, the second only in `two`, and the values are unchanged."
+name = "rules.fact_takes_the_parts_of_a_compound"
+desc = "A declaration with parameters (`fact mul_by_one(a: Node, b: Node): bool`) is a multi-parameter query: a rule's condition hands it the parts of the compound, and the fact is the one of the value whose parts they are (rewrite design 4.1-4.2). `mul_one_by_parts` rewrites `x * 1` to `x` because `mul_by_one(x, node_of(c))` reads `sign(y) == 1` through the `x * y` case; `x * 2` keeps its product because the query answers false. The coefficient is a `const` parameter, so its node is reached with `node_of(c)` (rule-language design v2, section 1: `const c` is the constant's value in a condition, and `node_of(c)` is the node), and the two parts are a factor and a node rather than two values pinned by shape. The first report prints one product in each function, the second only in `two`, and the values are unchanged."
 kind = "behavior"
-case = "../../../cases/modules/rules/analysis_parts.cml"
-args = ["${case}", "analysis_parts::report", "analysis_parts::apply", "analysis_parts::report", "std::nvm"]
+case = "../../../cases/modules/rules/fact_parts.cml"
+args = ["${case}", "fact_parts::report", "fact_parts::apply", "fact_parts::report", "std::nvm"]
 expect_exit = 0
 expect_stdout_contains = ["one 1 two 1\none 0 two 1\n7 14\n"]
 timeout_ms = 20000
@@ -609,6 +609,21 @@ case = "../../../cases/modules/rules/node_of_misuse.cml"
 args = ["${case}", "std::nvm"]
 expect_exit = 1
 expect_output_contains = ["NodeOfNotAParameter", "'x' is not a const parameter of the rule 'drop_by_node'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.refuses_a_const_parameter_the_left_side_matches_no_constant_for"
+desc = "A `const` parameter means the left side matches a constant there, so `drop_by_shape`, whose left side is `x + 1` and whose condition asks for `node_of(c)`, is refused where it is written: the diagnostic is located at the parameter it names, and the engine's own guards are never reached (the run reaches the pass, whose condition has a `const` parameter its match bound no constant for, only because the declaration was accepted)."
+kind = "negative"
+case = "../../../cases/modules/rules/const_param_unbound.cml"
+args = ["${case}", "const_param_unbound::apply", "std::nvm"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::RuleConstParamNotMatched"
+expect_diagnostic_line = 24
+expect_diagnostic_column = 34
+expect_output_contains = ["'c' is a `const` parameter of the rule 'drop_by_shape', and the left side matches no constant for it.", "A `const` parameter means the left side matches a constant there"]
+expect_output_not_contains = ["left side bound no constant", "left side binds no node"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
 
@@ -1477,4 +1492,135 @@ assert(given.includes('sampled sum_swap<f32[3]>: '), "the program's own type joi
 assert(allDefaults === left, 'the defaults of samples and seed read the registered types alone: ' + allDefaults)
 }
 """
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.with_parameters_bound"
+desc = "A rule whose declaration writes `with` parameters is a function of them: `add_zero_tiled<1>` and `mul_one_scaled` (whose parameter has a default, so its name alone is a `Rule`) enter a rule set as `Rule` values. The report before and after shows the two functions that hold the pattern losing their addition, and the one that holds `x * 1` losing its product."
+kind = "behavior"
+case = "../../../cases/modules/rules/with_target.cml"
+args = ["${case}", "with_rules::report", "with_rules::apply", "with_rules::report", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["left 1 0\nright 2 0\nfolded 0 1\nleft 0 0\nright 1 0\nfolded 0 0\n3 7 5\n"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.with_parameters_the_condition_reads"
+desc = "The `when` of a rule with `with` parameters reads them: the same rule and the same program, bound to 0 instead of 1, refuses -- both additions stay -- while the rule bound by its default still fires. The value is what the two runs differ by."
+kind = "behavior"
+case = "../../../cases/modules/rules/with_target.cml"
+args = ["${case}", "with_rules::report", "with_rules::apply_refusing", "with_rules::report", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["left 1 0\nright 2 0\nfolded 0 1\nleft 1 0\nright 2 0\nfolded 0 0\n3 7 5\n"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.with_parameter_unbound"
+desc = "A rule with a `with` parameter that has no default is no `Rule` until it is bound: writing the name alone in a rule set is a compile error that says so (RuleWithParameterUnbound), and the program does not run."
+kind = "negative"
+case = "../../../cases/modules/rules/err_rule_with_unbound.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::RuleWithParameterUnbound"
+expect_diagnostic_line = 16
+expect_output_contains = ["'shift' is a `with` parameter of the rule 'add_shift', it has no default, and the rule value here binds nothing for it"]
+expect_output_not_contains = ["15 3 5"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.with_parameter_format"
+desc = "camel-format writes a rule's `with` parameters before the declaration, as it writes a function's, and before `export`: one line for the `with` clause, however many parameters it lists, and the declaration on the next line. The parameters keep the spelling of the input (`tile: int, scale: float = 1.0, shift: int = 2`), so the formatted text is the text the formatter was given."
+kind = "snapshot"
+tool = "camel-format"
+case = "../../../cases/modules/rules/with_format.cml"
+args = ["${case}"]
+expect_exit = 0
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "golden/with_format.cml"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.with_parameter_and_a_type_parameter"
+desc = "The rule of the design draft 1: `with <tile: int>` and `rule tile_scale::<T>(x: T)`, one instantiation channel. The value is the factor of the product, and both sides read it: the pattern `x * tile` matches `x * 2` where the rule is bound to 2 and not where it is bound to 3 or 0, and the replacement `x + x * (tile - 1)` is built from it, which is where the addition of the two rewritten functions comes from. The four reports show the additions and products of the target's functions before and after each binding, and the program prints what it printed."
+kind = "behavior"
+case = "../../../cases/modules/rules/with_generic_target.cml"
+args = ["${case}", "with_generic_rules::report", "with_generic_rules::counted_two", "with_generic_rules::report", "with_generic_rules::counted_three", "with_generic_rules::report", "with_generic_rules::counted_zero", "with_generic_rules::report", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["wide 0 1\n", "again 0 1\n", "thrice 0 1\n", "zeroed 0 1\n", "6 8 15 0\n"]
+timeout_ms = 30000
+
+[[tests]]
+name = "rules.with_parameter_and_a_type_parameter_instances"
+desc = "The proof of the rule bound to 2 names the instance each rewrite came from: the two sites of `x * 2` are one instance, `tile_scale<int>(tile = 2)`, and the same rule bound to 3 is another, `tile_scale<int>(tile = 3)` -- the value is half of the key the instance is made under. `check` then enumerates the instances of the one bound value, one row per instance."
+kind = "behavior"
+case = "../../../cases/modules/rules/with_generic_target.cml"
+args = ["${case}", "with_generic_rules::counted_two", "with_generic_rules::counted_three", "with_generic_rules::checked", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["rewrites 2 rule tile_scale\n", "tile_scale<int>(tile = 2)", "rewrites 1 rule tile_scale\n", "tile_scale<int>(tile = 3)", "6 8 15 0\n"]
+timeout_ms = 30000
+
+[[tests]]
+name = "rules.with_parameter_binding_is_a_constant"
+desc = "The value bound to a rule's `with` parameter is what selects the instance its sides are made at, so it is a value the compiler knows: a binding whose value is a parameter of the function around it is refused where the binding is written (RuleWithArgumentNotConstant), and the program does not run."
+kind = "negative"
+case = "../../../cases/modules/rules/err_rule_with_not_constant.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::RuleWithArgumentNotConstant"
+expect_diagnostic_line = 17
+expect_output_contains = ["The value bound to the `with` parameter 'tile' of the rule 'add_tile' is not a compile-time constant of the type 'int'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.fact_argument_is_not_a_constant"
+desc = "A fact is computed once for the arguments it is queried with, and two different arguments are two different facts, so the compiler must compute the argument where the query is written: `capped<y>(x)` names a parameter of the rule, a value of the run, and the declaration is refused with `SemanticDiag::FactArgumentNotConstant` (name=SemanticDiag::FactArgumentNotConstant, code=0x030001C3) on the written argument, rather than computing a fact for every value the parameter may take."
+kind = "negative"
+case = "../../../cases/modules/rules/fact_arg_not_constant.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::FactArgumentNotConstant"
+expect_diagnostic_line = 17
+expect_output_contains = ["The argument 'cap' of a fact is not a compile-time constant of type 'int'.", "An argument is therefore a value the compiler computes where the query is written", "fact_arg_not_constant.cml:17:42"]
+expect_output_not_contains = ["UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.fact_without_a_default_case"
+desc = "Every fact needs one case that takes whatever the others do not: `sign` matches only a constant, so nothing says what the fact is for a value no case matched, and the declaration is refused with `SemanticDiag::FactCaseDefaultMissing` (name=SemanticDiag::FactCaseDefaultMissing, code=0x030001C4) on the `fact` line. The value of that case is also what a value that depends on itself settles on, so it is not optional."
+kind = "negative"
+case = "../../../cases/modules/rules/fact_no_default.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::FactCaseDefaultMissing"
+expect_diagnostic_line = 8
+expect_output_contains = ["The fact 'sign' has no 'case _', so nothing says what it is for a value no other case matched.", "every fact needs one case that takes whatever they do not"]
+expect_output_not_contains = ["UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.fact_with_argument_is_read_by_a_case"
+desc = "The arguments a fact is queried with are the fact's, and they reach the functions the declaration generates: `fact times` multiplies a constant by `with <factor: int>` and its initial case is the argument negated, so a case reads the value by name. Two rules ask the same pattern for different constants -- `mul_by_two` fires where `times<2>(y) == 4` (the constant is 2) and `mul_by_three` where `times<3>(y) == 9` (the constant is 3) -- and on a target with a product by 1 and a product by 2 the first rewrites the one product and the second none, so which constant a rule rewrites is the value the case read. `x * 2` is rewritten to `x + x`, so the numbers of the program are unchanged."
+kind = "behavior"
+case = "../../../cases/modules/rules/fact_with_value.cml"
+args = ["${case}", "fact_with_value::report", "fact_with_value::apply_two", "fact_with_value::report", "fact_with_value::apply_three", "fact_with_value::report", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["one 1 two 1\none 1 two 0\none 1 two 0\n7 14\n"]
+timeout_ms = 20000
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+
+[[tests]]
+name = "rules.a_condition_whose_fact_query_finds_nothing_does_not_leave_a_frame_behind"
+desc = "A rule whose condition queries a fact over the parts of the redex and finds no value leaves the rewrite able to go on, and leaves nothing of its own behind. This is the minimal shape of the fact condition path: one two-parameter fact (`sub(a, b)`) whose case queries a second fact (`sign(y)`), asked from a rule's `when` about the operands of a product no subtraction has. The first query of `sub` answers nothing and throws `FactQueryNoValue`, which the condition turns into `false`; the query is asked again on the next match, and must not read anything of the evaluation that already ended. The point of the case is that the pass runs to the end and the product survives: it died with SIGSEGV on the host before the fix (exit 139, stdout stopping at the report before `apply`)."
+kind = "behavior"
+case = "../../../cases/modules/rules/fact_no_value.cml"
+args = ["${case}", "fact_no_value::report", "fact_no_value::apply", "fact_no_value::report", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["kept 1\nkept 1\nkept 14\n"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000

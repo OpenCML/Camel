@@ -6,7 +6,7 @@ module requires_nd
 import { Program } from graph
 import { rewrite } from rewrite
 
-#requires<nondeterministic>
+#requires(nondeterministic)
 rule mul_one(x: float) { x * 1.0 => x }
 
 export func apply(p: Program): Program! {

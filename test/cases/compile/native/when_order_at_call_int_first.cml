@@ -24,10 +24,10 @@ func is_arm_i32::<T>(): bool {
     }
 }
 
-#op<':op/add_l'>
+#op(':op/add_l')
 func arms_kernel::<T>(a: T, b: T): T when is_arm_int::<T>()
 
-#op<':op/sub_i'>
+#op(':op/sub_i')
 func arms_kernel::<T>(a: T, b: T): T when is_arm_i32::<T>()
 
 func main(): int sync {

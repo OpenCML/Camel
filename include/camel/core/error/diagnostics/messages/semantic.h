@@ -74,11 +74,13 @@ enum class SemanticDiag : uint32_t {
     FunctionNameAsValue = 0x000060,
     // Nullable and fallible values (design principles 3.8;
     // docs/technical/29_nullable_and_fallible_values.md).
+    // 0x000074 was TryCatchNotInLanguage: it named the `try`/`catch`/`finally` construct. Those
+    // words are not keywords any more (handover 5.00 "语法层收口" item 5), so writing one of them is
+    // an ordinary name or a syntax error and the diagnostic has no producer. The code is not reused.
     ThrowOutsideFallible  = 0x000070,
     ThrowNotAnError       = 0x000071,
     TaggedTypeNesting     = 0x000072,
     TaggedValueNotOpened  = 0x000073,
-    TryCatchNotInLanguage = 0x000074,
     TaggedOperandMismatch = 0x000075,
     TaggedMatchCases      = 0x000076,
     // Reporting several errors (0x80 and up, clear of the blocks above).
@@ -159,12 +161,21 @@ enum class SemanticDiag : uint32_t {
     RuleTagNotRequires     = 0x00016C,
     TagParameterType       = 0x00016D,
     TagShadowsPermission   = 0x00016E,
+    /// Two tags of one field are written with the same name.
+    TagFieldNameAmbiguous = 0x0001EA,
+    /// A tag argument is a function, which a `static` head has no value for.
+    TagFunctionArgumentNotReadable = 0x0001EB,
     // Static expansion (design principles 5.5): 0x170 and up.
-    StaticMatchNotExhaustive       = 0x000170,
-    StaticMatchUnreachableCase     = 0x000171,
-    StaticTypeNotConcrete          = 0x000172,
-    StaticMatchTooDeep             = 0x000173,
-    GenericInstantiationCycle      = 0x000174,
+    StaticMatchNotExhaustive   = 0x000170,
+    StaticMatchUnreachableCase = 0x000171,
+    StaticTypeNotConcrete      = 0x000172,
+    StaticMatchTooDeep         = 0x000173,
+    GenericInstantiationCycle  = 0x000174,
+    // A recursive generic call whose type argument is built out of the type the caller already
+    // instantiated (design principles 5.5): 'f::<T>(x: T)' calling 'f([x])' asks for one instance
+    // per level, and no level's key ever repeats. The count of open instances is not what bounds
+    // this, so the call is refused where the growth first appears.
+    GenericTypeArgumentGrows       = 0x0001EC,
     StaticForNotComposite          = 0x000175,
     StaticAccessNotInternal        = 0x000176,
     StaticAccessUnknownField       = 0x000177,
@@ -254,7 +265,8 @@ enum class SemanticDiag : uint32_t {
     /// A type query is asked about a type that is still open (a type variable).
     WhenTypeQueryNotConcrete = 0x0001AB,
     /// No candidate of a call applies: every condition that could take it is false.
-    WhenConditionUnmet = 0x0001AC,
+    WhenConditionUnmet    = 0x0001AC,
+    EffectInRuleCondition = 0x0001AD,
 
     // Defaults of `with` parameters and `with` arguments given by name (design principles 4.4,
     // handover). 0x1B7 to 0x1BE; 0x1BF and up belong to `when` predicate lookup.
@@ -312,7 +324,7 @@ enum class SemanticDiag : uint32_t {
     TypeOfNotWholeType = 0x0001B4,
     /// `T { static for ... }` names a type that is not a struct or a tuple.
     SameShapeComprehensionNotComposite = 0x0001B5,
-    /// `T { static for (n, F) in fields U }` walks a type other than the shape `T`.
+    /// `T { static for n, F in fields U }` walks a type other than the shape `T`.
     SameShapeComprehensionMismatch = 0x0001B6,
 
     // Type identity in `match type` (`case int`, `case T`; design principles 5.5). 0x1C2.
@@ -320,6 +332,8 @@ enum class SemanticDiag : uint32_t {
     /// expression, an open type variable, a type written twice in one case, or a type that an
     /// earlier case already selects.
     StaticMatchPatternCannotMatch = 0x0001C2,
+    FactArgumentNotConstant       = 0x0001C3,
+    FactCaseDefaultMissing        = 0x0001C4,
     // Folding a call of a pure function with constant arguments. 0x1C5 and up.
     /// An argument of a call in a place that needs a constant is not one.
     FoldCallArgumentNotConstant = 0x0001C5,
@@ -373,9 +387,12 @@ enum class SemanticDiag : uint32_t {
     /// `range(a, b, 0)` is no sequence at all: the step never moves (design principles 4.2; the
     /// rule on ` -interval-step-form`, which makes a step of 0 a fault
     /// and a constant one a compile-time error).
-    RangeStepZero               = 0x0001E6,
+    RangeStepZero = 0x0001E6,
+    /// A subscript slice with a constant step of 0 takes no element: `t[a:b:0]` (design principles 5.4;
+    /// the step of a slice follows the same rule the step of a range does).
+    SliceStepZero               = 0x0001E9,
     ReducedPrecisionUnsupported = 0x0001D7,
-    // #impl<f> (design principles 10.4): the Camel body of the function is its semantics and the
+    // #impl(f) (design principles 10.4): the Camel body of the function is its semantics and the
     // body-less declaration f of the same module is the operator that runs it. The graph builder
     // resolves the tag when it declares the module, so no pass reads it and it names no reader.
     ImplOnBodylessDeclaration = 0x0001D8,
@@ -400,6 +417,11 @@ enum class SemanticDiag : uint32_t {
     // head and writes it as the element type.
     TensorElementTypeRequired = 0x0001ED,
     BranchElementTypeMismatch = 0x0001EE,
+    RuleConstParamNotMatched  = 0x0001E8,
+    RuleWithParameterUnbound  = 0x0001DD,
+    /// The value bound to a rule's `with` parameter is part of what selects the instance its sides and
+    // its condition are made at, so it is a value the compiler knows.
+    RuleWithArgumentNotConstant = 0x0001F0,
 
     // Warnings
     IgnoredSideEffect = 0x100002,

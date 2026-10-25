@@ -5,7 +5,7 @@
  */
 module native_private
 
-#op<':op/idx_arr'>
+#op(':op/idx_arr')
 func at::<T>(xs: T[], i: int): T
 
 /// The module's own wrapper around its private operator.

@@ -41,7 +41,6 @@ Hello, Camel!
 
 - **Syntax** is written in a notation close to BNF: `*` zero or more times, `?` optional, `|` alternative, literal symbols inside quotes. The exact grammar is in [8.5](08_top_level_and_grammar.md#85-the-complete-grammar).
 - **Examples** are given as `cml` code blocks; a `text` code block is its output.
-- **"Reserved, not implemented"**: a construct that the grammar accepts but the compiler explicitly rejects. Every such construct gets a compile-time diagnostic; the text gives the name of the diagnostic and the alternative that works today. For a list see [8.6](08_top_level_and_grammar.md#86-constructs-reserved-but-not-implemented).
 - **"Behaviour of the current implementation, not yet decided"**: the implementation already has a definite behaviour, but there is no ruling on the language rule yet, and it may change later. Do not rely on the details of these behaviours when writing programs.
 
 ## 1.4 Chapters
@@ -54,6 +53,7 @@ Hello, Camel!
 | [5 Modules](05_modules.md) | `module`, `import`, `export`, `namespace` |
 | [6 Expressions](06_expressions.md) | Literals, access, calls, pipes, operators, `if`, `match`, lambdas |
 | [7 Statements and declarations](07_statements.md) | `let`/`var`, `return`/`throw`, blocks, functions, generics, type declarations |
-| [8 Program and grammar](08_top_level_and_grammar.md) | Top-level structure, entry, grammar summary, constructs reserved but not implemented |
+| [8 Program and grammar](08_top_level_and_grammar.md) | Top-level structure, entry, grammar summary |
+| [9 Rules and facts](09_rules_and_facts.md) | `rule` and conditions, type and `with` parameters, rule sets, `fact`, checking and explaining |
 
-**Loops.** Camel currently has no loop syntax: `for` and `while` cannot be used (`for` and `in` are reserved words). Repeated computation is written as recursion (tail recursion is not limited in depth) or with the higher-order operators `map`, `filter`, `reduce`, `foreach`.
+**Loops.** `loop` is an expression with state: the state is written on the loop head, the body's value is the next round's state, and the value of the whole loop is the final state. `loop acc = 0 for x in xs do acc + x` takes one element of the sequence per round, in order; `loop i = 1, acc = 0 while i <= n do (i + 1, acc + i)` goes on while the condition holds; with both written, each round looks at the condition first and then takes an element. There is no `break` and no `continue`: ending early is written as a `while` condition, and skipping the rest of a round as an `if`. A loop costs no call depth, so it may run any number of rounds. The exact rules are in [6.8.6](06_expressions.md#686-loop).

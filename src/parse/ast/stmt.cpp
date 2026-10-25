@@ -187,12 +187,19 @@ const std::string TypeDeclLoad::geneCode() const {
 
 const std::string TagDeclLoad::toString() const {
     std::string result = "TagDecl: " + ref_.toString();
+    if (!typeParams_.empty()) {
+        result += "::<";
+        for (size_t i = 0; i < typeParams_.size(); ++i) {
+            result += (i > 0 ? ", " : "") + typeParams_[i];
+        }
+        result += ">";
+    }
     if (!params_.empty()) {
-        result += "<";
+        result += "(";
         for (size_t i = 0; i < params_.size(); ++i) {
             result += (i > 0 ? ", " : "") + params_[i].name + ": " + params_[i].type;
         }
-        result += ">";
+        result += ")";
     }
     if (isGroup()) {
         result += " = [";
@@ -221,18 +228,28 @@ const std::string TagDeclLoad::toString() const {
                 result += (i > 0 ? ", " : "") + readBy_[i].toString();
             }
         }
+        if (!when_.empty()) {
+            result += " when " + when_;
+        }
     }
     return result + docSuffix();
 }
 
 const std::string TagDeclLoad::geneCode() const {
     std::string result = "tag " + ref_.toString();
+    if (!typeParams_.empty()) {
+        result += "::<";
+        for (size_t i = 0; i < typeParams_.size(); ++i) {
+            result += (i > 0 ? ", " : "") + typeParams_[i];
+        }
+        result += ">";
+    }
     if (!params_.empty()) {
-        result += "<";
+        result += "(";
         for (size_t i = 0; i < params_.size(); ++i) {
             result += (i > 0 ? ", " : "") + params_[i].name + ": " + params_[i].type;
         }
-        result += ">";
+        result += ")";
     }
     if (isGroup()) {
         result += " = [";
@@ -260,6 +277,9 @@ const std::string TagDeclLoad::geneCode() const {
         for (size_t i = 0; i < readBy_.size(); ++i) {
             result += (i > 0 ? ", " : "") + readBy_[i].toString();
         }
+    }
+    if (!when_.empty()) {
+        result += " when " + when_;
     }
     return result;
 }

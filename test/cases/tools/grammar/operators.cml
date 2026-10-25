@@ -14,7 +14,7 @@ func compare(a: int, b: int): bool {
     return strict && eq || !ne
 }
 
-func arithmetic(a: float, b: float, X: Tensor, w: Tensor): float {
+func arithmetic(a: float, b: float, X: f32[..], w: f32[..]): float {
     let sum = a + b - a * b / a % b
     let pow = a ^ 2.0
     let mat = X @ w
@@ -23,7 +23,7 @@ func arithmetic(a: float, b: float, X: Tensor, w: Tensor): float {
     return sum
 }
 
-func assign(var x: int, var t: Tensor, u: Tensor) {
+func assign(var x: int, var t: f32[..], u: f32[..]) {
     x = 1
     x += 2
     x -= 3

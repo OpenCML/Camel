@@ -7,8 +7,8 @@
 module comprehensions_graph
 
 func pairUp(t: {p: (int, int)}): {p: (int, int)} {
-    return { static for (n, F) in fields {p: (int, int)} => (
-        static for (m, G) in fields F => t.[n].[m] * 10
+    return { static for n, F in fields {p: (int, int)} => (
+        static for m, G in fields F => t.[n].[m] * 10
     ) }
 }
 

@@ -1,0 +1,3 @@
+refuted abs_of_nonnegative: proposition equality, evidence none, reason the rule never fired on its own left side in 64 tries, the rule never fired on its own left side, coverage beyond translation coverage: the operator 'math:abs_l' is not translated
+
+9

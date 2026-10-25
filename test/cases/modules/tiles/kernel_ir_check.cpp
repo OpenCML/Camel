@@ -474,7 +474,7 @@ void checkRegions() {
     require(residency.segments.size()==2 && residency.segments[0].downloads==std::vector<size_t>({1}) &&
             residency.segments[1].uploads==std::vector<size_t>({2}) &&
             residency.segments[1].downloads==std::vector<size_t>({3}));
-    auto invalidTransfers=[&](std::vector<Region> bad) {
+    auto invalidTransfers=[&](std::vector<Segment> bad) {
         try { (void)planResidency(detourFacts,detour,bad); }
         catch(const std::exception&) { return; }
         throw std::runtime_error("invalid transfer boundary accepted");
@@ -484,7 +484,7 @@ void checkRegions() {
     // A device value a host consumer reads is a download, a device value only dead host code reads
     // is not, and one host input shared by two regions is uploaded once.
     std::vector<RegionNode> split={{{},{},false,false},{{0},{},true,false},{{0,1},{},true,true},{{1},{},false,false}};
-    std::vector<Region> splitRegions={{{1},{0},{1}},{{2},{0,1},{2}}};
+    std::vector<Segment> splitRegions={{{1},{0},{1}},{{2},{0,1},{2}}};
     ResidencyFacts splitFacts;
     splitFacts.values.resize(3);
     splitFacts.values[1].block.placement=Placement::Gpu;
@@ -509,7 +509,7 @@ void checkRegions() {
     std::vector<RegionNode> ordered={{{},{},true,false},{{},{0},true,true}};
     regions=partitionRegions(ordered);
     if(!(regions.size()==2 &&
-         std::any_of(regions.begin(),regions.end(),[](const Region &r){return r.members==std::vector<size_t>{0};})))
+         std::any_of(regions.begin(),regions.end(),[](const Segment &r){return r.members==std::vector<size_t>{0};})))
         throw std::runtime_error("an ordering edge did not keep its predecessor live");
     // Two control regions never contract into one, however eligible the nodes are.
     std::vector<RegionNode> arms={{{},{},true,false},{{0},{},true,true}};

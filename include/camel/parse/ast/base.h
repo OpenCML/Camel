@@ -35,7 +35,7 @@ enum class LoadType {
     Repeated,
     Optional,
 
-    /// A tag use (`#name`, `#name<args>`, design principles 6.2), attached to the declaration or
+    /// A tag use (`#name`, `#name(args)`, design principles 6.2), attached to the declaration or
     /// block it is written on.
     TagUse,
 

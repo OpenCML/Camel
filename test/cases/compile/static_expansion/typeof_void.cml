@@ -5,6 +5,6 @@ func nothing(): void {
 }
 
 func main(): int sync {
-    static for (j, C) in fields typeof(nothing()) => println(j)
+    static for j, C in fields typeof(nothing()) => println(j)
     return 0
 }

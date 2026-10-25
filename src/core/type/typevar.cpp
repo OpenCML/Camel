@@ -195,7 +195,8 @@ FunctionTypeFactory rebuildFunctionType(
         factory.addWithArg(
             paramNameOf(func, i, "__w", i),
             replaced(func->withTypeAt(i)),
-            func->withIsVarAt(i));
+            func->withIsVarAt(i),
+            func->withNeedsValueAt(i));
     }
     for (size_t i = 0; i < func->normTypesCount(); ++i) {
         const std::string name =

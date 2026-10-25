@@ -10,6 +10,7 @@
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/execute/executor.h"
+#include "camel/profile/profile.h"
 #include "camel/utils/type.h"
 #include "camel/utils/utf8.h"
 #include "ops.h"
@@ -297,23 +298,72 @@ slot_t __slice_sub__(ArgsView &with, ArgsView &norm, Context &ctx) {
     return rtdata::toSlot(res);
 }
 
-// `t[idx]` with `idx` an int array: the rows the indices name, in that order (the `take` of
-// design principles 5.4). An index outside the array, negative included, is a fault with the
-// index as written; a repeated index repeats its row.
-slot_t __idx_take_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    Array *arr    = norm.get<Array *>(0);
-    Array *idx    = norm.get<Array *>(1);
-    auto *arrType = tt::as_ptr<ArrayType>(norm.type(0));
+namespace {
 
-    const size_t n    = arr->size();
-    const size_t take = idx->size();
-    Array *res        = Array::create(mm::autoSpace(), arrType, take);
-    for (size_t i = 0; i < take; ++i) {
-        const Int64 raw = idx->get<Int64>(i);
-        if (raw < 0 || static_cast<size_t>(raw) >= n) {
-            throwRuntimeFault(RuntimeDiag::IndexOutOfRange, raw, "an array", n);
+/// The type a shape-changing result is built with: the declared result type when it states an
+/// element type, and otherwise the element type the argument's value holds (an array literal
+/// whose element type nobody fixed yet). Only the element type is read from it; the extents of
+/// the value are the ones computed where the result is made.
+ArrayType *
+resultArrayType(Type *declared, const Array *values, std::span<const int64_t> extents) {
+    auto *declaredArray = declared != nullptr ? tt::as_ptr<ArrayType>(declared) : nullptr;
+    const bool stated   = declaredArray != nullptr && declaredArray->elemType() != nullptr &&
+                        declaredArray->elemType()->code() != TypeCode::Void;
+    if (stated) {
+        return declaredArray;
+    }
+    return ArrayType::create(const_cast<Type *>(values->elemType()), extents);
+}
+
+} // namespace
+
+// `t[idx]` with `idx` an int array: the rows the indices name, in that order, along the first
+// dimension (the `take` of design principles 5.4). The result's shape is
+// `[len(idx)] + shape(t)[1:]` -- for a rank-1 array the row is the element -- and it is a copy:
+// an arbitrary row order shares no block with the array it was taken from. An index outside the
+// first dimension, negative included, is a fault with the index as written; a repeated index
+// repeats its row, and its gradient accumulates there (design principles 9.9).
+slot_t __idx_take_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    (void)with;
+    (void)ctx;
+    auto *const arr   = norm.get<Array *>(0);
+    auto *const idx   = norm.get<Array *>(1);
+    const size_t rank = arr->rank();
+    if (rank < 1) {
+        // A rank-0 array has no first dimension to take a row from. The type system states a
+        // rank of at least one for this operator, so this is a defect rather than something a
+        // program writes.
+        throwRuntimeFault(
+            RuntimeDiag::InvalidArgument, "[]", "a subscript of an array of rank 0");
+    }
+    const uint64_t rows    = static_cast<uint64_t>(arr->dim(0));
+    const uint64_t rowSize = rows == 0 ? 0 : arr->numel() / rows;
+    const size_t take      = static_cast<size_t>(idx->numel());
+    std::vector<int64_t> extents;
+    extents.reserve(rank);
+    extents.push_back(static_cast<int64_t>(take));
+    for (size_t i = 1; i < rank; ++i) {
+        extents.push_back(arr->dim(i));
+    }
+    auto *const resType = resultArrayType(norm.resultType(), arr, extents);
+    Array *res          = Array::create(mm::autoSpace(), resType, extents);
+    for (size_t k = 0; k < take; ++k) {
+        const Int64 raw = idx->get<Int64>(k);
+        if (raw < 0 || static_cast<uint64_t>(raw) >= rows) {
+            // A rank-1 array is read whole, so the length is the array's; a deeper one is read
+            // one row at a time, and the length the index must stay under is the first
+            // dimension's.
+            throwRuntimeFault(
+                RuntimeDiag::IndexOutOfRange,
+                raw,
+                rank == 1 ? "an array" : "the first dimension of the input array",
+                rows);
         }
-        res->set<slot_t>(i, arr->get<slot_t>(static_cast<size_t>(raw)), arrType);
+        const uint64_t src = static_cast<uint64_t>(raw) * rowSize;
+        for (uint64_t j = 0; j < rowSize; ++j) {
+            res->setSlot(
+                static_cast<uint64_t>(k) * rowSize + j, arr->getSlot(src + j), resType);
+        }
     }
     return rtdata::toSlot(res);
 }
@@ -392,7 +442,12 @@ slot_t __append_owned_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Array *arr        = norm.get<Array *>(0);
     const slot_t elem = with.get<slot_t>(0);
     auto *arrType     = tt::as_ptr<ArrayType>(norm.type(0));
-    if (!arr->canWriteInPlace()) {
+    const bool ownStorage = arr->canWriteInPlace();
+    if (camel::profile::enabledInline()) {
+        // The array's own count answered, where the plan could not (docs/design/arrays-memory/README.cn.md 4.3.1).
+        camel::profile::arrayCountAnswer(ownStorage);
+    }
+    if (!ownStorage) {
         return __append_arr__(with, norm, ctx);
     }
     arr->append(elem, arrType);
@@ -725,28 +780,30 @@ slot_t moduleAddTangent(Context &ctx, Type *tangentType, slot_t lhsSlot, slot_t 
 
 } // namespace
 
-// `tangent/add_arr(lhs, rhs)`: the elementwise sum of two tangent arrays.
+// `tangent/add_arr(lhs, rhs)`: the elementwise sum of two tangent arrays. The tangent of an
+// array is the array of its elements' tangents, so a tangent of any rank is summed element by
+// element and the sum has the shape of the left one (design principles 9.9).
 slot_t __tangent_add_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
     (void)with;
     auto *arrayType = tt::as_ptr<ArrayType>(norm.type(0));
     auto *lhs       = norm.get<Array *>(0);
     auto *rhs       = norm.get<Array *>(1);
-    if (lhs->size() != rhs->size()) {
+    if (lhs->numel() != rhs->numel()) {
         throwRuntimeFault(
             RuntimeDiag::RuntimeError,
             "autodiff: tangent arrays added that have different lengths");
     }
-    Array *sum = Array::create(mm::autoSpace(), lhs->size());
-    for (size_t i = 0; i < lhs->size(); ++i) {
-        sum->set<slot_t>(
+    Array *sum = Array::create(mm::autoSpace(), arrayType, lhs->shapeSpan());
+    for (uint64_t i = 0; i < lhs->numel(); ++i) {
+        sum->setSlot(
             i,
-            addTangent(ctx, arrayType->elemType(), lhs->get<slot_t>(i), rhs->get<slot_t>(i)),
+            addTangent(ctx, arrayType->elemType(), lhs->getSlot(i), rhs->getSlot(i)),
             arrayType);
     }
     return rtdata::toSlot(sum);
 }
 
-// `tangent/zeros_arr(xs)`: the zero tangent of `xs`, an array of its length whose elements are
+// `tangent/zeros_arr(xs)`: the zero tangent of `xs`, an array of its shape whose elements are
 // the zero tangents of the elements of `xs`.
 slot_t __tangent_zeros_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
     (void)with;
@@ -763,12 +820,12 @@ slot_t __tangent_zeros_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
     auto *primalArray  = tt::as_ptr<ArrayType>(primalType);
     auto *tangentArray = tt::as_ptr<ArrayType>(tangentType);
     auto *value        = norm.get<Array *>(0);
-    Array *zero        = Array::create(mm::autoSpace(), value->size());
-    for (size_t i = 0; i < value->size(); ++i) {
-        zero->set<slot_t>(
+    Array *zero        = Array::create(mm::autoSpace(), tangentArray, value->shapeSpan());
+    for (uint64_t i = 0; i < value->numel(); ++i) {
+        zero->setSlot(
             i,
             zeroTangent(
-                ctx, primalArray->elemType(), tangentArray->elemType(), value->get<slot_t>(i)),
+                ctx, primalArray->elemType(), tangentArray->elemType(), value->getSlot(i)),
             tangentArray);
     }
     return rtdata::toSlot(zero);
@@ -795,6 +852,64 @@ slot_t __tangent_scatter_add_arr__(ArgsView &with, ArgsView &norm, Context &ctx)
     const size_t at = static_cast<size_t>(index);
     result->set<slot_t>(
         at, addTangent(ctx, arrayType->elemType(), base->get<slot_t>(at), delta), arrayType);
+    return rtdata::toSlot(result);
+}
+
+// `tangent/scatter_take_arr(base, indices, delta)`: `base` with `delta`'s rows added back into
+// the rows the indices name, a repeated index accumulating. The reverse of `t[idx]`, which takes
+// whole rows along the first dimension (design principles 5.4, 9.9): the gradient of the rows a
+// gather took goes back to the rows it took them from, and every other row of `base` keeps the
+// zero tangent it holds. `base` is the zero tangent of the array the subscript was taken from:
+// its shape is the array's, its elements give the zeros. The indices are discrete, so nothing
+// reaches them.
+slot_t __tangent_scatter_take_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    (void)with;
+    auto *arrayType   = tt::as_ptr<ArrayType>(norm.type(0));
+    auto *base        = norm.get<Array *>(0);
+    auto *indices     = norm.get<Array *>(1);
+    auto *delta       = norm.get<Array *>(2);
+    if (base->rank() < 1) {
+        throwRuntimeFault(
+            RuntimeDiag::RuntimeError,
+            "autodiff: the gradient of a row take needs an array of rank at least one");
+    }
+    const uint64_t rows    = static_cast<uint64_t>(base->dim(0));
+    const uint64_t rowSize = rows == 0 ? 0 : base->numel() / rows;
+    const size_t take      = static_cast<size_t>(indices->numel());
+    if (delta->numel() != static_cast<uint64_t>(take) * rowSize) {
+        throwRuntimeFault(
+            RuntimeDiag::RuntimeError,
+            std::format(
+                "autodiff: the gradient of a row take has {} elements, the take result has {}",
+                delta->numel(),
+                static_cast<uint64_t>(take) * rowSize));
+    }
+    Array *result = Array::create(mm::autoSpace(), arrayType, base->shapeSpan());
+    for (uint64_t i = 0; i < base->numel(); ++i) {
+        result->setSlot(i, base->getSlot(i), arrayType);
+    }
+    for (size_t k = 0; k < take; ++k) {
+        const Int64 row = indices->get<Int64>(k);
+        if (row < 0 || static_cast<uint64_t>(row) >= rows) {
+            throwRuntimeFault(
+                RuntimeDiag::IndexOutOfRange,
+                row,
+                base->rank() == 1 ? "an array" : "the first dimension of the input array",
+                rows);
+        }
+        const uint64_t dst = static_cast<uint64_t>(row) * rowSize;
+        const uint64_t src = static_cast<uint64_t>(k) * rowSize;
+        for (uint64_t j = 0; j < rowSize; ++j) {
+            result->setSlot(
+                dst + j,
+                addTangent(
+                    ctx,
+                    arrayType->elemType(),
+                    result->getSlot(dst + j),
+                    delta->getSlot(src + j)),
+                arrayType);
+        }
+    }
     return rtdata::toSlot(result);
 }
 

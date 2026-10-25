@@ -186,17 +186,17 @@ func combineOneMixedSign::<T>(c: T): bool {
     return finiteValue(c) && c != 0.0 && c < 0.0 && c + 1.0 != 0.0
 }
 
-#requires<reassociate>
+#requires(reassociate)
 export rule float_combine::<T>(x: T, const c1: T, const c2: T) when is_float::<T>() && combineSameSign(c1, c2) {
     x * c1 + x * c2 => x * (c1 + c2)
 }
 
-#requires<reassociate, no_infs, no_signed_zeros>
+#requires(reassociate, no_infs, no_signed_zeros)
 export rule float_combine_mixed::<T>(x: T, const c1: T, const c2: T) when is_float::<T>() && combineMixedSign(c1, c2) {
     x * c1 + x * c2 => x * (c1 + c2)
 }
 
-#requires<reassociate, no_infs>
+#requires(reassociate, no_infs)
 export rule float_fold::<T>(x: T, const c1: T, const c2: T) when is_float::<T>() && foldCoefficients(c1, c2) {
     (x * c1) * c2 => x * (c1 * c2)
 }
@@ -208,12 +208,12 @@ export rule float_double(x: float, const c: float) when exactDoubling(c) {
 /// The bare operand: `x*c + x` is `x*c + x*1.0`, the same law and the same permission as
 /// `float_combine` with the coefficient 1 implicit. One rule reads both orders of the sum: the
 /// matcher exchanges the operands of a commutative operator.
-#requires<reassociate>
+#requires(reassociate)
 export rule float_combine_one::<T>(x: T, const c: T) when is_float::<T>() && combineOneSameSign(c) {
     x * c + x => x * (c + 1.0)
 }
 
-#requires<reassociate, no_infs, no_signed_zeros>
+#requires(reassociate, no_infs, no_signed_zeros)
 export rule float_combine_one_mixed::<T>(x: T, const c: T) when is_float::<T>() && combineOneMixedSign(c) {
     x * c + x => x * (c + 1.0)
 }
@@ -273,17 +273,17 @@ export rule tensor_f32_neg_neg(x: Tensor<f32>) { -(-x) => x }
 /// `t + t => t * 2.0`: exactly the f32 doubling, elementwise.
 export rule tensor_f32_add_self(x: Tensor<f32>) { x + x => x * 2.0 }
 
-#requires<reassociate>
+#requires(reassociate)
 export rule tensor_f32_combine(x: Tensor<f32>, const c1: f32, const c2: f32) when combineSameSign::<f32>(c1, c2) {
     x * c1 + x * c2 => x * (c1 + c2)
 }
 
-#requires<reassociate, no_infs, no_signed_zeros>
+#requires(reassociate, no_infs, no_signed_zeros)
 export rule tensor_f32_combine_mixed(x: Tensor<f32>, const c1: f32, const c2: f32) when combineMixedSign::<f32>(c1, c2) {
     x * c1 + x * c2 => x * (c1 + c2)
 }
 
-#requires<reassociate, no_infs>
+#requires(reassociate, no_infs)
 export rule tensor_f32_fold(x: Tensor<f32>, const c1: f32, const c2: f32) when foldCoefficients::<f32>(c1, c2) {
     (x * c1) * c2 => x * (c1 * c2)
 }
@@ -295,12 +295,12 @@ export rule tensor_f32_double(x: Tensor<f32>, const c: f32) when exactDoubling32
 /// The bare operand: `t*c + t` is `t*c + t*1.0`, the same law and the same permission as
 /// `tensor_f32_combine`, with the coefficient 1 implicit (the element families' `*_combine_one`).
 /// One rule reads both orders of the sum.
-#requires<reassociate>
+#requires(reassociate)
 export rule tensor_f32_combine_one(x: Tensor<f32>, const c: f32) when combineOneSameSign::<f32>(c) {
     x * c + x => x * (c + 1.0)
 }
 
-#requires<reassociate, no_infs, no_signed_zeros>
+#requires(reassociate, no_infs, no_signed_zeros)
 export rule tensor_f32_combine_one_mixed(x: Tensor<f32>, const c: f32) when combineOneMixedSign::<f32>(c) {
     x * c + x => x * (c + 1.0)
 }
@@ -312,7 +312,7 @@ export rule tensor_f32_combine_one_mixed(x: Tensor<f32>, const c: f32) when comb
 /// the products may overflow where the sum does not (`a*(b+c)` is 0 where `a*b + a*c` is
 /// `inf + -inf`, a NaN). The element library has no float distribute either, for the same reason,
 /// and `algebra.cpp` has none at all.
-#requires<reassociate>
+#requires(reassociate)
 export rule tensor_i64_distribute(a: Tensor<int>, b: Tensor<int>, c: Tensor<int>) {
     a * (b + c) <=> a * b + a * c
 }
@@ -343,7 +343,7 @@ func simplifyWith(p: Program, strict: bool): Program! {
         tensor_f32_neg_neg, tensor_f32_add_self, tensor_f32_combine, tensor_f32_combine_mixed,
         tensor_f32_fold, tensor_f32_double, tensor_f32_combine_one,
         tensor_f32_combine_one_mixed,
-        // Accuracy rules (8.10): their `#requires<refine_accuracy>` decides whether they fire.
+        // Accuracy rules (8.10): their `#requires(refine_accuracy)` decides whether they fire.
         tensor_log_softmax_of_softmax, float_log1p, float_expm1,
     ], strict)
 }
@@ -373,7 +373,7 @@ func saturateWith(p: Program, strict: bool): Program! {
 /// `std::opt::saturate` is this pass under the core's name; `saturate_all` adds the
 /// extraction, so a caller that wants the classes as they are uses this one.
 /// @effect runs the rules' functions
-/// @fails error value `RuleInvalid` when a rule does not compile; error value `RewriteInvalid` when a rewrite cannot be carried out
+/// @fails error value `RuleInvalid` when a rule does not compile
 /// @example saturate_only(p)    // the program with several writings per value
 with <
     /// Rounds of saturation; 0 applies no rule at all, so the program keeps its writings.
@@ -488,7 +488,7 @@ func finished(r: Run<Program>!, done: (q: Program) => bool): bool {
 /// `seq`: the stages once each, in the written order, each to a fixpoint; a stage that fails fails
 /// the whole sequence. The stages are not interleaved or reordered.
 /// @effect runs the rules' functions
-/// @fails error value `RuleInvalid` when a rule does not compile; error value `RuleTwoWay` when a rule is applied in a direction it does not allow; error value `RewriteInvalid` when a rewrite cannot be carried out
+/// @fails error value `RuleInvalid` when a rule does not compile; error value `RuleTwoWay` when a rule is applied in a direction it does not allow
 /// @example-fragment the tests apply a schedule to a real graph
 with <stages: Rule[][], strict: bool>
 export func seq(f: Program): Run<Program>! {
@@ -500,7 +500,7 @@ export func seq(f: Program): Run<Program>! {
 /// the result. A stage that matches nothing does not stop the choice; when no stage rewrites
 /// anything the program is returned unchanged. A failing stage fails the choice.
 /// @effect runs the rules' functions
-/// @fails error value `RuleInvalid` when a rule does not compile; error value `RuleTwoWay` when a rule is applied in a direction it does not allow; error value `RewriteInvalid` when a rewrite cannot be carried out
+/// @fails error value `RuleInvalid` when a rule does not compile; error value `RuleTwoWay` when a rule is applied in a direction it does not allow
 /// @example-fragment the tests apply a schedule to a real graph
 with <stages: Rule[][], strict: bool>
 export func first(f: Program): Run<Program>! {
@@ -512,7 +512,7 @@ export func first(f: Program): Run<Program>! {
 /// rounds were made. A rule is therefore applied at most once per round, and the round that
 /// proves the fixpoint is made and counted.
 /// @effect runs the rules' functions
-/// @fails error value `RuleInvalid` when a rule does not compile; error value `RuleTwoWay` when a rule is applied in a direction it does not allow; error value `RewriteInvalid` when a rewrite cannot be carried out
+/// @fails error value `RuleInvalid` when a rule does not compile; error value `RuleTwoWay` when a rule is applied in a direction it does not allow
 /// @example-fragment the tests apply a schedule to a real graph
 with <rules: Rule[], rounds: int, strict: bool>
 export func repeat(f: Program): Run<Program>! {
@@ -524,7 +524,7 @@ export func repeat(f: Program): Run<Program>! {
 /// `rounds` rounds, or when `done` holds. `done` is read before a round, so the program it holds
 /// for already has every rewrite before it.
 /// @effect runs the rules' functions
-/// @fails error value `RuleInvalid` when a rule does not compile; error value `RuleTwoWay` when a rule is applied in a direction it does not allow; error value `RewriteInvalid` when a rewrite cannot be carried out
+/// @fails error value `RuleInvalid` when a rule does not compile; error value `RuleTwoWay` when a rule is applied in a direction it does not allow
 /// @example-fragment a predicate, a rule set and a program come from the caller
 with <rules: Rule[], done: (q: Program) => bool, rounds: int, strict: bool>
 export func until(f: Program): Run<Program>! {
@@ -535,7 +535,7 @@ export func until(f: Program): Run<Program>! {
 /// `alternate`: one round of `left`, then one round of `right`, until a full pair applies nothing
 /// or `rounds` pairs were made. Both stages see the program the other produced, in that order.
 /// @effect runs the rules' functions
-/// @fails error value `RuleInvalid` when a rule does not compile; error value `RuleTwoWay` when a rule is applied in a direction it does not allow; error value `RewriteInvalid` when a rewrite cannot be carried out
+/// @fails error value `RuleInvalid` when a rule does not compile; error value `RuleTwoWay` when a rule is applied in a direction it does not allow
 /// @example-fragment two rule sets and a program come from the caller
 with <left: Rule[], right: Rule[], rounds: int, strict: bool>
 export func alternate(f: Program): Run<Program>! {
@@ -585,7 +585,7 @@ func pair(r: Run<Program>, left: Rule[], right: Rule[], strict: bool): Run<Progr
 /// `log(softmax(x, axis))` where the program already calls `softmax`: rounding each probability to
 /// f32 becomes an absolute error in its log, and a probability that rounds to zero gives -inf where
 /// the true log-softmax is finite. `log_softmax` avoids both.
-#requires<refine_accuracy>
+#requires(refine_accuracy)
 export rule tensor_log_softmax_of_softmax(x: Tensor<f32>, const axis: int) {
     log(softmax(x, axis)) => log_softmax(x, axis)
 }
@@ -597,7 +597,7 @@ export rule tensor_log_softmax_of_softmax(x: Tensor<f32>, const axis: int) {
 /// `1 + x` rounds before the log: for |x| below the spacing of 1 the naive log is 0 and its
 /// relative error is 100%; `log1p` computes log(1 + x) without forming 1 + x, and its error does
 /// not grow as x -> 0.
-#requires<refine_accuracy>
+#requires(refine_accuracy)
 export rule float_log1p::<T>(x: T) when is_float::<T>() {
     math_log(1.0 + x) => log1p(x)
 }
@@ -607,7 +607,7 @@ export rule float_log1p::<T>(x: T) when is_float::<T>() {
 ///
 /// For |x| below the spacing of 1 the naive `exp(x)` rounds to exactly 1 and the subtraction gives
 /// 0; `expm1` evaluates exp(x) - 1 directly, without that cancellation.
-#requires<refine_accuracy>
+#requires(refine_accuracy)
 export rule float_expm1::<T>(x: T) when is_float::<T>() {
     math_exp(x) - 1.0 => expm1(x)
 }
@@ -617,7 +617,7 @@ export rule float_expm1::<T>(x: T) when is_float::<T>() {
 /// NaN, so the rewrite would not be "no worse" on the whole domain.
 
 /// The accuracy library, as the opt-in pass `rules::accuracy`. Every rule carries
-/// `#requires<refine_accuracy>`, so an unlicensed or `#strict` program is returned unchanged.
+/// `#requires(refine_accuracy)`, so an unlicensed or `#strict` program is returned unchanged.
 /// The naive softmax and naive log-softmax are not in the set: the check rejects the first on the
 /// sample above, and the second shares its subtraction.
 export func accuracy(p: Program): Program! {

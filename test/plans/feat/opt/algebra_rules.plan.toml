@@ -95,6 +95,12 @@ case = "../../../cases/opt/algebra_rules/agreement.cml"
 args = ["${case}", "rules::simplify", "std::opt::dce values_only=true", "std::gir"]
 verify_script_path = "../../../cases/opt/algebra_rules/algebra_graph_equal.mjs"
 
+# `measure::report` is the pass `test/cases/opt/algebra_rules/measure.cml` declares: a pass is
+# loaded by name from the entry program's directory, so that file is what prints the table these
+# entries compare. It locks the counting itself -- one line per graph, the number of rewrites each
+# side performs and the first difference it found -- and it is the same program the reference mode
+# and the library mode are read through, so the two tables cannot be counted differently.
+
 [[tests]]
 name = "algebra_rules.agreement.cpp_table"
 desc = "The reference table (measure::report after the C++ mode and dce): eleven graphs — the ten forms and main — each 4 nodes and 3 edges with no operation left, one print, and main 32 nodes and 31 edges with 10 prints."
@@ -242,7 +248,7 @@ golden = "./golden/algebra_rules.tensor.cpp.txt"
 
 [[tests]]
 name = "algebra_rules.tensor.table"
-desc = "The library's table against the deleted C++ law table's, out of 5 graphs: `tensor_double` is the one form both rewrite (`t + t` becomes `t * 2.0`), `tensor_combine` is refused by the deleted table for the `reassociate` grant its float path demands while the library's `#requires<reassociate>` is granted (design principles 7.3's default allows it; the old table's `relaxed()` policy is its own deviation), and two forms are left by both — `tensor_fold`, which needs the `no_infs` grant no node carries, and `tensor_zero`, whose replacement is a zero tensor of the matched shape: the rule language does write it, as a right side that calls a Camel function (rule language v2 section 4, `t * 0.0 => zeros_like(t)`), which is H232 step 3, so what is missing here is a law and not a language feature. The values the program prints are the values the C++ side printed, line for line."
+desc = "The library's table against the deleted C++ law table's, out of 5 graphs: `tensor_double` is the one form both rewrite (`t + t` becomes `t * 2.0`), `tensor_combine` is refused by the deleted table for the `reassociate` grant its float path demands while the library's `#requires(reassociate)` is granted (design principles 7.3's default allows it; the old table's `relaxed()` policy is its own deviation), and two forms are left by both — `tensor_fold`, which needs the `no_infs` grant no node carries, and `tensor_zero`, whose replacement is a zero tensor of the matched shape: the rule language does write it, as a right side that calls a Camel function (rule language v2 section 4, `t * 0.0 => zeros_like(t)`), which is H232 step 3, so what is missing here is a law and not a language feature. The values the program prints are the values the C++ side printed, line for line."
 case = "../../../cases/opt/algebra_rules/tensor_forms.cml"
 args = ["${case}", "rules::simplify", "std::opt::dce values_only=true", "measure::report", "std::nvm"]
 verify_script_path = "../../../cases/opt/algebra_rules/tables.mjs"

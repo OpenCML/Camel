@@ -7,10 +7,10 @@
  */
 module stream_type_impl_signature
 
-#op<':op/add_l'>
+#op(':op/add_l')
 func kernel(a: int, b: int): int
 
-#impl<kernel>
+#impl(kernel)
 func add(a: int, b: int..): int {
     return 0
 }

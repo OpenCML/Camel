@@ -5,7 +5,7 @@ export tag kernel on nodes
 export tag fast on func, nodes
 export tag readable on func, read_by std::opt
 export tag shape on type, field
-export tag width<w: int> on type, field
+export tag width(w: int) on type, field
 tag pure = [fast, readable]
 tag finite = [kernel, fast]
 
@@ -22,9 +22,9 @@ func grouped(): int { return 3 }
 #fast
 func stacked(): int { return 4 }
 
-#width<32>
+#width(32)
 type Bits = {
-    #width<8> a: int,
+    #width(8) a: int,
     b: int,
 }
 

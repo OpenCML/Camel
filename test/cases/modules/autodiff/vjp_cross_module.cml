@@ -1,5 +1,5 @@
 /**
- * A function declared with `#vjp<rule>` in another module, imported through two modules (so
+ * A function declared with `#vjp(rule)` in another module, imported through two modules (so
  * `vjp_lib` is compiled once and the second import hits the module cache): the gradient of a call
  * uses the rule, wherever the call is written.
  *

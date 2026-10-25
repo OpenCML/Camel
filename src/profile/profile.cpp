@@ -174,6 +174,17 @@ std::unordered_map<uint64_t, std::string> gLoopPositions;
 ReportOptions gOptions;
 std::string gJsonPath;
 
+/// In-place updates, as the execution plan decided them and as the array answered at run time
+/// (docs/design/arrays-memory/README.cn.md 4.3.1): `gUpdatePlannedReuse` and
+/// `gUpdatePlannedByCount` are the marks of every plan built during the run, and
+/// `gArrayCountInPlace` / `gArrayCountCopied` the answers of the update operators that asked the
+/// array itself. The first pair is what the plan decided, the second what happened.
+std::atomic<uint64_t> gUpdatePlannedReuse{0};
+std::atomic<uint64_t> gUpdatePlannedByCount{0};
+std::atomic<uint64_t> gUpdatePlannedCopy{0};
+std::atomic<uint64_t> gArrayCountInPlace{0};
+std::atomic<uint64_t> gArrayCountCopied{0};
+
 Totals totalsNow() {
     Totals totals;
     totals.operators = gOperators.load(std::memory_order_relaxed);
@@ -504,6 +515,11 @@ void reset() {
     gDeviceCompiles.store(0);
     gDeviceCompileNs.store(0);
     gUntimedCalls.store(0);
+    gUpdatePlannedReuse.store(0);
+    gUpdatePlannedByCount.store(0);
+    gUpdatePlannedCopy.store(0);
+    gArrayCountInPlace.store(0);
+    gArrayCountCopied.store(0);
     gFusionRuns.store(0);
     gFusionOperators.store(0);
     gFusionNs.store(0);
@@ -552,6 +568,20 @@ void reset() {
         gJsonPath.clear();
     }
     gOrigin = Clock::now();
+}
+
+void planUpdateMarks(size_t reuseInput, size_t byArrayCount, size_t copy) noexcept {
+    gUpdatePlannedReuse.fetch_add(reuseInput, std::memory_order_relaxed);
+    gUpdatePlannedByCount.fetch_add(byArrayCount, std::memory_order_relaxed);
+    gUpdatePlannedCopy.fetch_add(copy, std::memory_order_relaxed);
+}
+
+void arrayCountAnswer(bool inPlace) noexcept {
+    if (inPlace) {
+        gArrayCountInPlace.fetch_add(1, std::memory_order_relaxed);
+    } else {
+        gArrayCountCopied.fetch_add(1, std::memory_order_relaxed);
+    }
 }
 
 void loopRound(uint64_t origin) noexcept {
@@ -939,6 +969,28 @@ void reportText(std::ostream &os, const ReportOptions &options) {
         formatBytes(toDevice),
         formatBytes(toHost));
     os << std::format("  synchronisations     {}\n", syncs);
+    // In-place updates (docs/design/arrays-memory/README.cn.md 4.3.1): the marks of the plans
+    // built during the run, then the answers of the update operators that asked the array itself.
+    // A run that planned none and asked none prints nothing here, so a report of a program that
+    // has no update stays what it was.
+    const uint64_t plannedReuse = gUpdatePlannedReuse.load(std::memory_order_relaxed);
+    const uint64_t plannedCount = gUpdatePlannedByCount.load(std::memory_order_relaxed);
+    const uint64_t plannedCopy  = gUpdatePlannedCopy.load(std::memory_order_relaxed);
+    const uint64_t countInPlace = gArrayCountInPlace.load(std::memory_order_relaxed);
+    const uint64_t countCopied  = gArrayCountCopied.load(std::memory_order_relaxed);
+    if (plannedReuse + plannedCount + plannedCopy + countInPlace + countCopied != 0) {
+        os << std::format(
+            "  in-place updates     the plan reuses the input's storage at {} update nodes, asks "
+            "the array's count at {}, copies at {}\n",
+            plannedReuse,
+            plannedCount,
+            plannedCopy);
+        os << std::format(
+            "                       the array's own count answered the update operators: allowed "
+            "the write {} times, refused it {} times\n",
+            countInPlace,
+            countCopied);
+    }
     if (deviceCompiles != 0) {
         os << std::format(
             "  device compiles      {} ({})\n", deviceCompiles, formatDuration(deviceCompileNs));
@@ -1197,6 +1249,23 @@ std::string reportJson(const ReportOptions &options) {
         gSyncs.load(),
         gDeviceCompiles.load(),
         gDeviceCompileNs.load());
+    // The same condition as the text report's in-place line: a run with no in-place update has
+    // nothing to say here.
+    if (gUpdatePlannedReuse.load(std::memory_order_relaxed) +
+            gUpdatePlannedByCount.load(std::memory_order_relaxed) +
+            gUpdatePlannedCopy.load(std::memory_order_relaxed) +
+            gArrayCountInPlace.load(std::memory_order_relaxed) +
+            gArrayCountCopied.load(std::memory_order_relaxed) !=
+        0) {
+        json += std::format(
+            ",\"inplace_updates\":{{\"plan_reuse_input\":{},\"plan_by_array_count\":{},"
+            "\"plan_copy\":{},\"array_count_one\":{},\"array_count_not_one\":{}}}",
+            gUpdatePlannedReuse.load(std::memory_order_relaxed),
+            gUpdatePlannedByCount.load(std::memory_order_relaxed),
+            gUpdatePlannedCopy.load(std::memory_order_relaxed),
+            gArrayCountInPlace.load(std::memory_order_relaxed),
+            gArrayCountCopied.load(std::memory_order_relaxed));
+    }
     if (const LoopStat *step = stepLoop(); step != nullptr) {
         json += std::format(
             ",\"step\":{{\"origin\":{},\"rounds\":{},\"samples\":{},\"operators_per_round\":{:.3f},"

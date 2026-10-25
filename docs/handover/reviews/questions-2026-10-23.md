@@ -73,7 +73,7 @@
 **(b) 的正确版本：元素类型泛型加 `when` 限定为浮点。**
 
 ```camel
-#impl<tensor:log_softmax>
+#impl(tensor:log_softmax)
 export func log_softmax::<T>(x: Tensor<T>, axis: int? = null): Tensor<T> when is_float::<T>() { ... }
 ```
 
@@ -207,7 +207,7 @@ develop 上这一批有一半提交没有 Conventional Commits 前缀，有的�
 **(C) 现在改注释；能力本身已经设计好了，不是新语言。** 规则语言第二版第 4 节"右边可以调用 Camel 函数"就是它：
 
 ```camel
-rule tensor_mul_zero::<T>(t: Tensor<T>) when is_float::<T>() #requires<finite_math> { t * 0.0 => zeros_like(t) }
+rule tensor_mul_zero::<T>(t: Tensor<T>) when is_float::<T>() #requires(finite_math) { t * 0.0 => zeros_like(t) }
 ```
 
 - 浮点的 `x * 0` 本来就**不是** 0（`NaN * 0`、`inf * 0` 是 NaN，负数乘 0 是 `-0`），所以浮点（标量与张量）的零律都要 `finite_math` 许可；整数不需要。`x - x => 0` 同理。

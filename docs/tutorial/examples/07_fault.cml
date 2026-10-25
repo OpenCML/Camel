@@ -1,0 +1,10 @@
+// A fault is not an error value: reading past the end ends the program, with a position.
+// Run: camel docs/tutorial/examples/07_fault.cml
+
+func main(): int sync {
+    let xs = [1, 2, 3]
+    println('before')
+    println(xs[5])
+    println('after')
+    return 0
+}

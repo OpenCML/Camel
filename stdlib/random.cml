@@ -28,46 +28,46 @@ module random
 /// Sets the state of the generator: the same seed gives the same sequence.
 /// @effect sets the generator
 /// @example seed(42)
-#op<'rand:seed'>
+#op('rand:seed')
 export func seed(value: int): void
 
 /// A float drawn uniformly from 0 (included) to 1 (excluded).
 /// @effect advances the generator
 /// @example rand()    // 0.374540
-#op<'rand:rand'>
+#op('rand:rand')
 export func rand(): float
 
 /// A float drawn from the normal distribution with mean 0 and deviation 1.
 /// @effect advances the generator
 /// @example randn()    // -0.138264
-#op<'rand:randn'>
+#op('rand:randn')
 export func randn(): float
 
 /// An integer drawn uniformly from low to high, both included; the two are swapped when low is
 /// above high.
 /// @effect advances the generator
 /// @example randint(1, 6)    // 4
-#op<'rand:randint'>
+#op('rand:randint')
 export func randint(low: int, high: int): int
 
 /// One element of xs, drawn uniformly.
 /// @effect advances the generator
 /// @fails fault `InvalidArgument` when xs is empty
 /// @example choice(['a', 'b', 'c'])    // 'b'
-#op<'rand:choice'>
+#op('rand:choice')
 export func choice::<T>(xs: T[]): T
 
 /// n elements of xs drawn without replacement, as a new array.
 /// @effect advances the generator
 /// @fails fault `InvalidArgument` when n is negative or above the number of elements
 /// @example sample([1, 2, 3, 4], 2)    // [3, 1]
-#op<'rand:sample'>
+#op('rand:sample')
 export func sample::<T>(xs: T[], n: int): T[]
 
 /// The elements of xs in a random order, as a new array; xs is not changed.
 /// @effect advances the generator
 /// @example shuffle([1, 2, 3])    // [2, 3, 1]
-#op<'rand:shuffle'>
+#op('rand:shuffle')
 export func shuffle::<T>(xs: T[]): T[]
 
 /// A 128-bit key derived from a seed, as the struct `{ hi: int, lo: int }` (the high and the low
@@ -75,14 +75,14 @@ export func shuffle::<T>(xs: T[]): T[]
 /// on every scheduler, in translated C++, and on every platform.
 /// @pure
 /// @example key(42)    // { hi: 1350887118657991639, lo: -7139630017956984517 }
-#op<'rand:key'>
+#op('rand:key')
 export func key(seed: int): { hi: int, lo: int }
 
 /// Two independent keys derived from key: split(key) gives the same pair every time, and does
 /// not change key.
 /// @pure
 /// @example let (a, b) = split(key(42))
-#op<'rand:split'>
+#op('rand:split')
 export func split(key: { hi: int, lo: int }): ({ hi: int, lo: int }, { hi: int, lo: int })
 
 /// A uniformly random permutation of [0, n) by a Fisher-Yates shuffle driven by key's Philox
@@ -91,5 +91,5 @@ export func split(key: { hi: int, lo: int }): ({ hi: int, lo: int }, { hi: int, 
 /// @pure
 /// @fails fault `InvalidArgument` when n is negative
 /// @example permutation(key(42), 4)    // [1, 0, 2, 3]
-#op<'rand:permutation'>
+#op('rand:permutation')
 export func permutation(key: { hi: int, lo: int }, n: int): int[]

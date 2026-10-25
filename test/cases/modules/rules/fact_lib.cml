@@ -1,0 +1,68 @@
+/**
+ * `fact` (rewrite design 7.5): a fact computed for every value and read by name in a rule
+ * condition.
+ *
+ * `depth` counts how many additions a value is under: a constant is 1, an addition is one more
+ * than the deepest operand, and any other operator (a product) merges its operands. `sign` is the
+ * value of a constant. The rule `mul_one` reads `sign` in its `when`, so it rewrites `x * y` to
+ * `x` only when the constant is 1: a permission-free rule whose condition is a fact, not a shape
+ * test, and one that would be wrong for every other constant.
+ *
+ * The fact is read on `y`, a pattern variable, and so a node of the draft: a `const` parameter of
+ * a rule is the constant's *value* in a condition (rewrite design 2 (second version) 1;
+ * reviews/stdlib-rules.md item 5), and reaching the node of one needs a `node_of` the language
+ * does not have yet.
+ *
+ * `report` reads `depth` of the frozen graphs of the target functions (`sum`, `mixed`), which is
+ * the evaluation over a published program (and stores the fact of each node under the kind
+ * `user.fact.depth`), and counts products; `apply` rewrites the target with the rule. The test
+ * reads the numbers before and after `apply`.
+ */
+module fact_lib
+import { Program, Node, Graph, graphs, nodes, op, op_name, name } from graph
+import { max } from math
+import { rewrite } from rewrite
+
+fact depth: int match v {
+    case const c: int => 1
+    case x + y   => max(depth(x), depth(y)) + 1
+    case _       => 0
+} join max
+
+fact sign: int match v {
+    case const c: int => c
+    case _       => 0
+} join max
+
+rule mul_one(y: int, x: int) when sign(y) == 1 { x * y => x }
+
+func opText(n: Node): string {
+    return match op(n) {
+        case null => ''
+        case o => op_name(o)
+    }
+}
+
+func nodesOf(p: Program, function: string): Node[] {
+    let found = graphs(p)->filter<(g: Graph): bool => name(g) == function>
+    return nodes(found[0])
+}
+
+func addsOf(p: Program, function: string): int {
+    let adds = nodesOf(p, function)->filter<(n: Node): bool => opText(n) == ':op/add_l'>
+    return loop total = 0 for n in adds do total + depth(n)
+}
+
+func mulsOf(p: Program, function: string): int {
+    let muls = nodesOf(p, function)->filter<(n: Node): bool => opText(n) == ':op/mul_l'>
+    return loop total = 0 for n in muls do total + 1
+}
+
+export func apply(p: Program): Program! {
+    return rewrite(p, [mul_one])
+}
+
+export func report(p: Program): Program! sync {
+    println('sum', addsOf(p, 'sum'), 'mixed', addsOf(p, 'mixed'), 'one', mulsOf(p, 'one'), 'two', mulsOf(p, 'two'))
+    return p
+}

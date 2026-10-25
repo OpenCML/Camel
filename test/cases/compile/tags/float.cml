@@ -4,12 +4,12 @@
  */
 module float_arg
 
-export tag ratio<r: float> on type, field
+export tag ratio(r: float) on type, field
 
-#ratio<1.5>
+#ratio(1.5)
 type T = { x: int }
 
-#ratio<0.25>
+#ratio(0.25)
 type U = { y: int }
 
 func main(): int { return 0 }

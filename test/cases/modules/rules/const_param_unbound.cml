@@ -1,0 +1,35 @@
+/**
+ * A `const` parameter is matched by the left side: `const c` means the left side matches a
+ * constant there (rule-language design v2, section 1). The left side is what binds the parameter,
+ * so a rule that declares one and gives it no position on the left says nothing about the
+ * program, and its condition has no node to reach through `node_of` either.
+ *
+ * `drop_by_shape` has exactly that shape: its left side is `x + 1`, which matches no constant for
+ * `c`, while its condition asks for `node_of(c)`. The declaration is refused where it is written,
+ * with a diagnostic that names the parameter and the rule, rather than reaching the engine with a
+ * rule whose match binds no constant for one of its `const` parameters.
+ */
+module const_param_unbound
+
+import { Program, Node, type_of, type_name } from graph
+import { rewrite } from rewrite
+
+func typeText(n: Node): string {
+    return match type_of(n) {
+        case null => ''
+        case t => type_name(t)
+    }
+}
+
+rule drop_by_shape(x: int, const c: int) when typeText(node_of(c)) == 'int' { x + 1 => x }
+
+export func apply(p: Program): Program! {
+    return rewrite(p, [drop_by_shape])
+}
+
+func shifted(a: int): int { return a + 1 }
+
+func main(): int sync {
+    println(shifted(41))
+    return 0
+}

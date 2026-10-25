@@ -20,7 +20,6 @@ enum class DataType {
     StaticFor,
     StaticLoop,
     StaticAccess,
-    TryExpr,
     LoopExpr,
     Literal,
     Array,
@@ -100,8 +99,7 @@ enum class ReservedDataOp {
     Bind,
     Instantiate,
     Comp,
-    As,
-    Is
+    As
 };
 
 std::string to_string(DataType type);
@@ -244,7 +242,7 @@ class TypeCaseLoad : public DataLoad {
     std::vector<TypeCasePattern> patterns_;
 };
 
-/// `static for (n, F) in fields T => body` or `static for (j) in indices ts => body`:
+/// `static for n, F in fields T => body` or `static for j in indices ts => body`:
 /// children [0] the walked shape (a type for `fields`, a value for `indices`), [1] the body (a
 /// block). The load holds the names: for `fields`, `n` is the field name (a tuple's index in
 /// decimal), `F` the field type and `tags` the field's tags; for `indices`, only `j` (the
@@ -355,14 +353,6 @@ class MatchCaseLoad : public DataLoad {
     }
 };
 
-class TryExprLoad : public DataLoad {
-  public:
-    TryExprLoad() : DataLoad(DataType::TryExpr) {}
-
-    const std::string toString() const override { return "TryExpr" + this->status(); }
-    const std::string geneCode() const override;
-};
-
 /// loop S1 = INIT1, ..., Sk = INITk (for BINDER in SEQUENCE)? (while CONDITION)? do BODY
 ///
 /// A loop is an expression with a state (design principles 3.10, the `do` form). The
@@ -444,7 +434,7 @@ class TupleDataLoad : public DataLoad {
     const std::string geneCode() const override;
 };
 
-/// `( static for (n, F) in fields T => e )`: the generator is child 0. The elements come from
+/// `( static for n, F in fields T => e )`: the generator is child 0. The elements come from
 /// the rounds in declaration order; the type is `TupleType` of the rounds' value types.
 class TupleCompLoad : public DataLoad {
   public:
@@ -454,7 +444,7 @@ class TupleCompLoad : public DataLoad {
     const std::string geneCode() const override;
 };
 
-/// `{ static for (n, F) in fields T => e }`: the generator is child 0. The fields keep the names
+/// `{ static for n, F in fields T => e }`: the generator is child 0. The fields keep the names
 /// and order of `T`; the type is a `StructType` of the rounds' value types.
 class StructCompLoad : public DataLoad {
   public:
@@ -464,7 +454,7 @@ class StructCompLoad : public DataLoad {
     const std::string geneCode() const override;
 };
 
-/// `T { static for (n, F) in fields T => e }`: child 0 is the type `T`, child 1 the generator.
+/// `T { static for n, F in fields T => e }`: child 0 is the type `T`, child 1 the generator.
 /// The result has the field names and the kind of `T`, and the rounds' value types.
 class ShapeCompLoad : public DataLoad {
   public:

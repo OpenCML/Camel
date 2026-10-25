@@ -110,7 +110,7 @@ returning a gradient tree of the same type; the tree input is data.  The example
 
 ## Tests
 
-`test/plans/perf/showcase_d5.plan.toml` (`tier = "slow"`) runs `--profile small`: 256 sentences,
+`test/plans/perf/showcase_d5.plan.toml` (`tier = "milestone"`) runs `--profile small`: 256 sentences,
 200 steps, about six seconds for the whole plan (mostly the two PyTorch imports).  It fails when
 a bound is exceeded.
 

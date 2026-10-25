@@ -7,12 +7,16 @@
 
 #include "camel/runtime/exec_plan.h"
 
+#include "camel/core/operator_table.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/execute/graph_runtime_support.h"
+#include "camel/profile/profile.h"
 #include "camel/runtime/control_regions.h"
 
 #include <algorithm>
 #include <optional>
+#include <string_view>
+#include <unordered_set>
 
 namespace camel::runtime {
 
@@ -343,7 +347,282 @@ void buildLoopTables(const GCGraph &graph, ExecPlan &plan) {
     }
 }
 
+/// The operators that use a variable's cell without keeping the value in it: what a cell may be
+/// used by and stay a variable (`:var/new`, `:var/get`, `:var/peek`, `:var/take`, the assignment
+/// operators). Any other user -- a call handed the `var`, a capture port -- takes the cell out of
+/// the graph where its value's observers can be seen.
+bool isVariableOperator(std::string_view uri) {
+    return uri.starts_with(":var/") || uri.starts_with(":op/assn");
+}
+
+/// Whether the value in the cell `cell` may be seen by something the graph does not show: the cell
+/// escapes when a user other than the variable's own operators touches it. GATEs are transparent
+/// (they forward and order; they do not keep a value).
+bool cellEscapes(
+    const GCGraph &graph, const std::vector<std::vector<gc_node_ref_t>> &users, gc_node_ref_t cell,
+    std::vector<uint8_t> &cache) {
+    if (cell < cache.size() && cache[cell] != 0) {
+        return cache[cell] == 2;
+    }
+    bool escapes = false;
+    std::vector<gc_node_ref_t> pending{cell};
+    std::unordered_set<gc_node_ref_t> seen;
+    while (!pending.empty() && seen.size() < 256) {
+        const gc_node_ref_t at = pending.back();
+        pending.pop_back();
+        if (!seen.insert(at).second) {
+            continue;
+        }
+        for (const gc_node_ref_t user : users[at]) {
+            const GCNode *node = graph.node(user);
+            if (node == nullptr) {
+                continue;
+            }
+            if (node->kind == GCNodeKind::Gate) {
+                pending.push_back(user);
+                continue;
+            }
+            if (node->kind != GCNodeKind::Oper) {
+                escapes = true;
+                break;
+            }
+            const auto *body = graph.nodeBodyAs<GCOperBody>(user);
+            if (body == nullptr || !isVariableOperator(body->uri())) {
+                escapes = true;
+                break;
+            }
+        }
+        if (escapes) {
+            break;
+        }
+    }
+    if (cell < cache.size()) {
+        cache[cell] = escapes ? 2 : 1;
+    }
+    return escapes;
+}
+
+/// The cell a node reads or writes, when it is one of the variable's own operators.
+gc_node_ref_t cellOfNode(const GCGraph &graph, gc_node_ref_t ref) {
+    const auto norm = graph.normInputsOf(ref);
+    if (norm.empty()) {
+        return kInvalidNodeRef;
+    }
+    return valueBehindGates(graph, norm.front());
+}
+
+/// Whether the cell is a variable this graph declares (`var x = e` is `:var/new`). A cell that
+/// comes from elsewhere -- a `var` parameter, a captured cell -- is a port of this graph: its
+/// value is held outside it, so nothing in the graph can prove the old value has no observer.
+bool cellDeclaredHere(const GCGraph &graph, gc_node_ref_t cell) {
+    const GCNode *node = cell == kInvalidNodeRef ? nullptr : graph.node(cell);
+    if (node == nullptr || node->kind != GCNodeKind::Oper) {
+        return false;
+    }
+    const auto *body = graph.nodeBodyAs<GCOperBody>(cell);
+    return body != nullptr && body->oper == camel::core::oper::VarNew;
+}
+
+/// Whether the value a variable starts with is one this graph makes: a `Copy` node (a clone of a
+/// literal, made when the graph runs), a `Fill` node (a value built here), or a value slot of the
+/// graph. A static value (a `Data` node that indexes the static area) is the program's constant:
+/// it stays as it is and its variable's update copies. A value from elsewhere -- a call's result,
+/// a read of another variable, a parameter -- has an owner the plan cannot see, so the variable's
+/// first update copies as well.
+bool initialValueMadeHere(const GCGraph &graph, gc_node_ref_t init) {
+    const GCNode *node = init == kInvalidNodeRef ? nullptr : graph.node(init);
+    if (node == nullptr) {
+        return false;
+    }
+    switch (node->kind) {
+    case GCNodeKind::Copy:
+    case GCNodeKind::Fill:
+        return true;
+    case GCNodeKind::Data:
+        return node->dataIndex >= 0;
+    default:
+        return false;
+    }
+}
+
+/// Whether anything in the graph may hold the cell's value after it runs: a read whose value can
+/// be kept (`:var/get`), or a use that is not the variable's own operator (a call, a store, a
+/// capture). A read that cannot keep the value (`:var/peek`) and the update's own take and
+/// assignment do not. A cell of this graph is judged in order instead (see planStorageReuse); a
+/// cell from elsewhere is judged with this, because the graph may run again.
+bool cellValueMayBeKept(
+    const GCGraph &graph, const std::vector<std::vector<gc_node_ref_t>> &users, gc_node_ref_t cell) {
+    if (cell >= users.size()) {
+        return true;
+    }
+    for (const gc_node_ref_t user : users[cell]) {
+        const GCNode *node = graph.node(user);
+        if (node == nullptr || node->kind != GCNodeKind::Oper) {
+            return true;
+        }
+        const auto *body = graph.nodeBodyAs<GCOperBody>(user);
+        if (body != nullptr && body->uri() == ":var/get") {
+            return true;
+        }
+    }
+    return false;
+}
+
+/// Where each in-place update runs and whether it reuses the storage of the value it is given
+/// (docs/design/arrays-memory/README.cn.md 4.3.1). The update node takes its array from
+/// `:var/take` of a cell; the plan walks the graph in execution order carrying, per cell, whether
+/// the value the cell holds is one this variable's own update made and nothing has read since
+/// (the runtime fact the cell used to carry as a mark, now decided once, here):
+///
+///   * a cell that escapes, or that holds a value of unknown origin, proves nothing: the update
+///     asks the array itself at run time (StorageReuse::ByArrayCount);
+///   * a read that keeps the value (`:var/get`), or a plain store (`:op/assn`), ends the proof:
+///     the update copies (StorageReuse::Copy) and runs the plain form of the operator;
+///   * otherwise the update reuses the input's storage (StorageReuse::Input).
+///
+/// A loop's state comes round to the next round (the LOOP node takes the value of the body), so
+/// the walk runs twice: the second time, each loop's body starts from the state its end reached.
+void planStorageReuse(const GCGraph &graph, ExecPlan &plan) {
+    const size_t count = plan.topo.size();
+    plan.storageReuseAt.assign(count, StorageReuse::None);
+    const auto &table            = camel::core::OperatorTable::instance();
+    const size_t nodeCount       = graph.nodeCount();
+    std::vector<std::vector<gc_node_ref_t>> users(nodeCount);
+    for (size_t idx = 0; idx < count; ++idx) {
+        const gc_node_ref_t at = plan.topo[idx];
+        for (const gc_node_ref_t in : graph.normInputsOf(at)) {
+            if (in < users.size()) {
+                users[in].push_back(at);
+            }
+        }
+        for (const gc_node_ref_t in : graph.withInputsOf(at)) {
+            if (in < users.size()) {
+                users[in].push_back(at);
+            }
+        }
+    }
+    std::vector<uint8_t> escapeCache(nodeCount, 0);
+    std::vector<uint8_t> owned(nodeCount, 0);
+    std::vector<std::vector<uint8_t>> loopEntry(plan.loops.size());
+    for (int pass = 0; pass < 2; ++pass) {
+        const bool final = pass == 1;
+        std::fill(owned.begin(), owned.end(), 0);
+        for (size_t idx = 0; idx < count; ++idx) {
+            for (size_t li = 0; li < plan.loops.size(); ++li) {
+                // A round starts from the state the round before left: the body's own update is
+                // the writing the next round's update reads.
+                if (plan.loops[li].begin == idx && !loopEntry[li].empty()) {
+                    for (size_t c = 0; c < owned.size(); ++c) {
+                        owned[c] = static_cast<uint8_t>(owned[c] | loopEntry[li][c]);
+                    }
+                }
+            }
+            const gc_node_ref_t at = plan.topo[idx];
+            const GCNode *node     = graph.node(at);
+            if (node == nullptr) {
+                continue;
+            }
+            if (node->kind == GCNodeKind::Loop) {
+                for (size_t li = 0; li < plan.loops.size(); ++li) {
+                    if (plan.loops[li].position == idx) {
+                        loopEntry[li] = owned;
+                    }
+                }
+                continue;
+            }
+            if (node->kind != GCNodeKind::Oper) {
+                continue;
+            }
+            const auto *body = graph.nodeBodyAs<GCOperBody>(at);
+            if (body == nullptr) {
+                continue;
+            }
+            const std::string_view uri = body->uri();
+            if (table.plainForm(uri).has_value()) {
+                // An in-place form: an update node when its array comes from the cell's own
+                // `:var/take`.
+                const auto norm = graph.normInputsOf(at);
+                const gc_node_ref_t taken =
+                    norm.empty() ? kInvalidNodeRef : valueBehindGates(graph, norm.front());
+                const GCNode *takenNode = taken == kInvalidNodeRef ? nullptr : graph.node(taken);
+                if (takenNode != nullptr && takenNode->kind == GCNodeKind::Oper) {
+                    const auto *takeBody = graph.nodeBodyAs<GCOperBody>(taken);
+                    if (takeBody != nullptr && takeBody->uri() == ":var/take") {
+                        const gc_node_ref_t cell = cellOfNode(graph, taken);
+                        StorageReuse decision    = StorageReuse::Copy;
+                        if (cell != kInvalidNodeRef) {
+                            const bool escapes = cellEscapes(graph, users, cell, escapeCache);
+                            if (!cellDeclaredHere(graph, cell)) {
+                                // A cell this graph does not declare (a `var` parameter, a
+                                // captured cell): the plan has no proof of who holds the old
+                                // value, so the array's own count answers -- unless the graph
+                                // reads the cell and may keep what it read, which the count
+                                // cannot see (two names for one array are one array's count).
+                                decision = escapes || cellValueMayBeKept(graph, users, cell)
+                                               ? StorageReuse::Copy
+                                               : StorageReuse::ByArrayCount;
+                            } else if (escapes) {
+                                decision = StorageReuse::Copy;
+                            } else if (cell < owned.size() && owned[cell] != 0) {
+                                decision = StorageReuse::Input;
+                            }
+                        }
+                        if (final) {
+                            plan.storageReuseAt[idx] = decision;
+                        }
+                    }
+                }
+                continue;
+            }
+            if (uri == ":var/get") {
+                const gc_node_ref_t cell = cellOfNode(graph, at);
+                if (cell != kInvalidNodeRef && cell < owned.size()) {
+                    owned[cell] = 0;
+                }
+            } else if (uri == ":var/new") {
+                // `var v = e`: the node is the cell. When `e` is a value this graph makes, the
+                // variable is its only holder from here on and its first update may reuse the
+                // storage; when `e` comes from elsewhere, that first update copies.
+                const auto norm = graph.normInputsOf(at);
+                const gc_node_ref_t init =
+                    norm.empty() ? kInvalidNodeRef : valueBehindGates(graph, norm.front());
+                if (at < owned.size()) {
+                    owned[at] = initialValueMadeHere(graph, init) ? 1 : 0;
+                }
+            } else if (uri.starts_with(":op/assn")) {
+                const gc_node_ref_t cell = cellOfNode(graph, at);
+                if (cell != kInvalidNodeRef && cell < owned.size()) {
+                    owned[cell] = uri == ":op/assn_owned" ? 1 : 0;
+                }
+            }
+        }
+    }
+    // What the plan decided, for the profile report (`std::profile`): the update nodes that reuse
+    // the storage of the value they are given and the ones left to the array's own count.
+    camel::profile::planUpdateMarks(
+        plan.storageReuseCount(StorageReuse::Input),
+        plan.storageReuseCount(StorageReuse::ByArrayCount),
+        plan.storageReuseCount(StorageReuse::Copy));
+}
+
 } // namespace
+
+size_t ExecPlan::storageReuseCount(StorageReuse decision) const {
+    return static_cast<size_t>(std::count(storageReuseAt.begin(), storageReuseAt.end(), decision));
+}
+
+std::string_view ExecPlan::operatorUriFor(gc_node_ref_t ref) const {
+    const auto *body = graph != nullptr ? graph->nodeBodyAs<GCOperBody>(ref) : nullptr;
+    if (body == nullptr) {
+        return {};
+    }
+    const std::string_view declared = body->uri();
+    if (storageReuseOf(ref) != StorageReuse::Copy) {
+        return declared;
+    }
+    const auto plain = camel::core::OperatorTable::instance().plainForm(declared);
+    return plain.has_value() ? *plain : declared;
+}
 
 std::unique_ptr<ExecPlan> buildExecPlan(const GCGraph &graph) {
     // The helpers of graph_runtime_support read the graph through its const interface only.
@@ -450,6 +729,7 @@ std::unique_ptr<ExecPlan> buildExecPlan(const GCGraph &graph) {
     plan->directCallArgOffsets[count]  = static_cast<uint32_t>(plan->directCallArgSlots.size());
     plan->branchArmEntryOffsets[count] = static_cast<uint32_t>(plan->branchArmEntries.size());
     buildLoopTables(graph, *plan);
+    planStorageReuse(graph, *plan);
 
     for (gc_node_ref_t portRef : graph.normPorts()) {
         plan->calleePortSlots.push_back(dataIndexOf(graph, portRef));

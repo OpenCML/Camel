@@ -399,7 +399,7 @@ expect_stdout_exact = "3\n"
 
 [[tests]]
 name = "native.foreign_operator_refused"
-desc = "`#op<'bytes:size'>` in a module other than `bytes` names another module's operator: refused at the declaration, in the file that wrote it, before any call."
+desc = "`#op('bytes:size')` in a module other than `bytes` names another module's operator: refused at the declaration, in the file that wrote it, before any call."
 kind = "negative"
 case = "../../../cases/compile/native/foreign_operator.cml"
 args = ["${case}"]
@@ -1355,6 +1355,42 @@ case = "../../../cases/compile/native/graph_constant_type.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "graph_constant_type.cml:11:21", "argument types: <> (int, int)", "<graph:constant>: (n: Node, sample: i32) => i32?"]
+
+# ---- The declarations of `graph` itself: the handles, their operators and `type_of` ----
+#
+# `graph_constant_*` above pins the per-sample-type declarations; these three pin what an importer
+# of `graph` reads for the rest of the module: the entry, the program handle and its comparison
+# declarations, the graph and node handles, `id`, and `type_of` with the type name of a node.
+# The two negative cases are the arity and the type of `graph:root`'s one ordinary argument, so
+# they also say that the message's overload is the declaration's own parameter name (`p`) rather
+# than the C++ operator's.
+
+[[tests]]
+name = "native.graph_declaration_import"
+desc = "The declarations of `graph` are what an importer sees: `Program`, `Graph` and `Node` come from the module's declaration file, the two comparisons are the operators of the handle types, and each call reaches the operator the C++ module runs. It locks the answers: an entry equals itself and differs from the other one, a graph's name is `__root__`, a graph has nodes, `id` is stable on a node, and `type_of` of a node of no type answers null so the type name printed is the function's signature `() => int`."
+kind = "behavior"
+case = "../../../cases/compile/native/graph_declaration_import.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "true\nfalse\n__root__\ntrue\ntrue\n() => int\n"
+
+[[tests]]
+name = "native.graph_wrong_arity"
+desc = "The declaration of `graph:root` takes one ordinary argument: a call with none is refused at the call, and the overload the message lists is the declaration's, parameter name included (`<graph:root>: (p: Program) => Graph`)."
+kind = "negative"
+case = "../../../cases/compile/native/graph_arity.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "graph_arity.cml:10:17", "argument types: <> ()", "<graph:root>: (p: Program) => Graph"]
+
+[[tests]]
+name = "native.graph_wrong_type"
+desc = "An integer where the declaration of `graph:root` says `Program`: the call is refused at the declaration's type, and the signature in the message carries the declaration's own parameter name (`p`) — the source is the declaration file, not the C++ module."
+kind = "negative"
+case = "../../../cases/compile/native/graph_type.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "graph_type.cml:11:17", "argument types: <> (int)", "<graph:root>: (p: Program) => Graph"]
 
 # ---- The declaration itself is checked: its URI and its result type ----
 

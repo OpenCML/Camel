@@ -21,17 +21,15 @@ import { Program, Node, Graph, graphs, nodes, op, op_name, name } from graph
 import { max } from math
 import { rewrite } from rewrite
 
-analysis sign: int {
-    initial => 0
-    join(a, b) => max(a, b)
-    on (const c: int) => c
-}
+fact sign: int match v {
+    case const c: int => c
+    case _       => 0
+} join max
 
-analysis sub(a: Node, b: Node): int {
-    initial => 0
-    join(a, b) => max(a, b)
-    on (x - y) => sign(y)
-}
+fact sub(a: Node, b: Node): int match (a, b) {
+    case x - y   => sign(y)
+    case _       => 0
+} join max
 
 func positive(c: float): bool {
     return c > 0.0

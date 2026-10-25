@@ -562,17 +562,25 @@ ScalarOperand ScalarOperand::fromSlot(TypeCode code, slot_t slot) {
     case TypeCode::Int64:
         scalar.value.i = scalarToInt64(code, slot);
         break;
-    // A reduced-precision value is two bytes in the low half of its slot (camel/core/rtdata/
-    // half.h), and the operand is read at the element type it was written with: the two bytes are
-    // kept as they are. Widening them into `f` would put four bytes behind a two-byte element type
-    // and the kernel would read the value as the low half of an f32, which is not the value.
+    // The two reduced-precision floats keep their own form: a slot holds the two-byte pattern of
+    // the type (camel/core/rtdata/half.h), and that pattern is what a kernel computing in the
+    // element type reads, with the one rounding the arithmetic already does. A value widened to
+    // f32 and left in a wider member of the union would be read as the low half of that f32
+    // instead, and the operand would not be the number the program wrote.
     case TypeCode::BFloat16:
-    case TypeCode::Float16:
-        scalar.value.u16 = static_cast<uint16_t>(slot);
+        scalar.value.bf16 = rtdata::BFloat16::fromBits(rtdata::halfBitsOfSlot(slot));
         break;
-    default:
+    case TypeCode::Float16:
+        scalar.value.f16 = rtdata::Float16::fromBits(rtdata::halfBitsOfSlot(slot));
+        break;
+    case TypeCode::Bool:
         scalar.value.b = scalarToBool(code, slot) ? 1 : 0;
         break;
+    default:
+        // A scalar operand is read in the element type the operator declares, and no other type
+        // has a member here: reading an unknown one as a bool would hand the kernel a value the
+        // program never wrote (design principles 5.1, 7.3).
+        throw std::invalid_argument("Unsupported scalar type for a tensor operand");
     }
     return scalar;
 }

@@ -1,0 +1,31 @@
+/**
+ * A NaN's text carries no sign in the tensor form either (design principles 7.7; the language
+ * reference, 2.5.2): `inf - inf` is a NaN whose sign bit is set, and the tensor printer hands the
+ * element to the C library, which writes `-nan` for it unless the value is made positive first
+ * (camel/utils/number_text.h, `withoutNaNSign`; src/core/rtdata/array.cpp). The same value must
+ * write `nan` as a scalar, in a plain array, and in a tensor of f64 and of f32.
+ */
+module nan_text_in_a_tensor
+
+import { cast } from tensor
+
+func mul(a: float, b: float): float { return a * b }
+func sub(a: float, b: float): float { return a - b }
+func div(a: float, b: float): float { return a / b }
+
+func main(): int sync {
+    let inf = mul(1.0e308, 10.0)
+    let ninf = mul(-1.0e308, 10.0)
+    let nan = sub(inf, inf)
+    println("scalar")
+    println(nan)
+    println("array")
+    println([nan])
+    println("tensor-f64")
+    println(cast([nan], 'float64'))
+    println("tensor-f64-specials")
+    println(cast([nan, inf, ninf, div(-1.0, inf), div(1.0, inf)], 'float64'))
+    println("tensor-f32")
+    println(cast([f32(nan)], 'float32'))
+    return 0
+}

@@ -1,6 +1,7 @@
 // The higher-order array operators called by a macro function (std::macro): they are native
 // operators that call their function through the function-call service, which the macro
-// evaluator now provides (docs/design/native-subgraph-call, item 7). With n = 1 the squares plus
+// evaluator provides (docs/technical/06_runtime_and_execution.md, the native operator callback
+// service). With n = 1 the squares plus
 // one are 2 5 10 17 26 37, the even ones 2 10 26, and their sum 38.
 #macro func hof(n: int): int {
     let xs = [1, 2, 3, 4, 5, 6]

@@ -117,7 +117,7 @@ export func is_bool::<T>(): bool {
 /// so, and a struct or tuple is asked field by field.
 /// @example is_plain::<float>()    // true
 /// @example is_plain::<bool>()    // true
-/// @example is_plain::<(x: int, y: f32)>()    // true
+/// @example is_plain::<{ x: int, y: f32 }>()    // true
 /// @example is_plain::<string>()    // false
 /// @example is_plain::<int[]>()    // false
 export func is_plain::<T>(): bool {

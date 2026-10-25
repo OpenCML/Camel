@@ -3,7 +3,7 @@ module err_requires_not_permission
 
 tag plain on func
 
-#requires<plain>
+#requires(plain)
 rule r(x: int) { x + 0 => x }
 
 func main(): int { return 0 }

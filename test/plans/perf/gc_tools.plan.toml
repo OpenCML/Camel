@@ -1,0 +1,47 @@
+id = "perf.gc_tools"
+order = 434
+tier = "milestone"
+tags = ["perf", "gc", "tools"]
+desc = """
+The two instruments the collector and the performance work are measured with, run once each so the
+milestone layer can name them.
+
+`gcbench.py` compares the two collectors over five workloads -- the four under `test/cases/perf/gc`
+(`build_tree.cml`, `fib.cml`, `jit_const.cml`, `map_chain.cml`) and `para/core/block_sort_merge.cml`
+-- one round each, on the four schedulers it knows. `perfbaseline/baseline.py` reports the compile,
+optimize and execute time and the peak working set of three of those programs.
+
+Why the milestone layer: both report a time or a resident size, which is a property of the machine
+while it runs and not of the program, so neither belongs in a gate -- a shared host turns a
+measurement into a coin toss. `--rounds 1` is deliberate: this entry exists to prove the
+instruments run and to keep the workloads they measure reachable, not to produce a baseline. A
+baseline is taken on a quiet machine, by hand, with the round count the question needs.
+
+These five workloads were read by the two tools and by nothing else, so nothing ran them; the case
+ledger counts them as read because the tools build their paths, and this entry is what makes the
+tools themselves runnable from a plan.
+"""
+
+[defaults]
+kind = "behavior"
+tool = "python"
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+
+[[tests]]
+name = "gc_tools.gcbench_workloads"
+desc = "The five workloads no other plan runs -- build_tree, fib, jit_const, map_chain and block_sort_merge -- through gcbench.py, one round on the two collectors. The tool prints one row per workload and collector and marks a row FAILED when a run exits non-zero or differs between the collectors, so the assertions are the five names and the absence of those marks."
+case = "../../tools/gcbench/gcbench.py"
+args = ["${case}", "--rounds", "1", "--only", "build_tree.nvm,map_chain.nvm,fib32.nvm,jit_const36.fvm,block_sort_merge.prl", "--camel", "${camel}"]
+expect_output_contains = ["build_tree.nvm", "map_chain.nvm", "fib32.nvm", "jit_const36.fvm", "block_sort_merge.prl"]
+expect_output_not_contains = ["FAILED", "OUTPUT DIFFERS", "Traceback"]
+timeout_ms = 1800000
+
+[[tests]]
+name = "gc_tools.perfbaseline_workloads"
+desc = "Three of those workloads -- build_tree, map_chain and jit_const -- through perfbaseline/baseline.py: the markdown table it prints has one row per program, each row measured over the three back ends and the two optimize passes. The generated `scale.*` programs are left out: they are a size series the tool makes up, not a case in the tree."
+case = "../../tools/perfbaseline/baseline.py"
+args = ["${case}", "--rounds", "1", "--no-scale", "--only", "build_tree,map_chain,jit_const"]
+expect_output_contains = ["| build_tree |", "| map_chain |", "| jit_const |"]
+expect_output_not_contains = ["Traceback", "no camel binary"]
+timeout_ms = 1800000

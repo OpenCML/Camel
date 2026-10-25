@@ -17,7 +17,6 @@ A `**target**` note names its design under `docs/design/`, and a diagnostic is w
 | Control | `if` |
 | Type and conversion | `as` |
 | Literal | `null` |
-| Reserved (accepted, not implemented — §13) | `is` |
 
 **Operators and separators** (3): `=` `->` `..`
 <!-- camel-for-ai end: lexical -->

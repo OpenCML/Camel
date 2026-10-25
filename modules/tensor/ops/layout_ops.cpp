@@ -410,7 +410,8 @@ std::vector<int64_t> intListArg(ArgsView &args, size_t index, std::string_view o
 // 两种 `[]` 都只由核心回答; `docs/design/arrays-memory/plan.cn.md` 5.1a: 模块副本与按类型分派的那段一起删掉). The function
 // form below stays: it answers any axis and any rank, and its reading of its arguments -- a
 // negative bound counts from the end, an axis is normalized -- is not the core's yet (see
-// docs/handover/questions/slice-function-form-and-what-the-core-answers.md).
+// docs/handover/reviews/questions-2026-10-24-evening.md, section
+// slice-function-form-and-what-the-core-answers).
 
 // take(t, indices): rows along the first axis, in the order the indices give.
 slot_t takeKernel(ArgsView &, ArgsView &norm, context::Context &) {

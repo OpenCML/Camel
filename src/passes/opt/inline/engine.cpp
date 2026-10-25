@@ -150,7 +150,7 @@ bool mayHaveEffects(
         }
         if (node->kind == GCNodeKind::Oper) {
             const auto *body = graph->nodeBodyAs<camel::runtime::GCOperBody>(it.ref());
-            if (!body || !camel::core::OperatorTable::instance().isPure(body->oper)) {
+            if (!body || !camel::core::OperatorTable::instance().mayBeRecomputed(body->oper)) {
                 return true;
             }
         }

@@ -27,7 +27,7 @@ be distinguishable from failures; catching every runtime exception is not a
 fallback implementation. Numerical permissions remain lexical and cannot be
 expanded by target selection.
 
-Keep `@kernel`'s approved expert-kernel role separate from dispatch policy. Shared
+Keep `#kernel`'s approved expert-kernel role separate from dispatch policy. Shared
 kernel operations need CPU reference semantics; explicitly target-specific
 operations require capability declarations and may reject another target.
 
@@ -60,9 +60,11 @@ but automatic host/device routing and compiled CPU kernels remain pending.
 
 ## Implementation sequence
 
-1. Finish backend-independent native subgraph invocation and its GC/fault tests.
-2. Define target/capability selection and revise the decorator and inspection API
-   together; implement the GPU-preferred fallback behavior.
+1. Backend-independent native subgraph invocation and its GC/fault tests are done
+   (`docs/technical/06_runtime_and_execution.md`, the native operator callback service);
+   NodeVM, FastVM, JIT and Taskflow run the same service.
+2. Define target/capability selection and revise the `#gpu` placement label and the
+   inspection API together; implement the GPU-preferred fallback behavior.
 3. Separate common computation from CUDA physical planning without retaining two
    independent semantic representations.
 4. Add compiled CPU elementwise fusion, then ordered reductions and tiled matrix
@@ -92,7 +94,7 @@ uses preferred resident execution without test output or CUDA initialization
 during rewriting. This is the static-shape region implementation; symbolic
 shape compilation and cost-based target selection remain pending.
 
-Static region launch/source templates are now `tiles.compiled_region` target
+Static region launch/source templates are now `tiles.compiled_scope` target
 facts anchored on the actual extracted callee, with the core graph lineage,
 transitive revision and declaration epoch supplying invalidation. Draft commits
 preserve those identities for unchanged callees. A CUDA lowering-policy hash

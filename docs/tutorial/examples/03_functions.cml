@@ -1,6 +1,5 @@
 // Functions, recursion, pipelines and `with` parameters.
 // Run: camel docs/tutorial/examples/03_functions.cml
-module functions
 
 func square(x: int): int {
     return x * x

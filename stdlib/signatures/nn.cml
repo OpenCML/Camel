@@ -34,25 +34,25 @@
 /// rank 4, or a window that does not fit, is refused when the call is compiled.
 /// @pure
 /// @example conv2d(input, kernel, bias, 1, 0)    // [N, O, OH, OW]
-export func conv2d(input: Tensor, kernel: Tensor, bias: Tensor, stride?: int, padding?: int): Tensor
+export func conv2d(input: f32[..], kernel: f32[..], bias: f32[..], stride?: int, padding?: int): f32[..]
 
 /// The gradient of `conv2d` with respect to its input, given the upstream gradient `dy` shaped
 /// like the convolution's result; the result is shaped like `input`.
 /// @pure
 /// @example conv2d_input_grad(input, kernel, dy, 1, 0)    // like x
-export func conv2d_input_grad(input: Tensor, kernel: Tensor, dy: Tensor, stride?: int, padding?: int): Tensor
+export func conv2d_input_grad(input: f32[..], kernel: f32[..], dy: f32[..], stride?: int, padding?: int): f32[..]
 
 /// The gradient of `conv2d` with respect to its kernel, given `dy` shaped like the convolution's
 /// result; the result is shaped like `kernel`.
 /// @pure
 /// @example conv2d_kernel_grad(input, kernel, dy, 1, 0)    // like w
-export func conv2d_kernel_grad(input: Tensor, kernel: Tensor, dy: Tensor, stride?: int, padding?: int): Tensor
+export func conv2d_kernel_grad(input: f32[..], kernel: f32[..], dy: f32[..], stride?: int, padding?: int): f32[..]
 
 /// The gradient of `conv2d` with respect to its bias: the sum of `dy` over the batch and the
 /// spatial axes, shaped like `bias`.
 /// @pure
 /// @example conv2d_bias_grad(bias, dy)    // like b
-export func conv2d_bias_grad(bias: Tensor, dy: Tensor): Tensor
+export func conv2d_bias_grad(bias: f32[..], dy: f32[..]): f32[..]
 
 // ---- pooling ----
 
@@ -61,26 +61,26 @@ export func conv2d_bias_grad(bias: Tensor, dy: Tensor): Tensor
 /// the padding contributes -inf (the identity of the maximum).
 /// @pure
 /// @example max_pool2d(input, 2)    // [N, C, H/2, W/2]
-export func max_pool2d(input: Tensor, kernel: int, stride?: int, padding?: int): Tensor
+export func max_pool2d(input: f32[..], kernel: int, stride?: int, padding?: int): f32[..]
 
 /// Average pooling over a square window of `kernel`: the window's elements plus +0 for those in
 /// the padding are summed in an f64 accumulator and divided by `kernel*kernel`. `stride` defaults
 /// to `kernel`, `padding` to 0, and the result is `[N, C, OH, OW]`.
 /// @pure
 /// @example avg_pool2d(input, 2)    // [N, C, H/2, W/2]
-export func avg_pool2d(input: Tensor, kernel: int, stride?: int, padding?: int): Tensor
+export func avg_pool2d(input: f32[..], kernel: int, stride?: int, padding?: int): f32[..]
 
 /// The gradient of `max_pool2d` with respect to its input, given `dy` shaped like the pooling
 /// result; the result is shaped like `input`.
 /// @pure
 /// @example max_pool2d_grad(input, dy, 2)    // like x
-export func max_pool2d_grad(input: Tensor, dy: Tensor, kernel: int, stride?: int, padding?: int): Tensor
+export func max_pool2d_grad(input: f32[..], dy: f32[..], kernel: int, stride?: int, padding?: int): f32[..]
 
 /// The gradient of `avg_pool2d` with respect to its input, given `dy` shaped like the pooling
 /// result; the result is shaped like `input`.
 /// @pure
 /// @example avg_pool2d_grad(input, dy, 2)    // like x
-export func avg_pool2d_grad(input: Tensor, dy: Tensor, kernel: int, stride?: int, padding?: int): Tensor
+export func avg_pool2d_grad(input: f32[..], dy: f32[..], kernel: int, stride?: int, padding?: int): f32[..]
 
 // ---- batch normalization ----
 
@@ -88,7 +88,7 @@ export func avg_pool2d_grad(input: Tensor, dy: Tensor, kernel: int, stride?: int
 /// `eps` defaulting to 1e-5. Every tensor is f32 and the result is shaped like `input`.
 /// @pure
 /// @example batch_norm(input, running_mean, running_var, gamma, beta)
-export func batch_norm(input: Tensor, mean: Tensor, var: Tensor, gamma: Tensor, beta: Tensor, eps?: number): Tensor
+export func batch_norm(input: f32[..], mean: f32[..], var: f32[..], gamma: f32[..], beta: f32[..], eps?: number): f32[..]
 
 /// Training-mode batch normalization: normalizes `input` with the batch statistics, and answers
 /// `(y, new_running_mean, new_running_var)`, where `y` is shaped like `input` and the running
@@ -96,14 +96,14 @@ export func batch_norm(input: Tensor, mean: Tensor, var: Tensor, gamma: Tensor, 
 /// to 1e-5.
 /// @pure
 /// @example let (y, mean, variance) = batch_norm_train(input, gamma, beta, running_mean, running_var)
-export func batch_norm_train(input: Tensor, gamma: Tensor, beta: Tensor, running_mean: Tensor, running_var: Tensor, momentum?: number, eps?: number): (Tensor, Tensor, Tensor)
+export func batch_norm_train(input: f32[..], gamma: f32[..], beta: f32[..], running_mean: f32[..], running_var: f32[..], momentum?: number, eps?: number): (f32[..], f32[..], f32[..])
 
 /// The gradients of training-mode batch normalization: `(dx, dgamma, dbeta)`, shaped like
 /// `input`, `gamma` and `beta`. Only `y` carries gradient; the running-statistics blend is not
 /// differentiated, so the operator takes `dy` (the gradient of `y`) and `eps`.
 /// @pure
 /// @example let (dx, dgamma, dbeta) = batch_norm_train_grad(input, gamma, dy)
-export func batch_norm_train_grad(input: Tensor, gamma: Tensor, dy: Tensor, eps?: number): (Tensor, Tensor, Tensor)
+export func batch_norm_train_grad(input: f32[..], gamma: f32[..], dy: f32[..], eps?: number): (f32[..], f32[..], f32[..])
 
 // ---- embedding ----
 
@@ -112,13 +112,13 @@ export func batch_norm_train_grad(input: Tensor, gamma: Tensor, dy: Tensor, eps?
 /// @pure
 /// @fails fault `RuntimeError` when an index is outside the table
 /// @example embedding(table, indices)    // [2, dim]
-export func embedding(table: Tensor, indices: Tensor): Tensor
+export func embedding(table: f32[..], indices: f32[..]): f32[..]
 
 /// The gradient of `embedding` with respect to its table: unvisited rows stay zero, and the
 /// result is shaped like `table`.
 /// @pure
 /// @example embedding_table_grad(table, indices, dy)    // like table
-export func embedding_table_grad(table: Tensor, indices: Tensor, dy: Tensor): Tensor
+export func embedding_table_grad(table: f32[..], indices: f32[..], dy: f32[..]): f32[..]
 
 // ---- loss ----
 
@@ -129,9 +129,9 @@ export func embedding_table_grad(table: Tensor, indices: Tensor, dy: Tensor): Te
 /// @pure
 /// @fails fault `RuntimeError` when a label is outside `[0, classes)`
 /// @example softmax_cross_entropy(logits, target)    // a float
-export func softmax_cross_entropy(logits: Tensor, target: Tensor): float
-#op<'nn:softmax_cross_entropy_labels'>
-export func softmax_cross_entropy(logits: Tensor, target: Tensor | number[]): float
+export func softmax_cross_entropy(logits: f32[..], target: f32[..]): float
+#op('nn:softmax_cross_entropy_labels')
+export func softmax_cross_entropy(logits: f32[..], target: f32[..] | number[]): float
 
 /// The gradient of `softmax_cross_entropy` with respect to `logits`, scaled by `dy`; the result is
 /// shaped like `logits`. The label form (the URI `nn:softmax_cross_entropy_labels_grad`) takes
@@ -139,9 +139,9 @@ export func softmax_cross_entropy(logits: Tensor, target: Tensor | number[]): fl
 /// @pure
 /// @fails fault `RuntimeError` when a label is outside `[0, classes)`
 /// @example softmax_cross_entropy_grad(logits, target, 1.0)    // like logits
-export func softmax_cross_entropy_grad(logits: Tensor, target: Tensor, dy: number): Tensor
-#op<'nn:softmax_cross_entropy_labels_grad'>
-export func softmax_cross_entropy_grad(logits: Tensor, target: Tensor | number[], dy: number): Tensor
+export func softmax_cross_entropy_grad(logits: f32[..], target: f32[..], dy: number): f32[..]
+#op('nn:softmax_cross_entropy_labels_grad')
+export func softmax_cross_entropy_grad(logits: f32[..], target: f32[..] | number[], dy: number): f32[..]
 
 // ---- optimizers ----
 

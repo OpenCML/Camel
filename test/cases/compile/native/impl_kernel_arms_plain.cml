@@ -8,10 +8,10 @@
  */
 module impl_kernel_arms_plain
 
-#op<':op/sub_l'>
+#op(':op/sub_l')
 func sub_kernel(a: int, b: int): int when false
 
-#impl<sub_kernel>
+#impl(sub_kernel)
 func twisted(a: int, b: int): int {
     return a + b
 }

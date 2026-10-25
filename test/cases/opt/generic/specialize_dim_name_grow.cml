@@ -10,7 +10,8 @@
  * instance at all: a parameter written `f32[n]` is not a refinement at a call, so no instance key
  * is built for the entry call either and the widening is never reached. The count, the graph and
  * the isolation probes are recorded in the tests that name this file and in
- * docs/handover/questions/dim-name-relaxation-and-element-type-change.md.
+ * docs/handover/reviews/questions-2026-10-24-evening.md, section
+ * dim-name-relaxation-and-element-type-change.
  *
  * The author's sketch reads the depth from `read_int()`. The plan runner closes a test's standard
  * input (`stdio: ['ignore', ...]`, test/tools/run-tests.mjs), so the depth is read from the

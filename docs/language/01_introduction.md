@@ -41,7 +41,6 @@ Hello, Camel!
 
 - **语法**用近似 BNF 的写法：`*` 零次或多次，`?` 可选，`|` 选择，引号内是字面符号。精确的文法在 [8.5](08_top_level_and_grammar.md#85-完整文法)。
 - **示例**以 `cml` 代码块给出，`text` 代码块是它的输出。
-- **“保留，尚未实现”**：文法接受、但编译器明确拒绝的写法。这类写法都会得到一条编译期诊断，文中给出诊断名与现在可用的替代写法。一览见 [8.6](08_top_level_and_grammar.md#86-保留但尚未实现的写法)。
 - **“当前实现的行为，尚待确定”**：实现已经有确定的行为，但语言规则还没有裁定，以后可能改变。写程序时不要依赖这些行为的细节。
 
 ## 1.4 章节
@@ -54,6 +53,7 @@ Hello, Camel!
 | [5 模块](05_modules.md) | `module`、`import`、`export`、`namespace` |
 | [6 表达式](06_expressions.md) | 字面量、访问、调用、管道、运算符、`if`、`match`、lambda |
 | [7 语句与声明](07_statements.md) | `let`/`var`、`return`/`throw`、块、函数、泛型、类型声明 |
-| [8 程序与文法](08_top_level_and_grammar.md) | 顶层结构、入口、文法概要、保留未实现的写法 |
+| [8 程序与文法](08_top_level_and_grammar.md) | 顶层结构、入口、文法概要 |
+| [9 规则与事实](09_rules_and_facts.md) | `rule` 与条件、类型参数与 `with` 参数、规则集、`fact`、检查与解释 |
 
-**循环。** Camel 目前没有循环语法：`for`、`while` 不能用（`for`、`in` 是保留字）。重复的计算写成递归（尾递归不受深度限制）或高阶算子 `map`、`filter`、`reduce`、`foreach`。
+**循环。** `loop` 是带状态的表达式：状态写在循环头上，循环体的值是下一轮的状态，整个循环的值是最终状态。`loop acc = 0 for x in xs do acc + x` 每轮按顺序取序列的一个元素；`loop i = 1, acc = 0 while i <= n do (i + 1, acc + i)` 在条件成立时继续；两种写在一起时每轮先看条件、再取元素。没有 `break` 与 `continue`：提前结束写成 `while` 条件，跳过一轮的其余部分写成 `if`。循环不占调用深度，任意多轮都可以。精确规则见 [6.8.6](06_expressions.md#686-loop)。

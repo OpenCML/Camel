@@ -1,0 +1,22 @@
+/**
+ * A slice that takes its elements backwards has an adjoint: the core's slice adjoint scatters the
+ * gradient back through the same step, so the elements the slice took receive it and no other
+ * element does (design principles 9.9, 5.4). The first extent here is open, so nothing about the
+ * step is statically known: the slice runs, and its value and its gradient are the slice's.
+ */
+module autodiff_slice_grad_negative_step
+import { Tensor, reshape, sum } from tensor
+import { grad } from autodiff
+
+with <x: f32[..]>
+func backwards_loss(): float {
+    let c = reshape([1.0, 1.0, 1.0] as f32[], [3])
+    return sum(x[5:0:-2] * c)
+}
+
+func main(): int sync {
+    let x = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[], [6])
+    let g = grad(backwards_loss)<x>()
+    println(sum(g))
+    return 0
+}

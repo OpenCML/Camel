@@ -3,7 +3,7 @@ order = 322
 tier = "fast"
 tags = ["feat", "format", "formatter", "comments", "tags"]
 
-# A declaration's tags (`#impl<...>`, `#op<'...'>`, `#[...]`) are written before it, in its front
+# A declaration's tags (`#impl(...)`, `#op('...')`, `#[...]`) are written before it, in its front
 # matter, so its first token is the `#` of the first tag. A doc comment written above the tag stands
 # above the declaration and `commentsBefore` writes it before the tag; one written between the tag
 # and the keyword stands inside the declaration, where no visitor and no list looks, and the

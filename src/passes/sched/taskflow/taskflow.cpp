@@ -1972,8 +1972,11 @@ slot_t TaskflowExecSchedPass::executePreparedOperator(
         }
     }
 
-    const auto *body = graph->nodeBodyAs<GCOperBody>(nodeRef);
-    const std::string uri(body->uri());
+    // The plan names the operator: an update node whose storage must not be reused runs the plain
+    // form of the operator it names (docs/design/arrays-memory/README.cn.md 4.3.1).
+    const std::string uri(
+        plan != nullptr && plan->shared != nullptr ? plan->shared->operatorUriFor(nodeRef)
+                                                   : graph->execPlan().operatorUriFor(nodeRef));
     auto opFunc = context_->execMgr().find(uri);
     if (!opFunc) {
         // The graph names an operator no loaded module implements: a compiler defect.

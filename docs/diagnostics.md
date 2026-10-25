@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-268 diagnostics: 251 errors, 17 warnings. 15 carry a machine-applicable edit, 253 say why they carry none.
+280 diagnostics: 263 errors, 17 warnings. 15 carry a machine-applicable edit, 265 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -89,7 +89,6 @@ prints one entry.
 | `0x03000071` | [SemanticDiag::ThrowNotAnError](#thrownotanerror) | Error | no |
 | `0x03000072` | [SemanticDiag::TaggedTypeNesting](#taggedtypenesting) | Error | no |
 | `0x03000073` | [SemanticDiag::TaggedValueNotOpened](#taggedvaluenotopened) | Error | no |
-| `0x03000074` | [SemanticDiag::TryCatchNotInLanguage](#trycatchnotinlanguage) | Error | no |
 | `0x03000075` | [SemanticDiag::TaggedOperandMismatch](#taggedoperandmismatch) | Error | no |
 | `0x03000076` | [SemanticDiag::TaggedMatchCases](#taggedmatchcases) | Error | no |
 | `0x03000080` | [SemanticDiag::ImportedModuleHasErrors](#importedmodulehaserrors) | Error | no |
@@ -189,6 +188,7 @@ prints one entry.
 | `0x030001AA` | [SemanticDiag::WhenUnknownName](#whenunknownname) | Error | no |
 | `0x030001AB` | [SemanticDiag::WhenTypeQueryNotConcrete](#whentypequerynotconcrete) | Error | no |
 | `0x030001AC` | [SemanticDiag::WhenConditionUnmet](#whenconditionunmet) | Error | no |
+| `0x030001AD` | [SemanticDiag::EffectInRuleCondition](#effectinrulecondition) | Error | no |
 | `0x030001B3` | [SemanticDiag::TypeOfNotAValue](#typeofnotavalue) | Error | no |
 | `0x030001B4` | [SemanticDiag::TypeOfNotWholeType](#typeofnotwholetype) | Error | no |
 | `0x030001B5` | [SemanticDiag::SameShapeComprehensionNotComposite](#sameshapecomprehensionnotcomposite) | Error | no |
@@ -205,6 +205,8 @@ prints one entry.
 | `0x030001C0` | [SemanticDiag::WhenPredicateNotCompileTime](#whenpredicatenotcompiletime) | Error | no |
 | `0x030001C1` | [SemanticDiag::WhenPredicateAmbiguous](#whenpredicateambiguous) | Error | no |
 | `0x030001C2` | [SemanticDiag::StaticMatchPatternCannotMatch](#staticmatchpatterncannotmatch) | Error | no |
+| `0x030001C3` | [SemanticDiag::FactArgumentNotConstant](#factargumentnotconstant) | Error | no |
+| `0x030001C4` | [SemanticDiag::FactCaseDefaultMissing](#factcasedefaultmissing) | Error | no |
 | `0x030001C5` | [SemanticDiag::FoldCallArgumentNotConstant](#foldcallargumentnotconstant) | Error | no |
 | `0x030001C6` | [SemanticDiag::FoldCallHasEffects](#foldcallhaseffects) | Error | no |
 | `0x030001C7` | [SemanticDiag::FoldCallTooDeep](#foldcalltoodeep) | Error | no |
@@ -225,6 +227,7 @@ prints one entry.
 | `0x030001DA` | [SemanticDiag::ImplKernelForeign](#implkernelforeign) | Error | no |
 | `0x030001DB` | [SemanticDiag::ImplSignatureMismatch](#implsignaturemismatch) | Error | no |
 | `0x030001DC` | [SemanticDiag::ImplKernelNotBodyless](#implkernelnotbodyless) | Error | no |
+| `0x030001DD` | [SemanticDiag::RuleWithParameterUnbound](#rulewithparameterunbound) | Error | no |
 | `0x030001DE` | [SemanticDiag::NodeOfNotAParameter](#nodeofnotaparameter) | Error | no |
 | `0x030001DF` | [SemanticDiag::OverloadParameterNames](#overloadparameternames) | Error | no |
 | `0x030001E0` | [SemanticDiag::WhenDeclarationOverlap](#whendeclarationoverlap) | Error | no |
@@ -235,8 +238,14 @@ prints one entry.
 | `0x030001E5` | [SemanticDiag::RangeTwoArgumentsRemoved](#rangetwoargumentsremoved) | Error | no |
 | `0x030001E6` | [SemanticDiag::RangeStepZero](#rangestepzero) | Error | no |
 | `0x030001E7` | [SemanticDiag::StaticLoopSequenceNotKnown](#staticloopsequencenotknown) | Error | no |
+| `0x030001E8` | [SemanticDiag::RuleConstParamNotMatched](#ruleconstparamnotmatched) | Error | no |
+| `0x030001E9` | [SemanticDiag::SliceStepZero](#slicestepzero) | Error | no |
+| `0x030001EA` | [SemanticDiag::TagFieldNameAmbiguous](#tagfieldnameambiguous) | Error | no |
+| `0x030001EB` | [SemanticDiag::TagFunctionArgumentNotReadable](#tagfunctionargumentnotreadable) | Error | no |
+| `0x030001EC` | [SemanticDiag::GenericTypeArgumentGrows](#generictypeargumentgrows) | Error | no |
 | `0x030001ED` | [SemanticDiag::TensorElementTypeRequired](#tensorelementtyperequired) | Error | no |
 | `0x030001EE` | [SemanticDiag::BranchElementTypeMismatch](#branchelementtypemismatch) | Error | no |
+| `0x030001F0` | [SemanticDiag::RuleWithArgumentNotConstant](#rulewithargumentnotconstant) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn | no |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn | no |
@@ -284,6 +293,9 @@ prints one entry.
 | `0x04000187` | [RuntimeDiag::PassNotExportedByModule](#passnotexportedbymodule) | Error | no |
 | `0x040001A7` | [RuntimeDiag::GpuScopeNoDeviceProgram](#gpuscopenodeviceprogram) | Error | no |
 | `0x040001A8` | [RuntimeDiag::ValueWithNoDerivativeRule](#valuewithnoderivativerule) | Error | no |
+| `0x040001A9` | [RuntimeDiag::GpuScopeMacroNotExpanded](#gpuscopemacronotexpanded) | Error | no |
+| `0x040001AA` | [RuntimeDiag::GraphNoDeviceProgram](#graphnodeviceprogram) | Error | no |
+| `0x040001AB` | [RuntimeDiag::DeviceNotSelected](#devicenotselected) | Error | no |
 | `0x0410000F` | [RuntimeDiag::PassesNeverRun](#passesneverrun) | Warn | no |
 | `0x04100015` | [RuntimeDiag::ConstantExpressionFaults](#constantexpressionfaults) | Warn | no |
 | `0x04100016` | [RuntimeDiag::TranslationLinksRuntime](#translationlinksruntime) | Warn | no |
@@ -1447,7 +1459,7 @@ Invalid access index: '{0}'.
 Ensure the index is within bounds for arrays or refers to a valid field in structs.
 ```
 
-**Example** (`test/cases/consistency/faults/tuple_index_static.cml`, run as `camel `)
+**Example** (`test/cases/consistency/faults/tuple_index_static.cml`, run as `camel test/cases/consistency/faults/tuple_index_static.cml ${backend}`)
 
 ```camel
 module tuple_index_static
@@ -1855,7 +1867,7 @@ Use a valid operator URI in the form protocol:path (e.g. std:add).
 /// '#op' names an operator by URI: a URI without 'protocol:path' is refused.
 module operator_uri_invalid
 
-#op<'stdadd'>
+#op('stdadd')
 func add(a: int, b: int): int
 
 func main(): int sync {
@@ -1883,22 +1895,22 @@ Entry module '{0}' must define a resolvable 'main' on the module root (__root__)
 Add a top-level main function or ensure it is registered as a direct root subgraph.
 ```
 
-**Example** (`test/cases/trans/library_module.cml`, run as `camel check -O short test/cases/trans/library_module.cml`)
+**Example** (`docs/tutorial/examples/shapes.cml`, run as `camel docs/tutorial/examples/shapes.cml`)
 
 ```camel
-// A library module: it defines no `main`. Translation passes (std::gir, std::jgir) and
-// `inspect -g` must still build and dump its graphs; only execution requires an entry.
-// The top-level value and the unexported helper make the root depend on more than one graph.
-let offset = 10
+// A library module used by 12_modules.cml.
+module shapes
 
-func square(x: int): int { return x * x }
+import { sqrt } from math
 
-export func shifted_square(x: int): int {
-    return square(x) + offset
+export type Vec = { x: float, y: float }
+
+export func hypot(v: Vec): float {
+    return sqrt(v.x * v.x + v.y * v.y)
 }
 
-export func classify(x: int): int {
-    return if x < 0 then -1 else 1
+export func area(w: float, h: float): float {
+    return w * h
 }
 ```
 
@@ -2394,17 +2406,37 @@ Instantiating the generic function '{0}' with {1} is refused: {2}.
 Each call of a generic function with a new set of types builds a new subgraph. A generic function that calls itself with ever larger types never stops doing so.
 ```
 
-**Example** (`test/cases/compile/generics/err_deep.cml`, run as `camel test/cases/compile/generics/err_deep.cml`)
+**Example** (`test/cases/compile/generics/err_deep_types.cml`, run as `camel test/cases/compile/generics/err_deep_types.cml`)
 
 ```camel
-module err_deep
+module err_deep_types
 
-func grow::<T>(x: T, n: int): int {
-    return if n <= 0 then 0 else grow([x], n - 1)
+func churn::<T>(x: T, k: int): int {
+    let anF32: f32 = 1.0
+    let anF64: f64 = 1.0
+    let anI32: i32 = 1
+    let anI64: i64 = 1
+    let aBf16: bf16 = 1.0
+    let aF16: f16 = 1.0
+    let aBool = true
+    let aString = 's'
+    let aC64: c64 = 1 - 2i
+    let aC128: c128 = 1 + 2i
+    return if k <= 0 then 0
+           else if k == 1 then churn(anF32, k - 1)
+           else if k == 2 then churn(anF64, k - 1)
+           else if k == 3 then churn(anI32, k - 1)
+           else if k == 4 then churn(anI64, k - 1)
+           else if k == 5 then churn(aBf16, k - 1)
+           else if k == 6 then churn(aF16, k - 1)
+           else if k == 7 then churn(aBool, k - 1)
+           else if k == 8 then churn(aString, k - 1)
+           else if k == 9 then churn(aC64, k - 1)
+           else churn(aC128, k - 1)
 }
 
 func main(): int sync {
-    println(grow(1, 3))
+    println(churn(0, 3))
     return 0
 }
 ```
@@ -2661,44 +2693,6 @@ func main(): int sync {
     println('never printed')
     let r = parse_int('1')
     println(r.0)
-    return 0
-}
-```
-
-### TryCatchNotInLanguage
-
-`0x03000074` · Error · `SemanticDiag::TryCatchNotInLanguage`
-
-**Fix**
-
-None: choice: the repair is a decision only the writer can make
-
-**Message**
-
-```text
-'try'/'catch' is not part of Camel.
-```
-
-**Help**
-
-```text
-An operation that can fail returns a value of type 'T!'. Give a fallback with 'a !! b', hand an error on with 'x ?-> f', or inspect it with 'match r { case error e => ... case v => ... }'. Faults (division by zero, an index out of range) are not errors and end the program; isolating them is the job of the fault-isolation operator.
-```
-
-**Example** (`test/cases/compile/semantic/try_not_in_language.cml`, run as `camel test/cases/compile/semantic/try_not_in_language.cml`)
-
-```camel
-module try_not_in_language
-
-func main(): int sync {
-    println('never printed')
-    try {
-        println('body')
-    } catch e: int {
-        println('handler')
-    } finally {
-        println('cleanup')
-    }
     return 0
 }
 ```
@@ -3534,7 +3528,7 @@ The annotation '@{0}' is not accepted: {1}.
 **Help**
 
 ```text
-A line that starts with '@' annotates the function declaration or the block that follows. '@name' and '@name<args>' are decorators of a function or of a block; '@name(args)' is no longer accepted (numeric permissions are tags, design principles 7.2). A tag is written with '#': '#name', '#name<args>' or '#[a, b<v>]' (design principles 6.2).
+A line that starts with '@' annotates the function declaration or the block that follows. '@name' and '@name<args>' are decorators of a function or of a block; '@name(args)' is no longer accepted (numeric permissions are tags, design principles 7.2). A tag is written with '#': '#name', '#name(args)' or '#[a, b(v)]' (design principles 6.2).
 ```
 
 **Example** (`test/cases/compile/tags/err_numeric_annotation.cml`, run as `camel test/cases/compile/tags/err_numeric_annotation.cml`)
@@ -4333,7 +4327,7 @@ func add(a: int, b: int): int {
     return a + b
 }
 
-#impl<>
+#impl()
 func add_with_kernel(a: int, b: int): int {
     return a + b
 }
@@ -4365,10 +4359,10 @@ A tag is read before the program runs: write a literal, a top-level constant or 
 /// A tag argument that is not a compile-time value.
 module err_const
 
-export tag width<w: int> on type
+export tag width(w: int) on type
 
 func f(n: int): int {
-    #width<n>
+    #width(n)
     type T = { a: int }
     return 0
 }
@@ -4402,9 +4396,9 @@ Declare the struct as a type ('type S = { ... }') and tag the field in that decl
 /// A tag on a field of a struct type written inline, which is not a declaration.
 module tag_on_unnamed_field
 
-tag width<w: int> on field
+tag width(w: int) on field
 
-func f(x: { #width<8> a: int }): int {
+func f(x: { #width(8) a: int }): int {
     return x.a
 }
 
@@ -4430,7 +4424,7 @@ A tag argument is positional: '{0}' is named.
 **Help**
 
 ```text
-A tag's parameters are given in the order the tag declares them: write '#tag<a, b>', not '#tag<x: a>'.
+A tag's parameters are given in the order the tag declares them: write '#tag(a, b)', not '#tag(x: a)'.
 ```
 
 **Example** (`test/cases/compile/tags/tag_argument_named.cml`, run as `camel test/cases/compile/tags/tag_argument_named.cml`)
@@ -4439,9 +4433,9 @@ A tag's parameters are given in the order the tag declares them: write '#tag<a, 
 /// A tag argument is positional; naming one is refused.
 module tag_argument_named
 
-tag width<w: int> on func
+tag width(w: int) on func
 
-#width<w: 8>
+#width(w: 8)
 func g(): int {
     return 0
 }
@@ -4468,7 +4462,7 @@ The parameter '{0}' of the tag '{1}' is declared '{2}', but the argument is '{3}
 **Help**
 
 ```text
-A tag argument is a compile-time constant of the kind the parameter declares: write an integer for 'int', a real for 'float', 'true' or 'false' for 'bool', a string for 'string', and the name of a function for 'func' (the fact is the graph reference of that function).
+A tag argument is a compile-time constant of the kind the parameter declares: write an integer for 'int', a real for 'float', 'true' or 'false' for 'bool', a string for 'string', and the name of a function for a parameter that carries one (the fact is the graph reference of that function).
 ```
 
 **Example** (`test/cases/compile/tags/err_float.cml`, run as `camel test/cases/compile/tags/err_float.cml`)
@@ -4477,9 +4471,9 @@ A tag argument is a compile-time constant of the kind the parameter declares: wr
 /// A tag argument of a type a tag cannot hold yet (adds them).
 module err_float
 
-export tag width<w: int> on type
+export tag width(w: int) on type
 
-#width<1.5>
+#width(1.5)
 type T = { a: int }
 
 func main(): int { return 0 }
@@ -4513,7 +4507,7 @@ module err_requires_unknown
 import { Program } from graph
 import { rewrite } from rewrite
 
-#requires<reassociate2>
+#requires(reassociate2)
 rule r(x: int) { x + 0 => x }
 
 export func apply(p: Program): Program! {
@@ -4532,13 +4526,13 @@ None: choice: the repair is a decision only the writer can make
 **Message**
 
 ```text
-A rule may be preceded only by '#requires<...>', not by the tag '{0}'.
+A rule may be preceded only by '#requires(...)', not by the tag '{0}'.
 ```
 
 **Help**
 
 ```text
-State the permissions the rule needs as tag arguments: '#requires<reassociate>' (design principles 7.2).
+State the permissions the rule needs as tag arguments: '#requires(reassociate)' (design principles 7.2).
 ```
 
 **Example** (`test/cases/modules/rules/err_rule_tag.cml`, run as `camel test/cases/modules/rules/err_rule_tag.cml`)
@@ -4566,13 +4560,13 @@ None: choice: the repair is a decision only the writer can make
 **Message**
 
 ```text
-The parameter '{0}' of the tag '{1}' is declared '{2}': a tag parameter is an int, a float, a bool, a string or a func.
+The parameter '{0}' of the tag '{1}' is declared '{2}': a tag parameter is an int, a float, a bool, a string, a concrete function type, or a type parameter the condition selects with is_function.
 ```
 
 **Help**
 
 ```text
-Declare the parameter with the kind of the argument the tag is written with: 'tag {1}<{0}: int> on ...'; a 'func' parameter is written with the name of a function ('#vjp<rule>').
+Declare the parameter with the kind of the argument the tag is written with: 'tag {1}({0}: int) on ...'. A parameter that carries a function is a type parameter with a condition ('export tag vjp::<F>(rule: F) on func when is_function::<F>()') or a concrete function type ('tag rule(f: (x: int) => int) on field').
 ```
 
 **Example** (`test/cases/compile/tags/err_param_type.cml`, run as `camel test/cases/compile/tags/err_param_type.cml`)
@@ -4581,9 +4575,9 @@ Declare the parameter with the kind of the argument the tag is written with: 'ta
 /// A parameter of a kind a tag cannot carry: reported where the tag is written, not carried.
 module err_param_type
 
-tag callback<f: (x: int) => int> on type
+tag callback(xs: int[]) on type
 
-#callback<1>
+#callback(1)
 type T = { x: int }
 
 func main(): int { return 0 }
@@ -4817,7 +4811,7 @@ A 'static for' walks a struct or an ordinary tuple. A 'T?' or 'T!' and a mutable
 module static_for_not_composite
 
 func walk(t: int) {
-    static for (n, F) in fields int => {
+    static for n, F in fields int => {
         println(n, t)
     }
 }
@@ -4987,7 +4981,7 @@ The block is the value of one field: its last statement must have a value. A cal
 module comprehension_void_element
 
 func broken(t: {a: int, b: int}) {
-    return { static for (n, F) in fields {a: int, b: int} => {} }
+    return { static for n, F in fields {a: int, b: int} => {} }
 }
 
 func main(): int sync {
@@ -5116,12 +5110,12 @@ An operator has one meaning for one call: which rule applies must be decided by 
 ```camel
 module native_overlap
 
-#op<':op/idx_arr'>
+#op(':op/idx_arr')
 export func pick::<T>(xs: T[], i: int): T
 
 // The same call: an array of some element type and an index. `T` and `U` are no help — every
 // call of one is a call of the other.
-#op<':op/idx_arr'>
+#op(':op/idx_arr')
 export func pick::<U>(xs: U[], i: int): U
 
 func main(): int sync {
@@ -6097,6 +6091,58 @@ func main(): int sync {
 }
 ```
 
+### EffectInRuleCondition
+
+`0x030001AD` · Error · `SemanticDiag::EffectInRuleCondition`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
+**Message**
+
+```text
+{0} has an effect, and it is inside the condition of the rule '{1}'.
+```
+
+**Help**
+
+```text
+A rule's condition decides whether the rule applies to a redex, and the engine evaluates it while it holds a session on the program being rewritten: a commit or a rewrite there acts inside that session, and a commit replaces the program the engine is reading. Keep the condition a predicate over the values the rule matched, and write the effect in the rule's right side or in the program around the rewrite.
+```
+
+**Example** (`test/cases/modules/rules/condition_rewrite.cml`, run as `camel test/cases/modules/rules/condition_rewrite.cml`)
+
+```camel
+module condition_rewrite
+
+import { Program, current } from graph
+import { rewrite } from rewrite
+
+rule add_zero(x: int) when publish_now() { x + 0 => x }
+rule drop_one(x: int) when true { x * 1 => x }
+
+func publish_now(): bool {
+    let p = current()
+    return match rewrite(p, [drop_one]) {
+        case error e => sync { println('inner error value: ', e.kind); return false }
+        case q => sync { return true }
+    }
+}
+
+func redex(x: int): int {
+    return x * 1 + 0
+}
+
+func main(): int sync {
+    let p = current()
+    return match rewrite(p, [add_zero]) {
+        case error e => sync { println('outer error value: ', e.kind); return 1 }
+        case q => sync { println('rewritten'); return 0 }
+    }
+}
+```
+
 ### TypeOfNotAValue
 
 `0x030001B3` · Error · `SemanticDiag::TypeOfNotAValue`
@@ -6126,7 +6172,7 @@ func nothing(): void {
 }
 
 func main(): int sync {
-    static for (j, C) in fields typeof(nothing()) => println(j)
+    static for j, C in fields typeof(nothing()) => println(j)
     return 0
 }
 ```
@@ -6157,7 +6203,7 @@ typeof is written inside the larger type {0}.
 module typeof_inside_type
 
 func main(): int sync {
-    static for (j, C) in fields typeof(1)[] => println(j)
+    static for j, C in fields typeof(1)[] => println(j)
     return 0
 }
 ```
@@ -6190,7 +6236,7 @@ module shape_not_composite
 type N = int
 
 func build(t: int) {
-    return N { static for (n, F) in fields N => t }
+    return N { static for n, F in fields N => t }
 }
 
 func main(): int sync {
@@ -6216,7 +6262,7 @@ The shape {0} is filled from the fields of {1}.
 **Help**
 
 ```text
-Write `T { static for (n, F) in fields T => ... }`: the generator must walk the shape the comprehension constructs.
+Write `T { static for n, F in fields T => ... }`: the generator must walk the shape the comprehension constructs.
 ```
 
 **Example** (`test/cases/compile/static_expansion/shape_mismatch.cml`, run as `camel test/cases/compile/static_expansion/shape_mismatch.cml`)
@@ -6228,7 +6274,7 @@ type A = {a: int}
 type B = {b: int, c: int}
 
 func build(u: B) {
-    return A { static for (n, F) in fields B => u.[n] }
+    return A { static for n, F in fields B => u.[n] }
 }
 
 func main(): int sync {
@@ -6665,6 +6711,82 @@ func twice::<T>(t: T): int {
 
 func main(): int sync {
     println(twice(1))
+    return 0
+}
+```
+
+### FactArgumentNotConstant
+
+`0x030001C3` · Error · `SemanticDiag::FactArgumentNotConstant`
+
+**Fix**
+
+None: choice: the argument the fact is computed for is the writer's to write, so the message names both the parameter and its type
+
+**Message**
+
+```text
+The argument '{0}' of a fact is not a compile-time constant of type '{1}'.
+```
+
+**Help**
+
+```text
+A fact is computed once for the arguments it is queried with, and two different arguments are two different facts. An argument is therefore a value the compiler computes where the query is written: a literal, a name a constas or with parameter records, or the result of a pure call on those. Write a constant here, or query the fact from a place where the value is one.
+```
+
+**Example** (`test/cases/modules/rules/fact_arg_not_constant.cml`, run as `camel test/cases/modules/rules/fact_arg_not_constant.cml`)
+
+```camel
+module fact_arg_not_constant
+import { Program, Node } from graph
+import { max } from math
+import { rewrite } from rewrite
+
+with <cap: int = 5>
+fact capped(v: int): int match v {
+    case const c => c
+    case _       => 0
+} join max
+
+rule bad_arg(x: int, y: int) when capped<y>(x) == 0 { x * y => x }
+
+func main(): int sync {
+    return 0
+}
+```
+
+### FactCaseDefaultMissing
+
+`0x030001C4` · Error · `SemanticDiag::FactCaseDefaultMissing`
+
+**Fix**
+
+None: choice: what the fact says of a value none of its cases matched is the writer's to write
+
+**Message**
+
+```text
+The fact '{0}' has no 'case _', so nothing says what it is for a value no other case matched.
+```
+
+**Help**
+
+```text
+The cases read how a value was built, and every fact needs one case that takes whatever they do not: 'case _', written last. Its value is also what a value that depends on itself settles on.
+```
+
+**Example** (`test/cases/modules/rules/fact_no_default.cml`, run as `camel test/cases/modules/rules/fact_no_default.cml`)
+
+```camel
+module fact_no_default
+import { max } from math
+
+fact sign(v: int): int match v {
+    case const c => c
+} join max
+
+func main(): int sync {
     return 0
 }
 ```
@@ -7195,13 +7317,13 @@ None: choice: the repair is a decision only the writer can make
 **Message**
 
 ```text
-The body-less declaration '{0}' cannot carry '#impl<{1}>': it has no Camel body.
+The body-less declaration '{0}' cannot carry '#impl({1})': it has no Camel body.
 ```
 
 **Help**
 
 ```text
-'#impl<f>' is written before a function whose Camel body is the semantics; f is the body-less declaration of the operator that runs it. A body-less declaration is the kernel itself and needs no tag: remove the tag, or write the body.
+'#impl(f)' is written before a function whose Camel body is the semantics; f is the body-less declaration of the operator that runs it. A body-less declaration is the kernel itself and needs no tag: remove the tag, or write the body.
 ```
 
 **Example** (`test/cases/compile/native/impl_on_bodyless.cml`, run as `camel test/cases/compile/native/impl_on_bodyless.cml`)
@@ -7209,8 +7331,8 @@ The body-less declaration '{0}' cannot carry '#impl<{1}>': it has no Camel body.
 ```camel
 module impl_on_bodyless
 
-#op<':op/add_l'>
-#impl<add_kernel>
+#op(':op/add_l')
+#impl(add_kernel)
 func add_kernel(a: int, b: int): int
 
 func main(): int sync {
@@ -7243,7 +7365,7 @@ The kernel of a '#impl' function is a body-less declaration of the same module (
 ```camel
 module impl_unknown
 
-#impl<nope>
+#impl(nope)
 func add(a: int, b: int): int {
     return a + b
 }
@@ -7280,7 +7402,7 @@ module impl_foreign
 
 import { at } from generic_module
 
-#impl<at>
+#impl(at)
 func first(xs: int[], i: int): int {
     return xs[i]
 }
@@ -7315,10 +7437,10 @@ The kernel is another implementation of the very same function: same 'with' and 
 ```camel
 module impl_signature
 
-#op<':op/add_l'>
+#op(':op/add_l')
 func add_kernel(a: int, b: int): int
 
-#impl<add_kernel>
+#impl(add_kernel)
 func add(a: float, b: float): float {
     return a + b
 }
@@ -7357,13 +7479,49 @@ func helper(a: int, b: int): int {
     return a + b
 }
 
-#impl<helper>
+#impl(helper)
 func add(a: int, b: int): int {
     return a - (0 - b)
 }
 
 func main(): int sync {
     return add(1, 2)
+}
+```
+
+### RuleWithParameterUnbound
+
+`0x030001DD` · Error · `SemanticDiag::RuleWithParameterUnbound`
+
+**Fix**
+
+None: choice: the parameter and the value bound to it are the writer's to write
+
+**Message**
+
+```text
+'{0}' is a `with` parameter of the rule '{1}', it has no default, and the rule value here binds nothing for it.
+```
+
+**Help**
+
+```text
+A rule whose declaration writes `with` parameters is a function of them, and only `name<value>` gives the `Rule`: `tile_matmul<64>` binds `tile` there. An unbound parameter is not the same as an unset one - the rule value would carry no value for the rule's functions to read - so the use is refused rather than a rule made that cannot match. Write the binding where the rule value is written (`tile_matmul<64>`), or give the parameter a default in the declaration (`with <tile: int = 16>`), which binds it wherever the name is used as it is.
+```
+
+**Example** (`test/cases/modules/rules/err_rule_with_unbound.cml`, run as `camel test/cases/modules/rules/err_rule_with_unbound.cml std::nvm`)
+
+```camel
+module err_rule_with_unbound
+import { Program } from graph
+import { rewrite } from rewrite
+
+with <shift: int>
+rule add_shift(x: int) { x + 0 => x }
+
+export func apply(p: Program): Program! {
+    let rules = [add_shift]
+    return rewrite(p, rules)
 }
 ```
 
@@ -7479,13 +7637,13 @@ func is_number::<T>(): bool {
     }
 }
 
-#op<':op/add_i'>
+#op(':op/add_i')
 func arms_kernel::<T>(a: T, b: T): T when is_small_int::<T>()
 
-#op<':op/sub_i'>
+#op(':op/sub_i')
 func arms_kernel::<T>(a: T, b: T): T when is_number::<T>()
 
-#impl<arms_kernel>
+#impl(arms_kernel)
 func combine::<T>(a: T, b: T): T {
     return a * b
 }
@@ -7741,6 +7899,218 @@ func sumTo(n: int): int {
 }
 ```
 
+### RuleConstParamNotMatched
+
+`0x030001E8` · Error · `SemanticDiag::RuleConstParamNotMatched`
+
+**Fix**
+
+None: choice: the position that matches the constant is the writer's to write
+
+**Message**
+
+```text
+'{0}' is a `const` parameter of the rule '{1}', and the left side matches no constant for it.
+```
+
+**Help**
+
+```text
+A `const` parameter means the left side matches a constant there: in the rule r(x: int, const c: int), whose sides are x * c and x, the left side matches the constant through c. The left side is what binds the parameter, and a `const` parameter it does not use leaves the rule saying nothing about the program -- its condition has no node to reach through node_of either.
+```
+
+**Example** (`test/cases/modules/rules/const_param_unbound.cml`, run as `camel test/cases/modules/rules/const_param_unbound.cml const_param_unbound::apply std::nvm`)
+
+```camel
+module const_param_unbound
+
+import { Program, Node, type_of, type_name } from graph
+import { rewrite } from rewrite
+
+func typeText(n: Node): string {
+    return match type_of(n) {
+        case null => ''
+        case t => type_name(t)
+    }
+}
+
+rule drop_by_shape(x: int, const c: int) when typeText(node_of(c)) == 'int' { x + 1 => x }
+
+export func apply(p: Program): Program! {
+    return rewrite(p, [drop_by_shape])
+}
+
+func shifted(a: int): int { return a + 1 }
+
+func main(): int sync {
+    println(shifted(41))
+    return 0
+}
+```
+
+### SliceStepZero
+
+`0x030001E9` · Error · `SemanticDiag::SliceStepZero`
+
+**Fix**
+
+None: choice: which step the slice takes is the writer's to say, and the message names both the stepped slice and the plain one
+
+**Message**
+
+```text
+The slice 't[a:b:s]' has a step of 0, so it takes no element at all, whatever its bounds are.
+```
+
+**Help**
+
+```text
+A slice takes every step-th element from its start, so the step decides which elements it has: with a positive step 'a', 'a + step', ... below 'b', and with a negative one backwards from the start. A step that does not move names no slice, so a constant step of 0 is refused where it is written (design principles 5.4). Give a non-zero step, or write 't[a:b]' when the step is 1. A step that is not constant is a fault of the run instead (RuntimeDiag::InvalidArgument).
+```
+
+**Example** (`test/cases/linear/faults/subscript_step_zero_const.cml`, run as `camel test/cases/linear/faults/subscript_step_zero_const.cml`)
+
+```camel
+module subscript_step_zero_const
+
+func main(): int sync {
+    let xs = [1, 2, 3, 4, 5, 6]
+    println(xs[0:6:0])
+    println('not reached')
+    return 0
+}
+```
+
+### TagFieldNameAmbiguous
+
+`0x030001EA` · Error · `SemanticDiag::TagFieldNameAmbiguous`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
+**Message**
+
+```text
+Two tags on this field are written '{0}': '{1}' and '{2}'.
+```
+
+**Help**
+
+```text
+The `tags` struct names one field per tag, by the tag's own name, so two tags of one name would be one field of the record. Rename one of them, or write only one of the two.
+```
+
+**Example** (`test/cases/compile/static_expansion/tags_field_name_conflict.cml`, run as `camel test/cases/compile/static_expansion/tags_field_name_conflict.cml`)
+
+```camel
+module tags_field_name_conflict
+
+import tags_second_width
+
+tag width(w: int) on field
+
+type Box = {
+    #width(1) #tags_second_width::width(2) marked: int,
+}
+
+func read(b: Box): int {
+    return static loop acc = 0 for n, F, tags in fields Box do
+        acc + 1
+}
+
+func main(): int sync {
+    println(read({marked: 3}))
+    return 0
+}
+```
+
+### TagFunctionArgumentNotReadable
+
+`0x030001EB` · Error · `SemanticDiag::TagFunctionArgumentNotReadable`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
+**Message**
+
+```text
+The tag '{0}' takes a function for its parameter '{1}', and a 'static' head cannot give a function value yet.
+```
+
+**Help**
+
+```text
+A parameter that carries a function carries the function as its graph reference: an internal number, not a value the language has. Do not read the tags of this field at a 'static' head; a function argument stays a fact for a pass that reads the tag after the program is compiled.
+```
+
+**Example** (`test/cases/compile/static_expansion/tags_function_argument.cml`, run as `camel test/cases/compile/static_expansion/tags_function_argument.cml`)
+
+```camel
+module tags_function_argument
+
+tag rule::<F>(f: F) on field when is_function::<F>()
+tag width(w: int) on field
+
+func twice(x: int): int {
+    return x + x
+}
+
+type Box = {
+    #rule(twice) scaled: int,
+    #width(8) plain: int,
+}
+
+func read(b: Box): int {
+    return static loop acc = 0 for n, F, tags in fields Box do
+        acc + (match type typeof(tags) {
+            case { width: { w: int } } => tags.width.w
+            case _ => 0
+        })
+}
+
+func main(): int sync {
+    println(read({scaled: 1, plain: 2}))
+    return 0
+}
+```
+
+### GenericTypeArgumentGrows
+
+`0x030001EC` · Error · `SemanticDiag::GenericTypeArgumentGrows`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
+**Message**
+
+```text
+The recursive call makes the type argument '{0}' of the generic function '{1}' grow from '{2}' to '{3}': every instance's type argument would contain the one before it, so specialization never stops.
+```
+
+**Help**
+
+```text
+The type arguments of a generic function are its instance key, so a call that hands it a type built out of the type it already has asks for a new instance at every level: 'f::<T>(x: T)' calling 'f([x])' makes 'T', then 'T[]', then 'T[][]'. No set of instances reaches a fixed point. Write the recursion so that its type argument is the same at every level, and take what changes as a value parameter.
+```
+
+**Example** (`test/cases/compile/generics/err_deep.cml`, run as `camel test/cases/compile/generics/err_deep.cml`)
+
+```camel
+module err_deep
+
+func grow::<T>(x: T, n: int): int {
+    return if n <= 0 then 0 else grow([x], n - 1)
+}
+
+func main(): int sync {
+    println(grow(1, 3))
+    return 0
+}
+```
+
 ### TensorElementTypeRequired
 
 `0x030001ED` · Error · `SemanticDiag::TensorElementTypeRequired`
@@ -7819,6 +8189,47 @@ func pick(flag: bool, whole: int[], real: f32[]): int[] {
 func main(): int sync {
     let picked = pick(true, new([1, 2, 3] as int[]), new([f32(1.0), f32(2.0), f32(3.0)]))
     return if picked[0] > 0 then 0 else 1
+}
+```
+
+### RuleWithArgumentNotConstant
+
+`0x030001F0` · Error · `SemanticDiag::RuleWithArgumentNotConstant`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
+**Message**
+
+```text
+The value bound to the `with` parameter '{0}' of the rule '{1}' is not a compile-time constant of the type '{2}'.
+```
+
+**Help**
+
+```text
+A rule's `with` value is part of what selects the instance the rule's sides and its condition are made at, so it is known while the program is compiled: write a literal, a constant, or a constant expression of an integer, real, bool or string type. A value the compiler cannot work out would need one instance for every value it could take.
+```
+
+**Example** (`test/cases/modules/rules/err_rule_with_not_constant.cml`, run as `camel test/cases/modules/rules/err_rule_with_not_constant.cml std::nvm`)
+
+```camel
+module err_rule_with_not_constant
+
+import { Program, graphs } from graph
+import { rewrite } from rewrite
+
+with <tile: int>
+rule add_tile(x: int) when tile > 0 { x + tile => x }
+
+/// The factor is a parameter of the function, so it is not known while the program is compiled.
+func apply(p: Program, tile: int): Program! {
+    return rewrite(p, [add_tile<tile>])
+}
+
+func main(): int sync {
+    return 0
 }
 ```
 
@@ -8361,7 +8772,7 @@ Attempted division by zero.
 Ensure the denominator is not zero before performing division.
 ```
 
-**Example** (`test/cases/consistency/attempt/fault_outside.cml`, run as `camel `)
+**Example** (`test/cases/consistency/attempt/fault_outside.cml`, run as `camel test/cases/consistency/attempt/fault_outside.cml ${backend}`)
 
 ```camel
 module fault_outside
@@ -8435,23 +8846,21 @@ Maximum recursion depth ({1}) exceeded when evaluating graph '{0}'.
 Check for infinite recursion. A call in tail position takes no frame, so write a deep recursion as a tail call; or raise the limit with --max-recursion-depth <n> or CAMEL_MAX_RECURSION_DEPTH=<n>.
 ```
 
-**Example** (`test/cases/consistency/limits/depth_value.cml`, run as `N=50 camel `)
+**Example** (`test/cases/consistency/limits/depth_direct.cml`, run as `N=100 camel --max-recursion-depth 100 test/cases/consistency/limits/depth_direct.cml ${backend}`)
 
 ```camel
-module depth_value
+module depth_direct
 
 import { get_env } from env
 
-func via(f: (n: int) => int, n: int): int {
-    return if n == 0 then 0 else 1 + f(n - 1)
+func depth(n: int): int {
+    return if n == 0 then 0 else 1 + depth(n - 1)
 }
-
-func step(n: int): int { return 0 + via(step, n) }
 
 func main(): int sync {
     let n = int(get_env('N'))
     println('start')
-    println(step(n))
+    println(depth(n))
     println('done')
     return 0
 }
@@ -8810,7 +9219,7 @@ Cannot convert the string '{0}' to {1}.
 The whole string must be {2}: no blanks before or after it and nothing else. A conversion that fails is a fault and ends the program; parse_int and parse_float return an error value (T!) instead.
 ```
 
-**Example** (`test/cases/consistency/faults/int_text_trailing.cml`, run as `camel `)
+**Example** (`test/cases/consistency/faults/int_text_trailing.cml`, run as `camel test/cases/consistency/faults/int_text_trailing.cml ${backend}`)
 
 ```camel
 module int_text_trailing
@@ -8921,7 +9330,7 @@ module idx_field_missing
 
 type S = { x: int }
 
-#op<':op/idx_str'>
+#op(':op/idx_str')
 func field(s: S, k: string): int
 
 func main(): int sync {
@@ -9086,7 +9495,7 @@ func pick_rule(xs: float[], i: int, dy: float): f32 {
     return f32(0.0)
 }
 
-#vjp<pick_rule>
+#vjp(pick_rule)
 func pick(xs: float[], i: int): float {
     return xs[i]
 }
@@ -9123,7 +9532,7 @@ Cannot convert {0} to {1}: {2}.
 A conversion whose value does not fit the target type is a fault (design principles 5.1): a float that is NaN, infinite or beyond the integer's range, an integer beyond the range of a narrower integer type, or a text that is a number the type cannot hold (out of range, which is not the same as text that is not a number: that is InvalidNumberText). Check the value before converting it, or clamp it (min, max) to the range of the target.
 ```
 
-**Example** (`test/cases/consistency/faults/float_to_int_range.cml`, run as `camel `)
+**Example** (`test/cases/consistency/faults/float_to_int_range.cml`, run as `camel test/cases/consistency/faults/float_to_int_range.cml ${backend}`)
 
 ```camel
 module float_to_int_range
@@ -9164,7 +9573,7 @@ An error value reached the exit of 'main' without being handled: {0}: {1}.
 A value of type T! that has failed must be opened before the program ends: give a replacement with '!!', pass it on with '?->', or take it apart with 'match ... case error e'. The position is where the error was made (the definition of 'main' when the error records none).
 ```
 
-**Example** (`test/cases/consistency/entry/error_thrown.cml`, run as `camel `)
+**Example** (`test/cases/consistency/entry/error_thrown.cml`, run as `camel test/cases/consistency/entry/error_thrown.cml ${backend}`)
 
 ```camel
 module error_thrown
@@ -9203,7 +9612,7 @@ The range {0} to {1} is out of range for {2} of length {3}.
 A bound of 'slice' is a position from 0 to the length; the end is one past the last element taken. A range that leaves the sequence is a fault, as an index out of range is. To take or leave out at most n elements, use 'take' and 'drop' of the module 'array', which cut by definition.
 ```
 
-**Example** (`test/cases/consistency/faults/slice_out_of_range.cml`, run as `camel `)
+**Example** (`test/cases/consistency/faults/slice_out_of_range.cml`, run as `camel test/cases/consistency/faults/slice_out_of_range.cml ${backend}`)
 
 ```camel
 module slice_out_of_range
@@ -9547,6 +9956,119 @@ func defaulted(): float {
 
 func main(): int sync {
     println(grad(defaulted)<5.0>())
+    return 0
+}
+```
+
+### GpuScopeMacroNotExpanded
+
+`0x040001A9` · Error · `RuntimeDiag::GpuScopeMacroNotExpanded`
+
+**Fix**
+
+None: runtime: the fault is raised while the program runs, and the repair is in the program's logic
+
+**Message**
+
+```text
+`#gpu` scope '{0}': {1} is a macro operator no pass has expanded, so the derived graph does not exist when the scope is compiled; put the pass '{2}' before this one.
+```
+
+**Help**
+
+```text
+`grad` and `with_grad` build their derived graph ahead of time (`std::macro`), and only a graph that exists while the passes run is part of the scope's unit. Write the pass before `tiles::compile`, or move the call out of the `#gpu` scope.
+```
+
+*No example: no test small enough to show raises it.*
+
+### GraphNoDeviceProgram
+
+`0x040001AA` · Error · `RuntimeDiag::GraphNoDeviceProgram`
+
+**Fix**
+
+None: runtime: the report is raised while the program runs, and the repair is in the program's logic
+
+**Message**
+
+```text
+'{0}' has no device program for '{1}': {2}.
+```
+
+**Help**
+
+```text
+The device back end has no program for this graph, so the operator that asked for one cannot be served by it. Name a graph the device can serve, or let the host run it: outside a `#gpu` scope a graph the device cannot serve is the host's, and `--devices cpu` runs the whole program there.
+```
+
+**Example** (`test/cases/modules/tiles/reject_effect.cml`, run as `camel test/cases/modules/tiles/reject_effect.cml`)
+
+```camel
+module tiles_reject_effect
+import { Tensor, reshape } from tensor
+import { source } from tiles
+func noisy(x: Tensor<f32>): Tensor<f32> sync {
+    println("BODY MUST NOT EXECUTE")
+    return x + x
+}
+func main(): int sync {
+    let x = reshape([1.0, 2.0] as f32[], [2])
+    println(source<noisy>(x))
+    return 0
+}
+```
+
+### DeviceNotSelected
+
+`0x040001AB` · Error · `RuntimeDiag::DeviceNotSelected`
+
+**Fix**
+
+None: runtime: the report is raised while the program runs, and the repair is in the program's logic
+
+**Message**
+
+```text
+No device to run '{0}' on: {1}.
+```
+
+**Help**
+
+```text
+Name a device this machine has (--devices <ordinal>), or drop the operator that needs one: a report operator on a scope a pass has cut needs no device, and `available()` says what this machine can serve.
+```
+
+**Example** (`test/cases/modules/tiles/gpu_scope_benchmark.cml`, run as `CUDA_VISIBLE_DEVICES=-1 camel --devices cpu test/cases/modules/tiles/gpu_scope_benchmark.cml`)
+
+```camel
+/// `tiles::benchmark` on a scope a pass has cut: what is left to measure is the plan of each
+/// segment (docs/design/gpu/plan.cn.md 2.1-2.3, 2.5). The values a segment's inputs take are
+/// bound by the call that runs it, while the scope runs; a report made before that call has none,
+/// and samples taken from inputs nothing wrote would measure values that are not the program's.
+/// The report says so instead of taking them.
+///
+/// Without the pass the same call is the whole-graph reading, and it needs a device: the plan of
+/// one program is compiled and run there. On a run with no device the operator names the run's
+/// own configuration instead of reporting a fault, which is what `--devices cpu` gets.
+///
+/// Red when: the report runs the segments with inputs it does not have, times the wrapper, or
+/// says the runtime broke where the run has no device.
+module tiles_gpu_scope_benchmark
+
+import { Tensor, reshape } from tensor
+import { benchmark } from tiles
+
+#gpu
+func pair(x: Tensor<f32, [3]>): Tensor<f32, [3]> {
+    let y = x * 2.0
+    let z = y + 3.0
+    return z - 1.0
+}
+
+func main(): int sync {
+    let x = reshape([1.0, 2.0, 3.0] as f32[], [3])
+    println(benchmark<pair>(x))
     return 0
 }
 ```

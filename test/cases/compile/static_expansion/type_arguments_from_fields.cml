@@ -11,8 +11,8 @@ func leaf::<L>(depth: int): L { return depth }
 
 func load_at::<T>(depth: int): T {
     return match type T {
-        case struct => { static for (n, F) in fields T => load_at::<F>(depth + 1) }
-        case tuple => ( static for (n, F) in fields T => load_at::<F>(depth + 1) )
+        case struct => { static for n, F in fields T => load_at::<F>(depth + 1) }
+        case tuple => ( static for n, F in fields T => load_at::<F>(depth + 1) )
         case _ => leaf::<T>(depth)
     }
 }

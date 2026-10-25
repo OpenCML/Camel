@@ -1,0 +1,59 @@
+id = "docs.tutorial_images"
+order = 921
+tier = "fast"
+tags = ["feat", "docs", "tutorial"]
+desc = "Every picture in docs/tutorial/images is the graph this tree draws for the example beside it: the check re-dumps each example's graph and compares it with the DOT the picture was drawn from"
+
+# The tutorial shows pictures instead of pasting DOT (the review of the sample chapter asked for
+# them: a page-sized DOT block, with `origin`, `span` and `tupleSlots` in it, is a poor first
+# frame). docs/tutorial/tools/render-graphs.mjs draws them: for each picture it runs
+# `camel <example> <passes...>`, keeps the part of the dump the picture is about, drops the
+# attributes that move with the source positions, and writes `images/<name>.dot` (what the
+# picture was drawn from) and `images/<name>.svg` (the picture).
+#
+# What a picture says about the page is `images/<name>.dot`, so that is what the check compares:
+# it re-dumps every example, normalises the same way and requires the committed file to be what
+# comes out. A graph whose shape changed -- a pass that stops folding, a rule that stops firing,
+# an example that grew a node -- fails here until the picture is drawn again, so a picture cannot
+# drift away from the example beside it, and the page's picture cannot go on showing a graph the
+# tree no longer builds.
+#
+# `camel` comes from the run: the runner puts the build's binary on PATH for a case, the same way
+# `docs.snippets_compile` gets it, and the check needs nothing else -- it draws nothing, so it
+# needs no Graphviz, no GPU and no display. Drawing a picture again (`node
+# docs/tutorial/tools/render-graphs.mjs`, without `--check`) does need Graphviz `dot` on PATH, and
+# it is what the reader of a failure runs; that path is deliberately not part of this case, since
+# an SVG's bytes also depend on the Graphviz version (the DOT above them does not).
+#
+# Cost: 7 examples dumped once each, well under a second on the Linux build host.
+#
+# The second case is the planted drift: a copy of the pictures under
+# `test/plans/feat/docs/fixture/images/` whose `01_twice_after.dot` says the constant is `5` where
+# `x * 2 + x * 2` folds to `4`. The check reads that directory instead, and the case requires it to
+# go red naming the picture -- so a run of the first case is evidence that the picture is what the
+# example draws, not that a file exists. The `.svg` files of the fixture are stand-ins: the check
+# reads them only to know a picture is there, and the DOT beside them is what it compares.
+
+[[tests]]
+name = "docs.tutorial_images.current"
+desc = "Every picture under docs/tutorial/images is drawn from the graph this tree builds for the example beside it, and every .svg beside a .dot is a picture."
+kind = "behavior"
+tool = "node"
+case = "../../../../docs/tutorial/tools/render-graphs.mjs"
+args = ["${case}", "--check", "--camel", "${camel}"]
+expect_exit = 0
+expect_stdout_contains = ["picture(s) are what the examples draw"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 60000
+
+[[tests]]
+name = "docs.tutorial_images.planted_drift_is_red"
+desc = "A picture whose committed DOT is not the graph this tree draws for its example fails the check, naming the picture and saying that the graph it draws is not the graph the picture was drawn from."
+kind = "behavior"
+tool = "node"
+case = "../../../../docs/tutorial/tools/render-graphs.mjs"
+args = ["${case}", "--check", "--camel", "${camel}", "--images", "test/plans/feat/docs/fixture/images"]
+expect_exit = 1
+expect_stdout_contains = ["01_twice_after: the graph this tree draws is not the graph the picture was drawn from"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 60000

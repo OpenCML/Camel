@@ -201,7 +201,7 @@ timeout_ms = 30000
 
 [[tests]]
 name = "writings.facts"
-desc = "The fact of a value with several writings is the join of the facts of its writings (the analysis of the rewrite design 4.2); a value with one writing has the fact of that writing."
+desc = "The fact of a value with several writings is the join of the facts of its writings (the fact of the rewrite design 7.5); a value with one writing has the fact of that writing."
 kind = "behavior"
 case = "../../../cases/feat/mm/writings/congruence.cml"
 args = ["${case}", "test::writings", "std::nvm"]
