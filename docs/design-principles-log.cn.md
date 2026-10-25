@@ -596,7 +596,7 @@ B(i)
 
 - **装饰器 `@`：变换。** `@d<a> func f` 即 `let f = d<a>(f₀)`，`d` 是普通函数，可以改变行为；类型装饰器是类型函数，`@D type T = E` 即 `type T = D<T₀>`；也可以装饰代码块（等价于立即调用的无参函数，行为与不加装饰的块完全相同）。一行一个，自下而上依次作用（顺序有意义，是函数组合）；重复的组合定义成新的装饰器函数。函数装饰器小写，类型装饰器大写（与类型函数一致）。
 - **标签 `#`：编译期事实。** 标签附在声明或节点上，只在编译期存在，不会被"调用"，在图上不产生节点。**语言本身不赋予标签任何含义**：含义由声明它的库定义，由读取它的遍实现，后果由库负责（与第 4 节一致）；标准标签（如数值许可、`#macro`）的含义写在本规范中。事实有两种：性质（不带参数，如 `#leaf`）与关系（带编译期值的参数，如 `#vjp(cube_rule)`）。多个标签写成 `#[a, b(v)]`，只有一个时可省方括号。标签名小写。
-- **标签用关键字 `tag` 声明**：`export tag leaf on type`、`export tag fixed on field`、`export tag vjp(rule: func) on func`、`export tag reassociate on nodes`。`on` 列出能贴的位置：`func`、`type`、`field`，以及 `nodes`（被标记的函数或代码块里按词法写出的节点，含分支臂、循环体、lambda，不含它调用的函数）；以后可加参数、变体、模块。别名组 `tag finite_math = [no_nans, no_infs, no_signed_zeros, flush_subnormals]` 展开为其中各条事实。贴到未列出的位置是编译错误。
+- **标签用关键字 `tag` 声明**：`export tag leaf on type`、`export tag fixed on field`、`export tag vjp::<F>(rule: F) on func when is_function::<F>()`、`export tag reassociate on nodes`。`on` 列出能贴的位置：`func`、`type`、`field`，以及 `nodes`（被标记的函数或代码块里按词法写出的节点，含分支臂、循环体、lambda，不含它调用的函数）；以后可加参数、变体、模块。别名组 `tag finite_math = [no_nans, no_infs, no_signed_zeros, flush_subnormals]` 展开为其中各条事实。贴到未列出的位置是编译错误。
 - **区域上的事实累积**：一个节点具有它所在的所有被标记区域的全部事实；带参数的同名事实以内层为准。不需要合并规则。
 - **标签属于声明**（名字），与装饰器怎样包装它的实现无关。标签只能在声明处贴，不能事后给别处的声明补贴（调度是否例外另行讨论）。
 - **读取标签**：C++ 模块通过登记与查询接口读；编译期代码中标签是编译期的值，`match type T { case #leaf => … }`，`fields T` 同时给出每个字段的标签。标签与其他名字共用命名空间，按同样方式导入，可写限定名 `#[tiles::kernel]`。是否满足一个要求类标签（如 `#kernel`）由库的遍检查。

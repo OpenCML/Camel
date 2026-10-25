@@ -365,7 +365,7 @@ macro operator over function values).
 Precedence, most specific first:
 
 1. **Function rules from `#vjp(rule)`.** A declaration tag on a user function
-   (`export tag vjp(rule: func) on func`, design principles 6.2). Its argument is
+   (`export tag vjp::<F>(rule: F) on func when is_function::<F>()`, design principles 6.2). Its argument is
    the rule's graph: the GIR builder keeps it in the function graph's reference
    table (`kGraphRefRule`), so the frozen graph names the rule and the transform
    reads it directly — no macro evaluation, no side table, no rewritten copy of
