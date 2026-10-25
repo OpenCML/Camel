@@ -715,7 +715,7 @@ Builder::operatorValueGraphOf(const oper_idx_ptr_t &op, const GCT::node_ptr_t &o
                    : std::format("{}{}", prefix, i);
     };
     for (size_t i = 0; i < opType->withTypesCount(); ++i) {
-        factory.addWithArg(nameAt(i, "__w", i), opType->withTypeAt(i), false);
+        factory.addWithArg(nameAt(i, "__w", i), opType->withTypeAt(i), false, opType->withNeedsValueAt(i));
     }
     for (size_t i = 0; i < opType->normTypesCount(); ++i) {
         factory.addNormArg(

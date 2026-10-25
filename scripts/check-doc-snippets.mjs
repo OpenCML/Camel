@@ -172,27 +172,31 @@ const PENDING = [
     },
     {
         file: 'docs/tutorial/17_teaching_a_law.cn.md',
-        key: '22087797dae1e989',
+        key: 'e9c8cd7fea9b9890',
         reason:
-            'chapter 17: a law guarded by a `fact` as its premise, used by `std::opt`, is ruled, and this ' +
-            'tree can compile neither the `fact` nor the premise',
+            'chapter 17: the `fact` compiles now; the text block is what `check` prints for a law ' +
+            'whose premise is a fact\'s conclusion (rewrite design 8.1), which is not implemented',
     },
     {
         file: 'docs/tutorial/17_teaching_a_law.en.md',
-        key: '22087797dae1e989',
+        key: 'e9c8cd7fea9b9890',
         reason:
-            'chapter 17: a law guarded by a `fact` as its premise, used by `std::opt`, is ruled, and this ' +
-            'tree can compile neither the `fact` nor the premise',
+            'chapter 17: the `fact` compiles now; the text block is what `check` prints for a law ' +
+            'whose premise is a fact\'s conclusion (rewrite design 8.1), which is not implemented',
     },
     {
         file: 'docs/tutorial/17_teaching_a_law.cn.md',
-        key: '954fe466d30bb486',
-        reason: 'chapter 17: `fact` replaces `analysis` and the declaration is ruled, and this tree cannot compile it yet',
+        key: 'ae3202e7918239ce',
+        reason:
+            'chapter 17: the `fact` compiles now; the text block asks for `check` to fire a law on ' +
+            'a fact\'s conclusion (rewrite design 8.1), and `math:abs_l` is not translated',
     },
     {
         file: 'docs/tutorial/17_teaching_a_law.en.md',
-        key: '954fe466d30bb486',
-        reason: 'chapter 17: `fact` replaces `analysis` and the declaration is ruled, and this tree cannot compile it yet',
+        key: 'ae3202e7918239ce',
+        reason:
+            'chapter 17: the `fact` compiles now; the text block asks for `check` to fire a law on ' +
+            'a fact\'s conclusion (rewrite design 8.1), and `math:abs_l` is not translated',
     },
 ]
 
@@ -877,6 +881,13 @@ let ran = 0
 let graphDumps = 0
 const pendingUsed = new Map()
 const exempted = []
+// A page may show one program at several points (chapter 17 shows the same file four times), so one
+// key can stand for several snippets and they need not be at the same stage: a page whose first
+// stage prints its text block and whose later stages dump a graph has one snippet behind the tree
+// and three ahead of nothing. An entry speaks for the gap as long as one snippet of its key is
+// still behind it, and is stale only when every snippet of that key has caught up.
+const pendingBehind = new Set()
+const pendingCaughtUp = []
 for (const entry of results) {
     if (!entry) continue
     const result = entry.result
@@ -889,13 +900,10 @@ for (const entry of results) {
             // is, and the tree has not caught up. The failure is named in the output and does not
             // make the gate red. Once it compiles (and prints its text block, if it has one) the
             // entry must go: the list is a record of the gap, and the gap closes.
+            pendingBehind.add(pending)
             exempted.push({ entry, pending, line, problems: result.problems })
         } else {
-            problems.push(
-                `${entry.rel}:${line}: this snippet has a pending entry (key ${pending.key}, ` +
-                    `${JSON.stringify(snippetOpens(entry.snippet))}) and now compiles, so the entry is stale: ` +
-                    'remove it from PENDING in scripts/check-doc-snippets.mjs',
-            )
+            pendingCaughtUp.push({ entry, pending, line })
         }
         continue
     }
@@ -928,6 +936,17 @@ if (FULL_SCOPE) {
                 (onPage.length > 0 ? `\n${onPage.join('\n')}` : ''),
         )
     }
+}
+
+// The snippets of a key that caught up, reported only when every snippet of that key has: while one
+// of them is still behind the tree the entry is what exempts it (see the note above `pendingBehind`).
+for (const { entry, pending, line } of pendingCaughtUp) {
+    if (pendingBehind.has(pending)) continue
+    problems.push(
+        `${entry.rel}:${line}: this snippet has a pending entry (key ${pending.key}, ` +
+            `${JSON.stringify(snippetOpens(entry.snippet))}) and now compiles, so the entry is stale: ` +
+            'remove it from PENDING in scripts/check-doc-snippets.mjs',
+    )
 }
 
 for (const problem of problems) console.log(problem)

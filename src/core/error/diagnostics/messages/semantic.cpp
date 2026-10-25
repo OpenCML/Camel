@@ -1349,6 +1349,22 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::FactArgumentNotConstant,
+            {
+                "FactArgumentNotConstant",
+                "The argument '{0}' of a fact is not a compile-time constant of type '{1}'.",
+                "A fact is computed once for the arguments it is queried with, and two different arguments are two different facts. An argument is therefore a value the compiler computes where the query is written: a literal, a name a constas or with parameter records, or the result of a pure call on those. Write a constant here, or query the fact from a place where the value is one.",
+            },
+        },
+        {
+            SemanticDiag::FactCaseDefaultMissing,
+            {
+                "FactCaseDefaultMissing",
+                "The fact '{0}' has no 'case _', so nothing says what it is for a value no other case matched.",
+                "The cases read how a value was built, and every fact needs one case that takes whatever they do not: 'case _', written last. Its value is also what a value that depends on itself settles on.",
+            },
+        },
+        {
             SemanticDiag::FoldCallArgumentNotConstant,
             {
                 "FoldCallArgumentNotConstant",

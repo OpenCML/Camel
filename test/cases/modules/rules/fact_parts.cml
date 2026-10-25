@@ -1,37 +1,35 @@
 /**
- * `analysis` over pattern variables (rewrite design 4): a declaration with parameters is queried
+ * `fact` over pattern variables (rewrite design 7.5): a declaration with parameters is queried
  * with the parts of a value. That is how a rule's condition reads the fact of the compound it is
  * rewriting -- the language does not name the whole match, and it reaches the node of a `const`
  * parameter with `node_of(c)` (rule-language design v2, section 1).
  *
- * `mul_by_one(a, b)` is the fact of a product: the clause for `x * y` says it is "by one" when
- * `sign(y) == 1` (the same one-value analysis the other test uses). The rule
+ * `mul_by_one(a, b)` is the fact of a product: the case for `x * y` says it is "by one" when
+ * `sign(y) == 1` (the same one-value fact the other test uses). The rule
  * `mul_one_by_parts(x, const c)` passes the two parts of the multiplication to it -- the factor as
  * the pattern binds it, and the coefficient's node through `node_of(c)` -- so `one` (`x * 1`) is
  * rewritten and `two` (`x * 2`) is not: the false case must leave the product alone. That is what
- * this input detects: the parts reach the query as a factor and a *node*, so the clause reading the
+ * this input detects: the parts reach the query as a factor and a *node*, so the case reading the
  * second part as the constant `1` fires only for the coefficient that is one, and a `const`
  * parameter carries a value that cannot be turned back into a node by itself.
  *
  * `report` prints the number of products before and after `apply`, and `main` the values, which
  * are the same before and after the rewrite.
  */
-module analysis_parts
+module fact_parts
 import { Program, Node, Graph, graphs, nodes, op, op_name, name } from graph
 import { max } from math
 import { rewrite } from rewrite
 
-analysis sign: int {
-    initial => 0
-    join(a, b) => max(a, b)
-    on (const c: int) => c
-}
+fact sign: int match v {
+    case const c: int => c
+    case _       => 0
+} join max
 
-analysis mul_by_one(a: Node, b: Node): bool {
-    initial => false
-    join(a, b) => a || b
-    on (x * y) => sign(y) == 1
-}
+fact mul_by_one(a: Node, b: Node): bool match (a, b) {
+    case x * y   => sign(y) == 1
+    case _       => false
+} join (lhs: bool, rhs: bool) => lhs || rhs
 
 rule mul_one_by_parts(x: int, const c: int) when mul_by_one(x, node_of(c)) { x * c => x }
 

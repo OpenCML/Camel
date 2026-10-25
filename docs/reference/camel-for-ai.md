@@ -1336,7 +1336,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 
 | `ComparisonAcrossLines` | This '>' is read as a comparison with the next line, which starts with {0}: two statements may have been joined into one. |
 
-**Semantic — errors** (`SemanticDiag`) — 197
+**Semantic — errors** (`SemanticDiag`) — 199
 
 | `Redeclaration` | Redeclaration of reference: '{0}'. |
 | `ModuleNotFound` | Module '{0}' not found. {1} |
@@ -1505,6 +1505,8 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `SameShapeComprehensionNotComposite` | {0} is not a struct or a tuple, so it has no shape to fill. |
 | `SameShapeComprehensionMismatch` | The shape {0} is filled from the fields of {1}. |
 | `StaticMatchPatternCannotMatch` | The identity pattern '{0}' cannot select a type here: {1}. |
+| `FactArgumentNotConstant` | The argument '{0}' of a fact is not a compile-time constant of type '{1}'. |
+| `FactCaseDefaultMissing` | The fact '{0}' has no 'case _', so nothing says what it is for a value no other case matched. |
 | `FoldCallArgumentNotConstant` | The call of '{0}' cannot be evaluated at build time: {1}. |
 | `FoldCallHasEffects` | The call of '{0}' cannot be evaluated at build time: {1}. |
 | `FoldCallTooDeep` | The call of '{0}' cannot be evaluated at build time: {1}. |

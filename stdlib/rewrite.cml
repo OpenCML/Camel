@@ -13,8 +13,8 @@
  * and `strict` restricts the float rules to the ones that hold bit for bit.
  *
  * The module also exports the reserved groups the language's own `rule`, `rule` with `when`, and
- * `analysis` declarations compile to (`rewrite:rule`, `rewrite:rule_when`,
- * `rewrite:analysis`). They have no callable Camel name, so they are not declared here and
+ * `fact` declarations compile to (`rewrite:rule`, `rewrite:rule_when`,
+ * `rewrite:fact`). They have no callable Camel name, so they are not declared here and
  * `inspect --ops` hides them from the name comparison.
  */
 

@@ -257,8 +257,9 @@ size_t reinferDraftTypes(GraphDraft &draft) {
             return funcType->hasArgNames() ? std::string(funcType->argNameAt(arg++))
                                            : std::string();
         };
+        size_t withAt = 0;
         for (const auto &[t, isVar] : withTypes) {
-            factory.addWithArg(name(), t, isVar);
+            factory.addWithArg(name(), t, isVar, funcType->withNeedsValueAt(withAt++));
         }
         for (const auto &[t, isVar] : normTypes) {
             factory.addNormArg(name(), t, isVar);

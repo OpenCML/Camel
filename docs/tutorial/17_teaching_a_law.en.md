@@ -51,7 +51,7 @@ fact nonnegative(v: int): bool match v {
     case const c => c >= 0
     case x - y   => false
     case _       => true
-} join or
+} join (lhs: bool, rhs: bool) => lhs || rhs
 ```
 
 ```bash
@@ -123,7 +123,7 @@ fact nonnegative(v: int): bool match v {
     case const c => c >= 0
     case x - y   => false
     case _       => true
-} join or
+} join (lhs: bool, rhs: bool) => lhs || rhs
 ```
 
 ```bash
@@ -198,7 +198,7 @@ fact nonnegative(v: int): bool match v {
     case const c => c >= 0
     case x - y   => false
     case _       => true
-} join or
+} join (lhs: bool, rhs: bool) => lhs || rhs
 ```
 
 ```bash
@@ -271,7 +271,7 @@ fact nonnegative(v: int): bool match v {
     case const c => c >= 0
     case x - y   => false
     case _       => true
-} join or
+} join (lhs: bool, rhs: bool) => lhs || rhs
 ```
 
 ```bash
@@ -337,7 +337,7 @@ fact nonnegative(v: int): bool match v {
     case const c => c >= 0
     case x * x   => true
     case _       => false
-} join or
+} join (lhs: bool, rhs: bool) => lhs || rhs
 
 // The law holds only where the fact does: on a value that is never negative, `abs` changes nothing.
 rule abs_of_nonnegative(x: int) when nonnegative(x) { abs(x) => x }
@@ -367,7 +367,8 @@ sampled abs_of_nonnegative: proposition equality, evidence samples 100, fired 8 
 The head of a `fact` says which type it gives which piece of knowledge for (here `int`'s `nonnegative`); the
 body is a `match`, but what it reads is **how the value was built on the graph**: a square is never negative, a
 constant can be decided at compile time, and everything else is `case _`. `join` says how the knowledge of two
-writings of one value is merged (here `or`: either writing saying it is non-negative is enough).
+writings of one value is merged (here `(lhs, rhs) => lhs || rhs`: either writing saying it is
+non-negative is enough).
 
 `fact` and `rule` together are the two doors through which "what is true in my field" reaches the compiler:
 `rule` gives equalities, `fact` gives premises. Their full rules are in chapter 8 of the language reference.

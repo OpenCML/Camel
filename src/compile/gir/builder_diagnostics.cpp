@@ -483,14 +483,14 @@ bool Builder::isCompileTimeEffect(DraftGraphBuilder *graph, node_handle_t node) 
     if (op == nullptr) {
         return false;
     }
-    // The operators that build a rule and the one that compiles an `analysis` declaration are
+    // The operators that build a rule and the one that compiles a `fact` declaration are
     // declared impure so that constant folding leaves them where they are written (rewrite
     // module), and what they do happens where the rule is written, not while the engine holds a
-    // session. Reading a fact in a condition is what an analysis is for: the condition is a
+    // session. Reading a fact in a condition is what a fact is for: the condition is a
     // query over the redex, and only the effects that act while the condition runs matter here.
     const std::string_view uri = op->uri();
     return uri == "rewrite:rule" || uri == "rewrite:rule_when" || uri == "rewrite:rule_generic" ||
-           uri == "rewrite:analysis";
+           uri == "rewrite:fact";
 }
 
 node_handle_t Builder::effectOfGraph(

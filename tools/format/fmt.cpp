@@ -673,10 +673,10 @@ any Formatter::visitRuleDecl(cst::RuleDecl context) {
 }
 
 /*
-analysisDecl : frontMatter? 'export'? IDENTIFIER identDef parentParams? ':' typeExpr
-               '{' analysisClause* '}'
+factDecl : ('with' angledParams)? 'export'? 'fact' identDef typeParams? parentParams? ':' typeExpr
+           factBody factClause*
 */
-any Formatter::visitAnalysisDecl(cst::AnalysisDecl context) {
+any Formatter::visitFactDecl(cst::FactDecl context) {
     string result;
     for (const auto &tagUse : context->all<cst::TagUse>()) {
         // The comments written between the tag and the declaration it belongs to are written here,
@@ -684,44 +684,75 @@ any Formatter::visitAnalysisDecl(cst::AnalysisDecl context) {
         result += any_cast<string>(visitTagUse(tagUse)) +
                   commentsInFrontMatter(tagUse->lastToken()->index());
     }
-    result += context->tok(TK::KwExport) ? "export analysis " : "analysis ";
+    // The arguments the fact is queried with come first, as they do for a function
+    // (visitFuncDecl), and before `export`, which belongs to the declaration's name.
+    if (const auto angledParams = context->get<cst::AngledParams>()) {
+        result += "with " + any_cast<string>(visitAngledParams(angledParams)) +
+                  commentsInFrontMatter(angledParams->lastToken()->index());
+    }
+    result += context->tok(TK::KwExport) ? "export fact " : "fact ";
     result += any_cast<string>(visitIdentDef(context->get<cst::IdentDef>()));
-    if (const auto params = context->get<cst::ParentParams>()) {
-        result += any_cast<string>(visitParentParams(params));
+    if (const auto typeParams = context->get<cst::TypeParams>()) {
+        result += any_cast<string>(visitTypeParams(typeParams));
+    }
+    if (const auto parentParams = context->get<cst::ParentParams>()) {
+        result += any_cast<string>(visitParentParams(parentParams));
     }
     result += ": " + any_cast<string>(visitType(context->type()));
-    result += " {";
-    pushIndent();
-    for (const auto clause : context->all<cst::AnalysisClause>()) {
-        result += lineEnd() + any_cast<string>(visitAnalysisClause(clause));
+    result += " " + any_cast<string>(visitFactBody(context->get<cst::FactBody>()));
+    // The clauses that say how two facts are merged, one per line, as written.
+    for (const auto clause : context->all<cst::FactClause>()) {
+        result += lineEnd() + any_cast<string>(visitFactClause(clause));
     }
-    popIndent();
-    result += lineEnd() + "}";
     return result;
 }
 
 /*
-analysisClause : IDENTIFIER '=>' dataExpr
-               | IDENTIFIER '(' identList? ')' '=>' dataExpr
-               | IDENTIFIER '(' ('const' identDef ':' typeExpr | dataExpr) ')' '=>' dataExpr
+factBody : 'match' logicalOrExpr '{' factCase* '}'
 */
-any Formatter::visitAnalysisClause(cst::AnalysisClause context) {
-    const string keyword = context->tok(TK::Identifier).text();
-    const auto exprs     = context->exprs();
+any Formatter::visitFactBody(cst::FactBody context) {
+    return "match " + any_cast<string>(visitExpr(context->expr())) + " {" +
+           formatList(
+               vec(context->all<cst::FactCase>()),
+               context,
+               " ",
+               "",
+               PaddingNL | Multiline | PushScope) +
+           "}";
+}
+
+/*
+factCase : 'case' factPattern '=>' dataExpr
+*/
+any Formatter::visitFactCase(cst::FactCase context) {
+    return "case " + any_cast<string>(visitFactPattern(context->get<cst::FactPattern>())) + " => " +
+           any_cast<string>(visitExpr(context->expr()));
+}
+
+/*
+factPattern : 'const' identDef (':' typeExpr)? | dataExpr
+*/
+any Formatter::visitFactPattern(cst::FactPattern context) {
     if (const auto name = context->get<cst::IdentDef>()) {
-        return "on (const " + any_cast<string>(visitIdentDef(name)) + ": " +
-               any_cast<string>(visitType(context->type())) + ") => " +
-               any_cast<string>(visitExpr(exprs[0]));
+        string result = "const " + any_cast<string>(visitIdentDef(name));
+        if (const auto type = context->type()) {
+            result += ": " + any_cast<string>(visitType(type));
+        }
+        return result;
     }
-    if (const auto params = context->get<cst::IdentList>()) {
-        return keyword + "(" + any_cast<string>(visitIdentList(params)) + ") => " +
-               any_cast<string>(visitExpr(exprs[0]));
+    // `_` is no expression: it is written as it stands.
+    if (context->has(TK::Underscore)) {
+        return string("_");
     }
-    if (keyword == "on") {
-        return "on (" + any_cast<string>(visitExpr(exprs[0])) + ") => " +
-               any_cast<string>(visitExpr(exprs[1]));
-    }
-    return keyword + " => " + any_cast<string>(visitExpr(exprs[0]));
+    return any_cast<string>(visitExpr(context->expr()));
+}
+
+/*
+factClause : IDENTIFIER dataExpr
+*/
+any Formatter::visitFactClause(cst::FactClause context) {
+    return string(context->tok(TK::Identifier).text()) + " " +
+           any_cast<string>(visitExpr(context->expr()));
 }
 
 /*
@@ -2049,8 +2080,11 @@ any Formatter::dispatch(syn::Node context) {
         CAMEL_FORMAT(FuncDecl)
         CAMEL_FORMAT(RuleDecl)
         CAMEL_FORMAT(WhenClause)
-        CAMEL_FORMAT(AnalysisDecl)
-        CAMEL_FORMAT(AnalysisClause)
+        CAMEL_FORMAT(FactDecl)
+        CAMEL_FORMAT(FactBody)
+        CAMEL_FORMAT(FactCase)
+        CAMEL_FORMAT(FactPattern)
+        CAMEL_FORMAT(FactClause)
         CAMEL_FORMAT(RuleContext)
         CAMEL_FORMAT(TypeParams)
         CAMEL_FORMAT(RuleBody)

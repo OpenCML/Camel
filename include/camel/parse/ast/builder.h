@@ -95,11 +95,11 @@ class Builder {
     Value visitExportDecl(syntax::cst::ExportDecl context);
     Value visitUsingNamespaceDecl(syntax::cst::UsingNamespaceDecl context);
     Value visitRuleDecl(syntax::cst::RuleDecl context);
-    Value visitAnalysisDecl(syntax::cst::AnalysisDecl context);
+    Value visitFactDecl(syntax::cst::FactDecl context);
     /// The import of the module `rewrite` that rule declarations need was made.
     bool ruleImportAdded_ = false;
-    /// The imports an analysis declaration needs (`__analysis`, `graph.Node`) were made.
-    bool analysisImportAdded_ = false;
+    /// The imports a fact declaration needs (`__fact`, `graph.Node`) were made.
+    bool factImportAdded_ = false;
     /// The imports a rule condition needs (`__rule_when`, `graph.Node`) were made.
     bool whenImportAdded_ = false;
     /// The import of the maker a generic rule needs (`__rule_generic`) was made: a rule whose head

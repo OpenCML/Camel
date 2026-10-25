@@ -655,8 +655,11 @@ class Formatter {
     std::any visitFuncDecl(cst::FuncDecl context);
     std::any visitWhenClause(cst::WhenClause context);
     std::any visitRuleDecl(cst::RuleDecl context);
-    std::any visitAnalysisDecl(cst::AnalysisDecl context);
-    std::any visitAnalysisClause(cst::AnalysisClause context);
+    std::any visitFactDecl(cst::FactDecl context);
+    std::any visitFactBody(cst::FactBody context);
+    std::any visitFactCase(cst::FactCase context);
+    std::any visitFactPattern(cst::FactPattern context);
+    std::any visitFactClause(cst::FactClause context);
     std::any visitRuleContext(cst::RuleContext context);
     std::any visitTypeParams(cst::TypeParams context);
     std::any visitRuleBody(cst::RuleBody context);

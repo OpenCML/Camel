@@ -5450,7 +5450,7 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
             diags_->of(SemanticDiag::DuplicateParameter).at(paramLoad->tokenRange()).commit(name);
             throw BuildAbortException();
         }
-        factory.addWithArg(name, type, isVar);
+        factory.addWithArg(name, type, isVar, paramLoad->isConstas());
     }
 
     // Process normal parameters

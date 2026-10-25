@@ -96,7 +96,7 @@ enumBody  : 'enum' '{' 变体, ... '}'
 ```
 program            : SEP? (decl SEP?)* EOF
 decl               : moduleDecl | importDecl | exportDecl | namespaceDecl | usingNamespaceDecl
-                     | tagDecl | resourceDecl | dataDecl | funcDecl | typeDecl | ruleDecl
+                     | tagDecl | resourceDecl | dataDecl | funcDecl | typeDecl | ruleDecl | factDecl
 stmt               : dataDecl | funcDecl | typeDecl | dataExpr | usingNamespaceDecl | retStmt
                      | blockStmt | staticForExpr
 blockStmt          : stmtBlock | funcAnno+ stmtBlock
@@ -243,11 +243,12 @@ ruleDecl           : frontMatter? 'export'? IDENTIFIER identDef typeParams? rule
                      whenClause? '{' ruleBody '}'
 ruleContext        : '<' identDef (',' identDef)* ','? '>'
 ruleBody           : dataExpr ('=>' | '<=>') dataExpr
-analysisDecl       : frontMatter? 'export'? IDENTIFIER identDef parentParams? ':' typeExpr
-                     '{' analysisClause* '}'
-analysisClause     : IDENTIFIER '=>' dataExpr
-                     | IDENTIFIER '(' identList? ')' '=>' dataExpr
-                     | IDENTIFIER '(' ('const' identDef ':' typeExpr | dataExpr) ')' '=>' dataExpr
+factDecl           : frontMatter? ('with' angledParams)? 'export'? IDENTIFIER identDef typeParams?
+                     parentParams? ':' typeExpr factBody factClause*
+factBody           : 'match' logicalOrExpr '{' factCase* '}'
+factCase           : 'case' factPattern '=>' dataExpr
+factPattern        : 'const' identDef (':' typeExpr)? | '_' | dataExpr
+factClause         : IDENTIFIER dataExpr
 ```
 
 <!-- grammar:end -->
