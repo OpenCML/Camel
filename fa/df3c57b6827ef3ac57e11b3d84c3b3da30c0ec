@@ -1,0 +1,10 @@
+作者 fsh-dev 7 条：下标规则收下（合入 fadf3c57b）
+
+对 h529 交接项的答复：核心 `:op/idx_take` 已对任意秩按第 0 维取行、声明层给形状、反向按下标 scatter-add 重复累加；
+今天删模块副本新增 9 条红的读数对。按"过渡不进 develop"的规则，**删掉模块副本算 P4 删除步的一部分**，
+已列进 `docs/design/arrays-memory/plan.cn.md` 5.1a 的依赖表，P4 合入时一起做，**不另立一步**。
+命名维度不产生实例、类型实参在调用环上增长就当场拒绝、比较注册表随过渡类型删除——这几批一并收下。
+
+另批：`pip install camel-lang` 与"发布包按安装后可用"的任务；一个平台一个 wheel（Linux x64/arm64、macOS Apple silicon、
+Windows x64）；`linux_x86_64` 标签的上传被拒，所以 manylinux 构建在前；工具链装在任何 Python 3 上，
+互操作只在 CPython 3.10+ 的稳定 ABI 上建一次。
