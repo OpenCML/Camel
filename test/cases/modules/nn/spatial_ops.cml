@@ -11,11 +11,11 @@ import {
     max_pool2d, max_pool2d_grad, avg_pool2d, avg_pool2d_grad, batch_norm
 } from nn
 
-func fixture(name: string): Tensor {
+func fixture(name: string): f32[..] {
     return load_npy::<f32>('test/cases/modules/nn/fixtures/spatial/' + name + '.npy')
 }
 
-func err(actual: Tensor, name: string): float {
+func err(actual: f32[..], name: string): float {
     return sum(abs(actual - fixture('ref_' + name)))
 }
 

@@ -1349,7 +1349,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === '[0.7692267, 0.780836, 0.77707076] | [2.7822266, 1.7102305, -0.8943019] | [2.8903537, 2.2424502, 2.4619071] | [0.24714532, 0.20941702, 0.11465217] | [0.855341, 0.47992235, -0.6467736]', `unexpected output: ${out}`)
+assert(out === '[0.7692267, 0.780836, 0.77707076] | [2.7822266, 1.7102305, -0.8943019] | [2.8903537, 2.2424502, 2.4619071] | [0.24714534, 0.20941703, 0.11465219] | [0.855341, 0.47992235, -0.6467736]', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 8000
@@ -1365,7 +1365,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === '[0.7692267, 0.780836, 0.77707076] | [2.7822266, 1.7102305, -0.8943019] | [2.8903537, 2.2424502, 2.4619071] | [0.24714532, 0.20941702, 0.11465217] | [0.855341, 0.47992235, -0.6467736]', `unexpected output: ${out}`)
+assert(out === '[0.7692267, 0.780836, 0.77707076] | [2.7822266, 1.7102305, -0.8943019] | [2.8903537, 2.2424502, 2.4619071] | [0.24714534, 0.20941703, 0.11465219] | [0.855341, 0.47992235, -0.6467736]', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 8000
@@ -1381,7 +1381,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === '[0.7692267, 0.780836, 0.77707076] | [2.7822266, 1.7102305, -0.8943019] | [2.8903537, 2.2424502, 2.4619071] | [0.24714532, 0.20941702, 0.11465217] | [0.855341, 0.47992235, -0.6467736]', `unexpected output: ${out}`)
+assert(out === '[0.7692267, 0.780836, 0.77707076] | [2.7822266, 1.7102305, -0.8943019] | [2.8903537, 2.2424502, 2.4619071] | [0.24714534, 0.20941703, 0.11465219] | [0.855341, 0.47992235, -0.6467736]', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 8000
@@ -1397,7 +1397,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === '[0.7692267, 0.780836, 0.77707076] | [2.7822266, 1.7102305, -0.8943019] | [2.8903537, 2.2424502, 2.4619071] | [0.24714532, 0.20941702, 0.11465217] | [0.855341, 0.47992235, -0.6467736]', `unexpected output: ${out}`)
+assert(out === '[0.7692267, 0.780836, 0.77707076] | [2.7822266, 1.7102305, -0.8943019] | [2.8903537, 2.2424502, 2.4619071] | [0.24714534, 0.20941703, 0.11465219] | [0.855341, 0.47992235, -0.6467736]', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 8000
@@ -1858,7 +1858,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === '[1.9345258, 1.9592321, 1.9512241] | [3.5810165, 2.369704, -0.5429288] | [0.24714532, 0.20941702, 0.11465217] | [2.8903537, 2.2424502, 2.4619071] | [1.1652992, 1.1783961, 1.1741533] | [1.25, 0.625, -0.875] | [0.6224288, 0.47459483, 0.115042746] | [1.1652992, 1.1783961, 1.1741533] | [0.46280712, 0.46815383, 0.46641457] | [0.23816949, 0.23876452, 0.23857346]', `unexpected output: ${out}`)
+assert(out === '[1.9345258, 1.9592321, 1.9512241] | [3.5810165, 2.369704, -0.5429288] | [0.24714534, 0.20941703, 0.11465219] | [2.8903537, 2.2424502, 2.4619071] | [1.1652992, 1.1783961, 1.1741533] | [1.25, 0.625, -0.875] | [0.6224288, 0.47459483, 0.115042746] | [1.1652992, 1.1783961, 1.1741533] | [0.46280712, 0.46815383, 0.46641457] | [0.23816949, 0.23876452, 0.23857346]', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 12000
@@ -1874,7 +1874,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === '[1.9345258, 1.9592321, 1.9512241] | [3.5810165, 2.369704, -0.5429288] | [0.24714532, 0.20941702, 0.11465217] | [2.8903537, 2.2424502, 2.4619071] | [1.1652992, 1.1783961, 1.1741533] | [1.25, 0.625, -0.875] | [0.6224288, 0.47459483, 0.115042746] | [1.1652992, 1.1783961, 1.1741533] | [0.46280712, 0.46815383, 0.46641457] | [0.23816949, 0.23876452, 0.23857346]', `unexpected output: ${out}`)
+assert(out === '[1.9345258, 1.9592321, 1.9512241] | [3.5810165, 2.369704, -0.5429288] | [0.24714534, 0.20941703, 0.11465219] | [2.8903537, 2.2424502, 2.4619071] | [1.1652992, 1.1783961, 1.1741533] | [1.25, 0.625, -0.875] | [0.6224288, 0.47459483, 0.115042746] | [1.1652992, 1.1783961, 1.1741533] | [0.46280712, 0.46815383, 0.46641457] | [0.23816949, 0.23876452, 0.23857346]', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 12000
@@ -1890,7 +1890,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === '[1.9345258, 1.9592321, 1.9512241] | [3.5810165, 2.369704, -0.5429288] | [0.24714532, 0.20941702, 0.11465217] | [2.8903537, 2.2424502, 2.4619071] | [1.1652992, 1.1783961, 1.1741533] | [1.25, 0.625, -0.875] | [0.6224288, 0.47459483, 0.115042746] | [1.1652992, 1.1783961, 1.1741533] | [0.46280712, 0.46815383, 0.46641457] | [0.23816949, 0.23876452, 0.23857346]', `unexpected output: ${out}`)
+assert(out === '[1.9345258, 1.9592321, 1.9512241] | [3.5810165, 2.369704, -0.5429288] | [0.24714534, 0.20941703, 0.11465219] | [2.8903537, 2.2424502, 2.4619071] | [1.1652992, 1.1783961, 1.1741533] | [1.25, 0.625, -0.875] | [0.6224288, 0.47459483, 0.115042746] | [1.1652992, 1.1783961, 1.1741533] | [0.46280712, 0.46815383, 0.46641457] | [0.23816949, 0.23876452, 0.23857346]', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 12000
@@ -1906,7 +1906,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === '[1.9345258, 1.9592321, 1.9512241] | [3.5810165, 2.369704, -0.5429288] | [0.24714532, 0.20941702, 0.11465217] | [2.8903537, 2.2424502, 2.4619071] | [1.1652992, 1.1783961, 1.1741533] | [1.25, 0.625, -0.875] | [0.6224288, 0.47459483, 0.115042746] | [1.1652992, 1.1783961, 1.1741533] | [0.46280712, 0.46815383, 0.46641457] | [0.23816949, 0.23876452, 0.23857346]', `unexpected output: ${out}`)
+assert(out === '[1.9345258, 1.9592321, 1.9512241] | [3.5810165, 2.369704, -0.5429288] | [0.24714534, 0.20941703, 0.11465219] | [2.8903537, 2.2424502, 2.4619071] | [1.1652992, 1.1783961, 1.1741533] | [1.25, 0.625, -0.875] | [0.6224288, 0.47459483, 0.115042746] | [1.1652992, 1.1783961, 1.1741533] | [0.46280712, 0.46815383, 0.46641457] | [0.23816949, 0.23876452, 0.23857346]', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 12000
@@ -1922,7 +1922,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === 'loss1 | apply | apply: first call done | loss1: applied | [1.1652992, 1.1783961, 1.1741533] | loss2 | make | loss2: made | [0.24714532, 0.20941702, 0.11465217] | loss3 | loss3: built | [1.9345258, 1.9592321, 1.9512241]', `unexpected output: ${out}`)
+assert(out === 'loss1 | apply | apply: first call done | loss1: applied | [1.1652992, 1.1783961, 1.1741533] | loss2 | make | loss2: made | [0.24714534, 0.20941703, 0.11465219] | loss3 | loss3: built | [1.9345258, 1.9592321, 1.9512241]', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 12000
@@ -1938,7 +1938,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === 'loss1 | apply | apply: first call done | loss1: applied | [1.1652992, 1.1783961, 1.1741533] | loss2 | make | loss2: made | [0.24714532, 0.20941702, 0.11465217] | loss3 | loss3: built | [1.9345258, 1.9592321, 1.9512241]', `unexpected output: ${out}`)
+assert(out === 'loss1 | apply | apply: first call done | loss1: applied | [1.1652992, 1.1783961, 1.1741533] | loss2 | make | loss2: made | [0.24714534, 0.20941703, 0.11465219] | loss3 | loss3: built | [1.9345258, 1.9592321, 1.9512241]', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 12000
@@ -1954,7 +1954,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === 'loss1 | apply | apply: first call done | loss1: applied | [1.1652992, 1.1783961, 1.1741533] | loss2 | make | loss2: made | [0.24714532, 0.20941702, 0.11465217] | loss3 | loss3: built | [1.9345258, 1.9592321, 1.9512241]', `unexpected output: ${out}`)
+assert(out === 'loss1 | apply | apply: first call done | loss1: applied | [1.1652992, 1.1783961, 1.1741533] | loss2 | make | loss2: made | [0.24714534, 0.20941703, 0.11465219] | loss3 | loss3: built | [1.9345258, 1.9592321, 1.9512241]', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 12000
@@ -1970,7 +1970,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === 'loss1 | apply | apply: first call done | loss1: applied | [1.1652992, 1.1783961, 1.1741533] | loss2 | make | loss2: made | [0.24714532, 0.20941702, 0.11465217] | loss3 | loss3: built | [1.9345258, 1.9592321, 1.9512241]', `unexpected output: ${out}`)
+assert(out === 'loss1 | apply | apply: first call done | loss1: applied | [1.1652992, 1.1783961, 1.1741533] | loss2 | make | loss2: made | [0.24714534, 0.20941703, 0.11465219] | loss3 | loss3: built | [1.9345258, 1.9592321, 1.9512241]', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 12000

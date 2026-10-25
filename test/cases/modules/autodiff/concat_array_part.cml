@@ -17,7 +17,7 @@ module concat_array_part
 import { Tensor, concat, reshape, sum } from tensor
 import { grad } from autodiff
 
-with <w: Tensor>
+with <w: f64[..]>
 func skip_constant_array(): float {
     let y = concat([2.0, 3.0], w, 0)
     let c = reshape([1.0, 0.0, 2.0, 3.0], [4])

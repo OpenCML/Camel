@@ -1,7 +1,8 @@
 /**
  * Negative case: conv2d must reject channel mismatch at runtime. The operands
- * go through a function with plain Tensor parameters, so their shapes are not
- * known statically (static_shape_error covers the compile-time check).
+ * go through a function whose parameters state only their element type and
+ * rank, so their shapes are not known statically (static_shape_error covers the
+ * compile-time check).
  */
 module conv2d_shape_error
 
@@ -13,7 +14,7 @@ import {
     conv2d
 } from nn
 
-func convolve(x: Tensor, kernel: Tensor, bias: Tensor): Tensor {
+func convolve(x: f64[..], kernel: f64[..], bias: f64[..]): f32[..] {
     return conv2d(x, kernel, bias)
 }
 

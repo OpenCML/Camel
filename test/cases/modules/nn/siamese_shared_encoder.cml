@@ -10,8 +10,8 @@ import { Tensor, full, sum, tanh, zeros } from tensor
 import { sgd } from nn
 
 type Encoder = {
-    weight: Tensor,
-    bias: Tensor
+    weight: f32[..],
+    bias: f32[..]
 }
 
 type Siamese = {
@@ -19,22 +19,22 @@ type Siamese = {
 }
 
 with <encoder: Encoder>
-func linear(x: Tensor): Tensor {
+func linear(x: f32[..]): f32[..] {
     return (x @ encoder.weight) + encoder.bias
 }
 
 with <encoder: Encoder>
-func encode(x: Tensor): Tensor {
+func encode(x: f32[..]): f32[..] {
     return tanh(x->linear<encoder>)
 }
 
-func pair_loss(za: Tensor, zb: Tensor): float {
+func pair_loss(za: f32[..], zb: f32[..]): float {
     let diff = za - zb
     return sum(diff * diff)
 }
 
 with <model: Siamese>
-func siamese_loss(xa: Tensor, xb: Tensor): float {
+func siamese_loss(xa: f32[..], xb: f32[..]): float {
     let za = xa->encode<model.encoder>
     let zb = xb->encode<model.encoder>
     return pair_loss(za, zb)
@@ -49,7 +49,7 @@ func init(): Siamese {
     }
 }
 
-func train(model: Siamese, xa: Tensor, xb: Tensor, steps: int): Siamese {
+func train(model: Siamese, xa: f32[..], xb: f32[..], steps: int): Siamese {
     return if steps == 0 then model else train(sgd(model, grad(siamese_loss)<model>(xa, xb), 0.2), xa, xb, steps - 1)
 }
 

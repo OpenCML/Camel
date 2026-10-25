@@ -10,7 +10,7 @@ module fused_grad_check
 import { grad } from autodiff
 import { Tensor, new, sum, relu } from tensor
 
-func check(name: string, f: <x: Tensor> () => float, df: <x: Tensor> () => Tensor, x: Tensor, v: Tensor): int sync {
+func check(name: string, f: <x: f32[..]> () => float, df: <x: f32[..]> () => f32[..], x: f32[..], v: f32[..]): int sync {
     let h = 0.001
     let analytic = sum(df<x>() * v)
     let numeric = (f<x + v * h>() - f<x - v * h>()) / (2.0 * h)
@@ -22,24 +22,24 @@ func check(name: string, f: <x: Tensor> () => float, df: <x: Tensor> () => Tenso
     return 0
 }
 
-func x23(): Tensor { return new([[0.3, -1.2, 0.5], [1.1, 0.4, -0.7]] as f32[][]) }
-func w34(): Tensor { return new([[0.3, -1.2, 0.5, 2.0], [1.1, 0.4, -0.7, 0.2], [-0.5, 0.9, 1.3, -0.1]] as f32[][]) }
-func b4(): Tensor { return new([0.7, -0.3, 1.5, 0.2] as f32[]) }
-func out24(): Tensor { return new([[1.0, -2.0, 0.5, 0.3], [0.4, 1.2, -0.6, 0.9]] as f32[][]) }
+func x23(): f32[..] { return new([[0.3, -1.2, 0.5], [1.1, 0.4, -0.7]] as f32[][]) }
+func w34(): f32[..] { return new([[0.3, -1.2, 0.5, 2.0], [1.1, 0.4, -0.7, 0.2], [-0.5, 0.9, 1.3, -0.1]] as f32[][]) }
+func b4(): f32[..] { return new([0.7, -0.3, 1.5, 0.2] as f32[]) }
+func out24(): f32[..] { return new([[1.0, -2.0, 0.5, 0.3], [0.4, 1.2, -0.6, 0.9]] as f32[][]) }
 
 // matmul + bias (one fused group), in each operand
-with <x: Tensor>
+with <x: f32[..]>
 func lin_x(): float { return sum((x @ w34() + b4()) * out24()) }
-with <w: Tensor>
+with <w: f32[..]>
 func lin_w(): float { return sum((x23() @ w + b4()) * out24()) }
-with <b: Tensor>
+with <b: f32[..]>
 func lin_b(): float { return sum((x23() @ w34() + b) * out24()) }
 // matmul + bias + relu (one fused group)
-with <x: Tensor>
+with <x: f32[..]>
 func mlp_x(): float { return sum(relu(x @ w34() + b4()) * out24()) }
-with <w: Tensor>
+with <w: f32[..]>
 func mlp_w(): float { return sum(relu(x23() @ w + b4()) * out24()) }
-with <b: Tensor>
+with <b: f32[..]>
 func mlp_b(): float { return sum(relu(x23() @ w34() + b) * out24()) }
 
 func main(): int sync {
