@@ -1,0 +1,14 @@
+// Importing from a standard module and from a file next to this one.
+// Run: camel docs/tutorial/examples/08_modules.cml
+
+import { sqrt } from math
+import { hypot, Vec } from geometry
+import geometry
+
+func main(): int sync {
+    println(sqrt(2.0))
+    let v: Vec = { x: 3.0, y: 4.0 }
+    println(hypot(v))
+    println(geometry::area(2.0, 5.0))
+    return 0
+}

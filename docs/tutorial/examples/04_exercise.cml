@@ -1,0 +1,16 @@
+// The answer to the exercise of chapter 4: an `if` is an expression, and a `match` needs its default.
+// Run: camel docs/tutorial/examples/04_exercise.cml
+
+func describe(n: int): string {
+    return if n == 0 then 'zero'
+        else if n < 0 then 'negative'
+        else match n % 2 {
+            case 0 => 'even'
+            case _ => 'odd'
+        }
+}
+
+func main(): int sync {
+    println(describe(0), describe(-3), describe(7), describe(8))
+    return 0
+}

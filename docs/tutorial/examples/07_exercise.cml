@@ -1,0 +1,11 @@
+// The answer to the exercise of chapter 7: the values that are there, and 0 for the ones that are not.
+// Run: camel docs/tutorial/examples/07_exercise.cml
+
+func sum_ints(words: string[]): int {
+    return words->map<(s: string): int => parse_int(s) !! 0>->reduce<(acc: int, x: int): int => acc + x, 0>
+}
+
+func main(): int sync {
+    println(sum_ints(['12', 'x', '7']))
+    return 0
+}

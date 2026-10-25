@@ -1,0 +1,13 @@
+// A literal takes the type its context asks for; a variable keeps its own type.
+// Run: camel docs/tutorial/examples/02_literals.cml
+
+func scale(x: int): float {
+    return float(x) * 1.5
+}
+
+func main(): int sync {
+    let a: float = 1 + 2.0      // the declared type is float, so both literals are read as float
+    let b: f32 = 1              // the literal is read as the f32 one
+    println(a, b, scale(3), 1.0 + 2)
+    return 0
+}
