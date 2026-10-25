@@ -18,6 +18,33 @@ import sys
 import zipfile
 
 
+def retagged_metadata(text, tags, purelib):
+    """`WHEEL`'s text with this wheel's tags, keeping every line in the header block.
+
+    The header block ends at the first blank line; anything after it is the message body, and
+    a `Tag:` there is not a tag at all. Appending to the parsed lines therefore looked right in
+    a text editor and was invisible to `auditwheel repair`, which reports the tags it found as
+    empty, decides `No WHEEL info change needed` and leaves the old tag in place.
+    """
+    lines = text.splitlines()
+    end = next((index for index, line in enumerate(lines) if not line.strip()), len(lines))
+    # A wheel retagged by an earlier version carries a second Generator:/Tag: block *after* the
+    # blank line. Those lines are not headers, nothing reads them, and a `Tag:` among them names
+    # the platform the wheel was retagged away from -- so they are dropped from both halves.
+    drop = ("Tag:", "Generator:", "Root-Is-Purelib:")
+    headers = [line for line in lines[:end] if not line.startswith(drop)]
+    headers.append("Generator: camel scripts/wheel_retag.py")
+    # A wheel that names a platform is installed into the platform tree; `py3-none-any` is the
+    # only form that belongs in the pure-python one, and pip reads this line to decide.
+    headers.append("Root-Is-Purelib: %s" % ("true" if purelib else "false"))
+    headers += ["Tag: " + tag for tag in tags]
+    body = [line for line in lines[end:] if not line.startswith(drop)]
+    while body and not body[-1].strip():
+        body.pop()
+    kept = headers + ([""] + body if body else [])
+    return "\n".join(kept) + "\n"
+
+
 def retag(wheel, python_tag, abi_tag, platform_tag):
     """Rewrite `wheel`'s tags and rename it; returns the new path."""
     tags = ["%s-%s-%s" % (python_tag, abi_tag, platform_tag)]
@@ -29,14 +56,9 @@ def retag(wheel, python_tag, abi_tag, platform_tag):
             for item in source.infolist():
                 data = source.read(item.filename)
                 if item.filename.count("/") == 1 and item.filename.endswith(".dist-info/WHEEL"):
-                    lines = [
-                        line
-                        for line in data.decode("utf-8").splitlines()
-                        if not line.startswith("Tag:") and not line.startswith("Generator:")
-                    ]
-                    lines.append("Generator: camel scripts/wheel_retag.py")
-                    lines += ["Tag: " + tag for tag in tags]
-                    data = ("\n".join(lines) + "\n").encode("utf-8")
+                    data = retagged_metadata(
+                        data.decode("utf-8"), tags, purelib=(platform_tag == "any")
+                    ).encode("utf-8")
                 target.writestr(item, data)
 
     # The name is where pip reads the tags from: name-version-python-abi-platform.whl.
