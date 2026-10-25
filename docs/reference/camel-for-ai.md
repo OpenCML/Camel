@@ -1396,7 +1396,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `LambdaParametersNeedParentheses` | E | A lambda's parameters need their parentheses: write '(x) => e', not 'x => e'. |
 | `ComparisonAcrossLines` | W | This '>' is read as a comparison with the next line, which starts with {0}: two statements may have been joined into one. |
 
-**Semantic** (`SemanticDiag`) — 203 (191 errors, 12 warnings)
+**Semantic** (`SemanticDiag`) — 204 (192 errors, 12 warnings)
 
 | `Redeclaration` | E | Redeclaration of reference: '{0}'. |
 | `ModuleNotFound` | E | Module '{0}' not found. {1} |
@@ -1635,7 +1635,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `ConstantExpressionFaults` | W | This constant expression faults whenever it is evaluated ({0}); it is not folded. |
 | `TranslationLinksRuntime` | W | std::cpp has no standalone translation of {0}: the program it writes calls the Camel runtime there and is built with libcamel. |
 
-**Semantic** (`SemanticDiag`) — 203 (191 errors, 12 warnings)
+**Semantic** (`SemanticDiag`) — 204 (192 errors, 12 warnings)
 
 | `ReducedPrecisionUnsupported` | E | The call of '{0}' cannot take a value of the reduced-precision element type '{1}'. |
 | `ImplOnBodylessDeclaration` | E | The body-less declaration '{0}' cannot carry '#impl<{1}>': it has no Camel body. |
@@ -1645,6 +1645,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `ImplKernelNotBodyless` | E | The '#impl' tag of '{0}' names '{1}', which has a body. |
 | `StreamInContainer` | E | '{0}' cannot be the element of {1}: a stream is consumed once, while the elements of a container are read more than once. |
 | `NodeOfNotAParameter` | E | '{0}' is not a const parameter of the rule '{1}', so node_of({0}) names no node. |
+| `RuleConstParamNotMatched` | E | '{0}' is a `const` parameter of the rule '{1}', and the left side matches no constant for it. |
 <!-- camel-for-ai end: diagnostics -->
 
 ## Appendix B. Standard library signatures (generated)

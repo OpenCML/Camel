@@ -96,6 +96,25 @@ inline CharRange rangeOf(syn::TokenRef start, syn::TokenRef end) {
 }
 inline CharRange rangeOf(syn::TokenRef token) { return rangeOf(token, token); }
 
+// Whether an expression reads a name as data: a `RefData` of that text, at any depth (`x * c`
+// reads `x` and `c`). The left side of a rule is what binds its `const` parameters, and a read
+// there is the position that matches the constant. A member name (`x.c`) and a type are not
+// `RefData` nodes, so neither is read here, and neither binds anything.
+inline bool readsDataName(syn::Node node, const std::string &name) {
+    if (!node) {
+        return false;
+    }
+    if (node.is(NK::RefData) && node.text() == name) {
+        return true;
+    }
+    for (const syn::Node &child : node.nodes()) {
+        if (readsDataName(child, name)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 inline camel::source::origin_id_t
 deriveAstAnchorOrigin(const node_ptr_t &owner, syn::TokenRef token, const std::string &label) {
     if (!g_sourceContext || g_sourceFileId == camel::source::kInvalidSourceFileId || !owner ||
@@ -866,6 +885,35 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
                 consts |= int64_t{1} << bit;
             }
             ++bit;
+        }
+    }
+
+    // A `const` parameter is matched by the left side, and the left side is what binds it: the
+    // parameter it is declared with is the constant's value in the condition, and the node of
+    // that constant is the hidden node parameter the condition takes when the declaration has
+    // one. A left side that reads no such name gives the parameter no position to match a
+    // constant in, so the declaration is refused here, where it is written: the rule says
+    // nothing about the program, and a condition that reaches the node through `node_of` has no
+    // node to read -- which is the state the engine's own guards report as an internal error at
+    // every match. `consts` is what the rule value carries (`__rule`), and it is read here the
+    // same way, so the check covers exactly the parameters the engine treats as constant.
+    if (params) {
+        const auto paired = params->get<cst::PairedParams>();
+        for (const auto pair : paired->all<cst::KeyParamPair>()) {
+            if (!pair->has(TK::KwConst)) {
+                continue;
+            }
+            const auto ident = pair->get<cst::IdentDef>();
+            if (!ident) {
+                continue;
+            }
+            const std::string written(ident->text());
+            if (readsDataName(sides[0], written)) {
+                continue;
+            }
+            diags_->of(SemanticDiag::RuleConstParamNotMatched)
+                .at(rangeOf(ident->firstToken(), ident->lastToken()))
+                .commit(written, name);
         }
     }
 

@@ -613,6 +613,21 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
 
 [[tests]]
+name = "rules.refuses_a_const_parameter_the_left_side_matches_no_constant_for"
+desc = "A `const` parameter means the left side matches a constant there, so `drop_by_shape`, whose left side is `x + 1` and whose condition asks for `node_of(c)`, is refused where it is written: the diagnostic is located at the parameter it names, and the engine's own guards are never reached (the run reaches the pass, whose condition has a `const` parameter its match bound no constant for, only because the declaration was accepted)."
+kind = "negative"
+case = "../../../cases/modules/rules/const_param_unbound.cml"
+args = ["${case}", "const_param_unbound::apply", "std::nvm"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::RuleConstParamNotMatched"
+expect_diagnostic_line = 24
+expect_diagnostic_column = 34
+expect_output_contains = ["'c' is a `const` parameter of the rule 'drop_by_shape', and the left side matches no constant for it.", "A `const` parameter means the left side matches a constant there"]
+expect_output_not_contains = ["left side bound no constant", "left side binds no node"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
 name = "rules.parts_query_ignores_the_order_of_a_commutative_operator"
 desc = "A rule whose coefficient is a `const` parameter asks a parameterized fact query (`mul_by_one(x, node_of(c))`), and the query's two parts reach it in the order the rule's own match bound them -- the pairing which the declaration of a commutative operator may exchange (`swapped` is `a * 1` against the pattern `x * c`, where only the exchange binds the constant to `c`, so the query is asked with the parts in the order the product holds them the other way). Both orders name the same value (op-semantics 7.4: the exchange gives the same value), so the query answers with the operands in either order and the product goes: `swapped` loses its product and keeps the factor as its value (`7`). `kept` (`a * 2`), whose coefficient is not one, keeps its product and the value `14`, and `plain`, whose guard is on the value, loses its product in the same pass -- so the pass is neither failing nor quietly idle. The counts are one product in each function before the pass and none in `swapped` and `plain` after it."
 kind = "behavior"
