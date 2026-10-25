@@ -594,3 +594,25 @@ name = "tutorial.examples.10_exercise"
 desc = "The answer to the exercise of chapter 10: a `var` written inside a sync block, and a callback whose signature says it is pure."
 case = "../../../docs/tutorial/examples/10_exercise.cml"
 golden = "golden/tutorial_examples/10_exercise.txt"
+
+# ---- Chapter 18 -------------------------------------------------------------------------------
+
+# The outline numbers this chapter 18 while its files keep the number they were written with, so the
+# entries below are named after the files and the `desc` says which chapter they belong to.
+[[tests]]
+name = "tutorial.examples.17_rule"
+desc = "The law of chapter 18's program written as a `rule`: the optimizer's verdict on it, and the values `main` prints."
+case = "../../../docs/tutorial/examples/17_rule.cml"
+golden = "golden/tutorial_examples/17_rule.txt"
+
+[[tests]]
+name = "tutorial.examples.17_fact"
+desc = "The knowledge of the field that is not an equation, handed to the compiler as a `fact`: what the rule that needs it reports without it, including the operator that is not translated."
+case = "../../../docs/tutorial/examples/17_fact.cml"
+golden = "golden/tutorial_examples/17_fact.txt"
+
+[[tests]]
+name = "tutorial.examples.17_exercise"
+desc = "The answer to the exercise of chapter 18: a law written as a `rule`, and the verdict its `check` prints."
+case = "../../../docs/tutorial/examples/17_exercise.cml"
+golden = "golden/tutorial_examples/17_exercise.txt"
