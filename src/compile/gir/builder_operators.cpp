@@ -2946,6 +2946,35 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                     throw BuildAbortException();
                 }
             }
+            // A subscript slice with a constant step of 0 takes no element at all: the same rule
+            // as the step of a range, refused where the step is written (design principles 5.4
+            // for the slice, 4.2 for the range). The step is the fourth ordinary argument of
+            // `__slice__`; the fifth is the mask that says which of the two bounds were written,
+            // so it is not the step. A step that is not constant is a fault of the run instead
+            // (RuntimeDiag::InvalidArgument), and a tensor's own slice checks its step with the
+            // shape facts it holds.
+            if (targetOperator->uri() == ":op/slice_sub" && normInputs.size() == 5 &&
+                withInputs.empty() && gct->size() >= 1 &&
+                gct->at(0)->type() == GCT::NodeKind::DREF && gct->at(0)->name() == "__slice__") {
+                const auto stepIsZero = [](const data_ptr_t &data) {
+                    if (const auto integer = std::dynamic_pointer_cast<LongData>(data);
+                        integer != nullptr) {
+                        return integer->data() == 0;
+                    }
+                    const auto integer = std::dynamic_pointer_cast<IntData>(data);
+                    return integer != nullptr && integer->data() == 0;
+                };
+                if (stepIsZero(constantOfNode(normInputs[3].node))) {
+                    // The caret is under the step, the argument that says why the slice can
+                    // never be right.
+                    const GCT::node_ptr_t &stepExpr = normInputs[3].expr;
+                    const auto where = stepExpr != nullptr && stepExpr->origin() != 0
+                                           ? stepExpr->origin()
+                                           : gct->origin();
+                    diags_->of(SemanticDiag::SliceStepZero).atOrigin(where).commit();
+                    throw BuildAbortException();
+                }
+            }
             if (inPlaceCalls_.contains(gct)) {
                 // Written by inPlaceRebindingOf, which checked that this overload has an
                 // in-place form: the call works on the array:var/take hands it.

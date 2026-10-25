@@ -1,104 +1,140 @@
-# Camel: A Graph-Native Programming Language
+<div align="center">
 
-[中文简体](docs/README.cn.md) | English
+<img src="assets/logo_text.png" alt="Camel" width="560">
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
-![WIP](https://img.shields.io/badge/status-WIP-yellow.svg)
+### The program is the graph.
 
-<p align="center">
-  <img src='https://www.github.com/OpenCML/ImagesHosting/raw/main/GetDefaultLogger()o_text.png' width=800>
-</p>
+**Camel** is a graph-native general-purpose programming language, with AI as its primary application.
 
-Camel is a **graph-native general-purpose programming language**; AI is its primary application domain.
+[![CI](https://github.com/OpenCML/Camel/actions/workflows/ci.yml/badge.svg)](https://github.com/OpenCML/Camel/actions/workflows/ci.yml)
+[![Version](https://img.shields.io/github/v/tag/OpenCML/Camel?label=version&color=blue)](https://github.com/OpenCML/Camel/tags)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Platforms](https://img.shields.io/badge/platforms-Linux%20%7C%20Windows-lightgrey.svg)](docs/setup.en.md)
+[![VS Code](https://img.shields.io/visual-studio-marketplace/v/Kogler7.open-cml-extension?label=VS%20Code&logo=visualstudiocode)](https://marketplace.visualstudio.com/items?itemName=Kogler7.open-cml-extension)
+[![Stars](https://img.shields.io/github/stars/OpenCML/Camel?style=social)](https://github.com/OpenCML/Camel/stargazers)
 
-A Camel program expresses computational intent only: what is to be computed, and what depends on what. The graph is not captured or recovered from code written in some other language; what the source says *is* the graph. Every element of the language corresponds directly to a piece of that graph, and compiling, optimizing, differentiating, exporting and running a program are all transformations of the graph, called passes, which you compose on the command line.
+[Why Camel](#why-camel) ·
+[Zen](#the-zen-of-camel) ·
+[A taste](#a-taste) ·
+[Quick start](#quick-start) ·
+[Tutorial](docs/tutorial/tutorial.en.md) ·
+[Documentation](#documentation) ·
+[Roadmap](ROADMAP.md) ·
+[中文](docs/README.cn.md)
+
+</div>
+
+---
+
+## Why Camel
+
+Most languages write a program as instructions for a machine to carry out one step at a time. Yet what compilers, parallel runtimes, automatic differentiation and GPU back ends actually need is a graph: what is to be computed, and what depends on what. So the graph has to be recovered from the code after the fact, by tracing, capturing and analysis. The recovered graph breaks apart, loses what the side effects meant, and the transformations applied to it become a black box the user cannot touch.
+
+In Camel **the program is the graph**. What you write is the intent of the computation and its dependencies; order is written only where you need it. From that:
+
+- **The compiler gets exactly what you wrote**: nothing is traced, the graph does not break, and computations that do not depend on each other are free to run in parallel.
+- **Transformations are ordinary functions**: optimizing, differentiating, moving to a GPU and exporting are passes over the graph. You can look at them, swap them, and write your own in Camel.
+- **Knowledge about optimization is code you can check**: an algebraic law is a rule, and `check` tells you whether it holds.
+- **One program, many ways to run it**: interpreted, JIT-compiled, on a GPU, or exported to ONNX or C++, with the same meaning.
+
+These properties hold for every program where computation matters more than control flow. Training and deploying models is the most pressing of them, which is why AI is Camel's primary application, though not its only one. More in [Why Camel](docs/why.en.md).
+
+## The Zen of Camel
+
+1. **Let the graph speak.** All computation is a graph of intent.
+2. **Graphs are primitives, not artifacts.** Graphs are the native shape of intent, not a byproduct of code.
+3. **Every construct is a piece of the graph.** If a construct has no clear place on the graph, it does not belong in the language.
+4. **Async by nature, sync when explicit.** Order emerges from dependencies, not from syntax.
+5. **Execution is polymorphic and multi-staged.** Passes are functions, functions are graphs: compiling, optimizing and running are all stages of rewriting.
+6. **Keep code pure, let runtimes specialize.** Context is injected at runtime, not embedded in code.
+7. **One language, all the way down.** Types, rules and passes are all written in Camel itself.
+8. **Let compilers bear the burden.** Scheduling, mapping, fusing, and lowering — these are not your job.
+
+`camel --zen` prints them.
+
+## Highlights
+
+| | |
+|---|---|
+| 🧭 **Graph-native** | Every construct maps to a fixed piece of the graph. Evaluation follows dependencies; independent work runs in parallel without being asked. |
+| 🔁 **Passes are functions** | Optimization, differentiation, export and execution are graph-to-graph passes you compose on the command line, or write yourself in Camel. |
+| 📐 **Rules you can verify** | Write an algebraic law once, generic over types; the rewrite engine applies it, and `check` proves, refutes or samples it. |
+| ∂ **Differentiable by construction** | `grad(f)` rewrites the graph of `f` into the graph of its derivative, at compile time, so every later pass optimizes it too. |
+| 🧮 **Arrays with shapes** | `f32[n, k]` is one type for every rank; dimension names are checked across a call, and memory is updated in place whenever nothing else can see it. |
+| 🚀 **Many back ends** | A node VM, a bytecode VM, a JIT, a parallel scheduler, GPU kernels, ONNX and standalone C++ — one meaning everywhere. |
+| 🐍 **Plays well with Python** | Call Camel modules from Python with zero-copy arrays, and get Camel's diagnostics as Python exceptions with locations. |
+| 🛠️ **Real tooling** | A language server, a formatter, a debugger that steps through passes, and diagnostics that come with machine-applicable fixes. |
+
+## A taste
+
+Fit a line by gradient descent. `grad(loss)` is not a library call evaluated step by step: it is a graph rewrite, and the derivative it builds is an ordinary graph the optimizer and the JIT see.
+
+```camel
+module fit
+
+import { grad } from autodiff
+
+with <w: float>
+func loss(x: float, y: float): float {
+    let e = w * x - y
+    return e * e
+}
+
+func main(): int sync {
+    let fitted = loop w = 0.0 for i in 0..100 do w - 0.01 * grad(loss)<w>(3.0, 6.0)
+    println(fitted)                  // close to 2.0
+    return 0
+}
+```
+
+The words after the file name are the passes to run, in order:
+
+```bash
+camel fit.cml                        # run on the node VM
+camel fit.cml std::gir               # print the graph (Graphviz DOT) instead of running
+camel fit.cml std::macro std::opt std::jit   # expand grad, optimize, run with the JIT
+camel fit.cml std::opt::saturate std::gir    # keep every equivalent form and draw them side by side
+```
+
+Optimizations are written in Camel too. A law is stated once, for every type that satisfies its condition:
+
+<!-- camel-snippet: fragment: a rule declaration from the standard library's style, shown on its own -->
+
+```camel
+rule add_zero::<T>(x: T) when is_integer::<T>() { x + 0 => x }
+```
 
 ## The language and the graph
 
 | In the source | On the graph | What follows |
 |---|---|---|
-| An expression, an operator call | Nodes and data edges | Evaluation follows dependencies; nodes that do not depend on each other may run in any order or in parallel |
+| An expression, an operator call | Nodes and data edges | Evaluation follows dependencies; independent nodes may run in any order or in parallel |
 | A function | A subgraph; a call is a node | A function's behaviour is decided by the function itself |
-| A `sync` block | Control edges between adjacent expressions | Statements run in the order written |
+| A `sync` block | Order between the effects it contains | Effects run in the order written |
 | `if`, `match`, `a ?? b`, `a !! b` | A branch | Errors and nulls are values, handled by branches |
+| `loop … do …` | A loop node with its state | Iteration is an expression whose value is the last state |
 | A generic function | A subgraph template, instantiated per set of concrete types | Only concrete types are on the graph |
-| A pass | A program that turns one graph into another, or consumes it | An open pipeline |
+| A pass | A function from a graph to a graph | An open pipeline |
 
 The rules behind this table are in the [design principles](docs/design-principles.en.md).
 
-## A first look
+## Quick start
 
-```camel
-module stats
+### Build from source
 
-func mean(xs: float[]): float {
-    return xs->reduce<(acc: float, x: float): float => acc + x, 0.0> / float(len(xs))
-}
-
-func parse_all(texts: string[]): int[] {
-    return texts->map<(t: string): int => parse_int(t) !! 0>   // a text that is not a number counts as 0
-}
-
-func main(): int sync {
-    let xs = parse_all(['3', '4', 'five', '6'])
-    println(xs)
-    println('mean = {:.2f}'->format<mean(xs->map<(x: int): float => float(x)>)>)
-    return 0
-}
-```
-
-```text
-[3, 4, 0, 6]
-mean = 3.25
-```
-
-- `->` pipes a value into a function; the function given to `map` and `reduce` is written in angle brackets because it configures the operator, while the array is the data that flows through it.
-- `parse_int` returns an `int!`, a value that is either an `int` or an error; `!!` supplies a substitute. There are no exceptions.
-- The body of `main` is a `sync` block, so its statements run in the order written. Elsewhere evaluation follows dependencies: outside a sync block, an effect whose result nothing uses does not run (the compiler warns about it).
-- There is no loop syntax yet; repetition is recursion (tail calls take no stack) and the higher-order operators `map`, `filter`, `reduce`, `foreach`.
-
-## One source, different passes
-
-What comes after the file name on the command line is the sequence of passes to run:
+You need Clang 19+, CMake 3.25+, Ninja, Conan 2.10+ and Node.js 18+. [docs/setup.en.md](docs/setup.en.md) lists the toolchain per platform.
 
 ```bash
-camel prog.cml                          # run on the node VM (the default)
-camel prog.cml std::fvm                 # run on the bytecode VM
-camel prog.cml std::jit                 # run with JIT compilation
-camel prog.cml std::prl                 # run with parallel scheduling
-camel prog.cml std::opt std::fvm        # optimize, then run
-camel prog.cml std::gir                # print the graph (Graphviz DOT) instead of running
-camel prog.cml std::macro std::opt 'onnx::export out="model.onnx"'   # export `main` to an ONNX model
+git clone https://github.com/OpenCML/Camel.git && cd Camel
+npm install          # npm packages and the C++ dependencies (needs network access)
+npm run build        # Release build into out/latest
 ```
 
-Automatic differentiation (`grad` from the `autodiff` module) and ONNX export are libraries built on the same pass mechanism. The [tutorial](docs/tutorial/tutorial.en.md) walks through looking at the graph, changing the pipeline, exporting a small model and taking a gradient.
-
-## Getting started
-
-> [!WARNING]
-> Camel is a work in progress. The language and the command line still change, and parts of the grammar are reserved but not implemented; the [language reference](docs/language/en/README.md) says which.
-
-### Build
-
-Camel is built from source; [docs/setup.en.md](docs/setup.en.md) lists the toolchain per platform. The build needs Clang 19 or newer, CMake 3.25 or newer, Ninja and Conan 2.10 or newer, plus Node.js 18 or newer for the scripts. The first `npm install` or build runs `conan install` and downloads the C++ dependencies, so it needs network access.
-
-```bash
-npm install          # installs the npm packages and runs conan install
-npm run build        # Release build; the executable lands in out/latest/bin
-```
-
-The executable is `out/latest/bin/camel` on Linux and macOS and `out/latest/bin/camel.exe` on Windows. Put `out/latest/bin` on your `PATH` and set `CAMEL_HOME` to `out/latest` (the directory that holds `bin/`, `libs/`, `include/` and `stdlib/`). Release CI builds and tests Linux x64 and Windows x64; the macOS arm64 leg is an opt-in experimental job, so treat macOS as untested by CI.
-
-The `python` and `pyplot` modules are built only when a CPython with development headers is found; without one they are skipped, and `CAMEL_SKIP_PYTHON=1` skips them explicitly. A Python wheel named `camel-lang` can be built from the same tree with `npm run pypi:rollup`; see [docs/pypi-packaging.md](docs/pypi-packaging.md).
-
-### VS Code
-
-Install [OpenCML-Ext from the VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=Kogler7.open-cml-extension) for syntax highlighting, language services, interactive GIR browsing, and debugging. Configure `opencmlLanguageServer.camelPath` to point to your built `camel` executable; the extension discovers `camel-ls` and `camel-db` alongside it. Recent runtime builds also support stepping through compiler passes, inspecting the paused GIR, and viewing memory. See the [extension README](https://github.com/OpenCML/OpenCML-Ext#readme) for setup and the [debugging guide](docs/debugging.en.md) for runtime capabilities.
+Put `out/latest/bin` on your `PATH` and set `CAMEL_HOME` to `out/latest`. CI builds and tests Linux x64 and Windows x64.
 
 ### Hello, Camel
 
 ```camel
-// greeting.cml
 module hello
 
 func main(): int sync {
@@ -108,34 +144,47 @@ func main(): int sync {
 ```
 
 ```bash
-camel greeting.cml
+camel hello.cml
 ```
 
 ```text
 Hello, Camel!
 ```
 
-## Learn more
+### Editor support
 
-- [Tutorial](docs/tutorial/tutorial.en.md) ([中文](docs/tutorial/tutorial.cn.md)): from the first program to graphs, passes, export and gradients, with runnable examples
-- [Examples](examples/README.md): short task-oriented programs (JSON, files, maps, sorting, a command-line tool, parallel `map`, a simulation, a training step)
-- [Language reference](docs/language/en/README.md) ([中文](docs/language/README.md))
-- [Command line](docs/cli.md) and the [catalog of diagnostics](docs/diagnostics.md) (`camel --explain <name>`)
-- [Debugging](docs/debugging.en.md): breakpoints, stepping and variables in an editor through `camel-db --dap`, and what they mean in a graph language
-- [Design principles](docs/design-principles.en.md) ([中文, authoritative](docs/design-principles.cn.md)): what Camel is and why
-- [Technical documentation](docs/technical/README.md): the compilation pipeline, the graph IR, the runtime
-- [Build from source](docs/setup.en.md) and [CMake build options](docs/build-options.en.md)
-- [Python integration](modules/python/README.md): embedding Python through the `python` module
-- [Roadmap](ROADMAP.md) (Chinese)
+Install [OpenCML-Ext](https://marketplace.visualstudio.com/items?itemName=Kogler7.open-cml-extension) for VS Code: highlighting, language services, an interactive graph browser, and a debugger that can pause between passes. Point `opencmlLanguageServer.camelPath` at your `camel` executable. See the [extension README](https://github.com/OpenCML/OpenCML-Ext#readme) and the [debugging guide](docs/debugging.en.md).
+
+### Python
+
+```bash
+npm run pypi:rollup  # builds the camel-lang wheel from this tree
+```
+
+See [docs/pypi-packaging.md](docs/pypi-packaging.md) and the [Python bindings](docs/technical/57_python_bindings.md).
+
+## Documentation
+
+| | |
+|---|---|
+| 📘 [Tutorial](docs/tutorial/tutorial.en.md) | From the first program to rules, passes, gradients and export |
+| 💡 [Why Camel](docs/why.en.md) | What problem Camel solves and why the program should be the graph |
+| 📖 [Language reference](docs/language/en/README.md) | Every construct, precisely |
+| 📚 [Standard library](docs/stdlib-reference.md) | Every module and function |
+| 🧪 [Examples](examples/README.md) | Short task-oriented programs: files, JSON, a CLI tool, parallel `map`, a training step |
+| ⌨️ [Command line](docs/cli.md) · [Diagnostics](docs/diagnostics.md) | Options, passes, and `camel --explain <name>` |
+| 🤖 [Camel for AI](docs/reference/camel-for-ai.md) · [`llms.txt`](llms.txt) | What a model needs to write Camel |
+| 🧱 [Design principles](docs/design-principles.en.md) | The rules the language is built on ([中文, authoritative](docs/design-principles.cn.md)) |
+| ⚙️ [Technical docs](docs/technical/README.md) | The pipeline, the graph IR, the runtime |
+
+## Status
+
+Camel is under active development and has not reached 1.0. The language changes without compatibility shims: when a spelling is replaced, the old one is simply gone. Release notes are in [changes.log](changes.log), and the plan is in the [roadmap](ROADMAP.md).
 
 ## Contributing
 
-- [Contributing Guide](CONTRIBUTING.md)
-- [Code of Conduct](CODE_OF_CONDUCT.md)
-- [Security Policy](SECURITY.md)
-- [Issue Tracker](https://github.com/OpenCML/Camel/issues)
+Issues and pull requests are welcome. Start with the [contributing guide](CONTRIBUTING.md), and please follow the [code of conduct](CODE_OF_CONDUCT.md). Security issues go through the [security policy](SECURITY.md).
 
 ## License
 
-Code written by this project's contributors is licensed under the [MIT License](LICENSE).
-
+Camel is released under the [MIT License](LICENSE).

@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-267 diagnostics: 250 errors, 17 warnings. 15 carry a machine-applicable edit, 252 say why they carry none.
+271 diagnostics: 254 errors, 17 warnings. 15 carry a machine-applicable edit, 256 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -236,6 +236,10 @@ prints one entry.
 | `0x030001E6` | [SemanticDiag::RangeStepZero](#rangestepzero) | Error | no |
 | `0x030001E7` | [SemanticDiag::StaticLoopSequenceNotKnown](#staticloopsequencenotknown) | Error | no |
 | `0x030001E8` | [SemanticDiag::RuleConstParamNotMatched](#ruleconstparamnotmatched) | Error | no |
+| `0x030001E9` | [SemanticDiag::SliceStepZero](#slicestepzero) | Error | no |
+| `0x030001EA` | [SemanticDiag::TagFieldNameAmbiguous](#tagfieldnameambiguous) | Error | no |
+| `0x030001EB` | [SemanticDiag::TagFunctionArgumentNotReadable](#tagfunctionargumentnotreadable) | Error | no |
+| `0x030001EC` | [SemanticDiag::GenericTypeArgumentGrows](#generictypeargumentgrows) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn | no |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn | no |
@@ -2387,17 +2391,37 @@ Instantiating the generic function '{0}' with {1} is refused: {2}.
 Each call of a generic function with a new set of types builds a new subgraph. A generic function that calls itself with ever larger types never stops doing so.
 ```
 
-**Example** (`test/cases/compile/generics/err_deep.cml`, run as `camel test/cases/compile/generics/err_deep.cml`)
+**Example** (`test/cases/compile/generics/err_deep_types.cml`, run as `camel test/cases/compile/generics/err_deep_types.cml`)
 
 ```camel
-module err_deep
+module err_deep_types
 
-func grow::<T>(x: T, n: int): int {
-    return if n <= 0 then 0 else grow([x], n - 1)
+func churn::<T>(x: T, k: int): int {
+    let anF32: f32 = 1.0
+    let anF64: f64 = 1.0
+    let anI32: i32 = 1
+    let anI64: i64 = 1
+    let aBf16: bf16 = 1.0
+    let aF16: f16 = 1.0
+    let aBool = true
+    let aString = 's'
+    let aC64: c64 = 1 - 2i
+    let aC128: c128 = 1 + 2i
+    return if k <= 0 then 0
+           else if k == 1 then churn(anF32, k - 1)
+           else if k == 2 then churn(anF64, k - 1)
+           else if k == 3 then churn(anI32, k - 1)
+           else if k == 4 then churn(anI64, k - 1)
+           else if k == 5 then churn(aBf16, k - 1)
+           else if k == 6 then churn(aF16, k - 1)
+           else if k == 7 then churn(aBool, k - 1)
+           else if k == 8 then churn(aString, k - 1)
+           else if k == 9 then churn(aC64, k - 1)
+           else churn(aC128, k - 1)
 }
 
 func main(): int sync {
-    println(grow(1, 3))
+    println(churn(0, 3))
     return 0
 }
 ```
@@ -7776,6 +7800,169 @@ func shifted(a: int): int { return a + 1 }
 
 func main(): int sync {
     println(shifted(41))
+    return 0
+}
+```
+
+### SliceStepZero
+
+`0x030001E9` · Error · `SemanticDiag::SliceStepZero`
+
+**Fix**
+
+None: choice: which step the slice takes is the writer's to say, and the message names both the stepped slice and the plain one
+
+**Message**
+
+```text
+The slice 't[a:b:s]' has a step of 0, so it takes no element at all, whatever its bounds are.
+```
+
+**Help**
+
+```text
+A slice takes every step-th element from its start, so the step decides which elements it has: with a positive step 'a', 'a + step', ... below 'b', and with a negative one backwards from the start. A step that does not move names no slice, so a constant step of 0 is refused where it is written (design principles 5.4). Give a non-zero step, or write 't[a:b]' when the step is 1. A step that is not constant is a fault of the run instead (RuntimeDiag::InvalidArgument).
+```
+
+**Example** (`test/cases/linear/faults/subscript_step_zero_const.cml`, run as `camel test/cases/linear/faults/subscript_step_zero_const.cml`)
+
+```camel
+module subscript_step_zero_const
+
+func main(): int sync {
+    let xs = [1, 2, 3, 4, 5, 6]
+    println(xs[0:6:0])
+    println('not reached')
+    return 0
+}
+```
+
+### TagFieldNameAmbiguous
+
+`0x030001EA` · Error · `SemanticDiag::TagFieldNameAmbiguous`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
+**Message**
+
+```text
+Two tags on this field are written '{0}': '{1}' and '{2}'.
+```
+
+**Help**
+
+```text
+The `tags` struct names one field per tag, by the tag's own name, so two tags of one name would be one field of the record. Rename one of them, or write only one of the two.
+```
+
+**Example** (`test/cases/compile/static_expansion/tags_field_name_conflict.cml`, run as `camel test/cases/compile/static_expansion/tags_field_name_conflict.cml`)
+
+```camel
+module tags_field_name_conflict
+
+import tags_second_width
+
+tag width<w: int> on field
+
+type Box = {
+    #width<1> #tags_second_width::width<2> marked: int,
+}
+
+func read(b: Box): int {
+    return static loop acc = 0 for n, F, tags in fields Box do
+        acc + 1
+}
+
+func main(): int sync {
+    println(read({marked: 3}))
+    return 0
+}
+```
+
+### TagFunctionArgumentNotReadable
+
+`0x030001EB` · Error · `SemanticDiag::TagFunctionArgumentNotReadable`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
+**Message**
+
+```text
+The tag '{0}' takes a function for its parameter '{1}', and a 'static' head cannot give a function value yet.
+```
+
+**Help**
+
+```text
+A 'func' parameter carries the function as its graph reference: an internal number, not a value the language has. Do not read the tags of this field at a 'static' head; a 'func' argument stays a fact for a pass that reads the tag after the program is compiled.
+```
+
+**Example** (`test/cases/compile/static_expansion/tags_function_argument.cml`, run as `camel test/cases/compile/static_expansion/tags_function_argument.cml`)
+
+```camel
+module tags_function_argument
+
+tag rule<f: function> on field
+tag width<w: int> on field
+
+func twice(x: int): int {
+    return x + x
+}
+
+type Box = {
+    #rule<twice> scaled: int,
+    #width<8> plain: int,
+}
+
+func read(b: Box): int {
+    return static loop acc = 0 for n, F, tags in fields Box do
+        acc + (match type typeof(tags) {
+            case { width: { w: int } } => tags.width.w
+            case _ => 0
+        })
+}
+
+func main(): int sync {
+    println(read({scaled: 1, plain: 2}))
+    return 0
+}
+```
+
+### GenericTypeArgumentGrows
+
+`0x030001EC` · Error · `SemanticDiag::GenericTypeArgumentGrows`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
+**Message**
+
+```text
+The recursive call makes the type argument '{0}' of the generic function '{1}' grow from '{2}' to '{3}': every instance's type argument would contain the one before it, so specialization never stops.
+```
+
+**Help**
+
+```text
+The type arguments of a generic function are its instance key, so a call that hands it a type built out of the type it already has asks for a new instance at every level: 'f::<T>(x: T)' calling 'f([x])' makes 'T', then 'T[]', then 'T[][]'. No set of instances reaches a fixed point. Write the recursion so that its type argument is the same at every level, and take what changes as a value parameter.
+```
+
+**Example** (`test/cases/compile/generics/err_deep.cml`, run as `camel test/cases/compile/generics/err_deep.cml`)
+
+```camel
+module err_deep
+
+func grow::<T>(x: T, n: int): int {
+    return if n <= 0 then 0 else grow([x], n - 1)
+}
+
+func main(): int sync {
+    println(grow(1, 3))
     return 0
 }
 ```

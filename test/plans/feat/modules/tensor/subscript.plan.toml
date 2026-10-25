@@ -63,24 +63,35 @@ timeout_ms = 10000
 
 [[tests]]
 name = "slice_step"
-desc = "A subscript slice with a step other than the constant 1 is a view with strides: refused at compile time, naming H17 (design principles 5.4)."
-kind = "negative"
+desc = "A subscript slice with a step takes every step-th element of the first axis (design principles 5.4): the step is a value like any other, so a constant step and a run-time step name the same elements, and the elements are the slice's value whether the result is a view or a copy."
+kind = "behavior"
 case = "../../../../cases/modules/tensor/subscript/slice_step.cml"
 args = ["${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
-expect_output_contains = ["a slice step other than the constant 1", "H17"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+expect_exit = 0
+expect_stdout_exact = "[3]\n1.0\n3.0\n5.0\n[2]\n1.0\n4.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
 
 [[tests]]
 name = "slice_step_negative"
-desc = "A negative step is refused like a positive one on a tensor: `t[a:b:-1]` is still a view with strides (H17), refused at compile time rather than read as a backwards copy, so no gradient is ever built from an unsupported step (design principles 5.4)."
-kind = "negative"
+desc = "A negative step runs the slice backwards (design principles 5.4): the elements from the start down to the end, the start defaulting to the last element and the end to the position before the first."
+kind = "behavior"
 case = "../../../../cases/modules/tensor/subscript/slice_step_negative.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "[3]\n6.0\n4.0\n2.0\n[6]\n6.0\n1.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "slice_step_zero"
+desc = "A subscript slice of a tensor whose step is the constant 0 takes no element at all: refused where the step is written (design principles 5.4), as the step of a range is (4.2)."
+kind = "negative"
+case = "../../../../cases/modules/tensor/subscript/slice_step_zero.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
-expect_output_contains = ["a slice step other than the constant 1", "H17"]
+expect_output_contains = ["a slice step of 0 takes no element"]
+expect_output_not_contains = ["not reached"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000

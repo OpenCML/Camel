@@ -1,0 +1,21 @@
+/**
+ * A recursion whose type argument is built out of the type the caller already instantiated. The
+ * parameter is written with a type variable and a dimension name (`T[n]`), and every level passes
+ * the array wrapped in one more array, so the type argument of the instance is `float[n]`, then
+ * `float[n][n]`, and so on: the type argument of every level contains the one before it, and no
+ * set of instances is closed.
+ *
+ * The compiler refuses the call where the growth first appears (design principles 5.5), rather
+ * than when a count of instances being built is reached: the growing call is at the recursive
+ * call of `nest`, at the level whose type argument contains the one the open instance holds.
+ */
+module err_nest_element_type
+
+func nest::<T>(xs: T[n], k: int): int {
+    return if k <= 0 then len(xs) else nest([xs], k - 1)
+}
+
+func main(): int sync {
+    println(nest([1.0, 2.0], 3))
+    return 0
+}

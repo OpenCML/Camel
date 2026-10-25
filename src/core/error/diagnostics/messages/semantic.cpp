@@ -821,6 +821,22 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::TagFieldNameAmbiguous,
+            {
+                "TagFieldNameAmbiguous",
+                "Two tags on this field are written '{0}': '{1}' and '{2}'.",
+                "The `tags` struct names one field per tag, by the tag's own name, so two tags of one name would be one field of the record. Rename one of them, or write only one of the two.",
+            },
+        },
+        {
+            SemanticDiag::TagFunctionArgumentNotReadable,
+            {
+                "TagFunctionArgumentNotReadable",
+                "The tag '{0}' takes a function for its parameter '{1}', and a 'static' head cannot give a function value yet.",
+                "A 'func' parameter carries the function as its graph reference: an internal number, not a value the language has. Do not read the tags of this field at a 'static' head; a 'func' argument stays a fact for a pass that reads the tag after the program is compiled.",
+            },
+        },
+        {
             SemanticDiag::StaticMatchNotExhaustive,
             {
                 "StaticMatchNotExhaustive",
@@ -858,6 +874,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "GenericInstantiationCycle",
                 "The generic function '{0}' is instantiated with {1} while that same instance is being built, and its return type is not known yet.",
                 "A recursive generic call can be built only after the return type is known. Write the return type of the function, or make the recursive call use strictly smaller type arguments.",
+            },
+        },
+        {
+            SemanticDiag::GenericTypeArgumentGrows,
+            {
+                "GenericTypeArgumentGrows",
+                "The recursive call makes the type argument '{0}' of the generic function '{1}' grow from '{2}' to '{3}': every instance's type argument would contain the one before it, so specialization never stops.",
+                "The type arguments of a generic function are its instance key, so a call that hands it a type built out of the type it already has asks for a new instance at every level: 'f::<T>(x: T)' calling 'f([x])' makes 'T', then 'T[]', then 'T[][]'. No set of instances reaches a fixed point. Write the recursion so that its type argument is the same at every level, and take what changes as a value parameter.",
             },
         },
         {
@@ -1474,6 +1498,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "RangeStepZero",
                 "The range 'range({0}, {1}, 0)' has a step of 0, so it is no sequence of integers.",
                 "The integers of `range(a, b, step)` are `a`, `a + step`, ... below `b`, so the step decides which integers the range holds: a step that does not move names no one sequence, whatever the bounds are (design principles 4.2; the author's ruling of 2026-10-24 on `h426-interval-step-form`). The step is a constant here, so the call can never be right and the refusal is at the call, where the step is written. Give a non-zero step, or write the interval `a..b` when the step is 1. A step that is not constant is a fault of the run instead (RuntimeDiag::InvalidArgument).",
+            },
+        },
+        {
+            SemanticDiag::SliceStepZero,
+            {
+                "SliceStepZero",
+                "The slice 't[a:b:s]' has a step of 0, so it takes no element at all, whatever its bounds are.",
+                "A slice takes every step-th element from its start, so the step decides which elements it has: with a positive step 'a', 'a + step', ... below 'b', and with a negative one backwards from the start. A step that does not move names no slice, so a constant step of 0 is refused where it is written (design principles 5.4). Give a non-zero step, or write 't[a:b]' when the step is 1. A step that is not constant is a fault of the run instead (RuntimeDiag::InvalidArgument).",
             },
         },
         {

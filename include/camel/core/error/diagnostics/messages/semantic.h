@@ -159,12 +159,21 @@ enum class SemanticDiag : uint32_t {
     RuleTagNotRequires     = 0x00016C,
     TagParameterType       = 0x00016D,
     TagShadowsPermission   = 0x00016E,
+    /// Two tags of one field are written with the same name.
+    TagFieldNameAmbiguous = 0x0001EA,
+    /// A tag argument is a function, which a `static` head has no value for.
+    TagFunctionArgumentNotReadable = 0x0001EB,
     // Static expansion (design principles 5.5): 0x170 and up.
-    StaticMatchNotExhaustive       = 0x000170,
-    StaticMatchUnreachableCase     = 0x000171,
-    StaticTypeNotConcrete          = 0x000172,
-    StaticMatchTooDeep             = 0x000173,
-    GenericInstantiationCycle      = 0x000174,
+    StaticMatchNotExhaustive   = 0x000170,
+    StaticMatchUnreachableCase = 0x000171,
+    StaticTypeNotConcrete      = 0x000172,
+    StaticMatchTooDeep         = 0x000173,
+    GenericInstantiationCycle  = 0x000174,
+    // A recursive generic call whose type argument is built out of the type the caller already
+    // instantiated (design principles 5.5): 'f::<T>(x: T)' calling 'f([x])' asks for one instance
+    // per level, and no level's key ever repeats. The count of open instances is not what bounds
+    // this, so the call is refused where the growth first appears.
+    GenericTypeArgumentGrows       = 0x0001EC,
     StaticForNotComposite          = 0x000175,
     StaticAccessNotInternal        = 0x000176,
     StaticAccessUnknownField       = 0x000177,
@@ -373,7 +382,10 @@ enum class SemanticDiag : uint32_t {
     /// `range(a, b, 0)` is no sequence at all: the step never moves (design principles 4.2; the
     /// rule on ` -interval-step-form`, which makes a step of 0 a fault
     /// and a constant one a compile-time error).
-    RangeStepZero               = 0x0001E6,
+    RangeStepZero = 0x0001E6,
+    /// A subscript slice with a constant step of 0 takes no element: `t[a:b:0]` (design principles 5.4;
+    /// the step of a slice follows the same rule the step of a range does).
+    SliceStepZero               = 0x0001E9,
     ReducedPrecisionUnsupported = 0x0001D7,
     // #impl<f> (design principles 10.4): the Camel body of the function is its semantics and the
     // body-less declaration f of the same module is the operator that runs it. The graph builder

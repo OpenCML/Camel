@@ -131,6 +131,11 @@ bool TensorModule::load() {
     // A tensor is a numeric array: `==` compares two of them by shape and by element, as it
     // does for any array (design principles 4.2), which the core cannot know by itself because
     // the type is this module's. Registered once, where the type itself is declared.
+    //
+    // This call is the transition period's: a tensor is the numeric array whose element type the
+    // type does not fix yet, so the core has to be told that its values compare as an array of
+    // numbers. Delete it when a tensor is an array -- the core then reaches the array's own
+    // comparison, the registry goes with this call, and nothing else is registered there.
     static const bool comparableAdded = [] {
         camel::core::rtdata::registerContentComparableType(camel::tensor::TensorType::typeCode());
         return true;
