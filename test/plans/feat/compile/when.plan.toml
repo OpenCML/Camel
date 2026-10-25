@@ -100,14 +100,14 @@ timeout_ms = 8000
 
 [[tests]]
 name = "when.not_constant"
-desc = "A `when` that calls an ordinary function is not a compile-time predicate: it is a declaration-site error (WhenConditionNotConstant) and is never taken for true."
+desc = "A `when` that reads a run-time value is not a compile-time predicate: the condition calls a `sync` function, so it is a declaration-site error (WhenConditionNotConstant) and is never taken for true."
 kind = "negative"
 case = "../../../cases/compile/when/not_constant.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::WhenConditionNotConstant"
-expect_diagnostic_line = 11
-expect_output_contains = ["The 'when' condition of 'bad' cannot be evaluated"]
+expect_diagnostic_line = 15
+expect_output_contains = ["The 'when' condition of 'bad' cannot be evaluated", "it reads 'counter', which is not a compile-time constant"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
@@ -249,4 +249,28 @@ args = ["${case}", "std::nvm"]
 expect_exit = 0
 expect_stdout_exact = "numeric\nnot integer\nnot float\ncomplex\nnumeric\nnot ordered\nnot numeric\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "when.ordinary_call"
+desc = "A `when` calls an ordinary function of this module with a compile-time constant: the condition is evaluated where the declaration is written, so `is_positive(1)` holds and `is_positive(0)` does not, and the two overloads are told apart by the folded value."
+kind = "behavior"
+case = "../../../cases/compile/when/ordinary_call.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "42\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "when.ordinary_call_unmet"
+desc = "The same ordinary call where it does not hold: `is_positive(0)` is folded to false, the only candidate is inapplicable, and the call site lists `is_positive(0)` among the conditions."
+kind = "negative"
+case = "../../../cases/compile/when/ordinary_call_unmet.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::WhenConditionUnmet"
+expect_diagnostic_line = 16
+expect_output_contains = ["is_positive(0)", "every candidate's 'when' condition is false"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
