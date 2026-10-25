@@ -300,14 +300,14 @@ func area(s: Shape): float {
 - **Exhaustiveness**: naming all variants means no `case _` is needed; a missing variant without `case _` is the compile-time error `EnumMatchNotExhaustive`, whose diagnostic lists the missing variants. A variant already covered by an earlier case is a warning (`EnumVariantCaseRepeated`), and a case after `case _` is never taken and warns (`MatchCaseAfterWildcard`). A `case _` written after every variant is already named can never be taken and warns (`MatchWildcardRedundant`).
 - A pattern names a variant of the type being matched: a wrong prefix (`Shape::`) or a wrong variant name is `EnumPatternMismatch`, which lists the variants of that type.
 - **A name without `::` in a pattern is a binding** (`case v` over `T?` / `T!`), not a variant: a unit variant is written with its qualifier, `case Shape::Empty`. Writing `case Empty` is `EnumPatternMismatch`, whose diagnostic says that `Empty` is one of the variants and shows `case Shape::Empty`.
-- **The first version has no nested patterns**: a pattern in the position of a field, such as `case Shape::Circle(0.0)`, gives "not supported yet" (`ConstructNotSupported`) and asks for a name or `_` per field, matched inside the arm.
+- **Nested patterns**: a pattern in the position of a field, such as `case Shape::Circle(0.0)`, gives "not supported yet" (`ConstructNotSupported`) and asks for a name or `_` per field, matched inside the arm.
 - The subject may be any expression, including a call that returns an enum; the arms unify as in the existing `match` ([6.8.2](06_expressions.md#682-match)).
 
 **Equality and printing.** Two values of the same enum instance can be compared with `==` and `!=`: the variant first, then each field in declaration order; when a field type cannot be compared, the enum cannot either (a compile-time error). Printing writes the source form: `Shape::Circle(1.0)`, `Shape::Rect { w: 2.0, h: 3.0 }`, `Shape::Empty`; a generic instance does not print its type arguments (`Option::Some(42)`, not `Option::Some<int>(42)`).
 
 **Generics.** `Option<int>` and `Option<float>` are different types with different values. A field type may use the parameters again: `type Pair<A, B> = enum { Both(A, B), Neither }`, and `Pair<int, string>`'s `Both` takes an `int` and a `string`.
 
-**On the graph.** No node kind is added: construction stores a tag and the data, `match` reads the tag, branches on it and takes the data out in the arm, as for `T?` and `T!`. Reading the tag and a field are ordinary internal operators (`__enum_tag__`, `__enum_field__`), and the schedulers do not special-case them by name. `std::nvm`, `std::fvm`, `std::jit`, `std::prl`, `std::macro` and `std::cpp` all support enums; ONNX export and autodiff refuse one with a located diagnostic for now.
+**On the graph.** No node kind is added: construction stores a tag and the data, `match` reads the tag, branches on it and takes the data out in the arm, as for `T?` and `T!`. Reading the tag and a field are ordinary internal operators (`__enum_tag__`, `__enum_field__`), and the schedulers do not special-case them by name. `std::nvm`, `std::fvm`, `std::jit`, `std::prl`, `std::macro` and `std::cpp` all support enums; ONNX export and autodiff refuse one with a located diagnostic.
 
 ## 3.6 Maps and sets
 

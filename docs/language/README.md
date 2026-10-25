@@ -15,7 +15,7 @@
 | 5 | [模块](05_modules.md) | `module`、`import`、`export`、`namespace`、随附的模块 |
 | 6 | [表达式](06_expressions.md) | 访问、调用、管道、运算符、`??`/`!!`/`?->`、`if`、`match`、lambda、高阶算子、优先级 |
 | 7 | [语句与声明](07_statements.md) | `let`/`var`、`return`/`throw`、函数、`with` 形参、重载、泛型、标注、类型声明 |
-| 8 | [程序与文法](08_top_level_and_grammar.md) | 顶层结构、文法概要、保留但尚未实现的写法一览 |
+| 8 | [程序与文法](08_top_level_and_grammar.md) | 顶层结构、文法概要 |
 
 ## 相关文档
 
