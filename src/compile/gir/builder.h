@@ -1370,6 +1370,10 @@ class Builder {
         /// the attempt as one that did not come about keeps this as its reason, and `why_not` is
         /// where a reader gets it (nothing is reported where the body said it).
         std::string reason() const;
+        /// The sink the user reads: the outermost sink this scope replaced. A verdict about the
+        /// program itself is reported here even while a scope is open, so that holding what one
+        /// attempt at one type tuple said cannot swallow it.
+        camel::core::error::Diagnostics *sinkForTheProgram() const;
 
       private:
         Builder &self_;
@@ -1943,12 +1947,21 @@ class Builder {
     // below. Reported once per module, like the warnings above, so that the position and the
     // module are the ones the rule is written in.
     void reportEffectfulConditions();
-    // The condition graphs of the `rule ... when ...` declarations written in `graph`: a maker
-    // call the front end wrote for a rule whose head has no type parameters (the generic maker
-    // takes templates, whose bodies exist only per instance and are not written where the rule
-    // is, so a generic rule's condition is not seen here). `ownedByUnit` reads only the values of
-    // the current module, for the root graph, which holds the top levels of every module.
-    std::vector<compile_graph_ptr_t> ruleConditionsIn(
+    // The condition graphs of the `rule ... when ...` declarations written in `graph`, with the
+    // place each rule is written. A maker call the front end wrote for a rule whose head has no
+    // type parameters carries its condition as a function value; a generic rule carries its
+    // templates instead, and its condition is read from the template here and from the instance
+    // where the tuple is known (`reportEffectInRuleInstance`). `ownedByUnit` reads only the values
+    // of the current module, for the root graph, which holds the top levels of every module.
+    struct RuleCondition {
+        // The condition graph of an ordinary rule, null for a generic one.
+        compile_graph_ptr_t graph;
+        // Where the rule is written: the maker call of the declaration.
+        camel::source::origin_id_t where = camel::source::kInvalidOriginId;
+        // The templates of a generic rule, null for an ordinary one.
+        const GenericRuleEntry *entry = nullptr;
+    };
+    std::vector<RuleCondition> ruleConditionsIn(
         const compile_graph_ptr_t &graph, std::unordered_set<const void *> &visited,
         bool ownedByUnit) const;
     // The node of `graph` (or of a function it calls) that makes running the graph an effect,
@@ -1958,13 +1971,41 @@ class Builder {
     node_handle_t effectOfGraph(
         const compile_graph_ptr_t &graph, std::unordered_set<const void *> &visited,
         compile_graph_ptr_t &inside) const;
-    // Whether the node is one of the operators that do their work where a rule is written rather
-    // than while the condition runs (the rewrite module declares them impure to keep constant
-    // folding off them, which is not an effect of the condition).
-    bool isCompileTimeEffect(DraftGraphBuilder *graph, node_handle_t node) const;
+    // What an effect of a generic rule's condition is, and where it is written: the body of a
+    // template is built once per type tuple, so at the declaration only the tree the declaration
+    // wrote can be read. `found` false: the rule's own writing has no effect, and only the
+    // instance can still say (`reportEffectInRuleInstance`).
+    struct TemplateEffect {
+        bool found = false;
+        std::string subject;
+        camel::source::origin_id_t origin = camel::source::kInvalidOriginId;
+    };
+    TemplateEffect effectOfConditionTemplate(const GenericRuleEntry &entry);
+    // Whether the name is a call of a generic function: its body exists per type tuple, and only
+    // the type arguments of an instance say which candidate it takes.
+    bool calleeIsGeneric(const std::string &name) const;
+    // Whether an overload of the operator group `name` has an effect.
+    bool operatorGroupHasEffect(const std::string &name) const;
+    // The wording of the report: what the effect is and, when it was found in a function the
+    // condition calls, which function that is.
+    std::string describeEffect(
+        const compile_graph_ptr_t &inside, node_handle_t effect, bool insideACall) const;
+    // Reports EffectInRuleCondition for the condition of one instance of a generic rule, when the
+    // type arguments are what revealed the effect (a call whose candidate the types decide). The
+    // report is about the rule, not about the attempt at one tuple, so it goes to the sink the
+    // user reads (`userSink`) and is made once for the rule.
+    void reportEffectInRuleInstance(
+        const GenericRuleEntry &entry, const compile_graph_ptr_t &condition);
+    // The sink the user reads, whatever speculative scope the compiler is in: a verdict about the
+    // program itself goes here, so that a scope holding what one attempt said cannot swallow it.
+    camel::core::error::Diagnostics *userSink();
     // The conditions already reported, so that a condition reached twice (through the root graph
     // and through the module that wrote it) is one error.
     std::unordered_set<const void *> conditionsReported_;
+    // The conditions of generic rules already reported, by their template: an effect that only the
+    // type arguments reveal is reported once for the rule, and a rule already reported where it is
+    // written is not reported again where it is instantiated.
+    std::unordered_set<const void *> templateConditionsReported_;
     compile_graph_ptr_t buildDecoratedGraph(
         const std::string &funcName, const compile_graph_ptr_t &rawGraph,
         const std::vector<GCT::node_ptr_t> &annoNodes);

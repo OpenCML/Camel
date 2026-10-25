@@ -20,6 +20,8 @@
 
 #include "types.h"
 
+#include "camel/core/source/ids.h"
+
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -78,6 +80,10 @@ struct GenericRuleEntry {
     /// The builder that holds the templates: an instance is built where the rule was declared,
     /// never in the program that matches it.
     void *owner = nullptr;
+    /// Where the rule is written, in the source of the module that declared it: the maker call of
+    /// the declaration, which a report about the rule can point at from anywhere (`EffectInRule
+    /// Condition` names it beside the effect, whose own position the instance has).
+    camel::source::origin_id_t where = camel::source::kInvalidOriginId;
     /// Every tuple tried, in the order it was asked for (`genericRuleInstance` appends and
     /// answers the place of one; the vector grows, so no caller keeps a reference into it).
     std::vector<GenericRuleInstance> instances;
