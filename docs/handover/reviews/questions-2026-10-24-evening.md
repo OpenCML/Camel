@@ -348,3 +348,21 @@ println(grow([1.0, 2.0], read_int()))
 2. **名字不进身份**：plan 3.2 让包名、维度名进驻留键（打印与诊断要保留它们），而 `equals` 忽略它们。所以表里每个类型同时记下它的**规范 id**（擦掉名字后的那个类型的 id）。图的不变式、`nodeContentHash`、`contentHash`、`sameContent`、e-graph 的表达式类都用规范 id；打印与诊断用带名字的那个。这样不需要另写结构哈希——规范 id 就是结构哈希。
 3. 于是问题 2 的回答是"比 id"，但比的是规范 id；问题 3 的回答是"同一个类型的两份就是同一个内容"。`contentHash` 里混入的四个裸指针改成各自的规范 id。
 4. 验收：probe 3、4 那两处不必改成 `typeEquals`（改回比 id 也绿）；`export_fold` 不靠 probe 1、2 也回到亚秒；加一条检查——冻结图里出现的每个 type id 都来自表的驻留路径（调试构建断言）。
+
+## release-gate-inventory-eight-perf-plans-unclassified
+
+选 **B**（逐条定命运），外加机制上两处小改；不做目录通配——每个计划的命运单独写出理由，这是这份清单的用处。
+
+| 计划 | 命运 |
+|---|---|
+| `para_speedup` | `SLOW_PLANS`（照 perf-para-gate 选 B） |
+| `step_budget`、`reduce_layout` | **拆文件**：只断言计数与性质的守卫（`step.count`、`reduce_layout.count`）移到各自的计划文件进 `SLOW_PLANS`；测量那半留在原文件进 `FORBIDDEN`（发布前测量） |
+| `instruction_counts`、`instruction_counts_load` | `FORBIDDEN`：要特权容器与 `perf`，`_load` 还要人为诱导负载 |
+| `gemm_canonical_shapes`、`gemm_threads` | `FORBIDDEN`：速率曲线，只做发布前测量 |
+| `showcase_d4` | `FORBIDDEN`：与 Python 的逐行对比属于测量，与 showcase 同族一致 |
+
+机制：
+1. inventory 收集完所有问题再一起报（不在第一条就 `die`），一次看到全部未分类的计划。
+2. **inventory 检查进合并闸门的 fast 层**：新计划落地时如果没有归类，就在那次提交上变红，而不是等到有人跑 release gate。这就治住了"第 9 个计划又弄坏工具"。
+
+**返工**：`--camel <path>` 取代 `CAMEL_EXE` 只做了两条脚本。按"一类事一条规则"，`CAMEL_EXE` 在其余脚本里也一并删掉、改成 `--camel`（`camel-for-ai.mjs`、`check-doc-snippets.mjs`、`perf-gate.mjs`、`test/tools/check-doc-pass-forms.mjs`、`import-audit.mjs`、`para-speedup.mjs`、`jitcov.py`、`progen/README.md`）。另外 `stdlib-reference.mjs` 等处的注释"`CAMEL_EXE` is gone (the author's ruling …)"删掉——代码只描述现在怎么做，不记录已不存在的写法。
