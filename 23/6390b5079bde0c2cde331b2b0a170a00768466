@@ -1,0 +1,19 @@
+h527 原地决策层（合入 236390b50）
+
+目的：把"这次写能不能原地改"从猜变成计划里的一次决策，并让运行期的答案来自数组自己的计数。
+
+交付（21 文件 +543/−76，两次 --no-ff 合 develop）：
+- `ExecPlan` 新增 `StorageReuse{None,Input,ByArrayCount,Copy}`，两遍 dataflow 写入；四个后端按它选算子 URI。
+- 删掉 `Tuple::holdsUnsharedArray`，计数判断归 `Array::canWriteInPlace`；`:var/take` 成为真正的搬出。
+- `std::profile` 打 `reuses/asks/copies`，JSON 加 `inplace_updates`（全 0 时不打，两个 `fusion_group.profile.none` 金标不动）。
+
+读数：闸门 `6208 / 6189 / fail 0 / skip 11 / known 8`，红名单空。逐字：
+`element_assigned = reuses 1 / asks 0 / copies 0`；`rebinding_loop = reuses 0 / asks 3 / copies 1`，allowed 250 / refused 120。
+
+两页问题页（交作者）：`profile-in-place-lines-when-zero.md`（零值时打不打两行，代价是重录两个 golden）、
+`in-place-write-through-a-var-alias.md`（var 形参格子原地写穿到调用方别名；最小复现 `allocated by the update: 0`）。
+
+文档最小修 3 处：`docs/design/arrays-memory/plan.cn.md` §7.1 与 `docs/design/cpp-standalone/README.cn.md` 里对已删符号的引用、
+`docs/technical/18_sync_control_semantics.md` 补"被捕获的格子若本图读过就按拷贝"及其理由。
+
+没做：跨函数 consume/borrow 推断（问题页 B）；profile 零值口径（问题页 A）。
