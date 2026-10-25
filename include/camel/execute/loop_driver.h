@@ -32,6 +32,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <span>
 
 namespace camel::execute {
 
@@ -84,6 +85,57 @@ inline void bindLoopRound(
     for (size_t c = 0; c < captureCount; ++c) {
         frame->set(target->node(with[c])->dataIndex, captureAt(c));
     }
+}
+
+/**
+ * The value one round of a `for` hands over, in the form the round's declared type says.
+ * `Array::firstDimensionElement` is what the first dimension gives: the element itself for a
+ * rank-1 array, the row one dimension fewer for a higher-rank one (design principles 5.4). When
+ * that value is the element itself while the round's declared type `elementType` is an array, the
+ * element is handed over as the array of no dimension holding it: the sub-tensor one dimension
+ * fewer, the same value in the form a reader of an array-typed slot takes. A round of an array
+ * whose rank is open (`f32[..]`) is declared as that array — a rank nobody fixed leaves one
+ * dimension fewer an open rank too, and no type can say "the element at rank 1, the row above it"
+ * (ArrayType::firstDimensionElement) — so its reader takes a pointer there (the tensor module's
+ * tensorArg), and a value with no dimension stays an array for a reader whose type says an array,
+ * as it does for a result read by one (wrap). Handing the element itself over would leave the slot
+ * holding the element's bits where its declared type promises a pointer.
+ *
+ * The rounds are the same on every back end, so this rule lives here with the rest of the round's
+ * rules, and every executor asks it (loop_frame.h's loopTest, driveLoopRounds).
+ */
+inline slot_t loopRoundValue(
+    ::Array *array, uint64_t round, const camel::core::type::Type *elementType) {
+    const slot_t element = array->firstDimensionElement(round);
+    // An array whose elements are arrays (`f32[][]`, `f32[][..]`): what the first dimension gives
+    // is the inner array, which is already the array the round's declared type says.
+    const camel::core::type::Type *elementOfElement = array->elemType();
+    const bool elementIsAnArray =
+        elementOfElement != nullptr &&
+        elementOfElement->code() == camel::core::type::TypeCode::Array;
+    if (elementType == nullptr || elementType->code() != camel::core::type::TypeCode::Array ||
+        array->rank() > 1 || elementIsAnArray) {
+        // The declared type is the element itself (a rank-1 array's `f32`, an interval's integer),
+        // the first dimension gave the row of a higher-rank array (already an array), or the
+        // element is an array: the value the first dimension gives is the round's value.
+        return element;
+    }
+    if (array->isCompact()) {
+        // The sub-tensor one dimension fewer of a rank-1 array holds the same element, so it
+        // shares the data as a row does (arrays are immutable values, and a view is how a reader
+        // of the type reads one).
+        return camel::core::rtdata::toSlot(Array::view(array, std::span<const int64_t>(), round));
+    }
+    // An array of references: the round is a copy of the one element, as a row of such an array is
+    // a copy of its run of slots.
+    const camel::core::type::ArrayType *boxType =
+        elementOfElement != nullptr
+            ? camel::core::type::ArrayType::create(
+                  const_cast<camel::core::type::Type *>(elementOfElement))
+            : static_cast<const camel::core::type::ArrayType *>(elementType);
+    ::Array *box = ::Array::create(camel::core::mm::autoSpace(), boxType, std::span<const int64_t>());
+    box->setSlot(0, element, static_cast<const camel::core::type::ArrayType *>(elementType));
+    return camel::core::rtdata::toSlot(box);
 }
 
 namespace detail {
@@ -175,6 +227,8 @@ inline void takeLoopRound(const LoopShape &shape, Host &host, slot_t result) {
  *                                             state read through loopStateComponent from
  *                                             stateValue()); returns the graph's result
  *   Array *iterable()                         the array a `for` iterates, read at each round
+ *   const type::Type *elementType()           the declared type of the round's element port (what
+ *                                             the round hand over must have, loopRoundValue)
  */
 template <typename Host> inline void driveLoopRounds(const LoopShape &shape, Host &host) {
     startLoopState(shape, host);
@@ -192,9 +246,9 @@ template <typename Host> inline void driveLoopRounds(const LoopShape &shape, Hos
                 if (round >= array->size()) {
                     break;
                 }
-                // The round's element, along the first dimension: the element itself for a rank-1
-                // array, the row for a higher-rank one (Array::firstDimensionElement).
-                element = array->firstDimensionElement(round);
+                // The round's value, along the first dimension and in the form its declared type
+                // says (loopRoundValue).
+                element = loopRoundValue(array, round, host.elementType());
             }
             takeLoopRound(
                 shape,
