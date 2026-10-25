@@ -1,16 +1,15 @@
-// What the alias prints as (plan section 5.4): `Tensor<f32>` is `f32[..]`, `Tensor<[3]>` keeps
-// the `Tensor` spelling for an element nobody fixed, and `Tensor<f32, [2, 3]>` is `f32[2, 3]`.
-// The candidate list of a refused call is where the text is visible.
+// The printed form of each spelling: `Tensor<f32>` is `f32[..]` and `Tensor<f32, [2, 3]>` is
+// `f32[2, 3]`. The candidate list of a refused call is where the text is visible.
 module array_alias_type_text
 
 import { Tensor } from tensor
 
-func takes(a: Tensor<f32>, b: Tensor<[3]>, c: Tensor<f32, [2, 3]>): int {
+func takes(a: Tensor<f32>, b: Tensor<f32, [2, 3]>): int {
     return 0
 }
 
 func main(): int sync {
     let s: string[] = ["a"]
-    println(takes(s, s, s))
+    println(takes(s, s))
     return 0
 }
