@@ -76,6 +76,20 @@ enum class RuntimeDiag : uint32_t {
     // runs everything it contains, and GPU design 6.1 makes that a compile-time error rather than
     // a host execution; unlike GpuScopeUnsupported this is about the use, not the operator.
     GpuScopeNoDeviceProgram = 0x0001A7,
+    // A graph the device back end has no program for, asked for by an operator that needs one
+    // (`inspect`, `source`, `benchmark`, `regions`, `run_preferred_resident`, `run_compiled`). No
+    // `#gpu` scope is claimed: the graph may be a function no tag covers (`source<noisy>`) or one
+    // segment of a scope the pass has cut, and a capability miss is a scheduling decision rather
+    // than a fault (`tiles/internal/capability.h`). Unlike GpuScopeUnsupported and
+    // GpuScopeNoDeviceProgram, which answer for a scope's promise at compile time, this one says
+    // what the call that asked was refused, and leaves the graph to the host where no scope covers it.
+    GraphNoDeviceProgram = 0x0001AA,
+    // A run that selected no device at all (`--devices cpu`, or no `--devices` on a machine whose
+    // driver the back end cannot use) while the operator needs one. DeviceUnavailable is the other
+    // shape of this: there the run named a device that must exist (design principles 13.4), so the
+    // report names the missing ordinal; here nothing was named and the operator's own need is what
+    // cannot be met.
+    DeviceNotSelected = 0x0001AB,
     // A `#gpu` scope that still holds a macro operator (`grad`, `with_grad`) when it is compiled: the
     // derived graph has to exist while the passes run, and the pass that builds it is `std::macro`,
     // which the pipeline does not contain. The defect is the pipeline, not the program, so the message

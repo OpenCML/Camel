@@ -26,7 +26,7 @@
 #include "modules/tensor/type.h"
 #include "tiles/device.h"
 #include "tiles/internal/capability.h"
-#include "tiles/internal/compiled_region.h"
+#include "tiles/internal/compiled_scope.h"
 #include "tiles/internal/graph_values.h"
 #include "tiles/internal/placement.h"
 #include "tiles/internal/profile_hooks.h"
@@ -68,17 +68,20 @@ template <class F> slot_t checked(Ask ask, F &&body) {
         // A capability miss is a dispatch decision, not a fault (tiles/internal/capability.h):
         // the back end has no program for this graph, and whether a shape or the operator itself
         // is missing is what the miss says. `RuntimeError` would tell the user the runtime broke.
+        // No `#gpu` scope is claimed here: the graph may be one no tag covers, or one segment of
+        // a scope the pass has cut. The diagnostic a scope's own promise gets at compile time is
+        // `GpuScopeNoDeviceProgram`.
         core::error::throwRuntimeFault(
-            core::error::RuntimeDiag::InvalidArgument,
+            core::error::RuntimeDiag::GraphNoDeviceProgram,
             ask.oper,
-            "the device back end has no program for " +
-                (ask.unit.empty() ? std::string("this graph") : "'" + ask.unit + "'") + ": " +
-                e.what());
+            ask.unit.empty() ? std::string("this graph") : ask.unit,
+            e.what());
     } catch (const BackendUnavailable &e) {
         // Also a capability miss: this run has no device to serve the operator with. `--devices
-        // cpu` says so on purpose, and a run the driver refuses says why.
+        // cpu` says so on purpose, and a run the driver refuses says why. `DeviceUnavailable` is
+        // the other shape of this: there the run named a device that must exist.
         core::error::throwRuntimeFault(
-            core::error::RuntimeDiag::InvalidArgument, ask.oper, e.what());
+            core::error::RuntimeDiag::DeviceNotSelected, ask.oper, e.what());
     } catch (const std::exception &e) {
         core::error::throwRuntimeFault(
             core::error::RuntimeDiag::RuntimeError,
@@ -869,7 +872,7 @@ class TilesModule final : public BuiltinModule {
                 name,
                 {.pure = false, .callsGraphs = true, .readsGraphs = true});
         // What each touches (docs/design/op-semantics 8, 14.4): device memory is a foreign
-        // resource `tiles:device` (upload makes one; the compiled-region runners read the device
+        // resource `tiles:device` (upload makes one; the compiled-scope runners read the device
         // values among their inputs, the resident ones return new ones that may be inputs
         // again); the driver and the device are ambient state `tiles:driver`. Every operator is
         // an effect outside the program, as its traits say.

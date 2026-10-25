@@ -16,5 +16,5 @@ Program prepareProgram(
     bool staticRegion = false);
 // Per-thread diagnostic for contract tests; never emits runtime output.
 size_t compilationExtractions();
-bool hasCompiledRegion(Function *function, runtime::fact::FactStore &facts);
+bool hasCompiledScope(Function *function, runtime::fact::FactStore &facts);
 } // namespace camel::tiles

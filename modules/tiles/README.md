@@ -58,21 +58,24 @@ run. The capability miss is `GpuScopeUnsupported`; an operator the device back e
 for but not for this shape, or one whose module provides none, is `GpuScopeNoDeviceProgram`. Both
 are located at the operator, name the scope and say why. A report operator (`inspect`, `source`,
 `benchmark`, `regions`) asked about a function the device back end refuses names itself and the
-graph it was given (`RuntimeDiag::InvalidArgument`): the miss is a scheduling decision, so it is a
-diagnostic and not a fault. A `#cpu` block inside the scope is the
+graph it was given (`RuntimeDiag::GraphNoDeviceProgram`, `RuntimeDiag::DeviceNotSelected` when the
+run has no device to serve it): the miss is a scheduling decision, so it is a diagnostic and not a
+fault, and no `#gpu` scope is claimed — the graph may be one no tag covers. A `#cpu` block inside
+the scope is the
 explicit host escape and stays the host's. Without `tiles::compile` in the pipeline nothing reads
 the label, and the compiler warns that the tag has no reader (design principles 9.4). Outside a
 `#gpu` scope, a node the device cannot take is left on the host: that host side is this operator's
 own contract (`run_preferred_resident`, the GPU design's §6 item 3), not a defect to remove.
 
 For statically shaped eligible tensor regions, `tiles::compile` uses region extraction and resident
-transfers. Unsupported nodes stay on CPU while supported regions prefer GPU; captures and CPU
-effects are preserved. Partitioning happens once, when the pass rewrites the program.
+transfers. The analysis partitions a graph into segments: unsupported nodes stay on CPU while a
+supported segment prefers GPU; captures and CPU effects are preserved. Partitioning happens once,
+when the pass rewrites the program.
 A scope the pass has cut is a wrapper of exec calls, one per segment, each carrying the graph of
 its segment; `inspect`, `source`, `benchmark` and `regions` read those segments, one plan each.
 Static regions now generate their launch plans and CUDA source from parameter types
 when outlined, without allocating placeholder input tensors or initializing CUDA.
-The core context's process-local `tiles.compiled_region` target fact associates the
+The core context's process-local `tiles.compiled_scope` target fact associates the
 owned template with the extracted callee graph. Re-encoding an unchanged callee
 preserves its GraphId and revision, so the actual runtime call reads the same fact.
 Each call copies the template and binds fresh inputs through an explicit parameter
@@ -107,7 +110,7 @@ faults are reported; an executed GPU region is never replayed on CPU.
 be made for its function, unless the function's body is `#gpu`: a device unit is
 reported as `GpuScopeNoDeviceProgram` instead of being replayed on the host. Functions with
 mutable parameters, unbound context parameters or no ordinary inputs are still refused by the
-compiled-region path.
+compiled-scope path.
 
 CPU fallback may change the last bits of transcendental results such as `exp`
 and `log`: each backend must satisfy the operator's declared ulp bound, rather
@@ -142,7 +145,7 @@ disabled. Matmul's normative increasing-k FMA chain needs no relaxation grant.
 The benchmark's existing numerical gate compares against unfused execution with
 a tolerance. Contraction can legitimately exceed that tolerance for cancellation
 cases; such a benchmark still refuses to report a speedup. A reference for each
-selected relaxed algorithm is needed before relaxing this gate. A compiled-region
+selected relaxed algorithm is needed before relaxing this gate. A compiled-scope
 call, and `run_preferred_resident`, execute the granted contraction independently
 of that benchmark gate.
 
@@ -306,9 +309,9 @@ reassociation or contraction.
 `while`, `for ... while`, dynamic domains, mixed recurrent lane domains, nested loops, integer
 element arithmetic, shape-changing state, reductions and non-pointwise accesses
 inside the body remain unsupported. These are computation boundaries for the
-compiled-region path; `source` reports an unsupported computation, and a `#gpu`
+compiled-scope path; `source` reports an unsupported computation, and a `#gpu`
 scope refuses one at compile time. Scalar
-division faults during device execution are reported without CPU replay. Region
+division faults during device execution are reported without CPU replay. The segment
 analysis reads the body to establish the supported subset. A selected loop region
 owns that body, and `tiles::compile` does not outline it independently. Unsupported
 loops remain CPU boundaries; the graph pass may still select eligible regions

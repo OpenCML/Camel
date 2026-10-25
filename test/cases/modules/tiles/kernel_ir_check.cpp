@@ -463,7 +463,7 @@ void checkRegions() {
     require(transfers.uploads==std::vector<size_t>({0,2}) &&
             transfers.downloads==std::vector<size_t>({1,3}) && transfers.resident.size()==1);
     require(transfers.resident[0].value==1 && transfers.resident[0].producer==0 && transfers.resident[0].consumer==1);
-    auto invalidTransfers=[&](std::vector<Region> bad) {
+    auto invalidTransfers=[&](std::vector<Segment> bad) {
         try { (void)planRegionTransfers(detour,bad); }
         catch(const std::exception&) { return; }
         throw std::runtime_error("invalid transfer boundary accepted");
@@ -472,7 +472,7 @@ void checkRegions() {
     badRegions=regions; badRegions[1].members.push_back(1); invalidTransfers(badRegions);
     // Multiple regions share one host input; unused CPU consumers must not trigger downloads.
     std::vector<RegionNode> split={{{},{},false,false},{{0},{},true,false},{{0,1},{},true,true},{{1},{},false,false}};
-    std::vector<Region> splitRegions={{{1},{0},{1}},{{2},{0,1},{2}}};
+    std::vector<Segment> splitRegions={{{1},{0},{1}},{{2},{0,1},{2}}};
     transfers=planRegionTransfers(split,splitRegions);
     require(transfers.uploads==std::vector<size_t>{0} && transfers.downloads==std::vector<size_t>{2});
     split[0].embedded=true;
@@ -492,7 +492,7 @@ void checkRegions() {
     std::vector<RegionNode> ordered={{{},{},true,false},{{},{0},true,true}};
     regions=partitionRegions(ordered);
     if(!(regions.size()==2 &&
-         std::any_of(regions.begin(),regions.end(),[](const Region &r){return r.members==std::vector<size_t>{0};})))
+         std::any_of(regions.begin(),regions.end(),[](const Segment &r){return r.members==std::vector<size_t>{0};})))
         throw std::runtime_error("an ordering edge did not keep its predecessor live");
     // Two control regions never contract into one, however eligible the nodes are.
     std::vector<RegionNode> arms={{{},{},true,false},{{0},{},true,true}};
