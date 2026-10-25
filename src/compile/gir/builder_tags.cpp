@@ -88,8 +88,9 @@ ArgKind kindOfDeclaredType(std::string_view type) {
 /// The compile-time kind a tag parameter restores to, read from the type name the declaration
 /// writes. The language's own names are `int` (i64) and `float` (f64), and their explicit
 /// spellings name the same objects, so a parameter restores as the type it names and not as the
-/// kind the fact happens to be stored in. A name the compile-time value layer has no kind for is
-/// `Other`: only the declaration decides, never the storage.
+/// kind the fact happens to be stored in (`int8`, `bf16` and the like are `Other`: the
+/// compile-time value layer has no value of those types to make, so those fall back to the stored
+/// kind rather than inventing one).
 enum class RestoredKind { Int64, Int32, Float64, Float32, Bool, String, Func, Other };
 
 RestoredKind restoredKindOf(std::string_view type) {
