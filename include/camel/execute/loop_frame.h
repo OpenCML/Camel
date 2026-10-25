@@ -183,14 +183,11 @@ inline bool loopTest(camel::core::context::Frame &frame, const camel::runtime::E
             // `Tensor` whose rank is not fixed, and such a value may turn out to have no
             // dimension: a value with no dimension is the element itself (the rank-zero ruling,
             // docs/handover/reviews/questions-2026-10-23.md), stored as the scalar it is rather
-            // than as an array. It has no first dimension to take elements from, so the rounds
-            // cannot start: reported here, where the loop reads its sequence, rather than taken
-            // as a loop of no round at all.
-            if (array == nullptr) {
-                camel::core::error::throwRuntimeFault(
-                    camel::core::error::RuntimeDiag::RuntimeError,
-                    "a value with no dimension has no first dimension to iterate over");
-            }
+            // than as an array, and the round an array of open rank hands over is the array of no
+            // dimension holding the element (loopRoundValue). Neither has a first dimension to
+            // take elements from, so neither is a sequence: refused here, where the loop reads its
+            // sequence, rather than taken as a loop of no round at all (requireFirstDimension).
+            requireFirstDimension(array, loop.origin);
             if (static_cast<size_t>(round) >= array->size()) {
                 stop = true;
             } else {

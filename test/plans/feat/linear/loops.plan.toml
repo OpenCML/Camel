@@ -273,6 +273,20 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
+name = "loops.open_rank_round_iterate_round"
+desc = "The round of an open-rank array is an array, and the round of a value whose runtime rank is 1 is the array of no dimension holding the element: that value has no first dimension, so iterating it is not a loop of no round -- it is refused where the inner `for` reads it, with the position of that `for`, as `for` over any value with no dimension is (docs/technical/39_loops.md 2a). Before this change the inner loop silently ran no round at all and the program printed 0."
+kind = "negative"
+case = "../../../cases/loops/open_rank_round_iterate_round.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::RuntimeError"
+expect_diagnostic_line = 13
+expect_diagnostic_column = 14
+expect_output_contains = ["a value with no dimension has no first dimension to iterate over", "open_rank_round_iterate_round.cml:13:"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
 name = "loops.iterate_string.macro"
 desc = "std::macro runs a macro function's loop over a string at compile time: the calls with '中a' and 'abc' fold to the constants 2 and 3."
 kind = "behavior"

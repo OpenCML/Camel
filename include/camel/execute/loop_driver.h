@@ -24,6 +24,7 @@
 #pragma once
 
 #include "camel/core/context/frame.h"
+#include "camel/core/error/runtime.h"
 #include "camel/core/mm.h"
 #include "camel/core/rtdata/array.h"
 #include "camel/core/type/composite/tuple.h"
@@ -35,6 +36,33 @@
 #include <span>
 
 namespace camel::execute {
+
+/// The array a `for` iterates, held to the first dimension it needs: a sequence whose declared
+/// type is an array but whose value has no dimension is refused where the loop reads it
+/// (docs/technical/39_loops.md 2a; docs/language/en/06_expressions.md, "A rank-0 array has no first
+/// dimension and is not a sequence").
+///
+/// Two values have no dimension and both arrive here. A value with no dimension is the element
+/// itself, not an array (the rank-zero ruling, docs/handover/reviews/questions-2026-10-23.md), so
+/// the slot of an array-typed position may hold no array at all (`array == nullptr`). And the round
+/// an array of open rank hands over is the array of no dimension holding its element
+/// (loopRoundValue), which is an array object of rank 0 whose first extent is absent as well.
+/// Neither has a first dimension to take elements from, so neither is a sequence: both are refused
+/// rather than taken as a loop of no round at all. `origin` is the LOOP node's source position, so
+/// the fault is reported at the `for` that reads the sequence and not at the node the interpreter
+/// happened to be at (a fault raised between two nodes has no position of its own).
+inline void requireFirstDimension(::Array *array, uint64_t origin = 0) {
+    if (array != nullptr && array->rank() != 0) {
+        return;
+    }
+    throw camel::core::error::RuntimeFault(
+        camel::core::error::RuntimeDiag::RuntimeError,
+        {"a value with no dimension has no first dimension to iterate over"},
+        "",
+        nullptr,
+        camel::core::error::ExecutionSiteHint{
+            .cachedOrigin = static_cast<camel::source::origin_id_t>(origin)});
+}
 
 /// What a loop does, as the interpreters need it.
 struct LoopShape {
@@ -253,6 +281,7 @@ template <typename Host> inline void driveLoopRounds(const LoopShape &shape, Hos
             slot_t element = NullSlot;
             if (shape.iterates) {
                 ::Array *array = host.iterable();
+                requireFirstDimension(array, shape.origin);
                 if (round >= array->size()) {
                     break;
                 }
