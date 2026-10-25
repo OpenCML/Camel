@@ -507,6 +507,7 @@ func canonical(x: float, y: float): float {
 export tag kernel on nodes                  // 写在块、函数或类型之前，属于其中的节点
 export tag fast on func, nodes              // 也属于函数的声明
 export tag width<w: int> on type, field     // 带参数，参数是编译期值
+export tag vjp<rule: func> on func          // 形参是函数：实参是一个函数，事实还原成那个函数
 tag finite = [kernel, fast]                 // 标签组：成员一起生效
 ```
 
@@ -543,11 +544,11 @@ func main(): int {
 }
 ```
 
-`#name`、`#name<实参>` 与 `#[a, b<v>]`（标签组）。标签的参数是编译期值：字面量、顶层常量或函数名。实参必须是声明的形参类型所指的那种常量——`int`、`float`、`bool`、`string`，或 `func` 的实参（函数名）；浮点实参按位记为 real 属性，`1.5` 就打印为 `1.5`。写到声明没有列出的位置是错误，位置在标签上。参数个数与声明的参数不符、实参不是编译期值、实参的种别与形参声明的类型不符（`SemanticDiag::TagArgumentType`）、形参的类型标签还载不了（`SemanticDiag::TagParameterType`），也都在标签上报告。
+`#name`、`#name<实参>` 与 `#[a, b<v>]`（标签组）。标签的参数是编译期值：字面量、顶层常量或函数名。实参必须是声明的形参类型所指的那种常量——`int`、`float`、`bool`、`string`，或 `func` 的实参（一个函数）；浮点实参按位记为 real 属性，`1.5` 就打印为 `1.5`。写到声明没有列出的位置是错误，位置在标签上。参数个数与声明的参数不符、实参不是编译期值、实参的种别与形参声明的类型不符（`SemanticDiag::TagArgumentType`）、形参的类型标签还载不了（`SemanticDiag::TagParameterType`），也都在标签上报告。
 
 `on nodes` 的标签是**节点的属性**（`camel/core/node_attrs.h`）：写在前面的标签对那个函数体或块里写下的节点生效，与外面同名的标签按属性的合并规则累积，内层带参数的标签取内层的值。`on func`、`on type`、`on field` 的标签属于声明本身，C++ 模块用 `tag::factsOf` 一处读取（标签、许可、读者；`tag::ofDeclaration` / `tag::ofField` 仍在）；在 Camel 代码里读它们要等泛型的第一阶段。
 
-形参类型还可以是 `func`：这时实参是一个函数名，标签的事实是那个函数的**图引用**（`attr::graphRef`），不是函数值。GIR 构建器把该图记进函数图的引用表（`kGraphRefRule`），于是冻结后的图直接指向这个函数，运行期不必再按名字解析，也不需要闭包捕获；因此 `func` 实参只能是程序里的静态函数，载不了捕获了外围值的闭包。自动微分模块就是这样声明 `export tag vjp<rule: func> on func` 的：`#vjp<rule>` 写在函数声明之前，调用这个函数时用规则而不是函数体的导数（[26 自动微分](../technical/26_autodiff_as_graph_rewrite.md)）。`@vjp<rule>` 在标注处报 `SemanticDiag::InvalidAnnotation`，应写 `#vjp<rule>`。
+形参类型还可以是 `func`：实参是一个函数，标签的事实就是那个函数本身（还原成那个函数），不是它的名字，也不是任何内部记号。自动微分模块就是这样声明 `export tag vjp<rule: func> on func` 的：`#vjp<rule>` 写在函数声明之前，调用这个函数时用规则而不是函数体的导数（[26 自动微分](../technical/26_autodiff_as_graph_rewrite.md)）。`@vjp<rule>` 在标注处报 `SemanticDiag::InvalidAnnotation`，应写 `#vjp<rule>`。
 
 **`#impl<f>`：Camel 函数体是语义，原生内核是执行**（设计原则 10.4）。它写在带函数体的函数声明之前：
 

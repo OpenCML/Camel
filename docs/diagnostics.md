@@ -7892,7 +7892,7 @@ A 'func' parameter carries the function as its graph reference: an internal numb
 ```camel
 module tags_function_argument
 
-tag rule<f: function> on field
+tag rule<f: func> on field
 tag width<w: int> on field
 
 func twice(x: int): int {
