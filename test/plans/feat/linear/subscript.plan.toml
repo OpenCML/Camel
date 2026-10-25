@@ -97,6 +97,7 @@ case = "../../../cases/linear/faults/subscript_step_zero_const.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::SliceStepZero"
+expect_diagnostic_code = "0x030001E9"
 expect_diagnostic_line = 9
 expect_diagnostic_column = 20
 expect_output_contains = ["The slice 't[a:b:s]' has a step of 0"]

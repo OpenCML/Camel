@@ -235,7 +235,7 @@ prints one entry.
 | `0x030001E5` | [SemanticDiag::RangeTwoArgumentsRemoved](#rangetwoargumentsremoved) | Error | no |
 | `0x030001E6` | [SemanticDiag::RangeStepZero](#rangestepzero) | Error | no |
 | `0x030001E7` | [SemanticDiag::StaticLoopSequenceNotKnown](#staticloopsequencenotknown) | Error | no |
-| `0x030001E8` | [SemanticDiag::SliceStepZero](#slicestepzero) | Error | no |
+| `0x030001E9` | [SemanticDiag::SliceStepZero](#slicestepzero) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn | no |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn | no |
@@ -7740,7 +7740,7 @@ func sumTo(n: int): int {
 
 ### SliceStepZero
 
-`0x030001E8` · Error · `SemanticDiag::SliceStepZero`
+`0x030001E9` · Error · `SemanticDiag::SliceStepZero`
 
 **Fix**
 
