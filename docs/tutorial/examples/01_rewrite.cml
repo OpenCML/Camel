@@ -1,0 +1,12 @@
+// The same shape as 01_hello.cml, with one expression that has more than one writing.
+// Run: camel docs/tutorial/examples/01_rewrite.cml
+module rewrite_hook
+
+func twice(x: int): int {
+    return x * 2 + x * 2
+}
+
+func main(): int sync {
+    println(twice(3))
+    return 0
+}
