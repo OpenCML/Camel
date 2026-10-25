@@ -126,7 +126,7 @@ rule add_zero::<T>(x: T) when is_integer::<T>() { x + 0 => x }
 pip install camel-lang
 ```
 
-装好后 `camel` 命令就在 `PATH` 上，Python 里也能 `import camel`。发布的 wheel 覆盖 Linux（x64、arm64）、macOS（Apple Silicon）与 Windows（x64），Python 3.10 及以后。
+装好后 `camel` 命令就在 `PATH` 上，Python 里也能 `import camel`。发布的 wheel 覆盖 Linux（x64、arm64）、macOS（Apple Silicon）与 Windows（x64）。`camel` 命令在任何 Python 3 上都能装；从 Python 调用 Camel 需要 CPython 3.10 或更新的版本。
 
 ### 从源码构建
 

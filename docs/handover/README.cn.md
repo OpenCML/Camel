@@ -627,7 +627,14 @@ CI 的触发不改（只在 `v*` 标签与手动触发时运行，不花 runner 
    - macOS arm64（Apple Silicon，`macos-latest`）：用 `delocate` 把依赖的动态库打进包、修正装载路径（macOS 上对应 auditwheel 的工具），部署目标写明（如 `MACOSX_DEPLOYMENT_TARGET=13.0`），二进制按 macOS 的要求做 ad-hoc 签名，保证从 pip 装上就能运行；
    - Windows x64。
    arm64 两格的指令集基线用 `baseline`（`x86-64-v3` 只适用于 x86-64）。Intel Mac 与 Windows arm64 暂不发布：前者苹果已停产，后者用户很少；以后有需要再加一格，不另作设计。`ci.yml` 里 macOS 那一腿的注释说"wheel 工作流已经在 macOS 上构建"，实际矩阵里 macOS 是注释掉的，随本条改成真实情况，并把 macOS 那一腿从可选改成每次发布都跑。
-7. **每个平台一个 wheel，不再按 Python 版本各建一遍**：现在 2 个平台 × 4 个 Python 版本 = 8 次完整的原生构建，平台扩到四个就是 16 次。`camel` 二进制、运行库与标准库与 Python 版本无关，只有 Python 扩展模块与版本有关。评估让扩展模块只用 CPython 的稳定 ABI（Limited API，`abi3`，最低 3.10），做得到就每个平台一个 `cp310-abi3` 的 wheel；做不到，就每个平台只做一次原生构建，扩展模块按版本单独编译后分别装进各自的 wheel。报告里写明选了哪条、为什么。
+7. **Python 版本：本体与互操作分开（负责人 2026-10-25："不直接支持的版本可以只安装 camel 本体，方便用户体验 camel"）**。现在每个平台 × 每个 Python 版本各做一次完整的原生构建（2 × 4 = 8 次，平台扩到四个就是 16 次），而 `camel` 二进制、运行库与标准库其实与 Python 版本无关，只有两处互操作与版本有关：从 Python 调 Camel 的扩展模块（`bindings/python`），以及 Camel 调 Python 的嵌入模块（`modules/python`，现在按版本各编一个桥接库）。改成：
+   - **每个平台只做一次原生构建**，出两个同名的 wheel，由 pip 按解释器自动挑：
+     - `camel_lang-<ver>-cp310-abi3-<平台>.whl`：本体加互操作。两处互操作都只用 CPython 的稳定 ABI（Limited API，`Py_LIMITED_API=0x030A0000`），编一次，就覆盖 CPython 3.10 及以后的所有版本，包括还没发布的版本；嵌入模块链接 `python3`（稳定 ABI 的那个库），不再按版本各编一个桥接库。
+     - `camel_lang-<ver>-py3-none-<平台>.whl`：只有本体。任何 Python 3 都能装，包括 3.9 及更早的版本、自由线程版（3.13t/3.14t，它们目前不支持稳定 ABI）、PyPy。装上就有 `camel` 命令，能写、能跑 Camel 程序。
+   - pip 在 CPython 3.10+ 上会优先选第一个，其余解释器上落到第二个，用户只需要 `pip install camel-lang`。`requires-python` 放宽到 `>=3.8`。
+   - **只装了本体时 `import camel`**：报一条清楚的 `ImportError`，说明从 Python 调用 Camel 需要 CPython 3.10 或更新的版本，`camel` 命令照常可用。不报晦涩的找不到扩展模块。
+   - 如果稳定 ABI 实在覆盖不了某个用到的接口，在报告里列出是哪几个、换成了什么写法；不退回按版本各编一遍。自由线程版要不要单独出互操作的 wheel，等 CPython 的自由线程稳定 ABI 落地后再看。
+   - 这样四个平台一共四次原生构建、八个 wheel。冒烟测试每个平台跑三个解释器：CPython 3.10（最低）、当前最新的 CPython（互操作能用）、一个只拿到本体的解释器（3.9 或 PyPy：`camel hello.cml` 能跑，`import camel` 给出上面那条消息）。
 8. **JIT 在 arm64 上**：`std::jit` 现在只有 x86-64 的代码生成器，arm64 上由 `std::fvm` 的字节码解释器执行，结果相同、速度不同，并在 `-v` 日志里说明一次。这一点照实写进安装与命令行文档。aarch64 的代码生成器另立任务，排在 P4 与 GPU 之后，不挡发布。
 
 人手：单独一条小车道，不占 H242 与 P4。

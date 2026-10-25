@@ -126,7 +126,7 @@ The rules behind this table are in the [design principles](docs/design-principle
 pip install camel-lang
 ```
 
-This puts the `camel` command on your `PATH`, and `import camel` in Python. Wheels are published for Linux (x64, arm64), macOS (Apple silicon) and Windows (x64), for Python 3.10 and later.
+This puts the `camel` command on your `PATH`, and `import camel` in Python. Wheels are published for Linux (x64, arm64), macOS (Apple silicon) and Windows (x64). The `camel` command installs on any Python 3; calling Camel from Python needs CPython 3.10 or newer.
 
 ### Build from source
 
