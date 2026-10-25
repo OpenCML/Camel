@@ -609,6 +609,13 @@ class Array : public rtdata::Object {
     // ---- Object protocol -----------------------------------------------------------------
 
     bool equals(const rtdata::Object *other, const type::Type *type, bool deep = false) const override;
+
+    /// The content comparison of two arrays: the same shape, then element by element as the
+    /// element type says. `equals` is this plus the identity short-cut; the whole comparison of
+    /// two array values calls this one directly, because an array that holds a NaN does not
+    /// equal itself (design principles 4.2) even when both sides are the same object. `type` is
+    /// the array's static type, or null when the value carries its element type instead.
+    bool equalsContent(const Array *other, const type::Type *type, bool deep = false) const;
     rtdata::Object *
     clone(camel::core::mm::IAllocator &allocator, const type::Type *type, bool deep = false)
         const override;

@@ -54,6 +54,6 @@ func main(): int sync {
     'softmax equal={}'->format<sum(abs(softmax(x, 1) - defined))>->println
     // A NaN anywhere in the axis makes the whole axis NaN (how a NaN prints depends on its sign).
     let s = softmax(pick([1.0, 0.0, 1.0], [1.0, 2.0, 3.0]), 0)
-    'softmax nan_count={}'->format<sum(s != s)>->println
+    'softmax nan_count={}'->format<sum(s !== s)>->println
     return 0
 }

@@ -1077,6 +1077,22 @@ bool Array::compactEqualsElements(const Array *other, bool deep) const {
         }
         return true;
     }
+    // A float array compares by value as well (design principles 7.3): a NaN equals nothing and
+    // the two zeros are equal, where a memcmp compares the bit patterns. Every element is read
+    // as the number its dtype says, exactly (getAsDouble widens f32, bf16 and f16 without a
+    // loss), so this is the rule the scalar `==` of the same type follows.
+    const bool ieeeFloat = elemTypeCode_ == TypeCode::Float32 ||
+                           elemTypeCode_ == TypeCode::Float64 ||
+                           elemTypeCode_ == TypeCode::BFloat16 ||
+                           elemTypeCode_ == TypeCode::Float16;
+    if (ieeeFloat) {
+        for (uint64_t i = 0; i < numel_; ++i) {
+            if (!(getAsDouble(i) == other->getAsDouble(i))) {
+                return false;
+            }
+        }
+        return true;
+    }
     return byteSize() == 0 || std::memcmp(dataPtr_, other->dataPtr_, byteSize()) == 0;
 }
 
@@ -1088,7 +1104,14 @@ bool Array::equals(
     if (!rtdata::isOfSameCls(this, other)) {
         return false;
     }
-    const auto *rhs = reinterpret_cast<const Array *>(other);
+    return equalsContent(reinterpret_cast<const Array *>(other), typeInfo, deep);
+}
+
+bool Array::equalsContent(
+    const Array *rhs, const type::Type *typeInfo, bool deep) const {
+    if (!rtdata::isOfSameCls(this, rhs)) {
+        return false;
+    }
     if (!sameShape(rhs)) {
         return false;
     }

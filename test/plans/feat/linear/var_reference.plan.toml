@@ -1334,6 +1334,61 @@ assert(take && labels.get(take.source) === ':var/new', 'take reads the variable 
 }
 """
 
+# The differential `test/cases/linear/byref/element_assigned_append.cml` states: `v = v->append<4>`
+# reaches the same three positions this lowering does -- take the array out of the cell, run the
+# in-place operator, store it back -- with `:struct/append_arr_in_place` where `arr[0] = 9` has
+# `:op/set_index_in_place`. The criterion is the same in both: the cell's "not shared" mark decides
+# whether the array is copied, and neither program copies.
+[[tests]]
+name = "element_assigned_append.in_place_form"
+desc = "`v = v->append<4>` on a `var` array is the in-place rebinding: the graph takes the array out of the cell (`:var/take` of `:var/new`), appends through `:struct/append_arr_in_place`, and `:op/assn_owned` stores the result into that same cell -- the cell is its first operand, the appended array its second, and the take is its control dependency. The copying form `:struct/append_arr` is not in the graph, and the cell is not read (`:var/peek`) first."
+kind = "behavior"
+case = "../../../cases/linear/byref/element_assigned_append.cml"
+args = ["${case}", "std::jgir"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const gir = JSON.parse(input.stdout)
+const graph = gir.graphs.find((g) => g.name === 'main')
+assert(graph, 'the main graph is in the dump')
+const labels = new Map(graph.nodes.map((n) => [n.id, n.label]))
+const inputEdge = (id, index) =>
+  graph.edges.find((e) => e.target === id && e.kind === 'normal' && e.targetIndex === index)
+const only = (label) => graph.nodes.filter((n) => n.label === label)
+const take = only(':var/take')
+assert(take.length === 1, `one :var/take, got ${take.length}`)
+const cell = inputEdge(take[0].id, 0)
+assert(cell && labels.get(cell.source) === ':var/new', 'take reads the variable cell itself')
+const append = only(':struct/append_arr_in_place')
+assert(append.length === 1, `one in-place append, got ${append.length}`)
+const from = inputEdge(append[0].id, 0)
+assert(from && from.source === take[0].id, 'the in-place append takes the array from :var/take')
+const store = only(':op/assn_owned')
+assert(store.length === 1, `one :op/assn_owned, got ${store.length}`)
+const into = inputEdge(store[0].id, 0)
+assert(into && labels.get(into.source) === ':var/new', 'the store writes the variable cell itself')
+const value = inputEdge(store[0].id, 1)
+assert(value && value.source === append[0].id, 'the appended array is the value it stores')
+assert(
+  graph.edges.some((e) => e.source === take[0].id && e.target === store[0].id && e.kind === 'control'),
+  'the take is the control dependency of the store, which is where the cell is read',
+)
+assert(only(':struct/append_arr').length === 0, 'the copying form is not in the graph')
+assert(only(':var/peek').length === 0, 'the cell is not read before the write')
+}
+"""
+
+[[tests]]
+name = "element_assigned_append"
+desc = "An append on a `var` array: `v = v->append<4>` on `[1, 2, 3]` leaves `[1, 2, 3, 4]` in the variable (design principles 3.5, 10.5)."
+kind = "behavior"
+case = "../../../cases/linear/byref/element_assigned_append.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout = "[1, 2, 3, 4]\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
 # The same claim, counted rather than argued from the graph: `std::mem::blocks()` reads the
 # numeric array block counters (the pattern of `loops.state_in_place`), so the writes can be
 # asked what they allocate. The array is 40 ints — past the 256 bytes an array may keep in its

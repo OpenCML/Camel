@@ -22,6 +22,7 @@
 
 import fs from 'node:fs'
 import path from 'node:path'
+import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { parseTomlFile } from '../test/tools/toml-lite.mjs'
 
@@ -174,18 +175,462 @@ export function planInventoryProblems() {
     return problems
 }
 
+// --- the case ledger: the same accounting, extended from plan files to cases ------------------
+//
+// The fates above say what happens to every plan file; this says what happens to every file under
+// `test/cases`. A case no plan reaches is a file nothing reads: it cannot fail, so a change that
+// breaks it is invisible while the tree keeps paying for it. That is not hypothetical -- a
+// one-off measurement workload stayed in the tree for months, was never run, and had gone wrong.
+//
+// A file under `test/cases` counts as read when one of these holds:
+//
+//   * a plan names it: a test's `case`, `verify_script_path`, `compare_to`, `golden`, an argument
+//     or an environment value resolves to the file, or to a directory holding it. A value also
+//     resolves against the test's own case directory, because a module root (`-I ../roots/one`)
+//     is written relative to the program that reads it;
+//   * a plan names the module of the file rather than its path: a pass or a definition library is
+//     loaded by name (`no_pass::run`), and the search starts at the entry program's directory, so
+//     `<case directory>/<module>.cml` is that file;
+//   * some file of the tree names the path: a fragment of two or more segments that ends at the
+//     file (`trans/cml_canon_name_a.cml` in a harness, the whole path in a golden or a document),
+//     or a directory two or more levels below `test/cases` read as a fixture
+//     (`test/cases/modules/nn/fixtures/spatial`);
+//   * a case reads it: an `import` of another case, transitively, over the module roots an import
+//     searches; a harness beside its program, or in the directory above it, names the program
+//     (`fixture('fstring.cml')`); or a harness and a case share a stem (`port_fill_metadata.py`
+//     reads `port_fill_metadata.cml`, the same convention `profile_alloc.py` states outright).
+//
+// A file the check cannot reach and the tree keeps anyway is recorded in CASE_EXCEPTIONS with the
+// reason, and the run prints how many were recorded, so an exception is visible in the gate's
+// output instead of being a silent pass. A plan file under `test/cases` is not a case: it must be
+// recorded too, or the check asks for it to move under `test/plans`.
+export const CASE_EXCEPTIONS = [
+    {
+        file: 'test/cases/compile/array_alias/array_alias.plan.toml',
+        reason:
+            'a plan file, not a case: the file itself says it belongs in test/plans/feat/compile/ ' +
+            'and lives here only until the tensor-alias flip moves it. No plan can name a plan, so ' +
+            'no reference can reach it; until it moves, no layer runs its 8 tests and they are ' +
+            'known failures, not green',
+    },
+    {
+        file: 'test/cases/perf/gc/build_tree.cml',
+        reason:
+            'a workload of the manual GC instrument (test/tools/gcbench/gcbench.py, ' +
+            'test/tools/perfbaseline/baseline.py): no plan and no case reads it, the instrument is ' +
+            'what runs it, and its measurement is written up in docs/performance/graph-store-baseline.md',
+    },
+    {
+        file: 'test/cases/perf/gc/fib.cml',
+        reason:
+            'a workload of the manual GC instrument (test/tools/gcbench/gcbench.py): no plan and no ' +
+            'case reads it; benchmarks/pipeline/exclusions.json keeps it out of the benchmark pipeline too',
+    },
+    {
+        file: 'test/cases/perf/gc/jit_const.cml',
+        reason:
+            'a workload of the manual GC instrument (test/tools/gcbench/gcbench.py): no plan and no ' +
+            'case reads it, and its measurement is written up in docs/performance/graph-store-baseline.md',
+    },
+    {
+        file: 'test/cases/perf/gc/map_chain.cml',
+        reason:
+            'a workload of the manual GC instrument (test/tools/gcbench/gcbench.py): no plan and no ' +
+            'case reads it, and its measurement is written up in docs/performance/graph-store-baseline.md',
+    },
+    {
+        file: 'test/cases/para/core/block_sort_merge.cml',
+        reason:
+            'a workload of the manual GC instrument (test/tools/gcbench/gcbench.py): no plan and no ' +
+            'case reads it, the instrument is what runs it',
+    },
+]
+
+const CASE_ROOT = 'test/cases'
+// A case is a file of the repository, and a bytecode cache is not: the interpreter writes
+// `__pycache__` beside a Python module it imports, it is in `.gitignore` (so no commit carries
+// one), and it appears and disappears with whoever last imported the module -- including in a
+// checkout a gate reuses, where it survives `git clean -fd` because it is ignored. The walk below
+// reads the filesystem, so it sees such a file; the thing that reads it is the interpreter that
+// wrote it, which is not a plan. Interpreter caches that are hidden directories (`.pytest_cache`,
+// `.mypy_cache`) are already skipped with the hidden files, and no other directory of this kind
+// exists in the tree.
+const PYTHON_CACHE = /(^|\/)__pycache__\//
+const CASE_REFERENCE_KEYS = new Set(['case', 'verify_script_path', 'compare_to', 'golden', 'args', 'envs', 'plans'])
+
+// A plan is an index of the cases it runs, and `test/plan-selection.json` is an index of the
+// directories a change touches: neither reads a directory by naming it, only a harness, a program
+// or a data file of one does (a run list that names the directory its programs live in, a test
+// that names the fixture tree it loads).
+const INDEX_FILES = new Set(['test/plan-selection.json'])
+
+// Where a reference counts: the compiler, the standard library, the modules, the tools, the tests
+// and the scripts -- the paths a gate or a plan reads a case through. A document or a report that
+// *describes* a measurement is not a reader of the workload it measured, and neither is the
+// benchmark pipeline, which is a harness of its own outside the plans.
+const NAMING_ROOTS = ['test/', 'scripts/', 'src/', 'include/', 'stdlib/', 'modules/', 'tools/', 'examples/', 'exemplars/']
+
+function walkTreeFiles(dir) {
+    const out = []
+    const walk = (abs, prefix) => {
+        for (const name of fs.readdirSync(abs).sort()) {
+            const child = `${abs}/${name}`
+            if (fs.statSync(child).isDirectory()) walk(child, `${prefix}/${name}`)
+            else out.push(`${prefix}/${name}`)
+        }
+    }
+    walk(path.join(ROOT, dir), dir)
+    return out
+}
+
+// The files of `test/cases` that are cases: the walk above reads what the filesystem holds, and the
+// ledger judges what the repository holds, so a hidden file (the directory's own bookkeeping) and a
+// bytecode cache (the interpreter's) are not cases.
+function caseTreeFiles() {
+    return walkTreeFiles(CASE_ROOT)
+        .filter((file) => !PYTHON_CACHE.test(file) && !baseOf(file).startsWith('.'))
+        .sort()
+}
+
+// A path under `test/cases`, written the way the plans write it: `path.resolve` and
+// `path.relative` are the two slowest calls in the check on Windows (they normalize, check
+// reserved names and split drives for every candidate), and a plan value is already relative to
+// the plan's directory, so `/` and `..` can be resolved by hand. The same holds for the
+// directory and the name of a path, which this file needs a few hundred thousand times.
+function underCases(base, value) {
+    const out = []
+    for (const part of `${base}/${value}`.split('/')) {
+        if (part === '' || part === '.') continue
+        if (part === '..') out.pop()
+        else out.push(part)
+    }
+    return out.join('/')
+}
+
+const dirOf = (p) => {
+    const i = p.lastIndexOf('/')
+    return i < 0 ? '' : p.slice(0, i)
+}
+
+const baseOf = (p) => p.slice(p.lastIndexOf('/') + 1)
+
+function readText(file) {
+    const buf = fs.readFileSync(file)
+    return buf.includes(0) ? null : buf.toString('utf8')
+}
+
+// A case tree carries tensors, bytecode images and models beside its source, and the check reads
+// text: a name inside a binary is not a reference to anything, and reading megabytes of them per
+// run costs the fast layer more than the whole check.
+const BINARY_SUFFIX =
+    /\.(npy|npz|npyc|cmo|onnx|pb|pt|pth|pkl|pickle|h5|safetensors|tflite|caffemodel|bin|dat|so|dll|exe|o|a|lib|wasm|zip|gz|tar|pdf|png|jpe?g|gif|bmp|tiff|ico|woff2?|mp3|wav|mp4|mov|arrow|parquet)$/i
+
+function referenceStrings(node, out = []) {
+    if (Array.isArray(node)) {
+        for (const value of node) referenceStrings(value, out)
+        return out
+    }
+    if (node && typeof node === 'object') {
+        for (const [key, value] of Object.entries(node)) {
+            if (CASE_REFERENCE_KEYS.has(key)) {
+                if (typeof value === 'string') out.push(value)
+                else if (Array.isArray(value)) for (const item of value) if (typeof item === 'string') out.push(item)
+            } else referenceStrings(value, out)
+        }
+    }
+    return out
+}
+
+// Every problem, not the first, for the same reason as the fates above: one run, the whole list.
+export function caseLedgerProblems() {
+    const problems = []
+    const caseRootAbs = path.join(ROOT, CASE_ROOT)
+    if (!fs.existsSync(caseRootAbs)) {
+        return [`${CASE_ROOT} does not exist: the case ledger examined nothing, which is not a pass`]
+    }
+    const recorded = new Set(CASE_EXCEPTIONS.map((entry) => entry.file))
+    for (const entry of CASE_EXCEPTIONS) {
+        if (!fs.existsSync(path.join(ROOT, entry.file))) {
+            problems.push(`the recorded case '${entry.file}' does not exist; the exception list is stale`)
+        }
+    }
+
+    const listed = spawnSync('git', ['ls-files', '-z'], { cwd: ROOT, encoding: 'utf8', maxBuffer: 1 << 28 })
+    if (listed.error || listed.status !== 0) {
+        return [
+            'the case ledger could not list the tree (git ls-files failed): the check examined nothing, ' +
+                'which is not a pass',
+        ]
+    }
+    const tracked = listed.stdout.split('\0').filter(Boolean)
+
+    const files = caseTreeFiles()
+    const caseFiles = files.filter((file) => !file.endsWith('.plan.toml'))
+    const treePlans = files.filter((file) => file.endsWith('.plan.toml'))
+    if (caseFiles.length === 0) {
+        return [`${CASE_ROOT} holds no case file: the case ledger examined nothing, which is not a pass`]
+    }
+    const caseSet = new Set(caseFiles)
+    // The tree is read once, from this file list, and never from the disk again: a stat per plan
+    // value per base per candidate is hundreds of thousands of system calls, and on Windows that
+    // alone costs the fast layer half a minute.
+    const fileSet = new Set(files)
+    const below = new Map()
+    for (const file of files) {
+        let dir = dirOf(file)
+        while (dir.includes('/')) {
+            if (!below.has(dir)) below.set(dir, [])
+            below.get(dir).push(file)
+            dir = dirOf(dir)
+        }
+    }
+
+    // --- what a plan names ------------------------------------------------------------------
+    const reached = new Map()
+    const mark = (file, who) => {
+        if (caseSet.has(file) && !reached.has(file)) reached.set(file, who)
+    }
+    for (const plan of tracked.filter((file) => file.endsWith('.plan.toml'))) {
+        const abs = `${ROOT}/${plan}`
+        let doc
+        try {
+            doc = parseTomlFile(abs)
+        } catch {
+            continue
+        }
+        const planDir = dirOf(plan)
+        const tests = Array.isArray(doc.tests) ? doc.tests : []
+        const caseDirs = []
+        for (const test of tests) {
+            if (typeof test?.case !== 'string' || test.case.includes('${')) continue
+            const target = underCases(planDir, test.case)
+            caseDirs.push(fileSet.has(target) ? dirOf(target) : target)
+        }
+        for (const value of referenceStrings(doc)) {
+            if (!value || value.includes('${') || value.startsWith('http')) continue
+            for (const base of [planDir, ...caseDirs]) {
+                for (const candidate of [value, `${value}.cml`]) {
+                    const key = underCases(base, candidate)
+                    if (!key.startsWith(`${CASE_ROOT}/`)) continue
+                    // naming a directory reads every file it holds (a fixture directory, a module
+                    // root the test compiles against)
+                    if (below.has(key)) {
+                        for (const child of below.get(key)) mark(child, plan)
+                    } else mark(key, plan)
+                }
+            }
+        }
+        // a pass or a definition library named as `module::member`, or quoted by name (`'broken_definitions'
+        // does not compile`), and the module sits beside the program the test runs
+        const text = readText(abs)
+        if (text === null) continue
+        const modules = new Set([
+            ...[...text.matchAll(/([A-Za-z_][A-Za-z0-9_]*)\s*::/g)].map((match) => match[1]),
+            ...[...text.matchAll(/['"]([A-Za-z_][A-Za-z0-9_]*)['"]/g)].map((match) => match[1]),
+        ])
+        for (const dir of caseDirs) {
+            for (const module of modules) mark(`${dir}/${module}.cml`, `${plan} (a module it names)`)
+        }
+    }
+
+    // --- what the rest of the tree names, and what a harness beside a case reads -------------
+    const suffix = new Map()
+    const dirSuffix = new Map()
+    const near = new Map()
+    const push = (map, key, value) => {
+        if (!map.has(key)) map.set(key, [])
+        map.get(key).push(value)
+    }
+    for (const file of caseFiles) {
+        const parts = file.split('/')
+        for (let i = 0; i < parts.length; i++) push(suffix, parts.slice(i).join('/'), file)
+        for (let i = 0; i < parts.length - 1; i++) {
+            for (let j = i + 1; j < parts.length - 1; j++) push(dirSuffix, parts.slice(i, j + 1).join('/'), file)
+        }
+        const dir = dirOf(file)
+        push(near, dir, file)
+        push(near, dirOf(dir), file)
+    }
+    const TOKEN = /[A-Za-z0-9_.\-]+(?:\/[A-Za-z0-9_.\-]+)+/g
+    // A file named anywhere, a comment included, is a reference to it: a plan that says its expected
+    // values come from an independent implementation names a file someone has to rerun. A directory
+    // named in prose is not: only code that reads the directory does, so the two rules that read a
+    // whole directory -- a harness that joins the path of its fixture tree out of segments, and a
+    // directory a program or a run list names -- look at the text with comments stripped (`#` is a
+    // comment in a script or a data list, not in Camel, C++ or JavaScript, where it is an attribute
+    // or an operator).
+    const HASH_COMMENT = /\.(py|toml|txt|sh|ya?ml|cfg|ini)$/
+    const stripComments = (text, hash) => {
+        let out = text.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\/\/[^\n]*/g, ' ')
+        if (hash) out = out.replace(/#[^\n]*/g, ' ')
+        return out
+    }
+    for (const file of tracked) {
+        if (!NAMING_ROOTS.some((root) => file.startsWith(root))) continue
+        // the exception table below names the files it records; the ledger is not a reader of them
+        if (file === 'scripts/plan-inventory.mjs') continue
+        if (BINARY_SUFFIX.test(file)) continue
+        const isPlan = file.endsWith('.plan.toml')
+        const text = readText(`${ROOT}/${file}`)
+        if (text === null) continue
+        const code = stripComments(text, HASH_COMMENT.test(file))
+        for (const candidate of near.get(dirOf(file)) ?? []) {
+            // a file that writes its own name in a comment does not read itself
+            if (candidate === file) continue
+            if (text.includes(baseOf(candidate))) mark(candidate, file)
+        }
+        const relOfJoin = (source) => {
+            const found = new Set()
+            for (const call of source.matchAll(/\.join\(([^)]*)\)/g)) {
+                const parts = [...call[1].matchAll(/['"]([^'"]+)['"]/g)].map((match) => match[1])
+                if (parts.length < 3) continue
+                const at = parts.join('/').indexOf(`${CASE_ROOT}/`)
+                if (at < 0) continue
+                found.add(parts.join('/').slice(at))
+            }
+            return found
+        }
+        // a harness that builds the path of its fixture tree out of segments
+        // (`path.join(ROOT, 'test', 'cases', 'modules', 'std', 'env', 'unicode')`) reads that
+        // directory, and no single token in its text says so
+        for (const joined of relOfJoin(code)) {
+            if (caseSet.has(joined)) {
+                mark(joined, file)
+            } else if (below.has(joined)) {
+                for (const child of below.get(joined)) mark(child, file)
+            }
+        }
+        for (const [source, whole] of [[text, false], [code, true]]) {
+            for (const match of source.matchAll(TOKEN)) {
+                const token = match[0].replace(/^[.\-/]+/, '').replace(/[.\-/]+$/, '')
+                for (const candidate of suffix.get(token) ?? []) mark(candidate, file)
+                // a fixture directory a harness reads: naming a directory reads every file under it.
+                // A plan's prose pointing at the directory its cases live in is an index, not a read:
+                // what a plan reads are its values, and those are resolved above with the plan's own
+                // directory as the base, and `test/plan-selection.json` is an index of the
+                // directories a change touches rather than a reader of them.
+                const broadens = whole && !isPlan && !INDEX_FILES.has(file)
+                if (broadens && token.startsWith(`${CASE_ROOT}/`) && token.split('/').length >= 4) {
+                    for (const candidate of dirSuffix.get(token) ?? []) mark(candidate, file)
+                }
+            }
+        }
+    }
+
+    // --- what a reached case reads: imports, and a harness that shares its stem --------------
+    const edges = new Map()
+    const addImport = (from, target) => {
+        if (target === from || !caseSet.has(target)) return
+        if (!edges.has(from)) edges.set(from, new Set())
+        edges.get(from).add(target)
+    }
+    for (const file of caseFiles) {
+        if (!file.endsWith('.cml')) continue
+        const text = readText(`${ROOT}/${file}`)
+        if (text === null) continue
+        for (const line of text.split('\n')) {
+            const match = /^\s*import\s+(?:\{[^}]*\}\s+from\s+)?([A-Za-z0-9_./]+)/.exec(line)
+            if (!match) continue
+            let base = dirOf(file)
+            const rest = []
+            for (const segment of match[1].split('/')) {
+                if (/^\.+$/.test(segment)) {
+                    for (let i = 1; i < segment.length; i++) base = dirOf(base)
+                } else rest.push(segment.replace(/\./g, '/'))
+            }
+            if (!rest.length) continue
+            for (const root of moduleRoots(base)) {
+                // a dot inside a name is a separator (`import a.one`), so the joined form can hold
+                // an empty segment: `import .x` is the name `x` in the program's own directory
+                const stem = `${root}/${rest.join('/')}`.split('/').filter(Boolean).join('/')
+                addImport(file, `${stem}.cml`)
+                addImport(file, `${stem}/index.cml`)
+            }
+        }
+    }
+    const stemOf = (file) => file.replace(/\.[A-Za-z0-9]+$/, '.cml')
+    let grew = true
+    while (grew) {
+        grew = false
+        for (const [from, targets] of edges) {
+            if (!reached.has(from)) continue
+            for (const target of targets) {
+                if (!reached.has(target)) {
+                    mark(target, `${from} imports it`)
+                    grew = true
+                }
+            }
+        }
+        for (const file of [...reached.keys()]) {
+            if (file.endsWith('.cml')) continue
+            const stem = stemOf(file)
+            if (caseSet.has(stem) && !reached.has(stem)) {
+                mark(stem, `${file} is the harness beside it`)
+                grew = true
+            }
+        }
+    }
+
+    // --- the verdict ------------------------------------------------------------------------
+    for (const file of [...treePlans, ...caseFiles]) {
+        if (reached.has(file)) {
+            if (recorded.has(file)) {
+                problems.push(
+                    `${file}: recorded in CASE_EXCEPTIONS, but ${reached.get(file)} reads it now; remove the entry`,
+                )
+            }
+            continue
+        }
+        if (recorded.has(file)) continue
+        if (file.endsWith('.plan.toml')) {
+            problems.push(
+                `${file}: a plan file under ${CASE_ROOT} belongs under test/plans (no plan can name a plan, ` +
+                    'so nothing reaches it); move it, or record it in CASE_EXCEPTIONS with the reason',
+            )
+        } else {
+            problems.push(
+                `${file}: no plan and no other file of the tree reads it (not a test's case, not a module a ` +
+                    'plan loads by name, not imported by a reached case, not named by a harness or a fixture ' +
+                    'directory), and CASE_EXCEPTIONS does not record it; delete it, or say what it locks',
+            )
+        }
+    }
+    return problems
+}
+
+// A module name is looked up in the importing file's directory and then in each directory above it
+// (the module roots): `import ../lib`, `import a.one` and a bare `import lib` all land somewhere.
+function moduleRoots(from) {
+    const roots = [from]
+    let up = from
+    while (up.includes('/')) {
+        up = dirOf(up)
+        roots.push(up)
+    }
+    return roots
+}
+
 // The merge gate's fast layer runs this file as a plan entry, and a reader can run it by hand: the
-// same check the release gate starts with, without an install and without a layer.
+// same checks the release gate starts with, without an install and without a layer.
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-    const problems = planInventoryProblems()
+    const fateProblems = planInventoryProblems()
+    const caseProblems = caseLedgerProblems()
+    const problems = [...fateProblems, ...caseProblems]
     const examined = (walkPlans('test/plans') ?? []).length
     for (const problem of problems) console.error(`plan-inventory: ${problem}`)
     if (problems.length > 0) {
         console.error(
             `plan-inventory: ${problems.length} problem(s): every plan file must be reached by a fast target, ` +
-                'named in SLOW_PLANS, named in FORBIDDEN, or be a debug plan',
+                'named in SLOW_PLANS, named in FORBIDDEN, or be a debug plan; and every file under test/cases ' +
+                'must be read by a plan either directly or through a module, an import or a harness, or be ' +
+                'recorded in CASE_EXCEPTIONS with the reason it is kept',
         )
         process.exit(1)
     }
     console.log(`plan-inventory: ${examined} plan files, every one of them has a fate`)
+    const cases = caseTreeFiles().filter((file) => !file.endsWith('.plan.toml')).length
+    console.log(
+        `plan-inventory: ${cases} case files, every one of them is read by a plan or recorded with a reason ` +
+            `(${CASE_EXCEPTIONS.length} recorded)`,
+    )
 }

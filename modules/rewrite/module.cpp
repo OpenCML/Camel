@@ -459,10 +459,19 @@ std::vector<Type *> programValueTypes(const camel::runtime::Program &program) {
 /// parameters, capped at `kCheckTupleCap` tuples in a fixed order. The types are those of every
 /// value the program being rewritten has, each once, in the order the graphs write them. The ruling
 /// of 2026-10-23 on generic-rule-instantiation binds the rule's type variables from the nodes it
-/// matches, so the types are the program's own (not the registered meta-types `check` adds). A
-/// tuple that cannot be written for is remembered as one that did not come about, and the engine
-/// skips it.
-std::vector<std::vector<Type *>> tuplesOf(const camel::runtime::Program &program, size_t arity) {
+/// matches, so the types are the program's own (not the registered meta-types `check` adds).
+///
+/// A tuple is kept only when the rule's condition admits it at the type level (`ruleConditionAt`),
+/// which is the same filter `check` applies before it tries a tuple. A rule's condition is what
+/// says which of the program's types it is written for, and a value the program has need not be one
+/// of them: a program with a function value in it has a function's type among its types, and a law
+/// of integer arithmetic is not written for it. Tried anyway, the tuple would be refused by the
+/// body -- the type has no `+` -- which is a reason about the body and not about the law. The
+/// condition is asked before the cap counts the tuple, so the cap is spent on tuples the law can
+/// have. A tuple that cannot be written for is remembered as one that did not come about, and the
+/// engine skips it.
+std::vector<std::vector<Type *>> tuplesOf(
+    Context &ctx, const camel::runtime::Program &program, uint64_t ruleId, size_t arity) {
     const std::vector<Type *> types = programValueTypes(program);
     std::vector<std::vector<Type *>> tuples;
     if (types.empty()) {
@@ -475,9 +484,13 @@ std::vector<std::vector<Type *>> tuplesOf(const camel::runtime::Program &program
         for (size_t i = 0; i < count; ++i) {
             tuple[i] = types[at[i]];
         }
-        tuples.push_back(std::move(tuple));
-        if (tuples.size() >= kCheckTupleCap) {
-            break;
+        std::string why;
+        if (camel::compile::gir::ruleConditionAt(ctx, ruleId, tuple, why) !=
+            RuleConditionAt::Fails) {
+            tuples.push_back(std::move(tuple));
+            if (tuples.size() >= kCheckTupleCap) {
+                break;
+            }
         }
         size_t i = 0;
         for (; i < count; ++i) {
@@ -601,7 +614,7 @@ std::vector<camel::runtime::Rule> engineRules(
             // two-parameter rule for one type is what left such a law with no instance at all).
             GenericRuleEntry *entry = camel::compile::gir::genericRuleEntry(ctx, ruleId);
             const size_t arity      = entry != nullptr ? entry->typeParams.size() : 1;
-            for (const std::vector<Type *> &types : tuplesOf(*base, arity)) {
+            for (const std::vector<Type *> &types : tuplesOf(ctx, *base, ruleId, arity)) {
                 const size_t index = camel::compile::gir::genericRuleInstance(ctx, ruleId, types);
                 // Making an instance builds a body and encodes graphs: the value is read again
                 // from the array, and the entry again from the context, after it.
@@ -867,6 +880,12 @@ slot_t rewriteKernel(ArgsView &, ArgsView &norm, Context &ctx) {
             16);
         return makeOk(
             toSlot(const_cast<camel::runtime::Program *>(application.program)), resultType);
+    } catch (const camel::runtime::GraphCommitConflict &e) {
+        // The program the rewrite started from was replaced while it ran: a rule's condition that
+        // commits -- through a rewrite or a graph transaction of its own -- does this. Which rules
+        // were given is the caller's decision, so the failure is theirs to see as an error value,
+        // and not the internal error of a pass that found a program it cannot handle.
+        return makeError("RewriteConflict", e.what(), "<rewrite::rewrite>");
     } catch (const camel::runtime::RuleCompileError &e) {
         return makeError("RuleInvalid", e.what(), "<rewrite::rewrite>");
     } catch (const std::invalid_argument &e) {
@@ -940,6 +959,10 @@ slot_t runKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
             run->set(7, makeSome(toSlot(proof), proofType));
         }
         return makeOk(toSlot(root.getAs<Struct>()), resultType);
+    } catch (const camel::runtime::GraphCommitConflict &e) {
+        // As in `rewrite`: a condition that commits replaces the program this run started from,
+        // and the caller's own rules are what did it.
+        return makeError("RewriteConflict", e.what(), "<rewrite::run>");
     } catch (const camel::runtime::RuleCompileError &e) {
         return makeError("RuleInvalid", e.what(), "<rewrite::run>");
     } catch (const std::invalid_argument &e) {
@@ -1434,6 +1457,10 @@ slot_t saturateKernel(ArgsView &, ArgsView &norm, Context &ctx) {
         }
         const camel::runtime::Program *committed = session.commitChecked();
         return makeOk(toSlot(const_cast<camel::runtime::Program *>(committed)), resultType);
+    } catch (const camel::runtime::GraphCommitConflict &e) {
+        // As in `rewrite`: a condition that commits replaces the program this saturation started
+        // from, and the caller's own rules are what did it.
+        return makeError("RewriteConflict", e.what(), "<rewrite::saturate>");
     } catch (const camel::runtime::RuleCompileError &e) {
         return makeError("RuleInvalid", e.what(), "<rewrite::saturate>");
     } catch (const mm::MemoryExhausted &) {

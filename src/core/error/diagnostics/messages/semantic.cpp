@@ -821,6 +821,22 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::TagFieldNameAmbiguous,
+            {
+                "TagFieldNameAmbiguous",
+                "Two tags on this field are written '{0}': '{1}' and '{2}'.",
+                "The `tags` struct names one field per tag, by the tag's own name, so two tags of one name would be one field of the record. Rename one of them, or write only one of the two.",
+            },
+        },
+        {
+            SemanticDiag::TagFunctionArgumentNotReadable,
+            {
+                "TagFunctionArgumentNotReadable",
+                "The tag '{0}' takes a function for its parameter '{1}', and a 'static' head cannot give a function value yet.",
+                "A 'func' parameter carries the function as its graph reference: an internal number, not a value the language has. Do not read the tags of this field at a 'static' head; a 'func' argument stays a fact for a pass that reads the tag after the program is compiled.",
+            },
+        },
+        {
             SemanticDiag::StaticMatchNotExhaustive,
             {
                 "StaticMatchNotExhaustive",
@@ -1477,6 +1493,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::SliceStepZero,
+            {
+                "SliceStepZero",
+                "The slice 't[a:b:s]' has a step of 0, so it takes no element at all, whatever its bounds are.",
+                "A slice takes every step-th element from its start, so the step decides which elements it has: with a positive step 'a', 'a + step', ... below 'b', and with a negative one backwards from the start. A step that does not move names no slice, so a constant step of 0 is refused where it is written (design principles 5.4). Give a non-zero step, or write 't[a:b]' when the step is 1. A step that is not constant is a fault of the run instead (RuntimeDiag::InvalidArgument).",
+            },
+        },
+        {
             SemanticDiag::ReducedPrecisionUnsupported,
             {
                 "ReducedPrecisionUnsupported",
@@ -1538,6 +1562,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "NodeOfNotAParameter",
                 "'{0}' is not a const parameter of the rule '{1}', so node_of({0}) names no node.",
                 "node_of reaches the node of a const parameter, so that a condition can read a fact or a shape of the constant: write it over a name the rule declares const, as in the condition sign(node_of(c)) == 1 of the rule r(x: int, const c: float) whose sides are x * c and x. A parameter that is not const is a node of the draft already, so the condition names it directly, and a name that is not a parameter of this rule has no node here.",
+            },
+        },
+        {
+            SemanticDiag::RuleConstParamNotMatched,
+            {
+                "RuleConstParamNotMatched",
+                "'{0}' is a `const` parameter of the rule '{1}', and the left side matches no constant for it.",
+                "A `const` parameter means the left side matches a constant there: in the rule r(x: int, const c: int), whose sides are x * c and x, the left side matches the constant through c. The left side is what binds the parameter, and a `const` parameter it does not use leaves the rule saying nothing about the program -- its condition has no node to reach through node_of either.",
             },
         },
         {

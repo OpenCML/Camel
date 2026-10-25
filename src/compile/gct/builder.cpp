@@ -2421,21 +2421,15 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
         LEAVE("BinaryExpr");
         return res;
     }
-    case AST::BinaryDataOp::StrictEq:
+    case AST::BinaryDataOp::StrictEq: {
+        // `a === b` is the elementwise equality (design principles 4.2): the group holding the
+        // scalar comparison, which the tensor module also exports its array entry into. The
+        // whole comparison is `==`, the reduction of this one, and is a different group.
+        opNode = tree_->makeDRef("__strict_eq__");
+    } break;
     case AST::BinaryDataOp::StrictNeq: {
-        // Design principles 4.1: `===` is not supported for now (and `!==` with it). It
-        // used to compile and compared objects, so two equal string literals were unequal.
-        // Located at the whole comparison (the range of the node itself is its right side).
-        auto range  = ast->load()->tokenRange();
-        range.start = lhsASTNode->load()->tokenRange().start;
-        diags_->of(SemanticDiag::ConstructNotSupported)
-            .at(range)
-            .commit(
-                binaryExpr->op() == AST::BinaryDataOp::StrictEq ? "===" : "!==",
-                "identity comparison is not part of the language for now; compare values "
-                "with '==' and '!='");
-        throw BuildAbortException();
-    }
+        opNode = tree_->makeDRef("__strict_neq__");
+    } break;
     case AST::BinaryDataOp::Index: {
         // `t[a:b]` is the slice operator, `t[i]` the index operator; the table gives `[]` the
         // index operator, so the slice is named here (design principles 5.4).

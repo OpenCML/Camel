@@ -1,0 +1,24 @@
+/**
+ * A slice that takes its elements backwards has no adjoint here: the operator the gradient is
+ * built from scatters the elements forwards only, so the step is a fault of the run that names
+ * it rather than a gradient landing at the wrong elements (design principles 9.9, 5.4). The step
+ * of a subscript is an ordinary value of the graph, not one of the static slots a rule can read,
+ * so the refusal is raised where the scatter runs and carries no position of the program: a
+ * backwards adjoint is not implemented.
+ */
+module autodiff_slice_grad_negative_step
+import { Tensor, reshape, sum } from tensor
+import { grad } from autodiff
+
+with <x: Tensor>
+func backwards_loss(): float {
+    let c = reshape([1.0, 1.0, 1.0] as f32[], [3])
+    return sum(x[5:0:-2] * c)
+}
+
+func main(): int sync {
+    let x = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[], [6])
+    let g = grad(backwards_loss)<x>()
+    println(sum(g))
+    return 0
+}

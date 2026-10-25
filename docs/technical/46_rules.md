@@ -65,6 +65,14 @@ and is refused by the same diagnostic, by name. The hidden parameters are what
 `RuleSource::whenNodesStart` counts from, and the engine hands each of them the node its `const`
 parameter was bound to.
 
+The left side is what binds a `const` parameter, so a declaration that gives one of them no
+position to match a constant in is refused where it is written
+(`SemanticDiag::RuleConstParamNotMatched`): with no position on the left, the parameter is given no
+constant in the condition and its hidden node parameter is given no node, which the engine reports
+as an internal error at every match. The hidden node parameter exists whether the condition writes
+`node_of(c)` or not -- what the declaration must do is use the parameter on the left, as in
+`x * c`.
+
 `__rule` and `__rule_when` are operators of the module `rewrite` (`modules/rewrite`), which the
 declaration imports itself (with `graph.Node` for the condition). They make a `RuleObject` (type
 `Rule`): the name, the direction, the permissions the rule needs, a bit per `const` parameter and
@@ -133,7 +141,8 @@ calls a user function. A `<=>` rule gives two `Rule`s.
 
 `rewrite` and `saturate` leave the functions that are the sides of rules (`__lhs`, `__rhs`, and
 `__when`) alone. The result is `Program!`; the errors are `RuleInvalid`, `RuleTwoWay`,
-`NoCostModel`, `RewriteInvalid`. A pass is
+`NoCostModel` and `RewriteConflict` — the last one when a rule's condition commits, so the program
+the rewrite started from is replaced while it runs. A pass is
 a function `(p: Program) => Program!` (`camel prog.cml mod::pass std::nvm`):
 
 ```camel

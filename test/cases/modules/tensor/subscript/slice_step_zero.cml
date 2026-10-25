@@ -1,0 +1,13 @@
+/**
+ * A subscript slice of a tensor whose step is the constant 0 takes no element at all, so it is
+ * refused where it is written (design principles 5.4), as the step of a range is (4.2).
+ */
+module subscript_slice_step_zero
+import { Tensor, reshape, shape } from tensor
+
+func main(): int sync {
+    let b = reshape([1.0, 2.0, 3.0, 4.0], [4])
+    println(shape(b[0:4:0]))
+    println('not reached')
+    return 0
+}

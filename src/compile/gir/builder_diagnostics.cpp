@@ -1320,9 +1320,21 @@ Builder::SpeculativeInstantiation::SpeculativeInstantiation(Builder &builder)
     // same file, so a diagnostic kept from it reads as one the builder would have made. The sink is
     // not swapped in here: only a body build writes to it (`BodyDiagnostics`), so a verdict the
     // attempt makes on its way to the body is reported where it always was.
+    //
+    // It is made without the outer sink's configuration, and so without its limit. A limit says how
+    // much the user is shown before the compiler gives up on them; a diagnostic kept here is shown
+    // to nobody -- it is the reason one attempt at one type tuple did not come about, read by
+    // `reason` and otherwise dropped -- so a limit on it reports nothing about what the user may
+    // see and everything about the pass: a body that says why the law is not written for these
+    // types would end the whole pass instead, and a program with no error in it would fail.
+    //
+    // Nothing grows without bound for the missing limit. The sink lives exactly as long as one
+    // attempt at one type tuple, and a body build records at most one error per statement of the
+    // body it is building (a statement that fails is skipped so the rest is still checked), so what
+    // it holds is bounded by the body, not by the program the rule is applied to; the only reader
+    // takes the first error and looks no further.
     inner_ = std::make_shared<Diagnostics>(
         outer_->moduleName(), outer_->modulePath(), outer_->sourceContext());
-    inner_->setConfig(outer_->getConfig());
     self_.speculative_ = this;
 }
 
