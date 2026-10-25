@@ -3,6 +3,7 @@
 ## Message Format
 - Use Conventional Commits prefixes such as `feat:`, `fix:`, `refactor:`, `docs:`, or `chore:`.
 - Keep the subject concise and specific to the primary change.
+- Write the message in English: the public repository is English-first, and the history reads in one language.
 - Write the subject against the whole staged set, not the most recent edit you happened to make.
 - The subject should name the highest-level purpose shared by all staged files; if it only describes the last step, it is too narrow.
 - Use `refactor:` for structural code changes.
