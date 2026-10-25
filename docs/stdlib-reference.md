@@ -5425,7 +5425,7 @@ Drops this program's reference to the Python object `obj`.
 Neural-network primitives: 2-D convolution and its gradients, max and average pooling with
 their gradients, batch normalization, embedding, the fused softmax cross-entropy loss, the
 optimizers, and the checkpoint writer for a parameter tree. The operators work on the core
-`Tensor` type; nothing here needs PyTorch or a GPU.
+array type; nothing here needs PyTorch or a GPU.
 
 ### Convolution
 
