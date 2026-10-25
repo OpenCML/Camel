@@ -1549,6 +1549,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::BranchElementTypeMismatch,
+            {
+                "BranchElementTypeMismatch",
+                "The two arms of the branch have different element types: '{0}' and '{1}'. An array's element type is part of its type, and a number of one element type does not become a number of another by itself.",
+                "Give the two arms one element type: write the conversion on the arm that needs it -- f32(v) for a value, cast(v, 'float32') for a name -- or build both arms at the element type the value is to have, which is the element type a declaration writes. An int[] and an f32[] have no common type, so the join picks neither of the two and invents no third.",
+            },
+        },
+        {
             SemanticDiag::IgnoredSideEffect,
             {
                 "IgnoredSideEffect",
