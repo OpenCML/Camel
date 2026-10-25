@@ -103,11 +103,11 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 10000
 
 [[tests]]
-name = "rules.analysis_clause_reads_the_value_it_captured"
-desc = "An analysis whose clauses read a value of the module they are declared in: every value's fact is that value (times a thousand, so nothing else can be mistaken for it). A clause is a function value of the module, and the value is one it captured where it was written; a call that passes the graph alone reads the capture as an empty slot and the reader then reads a number nothing computed."
+name = "rules.fact_clause_reads_the_value_it_captured"
+desc = "A fact whose clauses read a value of the module they are declared in: every value's fact is that value (times a thousand, so nothing else can be mistaken for it). A clause is a function value of the module, and the value is one it captured where it was written; a call that passes the graph alone reads the capture as an empty slot and the reader then reads a number nothing computed."
 kind = "behavior"
-case = "../../../cases/modules/rules/analysis_capture_target.cml"
-args = ["${case}", "analysis_capture::report", "std::nvm"]
+case = "../../../cases/modules/rules/fact_capture_target.cml"
+args = ["${case}", "fact_capture::report", "std::nvm"]
 expect_exit = 0
 expect_stdout_exact = "depth  35002\n4\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]

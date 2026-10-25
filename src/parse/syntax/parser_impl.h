@@ -229,12 +229,20 @@ class ParserImpl {
     void parseRuleDeclRest(size_t m);
     void parseRuleContext();
     void parseRuleBody();
-    /// At the name `analysis` (offset `n`) that starts an analysis declaration.
-    bool atAnalysisDecl(uint32_t n) const;
-    void parseAnalysisDecl();
-    /// analysisDecl after the tags and decorators that may precede it; `m` marks where it began.
-    void parseAnalysisDeclRest(size_t m);
-    void parseAnalysisClause();
+    /// At the name `fact` (offset `n`, after the `with` parameters and an `export` when they are
+    /// written) that starts a fact declaration.
+    bool atFactDecl(uint32_t n) const;
+    void parseFactDecl();
+    /// factDecl after the tags and decorators that may precede it; `m` marks where it began.
+    void parseFactDeclRest(size_t m);
+    void parseFactBody();
+    void parseFactCase();
+    void parseFactPattern();
+    void parseFactClause();
+    /// The index of the token at the offset `n` from the current position, trivia skipped.
+    uint32_t tokenIndexAt(uint32_t n) const;
+    /// The offset just after the `<...>` whose `<` is at the offset `angle`, or kNone.
+    uint32_t afterAngledParams(uint32_t angle) const;
     void parseDataDecl();
     void parseTypeDecl();
     /// typeDecl after the tags and decorators that may precede it; `m` marks where it began.

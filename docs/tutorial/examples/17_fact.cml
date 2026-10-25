@@ -11,7 +11,7 @@ fact nonnegative(v: int): bool match v {
     case const c => c >= 0
     case x * x   => true
     case _       => false
-} join or
+} join (lhs: bool, rhs: bool) => lhs || rhs
 
 // The law holds only where the fact does: on a value that is never negative, `abs` changes nothing.
 rule abs_of_nonnegative(x: int) when nonnegative(x) { abs(x) => x }
