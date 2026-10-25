@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-280 diagnostics: 263 errors, 17 warnings. 15 carry a machine-applicable edit, 265 say why they carry none.
+281 diagnostics: 264 errors, 17 warnings. 15 carry a machine-applicable edit, 266 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -246,6 +246,7 @@ prints one entry.
 | `0x030001ED` | [SemanticDiag::TensorElementTypeRequired](#tensorelementtyperequired) | Error | no |
 | `0x030001EE` | [SemanticDiag::BranchElementTypeMismatch](#branchelementtypemismatch) | Error | no |
 | `0x030001F0` | [SemanticDiag::RuleWithArgumentNotConstant](#rulewithargumentnotconstant) | Error | no |
+| `0x030001F1` | [SemanticDiag::UsesPromiseViolated](#usespromiseviolated) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn | no |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn | no |
@@ -8234,6 +8235,46 @@ func main(): int sync {
 }
 ```
 
+### UsesPromiseViolated
+
+`0x030001F1` · Error · `SemanticDiag::UsesPromiseViolated`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
+**Message**
+
+```text
+'{0}' does not keep its resource promise: {1}.
+```
+
+**Help**
+
+```text
+A signature is a promise the compiler checks against the resources the function uses. 'uses' is an upper bound, so every resource the body uses must be named there, and 'pure' promises the empty set; a 'var' parameter is a resource by itself, and so is a capture. Change the body so that it no longer reaches for it, or change the signature to name it.
+```
+
+**Example** (`test/cases/effects/err_pure_var.cml`, run as `camel test/cases/effects/err_pure_var.cml`)
+
+```camel
+// `pure` promises that a call touches no resource at all. A `var` parameter is a resource by
+// itself: the cell is shared with the caller, so a call through the parameter reads and writes it
+// wherever the body is written, and no body can bring the set back to empty. So the signature is
+// refused at its own clause, and the note points at the parameter that breaks the promise
+// (UsesPromiseViolated).
+func bump(var c: int): int pure sync {
+    c = c + 1
+    return c
+}
+
+func main(): int sync {
+    var n = 1
+    println(bump(n))
+    return 0
+}
+```
+
 ### IgnoredSideEffect
 
 `0x03100002` · Warn · `SemanticDiag::IgnoredSideEffect`
@@ -8287,13 +8328,13 @@ None: context: an effect reachable only from a branch that never runs; the repai
 **Message**
 
 ```text
-{0} has side effects but is never executed: nothing depends on it and it is not in a sync block.
+{0} has side effects but is never executed: {1}.
 ```
 
 **Help**
 
 ```text
-Evaluation is driven by dependencies: outside a sync block an expression whose result (or the variable it writes) nothing needs does not run. This is legal. To run it, put it in a sync block ('sync { ... }', or a function body 'func f(): T sync { ... }'), or use its result.
+Evaluation is driven by dependencies: an expression whose result (or the variable it writes) nothing needs does not run, and a sync block nothing needs does not run either, so the effects written directly in it do not run with it. This is legal. To run it, put it on a sync chain ('sync { ... }' in a function body, or use the block's value), or use its result.
 ```
 
 **Example** (`test/cases/compile/diag_json/dropped_effects_forward.cml`, run as `camel --output-format json test/cases/compile/diag_json/dropped_effects_forward.cml`)

@@ -1341,6 +1341,58 @@ Builder::resourceSignatureOf(const AST::node_ptr_t &funcTypeAst, const FunctionT
         throw BuildAbortException();
     }
     if (clause->pure()) {
+        // `pure` promises the empty set (design effects plan 4.3, step 5). A `var` parameter is a
+        // resource by itself: the cell is shared with the caller, so a call through the parameter
+        // reads and writes that cell wherever the body is written, and no body can bring the set
+        // back to empty. So a signature that writes `pure` and gives a parameter `var` is refused
+        // where it is written, and the note points at the parameter that breaks the promise (the
+        // author's ruling: the error is at the declaration's clause, the note at the first use the
+        // signature does not promise).
+        const auto varRangeOf =
+            [&](const std::string &name) -> std::optional<camel::core::error::TokenRange> {
+            for (size_t list = 0; list < 2; ++list) {
+                const auto &params = funcTypeAst->atAs<AST::RepeatedLoad>(list);
+                for (size_t pi = 0; pi < params->size(); ++pi) {
+                    const auto &pair = (*params)[pi];
+                    if (pair == nullptr) {
+                        continue;
+                    }
+                    const auto &load = pair->loadAs<AST::NamedPairLoad>();
+                    if (load->isVar() && load->getRef().ident() == name) {
+                        return load->tokenRange();
+                    }
+                }
+            }
+            return std::nullopt;
+        };
+        const auto varNameAt = [&](size_t index) -> std::string {
+            // The parameter numbering a call uses: `with` parameters first, ordinary ones after
+            // them (the same numbering resourceSignatureOf uses below).
+            const size_t withCount = built->withTypesCount();
+            if (index < withCount) {
+                return built->withIsVarAt(index) ? std::string(built->argNameAt(index))
+                                                 : std::string();
+            }
+            const size_t norm = index - withCount;
+            return built->normIsVarAt(norm) ? std::string(built->argNameAt(index)) : std::string();
+        };
+        for (size_t i = 0; i < built->withTypesCount() + built->normTypesCount(); ++i) {
+            const std::string name = varNameAt(i);
+            if (name.empty()) {
+                continue;
+            }
+            // The builder is kept by value: `of` hands out a temporary and the chain returns a
+            // reference to it, so a reference held across statements would outlive the builder.
+            auto diag = diags_->of(SemanticDiag::UsesPromiseViolated).at(clause->tokenRange());
+            if (const auto range = varRangeOf(name); range.has_value()) {
+                diag.related(
+                    *range,
+                    "this parameter is a resource: a call through it writes the caller's cell, so "
+                    "the call touches it wherever the body is written");
+            }
+            diag.commit(built->toString(), "the 'var' parameter '" + name + "'");
+            throw BuildAbortException();
+        }
         return signature;
     }
     // The parameters the clause may name, in the numbering a call uses: with parameters first,
