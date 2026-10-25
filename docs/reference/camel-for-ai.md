@@ -52,8 +52,6 @@ last column below, which is read out of this table and measured against the chap
 | 10. Passes, the command line, the graph | how to run a program and look at its graph | 3,000 |
 | 11. Idioms | how Camel code is written when it is written by someone who knows | 3,600 |
 | 12. Common errors | the error, the diagnostic, the fix | 11,800 |
-| 13. Accepted and then rejected | reserved spellings and their diagnostics | 2,600 |
-| 14. Not implemented yet (`target`) | what to avoid until its design lands | 1,700 |
 | Appendix A. Diagnostics | name, severity, message — generated | 28,000 |
 | Appendix B. Standard library signatures | every exported name — generated | 28,000 |
 | Appendix C. Sources | which normative page each rule comes from | 1,800 |
@@ -1284,54 +1282,6 @@ func kind(x: int): int {
 }
 ```
 
-## 13. Accepted and then rejected
-
-These spellings parse or are reserved, and the compiler rejects them on purpose. Do not build on
-them: most have no decided meaning yet. The diagnostics are named as the compiler prints them.
-
-| Spelling | The compiler answers | Write instead |
-|---|---|---|
-| Spread: `[...xs, y]`, `{ ...p, x: 1 }`, `f(...args)` | `SemanticDiag::ConstructNotSupported` | `concat(xs, [y])`; write the fields out |
-| `e is T` | `SemanticDiag::ConstructNotSupported` | nothing — there is no type at run time; use a `match` over an `enum` |
-| Non-null assertion `x!` | `SemanticDiag::ConstructNotSupported` | `x ?? fallback`, or `match x` |
-| `f ?.. g` | `SemanticDiag::ConstructNotSupported` | nothing |
-| `try { } catch e: T { } finally { }` | `SemanticDiag::TryCatchNotInLanguage` | return `T!`, open it with `!!`, `?->`, `case error e` |
-| Tuple patterns, struct patterns, identifier patterns for ordinary types | `SemanticDiag::ConstructNotSupported` | `if` chains; read the members first |
-| Destructuring `let { x, y } = p`, `let [a, b] = xs` | `SemanticDiag::FeatureNotSupported` | `p.x`, `xs[0]` (tuple destructuring works) |
-| A slice that cuts a dimension other than the first: `xs[:, 0]`, `xs[a:b, c]` | `SemanticDiag::ConstructNotSupported` | take the rows with `take` first, one dimension at a time |
-| A slice whose step is the constant 0: `xs[a:b:0]` | `SemanticDiag::SliceStepZero`, or `SemanticDiag::ArgumentsRejected` on a tensor | `xs[a:b]` when the step is 1, or a step that moves |
-| Type operations `A & B`, `A \ B`, `A + B`, `A - B`, `A ^ B` | `SemanticDiag::FeatureNotSupported` | nothing |
-| `name of T` | `SemanticDiag::FeatureNotSupported` | nothing |
-| `keyof` | a syntax error | nothing |
-| Declaring a function type: `let f: (x: int) => int = g` | `SemanticDiag::FeatureNotSupported` | let the type be inferred: `let f = g` |
-
-Source: `docs/language/08_top_level_and_grammar.md` §8.6.
-
-**Common errors.** Writing a `target` feature as if it already existed. The compiler refuses it
-today: a stream spelling is `SemanticDiag::NoMatchingFunction` (§12.14), and the fix until the
-feature lands is the array form of the same program.
-
-## 14. Not implemented yet (`target`)
-
-Everything here is decided and absent; code written against it does not compile today. Each entry
-names the design it comes from.
-
-- **Streams**: `T..`, `yield`, `tee`. `docs/design/io-concurrency-streams/`; the ruling is recorded
-  in `docs/design-principles.cn.md` §4.2.
-- **Match guards**: `case p when <condition> => ...`. `docs/design-principles.cn.md` §4.4. A guard
-  written today is a syntax error, not a filter.
-- **Type operations and `of`**: `A & B`, `A | B`, `A \ B`, `A + B`, `A - B`, `A ^ B`, `name of T`.
-  `docs/language/08_top_level_and_grammar.md` §8.6.
-- **Deleting the two-parameter `range(a, b)`**: `a..b` is the interval now, and `range(a, b)` is the
-  same value under a name that is on its way out — `docs/design-principles.cn.md` §4.2. `range` with
-  a step is not affected.
-- **A bare `Tensor` in a signature**: it becomes an explicit type parameter over a shaped type
-  (**target**, `docs/design-principles.cn.md` §5.4). `Tensor` is still the `tensor` module's own
-  type name and is imported by name (§12.2).
-- **Automatic differentiation and ONNX export over `enum`**: both refuse with a located rejection
-  rather than mis-compiling (`docs/language/03_data_model.md` §3.5). That is a decision to work with,
-  not a `target` to wait for: an enum at a differentiated boundary needs an explicit reading.
-
 ## Appendix A. Diagnostics (generated)
 
 Every diagnostic the compiler, the passes and the run time can report. The blocks are the registry's
@@ -2481,8 +2431,6 @@ supported_operators: () => string[]
 | 10. Passes and the command line | `docs/language/04_execution_model.md` §4.7; `docs/cli.cn.md` |
 | 11. Idioms | `docs/language/07_statements.md`, `docs/language/06_expressions.md`, `docs/design-principles.cn.md` §11 |
 | 12. Common errors | the registry `diagnostics/registry.tsv`, and the compiler through `node scripts/camel-for-ai.mjs --verify-errors` |
-| 13. Accepted and then rejected | `docs/language/08_top_level_and_grammar.md` §8.6 |
-| 14. Not implemented yet | the designs named in the section |
 | Appendix A | generated from `diagnostics/registry.tsv` |
 | Appendix B | generated from `docs/stdlib-reference.md` |
 

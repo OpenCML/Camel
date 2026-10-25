@@ -50,7 +50,6 @@ The following words are reserved and cannot be used as names (using one gives `S
 | Literals | `null` `true` `false` |
 | Reserved, not implemented | `is` `of` `try` `catch` `finally` `typeof` `keyof` |
 
-For the status of each word in the last row see [8.6](08_top_level_and_grammar.md#86-constructs-reserved-but-not-implemented).
 
 Names of the form `__x__` (two underscores on each side) are the compiler's own: the operators are functions of such names (`a + b` is `__add__(a, b)`). A variable, a parameter or a function cannot take one (`SemanticDiag::ReservedIdentifier`). To define an operator for a type of the program, write `func operator +(a: V, b: V): V` ([7.4.5](07_statements.md#745-operator-overloading)); `operator` is not a keyword, and is read this way only right after `func` and before an operator.
 
