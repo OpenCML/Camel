@@ -1,0 +1,20 @@
+tip=de4512d16 H554 第十八轮：去 `whereIs` 落地（14 处消息文本条款消失，位置仍在字段里）；12 条用例未改（读数：编译期今天只报一条）
+
+数字
+- gate-34（全量快层）：`total: 6382, pass: 6328, fail: 26, skip: 12, known failures: 16` —— 26 → **26**，逐名 **fixed 0 / new 0**（本次改动是消息文本，不改红数）。
+- `-Check all`：**8 run, 0 failed**。提交 `de4512d16`，工作树干净。
+
+① 去 `whereIs` **已落地**（裁定第 3 条的上半）
+- 做法：14 处调用点的**格式串与实参一律没动**，改为把 helper 本体收成"不给文本"——`modules/autodiff/pullback.cpp:149-155` 现在是 `std::string whereIs(uint64_t) { return {}; }`，注释改成"位置由诊断自己的位置字段与关联位置承载，消息不再重复写一遍"。理由：我先写了一个"删掉每个 `whereIs(...)` 实参并删掉它填的那个 `{}`"的脚本，它在某个站点找不到对应占位符就中止了（**发现即停，没有写盘**）；逐站点重写 14 个格式串风险大于收益，而 helper 返回空串让**同一条消息恰好少掉 `" (at …)"` 这一段**，不多一个空格、不动一个占位符。
+- 验证：构建通过；`test/plans/feat/modules/autodiff.plan.toml` `total: 204, pass: 192, fail: 12` —— **还是那 12 条**，它们现在失败在第二处断言 `/(at …:11:13)/`（正是裁定第 3 条下半要一起改的地方），**没有任何其它用例变红**；全量快层同上，新增红 0。
+- 位置没有被丢掉：这些拒绝本来就走 `failAt(origin, …)`（`pullback.cpp:88-97`，`ExecutionSiteHint{.cachedOrigin}`），`whereIs` 只是消息里的重复。
+
+② 关联位置（裁定第 3 条下半）**未落**：编译期那条按你认可的最小做法，落点就是 `src/execute/macro/eval.cpp:415-436` 的 `reportFailures()`（那里正在建 `Diagnostic`，加 related 最省）；运行期那条的链是 `RuntimeFault` → `context_->runtimeErrorReporter()->describe(fault, site)` → `Diagnostic`，我**还没读** `describe` 能否带 related（下一轮先读它、再决定是否给 `RuntimeFault` 加一个 related origin；若确实承载不了，就按你说的给逐字证据 + 写页）。
+
+③ 12 条用例**未改**，但拿到一条关键读数：`grad_function_value_branch` 的 macro 运行今天只打印**一条**诊断，逐字
+`error[RuntimeDiag::MacroEvaluationFailed]: 'autodiff:grad' could not be evaluated by std::macro: RuntimeError: An error has occurred: autodiff: cannot differentiate through this call of a function value: which function it calls is not evident…`
+（位置 10:13，内层拒绝文本来自自动微分自己——**判定确实只有一份**）；而裁定要求 macro 变体**两条诊断两个位置**（该用例把函数值调用了两次）。`reportFailures()` 是"每条记录一条诊断"，所以问题在展开期只记了**一条**：下一轮先读第二个调用点是否作为独立候选被求值/是否被去重，再按裁定分开写断言（default：第一处那一条 + 无 `(at …)`；macro：两条 + 两个位置）。
+
+④ 其余清单未动（读数同前）：`docs/language/**` 那一句等实现齐了一起加；snippets 4 行（EN 61/363、CN 59/350）+ CN:69 那句散文已定位；`fixes_apply` 逐项打印、`failed_evaluation.error`、`pass_dump.py`、`debugger.http_gateway`、LSP 三条、`compile_bench.smoke`、`fusion_group.profile.none`。
+
+纪律：未推 origin；未碰其它工作树/分支；未在 Windows 构建；脚本助手都在工作树外且未提交。报告已附 `git notes --ref=handover`（HEAD）。
