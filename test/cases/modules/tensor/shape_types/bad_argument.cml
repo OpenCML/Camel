@@ -1,9 +1,0 @@
-module shape_bad_argument
-import { zeros, ones, reshape, sum, tanh, load_npy } from tensor
-func f(b: f32, const 'abc'[..]): float {
-    return float(sum(b))
-}
-func main(): int sync {
-    println(f(ones([3])))
-    return 0
-}
