@@ -208,7 +208,7 @@
 1. **`fact` 取代 `analysis`**（规则语言第二版 7.5）：`fact range::<T>(v: T): Interval match v { case … } join f meet g widen h narrow k`；`analysis` 删掉，用例改写。
 2. **流的 `yield`**：`T..` 类型已经能解析，生成器里的 `yield e` 还没有。`tee` 是库函数，不进词法。
 3. **模块位置的标签**（H49 第 1 问）：源码里给 `module` 贴标签的写法，以及标签声明的 `on module`。
-4. **标签形参类型写 `func`**：标签声明的形参列表接受关键字 `func`，`function` 这个别名删掉。
+4. **函数形参的标签写成类型参数加条件**（负责人 2026-10-25："func 是关键字，不适合做类型名"）：`export tag vjp<rule: F> on func when is_function::<F>()`，标签声明支持类型参数与 `when`，与函数、规则、遍同一套机制；读标签的一方在贴的位置检查实参签名是否合用。刚落地的"标签形参列表放行关键字 `func`"整个删掉（解析器里那段特例、`func_param.cml` 改写），`function` 也不再出现；`TagParameterType` 的消息改成"标签形参是 `int`、`float`、`bool`、`string`，或者满足 `is_function` 的类型参数"。
 5. **清理保留字**：`is`、`of`、`keyof`、`try`、`catch`、`finally` 这些不进语言的词不再保留，写了就是普通的名字或语法错误；展开 `...xs`、结构体和数组解构同样处理。删掉只为指路而存在的诊断：`ConstructNotSupported`、`FeatureNotSupported`、`TryCatchNotInLanguage`（负责人 2026-10-25："try catch 不保留，应该是历史债"；设计原则 3.9 已改）。`throw`、`namespace`、`using`、`typeof`、`constas` 都是现行语法，保留。
 6. **格式化器**：超宽的 `when`/`uses` 另起一行（见下面"格式化器"一条），新语法（`fact`、`yield`、模块标签）都要能格式化。
 7. **给插件的交付物**：完成后在 `docs/language/02_lexical.md`（中英文）给出最终的关键字表与上下文关键字表（`rule`、`fact`、`when`、`uses`、`pure`、`yield`、`tag`、`on` 等只在特定位置是关键字的词），分组写清；仓库里 `editors/vscode/` 的 TextMate 文法与它的快照用例同步更新。负责人照这张表改插件，表里的词与文法逐个对得上。

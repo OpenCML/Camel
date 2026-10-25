@@ -758,3 +758,7 @@ println(grow([1.0, 2.0], read_int()))
 标签声明的形参列表接受关键字 `func`，`function` 别名删了，`func_param.cml` 也钉住了正向用法。收下。
 
 **返工**（与上次 `static_for_head_parenthesized` 同一类）：`test/cases/compile/tags/err_function_alias.cml` 专门钉"写 `function` 会被拒"，注释里还在讲 `function` 不是名字，等于给删掉的别名留了一份记录。`TagParameterType` 这条诊断本身要有负例，所以换一个与旧写法无关的不支持类型（比如 `tag t<xs: int[]> on field`），注释只说规则："标签形参是 `int`、`float`、`bool`、`string` 或 `func`"。文件名、计划条目一并改，不再出现 `function_alias`。
+
+## 更正：标签的函数形参不写 `func`
+
+负责人 2026-10-25："func 是关键字，不适合做类型名。"本文件 `tag-parameter-kind-names` 一节"只用 `func` 一个名字"作废，上一节的返工随之变成：删掉标签形参列表对关键字 `func` 的放行，改为类型参数加条件 `tag vjp<rule: F> on func when is_function::<F>()`。设计原则 6.2、语言参考 7 章（中英文）已改；具体做法见交接说明 5.00"语法层收口"第 4 条。语言参考里那句"`@vjp<rule>` 报 `InvalidAnnotation`，应写 `#vjp<rule>`"是给旧写法指路的，一并删掉了。

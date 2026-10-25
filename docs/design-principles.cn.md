@@ -429,7 +429,7 @@ func main(): int sync {
 
 - 标签附在声明或节点上，只在编译期存在，不会被"调用"，在图上不产生节点。**语言本身不赋予标签任何含义**：含义由声明它的库定义，由读取它的遍实现，后果由库负责（与第 9 节一致）；标准标签的含义写在本规范中（6.6）。
 - 事实有两种：性质（不带参数，如 `#leaf`）与关系（带编译期值的参数，如 `#vjp<cube_rule>`）。多个标签写成 `#[a, b<v>]`，只有一个时可省方括号。标签名小写。
-- **标签用关键字 `tag` 声明**：`export tag leaf on type`、`export tag fixed on field`、`export tag vjp<rule: func> on func`、`export tag reassociate on nodes`。`on` 列出能贴的位置：`func`、`type`、`field`、函数参数，以及 `nodes`（被标记的函数或代码块里按词法写出的节点，含分支臂、循环体、lambda，不含它调用的函数）；以后可加变体、模块。别名组 `tag finite_math = [no_nans, no_infs, no_signed_zeros, flush_subnormals]` 展开为其中各条事实。贴到未列出的位置是编译错误。
+- **标签用关键字 `tag` 声明**：`export tag leaf on type`、`export tag fixed on field`、`export tag vjp<rule: F> on func when is_function::<F>()`（形参是函数时写类型参数加条件，与遍的签名同一种写法；关键字不作类型名）、`export tag reassociate on nodes`。`on` 列出能贴的位置：`func`、`type`、`field`、函数参数，以及 `nodes`（被标记的函数或代码块里按词法写出的节点，含分支臂、循环体、lambda，不含它调用的函数）；以后可加变体、模块。别名组 `tag finite_math = [no_nans, no_infs, no_signed_zeros, flush_subnormals]` 展开为其中各条事实。贴到未列出的位置是编译错误。
 - **区域上的事实累积**：一个节点具有它所在的所有被标记区域的全部事实；带参数的同名事实以内层为准。不需要合并规则。
 - **标签属于声明**（名字），与装饰器怎样包装它的实现无关。标签只能在声明处贴，不能事后给别处的声明补贴（调度是否例外另行讨论，见第 15 节）。
 
