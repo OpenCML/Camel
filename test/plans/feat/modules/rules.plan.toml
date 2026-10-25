@@ -1542,41 +1542,35 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
 [[tests]]
-name = "rules.with_parameter_generic_head"
-desc = "A rule that declares type parameters and `with` parameters together is refused (RuleWithParameterGenericHead): the sides of a generic rule are instantiated for the types it is used with, one instance per type, while a `with` value is bound once, where the rule value is written. The refusal names the rule and stands where the type parameters are written."
-kind = "negative"
-case = "../../../cases/modules/rules/err_rule_with_generic_head.cml"
-args = ["${case}", "std::nvm"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::RuleWithParameterGenericHead"
-expect_diagnostic_line = 12
-expect_output_contains = ["The rule 'tiled' declares type parameters and `with` parameters together, which is not implemented yet"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 20000
+name = "rules.with_parameter_and_a_type_parameter"
+desc = "The rule of the design draft 1: `with <tile: int>` and `rule tile_scale::<T>(x: T)`, one instantiation channel. The value is the factor of the product, and both sides read it: the pattern `x * tile` matches `x * 2` where the rule is bound to 2 and not where it is bound to 3 or 0, and the replacement `x + x * (tile - 1)` is built from it, which is where the addition of the two rewritten functions comes from. The four reports show the additions and products of the target's functions before and after each binding, and the program prints what it printed."
+kind = "behavior"
+case = "../../../cases/modules/rules/with_generic_target.cml"
+args = ["${case}", "with_generic_rules::report", "with_generic_rules::counted_two", "with_generic_rules::report", "with_generic_rules::counted_three", "with_generic_rules::report", "with_generic_rules::counted_zero", "with_generic_rules::report", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["wide 0 1\n", "again 0 1\n", "thrice 0 1\n", "zeroed 0 1\n", "6 8 15 0\n"]
+timeout_ms = 30000
 
 [[tests]]
-name = "rules.with_parameter_on_the_left_is_refused"
-desc = "The left side of a rule is the pattern matched against the program, so it holds an operator, a constant or one of the rule's parameters: a `with` parameter read there is refused where the parameter is written (RuleWithParameterOnASide), with the side named, and no rule is declared."
-kind = "negative"
-case = "../../../cases/modules/rules/err_rule_with_left_read.cml"
-args = ["${case}", "std::nvm"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::RuleWithParameterOnASide"
-expect_diagnostic_line = 11
-expect_output_contains = ["The left side of the rule 'add_tiled' reads the `with` parameter 'tile', which is not implemented yet"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 20000
+name = "rules.with_parameter_and_a_type_parameter_instances"
+desc = "The proof of the rule bound to 2 names the instance each rewrite came from: the two sites of `x * 2` are one instance, `tile_scale<int>(tile = 2)`, and the same rule bound to 3 is another, `tile_scale<int>(tile = 3)` -- the value is half of the key the instance is made under. `check` then enumerates the instances of the one bound value, one row per instance."
+kind = "behavior"
+case = "../../../cases/modules/rules/with_generic_target.cml"
+args = ["${case}", "with_generic_rules::counted_two", "with_generic_rules::counted_three", "with_generic_rules::checked", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["rewrites 2 rule tile_scale\n", "tile_scale<int>(tile = 2)", "rewrites 1 rule tile_scale\n", "tile_scale<int>(tile = 3)", "6 8 15 0\n"]
+timeout_ms = 30000
 
 [[tests]]
-name = "rules.with_parameter_on_the_right_is_refused"
-desc = "The right side of a rule is the replacement built from the terms the match binds, so it holds the same terms as the left one: a `with` parameter read there is refused at the parameter too, and the side the refusal names is the right one."
+name = "rules.with_parameter_binding_is_a_constant"
+desc = "The value bound to a rule's `with` parameter is what selects the instance its sides are made at, so it is a value the compiler knows: a binding whose value is a parameter of the function around it is refused where the binding is written (RuleWithArgumentNotConstant), and the program does not run."
 kind = "negative"
-case = "../../../cases/modules/rules/err_rule_with_right_read.cml"
+case = "../../../cases/modules/rules/err_rule_with_not_constant.cml"
 args = ["${case}", "std::nvm"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::RuleWithParameterOnASide"
-expect_diagnostic_line = 11
-expect_output_contains = ["The right side of the rule 'add_shift' reads the `with` parameter 'shift', which is not implemented yet"]
+expect_diagnostic_name = "SemanticDiag::RuleWithArgumentNotConstant"
+expect_diagnostic_line = 17
+expect_output_contains = ["The value bound to the `with` parameter 'tile' of the rule 'add_tile' is not a compile-time constant of the type 'int'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
 
