@@ -14,7 +14,7 @@
   variables a `var` declared, read and assigned: the trace has the store (`:op/assn*`) and the
           println; creating and reading the variable (`:var/new`, `:var/get`) emit nothing.
 
-Usage: python effect_trace.py order|stage|payload|variables   (needs only the standard library)
+Usage: python effect_trace.py order|stage|payload|variables [--camel PATH]
 """
 
 from __future__ import annotations
@@ -30,17 +30,24 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 REPO_ROOT = HERE.parents[3]
 
+sys.path.insert(0, str(REPO_ROOT / "test" / "tools"))
+from camel_arg import camel_from_argv  # noqa: E402
+
+
+# The install this case measures: `--camel <path>` names it (the author's ruling of 2026-10-25
+# replaced the `CAMEL_EXE` environment switch with that argument); without it,
+# `$CAMEL_HOME/bin/camel`, else this tree's `out/latest/bin/camel`. One rule, in one place:
+# test/tools/camel_arg.py. `ARGV` is this process's arguments without the `--camel` pair.
+CAMEL, ARGV = camel_from_argv(REPO_ROOT)
+
 
 def camel_exe() -> str:
-    override = os.environ.get("CAMEL_EXE")
-    if override:
-        return override
-    return str(REPO_ROOT / "out" / "latest" / "bin" / ("camel.exe" if os.name == "nt" else "camel"))
+    return CAMEL
 
 
 def run(program: Path, passes: list[str], trace: Path) -> tuple[int, str, list[dict]]:
     env = dict(os.environ)
-    env.setdefault("CAMEL_HOME", str(REPO_ROOT / "out" / "latest"))
+    env.setdefault("CAMEL_HOME", str(Path(CAMEL).resolve().parents[1]))
     if trace.exists():
         trace.unlink()
     # The trace is a parameter of the run: std::profile turns it on and writes no report.
@@ -67,7 +74,7 @@ def strip_seq(lines: list[dict]) -> list[dict]:
 
 
 def main() -> int:
-    mode = sys.argv[1]
+    mode = ARGV[0]
     failures: list[str] = []
 
     def check(cond: bool, what: str) -> None:

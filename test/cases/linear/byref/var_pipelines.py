@@ -28,8 +28,9 @@ sibling (a line printed twice on NodeVM and Taskflow; a wrong number on FastVM a
 These functions are in programs of their own (a<k>.cml beside p<k>.cml) and draw from their own
 random stream, so the programs of the first two shapes are the same as before they were added.
 
-Usage: python var_pipelines.py [--seed N] [--programs N] [--keep DIR] [--warnings]
-The compiler is REPO_ROOT/out/latest unless CAMEL_EXE / CAMEL_HOME are set.
+Usage: python var_pipelines.py [--seed N] [--programs N] [--keep DIR] [--warnings] [--camel PATH]
+The compiler is the install `--camel <path>` names, `$CAMEL_HOME` without it, else
+REPO_ROOT/out/latest.
 """
 
 from __future__ import annotations
@@ -44,6 +45,14 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 REPO_ROOT = HERE.parents[3]
+
+sys.path.insert(0, str(REPO_ROOT / "test" / "tools"))
+from camel_arg import camel_from_argv  # noqa: E402
+
+# The install this case measures: `--camel <path>` names it, `$CAMEL_HOME/bin/camel` without it,
+# else this tree's `out/latest/bin/camel` (one rule, in one place: test/tools/camel_arg.py).
+# `CAMEL_ARGV` is this process's arguments without the `--camel` pair.
+CAMEL, CAMEL_ARGV = camel_from_argv(REPO_ROOT)
 
 PIPELINES = [
     [],
@@ -268,10 +277,13 @@ def main() -> int:
     ap.add_argument("--programs", type=int, default=8)
     ap.add_argument("--keep")
     ap.add_argument("--warnings", action="store_true", help="also show compiler warnings of correct cells")
-    args = ap.parse_args()
+    args = ap.parse_args(CAMEL_ARGV)
     rng = random.Random(args.seed)
-    home = os.environ.get("CAMEL_HOME") or str(REPO_ROOT / "out" / "latest")
-    exe = os.environ.get("CAMEL_EXE") or str(Path(home) / "bin" / ("camel.exe" if os.name == "nt" else "camel"))
+    # The install this run measures: `--camel <path>` names it (the author's ruling of 2026-10-25
+    # replaced the `CAMEL_EXE` environment switch with that argument); without it, `$CAMEL_HOME`,
+    # else this tree's `out/latest`. One rule, in one place: test/tools/camel_arg.py.
+    home = str(Path(CAMEL).resolve().parents[1])
+    exe = CAMEL
     bad = cells = 0
     with tempfile.TemporaryDirectory() as t:
         work = Path(args.keep or t)

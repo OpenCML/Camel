@@ -40,7 +40,9 @@ desc = "One profiled round of the d=256 step issues the pinned number of operato
 kind = "behavior"
 tool = "python"
 case = "../../cases/perf/step_budget.py"
-args = ["${case}", "count"]
+# `${camel}` is the compiler of the build under test, named as an argument (the author's ruling
+# of 2026-10-25): `CAMEL_EXE` is gone and `CAMEL_HOME` stays the install location's convention.
+args = ["${case}", "count", "--camel", "${camel}"]
 expect_exit = 0
 expect_stdout_contains = ["step operator counts: PASS"]
 expect_output_not_contains = ["FAIL"]
@@ -53,7 +55,7 @@ desc = "Every element-wise operator of the d=256 step allocates exactly one allo
 kind = "behavior"
 tool = "python"
 case = "../../cases/perf/step_budget.py"
-args = ["${case}", "elementwise"]
+args = ["${case}", "elementwise", "--camel", "${camel}"]
 expect_exit = 0
 expect_stdout_contains = ["step elementwise: PASS"]
 expect_output_not_contains = ["FAIL"]
@@ -69,7 +71,7 @@ desc = "The per-step budget of the same program: the step's CPU time from two ru
 kind = "behavior"
 tool = "python"
 case = "../../cases/perf/step_budget.py"
-args = ["${case}", "budget"]
+args = ["${case}", "budget", "--camel", "${camel}"]
 expect_exit = 0
 expect_stdout_contains = ["step budget: PASS", "matmul", "residual"]
 expect_output_not_contains = ["FAIL"]

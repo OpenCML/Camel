@@ -746,7 +746,9 @@ name = "public_region_graph"
 kind = "behavior"
 tool = "python"
 case = "../../../cases/modules/tiles/public_pass_graph.py"
-args = ["${case}"]
+# `${camel}` is the compiler of the build under test, named as an argument (the author's ruling
+# of 2026-10-25): `CAMEL_EXE` is gone and `CAMEL_HOME` stays the install location's convention.
+args = ["${case}", "--camel", "${camel}"]
 expect_exit = 0
 expect_stdout_contains = ["Public Tiles pass: module loading and deferred target selection PASS"]
 timeout_ms = 20000

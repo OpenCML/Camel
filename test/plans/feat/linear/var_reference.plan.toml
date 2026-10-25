@@ -3438,7 +3438,9 @@ desc = "Generated programs that write variables (fixed seed): recursions writing
 kind = "behavior"
 tool = "python"
 case = "../../../cases/linear/byref/var_pipelines.py"
-args = ["${case}"]
+# `${camel}` is the compiler of the build under test, named as an argument (the author's ruling
+# of 2026-10-25): `CAMEL_EXE` is gone and `CAMEL_HOME` stays the install location's convention.
+args = ["${case}", "--camel", "${camel}"]
 expect_exit = 0
 expect_stdout_contains = ["176 program-pipeline cells, 0 wrong", "PASS"]
 expect_output_not_contains = ["FAIL"]

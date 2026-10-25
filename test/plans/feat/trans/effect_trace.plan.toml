@@ -9,7 +9,9 @@ desc = "std::profile effect_trace="<file>": the effect-order exemplar yields the
 kind = "behavior"
 tool = "python"
 case = "../../../cases/trans/effect_trace/effect_trace.py"
-args = ["${case}", "order"]
+# `${camel}` is the compiler of the build under test, named as an argument (the author's ruling
+# of 2026-10-25): `CAMEL_EXE` is gone and `CAMEL_HOME` stays the install location's convention.
+args = ["${case}", "order", "--camel", "${camel}"]
 expect_exit = 0
 expect_stdout_contains = ["effect trace: PASS"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -21,7 +23,7 @@ desc = "std::profile effect_trace="<file>": a println in a macro function body i
 kind = "behavior"
 tool = "python"
 case = "../../../cases/trans/effect_trace/effect_trace.py"
-args = ["${case}", "stage"]
+args = ["${case}", "stage", "--camel", "${camel}"]
 expect_exit = 0
 expect_stdout_contains = ["effect trace: PASS"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -33,7 +35,7 @@ desc = "std::profile effect_trace="<file>": `payload` is the hashed argument tex
 kind = "behavior"
 tool = "python"
 case = "../../../cases/trans/effect_trace/effect_trace.py"
-args = ["${case}", "payload"]
+args = ["${case}", "payload", "--camel", "${camel}"]
 expect_exit = 0
 expect_stdout_contains = ["effect trace: PASS"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -45,7 +47,7 @@ desc = "std::profile effect_trace="<file>": a store into a var is an effect even
 kind = "behavior"
 tool = "python"
 case = "../../../cases/trans/effect_trace/effect_trace.py"
-args = ["${case}", "variables"]
+args = ["${case}", "variables", "--camel", "${camel}"]
 expect_exit = 0
 expect_stdout_contains = ["effect trace: PASS"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]

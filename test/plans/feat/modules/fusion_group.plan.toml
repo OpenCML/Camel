@@ -226,7 +226,9 @@ desc = "A private chain in a three-round training step on std::nvm: the profile 
 kind = "behavior"
 tool = "python"
 case = "../../../cases/modules/tensor/fusion_group_profile.py"
-args = ["${case}", "group"]
+# `${camel}` is the compiler of the build under test, named as an argument (the author's ruling
+# of 2026-10-25): `CAMEL_EXE` is gone and `CAMEL_HOME` stays the install location's convention.
+args = ["${case}", "group", "--camel", "${camel}"]
 expect_exit = 0
 expect_stdout_contains = ["fusion group profile: PASS"]
 expect_output_not_contains = ["FAIL"]
@@ -238,7 +240,7 @@ desc = "A program with no division therefore no group: its profile report must b
 kind = "behavior"
 tool = "python"
 case = "../../../cases/modules/tensor/fusion_group_profile.py"
-args = ["${case}", "none"]
+args = ["${case}", "none", "--camel", "${camel}"]
 expect_exit = 0
 expect_stdout_contains = ["fusion group profile: PASS"]
 expect_output_not_contains = ["FAIL"]

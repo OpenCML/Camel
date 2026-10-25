@@ -8,10 +8,21 @@ from pathlib import Path
 import random
 import struct
 import subprocess
+import sys
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[4]
-EXE = os.environ.get('CAMEL_EXE', str(ROOT / 'out/latest/bin' / ('camel.exe' if os.name == 'nt' else 'camel')))
+sys.path.insert(0, str(ROOT / 'test' / 'tools'))
+from camel_arg import camel_from_argv  # noqa: E402
+
+# `--camel <path>` names the install this case measures: the author's ruling of 2026-10-25 replaced
+# the `CAMEL_EXE` environment switch with that argument. Without it the install is
+# `$CAMEL_HOME/bin/camel`, else this tree's `out/latest/bin/camel`. One rule, in one place:
+# test/tools/camel_arg.py. `ARGV` is this process's arguments without the `--camel` pair.
+EXE, ARGV = camel_from_argv(ROOT)
+# The install that binary lives in: the child is given it as CAMEL_HOME, so the compiler the case
+# runs and the standard library it reads are the same install whichever one `--camel` named.
+INSTALL = str(Path(EXE).resolve().parents[1])
 
 
 def write(path, bits):
@@ -94,7 +105,7 @@ with localcontext() as context, tempfile.TemporaryDirectory(prefix='camel-math-u
     folder = Path(folder)
     for name, data in inputs.items():
         write(folder / f'{name}.npy', data)
-    env = dict(os.environ, CAMEL_HOME=str(ROOT / 'out/latest'), TILES_TEST_OUT=str(folder))
+    env = dict(os.environ, CAMEL_HOME=INSTALL, TILES_TEST_OUT=str(folder))
     for vm in ['std::nvm', 'std::fvm', 'std::jit', 'std::prl']:
         run = subprocess.run([EXE, str(Path(__file__).with_suffix('.cml')), vm],
                              cwd=ROOT, env=env, capture_output=True, text=True, timeout=60)

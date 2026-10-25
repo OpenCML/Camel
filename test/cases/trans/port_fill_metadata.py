@@ -2,12 +2,20 @@
 import os
 import re
 import subprocess
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
-EXE = os.environ.get("CAMEL_EXE", str(ROOT / "out/latest/bin" / ("camel.exe" if os.name == "nt" else "camel")))
+sys.path.insert(0, str(ROOT / "test" / "tools"))
+from camel_arg import camel_from_argv  # noqa: E402
+
+# The install this case measures: `--camel <path>` names it (the author's ruling of 2026-10-25
+# replaced the `CAMEL_EXE` environment switch with that argument); without it,
+# `$CAMEL_HOME/bin/camel`, else this tree's `out/latest/bin/camel`. One rule, in one place:
+# test/tools/camel_arg.py.
+EXE, ARGV = camel_from_argv(ROOT)
 env = dict(os.environ)
-env.setdefault("CAMEL_HOME", str(ROOT / "out/latest"))
+env.setdefault("CAMEL_HOME", str(Path(EXE).resolve().parents[1]))
 for export in ("rgir", "gir", "argir", "agir"):
     result = subprocess.run([EXE, "--color", "never", str(Path(__file__).with_suffix(".cml")), "std::" + export], capture_output=True, text=True, env=env, cwd=ROOT)
     assert result.returncode == 0, result.stderr

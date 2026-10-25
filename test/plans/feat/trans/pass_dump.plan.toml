@@ -9,7 +9,9 @@ desc = "`--dump-after-each-pass` writes the input graph and one snapshot per gra
 kind = "behavior"
 tool = "python"
 case = "../../../cases/trans/pass_dump/pass_dump.py"
-args = ["${case}"]
+# `${camel}` is the compiler of the build under test, named as an argument (the author's ruling
+# of 2026-10-25): `CAMEL_EXE` is gone and `CAMEL_HOME` stays the install location's convention.
+args = ["${case}", "--camel", "${camel}"]
 expect_exit = 0
 expect_stdout_contains = ["pass dump: PASS"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]

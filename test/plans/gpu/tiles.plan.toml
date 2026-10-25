@@ -1127,7 +1127,9 @@ name = "arithmetic_bit_contract"
 kind = "behavior"
 tool = "python"
 case = "../../cases/modules/tiles/arithmetic_bits.py"
-args = ["${case}"]
+# `${camel}` is the compiler of the build under test, named as an argument (the author's ruling
+# of 2026-10-25): `CAMEL_EXE` is gone and `CAMEL_HOME` stays the install location's convention.
+args = ["${case}", "--camel", "${camel}"]
 expect_exit = 0
 expect_stdout_contains = ["Arithmetic bits: six operations, four schedulers, signed zeros and subnormals PASS"]
 timeout_ms = 60000
@@ -1137,7 +1139,7 @@ name = "transcendental_ulp_contract"
 kind = "behavior"
 tool = "python"
 case = "../../cases/modules/tiles/math_ulp.py"
-args = ["${case}"]
+args = ["${case}", "--camel", "${camel}"]
 expect_exit = 0
 expect_stdout_contains = ["Transcendental declared ULP bounds: four schedulers PASS"]
 timeout_ms = 60000
@@ -1147,7 +1149,7 @@ name = "static_loop_device"
 kind = "behavior"
 tool = "python"
 case = "../../cases/modules/tiles/loop_device.py"
-args = ["${case}"]
+args = ["${case}", "--camel", "${camel}"]
 expect_exit = 0
 expect_stdout_contains = ["std::nvm: LOOP", "std::fvm: LOOP", "std::jit: LOOP", "std::prl: LOOP"]
 timeout_ms = 180000
@@ -1157,7 +1159,7 @@ name = "loop_boundaries_faults_permissions"
 kind = "behavior"
 tool = "python"
 case = "../../cases/modules/tiles/loop_checks.py"
-args = ["${case}"]
+args = ["${case}", "--camel", "${camel}"]
 expect_exit = 0
 expect_stdout_contains = ["std::nvm: LOOP CPU boundaries", "std::fvm: LOOP CPU boundaries", "std::jit: LOOP CPU boundaries", "std::prl: LOOP CPU boundaries", "neighboring GPU regions preserved PASS"]
 # Four CPU back ends, a GPU region beside every loop and the permission checks: the script runs
@@ -1171,7 +1173,7 @@ kind = "behavior"
 
 tool = "python"
 case = "../../cases/modules/tiles/loop_multi_device.py"
-args = ["${case}"]
+args = ["${case}", "--camel", "${camel}"]
 expect_exit = 0
 expect_stdout_contains = ["std::nvm: multi-state LOOP", "std::fvm: multi-state LOOP", "std::jit: multi-state LOOP", "std::prl: multi-state LOOP"]
 timeout_ms = 180000
@@ -1182,7 +1184,7 @@ kind = "behavior"
 
 tool = "python"
 case = "../../cases/modules/tiles/core_views.py"
-args = ["${case}"]
+args = ["${case}", "--camel", "${camel}"]
 # The case binds grad(loss) outside the wrapper it hands to run<f>: a loss that captures a
 # value is not macro-static, so the transform stays a runtime operator, and tiles::run has no
 # CPU fallback for an operator it cannot lower.
@@ -1205,7 +1207,7 @@ name = "async_public_completion"
 kind = "behavior"
 tool = "python"
 case = "../../cases/modules/tiles/async_execution.py"
-args = ["${case}"]
+args = ["${case}", "--camel", "${camel}"]
 expect_exit = 0
 expect_stdout_contains = ["std::nvm: async public exact bits, completed results and eager faults PASS", "std::fvm: async public exact bits, completed results and eager faults PASS", "std::jit: async public exact bits, completed results and eager faults PASS", "std::prl: async public exact bits, completed results and eager faults PASS"]
 timeout_ms = 180000
@@ -1610,7 +1612,7 @@ name = "resident_loop_declares_its_blocks"
 kind = "behavior"
 tool = "node"
 case = "../../cases/modules/tiles/resident_loop.mjs"
-args = ["${case}"]
+args = ["${case}", "--camel", "${camel}"]
 envs = ["CUDA_VISIBLE_DEVICES=-1"]
 tier = "fast"
 expect_exit = 0
