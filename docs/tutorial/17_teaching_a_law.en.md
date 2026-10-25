@@ -213,15 +213,15 @@ camel docs/tutorial/examples/17_rule.cml std::opt std::gir
 
 ```text
             label="combined";
-            F05 [label="ARGS", type="ARGS"];
-            O05 [label="EXIT", type="EXIT"];
-            N09 [label="x", type="PORT", param_name="x", param_kind="normal", param_index="0", value_type="int"];
-            N0A [label="8", type="DATA", value_type="int"];
-            N0B [label=":op/mul_l", type="OPER", origin=1800, span="16:17-16:18", srcfile="docs/tutorial/examples/17_rule.cml", value_type="int"];
-            F05 -> N09 [label="0", type="NORM_PORT"];
-            N0B -> O05 [label="0", type="EXIT"];
-            N09 -> N0B [label="0|0", type="NORM"];
-            N0A -> N0B [label="0|1", type="NORM"];
+            F0E [label="ARGS", type="ARGS"];
+            O0E [label="EXIT", type="EXIT"];
+            N36 [label="x", type="PORT", param_name="x", param_kind="normal", param_index="0", value_type="int"];
+            N37 [label="8", type="DATA", value_type="int"];
+            N38 [label=":op/mul_l", type="OPER", origin=2088, span="16:17-16:18", srcfile="docs/tutorial/examples/17_rule.cml", value_type="int"];
+            F0E -> N36 [label="0", type="NORM_PORT"];
+            N38 -> O0E [label="0", type="EXIT"];
+            N36 -> N38 [label="0|0", type="NORM"];
+            N37 -> N38 [label="0|1", type="NORM"];
         }
 ```
 
@@ -287,31 +287,31 @@ camel docs/tutorial/examples/17_rule.cml std::opt::saturate std::gir
 ```text
             label="doubled";
             writings_cost="weighted";
-            F06 [label="ARGS", type="ARGS"];
-            O06 [label="EXIT", type="EXIT"];
-            N13 [label="x", type="PORT", param_name="x", param_kind="normal", param_index="0", value_type="int"];
-            subgraph cluster_class_C01 {
+            F0F [label="ARGS", type="ARGS"];
+            O0F [label="EXIT", type="EXIT"];
+            N36 [label="x", type="PORT", param_name="x", param_kind="normal", param_index="0", value_type="int"];
+            subgraph cluster_class_C02 {
             label="class c1";
             style=dashed;
-            C01 [label="class c1", type="CLASS"];
-                N14 [label="2", type="DATA", origin=1804, span="21:15-21:16", srcfile="docs/tutorial/examples/17_rule.cml", value_type="int", class="c1", chosen="true"];
-                N15 [label="2", type="DATA", origin=1807, span="21:23-21:24", srcfile="docs/tutorial/examples/17_rule.cml", value_type="int", class="c1"];
-            }
-            subgraph cluster_class_C02 {
-            label="class c2";
-            style=dashed;
-            C02 [label="class c2", type="CLASS"];
-                N16 [label=":op/mul_l", type="OPER", origin=1805, span="21:13-21:14", srcfile="docs/tutorial/examples/17_rule.cml", value_type="int", class="c2", chosen="true"];
-                N17 [label=":op/mul_l", type="OPER", origin=1808, span="21:21-21:22", srcfile="docs/tutorial/examples/17_rule.cml", value_type="int", class="c2"];
+            C02 [label="class c1", type="CLASS"];
+                N37 [label="2", type="DATA", origin=2092, span="21:15-21:16", srcfile="docs/tutorial/examples/17_rule.cml", value_type="int", class="c1", chosen="true"];
+                N38 [label="2", type="DATA", origin=2095, span="21:23-21:24", srcfile="docs/tutorial/examples/17_rule.cml", value_type="int", class="c1"];
             }
             subgraph cluster_class_C03 {
+            label="class c2";
+            style=dashed;
+            C03 [label="class c2", type="CLASS"];
+                N39 [label=":op/mul_l", type="OPER", origin=2093, span="21:13-21:14", srcfile="docs/tutorial/examples/17_rule.cml", value_type="int", class="c2", chosen="true"];
+                N3A [label=":op/mul_l", type="OPER", origin=2096, span="21:21-21:22", srcfile="docs/tutorial/examples/17_rule.cml", value_type="int", class="c2"];
+            }
+            subgraph cluster_class_C04 {
             label="class c5";
             style=dashed;
-            C03 [label="class c5", type="CLASS"];
-                N18 [label=":op/add_l", type="OPER", origin=1809, span="21:17-21:18", srcfile="docs/tutorial/examples/17_rule.cml", value_type="int", class="c5"];
-                N19 [label=":op/mul_l", type="OPER", origin=1809, span="21:17-21:18", srcfile="docs/tutorial/examples/17_rule.cml", value_type="int", class="c5", chosen="true"];
-                N1A [label=":op/mul_l", type="OPER", origin=1809, span="21:17-21:18", srcfile="docs/tutorial/examples/17_rule.cml", value_type="int", class="c5"];
-                N1B [label=":op/mul_l", type="OPER", origin=1809, span="21:17-21:18", srcfile="docs/tutorial/examples/17_rule.cml", value_type="int", class="c5"];
+            C04 [label="class c5", type="CLASS"];
+                N3B [label=":op/add_l", type="OPER", origin=2097, span="21:17-21:18", srcfile="docs/tutorial/examples/17_rule.cml", value_type="int", class="c5"];
+                N3C [label=":op/mul_l", type="OPER", origin=2097, span="21:17-21:18", srcfile="docs/tutorial/examples/17_rule.cml", value_type="int", class="c5", chosen="true"];
+                N3D [label=":op/mul_l", type="OPER", origin=2097, span="21:17-21:18", srcfile="docs/tutorial/examples/17_rule.cml", value_type="int", class="c5"];
+                N3E [label=":op/mul_l", type="OPER", origin=2097, span="21:17-21:18", srcfile="docs/tutorial/examples/17_rule.cml", value_type="int", class="c5"];
             }
 ```
 
