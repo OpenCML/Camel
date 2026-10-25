@@ -1477,6 +1477,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::SliceStepZero,
+            {
+                "SliceStepZero",
+                "The slice 't[a:b:s]' has a step of 0, so it takes no element at all, whatever its bounds are.",
+                "A slice takes every step-th element from its start, so the step decides which elements it has: with a positive step 'a', 'a + step', ... below 'b', and with a negative one backwards from the start. A step that does not move names no slice, so a constant step of 0 is refused where it is written (design principles 5.4). Give a non-zero step, or write 't[a:b]' when the step is 1. A step that is not constant is a fault of the run instead (RuntimeDiag::InvalidArgument).",
+            },
+        },
+        {
             SemanticDiag::ReducedPrecisionUnsupported,
             {
                 "ReducedPrecisionUnsupported",
