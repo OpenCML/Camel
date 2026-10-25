@@ -1541,6 +1541,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::TensorElementTypeRequired,
+            {
+                "TensorElementTypeRequired",
+                "The type '{0}' states no element type: a tensor's element type is part of its type, so this spelling is not a type of a value.",
+                "Every tensor type writes its element type: 'Tensor<f32>' (a rank nobody fixes yet), 'Tensor<f32, [2, 3]>', or the array type itself, 'f32[..]' and 'f32[2, 3]'. A signature that takes a tensor of any element type declares a type variable in its head and writes it as the element type -- 'func f::<T>(x: Tensor<T>)', which is the same type as 'func f::<T>(x: T[..])' -- and the call's argument fixes that type variable, so the body sees the element type the call bound. A shape written without an element type ('Tensor<[3]>') leaves the same question open.",
+            },
+        },
+        {
             SemanticDiag::IgnoredSideEffect,
             {
                 "IgnoredSideEffect",

@@ -1396,7 +1396,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `LambdaParametersNeedParentheses` | E | A lambda's parameters need their parentheses: write '(x) => e', not 'x => e'. |
 | `ComparisonAcrossLines` | W | This '>' is read as a comparison with the next line, which starts with {0}: two statements may have been joined into one. |
 
-**Semantic** (`SemanticDiag`) — 203 (191 errors, 12 warnings)
+**Semantic** (`SemanticDiag`) — 204 (192 errors, 12 warnings)
 
 | `Redeclaration` | E | Redeclaration of reference: '{0}'. |
 | `ModuleNotFound` | E | Module '{0}' not found. {1} |
@@ -1635,7 +1635,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `ConstantExpressionFaults` | W | This constant expression faults whenever it is evaluated ({0}); it is not folded. |
 | `TranslationLinksRuntime` | W | std::cpp has no standalone translation of {0}: the program it writes calls the Camel runtime there and is built with libcamel. |
 
-**Semantic** (`SemanticDiag`) — 203 (191 errors, 12 warnings)
+**Semantic** (`SemanticDiag`) — 204 (192 errors, 12 warnings)
 
 | `ReducedPrecisionUnsupported` | E | The call of '{0}' cannot take a value of the reduced-precision element type '{1}'. |
 | `ImplOnBodylessDeclaration` | E | The body-less declaration '{0}' cannot carry '#impl<{1}>': it has no Camel body. |
@@ -1645,6 +1645,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `ImplKernelNotBodyless` | E | The '#impl' tag of '{0}' names '{1}', which has a body. |
 | `StreamInContainer` | E | '{0}' cannot be the element of {1}: a stream is consumed once, while the elements of a container are read more than once. |
 | `NodeOfNotAParameter` | E | '{0}' is not a const parameter of the rule '{1}', so node_of({0}) names no node. |
+| `TensorElementTypeRequired` | E | The type '{0}' states no element type: a tensor's element type is part of its type, so this spelling is not a type of a value. |
 <!-- camel-for-ai end: diagnostics -->
 
 ## Appendix B. Standard library signatures (generated)
@@ -1876,13 +1877,9 @@ slice: (t: Tensor, axis: int, start: int, end: int, step?: int) => Tensor
 take: (t: Tensor, indices: Tensor | number[]) => Tensor
 one_hot: (labels: Tensor | number[], classes: int) => Tensor
 shape: (t: T[..]) => int[] when is_numeric::<T>()
-shape: (t: Tensor) => int[]
 numel: (t: T[..]) => int when is_numeric::<T>()
-numel: (t: Tensor) => int
 dim: (t: T[..], axis: int) => int when is_numeric::<T>()
 dim: (t: T[..], axis: i32) => int when is_numeric::<T>()
-dim: (t: Tensor, axis: int) => int
-dim: (t: Tensor, axis: i32) => int
 sum: (t: Tensor) => float
 sum: (t: Tensor, axis: int, keepdims?: bool) => Tensor
 mean: (t: Tensor) => float
@@ -1901,13 +1898,10 @@ zeros_like: (t: Tensor) => Tensor
 ones_like: (t: Tensor) => Tensor
 cast: (t: Tensor | number[], dtype: string) => Tensor
 load_npy: (path: string) => T[..]
-show: (t: Tensor) => void
-show: (t: A[]) => void
+show: (t: A[..]) => void
 from_bytes: (bytes: Bytes, shape: int[]) => Tensor
 to_bytes: (t: T[..]) => Bytes when is_numeric::<T>()
-to_bytes: (t: Tensor) => Bytes
 save_npy: (t: T[..], path: string) => void when is_numeric::<T>()
-save_npy: (t: Tensor, path: string) => void
 num_threads: () => int
 set_num_threads: (n: int) => void
 set_num_threads: (n: i32) => void

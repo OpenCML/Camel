@@ -5290,6 +5290,18 @@ Type *Builder::visitType(const AST::node_ptr_t &ast) {
         throw BuildAbortException();
     }
 
+    // A name that requires an element type (`Tensor`) stands for no type of a value on its own:
+    // the element type of a value is in its type (design principles 5.1). It is a type as the base
+    // of the spelling that gives it one (`Tensor<f32>`), and `visitSpecType` applies that
+    // argument; everywhere else the author is told to write one
+    // (docs/design/arrays-memory/plan.cn.md section 5.1a).
+    if (res != nullptr && !asTypeFunctionBase && isElementTypeOpenArray(res)) {
+        diags_->of(SemanticDiag::TensorElementTypeRequired)
+            .at(ast->load()->tokenRange())
+            .commit(res->toString());
+        throw BuildAbortException();
+    }
+
     if (auto *recorder = context_ ? context_->semanticRecorder() : nullptr) {
         recorder->typeExpression(ast->load()->origin(), res);
     }
@@ -5922,6 +5934,17 @@ Type *Builder::visitSpecType(const AST::node_ptr_t &ast) {
     ASSERT(ast->size() >= 1, "SpecType must have base type");
     typeFunctionBase_ = ast->size() >= 2;
     Type *base        = visitType(ast->atAs<AST::TypeLoad>(0));
+    // A name that requires an element type (`Tensor`, which the tensor module exports as the open
+    // rank array whose element type nobody stated) reads that element type from the spelling's
+    // first argument: one that gives only a shape leaves the question the name exists to answer
+    // open, and the author is told which spellings answer it (docs/design/arrays-memory/plan.cn.md
+    // section 5.1a).
+    const auto refuseElementTypeOpen = [&]() {
+        diags_->of(SemanticDiag::TensorElementTypeRequired)
+            .at(ast->load()->tokenRange())
+            .commit(base->toString());
+        throw BuildAbortException();
+    };
     if (ast->size() < 2) {
         LEAVE("SpecType");
         return base;
@@ -6012,8 +6035,23 @@ Type *Builder::visitSpecType(const AST::node_ptr_t &ast) {
         return typeFunc->apply(types);
     }
     if (arguments.empty()) {
+        if (isElementTypeOpenArray(base)) {
+            // `Tensor<>`: no argument at all states no element type either.
+            refuseElementTypeOpen();
+        }
         LEAVE("SpecType");
         return base;
+    }
+    if (isElementTypeOpenArray(base)) {
+        // The first argument of `Tensor` is its element type; a spelling that gives only a shape
+        // (`Tensor<[3]>`) leaves the question the name exists to answer open.
+        bool statesElementType = false;
+        for (const TypeArgument &argument : arguments) {
+            statesElementType = statesElementType || argument.type != nullptr;
+        }
+        if (!statesElementType) {
+            refuseElementTypeOpen();
+        }
     }
     if (const CollectionType *coll = asCollectionTypeOrPrototype(base);
         coll != nullptr && !arguments.empty() && arguments.front().type != nullptr) {

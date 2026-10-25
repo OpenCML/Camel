@@ -394,6 +394,11 @@ enum class SemanticDiag : uint32_t {
     // may take and give a stream.
     StreamInContainer   = 0x0001E3,
     NodeOfNotAParameter = 0x0001DE,
+    // The element type of a value is in its type (design principles 5.1), so a tensor type writes one:
+    // the name `Tensor` on its own, and a shape written without it (`Tensor<[3]>`), ask a question the
+    // type of a value answers. A signature that takes any element type declares a type variable in its
+    // head and writes it as the element type.
+    TensorElementTypeRequired = 0x0001ED,
 
     // Warnings
     IgnoredSideEffect = 0x100002,
