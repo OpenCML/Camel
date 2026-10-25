@@ -37,7 +37,8 @@ Chapters already written to the new outline (Chinese and English together, each 
 [7 Missing and failing](07_missing_and_failure.en.md) ·
 [8 Modules, the standard library, and a small tool](08_modules_and_stdlib.en.md) ·
 [9 Evaluation by dependency](09_evaluation_by_dependency.en.md) ·
-[17 Teaching the compiler a law](17_teaching_a_law.en.md)
+[10 Effects and order](10_effects_and_order.en.md) ·
+[18 Teaching the compiler a law](17_teaching_a_law.en.md)
 
 ---
 

@@ -19,7 +19,11 @@
 // exactly the noise a reader does not want in the picture. Everything else is compared, so a change
 // in the graph's shape fails `--check` until the picture is drawn again.
 //
-// `camel` and `dot` are taken from PATH, or from $CAMEL and $DOT.
+// `camel` and `dot` are taken from PATH, or from $CAMEL and $DOT, or from `--camel <path>` and
+// `--dot <path>`; `--images <dir>` compares (or writes) under another directory, which is how the
+// planted-drift case of the plan below proves the check can go red. `--check` needs `camel` only --
+// it draws nothing, it compares -- and `dot` is needed to write a picture; the gate runs the check
+// in test/plans/feat/docs/tutorial_images.plan.toml, and a picture that has drifted fails there.
 
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -28,10 +32,15 @@ import { fileURLToPath } from 'node:url';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const TUTORIAL = path.resolve(HERE, '..');
-const IMAGES = path.join(TUTORIAL, 'images');
 
-const CAMEL = process.env.CAMEL || 'camel';
-const DOT = process.env.DOT || 'dot';
+function option(name, fallback) {
+    const at = process.argv.indexOf(`--${name}`);
+    return at >= 0 && process.argv[at + 1] ? process.argv[at + 1] : fallback;
+}
+
+const IMAGES = path.resolve(option('images', path.join(TUTORIAL, 'images')));
+const CAMEL = option('camel', process.env.CAMEL || 'camel');
+const DOT = option('dot', process.env.DOT || 'dot');
 
 // The pictures the tutorial shows, in the order the chapters use them.
 const SHEETS = [
@@ -61,6 +70,13 @@ const SHEETS = [
         passes: ['std::rgir'],
         cluster: 'total',
         title: 'total 的子图：谁要谁的结果',
+    },
+    {
+        name: '10_var_order',
+        source: 'examples/10_var_order.cml',
+        passes: ['std::rgir'],
+        cluster: 'twice',
+        title: 'twice 的子图：格子和两次写之间的同步边',
     },
     {
         name: '17_rule_negated',
@@ -158,6 +174,8 @@ for (const sheet of SHEETS) {
             failed.push(`${sheet.name}: ${fs.existsSync(dotFile) ? '' : `${sheet.name}.dot `}${fs.existsSync(svgFile) ? '' : `${sheet.name}.svg`} is not drawn yet`);
             continue;
         }
+        const svg = fs.readFileSync(svgFile, 'utf8');
+        if (!svg.includes('<svg') || svg.length < 200) failed.push(`${sheet.name}: ${sheet.name}.svg is not a picture`);
         const kept = fs.readFileSync(dotFile, 'utf8');
         if (kept !== dot) failed.push(`${sheet.name}: the graph this tree draws is not the graph the picture was drawn from`);
         continue;

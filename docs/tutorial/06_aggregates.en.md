@@ -116,7 +116,7 @@ true
 ```
 
 The four `true`s all say the same thing: `a` and `b` are two structs built separately, their contents are equal, so
-they are equal. Asking whether they are the same piece of data is the other operator, `===`, which chapter 13 uses
+they are equal. Asking whether they are the same piece of data is the other operator, `===`, which chapter 14 uses
 on arrays.
 
 ## On the graph
