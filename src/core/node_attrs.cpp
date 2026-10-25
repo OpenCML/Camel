@@ -635,20 +635,20 @@ const std::vector<FateRow> &fateTable() {
             "a declaration fact: no node carries it.");
         add("autodiff::vjp",
             "*",
-            "autodiff's `tag vjp<rule>` declaration",
+            "autodiff's `tag vjp::<F>(rule: F) on func when is_function::<F>()` declaration",
             notNode,
             notNode,
             notNode,
             notNode,
             "a declaration fact (the graph of a derivative rule): no node "
             "carries it.");
-        // `#impl<kernel>` (design principles 10.4) names the body-less declaration that
+        // `#impl(kernel)` (design principles 10.4) names the body-less declaration that
         // implements a function, so the key is interned in the attribute namespace but is a
         // declaration fact: the builder resolves it while the module is declared, and no node
         // ever carries it.
         add("impl",
             "*",
-            "#impl<kernel> (a function declaration)",
+            "#impl(kernel) (a function declaration)",
             notNode,
             notNode,
             notNode,

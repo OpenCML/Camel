@@ -631,7 +631,7 @@ node_handle_t Builder::staticFieldTagsNode(
     Type *subject, size_t index, const GCT::node_ptr_t &where, const GCT::node_ptr_t &head) {
     // The tags written on the field, as a compile-time struct: one field per tag, named by the
     // tag, whose value is the record of that tag's arguments. A field of
-    // `type Box = { #width<8> low: int, high: int }` under `tag width<w: int>` gives
+    // `type Box = { #width(8) low: int, high: int }` under `tag width(w: int)` gives
     // `{ width: { w: 8 } }` for `low` and `{}` for `high`, so `tags.width.w` reads the value where
     // the round's type has that field, `fields typeof(tags)` walks the names, and each round's
     // `tags` has the type its own field's tags make. The facts of a field are kept by the module

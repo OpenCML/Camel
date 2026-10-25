@@ -47,7 +47,8 @@ namespace {
 
 /// The kind a tag parameter declares, as far as a tag can carry it. A tag argument is a
 /// compile-time constant: an integer, a real, a boolean or a string, or, for a parameter
-/// declared `func`, a function of the program (carried as its graph reference).
+/// declared as a function (a concrete function type, or a type parameter the condition selects
+/// with `is_function::<F>()`), a function of the program (carried as its graph reference).
 enum class ArgKind { Int, Float, Bool, String, Func, Other };
 
 /// The type a tag parameter is declared with, as it is compared: letters lowercased and spaces
@@ -62,7 +63,36 @@ std::string foldedType(std::string_view type) {
     return t;
 }
 
-ArgKind kindOfDeclaredType(std::string_view type) {
+/// Whether the declared type is written out as a function type (`(x: int) => int`). The arrow
+/// is what tells it from every other type a parameter could declare, and it is the parameter
+/// that fixes the signature: the tag machinery checks the function's own signature against it.
+bool isFunctionTypeText(std::string_view type) {
+    return type.find("=>") != std::string_view::npos;
+}
+
+/// Whether the declared type is one of the declaration's type parameters (`::<F>`).
+bool namesTypeParameter(const camel::core::tag::Decl &decl, std::string_view type) {
+    const std::string t = foldedType(type);
+    for (const std::string &param : decl.typeParams) {
+        if (foldedType(param) == t) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/// Whether the declaration's condition says the parameter's type is a function
+/// (`when is_function::<F>()`). The condition is one text and the name is matched in it with the
+/// spaces dropped, exactly as a pass declaration's condition is (Builder::isPassDeclaration): a
+/// tag carries no instance of its own for the type parameter to be bound in, so there is no
+/// other reading of it. A condition that also says something else still selects every type
+/// parameter it names this way.
+bool conditionSelectsFunction(const camel::core::tag::Decl &decl, std::string_view type) {
+    return foldedType(decl.when).find("is_function::<" + foldedType(type) + ">()") !=
+           std::string::npos;
+}
+
+ArgKind kindOfDeclaredType(const camel::core::tag::Decl &decl, std::string_view type) {
     const std::string t = foldedType(type);
     if (t == "int" || t == "int8" || t == "int16" || t == "int32" || t == "int64" || t == "i8" ||
         t == "i16" || t == "i32" || t == "i64" || t == "u8" || t == "u16" || t == "u32" ||
@@ -79,10 +109,48 @@ ArgKind kindOfDeclaredType(std::string_view type) {
     if (t == "string" || t == "str" || t == "text") {
         return ArgKind::String;
     }
-    if (t == "func") {
+    if (isFunctionTypeText(type)) {
         return ArgKind::Func;
     }
+    if (namesTypeParameter(decl, type) && conditionSelectsFunction(decl, type)) {
+        return ArgKind::Func;
+    }
+    // No other type a tag parameter may declare: a parameter of any other type is reported
+    // where the tag is written (TagParameterType).
     return ArgKind::Other;
+}
+
+/// The comparable form of a function type: lowercased, without spaces and without the parameter
+/// names, so the type a declaration writes (`(x: int) => int`) and the type a function of the
+/// program has (`(n: i64) => i64`) compare as the signature they are.
+std::string foldedSignature(std::string_view text) {
+    const std::string folded = foldedType(text);
+    std::string out;
+    size_t i = 0;
+    while (i < folded.size()) {
+        const char c = folded[i];
+        const bool word = (c >= 'a' && c <= 'z') || c == '_';
+        if (word) {
+            size_t end = i;
+            while (end < folded.size() &&
+                   ((folded[end] >= 'a' && folded[end] <= 'z') ||
+                    (folded[end] >= '0' && folded[end] <= '9') || folded[end] == '_')) {
+                ++end;
+            }
+            // `name:` is a parameter's name, not part of its type; `::` never is.
+            if (end < folded.size() && folded[end] == ':' &&
+                (end + 1 >= folded.size() || folded[end + 1] != ':')) {
+                i = end + 1;
+                continue;
+            }
+            out += folded.substr(i, end - i);
+            i = end;
+            continue;
+        }
+        out += c;
+        ++i;
+    }
+    return out;
 }
 
 /// The compile-time kind a tag parameter restores to, read from the type name the declaration
@@ -93,7 +161,7 @@ ArgKind kindOfDeclaredType(std::string_view type) {
 /// kind rather than inventing one).
 enum class RestoredKind { Int64, Int32, Float64, Float32, Bool, String, Func, Other };
 
-RestoredKind restoredKindOf(std::string_view type) {
+RestoredKind restoredKindOf(const camel::core::tag::Decl &decl, std::string_view type) {
     const std::string t = foldedType(type);
     if (t == "int" || t == "int64" || t == "i64" || t == "integer") {
         return RestoredKind::Int64;
@@ -113,7 +181,7 @@ RestoredKind restoredKindOf(std::string_view type) {
     if (t == "string" || t == "str" || t == "text") {
         return RestoredKind::String;
     }
-    if (t == "func") {
+    if (kindOfDeclaredType(decl, type) == ArgKind::Func) {
         return RestoredKind::Func;
     }
     return RestoredKind::Other;
@@ -157,7 +225,7 @@ const char *kindName(ArgKind kind) {
     case ArgKind::String:
         return "string";
     case ArgKind::Func:
-        return "func";
+        return "a function";
     default:
         return "other";
     }
@@ -268,11 +336,11 @@ Builder::tagValueOf(const camel::core::tag::Decl &decl, const GCT::TagUse &use) 
     };
     bool takesFunction = false;
     for (const camel::core::tag::TagParam &param : decl.params) {
-        takesFunction = takesFunction || kindOfDeclaredType(param.type) == ArgKind::Func;
+        takesFunction = takesFunction || kindOfDeclaredType(decl, param.type) == ArgKind::Func;
     }
     if (takesFunction) {
-        // A parameter declared `func` names a function of the program (design principles 6.2:
-        // `#vjp<cube_rule>`). Its fact is the graph reference of the function
+        // A parameter declared as a function names a function of the program (design principles
+        // 6.2: `#vjp(cube_rule)`). Its fact is the graph reference of the function
         // (attr::graphRef), not a data value: the graph is added to the reference table of the
         // declaring graph by attachRuleGraphs, so the tag's reader finds it in the frozen graph
         // instead of resolving the name again.
@@ -280,7 +348,7 @@ Builder::tagValueOf(const camel::core::tag::Decl &decl, const GCT::TagUse &use) 
         values.reserve(use.args.size());
         for (size_t i = 0; i < use.args.size(); ++i) {
             const camel::core::tag::TagParam &param = decl.params[i];
-            const ArgKind declared                  = kindOfDeclaredType(param.type);
+            const ArgKind declared                  = kindOfDeclaredType(decl, param.type);
             const GCT::node_ptr_t &arg              = use.args[i];
             if (declared == ArgKind::Func) {
                 std::optional<compile_graph_ptr_t> graph;
@@ -296,6 +364,24 @@ Builder::tagValueOf(const camel::core::tag::Decl &decl, const GCT::TagUse &use) 
                             param.type,
                             arg == nullptr ? std::string{} : arg->name(),
                             "not a function of the program");
+                    throw BuildAbortException();
+                }
+                // A parameter whose type is written out as a function type fixes the signature
+                // the argument must have: the check is made here, where the tag is pasted. A
+                // parameter declared as a type parameter (`rule: F`) names no signature for
+                // this machinery to compare, so what its condition asks for is the reader's
+                // question, answered at the tag's position when it reads the version it asks
+                // the function to build.
+                const camel::core::type::FunctionType *type = graph.value()->funcType();
+                const std::string actual =
+                    type == nullptr
+                        ? std::string{}
+                        : camel::core::type::sourceTypeSpelling(type->toString());
+                if (isFunctionTypeText(param.type) && type != nullptr &&
+                    foldedSignature(param.type) != foldedSignature(actual)) {
+                    diags_->of(SemanticDiag::TagArgumentType)
+                        .atOrigin(use.origin)
+                        .commit(param.name, use.name, param.type, arg->name(), actual);
                     throw BuildAbortException();
                 }
                 const camel::runtime::GraphId id                = graph.value()->graphId();
@@ -343,7 +429,7 @@ Builder::tagValueOf(const camel::core::tag::Decl &decl, const GCT::TagUse &use) 
     // would otherwise be reported as an argument that is not a compile-time value -- telling the
     // writer to write what they wrote.
     for (const camel::core::tag::TagParam &param : decl.params) {
-        if (kindOfDeclaredType(param.type) == ArgKind::Other) {
+        if (kindOfDeclaredType(decl, param.type) == ArgKind::Other) {
             diags_->of(SemanticDiag::TagParameterType)
                 .atOrigin(use.origin)
                 .commit(param.name, use.name, param.type);
@@ -362,7 +448,7 @@ Builder::tagValueOf(const camel::core::tag::Decl &decl, const GCT::TagUse &use) 
         args.push_back(arg->data());
     }
     if (decl.names) {
-        // The arguments are names, not values (`#reads<reassociate, contract>`): the fact is
+        // The arguments are names, not values (`#reads(reassociate, contract)`): the fact is
         // the tuple of them, one item per argument, always a tuple however many there are.
         std::vector<camel::core::attr::AttrValueId> items;
         items.reserve(args.size());
@@ -398,7 +484,7 @@ Builder::tagValueOf(const camel::core::tag::Decl &decl, const GCT::TagUse &use) 
     // as something else.
     for (size_t i = 0; i < args.size(); ++i) {
         const camel::core::tag::TagParam &param = decl.params[i];
-        const ArgKind declared                  = kindOfDeclaredType(param.type);
+        const ArgKind declared                  = kindOfDeclaredType(decl, param.type);
         const ArgKind actual = kindOfValue(args[i]->type()->code());
         if (actual != declared) {
             diags_->of(SemanticDiag::TagArgumentType)
@@ -427,8 +513,9 @@ camel::core::data::data_ptr_t Builder::tagArgumentValue(
     using camel::core::attr::ValueKind;
     const camel::core::attr::Value value = camel::core::attr::value(id);
     const RestoredKind declared =
-        decl != nullptr && index < decl->params.size() ? restoredKindOf(decl->params[index].type)
-                                                       : RestoredKind::Other;
+        decl != nullptr && index < decl->params.size()
+            ? restoredKindOf(*decl, decl->params[index].type)
+            : RestoredKind::Other;
     switch (declared) {
     case RestoredKind::Bool:
         // The fact of a boolean argument is the 0 or 1 an integer holds (attr keeps no boolean
@@ -605,7 +692,7 @@ void Builder::addTagFacts(
         mergeFact(facts.nodes);
     }
     // The pipeline can tell the programmer when nothing reads the tag: the declaration names
-    // the passes, and a Camel pass names the tags it reads with `#reads<...>`. The use is where
+    // the passes, and a Camel pass names the tags it reads with `#reads(...)`. The use is where
     // the tag was written.
     if (context_ != nullptr && !decl->readBy.empty()) {
         context_->noteTagUse({decl->name, decl->readBy, use.origin});

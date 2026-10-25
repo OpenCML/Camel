@@ -630,7 +630,7 @@ node_ptr_t Builder::visitModule(const AST::node_ptr_t &ast) {
                 if (node->nativeDeclaration()) {
                     // The declaration keeps what makes it one: no body, so the graph builder
                     // makes an operator rule of it instead of a graph (handover step 1),
-                    // and its tag uses go with it (`#op<'module:function'>`; design principles
+                    // and its tag uses go with it (`#op('module:function')`; design principles
                     // 6.2).
                     declNode->setNativeDeclaration();
                     if (const auto *uses = tree_->tagUsesOf(node); uses != nullptr) {
@@ -1176,7 +1176,8 @@ void Builder::checkOperatorDeclaration(
 FuncDecl(Ref ref) : FuncAnno* anno, FuncData ;
 */
 /*
-tagDecl : 'export'? 'tag' identDef angledParams? 'on' tagPositions ('read_by' tagReaders)?
+tagDecl : 'export'? 'tag' identDef typeParams? parentParams? 'on' tagPositions
+            ('read_by' tagReaders)? whenClause?
         | 'export'? 'tag' identDef '=' bracketIdents ;
 The tag is registered here, before any type is declared (visitModule), so that a `#` use reads
 it. It lowers to no node: a tag is a compile-time name, not a value of the program (design
@@ -1202,6 +1203,8 @@ void Builder::visitTagDecl(const AST::node_ptr_t &ast) {
     for (const auto &param : decl->params()) {
         tag.params.push_back({param.name, param.type});
     }
+    tag.typeParams = decl->typeParams();
+    tag.when       = decl->when();
     for (const auto &alias : decl->aliases()) {
         tag.aliases.push_back(alias);
     }

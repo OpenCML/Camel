@@ -57,7 +57,7 @@ std::string qualified(std::string_view module, std::string_view ident) {
 }
 
 /// The passes modules and the core registered as readers of tag facts, and, for a Camel pass
-/// that says which tags it reads (`#reads<...>`), the passes of each tag.
+/// that says which tags it reads (`#reads(...)`), the passes of each tag.
 struct Readers {
     std::shared_mutex mutex;
     std::set<std::string> passes;
@@ -130,8 +130,8 @@ void declareStandardTags() {
         strict.on    = static_cast<Positions>(Func | Nodes);
         declare(std::move(strict));
         // `reads`, written on a Camel pass function: the tags the pass reads. Its arguments are
-        // tag names, not values, and there may be any number of them (`#reads<reassociate,
-        // contract>`); `registerCamelPass` records the pass as a reader of each.
+        // tag names, not values, and there may be any number of them (`#reads(reassociate,
+        // contract)`); `registerCamelPass` records the pass as a reader of each.
         Decl reads;
         reads.name     = "reads";
         reads.ident    = "reads";

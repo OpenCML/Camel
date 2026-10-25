@@ -786,7 +786,7 @@ bool Builder::rejectParenthesizedName(cst::FuncAnno context) {
               "'#[reassociate, contract]', '#[finite_math]', ...) before the function or the "
               "block"
             : "an annotation takes '<...>' arguments, not '(...)'; a tag is written '#name', "
-              "'#name<args>' or '#[a, b]'";
+              "'#name(args)' or '#[a, b]'";
     diags_->of(SemanticDiag::InvalidAnnotation)
         .at(rangeOf(context->firstToken(), context->lastToken()))
         .commit(annotation, why);
@@ -802,7 +802,7 @@ bool Builder::rejectVjpAnnotation(cst::FuncAnno context) {
         .at(rangeOf(context->firstToken(), context->lastToken()))
         .commit(
             annotation,
-            "a custom derivative rule is a declaration tag now: write '#vjp<rule>' before the "
+            "a custom derivative rule is a declaration tag now: write '#vjp(rule)' before the "
             "function (design principles 6.2, 8)");
     return true;
 }
@@ -927,7 +927,7 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
         }
     }
 
-    // `#requires<...>`: the numeric permissions the rule needs (design principles 7.2). The
+    // `#requires(...)`: the numeric permissions the rule needs (design principles 7.2). The
     // arguments are the names of the standard permission tags, not values: a permission tag is
     // a compile-time fact, so the requirement is checked here, when the rule is compiled, and
     // an argument that names no permission is a located diagnostic rather than a silent pass.
@@ -1573,8 +1573,9 @@ Value Builder::visitAnalysisDecl(cst::AnalysisDecl context) {
 /*
         | ('export')? 'tag' identDef '=' bracketIdents ;
 A tag is a name in the namespace of functions and types (design principles 6.2). The AST keeps
-the positions as a bit set (TagPosition), the parameters as written, the members of a group and
-the passes its declaration names; the GCT builder registers the tag with them.
+the positions as a bit set (TagPosition), the type parameters and the condition as written, the
+parameters as written, the members of a group and the passes its declaration names; the GCT
+builder registers the tag with them.
 */
 Value Builder::visitTagDecl(cst::TagDecl context) {
     ENTER("TagDecl");
@@ -1586,7 +1587,12 @@ Value Builder::visitTagDecl(cst::TagDecl context) {
     auto decl = declNode->loadAs<TagDeclLoad>();
     decl->setDoc(docOf(context));
 
-    if (const auto params = context->get<cst::AngledParams>()) {
+    if (const auto typeParams = context->get<cst::TypeParams>()) {
+        for (const auto ident : typeParams->all<cst::IdentDef>()) {
+            decl->addTypeParam(ident->text());
+        }
+    }
+    if (const auto params = context->get<cst::ParentParams>()) {
         const auto paired = params->get<cst::PairedParams>();
         for (const auto pair : paired->all<cst::KeyParamPair>()) {
             TagDeclLoad::Param param;
@@ -1622,6 +1628,13 @@ Value Builder::visitTagDecl(cst::TagDecl context) {
                 decl->addReader(value_cast<Reference>(visitIdentRef(reader)));
             }
         }
+        if (const auto when = context->get<cst::WhenClause>()) {
+            // The condition is kept as written, without the `when` word: a tag carries no
+            // instance of its own for the type parameters to be bound in, so what the condition
+            // says (`is_function::<F>()`) is read as the text it is, the same way a pass
+            // declaration's condition is read.
+            decl->setWhen(std::string(when->expr().sourceText()));
+        }
     }
 
     if (context->tok(TK::KwExport)) {
@@ -1640,8 +1653,8 @@ std::vector<node_ptr_t> Builder::tagUsesOf(cst::TagUse context) {
         const auto name = value_cast<Reference>(visitIdentRef(ref->get<cst::IdentRef>()));
         node_ptr_t use  = createNodeAs<TagUseLoad>(name);
         setNodeTokenRangeByContext(use, ref);
-        if (const auto values = ref->get<cst::AngledValues>()) {
-            // A tag whose arguments are names, not values (`#reads<reassociate, contract>`):
+        if (const auto arguments = ref->get<cst::ParentArgues>()) {
+            // A tag whose arguments are names, not values (`#reads(reassociate, contract)`):
             // each argument is the name as written, carried as a string constant. Whether the
             // name is a tag is the GIR builder's question; here it is only text.
             const auto id = camel::core::tag::find(name.toString());
@@ -1649,26 +1662,26 @@ std::vector<node_ptr_t> Builder::tagUsesOf(cst::TagUse context) {
                 id.has_value() ? camel::core::tag::get(*id) : nullptr;
             if (decl != nullptr && decl->names) {
                 node_ptr_t dataList = createNodeAs<RepeatedLoad>("Data");
-                setNodeTokenRangeByContext(dataList, values);
+                setNodeTokenRangeByContext(dataList, arguments);
                 const syn::TokenBuffer &tokens = context.tree()->tokens();
                 std::string current;
                 const auto flush = [&]() {
                     if (!current.empty()) {
                         node_ptr_t literalNode =
                             createNodeAs<LiteralLoad>(Literal(LiteralType::String, current));
-                        setNodeTokenRangeByContext(literalNode, values);
+                        setNodeTokenRangeByContext(literalNode, arguments);
                         *dataList << literalNode;
                         current.clear();
                     }
                 };
-                for (size_t i = values->firstToken().index();
-                     i <= values->lastToken().index() && i < tokens.size();
+                for (size_t i = arguments->firstToken().index();
+                     i <= arguments->lastToken().index() && i < tokens.size();
                      ++i) {
                     if (syn::isTrivia(tokens[i].kind)) {
                         continue;
                     }
                     const std::string_view text = tokens.text(i);
-                    if (text == "<" || text == ">") {
+                    if (text == "(" || text == ")") {
                         flush();
                     } else if (text == ",") {
                         flush();
@@ -1681,12 +1694,12 @@ std::vector<node_ptr_t> Builder::tagUsesOf(cst::TagUse context) {
                 uses.push_back(use);
                 continue;
             }
-            const ArgumentValues args = value_cast<ArgumentValues>(visitAngledValues(values));
+            const ArgumentValues args = value_cast<ArgumentValues>(visitParentArgues(arguments));
             if (args.named && args.named->size() > 0) {
                 // A tag takes positional arguments only: it names its parameters where it is
                 // declared, and the pass that reads the tag matches them by position.
                 diags_->of(SemanticDiag::TagArgumentNamed)
-                    .at(rangeOf(values->firstToken(), values->lastToken()))
+                    .at(rangeOf(arguments->firstToken(), arguments->lastToken()))
                     .commit(args.named->at(0)->load()->toString());
             }
             *use << args.data;

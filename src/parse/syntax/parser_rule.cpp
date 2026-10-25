@@ -39,7 +39,7 @@ bool ParserImpl::atRuleDecl(uint32_t n) const {
 ///            whenClause? '{' ruleBody '}'
 /// The first IDENTIFIER is the name `rule`; the condition, when there is one, is the `whenClause`
 /// between the parameters and the body. The parameters are the pattern variables; `const x: T`
-/// only matches a constant. The tags before it are the rule's requirements (`#requires<reassociate>`,
+/// only matches a constant. The tags before it are the rule's requirements (`#requires(reassociate)`,
 /// design principles 7.2); the AST reads them from the tree.
 /// The condition is part of the signature, so it is written between the parameters and the body,
 /// in the one position the parser reads it in (design principles 4.4; 

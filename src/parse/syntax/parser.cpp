@@ -750,7 +750,7 @@ void ParserImpl::parseFuncAnno() {
 }
 
 /// A statement that starts with annotations or tag uses: a function declaration, a type
-/// declaration, a rule declaration (`#requires<...> rule f(...)`), a module declaration
+/// declaration, a rule declaration (`#requires(...) rule f(...)`), a module declaration
 /// (`#gpu module m`, design principles 13.4), or an annotated/tagged block
 /// (blockStmt's second form; an `@name(args)` annotation, the removed spelling of the numeric
 /// permission annotation; `#tag { ... }` on
@@ -806,18 +806,24 @@ void ParserImpl::parseFuncDecl() {
     parseFuncDeclRest(m);
 }
 
-/// tagDecl : 'export'? 'tag' identDef angledParams? 'on' tagPositions ('read_by' tagReaders)?
+/// tagDecl : 'export'? 'tag' identDef typeParams? parentParams? 'on' tagPositions
+///             ('read_by' tagReaders)? whenClause?
 ///         | 'export'? 'tag' identDef '=' bracketIdents
 ///
 /// A tag is a name in the namespace of functions and types (design principles 6.2): the
 /// positions after `on` say where it may be written, `read_by` names the passes that read it,
 /// and the second form makes it the group of the tags in the list (`tag finite_math = [no_nans,
 /// no_infs]`). `tag`, `on` and `read_by` are contextual: they are not reserved words, and a
-/// declaration starts with `tag` only when a name, `<` or `=` follows it.
+/// declaration starts with `tag` only when a name, `::`, `(`, `=` or the contextual `on`
+/// follows it.
 ///
-/// A parameter's type may be the keyword `func` (design principles 6.2: `tag vjp<rule: func> on
-/// func`): the tag carries a function under that parameter. This is the only type position that
-/// reads the keyword as a name.
+/// A tag's parameters are its own -- they are what a use builds its fact from -- so they are
+/// written in parentheses, a name and a type each (`tag width(w: int) on field`). Its type
+/// parameters are declared `::<...>` after its name and its condition is a `when` clause, the
+/// same spelling a function, a rule and a pass use; a parameter that carries a function is
+/// therefore either a type parameter the condition holds for
+/// (`export tag vjp::<F>(rule: F) on func when is_function::<F>()`) or a concrete function type
+/// (`tag rule(f: (x: int) => int) on field`).
 void ParserImpl::parseTagDecl() {
     const size_t m = mark();
     eat(TK::KwExport);
@@ -830,11 +836,11 @@ void ParserImpl::parseTagDecl() {
         close(m, NK::TagDecl);
         return;
     }
-    if (cur_ == TK::Lt || cur_ == TK::LAngle) {
-        // A tag's parameters are declared in the one parameter list where a type may be the
-        // keyword `func` (design principles 6.2: `tag vjp<rule: func> on func`).
-        TagParamScope tagParams(*this);
-        parseAngledParams();
+    if (cur_ == TK::ColonColon && (peek(1) == TK::Lt || peek(1) == TK::LAngle)) {
+        parseTypeParams();
+    }
+    if (cur_ == TK::LParen) {
+        parseParentParams();
     }
     if (!atWord(0, "on")) {
         unexpected({e(TK::Identifier)});
@@ -846,17 +852,21 @@ void ParserImpl::parseTagDecl() {
         bump();
         parseTagReaders();
     }
+    if (atWord(0, "when")) {
+        parseWhenClause();
+    }
     close(m, NK::TagDecl);
 }
 
-/// Whether a tag declaration starts at offset `n`: `tag` followed by a name and then `<`, `=`,
-/// or the contextual `on`. A `tag` followed by anything else is an ordinary name.
+/// Whether a tag declaration starts at offset `n`: `tag` followed by a name and then `::`, `(`,
+/// `=`, or the contextual `on`. A `tag` followed by anything else is an ordinary name.
 bool ParserImpl::atTagDecl(uint32_t n) const {
     if (!atWord(n, "tag") || peek(n + 1) != TK::Identifier) {
         return false;
     }
     const TK third = peek(n + 2);
-    return third == TK::Lt || third == TK::LAngle || third == TK::Assign || atWord(n + 2, "on");
+    return third == TK::ColonColon || third == TK::LParen || third == TK::Assign ||
+           atWord(n + 2, "on");
 }
 
 /// tagPositions : tagPositionName (',' tagPositionName)* ','?
@@ -907,8 +917,8 @@ void ParserImpl::parseTagReaders() {
 }
 
 /// tagUse : '#' (tagRef | '[' (tagRef (',' tagRef)* ','?)? ']')
-/// The `#` forms of design principles 6.2: `#name`, `#name<args>` and the group
-/// `#[a, b<v>]`. `#` used to start a comment; it is now always a tag (2.1).
+/// The `#` forms of design principles 6.2: `#name`, `#name(args)` and the group
+/// `#[a, b(v)]`. `#` used to start a comment; it is now always a tag (2.1).
 void ParserImpl::parseTagUse() {
     const size_t m = mark();
     bump(); // `#`
@@ -934,12 +944,16 @@ void ParserImpl::parseTagUse() {
     close(m, NK::TagUse);
 }
 
-/// tagRef : identRef angledValues?
+/// tagRef : identRef parentArgues?
+///
+/// A tag's arguments are its own, so they are written in parentheses (`#width(8)`). A tag is
+/// never written before an expression that starts with `(`, so an open parenthesis right after
+/// the name is the argument list and nothing else.
 void ParserImpl::parseTagRef() {
     const size_t m = mark();
     parseIdentRef(NK::IdentRef);
-    if (cur_ == TK::LAngle) {
-        parseAngledValues();
+    if (cur_ == TK::LParen) {
+        parseParentArgues();
     }
     close(m, NK::TagRef);
 }
