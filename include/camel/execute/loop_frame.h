@@ -39,7 +39,9 @@ struct LoopFrameHost {
     slot_t stateValue() { return frame.get<slot_t>(loop.stateSlot); }
     /// The declared type of the round's element port: the body's first port when the loop iterates
     /// (ExecLoop::slots), which the builder gave the type of the round (ArrayType's
-    /// firstDimensionElement of the iterable, or an interval's integer).
+    /// firstDimensionElement of the iterable, or an interval's integer). A round hands over a value
+    /// of this type: what a value is at run time follows the type it is declared with
+    /// (loopRoundValue).
     const camel::core::type::Type *elementType() {
         return frame.typeAt<camel::core::type::Type>(
             loop.slots[loop.stateCount + (loop.hasCond ? loop.stateCount : 0)]);
@@ -192,8 +194,8 @@ inline bool loopTest(camel::core::context::Frame &frame, const camel::runtime::E
             if (static_cast<size_t>(round) >= array->size()) {
                 stop = true;
             } else {
-                // The round's value, along the first dimension and in the form its declared type
-                // says: the element port is what the round must have the type of (loopRoundValue).
+                // The round's value: what a round hands over follows the type its port declares,
+                // and that port is the element port (loopRoundValue).
                 element = loopRoundValue(
                     array, static_cast<size_t>(round),
                     frame.typeAt<camel::core::type::Type>(loop.slots[first]));
