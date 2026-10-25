@@ -3466,17 +3466,20 @@ This value has type '{0}', which is not the declared type '{1}'.
 A declaration written with a type takes a value of that type; nothing is converted on the way (a number does not become a float by itself, and a text does not become a number). Convert the value explicitly: 'float(n)' for a number of another type, 'int(s)' or 'parse_int(s)' for a text, 'string(n)' for a number written as text (the same for 'i32', 'f32', 'f64' and the complex types), 'v as T' for a module type; or change the declared type.
 ```
 
-**Example** (`test/cases/compile/literals/expected_type_typed_value_not_converted.cml`, run as `camel -E short test/cases/compile/literals/expected_type_typed_value_not_converted.cml`)
+**Example** (`test/cases/compile/array_shape/err_nonliteral_rank.cml`, run as `camel test/cases/compile/array_shape/err_nonliteral_rank.cml std::nvm`)
 
 ```camel
-module expected_type_typed_value_not_converted
-
-func keep::<T>(xs: T[], n: int): T[] { return xs }
+// A one-dimensional constant that is not written as a nested literal at the position: it is an
+// `f32[4]` of four elements where the annotation states `f32[2, 2]`. 2 * 2 is its element count,
+// and that alone does not make it one array of that shape (design principles 5.1, 5.4): only a
+// source whose own nesting already gives the shape -- a nested literal, a constant a folded
+// `reshape` names -- is read as the shape the position states. Nothing is reshaped to fit.
+module array_shape_err_nonliteral_rank
 
 func main(): int sync {
-    let v: float[] = [1.0, 2.0]
-    let xs: f32[] = keep(v, 2)
-    println(len(xs))
+    let flat: f32[] = [1.0, 2.0, 3.0, 4.0]
+    let one = flat as f32[4]
+    let b: f32[2, 2] = one
     return 0
 }
 ```
