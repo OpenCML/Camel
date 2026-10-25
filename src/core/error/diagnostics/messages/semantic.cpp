@@ -833,7 +833,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "TagFunctionArgumentNotReadable",
                 "The tag '{0}' takes a function for its parameter '{1}', and a 'static' head cannot give a function value yet.",
-                "A parameter that carries a function holds the function's graph reference: an internal number, not a value the language has. Do not read the tags of this field at a 'static' head; a function argument stays a fact for a pass that reads the tag after the program is compiled.",
+                "A parameter that carries a function carries the function as its graph reference: an internal number, not a value the language has. Do not read the tags of this field at a 'static' head; a function argument stays a fact for a pass that reads the tag after the program is compiled.",
             },
         },
         {
