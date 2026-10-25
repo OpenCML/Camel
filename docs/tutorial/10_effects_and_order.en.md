@@ -370,7 +370,8 @@ Draw the graph of this program and the `tooltip` of a function node is the resou
 
 All three lines say what a call touches: `read_id` touches the handle it is given, `tick` touches the `console` group
 (expanded to `db` and `stdout`), `bump` touches the cell the caller hands it. **That is resource inference**: you need
-not write it, and it is visible on the graph; if you do write it, it is a promise the compiler checks.
+not write it, and it is visible on the graph; what you write is a promise, and the compiler checks the part of it it
+can (the errors below).
 
 What a wrong clause looks like (all compile errors):
 
