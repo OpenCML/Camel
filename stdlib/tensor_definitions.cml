@@ -53,11 +53,14 @@ export func log_softmax(x: Tensor<f32>, axis: int): Tensor<f32> {
 /// tensor:mean of a whole tensor: the element type `T` is answered as
 /// T(sum(float(x)) / float(numel(x))) — the sum and the division both happen in f64 and their
 /// result is rounded into `T` once, never a sum rounded to the element type and divided again,
-/// which would round twice. The one rounding is the `match` on the element type below: a
-/// conversion to a type variable is not something the language writes, so each element type names
-/// its own conversion. A tensor without elements is a fault.
+/// which would round twice. The widening is written `cast(x, "f64")`: `float(x)` is a scalar
+/// conversion and a conversion does not map over an array (measured: `No matching function found
+/// for argument types: <> (f32[..])`), and the tensor-wide widening is the module's `cast`. The
+/// one rounding is the `match` on the element type: a conversion to a type variable is not
+/// something the language writes either, so each element type names its own. A tensor without
+/// elements is a fault.
 export func mean::<T>(x: T[..]): T {
-    let m = sum(float(x)) / float(numel(x))
+    let m = sum(cast(x, "f64")) / float(numel(x))
     return match type T {
         case float => float(m)
         case f32 => f32(m)
