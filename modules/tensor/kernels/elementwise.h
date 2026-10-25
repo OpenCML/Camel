@@ -38,13 +38,27 @@ struct Operand {
 };
 
 /// Scalar storage for a rank-0 operand built from a Camel scalar.
+///
+/// The union has a member for every scalar type an operator takes, the two reduced-precision
+/// floats included: beside a tensor the scalar takes the element type the operator declares
+/// (design principles 5.1), and a kernel computing in that element type reads the operand where it
+/// lies (`asDType` hands the caller the operand's own bytes when the two dtypes agree), so a bf16
+/// or an f16 scalar has to be stored as its own two-byte pattern. Stored through a wider member it
+/// is not that value: a bool writes 0 or 1 into the low byte, which read as an element of the type
+/// is the pattern 0x0001 - the smallest bf16 subnormal, 9.18e-40 - and never the number written.
 struct ScalarOperand {
-    union {
+    union Value {
         double d;
         float f;
         int32_t i32;
         int64_t i;
         bool_t b;
+        rtdata::BFloat16 bf16;
+        rtdata::Float16 f16;
+        /// Written out because the two reduced-precision members carry an initialiser of their
+        /// own, which deletes the union's implicit default constructor; the operand starts as the
+        /// element zero of the type the caller names in `dtype`.
+        Value() : bf16() {}
     } value;
     type::TypeCode dtype;
 
