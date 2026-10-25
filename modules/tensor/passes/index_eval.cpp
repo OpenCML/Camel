@@ -1090,6 +1090,13 @@ void runOperator(
             }
         } catch (const std::exception &) {
         }
+        // The view carries the call's static result type, which is what every scheduler hands a
+        // kernel (`node->dataType()`, `header->dataType`, the frame's `typeAt(bc.result)`): this is
+        // the type `ops::wrap` asks to decide between the element and the array box, so a kernel run
+        // without it answers a rank-zero result as a box, and the reading below -- which follows the
+        // type rule and takes the element -- would take the box's pointer for the element. A real
+        // call therefore never disagreed with itself here; only this tool did, by not asking.
+        norm.setResultType(resultType);
         std::optional<Data> kernelResult;
         bool kernelFault = false;
         try {
