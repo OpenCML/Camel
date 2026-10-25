@@ -26,7 +26,7 @@ import {
 // The file operators still type-check (this function is not called): `load_npy` writes the
 // element type the file holds, and the file's own element type is checked against it when the
 // call runs.
-func round_trip(t: Tensor, path: string): Tensor sync {
+func round_trip(t: f32[..], path: string): f32[..] sync {
     save_npy(t, path)
     return load_npy::<f32>(path)
 }
