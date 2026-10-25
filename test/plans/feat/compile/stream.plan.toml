@@ -565,3 +565,27 @@ expect_output_contains = ["generators"]
 expect_output_not_contains = ["UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
+[[tests]]
+name = "stream.cell_from_null_stays_void"
+desc = "A `var` whose first value is `null` does not take a type from a later assignment: it stays `void`, and reading it as a `T?` is refused. Measured while choosing how the generator lowering carries its state, and pinned so the constraint that choice rests on is a reading rather than a belief."
+kind = "behavior"
+case = "../../../cases/compile/stream/probe_var_null.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["has type 'void'"]
+expect_output_not_contains = ["UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "stream.non_null_assertion_not_implemented"
+desc = "The postfix `!` is not a spelling of the language -- it left the grammar, so `x!` is an ordinary syntax error -- and a value of a nullable type is therefore not unwrapped with it; `??` is the form the language has. Measured while choosing how a yielded element is delivered."
+kind = "behavior"
+case = "../../../cases/compile/stream/probe_unwrap_nullable.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SyntaxDiag::MissingComma"
+expect_output_contains = ["Expected ',' or ')' before '!'"]
+expect_output_not_contains = ["UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
