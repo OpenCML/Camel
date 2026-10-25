@@ -17,7 +17,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "catalog.failure_paths"
-desc = "The registry's failure paths on a scratch copy: a duplicate number, a number outside its section's range, a duplicate name, a generated header that disagrees with the registry, an empty registry, and a declaration that does not say whether it carries a machine-applicable edit (or says it in a way the vocabulary does not know, or promises an edit without the help that says what it does) all exit 1; one appended line takes the next free number and changes only the registry and that section's generated files."
+desc = "The registry's failure paths on a scratch copy: a duplicate number, a number outside its section's range, a duplicate name, a generated header that disagrees with the registry, an empty registry, a declaration that does not say whether it carries a machine-applicable edit (or says it in a way the vocabulary does not know, or promises an edit without the help that says what it does), and a message or help whose braces are not the substitution's fields (a literal brace, a field with a format specifier, or one pattern mixing `{}` with `{1}`, while an escaped `{{` is accepted) all exit 1; one appended line takes the next free number and changes only the registry and that section's generated files."
 kind = "behavior"
 tool = "node"
 case = "../../../../test/cases/diagnostics/registry_proof.mjs"
