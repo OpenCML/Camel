@@ -205,7 +205,7 @@ graph train_step [body placement=gpu]
 | 主机效果算子（`print`、文件写、`save_npy`） | 留主机，边界处一个显式 `download`（`syncs` 计数） |
 | 没有设备实现、也不是主机效果的算子 | 拒绝：`GpuScopeUnsupported`；闭包里的模块没有设备程序时是 `GpuScopeNoDeviceProgram` |
 
-落地状态要说清：**"不拒绝"这一半已经落地**（`#gpu` 里写 `println` 不再报 `GpuScopeUnsupported`，作用域照旧是一个设备单元）；**"效果写在作用域体内时的那一次 `download`"还没有**——遍把段抽出去之后，体内的效果节点既不再执行、也没有传输给它，读数是 `TILES_RESIDENCY` 的 `downloads: 0` 与不打印。这一条挂在 `docs/handover/questions/gpu-scope-in-body-host-effect.md` 上等裁定；本文其余部分（作用域、边界、`--devices cpu` 不改可编译集合）不受影响。另外，"观察点 download"本身只在**有设备**时才会被写出来（`region_outline.cpp` 里插传输的那一圈以 `device` 非空为条件），`--devices cpu` 下一次传输都不写、`syncs` 记 0。
+落地状态要说清：**"不拒绝"这一半已经落地**（`#gpu` 里写 `println` 不再报 `GpuScopeUnsupported`，作用域照旧是一个设备单元）；**"效果写在作用域体内时的那一次 `download`"还没有**——遍把段抽出去之后，体内的效果节点既不再执行、也没有传输给它，读数是 `TILES_RESIDENCY` 的 `downloads: 0` 与不打印。这一条已在 `docs/handover/reviews/questions-2026-10-24-evening.md` 里定为**错误、现在就修**——效果节点和图的输出、出口一样是**可观察的根**，决定执行的那一处要读它；取值处插一次跨边界的 `download`，`--devices cpu` 下整个作用域本就在主机上、不需要传输但**同样要打印**；本文其余部分（作用域、边界、`--devices cpu` 不改可编译集合）不受影响。另外，"观察点 download"本身只在**有设备**时才会被写出来（`region_outline.cpp` 里插传输的那一圈以 `device` 非空为条件），`--devices cpu` 下一次传输都不写、`syncs` 记 0。
 
 诊断形状：一条诊断列出作用域里**所有**不合格算子（URI + origin + 原因），给出两条出路（写 `#cpu` 块，或 `--devices cpu`），不让用户一条一条试。`--devices cpu` **不改变可编译集合**：支持面在编译期定死，`--devices cpu` 只决定"编出来的段在哪执行"（主机后端执行同一段图）。否则同一个程序在有无设备时编译结果不同，这就是"静默地为错的设备编译"。
 
