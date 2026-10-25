@@ -1,8 +1,8 @@
 tip=d96797619 H554 第十六轮：清 1 条（`check_command` 的 JSON 位置断言）；裁定两条路的读数已拿到，实现未动
 
 数字
-- 计划级：`check_command.plan.toml` `total: 12, pass: 12, fail: 0` → `check.lexical_limit_json` **已清**，27 → **26**；全量快层见文末（本轮只改测试侧，产品未动）。
-- `-Check all` 见文末。提交 `d96797619`。
+- 计划级：`check_command.plan.toml` `total: 12, pass: 12, fail: 0` → `check.lexical_limit_json` **已清**，27 → **26**；gate-33（全量快层）：`total: 6382, pass: 6328, fail: 26, skip: 12, known failures: 16` —— 27 → **26**，逐名 fixed 1 / new 0。
+- `-Check all`：**8 run, 0 failed**。提交 `d96797619`。
 
 ① `check.lexical_limit_json` **已清（测试侧陈旧）**：脚本断言逐字 `assert(errors.every(d => d.range.start.line === -1), 'source positions retained')`，而实测 JSON 是 `{"range":{"start":{"line":0,"character":14},"end":{"line":0,"character":15}},…}`，且该用例自己的 desc 写着"two **located** errors in JSON mode" → 断言与 desc 自相矛盾，改成 `d.range.start.line >= 0` 并在信息里打出 range。
 
