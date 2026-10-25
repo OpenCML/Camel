@@ -862,13 +862,16 @@ class Compiler {
         // core shape fact; only invocation specialization needs to infer again.
         auto inferred = knownResult ? std::optional<ty::Type *>(knownResult)
                                     : def->infer(tensor::ops::InferContext(types, constants));
-        // A whole-tensor reduction answers f64 today (the accumulator's type): `tensor:sum`
-        // declares `float` for every tensor dtype. Taking the element type here is the second half
-        // of the ruling in `9acbac6f7`;
-        // `docs/handover/reviews/questions-2026-10-23.md（§tensor-reduction-element-type-slice）` records what it needs
-        // (the run-time answer cannot disagree with the inferred type) and what it still costs.
-        if (inferred && (*inferred)->code() == ty::TypeCode::Float64 &&
-            (def->name == "sum" || def->name == "mean")) {
+        // A whole-tensor reduction answers in its elements' own type (design principles 7.3), so
+        // the device accumulates in f64 and rounds into the annotation once: the reduction kernel
+        // casts its f64 accumulator to the node's dtype, and `mean_all` divides by the count
+        // there, which is the definition's own sum-then-divide. Only the two float widths this
+        // device has are represented here; an integer or bool reduction -- whose exact int64
+        // accumulator the device does not have -- is refused below and stays on the CPU.
+        if (inferred && (def->name == "sum" || def->name == "mean") &&
+            ((*inferred)->code() == ty::TypeCode::Float32 ||
+             (*inferred)->code() == ty::TypeCode::Float64)) {
+            const bool wide = (*inferred)->code() == ty::TypeCode::Float64;
             size_t input = tensorValue(args.at(0));
             return {
                 .type   = *inferred,
@@ -877,7 +880,7 @@ class Compiler {
                         .op     = def->name == "sum" ? "sum_all" : "mean_all",
                         .shape  = {},
                         .inputs = {input},
-                        .dtype  = DType::F64})};
+                        .dtype  = wide ? DType::F64 : DType::F32})};
         }
         const tensor::TensorFacts result =
             inferred ? tensor::tensorFactsOf(*inferred) : tensor::TensorFacts{};

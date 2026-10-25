@@ -919,23 +919,24 @@ const std::unordered_map<std::string_view, Indexing> &indexings() {
         t.emplace("broadcast_like", Indexing{broadcastLikeIndexing, {}});
         t.emplace("expand_axis", Indexing{expandAxisIndexing, {}});
 
-        // sum and mean of everything: f32 elements are added in f64; int64 and bool elements
-        // exactly in int64, wrapping (design principles 7.7), and the result converted to f64
-        // once (mean divides in f64 first).
+        // sum and mean of everything: f32 elements are added in f64 and rounded into the
+        // element type once; int64 and bool elements exactly in int64, wrapping (design
+        // principles 7.7), an int64 or bool sum answering that exact value and a mean of
+        // them dividing it in f64 before the one rounding to f32.
         t.emplace(
             "sum",
             Indexing{
                 reduceAllIndexing,
-                {sumLaw("sum_f32", f32, f64, f64),
-                 sumLaw("sum_i64", i64, i64, f64),
-                 sumLaw("sum_bool", boolean, i64, f64)}});
+                {sumLaw("sum_f32", f32, f64, f32),
+                 sumLaw("sum_i64", i64, i64, i64),
+                 sumLaw("sum_bool", boolean, i64, i64)}});
         t.emplace(
             "mean",
             Indexing{
                 reduceAllIndexing,
-                {meanLaw("mean_f32", f32, f64, f64, LawEmpty::Fault),
-                 meanLaw("mean_i64", i64, i64, f64, LawEmpty::Fault),
-                 meanLaw("mean_bool", boolean, i64, f64, LawEmpty::Fault)}});
+                {meanLaw("mean_f32", f32, f64, f32, LawEmpty::Fault),
+                 meanLaw("mean_i64", i64, i64, f32, LawEmpty::Fault),
+                 meanLaw("mean_bool", boolean, i64, f32, LawEmpty::Fault)}});
         // By axis: floats in f64 rounded once to f32, integers and bools exactly in int64.
         t.emplace(
             "sum_axis",

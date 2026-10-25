@@ -649,7 +649,10 @@ int main() {
         schedule(scalar);
         validatePlan(scalar);
         rejects(scalar, [](auto &x) { x.storage.bytes[x.storage.slots[1]] = 4; }, "undersized/missing allocation");
-        rejects(scalar, [](auto &x) { x.nodes[1].dtype = DType::F32; }, "scalar reduction type");
+        // The annotation is the elements' own type (design principles 7.3), so an f32 scalar
+        // reduction is now a valid plan: what the schedule still refuses is one that is not a
+        // scalar at all.
+        rejects(scalar, [](auto &x) { x.nodes[1].shape = {1}; }, "scalar reduction type");
         rejects(scalar, [](auto &x) { x.nodes[1].op = "relu"; }, "unsupported operation dtype");
         auto borrowed = indexed;
         auto resident = std::make_shared<DeviceValue>();

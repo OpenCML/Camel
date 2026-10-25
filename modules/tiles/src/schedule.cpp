@@ -236,9 +236,11 @@ void validate(const Program &p, InputBindings bindings) {
             continue;
         }
         if (n.op == "sum_all" || n.op == "mean_all") {
+            // The annotation is the elements' type (design principles 7.3) and the kernel casts
+            // its f64 accumulator into it once; the device has the two float widths only.
             require(
-                n.dtype == DType::F64 && n.shape.empty() && n.inputs.size() == 1 &&
-                    p.nodes[n.inputs[0]].dtype == DType::F32,
+                (n.dtype == DType::F32 || n.dtype == DType::F64) && n.shape.empty() &&
+                    n.inputs.size() == 1 && p.nodes[n.inputs[0]].dtype == DType::F32,
                 "scalar reduction type");
             (void)kernel::reductionAccess(p, n, kernel::IndexExpr(0), kernel::IndexExpr(0));
             continue;

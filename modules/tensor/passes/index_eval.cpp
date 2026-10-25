@@ -1094,8 +1094,29 @@ void runOperator(
         bool kernelFault = false;
         try {
             const slot_t r = def->kernel(with, norm, ctx);
-            if (resultType && resultType->code() == TypeCode::Float64) {
+            // A number comes back in the slot and a tensor comes back as a pointer to an array. An
+            // array states its elements' code, so the code alone puts an f32 array and an f32
+            // scalar together; the shape separates them, and a rank-zero result states an empty
+            // one. The whole-tensor `sum` and `mean` answer in their elements' own type (design
+            // principles 7.3) and are such results; the test used to be `code() == Float64`, which
+            // read them as a pointer and ended the process.
+            bool numberResult = false;
+            if (resultType != nullptr) {
+                const TensorFacts facts = tensorFactsOf(resultType);
+                numberResult = facts.isStaticShape() && facts.shape->empty() &&
+                               (resultType->code() == TypeCode::Float32 ||
+                                resultType->code() == TypeCode::Float64 ||
+                                resultType->code() == TypeCode::Int64 ||
+                                resultType->code() == TypeCode::Bool);
+            }
+            if (numberResult && resultType->code() == TypeCode::Float32) {
+                kernelResult = Data{TypeCode::Float32, {}, {f32(camel::core::rtdata::fromSlot<float>(r))}};
+            } else if (numberResult && resultType->code() == TypeCode::Float64) {
                 kernelResult = Data{TypeCode::Float64, {}, {f64(camel::core::rtdata::fromSlot<double>(r))}};
+            } else if (numberResult && resultType->code() == TypeCode::Int64) {
+                kernelResult = Data{TypeCode::Int64, {}, {i64(camel::core::rtdata::fromSlot<int64_t>(r))}};
+            } else if (numberResult && resultType->code() == TypeCode::Bool) {
+                kernelResult = Data{TypeCode::Bool, {}, {boolean(camel::core::rtdata::fromSlot<bool>(r))}};
             } else {
                 kernelResult = dataOf(camel::core::rtdata::fromSlot<Array *>(r));
             }

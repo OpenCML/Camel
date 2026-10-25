@@ -178,8 +178,9 @@ KernelBody serialBody(const Program &p, Launch &launch) {
         result = lower.value(body, launch.node, row);
     body.push_back(Store{{launch.node, row, Predicate(true)}, result});
     launch.blockX = launch.implementation == "ordered_reduce"             ? 32
-                    : (root.dtype == DType::F64 || root.op == "cast_f32") ? 1
-                                                                          : 256;
+                    : (root.dtype == DType::F64 || root.op == "cast_f32" || root.op == "sum_all" ||
+                       root.op == "mean_all") ? 1
+                                              : 256;
     launch.gridX  = static_cast<unsigned>(
         std::clamp<size_t>((count + launch.blockX - 1) / launch.blockX, 1, 65535));
     const auto begin =
