@@ -1902,7 +1902,6 @@ Add a top-level main function or ensure it is registered as a direct root subgra
 
 ```camel
 // A library module used by 12_modules.cml.
-module shapes
 
 import { sqrt } from math
 

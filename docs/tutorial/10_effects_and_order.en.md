@@ -32,9 +32,9 @@ camel docs/tutorial/examples/10_unused_effect.cml
 
 ```text
 warning[SemanticDiag::EffectNotExecuted]: The call of 'println' has side effects but is never executed: nothing depends on it and it is not in a sync block.
-  --> docs/tutorial/examples/10_unused_effect.cml:7:5
+  --> docs/tutorial/examples/10_unused_effect.cml:6:5
    |
- 7 |     println('hello from greet')
+ 6 |     println('hello from greet')
    |     ^^^^^^^
 help: Evaluation is driven by dependencies: outside a sync block an expression whose result (or the variable it writes) nothing needs does not run. This is legal. To run it, put it in a sync block ('sync { ... }', or a function body 'func f(): T sync { ... }'), or use its result.
 
@@ -114,9 +114,9 @@ camel docs/tutorial/examples/10_sync_block.cml
 
 ```text
 warning[SemanticDiag::EffectNotExecuted]: The call of 'println' has side effects but is never executed: nothing depends on it and it is not in a sync block.
-  --> docs/tutorial/examples/10_sync_block.cml:8:22
+  --> docs/tutorial/examples/10_sync_block.cml:7:22
    |
- 8 |     if second then { println('three'); println('four') }
+ 7 |     if second then { println('three'); println('four') }
    |                      ^^^^^^^
 help: Evaluation is driven by dependencies: outside a sync block an expression whose result (or the variable it writes) nothing needs does not run. This is legal. To run it, put it in a sync block ('sync { ... }', or a function body 'func f(): T sync { ... }'), or use its result.
 
@@ -227,16 +227,16 @@ camel docs/tutorial/examples/10_write_nobody_reads.cml
 
 ```text
 warning[SemanticDiag::IgnoredSideEffect]: The call of '<__assn__>: (var int, int) => int' is not in a sync block, and it takes a var argument.
-   --> docs/tutorial/examples/10_write_nobody_reads.cml:10:5
+   --> docs/tutorial/examples/10_write_nobody_reads.cml:9:5
     |
- 10 |     c = 5
+ 9 |     c = 5
     |     ^^^^^
 help: Put it in a sync block ('sync { ... }', or a function body 'func f(): T sync { ... }'): only then is the write ordered after the earlier uses of the variable. Without one, the write runs only if the variable is read afterwards.
 
 warning[SemanticDiag::EffectNotExecuted]: The assignment has side effects but is never executed: nothing depends on it and it is not in a sync block.
-   --> docs/tutorial/examples/10_write_nobody_reads.cml:10:7
+   --> docs/tutorial/examples/10_write_nobody_reads.cml:9:7
     |
- 10 |     c = 5
+ 9 |     c = 5
     |       ^
 help: Evaluation is driven by dependencies: outside a sync block an expression whose result (or the variable it writes) nothing needs does not run. This is legal. To run it, put it in a sync block ('sync { ... }', or a function body 'func f(): T sync { ... }'), or use its result.
 
@@ -450,9 +450,9 @@ camel docs/tutorial/examples/10_pure_callback_wrong.cml
 
 ```text
 error[SemanticDiag::NoMatchingFunction]: No matching function found for argument types: <> ((x: int) => int, int).
-   --> docs/tutorial/examples/10_pure_callback_wrong.cml:16:18
+   --> docs/tutorial/examples/10_pure_callback_wrong.cml:15:18
     |
- 16 |     println(apply(noisy, 4))
+ 15 |     println(apply(noisy, 4))
     |                  ^^^^^^^^^^
 help: Check the number and types of arguments to ensure they match one of the available overloaded function signatures. Available overloads:
           apply: (f: (x: int) => int pure, x: int) => int

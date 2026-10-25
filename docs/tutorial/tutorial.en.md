@@ -249,9 +249,9 @@ negative
 
 ```text
 warning[SemanticDiag::ExitInUnusedBranch]: This 'return' gives the value of the 'if' it is in, and nothing uses that value: it does not leave the function.
-  --> docs/tutorial/examples/04_block_return.cml:7:21
+  --> docs/tutorial/examples/04_block_return.cml:6:21
    |
- 7 |     if x < 0 then { return 'negative' } else { return 'not negative' }
+ 6 |     if x < 0 then { return 'negative' } else { return 'not negative' }
    |                     ^^^^^^^^^^^^^^^^^
 note: the value of this 'if' is not used
 ```
@@ -367,9 +367,9 @@ camel docs/tutorial/examples/06_unused_effect.cml
 
 ```text
 warning[SemanticDiag::EffectNotExecuted]: The call of 'println' has side effects but is never executed: nothing depends on it and it is not in a sync block.
-  --> docs/tutorial/examples/06_unused_effect.cml:6:5
+  --> docs/tutorial/examples/06_unused_effect.cml:5:5
    |
- 6 |     println('hello from greet')     // not used, not in a sync block: never runs
+ 5 |     println('hello from greet')     // not used, not in a sync block: never runs
    |     ^^^^^^^
 help: Evaluation is driven by dependencies: outside a sync block an expression whose result (or the
       variable it writes) nothing needs does not run. This is legal. To run it, put it in a sync
@@ -471,9 +471,9 @@ In Camel every value is passed by reference. Writing `var` before a parameter me
 
 ```text
 error[SemanticDiag::ImmutablePassedToVarParam]: 'k' is immutable and cannot be passed to a var parameter of 'bump'.
-   --> docs/tutorial/examples/06_let_to_var.cml:11:10
+   --> docs/tutorial/examples/06_let_to_var.cml:10:10
     |
- 11 |     bump(k)
+ 10 |     bump(k)
     |          ^
 help: Only a variable declared with 'var' (or a var parameter) can be modified. Declare it with
       'var', or bind the new value to a new name.
@@ -674,9 +674,9 @@ error DivByZero: the divisor is zero
 ```text
 before
 error[RuntimeDiag::IndexOutOfRange]: Index 5 is out of range for an array of length 3.
-  --> docs/tutorial/examples/09_fault.cml:8:15
+  --> docs/tutorial/examples/09_fault.cml:7:15
    |
- 8 |     println(xs[5])
+ 7 |     println(xs[5])
    |               ^
 help: Ensure the index is within the valid range of the collection.
 ```
