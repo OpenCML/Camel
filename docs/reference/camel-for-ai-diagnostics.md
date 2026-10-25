@@ -59,7 +59,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 
 | `ComparisonAcrossLines` | This '>' is read as a comparison with the next line, which starts with {0}: two statements may have been joined into one. |
 
-**Semantic — errors** (`SemanticDiag`) — 202
+**Semantic — errors** (`SemanticDiag`) — 201
 
 | `Redeclaration` | Redeclaration of reference: '{0}'. |
 | `ModuleNotFound` | Module '{0}' not found. {1} |
@@ -247,7 +247,6 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `CompOperandMismatch` | '..' takes two functions or two integers; the left operand is '{0}' and the right one '{1}'. |
 | `CompOperandNotUnary` | '..' composes a unary function on the left; '{0}' takes {1} parameters. |
 | `CompOperandGenericWithoutType` | '..' composes two functions, and its {0} operand, the generic function '{1}', has no instance here: write its type arguments ('{1}::<int>'), or give the whole expression an expected function type. |
-| `RangeTwoArgumentsRemoved` | The two-parameter 'range(a, b)' is gone; write the interval 'a..b'. |
 | `RangeStepZero` | The range 'range({0}, {1}, 0)' has a step of 0, so it is no sequence of integers. |
 | `SliceStepZero` | The slice 't[a:b:s]' has a step of 0, so it takes no element at all, whatever its bounds are. |
 | `ReducedPrecisionUnsupported` | The call of '{0}' cannot take a value of the reduced-precision element type '{1}'. |

@@ -1012,6 +1012,14 @@ Builder::staticLoopSequenceOf(const GCT::node_ptr_t &subject) {
             return sequence;
         }
     }
+    // The read found no sequence, so the caller is about to report one it cannot work out. A call
+    // in sequence position is handed to the call path before that: a spelling the overload set
+    // refuses is answered there the way it is answered anywhere else, one fault one answer. The
+    // read above built nothing, so the call path builds this subject once, here; every other
+    // unknown sequence still leaves the caller its own diagnostic.
+    if (subject->type() == GCT::NodeKind::LINK) {
+        (void)visitLinkNode(subject);
+    }
     return std::nullopt;
 }
 
