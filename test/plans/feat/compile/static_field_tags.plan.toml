@@ -6,7 +6,7 @@ desc = "The third name of `fields T` -- a field's tags as a compile-time struct 
 
 [[tests]]
 name = "static_field_tags_restore"
-desc = "The `tags` struct of a round restores each argument by the type its parameter declares: `#flag(true)` under `flag<w: bool> on field` has type `bool` (the case `{ flag: { w: bool } }` selects and the value it carries is `true`), `#width(8)` under `width<w: int>` reads as 8 both as a value and as the key of an array, a field with no tags and a tag with no arguments are both the empty record, and every reading is identical under `std::fvm` and `std::nvm`."
+desc = "The `tags` struct of a round restores each argument by the type its parameter declares: `#flag(true)` under `flag(w: bool) on field` has type `bool` (the case `{ flag: { w: bool } }` selects and the value it carries is `true`), `#width(8)` under `width(w: int)` reads as 8 both as a value and as the key of an array, a field with no tags and a tag with no arguments are both the empty record, and every reading is identical under `std::fvm` and `std::nvm`."
 kind = "behavior"
 case = "../../../cases/compile/static_expansion/tags_restore_readings.cml"
 args = ["${case}", "std::fvm"]

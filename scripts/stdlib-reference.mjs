@@ -679,7 +679,7 @@ function readDeclarations(file, module) {
         // principles 6.4, step 1). This used to end the comment for a module written
         // in Camel, which lost the description of every such declaration from the page.
         if (trimmed.startsWith('#')) {
-            const tagged = trimmed.match(/^#\[?op<['"]([^'"]+)['"]>/)
+            const tagged = trimmed.match(/^#\[?op\(['"]([^'"]+)['"]\)/)
             if (tagged) {
                 pendingUri = tagged[1]
             } else if (module.kind === 'cpp') {

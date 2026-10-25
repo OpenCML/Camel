@@ -40,7 +40,7 @@ $ camel /tmp/h547probe/probe_law.cml
 
 ```
 /// @example let rs: Rule[] = []; p->run<rs>    // the run
-#op<'rewrite:run'>
+#op('rewrite:run')
 with <rules: Rule[], rounds: int = 16, strict: bool = false, explain: bool = false>
 export func run(p: Program): Run<Program>!
 ```

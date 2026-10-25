@@ -530,7 +530,7 @@ function readDeclarations(file, moduleName) {
     let pendingUri = null
     for (let i = 0; i < lines.length; i++) {
         const trimmed = lines[i].trim()
-        const tag = trimmed.match(/^#\[?op<['"]([^'"]+)['"]>/)
+        const tag = trimmed.match(/^#\[?op\(['"]([^'"]+)['"]\)/)
         if (tag) {
             pendingUri = tag[1]
             continue
