@@ -189,8 +189,8 @@ std::optional<Type *> layerNormInfer(const InferContext &ctx) {
         }
         bool fits = p->size() <= x->size();
         for (size_t d = 0; fits && d < p->size(); ++d) {
-            const int64_t want = (*x)[x->size() - p->size() + d], have = (*p)[d];
-            fits = want == kUnknownDim || have == kUnknownDim || want == have;
+            const std::optional<int64_t> want = (*x)[x->size() - p->size() + d], have = (*p)[d];
+            fits = !want.has_value() || !have.has_value() || want == have;
         }
         if (!fits) {
             throw ShapeError(std::format(

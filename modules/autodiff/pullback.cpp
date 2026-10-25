@@ -600,14 +600,19 @@ std::string uniqueSuffix() {
 /// array whose elements have no tangent has none, and a loop that iterates or captures one while
 /// it depends on a differentiated value is refused instead (see Backward::run).
 bool carriesGradient(Type *type) {
-    if (type == nullptr || tangentTypeOf(type) == nullptr) {
+    if (type == nullptr) {
         return false;
     }
-    if (type->code() == TypeCode::Array) {
+    if (const ArrayType *array = asArrayType(type)) {
         // An array's gradient is carried as the array of its elements' gradients, and an array
-        // whose element has no tangent has none (an integer array's element, or an element
-        // nobody stated): the lookup above is the answer.
-        return true;
+        // whose element has no tangent has none (an integer array's element): the element type is
+        // the answer. The transitional type needed the tangent-type lookup for this, because its
+        // element was `Void` and no element could be reached (docs/design/arrays-memory/plan.cn.md
+        // section 5.1a's table row `carriesGradient`: restored to `carriesGradient(elemType)`).
+        return carriesGradient(array->elemType());
+    }
+    if (tangentTypeOf(type) == nullptr) {
+        return false;
     }
     if (isAggregate(type)) {
         for (size_t i = 0; i < aggregateSize(type); ++i) {

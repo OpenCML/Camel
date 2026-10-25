@@ -29,11 +29,25 @@ namespace camel::tensor {
 
 namespace type = camel::core::type;
 
-/// Marker for an extent that is not known statically. An array the plan states as `?` reads as
-/// this in the facts (`TensorFacts::shape`); the type itself keeps the unknown as a form.
-inline constexpr int64_t kUnknownDim = -1;
+/// An extent a program left open (`?` in the plan's spelling): the facts carry it as an absent
+/// value, and the type itself keeps the unknown as a form (`ExtentForm`). The transitional `-1`
+/// sentinel is gone (docs/design/arrays-memory/plan.cn.md section 5.3's migration table:
+/// `kUnknownDim = -1` is `std::nullopt`).
+using StaticShape = std::vector<std::optional<int64_t>>;
 
-using StaticShape = std::vector<int64_t>;
+/// The plain extents of a shape whose every extent is known, for a caller that needs numbers with
+/// no way to say unknown (an array is created from them, a program's shape is written into). The
+/// callers check the shape first.
+std::vector<int64_t> extentsOf(const StaticShape &shape);
+
+/// The same extents in the kernel shape helpers' own spelling (modules/tensor/kernels/layout.h):
+/// an extent nobody stated is `-1` there, which is how a kernel carries an unknown extent through
+/// a permutation or a reshape.
+std::vector<int64_t> kernelExtents(const StaticShape &shape);
+
+/// The facts' shape of a kernel shape helper's result: a negative extent is that helper saying the
+/// extent is unknown, so the entry is absent here.
+StaticShape knownShape(std::vector<int64_t> extents);
 
 /// True for an array whose element is a numeric scalar, and for an array whose element type
 /// nobody stated (`Void`, the empty array literal's element). A nested array (`f32[][]`) is not
@@ -42,7 +56,7 @@ using StaticShape = std::vector<int64_t>;
 bool isTensorType(const type::Type *type);
 
 /// What is statically known about a tensor-valued argument: the element type when one is fixed,
-/// and the shape when the rank is (an extent that is not known is `kUnknownDim`).
+/// and the shape when the rank is (an extent that is not known is an absent entry).
 struct TensorFacts {
     std::optional<type::TypeCode> dtype;
     std::optional<StaticShape> shape;
@@ -52,8 +66,8 @@ struct TensorFacts {
         if (!shape) {
             return false;
         }
-        for (int64_t extent : *shape) {
-            if (extent == kUnknownDim) {
+        for (const std::optional<int64_t> &extent : *shape) {
+            if (!extent) {
                 return false;
             }
         }
