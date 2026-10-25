@@ -362,3 +362,17 @@ name = "tutorial.examples.01_exercise"
 desc = "The answer to the exercise of chapter 1: a function of two parameters, and the value it returns."
 case = "../../../docs/tutorial/examples/01_exercise.cml"
 golden = "golden/tutorial_examples/01_exercise.txt"
+
+# ---- Chapter 2 --------------------------------------------------------------------------------
+
+[[tests]]
+name = "tutorial.examples.02_literals"
+desc = "A literal takes the type its context asks for while a variable keeps its own type: the same numbers printed as reals and as ints."
+case = "../../../docs/tutorial/examples/02_literals.cml"
+golden = "golden/tutorial_examples/02_literals.txt"
+
+[[tests]]
+name = "tutorial.examples.02_exercise"
+desc = "The answer to the exercise of chapter 2: a value of one type is not another type, and the conversion is written out."
+case = "../../../docs/tutorial/examples/02_exercise.cml"
+golden = "golden/tutorial_examples/02_exercise.txt"
