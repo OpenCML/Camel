@@ -2,14 +2,14 @@
 // docs/handover/reviews/questions-2026-10-23.md section rank-zero-tensor — so another element count
 // has no value to become, and the count is checked when the shape runs (the shape arrives through a
 // parameter). The loop below is never reached: `for` over a value with no dimension is refused
-// where it is written (loops.err_tensor_rank0), and the transition period's bare `Tensor` is a gap
-// no mechanism is built for (the author's ruling of 2026-10-25 on
+// where it is written (loops.err_tensor_rank0), and rank 0 is decided at the instantiation, so the
+// parameter is written the final way, `T[..]` (the author's ruling of 2026-10-25 on
 // no-dimension-value-in-an-array-typed-slot).
 module tensor_rank0_runtime
 
-import { Tensor, zeros, reshape } from tensor
+import { zeros, reshape } from tensor
 
-func toShape(t: Tensor, s: int[]): Tensor {
+func toShape::<T>(t: T[..], s: int[]): T[..] {
     return reshape(t, s)
 }
 

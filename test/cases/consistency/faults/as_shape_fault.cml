@@ -5,7 +5,7 @@ module as_shape_fault
 
 import { Tensor, reshape, zeros } from tensor
 
-func shaped(rows: int, cols: int): Tensor {
+func shaped(rows: int, cols: int): Tensor<f32> {
     return zeros([rows, cols])
 }
 
