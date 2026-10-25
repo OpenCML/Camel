@@ -1,0 +1,19 @@
+/**
+ * A body that writes `yield` is refused by name until the generator state machine lands
+ * (docs/design/io-concurrency-streams/plan.cn.md slice E, lines 282-307): `yield` now parses, and
+ * running it as a `return` would give a wrong value, so the graph builder reports
+ * `SemanticDiag::FeatureNotSupported` with `'generators'` in the message. The `yield` is on line
+ * 10; what it means is already ruled (docs/handover/reviews/questions-2026-10-23.md:394).
+ */
+func count(n: int): int.. {
+    loop i = 0 while i < n do {
+        yield i
+        i + 1
+    }
+}
+
+func main(): int sync {
+    let s = count(3)
+    println(1)
+    return 0
+}
