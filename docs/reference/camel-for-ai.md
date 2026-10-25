@@ -1666,7 +1666,7 @@ Source: `docs/stdlib-reference.md`, generated from the declarations in `stdlib/*
 `node scripts/stdlib-reference.mjs --write`.
 
 <!-- camel-for-ai region: stdlib-signatures (generated from docs/stdlib-reference.md; node scripts/camel-for-ai.mjs --write) -->
-**`Built-in functions`** — no import — 58 name(s)
+**`Built-in functions`** — no import — 59 name(s)
 
 ```text
 std::mem::blocks: () => { allocs: int, frees: int, live: int, bytes: int }
@@ -1755,6 +1755,7 @@ head: (xs: T[]) => T
 last: (xs: T[]) => T
 tail: (xs: T[]) => T[]
 slice: <start: int, end: int> (xs: T[]) => T[]
+slice: (t: T[], axis: int, start: int, end: int, step?: int) => T[]
 concat: (xs: T[], ys: T[]) => T[]
 contains: <value: T> (xs: T[]) => bool
 contains: <sub: string> (s: string) => bool

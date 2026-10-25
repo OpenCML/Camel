@@ -560,6 +560,21 @@ range is. `take` and `drop` of the module `array` cut to the array instead.
 - Pure.
 - Example: `[1, 2, 3, 4]->slice<1, 3>` gives `[2, 3]`
 
+#### `slice`
+
+```camel
+slice: (t: T[], axis: int, start: int, end: int, step?: int) => T[]
+```
+
+The slice of the first dimension of an array of values, written as a call: `slice(t, 0, a, b)`
+is the same node the subscript `t[a:b]` builds, with the axis written and the written mask left
+out. A negative bound is a fault here, as for the subscript; a slice of another axis, of a rank
+above 1, or with a step other than the constant 1 is a view with strides, which the core's slice
+does not answer (H17) and the module `tensor`'s `slice` does.
+
+- Pure.
+- Example: `[1, 2, 3, 4]->slice(0, 1, 3)` gives `[2, 3]`
+
 #### `concat`
 
 ```camel

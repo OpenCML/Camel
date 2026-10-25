@@ -278,10 +278,21 @@ void sliceArrayVjp(VjpBuilder &b, const VjpCall &call) {
         b, call, call.withInputs[0], call.withInputs[1], staticInt(b, 1), staticInt(b, 3));
 }
 
-// `xs[a:b:s]`: the two bounds, the step and the mask follow the value and the axis.
+// `xs[a:b:s]`: the two bounds, the step and the mask follow the value and the axis. The function
+// form `slice(xs, 0, a, b, s?)` is the same node with the two words a call has not, and for it
+// those words stand for "step 1, both bounds written" -- the same defaults the forward kernel
+// reads (design principles 5.4; the author's ruling of 2026-10-25: both spellings are one node
+// with one adjoint rule).
 void sliceSubArrayVjp(VjpBuilder &b, const VjpCall &call) {
-    requireInputs(call, 6);
-    scatterSliceArray(b, call, call.inputs[2], call.inputs[3], call.inputs[4], call.inputs[5]);
+    if (call.inputs.size() < 4) {
+        throw std::runtime_error(std::format(
+            "Derivative of '{}' expects at least 4 inputs, got {}.",
+            call.uri,
+            call.inputs.size()));
+    }
+    const vjp_node_t step = call.inputs.size() >= 5 ? call.inputs[4] : staticInt(b, 1);
+    const vjp_node_t written = call.inputs.size() >= 6 ? call.inputs[5] : staticInt(b, 3);
+    scatterSliceArray(b, call, call.inputs[2], call.inputs[3], step, written);
 }
 
 // ---- the rules of a gradient graph: the second derivative of an array expression ----
