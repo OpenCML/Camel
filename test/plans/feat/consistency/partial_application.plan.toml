@@ -106,7 +106,7 @@ expect_output_contains = ["name=SemanticDiag::PartialApplicationRefused", "err_c
 
 [[tests]]
 name = "partial_application.var_parameter"
-desc = "A function with a `var` context parameter can be partially applied (graph model Q9, `partial-application-var`): `add<t>` is a function value that captured the cell of `t`, and each call writes it through the capture, so the calls accumulate. The write lands on the variable the value was bound to, which the reads after the calls show."
+desc = "A function with a `var` context parameter can be partially applied (graph model Q9, `partial-application-var`): `add<t>` is a function value that captured the cell of `t`, and each call writes it through the capture, so the calls accumulate. The write lands on the variable the value was bound to, which the reads after the calls show. The effect of the call is carried by the resource set the value's type infers, not by a flag on the type; a call through a parameter of function type reaches the same resources, because what the parameter is instantiated with is what the call runs."
 kind = "behavior"
 case = "../../../cases/consistency/partial_application/var_parameter.cml"
 args = ["${case}", "${backend}"]
@@ -125,7 +125,7 @@ timeout_ms = 30000
 
 [[tests]]
 name = "partial_application.var_parameter_effect"
-desc = "The value `add<t>` makes writes the cell it captured: `g(1)` is recorded as a write of `t`, so inside a sync block the call runs and a read of `t` written after it sees the write (design principles 3.5, F3); outside one the call is taken by nothing and does not run, so the read still sees the value `t` had."
+desc = "The value `add<t>` makes writes the cell it captured: `g(1)` is recorded as a write of `t`, so inside a sync block the call runs and a read of `t` written after it sees the write (design principles 3.5, F3); outside one the call is taken by nothing and does not run, so the read still sees the value `t` had -- and the call is reported as EffectNotExecuted, because its type carries the write and there is nothing in the resource set that would let the compiler call it pure."
 kind = "behavior"
 case = "../../../cases/consistency/partial_application/var_parameter_effect.cml"
 args = ["${case}", "${backend}"]
@@ -133,6 +133,7 @@ backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
 expect_output_not_contains = ["[Error]", "error[", "Segmentation fault", "dumped core"]
+expect_output_contains = ["SemanticDiag::EffectNotExecuted", "var_parameter_effect.cml:34:"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 verify_script = """
 ({ input, assert }) => {

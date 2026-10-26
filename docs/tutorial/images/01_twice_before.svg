@@ -12,7 +12,7 @@
 <text text-anchor="middle" x="123" y="-584.79" font-family="Times,serif" font-size="14.00">std::opt 之前：两个乘法加一个加法</text>
 <g id="clust1" class="cluster">
 <title>cluster_F02</title>
-<g id="a_clust1"><a xlink:title="(x: int) =&gt; int">
+<g id="a_clust1"><a xlink:title="(x: int) =&gt; int pure">
 <polygon fill="none" stroke="black" points="8,-8 8,-568.99 238,-568.99 238,-8 8,-8"/>
 <text text-anchor="middle" x="123" y="-553.79" font-family="Times,serif" font-size="14.00">twice</text>
 </a>

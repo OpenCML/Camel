@@ -15,6 +15,7 @@
 #include "camel/core/rtdata/tagged.h"
 #include "camel/core/type/collection.h"
 #include "camel/core/type/resolver.h"
+#include "camel/core/type/text.h"
 
 #include <functional>
 #include <optional>
@@ -256,7 +257,10 @@ const std::vector<oper_group_ptr_t> &getCollectionOperatorGroups() {
                   "<key: K, fallback: V> (m: Map<K, V>) => V",
                   [=](Type *coll, const type_vec_t &config) -> optional<Type *> {
                       const MapType *map = mapWithKey(coll, config[0]);
-                      if (map == nullptr || !map->valueType()->equals(config[1])) {
+                      // The fallback stands at the map's value type: a value type written
+                      // without a resource clause takes the fallback's.
+                      if (map == nullptr ||
+                          !sameTypeWithUnwrittenResources(map->valueType(), config[1])) {
                           return nullopt;
                       }
                       return map->valueType();
@@ -303,7 +307,10 @@ const std::vector<oper_group_ptr_t> &getCollectionOperatorGroups() {
                   "<key: K, value: V> (m: Map<K, V>) => Map<K, V>",
                   [=](Type *coll, const type_vec_t &config) -> optional<Type *> {
                       const MapType *map = mapWithKey(coll, config[0]);
-                      if (map == nullptr || !map->valueType()->equals(config[1])) {
+                      // The value stands at the map's value type: a value type written
+                      // without a resource clause takes the value's.
+                      if (map == nullptr ||
+                          !sameTypeWithUnwrittenResources(map->valueType(), config[1])) {
                           return nullopt;
                       }
                       return itself(map);

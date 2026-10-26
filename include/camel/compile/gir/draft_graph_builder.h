@@ -73,6 +73,13 @@ class DraftGraphBuilder {
     /// in place, so every value of the function sees it; any other is replaced by the interned
     /// signature with that result type. Interned types are never modified.
     void setExitType(camel::core::type::Type *exitType);
+    /// Completes the signature with the resources its body was measured to reach: what a function
+    /// promises about resources is part of its type, so a function that wrote no clause promises
+    /// what it was measured to touch, written where the type is. An open signature is completed in
+    /// place, so every value of the function and every reader of its type sees the same set; any
+    /// other is replaced by the interned signature with those resources. Interned types are never
+    /// modified.
+    void setResources(const camel::core::sem::ResourceSignature &resources);
     /// The names the function captures, in capture order (runtime::GraphDraft::captureNames).
     std::vector<std::string_view> captureNames() const;
     /// Records that the function captures `name` (one entry per capture port, in order).
