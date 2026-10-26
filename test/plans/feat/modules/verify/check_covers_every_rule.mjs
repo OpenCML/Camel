@@ -16,7 +16,9 @@
 //   * every name that appears in the check's report is an exported rule of the library -- a name
 //     the case invents, or a rule the library dropped, fails here;
 //   * every name of the library appears in the check's report -- a rule the case hands over but
-//     which produces no line (an instance walk that stopped reaching it) fails here.
+//     which produces no line (an instance walk that stopped reaching it) fails here;
+//   * no line of the report is `refuted` -- a law of the library that does not hold is fixed, or its
+//     guard is, and no law is registered as one the check may refuse.
 //
 // The case is read with its comments stripped: a rule named in a doc comment and nowhere else is a
 // rule the case does not hand over, and a check that counted comment words would not notice.
@@ -140,48 +142,19 @@ if (unreached.length > 0) {
             `${unreached.join(', ')} (the report has ${lines.length} line(s))`
     )
 }
+// A `refuted` line is the check's verdict that a law of the library does not hold, and no name is
+// excused from it: a rule a numeric licence puts outside this comparison passes under that licence
+// in the check itself, and a rule with a real counterexample is fixed, or its guard is, rather than
+// registered as known.
 const refuted = (name) => {
     const word = new RegExp(`^refuted\\s+${name}(?![A-Za-z0-9_])`)
     return stdout.split('\n').some((line) => word.test(line.trim()))
 }
-// The list of rules allowed to be `refuted` is exactly the two below, and it is written here rather than dropped so
-// that the count below still catches a name added back by accident. It used to hold
-// `tensor_combine_mixed`, whose own guard (`combineMixedSign`) was read as assuming `reassociate`
-// covers the opposite-sign cancellation: a tensor with a `1e+30` element, `c1 = 48`, `c2 = -47` gave
-// two element-type results 27 ulps of the result apart, `1.0000041e+30` and `1e+30`, and the rule was
-// refused by measuring those two against each other. The rule on
-// `verification-report-surface-s0` withdrew that method -- a `reassociate` rule is compared where the
-// real value is, both sides evaluated in the reference's precision -- and the rule is `sampled`
-// No rule is excused now, so every `refuted` line fails the run.
-//
-// One rule IS still `refuted`, at the type the reduced-precision lane made checkable:
-// `float_combine_mixed`'s guard is incomplete at `f16` -- `x = 10000.0`, `c1 = 39`, `c2 = -55` are
-// ordinary elements of `f16`, both products of the left side overflow (390000 and -550000 against
-// 65504), so its left side is a NaN (`inf + -inf`) where the right side is an infinity
-// (`10000 * -16`); the guard checks the coefficients' finiteness, not that the two products stay
-// finite, and `no_infs` does not license turning a NaN into an infinity (the proposition of a
-// `reassociate` rule is `real equality + IEEE on special values`, and IEEE does not call the two
-// equal). At `f32`/`f64` the same hole is unreachable with the values the sampler draws; at `f16` a
-// four-digit value reaches it, and the draw that exposes it depends on the seed, which is why the
-// coverage case's seed is the one this reading is pinned at. Reported with the lane
-//; fixing the guard belongs
-// to the rules library's own lane, and this entry comes out with it.
-// The tensor twin of that law is `refuted` at `f16` for the same reason, measured 2026-10-26 on this
-// case's own seed: the elementwise `tensor_combine_mixed<f16>` draws 10000.0 with the coefficients 58
-// and -61, both products overflow f16's 65504, and its left side is a NaN where the right side is an
-// infinity. The guard `combineMixedSign` checks the coefficients' finiteness, not that the two products
-// stay finite, and one generic law inherits the hole its scalar twin has; the fix belongs to the rules
-// library's lane with `float_combine_mixed`, and this entry comes out with it.
-const knownRefuted = new Set(['float_combine_mixed', 'tensor_combine_mixed'])
-const failed = [...verdicts.keys()].filter((name) => refuted(name) && !knownRefuted.has(name))
+const failed = [...verdicts.keys()].filter(refuted)
 if (failed.length > 0) {
-    fail(`${input.test_name ?? payload.test_name}: the check failed ${failed.length} rule(s): ${failed.join(', ')}`)
-}
-const known = [...verdicts.keys()].filter((name) => refuted(name) && knownRefuted.has(name))
-if (known.length !== knownRefuted.size) {
     fail(
-        `${input.test_name ?? payload.test_name}: ${knownRefuted.size - known.length} rule(s) expected ` +
-            `to be refuted are not: ${[...knownRefuted].filter((name) => !known.includes(name)).join(', ')}`
+        `${input.test_name ?? payload.test_name}: the check refuted ${failed.length} rule(s) of the ` +
+            `library: ${failed.join(', ')}`
     )
 }
 
@@ -190,7 +163,5 @@ console.log(
     `${exported.length} exported rule(s) of ${path.relative(repoRoot, library)} are all handed to ` +
         `the check, and all ${checked.length} of them have a line in its report ` +
         `(${notExported.length} rule(s) are not exported and are not asked about); ` +
-        (knownRefuted.size === 0
-            ? `no rule of them is refuted`
-            : `${known.length} of them is refuted and named as known (${known.join(', ')})`)
+        `no rule of them is refuted`
 )

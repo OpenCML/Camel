@@ -500,54 +500,6 @@ Array *layerNormGrad(
     return out;
 }
 
-Array *sliceGrad(
-    const Array *dy, std::span<const int64_t> shape, int64_t axisArg, int64_t start,
-    int64_t end, int64_t step, mm::IAllocator &allocator) {
-    if (step <= 0) {
-        throw std::invalid_argument("slice step must be positive");
-    }
-    const auto rank    = static_cast<int64_t>(shape.size());
-    const int64_t axis = axisArg < 0 ? axisArg + rank : axisArg;
-    if (axis < 0 || axis >= rank) {
-        throw std::invalid_argument("slice axis out of range");
-    }
-    const int64_t extent = shape[static_cast<size_t>(axis)];
-    // The forward slice's bounds, normalized the same way (the forward slice faulted when they
-    // were out of range, so they are in range here unless the gradient was built by hand).
-    const auto range = normalizeSliceBounds(extent, start, end);
-    if (!range) {
-        throw std::out_of_range("slice bounds out of range");
-    }
-    start = range->start;
-    end   = range->end;
-    const int64_t count     = end > start ? (end - start + step - 1) / step : 0;
-    const Array *src = asFloat(dy, allocator);
-    if (src->rank() != shape.size() || src->dim(static_cast<size_t>(axis)) != count) {
-        throw ShapeError("slice gradient: dy shape does not match the slice");
-    }
-    Array *out = createTensor(TypeCode::Float32, shape, allocator, true);
-    uint64_t outer = 1, inner = 1;
-    for (int64_t d = 0; d < axis; ++d) {
-        outer *= static_cast<uint64_t>(shape[static_cast<size_t>(d)]);
-    }
-    for (int64_t d = axis + 1; d < rank; ++d) {
-        inner *= static_cast<uint64_t>(shape[static_cast<size_t>(d)]);
-    }
-    const float *in = src->dataAs<float>();
-    float *dst      = out->dataAs<float>();
-    for (uint64_t o = 0; o < outer; ++o) {
-        for (int64_t k = 0; k < count; ++k) {
-            const uint64_t to =
-                (o * static_cast<uint64_t>(extent) + static_cast<uint64_t>(start + k * step)) *
-                inner;
-            const uint64_t from =
-                (o * static_cast<uint64_t>(count) + static_cast<uint64_t>(k)) * inner;
-            std::copy(in + from, in + from + inner, dst + to);
-        }
-    }
-    return out;
-}
-
 namespace {
 
 /// Operands of matmul viewed as matrices: vectors get the unit axis matmul gives them, and dy

@@ -269,7 +269,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ArgumentsMismatch"
 expect_diagnostic_line = 14
-expect_output_contains = ["'(a: int, b: int) => int' cannot be called with argument types"]
+expect_output_contains = ["'(a: int, b: int) => int pure' cannot be called with argument types"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 

@@ -3,7 +3,7 @@
 
 /*
  * Shape and data-movement operators: shape, reshape, flatten, unsqueeze,
- * transpose, permute, concat, slice.
+ * transpose, permute, concat.
  *
  * Static inference computes result shapes with the same helpers the kernels
  * use (layout.h) whenever every input fact is known, and degrades to unknown
@@ -335,11 +335,10 @@ std::vector<int64_t> intListArg(ArgsView &args, size_t index, std::string_view o
     return values;
 }
 
-// The slice of the first axis on a tensor, a view sharing the block, was this module's own
-// subscript kernel and type rule (`t[a:b]`); both are gone, because a subscript is answered by the
-// core's one slice operator and its one adjoint rule for any rank and any element type. The function
-// form below stays: it answers any axis and any rank, and its reading of its arguments -- a
-// negative bound counts from the end, an axis is normalized -- is not the core's yet.
+// The slice has one owner: the core's own node `:op/slice_sub`, which answers `t[a:b:s]` and the
+// function form `slice(t, axis, a, b, s)` alike, for any rank and any element type, with one
+// adjoint rule. This module's own slice kernel and type rule are gone with it (design principles
+// 5.4).
 
 // take(t, indices): rows along the first axis, in the order the indices give.
 slot_t takeKernel(ArgsView &, ArgsView &norm, context::Context &) {

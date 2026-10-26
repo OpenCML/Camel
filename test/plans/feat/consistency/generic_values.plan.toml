@@ -169,7 +169,7 @@ backends = ["nvm"]
 backends_agree = []
 expect_exit = 1
 expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error", "live DREF"]
-expect_output_contains = ["name=SemanticDiag::FunctionNameAsValue", "2 functions of that name [(x: int) => int; (x: float) => float]"]
+expect_output_contains = ["name=SemanticDiag::FunctionNameAsValue", "2 functions of that name [(x: int) => int pure; (x: float) => float pure]"]
 
 [[tests]]
 name = "generic_values.candidate_body_fails"

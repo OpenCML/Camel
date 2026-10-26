@@ -2846,7 +2846,7 @@ expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_diagnostic_code = "0x0400000B"
 expect_diagnostic_line = 14
 expect_diagnostic_column = 12
-expect_output_contains = ["a branch on a condition that depends on the model input chooses between functions (its value is a '(x: float[..]) => float[..]')", "a model has no function values"]
+expect_output_contains = ["a branch on a condition that depends on the model input chooses between functions (its value is a '(x: float[..]) => float[..] pure')", "a model has no function values"]
 expect_output_not_contains = ["onnx::export: wrote", ":?:?:", "arm_out"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 60000
@@ -2859,7 +2859,7 @@ case = "../../../cases/modules/onnx/refusals/function_branch.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::RuntimeError"
-expect_output_contains = ["a branch on a condition that depends on the model input chooses between functions (its value is a '(x: float[..]) => float[..]')", "function_branch.cml:14:12"]
+expect_output_contains = ["a branch on a condition that depends on the model input chooses between functions (its value is a '(x: float[..]) => float[..] pure')", "function_branch.cml:14:12"]
 expect_output_not_contains = ["arm_out"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 60000

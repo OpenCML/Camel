@@ -78,6 +78,18 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
+name = "map_callback_not_same_type"
+desc = "A written callback type leaves only the resources open: `map` takes a callback of the element type whatever it touches, and still refuses one whose parameter is another type or whose parameter list is another shape, each at its own line."
+kind = "negative"
+case = "../../../cases/compile/function_values/map_callback_not_same_type.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::NoMatchingFunction"
+expect_output_contains = ["map_callback_not_same_type.cml:15:", "map_callback_not_same_type.cml:16:", "map", "(s: string) => int", "(a: int, b: int) => int"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
 name = "partial_application_span"
 desc = "A partial application is a function value located at the expression itself: in `let g = inc<1>` both the FUNC node the value calls and the value node cover `inc<1>` (9:12-9:18), not the whole `let` statement (H9 1.6, H16 item 4)."
 kind = "behavior"

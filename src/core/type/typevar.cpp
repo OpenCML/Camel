@@ -15,6 +15,7 @@
 #include "camel/core/type/intern.h"
 #include "camel/core/type/other.h"
 #include "camel/core/type/storage.h"
+#include "camel/core/type/text.h"
 #include "camel/utils/assert.h"
 
 #include <algorithm>
@@ -230,6 +231,87 @@ OtherType *asTypeApplication(Type *type) {
     }
     auto *other = static_cast<OtherType *>(type);
     return other->typeArguments() && other->paramCount() > 0 ? other : nullptr;
+}
+
+/// Whether any function type in `type` writes a resource clause. Only such a clause can be left
+/// open by another occurrence of a variable a type is already solved to, so only it makes the
+/// walk of unifyTypeVars worth continuing into a pattern whose variables are all solved.
+bool writesResourceClause(Type *type) {
+    if (type == nullptr) {
+        return false;
+    }
+    switch (type->code()) {
+    case TypeCode::Function: {
+        const auto *func = static_cast<const FunctionType *>(type);
+        if (func->resources().mode != sem::ResourceSignature::Mode::Generic) {
+            return true;
+        }
+        if (func->hasExitType() && writesResourceClause(func->exitType())) {
+            return true;
+        }
+        for (size_t i = 0; i < func->withTypesCount(); ++i) {
+            if (writesResourceClause(func->withTypeAt(i))) {
+                return true;
+            }
+        }
+        for (size_t i = 0; i < func->normTypesCount(); ++i) {
+            if (writesResourceClause(func->normTypeAt(i))) {
+                return true;
+            }
+        }
+        return false;
+    }
+    case TypeCode::Array:
+        return writesResourceClause(static_cast<const ArrayType *>(type)->elemType());
+    case TypeCode::Tuple: {
+        const auto *tuple = static_cast<const TupleType *>(type);
+        for (size_t i = 0; i < tuple->size(); ++i) {
+            if (writesResourceClause(tuple->typeAt(i))) {
+                return true;
+            }
+        }
+        return false;
+    }
+    case TypeCode::Struct: {
+        const auto *record = static_cast<const StructType *>(type);
+        if (record->named()) {
+            for (size_t i = 0; i < record->typeArgCount(); ++i) {
+                if (writesResourceClause(record->typeArgAt(i))) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        for (size_t i = 0; i < record->size(); ++i) {
+            if (writesResourceClause(record->typeAt(i))) {
+                return true;
+            }
+        }
+        return false;
+    }
+    default:
+        break;
+    }
+    if (const OtherType *application = asTypeApplication(type); application != nullptr) {
+        for (size_t i = 0; i < application->paramCount(); ++i) {
+            if (writesResourceClause(application->params()[i])) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+/// Whether one of the solved variables in `names` is solved to a type that writes a resource
+/// clause (see writesResourceClause).
+bool anySolutionWritesResourceClause(
+    const std::vector<std::string> &names, const type_bindings_t &bindings) {
+    for (const std::string &name : names) {
+        if (writesResourceClause(findTypeBinding(bindings, name))) {
+            return true;
+        }
+    }
+    return false;
 }
 
 } // namespace
@@ -732,17 +814,40 @@ bool unifyTypeVars(Type *pattern, Type *actual, type_bindings_t &bindings) {
     if (const TypeVarType *var = asVar(pattern)) {
         if (findTypeBinding(bindings, var->name()) == nullptr && !containsTypeVar(actual)) {
             bindings.emplace_back(var->name(), actual);
+            return true;
+        }
+        // The variable is solved already, and this occurrence constrains it too. What satisfies
+        // every occurrence is the weakest type they gave: a type that writes no resource clause is
+        // a value of the one that writes them (sameTypeWithUnwrittenResources), never the other
+        // way round, so this occurrence becomes the solution where the other wrote a clause and
+        // this one writes none. A clause written in one argument is then not a requirement the
+        // others have to keep, and the call's result promises no more than the arguments stated.
+        Type *bound = findTypeBinding(bindings, var->name());
+        if (bound != nullptr && !sameTypeWithUnwrittenResources(bound, actual) &&
+            sameTypeWithUnwrittenResources(actual, bound)) {
+            for (auto &[name, type] : bindings) {
+                if (name == var->name()) {
+                    type = actual;
+                    break;
+                }
+            }
         }
         return true;
     }
-    // Nothing left to learn below, or nothing known on the other side.
+    // Nothing left to learn below, or nothing known on the other side. A solved variable is still
+    // something to learn below when its solution writes a resource clause: this occurrence may
+    // leave that clause open (the case above), so the walk continues into a pattern whose
+    // variables are all solved.
+    if (actual->code() == TypeCode::TypeVar) {
+        return true;
+    }
     std::vector<std::string> names;
     collectTypeVars(pattern, names);
     if (std::all_of(
             names.begin(),
             names.end(),
-            [&](const std::string &name) { return findTypeBinding(bindings, name) != nullptr; }) ||
-        actual->code() == TypeCode::TypeVar) {
+            [&](const std::string &name) { return findTypeBinding(bindings, name) != nullptr; }) &&
+        !anySolutionWritesResourceClause(names, bindings)) {
         return true;
     }
     // A value that is not of the form of a `T?` / `T!` parameter enters it: its type is the

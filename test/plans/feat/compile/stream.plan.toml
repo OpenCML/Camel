@@ -67,7 +67,7 @@ expect_diagnostic_name = "SemanticDiag::CompOperandNotUnary"
 expect_diagnostic_code = "0x030001E2"
 expect_diagnostic_line = 9
 expect_diagnostic_column = 13
-expect_output_contains = ["'..' composes a unary function on the left; '(a: int, b: int) => int' takes 2 parameters."]
+expect_output_contains = ["'..' composes a unary function on the left; '(a: int, b: int) => int pure' takes 2 parameters."]
 expect_output_not_contains = ["UnknownInternalError", "Warning"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
@@ -100,13 +100,13 @@ const signature = (name) => {
     assert(graph, `${name} is missing from ${doc.graphs.map((g) => g.name).join(', ')}`)
     return graph.signature
 }
-assert(signature('count') === '(s: int..) => int', `count is ${signature('count')}`)
+assert(signature('count') === '(s: int..) => int pure', `count is ${signature('count')}`)
 assert(
-    signature('shapes') === '(a: int?.., b: int!.., c: int..?, d: int[3].., e: int[..]..) => int',
+    signature('shapes') === '(a: int?.., b: int!.., c: int..?, d: int[3].., e: int[..]..) => int pure',
     `shapes is ${signature('shapes')}`,
 )
-assert(signature('teePair') === '(pair: (int.., int)) => int', `teePair is ${signature('teePair')}`)
-assert(signature('openRank') === '(rows: f32[..]) => int', `openRank is ${signature('openRank')}`)
+assert(signature('teePair') === '(pair: (int.., int)) => int pure', `teePair is ${signature('teePair')}`)
+assert(signature('openRank') === '(rows: f32[..]) => int pure', `openRank is ${signature('openRank')}`)
 const types = [...new Set(doc.graphs.flatMap((g) => g.nodes.map((n) => n.outputType)).filter(Boolean))]
 for (const wanted of ['int..', 'int?..', 'int!..', 'int..?', 'int[3]..', 'int[..]..', 'f32[..]', '(int.., int)']) {
     assert(types.includes(wanted), `${wanted} is not among ${JSON.stringify(types)}`)
@@ -132,10 +132,10 @@ const signature = (name) => {
     assert(graph, `${name} is missing from ${doc.graphs.map((g) => g.name).join(', ')}`)
     return graph.signature
 }
-assert(signature('take') === '(s: int..) => int', `take is ${signature('take')}`)
-assert(signature('give') === '(s: int..) => int', `give is ${signature('give')}`)
+assert(signature('take') === '(s: int..) => int pure', `take is ${signature('take')}`)
+assert(signature('give') === '(s: int..) => int pure', `give is ${signature('give')}`)
 const pick = doc.graphs.filter((g) => g.name.startsWith('pick')).map((g) => g.signature)
-for (const wanted of ['(x: int) => int', '(x: int..) => int', '(x: int[]) => int']) {
+for (const wanted of ['(x: int) => int pure', '(x: int..) => int pure', '(x: int[]) => int pure']) {
     assert(pick.includes(wanted), `${wanted} is not in ${JSON.stringify(pick)}`)
 }
 }
@@ -309,7 +309,7 @@ expect_diagnostic_name = "SemanticDiag::CompOperandMismatch"
 expect_diagnostic_code = "0x030001E1"
 expect_diagnostic_line = 13
 expect_diagnostic_column = 20
-expect_output_contains = ["'..' takes two functions or two integers; the left operand is '(x: int) => int' and the right one 'int'."]
+expect_output_contains = ["'..' takes two functions or two integers; the left operand is '(x: int) => int pure' and the right one 'int'."]
 expect_output_not_contains = ["UnknownInternalError", "Warning", "has no instance here"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
@@ -605,12 +605,12 @@ timeout_ms = 10000
 
 [[tests]]
 name = "stream.step_value_other_signature"
-desc = "The step signature is the only function value that is a stream: a function value of any other signature is refused where a stream is expected, so the seam between a stream and a function value is exactly one signature wide."
+desc = "The step signature is the only function value that is a stream: a function value of any other signature is refused where a stream is expected, so the seam between a stream and a function value is exactly one signature wide. The lambda writes no resource clause, so its type carries what its body was measured to reach -- it touches nothing, which is `pure` -- and the refusal quotes the type it has."
 kind = "behavior"
 case = "../../../cases/compile/stream/step_value_signature.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["has type '(x: int) => int', which is not the declared type 'int..'"]
+expect_output_contains = ["has type '(x: int) => int pure', which is not the declared type 'int..'"]
 expect_output_not_contains = ["UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
@@ -738,5 +738,25 @@ args = ["${case}"]
 expect_exit = 0
 expect_stdout_contains = ["6"]
 expect_output_not_contains = ["UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+[[tests]]
+name = "stream.while_effects"
+desc = "When the condition `c` of `for x in s while c` is asked, and how often: the condition prints the state it is asked with, so the exact output is the reading. The stream and the array read the same -- four asks for three elements, one for an empty one -- because the condition is judged first and the step function is called only where it holds."
+kind = "behavior"
+case = "../../../cases/compile/stream/while_effects.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "stream-drain\nc 0\nc 3\nc 5\nc 6\n6\narray-drain\nc 0\nc 1\nc 3\nc 6\n6\nstream-empty\nc 0\n0\narray-empty\nc 0\n0\ndone\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+[[tests]]
+name = "stream.pull_order"
+desc = "The order of a round is the array`s: `c` is judged first and the step function is called only where it holds. The step prints on every call, so the reading counts calls: a condition that accepts ten rounds reads ten elements and not eleven, and the plain `for` reads one per round plus the call that answers the stream is over."
+kind = "behavior"
+case = "../../../cases/compile/stream/pull_order.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "ten\nread 10\nread 9\nread 8\nread 7\nread 6\nread 5\nread 4\nread 3\nread 2\nread 1\n10\ntwo\nread 3\nread 2\n2\ntotal\nread 3\nread 2\nread 1\nread 0\n6\ndone\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000

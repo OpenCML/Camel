@@ -72,7 +72,7 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ArgumentNeedsConversion"
 expect_diagnostic_line = 12
 expect_diagnostic_column = 14
-expect_output_contains = ["The call to 'h: (a: f32[3]) => float' needs an explicit conversion", "argument 1 ('t', for parameter 'a') has type 'f32[..]', which is less exact than 'f32[3]'", "write the conversion: 't as f32[3]'"]
+expect_output_contains = ["The call to 'h: (a: f32[3]) => float pure' needs an explicit conversion", "argument 1 ('t', for parameter 'a') has type 'f32[..]', which is less exact than 'f32[3]'", "write the conversion: 't as f32[3]'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 

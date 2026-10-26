@@ -55,9 +55,8 @@ for (const l of [
   'RESOURCES footprint main rmw ambient rng; write ambient stdout; read ambient fs; rmw object (any); external',
   'RESOURCES node main 2 :var/new: allocates variable',
   'RESOURCES node main 9 :op/assn_l: write variable (node 2); result same 0',
-  'RESOURCES node main 10 FUNC bump: rmw variable (node 2); result unknown',
+  'RESOURCES node main 10 FUNC bump: rmw variable (node 2)',
   'RESOURCES node main 12 FUNC countdown: rmw variable (node 5); result unknown',
-  'RESOURCES node main 15 CALL: rmw variable (node 2)',
   'RESOURCES node main 19 :var/take: rmw variable (node 18); result may_alias 0',
   'RESOURCES node main 20 array:sort_l_in_place: rmw object (node 19); result same 0',
   'RESOURCES node main 23 rand:seed: write ambient rng; external',
@@ -70,6 +69,10 @@ for (const l of [
   'RESOURCES order countdown 4 12 resource ordered by control',
   'true', 'false', '4', '16', '[1, 2, 3]',
 ]) line(l)
+// A call's access is the one the callee's own resource clause names: `FUNC bump` says
+// `rmw variable (node 2)` with no result part (a clause of a type has none), while the recursive
+// `countdown` answers `result unknown` from the fixpoint of its body, and the `CALL` node of
+// `main` records no access of its own.
 // The closure `let inc = sync () => { c += 1 }` is an anonymous graph, and its name is the number
 // the compilation had reached when it was built -- how many graphs were created before it, the
 // imported modules' and the speculative instantiations' included -- not a fact about the program

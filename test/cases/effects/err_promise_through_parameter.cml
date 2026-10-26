@@ -1,0 +1,20 @@
+/**
+ * A body that declares `pure` and calls through a parameter that writes no clause has not proved
+ * the empty set: what the call reaches is the parameter's resources, which are the instantiation's
+ * (design principles 3.3, effects plan 5). The declaration is refused at its own clause, and the
+ * repair the diagnostic names is to write `pure` on the parameter.
+ */
+module err_promise_through_parameter
+
+func applyPure(f: (x: int) => int): int pure {
+    return f(1)
+}
+
+func twice(x: int): int {
+    return x * 2
+}
+
+func main(): int sync {
+    println(applyPure(twice))
+    return 0
+}

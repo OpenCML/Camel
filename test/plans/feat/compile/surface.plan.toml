@@ -63,7 +63,7 @@ args = ["-E", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::FunctionNameAsValue"
 expect_diagnostic_line = 6
-expect_output_contains = ["2 functions of that name [(x: int) => int; (x: float) => float]"]
+expect_output_contains = ["2 functions of that name [(x: int) => int pure; (x: float) => float pure]"]
 
 [[tests]]
 name = "surface.if_without_else"
