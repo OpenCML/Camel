@@ -1,4 +1,3 @@
-
 // A higher-order operator hands each element of a compact array of pure-data aggregates to its
 // callback as a *view*: a Struct/Tuple header in the thread-local view store that points into the
 // array's block, not an object in the GC heap (rtdata/view.h, docs/technical/23_gc_runtime_lifetime.md).

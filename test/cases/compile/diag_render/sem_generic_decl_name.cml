@@ -1,4 +1,3 @@
-
 func never_called::<T>(x: T): T {
     let n = x + undefined_in_body
     return n

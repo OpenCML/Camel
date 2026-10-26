@@ -1,4 +1,3 @@
-
 func main(): int sync {
     println('before')
     println('中文'[2])

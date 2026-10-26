@@ -1,4 +1,3 @@
-
 func main(): int sync {
     let n  = 10000
     let xs = 0..n->map<(i: int): (int, int) => (i, i + 1)>

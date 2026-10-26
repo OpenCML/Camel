@@ -1,4 +1,3 @@
-
 func main(): int sync {
     let 名字 = 1
     return 0

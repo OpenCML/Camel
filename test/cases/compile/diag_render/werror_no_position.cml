@@ -1,4 +1,3 @@
-
 func main(): int sync {
     println('not run')
     return 0

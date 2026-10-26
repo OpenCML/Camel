@@ -1,4 +1,3 @@
-
 // Maps and sets whose keys and values are collected objects (strings, arrays, tuples, boxes
 // of `T?`, other maps), built entry by entry so that every step leaves garbage behind: each
 // `put` makes a new table and the previous one is unreachable once the loop moves on. Under

@@ -1,4 +1,3 @@
-
 import { shr } from math
 
 func main(): int sync {

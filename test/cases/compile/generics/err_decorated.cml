@@ -1,4 +1,3 @@
-
 func deco(f: (x: int) => int): (x: int) => int {
     return f
 }

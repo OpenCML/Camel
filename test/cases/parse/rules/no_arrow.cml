@@ -1,4 +1,3 @@
-
 rule keep(x: int) { x }
 
 func main(): int sync {

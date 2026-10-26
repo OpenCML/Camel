@@ -1,4 +1,3 @@
-
 import { split } from str
 
 func main(): int sync {

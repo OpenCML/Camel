@@ -1,4 +1,3 @@
-
 // Non-tail recursion is limited to 1000 open calls by default on every back end. depth(200) fits;
 // depth(1200) stops with MaxRecursionDepthExceeded at the recursive call, after what ran before it.
 func depth(n: int): int {

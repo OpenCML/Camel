@@ -1,4 +1,3 @@
-
 import { decode, from_array } from bytes
 
 func main(): int sync {

@@ -1,4 +1,3 @@
-
 func zero_of::<T>(x: T): T {
     let z: T = 0
     return z

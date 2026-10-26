@@ -1,3 +1,2 @@
-
 func main(): int {
     let x = 1

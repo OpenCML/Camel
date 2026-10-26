@@ -1,4 +1,3 @@
-
 import { lcm } from math
 
 func main(): int sync {

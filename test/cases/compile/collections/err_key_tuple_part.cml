@@ -1,4 +1,3 @@
-
 // A tuple is a key type only when every element of it is one.
 
 func main(): int sync {

@@ -1,4 +1,3 @@
-
 // The corpus of 5.7 (docs/design/effects/edges.cn.md): the body of an inlined `sync`
 // function brings a chain of its own, and those statements are the statements of the body's own
 // block, not of the caller's. The caller prints 1, the body prints 101 and 102, the caller prints

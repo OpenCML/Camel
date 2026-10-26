@@ -1,4 +1,3 @@
-
 import nosuch_module_anywhere
 
 func main(): int sync {

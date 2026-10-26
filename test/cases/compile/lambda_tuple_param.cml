@@ -1,4 +1,3 @@
-
 // A lambda parameter destructured as a tuple binds its names as `let (a, b) = p` does.
 with <f: (p: (int, int)) => int>
 func apply_all(ps: (int, int)[]): int[] {

@@ -1,4 +1,3 @@
-
 import { Json, decode } from json
 
 // Text that is not JSON: decode gives an error value (design principles 11.2), which reaches

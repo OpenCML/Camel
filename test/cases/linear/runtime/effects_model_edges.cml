@@ -1,4 +1,3 @@
-
 // The frozen input of test/plans/feat/linear/effects_model_edges.plan.toml, which reads the graph
 // of this program with `std::gir` and asserts the edge model of docs/design/effects/edges.cn.md:
 // a `sync` block's statements are joined by sync edges, ordering that is not the sync chain is an

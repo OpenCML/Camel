@@ -1,3 +1,2 @@
-
 func main(): int sync {
     return 0

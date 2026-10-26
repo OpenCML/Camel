@@ -1,4 +1,3 @@
-
 import { rev } from export_lib
 
 func main(): int sync {

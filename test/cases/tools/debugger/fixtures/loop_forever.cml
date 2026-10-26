@@ -1,4 +1,3 @@
-
 func spin(n: int): int {
     return spin(n + 1)               // mark:spin
 }

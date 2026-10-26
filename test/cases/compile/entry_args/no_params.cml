@@ -1,4 +1,3 @@
-
 func main(): int sync {
     println('ran')
     return 0

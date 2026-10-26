@@ -1,4 +1,3 @@
-
 // The forms the legacy C++ algebraic pass does not perform and the rule library does, one form per
 // function. They measure the other direction of the comparison: what the library reaches that the
 // reference mode cannot.

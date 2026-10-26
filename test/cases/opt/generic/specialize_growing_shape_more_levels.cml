@@ -1,4 +1,3 @@
-
 import { new, concat, sum, shape } from tensor
 
 // The growing-shape recursion of specialize_growing_shape.cml with the level bound at 24 instead

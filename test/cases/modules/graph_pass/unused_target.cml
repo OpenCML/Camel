@@ -1,4 +1,3 @@
-
 func waste(x: int, y: int): int {
     let a = x * y
     let b = a + 1

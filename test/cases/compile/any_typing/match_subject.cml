@@ -1,4 +1,3 @@
-
 import { Json, decode } from json
 
 // A decoded value as the subject of a `match` on literals: as an `any` it was compared bit for

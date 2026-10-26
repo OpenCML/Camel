@@ -1,4 +1,3 @@
-
 import { whoami } from process
 
 func main() sync {

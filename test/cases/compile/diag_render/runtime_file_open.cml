@@ -1,4 +1,3 @@
-
 import { read_text } from fs
 
 func main(): int sync {

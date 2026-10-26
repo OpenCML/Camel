@@ -1,7 +1,6 @@
 // Copyright (c) the OpenCML Organization
 // SPDX-License-Identifier: MIT
 
-
 import { now } from time
 import { sqrt } from math
 import { mean, stdev } from statistics

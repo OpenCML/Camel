@@ -1,4 +1,3 @@
-
 func twice::<T>(x: T): T {
     let n = x + x
     return n

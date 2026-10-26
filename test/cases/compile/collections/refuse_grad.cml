@@ -1,4 +1,3 @@
-
 import { grad } from autodiff
 
 // The value to differentiate flows through a map (x is stored in it and read back), and

@@ -1,4 +1,3 @@
-
 type Two<T, T> = (T, T)
 
 func main(): int sync {

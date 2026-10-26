@@ -1,4 +1,3 @@
-
 func part(xs: int[], a: int, b: int): int[] {
     return xs[a:b]
 }

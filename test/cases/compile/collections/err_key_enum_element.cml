@@ -1,4 +1,3 @@
-
 // The element of a set is checked like the key of a map: an enum with a struct field is not
 // one, and the diagnostic names the field of the variant it is in.
 

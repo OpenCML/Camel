@@ -1,4 +1,3 @@
-
 // A `constas` parameter writes its type; only `int` is supported.
 func bad(constas n): int {
     return n

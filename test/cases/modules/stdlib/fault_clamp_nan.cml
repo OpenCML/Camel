@@ -1,4 +1,3 @@
-
 import { clamp, nan } from math
 
 func main(): int sync {

@@ -1,4 +1,3 @@
-
 func walk(t: int) {
     static for n, F in fields int => {
         println(n, t)

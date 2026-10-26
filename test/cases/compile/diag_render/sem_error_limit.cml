@@ -1,4 +1,3 @@
-
 func main(): int sync {
     println(u0)
     println(u1)

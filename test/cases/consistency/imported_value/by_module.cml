@@ -1,4 +1,3 @@
-
 import lib
 
 func apply(f: (x: int) => int, x: int): int { return f(x) }

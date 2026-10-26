@@ -1,4 +1,3 @@
-
 func main(): int sync {
     let x = 1 $ 2
     return x

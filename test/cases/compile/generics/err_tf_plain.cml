@@ -1,4 +1,3 @@
-
 type Point = (int, int)
 
 func f(p: Point<int>): int {

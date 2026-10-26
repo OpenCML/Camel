@@ -1,4 +1,3 @@
-
 import { encode } from json
 
 // The operators whose signatures used `any` as a placeholder take each argument with its own

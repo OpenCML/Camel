@@ -1,4 +1,3 @@
-
 import { perfms } from perf
 
 func fib(n: int): int {

@@ -1,4 +1,3 @@
-
 // The subscript of a map takes a key of the key type.
 
 func main(): int sync {

@@ -1,4 +1,3 @@
-
 func show::<T>(t: T) {
     static for n, F in fields T => {
         let v: F = t.[n]

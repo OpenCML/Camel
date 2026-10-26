@@ -1,4 +1,3 @@
-
 func first(a: int, ..ts): int {
     return a
 }

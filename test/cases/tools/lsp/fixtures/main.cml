@@ -1,4 +1,3 @@
-
 import { norm2, scale } from shapes
 import { now } from time
 

@@ -1,4 +1,3 @@
-
 // Map and Set with head type parameters: the variables are bound from the arguments of the
 // collection type, and each set of types gets its own instance. `map_values` and
 // `filter_keys` are the compositions the library cannot ship yet (a generic function cannot be

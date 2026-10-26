@@ -1,4 +1,3 @@
-
 func name_of::<T>(s: { name: T }): T {
     return s.name
 }

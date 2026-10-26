@@ -1,4 +1,3 @@
-
 func echo(x: int): int sync {
     return println(x)
 }

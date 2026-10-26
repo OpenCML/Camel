@@ -1,4 +1,3 @@
-
 // The set operations take two sets of one type.
 
 func main(): int sync {

@@ -1,4 +1,3 @@
-
 func pick::<T>(c: bool, a: T, b: T): T {
     return if c then a else b
 }

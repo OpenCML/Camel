@@ -1,4 +1,3 @@
-
 import { clamp } from math
 
 func main(): int sync {

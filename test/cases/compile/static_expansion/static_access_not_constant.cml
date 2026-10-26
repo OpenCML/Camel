@@ -1,4 +1,3 @@
-
 func field(t: {a: int, b: int}, k: string): int {
     return t.[k]
 }

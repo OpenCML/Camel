@@ -1,4 +1,3 @@
-
 import { gcd } from math
 
 func main(): int sync {

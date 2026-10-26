@@ -1,4 +1,3 @@
-
 // The format string is computed, so the compiler cannot compare its fields with the
 // arguments (a constant format string is checked when the program is compiled, design
 // principles 5.4); the call fails when it runs.

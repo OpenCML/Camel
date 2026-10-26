@@ -1,4 +1,3 @@
-
 func at(xs: int[], i: int): int { return xs[i] }
 
 func main(): int sync {

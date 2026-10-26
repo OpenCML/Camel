@@ -1,4 +1,3 @@
-
 func element(t: (int, int)): int {
     return t.[2]
 }

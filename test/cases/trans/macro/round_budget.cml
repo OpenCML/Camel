@@ -1,4 +1,3 @@
-
 // A loop evaluated ahead of time runs at most --max-macro-rounds rounds (design principles 8).
 // With the default limit the loop finishes; a small limit makes the evaluation fail, and the
 // failure is a run-time fault of the std::macro pass at the call.

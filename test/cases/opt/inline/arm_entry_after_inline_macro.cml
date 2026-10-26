@@ -1,4 +1,3 @@
-
 // The macro evaluator runs branch arms the way the schedulers do. `train` is evaluated ahead of
 // time by std::macro; after std::opt::inline its recursive arm holds the helper's nodes before the
 // node recorded as the arm's head. Expected output: 0.512.

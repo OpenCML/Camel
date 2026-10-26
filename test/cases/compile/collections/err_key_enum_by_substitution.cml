@@ -1,4 +1,3 @@
-
 // The key of a Map (the element of a Set) is checked again when a type variable is replaced:
 // `Set<T>` with `T` an enum whose payload cannot be a key is rejected at the call, naming the
 // field of the enum.

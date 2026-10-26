@@ -1,4 +1,3 @@
-
 import { grad } from autodiff
 import { sin } from math
 

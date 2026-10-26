@@ -1,4 +1,3 @@
-
 import { quantile } from statistics
 
 func main(): int sync {

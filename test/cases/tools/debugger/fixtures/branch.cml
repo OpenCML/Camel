@@ -1,4 +1,3 @@
-
 func shout(s: string): string {
     return s + '!'                   // mark:shout
 }

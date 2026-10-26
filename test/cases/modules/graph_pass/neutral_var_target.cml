@@ -1,4 +1,3 @@
-
 func main(): int sync {
     var a = 5
     let b = a + 0

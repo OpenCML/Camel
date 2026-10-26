@@ -1,4 +1,3 @@
-
 // Collections as constants of the graph: under std::macro a macro function is evaluated
 // ahead of time and its result, here a map or a set, is stored in the static area of the
 // graph that called it. The keys and values (strings, arrays, function values, other maps)

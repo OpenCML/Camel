@@ -1,4 +1,3 @@
-
 // Two equal constant keys in a literal converted to a map are taken for a mistake.
 
 func main(): int sync {

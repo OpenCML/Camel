@@ -1,4 +1,3 @@
-
 import lib_plain
 
 func main(): int sync {

@@ -1,4 +1,3 @@
-
 // The result of a sync call is a constant, but reading it orders the next call after the first
 // one's effects. Once the first call is inlined, std::opt sees the constant through the GATE
 // that waits for those effects and binds it into a specialization of the second call, which

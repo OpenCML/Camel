@@ -1,4 +1,3 @@
-
 // Maps and sets that have outgrown a single table and are trees of tables
 // (docs/technical/31_map_and_set.md, section 5.3): the collector reaches the leaves, their
 // keys and their values through the branches, with nothing but the static type of the

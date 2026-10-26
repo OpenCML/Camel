@@ -1,4 +1,3 @@
-
 // Constant arguments let std::opt unroll a recursion one level per round: each call is
 // specialized, its condition folds, the surviving arm is inlined. fib(18) would become its whole
 // call tree (thousands of calls); the growth budget stops the unrolling and leaves the remaining

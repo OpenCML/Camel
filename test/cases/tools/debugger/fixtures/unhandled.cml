@@ -1,4 +1,3 @@
-
 func parse(text: string): int! {
     throw error('BadInput', 'not a number: ' + text)    // mark:throw
 }

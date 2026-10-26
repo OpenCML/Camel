@@ -1,4 +1,3 @@
-
 /// The square of a number.
 /// Negative numbers are fine.
 func square(x: int): int {
