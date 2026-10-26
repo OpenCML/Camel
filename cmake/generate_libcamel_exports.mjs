@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * Generates the .def lld-link is given for one configuration of libcamel (H36).
+ * Generates the .def lld-link is given for one configuration of libcamel.
  *
  * The list is a build product, not a checked-in snapshot: it is the intersection between
  *   - the symbols the object files of every dependent target leave undefined, and

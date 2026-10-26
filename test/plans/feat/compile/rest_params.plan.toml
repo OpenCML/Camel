@@ -2,7 +2,7 @@ id = "compile.rest_params"
 order = 340
 tier = "fast"
 tags = ["feat", "compile", "generics", "rest"]
-desc = "Rest parameters (design principles 5.5, H51 step 6): `..ts` is the last parameter, a call expands the body in place, and `..e` passes the elements of a compile-time tuple."
+desc = "Rest parameters (design principles 5.5): `..ts` is the last parameter, a call expands the body in place, and `..e` passes the elements of a compile-time tuple."
 
 [[tests]]
 name = "rest_params"

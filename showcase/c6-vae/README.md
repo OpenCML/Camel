@@ -34,7 +34,7 @@ standard-normal `eps` that both sides slice per step.
 **Why the epsilons are in the data**: the language currently has only the effectful
 `random::randn` that advances a global state, with no keyed random numbers.  Sampling inside the
 program would give the two runs different noise and the PyTorch comparison would be meaningless.
-H20-3 adds `random::key(seed)` / `split` / `permutation` (Philox, pure); after it lands the loop
+Keyed random numbers add `random::key(seed)` / `split` / `permutation` (Philox, pure); after it lands the loop
 will split a key per step instead of reading the file.  The README and the report record this
 dependency.
 
@@ -94,19 +94,19 @@ runtime.
 
 ### Differentiation spelling
 
-Design principles 9.9 (H21 item 3 was withdrawn; see H25): `with <m: Vae>` is the final
+Design principles 9.9: `with <m: Vae>` is the final
 spelling, and `with_grad(loss)<m>(x, eps)` differentiates the first `with` parameter, returning
 a gradient of the same type as `m`; the other parameters are data.  The example binds
 `with_grad(loss)` outside the loop.
 
 ## Problems found
 
-- **No keyed random numbers**: worked around with a pre-generated epsilon file; H20-3 should
+- **No keyed random numbers**: worked around with a pre-generated epsilon file; keyed random numbers should
   replace it.  This is not a pattern to copy, only the only way today to guarantee identical
   noise on both sides.
-- **No checkpoint**: atomic replacement of `save_tree` is H20-4, and C2 already hit the
+- **No checkpoint**: atomic replacement of `save_tree` is unlanded, and C2 already hit the
   "directory exists" error.  C6 does not need a checkpoint, so it does not repeat the
-  workaround; saving VAE parameters waits for H20-4.
+  workaround; saving VAE parameters waits for the atomic replacement to land.
 - Sampling uses `exp(0.5 * logvar)` rather than a separate standard-deviation head, one tensor
   fewer; a spelling choice with no semantic effect.
 

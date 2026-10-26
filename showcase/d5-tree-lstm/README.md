@@ -29,7 +29,7 @@ showcase/d5-tree-lstm/
 - The label is `(left subtree polarity > 0) XOR (right subtree polarity > 0)`.
 - 256 training and 64 validation sentences, fixed seed.
 - Each leaf is stored as a one-hot `[4, 8]` row, and both sides compute `onehot @ emb`.
-  `take`/row indexing does not exist yet (H20-2), so the data stores one-hots and the lookup is a
+  `take`/row indexing does not exist yet, so the data stores one-hots and the lookup is a
   matrix product.
 
 The model has 762 parameters and an 8-wide hidden state.
@@ -83,13 +83,13 @@ not kernel speed.  The C2 MLP is the compute-dominated comparison.
 ### Why one sentence per step
 
 Trees have variable shape.  Batching would either pad to a fixed shape or use row indexing /
-`take` to assemble several trees; the latter is H20-2/H21-1.  This example processes one tree per
+`take` to assemble several trees; the latter needs row indexing and subscripts.  This example processes one tree per
 step to make "recursion + autodiff" clear; throughput is not the goal.  Once `t[idx]` from
-H21-1 lands, a batch can be assembled as an array of trees and the loop shape does not change.
+subscripting lands, a batch can be assembled as an array of trees and the loop shape does not change.
 
 ### Differentiation spelling
 
-Design principles 9.9 (H21 item 3 was withdrawn; see H25): `with <p: Params>` is the final
+Design principles 9.9: `with <p: Params>` is the final
 spelling, and `with_grad(loss)<p>(tree, target)` differentiates the whole parameter tree,
 returning a gradient tree of the same type; the tree input is data.  The example binds
 `with_grad(loss)` outside the loop.
@@ -100,9 +100,9 @@ returning a gradient tree of the same type; the tree input is data.  The example
   differentiated with respect to the parameters, works.  That is the point of D5, and nothing
   blocked it.
 - **No `take` / row indexing**: the lookup is a one-hot matrix product instead of selecting a
-  row of the embedding table; H20-2's `take` will allow storing word ids directly.  See the data
+  row of the embedding table; `take` will allow storing word ids directly.  See the data
   section.
-- **No batching for variable trees**: see above; H21-1 enables it.  The current run is one
+- **No batching for variable trees**: see above; subscripting enables it.  The current run is one
   sentence per step, and the throughput is reported as measured.
 - The internal node's input is the sum of the children's hidden states (child-sum), with no
   extra parameter for internal nodes; a standard Tree-LSTM simplification that does not affect

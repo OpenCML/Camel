@@ -60,7 +60,7 @@ result may be any of them, and it has an external effect when its traits say so.
 | `:io/eprintln` | write `stderr`, external |
 | `:io/input`, `io:get_char(s)`, `io:clear_input_buffer` | read-modify-write `stdin`, external |
 | `io:has_input` | read `stdin`, external |
-| `io:set_terminal_raw_mode` | write `stdin`, external; the one resource of the terminal, so raw mode and a read order each other (H134 question 1) |
+| `io:set_terminal_raw_mode` | write `stdin`, external; the one resource of the terminal, so raw mode and a read order each other |
 | `fs:*`, `nn:save_params`, `tensor:load_npy`, `tensor:save_npy`, `ckpt:save_tree` | read or read-modify-write `fs`, external |
 | `ckpt:load_tree` | read `fs` and write `stderr`, external |
 | `rand:*` | write or read-modify-write `rng`, external |

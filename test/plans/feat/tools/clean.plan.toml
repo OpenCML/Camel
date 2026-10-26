@@ -13,7 +13,7 @@ desc = "`npm run clean` removes exactly the build trees, installs, test scratch 
 
 [[tests]]
 name = "clean.tiers"
-desc = "Each tier flag lists exactly its paths under --dry-run; the default and --all select the same four tiers; the H191 guard's --clean delegates to the same delete; the real run removes those paths and leaves .git, stdlib/*.cml, the tracked fixture, a tracked .cmo and non-scratch tmp files in place."
+desc = "Each tier flag lists exactly its paths under --dry-run; the default and --all select the same four tiers; the source-artifact guard's --clean delegates to the same delete; the real run removes those paths and leaves .git, stdlib/*.cml, the tracked fixture, a tracked .cmo and non-scratch tmp files in place."
 kind = "behavior"
 tool = "node"
 case = "../../../cases/tools/clean/clean_tiers.mjs"

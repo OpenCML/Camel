@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "purpose": "H254 AI learnability evaluation: can a model that has never seen Camel write correct Camel from docs/reference/camel-for-ai.md alone? Every task's acceptance is a reading the compiler produces, never an opinion. camel_revision is the compiler every task is measured against.",
+  "purpose": "AI learnability evaluation: can a model that has never seen Camel write correct Camel from docs/reference/camel-for-ai.md alone? Every task's acceptance is a reading the compiler produces, never an opinion. camel_revision is the compiler every task is measured against.",
   "camel_revision": "2e6438492",
   "camel_binary": "~/camel-work/h425-ai-reference/out/latest/bin/camel",
   "camel_env": "LD_LIBRARY_PATH=~/camel-eval/conda/envs/clang/lib CAMEL_HOME=~/camel-work/h425-ai-reference/out/latest",

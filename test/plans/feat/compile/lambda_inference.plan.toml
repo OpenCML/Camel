@@ -137,7 +137,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "lambda_inference.generic"
-desc = "The former undecided case of the H92 report, now settled: a generic higher-order operator (`map`) binds its type variable from the ordinary argument before the lambda is lowered, so the lambda's parameter type follows without being written."
+desc = "The former undecided case, now settled: a generic higher-order operator (`map`) binds its type variable from the ordinary argument before the lambda is lowered, so the lambda's parameter type follows without being written."
 kind = "behavior"
 case = "../../../cases/compile/lambda_inference/generic.cml"
 args = ["${case}", "std::nvm"]

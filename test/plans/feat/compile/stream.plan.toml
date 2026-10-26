@@ -2,7 +2,7 @@ id = "compile.stream"
 order = 336
 tier = "fast"
 tags = ["feat", "compile", "stream"]
-desc = "The stream surface of H248: `f..g` and the interval `a..b` (H248 group 1, slice A: the ruled readings of `..`, and the removal of `?..`); and the interval line of H426: the two-parameter `range(a, b)` is deleted, and `for i in 0..n` is fused by the compiler rather than materialised."
+desc = "The stream surface: `f..g` and the interval `a..b` (slice A of the stream plan: the ruled readings of `..`, and the removal of `?..`); and the interval line: the two-parameter `range(a, b)` is deleted, and `for i in 0..n` is fused by the compiler rather than materialised."
 
 [[tests]]
 name = "stream.composition"
@@ -497,7 +497,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "stream.yield_keyword"
-desc = "`yield` is a control keyword: the token table lists it and `retStmt` reads it, so a program can no longer use it as a name. The H248 plan's negative acceptance for the generator slice (`docs/design/io-concurrency-streams/plan.cn.md:307`) is this program, its t9, which compiled and printed `1` while `yield` was an ordinary identifier."
+desc = "`yield` is a control keyword: the token table lists it and `retStmt` reads it, so a program can no longer use it as a name. The stream plan's negative acceptance for the generator slice (`docs/design/io-concurrency-streams/plan.cn.md:307`) is this program, its t9, which compiled and printed `1` while `yield` was an ordinary identifier."
 kind = "negative"
 case = "../../../cases/compile/stream/yield_keyword.cml"
 args = ["${case}"]

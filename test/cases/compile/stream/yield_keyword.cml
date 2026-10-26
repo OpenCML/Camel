@@ -1,6 +1,6 @@
 /**
  * `yield` is a keyword now: the token table lists it as a control keyword and `retStmt` reads
- * it, so it cannot be a name. This program is the H248 plan's negative acceptance for the
+ * it, so it cannot be a name. This program is the stream plan's negative acceptance for the
  * generator slice (docs/design/io-concurrency-streams/plan.cn.md:307: "`yield` 成为关键字之后
  * t9 必须变成语法错误"): it is that plan's t9, which compiled and printed `1` before.
  */

@@ -130,7 +130,7 @@ The other way round, `func` and `type` among the position names are reserved wor
 
   A `f32` is written as the shortest text that reads back as that `f32` (`f32(0.1)` is `0.1`). `float(s)` and `parse_float(s)` read every text above. For another form give the placeholder of `format` a specification: `'{:.2f}'->format<2.5>` is `2.50`, `'{:.17g}'->format<0.1>` is `0.10000000000000001`.
 
-  **Data text has exactly two supplements over a literal** (H15i). An entry argument reads every base of an integer literal (`0x`, `0b`, `0o`); the integer text of a conversion function is decimal digits (`int('0x10')` and `int('0o77')` are not integer texts). Beyond what the two share:
+  **Data text has exactly two supplements over a literal**. An entry argument reads every base of an integer literal (`0x`, `0b`, `0o`); the integer text of a conversion function is decimal digits (`int('0x10')` and `int('0o77')` are not integer texts). Beyond what the two share:
 
   1. `inf`, `-inf` and `nan`: these are the forms `floatText` prints for the infinities and NaN, and a value a program wrote has to read back (source uses `math::inf` and `math::nan`; there is no literal). A float parameter and `float(s)` / `parse_float(s)` read them; an integer parameter and `int(s)` / `parse_int(s)` have an integer target and do not. A NaN carries no sign; `+inf` and `+nan` take a `+` sign.
   2. **A leading-zero decimal**: `077` is 77, and `09` and `007` read as usual; an entry argument and all four conversion functions read it so. In source that form is a lexical error and octal is written `0o77`; data text has no leading-zero octal, `0o77` is still 63 as an entry argument, and it is not an integer text for a conversion function.

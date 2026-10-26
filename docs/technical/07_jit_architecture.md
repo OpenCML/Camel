@@ -1,6 +1,6 @@
 # FastVM JIT 架构文档
 
-> **适用范围（2026-10-21）**：JIT 把图编译成两种代码之一。**无帧代码**（frameless）是"自足"的图——字节码里只有算术、比较、`BRCH`/`JOIN`/`JUMP`/`RETN`，以及目标是**本图自身**的 `FUNC`/`TAIL`；它不调用任何 C++，自调用是原生调用，自尾调用是跳转。第 1 至 16 节描述的是它。**有帧代码**（framed）是其余所有的图（含 `OPER`、`CAST`、`COPY`、`FILL`、`ACCS`、`CALL`、`SCHD`、`match`、循环的 `LBEG`/`LTST`/`LEND`，或调用其他图）：算子等经 C++ 辅助函数执行，循环的三个事件也在辅助函数里跑，调用 Camel 函数的字节码交回驱动循环执行，见第 17 节。哪一种由 `collectRuntimeConstructs` 一处决定，`-vv` 日志写明（`compiled & cached graph 'f' as framed code`）。最早只在 Linux x86-64 上构建和运行过；有帧代码新增编码的 Win64 分支（`CallHelper`、`ExitToDriver`、包装器的续点分支）此后在 Windows x64（clang++）上构建并运行过（H43a，含循环的图），第 8 节的汇编包装器仍没有被用到。
+> **适用范围（2026-10-21）**：JIT 把图编译成两种代码之一。**无帧代码**（frameless）是"自足"的图——字节码里只有算术、比较、`BRCH`/`JOIN`/`JUMP`/`RETN`，以及目标是**本图自身**的 `FUNC`/`TAIL`；它不调用任何 C++，自调用是原生调用，自尾调用是跳转。第 1 至 16 节描述的是它。**有帧代码**（framed）是其余所有的图（含 `OPER`、`CAST`、`COPY`、`FILL`、`ACCS`、`CALL`、`SCHD`、`match`、循环的 `LBEG`/`LTST`/`LEND`，或调用其他图）：算子等经 C++ 辅助函数执行，循环的三个事件也在辅助函数里跑，调用 Camel 函数的字节码交回驱动循环执行，见第 17 节。哪一种由 `collectRuntimeConstructs` 一处决定，`-vv` 日志写明（`compiled & cached graph 'f' as framed code`）。最早只在 Linux x86-64 上构建和运行过；有帧代码新增编码的 Win64 分支（`CallHelper`、`ExitToDriver`、包装器的续点分支）此后在 Windows x64（clang++）上构建并运行过（含循环的图），第 8 节的汇编包装器仍没有被用到。
 
 本文档描述 Camel FastVM 的 **JIT 编译 pipeline**：从字节码到 x86-64 机器码的完整流程，涵盖双入口函数布局、JIT 内部调用约定、Frame 池管理、frameless 栈分配优化、近期引入的 MIR 定向代码生成优化，以及与解释器/trampoline 的协同工作机制。
 
@@ -838,15 +838,15 @@ python3 test/tools/jitcov/jitcov.py --progen 1-300              # 随机程序
 
 ### 17.8 没有做的
 
-- Win64：`CallHelper`、`ExitToDriver`、包装器的续点分支按 Win64 的约定写了；H43a 在 Windows x64（clang++）上构建并运行了它们（含循环的图），第 8 节的汇编包装器仍没有被用到。
+- Win64：`CallHelper`、`ExitToDriver`、包装器的续点分支按 Win64 的约定写了；在 Windows x64（clang++）上构建并运行了它们（含循环的图），第 8 节的汇编包装器仍没有被用到。
 - 有帧图之间的原生调用与解释器一侧热度记账的精简（见 17.6）；算子的原生下降（整数取模、数组长度与下标等仍经辅助函数）。
 - `CALL` 与 `SCHD` 由驱动循环按解释器的方式嵌套执行，深度受机器栈限制，与 `std::fvm` 相同。
 - 为 JIT 代码注册展开信息（16.5）。
-- 循环事件的原生下降（17.9）：`LBEG`/`LTST`/`LEND` 仍是每轮两次辅助函数调用，代价在 H43 的第 7 项里再降。
+- 循环事件的原生下降（17.9）：`LBEG`/`LTST`/`LEND` 仍是每轮两次辅助函数调用，代价还要再降。
 
 ### 17.9 循环：`LBEG` / `LTST` / `LEND`
 
-循环是图里的区域（`39_loops.md` 第 4 节）：执行计划把条件、循环体和 `LOOP` 节点排成一段，在三个位置发出 `LBEG`（一轮开始）、`LTST`（条件跑完：停止，或绑定循环体的端口）和 `LEND`（循环体跑完：取下一轮的状态，并跳回一轮的开头）。编译出的代码不把这些规则重写一遍——状态的元组与解包、端口的绑定、每轮收集的追加、H29 的元素物化都只在 `camel/execute/loop_frame.h` 里有一份——而是经辅助函数在帧上执行：
+循环是图里的区域（`39_loops.md` 第 4 节）：执行计划把条件、循环体和 `LOOP` 节点排成一段，在三个位置发出 `LBEG`（一轮开始）、`LTST`（条件跑完：停止，或绑定循环体的端口）和 `LEND`（循环体跑完：取下一轮的状态，并跳回一轮的开头）。编译出的代码不把这些规则重写一遍——状态的元组与解包、端口的绑定、每轮收集的追加、紧凑元素视图的元素物化都只在 `camel/execute/loop_frame.h` 里有一份——而是经辅助函数在帧上执行：
 
 | 字节码 | 辅助函数 | 之后 |
 |---|---|---|

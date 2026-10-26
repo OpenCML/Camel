@@ -277,7 +277,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "npy_element_type"
-desc = "`load_npy` reads an f32 `.npy` as `f32[..]` (`load_npy::<f32>`) and the tree's only int64 `.npy` as `i64[..]` (`load_npy::<i64>`), each with the file's extents (3 and 2 elements); a third load writes no type argument at all and takes the element type from the declared type of the position it stands in (`let typed: f32[..] = load_npy(p)`). Before H466 the result had no element type the program could state, and the only spelling was the untyped `load_npy(p)`."
+desc = "`load_npy` reads an f32 `.npy` as `f32[..]` (`load_npy::<f32>`) and the tree's only int64 `.npy` as `i64[..]` (`load_npy::<i64>`), each with the file's extents (3 and 2 elements); a third load writes no type argument at all and takes the element type from the declared type of the position it stands in (`let typed: f32[..] = load_npy(p)`). The result used to have no element type the program could state, and the only spelling was the untyped `load_npy(p)`."
 kind = "behavior"
 case = "../../../../cases/modules/tensor/dtype/npy_element_type.cml"
 args = ["${case}"]
@@ -288,7 +288,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "npy_dtype_mismatch"
-desc = "An int64 `.npy` read as `load_npy::<f32>(p)` is a RuntimeDiag::RuntimeError at the call, at the position of the type argument the call writes (`npy_dtype_mismatch.cml:10:21`), naming the file's element type and the declared one (`the file holds i64 and the program declares f32`). Before H466 no element type was declared, so a file of any element type loaded as-is and the mismatch could not be reported at all (design principles 5.1, 5.5)."
+desc = "An int64 `.npy` read as `load_npy::<f32>(p)` is a RuntimeDiag::RuntimeError at the call, at the position of the type argument the call writes (`npy_dtype_mismatch.cml:10:21`), naming the file's element type and the declared one (`the file holds i64 and the program declares f32`). No element type used to be declared, so a file of any element type loaded as-is and the mismatch could not be reported at all (design principles 5.1, 5.5)."
 kind = "negative"
 case = "../../../../cases/modules/tensor/dtype/npy_dtype_mismatch.cml"
 args = ["${case}"]
@@ -300,7 +300,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "npy_no_element_type"
-desc = "`load_npy(p)` with no type argument, standing where no element type is expected, does not resolve: the element type is the one type variable no parameter mentions, so the call is refused (No matching function found, `SemanticDiag::NoMatchingFunction`) and the candidates print the five element types a `.npy` file can hold, each with the type argument it takes (`<tensor:load_npy_f32>: ::<float32>(path: string) => float32[..]`). Before H466 this call compiled and returned a tensor whose element type was whatever the file held (design principles 5.5)."
+desc = "`load_npy(p)` with no type argument, standing where no element type is expected, does not resolve: the element type is the one type variable no parameter mentions, so the call is refused (No matching function found, `SemanticDiag::NoMatchingFunction`) and the candidates print the five element types a `.npy` file can hold, each with the type argument it takes (`<tensor:load_npy_f32>: ::<float32>(path: string) => float32[..]`). This call used to compile and returned a tensor whose element type was whatever the file held (design principles 5.5)."
 kind = "negative"
 case = "../../../../cases/modules/tensor/dtype/npy_no_element_type.cml"
 args = ["${case}"]

@@ -307,7 +307,7 @@ expect_output_contains = ["missing_root.cml:6:1", "Module 'nowhere_module' not f
 
 [[tests]]
 name = "imports.include_root_library_import"
-desc = "A library that is not the entry resolves its own import through the same -I root (after its own directory, H112)."
+desc = "A library that is not the entry resolves its own import through the same -I root (after its own directory)."
 kind = "behavior"
 case = "../../../cases/compile/module_imports/include_path/prog/library_via_include.cml"
 args = ["-E", "short", "-I", "../roots/one", "${case}"]
@@ -388,7 +388,7 @@ expect_stdout_exact = "1 2\n"
 
 [[tests]]
 name = "imports.order_local_shadows_stdlib"
-desc = "A library beside a graph.cml imports `graph`: the local file shadows the standard library's graph with no diagnostic (41; stdlib/graph has no `answer`). Pinned as the rule's consequence; whether a warning is wanted is an open author question (H220 report)."
+desc = "A library beside a graph.cml imports `graph`: the local file shadows the standard library's graph with no diagnostic (41; stdlib/graph has no `answer`). Pinned as the rule's consequence; whether a warning is wanted is an open author question."
 kind = "behavior"
 case = "../../../cases/compile/module_imports/import_order/stdlib_shadow/main.cml"
 args = ["-E", "short", "${case}"]

@@ -226,7 +226,7 @@ jobs:
 
       # The default collector is generational; the no-JIT job runs the whole set on it, and the
       # plans of feat/mm that name the other collector (--gc mark-sweep) keep mark-sweep tested on
-      # every push. The collector is a command-line option now (H81), so it is not set here.
+      # every push. The collector is a command-line option now, so it is not set here.
       - name: Test (smoke + feat)
         run: node scripts/test.js
 

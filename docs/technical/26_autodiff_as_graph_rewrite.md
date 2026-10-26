@@ -521,7 +521,7 @@ What differs from the design above:
     argument that is a tuple or struct is carried leaf by leaf, in the order of
     its fields: one `Loop` state input per leaf, the body entry rebuilds the
     tuple or struct from those inputs, and the loop's outputs are rebuilt into
-    the value the recursion returns (H44's outline; `ort_struct_loop`);
+    the value the recursion returns (the outline; `ort_struct_loop`);
   - the body is the function's own graph evaluated once. A branch that
     separates "return" from "call again" becomes an `If` whose outputs are the
     continue flag and the next state: each side is computed only when it is
