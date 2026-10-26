@@ -469,6 +469,15 @@ class GenerationalAllocatorWithGC : public IAllocator {
 
     void majorGCUnlocked();
 
+    /// A collection that threw. The heap is half relocated at that point (the haven has been
+    /// swapped, some objects carry forwarding pointers, the remembered set has been rewritten),
+    /// so there is no state to go on from: this names what was being collected and why it failed,
+    /// and ends the process. Called from the one place a collection is started
+    /// (collectAtSafepointUnlocked), so an exception from a collection never reaches ordinary
+    /// fault handling as if the heap were still usable (C24, MG/R8).
+    [[noreturn]] static void reportFatalCollectionFailure(
+        CollectionKind kind, std::string_view reason);
+
     // ============================================================================
     // Allocation region tag
     // ============================================================================
