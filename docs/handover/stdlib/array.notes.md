@@ -131,7 +131,7 @@
 ## R1. 规则
 
 - `sum`、`mean`、`min`、`max`、`argmax`、`argmin` 取 `T[..]`，归约所有元素（行主序），都在 `array`。函数体先 `flatten(xs)`；`T[..]` 的 `flatten` 是新的第二个重载（`T[][]` 的那个仍是拼接），底下一个私有原子 `array:elements`（布局内核：行主序元素视图，连续数组共享数据块）。
-- 空数组：`sum`、`mean`、`min`、`max`、`argmax`、`argmin` 全是故障（7.7），种类 `InvalidArgument`（目录里没有更贴的；`tensor` 现用 `DivisionByZero`/`RuntimeError`，统一时请定）。`min`/`max` 不再答 `T?`。`sum` 也按字面执行：空数组的和是故障，**不再是 0**。
+- 空数组：`sum` 是单位元 0（不是故障）；`mean`、`min`、`max`、`argmax`、`argmin` 是故障（7.7），种类 `InvalidArgument`（目录里没有更贴的；`tensor` 现用 `DivisionByZero`/`RuntimeError`，统一时请定）。`min`/`max` 不再答 `T?`。
 - `mean` 现在在 `array`（`T[..]`，仅浮点元素类型；整数数组的均值要先转换，不答整数）。`statistics` 只剩 `variance`、`stdev`、`median`、`quantile`。
 - 新增 `argmax`、`argmin`（一维以上的行主序位置；7.7 规则：首个 NaN 胜出，并列取前者，+0 大于 −0）和 `chunks<n>`。
 - 不新增 `group_by`。
@@ -143,7 +143,7 @@
 | 文件 | 位置 | 种类 |
 |---|---|---|
 | array.cml | `chunks`：n < 1 | `InvalidArgument` |
-| array.cml | `some_elements`（`sum`、`mean`、`min`、`max`、`argmax`、`argmin` 共用）：空数组 | `InvalidArgument` |
+| array.cml | `some_elements`（`mean`、`min`、`max`、`argmax`、`argmin` 共用）：空数组 | `InvalidArgument` |
 | statistics.cml | `quantile`：q 不在 [0, 1] | `InvalidArgument` |
 | statistics.cml | `quantile`：空数组 | `InvalidArgument` |
 | statistics.cml | `variance_of`（`variance`、`stdev` 共用）：少于两个元素 | `InvalidArgument` |
@@ -152,15 +152,13 @@
 
 ## R3. 对 C++ 的影响（在 §2 之上）
 
-- 内核（`sum_*`、`min_*`、`max_*`）收 `T[..]`：按元素总数扫描；空数组要故障，与函数体一致（`InvalidArgument`）。内核返回 `T` 而不是 `T?`，`min_*/max_*` 的空数组分支由 `NullSlot` 改为故障。
+- 内核（`sum_*`、`min_*`、`max_*`）收 `T[..]`：按元素总数扫描；空数组上 `sum_*` 答 0，`min_*`、`max_*` 故障（`InvalidArgument`），与函数体一致。内核返回 `T` 而不是 `T?`，`min_*/max_*` 的空数组分支由 `NullSlot` 改为故障。
 - 新增原子 `array:elements`（私有，`T[..]` → `T[]`）。
 - 张量模块的整体形式 `sum::<T>(t)`、`mean::<T>(t)`（`stdlib/signatures/tensor.cml`）**删除**，其 C++ 内核并入上述 `array` 内核或直接共用；带轴的形式留 tensor，待 tensor 重写时移动。`tensor_definitions.cml` 里的 `mean` 规范式因此指向 `array::mean`，并要改用 `array` 的 `sum`。
 - `argmax`/`argmin` 当前的 Camel 定义用 `precedes(a, b) = argsort([b, a])[0] == 1`，每次比较分配一个两元素数组，只作语义；`tensor` 已有 `argmax_axis` 内核，应作为 `#impl` 内核补上（`i32/int/f32/float`）。
 
 ## R4. “空数组求和”需要改的用例
 
-- `test/cases/modules/stdlib/reduced_sum_refused.cml:67`：`println(sum(empty), sum(empty) == bf16(0.0))`，现在应当故障；改成钉故障（`InvalidArgument`）。
-- `test/cases/modules/tiles/core_views.cml:31`：`sum(empty_mark(sum(x, 1)))` 是 `tensor` 的整体 `sum`，该名字迁到 `array` 后，若这里确实求和零元素数组，也要改。
 - 全部 `min(..) ?? d`、`max(..) ?? d` 的写法去掉 `?? d`：`test/cases/modules/stdlib/array_basic.cml`、`array_large.cml`、`array_reduction_kernels.cml`、`reduced_minmax.cml`（含空数组期望 `null` 的断言，改为钉故障）、`examples/numeric/monte_carlo_pi.cml`、`random_walk.cml`、`examples/text/table_report.cml`，以及 `docs/stdlib-reference.md`（重生）。
 - 对空数组调用 `max` 的示例（`examples/text/table_report.cml` 对表格列求最大宽度）要确认列非空。
 
@@ -212,3 +210,8 @@ export func is_same::<T, U>(): bool {
 
 - 沿轴的包装函数声明结果是 `T[..]`，丢掉 C++ 推理器原来给出的静态各维（常量轴时结果的秩与各维是知道的）。后续：在核心里给“沿轴归约”一个类型函数（`ReducedShape<S, axis, keepdims>`），包装函数的返回类型改用它，原子的类型规则留在 C++。
 - `precedes` 仍是语义定义；`argmax/argmin` 的 `#impl` 内核待补。
+
+
+## S4. 空数组的 `sum`（作者裁定后）
+
+`sum` 对空数组或空轴得单位元 0，不是故障；`some_elements` 不再用于 `sum`（函数体直接 `flatten`），`sum` 沿轴形式在长度为 0 的轴上也答 0。上文 R1、R2、R3 与 R4 中凡把 `sum` 列为故障的、以及“空数组求和”需要改的用例清单（`reduced_sum_refused.cml:67`、`core_views.cml:31`）一律作废，不需要迁移。`mean`、`min`、`max`、`argmax`、`argmin` 仍是故障。
