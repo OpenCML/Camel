@@ -18,7 +18,7 @@ func each(n: int): int { return 0..3->map<depth>->reduce<(a: int, x: int): int =
 
 // Every level is a boundary: the fault of the innermost call is taken by the boundary below it.
 func tower(n: int): int {
-    return 1 + (attempt(tower, n + 1) !! 0)
+    return 1 + (attempt(tower)(n + 1) !! 0)
 }
 
 func kind(r: int!): string {
@@ -38,15 +38,15 @@ func kind_only(r: int!): string {
 }
 
 func main(): int sync {
-    println(kind(attempt(depth, 50)))
-    println(kind(attempt(depth, 1000000)))
-    println(kind(attempt(depth, 50)))
-    println(kind_only(attempt(step, 1000000)))
-    println(kind(attempt(step, 20)))
-    println(kind(attempt(depth, 1000000)))
-    println(kind(attempt(each, 40)))
+    println(kind(attempt(depth)(50)))
+    println(kind(attempt(depth)(1000000)))
+    println(kind(attempt(depth)(50)))
+    println(kind_only(attempt(step)(1000000)))
+    println(kind(attempt(step)(20)))
+    println(kind(attempt(depth)(1000000)))
+    println(kind(attempt(each)(40)))
     println(depth(60))
-    println((attempt(tower, 0) !! -1) > 10)
+    println((attempt(tower)(0) !! -1) > 10)
     println(depth(60))
     println('end')
     return 0

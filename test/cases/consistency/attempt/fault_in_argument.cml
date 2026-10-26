@@ -8,8 +8,8 @@ func risky(d: int): int { return 100 / d }
 
 func main(): int sync {
     let z = 0
-    println(attempt(risky, 5) !! -1)
-    println(attempt(risky, 10 / z) !! -1)
+    println(attempt(risky)(5) !! -1)
+    println(attempt(risky)(10 / z) !! -1)
     println('not reached')
     return 0
 }

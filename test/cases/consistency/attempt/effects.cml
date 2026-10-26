@@ -20,10 +20,10 @@ func main(): int sync {
         return q
     }
     println('before')
-    let a = attempt(work, 4) !! -1
+    let a = attempt(work)(4) !! -1
     println(a)
     println(total)
-    let b = attempt(work, 0) !! -1
+    let b = attempt(work)(0) !! -1
     println(b)
     println(total)
     var seen = 0
@@ -33,7 +33,7 @@ func main(): int sync {
             println(seen)
         }>
         return seen
-    }) !! -1
+    })() !! -1
     println(c)
     println(seen)
     println('after')

@@ -11,7 +11,7 @@ func risky(x: float): float { return 6.0 / x }
 
 with <x: float>
 func through(): float {
-    return (attempt(risky, x) !! 0.0) * x
+    return (attempt(risky)(x) !! 0.0) * x
 }
 
 func main(): int sync {

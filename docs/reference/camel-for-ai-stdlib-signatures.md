@@ -120,7 +120,7 @@ filter: <f: (item: T) => bool> (xs: T[]) => T[]
 reduce: <f: (acc: U, item: T) => U, initial: U> (xs: T[]) => U
 foreach: <f: (item: T) => void> (xs: T[]) => void
 apply: <f: (item: T) => T> (xs: T[]) => T[]
-attempt: (f: (...args: A) => T, ...args: A) => T!
+attempt: (f: (...args: A) => T) => (...args: A) => T!
 len: (x: Map<K, V>) => int
 len: (x: Set<T>) => int
 get: <key: K> (m: Map<K, V>) => V?

@@ -26,13 +26,13 @@ func warm(i: int, acc: int): int {
 func main(): int sync {
     // Make both callees hot first, so that an on-demand JIT has compiled them.
     println(warm(200, 0))
-    println(kind(attempt(quot, 9, 4)))
-    println(kind(attempt(quot, 9, 2)))
-    println(kind(attempt(quot, 9, 4)))
-    println(kind(attempt(depth, 40)))
-    println(kind(attempt(depth, 1000000)))
-    println(kind(attempt(depth, 40)))
-    println(kind(attempt(() => quot(1, 2) + depth(3))))
+    println(kind(attempt(quot)(9, 4)))
+    println(kind(attempt(quot)(9, 2)))
+    println(kind(attempt(quot)(9, 4)))
+    println(kind(attempt(depth)(40)))
+    println(kind(attempt(depth)(1000000)))
+    println(kind(attempt(depth)(40)))
+    println(kind(attempt(() => quot(1, 2) + depth(3))()))
     println(warm(200, 0))
     println('end')
     return 0

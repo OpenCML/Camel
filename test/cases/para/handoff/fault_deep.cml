@@ -37,7 +37,7 @@ func late(i: int): int {
 
 func main(): int sync {
     0..30->foreach<(round: int) => sync {
-        let r = attempt(row, round)
+        let r = attempt(row)(round)
         let line = match r {
             case error e => e.message
             case v => 'no fault'
