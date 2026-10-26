@@ -13,7 +13,6 @@ This chapter shows what that sentence looks like on the graph, and how it differ
 // Who needs whose result decides what runs, and what can run at the same time.
 // Run: camel docs/tutorial/examples/09_dependency.cml
 //      camel docs/tutorial/examples/09_dependency.cml std::gir
-module dependency
 
 func price(n: int): int {
     return n * 3
@@ -70,7 +69,6 @@ the `total` part of what `camel docs/tutorial/examples/09_dependency.cml std::gi
 // Who needs whose result decides what runs, and what can run at the same time.
 // Run: camel docs/tutorial/examples/09_dependency.cml
 //      camel docs/tutorial/examples/09_dependency.cml std::gir
-module dependency
 
 func price(n: int): int {
     return n * 3
@@ -197,7 +195,6 @@ back end whenever each element is computed on its own, without changing a charac
 // command line; the program does not change and the results keep the order of the elements.
 // Run: camel examples/parallel/parallel_map.cml
 //      camel examples/parallel/parallel_map.cml std::prl
-module parallel_map
 
 // Number of steps the Collatz sequence takes from `n` down to 1.
 func collatz_steps(n: int, steps: int): int {
@@ -262,7 +259,6 @@ Answer [`examples/09_exercise.cml`](examples/09_exercise.cml):
 // The answer to the exercise of chapter 9: one call now needs the other's result, so the graph
 // has an edge between them and they no longer stand side by side.
 // Run: camel docs/tutorial/examples/09_exercise.cml
-module exercise
 
 func price(n: int): int {
     return n * 3

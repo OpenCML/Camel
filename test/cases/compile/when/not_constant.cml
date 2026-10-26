@@ -1,14 +1,18 @@
 /**
- * A `when` that calls an ordinary function is not a compile-time predicate: it is reported,
- * never taken as true (design principles 5.13).
+ * A `when` that reads a run-time value is not a compile-time predicate: the condition calls a
+ * function whose body reads a module-level `var`, so its value only exists once the program
+ * runs and the declaration is reported, never taken as true (design principles 5.13).
  */
 module when_not_constant
 
-func is_positive(x: int): bool {
-    return x > 0
+var counter = 0
+
+func bump(): bool sync {
+    counter = counter + 1
+    return counter > 0
 }
 
-func bad(x: int): int when is_positive(1) {
+func bad(x: int): int when bump() {
     return x
 }
 

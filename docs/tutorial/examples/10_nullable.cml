@@ -1,6 +1,5 @@
 // T? may be null; open it with ?? or with match.
 // Run: camel docs/tutorial/examples/10_nullable.cml
-module nullable
 
 func find(xs: int[], target: int, i: int): int? {
     return if i >= len(xs) then null

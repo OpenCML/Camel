@@ -1,0 +1,16 @@
+// `uses` is an upper bound, not a description: it names what a call may touch, and the body has
+// to stay inside it. Here `fs` is promised and the body writes `stdout`, which the clause does not
+// name -- a caller that reads only the declaration would not expect it, so the declaration is
+// refused (design effects plan, step 5).
+module err_uses_live
+
+/// The clause names `fs`; the body writes `stdout`.
+func stamp(): int uses fs sync {
+    println('x')
+    return 1
+}
+
+func main(): int sync {
+    println(stamp())
+    return 0
+}

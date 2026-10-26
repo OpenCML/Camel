@@ -1,7 +1,6 @@
 // What a call touches: a resource of the module, a group of them, a handle type and `uses` on a
 // parameter. The bodies touch nothing -- a clause is a promise the compiler checks where it can.
 // Run: camel docs/tutorial/examples/10_resources.cml
-module resources
 
 resource db
 resource console = [db, stdout]

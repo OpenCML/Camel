@@ -49,7 +49,6 @@ First get the `camel` executable: build it from source by following [setup.en.md
 [`examples/01_hello.cml`](examples/01_hello.cml):
 
 ```cml
-module hello
 
 func main(): int sync {
     println('Hello, Camel!')
@@ -75,7 +74,6 @@ Hello, Camel!
 [`examples/02_values.cml`](examples/02_values.cml):
 
 ```cml
-module values
 
 type Point = { x: int, y: int }
 
@@ -130,7 +128,6 @@ Key points:
 [`examples/03_functions.cml`](examples/03_functions.cml):
 
 ```cml
-module functions
 
 func square(x: int): int {
     return x * x
@@ -179,7 +176,6 @@ func main(): int sync {
 [`examples/04_branches.cml`](examples/04_branches.cml):
 
 ```cml
-module branches
 
 func sign(x: int): string {
     return if x > 0 then 'positive' else if x < 0 then 'negative' else 'zero'
@@ -225,7 +221,6 @@ A B D
 In the graph, each arm of a branch is a subgraph of its own. So **a `return` written in the block of an arm gives the value of that branch; it does not leave the function**. [`examples/04_block_return.cml`](examples/04_block_return.cml):
 
 ```cml
-module block_return
 
 // The `if` is a statement whose value nobody uses, so the two `return`s have no effect.
 func wrong(x: int): string {
@@ -254,9 +249,9 @@ negative
 
 ```text
 warning[SemanticDiag::ExitInUnusedBranch]: This 'return' gives the value of the 'if' it is in, and nothing uses that value: it does not leave the function.
-  --> docs/tutorial/examples/04_block_return.cml:7:21
+  --> docs/tutorial/examples/04_block_return.cml:6:21
    |
- 7 |     if x < 0 then { return 'negative' } else { return 'not negative' }
+ 6 |     if x < 0 then { return 'negative' } else { return 'not negative' }
    |                     ^^^^^^^^^^^^^^^^^
 note: the value of this 'if' is not used
 ```
@@ -268,7 +263,6 @@ There is no "early return" in Camel. Make the branch the last expression of the 
 [`examples/05_arrays.cml`](examples/05_arrays.cml):
 
 ```cml
-module arrays
 
 func main(): int sync {
     let xs = 1..11    // [1, ..., 10]
@@ -311,7 +305,6 @@ item c
 There is **no agreed order of execution** between the elements of a `map`. When the element function is pure this does not matter; once it calls something stateful, the result depends on which element is computed first. [`examples/05_map_order.cml`](examples/05_map_order.cml) demonstrates this with the random number generator (each call of `randint` advances the hidden state by one step):
 
 ```cml
-module map_order
 
 import { seed, randint } from random
 
@@ -356,7 +349,6 @@ In most languages, statements run one after another. In Camel, by default, **eva
 This has a consequence: **outside a sync block, a call whose result nobody uses does not run**, even if it has side effects. [`examples/06_unused_effect.cml`](examples/06_unused_effect.cml):
 
 ```cml
-module unused_effect
 
 func greet(): int {
     println('hello from greet')     // not used, not in a sync block: never runs
@@ -375,9 +367,9 @@ camel docs/tutorial/examples/06_unused_effect.cml
 
 ```text
 warning[SemanticDiag::EffectNotExecuted]: The call of 'println' has side effects but is never executed: nothing depends on it and it is not in a sync block.
-  --> docs/tutorial/examples/06_unused_effect.cml:6:5
+  --> docs/tutorial/examples/06_unused_effect.cml:5:5
    |
- 6 |     println('hello from greet')     // not used, not in a sync block: never runs
+ 5 |     println('hello from greet')     // not used, not in a sync block: never runs
    |     ^^^^^^^
 help: Evaluation is driven by dependencies: outside a sync block an expression whose result (or the
       variable it writes) nothing needs does not run. This is legal. To run it, put it in a sync
@@ -424,7 +416,6 @@ The `if` itself is on the sync chain, its arm is not: the arm is evaluated by de
 The body of `main` is a sync block, so will a `println` inside a function it calls run? No. A function is compiled into a subgraph of its own, and a call only places that subgraph node into a larger graph; it does not change its structure. [`examples/06_callee_decides.cml`](examples/06_callee_decides.cml):
 
 ```cml
-module callee_decides
 
 func log(x: int): int {
     println(x)          // result unused, body is not a sync block: not executed
@@ -450,7 +441,6 @@ The two calls of `log` did run in order (`b` is 3), but `println(x)` belongs to 
 When `sync` is written in the **function body** position (`func g(): int sync { ... }`), it modifies the block that is the function body: the statements of the block execute in the order they are written. A function body without `sync` is not a sync block, and effects such as `println` in it do not run (evaluation by dependency). [`examples/06_sync_body.cml`](examples/06_sync_body.cml):
 
 ```cml
-module sync_body
 
 func f(): int {
     println('f')        // not executed: the body is not a sync block
@@ -481,9 +471,9 @@ In Camel every value is passed by reference. Writing `var` before a parameter me
 
 ```text
 error[SemanticDiag::ImmutablePassedToVarParam]: 'k' is immutable and cannot be passed to a var parameter of 'bump'.
-   --> docs/tutorial/examples/06_let_to_var.cml:11:10
+   --> docs/tutorial/examples/06_let_to_var.cml:10:10
     |
- 11 |     bump(k)
+ 10 |     bump(k)
     |          ^
 help: Only a variable declared with 'var' (or a var parameter) can be modified. Declare it with
       'var', or bind the new value to a new name.
@@ -492,7 +482,6 @@ help: Only a variable declared with 'var' (or a var parameter) can be modified. 
 Once there are mutable variables, there is a question of order: which write must a read come after? The answer is the sync block: the statements written in one sync block execute in the order they are written, so two writes and a later read have a determined order. [`examples/06_var_order.cml`](examples/06_var_order.cml):
 
 ```cml
-module var_order
 
 func bump(var counter: int): int sync {
     counter += 1
@@ -528,7 +517,6 @@ The everyday advice is simple: write computation as `let`s and pure functions; p
 [`examples/07_closures.cml`](examples/07_closures.cml):
 
 ```cml
-module closures
 
 func inc(x: int): int { return x + 1 }
 func dbl(x: int): int { return x * 2 }
@@ -574,7 +562,6 @@ func main(): int sync {
 [`examples/08_generics.cml`](examples/08_generics.cml):
 
 ```cml
-module generics
 
 type Pair<T> = (T, T)
 
@@ -614,7 +601,6 @@ a
 A declaration can also say **where it applies**: `when` after the signature is a compile-time condition over the declaration's type parameters. `double_it` below applies to numbers and to nothing else; when no candidate of a call meets its condition, the error at the call site lists the condition each candidate wrote. `is_numeric` is not a name the compiler knows: it is an ordinary function written with `match type` (the standard library's seven type predicates live in `types`), and a condition calls a function the module can see, so the snippet writes it in the same module.
 
 ```cml
-module applicability
 
 func is_numeric::<T>(): bool {
     return match type T {
@@ -638,7 +624,6 @@ func main(): int sync {
 Camel has no exceptions and no `try`/`catch`. A function that may fail declares its return type as **`T!`**: its value is either a `T` or an error. [`examples/09_errors.cml`](examples/09_errors.cml):
 
 ```cml
-module errors
 
 func safe_div(a: int, b: int): int! {
     return if b == 0 then {
@@ -689,9 +674,9 @@ error DivByZero: the divisor is zero
 ```text
 before
 error[RuntimeDiag::IndexOutOfRange]: Index 5 is out of range for an array of length 3.
-  --> docs/tutorial/examples/09_fault.cml:8:15
+  --> docs/tutorial/examples/09_fault.cml:7:15
    |
- 8 |     println(xs[5])
+ 7 |     println(xs[5])
    |               ^
 help: Ensure the index is within the valid range of the collection.
 ```
@@ -701,7 +686,6 @@ help: Ensure the index is within the valid range of the collection.
 A value of type **`T?`** is either `null` or a `T`. [`examples/10_nullable.cml`](examples/10_nullable.cml):
 
 ```cml
-module nullable
 
 func find(xs: int[], target: int, i: int): int? {
     return if i >= len(xs) then null
@@ -742,7 +726,6 @@ null
 `Map<K, V>` and `Set<T>` are built-in types. There are no dedicated literals: write an array, then convert it with `as`. [`examples/11_collections.cml`](examples/11_collections.cml):
 
 ```cml
-module collections
 
 func main(): int sync {
     let ages = [('bob', 31), ('alice', 28)] as Map<string, int>
@@ -780,7 +763,6 @@ func main(): int sync {
 [`examples/shapes.cml`](examples/shapes.cml) is a library module; it marks the names visible from outside with `export`:
 
 ```cml
-module shapes
 
 import { sqrt } from math
 
@@ -798,7 +780,6 @@ export func area(w: float, h: float): float {
 [`examples/12_modules.cml`](examples/12_modules.cml) uses it and the standard module `math`:
 
 ```cml
-module modules_demo
 
 import { sqrt } from math
 import { hypot, Vec } from shapes
@@ -827,7 +808,6 @@ func main(): int sync {
 The modules that come with Camel are `str` (strings), `array` (arrays), `math`, `statistics`, `random`, `time`, `fs`, `json`, `process`, `env`, `re`, `hash`, `para`, `this`, the tensor family `tensor`, `nn`, `autodiff`, `onnx`, and `python`, which embeds Python ([language reference 5.2.1](../language/en/05_modules.md#521-modules-provided-with-camel)). The [standard library reference](../stdlib-reference.md) lists the functions of the first fourteen modules one by one: signature, whether it is pure, behaviour on failure, examples. [`examples/12_stdlib.cml`](examples/12_stdlib.cml):
 
 ```cml
-module stdlib_demo
 
 import { split, trim, to_upper, replace, find } from str
 import { sort_by, take, sum, reverse, unique } from array
@@ -890,7 +870,6 @@ Pure operators can be evaluated ahead of time, merged and removed by optimisatio
 Up to here we have kept saying "a function is a subgraph, a call is a node". Now let us see it with our own eyes. [`examples/13_graph.cml`](examples/13_graph.cml):
 
 ```cml
-module graph_demo
 
 func add(a: int, b: int): int {
     return a + b
@@ -963,7 +942,6 @@ If you have Graphviz installed, `camel ... std::rgir | dot -Tsvg -o graph.svg` g
 `std::rgir` is a **pass**. Camel models compilation, optimisation, execution and export all as transformations of the graph, and what you write after the file name is the passes to run, in order. The same source, with a different set of passes, does a different thing. Using [`examples/14_passes.cml`](examples/14_passes.cml):
 
 ```cml
-module passes_demo
 
 func square(x: int): int {
     return x * x
@@ -1024,7 +1002,6 @@ A few rules:
 Tensors come from the `tensor` module. [`examples/15_tensor.cml`](examples/15_tensor.cml):
 
 ```cml
-module tensor_demo
 
 import { Tensor, ones, zeros, shape, sum, transpose } from tensor
 
@@ -1050,7 +1027,6 @@ func main(): int sync {
 **A minimal model.** In its true form, a Camel program expresses only computation: `main` is the model, and its parameters are the inputs of the model. [`examples/15_model.cml`](examples/15_model.cml):
 
 ```cml
-module model
 
 import { Tensor, ones, relu, sum } from tensor
 
@@ -1091,7 +1067,6 @@ The export pass translates whatever it can translate, and where it cannot (the p
 Automatic differentiation is a library built on top of the pass mechanism: `grad(f)` rewrites the graph of `f` into the graph of its derivative. The first `with` parameter of `f` is the weight it differentiates; ordinary parameters are data. [`examples/16_grad.cml`](examples/16_grad.cml):
 
 ```cml
-module grad_demo
 
 import { grad, with_grad } from autodiff
 

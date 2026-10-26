@@ -1,7 +1,7 @@
 /**
  * A conversion (`e as T`) of a constant is a constant: std::opt::fold evaluates it, with the
  * check the conversion performs when it runs. `a` is converted to the shape the compiler
- * already knows, `b` comes from a function declared to return a plain Tensor (the conversion
+ * already knows, `b` comes from a function declared to return a plain `f32[..]` (the conversion
  * is checked against the value), `n` is a number converted to another
  * primitive type.
  */

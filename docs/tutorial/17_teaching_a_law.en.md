@@ -15,7 +15,6 @@ program.
 ```cml
 // The law of this program's arithmetic, written the way the compiler reads laws.
 // Run: camel docs/tutorial/examples/17_rule.cml
-module law
 
 import { check } from rewrite
 
@@ -135,7 +134,6 @@ holds.
 ```cml
 // The knowledge of your field that is not an equation, handed to the compiler.
 // Run: camel docs/tutorial/examples/17_fact.cml
-module domain
 
 import { check } from rewrite
 import { abs } from math
@@ -209,7 +207,6 @@ Answer [`examples/17_exercise.cml`](examples/17_exercise.cml):
 // The answer to the exercise of chapter 18: a law written as a `rule`, and the verdict `check`
 // gives it.
 // Run: camel docs/tutorial/examples/17_exercise.cml
-module exercise
 
 import { check } from rewrite
 

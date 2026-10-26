@@ -1,0 +1,13 @@
+/**
+ * An alias whose right-hand side mentions itself through an array. The rule admits recursion
+ * through an array, a map, a set or an enum (design principles 5.2), and the declaration has no
+ * representation for it: the name is not in scope while an alias is read. The array form of a
+ * struct field is the one that is built: recursive_struct_array.cml.
+ */
+module type_alias_recursion_array
+
+type Row = Row[]
+
+func main(): int {
+    return 0
+}

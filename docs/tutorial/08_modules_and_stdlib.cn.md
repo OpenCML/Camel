@@ -29,9 +29,6 @@ export func area(w: float, h: float): float {
 }
 ```
 
-> 树上的 `examples/shapes.cml` 顶上还有一行 `module shapes`，那是**已经废弃的写法**：语言里已经没有这条声明，
-> 仓库正在把它从源码和文档里清掉（`docs/design-principles.cn.md` 第 14 节）。新写的文件不要再写它。
-
 用它的那一侧有两种写法，[`examples/08_modules.cml`](examples/08_modules.cml) 里都出现了：
 
 ```cml

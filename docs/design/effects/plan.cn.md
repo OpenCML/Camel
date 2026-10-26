@@ -327,15 +327,15 @@ pump(s, open("b"))   同上：被调用者不知道 s 与新句柄不同，仍�
 
 ## 6. 诊断
 
-诊断目录的下一个空块是低 20 位的 `0x1A0`（最后一处错误是  的 `0x000190`，最后一处警告是  的 `0x100160`；全目录无 `0x1A0`）。约定：错误 `0x0001A0` 起，警告 `0x1001A0` 起，提示 `0x3001A0` 起。下表写的是**枚举值**（低 24 位）；JSON 与 `--explain` 里的完整码在前面再加类型 `0x03`（例如 `0x033001A0`）。先占 6 个：
+下表写的是**枚举值**（低 24 位）；JSON 与 `--explain` 里的完整码在前面再加类型 `0x03`（例如 `0x030001A0`）。**落地时分配到哪些码以 `diagnostics/registry.tsv` 为准**：`UnknownResource`、`PureAndUses`、`ResourceGroupCycle`、`HandleTypeNotNominal`、`NativeResourceMismatch` 落在 `0x0001A0`–`0x0001A4`，`UsesPromiseViolated` 落在 `0x0001F1`；底下最后两条（`UndeclaredOperatorEffect`、`ExportedResourcesChanged`）还没进目录：
 
 | 码 | 名字 | 严重性 | 位置 | 何时 |
 |---|---|---|---|---|
 | `0x0001A0` | `UnknownResource` | Error | `uses` 里的名字 | 名字既不是本函数形参、也不是可见资源（附注列出形参与资源） |
-| `0x0001A1` | `UsesPromiseViolated` | Error | 声明（`uses`/`pure`） | 推断集超出 `uses`；`pure` 却非空（含 `var` 形参与捕获）；附注指向第一个超出的使用点 |
-| `0x0001A2` | `HandleTypeNotNominal` | Error | `#resource` 标签 | 标在别名或内建类型上 |
-| `0x0001A3` | `PureAndUses` | Error | 第二个子句 | `pure` 与 `uses` 同时写（帮助：`pure` 是 `uses` 为空的特例） |
-| `0x0001A4` | `ResourceGroupCycle` | Error | 组声明 | 组展开成环（`a = [b]; b = [a]`） |
+| `0x0001F1` | `UsesPromiseViolated` | Error | 声明（`uses`/`pure`） | 推断集超出 `uses`；`pure` 却非空（含 `var` 形参与捕获）；附注指向第一个超出的使用点 |
+| `0x0001A3` | `HandleTypeNotNominal` | Error | `#resource` 标签 | 标在别名或内建类型上 |
+| `0x0001A1` | `PureAndUses` | Error | 第二个子句 | `pure` 与 `uses` 同时写（帮助：`pure` 是 `uses` 为空的特例） |
+| `0x0001A2` | `ResourceGroupCycle` | Error | 组声明 | 组展开成环（`a = [b]; b = [a]`） |
 | `0x3001A0` | `UndeclaredOperatorEffect` | Hint | 模块级（无源位置） | 模块有算子既无 `pure` 也无 `uses`；按全局资源对待 |
 
 另有一条**条件**警告，取决于 Q2：

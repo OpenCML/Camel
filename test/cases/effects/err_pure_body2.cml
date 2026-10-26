@@ -1,0 +1,21 @@
+// The same refusal where the function is never called directly: `say` is passed to a parameter
+// that promises `pure`, and `say`'s own body writes the standard output. The error is at `say`'s
+// declaration -- the promise a caller can see is the one that is broken -- not at the call site,
+// which only reads what the declaration said (design effects plan, step 5).
+module err_pure_body2
+
+/// The parameter promises an empty set: whatever is passed must touch nothing.
+func apply(f: (x: int) => int pure, x: int): int {
+    return f(x)
+}
+
+/// The clause promises the empty set; the body writes `stdout`.
+func say(x: int): int pure {
+    println('x')
+    return x + 1
+}
+
+func main(): int sync {
+    println(apply(say, 4))
+    return 0
+}
