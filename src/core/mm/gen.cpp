@@ -21,6 +21,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cstring>
+#include <exception>
 #include <format>
 #include <iostream>
 #include <mutex>
@@ -817,19 +818,29 @@ void GenerationalAllocatorWithGC::collectAtSafepointUnlocked(
     }
 
     const auto begin = std::chrono::steady_clock::now();
-    switch (kind) {
-    case CollectionKind::Minor:
-        minorGCUnlocked();
-        break;
-    case CollectionKind::Major:
-        majorGCUnlocked();
-        break;
-    case CollectionKind::MinorAndMajor:
-        minorGCUnlocked();
-        majorGCUnlocked();
-        break;
-    case CollectionKind::None:
-        break;
+    try {
+        switch (kind) {
+        case CollectionKind::Minor:
+            minorGCUnlocked();
+            break;
+        case CollectionKind::Major:
+            majorGCUnlocked();
+            break;
+        case CollectionKind::MinorAndMajor:
+            minorGCUnlocked();
+            majorGCUnlocked();
+            break;
+        case CollectionKind::None:
+            break;
+        }
+    } catch (...) {
+        // A collection that throws stops half way: the haven has been swapped, some objects carry
+        // forwarding pointers and the remembered set has been rewritten. The heap is not a heap
+        // any more, and the exception travels into ordinary fault handling (`attempt`, a macro
+        // evaluation, a per-element fault boundary) as if the program could go on (C24, MG/R8).
+        // The one thing a half-relocated heap can say is that it stopped, so it is fatal here, and
+        // the diagnostics of the process can name what was being collected.
+        reportFatalCollectionFailure(kind, reason);
     }
     {
         const auto pause =
@@ -888,12 +899,48 @@ void GenerationalAllocatorWithGC::noteBlockBytesAfterDeferredReleases() {
     blockBytesAtCollection_ = camel::core::mm::blockBytesLive();
 }
 
+void GenerationalAllocatorWithGC::reportFatalCollectionFailure(
+    CollectionKind kind, std::string_view reason) {
+    const char *what = kind == CollectionKind::Minor   ? "minor"
+                       : kind == CollectionKind::Major ? "major"
+                                                       : "minor and major";
+    try {
+        std::string detail = "an unnamed exception";
+        if (std::exception_ptr current = std::current_exception()) {
+            try {
+                std::rethrow_exception(current);
+            } catch (const std::exception &error) {
+                detail = error.what();
+            } catch (...) {
+                // Keep the fallback text.
+            }
+        }
+        std::cerr << std::format(
+            "camel: fatal: the {} collection started for '{}' threw ({}); the heap is half "
+            "relocated and cannot be used again\n",
+            what,
+            reason,
+            detail);
+        std::cerr.flush();
+    } catch (...) {
+        // Reporting must not hide the stop.
+    }
+    std::terminate();
+}
+
 void GenerationalAllocatorWithGC::minorGCUnlocked() {
     if (!enableYoungGenCopying_) {
         return;
     }
-    if (inGC_)
-        return; // Reentrancy guard
+    // Reentrancy is a programming error, not a state to carry on from: nothing that runs inside a
+    // collection allocates through this allocator, and a collection only starts at a safepoint, so
+    // this means a caller collected from inside one. Returning here (as this used to) skipped a
+    // requested collection without saying so (C24, MG/R8).
+    ASSERT(!inGC_, "A minor collection was started while one was already running.");
+    if (inGC_) {
+        throw std::logic_error(
+            "GC invariant violated: a minor collection was started while one was running");
+    }
     inGC_ = true;
     ++stats_.minorCollections;
 
