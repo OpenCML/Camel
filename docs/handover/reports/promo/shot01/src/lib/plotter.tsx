@@ -371,6 +371,52 @@ export function blank(c: Code, line: number) {
   }
 }
 
+// ---- match cuts (style.md 5.4) ---------------------------------------------------------------
+
+/**
+ * The end of a shot that hands one shape to the next: everything in `world` fades except the
+ * nodes in `keep` (and what holds them), so the last frame is that shape alone on the ground.
+ */
+export function* handOff(world: Node, keep: Node[], duration = 0.4): ThreadGenerator {
+  const holds = (n: Node) => keep.some((k) => {
+    for (let p: Node | null = k; p !== null; p = p.parent()) {
+      if (p === n) return true;
+    }
+    return false;
+  });
+  const faded: Node[] = [];
+  const visit = (n: Node) => {
+    if (keep.includes(n)) return;
+    if (holds(n)) {
+      n.children().forEach(visit);
+    } else {
+      faded.push(n);
+    }
+  };
+  world.children().forEach(visit);
+  yield* all(...faded.map((n) => n.opacity(0, duration)));
+}
+
+/**
+ * The start of a shot that takes a node from the last one: drawn from the first frame at `from`
+ * (in its parent's coordinates) and `fromScale`, it glides to its own place. With `glyph` false
+ * the label stays hidden: the shape carries over, the name is the new shot's to write.
+ */
+export function* arrive(n: GNode, from: Vector2, fromScale = 1, duration = 0.6, glyph = true): ThreadGenerator {
+  const to = n.pos();
+  n.pos(from);
+  n.root().scale(fromScale);
+  n.shape().opacity(1);
+  n.shape().end(1);
+  if (glyph) {
+    n.glyph().opacity(1);
+  }
+  if (n.kind === 'effect') {
+    n.notch().opacity(1);
+  }
+  yield* all(n.pos(to, duration, easeInOutCubic), n.root().scale(1, duration, easeInOutCubic));
+}
+
 // ---- labels and the subtitle ----------------------------------------------------------------
 
 export function label(parent: Node, x: number, y: number, text: string, color = CHALK_DIM, size = 24): Reference<Txt> {

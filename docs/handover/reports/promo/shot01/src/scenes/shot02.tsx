@@ -32,6 +32,7 @@ import {
   SAND,
   THREAD,
   addNode,
+  arrive,
   at,
   beadsAlong,
   ch,
@@ -41,6 +42,7 @@ import {
   edge,
   flash,
   ground,
+  handOff,
   kw,
   label,
   nm,
@@ -130,7 +132,8 @@ export default makeScene2D(function* (view) {
   yield chain(waitFor(0.3), say('效果在被需要时才执行；'));
   yield* all(
     src.root().opacity(1, 0.4),
-    sequence(0.04, ...[...computeNodes, zero, result].map((n) => trace(n, 0.3))),
+    arrive(x, new Vector2(10.3, 0), 1.03),
+    sequence(0.04, ...[...computeNodes.filter((n) => n !== x), zero, result].map((n) => trace(n, 0.3))),
     sequence(0.05, ...dataEdges.map((e) => stroke(e, 0.25))),
   );
   yield* all(...computeNodes.map((n) => dim(n, true, 0.3)), ...[eXA, eXB, eAC, eBC, eCP, eDW].map((e) => e().opacity(0.35, 0.3)));
@@ -175,6 +178,8 @@ export default makeScene2D(function* (view) {
   yield* flash(wt);
   yield* result.shape().stroke(SAND, 0.15).to(MINT, 0.3);
 
-  // ---- hold ------------------------------------------------------------------------------------
-  yield* waitFor(0.8);
+  // ---- hold, then hand x to shot 3 ---------------------------------------------------------------
+  yield* waitFor(0.3);
+  yield* handOff(w, [x.root()]);
+  yield* waitFor(0.1);
 });

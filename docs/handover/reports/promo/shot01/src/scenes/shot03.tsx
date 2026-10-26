@@ -21,6 +21,7 @@ import {
   MINT,
   MONO,
   addNode,
+  arrive,
   at,
   beadsAlong,
   ch,
@@ -28,6 +29,7 @@ import {
   dm,
   edge,
   ground,
+  handOff,
   kw,
   label,
   stroke,
@@ -84,7 +86,7 @@ export default makeScene2D(function* (view) {
 
   // ---- 0.0 - 0.6: the head; x -------------------------------------------------------------------
   yield chain(waitFor(0.3), say('一层网络，就是绑定了权重的函数。'));
-  yield* all(src.root().opacity(1, 0.4), trace(x, 0.4));
+  yield* all(src.root().opacity(1, 0.4), arrive(x, new Vector2(60, -290)));
 
   // ---- 0.6 - 4.2: each stage is written and traced; the weights dock --------------------------------
   const dockAt = (n: typeof w1, y: number) => n.pos(new Vector2(n.pos().x, y), 0.5, easeInOutCubic);
@@ -123,5 +125,8 @@ export default makeScene2D(function* (view) {
     ...shapes.map((s) => s().opacity(0, 0.4)),
     chain(waitFor(0.4), all(frame().end(1, 0.6, easeInOutCubic), name().opacity(1, 0.4))),
   );
-  yield* waitFor(0.2);
+  yield* waitFor(0.4);
+  // hand the frame of mlp to shot 4, where it folds into one node
+  yield* handOff(w, [frame(), name()]);
+  yield* waitFor(0.1);
 });

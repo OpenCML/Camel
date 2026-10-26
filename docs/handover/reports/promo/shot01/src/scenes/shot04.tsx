@@ -24,12 +24,14 @@
 import {Line, Node, Rect, Txt, makeScene2D} from '@motion-canvas/2d';
 import {Vector2, all, chain, createRef, createSignal, easeInOutCubic, linear, sequence, waitFor} from '@motion-canvas/core';
 import {
+  CHALK,
   CHALK_DIM,
   CYAN,
   MINT,
   MONO,
   VIOLET,
   addNode,
+  handOff,
   at,
   beadsAlong,
   ch,
@@ -113,6 +115,30 @@ export default makeScene2D(function* (view) {
     twin().add(<Line points={[a.pos().add(new Vector2(a.hw + 4, 0)), b.pos().sub(new Vector2(b.hw + 10, 0))]} stroke={VIOLET} lineWidth={3} endArrow arrowSize={9} />);
   }
 
+  // The frame of mlp, as shot 3 left it (the match cut), folds into the node mlp.
+  const carried = createRef<Rect>();
+  const carriedName = createRef<Txt>();
+  w.add(<Rect ref={carried} x={0} y={150} width={980} height={250} radius={28} stroke={CHALK_DIM} lineWidth={2} lineDash={[14, 10]} zIndex={3} />);
+  w.add(<Txt ref={carriedName} text="mlp" x={-455} y={55} fontFamily={MONO} fontSize={26} fill={CHALK_DIM} zIndex={4} />);
+  const mlpAt = mlp.pos().add(graphLayer().position());
+  function* foldIn() {
+    yield* all(
+      carried().position(mlpAt, 0.7, easeInOutCubic),
+      carried().size(new Vector2(mlp.hw * 2, mlp.hh * 2), 0.7, easeInOutCubic),
+      carried().radius(18, 0.7, easeInOutCubic),
+      carried().stroke(CHALK, 0.7),
+      carried().lineWidth(4, 0.7),
+      carriedName().position(mlpAt, 0.7, easeInOutCubic),
+      carriedName().fontSize(30, 0.7, easeInOutCubic),
+      carriedName().fill(CHALK, 0.7),
+    );
+    mlp.shape().opacity(1);
+    mlp.shape().end(1);
+    mlp.glyph().opacity(1);
+    carried().remove();
+    carriedName().remove();
+  }
+
   // ---- 0.0 - 0.7: the forward graph, the code, the strip ------------------------------------------
   yield chain(waitFor(0.3), say('求导是对图的变换，'));
   yield* all(
@@ -120,7 +146,8 @@ export default makeScene2D(function* (view) {
     strip().opacity(1, 0.4),
     frame().end(1, 0.6, easeInOutCubic),
     frameName().opacity(1, 0.4),
-    sequence(0.05, ...[x, mlp, m, y, mse, l].map((n) => trace(n, 0.3))),
+    sequence(0.05, ...[x, m, y, mse, l].map((n) => trace(n, 0.3))),
+    foldIn(),
     sequence(0.06, ...fEdges.map((e) => stroke(e))),
   );
 
@@ -198,6 +225,9 @@ export default makeScene2D(function* (view) {
   yield* beadsAlong(gw, [eMse], 0.22, VIOLET);
   yield* beadsAlong(gw, [eG], 0.2, VIOLET);
   yield* g.shape().stroke(MINT, 0.25);
-  yield* waitFor(0.4);
+  yield* waitFor(0.3);
+  // hand mlp (and its weights) to shot 5
+  yield* all(handOff(w, [mlp.root(), m.root()]), strip().opacity(0, 0.4));
+  yield* waitFor(0.1);
 });
 

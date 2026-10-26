@@ -74,7 +74,7 @@ the right 58 %, unless a shot says otherwise.
 
 **Colour:** chalk-dim only, and no accent. This is the one shot without the brand's colour.
 
-**Narration:** "Compilers need the graph. Most languages make them reconstruct it — and the copy breaks."
+**Narration:** "Compilers need the graph. Most languages make them rebuild it — and it breaks."
 
 **Subtitle:** 编译器需要的是图。多数语言让它事后重建——重建出来的图会断。
 
@@ -238,7 +238,7 @@ the same meaning.
 
 **Colour:** rose, mint.
 
-**Narration:** "Say where it runs; the compiler moves the data. Or ship the same graph as ONNX or C++."
+**Narration:** "Say where it runs; the compiler moves the data. Or ship it as ONNX or C++."
 
 **Subtitle:** 说明在哪里运行，数据搬运由编译器推出来。或者，把同一张图导出成 ONNX 或 C++。
 
@@ -371,9 +371,9 @@ checks.
 
 **Colour:** mint, coral.
 
-**Narration:** "Promises are checked. Say pure, and the compiler holds you to it."
+**Narration:** "Promises are checked: say pure, and keep it."
 
-**Subtitle:** 承诺会被检查。写下 pure，编译器就让你兑现。
+**Subtitle:** 承诺会被检查：写下 pure，就得做到。
 
 **Code:**
 

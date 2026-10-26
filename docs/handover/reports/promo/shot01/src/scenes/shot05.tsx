@@ -31,6 +31,7 @@ import {
   MONO,
   ROSE,
   addNode,
+  arrive,
   at,
   beadsAlong,
   ch,
@@ -123,7 +124,9 @@ export default makeScene2D(function* (view) {
   yield* all(
     src.root().opacity(1, 0.4),
     strip().opacity(1, 0.4),
-    sequence(0.06, ...[x, m, mlp, sm, out].map((n) => trace(n, 0.3))),
+    arrive(mlp, new Vector2(-90, -180)),
+    arrive(m, new Vector2(-90, -239)),
+    sequence(0.06, ...[x, sm, out].map((n) => trace(n, 0.3))),
     sequence(0.08, ...[e1, e2, e3].map((e) => stroke(e))),
   );
 

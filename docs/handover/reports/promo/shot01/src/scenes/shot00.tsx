@@ -111,7 +111,8 @@ export default makeScene2D(function* (view) {
   yield* waitFor(0.6);
 
   // ---- 4.4 - 5.6: it greys and crumples to a point ----------------------------------------------
-  const point = new Vector2(-560, -330);
+  // where shot 1's caret stands before the first glyph is typed (the match cut)
+  const point = new Vector2(-681.5, -11);
   yield* all(
     g.opacity(0.5, 0.3),
     ...barRefs.map((b) => b().opacity(0, 0.5)),

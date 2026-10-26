@@ -33,6 +33,7 @@ import {
   dm,
   edge,
   ground,
+  handOff,
   kw,
   showValue,
   stroke,
@@ -86,6 +87,17 @@ export default makeScene2D(function* (view) {
   const underline = createRef<Rect>();
   w.add(<Rect ref={underline} x={-890 + 40 + 36 + 15 * 24} y={-460 + 54 * 4 - 6} offsetX={-1} width={0} height={4} fill={SAND} />);
 
+  // The pipe, as shot 6 left it (the match cut), straightens into the rail.
+  const pipe = createRef<Rect>();
+  w.add(<Rect ref={pipe} x={-480} y={60} width={660} height={90} radius={45} stroke={CHALK_DIM} lineWidth={3} zIndex={0} />);
+  yield* all(
+    pipe().position(new Vector2(0, Y), 0.6, easeInOutCubic),
+    pipe().size(new Vector2(1600, 0), 0.6, easeInOutCubic),
+    pipe().radius(0, 0.6, easeInOutCubic),
+    pipe().stroke(CHALK, 0.6),
+    pipe().lineWidth(2, 0.6),
+  );
+
   // ---- 0.0 - 0.8: the code and the rails -------------------------------------------------------------
   yield chain(waitFor(0.3), say('失败是一个值。'));
   yield* all(
@@ -96,6 +108,7 @@ export default makeScene2D(function* (view) {
     side().end(1, 0.7, easeInOutCubic),
     sequence(0.08, ...stubs.map((s) => s().end(1, 0.3))),
     rejoin().end(1, 0.5),
+    pipe().opacity(0, 0.6),
   );
 
   // ---- 0.8 - 2.6: the happy path: the value hops from step to step along the rail --------------
@@ -126,6 +139,8 @@ export default makeScene2D(function* (view) {
   yield* beadsAlong(w, [rail[4]], 0.3);
   yield* all(cfg.shape().stroke(MINT, 0.3), showValue(cfg, 'defaults'), read.shape().stroke(CHALK, 0.4));
 
-  // ---- hold ----------------------------------------------------------------------------------------------
-  yield* waitFor(1.2);
+  // ---- hold, then hand the shape of path to shot 8 ---------------------------------------------------------
+  yield* waitFor(0.7);
+  yield* all(handOff(w, [path.root()]), path.glyph().opacity(0, 0.4));
+  yield* waitFor(0.1);
 });

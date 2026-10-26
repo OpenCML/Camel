@@ -27,6 +27,7 @@ import {
   MINT,
   SAND,
   addNode,
+  arrive,
   at,
   beadsAlong,
   ch,
@@ -35,6 +36,7 @@ import {
   dm,
   edge,
   ground,
+  handOff,
   kw,
   label,
   stroke,
@@ -92,7 +94,11 @@ export default makeScene2D(function* (view) {
   yield chain(waitFor(0.3), say('bug 是故障，会带着位置停下——'));
   yield* all(
     src.root().opacity(1, 0.4),
-    sequence(0.03, ...[lines, map, ...calls, ...results].map((n) => trace(n, 0.3))),
+    // the shape of `path` (shot 7, the match cut) widens into `lines`
+    arrive(lines, new Vector2(-800, 20), 1, 0.6, false),
+    lines.shape().width(117).width(lines.hw * 2, 0.6, easeInOutCubic),
+    chain(waitFor(0.4), lines.glyph().opacity(1, 0.3)),
+    sequence(0.03, ...[map, ...calls, ...results].map((n) => trace(n, 0.3))),
     stroke(eIn, 0.25),
     sequence(0.03, ...[...fan, ...outs].map((e) => stroke(e, 0.25))),
   );
@@ -154,6 +160,8 @@ export default makeScene2D(function* (view) {
   });
   yield* all(...results.map((n, i) => all(n.shape().stroke(i === FAULT ? CORAL : MINT, 0.25), n.glyph().opacity(1, 0.25))));
 
-  // ---- hold -------------------------------------------------------------------------------------
-  yield* waitFor(1.2);
+  // ---- hold, then hand the fault's fence to shot 9, where it widens into a function's frame ----------
+  yield* waitFor(0.7);
+  yield* handOff(w, [fences[FAULT]()]);
+  yield* waitFor(0.1);
 });

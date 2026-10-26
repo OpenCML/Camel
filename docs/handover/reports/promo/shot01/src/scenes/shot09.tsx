@@ -70,7 +70,8 @@ export default makeScene2D(function* (view) {
   const CX = -20;
   const CY = Y + 50;
   const frame = createRef<Rect>();
-  w.add(<Rect ref={frame} x={CX} y={CY} width={1000} height={300} radius={26} stroke={CHALK_DIM} lineWidth={2} lineDash={[14, 10]} end={0} zIndex={0} />);
+  // drawn first as shot 8 left the fault's fence (the match cut), then widened into the frame
+  w.add(<Rect ref={frame} x={0} y={45} width={229} height={88} radius={24} stroke={CORAL} lineWidth={2} zIndex={0} />);
   const frameName = label(w, CX - 500 + 90, CY - 150 + 28, 'normalize', CHALK_DIM, 26);
   // the seal: drawn closed around the frame, with its tab
   const SEAL_W = 1060;
@@ -98,14 +99,24 @@ export default makeScene2D(function* (view) {
   const verdict = label(w, 520, sealTop - 60, 'UsesPromiseViolated', CORAL, 28);
 
   // ---- 0.0 - 0.8: the code and the graph -----------------------------------------------------------
-  yield chain(waitFor(0.3), say('承诺会被检查。'));
+  yield chain(waitFor(0.3), say('承诺会被检查：'));
   for (const n of [pr]) n.root().opacity(0);
   for (const e of [eDP, ePO]) e().opacity(0);
   yield* all(
     src.root().opacity(1, 0.4),
     sequence(0.06, ...[x, sum, div, out].map((n) => trace(n, 0.3))),
     sequence(0.06, ...[eXD, eXS, eSD, eDO].map((e) => stroke(e, 0.25))),
-    frame().end(1, 0.7, easeInOutCubic),
+    chain(
+      all(
+        frame().position(new Vector2(CX, CY), 0.7, easeInOutCubic),
+        frame().size(new Vector2(1000, 300), 0.7, easeInOutCubic),
+        frame().radius(26, 0.7, easeInOutCubic),
+        frame().stroke(CHALK_DIM, 0.7),
+      ),
+      function* () {
+        frame().lineDash([14, 10]);
+      }(),
+    ),
     frameName().opacity(1, 0.4),
   );
 
@@ -113,7 +124,7 @@ export default makeScene2D(function* (view) {
   yield* all(seal().end(1, 0.6, easeInOutCubic), chain(waitFor(0.4), tab().opacity(1, 0.2)));
 
   // ---- 1.5 - 2.3: ->println -------------------------------------------------------------------------
-  yield say('写下 pure，编译器就让你兑现。');
+  yield say('写下 pure，就得做到。');
   yield* typeLine(src, 1, 30);
   pr.root().opacity(1);
   yield* all(eDO().opacity(0, 0.2), trace(pr, 0.3), chain(waitFor(0.1), all(stroke(eDP, 0.2), stroke(ePO, 0.2))));

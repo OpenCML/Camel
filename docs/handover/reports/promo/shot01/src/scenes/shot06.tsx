@@ -33,6 +33,7 @@ import {
   dm,
   edge,
   ground,
+  handOff,
   kw,
   stroke,
   subtitles,
@@ -164,6 +165,8 @@ export default makeScene2D(function* (view) {
   yield* all(ghostPull().stroke(CORAL, 0.1), snap().opacity(1, 0.2));
   yield* all(ghostPull().end(0.45, 0.3, easeOutCubic), ghost().opacity(0.4, 0.4));
 
-  // ---- hold ----------------------------------------------------------------------------------------
-  yield* waitFor(1.0);
+  // ---- hold, then hand the pipe to shot 7, where it straightens into the rail ----------------------
+  yield* waitFor(0.5);
+  yield* handOff(w, [pipe()]);
+  yield* waitFor(0.1);
 });

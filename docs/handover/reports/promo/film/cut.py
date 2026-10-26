@@ -1,10 +1,21 @@
-"""Assembles the main film's first cut: shots 00-10 joined by a short dissolve through the ground,
-with the English narration burned in as a small caption under the Chinese subtitle.
-Run in /work/promo/cut with the shot MP4s and script.md beside it."""
+"""Assembles a cut of the main film: shots 00-10 joined by match cuts (a hard cut where the last
+frame of a shot is the first frame of the next) or, where no shape carries over, a short dissolve
+through the ground. The scratch narration (voice/shotNN.wav) is laid at each shot's start plus a
+breath, and the English narration is burned in as a small caption under the Chinese subtitle.
+
+Run in a directory holding shot00.mp4 .. shot10.mp4, script.md and voice/ (made by voice.py):
+    python3 cut.py main-cut-v2.mp4
+"""
+import os
 import re
 import subprocess
+import sys
 
+OUT = sys.argv[1] if len(sys.argv) > 1 else "main-cut.mp4"
 FADE = 0.4
+BREATH = 0.3
+# the joins that are dissolves; every other join is a match cut
+DISSOLVES = {(5, 6), (9, 10)}
 shots = [f"shot{n:02d}" for n in range(11)]
 
 
@@ -14,17 +25,19 @@ def duration(path):
 
 
 durs = [duration(f"{s}.mp4") for s in shots]
+fade_after = [FADE if (i, i + 1) in DISSOLVES else 0.0 for i in range(len(shots))]
+fade_after[-1] = 0.0
 script = open("script.md", encoding="utf-8").read()
+script = script[: script.index("# Part 2")]
 narration = {int(m.group(1)): " ".join(m.group(2).split())
              for m in re.finditer(r"### Shot (\d+) .*?\*\*Narration:\*\* \"(.*?)\"", script, re.S)}
 
-# the timeline: each shot starts FADE before the previous one ends
 starts = []
 t = 0.0
-for d in durs:
+for i, d in enumerate(durs):
     starts.append(t)
-    t += d - FADE
-total = t + FADE
+    t += d - fade_after[i]
+total = t
 
 
 def ts(x):
@@ -45,25 +58,44 @@ ass = [
 for i, (s, d) in enumerate(zip(starts, durs)):
     line = narration.get(i)
     if line:
-        ass.append(f"Dialogue: 0,{ts(s + 0.3)},{ts(s + d - FADE - 0.05)},Caption,,0,0,0,,{{\\fad(150,150)}}{line}")
+        ass.append(f"Dialogue: 0,{ts(s + BREATH)},{ts(s + d - fade_after[i] - 0.05)},Caption,,0,0,0,,{{\\fad(150,150)}}{line}")
 open("captions.ass", "w", encoding="utf-8").write("\n".join(ass) + "\n")
 
-# the dissolve chain
+# video: runs of match-cut shots are concatenated; the runs are joined by dissolves
 inputs = sum((["-i", f"{s}.mp4"] for s in shots), [])
-chain = []
-prev = "[0:v]"
-acc = durs[0]
+runs, run = [], [0]
 for i in range(1, len(shots)):
+    if fade_after[i - 1] > 0:
+        runs.append(run)
+        run = []
+    run.append(i)
+runs.append(run)
+graph = []
+for r, members in enumerate(runs):
+    graph.append("".join(f"[{i}:v]" for i in members) + f"concat=n={len(members)}:v=1:a=0[r{r}]")
+prev, acc = "[r0]", sum(durs[i] for i in runs[0])
+for r in range(1, len(runs)):
     off = acc - FADE
-    out = f"[v{i}]"
-    chain.append(f"{prev}[{i}:v]xfade=transition=fade:duration={FADE}:offset={off:.4f}{out}")
-    prev = out
-    acc = off + durs[i]
-chain.append(f"{prev}subtitles=captions.ass:fontsdir=/usr/share/fonts[out]")
-cmd = ["ffmpeg", "-y", "-loglevel", "error", *inputs, "-filter_complex", ";".join(chain), "-map", "[out]",
-       "-c:v", "libx264", "-preset", "slow", "-crf", "18", "-pix_fmt", "yuv420p", "-r", "60", "-movflags", "+faststart",
-       "main-cut-v1.mp4"]
+    graph.append(f"{prev}[r{r}]xfade=transition=fade:duration={FADE}:offset={off:.4f}[x{r}]")
+    prev = f"[x{r}]"
+    acc = off + sum(durs[i] for i in runs[r])
+graph.append(f"{prev}subtitles=captions.ass:fontsdir=/usr/share/fonts[vout]")
+
+# audio: each shot's line, a breath after the shot starts
+voices = [i for i in range(len(shots)) if os.path.exists(f"voice/shot{i:02d}.wav")]
+audio_inputs = sum((["-i", f"voice/shot{i:02d}.wav"] for i in voices), [])
+base = len(shots)
+for k, i in enumerate(voices):
+    ms = int(round((starts[i] + BREATH) * 1000))
+    graph.append(f"[{base + k}:a]aresample=48000,adelay={ms}:all=1[a{k}]")
+graph.append("".join(f"[a{k}]" for k in range(len(voices))) + f"amix=inputs={len(voices)}:normalize=0,apad,atrim=0:{total:.3f}[aout]")
+
+cmd = ["ffmpeg", "-y", "-loglevel", "error", *inputs, *audio_inputs, "-filter_complex", ";".join(graph),
+       "-map", "[vout]", "-map", "[aout]",
+       "-c:v", "libx264", "-preset", "slow", "-crf", "18", "-pix_fmt", "yuv420p", "-r", "60",
+       "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", OUT]
 subprocess.check_call(cmd)
 print(f"total {total:.2f} s")
-for s, st, d in zip(shots, starts, durs):
-    print(f"{s} {ts(st)} {d:.2f}")
+for i, (s, st, d) in enumerate(zip(shots, starts, durs)):
+    join = "dissolve" if fade_after[i] else ("match cut" if i < len(shots) - 1 else "end")
+    print(f"{s} {ts(st)} {d:.2f} -> {join}")

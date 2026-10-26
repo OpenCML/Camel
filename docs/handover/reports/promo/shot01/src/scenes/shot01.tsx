@@ -16,6 +16,7 @@
  *   6.4 - 7.0   hold (a slow 3 % push-in runs under the whole shot)
  */
 import {Gradient, Line, Node, Rect, Txt, makeScene2D} from '@motion-canvas/2d';
+import {handOff} from '../lib/plotter';
 import {
   Reference,
   ThreadGenerator,
@@ -143,7 +144,7 @@ export default makeScene2D(function* (view) {
       ]}
       stroke={CHALK_DIM}
       lineWidth={1}
-      opacity={0.6}
+      opacity={() => code().opacity() * 0.6} // with the code, so the first frame is the caret alone
     />,
   );
   world().add(
@@ -427,6 +428,11 @@ export default makeScene2D(function* (view) {
   // ---- 0.0 - 0.5: header, frame, port and ring -------------------------------------------------
   yield world().scale(1.03, 7, linear);
   yield chain(waitFor(0.3), say('在 Camel 里，你写下的就是图本身。'));
+  // The caret shot 0 crumpled into: it stands here from the first frame, takes the colour, and
+  // hands over to the code's own caret when the first glyph is typed.
+  const handed = createRef<Rect>();
+  world().add(<Rect ref={handed} x={-681.5} y={-11} width={5} height={CODE_SIZE} radius={2} fill={CHALK_DIM} />);
+  yield chain(handed().fill(SAND, 0.3), waitFor(0.2), handed().opacity(0, 0));
   yield* all(
     code().opacity(1, 0.3),
     frame().end(1, 0.5, easeInOutCubic),
@@ -530,6 +536,8 @@ export default makeScene2D(function* (view) {
   out.shape().end(0);
   yield* all(out.shape().end(1, 0.3, easeInOutCubic), out.value().opacity(1, 0.15));
 
-  // ---- 6.4 - 7.0: hold -------------------------------------------------------------------------
-  yield* waitFor(0.5);
+  // ---- 6.4 - 7.0: hold, then hand port x to shot 2 ------------------------------------------------
+  yield* waitFor(0.3);
+  yield* all(handOff(world(), [port.node()]), port.value().opacity(0, 0.4));
+  yield* waitFor(0.1);
 });
