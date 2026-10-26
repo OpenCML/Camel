@@ -1,5 +1,7 @@
 /**
- * The patterns that bind are defined over `T?` / `T!` only.
+ * The patterns that bind are the fixed forms of `T?` / `T!` (design principles 3.8):
+ * `case error e` reads the error out of a `T!`, and over an `int` there is no mark to take
+ * apart. A `match` over the value reads it with a literal pattern or `_` instead.
  */
 module err_bind_plain
 

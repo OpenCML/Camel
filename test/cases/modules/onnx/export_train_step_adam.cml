@@ -20,7 +20,7 @@ with <m: Mlp>
 func loss(x: f32[..]): float {
     let h = relu(x @ m.w1 + m.b1)
     let y = h @ m.w2 + m.b2
-    return mean(y * y)
+    return float(mean(y * y))
 }
 
 func step(m: Mlp, st: OptimizerState, x: f32[..]): (float, Mlp, OptimizerState) {

@@ -42,7 +42,7 @@ type M = {
 
 #gpu
 with <m: M>
-func loss(): float sync {
+func loss(): f32 sync {
     return sum(m.x * m.p0)
 }
 

@@ -78,7 +78,7 @@ std::optional<RowKernel> rowKernel(const Program &p) {
             stage.reduction = law;
             ++reductions;
         } else {
-            if (!elementwise(n.op) && n.op != "cast_f32")
+            if (!elementwise(n.op) && n.op != "cast_f32" && n.op != "cast_f64")
                 return std::nullopt;
             if (elementwise(n.op) && !canonicalPointwise(p, n))
                 return std::nullopt;

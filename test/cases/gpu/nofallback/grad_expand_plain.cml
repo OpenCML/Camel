@@ -26,7 +26,7 @@ type M = {
 
 with <m: M>
 func loss(): float sync {
-    return sum(m.x * m.p0)
+    return float(sum(m.x * m.p0))
 }
 
 func step(m: M): f32[3] sync {

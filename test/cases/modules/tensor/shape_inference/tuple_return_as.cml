@@ -5,7 +5,7 @@ func g(x: f32[3]): (f32[..], f32[..]) {
 }
 func f(x: f32[3]): (f32[3], float, f32[3]) {
     let (a, b) = g(x)
-    return (a as f32[3], sum(x), b as f32[3])
+    return (a as f32[3], float(sum(x)), b as f32[3])
 }
 func main(): int sync {
     let r = f(ones([3]))

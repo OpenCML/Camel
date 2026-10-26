@@ -2,7 +2,7 @@ module constas_as_value
 import { ones, sum } from tensor
 
 func total(constas n: int, x: f32[n]): float {
-    return sum(x)
+    return float(sum(x))
 }
 
 func apply(f: (x: f32[..]) => float, x: f32[..]): float {

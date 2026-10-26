@@ -11,7 +11,7 @@ import { grad } from autodiff
 
 with <w: f32[..]>
 func row_sum(): float {
-    return sum(take(w, [0, 0, 1]))
+    return float(sum(take(w, [0, 0, 1])))
 }
 
 func main(): int sync {

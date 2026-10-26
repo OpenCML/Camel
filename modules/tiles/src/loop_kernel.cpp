@@ -96,7 +96,8 @@ void validateLoopRegion(const Program &outer, const Node &node) {
         } else
             require(
                 value.op == "loop_index_f64" || value.op == "constant64" ||
-                    value.op == "cast_f32" || scalar(value.op) || elementwise(value.op),
+                    value.op == "cast_f32" || value.op == "cast_f64" || scalar(value.op) ||
+                    elementwise(value.op),
                 "body contains a non-pointwise operation");
         require(value.shape.empty() || value.shape == state.shape, "body changes the lane domain");
         if (elementwise(value.op))
@@ -177,10 +178,16 @@ KernelBody loopBody(const Program &p, Launch &launch) {
         iteration.push_back(ScalarBinding{name, expr});
         values.emplace(id, ScalarExpr::symbol(name, node.dtype));
     }
-    // Compute every next-state expression before updating any current state.
-    for (size_t i = 0; i < region.stateInputs.size(); ++i)
-        iteration.push_back(
-            ScalarBinding{"k_next" + std::to_string(i), values.at(region.nextStates[i])});
+    // Compute every next-state expression before updating any current state. A state keeps the
+    // width it was declared at, so a next value computed in another width is converted once here,
+    // at the update: one operation has one width and its operands have that width.
+    for (size_t i = 0; i < region.stateInputs.size(); ++i) {
+        const DType stateWidth = body.nodes[region.stateInputs[i]].dtype;
+        ScalarExpr next        = values.at(region.nextStates[i]);
+        if (next.type() != stateWidth)
+            next = ScalarExpr::cast(stateWidth, next);
+        iteration.push_back(ScalarBinding{"k_next" + std::to_string(i), next});
+    }
     for (size_t i = 0; i < region.stateInputs.size(); ++i)
         iteration.push_back(
             Assignment{

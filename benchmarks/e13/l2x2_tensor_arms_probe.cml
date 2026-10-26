@@ -27,9 +27,9 @@ with <m: Mlp>
 func loss(x: float[..]): float {
     let h = relu(x @ m.w1 + m.b1)
     let y = h @ m.w2 + m.b2
-    let s = mean(y * y)
+    let s = float(mean(y * y))
     let z = if s > 1.0 then y * 2.0 else y
-    return mean(z * z)
+    return float(mean(z * z))
 }
 
 func fwd(m: Mlp, x: float[..]): float {

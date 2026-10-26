@@ -258,7 +258,7 @@ run time.
 
 `try`, `catch` and `finally` are not keywords: they are ordinary names, and a `try { ... }` written
 with them is an ordinary syntax error. (Until the syntax closure of 2026-10-25 the parser read the
-form only to explain itself, with `TryCatchNotInLanguage`; that diagnostic is retired.) `raise` is
+form only to explain itself, with a diagnostic of its own; that code is empty now.) `raise` is
 untouched (undecided, design principles section 15).
 
 ## 6. Errors and faults

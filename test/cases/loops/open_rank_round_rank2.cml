@@ -8,7 +8,7 @@ module open_rank_round_rank2
 import { sum } from tensor
 
 func rowSums(x: f32[..]): float[] {
-    return loop acc = [] for v in x do acc->append<sum(v)>
+    return loop acc = [] for v in x do acc->append<float(sum(v))>
 }
 
 func main(): int sync {

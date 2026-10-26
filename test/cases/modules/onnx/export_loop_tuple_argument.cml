@@ -10,7 +10,7 @@ import { export_model } from onnx
 import { get_env } from env
 
 func walk(s: (float[..], int)): (float[..], int) {
-    return if s.1 >= 6 || sum(s.0 * s.0) < 1.0 then s else walk((tanh(s.0) * 0.3 + s.0 * 0.6, s.1 + 1))
+    return if s.1 >= 6 || float(sum(s.0 * s.0)) < 1.0 then s else walk((tanh(s.0) * 0.3 + s.0 * 0.6, s.1 + 1))
 }
 
 func main(): int sync {

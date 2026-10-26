@@ -863,7 +863,7 @@ parameter is on its way out (**target**, `docs/design-principles.cn.md` §5.4).
 import tensor
 import { Tensor } from tensor
 
-func twice(x: f32[..]): float {
+func twice(x: f32[..]): f32 {
     return tensor::sum(tensor::multiply(x, 2.0))
 }
 

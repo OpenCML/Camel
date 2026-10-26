@@ -20,7 +20,7 @@ import { grad } from autodiff
 
 with <x: f32[]>
 func probe(): float {
-    return sum(x[1:4])
+    return float(sum(x[1:4]))
 }
 
 func main(): int sync {
