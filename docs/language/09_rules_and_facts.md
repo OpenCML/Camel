@@ -95,6 +95,8 @@ rule 名字::<T>(形参...) when 条件? { 左边 => 右边 }
 | `::<T>` | 匹配到的类型：泛型规则按类型实例化 |
 | `with <tile: int>` | 选用这条规则的人绑定一次，之后按这个值用在整段改写上 |
 
+规则的形参在条件里是**节点**，节点的类型写出它承载的值的类型：形参写 `x: T`，条件里的 `x` 就是 `Node<T>`，写 `x: int` 就是 `Node<int>`；`const c: T` 在条件里仍是**值**，它的节点是 `node_of(c)`，类型 `Node<T>`（[9.2](#92-条件与许可)）。`Node<T>` 是程序写得出的类型，头部写 `n: Node<int>` 就是"值类型为 `int` 的那个节点"。类型实参照[设计原则 5.9](../design-principles.cn.md) 从实参的节点推出：条件里 `range(x)` 的 `x` 是 `Node<T>`，于是 `T` 就是规则自己的 `T`；推不出来时写出来（`range::<int>(n)`）。
+
 `with` 参数的文法与函数的 `with` 参数相同（[7.4.2](07_statements.md#742-with-形参)）：可以写默认值，可以按名字给。**绑定写在用它的地方**，与函数的部分应用同一种写法：
 
 ```cml
@@ -242,7 +244,7 @@ error[SemanticDiag::FactCaseDefaultMissing]: The fact 'sign' has no 'case _', so
 
 ## 9.6 事实的参数与 `with` 实参
 
-**参数。** 事实可以有参数，查询时把它们当实参传进去。参数是值的**那几个部分**（节点）：`fact mul_by_one(a: Node, b: Node): bool match (a, b) { ... }` 由规则的条件用 `mul_by_one(x, node_of(c))` 查询。没有参数时是单值形式 `range(v)`。类型参数写在名字后（`fact range::<T>(v: T): Interval`），与规则的写法相同——见 [9.3](#93-类型参数与-with-参数)。
+**参数。** 事实可以有参数，查询时把它们当实参传进去。参数是值的**那几个部分**（节点）：`fact mul_by_one(a: Node, b: Node): bool match (a, b) { ... }` 由规则的条件用 `mul_by_one(x, node_of(c))` 查询——`a: Node` 写的是"值类型没说出来的那个节点"，写成 `a: int` 就是"值类型为 `int` 的那个节点"，即 `Node<int>`。没有参数时是单值形式 `range(v)`。类型参数写在名字后（`fact range::<T>(v: T): Interval`），与规则的写法相同——见 [9.3](#93-类型参数与-with-参数)。
 
 ```cml
 module parts
@@ -297,7 +299,7 @@ export func apply(p: Program): Program! {
 
 - **不同的实参是不同的两项事实**：引擎按"事实 + 实参"分别计算与缓存，`capped<3>` 与 `capped` 各有一份值，写下一个实参不改变别处读到的那一项事实。
 - **实参必须是编译期常量**：一项事实的值只由程序与写出来的实参决定，所有规则看到同一个答案。写出不是常量的实参会被拒（`SemanticDiag::FactArgumentNotConstant`）。
-- **查询的实参是节点**：一项事实说的是程序图上一个值**是怎么得来的**，它属于图，不属于运行期的值，所以头部 `fact range::<T>(v: T)` 里的 `v: T` 意思是**产出类型 `T` 的那个节点**（[规则语言第二版](../design/rewrite/v2.cn.md) 第 1 节）。于是查询写在有节点可用的地方：规则的条件（`when`）、另一项事实的主体（[9.5](#95-事实)），或者任何拿到 `Node` 的函数。普通函数体在运行期，那里没有"图上的这个值"可问，所以查询不写在里面：今天把值传给查询得到的是 `SemanticDiag::NoMatchingFunction`（帮助里列出 `名字: (v: Node) => 事实类型`）；按设计原则，这里该是一条点名规则的诊断，尚未实现。
+- **查询的实参是节点**：一项事实说的是程序图上一个值**是怎么得来的**，它属于图，不属于运行期的值，所以头部 `fact range::<T>(v: T)` 里的 `v: T` 意思是**值类型为 `T` 的那个节点**，写成 `Node<T>`（[规则语言第二版](../design/rewrite/v2.cn.md) 第 1 节）。于是查询写在有节点可用的地方：规则的条件（`when`）、另一项事实的主体（[9.5](#95-事实)），或者任何拿到 `Node` 的函数。**`Node<T>` 是程序写得出的类型**：形参写 `n: Node<int>` 就是"值类型为 `int` 的那个节点"，它自己给出事实的类型实参；遍里读到的节点不写值类型（裸 `Node`），那时查询写出类型实参（`range::<int>(n)`），不写就问不出类型实参。普通函数体在运行期，那里没有"图上的这个值"可问，所以查询不写在里面：把一个值（不是节点）传给查询会被拒，报的是**参数取 `Node<T>`、实参是该值的类型**这条不匹配（`SemanticDiag::GenericArgumentsMismatch` 的 `argument 1 has type 'int', but its parameter 'v: Node<T>'`），不是 `NoMatchingFunction`。
 
 反例：事实的实参写了规则的形参 `y`，它不是常量。
 
