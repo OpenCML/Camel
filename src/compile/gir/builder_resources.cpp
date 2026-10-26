@@ -17,14 +17,9 @@
 #include "camel/utils/type.h"
 
 #include <algorithm>
-#include <array>
-#include <deque>
-#include <format>
-#include <limits>
 #include <optional>
 #include <string>
 #include <unordered_map>
-#include <unordered_set>
 #include <vector>
 
 using namespace std;
@@ -36,443 +31,517 @@ namespace camel::compile::gir {
 
 namespace {
 
+using sem::AccessMode;
+using sem::ResourceClass;
 using sem::ResourceSignature;
-using Measurements = std::unordered_map<DraftGraphBuilder *, ResourceSignature>;
 
-/// The classes a use the measurement cannot place is read as touching: every class a clause has
-/// no name for. A clause that names resources does not cover them, so `covers` decides.
-constexpr std::array<sem::ResourceClass, 5> kUnplacedClasses = {
-    sem::ResourceClass::Variable,
-    sem::ResourceClass::Object,
-    sem::ResourceClass::Foreign,
-    sem::ResourceClass::Ambient,
-    sem::ResourceClass::Handle};
+// Two uses of one resource amount to the wider access: the same access stays itself, and Read with
+// Write is covered by no single access but ReadModifyWrite. Widening two writes into a
+// read-modify-write would make a measured set harder to cover than the uses it stands for.
+AccessMode uniteAccess(AccessMode left, AccessMode right) {
+    return left == right ? left : AccessMode::ReadModifyWrite;
+}
 
-/// Walks the nodes of one body and adds up what they publish. A use it cannot place is not
-/// dropped: either the whole measurement is refused (`Early`, which wants a complete answer or
-/// none) or the use is read conservatively and the reason is kept for the report (`Settled`).
-class FootprintWalker {
-  public:
-    FootprintWalker(DraftGraphBuilder *graph, const Measurements &callees, bool settled)
-        : graph_(graph), draft_(graph->draft()), type_(graph->funcType()), callees_(callees),
-          settled_(settled) {
-        out_.mode = ResourceSignature::Mode::Concrete;
+// The bottom of a measurement: a body recorded as reaching nothing. Every body starts here, and no
+// body is ever below it. What a call answers about its result stays the conservative one: the walk
+// says which resources a body reaches, not what its result aliases.
+ResourceSignature emptyReach() {
+    ResourceSignature reach;
+    reach.mode   = ResourceSignature::Mode::Concrete;
+    reach.result = sem::ResultAlias{.kind = sem::ResultAlias::Kind::Unknown};
+    return reach;
+}
+
+// What a body reaches when the walk cannot place one of its nodes. Reaching *something* unknown is
+// the honest reading (a class the clause has no name for, an ambient resource that could be any),
+// and recording it is what lets the clause a declaration wrote still be judged: skipping the body
+// would leave the promise unchecked and unsaid (design principles 3.3).
+ResourceSignature unplaceableReach() {
+    ResourceSignature reach = emptyReach();
+    for (ResourceClass cls : {ResourceClass::Variable, ResourceClass::Object, ResourceClass::Foreign,
+                              ResourceClass::Ambient, ResourceClass::Handle}) {
+        reach.anyOf.push_back(cls);
     }
+    reach.external = true;
+    return reach;
+}
 
-    /// nullopt when the body did not build, or when it could not be measured and `Early` was
-    /// asked for.
-    std::optional<ResourceSignature> run(std::vector<std::string> *unplaced) {
-        if (type_ == nullptr) {
-            return std::nullopt; // the body did not build (an error was reported)
+// What two readings of one body amount to: a resource either of them reaches is reached. The mode
+// widens the same way, and the parameter and ambient uses keep the wider access.
+ResourceSignature uniteReach(const ResourceSignature &a, const ResourceSignature &b) {
+    ResourceSignature united = a;
+    for (const auto &use : b.params) {
+        const auto found = std::find_if(united.params.begin(), united.params.end(),
+                                        [&](const auto &other) { return other.index == use.index; });
+        if (found == united.params.end()) {
+            united.params.push_back(use);
+            continue;
         }
-        numberPorts();
-        for (draft_node_ref_t node : draft_.closureNodes()) {
-            captured_.insert(node);
-        }
-        for (draft_node_ref_t id = 0; id < draft_.nodeSlotCount(); ++id) {
-            if (draft_.alive(id)) {
-                measureNode(id);
-            }
-        }
-        addVarParameters();
-        if (!unplaced_.empty()) {
-            if (!settled_) {
-                return std::nullopt;
-            }
-            for (sem::ResourceClass cls : kUnplacedClasses) {
-                out_.anyOf.push_back(cls);
-            }
-            out_.external = true;
-            if (unplaced != nullptr) {
-                *unplaced = unplaced_;
-            }
-        }
-        sortAndDedupe();
-        return out_;
-    }
-
-  private:
-    // ---- the numbering of parameters ----
-
-    /// Which parameter a port is, in the numbering a call uses: `with` parameters first, then the
-    /// ordinary ones (a `constas` parameter is not a runtime value and has no port).
-    void numberPorts() {
-        const size_t withCount = type_->withTypesCount();
-        const auto withPorts   = draft_.withPorts();
-        const auto normPorts   = draft_.normPorts();
-        size_t index = 0, withAt = 0, normAt = 0;
-        for (size_t i = 0; i < withCount + type_->normTypesCount(); ++i) {
-            if (i < withCount) {
-                if (withAt < withPorts.size()) {
-                    portIndex_.emplace(withPorts[withAt++], index);
-                }
-            } else {
-                if (type_->normIsConstasAt(i - withCount)) {
-                    continue; // not a runtime parameter
-                }
-                if (normAt < normPorts.size()) {
-                    portIndex_.emplace(normPorts[normAt++], index);
-                }
-            }
-            ++index;
-        }
-        // A `with` port the type does not count is a value the function captured from the one
-        // around it: its resource is that function's, and is not a parameter of this one.
-        for (; withAt < withPorts.size(); ++withAt) {
-            captured_.insert(withPorts[withAt]);
-        }
-    }
-
-    // ---- what is added up ----
-
-    /// A use that cannot be placed: the reason is kept, and the result is read conservatively.
-    void unplaced(std::string reason) {
-        if (std::find(unplaced_.begin(), unplaced_.end(), reason) == unplaced_.end()) {
-            unplaced_.push_back(std::move(reason));
-        }
-    }
-
-    static sem::AccessMode uniteMode(sem::AccessMode a, sem::AccessMode b) {
-        return sem::writes(a) || sem::writes(b) ? sem::AccessMode::ReadModifyWrite
-                                                : sem::AccessMode::Read;
-    }
-
-    void addParam(
-        size_t index, sem::ResourceClass cls, const std::string &name, sem::AccessMode mode) {
-        if (index > std::numeric_limits<uint8_t>::max()) {
-            // A signature names a parameter by one byte: a use through a later one has no place.
-            unplaced(std::format("a use through parameter {}, past the 255th", index + 1));
-            return;
-        }
-        const auto found =
-            std::find_if(out_.params.begin(), out_.params.end(), [&](const auto &use) {
-                return use.index == static_cast<uint8_t>(index);
-            });
-        if (found == out_.params.end()) {
-            out_.params.push_back(ResourceSignature::ParamUse{
-                .index = static_cast<uint8_t>(index), .cls = cls, .name = name, .mode = mode});
-            return;
-        }
-        // One parameter, one resource: two uses of it are one use, with the wider mode.
-        if (found->cls != cls) {
-            found->cls = sem::ResourceClass::Unknown;
+        if (found->cls != use.cls) {
+            found->cls = ResourceClass::Unknown;
         }
         if (found->name.empty()) {
-            found->name = name;
+            found->name = use.name;
         }
-        found->mode = uniteMode(found->mode, mode);
+        found->mode = uniteAccess(found->mode, use.mode);
     }
-
-    void addAmbient(const std::string &name, sem::AccessMode mode) {
-        const auto found =
-            std::find_if(out_.ambient.begin(), out_.ambient.end(), [&](const auto &use) {
-                return use.name == name;
-            });
-        if (found == out_.ambient.end()) {
-            out_.ambient.push_back(ResourceSignature::AmbientUse{.name = name, .mode = mode});
-            return;
+    for (const auto &use : b.ambient) {
+        const auto found = std::find_if(united.ambient.begin(), united.ambient.end(),
+                                        [&](const auto &other) { return other.name == use.name; });
+        if (found == united.ambient.end()) {
+            united.ambient.push_back(use);
+            continue;
         }
-        found->mode = uniteMode(found->mode, mode);
+        found->mode = uniteAccess(found->mode, use.mode);
     }
-
-    // ---- reading a signature ----
-
-    /// The operand of a callee's parameter at this node, or nullopt when the node has fewer
-    /// operands than the callee has parameters. A call through a value keeps the value itself as
-    /// its first `with` input.
-    std::optional<draft_node_ref_t> operandOf(
-        draft_node_ref_t id, uint8_t calleeParam, size_t calleeWithCount, bool isCall) const {
-        const auto norm = draft_.normInputsOf(id);
-        const auto with = draft_.withInputsOf(id);
-        if (calleeParam < calleeWithCount) {
-            const size_t at = size_t(calleeParam) + (isCall ? 1 : 0);
-            return at < with.size() ? std::optional(with[at]) : std::nullopt;
-        }
-        const size_t at = size_t(calleeParam) - calleeWithCount;
-        return at < norm.size() ? std::optional(norm[at]) : std::nullopt;
+    united.captures.insert(united.captures.end(), b.captures.begin(), b.captures.end());
+    united.anyOf.insert(united.anyOf.end(), b.anyOf.begin(), b.anyOf.end());
+    united.result = b.result;
+    if (!united.allocates && b.allocates.has_value()) {
+        united.allocates = b.allocates;
     }
+    united.external = united.external || b.external;
+    std::sort(united.params.begin(), united.params.end(),
+              [](const auto &left, const auto &right) { return left.index < right.index; });
+    std::sort(united.ambient.begin(), united.ambient.end(),
+              [](const auto &left, const auto &right) { return left.name < right.name; });
+    std::sort(united.captures.begin(), united.captures.end());
+    united.captures.erase(std::unique(united.captures.begin(), united.captures.end()),
+                          united.captures.end());
+    std::sort(united.anyOf.begin(), united.anyOf.end());
+    united.anyOf.erase(std::unique(united.anyOf.begin(), united.anyOf.end()), united.anyOf.end());
+    return united;
+}
 
-    /// What one node's signature amounts to for this body: its own parameters, in the numbering
-    /// the callee uses, read back onto the parameters of this body where the operand is one of
-    /// them. Returns why when the signature says something this measurement cannot place.
-    std::optional<std::string> readSignature(
-        const ResourceSignature &sig, size_t calleeWithCount, bool isCall, draft_node_ref_t id) {
-        if (sig.mode != ResourceSignature::Mode::Concrete) {
-            return "a callee whose resources are not known";
-        }
-        if (!sig.captures.empty()) {
-            // A capture is a resource of the closure this body belongs to, and which capture of
-            // the enclosing function it is cannot be read from here.
-            return "a resource the callee captures from the function around it";
-        }
-        for (const auto &use : sig.params) {
-            const auto operand = operandOf(id, use.index, calleeWithCount, isCall);
-            if (!operand) {
-                return "a call with fewer operands than the callee has parameters";
+} // namespace
+
+void Builder::numberBodyPorts(BodyReach &walk, const runtime::GraphDraft &draft,
+                              const FunctionType &type) const {
+    // Which parameter a port is, in the numbering a call uses: `with` parameters first, then the
+    // ordinary ones (a `constas` parameter is not a runtime value and has no port).
+    const size_t withCount = type.withTypesCount();
+    const auto withPorts   = draft.withPorts();
+    const auto normPorts   = draft.normPorts();
+    size_t index = 0, withAt = 0, normAt = 0;
+    for (size_t i = 0; i < withCount + type.normTypesCount(); ++i) {
+        const bool isWith = i < withCount;
+        if (isWith) {
+            if (withAt < withPorts.size()) {
+                walk.ports.emplace(withPorts[withAt++], index);
             }
-            if (captured_.contains(*operand)) {
-                return "a resource captured from the function around it, passed to the callee";
+        } else {
+            if (type.normIsConstasAt(i - withCount)) {
+                continue; // not a runtime parameter
             }
-            const auto port = portIndex_.find(*operand);
-            if (port == portIndex_.end()) {
-                // The operand is a value the body computed, not one of its caller's: a use
-                // through it is not a use of a resource the caller still holds.
-                continue;
+            if (normAt < normPorts.size()) {
+                walk.ports.emplace(normPorts[normAt++], index);
             }
-            addParam(port->second, use.cls, use.name, use.mode);
         }
-        for (const auto &use : sig.ambient) {
-            addAmbient(use.name, use.mode);
-        }
-        for (sem::ResourceClass cls : sig.anyOf) {
-            out_.anyOf.push_back(cls);
-        }
-        if (sig.allocates) {
-            out_.allocates = sig.allocates;
-        }
-        out_.external = out_.external || sig.external;
-        return std::nullopt;
+        ++index;
     }
+    // A `with` port the type does not count is a value the function captured from the one around
+    // it; so is a closure node. A use through one is not a use of a parameter of this function, and
+    // which resource of the enclosing function it is cannot be read from here.
+    for (; withAt < withPorts.size(); ++withAt) {
+        walk.captured.insert(withPorts[withAt]);
+    }
+    for (draft_node_ref_t node : draft.closureNodes()) {
+        walk.captured.insert(node);
+    }
+}
 
-    // ---- one node ----
+void Builder::addParamUse(BodyReach &walk, size_t index, sem::ResourceClass cls,
+                          const std::string &name, sem::AccessMode mode) const {
+    if (index > 0xFF) {
+        // A signature numbers its parameters in one byte, so a use through the 256th parameter has
+        // no way to be written down. Dropping it would measure the body as reaching less than it
+        // does, and a `pure` body would pass on a use nobody recorded. Nothing here is measured
+        // instead.
+        walk.unplaceable = true;
+        return;
+    }
+    ResourceSignature &out = walk.reach;
+    const auto found       = std::find_if(out.params.begin(), out.params.end(), [&](const auto &use) {
+        return use.index == static_cast<uint8_t>(index);
+    });
+    if (found == out.params.end()) {
+        out.params.push_back(ResourceSignature::ParamUse{
+            .index = static_cast<uint8_t>(index), .cls = cls, .name = name, .mode = mode});
+        return;
+    }
+    // One parameter, one resource: two uses of it are one use, with the wider mode.
+    if (found->cls != cls) {
+        found->cls = sem::ResourceClass::Unknown;
+    }
+    if (found->name.empty()) {
+        found->name = name;
+    }
+    found->mode = uniteAccess(found->mode, mode);
+}
 
-    void measureNode(draft_node_ref_t id) {
-        const node_handle_t node = draft_.ref(id);
-        switch (nodeKindOf(node)) {
+void Builder::addAmbientUse(BodyReach &walk, const std::string &name, sem::AccessMode mode) const {
+    ResourceSignature &out = walk.reach;
+    const auto found =
+        std::find_if(out.ambient.begin(), out.ambient.end(), [&](const auto &use) {
+            return use.name == name;
+        });
+    if (found == out.ambient.end()) {
+        out.ambient.push_back(ResourceSignature::AmbientUse{.name = name, .mode = mode});
+        return;
+    }
+    found->mode = uniteAccess(found->mode, mode);
+}
+
+bool Builder::readCalleeSignature(BodyReach &walk, const runtime::GraphDraft &draft,
+                                  const ResourceSignature &sig, size_t calleeWithCount, bool isCall,
+                                  draft_node_ref_t id) const {
+    // What one node's signature amounts to for this body: its own parameters, in the numbering the
+    // callee uses (with parameters first, then ordinary ones -- the same mapping as
+    // runtime/resources.cpp fromSignature), read back onto the parameters of this body where the
+    // operand is one of them. False when the signature says nothing (Generic), or says something
+    // this measurement cannot place: the body is then not measured at all, rather than measured as
+    // pure because the walk gave up.
+    if (sig.mode != ResourceSignature::Mode::Concrete) {
+        return false;
+    }
+    if (!sig.captures.empty()) {
+        // A capture is a resource of the closure this body belongs to, and which capture of the
+        // enclosing function it is cannot be read from here.
+        return false;
+    }
+    const auto norm = draft.normInputsOf(id);
+    const auto with = draft.withInputsOf(id);
+    for (const auto &use : sig.params) {
+        draft_node_ref_t operand = 0;
+        if (use.index < calleeWithCount) {
+            // A call through a value keeps the value itself as its first `with` input.
+            const size_t at = size_t(use.index) + (isCall ? 1 : 0);
+            if (at >= with.size()) {
+                return false;
+            }
+            operand = with[at];
+        } else {
+            const size_t at = size_t(use.index) - calleeWithCount;
+            if (at >= norm.size()) {
+                return false;
+            }
+            operand = norm[at];
+        }
+        if (walk.captured.contains(operand)) {
+            return false; // a resource of the function around this one
+        }
+        const auto port = walk.ports.find(operand);
+        if (port == walk.ports.end()) {
+            // The operand is a value the body computed, not one of its caller's: a use through it
+            // is not a use of a resource the caller still holds.
+            continue;
+        }
+        addParamUse(walk, port->second, use.cls, use.name, use.mode);
+    }
+    for (const auto &use : sig.ambient) {
+        addAmbientUse(walk, use.name, use.mode);
+    }
+    for (sem::ResourceClass cls : sig.anyOf) {
+        walk.reach.anyOf.push_back(cls);
+    }
+    if (sig.allocates) {
+        walk.reach.allocates = sig.allocates;
+    }
+    walk.reach.external = walk.reach.external || sig.external;
+    return true;
+}
+
+void Builder::readUnknownValue(BodyReach &walk) const {
+    // A signature that says nothing promises nothing, and what a call through it reaches is the
+    // instantiation's: any instantiation may write a cell or print. Read conservatively
+    // (resource_semantics.h, `Generic`) rather than as touching nothing -- a body is never measured
+    // as pure because the walk found a signature it could not read. What has such a signature is a
+    // parameter of function type that writes no clause of its own (resource-generic, design
+    // principles 3.3): a function that wrote a clause carries the clause, and a function that wrote
+    // none carries the set its own body was measured to reach, so those two are read above.
+    for (sem::ResourceClass cls : {sem::ResourceClass::Variable, sem::ResourceClass::Object,
+                                   sem::ResourceClass::Foreign, sem::ResourceClass::Ambient,
+                                   sem::ResourceClass::Handle}) {
+        walk.reach.anyOf.push_back(cls);
+    }
+    walk.reach.external = true;
+}
+
+bool Builder::reachOfOper(DraftGraphBuilder *graph, const runtime::GraphDraft &draft,
+                          BodyReach &walk, draft_node_ref_t id) const {
+    const auto &op = graph->operTarget(draft.ref(id));
+    if (op == nullptr) {
+        return false;
+    }
+    // An operator's resources are in the operator table, not on its type
+    // (runtime/resources.cpp oper reads them the same way): what the table declares, and otherwise
+    // the conservative reading of its traits.
+    const auto &table = camel::core::OperatorTable::instance();
+    const std::string uri(op->uri());
+    const auto traits = table.find(uri);
+    sem::ResourceSpec spec;
+    bool declared = false;
+    if (const auto found = table.lookup(uri); found.has_value()) {
+        if (const auto *facts = table.semantics(*found); facts != nullptr && facts->resources) {
+            spec     = *facts->resources;
+            declared = true;
+        }
+    }
+    if (!declared) {
+        spec = sem::conservativeResources(draft.normInputsOf(id).size(),
+                                          draft.withInputsOf(id).size(),
+                                          traits.has_value() && traits->pure,
+                                          table.hasExternalEffect(uri));
+    }
+    for (const sem::ResourceAccess &access : spec.accesses) {
+        if (access.binding.kind == sem::ResourceBinding::Kind::Ambient) {
+            addAmbientUse(walk, access.resource.name, access.mode);
+            continue;
+        }
+        if (access.binding.kind == sem::ResourceBinding::Kind::Capture) {
+            return false; // which capture of this closure it is, is not readable
+        }
+        const bool isWith = access.binding.kind == sem::ResourceBinding::Kind::With;
+        const auto inputs = isWith ? draft.withInputsOf(id) : draft.normInputsOf(id);
+        // A call through a value keeps the value itself as its first `with` input, so an operator
+        // value's `with` operands start after it.
+        const size_t at = size_t(access.binding.index) + (isWith ? 1 : 0);
+        if (at >= inputs.size()) {
+            return false;
+        }
+        if (walk.captured.contains(inputs[at])) {
+            return false; // a resource of the function around this one
+        }
+        const auto port = walk.ports.find(inputs[at]);
+        if (port == walk.ports.end()) {
+            continue; // a value the body computed, not one of its caller's
+        }
+        addParamUse(walk, port->second, access.resource.cls, access.resource.name, access.mode);
+    }
+    walk.reach.external = walk.reach.external || spec.externalEffect;
+    return true;
+}
+
+bool Builder::reachOfFunc(DraftGraphBuilder *graph, const runtime::GraphDraft &draft,
+                          BodyReach &walk, draft_node_ref_t id) const {
+    const compile_graph_ptr_t callee = graph->funcTarget(draft.ref(id));
+    if (callee == nullptr) {
+        return false;
+    }
+    const FunctionType *calleeType = callee->funcType();
+    if (calleeType == nullptr) {
+        return false;
+    }
+    // A call reads the signature of the function it calls -- the clause it wrote, or, when it wrote
+    // none, the set its body was measured to reach (design principles 3.3). A call through a value
+    // reads the same signature below, so a function's resources have one reading and both paths
+    // take it. A function that wrote no clause keeps its measurement in the fixpoint while that is
+    // still running, which is what a caller has to read then; a signature that says nothing at all
+    // is the one a function-type parameter has, and what the call reaches is the instantiation's,
+    // so it is read conservatively rather than as reaching nothing.
+    const auto inferred = inferredSignatures_.contains(callee.get())
+                              ? inferredResources_.find(callee.get())
+                              : inferredResources_.end();
+    if (inferred != inferredResources_.end()) {
+        return readCalleeSignature(walk, draft, inferred->second, calleeType->withTypesCount(),
+                                   false, id);
+    }
+    if (calleeType->resources().mode != ResourceSignature::Mode::Concrete) {
+        readUnknownValue(walk);
+        return true;
+    }
+    return readCalleeSignature(walk, draft, calleeType->resources(), calleeType->withTypesCount(),
+                               false, id);
+}
+
+bool Builder::reachOfCall(const runtime::GraphDraft &draft, BodyReach &walk,
+                          draft_node_ref_t id) const {
+    // A call through a function value: what it runs is the value's signature, which is the first
+    // `with` input of the call (isEffectNode reads it the same way). A value of a function that
+    // wrote no clause carries the set its body was measured to reach; the only function type that
+    // says nothing is a parameter of function type, whose clause the callee writes at each
+    // instantiation -- so this is read conservatively.
+    const auto callee = draft.withInputsOf(id);
+    if (callee.empty()) {
+        return false;
+    }
+    Type *calleeType = nodeTypeOf(draft.ref(callee[0]));
+    if (calleeType == nullptr || calleeType->code() != TypeCode::Function) {
+        return false;
+    }
+    const auto *calleeFunc = tt::as_ptr<FunctionType>(calleeType);
+    if (calleeFunc->resources().mode != ResourceSignature::Mode::Concrete) {
+        readUnknownValue(walk);
+        return true;
+    }
+    return readCalleeSignature(walk, draft, calleeFunc->resources(), calleeFunc->withTypesCount(),
+                               true, id);
+}
+
+void Builder::addVarParameters(BodyReach &walk, const FunctionType &type) const {
+    // The declaration's own `var` parameters: a `var` parameter is a resource by itself, whether or
+    // not the body reaches it (design principles 3.3). A parameter is not a node, so it is part of
+    // the body's reach and not of any one node's.
+    const size_t withCount = type.withTypesCount();
+    size_t index           = 0;
+    for (size_t i = 0; i < withCount + type.normTypesCount(); ++i) {
+        const bool isWith = i < withCount;
+        if (!isWith && type.normIsConstasAt(i - withCount)) {
+            continue; // not a runtime parameter
+        }
+        const bool isVar = isWith ? type.withIsVarAt(i) : type.normIsVarAt(i - withCount);
+        if (isVar) {
+            addParamUse(walk, index, sem::ResourceClass::Variable, "",
+                        sem::AccessMode::ReadModifyWrite);
+        }
+        ++index;
+    }
+}
+
+std::optional<camel::core::sem::ResourceSignature>
+Builder::footprintOf(DraftGraphBuilder *graph, std::optional<draft_node_ref_t> only) const {
+    FunctionType *type = graph->funcType();
+    if (type == nullptr) {
+        return std::nullopt; // the body did not build (an error was reported)
+    }
+    const runtime::GraphDraft &draft = graph->draft();
+    BodyReach walk;
+    walk.reach.mode = ResourceSignature::Mode::Concrete;
+    // The result part is the conservative answer, not the default a `Fresh` result would claim: the
+    // runtime reads this on the type once the measurement is published there, and a body that
+    // returns the caller's cell is not a body whose result nothing else refers to.
+    walk.reach.result = sem::ResultAlias{.kind = sem::ResultAlias::Kind::Unknown};
+    numberBodyPorts(walk, draft, *type);
+    for (draft_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
+        if (!draft.alive(id)) {
+            continue;
+        }
+        if (only.has_value() && id != *only) {
+            continue; // one node's own reach, asked for by the report of a violation
+        }
+        bool placed = true;
+        switch (nodeKindOf(draft.ref(id))) {
         case runtime::GCNodeKind::Oper:
-            measureOperator(id, node);
+            placed = reachOfOper(graph, draft, walk, id);
             break;
         case runtime::GCNodeKind::Func:
-            measureDirectCall(id, node);
+            placed = reachOfFunc(graph, draft, walk, id);
             break;
         case runtime::GCNodeKind::Call:
-            measureCallThroughValue(id);
+            placed = reachOfCall(draft, walk, id);
             break;
         default:
             break;
         }
-    }
-
-    /// An operator's resources are in the operator table, not on its type (runtime/resources.cpp
-    /// reads them the same way): what the table declares, and otherwise the conservative reading
-    /// of its traits.
-    sem::ResourceSpec specOf(draft_node_ref_t id, const std::string &uri) const {
-        const auto &table = camel::core::OperatorTable::instance();
-        if (const auto found = table.lookup(uri); found.has_value()) {
-            if (const auto *facts = table.semantics(*found);
-                facts != nullptr && facts->resources) {
-                return *facts->resources;
-            }
-        }
-        const auto traits = table.find(uri);
-        return sem::conservativeResources(
-            draft_.normInputsOf(id).size(),
-            draft_.withInputsOf(id).size(),
-            traits.has_value() && traits->pure,
-            table.hasExternalEffect(uri));
-    }
-
-    void measureOperator(draft_node_ref_t id, node_handle_t node) {
-        const auto &op = graph_->operTarget(node);
-        if (op == nullptr) {
-            unplaced("an operator whose target is not known");
-            return;
-        }
-        const std::string uri(op->uri());
-        const sem::ResourceSpec spec = specOf(id, uri);
-        for (const sem::ResourceAccess &access : spec.accesses) {
-            if (access.binding.kind == sem::ResourceBinding::Kind::Ambient) {
-                addAmbient(access.resource.name, access.mode);
-                continue;
-            }
-            if (access.binding.kind == sem::ResourceBinding::Kind::Capture) {
-                // Which capture of this closure it is, is not readable from here.
-                unplaced(std::format("a captured resource used by '{}'", uri));
-                continue;
-            }
-            const bool isWith = access.binding.kind == sem::ResourceBinding::Kind::With;
-            const auto inputs = isWith ? draft_.withInputsOf(id) : draft_.normInputsOf(id);
-            // A call through a value keeps the value itself as its first `with` input, so an
-            // operator value's `with` operands start after it.
-            const size_t at = size_t(access.binding.index) + (isWith ? 1 : 0);
-            if (at >= inputs.size()) {
-                unplaced(std::format("an operand of '{}' that is not there", uri));
-                continue;
-            }
-            if (captured_.contains(inputs[at])) {
-                // A capture of the function around this one: which of its resources it is cannot
-                // be read from this body.
-                unplaced(std::format("a resource captured from the function around it, used by '{}'", uri));
-                continue;
-            }
-            const auto port = portIndex_.find(inputs[at]);
-            if (port == portIndex_.end()) {
-                continue; // a value the body computed, not one of its caller's
-            }
-            addParam(port->second, access.resource.cls, access.resource.name, access.mode);
-        }
-        out_.external = out_.external || spec.externalEffect;
-    }
-
-    /// A call of a function known by name: what it runs is the callee's own measurement. Until
-    /// that exists (`Early`), the body cannot be measured; in the fixed point every body has one,
-    /// starting from the empty set, and a callee without one is a graph this build did not make.
-    void measureDirectCall(draft_node_ref_t id, node_handle_t node) {
-        const compile_graph_ptr_t callee = graph_->funcTarget(node);
-        if (callee == nullptr) {
-            unplaced("a call whose callee is not known");
-            return;
-        }
-        const auto measured = callees_.find(callee.get());
-        if (measured == callees_.end()) {
-            unplaced(std::format("a call of '{}', which is not measured", callee->name()));
-            return;
-        }
-        const FunctionType *calleeType = callee->funcType();
-        if (calleeType == nullptr) {
-            unplaced(std::format("a call of '{}', which has no type", callee->name()));
-            return;
-        }
-        // What a caller believes of a function is its clause when it wrote one (the body is held
-        // to it where it is declared), and the body's measurement when it wrote none.
-        const ResourceSignature &calleeSignature = calleeType->resources().mode == ResourceSignature::Mode::Concrete
-                                                  ? calleeType->resources()
-                                                  : measured->second;
-        if (const auto why =
-                readSignature(calleeSignature, calleeType->withTypesCount(), false, id)) {
-            unplaced(std::format("{} (in '{}')", *why, callee->name()));
+        if (!placed) {
+            return std::nullopt;
         }
     }
-
-    /// A call through a function value: what it runs is the value's signature, which is the first
-    /// `with` input of the call (isEffectNode reads it the same way). A value that writes no
-    /// clause promises nothing -- what it reaches is the instantiation's, and any instantiation
-    /// may write a cell or print -- so nothing in this body proves the call pure and it is read
-    /// conservatively (resource_semantics.h, `Generic`).
-    void measureCallThroughValue(draft_node_ref_t id) {
-        const auto callee = draft_.withInputsOf(id);
-        if (callee.empty()) {
-            unplaced("a call with no function value");
-            return;
-        }
-        Type *calleeType = nodeTypeOf(draft_.ref(callee[0]));
-        if (calleeType == nullptr || calleeType->code() != TypeCode::Function) {
-            unplaced("a call through a value that is not known to be a function");
-            return;
-        }
-        const auto *calleeFunc = tt::as_ptr<FunctionType>(calleeType);
-        if (calleeFunc->resources().mode != ResourceSignature::Mode::Concrete) {
-            for (sem::ResourceClass cls : kUnplacedClasses) {
-                out_.anyOf.push_back(cls);
-            }
-            out_.external = true;
-            return;
-        }
-        if (const auto why =
-                readSignature(calleeFunc->resources(), calleeFunc->withTypesCount(), true, id)) {
-            unplaced(*why + " (in a call through a function value)");
-        }
+    if (walk.unplaceable) {
+        return std::nullopt; // see addParamUse: nothing here is measured, rather than too little
     }
-
-    // ---- the declaration's own parameters ----
-
-    /// A `var` parameter is a resource by itself, whether or not the body reaches it (design
-    /// principles 3.3).
-    void addVarParameters() {
-        const size_t withCount = type_->withTypesCount();
-        size_t index           = 0;
-        for (size_t i = 0; i < withCount + type_->normTypesCount(); ++i) {
-            const bool isWith = i < withCount;
-            if (!isWith && type_->normIsConstasAt(i - withCount)) {
-                continue; // not a runtime parameter
-            }
-            const bool isVar = isWith ? type_->withIsVarAt(i) : type_->normIsVarAt(i - withCount);
-            if (isVar) {
-                addParam(index, sem::ResourceClass::Variable, "", sem::AccessMode::ReadModifyWrite);
-            }
-            ++index;
-        }
+    if (!only.has_value()) {
+        addVarParameters(walk, *type);
     }
-
-    void sortAndDedupe() {
-        std::sort(out_.params.begin(), out_.params.end(), [](const auto &a, const auto &b) {
-            return a.index < b.index;
-        });
-        std::sort(out_.ambient.begin(), out_.ambient.end(), [](const auto &a, const auto &b) {
-            return a.name < b.name;
-        });
-        std::sort(out_.anyOf.begin(), out_.anyOf.end());
-        out_.anyOf.erase(std::unique(out_.anyOf.begin(), out_.anyOf.end()), out_.anyOf.end());
-    }
-
-    DraftGraphBuilder *graph_;
-    const runtime::GraphDraft &draft_;
-    FunctionType *type_;
-    const Measurements &callees_;
-    const bool settled_;
-    ResourceSignature out_;
-    std::unordered_map<draft_node_ref_t, size_t> portIndex_;
-    std::unordered_set<draft_node_ref_t> captured_;
-    std::vector<std::string> unplaced_;
-};
-
-} // namespace
-
-std::optional<camel::core::sem::ResourceSignature> Builder::footprintOf(
-    DraftGraphBuilder *graph, FootprintMode mode, std::vector<std::string> *unplaced) const {
-    return FootprintWalker(graph, inferredResources_, mode == FootprintMode::Settled)
-        .run(unplaced);
+    std::sort(walk.reach.params.begin(), walk.reach.params.end(),
+              [](const auto &a, const auto &b) { return a.index < b.index; });
+    std::sort(walk.reach.ambient.begin(), walk.reach.ambient.end(),
+              [](const auto &a, const auto &b) { return a.name < b.name; });
+    std::sort(walk.reach.anyOf.begin(), walk.reach.anyOf.end());
+    walk.reach.anyOf.erase(std::unique(walk.reach.anyOf.begin(), walk.reach.anyOf.end()),
+                           walk.reach.anyOf.end());
+    return walk.reach;
 }
 
 void Builder::measureInferredResources() {
-    // What a body touches depends on its callees, which may be written after their caller, in
-    // another module, or be the body itself. The measurements are the least fixed point: every
-    // body starts as touching nothing and a round adds what its callees have added, so the sets
-    // only grow and the iteration ends. A body is recomputed only when a callee it calls changed.
-    std::vector<DraftGraphBuilder *> bodies;
-    std::unordered_map<DraftGraphBuilder *, std::vector<DraftGraphBuilder *>> callersOf;
-    ResourceSignature empty;
-    empty.mode = ResourceSignature::Mode::Concrete;
+    // What a body touches depends on its callees, which may be written after their caller and in
+    // another module, so the measurements settle against each other first -- and a body may call
+    // itself, so they settle from the bottom: every body is recorded as reaching nothing, and each
+    // round recomputes every body from what its callees currently reach, taking the union with what
+    // that body reached before. A recursive function therefore reads its own reach from the round
+    // before, and the answer it settles at is the least one its body satisfies. The sets only grow,
+    // so the rounds end.
+    std::vector<compile_graph_ptr_t> bodies;
     for (const ModuleUnit *unit : unitOrder_) {
         for (const compile_graph_ptr_t &graph : unit->builtBodies) {
-            if (graph->funcType() == nullptr) {
-                continue; // the body did not build (an error was reported)
-            }
-            bodies.push_back(graph.get());
-            inferredResources_[graph.get()] = empty;
-            const runtime::GraphDraft &draft = graph->draft();
-            for (draft_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
-                if (draft.alive(id) && nodeKindOf(draft.ref(id)) == runtime::GCNodeKind::Func) {
-                    if (const compile_graph_ptr_t callee = graph->funcTarget(draft.ref(id))) {
-                        callersOf[callee.get()].push_back(graph.get());
-                    }
-                }
-            }
+            bodies.push_back(graph);
+            inferredResources_[graph.get()] = emptyReach();
         }
     }
-    std::deque<DraftGraphBuilder *> work(bodies.begin(), bodies.end());
-    std::unordered_set<DraftGraphBuilder *> queued(bodies.begin(), bodies.end());
-    unplacedResources_.clear();
-    while (!work.empty()) {
-        DraftGraphBuilder *body = work.front();
-        work.pop_front();
-        queued.erase(body);
-        std::vector<std::string> unplaced;
-        const auto measured = footprintOf(body, FootprintMode::Settled, &unplaced);
-        if (!measured.has_value()) {
-            continue;
-        }
-        unplacedResources_[body] = std::move(unplaced);
-        if (inferredResources_[body] == *measured) {
-            continue;
-        }
-        inferredResources_[body] = *measured;
-        for (DraftGraphBuilder *caller : callersOf[body]) {
-            if (queued.insert(caller).second) {
-                work.push_back(caller);
+    // The bodies whose walk reads another body's signature: a direct call or a call through a
+    // function value. Everything else is settled by its first walk, so only these are walked again.
+    std::vector<DraftGraphBuilder *> unsettled;
+    for (const auto &graph : bodies) {
+        bool readsAnother = false;
+        for (draft_node_ref_t id = 0; id < graph->draft().nodeSlotCount() && !readsAnother; ++id) {
+            if (!graph->draft().alive(id)) {
+                continue;
             }
+            const auto kind = nodeKindOf(graph->draft().ref(id));
+            readsAnother    = kind == runtime::GCNodeKind::Func || kind == runtime::GCNodeKind::Call;
+        }
+        if (readsAnother) {
+            unsettled.push_back(graph.get());
         }
     }
+    const auto walk = [&](DraftGraphBuilder *body) {
+        const auto measured = footprintOf(body);
+        // A body the walk cannot place reaches something unknown rather than nothing, so a clause
+        // it wrote is still judged against it instead of passing unchecked.
+        const auto settled =
+            measured.has_value() ? uniteReach(inferredResources_[body], *measured)
+                                 : unplaceableReach();
+        const bool grew = !(settled == inferredResources_[body]);
+        inferredResources_[body] = settled;
+        return grew;
+    };
+    for (const auto &graph : bodies) {
+        walk(graph.get());
+    }
+    for (bool changed = true; changed;) {
+        changed = false;
+        for (DraftGraphBuilder *body : unsettled) {
+            changed = walk(body) || changed;
+        }
+    }
+    // The settled measurement is published on the signature of the bodies that carry an inferred
+    // set rather than a clause, which keeps the signature the one place a function's resources are
+    // read from: a caller that calls it directly reads the same thing a caller taking one of its
+    // values reads (design principles 3.3, effects plan 5). A function that wrote a clause keeps
+    // the clause: that is its contract with its callers. A set that cannot be written as a clause
+    // (`anyOf`: a class the clause has no name for) leaves the signature as it is rather than
+    // promising too little; a call through it is read conservatively.
+    for (const auto &graph : bodies) {
+        if (!inferredSignatures_.contains(graph.get())) {
+            continue;
+        }
+        const auto &settled = inferredResources_[graph.get()];
+        if (settled.anyOf.empty()) {
+            graph->setResources(settled);
+        }
+    }
+}
+
+camel::source::origin_id_t Builder::firstUnpromisedEffectOrigin(
+    const compile_graph_ptr_t &graph, const camel::core::sem::ResourceSignature &promised) const {
+    // The first use the clause does not name is what the writer has to look at: the declaration
+    // says what a caller may assume, and this is where the body stopped matching it. A use the
+    // clause does name is not that place, so it is skipped rather than reported.
+    for (draft_node_ref_t id = 0; id < graph->draft().nodeSlotCount(); ++id) {
+        if (!graph->draft().alive(id)) {
+            continue;
+        }
+        const node_handle_t node = graph->draft().ref(id);
+        if (!isEffectNode(graph.get(), node)) {
+            continue;
+        }
+        const auto reach = footprintOf(graph.get(), id);
+        if (!reach.has_value() || sem::covers(promised, *reach)) {
+            continue; // promised, or not placeable: not what the clause left out
+        }
+        return nodeDraftOf(node)->nodeOrigin(nodeIdOf(node));
+    }
+    return 0;
 }
 
 void Builder::checkInferredResources() {
@@ -493,7 +562,9 @@ void Builder::checkInferredResources() {
         if (sem::covers(promised, measured->second)) {
             continue;
         }
-        reportResourceViolation(graph, promised, measured->second);
+        reportResourceViolation(
+            graph, promised, measured->second,
+            firstUnpromisedEffectOrigin(graph, promised));
     }
 }
 } // namespace camel::compile::gir

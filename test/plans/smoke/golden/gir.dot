@@ -4,10 +4,10 @@ digraph GraphIR {
     edge [minlen=2];
     subgraph cluster_F01 {
         label="main";
-        tooltip="() => int";
+        tooltip="() => int uses clock, stdout";
         subgraph cluster_F02 {
             label="fib";
-            tooltip="(n: int) => int";
+            tooltip="(n: int) => int pure";
             F02 [label="ARGS", type="ARGS", style=dashed, shape=circle];
             O02 [label="EXIT", type="EXIT", style=dashed, shape=circle];
             N00 [label="n", type="PORT", param_name="n", param_kind="normal", param_index="0", value_type="int", origin=5, span="7:9-7:15", srcfile="<ROOT>/test/cases/smoke/core/fib10_pipeline.cml", shape=circle, style=solid, tooltip="n\nfib::node#1"];
@@ -74,7 +74,7 @@ digraph GraphIR {
         N16 -> N18 [label="0|0", type="CTRL", style=dashed, arrowhead=empty];
     }
     O00 [label="EXIT", type="EXIT", style=dashed, shape=circle];
-    N19 [label="Functio\nn(gr...", type="DATA", shape=circle, style=solid, value_type="() => int", origin=289, span="11:0-19:1", srcfile="<ROOT>/test/cases/smoke/core/fib10_pipeline.cml", tooltip="Function(graph=main, tupleSlots=0)\n__root__::node#-1"];
+    N19 [label="Functio\nn(gr...", type="DATA", shape=circle, style=solid, value_type="() => int uses clock, stdout", origin=289, span="11:0-19:1", srcfile="<ROOT>/test/cases/smoke/core/fib10_pipeline.cml", tooltip="Function(graph=main, tupleSlots=0)\n__root__::node#-1"];
     N1A [label="CALL", type="CALL", shape=diamond, style=solid, value_type="int", tooltip="CALL\n__root__::node#1"];
     N1A -> O00 [label="0", type="EXIT", style=solid];
     N19 -> N1A [label="0|0", type="WITH", style=dashed];

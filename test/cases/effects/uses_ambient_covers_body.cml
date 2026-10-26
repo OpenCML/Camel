@@ -1,0 +1,17 @@
+/**
+ * A clause that names the resource its body reaches keeps its promise, the effect outside the
+ * program included: `stdout` is state the program does not own, so writing it in a clause promises
+ * the effect that comes with it (design principles 3.3). The resource and the fact that reaching it
+ * is visible outside the program are not two things the writer has to say.
+ */
+module uses_ambient_covers_body
+
+func shout(): int uses stdout sync {
+    println('x')
+    return 1
+}
+
+func main(): int sync {
+    println(shout())
+    return 0
+}

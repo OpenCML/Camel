@@ -313,7 +313,8 @@ void Builder::settleEffectfulGraphs() {
 
 void Builder::reportResourceViolation(
     const compile_graph_ptr_t &graph, const camel::core::sem::ResourceSignature &promised,
-    const camel::core::sem::ResourceSignature &measured) {
+    const camel::core::sem::ResourceSignature &measured,
+    camel::source::origin_id_t noteOrigin) {
     // What the clause does not promise, said in the terms the clause is written in: the caller of
     // this function can see only the clause, so the report names the resources the body reaches
     // that the clause leaves out.
@@ -342,28 +343,6 @@ void Builder::reportResourceViolation(
     }
     if (measured.external && !promised.external) {
         unnamed.push_back("an effect outside the program");
-    }
-    // A use the measurement could not place is read as touching any class a clause has no name
-    // for, and said here, so that the clause is refused for a reason the writer can look at.
-    if (const auto reasons = unplacedResources_.find(graph.get());
-        reasons != unplacedResources_.end()) {
-        for (const std::string &reason : reasons->second) {
-            unnamed.push_back("what the compiler cannot determine (" + reason + ")");
-        }
-    }
-    // The first use the clause does not name, which is what the writer has to look at: the
-    // declaration says what a caller may assume, and this is where the body stopped matching it.
-    camel::source::origin_id_t noteOrigin = 0;
-    for (draft_node_ref_t id = 0; id < graph->draft().nodeSlotCount(); ++id) {
-        if (!graph->draft().alive(id)) {
-            continue;
-        }
-        const node_handle_t node = graph->draft().ref(id);
-        if (!isEffectNode(graph.get(), node)) {
-            continue;
-        }
-        noteOrigin = nodeDraftOf(node)->nodeOrigin(nodeIdOf(node));
-        break;
     }
     // One builder, mutated in place and committed once: `of` hands out a value, and assigning a
     // builder from the chain of another would copy state that is not meant to be copied.
