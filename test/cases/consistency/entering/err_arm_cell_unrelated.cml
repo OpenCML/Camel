@@ -1,0 +1,21 @@
+/**
+ * A cell's type never reaches the join (the ruling of 2026-10-26 on the arm of a branch): two
+ * arms that are cells of unrelated content types are joined as the types their cells hold, and
+ * the report names those. A join of the cell types themselves would name `var int` and
+ * `var string` instead, which is the cell type reaching the join.
+ */
+module err_arm_cell_unrelated
+
+// Each arm is the value of a `sync` block, which is the cell its write returned: nothing here
+// is a `var` read out by the position, so what the join sees is the cell unless the arm merge
+// reads it out.
+func bad(c: bool): int sync {
+    var x: int = 1
+    var s: string = 'a'
+    return if c then sync { x = x + 1 } else sync { s = s + 'b' }
+}
+
+func main(): int sync {
+    println(bad(true))
+    return 0
+}
