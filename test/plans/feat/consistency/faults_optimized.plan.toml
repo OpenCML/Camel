@@ -7,7 +7,7 @@ desc = "The run-time fault cases of consistency.faults again, through the optimi
 # The same cases and expectations as consistency.faults, with std::opt before the back end: no pass
 # may remove a fault, move one before the output that precedes it, or add one (design principles
 # 3.4, 9.7). A case here that differs from consistency.faults is a bug of a pass.
-#
+
 # Every case runs on std::nvm, std::fvm, std::jit and std::prl. Unless an entry says otherwise the
 # four must agree on the exit code, on standard output (the program's output and, after it, the
 # diagnostic as printed) and on the name, code, line and column of the diagnostic. A fault stops
@@ -397,7 +397,7 @@ expect_stdout_starts_with = "done\n"
 
 [[tests]]
 name = "end.exit_code"
-desc = "exit(3) in a function, without importing process: the output before it is there, nothing after it runs, the exit code is 3, and there is no diagnostic."
+desc = "exit(3) from process in a function: the output before it is there, nothing after it runs, the exit code is 3, and there is no diagnostic."
 kind = "behavior"
 case = "../../../cases/consistency/faults/exit_code.cml"
 expect_exit = 3
@@ -408,21 +408,10 @@ assert(input.diagnostics.length === 0, 'no diagnostic expected')
 """
 
 [[tests]]
-name = "end.exit_imported"
-desc = "The same with exit imported from process."
+name = "end.sleep_seconds"
+desc = "sleep takes a number of seconds as a float: a fraction of a second waits and the program goes on."
 kind = "behavior"
-case = "../../../cases/consistency/faults/exit_imported.cml"
-expect_exit = 3
-verify_script = """
-assert(input.normalized.stdout === 'before\nstopping\n', JSON.stringify(input.normalized.stdout))
-assert(input.diagnostics.length === 0, 'no diagnostic expected')
-"""
-
-[[tests]]
-name = "end.sleep_global"
-desc = "The global sleep, implemented in the os module like exit, works without importing it."
-kind = "behavior"
-case = "../../../cases/consistency/faults/sleep_global.cml"
+case = "../../../cases/consistency/faults/sleep_seconds.cml"
 expect_exit = 0
 expect_stdout_starts_with = "before\nafter\n"
 

@@ -356,7 +356,7 @@ bool pruneBranch(GraphDraft &draft, gc_node_ref_t brch) {
     }
     if (armTail == kInvalidNodeRef) {
         for (gc_node_ref_t n : armNodes) {
-            if (!carriesOrdering(draft, n)) {
+            if (!carriesOrdering(draft, n, true)) {
                 continue;
             }
             bool followed = false;

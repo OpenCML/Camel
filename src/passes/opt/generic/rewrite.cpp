@@ -70,7 +70,7 @@ bool isValueOnly(const GraphDraft &draft, gc_node_ref_t id) {
     case GCNodeKind::Accs:
     case GCNodeKind::Fill:
     case GCNodeKind::Oper:
-        return camel::runtime::nodeIsFreelySchedulable(draft, id);
+        return camel::runtime::nodeIsFreelySchedulable(draft, id, true);
     default:
         return false;
     }
@@ -158,7 +158,7 @@ std::vector<gc_node_ref_t> orderedSources(const GraphDraft &draft, gc_node_ref_t
             continue;
         }
         seen[n] = true;
-        if (carriesOrdering(draft, n)) {
+        if (carriesOrdering(draft, n, true)) {
             sources.push_back(n);
             continue;
         }
