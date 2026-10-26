@@ -79,8 +79,11 @@ const CUDA_AWARE_MODULES = [
  * machine's cards from it as it does for `ort_core_slice` beside it. The lane that added it left
  * this pin at 32, and the pin is what makes that visible: the runner's self-test reads the same
  * audit, so the stale number was red there before anyone ran the guard alone.
+ * 33 -> 34: `ort_slice_grad_stride` joined, the ONNX Runtime probe of a slice whose step is not 1
+ * in the same plan. CPU-only in the same way, so it names no device and the runner's default
+ * hides the machine's cards from it.
  */
-export const EXPECTED_EXAMINED = 33
+export const EXPECTED_EXAMINED = 34
 export const EXPECTED_DEVICE_LAYER = 17
 
 function walkPlanFiles(dir, out = []) {

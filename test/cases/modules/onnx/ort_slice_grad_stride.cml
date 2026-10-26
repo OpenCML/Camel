@@ -1,0 +1,55 @@
+/**
+ * A slice whose step is not 1, and its adjoint, exported to ONNX: `:op/slice_sub` takes any
+ * non-zero step (design principles 5.4), so a slice takes the positions the step names along the
+ * axis it slices -- every second position for `[0:5:2]`, the positions 5 and 3 for `[5:1:-2]`,
+ * and two positions of every row for `[:, :0:-2]` -- and the gradient of a value a slice produced
+ * goes back to exactly those positions.
+ *
+ * The loss slices three times: with a step of 2, with a negative step of 2, and along the second
+ * axis of a rank-2 value, with a negative step whose start the source left out.
+ *
+ *   loss = sum(w[0:5:2] * x[0:5:2])          the positions 0, 2, 4
+ *        + sum(w[5:1:-2] * x[5:1:-2])        the positions 5, 3
+ *        + sum(a[:, :0:-2] * b[:, :0:-2])    the columns 3 and 1 of every row
+ *
+ * so `d loss / d x` is `w` at the positions 0, 2, 4, 5 and 3 and the zero tangent at 1, and
+ * `d loss / d b` is `a` at the columns 3 and 1 of each row and the zero tangent at 0 and 2. The
+ * values this program prints and the model it exports are both checked against those by
+ * ort_slice_grad_stride.py.
+ */
+module ort_slice_grad_stride
+import { reshape, sum } from tensor
+import { with_grad } from autodiff
+import { export_model } from onnx
+import { get_env } from env
+
+type P = { w: f32[6], x: f32[6], a: f32[2, 4], b: f32[2, 4] }
+
+with <m: P>
+func loss(): f32 {
+    return sum(m.w[0:5:2] * m.x[0:5:2]) + sum(m.w[5:1:-2] * m.x[5:1:-2]) +
+        sum(m.a[:, :0:-2] * m.b[:, :0:-2])
+}
+
+func step(w: f32[6], x: f32[6], a: f32[2, 4], b: f32[2, 4]): (f32[..], f32[..], f32[..]) {
+    let m = { w: w, x: x, a: a, b: b }
+    let vg = with_grad(loss)<m>()
+    return (reshape([f32(vg.0)], [1]), vg.1.x, vg.1.b)
+}
+
+func main(): int sync {
+    let w = reshape([0.5, 0.25, -1.0, 2.0, 1.5, -0.5] as f32[], [6])
+    let x = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[], [6])
+    let a = reshape([1.0, 2.0, 3.0, 4.0, -1.0, -2.0, -3.0, -4.0] as f32[], [2, 4])
+    let b = reshape([0.5, 1.5, 2.5, 3.5, -0.5, -1.5, -2.5, -3.5] as f32[], [2, 4])
+    let r = step(w, x, a, b)
+    println(r.0)
+    println(r.1)
+    println(r.2)
+    export_model(
+        (w: f32[6], x: f32[6], a: f32[2, 4], b: f32[2, 4]): (f32[..], f32[..], f32[..]) => step(
+            w, x, a, b),
+        (w, x, a, b), get_env('ONNX_OUT'))
+    println('exported')
+    return 0
+}
