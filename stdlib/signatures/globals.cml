@@ -245,9 +245,10 @@ export func parse_int(text: string): int!
 export func parse_float(text: string): float!
 
 /// An Error value of the given kind with the given message; the compiler adds the source
-/// position of the call. `throw error(...)` returns it from a function declared `T!`.
+/// position of the call. `return error(...)` in a function declared `T!` hands it out as that
+/// type's failed form.
 /// @pure
-/// @example throw error('RangeError', 'too large')
+/// @example return error('RangeError', 'too large')
 #op(':op/error_new')
 export func error(kind: string, message: string): Error
 
@@ -491,6 +492,18 @@ export func apply(xs: T[]): T[]
 // (design principles 3.9; docs/technical/33_fault_isolation.md). It is a function transform:
 // `attempt(f)` is the function whose parameters are f's and whose calls are calls of f made
 // inside the boundary. The name is provisional.
+
+/// Raises a fault of the kind the program writes, with the message it gives. The call gives no
+/// value at all: its type is the bottom type `never` (design principles 3.9), so it may stand
+/// where any type is expected, and a branch arm that raises the fault leaves the branch's type
+/// to the other arm. The fault is raised where the call is written, and `attempt` isolates it
+/// into an error value whose kind is the name in the angle brackets.
+/// @pure
+/// @fails fault `<Kind>` with the message, which `attempt` isolates
+/// @example fail<'BadLimit'>('the limit must be positive')
+#op(':op/fail')
+with <Kind: string>
+export func fail(message: string): never
 
 /// The function f with the faults of its calls turned into error values: `attempt(f)` takes the
 /// parameters of f and gives the result of f plus `!`. A fault raised inside a call becomes an

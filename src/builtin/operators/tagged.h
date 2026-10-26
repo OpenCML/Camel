@@ -5,7 +5,7 @@
  * Built-in operators over the tagged forms `T?` and `T!` (design principles 3.8;
  * docs/technical/29_nullable_and_fallible_values.md).
  *
- * The first group is what `??`, `!!`, `->`, `throw` and the `match` patterns are lowered
+* The first group is what `??`, `!!`, `->` and the `match` patterns are lowered
  * to: reading the tag, taking the value or the error out. Their names are reserved
  * identifiers, so a program cannot call them. The second group is ordinary library
  * operators that can fail and therefore return a `T!`.
@@ -29,6 +29,8 @@ slot_t __throw__(ArgsView &with, ArgsView &norm, camel::core::context::Context &
 
 // Library.
 slot_t __error_new__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+// The program's own premise check: it raises a fault of the kind it is given and gives no value.
+slot_t __fail__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __parse_int__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __parse_float__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 

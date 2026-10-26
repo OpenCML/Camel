@@ -546,6 +546,15 @@ Type *camel::core::type::joinTypes(Type *a, Type *b) {
     if (a == nullptr || b == nullptr) {
         return nullptr;
     }
+    // The bottom type `never` has no value, so the other side decides what the join is
+    // (design principles 3.9): an arm that leaves the function joins with the arm that gives
+    // a value, and the branch is that value's type.
+    if (a->code() == TypeCode::Never) {
+        return b;
+    }
+    if (b->code() == TypeCode::Never) {
+        return a;
+    }
     if (Type *unified = a->unify(b)) {
         return unified;
     }

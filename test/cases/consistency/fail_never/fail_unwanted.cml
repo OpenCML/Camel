@@ -1,0 +1,14 @@
+/**
+ * A fault belongs to a value and is raised where that value is wanted (design principles 3.9):
+ * the value of the right side of `??` is not wanted while the left side has one, so the `fail`
+ * written there is not run at all and the program goes on.
+ */
+module fail_unwanted
+
+func main(): int sync {
+    let v: int? = 7
+    println('before')
+    println(v ?? fail<'Unwanted'>('nothing wants this value'))
+    println('after')
+    return 0
+}

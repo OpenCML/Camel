@@ -421,6 +421,8 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         {"op/tag_error_info", __error_info__},
         {"op/tag_throw", __throw__},
         {"op/error_new", __error_new__},
+        // The program's own premise check: it faults, so it is no pure operator.
+        {"op/fail", __fail__},
         {"op/parse_int", __parse_int__},
         {"op/parse_float", __parse_float__},
 

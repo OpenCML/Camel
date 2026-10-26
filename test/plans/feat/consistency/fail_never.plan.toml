@@ -1,0 +1,112 @@
+id = "consistency.fail_never"
+order = 352
+tier = "fast"
+tags = ["feat", "consistency", "never", "fail", "runtime", "negative"]
+desc = "The bottom type never, the fault fail raises, and the arrow that decides by signature"
+
+# `fail<'Kind'>(message)` raises the fault of the kind the program writes, where the call stands:
+# the report of a division by zero, with the program's own kind in the place the catalogue name
+# has (faults.plan.toml, div_zero_top). The four back ends must agree on it.
+#
+# The kind the program writes names the diagnostic the program sees: a fault raised by the
+# program carries the registry's RuntimeDiag::ProgramFault (0x040001AC), whose message is the
+# program's, and the report names it RuntimeDiag::<Kind>. The assertion below is on the code and
+# on the kind, so a report that lost either is red.
+
+[[tests]]
+name = "fail.located"
+desc = "fail<'BadLimit'> raises the fault BadLimit at the call: the shape of DivisionByZero with the kind the program chose, and what was printed before it stays. The position is the call's kind clause, as every call written with one is located."
+kind = "negative"
+case = "../../../cases/consistency/fail_never/fail_located.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
+expect_exit = 1
+expect_diagnostic_code = "0x040001AC"
+expect_diagnostic_line = 10
+expect_diagnostic_column = 39
+verify_script = """
+assert(input.diagnostics.length === 1, JSON.stringify(input.diagnostics))
+assert(input.diagnostics[0].name === 'RuntimeDiag::' + 'BadLimit', input.diagnostics[0].name)
+"""
+expect_stdout_starts_with = "before\n"
+expect_output_not_contains = ["not reached", "Segmentation fault", "dumped core"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "fail.isolated"
+desc = "The fault fail raises is isolatable: attempt gives an error value whose kind is the one the program wrote, the program runs on, and the call's own value is untouched where it succeeds."
+kind = "behavior"
+case = "../../../cases/consistency/fail_never/fail_isolated.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_contains = ["BadLimit", "true", "end"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "fail.unwanted_result"
+desc = "A fail whose value nothing takes is dropped with the value that holds it: the fault is never raised and the program goes on to print after it."
+kind = "behavior"
+case = "../../../cases/consistency/fail_never/fail_unwanted.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_contains = ["before", "after"]
+expect_output_not_contains = ["nothing wants this value"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "never.join"
+desc = "never is the type of an arm that gives no value: the branch takes the other arm's type, a never value stands where an int is expected, and a function may declare never."
+kind = "behavior"
+case = "../../../cases/consistency/fail_never/never_join.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_contains = ["1", "end"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "never.no_value"
+desc = "never has no value: a value written where it is expected is refused, and the report names the type."
+kind = "behavior"
+case = "../../../cases/consistency/fail_never/never_is_printed.cml"
+args = ["check", "-O", "short", "${case}"]
+expect_exit = 1
+expect_output_contains = ["never"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "never.inferred"
+desc = "A generic parameter takes never when the argument gives no value, and the call's result stands where the declared type is: the compiler settles both on the signature."
+kind = "behavior"
+case = "../../../cases/consistency/fail_never/never_inferred.cml"
+args = ["check", "-O", "short", "${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "exit.is_never"
+desc = "exit gives no value: its result type is never, so a function that declares an int may end with it, and the program leaves with the code it was given."
+kind = "behavior"
+case = "../../../cases/consistency/fail_never/exit_is_never.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 7
+expect_stdout_contains = ["before"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "arrow.propagates"
+desc = "-> hands a value without a tag to the call as it is, and passes a failed value on instead of calling with it; an error value written in a fallible position is the failed arm."
+kind = "behavior"
+case = "../../../cases/consistency/fail_never/arrow_propagates.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_contains = ["42", "BadInput", "end"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000

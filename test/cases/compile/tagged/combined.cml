@@ -11,14 +11,14 @@ func total(xs: (int?)[]): int {
 
 func lookup(k: int): int?! {
     if k < 0 then {
-        throw error('KeyError', 'negative key')
+        return error('KeyError', 'negative key')
     } else {
         return if k == 0 then null as int? else k as int?
     }
 }
 
 func save(ok: bool): void! {
-    if ok then { return null } else { throw error('IOError', 'disk') }
+    if ok then { return null } else { return error('IOError', 'disk') }
 }
 
 func show(r: int?!): string {

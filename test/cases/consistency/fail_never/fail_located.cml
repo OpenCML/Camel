@@ -1,0 +1,18 @@
+/**
+ * `fail<'Kind'>(message)` raises the fault of the kind the program writes, where the call
+ * stands (design principles 3.9). It is the fault of an operator: the report is the one a
+ * division by zero gets (compare consistency/faults/div_zero_top.cml), with the kind the program
+ * chose and its own message, and what was printed before it stays on standard output.
+ */
+module fail_located
+
+func limit(q: float): float {
+    return if q > 0.0 then q else fail<'BadLimit'>('the limit must be positive')
+}
+
+func main(): int sync {
+    println('before')
+    println(limit(-1.0))
+    println('not reached')
+    return 0
+}

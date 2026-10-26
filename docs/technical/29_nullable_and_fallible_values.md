@@ -1,7 +1,8 @@
 # Nullable and Fallible Values
 
 This note describes how the two built-in forms `T?` ("may be null") and `T!` ("may have
-failed"), the operators `??`, `!!`, `->`, the fixed `match` patterns and `throw` are
+failed"), the operators `??`, `!!`, `->`, the fixed `match` patterns and the `return` of an
+error value are
 compiled. The normative text is `docs/design-principles.cn.md` sections 3.8, "可空", 3.9, "错误与故障",
 and 3.7, "分支与 `match`";
 the user-facing description is in `docs/language/` (3.4, 6.6, 6.8.2, 7.3).
@@ -18,7 +19,7 @@ language author. Each is implemented the way section 10 recommends and marked in
 | `x -> f`, `x: T?` or `T!` that no overload of `f` takes whole | `BRCH` on the tag of `x`; arm 0 hands the null or the error on, arm 1 calls `f` with the value |
 | `match x { case null => A  case v => B }` | the same `BRCH`; arm 0 is `A`, arm 1 binds `v` and is `B` |
 | `match r { case error e => A  case v => B }` | the same `BRCH`; arm 0 binds `e` and is `A`, arm 1 binds `v` and is `B` |
-| `throw e` | the exit of the graph, exactly where `return` puts it; the value is the failed form of the declared `T!` (`OPER`, `CAST`) |
+| `return e` (an error value) | the exit of the graph, exactly where any `return` puts it; the value is the failed form of the declared `T!` (`OPER`, `CAST`) |
 | `v as T?`, and a value that enters a `T?`/`T!` position by itself (an argument, an annotated `let`, an array element, a branch arm, `return`) | a `CAST` node per level |
 | `try`/`catch` | nothing: a diagnostic |
 
@@ -156,9 +157,9 @@ starts with the operator that takes the value out, inside the arm.
 A scrutinee of any other type keeps the existing meaning of `match` (compare with literals);
 there `case null`, `case error e` and a binding case are errors.
 
-### 3.4 `throw e`
+### 3.4 `return e` (an error value)
 
-`throw e` is `return` of the failed form:
+`return e` with an error value is the `return` of the failed form:
 
 ```
 g:
@@ -170,19 +171,16 @@ g:
 
 `T!` is the declared return type of the function the statement belongs to (looking out of
 branch arms; a lambda is a function of its own). `__throw__` makes the failed value, the
-`CAST` gives it the declared type; both are the same object. It is not a jump: like `return`,
-it gives the value of the body (or of the branch arm) it stands in.
+`CAST` gives it the declared type; both are the same object. It is not a jump: like any other
+`return`, it gives the value of the body (or of the branch arm) it stands in.
 
 `error(kind, message)` builds an `Error`; the compiler appends the source position of the
 call (of the word `error`) as a third, constant argument (`file:line:column`, the file name
-without its directory). Rethrowing a caught error (`case error e => throw e`) keeps its
+without its directory). Handing a caught error on again (`case error e => return e`) keeps its
 original position.
 
 Diagnostics:
 
-- `ThrowOutsideFallible` (0x60): `throw` in a function whose declared return type is not
-  `T!` (or is not declared), or at module level.
-- `ThrowNotAnError` (0x61): the operand of `throw` is not an `Error`.
 - `TaggedOperandMismatch` (0x65): the left side of `??`/`!!` is not of the form the
   operator opens, or the right side of `??`/`!!` does not have the payload type. Located at
   the operator.
@@ -348,8 +346,9 @@ Each is implemented as recommended; none changes the behaviour of an existing pr
 - **Q1. Does a `T` flow into a `T?`/`T!` position implicitly?** Ruled on (design principles
   3.8): yes, wherever the target type is known; never the other way. Section 4.2.
 - **Q2. Nesting.** Ruled on (3.9): `T?!` and `T!?` allowed, `T??` and `T!!` rejected.
-- **Q3. What `throw` takes and how an error is made.** Ruled on (3.9): `throw e` with `e`
-  an error value made by `error(kind, message)`; the compiler fills in the position.
+- **Q3. How an error is made and handed out.** Ruled on (3.9): `error(kind, message)` makes
+  an error value and the compiler fills in the position; a `return` in a function declared
+  `T!` hands it out.
 - **Q4. `match` on a tagged value.** Implemented: exactly two cases, the tagged one and one
   rest case; literal cases are not mixed in (`case null`, `case 0`, `case v` together is an
   error). The spelling `case error e` makes `error` a word with a meaning only in this

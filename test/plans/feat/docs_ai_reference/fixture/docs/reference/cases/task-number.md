@@ -39,7 +39,7 @@ A `**target**` note names its design under `docs/design/`, and a diagnostic is w
 11  powerExpr           ^                                  right, one
 12  nullableExpr        ?? !!                              right (a whole expression on the right)
 13  unaryExpr           as is                              one
-14  linkExpr            -> ?->                             repeat, left
+14  linkExpr            -> ->                             repeat, left
 15  negExpr             - !                                prefix
 16  negPower            - ! ^                              prefix, right
 17  compExpr            ..                                 repeat, left
@@ -63,7 +63,7 @@ multiplicativeExpr : powerExpr (('*' | '/') powerExpr)*
 powerExpr          : nullableExpr ('^' powerExpr)?
 nullableExpr       : unaryExpr (('??' | '!!') dataExpr)?
 unaryExpr          : linkExpr (('as' | 'is') typeExpr)?
-linkExpr           : negExpr (('->' | '?->') compExpr)*
+linkExpr           : negExpr (('->' | '->') compExpr)*
 negExpr            : ('-' | '!') negPower | compExpr
 negPower           : ('-' | '!') negPower | compExpr ('^' negPower)?
 compExpr           : annoExpr ('..' annoExpr)*

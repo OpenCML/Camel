@@ -2,7 +2,7 @@
 
 [English](en/07_statements.md) | 中文
 
-块由语句组成，一行一条；一条语句在哪里结束见 [2.1](02_lexical.md#21-行空白与分隔)。语句是：表达式、`let`/`var` 声明、`return`/`throw`、嵌套的块，以及函数与类型的声明。
+块由语句组成，一行一条；一条语句在哪里结束见 [2.1](02_lexical.md#21-行空白与分隔)。语句是：表达式、`let`/`var` 声明、`return`/`yield`、嵌套的块，以及函数与类型的声明。
 
 ---
 
@@ -55,19 +55,17 @@ var count = 0
 - **`let _ = e` 有意丢弃 `e` 的值。** `_` 不是名字：它不绑定任何东西，所以同一个块里可以写任意多次，也不能读它。表达式与任何 `let` 的初值一样求值（在同步块里按顺序）。这是表明有意忽略一个 `T!` 的写法（[7.1](#71-表达式语句)）。只有这一种写法：`var _`、在多个名字中间写 `_` 都是语法错误。
 - 模块顶层的 `let` 是全局常量，顶层的 `var` 可以被函数读写，包括被导入的函数读写它所在模块的（[5.3](05_modules.md#53-导出)）。**顶层的声明与书写顺序无关，只看依赖**：`let area = pi * r * r` 可以写在 `let pi` 之前；顶层的值之间成环是 `SemanticDiag::ModuleValueCycle`（[5.6](05_modules.md#56-模块的加载)）。函数体里的局部 `let` 仍是先声明后使用。
 
-## 7.3 `return` 与 `throw`
+## 7.3 `return`
 
 - `return e` 给出**所在的块**的值。函数体是一个块，所以写在函数体顶层的 `return` 给出函数的返回值；写在分支臂的块里的 `return` 给出的是那个分支的值，不是离开函数（[6.8.1](06_expressions.md#681-if)）。
 - 不带值的 `return`、`return null` 用于没有值的块。
-- `throw e` 给出一个错误值，与 `return` 同构：它不展开调用栈，没有“传播”与“捕获”。
-  - 所在的函数必须把返回类型声明为 `T!`，否则是 `SemanticDiag::ThrowOutsideFallible`。
-  - `e` 必须是错误值：`error(kind, message)` 构造的，或 `case error e` 绑定的；否则是 `SemanticDiag::ThrowNotAnError`。
-- `raise` 不属于语言，也不是保留字（它是一个普通的名字）；返回错误值用 `throw`。
+- 交出一个错误值就是 `return error('Kind', 'message')`：`error(...)` 构造的是一个普通的值，`return` 把它交出去，和交出别的值没有分别——它不展开调用栈，没有“传播”与“捕获”（设计原则 3.9）。函数把返回类型声明为 `T!` 时，`error(...)` 进入这个位置就是失败那一臂。
+- 要让调用者自己接住错误或缺失、又不展开调用栈，交给 `->`（错误与缺失都传过去），或在调用处用 `??`、`!!` 取用。
 
 ```cml
 func check_age(age: int): int! {
-    return if age < 0 then {
-        throw error('InvalidAge', 'age is negative')
+    if age < 0 then {
+        return error('InvalidAge', 'age is negative')
     } else {
         return age
     }

@@ -1,0 +1,9 @@
+/**
+ * `never` has no value: a value written where it is expected is the mistake the compiler says it
+ * is, and the report names the type (design principles 3.9).
+ */
+module never_is_printed
+
+func hold(): never {
+    return 1
+}

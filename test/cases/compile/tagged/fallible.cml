@@ -1,5 +1,5 @@
 /**
- * `T!` (design principles 3.9): a value that may have failed. `throw e` returns the error
+ * `T!` (design principles 3.9): a value that may have failed. `return e` hands out the error
  * form, `a !! b` gives a fallback, `x -> f` hands an error on and calls `f` otherwise, and
  * `match` with `case error e` reads the error.
  */
@@ -7,7 +7,7 @@ module fallible
 
 func safe_div(a: int, b: int): int! {
     if b == 0 then {
-        throw error('DivByZero', 'the divisor is zero')
+        return error('DivByZero', 'the divisor is zero')
     } else {
         return a / b
     }
@@ -26,7 +26,7 @@ func show(r: int!): string {
 
 func rethrow(r: int!): int! {
     return match r {
-        case error e => { throw e }
+        case error e => { return e }
         case v => { return v + 1 }
     }
 }

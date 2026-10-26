@@ -46,6 +46,12 @@ const Type *firstUndetermined(const Type *type, std::vector<const Type *> &path)
         return nullptr;
     }
     const TypeCode code = type->code();
+    if (code == TypeCode::Never) {
+        // The bottom type `never` (design principles 3.9) is determined: it is the type of an
+        // expression that gives no value, so a graph may name it (the result of an `exit` call,
+        // the result type of a function that never returns) and nothing of it is ever a value.
+        return nullptr;
+    }
     if (isAuxiliary(code)) {
         return type;
     }

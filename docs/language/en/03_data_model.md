@@ -26,6 +26,7 @@ Every expression has a definite type at compile time; the graph contains only co
 | Map, set | `Map<K, V>`, `Set<T>` | See 3.6 |
 | Enum | `Shape`, `Option<int>` | See 3.5 |
 | No value | `void` | Return type of a function that returns no value; its only value prints as `null` |
+| Bottom | `never` | The type with no value: `fail<'Kind'>(message)` and `exit(code)` have it, and it fits everywhere (it is assignable to any type, joins a branch and is inferred), but no expression gives a value of it |
 | Module types | A type name introduced by a module (e.g. `Json`); a numeric array is not a module type of its own (the transitional `Tensor` name is deleted, and writing it is an unknown name) | Introduced by a module; the name and the arguments in angle brackets are interpreted by the type itself, and the representation is the module's |
 There is no type `any`: after compilation every value has a definite type (design principles 5.10). Writing `any` in any type position is, like any other unknown type name, the compile-time error `SemanticDiag::UnresolvedTypeReference`; a parameter that takes several types uses a type parameter (see [7.5](07_statements.md#75-generic-functions)), and values of different types side by side go in a tuple or a struct.
 
@@ -222,7 +223,7 @@ func positive(x: int): int? {
 }
 
 func safe_div(a: int, b: int): int! {
-    return if b == 0 then { throw error('DivByZero', 'the divisor is zero') } else a / b
+    return if b == 0 then { return error('DivByZero', 'the divisor is zero') } else a / b
 }
 
 func main(): int sync {
@@ -249,7 +250,7 @@ Rules:
   - a declaration with a type, `let x: T? = v`;
   - the elements of an array: `let xs: (int?)[] = [1, null, 3]`; without a written type, an array literal with a `null` among its elements is an array of `T?` (`[1, null, 3]` is an `(int?)[]`);
   - the two arms of a branch: when one arm is a `T` and the other is `null` or a `T?`, the branch is a `T?` (`if c then 1 else null` is an `int?`); likewise `T` and `T!`. An arm that has no value at all (`void`: a call of a function that returns nothing, an empty block) counts as `null`: the branch is a `T?` and that arm gives `null`;
-  - `return v` in a function whose return type is declared as `T?`/`T!` (`throw e` gives an error).
+  - `return v` in a function whose return type is declared as `T?`/`T!` (`return e` hands out an error value).
 
   `v as T?` can still be written. Several levels are entered at once: `let x: int?! = 5`. On the graph each level is a conversion node (`CAST`); the compiler adds the node a program would write with `as`, and the graph is the same.
 - **Never the other way.** A `T?` or `T!` used as a `T` must be opened; an `int?` does not become a `float?` either, and numbers are still not converted implicitly. The arguments of built-in operators (`append`, `println`, ...) are not such a position: their parameter types are computed from the arguments by C++ type rules, so there is no target type to enter; write `as` there.
@@ -260,6 +261,8 @@ Rules:
 - Built-in fallible functions: `parse_int(s)`, `parse_float(s)`, `read_text(path)`, `remove(path)` and `remove_dir(path)` of the `fs` module, `decode` and `decode_as` of the `json` module. `error(kind, message)` constructs an error value and records the location of the call.
 
 **Errors and faults are two different things.** Only an operation declared to return `T!` produces an error value. Division by zero, an out-of-range subscript and too deep a recursion are faults: the program terminates with a location, and `!!` cannot catch it (see [4.6](04_execution_model.md#46-faults-exit-and-resource-limits)).
+
+To raise a fault from a function body, write `fail<'Kind'>('message')`: it is an expression of type `never` (it has no value), the kind is the name in angle brackets, and `attempt` isolates it into an error value.
 
 **Behaviour of the current implementation, not yet decided**: a `match` on these two forms has exactly two cases; they can be printed but, apart from a `T?` with `null`, not compared with `==`.
 

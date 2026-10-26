@@ -73,9 +73,10 @@ enum class SemanticDiag : uint32_t {
     FunctionNameAsValue = 0x000060,
     // Nullable and fallible values (design principles 3.8;
     // docs/technical/29_nullable_and_fallible_values.md).
+    // 0x000070 and 0x000071 are retired: there is no `throw` statement, and an error value
+    // handed to a function that declares a `T!` is the failed arm of that `T!` (design
+    // principles 3.9). The numbers are not reused.
     // 0x000074: empty. The number is not reused.
-    ThrowOutsideFallible  = 0x000070,
-    ThrowNotAnError       = 0x000071,
     TaggedTypeNesting     = 0x000072,
     TaggedValueNotOpened  = 0x000073,
     TaggedOperandMismatch = 0x000075,

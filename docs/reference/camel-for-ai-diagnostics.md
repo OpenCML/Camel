@@ -59,7 +59,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 
 | `ComparisonAcrossLines` | This '>' is read as a comparison with the next line, which starts with {0}: two statements may have been joined into one. |
 
-**Semantic — errors** (`SemanticDiag`) — 213
+**Semantic — errors** (`SemanticDiag`) — 211
 
 | `Redeclaration` | Redeclaration of reference: '{0}'. |
 | `ModuleNotFound` | Module '{0}' not found. {1} |
@@ -101,8 +101,6 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `TypeFunctionArguments` | The type function '{0}' cannot be used this way: {1}. |
 | `GenericFunctionUnsupported` | The generic function '{0}' cannot be {1}. |
 | `FunctionNameAsValue` | '{0}' is used as a value here, but it names {1}, not one function. |
-| `ThrowOutsideFallible` | 'throw' needs a function declared to return 'T!': {0}. |
-| `ThrowNotAnError` | 'throw' takes an error value, not a value of type '{0}'. |
 | `TaggedTypeNesting` | The type '{0}' marks '{1}' twice. |
 | `TaggedValueNotOpened` | A value of type '{0}' cannot be used here: {1}. |
 | `TaggedOperandMismatch` | '{0}' cannot be applied here: {1}. |
@@ -290,11 +288,12 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `DimensionNameUsedOnce` | The dimension name '{0}' is written once in this signature, so it relates nothing. |
 | `TypeVariableUnused` | The type parameter '{0}' is declared at the head but never written in the signature. |
 
-**Run time and passes — errors** (`RuntimeDiag`) — 35
+**Run time and passes — errors** (`RuntimeDiag`) — 36
 
 | `RuntimeError` | An error has occurred: {0}. |
 | `DivisionByZero` | Attempted division by zero. |
 | `IndexOutOfRange` | Index {0} is out of range for {1} of length {2}. |
+| `ProgramFault` | {0} |
 | `MaxRecursionDepthExceeded` | Maximum recursion depth ({1}) exceeded when evaluating graph '{0}'. |
 | `TensorDimensionMismatch` | Array shape mismatch in '{0}': {1}. |
 | `UnrecognizedGraphPass` | Unrecognized graph rewriting/scheduling/translation pass '{0}'. |

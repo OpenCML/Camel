@@ -9,7 +9,7 @@ module optional_logic
 
 func maybe(x: int): int! { return x }
 
-func fail(): int! { throw error('Probe', 'always') }
+func fail(): int! { return error('Probe', 'always') }
 
 func main(): int sync {
     let o: bool? = true || false

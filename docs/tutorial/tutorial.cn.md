@@ -627,7 +627,7 @@ Camel 没有异常，没有 `try`/`catch`。可能失败的函数把返回类型
 
 func safe_div(a: int, b: int): int! {
     return if b == 0 then {
-        throw error('DivByZero', 'the divisor is zero')
+        return error('DivByZero', 'the divisor is zero')
     } else {
         return a / b
     }
@@ -662,7 +662,7 @@ DivByZero: the divisor is zero
 error DivByZero: the divisor is zero
 ```
 
-- **`throw e` 是返回一个错误值**，与 `return` 是同一种结构。它不展开调用栈；调用方拿到的就是一个 `int!` 的值。
+- **交出一个错误值用 `return e`**：它不展开调用栈；调用方拿到的就是一个 `int!` 的值。
 - `int!` 不能当 `int` 用，必须先拆开：
   - `a !! b`：出错取 `b`，否则取里面的值；
   - `x -> f`：出错就把错误原样传下去，否则调用 `f`，可以连成一串；

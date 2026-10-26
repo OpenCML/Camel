@@ -5,5 +5,5 @@ module main
 // recorded position is the start of the pipeline, not of the callee.
 
 func main(): int! sync {
-    throw 'Zero'->error('zero')
+    return 'Zero'->error('zero')
 }

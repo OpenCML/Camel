@@ -14,7 +14,7 @@ func half(x: int): int? {
 
 func check(x: int): int! {
     return if x < 10 then x else {
-        throw error('TooBig', 'ten or more')
+        return error('TooBig', 'ten or more')
     }
 }
 

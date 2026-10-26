@@ -363,10 +363,11 @@ error: (kind: string, message: string) => Error
 ```
 
 An Error value of the given kind with the given message; the compiler adds the source
-position of the call. `throw error(...)` returns it from a function declared `T!`.
+position of the call. `return error(...)` in a function declared `T!` hands it out as that
+type's failed form.
 
 - Pure.
-- Example: `throw error('RangeError', 'too large')`
+- Example: `return error('RangeError', 'too large')`
 
 ### Input and output
 
@@ -725,6 +726,22 @@ the program with a located diagnostic. `attempt` isolates it at the boundary of 
 (design principles 3.9; docs/technical/33_fault_isolation.md). It is a function transform:
 `attempt(f)` is the function whose parameters are f's and whose calls are calls of f made
 inside the boundary. The name is provisional.
+
+#### `fail`
+
+```camel
+fail: <Kind: string> (message: string) => never
+```
+
+Raises a fault of the kind the program writes, with the message it gives. The call gives no
+value at all: its type is the bottom type `never` (design principles 3.9), so it may stand
+where any type is expected, and a branch arm that raises the fault leaves the branch's type
+to the other arm. The fault is raised where the call is written, and `attempt` isolates it
+into an error value whose kind is the name in the angle brackets.
+
+- Pure.
+- Failure: fault `<Kind>` with the message, which `attempt` isolates.
+- Example: `fail<'BadLimit'>('the limit must be positive')`
 
 #### `attempt`
 
@@ -4239,11 +4256,12 @@ never folded away and the work of other ready nodes goes on meanwhile.
 #### `exit`
 
 ```camel
-exit: (code: int) => void uses process
+exit: (code: int) => never uses process
 ```
 
 Ends the program with the given exit code, after the buffered output is written and the
-external resources are released. Nothing that is written after the call runs.
+external resources are released. Nothing that is written after the call runs. It gives no
+value at all: its type is the bottom type `never` (design principles 3.9).
 
 - Example: `exit(2)`
 
