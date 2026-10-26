@@ -426,10 +426,10 @@
       ]
     },
     "carrier-punctuation": {
-      "comment": "carrier: identList | parentIdents | bracedIdents | bracketIdents",
+      "comment": "carrier: identList | parentIdents",
       "patterns": [
         { "name": "punctuation.separator.comma.camel", "match": "," },
-        { "name": "punctuation.definition.binding-pattern.camel", "match": "[(){}\\[\\]]" }
+        { "name": "punctuation.definition.binding-pattern.camel", "match": "[()]" }
       ]
     },
     "parameter-name": {

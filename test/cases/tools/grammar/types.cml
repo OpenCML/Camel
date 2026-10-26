@@ -27,8 +27,8 @@ func sum_pair(p: Pair<int>): int {
 
 func build(): Entry<string, Point> {
     let (a, b) = (1, 2)
-    let { x, y } = { x: a, y: b }
-    let [head, tail] = [a, b]
+    let s = { x: a, y: b }
+    let xs = [a, b]
     var m, n: int, int = 1, 2
     let entry: Entry<string, Point> = { key: 'k', value: { x: x, y: y } }
     let empty: Map<string, int> = [] as Map<string, int>

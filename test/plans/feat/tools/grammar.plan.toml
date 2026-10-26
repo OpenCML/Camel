@@ -120,7 +120,7 @@ timeout_ms = 30000
 
 [[tests]]
 name = "grammar.scopes.types"
-desc = "Scopes of type declarations, type parameters, built-in type names and the carriers of let / var declarations."
+desc = "Scopes of type declarations, type parameters, built-in type names, and the forms of a let / var declaration: one name, several names, or the elements of a tuple written in parentheses (07, 7.2)."
 kind = "snapshot"
 tool = "node"
 case = "../../../cases/tools/grammar/types.cml"
