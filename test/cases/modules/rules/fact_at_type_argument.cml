@@ -1,0 +1,50 @@
+/**
+ * `fact` head type parameters (rewrite design 7.5): one declaration, one fact per type argument.
+ *
+ * `depth::<T>(v: T)` counts how many additions a value of type `T` is under: a constant is 1, an
+ * addition is one more than the deepest operand, any other operator merges its operands.
+ *
+ * A rule's parameter is declared `y: T`, so the node its condition hands the query has the value
+ * type `T`: `depth(y)` is read at the type argument the declaration gives, without writing one,
+ * the same way any generic call infers its type arguments from its arguments (design principles
+ * 5.9). The fact body's own `x` is a node of a case, which states no value type, so the query
+ * there writes `depth::<T>(x)`.
+ *
+ * The rule `drop_deep` rewrites `x + y` to `x` only where `depth(y) > 1`, which is where `y` is
+ * itself an addition: `target` loses its outer addition and `keep` keeps its one.
+ */
+module fact_at_type_argument
+import { Program, Node, Graph, graphs, nodes, op, op_name, name } from graph
+import { max } from math
+import { rewrite } from rewrite
+
+fact depth::<T>(v: T): int match v {
+    case const c => 1
+    case x + y   => max(depth::<T>(x), depth::<T>(y)) + 1
+    case _       => 0
+} join max
+
+rule drop_deep::<T>(y: T, x: T) when depth(y) > 1 { x + y => x }
+
+func opText(n: Node): string {
+    return match op(n) {
+        case null => ''
+        case o => op_name(o)
+    }
+}
+
+func addsOf(p: Program, function: string): int {
+    let found = graphs(p)->filter<(g: Graph): bool => name(g) == function>
+    let adds = nodes(found[0])->filter<(n: Node): bool => opText(n) == ':op/add_l'>
+    // A node read out of a graph states no value type, so the query writes the type argument.
+    return loop total = 0 for n in adds do total + depth::<int>(n)
+}
+
+export func apply(p: Program): Program! {
+    return rewrite(p, [drop_deep])
+}
+
+export func report(p: Program): Program! sync {
+    println('target', addsOf(p, 'target'), 'keep', addsOf(p, 'keep'))
+    return p
+}

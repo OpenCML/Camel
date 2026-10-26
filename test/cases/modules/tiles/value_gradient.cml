@@ -2,10 +2,12 @@ module tiles_value_gradient
 import { reshape, sum, mean, abs, zeros } from tensor
 import { with_grad } from autodiff
 import { inspect, benchmark, run_preferred_resident, download } from tiles
+// A whole-tensor reduction answers the operand's element type (design principles 7.3): the f64
+// reading this case compares against is the conversion each call site writes.
 with <x: f32[..]>
-func loss(): float { return sum(x * x) }
-func total(x: f32[..]): float { return sum(x) }
-func average(x: f32[..]): float { return mean(x) }
+func loss(): float { return float(sum(x * x)) }
+func total(x: f32[..]): float { return float(sum(x)) }
+func average(x: f32[..]): float { return float(mean(x)) }
 func normalize(x: f32[..]): f32[..] { return x / f32(sum(x)) }
 func mixed(x: f32[..]): (float, f32[..], float) { return (float(sum(x)), x + 1.0, 1.0000000000000002) }
 func main(): int sync {
