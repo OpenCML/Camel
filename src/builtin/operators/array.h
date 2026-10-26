@@ -59,3 +59,16 @@ slot_t __array_max_bf__(ArgsView &with, ArgsView &norm, camel::core::context::Co
 slot_t __array_max_f6__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __array_max_b__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __array_max_s__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+// The layout atoms and the reductions along an axis (builtin/operators/array_axis.cpp): generic
+// declarations of stdlib/array.cml, one executor each, reading the element type of the array.
+slot_t __array_shape__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __array_numel__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __array_dim__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __array_elements__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __array_to_bytes__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __array_sum_axis__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __array_mean_axis__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __array_min_axis__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __array_max_axis__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __array_argmax_axis__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __array_argmin_axis__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
