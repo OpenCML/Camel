@@ -86,7 +86,7 @@ verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.output
 assert(text.includes("impure operator 'tensor:randn' cannot be exported"), 'missing impure-operator detail')
-assert(/at [^ ]*export_impure[.]cml:13:51[)]/.test(text), 'missing source position of the impure call')
+assert(/at [^ ]*export_impure[.]cml:13:56[)]/.test(text), 'missing source position of the impure call')
 assert(!text.includes('unreachable'), 'export must fail before the next statement')
 }
 """

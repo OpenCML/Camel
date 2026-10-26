@@ -10,8 +10,6 @@ import { get_env } from env
 
 func main(): int sync {
     let x = reshape([1.0, 2.0, 3.0, 4.0], [2, 2])
-    // `randn` answers f32 and the exported function reads f64: the widening is written, since a
-    // pair of two element types matches no arm (design principles 5.1).
     export_model((t: float[..]): float[..] => t + cast(randn([2, 2]), "f64"), x, get_env('ONNX_OUT'))
     println('unreachable')
     return 0
