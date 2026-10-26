@@ -1,0 +1,9 @@
+/// `thing.py` and no `thing.cml`: the only same-stem file is Python, and a Python module is not a
+/// Camel module (design principles 10.2: only `.cml` and `.cmo` name a module file). The import
+/// fails; it does not read the Python file as source and report a syntax error from inside it.
+import { value } from thing
+
+func main(): int sync {
+    println(value)
+    return 0
+}

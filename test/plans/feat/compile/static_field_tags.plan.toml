@@ -34,7 +34,7 @@ case = "../../../cases/compile/static_expansion/tags_function_argument.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TagFunctionArgumentNotReadable"
-expect_stdout_contains = ["The tag 'main::rule' takes a function for its parameter 'f', and a 'static' head cannot give a function value yet.", "carries the function as its graph reference: an internal number, not a value the language has"]
+expect_stdout_contains = ["The tag 'tags_function_argument::rule' takes a function for its parameter 'f', and a 'static' head cannot give a function value yet.", "carries the function as its graph reference: an internal number, not a value the language has"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
@@ -46,6 +46,6 @@ case = "../../../cases/compile/static_expansion/tags_field_name_conflict.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TagFieldNameAmbiguous"
-expect_stdout_contains = ["Two tags on this field are written 'width': 'main::width' and 'tags_second_width::width'.", "Rename one of them, or write only one of the two."]
+expect_stdout_contains = ["Two tags on this field are written 'width': 'tags_field_name_conflict::width' and 'tags_second_width::width'.", "Rename one of them, or write only one of the two."]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000

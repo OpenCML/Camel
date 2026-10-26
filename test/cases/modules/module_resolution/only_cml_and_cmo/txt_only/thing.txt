@@ -1,0 +1,3 @@
+// A text file by its name only, and valid Camel text as well, for the same reason as the
+// Markdown fixture: the lookup must not reach it at all.
+export let value = 700
