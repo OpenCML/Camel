@@ -2082,7 +2082,7 @@ timeout_ms = 12000
 
 [[tests]]
 name = "grad_function_value_parameter.default"
-desc = "Refused: the function called is a parameter of the differentiated function itself. The value is called twice (11:13 and 12:22); a run-time refusal is a fault, and a run stops at the first fault, so one diagnostic, at the first call in source order. The position is the diagnostic's own field and is not written into the message. Under: the default run (grad runs with the program)."
+desc = "Refused: the function called is a parameter of the differentiated function itself. The value is called twice (11:13 and 12:22); a run-time refusal is a fault, and a run stops at the first fault, so one diagnostic, at the first call in source order. The related position names the parameter the function value came in through: the port of the parameter carries the position the parameter is written at (10:11). Under: the default run (grad runs with the program)."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/grad_function_value_parameter.cml"
 args = ["${case}"]
@@ -2095,6 +2095,7 @@ const errors = text.split('\n').filter((line) => line.includes('[Error]'))
 assert(errors.length === 1, 'expected one diagnostic (a run-time refusal stops the run at the first): ' + text)
 assert(errors[0].includes('grad_function_value_parameter.cml:11:13'), 'the diagnostic is not located at the first call in source order (11:13): ' + text)
 assert(!/[(]at [^)]*grad_function_value_parameter[.]cml:11:13[)]/.test(text), 'the position is written into the message: ' + text)
+assert(text.includes('[the function value is chosen here at 10:11]'), 'missing the related position of the parameter the function value came in through: ' + text)
 assert(text.includes('the function is a parameter, or a captured value, of the function being differentiated'), 'missing: the function is a parameter, or a captured value, of the function being differentiated in: ' + text)
 }
 """
@@ -2102,7 +2103,7 @@ timeout_ms = 12000
 
 [[tests]]
 name = "grad_function_value_parameter.macro"
-desc = "Refused: the function called is a parameter of the differentiated function itself. The value is called twice (11:13 and 12:22): the compile-time expansion collects every refused call, and the run reports one error, at the first of them in source order. The position is the diagnostic's own field and is not written into the message. Under: std::macro (grad built at compile time)."
+desc = "Refused: the function called is a parameter of the differentiated function itself. The value is called twice (11:13 and 12:22): the compile-time expansion collects every refused call, and the run reports one error, at the first of them in source order. The related position names the parameter the function value came in through: the port of the parameter carries the position the parameter is written at (10:11). Under: std::macro (grad built at compile time)."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/grad_function_value_parameter.cml"
 args = ["${case}", "std::macro"]
@@ -2118,6 +2119,7 @@ assert(!/[(]at [^)]*grad_function_value_parameter[.]cml:(11:13|12:22)[)]/.test(t
 assert(text.includes('the function is a parameter, or a captured value, of the function being differentiated'), 'missing: the function is a parameter, or a captured value, of the function being differentiated in: ' + text)
 assert(text.includes('could not be evaluated by std::macro'), 'not a macro error: ' + text)
 assert(/the macro call is at [^ ]*[.]cml:17:13/.test(text), 'macro call not named: ' + text)
+assert(text.includes('[the function value is chosen here at 10:11]'), 'missing the related position of the parameter the function value came in through: ' + text)
 }
 """
 timeout_ms = 12000
@@ -2232,7 +2234,7 @@ timeout_ms = 12000
 
 [[tests]]
 name = "grad_function_value_recursion.default"
-desc = "Refused: a recursive function passes a function value on to itself. The value is followed into the function once; the call reached through the recursive call is refused, located at that call (7:52), and the reason names the recursive function. One call, one diagnostic at it; the position is the diagnostic's own field and is not written into the message. Under: the default run (grad runs with the program)."
+desc = "Refused: a recursive function passes a function value on to itself. The value is followed into the function once; the call reached through the recursive call is refused, located at that call (7:52), and the reason names the recursive function. The related position names the parameter the function value came in through: the port of the parameter carries the position the parameter is written at (6:14). Under: the default run (grad runs with the program)."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/grad_function_value_recursion.cml"
 args = ["${case}"]
@@ -2248,13 +2250,14 @@ assert(!/[(]at [^)]*grad_function_value_recursion[.]cml:7:52[)]/.test(text), 'th
 assert(text.includes('the function is a parameter of'), 'missing: the function is a parameter of in: ' + text)
 assert(text.includes('iterate'), 'missing: iterate in: ' + text)
 assert(text.includes('a recursive function that passes it on to itself'), 'missing: a recursive function that passes it on to itself in: ' + text)
+assert(text.includes('[the function value is chosen here at 6:14]'), 'missing the related position of the parameter the function value came in through: ' + text)
 }
 """
 timeout_ms = 12000
 
 [[tests]]
 name = "grad_function_value_recursion.macro"
-desc = "Refused: a recursive function passes a function value on to itself. The value is followed into the function once; the call reached through the recursive call is refused, located at that call (7:52), and the reason names the recursive function. One call, so compile-time expansion reports one diagnostic, at it, with no position in the message. Under: std::macro (grad built at compile time)."
+desc = "Refused: a recursive function passes a function value on to itself. The value is followed into the function once; the call reached through the recursive call is refused, located at that call (7:52), and the reason names the recursive function. The related position names the parameter the function value came in through, whose port carries the position the parameter is written at (6:14). Under: std::macro (grad built at compile time)."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/grad_function_value_recursion.cml"
 args = ["${case}", "std::macro"]
@@ -2272,6 +2275,7 @@ assert(text.includes('iterate'), 'missing: iterate in: ' + text)
 assert(text.includes('a recursive function that passes it on to itself'), 'missing: a recursive function that passes it on to itself in: ' + text)
 assert(text.includes('could not be evaluated by std::macro'), 'not a macro error: ' + text)
 assert(/the macro call is at [^ ]*[.]cml:17:13/.test(text), 'macro call not named: ' + text)
+assert(text.includes('[the function value is chosen here at 6:14]'), 'missing the related position of the parameter the function value came in through: ' + text)
 }
 """
 timeout_ms = 12000
