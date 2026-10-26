@@ -1,0 +1,38 @@
+/**
+ * The writings the fact rules leave open stay compilable, and their values are real: a `const` case
+ * whose type comes from the head (`sign`, whose first parameter is the value the fact is about), a
+ * `const` case that writes the type of its constant itself (`one`), a case whose pattern binds
+ * variables (`x + y`), the required `join`, and `case _` last (rewrite design 7.5).
+ *
+ * `mul_by_sign` fires where `sign(y) == 2`, so `left(3)` -- the product `3 * 2` -- is rewritten to
+ * `3 + 100` and the program prints 103 instead of 106.
+ */
+module fact_legal_forms
+
+import { max } from math
+import { Program } from graph
+import { rewrite } from rewrite
+
+fact sign(v: int): int match v {
+    case const c => c
+    case _       => 0
+} join max
+
+fact one: int match v {
+    case const c: int => c
+    case x + y        => one(x) + one(y)
+    case _            => 0
+} join max
+
+rule mul_by_sign(y: int, x: int) when sign(y) == 2 { x * y => x + 100 }
+
+export func apply(p: Program): Program! {
+    return rewrite(p, [mul_by_sign])
+}
+
+func left(x: int): int { return x * 2 }
+
+func main(): int sync {
+    println(left(3))
+    return 0
+}

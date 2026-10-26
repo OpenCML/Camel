@@ -1367,6 +1367,13 @@ class Builder {
     void settleGenericRuleMaker(
         std::vector<Argument> &normInputs, camel::core::type::type_vec_t &normTypes,
         const GCT::node_ptr_t &call);
+    /// The maker of a fact whose head declares type parameters (`fact range::<T>(v: T)`): the
+    /// functions the fact is made of are the generic ones the front end named, the type arguments
+    /// are the ones the query's own instance was resolved with, and they name the fact
+    /// (`range<int>`), because two instances at two types are two facts (rewrite design 7.5).
+    void settleGenericFactMaker(
+        std::vector<Argument> &normInputs, camel::core::type::type_vec_t &normTypes,
+        const GCT::node_ptr_t &call);
     /// The instance of one registered generic rule at `types`: declared public (above), since the
     /// context's table of generic rules calls it.
     /// A body build inside a speculative scope: while this lives, what the body reports goes to the

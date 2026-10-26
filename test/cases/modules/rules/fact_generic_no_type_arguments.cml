@@ -1,0 +1,29 @@
+/**
+ * A fact whose head declares type parameters is asked for at a type: `literal_of::<int>(n)`. A
+ * query is asked on a node, and a node says nothing about the type the fact is about -- it stands
+ * for the value it is the node of, not for a value of a type (design principles 5.9) -- so
+ * `literal_of(n)` fixes none of the fact's type arguments and the call is reported where it is
+ * written, with the type arguments to write.
+ */
+module fact_generic_no_type_arguments
+import { Program, Node, Graph, graphs, nodes, name } from graph
+import { max } from math
+
+fact literal_of::<T>(v: T): int match v {
+    case const c: T => 1
+    case _          => 0
+} join max
+
+func nodesOf(p: Program, function: string): Node[] {
+    let found = graphs(p)->filter<(g: Graph): bool => name(g) == function>
+    return nodes(found[0])
+}
+
+/// The type argument is left out: the declaration is the report.
+func literals(p: Program, function: string): int {
+    return loop total = 0 for n in nodesOf(p, function) do total + literal_of(n)
+}
+
+func main(): int sync {
+    return 0
+}
