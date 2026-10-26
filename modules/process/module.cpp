@@ -45,7 +45,7 @@ bool ProcessModule::load() {
         camel::core::OperatorTable::instance().declareResources(
             "process",
             {
-                {"exit", externalAmbient("process::process", AccessMode::ReadModifyWrite)},
+                {"exit", externalAmbient("process:process", AccessMode::ReadModifyWrite)},
                 {"sleep", externalAmbient("clock", AccessMode::Read)},
                 {"user_name", externalAmbient("env", AccessMode::Read)},
                 {"cpu_count", externalAmbient("env", AccessMode::Read)},
