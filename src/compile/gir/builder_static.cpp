@@ -277,6 +277,13 @@ void Builder::walkStaticBodyNames(
         if (!found && restBindingNamed(node->name()) != nullptr) {
             found = true;
         }
+        // The value an arrow hands to the call it names (`$passed`, design principles 3.9) is the
+        // arrow's own name, bound where the arrow is built and not by the source: a body read
+        // ahead of its instance has nothing to look it up in, and the call it stands in is what
+        // receives it.
+        if (!found && node->name() == GCT::kPassedValueName) {
+            found = true;
+        }
         if (!found && staticValueNamed(node->name()).has_value()) {
             found = true;
         }
@@ -1275,7 +1282,7 @@ node_handle_t Builder::visitStaticLoopNode(const GCT::node_ptr_t &gct) {
                     throw BuildAbortException();
                 }
             }
-            // A body that ends with `return` (or `throw`) leaves the function; the rounds after
+            // A body that ends with `return` leaves the function; the rounds after
             // it are unreachable and keep the state as it was.
         } else if (value != nullptr) {
             Type *bodyType = valueTypeOf(nodeTypeOf(value));

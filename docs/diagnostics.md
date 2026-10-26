@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-288 diagnostics: 271 errors, 17 warnings. 15 carry a machine-applicable edit, 273 say why they carry none.
+287 diagnostics: 270 errors, 17 warnings. 15 carry a machine-applicable edit, 272 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -85,8 +85,6 @@ prints one entry.
 | `0x03000056` | [SemanticDiag::TypeFunctionArguments](#typefunctionarguments) | Error | no |
 | `0x03000057` | [SemanticDiag::GenericFunctionUnsupported](#genericfunctionunsupported) | Error | no |
 | `0x03000060` | [SemanticDiag::FunctionNameAsValue](#functionnameasvalue) | Error | no |
-| `0x03000070` | [SemanticDiag::ThrowOutsideFallible](#throwoutsidefallible) | Error | no |
-| `0x03000071` | [SemanticDiag::ThrowNotAnError](#thrownotanerror) | Error | no |
 | `0x03000072` | [SemanticDiag::TaggedTypeNesting](#taggedtypenesting) | Error | no |
 | `0x03000073` | [SemanticDiag::TaggedValueNotOpened](#taggedvaluenotopened) | Error | no |
 | `0x03000075` | [SemanticDiag::TaggedOperandMismatch](#taggedoperandmismatch) | Error | no |
@@ -304,6 +302,7 @@ prints one entry.
 | `0x040001A9` | [RuntimeDiag::GpuScopeMacroNotExpanded](#gpuscopemacronotexpanded) | Error | no |
 | `0x040001AA` | [RuntimeDiag::GraphNoDeviceProgram](#graphnodeviceprogram) | Error | no |
 | `0x040001AB` | [RuntimeDiag::DeviceNotSelected](#devicenotselected) | Error | no |
+| `0x040001AC` | [RuntimeDiag::ProgramFault](#programfault) | Error | no |
 | `0x0410000F` | [RuntimeDiag::PassesNeverRun](#passesneverrun) | Warn | no |
 | `0x04100015` | [RuntimeDiag::ConstantExpressionFaults](#constantexpressionfaults) | Warn | no |
 | `0x04100016` | [RuntimeDiag::TranslationLinksRuntime](#translationlinksruntime) | Warn | no |
@@ -2586,83 +2585,6 @@ func main(): int sync {
     let t = (over, 1)
     let k = if c then println else inc
     println('never printed')
-    return 0
-}
-```
-
-### ThrowOutsideFallible
-
-`0x03000070` · Error · `SemanticDiag::ThrowOutsideFallible`
-
-**Fix**
-
-None: choice: the repair is a decision only the writer can make
-
-**Message**
-
-```text
-'throw' needs a function declared to return 'T!': {0}.
-```
-
-**Help**
-
-```text
-'throw e' returns an error value, as 'return' returns a value, so the function it stands in must declare a fallible return type, for example 'func f(): int! { ... }'. It does not unwind to a caller.
-```
-
-**Example** (`test/cases/compile/semantic/throw_outside_fallible.cml`, run as `camel test/cases/compile/semantic/throw_outside_fallible.cml`)
-
-```camel
-module throw_outside_fallible
-
-func check(x: int): int {
-    return if x > 0 then x else {
-        println('never printed')
-        throw x
-    }
-}
-
-func main(): int sync {
-    println('never printed either')
-    println(check(1))
-    return 0
-}
-```
-
-### ThrowNotAnError
-
-`0x03000071` · Error · `SemanticDiag::ThrowNotAnError`
-
-**Fix**
-
-None: choice: the repair is a decision only the writer can make
-
-**Message**
-
-```text
-'throw' takes an error value, not a value of type '{0}'.
-```
-
-**Help**
-
-```text
-Make one with 'error(kind, message)', for example 'throw error("ParseError", "not a number")', or hand on the one a 'case error e' bound.
-```
-
-**Example** (`test/cases/compile/tagged/err_throw_value.cml`, run as `camel test/cases/compile/tagged/err_throw_value.cml`)
-
-```camel
-module err_throw_value
-
-func check(x: int): int! {
-    if x > 0 then { return x } else {
-        throw 'x is not positive'
-    }
-}
-
-func main(): int sync {
-    println('never printed')
-    println(check(1) !! 0)
     return 0
 }
 ```
@@ -10016,7 +9938,7 @@ module error_thrown
 
 func check(x: int): int! {
     if x < 0 then {
-        throw error('Negative', 'the argument is negative')
+        return error('Negative', 'the argument is negative')
     } else {
         return x
     }
@@ -10436,6 +10358,43 @@ func pair(x: f32[3]): f32[3] {
 func main(): int sync {
     let x = reshape([1.0, 2.0, 3.0] as f32[], [3])
     println(benchmark<pair>(x))
+    return 0
+}
+```
+
+### ProgramFault
+
+`0x040001AC` · Error · `RuntimeDiag::ProgramFault`
+
+**Fix**
+
+None: runtime: the fault is raised while the program runs, and where to check the premise is the program's logic
+
+**Message**
+
+```text
+{0}
+```
+
+**Help**
+
+```text
+The fault was raised by the program itself, and its message says which premise it states.
+```
+
+**Example** (`test/cases/consistency/fail_never/fail_located.cml`, run as `camel test/cases/consistency/fail_never/fail_located.cml ${backend}`)
+
+```camel
+module fail_located
+
+func limit(q: float): float {
+    return if q > 0.0 then q else fail<'BadLimit'>('the limit must be positive')
+}
+
+func main(): int sync {
+    println('before')
+    println(limit(-1.0))
+    println('not reached')
     return 0
 }
 ```

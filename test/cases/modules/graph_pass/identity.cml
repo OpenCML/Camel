@@ -13,7 +13,7 @@ export func report(p: Program): Program! sync {
 }
 
 export func refuse(p: Program): Program! {
-    throw error('NotSupported', 'this program has too few graphs')
+    return error('NotSupported', 'this program has too few graphs')
 }
 
 export func helper(x: int): int {

@@ -19,9 +19,10 @@ export func sleep(seconds: float): void
 export resource process
 
 /// Ends the program with the given exit code, after the buffered output is written and the
-/// external resources are released. Nothing that is written after the call runs.
+/// external resources are released. Nothing that is written after the call runs. It gives no
+/// value at all: its type is the bottom type `never` (design principles 3.9).
 /// @example exit(2)
-export func exit(code: int): void uses process
+export func exit(code: int): never uses process
 
 /// The name of the user the process runs as.
 /// @effect reads the environment

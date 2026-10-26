@@ -36,7 +36,7 @@ func portOf(p: Program, function: string): Node {
 /// was made, and the answer says the rule fired there as `cancel_wide_addend<int>`.
 export func why_wide(p: Program): Program! sync {
     return match p->run<[cancel_wide_addend], explain: true> {
-        case error e => { throw e }
+        case error e => { return e }
         case r => sync {
             return match why_not(r, cancel_wide_addend, portOf(r.result, 'i64_wide')) {
                 case error e => sync { println(e); return r.result }
@@ -50,7 +50,7 @@ export func why_wide(p: Program): Program! sync {
 /// could be made, and the answer repeats why.
 export func why_narrow(p: Program): Program! sync {
     return match p->run<[cancel_wide_addend], explain: true> {
-        case error e => { throw e }
+        case error e => { return e }
         case r => sync {
             return match why_not(r, cancel_wide_addend, portOf(r.result, 'i32_zero')) {
                 case error e => sync { println(e); return r.result }

@@ -60,17 +60,17 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 10000
 
 [[tests]]
-name = "semantic.throw_outside_fallible"
-desc = "`throw` returns an error value, so the function around it must declare a `T!`: in a function returning `int` it is ThrowOutsideFallible at the statement. (It used to be reported as not supported, and before that compiled as `return`.)"
+name = "semantic.throw_is_a_name"
+desc = "`throw` is not a keyword and not a statement: it is an ordinary name that nothing declares, so writing it is an unresolved reference at the name. (The shape it was written in used to hand an error value out; that is now a `return` of an error value in a function declared `T!`.)"
 kind = "negative"
-case = "../../../cases/compile/semantic/throw_outside_fallible.cml"
+case = "../../../cases/compile/semantic/throw_is_a_name.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ThrowOutsideFallible"
-expect_diagnostic_code = "0x03000070"
-expect_diagnostic_line = 10
+expect_diagnostic_name = "SemanticDiag::UnresolvedReference"
+expect_diagnostic_code = "0x0300000B"
+expect_diagnostic_line = 12
 expect_diagnostic_column = 9
-expect_output_contains = ["'throw' needs a function declared to return 'T!': the function around it returns 'int'."]
+expect_output_contains = ["Unresolved reference: 'throw'."]
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000

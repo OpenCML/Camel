@@ -376,6 +376,11 @@ std::optional<std::string> ProgramValues::type(const Type *t) {
         return "rt::Str";
     case TypeCode::Void:
         return "void";
+    // The bottom type `never` (design principles 3.9): nothing of it reaches C++, which has
+    // no type for a value that does not exist; a call that never returns is emitted as one
+    // that returns nothing.
+    case TypeCode::Never:
+        return "void";
     default:
         break;
     }

@@ -1,5 +1,5 @@
 /**
- * `return` and `throw` in an arm of an `if` / `match` whose value nothing uses. An arm is a
+ * `return` in an arm of an `if` / `match` whose value nothing uses. An arm is a
  * graph of its own: the exit ends the arm and gives the value of the branch, and when the
  * branch is a statement that value goes nowhere. Each such exit gets the warning
  * ExitInUnusedBranch; what the program does is unchanged (every function here goes on to its
@@ -9,7 +9,7 @@ module unused_arm_exit
 
 // The exits of both arms are lost: the function returns 0 for every b.
 func safe_div(a: int, b: int): int! {
-    if b == 0 then sync { throw error('DivByZero', 'the divisor is zero') } else sync { return a / b }
+    if b == 0 then sync { return error('DivByZero', 'the divisor is zero') } else sync { return a / b }
     return 0
 }
 

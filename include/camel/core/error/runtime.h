@@ -138,7 +138,7 @@ class RuntimeFault : public std::exception {
         RuntimeDiag diag, std::vector<std::string> formatArgs = {}, std::string detail = "",
         std::exception_ptr cause = nullptr, ExecutionSiteHint hint = {},
         RuntimeFaultPolicy policy = RuntimeFaultPolicy::AbortCurrentExecution,
-        std::vector<CarriedReport> carried = {});
+        std::vector<CarriedReport> carried = {}, std::string kind = {});
 
     template <typename... Args> static RuntimeFault make(RuntimeDiag diag, Args &&...args) {
         std::vector<std::string> formatArgs;
@@ -148,6 +148,11 @@ class RuntimeFault : public std::exception {
     }
 
     RuntimeDiag diag() const { return diag_; }
+    /// The kind of the fault as the program wrote it (`fail<'Kind'>`), or empty for every fault
+    /// the compiler, a kernel or a pass raises. A fault that has one is reported and isolated
+    /// under that kind instead of the name of the catalogue entry it travels as (design
+    /// principles 3.9: `fail` raises a fault whose kind the program chooses).
+    const std::string &kind() const { return kind_; }
     const std::vector<std::string> &formatArgs() const { return formatArgs_; }
     const std::string &detail() const { return detail_; }
     std::exception_ptr cause() const { return cause_; }
@@ -163,6 +168,7 @@ class RuntimeFault : public std::exception {
     RuntimeDiag diag_;
     std::vector<std::string> formatArgs_;
     std::string detail_;
+    std::string kind_;
     std::exception_ptr cause_;
     ExecutionSiteHint hint_;
     RuntimeFaultPolicy policy_;

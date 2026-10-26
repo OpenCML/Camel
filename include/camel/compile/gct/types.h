@@ -34,7 +34,7 @@ enum class NodeKind : uint8_t {
     CASE, // an arm of a branch
     CAST, // a conversion of its child to a type
     ANNO, // an annotation of a function; child: the annotation expression
-    EXIT, // `return` / `throw`; child: the value
+    EXIT, // `return`; child: the value
     EXEC, // a block
     EXPT, // the names a module exports
     LOOP, // a loop (design principles 3.10); children: see Node::loopKind
