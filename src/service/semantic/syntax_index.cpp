@@ -291,8 +291,6 @@ class Walker {
             return;
         }
         switch (node.kind()) {
-        case NK::ModuleDecl:
-            return moduleDecl(cst::ModuleDecl(node));
         case NK::ImportDecl:
             return importDecl(cst::ImportDecl(node));
         case NK::ExportDecl:

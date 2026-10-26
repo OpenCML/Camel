@@ -437,26 +437,18 @@ Value Builder::visitProgram(cst::Program context) {
 
     *root_ << stmts;
 
-    // The tags written before `module` (visitModuleDecl): the module's child, after the
-    // statements, so that the three children a module has always had keep their indices.
-    if (moduleTagUses_) {
-        *root_ << moduleTagUses_;
-    }
-
     LEAVE("Program");
     return root_;
 }
 
 /*
-decl : moduleDecl | importDecl | exportDecl | namespaceDecl | usingNamespaceDecl
+decl : importDecl | exportDecl | namespaceDecl | usingNamespaceDecl
      | dataDecl | funcDecl | typeDecl ;
-namespaceItem : the same without moduleDecl.
+namespaceItem : the same without the module-level declarations.
 The tree has no node for either rule: the declaration itself is the child.
 */
 Value Builder::visitDecl(syn::Node context) {
     switch (context.kind()) {
-    case NK::ModuleDecl:
-        return visitModuleDecl(cst::ModuleDecl(context));
     case NK::ImportDecl:
         return visitImportDecl(cst::ImportDecl(context));
     case NK::ExportDecl:
@@ -534,21 +526,6 @@ Value Builder::visitStmtList(cst::StmtList context) {
     *block << rep;
     LEAVE("StmtList");
     return block;
-}
-
-/*
-moduleDecl : frontMatter? MODULE identDef ;
-*/
-Value Builder::visitModuleDecl(cst::ModuleDecl context) {
-    ENTER("ModuleDecl");
-    Reference ref(context->get<cst::IdentDef>()->text());
-    module_->setRef(ref);
-    // The tags written before `module` (`#gpu module m`, design principles 13.4) are the module's
-    // facts; they are put on the module node by visitProgram, once it exists. The list is made
-    // only when there are uses, so a module that writes none has exactly the tree it had before.
-    moduleTagUses_ = tagUseListOf(context);
-    LEAVE("ModuleDecl");
-    return Value();
 }
 
 /*

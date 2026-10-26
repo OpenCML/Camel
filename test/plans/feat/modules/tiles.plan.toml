@@ -1049,34 +1049,6 @@ normalizers = ["strip_ansi", "normalize_newlines"]
 timeout_ms = 30000
 
 [[tests]]
-name = "gpu_scope.module_tag_propagates"
-desc = "A tag written before `module` (design principles 13.4) is the fact of every top-level function of that module, and a fact a function writes itself is the inner one and wins: `#gpu module m` makes `scaled` a device unit and leaves `kept` (which writes `#cpu`) on the host."
-kind = "behavior"
-case = "../../../cases/modules/tiles/gpu_scope_module.cml"
-args = ["--devices", "cpu", "${case}", "tiles::compile", "std::nvm"]
-envs = ["CUDA_VISIBLE_DEVICES=-1"]
-expect_exit = 0
-verify_script = """
-({ input, assert }) => {
-const NL = String.fromCharCode(10)
-const lines = (input.normalized.stdout + input.normalized.stderr).split(NL).filter(Boolean)
-const rows = lines.filter((line) => line.startsWith('TILES_PLACEMENT '))
-  .map((line) => JSON.parse(line.slice('TILES_PLACEMENT '.length)))
-const row = (name) => {
-  const found = rows.find((r) => r.graph === name)
-  assert(found, `no placement row for ${name}: ${JSON.stringify(rows.map((r) => r.graph))}`)
-  return found
-}
-assert(row('scaled').body === 'gpu-required' && row('scaled').body_fact === 'gpu',
-  `the module's tag did not reach scaled: ${JSON.stringify(row('scaled'))}`)
-assert(row('kept').body === 'host' && row('kept').body_fact === 'cpu',
-  `the function's own tag did not win: ${JSON.stringify(row('kept'))}`)
-assert(input.stdout.includes('value 30.0'), input.stdout)
-}
-"""
-timeout_ms = 30000
-
-[[tests]]
 name = "gpu_scope.macro_needs_the_expansion_pass"
 desc = "A `#gpu` scope that still holds a macro operator is a pipeline defect, and the report names the pass that carries the expansion: `tiles::compile` consumes the derived graph, it never authors it (plan 2.6)."
 kind = "negative"

@@ -396,10 +396,8 @@ static void reportLiteralCastFailure(
 
 node_ptr_t Builder::visitModule(const AST::node_ptr_t &ast) {
     ENTER("Module");
-    // Ensure the AST node is of the expected type
-    ASSERT(ast->type() == AST::LoadType::Module, "Expected ModuleLoad type");
-
-    module_->setDeclaredName(ast->loadAs<AST::ModuleLoad>()->getModuleNameOrEmpty());
+    // The root of a file, and the module the file is; the file's name is its name.
+    ASSERT(ast->type() == AST::LoadType::Module, "Expected the module load at the root");
     // Extract different parts of the module node
     auto importNodes   = ast->atAs<AST::RepeatedLoad>(0);
     auto exportOptNode = ast->atAs<AST::OptionalLoad>(1);

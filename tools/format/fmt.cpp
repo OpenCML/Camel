@@ -147,7 +147,6 @@ void Formatter::insertComment(size_t index, string &result) {
 program : SEP? (decl SEP?)* EOF;
 */
 any Formatter::visitProgram(cst::Program context) {
-    syn::Node moduleDecl;
     vector<syn::Node> head, tail;
     vector<pair<syn::Node, size_t>> headWithIndex, tailWithIndex;
     vector<pair<size_t, size_t>> declTokenRanges, headTokenRanges, tailTokenRanges;
@@ -156,9 +155,7 @@ any Formatter::visitProgram(cst::Program context) {
     const vector<syn::Node> decls = vec(context->nodes());
     for (size_t i = 0; i < decls.size(); i++) {
         auto child = decls[i];
-        if (child.is(NK::ModuleDecl)) {
-            moduleDecl = child;
-        } else if (child.is(NK::ImportDecl)) {
+        if (child.is(NK::ImportDecl)) {
             headWithIndex.push_back({child, i});
         } else {
             tailWithIndex.push_back({child, i});
@@ -209,13 +206,14 @@ any Formatter::visitProgram(cst::Program context) {
     }
 
     string headStr, tailStr;
-    if (moduleDecl) {
-        // The comments above `module` (the description of the file) stay above it; they used
-        // to be dropped. A blank line between two of them is kept: it is what separates the
-        // licence header from the file's own description, and without it the two runs of
-        // comments become one, which changes how the parser reads the file.
+    // The comments above the first declaration (the description of the file) stay above it; they
+    // used to be dropped. A blank line between two of them is kept: it is what separates the
+    // licence header from the file's own description, and without it the two runs of comments
+    // become one, which changes how the parser reads the file.
+    {
+        const size_t limit = decls.empty() ? tokens.size() - 1 : decls.front()->firstToken().index();
         size_t previousEnd = 0;
-        for (size_t i = 0; i < moduleDecl.firstToken().index(); i++) {
+        for (size_t i = 0; i < limit; i++) {
             if (tokens[i].channel > 1) {
                 const size_t line = tokens[i].line();
                 if (previousEnd != 0 && line > previousEnd + 1) {
@@ -228,11 +226,6 @@ any Formatter::visitProgram(cst::Program context) {
                 previousEnd = line + std::count(tokens[i].text().begin(), tokens[i].text().end(), '\n');
             }
         }
-        headStr += any_cast<string>(visit(moduleDecl));
-        if (this->preferSemis) {
-            headStr += ";";
-        }
-        headStr += lineEnd(2);
     }
     // pass nullptr to avoid auto comment processing for empty head
     headStr += formatList(
@@ -273,22 +266,6 @@ any Formatter::visitStmtList(cst::StmtList context) {
 moduleName : ('.' | '..' | '...')? IDENTIFIER ('.' IDENTIFIER)* ;
 */
 any Formatter::visitModuleName(cst::ModuleName context) { return context->text(); }
-
-/*
-moduleDecl : frontMatter? MODULE identDef ;
-*/
-any Formatter::visitModuleDecl(cst::ModuleDecl context) {
-    string result;
-    // The tags written before the declaration (`#gpu module m`): a module carries the placement of
-    // the functions it declares (design principles 13.4, 6.2), so the tag stands before the
-    // keyword, one per line, and the formatter writes it back where the reader put it.
-    for (const auto &tagUse : context->all<cst::TagUse>()) {
-        result += any_cast<string>(visitTagUse(tagUse)) +
-                  commentsInFrontMatter(tagUse->lastToken()->index());
-    }
-    result += "module " + any_cast<string>(visitIdentDef(context->get<cst::IdentDef>()));
-    return result;
-}
 
 /*
 importDecl : IMPORT (moduleName | (identDef | bracedIdents) FROM moduleName) ;
@@ -2077,7 +2054,6 @@ any Formatter::dispatch(syn::Node context) {
         return visit##name(cst::name(context));
         CAMEL_FORMAT(StmtList)
         CAMEL_FORMAT(ModuleName)
-        CAMEL_FORMAT(ModuleDecl)
         CAMEL_FORMAT(ImportDecl)
         CAMEL_FORMAT(ExportDecl)
         CAMEL_FORMAT(UsingNamespaceDecl)

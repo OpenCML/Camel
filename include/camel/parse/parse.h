@@ -61,13 +61,6 @@ class CamelParser {
     /// Where the tokens are, for diagnostics placed by token range.
     const camel::core::error::TokenPositions &tokenPositions() const;
 
-    /// Returns the declared module name from AST (e.g. from "module mnist_json"), or empty if
-    /// none.
-    std::string getDeclaredModuleName() const;
-    /// The module name a file declares (`module name`), read from the tokens: what a file
-    /// that does not parse still says about itself. Empty if it declares none.
-    std::string declaredModuleNameInTokens() const;
-
     void dumpTokens(std::ostream &os);
     void dumpCST(std::ostream &os);
     void dumpDiagnostics(std::ostream &os, bool json = false);
@@ -87,7 +80,6 @@ class CamelParser {
     std::unique_ptr<Positions> positions_;
 
     std::string readAndRegister(std::istream &is);
-    void nameModuleFromTokens();
     bool buildCST(std::istream &is);
     bool buildAST();
 };
