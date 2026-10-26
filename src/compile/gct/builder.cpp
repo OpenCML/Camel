@@ -4315,6 +4315,12 @@ node_ptr_t Builder::visitDataInto(const AST::node_ptr_t &ast, Type *type, bool &
         // a: 1, b: 2.0 }`), so a literal element is converted now, exactly, and an `int`
         // array is never stored where a `float[]` was declared.
         const auto &load = ast->loadAs<AST::DataLoad>();
+        if (load->dataType() == AST::DataType::Array && ast->size() > 1) {
+            // `[f(x) for x in xs]`: a comprehension, whose elements are not written in the first
+            // child, is a computation and takes the type of its position where it is checked, not
+            // an empty literal of it.
+            return visitData(ast);
+        }
         if (load->dataType() == AST::DataType::Array) {
             const auto &items = *ast->atAs<AST::RepeatedLoad>(0);
             if (type->code() == TypeCode::Array) {
