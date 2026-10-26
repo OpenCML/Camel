@@ -48,7 +48,7 @@ func main(mode: int, path: string): int sync {
         let _ = line(remove_dir(path))
         return 0
     } else sync {
-        let root = get_env('CAMEL_TEST_TMPDIR')
+        let root = get_env('CAMEL_TEST_TMPDIR') ?? ''
         let dir = if root == '' then 'test/tmp/fs_remove' else root + '/fs_remove'
         mkdirs(dir)
         let file = dir + '/file.txt'

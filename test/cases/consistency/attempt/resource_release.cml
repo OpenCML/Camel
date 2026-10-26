@@ -30,7 +30,7 @@ func hold_and_fault(d: int): int sync {
 
 func main(): int sync {
     py_exec('class Resource:\n    def __init__(self, name):\n        self.name = name\n        print("acquire", name, flush=True)\n    def touch(self):\n        print("touch", self.name, flush=True)\n    def __del__(self):\n        print("release", self.name, flush=True)\n')
-    let end = get_env('END')
+    let end = get_env('END') ?? ''
     let a = open_resource('a')
     py_call('print', py_wrap('use a'))
     if end == 'isolated' then sync {

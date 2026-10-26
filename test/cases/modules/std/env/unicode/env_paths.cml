@@ -10,10 +10,10 @@ import { get_env, get_cwd } from env
 import { write_text, read_text, exists, file_size } from fs
 
 func main(): int sync {
-    let cwd = get_cwd()
+    let cwd = get_cwd() !! ''
     'cwd={}'->format<cwd>->println
-    'value={}'->format<get_env('CAMEL_H9_VALUE')>->println
-    'named={}'->format<get_env('H9变量')>->println
+    'value={}'->format<(get_env('CAMEL_H9_VALUE') ?? '')>->println
+    'named={}'->format<(get_env('H9变量') ?? '')>->println
 
     let text = '你好，世界 Ω 🐪'
     let file = cwd + '/数据 文件 🐪.txt'

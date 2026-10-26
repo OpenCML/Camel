@@ -13,7 +13,7 @@ func main(): int sync {
     // The runner gives every test its own scratch directory (CAMEL_TEST_TMPDIR): this test
     // writes under it, so it neither reads nor leaves anything under a fixed path. A direct run
     // (a benchmark, which has no private working directory) keeps the older fixed path.
-    let root = get_env('CAMEL_TEST_TMPDIR')
+    let root = get_env('CAMEL_TEST_TMPDIR') ?? ''
     let dir = if root == '' then 'test/tmp' else root + '/fs'
     let path = dir + '/fs_test_tmp.txt'
     let content = "hello from fs module"

@@ -33,7 +33,7 @@ func verdict(r: void!): string {
 }
 
 func main(): int sync {
-    let root = get_env('CAMEL_TEST_TMPDIR')
+    let root = get_env('CAMEL_TEST_TMPDIR') ?? ''
     let dir = if root == '' then 'test/tmp/fs_declaration' else root + '/fs_declaration'
     let path = dir + '/notes.txt'
     let binary = dir + '/notes.bin'

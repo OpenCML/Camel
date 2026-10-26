@@ -557,8 +557,8 @@ thread_count: () => int
 **`env`** — import { ... } from env — 2 name(s)
 
 ```text
-get_env: (name: string) => string
-get_cwd: () => string
+get_env: (name: string) => string?
+get_cwd: () => string!
 ```
 
 **`json`** — import { ... } from json — 14 name(s)

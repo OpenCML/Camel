@@ -35,7 +35,7 @@ const CASES = {
         old: 'sys',
         now: 'env',
         file: 'env_identity.cml',
-        expected: 'bdfca7bab26ddbb00227bcb92ee94983d1c021bc4716b6d24b1c3b1bbc4d0020',
+        expected: 'cac5edb82fce84c6e8d79efc1377408561ce5bb6c8d3b8a1824394ff180dca5f',
     },
     process: {
         old: 'os',

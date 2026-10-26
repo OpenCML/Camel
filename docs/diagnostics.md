@@ -9155,7 +9155,7 @@ func depth(n: int): int {
 }
 
 func main(): int sync {
-    let n = int(get_env('N'))
+    let n = int(get_env('N') ?? '')
     println('start')
     println(depth(n))
     println('done')

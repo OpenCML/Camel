@@ -38,7 +38,7 @@ func digit_sum(n: int, acc: int): int {
 }
 
 func main(): int sync {
-    let n = int(get_env('N'))
+    let n = int(get_env('N') ?? '')
     println(churn(n, 0))
     println(ping(n, 0))
     println(total(build(n / 100, [0]), 0, 0))

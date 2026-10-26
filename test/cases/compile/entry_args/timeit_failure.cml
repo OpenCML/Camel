@@ -10,7 +10,7 @@ import { get_env } from env
 import { try_read_text, write_text } from fs
 
 func main(): int sync {
-    let path = get_env('CAMEL_TIMEIT_COUNTER')
+    let path = get_env('CAMEL_TIMEIT_COUNTER') ?? ''
     let count = int(try_read_text(path) !! '0')
     let next = count + 1
     write_text(path, string(next))

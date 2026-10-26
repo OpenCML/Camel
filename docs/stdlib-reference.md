@@ -4025,29 +4025,33 @@ threads a run creates.
 
 ## `env`: environment
 
-Both functions read the environment of the process and are declared with effects.
+What the environment tells the process: its variables and its working directory. Both read the
+resource `env`, so a call is never folded or merged with another, and what a variable holds is
+whatever it holds when the call runs.
 
 #### `get_env`
 
 ```camel
-get_env: (name: string) => string
+get_env: (name: string) => string?
 ```
 
-The value of an environment variable, or the empty string when it is not set.
+The value of an environment variable; null when it is not set. A variable that is set to the
+empty text gives the empty text, not null.
 
 - With effects: reads the environment.
-- Example: `get_env('HOME')` gives `'/home/alice'`
+- Example: `'HOME'->get_env ?? ''` gives `'/home/alice'`
 
 #### `get_cwd`
 
 ```camel
-get_cwd: () => string
+get_cwd: () => string!
 ```
 
-The current working directory.
+The current working directory, the directory relative paths start at.
 
 - With effects: reads the environment.
-- Example: `get_cwd()` gives `'/home/alice/project'`
+- Failure: error value `NotFound` when the working directory has been removed; error value `PermissionDenied` when it cannot be read.
+- Example: `get_cwd() !! ''` gives `'/home/alice/project'`
 
 <a id="json"></a>
 

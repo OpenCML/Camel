@@ -18,7 +18,7 @@ func load(path: string): string {
 
 func main(): int sync {
     // The runner's per-test scratch directory; a direct run keeps the header's fixed path.
-    let root = get_env('CAMEL_TEST_TMPDIR')
+    let root = get_env('CAMEL_TEST_TMPDIR') ?? ''
     let dir = if root == '' then 'tmp/examples' else root
     let path = dir + '/notes.txt'
     mkdirs(dir)                                     // creates missing parent directories

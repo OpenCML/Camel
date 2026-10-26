@@ -32,8 +32,8 @@ func descend(a: int, b: int): int {
 }
 
 func main(): int sync {
-    let a = int(get_env('A'))
-    let b = int(get_env('B'))
+    let a = int(get_env('A') ?? '')
+    let b = int(get_env('B') ?? '')
     println('start')
     println(descend(a, b))
     println('done')

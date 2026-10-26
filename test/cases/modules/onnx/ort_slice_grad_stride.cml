@@ -49,7 +49,7 @@ func main(): int sync {
     export_model(
         (w: f32[6], x: f32[6], a: f32[2, 4], b: f32[2, 4]): (f32[..], f32[..], f32[..]) => step(
             w, x, a, b),
-        (w, x, a, b), get_env('ONNX_OUT'))
+        (w, x, a, b), get_env('ONNX_OUT') ?? '')
     println('exported')
     return 0
 }

@@ -35,7 +35,7 @@ func wide_mark(x: f32[..]): f32[..] { return x }
 with <x: f32[..]>
 func wide_loss(): float { return sum(wide_mark(sum(x, 1))) }
 func main(): int sync {
-    let folder = get_env('TILES_TEST_OUT')
+    let folder = get_env('TILES_TEST_OUT') ?? ''
     let x = load_npy::<f32>(folder + '/x.npy') as f32[2, 3, 4]
     save_npy(chained(x), folder + '/chain_cpu.npy')
     save_npy(download(run_preferred_resident<chained>(x)), folder + '/chain_gpu.npy')

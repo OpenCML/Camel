@@ -27,7 +27,7 @@ func main(): int sync {
     // The test runner gives every test its own scratch directory (CAMEL_TEST_TMPDIR), so the
     // four back ends (and two runs) do not share these files. A direct run keeps the path the
     // header names.
-    let root = get_env('CAMEL_TEST_TMPDIR')
+    let root = get_env('CAMEL_TEST_TMPDIR') ?? ''
     let dir = if root == '' then 'tmp/examples' else root
     mkdirs(dir)
 

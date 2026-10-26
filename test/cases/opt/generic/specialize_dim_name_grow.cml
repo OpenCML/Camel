@@ -28,6 +28,6 @@ func grow(xs: f32[n], k: int): f32 {
 }
 
 func main(): int sync {
-    println(grow([1.0, 2.0], int(get_env('H476_GROW_DEPTH'))))
+    println(grow([1.0, 2.0], int(get_env('H476_GROW_DEPTH') ?? '')))
     return 0
 }

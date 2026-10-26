@@ -255,3 +255,15 @@ expect_stdout_contains = ["1890 results and one large program, 0 wrong", "PASS"]
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 120000
+
+[[tests]]
+name = "env.unset_and_empty"
+desc = "An environment variable that is not set is null, and one set to a value gives that value; `??` supplies the default for the first only."
+kind = "behavior"
+case = "../../../cases/modules/std/env/unset_and_empty.cml"
+args = ["${case}"]
+envs = ["CAMEL_TEST_ENV_SET=abc"]
+expect_exit = 0
+expect_stdout_exact = "unset\nset to abc\ndefault\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
