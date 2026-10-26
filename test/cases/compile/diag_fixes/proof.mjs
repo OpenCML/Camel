@@ -240,7 +240,7 @@ expectFix({
     title: "insert ','",
     // Between the two parameters: at the space that is already there, so the file gets
     // `a: int, b: int` and not `a: int , b: int`.
-    edits: [{ range: { start: { line: 2, character: 15 }, end: { line: 2, character: 15 } }, replacement: ',' }],
+    edits: [{ range: { start: { line: 0, character: 15 }, end: { line: 0, character: 15 } }, replacement: ',' }],
     accepted: true,
 })
 expectFix({
@@ -248,7 +248,7 @@ expectFix({
     file: render('syntax_missing_then'),
     name: 'SyntaxDiag::MissingThen',
     title: "insert 'then'",
-    edits: [{ range: { start: { line: 4, character: 21 }, end: { line: 4, character: 21 } }, replacement: 'then ' }],
+    edits: [{ range: { start: { line: 2, character: 21 }, end: { line: 2, character: 21 } }, replacement: 'then ' }],
     accepted: true,
 })
 expectFix({
@@ -256,7 +256,7 @@ expectFix({
     file: render('syntax_extra_semicolon'),
     name: 'SyntaxDiag::ExtraSemicolon',
     title: "remove the extra ';'",
-    edits: [{ range: { start: { line: 3, character: 14 }, end: { line: 3, character: 15 } }, replacement: '' }],
+    edits: [{ range: { start: { line: 1, character: 14 }, end: { line: 1, character: 15 } }, replacement: '' }],
     accepted: true,
 })
 expectFix({
@@ -264,7 +264,7 @@ expectFix({
     file: render('syntax_stray_closer'),
     name: 'SyntaxDiag::UnmatchedClosingDelimiter',
     title: "remove the unmatched ')'",
-    edits: [{ range: { start: { line: 3, character: 16 }, end: { line: 3, character: 17 } }, replacement: '' }],
+    edits: [{ range: { start: { line: 1, character: 16 }, end: { line: 1, character: 17 } }, replacement: '' }],
     // `let x = 1 + )` becomes `let x = 1 + `, which is a second mistake of its own.
     accepted: false,
 })
