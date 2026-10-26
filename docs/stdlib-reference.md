@@ -2076,14 +2076,18 @@ Prints t to the console, in the module's layout.
 #### `from_bytes`
 
 ```camel
-from_bytes: (bytes: Bytes, shape: int[]) => f32[..]
+from_bytes: (bytes: Bytes, shape: int[]) => T[..] when is_plain::<T>()
 ```
 
-A tensor of the given shape made of little-endian elements. The element type is the explicit
-type argument (`from_bytes::<f32>(b, [2])`) or comes from the expected type of the result; it
-is `f32`, `f64`, `bf16`, `f16`, `i32`, `i64` or `bool`, exactly the type given. A byte count
-that does not fit the shape is a fault. The bits are copied: reading `bf16` or `f16` here
-passes the stored values through without rounding, so it needs no numeric permission.
+An array of the given shape made of little-endian elements: the payload `to_bytes` wrote. The
+element type is the explicit type argument (`from_bytes::<f32>(b, [2])`) or comes from the
+expected type of the result; it is `f32`, `f64`, `bf16`, `f16`, `i32`, `i64` or `bool`, exactly
+the type given, or a struct or tuple whose fields are all pure data, which takes its element
+type from the call (`from_bytes::<P>(b, [2])`) -- a declaration's parameters cannot mention a
+type variable that only the result mentions. The element's bytes are its layout's, written as
+`to_bytes` wrote them. A byte count that does not fit the shape is a fault. The bits are
+copied: reading `bf16` or `f16` here passes the stored values through without rounding, so it
+needs no numeric permission.
 
 - Pure.
 - Failure: fault `TensorDimensionMismatch` when the number of bytes does not fit the shape and the element type.

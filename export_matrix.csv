@@ -46,6 +46,7 @@ tensor:expand_axis,,13
 tensor:eye,,
 tensor:flatten,1,
 tensor:fma_f32,,
+tensor:from_bytes_aggregate,,
 tensor:full,9,
 tensor:ge,1,
 tensor:gelu,1,
