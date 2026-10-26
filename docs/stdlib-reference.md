@@ -2056,25 +2056,6 @@ A tensor of ones shaped and typed like t.
 
 ### Conversion and display
 
-#### `cast`
-
-```camel
-cast: (t: float[..] | number[], dtype: string) => int64[..]
-```
-
-t converted to the element type the name gives: "float32", "float", "double" or "float64"
-for `f32`; "bfloat16" or "bf16" for `bf16`; "float16", "half" or "f16" for `f16`; "int64",
-"int", "long" or "int32" for `int64`; "bool" for `bool`. The extents do not change.
-
-A conversion into `bf16` or `f16` rounds (to nearest, ties to even). Writing the conversion
-asks for that precision, so it needs no numeric permission: `change_precision` governs a
-computation the compiler moves to lower precision (design principles 7.2-7.3). Reading a
-`bf16` or `f16` tensor into a wider type is exact for every stored value.
-
-- Pure.
-- Failure: fault `RuntimeError` when the name is not one of those.
-- Example: `cast(new([1.0, 2.0]), 'int64')` gives `[1, 2]`
-
 #### `i32`
 
 ```camel
@@ -2147,7 +2128,7 @@ The conversion `float` applied to every element of an array: the result has the 
 bf16: (t: float[..] | number[]) => bf16[..]
 ```
 
-The conversion `bf16` applied to every element of an array: the result has the input's extents and element type `bf16`. A scalar converts as it always did; this entry is read together with the scalar conversions once `tensor` is imported.
+The conversion `bf16` applied to every element of an array: the result has the input's extents and element type `bf16`. A conversion into `bf16` or `f16` rounds (to nearest, ties to even); writing it asks for that precision, so it needs no numeric permission (`change_precision` governs a computation the compiler moves to lower precision, design principles 7.2-7.3). Reading a `bf16` or `f16` tensor into a wider type is exact. A scalar converts as it always did; this entry is read together with the scalar conversions once `tensor` is imported.
 
 - Pure.
 - Example: `bf16(new([1.0, 2.0]))`

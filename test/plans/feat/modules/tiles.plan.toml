@@ -58,22 +58,22 @@ assert(lines.length === 4, 'expected the value, the error and two plans');
 // The one print form  writes an array as its own shape in brackets and
 // each element in the shortest text of its own type; it carries no `dtype=` tag, so `dtype=float32`
 // here was reading a vehicle that no longer exists, not a changed element type. Line 0 is the
-// gradient of `sum(cast(x, "float32"))`, the case's first program. The value itself is pinned
+// gradient of `sum(f32(x))`, the case's first program. The value itself is pinned
 // exactly, and the element type stays pinned twice: statically by the case's own two lambdas
 // (`(v: f32[..]): f32[..]`, so a gradient of another element type does not compile), and at
 // run time by the plan numbers below -- cast_like/cast to a different element type cannot keep
 // materialized_values, allocations, logical_bytes, allocated_bytes and borrowed_bytes equal to the
 // cast-free derivative (an f64 buffer is twice as wide).
-assert(lines[0] === '[1.0, 1.0, 1.0]', 'the gradient of sum(cast(x, "float32")) is not the all-ones f32 value');
+assert(lines[0] === '[1.0, 1.0, 1.0]', 'the gradient of sum(f32(x)) is not the all-ones f32 value');
 assert(lines[1] === '0.0', 'gradient of sum(x) is not all ones');
 const withCast = JSON.parse(lines[2]);
 const plain = JSON.parse(lines[3]);
 for (const key of ['values', 'kernels', 'materialized_values', 'allocations', 'logical_bytes', 'allocated_bytes', 'borrowed_inputs', 'borrowed_bytes'])
     assert(withCast[key] === plain[key], 'cast or cast_like materialized a value: ' + key);
 assert(JSON.stringify(withCast.stages) === JSON.stringify(plain.stages), 'cast or cast_like changed the stage plan');
-assert(withCast.operator_contracts.some(c => c.identity === 'tensor:cast'), 'the cast was not seen');
+assert(withCast.operator_contracts.some(c => c.identity === 'tensor:to_f32'), 'the cast was not seen');
 assert(withCast.operator_contracts.some(c => c.identity === 'tensor:cast_like'), 'the cast_like was not seen');
-assert(!plain.operator_contracts.some(c => c.identity === 'tensor:cast' || c.identity === 'tensor:cast_like'), 'the plain derivative names a cast');
+assert(!plain.operator_contracts.some(c => c.identity === 'tensor:to_f32' || c.identity === 'tensor:cast_like'), 'the plain derivative names a cast');
 }
 """
 timeout_ms = 180000
@@ -84,7 +84,7 @@ kind = "negative"
 case = "../../../cases/modules/tiles/cast_dtype.cml"
 args = ["--devices", "cpu", "${case}"]
 expect_exit = 1
-expect_output_contains = ["operator 'tensor:cast' needs a statically known f32 tensor result"]
+expect_output_contains = ["operator 'tensor:to_i64' needs a statically known f32 tensor result"]
 timeout_ms = 10000
 
 [[tests]]
