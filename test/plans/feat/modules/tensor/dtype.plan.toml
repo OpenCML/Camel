@@ -425,12 +425,12 @@ timeout_ms = 8000
 
 [[tests]]
 name = "mask_written_conversion"
-desc = "The two writings a mask is read with once the conversion is written: `where(mask, x, 0.0)` selects what the mask keeps, and `x * cast(mask, \"f32\")` reads the mask as the number it stands for. Both compute in the tensor's element type and answer the numbers the mask idiom always gave."
+desc = "The two writings a mask is read with once the conversion is written: `where(mask, x, 0.0)` selects what the mask keeps, and `x * cast(mask, \"f32\")` reads the mask as the number it stands for. Both compute in the tensor's element type - four bytes an element in `to_bytes`, the width the tensor states and not the wider one the pair could have been read at - and both answer the numbers the mask idiom always gave."
 kind = "behavior"
 case = "../../../../cases/modules/tensor/dtype/mask_written_conversion.cml"
 args = ["${case}", "${run_nvm}"]
 expect_exit = 0
-expect_stdout = "4.0\n4.0\n"
+expect_stdout = "4.0\n4.0\n16\n16\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
