@@ -208,7 +208,7 @@ digraph GraphIR {
         N45 -> N47 [label="0|0", type="CTRL"];
     }
     O00 [label="EXIT", type="EXIT"];
-    N48 [label="Function(graph=main, tupleSlots=0)", type="DATA", origin=<ORIGIN>, span="79:0-91:1", srcfile="<ROOT>/test/cases/opt/algebra_rules/agreement.cml", value_type="() => int"];
+    N48 [label="Function(graph=main, tupleSlots=0)", type="DATA", origin=<ORIGIN>, span="79:0-91:1", srcfile="<ROOT>/test/cases/opt/algebra_rules/agreement.cml", value_type="() => int uses stdout"];
     N49 [label="CALL", type="CALL", value_type="int"];
     N49 -> O00 [label="0", type="EXIT"];
     N48 -> N49 [label="0|0", type="WITH"];

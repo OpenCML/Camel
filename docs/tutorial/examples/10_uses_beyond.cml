@@ -1,0 +1,16 @@
+// A counter-example: `stamp` promises `db`, and its body writes the standard output, which the
+// clause does not name. The declaration is refused where it is written, and the resource it left
+// out is named.
+// Run: camel docs/tutorial/examples/10_uses_beyond.cml
+
+resource db
+
+func stamp(): int uses db sync {
+    println('x')
+    return 1
+}
+
+func main(): int sync {
+    println(stamp())
+    return 0
+}
