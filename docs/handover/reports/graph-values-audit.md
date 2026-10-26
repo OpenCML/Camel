@@ -2,6 +2,8 @@
 
 2026-10-26 · lane `generics`，分支 `lane/graph-values`（基于 fsh-dev `7cb99a8a6`）
 
+> **更新（同日）**：F1 已按下文的修法修好，原来九项 `known_fail` 全部转绿，标记已去掉；附录里 `saturate` 的内部错误也已找到原因并修好。修好之后又暴露出另一个错误，见附录二。
+
 审计对象是 9.1 新增的两条规则：
 
 - 变换交出新函数，原来的函数对其他持有者不变；
@@ -93,7 +95,14 @@
 - 交给变换的 Program；
 - 流水线的下一个 pass（它用 pass 的返回值）。
 
-**修法：所有权检查，装入只在驱动里做**
+**修法（已实施）：所有权检查，装入只在驱动里做**
+
+- `commit`：`modules/graph/txn.cpp`，`commitKernel`，一律 `session.commit(true)`。
+- `rewrite`、`run`、`saturate`：`modules/rewrite/module.cpp`，`applyRewrite` 与 `saturateKernel`。
+- `extract`：`extractWritings` 增加 `detached` 参数（`include/camel/runtime/writings.h`），Camel 的 `extract` 传 `true`。
+- `GraphConflict` 从 `commit` 去掉：两个事务开在同一个 Program 上，提交出的就是两个 Program。`graph.plan.toml` 的 `txn_conflict` 因此改为 `txn_two_commits_are_two_values`，期望第二次提交也成功；`stdlib/graph.cml` 与 `docs/stdlib-reference.md` 随之更新。
+
+下面是当初提出的修法：
 
 1. 这四个从 Camel 侧可调的提交点一律 detached 提交：`session.commit(true)`。`extractWritings` 增加一个 `detached` 参数：流水线里的提取照旧，Camel 的 `extract` 传 `true`。
 2. 装入程序只由 pass 驱动来做。用 Camel 写的 pass 已经如此（`src/execute/camel_pass.cpp:254`，`installRuntimeProgramIfCurrent`），C++ 的 pass 由流水线自己提交。这样唯一持有者（流水线）原地发布，其余调用只交出值。
@@ -139,25 +148,47 @@ GCGraphBuildAccess::addFlags(graph, kGraphFlagGatesDissolved);
 | 流水线里的 pass（`tensor` 融合、`tiles` 区域、通用重写） | `modules/tensor/passes/fuse.cpp:221`、`modules/tiles/src/region_outline.cpp:541`、`src/passes/opt/generic/rewrite.cpp:402`：唯一持有者 | `pipeline_rewrites_its_only_holder` |
 | 执行计划 | `src/execute/exec_plan.cpp:629` 的 `const_cast` 只为调用常量接口，不写图 | — |
 
-## 附录：`saturate` 的内部错误（与 9.1 无关，另行处理）
+## 附录：`saturate` 的内部错误（已修）
 
-**现象**：在下面这个程序上，`saturate(current(), [drop_one], 2)` 在 nvm 上报 `PassInternalError`："Two writings of a value have the same type, region and permissions, and the permissions the equivalence needs."
+**原因**
 
-**复现程序**：把 `rewrite_rule.cml` 的 `main` 换成：
+- 规则 `x + 1 => x` 的右边是被绑定的 `x` 本身。
+- 当 `x + 1` 位于 `&&` 的臂里、而 `x` 在臂外时，饱和会把两个不同区域的节点并成一个值的两种写法（`src/runtime/writings.cpp`，`saturate`，`assertEqualDeferred`）。
+- 这违反了"一个值的各种写法同在一个区域"的前提：提取可能把臂里的节点放到臂外的使用处。于是抛出 `std::logic_error`，执行它的遍报 `PassInternalError`。
+- `str::ends_with` 正是这种形状，所以凡是导入 `str` 的程序，用 Camel 的 `saturate` 都会出错。
+
+**修法**
+
+- 右边的结果若与被匹配节点不在同一区域，饱和就不记录这条等价。
+- 单向的 `rewrite` 照样做这次替换：在臂里读外层的值本来就是一条普通的边。
+
+**测试**：`test/cases/modules/rules/saturate_outer_operand.cml`，以及 `rules.plan.toml` 里的两项：
+
+- 用 Camel 的 `saturate` 加 `extract`，nvm、fvm；
+- 走 `std::opt::saturate`。
+
+## 附录二：`std::opt::saturate` 在含 `loop` 的库函数上出错（未修，另行处理）
+
+**现象**：任何导入了 `str` 的程序，跑 `std::opt::saturate std::nvm` 都报：
+
+```text
+internal error: Runtime graph 'str::cut' has region 1 with a port the graph does not have.
+```
+
+**最小程序**：
 
 ```camel
+module t
+import { ends_with } from str
+
 func main(): int sync {
-    let p = current()
-    let rules: Rule[] = [drop_one]
-    let s = saturate(p, rules, 2) !! p
-    println(`saturated`)
+    println("abc"->ends_with<"bc">)
     return 0
 }
 ```
 
-并把导入改为 `import { Rule, saturate } from rewrite`。
-
 **观察**
 
-- 去掉 `opText`、`isTarget` 等带 `match` 与 `filter` 的辅助函数后不再出错，说明问题在这些函数的饱和上。
-- 这个复现没有放进计划。
+- 把上面的区域修法临时关掉、重新构建，同样出错，说明这是另一个早已存在的缺陷。
+- `str::cut` 里有一个 `loop`。错误出在饱和或提取之后的图校验，涉及循环区域的端口。
+- 原因比这次的任务深，没有修，只记录在这里。
