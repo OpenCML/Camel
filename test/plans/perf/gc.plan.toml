@@ -17,7 +17,7 @@ spaces and the number of promoted objects. The comparison itself is made with
 `python3 test/tools/gcbench/gcbench.py`.
 
 The two `gc_timeit_cycles` tests run the command that was seen to end in an access violation
-(handover note ⟨8ebe22c⟩ (H9), section 2) once per collector: `--timeit std::nvm/10` rebuilds and
+(, section 2) once per collector: `--timeit std::nvm/10` rebuilds and
 destroys the module, the graph and the Context ten times in one process, which is the cycle the
 crash was in. They expect exit 0 and check from the allocator's statistics that the collector of
 the test really collected during those ten iterations (10 minor collections for the generational
@@ -51,8 +51,7 @@ assert(field('moved') > 0, `the moving collector moved nothing: ${line[0]}`)
 }
 """
 # The cost bound is this test's own CPU time (user + system), and the timeout below is its liveness
-# bound, by the rule (docs/handover/reviews/questions-2026-10-23.md,
-# "declaration-cost-gate" (a)):
+# bound, by the rule:
 #
 #   "改量 CPU 时间，不量墙钟。共享主机上的墙钟随负载漂移 ... 进程的 CPU 时间（用户态 + 内核态）基本
 #    不随负载变"

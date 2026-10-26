@@ -470,11 +470,13 @@ Draw `twice` of [`examples/10_var_order.cml`](examples/10_var_order.cml) (`camel
 
 ![twice's subgraph: `var c` is a cell, and the two writes have a sync edge between them](images/10_var_order.svg)
 
-- `N07` is the **cell** built by `var c = 0` (`:var/new`): on the graph a `var` is "a node that builds a cell plus
+- `N09` is the **cell** built by `var c = 0` (`:var/new`): on the graph a `var` is "a node that builds a cell plus
   ordinary reads and writes", not a variable that changes by itself.
-- `N08` and `N09` are the two `bump` calls, and **there is a sync edge between them** (dashed, `type="CTRL"`): they are
-  written in a sync block, so the second comes after the first. That is where the `2` comes from.
-- `N0A` (`:var/get`) reads the cell, and `N0B` is a `GATE`: the end of the sync chain hands the value out through it --
+- `N0A` and `N0B` are the two `bump` calls, and **there is a sync edge between them** (dashed, `type="CTRL"`): they are
+  written in a sync block, so the second comes after the first. **There is also an order edge between them** (dotted,
+  `type="ORDER"`): between two writes of one cell there is only sequence, an order edge passes no "needed", and which
+  write really runs is decided by whether a read takes it. That is where the `2` comes from.
+- `N0C` (`:var/get`) reads the cell, and `N0D` is a `GATE`: the end of the sync chain hands the value out through it --
   it reads the value on one side, takes the chain's tail on the other, and passes the value on unchanged
   ([design note: the three kinds of edges](../design/effects/edges.cn.md)).
 
@@ -484,7 +486,7 @@ The graph has three kinds of edges, and this chapter has accounted for the last 
 |---|---|---|
 | data edge | where a value comes from; a needed node passes "needed" to what it reads | values being passed |
 | sync edge | order, and the earlier statement is thereby needed | adjacent statements of a sync block |
-| order edge | order only, and it does **not** pass "needed" | effects on the same resource |
+| order edge | order only, and it does **not** pass "needed" | effects on the same resource; two writes of one `var` |
 
 **Only data edges and sync edges decide whether something runs**; an order edge only says who is first when both run.
 That consequence is worth a lot: an effect that nobody needs and that is not in a sync block may not run at all -- the

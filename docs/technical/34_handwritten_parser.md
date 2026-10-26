@@ -8,7 +8,7 @@ states the same rules for a user; this note states them for someone who changes 
 
 The goals, in the language author's words: determinism (how a text is read follows from written
 rules, not from a prediction algorithm), efficiency, and line breaks that take part in
-delimiting statements. The rulings are in `docs/design-principles.cn.md` 4, "语法".
+delimiting statements. the rules are in `docs/design-principles.cn.md` 4, "语法".
 
 ```
 text ──Lexer──► TokenBuffer ──Parser──► Tree (CST) ──ast::Builder──► AST ──► GCT ──► GIR
@@ -210,7 +210,7 @@ Nothing else changes: no tables to regenerate, no prediction to re-check. For an
 (`loop … while … { }` as an operand) step 3 is a `case` in `parseExpr` or `parsePrimary`
 instead.
 
-### The minus, and `&` `|` beside `&&` `||` (rulings of October 13)
+### The minus, and `&` `|` beside `&&` `||` 
 
 The minus is always an operator; the parser no longer takes a `-` that touches a number into
 the literal. Its level is its own (`negExpr`, the first operand of `linkExpr`): tighter than
@@ -275,7 +275,7 @@ What the notation leaves awkward or open (for the language author):
 3. **`loop` and `while` as keywords** take two common names away. 18 files of the repository (57 places)
    named a function `loop` (the usual name of a tail-recursive helper); they were renamed to `spin`.
 4. **A loop without a state** (`loop for x in xs { println(x) }`) is not in the notation: the
-   ruling says effects are iterated with `foreach`.
+   rule says effects are iterated with `foreach`.
 5. **A tuple state of one name**, `loop (a,) = …`, is accepted and distinguished from
    `loop a = …` (`isTuple()`); whether it should be is not said.
 6. `loop … for x in xs while c`: the order `for` then `while` is fixed; `while … for …` is a
@@ -347,7 +347,7 @@ syntax errors: the parser saw the tokens without the offending text.
 | `UnexpectedToken`, `UnexpectedEndOfFile` | anything else, with what would have fitted |
 | `ComparisonNeedsSpace`, `AngleCloseAfterSpace` (new) | rule 1, section 2 |
 | `LineStartsWithOperator` (new) | rule 2, section 3 |
-| `LambdaParametersNeedParentheses` (new) | a name stands directly before a `=>` that fits nothing: a lambda's parameters are written in parentheses (5.9, the ruling of 2026-10-24) |
+| `LambdaParametersNeedParentheses` (new) | a name stands directly before a `=>` that fits nothing: a lambda's parameters are written in parentheses  |
 | `LexicalDiag::UnterminatedComment` (now raised) | `/*` without `*/` |
 
 ## 7. Verification against the ANTLR parser
@@ -366,7 +366,7 @@ is in the history as `tools/parsediff`; what needs no second parser lives on as
 - **Fuzzing**: token-level mutations of the corpus (delete, duplicate, swap, insert, truncate,
   splice two files, change the white space before a token). A difference was attributed
   automatically: to rule 2 if the new parser with that rule switched off agreed with ANTLR, to
-  rule 1 if an angle bracket was involved, to the two rulings of 2026-10-12 (`raise`, the minus
+  rule 1 if an angle bracket was involved, to the two rules of (`raise`, the minus
   of a literal) if the mutant used them; anything else was written out and read.
 
 ### Results (the last run, on the commit before the removal)
@@ -382,11 +382,11 @@ documents, 2000 programs of the random generator `test/tools/progen` and 200 at 
 | Probes of the grammar's decisions, 220 | 206 identical; 8 rejected by both; 6 different (below) |
 | Fuzzing, 80 000 mutants (ANTLR accepted 12 991) | rule 1: 261, rule 2: 49, minus: 24+, `raise`: 17+, other: 8 in two classes (below); the ANTLR side crashed on 11 |
 
-The 11 corpus files that differ, all by a rule or a ruling:
+The 11 corpus files that differ, all by a rule or a rule:
 
 | Files | Cause |
 |---|---|
-| `test/cases/compile/surface/angle_then_name_line.cml`, `angle_then_string_line.cml`, and five document blocks that quote them or `f<a>(x), g<b>(y)` | rules 1 and 2: the angle-bracket ruling of 2026-10-12, now read as written |
+| `test/cases/compile/surface/angle_then_name_line.cml`, `angle_then_string_line.cml`, and five document blocks that quote them or `f<a>(x), g<b>(y)` | rules 1 and 2: the angle-bracket rule, now read as written |
 | `test/cases/consistency/surface/minus.cml`, `test/cases/format/minus.cml`, `test/plans/feat/parse/golden/numbers_format.cml` | `- 1` is a negation, not the literal `-1` (same value) |
 | `test/cases/compile/semantic/raise_is_a_name.cml` | `raise` is a name |
 

@@ -6,7 +6,7 @@
 /**
  * @file checkreport.h
  * @brief What `check` answers: the verdict table (docs/design/rewrite/plan-verification.cn.md,
- * S0; the rulings of 2026-10-24 on `verification-verdict-surface` and on
+ * S0; the rule and on
  * `verification-licence-to-precondition`).
  *
  * The verdict vocabulary is closed and has three words -- `proved`, `refuted`, `sampled` -- and
@@ -16,18 +16,14 @@
  * (`verification-licence-to-precondition`, licence 3, option A: `sampled` and "not examined (why)"
  * are written separately and never mixed).
  *
- * Each row carries the five things the ruling asked a row to carry, plus the three a reader needs to
+ * Each row carries the five things the rule asked a row to carry, plus the three a reader needs to
  * reproduce it: the `rule`, the `instance` (a generic law's type tuple, empty when the rule is not
  * generic), the `verdict`, the `proposition` (what the verdict is about: `equality`,
  * `real equality + IEEE on special values` or `error bound`), the `evidence` (`solver`,
  * `samples <n>`, `counterexample` or `none`), the `reason` (why nothing was examined, or why a
  * rule that is not a counterexample is still `refuted`), the `detail` (the rest of the line:
  * how often the engine fired, the worst error ratio, the values a counterexample has), and the
- * `coverage` (docs/design/rewrite/plan-verification.cn.md, S1: what the translation layer made of
- * the rule's two sides -- the proposition it read, or `beyond translation coverage` with the
- * reason it refused; a rule outside
- * the coverage is `sampled` and this is where the reason is written, the ruling of 2026-10-24 on
- * `verification-verdict-surface`, 3).
+ * `coverage`.
  *
  * The record is declared here and not in module.cpp so the format has one owner: the module builds
  * it and `checkreport.cpp` prints it.
@@ -48,8 +44,7 @@ namespace mm     = camel::core::mm;
 namespace rtdata = camel::core::rtdata;
 using camel::core::type::Type;
 
-/// The proposition kinds a verdict can be about (the ruling of 2026-10-24 on
-/// `verification-licence-to-precondition`, licence 2): what the rule says about its two sides.
+/// The proposition kinds a verdict can be about: what the rule says about its two sides.
 inline constexpr const char *kPropositionEquality = "equality";
 inline constexpr const char *kPropositionRealEquality =
     "real equality + IEEE on special values";

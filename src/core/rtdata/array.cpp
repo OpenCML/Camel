@@ -1292,8 +1292,7 @@ rtdata::Object *Array::clone(
 
 void Array::print(std::ostream &os, const type::Type *typeInfo) const {
     if (rank_ == 0) {
-        // A value with no dimension is the element it holds (the rank-zero ruling,
-        // docs/handover/reviews/questions-2026-10-23.md section rank-zero-tensor): it prints as
+        // A value with no dimension is the element it holds: it prints as
         // that value, not as a bracketed list of none.
         rtdata::printSlot(os, getSlot(0), const_cast<type::Type *>(elemType_));
         return;

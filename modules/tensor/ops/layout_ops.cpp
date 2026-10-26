@@ -87,9 +87,7 @@ slot_t reshapeKernel(ArgsView &, ArgsView &norm, context::Context &) {
         const std::vector<int64_t> target = parseIntArray(norm.get<::Array *>(1), norm.type(1));
         Array *t = tensorArg(norm, 0, true);
         if (target.empty()) {
-            // No dimension at all: the value with no dimension is the element it holds (the
-            // rank-zero ruling, docs/handover/reviews/questions-2026-10-23.md section
-            // rank-zero-tensor), and `resolveReshape` refuses a value that is not one element.
+            // No dimension at all: the value with no dimension is the element it holds, and `resolveReshape` refuses a value that is not one element.
             (void)k::resolveReshape(t->shapeSpan(), target);
             return t->getSlot(0);
         }
@@ -596,8 +594,7 @@ void concatVjp(VjpBuilder &b, const VjpCall &call) {
     // 3 (`src/compile/gct/builder.cpp`: `intConstant((written[1] ? 1 : 0) | (written[0] ? 2 : 0))`
     // over the start and the end) and the step is the constant 1. The adjoint slices dy out with
     // the one core operator, the same node the subscript builds, so concat's adjoint no longer
-    // means a slice of the module's own (the author's ruling of 2026-10-25: every call is the
-    // core's).
+    // means a slice of the module's own.
     if (lhsTensor) {
         b.accumulateGradient(
             lhs,

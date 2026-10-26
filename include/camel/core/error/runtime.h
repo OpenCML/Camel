@@ -119,11 +119,10 @@ class FactQueryNoValue : public std::exception {
 /// to refuse, and each of them is a report of its own.
 ///
 /// A pass that works on a whole function (`grad`) refuses every call of a function value it cannot
-/// differentiate, not only the first: the ruling of 2026-10-24 (`gradient-refusal-named-call`) has
-/// each refused call collected, so that a reader fixes them all in one round, and the pass that
-/// raises the fault is the only one that knows how many there are. What a run shows of them is one
-/// fault, naming the first in source order, which is the report a run-time fault records; the
-/// ruling of 2026-10-26 (`how-many-macro-refusals-the-user-sees`) has the others attached to that
+/// differentiate, not only the first: each refused call is collected, so that a reader fixes them
+/// all in one round (design principles 9.9), and the pass that raises the fault is the only one
+/// that knows how many there are. What a run shows of them is one fault, naming the first in
+/// source order, which is the report a run-time fault records; the others are attached to that
 /// one as its related positions, one entry each with its own place and its own reason, and the
 /// run-time sink's rule ends the run there (the macro evaluator reports them that way).
 struct CarriedReport {

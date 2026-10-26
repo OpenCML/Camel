@@ -20,7 +20,7 @@ func first_dropped(): int {
 // still takes the initializer's value as a data input, so the initializer's effect is reachable
 // from the read whatever the writes do. The rule gives the cell no value input and gives the
 // read a data edge from the nearest write --
-// docs/handover/reviews/questions-2026-10-23.md, " -var-initializer-write" and
+// the rule and
 // " -capture-order-edge".
 func write_used(): int {
     var x = 1

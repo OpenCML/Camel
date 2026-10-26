@@ -2,10 +2,10 @@ id = "compile.match_guard"
 order = 345
 tier = "fast"
 tags = ["feat", "compile", "match", "when"]
-desc = "The guard of a `match` case (`case p when c => body`, review 「when-placement-and-match-guards」): the case is taken only when its pattern matches and its guard holds, the guard is read in the arm's scope and so sees the names the pattern binds, a guard that does not hold leaves the value to the cases written after it, and a guarded case counts for no exhaustiveness. Before this change the parser read `when` as the second word of the pattern and every case here was a syntax error."
+desc = "The guard of a `match` case (`case p when c => body`): the case is taken only when its pattern matches and its guard holds, the guard is read in the arm's scope and so sees the names the pattern binds, a guard that does not hold leaves the value to the cases written after it, and a guarded case counts for no exhaustiveness. Before this change the parser read `when` as the second word of the pattern and every case here was a syntax error."
 
 # Each case states what it pins. The guard is lowered into the cases written after it (the value
-# is dispatched again there), so the answers below are what a reader of the review expects for
+# is dispatched again there), so the answers below are what the rule says for
 # the value the guard refuses, and `std::fvm` must agree with `std::nvm` on all of them: the
 # guard reaches the runtime as ordinary control flow, not as a new branch the backends would
 # each have to implement.

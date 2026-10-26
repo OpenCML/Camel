@@ -88,7 +88,7 @@ bool isViewSlot(slot_t slot, const camel::core::type::Type *type);
 
 /**
  * The debug-only guard at a store boundary: a view must have been materialised before a value
- * is stored (design principles 10.5; review item 1). Compiled out in release builds; the
+ * is stored (design principles 10.5). Compiled out in release builds; the
  * always-compiled detector above is what the self-test exercises.
  */
 void assertStoredValueIsNotView(

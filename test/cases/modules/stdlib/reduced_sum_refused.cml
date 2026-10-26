@@ -1,8 +1,8 @@
 /**
- * The rule docs/handover/reviews/reduced-precision.md gives the reduced-precision types the
+ * The rule gives the reduced-precision types the
  * scalar language of any other float, and this is the case that asked for it: it used to assert
  * the refusal. `bf16` and `f16` now have literals, written conversions, scalar arithmetic and
- * comparison (items (a) and (b)), `array::sum` accumulates in f64 and rounds once (item (d)), and
+ * comparison, `array::sum` accumulates in f64 and rounds once, and
  * the two arms its `match type` was missing -- `case bf16 => bf16(sumF64(xs))` and
  * `case f16 => f16(sumF64(xs))` -- resolve, because the conversion into each type is declared.
  *

@@ -572,7 +572,7 @@ inline std::string layoutFloatText(std::string_view digits, int exponent, bool n
 /// "the same value" an element of the value's own type. The element widens to f32 exactly, so the
 /// digits are searched against that f32 and each candidate is held to the store rounding of the
 /// type (round to nearest, ties to even: `roundsBack`); `0.1 as bf16` prints `0.1`, where the
-/// f32 text of the same bits would print `0.100097656` (rule 2026-10-23, "reduced-precision-text").
+/// f32 text of the same bits would print `0.100097656`.
 template <typename Half, typename RoundsBack>
 std::string halfText(Half value, RoundsBack roundsBack) {
     const float widened = value.toFloat();

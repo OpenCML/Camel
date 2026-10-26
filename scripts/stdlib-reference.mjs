@@ -54,8 +54,8 @@
 //
 // When a declaration cannot express an operator — its result type comes from a type rule, or
 // from a type argument — that operator stays in the C++ resolver and keeps its entry in
-// stdlib/signatures/<module>.cml, for reference only (json: `encode`, `decode_as`; handover
-// The module's `computed` field names that file; the reference reads the declaration
+// stdlib/signatures/<module>.cml, for reference only (json: `encode`, `decode_as`). The module's `computed` field names
+// that file; the reference reads the declaration
 // file and the computed entries together, and --verify-ops checks both.
 //
 // --verify-ops runs `camel inspect --ops` on a program that imports every module and compares,
@@ -280,7 +280,7 @@ const MODULES = [
         name: 'rewrite',
         title: '`rewrite`: rules applied to a program',
         kind: 'cpp',
-        // The declarations, not a signature file: they are what the module compiles (handover
+        // The declarations, not a signature file: they are what the module compiles.
         // The three reserved groups the `rule`/`analysis` declarations compile to have no
         // callable Camel name, so they are neither declared nor listed.
         source: 'rewrite.cml',
@@ -571,7 +571,7 @@ function readDeclarations(file, module) {
             continue
         }
         // An operator whose result type C++ computes from its arguments cannot be a declaration
-        // (a `DynamicFuncTypeResolver` stays the one source of its type; handover). The
+        // (a `DynamicFuncTypeResolver` stays the one source of its type). The
         // declaration file records its reference entry in a comment, with the doc comment above
         // it, so the reference page still documents it without inventing a declaration.
         const dynamicMatch =
@@ -614,7 +614,7 @@ function readDeclarations(file, module) {
         }
         // A C++ module's value has no declaration to write: the declaration file records its
         // reference entry in a comment, and the C++ module stays the one source of the value
-        // (math's pi, e, inf and nan; handover). It carries the same doc comment as an
+        // It carries the same doc comment as an
         // operator, above the `// value` line.
         const docValue = module.kind === 'cpp' && trimmed.match(/^\/\/ value (\w+)\s*:\s*(.+)$/)
         if (docValue) {

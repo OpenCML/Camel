@@ -458,7 +458,7 @@ Builder::visitEnumMatch(const GCT::node_ptr_t &gct, node_handle_t scrutinee, Enu
         }
         // A case with a guard covers nothing on its own: the value its guard refuses falls to
         // the cases written after it, so it makes the match exhaustive for no variant and is
-        // no repetition of one named before it (review 「when-placement-and-match-guards」).
+        // no repetition of one named before it.
         const bool guardedCase = tree_->caseGuardOf(caseNode) != nullptr;
         if (!guardedCase) {
             if (covered[*tag]) {
@@ -541,7 +541,7 @@ Builder::visitEnumMatch(const GCT::node_ptr_t &gct, node_handle_t scrutinee, Enu
     };
 
     // A case with a guard is taken only where its guard holds, and a value the guard refuses
-    // falls to the cases written after it (review 「when-placement-and-match-guards」). The chain
+    // falls to the cases written after it. The chain
     // of tag tests cannot say that: its false arm is the tag test of the next case, and a guard
     // fails inside the arm the tag test entered. So the cases become one decision list, whose
     // steps test the tag and, where it holds, the guard of the case, and the names the pattern

@@ -596,7 +596,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "entry_args.tensor_npy"
-desc = "Tensor parameters are read from .npy files: the default run prints tanh(x @ w) of the two fixtures, as the array it is (`tensor(..., dtype=...)` is gone with `Tensor`, questions-2026-10-24-evening.md)."
+desc = "Tensor parameters are read from .npy files: the default run prints tanh(x @ w) of the two fixtures, as the array it is (`tensor(..., dtype=...)` is gone with `Tensor`)."
 kind = "behavior"
 case = "../../../cases/compile/entry_args/tensors.cml"
 args = ["${case}", "--arg", "x=test/cases/compile/entry_args/x.npy", "--arg", "w=test/cases/compile/entry_args/w.npy"]

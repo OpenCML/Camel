@@ -1,5 +1,5 @@
 /**
- * Handover: `x->f(a, b)` is `f(x, a, b)` (design principles 4.4). The receiver is the
+ * `x->f(a, b)` is `f(x, a, b)` (design principles 4.4). The receiver is the
  * first ordinary argument of the call written on the right, for an ordinary function
  * (`1->add(2)`), a function with a `with` argument (`1->bump<10>(2)`), a generic function
  * (`1->pick(2)`), and through `?->`; `1->inc()` is `inc(1)`, and the receiver enters the

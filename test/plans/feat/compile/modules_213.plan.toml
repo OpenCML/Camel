@@ -2,7 +2,7 @@ id = "compile.modules_213"
 order = 337
 tier = "fast"
 tags = ["feat", "compile", "modules"]
-desc = "Modules by the rulings of 2026-10-15 (design principles 10.1): a module importing itself, types forming a cycle across modules, values exported by a C++ module."
+desc = "Modules by the rule (design principles 10.1): a module importing itself, types forming a cycle across modules, values exported by a C++ module."
 
 [defaults]
 expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error", "Internal"]

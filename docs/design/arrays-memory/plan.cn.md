@@ -1,14 +1,14 @@
 # H17 实施计划：原生多维数组与数据块
 
-状态：**计划，待协调者批复**。本分支（`handover/H17-arrays-plan`）只改文档：不提交任何代码，因而不改变任何被观察到的行为。基线提交 `6a1c40c0`（2026-10-21，`develop`），构建与 `smoke` 已通过。
+状态：**计划，待协调者批复**。本分支只改文档：不提交任何代码，因而不改变任何被观察到的行为。基线提交 `6a1c40c0`（2026-10-21，`develop`），构建与 `smoke` 已通过。
 
 依据：
 
 - [原生多维数组、内存管理与互操作](README.cn.md) 第 9 节第 1–3 步；
 - [设计原则](../../design-principles.cn.md) 5.4（原生多维数组与维度）、10.5（库的边界与内存）；
-- 批复 [H17 计划批复](../../handover/reviews/H17-plan.md)、[H17–H22 检查意见](../../handover/reviews/H17-H22.md)、[H17c](../../handover/reviews/H17-H22.md) 的测量口径；
-- 旧计划 handover note ⟨f52f4b9⟩ (H17-plan)（已被本文件取代，保留作历史）；
-- 已落地的相关工作：本计划的摘要报告 handover note ⟨0f5f935⟩ (H17)（现状、关键判断、已读文件与验证）、handover note ⟨e36f1ec⟩ (H17b)、handover note ⟨13d8441⟩ (H17c)、handover note ⟨ab857b1⟩ (H17d)、handover note ⟨6684e77⟩ (H28)。
+- 批复 [H17 计划批复]、[H17–H22 检查意见]、[H17c] 的测量口径；
+- 旧计划（已被本文件取代，保留作历史）；
+- 已落地的相关工作：本计划的摘要报告 （现状、关键判断、已读文件与验证）、、、、。
 
 本文的每个结论都对应到文件与类型。读它不需要读代码；第 13 节列出会被触碰的文件的完整清单。
 
@@ -362,7 +362,7 @@ P4 的终点：
 - 签名里的裸 `Tensor` 是**编译错误**，诊断提示写 `Tensor<T>` 并在头部声明 `T`，或写具体元素类型
   （`f32` 等）；
 - 标准库的张量运算改为 `func op::<T>(x: Tensor<T>, …) when is_float::<T>()` 一类写法（按
-  `log_softmax` 的裁定）；
+  按 `log_softmax` 现行的写法）；
 - **值的元素类型总在类型里**；形状可以是 `?`（大小运行时才知道是值的事，不是类型的事）。
 
 删除步（P4 合入 develop 之前完成，负责人 2026-10-25：不留过渡、不留技术债。过渡状态只能存在于翻转分支上，develop 上不出现别名 `Tensor`、`numericUnknown` 或本节依赖表里的任何一处）：
@@ -653,7 +653,7 @@ println(after - before);             // 期望 0
 4. **中间红线（P4 之后、P5 之前）**：批复要求"超了先修再继续第 5 步"。用同一份 A 与 P4 后的构建 B′，只跑三个红线程序的 `nvm,fvm,jit`（`--pairs 3`），阈值同 8.4；超了就在开 P5 之前修 P2–P4。P7 的最终测量仍用 P6 后的完整 B，写进文档。
 5. **空载**：同一时段、无其它构建与测试并行；先跑 `fib.deep` 一次确认噪声底 < 3%，否则换时段重跑。作废受干扰的整轮（H17c 的做法），不挑单个数字。
 6. **不跨构建单次比较**：任何执行时间只在同一次 `ab.py` 调用内比较；`docs/performance/graph-store-baseline.md` 已有的"执行时间不跨构建单次比较"一节继续有效（H17c 第 3 条已写）。
-7. **认真记录**：结果表（程序、模式、A、B、B/A、噪声底、峰值 A/B）写进 `docs/performance/graph-store-baseline.md` 新增一节"H17 前后"与 `handover note ⟨0f5f935⟩ (H17)`。A 的提交、B 的提交、机器、时间、`--pairs/--rounds` 全部写明。
+7. **认真记录**：结果表（程序、模式、A、B、B/A、噪声底、峰值 A/B）写进 `docs/performance/graph-store-baseline.md` 新增一节"H17 前后"。A 的提交、B 的提交、机器、时间、`--pairs/--rounds` 全部写明。
 
 ### 8.4 通过标准
 
@@ -663,7 +663,7 @@ println(after - before);             // 期望 0
 
 ### 8.5 P7 的文件与门禁
 
-改：`test/tools/perfbaseline/baseline.py`（PROGRAMS）、`test/cases/perf/tensor/*.cml`、`docs/performance/graph-store-baseline.md`、`handover note ⟨0f5f935⟩ (H17)`。不改被测代码。
+改：`test/tools/perfbaseline/baseline.py`（PROGRAMS）、`test/cases/perf/tensor/*.cml`、`docs/performance/graph-store-baseline.md`。不改被测代码。
 
 门禁：`python3 test/tools/perfbaseline/ab.py ...` 的两组调用；`feat/perf` 只保证程序能编译与运行。P7 完成后，`docs/performance` 的表格是评审依据。
 
@@ -848,7 +848,7 @@ P4 是一个提交。如果评审或实施中发现它无法在合理时间内�
 | `docs/language/03_data_model.md`、`docs/language/08_top_level_and_grammar.md`（+`en/`）、`docs/diagnostics.md`、`docs/stdlib-reference.md`、`docs/performance/graph-store-baseline.md` | 文档 |
 | `test/tools/perfbaseline/baseline.py` | 张量程序 |
 | `test/plan-selection.json` | 新计划规则 |
-| `docs/handover/README.cn.md`（H17 一节的计划路径）、`handover note ⟨0f5f935⟩ (H17)` | 指向本计划 |
+| 本计划路径 | 指向本计划 |
 
 ### 删除
 

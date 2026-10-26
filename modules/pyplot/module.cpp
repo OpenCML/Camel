@@ -44,8 +44,7 @@ void ensurePyplotInterpreter() {
 bool PyplotModule::load() {
     if (loaded_)
         return true;
-    // `import` executes no code (design principles 3.1; the language author's ruling of
-    // 2026-10-22): loading registers the executor and the purity of the operator,
+    // `import` executes no code (design principles 3.1): loading registers the executor and the purity of the operator,
     // which the declaration loader needs, and nothing that touches CPython. The interpreter is
     // created by the first `plot` (`ensurePyplotInterpreter`), or attached to when `python`
     // created it first.

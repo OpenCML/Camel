@@ -1,7 +1,7 @@
 // `load_npy` declares the element type of the file it reads: the call writes it
 // (`load_npy::<f32>(p)`), or the type of the position the call stands in says it. The file's own
 // element type is the one the call declares -- a file of another element type is a fault, never a
-// conversion (design principles 5.1, 5.5; handover H466).
+// conversion (design principles 5.1, 5.5).
 //
 // The int64 array is the tree's only non-f32 `.npy`: the tensor a checkpoint's `odd` entry holds
 // (`test/cases/modules/nn/fixtures/checkpoint-v1/odd.npy`, element type int64, one extent of 2).

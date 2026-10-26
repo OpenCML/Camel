@@ -166,7 +166,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "type_position_empty_tuple"
-desc = "`fields` and `match type` are followed by a type position (H79 ruling 1): `fields ()` is the empty tuple type in the comprehension and statement forms, and `match type ()` matches it, without a `type EmptyTuple = ()` alias."
+desc = "`fields` and `match type` are followed by a type position: `fields ()` is the empty tuple type in the comprehension and statement forms, and `match type ()` matches it, without a `type EmptyTuple = ()` alias."
 kind = "behavior"
 case = "../../../cases/compile/static_expansion/type_position_empty_tuple.cml"
 args = ["${case}", "std::fvm"]
@@ -186,7 +186,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "comprehension_value_type"
-desc = "A comprehension's field types come from the round's values, not from `F` (H79 ruling 2): a recursive `widen` turns every int leaf of a nested struct/tuple into a float, the shape of `tree_map` with changed leaves."
+desc = "A comprehension's field types come from the round's values, not from `F`: a recursive `widen` turns every int leaf of a nested struct/tuple into a float, the shape of `tree_map` with changed leaves."
 kind = "behavior"
 case = "../../../cases/compile/static_expansion/comprehension_value_type.cml"
 args = ["${case}", "std::fvm"]
@@ -205,7 +205,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "comprehension_field_order"
-desc = "A struct comprehension keeps the field names and declaration order of the walked type while each field takes the type of its round's value (H79 ruling 2): `{a: int, b: float}` with values `(F, float)` gives `{a: (int, float), b: (float, float)}`, `a` before `b`."
+desc = "A struct comprehension keeps the field names and declaration order of the walked type while each field takes the type of its round's value: `{a: int, b: float}` with values `(F, float)` gives `{a: (int, float), b: (float, float)}`, `a` before `b`."
 kind = "behavior"
 case = "../../../cases/compile/static_expansion/comprehension_field_order.cml"
 args = ["${case}", "std::fvm"]
@@ -472,7 +472,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "static_loop_sequence"
-desc = "`static loop` walks a sequence written after `in` (the ruling of 2026-10-24, H462: the head lost the parentheses it carried and is written like the ordinary `loop`'s `for i in <序列>`). The constant interval `a..b` is read half-open as `..` is everywhere else, the trip count is the interval's and not any tuple's, an empty interval unrolls to no round, a `let` bound once to a constant is a bound the compiler knows, the iteration variable is a compile-time constant used as a value and as a `t.[i]` key at once, and one sequence loop nests in another."
+desc = "`static loop` walks a sequence written after `in`. The constant interval `a..b` is read half-open as `..` is everywhere else, the trip count is the interval's and not any tuple's, an empty interval unrolls to no round, a `let` bound once to a constant is a bound the compiler knows, the iteration variable is a compile-time constant used as a value and as a `t.[i]` key at once, and one sequence loop nests in another."
 kind = "behavior"
 case = "../../../cases/compile/static_expansion/static_loop_sequence.cml"
 args = ["${case}", "std::fvm"]
@@ -540,7 +540,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "static_loop_sequence_unknown"
-desc = "A `static loop` is unrolled where it stands, so how many rounds it has must be known when the function is compiled: a sequence bound by a parameter is refused by name (`SemanticDiag::StaticLoopSequenceNotKnown`, the ruling of 2026-10-24) rather than with the message of a missing tuple or of a type that is not concrete."
+desc = "A `static loop` is unrolled where it stands, so how many rounds it has must be known when the function is compiled: a sequence bound by a parameter is refused by name  rather than with the message of a missing tuple or of a type that is not concrete."
 kind = "negative"
 case = "../../../cases/compile/static_expansion/static_loop_sequence_unknown.cml"
 args = ["${case}"]
@@ -551,7 +551,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "static_loop_sequence_forms"
-desc = "The sequence of a `static loop` is decided by one rule, not a list of spellings (the ruling of 2026-10-25, H475): an expression built only from compile-time constants through pure operations that cannot fail is worked out and unrolled. `range(a, b, step)` with constant arguments walks `a, a + step, ...` (a negative step walks downwards), an array literal and a `let` bound once to an array walk by element, and an element that is not an integer is still a compile-time constant of the array's element type -- a string element is a `t.[s]` key by its own text."
+desc = "The sequence of a `static loop` is decided by one rule, not a list of spellings: an expression built only from compile-time constants through pure operations that cannot fail is worked out and unrolled. `range(a, b, step)` with constant arguments walks `a, a + step, ...` (a negative step walks downwards), an array literal and a `let` bound once to an array walk by element, and an element that is not an integer is still a compile-time constant of the array's element type -- a string element is a `t.[s]` key by its own text."
 kind = "behavior"
 case = "../../../cases/compile/static_expansion/static_loop_sequence_forms.cml"
 args = ["${case}", "std::fvm"]
@@ -573,7 +573,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "static_loop_sequence_tuple"
-desc = "`for x in ts` walks a compile-time tuple by element and each round's `x` is the *value* at that position, `ts.[i]` (the ruling of 2026-10-25, H475); its type, which varies with the position, is asked for as `typeof(x)` where a type is wanted. `tag::<typeof(x)>()` reads one per position and an empty tuple has no round."
+desc = "`for x in ts` walks a compile-time tuple by element and each round's `x` is the *value* at that position, `ts.[i]`; its type, which varies with the position, is asked for as `typeof(x)` where a type is wanted. `tag::<typeof(x)>()` reads one per position and an empty tuple has no round."
 kind = "behavior"
 case = "../../../cases/compile/static_expansion/static_loop_sequence_tuple.cml"
 args = ["${case}", "std::fvm"]
@@ -592,7 +592,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "static_loop_sequence_tuple_value"
-desc = "The tuple walk read as a value use is a positive case: each round's `x` is the element at that position (the ruling of 2026-10-25, H475 -- the earlier reading, that `x` is the type, was wrong), so the program the h471 measurement wrote for the tuple form (`acc + x`) adds 1, 2 and 3."
+desc = "The tuple walk read as a value use is a positive case: each round's `x` is the element at that position, so the program the h471 measurement wrote for the tuple form (`acc + x`) adds 1, 2 and 3."
 kind = "behavior"
 case = "../../../cases/compile/static_expansion/static_loop_sequence_tuple_value.cml"
 args = ["${case}", "std::fvm"]

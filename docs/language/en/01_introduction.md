@@ -41,7 +41,7 @@ Hello, Camel!
 
 - **Syntax** is written in a notation close to BNF: `*` zero or more times, `?` optional, `|` alternative, literal symbols inside quotes. The exact grammar is in [8.5](08_top_level_and_grammar.md#85-the-complete-grammar).
 - **Examples** are given as `cml` code blocks; a `text` code block is its output.
-- **"Behaviour of the current implementation, not yet decided"**: the implementation already has a definite behaviour, but there is no ruling on the language rule yet, and it may change later. Do not rely on the details of these behaviours when writing programs.
+- **"Behaviour of the current implementation, not yet decided"**: the implementation already has a definite behaviour, but there is no rule for it yet, and it may change later. Do not rely on the details of these behaviours when writing programs.
 
 ## 1.4 Chapters
 

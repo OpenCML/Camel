@@ -8,7 +8,7 @@
 namespace camel::core::rtdata {
 
 /**
- * Exercises the compact-element view boundary (review item 1):
+ * Exercises the compact-element view boundary:
  *
  *   normal   a view materialised before it is stored is not a view any more;
  *   escape   a view that is not materialised is still detected as one.

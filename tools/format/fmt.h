@@ -39,7 +39,7 @@ class Formatter {
 
     std::string currentIndent = "";
 
-    /// The wrap width of a declaration head (handover 5.00 "格式化器", the ruling of 2026-10-25):
+    /// The wrap width of a declaration head:
     /// past this many columns the clauses of the head move to lines of their own.
     static constexpr size_t wrapWidth = 80;
 
@@ -674,7 +674,7 @@ class Formatter {
     /// wider than `wrapWidth` puts every clause on a line of its own, indented one level; the
     /// caller decides beforehand whether the parameters go one per line too, and sets
     /// `paramsOnePerLine` for that. The body follows on the same line as the last clause, so the
-    /// opening brace of a `when` head stays at the end of its line (handover 5.00, 2026-10-25).
+    /// opening brace of a `when` head stays at the end of its line.
     std::string joinDeclClauses(
         const std::string &signature, const std::vector<std::string> &clauses);
 
@@ -761,7 +761,7 @@ class Formatter {
     std::any visitStaticLoopExpr(cst::StaticLoopExpr context);
 
     /// The names of a `static for` / `static loop` head, in the order written and comma-separated.
-    /// How many a head writes follows the element it walks (the ruling of 2026-10-25): the
+    /// How many a head writes follows the element it walks: the
     /// element of `fields T` is the triple (name, type, tags), every other element is one thing,
     /// so `for n, F, tags in fields T`, `for n in fields T` and `for j in indices ts` are all
     /// heads. Every name written is printed -- reading a fixed second name there printed nothing

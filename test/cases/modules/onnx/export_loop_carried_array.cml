@@ -4,8 +4,8 @@
  * value is a fact about the loop body (the shape of the carried state does not change from one
  * round to the next), not what the type prints, so the export is written. The trip count is a
  * constant here (`k >= 3`), so the export unrolls the recursion and keeps the input-dependent If;
- * the spelling of the type used to refuse this case (the ruling of 2026-10-24-evening,
- * growable-array-vs-tensor-in-the-onnx-exporter, replaced that proxy with the fact).
+ * the spelling of the type
+ * used to refuse this case.
  */
 module export_loop_carried_array
 import { reshape, sum } from tensor
