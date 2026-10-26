@@ -1,7 +1,7 @@
 # Copyright (c) the OpenCML Organization
 # SPDX-License-Identifier: MIT
 
-"""Camel from a Python project (H253).
+"""Camel from a Python project.
 
 A Python project calls the functions of a Camel module and the arrays cross through DLPack,
 without a copy:

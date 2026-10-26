@@ -31,7 +31,7 @@ returned for rework when it misses any of these, however well it tests:
   constructs (`loop … while`, `match`, pipelines in Camel).
 - **No dead or speculative code.** No commented-out code, unused parameters, "just in case"
   branches, flags nothing reads, or abstractions with one user and no second in sight.
-- **Comments state current facts and reasons**, not history ("used to", "after H123") and not a
+- **Comments state current facts and reasons**, not history ("used to", "after the rewrite") and not a
   narration of the code. Task numbers appear in reports and notes, never in code or comments.
 - **Errors are values or located diagnostics**, never silent fallbacks, magic sentinels or
   swallowed exceptions.

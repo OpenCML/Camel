@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.25)
 project(camel)
 
-# Object libraries whose undefined symbols decide what libcamel exports (H36). Every target that
+# Object libraries whose undefined symbols decide what libcamel exports. Every target that
 # is compiled separately and links libcamel registers its OBJECT library here; the generation at
 # the end of this file reads them all. The function is defined in the top-level directory, so the
 # subdirectories added below can call it.
@@ -86,7 +86,7 @@ add_compile_options(-ffp-contract=off)
 add_library(libcamel_objects OBJECT ${LIBCAMEL_SRC})
 add_library(libcamel SHARED $<TARGET_OBJECTS:libcamel_objects>)
 
-# Diagnostic codes are assigned in diagnostics/registry.tsv, not written by hand (H239): the
+# Diagnostic codes are assigned in diagnostics/registry.tsv, not written by hand: the
 # headers and message tables under core/error/diagnostics/messages are generated from it, and
 # this step refuses a duplicate number, a number outside its section's range, a duplicate name
 # and a generated file that no longer matches the registry. It runs before libcamel_objects, so
@@ -119,12 +119,12 @@ set_target_properties(libcamel PROPERTIES
     LINKER_LANGUAGE CXX
     PREFIX "")
 
-# Windows: explicit exports for camel-cli, the tools and the .cmo modules (H30, H16 item 5).
+# Windows: explicit exports for camel-cli, the tools and the .cmo modules.
 #
 # WINDOWS_EXPORT_ALL_SYMBOLS is off: a Debug build emits every inline and template function as a
 # real symbol, so "export everything" exceeded the PE limit of 65,535 exported names
 # (lld-link: "too many exported symbols (got 75682, max 65535)") and only the Release build ever
-# linked. The list is now generated (H36): for each configuration it is the intersection of the
+# linked. The list is generated (cmake/generate_libcamel_exports.mjs): for each configuration it is the intersection of the
 # symbols the dependent targets' object files leave undefined and the symbols libcamel's own
 # object files define. A new module, or a module that starts calling a new libcamel symbol, is
 # therefore in the list the next time libcamel links; no list edit is needed.
@@ -276,14 +276,14 @@ add_subdirectory(modules/verify)
 add_subdirectory(modules/rewrite)
 add_subdirectory(modules/onnx)
 
-# The Python binding (H253): the CPython extension `camel._camel`, a host of libcamel that a
+# The Python binding: the CPython extension `camel._camel`, a host of libcamel that a
 # Python project calls a Camel module through. Independent of modules/python (which embeds Python
 # in Camel, the other direction), so it is added whether or not CAMEL_ENABLE_PYTHON is on; the
 # directory itself returns early when Python's development files are absent.
 add_subdirectory(bindings/python)
 
 # ---------------------------------------------------------------------------------------------
-# The module manifest (H138): one line per .cmo this configure builds, per configuration.
+# The module manifest: one line per .cmo this configure builds, per configuration.
 #
 # The build tree keeps the output of a module after the module is renamed or removed, because
 # CMake does not delete the artifact of a target that no longer exists. scripts/common.js used to
@@ -308,7 +308,7 @@ file(GENERATE
 add_subdirectory(tools)
 
 # ---------------------------------------------------------------------------------------------
-# libcamel's export list, generated per configuration (H36).
+# libcamel's export list, generated per configuration.
 #
 # The cycle this breaks: the modules and the tools link libcamel, but libcamel needs the list of
 # symbols they import. Their *objects* are what carry the imports, and compiling an object needs
