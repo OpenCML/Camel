@@ -47,7 +47,7 @@ one definition.
 
 ```text
             +-----------------------------------------------+
-  modules/  |  onnx module: onnx.export_model(fn, x, path)  |
+  modules/  |  onnx module: export_model<out: path>(fn, x)  |
             |  partial evaluator + lowering table (by URI)  |
             |  + protobuf writer                            |
             +-----------------------+-----------------------+
@@ -313,10 +313,11 @@ Export is a runtime operator, not a tracer:
 
 ```camel
 import { export_model } from onnx
-export_model((x: Tensor): Tensor => forward<model>(x), example_x, 'model.onnx')
+export_model<out: 'model.onnx'>((x: Tensor): Tensor => forward<model>(x), example_x)
 ```
 
-(`export` is a Camel keyword, hence `export_model`.) The first argument is a
+(`export` is a Camel keyword, hence `export_model`.) The file the model is written to is a
+`with` argument — a runtime value, so the call gives it by name. The first argument is a
 function value: a runtime graph (`GCGraph`) plus its closure. The exporter
 partially evaluates that graph, demand-driven from its return value, with the
 parameter bound to a symbolic tensor carrying `example_x`'s dtype and shape.
@@ -366,7 +367,7 @@ Every node evaluates to either a constant or a symbolic tensor:
   becomes an ONNX `If`; each arm is emitted into its own subgraph (values first
   computed inside an arm stay in that arm). Matches on input-dependent values
   are rejected.
-- `export_model(fn, x, path, dynamic_axes)` leaves input axes dynamic (axis 0
+- `export_model<out: path, dynamic_axes: axes>(fn, x)` leaves input axes dynamic (axis 0
   is named `batch`). `shape(x)` then becomes `Shape`, but its statically known
   entries are tracked, so `shape(x)[3]` still folds and only the dynamic
   extent flows through `Gather`/`Concat`; `zeros(shape)` becomes

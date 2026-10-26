@@ -15,7 +15,7 @@ func main(): int sync {
     let b = zeros([8])
     let x = random([2, 4, 8], -1.0, 1.0)
     // reshape(.., shape(..)) needs the static rank of the layer_norm/matmul result.
-    export_model((t: f32[..]): f32[..] => reshape(t, shape(layer_norm(t, g, b) @ w)), x, get_env('ONNX_OUT') ?? '')
+    let _ = export_model<out: get_env('ONNX_OUT') ?? ''>((t: f32[..]): f32[..] => reshape(t, shape(layer_norm(t, g, b) @ w)), x)
     println('exported')
     return 0
 }

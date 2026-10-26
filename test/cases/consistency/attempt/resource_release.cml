@@ -40,9 +40,9 @@ func main(): int sync {
     let a = open_resource('a')
     let _ = py_call('print', py_wrap('use a'))
     if end == 'isolated' then sync {
-        println(attempt(hold_and_fault, 0) !! -1)
+        println(attempt(hold_and_fault)(0) !! -1)
     } else sync {
-        println(attempt(hold_and_fault, 4) !! -1)
+        println(attempt(hold_and_fault)(4) !! -1)
     }
     let _ = py_call(must(py_attr(a, 'touch')))
     let z = if end == 'fault' then 0 else 1

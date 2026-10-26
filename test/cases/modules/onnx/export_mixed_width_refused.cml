@@ -15,7 +15,7 @@ import { get_env } from env
 
 func main(): int sync {
     let x = reshape([1.0, 2.0, 3.0, 4.0], [2, 2])
-    export_model((t: float[..]): float[..] => t + randn([2, 2]), x, get_env('ONNX_OUT') ?? '')
+    let _ = export_model<out: get_env('ONNX_OUT') ?? ''>((t: float[..]): float[..] => t + randn([2, 2]), x)
     println('unreachable')
     return 0
 }

@@ -23,7 +23,7 @@
 
 ## 调用点
 
-`test/cases/modules/nn/{checkpoint_fixture_load,checkpoint_interrupted,checkpoint_roundtrip,checkpoint_tensor,checkpoint_unsupported_leaf,checkpoint_unsupported_load}.cml`、`test/cases/compile/native/declaration_type_argument.cml`、`docs/design/training/*.md`、`docs/technical/{09,41}_*.md`。`save_params`（`nn`）的 10 处也走这里（见 `nn.notes.md`）。
+`test/cases/modules/nn/{checkpoint_fixture_load,checkpoint_interrupted,checkpoint_roundtrip,checkpoint_tensor,checkpoint_unsupported_leaf,checkpoint_unsupported_load}.cml`、`docs/design/training/*.md`、`docs/technical/{09,41}_*.md`。`save_params`（`nn`）的 10 处也走这里（见 `nn.notes.md`）。
 
 ## 开放问题
 

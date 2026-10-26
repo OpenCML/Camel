@@ -74,7 +74,7 @@ func step(m: Block, x: f32[..]): (float, Block) {
 
 /// Exports `step` to ONNX: the parameters and the input become graph inputs.
 func export_step(m: Block, path: string): int sync {
-    export_model(step, (m, bench_input()), path)
+    let _ = export_model<out: path>(step, (m, bench_input()))
     return 0
 }
 

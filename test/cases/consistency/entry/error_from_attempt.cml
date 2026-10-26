@@ -8,5 +8,5 @@ func half(x: int): int { return 100 / x }
 
 func main(): int! sync {
     println('before')
-    return attempt(half, 0)
+    return attempt(half)(0)
 }

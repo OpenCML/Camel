@@ -20,8 +20,8 @@ func main(): int sync {
     println(a, b, a ?? -1, b ?? -1)
     println(checked(4), checked(-1), checked(4) !! 0, checked(-1) !! 0)
     println(parse_int('42'), parse_int('4x2'), parse_int('7') !! 0)
-    println(attempt(risky, 5), attempt(risky, 0), attempt(risky, 0) !! -1)
-    let e = attempt(risky, 0)
+    println(attempt(risky)(5), attempt(risky)(0), attempt(risky)(0) !! -1)
+    let e = attempt(risky)(0)
     let k = match e {
         case error err => err.kind
         case _ => 'fine'

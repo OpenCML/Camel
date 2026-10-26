@@ -16,7 +16,7 @@ func f(x: float[..]): float[..] {
 
 func main(): int sync {
     let x = reshape([1.0, 2.0], [2])
-    export_model(f, x, get_env('ONNX_OUT') ?? '')
+    let _ = export_model<out: get_env('ONNX_OUT') ?? ''>(f, x)
     println('exported')
     return 0
 }

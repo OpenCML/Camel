@@ -129,39 +129,39 @@ func main(): int sync {
     let out = get_env('ONNX_OUT') ?? ''
     let mode = get_env('MODE') ?? ''
     if mode == 'open' then {
-        export_model((x: f32[..]): f32[..] => openEnd(x), four, out)
+        let _ = export_model<out: out>((x: f32[..]): f32[..] => openEnd(x), four)
     } else if mode == 'start' then {
-        export_model((x: f32[..]): f32[..] => runtimeStart(x), four, out)
+        let _ = export_model<out: out>((x: f32[..]): f32[..] => runtimeStart(x), four)
     } else if mode == 'rank2' then {
-        export_model((x: f32[..]): f32[..] => rank2(x), four, out)
+        let _ = export_model<out: out>((x: f32[..]): f32[..] => rank2(x), four)
     } else if mode == 'known' then {
-        export_model((x: f32[..]): f32[..] => known(x), four, out)
+        let _ = export_model<out: out>((x: f32[..]): f32[..] => known(x), four)
     } else if mode == 'step' then {
-        export_model((x: f32[..]): f32[..] => stepped(x), four, out)
+        let _ = export_model<out: out>((x: f32[..]): f32[..] => stepped(x), four)
     } else if mode == 'negBoth' then {
-        export_model((x: f32[..]): f32[..] => negBoth(x), six, out)
+        let _ = export_model<out: out>((x: f32[..]): f32[..] => negBoth(x), six)
     } else if mode == 'posBoth' then {
-        export_model((x: f32[..]): f32[..] => posBoth(x), six, out)
+        let _ = export_model<out: out>((x: f32[..]): f32[..] => posBoth(x), six)
     } else if mode == 'negEnd' then {
-        export_model((x: f32[..]): f32[..] => negEnd(x), four, out)
+        let _ = export_model<out: out>((x: f32[..]): f32[..] => negEnd(x), four)
     } else if mode == 'posEnd' then {
-        export_model((x: f32[..]): f32[..] => posEnd(x), four, out)
+        let _ = export_model<out: out>((x: f32[..]): f32[..] => posEnd(x), four)
     } else if mode == 'negAll' then {
-        export_model((x: f32[..]): f32[..] => negAll(x), six, out)
+        let _ = export_model<out: out>((x: f32[..]): f32[..] => negAll(x), six)
     } else if mode == 'posAll' then {
-        export_model((x: f32[..]): f32[..] => posAll(x), six, out)
+        let _ = export_model<out: out>((x: f32[..]): f32[..] => posAll(x), six)
     } else if mode == 'negRank2' then {
-        export_model((x: f32[..]): f32[..] => negRank2(x), eight, out)
+        let _ = export_model<out: out>((x: f32[..]): f32[..] => negRank2(x), eight)
     } else if mode == 'posRank2' then {
-        export_model((x: f32[..]): f32[..] => posRank2(x), eight, out)
+        let _ = export_model<out: out>((x: f32[..]): f32[..] => posRank2(x), eight)
     } else if mode == 'sweep' then {
-        export_model((x: f32[..]): f32[..] => sweep(x), four, out)
+        let _ = export_model<out: out>((x: f32[..]): f32[..] => sweep(x), four)
     } else if mode == 'negOne' then {
-        export_model((x: f32[..]): f32[..] => negOne(x), six, out)
+        let _ = export_model<out: out>((x: f32[..]): f32[..] => negOne(x), six)
     } else if mode == 'posOne' then {
-        export_model((x: f32[..]): f32[..] => posOne(x), six, out)
+        let _ = export_model<out: out>((x: f32[..]): f32[..] => posOne(x), six)
     } else {
-        export_model((x: f32[..]): f32[..] => both(x), four, out)
+        let _ = export_model<out: out>((x: f32[..]): f32[..] => both(x), four)
     }
     println('exported')
     return 0

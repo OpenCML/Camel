@@ -1,0 +1,11 @@
+import { is_same } from types
+import { inf } from math
+
+#op('math:shr_l')
+with <count: int>
+func shr::<T>(x: T): T when is_same::<T, int>()
+
+func main(): int sync {
+    println((0 - 1)->shr<0 - 1>)
+    return 0
+}

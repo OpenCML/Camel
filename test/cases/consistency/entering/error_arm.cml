@@ -1,0 +1,34 @@
+// An error value in a T! position is that position's failing arm (design principles 3.9): the
+// declared return type reaches every arm of the `if`, so a `T!` function may write
+// `return if c then error('Bad', 'c was true') else v`, and the kinds and messages of the error
+// value arrive in the failed arm of the call (the ruling of 2026-10-26). Without a position
+// that names a T! the arms have no common type and the branch is refused (err_error_arm_no_type).
+
+func pick(c: bool): int! {
+    return if c then error('Bad', 'c was true') else 7
+}
+
+func direct(): int! {
+    return error('Direct', 'no branch')
+}
+
+func describe(c: bool): string {
+    return match pick(c) {
+        case error e => e.kind + ': ' + e.message
+        case v => 'value ' + '{}'->format<v>
+    }
+}
+
+func main(): int sync {
+    println(pick(true) !! -1)
+    println(pick(false) !! -1)
+    println(describe(true))
+    println(describe(false))
+    let y: int! = error('Given', 'written where a T! is wanted')
+    println(y !! -1)
+    println(match direct() {
+        case error e => e.kind + ': ' + e.message
+        case v => 'no value'
+    })
+    return 0
+}

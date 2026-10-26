@@ -3,7 +3,7 @@
 
 // Renders the film's frames with headless Chromium, several pages at once: a frame is a pure
 // function of its time, so pages take every n-th frame. Also writes the cue sheet the score reads.
-//   node render.cjs --out ../renders/poc/frames --fps 60 [--from 0] [--to 30] [--workers 4]
+//   node render.cjs --out ../renders/poc/frames --fps 60 [--from 0] [--to 30] [--workers 1]
 //   node render.cjs --out /tmp/stills --times 3.2,5.7,18.9
 const fs = require('fs');
 const path = require('path');
@@ -15,7 +15,8 @@ const args = Object.fromEntries(
 const url = args.url || 'http://localhost:9100/';
 const out = path.resolve(args.out || '../renders/poc/frames');
 const fps = Number(args.fps || 60);
-const workers = Number(args.workers || 4);
+// one page by default: on a CPU-only machine (software WebGL) several pages exhaust memory
+const workers = Number(args.workers || 1);
 fs.mkdirSync(out, { recursive: true });
 
 // software WebGL: Mesa llvmpipe through ANGLE's Vulkan backend was the fastest in the container

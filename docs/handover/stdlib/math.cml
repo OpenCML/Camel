@@ -35,15 +35,16 @@ export let pi: float = 3.141592653589793
 /// @example log(e)    // 1
 export let e: float = 2.718281828459045
 
-// Values the C++ module exports; a value has no declaration to write (stdlib-conventions 1).
+// Values the C++ module provides: declared without a right side, as a function without a body
+// and a type without a right side are (design principles 6.4; a float division by zero is a fault).
 
 /// Positive infinity; negative infinity is -inf.
 /// @example is_inf(-inf)    // true
-// value inf: float
+export let inf: float
 
 /// A NaN. It equals nothing, itself included: test with is_nan.
 /// @example is_nan(nan)    // true
-// value nan: float
+export let nan: float
 
 // ---- the f64 kernels ----
 // The elementary functions in f64, one operator each. Every float type goes through them: the

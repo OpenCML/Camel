@@ -607,6 +607,12 @@ void registerBuiltinOperatorTraits() {
     registry.set(
         std::string(camel::execute::kFaultIsolationUri),
         {.pure = false, .callsGraphs = true});
+    // The transform that gives the function of that node (:mark/attempt) is read by the builder,
+    // which turns `attempt(f)` into the value itself: no graph ever holds this node, and the
+    // declaration is the conservative one, as for the operator the value calls.
+    registry.set(
+        std::string(camel::execute::kAttemptTransformUri),
+        {.pure = false, .callsGraphs = true});
     // The block counters are ambient state: two calls with the same arguments can return
     // different structs, so the call must not be folded, merged or dropped as a pure one.
     registry.set(":op/mem_blocks", {.pure = false});

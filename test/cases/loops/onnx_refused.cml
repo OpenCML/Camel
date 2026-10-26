@@ -8,11 +8,9 @@ func model(x: float[..], w: float[..]): float[..] {
     return (loop h = x, k = 0 while k < 3 do (tanh(h @ w), k + 1)).0
 }
 
-func main(): int sync {
+func main(): void! sync {
     let x = reshape([1.0, 2.0, 3.0, 4.0], [2, 2])
     let w = reshape([0.5, -0.25, 0.1, 0.3], [2, 2])
     println(model(x, w))
-    export_model((x: float[..], w: float[..]): float[..] => model(x, w), (x, w), 'tmp/test/onnx/loop_refused.onnx')
-    println('exported')
-    return 0
+    export_model<out: 'tmp/test/onnx/loop_refused.onnx'>((x: float[..], w: float[..]): float[..] => model(x, w), (x, w))
 }

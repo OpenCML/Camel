@@ -33,7 +33,20 @@ func noisy(x: f32[..]): f32[..] {
     return x + randn([2, 2])
 }
 
-func main(): int sync {
+func export_step(m: Mlp, x: f32[..]): void! sync {
+    let _ = export_model<out: get_env('ONNX_OUT') ?? ''>(step, (m, x))
+    println('exported step')
+    return null
+}
+
+/// `noisy` has an effect, so the export is refused and the error value it gives
+/// is this function's result: nothing handles it, so it reaches the exit of
+/// `main` (design principles 3.9).
+func export_noisy(x: f32[..]): void! sync {
+    return export_model<out: get_env('ONNX_OUT') ?? ''>(noisy, x)
+}
+
+func main(): void! sync {
     let m = {
         w1: reshape([0.5, -0.25, 0.75, 1.0, -0.5, 0.25] as f32[], [2, 3]),
         b1: reshape([0.1, 0.0, -0.1] as f32[], [3]),
@@ -42,12 +55,8 @@ func main(): int sync {
     }
     let x = reshape([1.0, 2.0, -1.0, 0.5] as f32[], [2, 2])
     return if (get_env('MODE') ?? '') == 'step' then sync {
-        export_model(step, (m, x), get_env('ONNX_OUT') ?? '')
-        println('exported step')
-        return 0
+        export_step(m, x)
     } else sync {
-        export_model(noisy, x, get_env('ONNX_OUT') ?? '')
-        println('unreachable')
-        return 0
+        export_noisy(x)
     }
 }

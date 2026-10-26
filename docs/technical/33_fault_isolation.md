@@ -20,38 +20,53 @@ generated `docs/stdlib-reference.md`, this note, and the test programs.
 
 ### 1.1 Form
 
-`attempt` is a built-in higher-order operator. Its first argument is a function value, the
-rest are the arguments that function is called with:
+`attempt` is a built-in **function transform**. Applied to a function value it gives a function
+whose parameters are that function's and whose result is that function's result plus `!`:
 
 ```camel
-let b = attempt(risky, 0) !! -1                // a named function and its argument
-let ys = attempt(() => xs->map<risky>) !! [-1] // a closure: any expression can be isolated
+let b = attempt(risky)(0) !! -1                 // a named function and its argument
+let ys = attempt(() => xs->map<risky>)() !! [-1] // a closure: any expression can be isolated
+let g = attempt(risky)                          // (d: int) => int!: a value like any other
 ```
+
+The value is a function value like any other: it can be stored, passed on, and written in angle
+brackets (`rows->map<attempt(parse_row)>`). The old spelling `attempt(f, a)` is **deleted**:
+written with two arguments it is a plain argument count mismatch (`SemanticDiag::NoMatchingFunction`
+at the call), with no diagnostic of its own.
+
+It is an ordinary global name resolved like `map` or `println`; the grammar is unchanged.
+The function value may be a named function, a lambda, or any expression of a function type
+(a closure returned by another function, a parameter).
 
 (The sketch in the design principles writes `!! []`. An empty array literal takes its element
 type from an annotation only (`let none: int[] = []`); written in place it is a `void[]`, which
 `!!` refuses, and `[] as int[]` is refused too. The fallback is a named empty array or a
 non-empty literal; that is a limit of array literals, not of this operator.)
 
-It is an ordinary global name resolved like `map` or `println`; the grammar is unchanged.
-The function value may be a named function, a lambda, or any expression of a function type
-(a closure returned by another function, a parameter).
-
 ### 1.2 Type
 
-| `f` | `attempt(f, a...)` |
-|---|---|
-| `(A...) => T` | `T!` |
-| `(A...) => U?` | `U?!` (allowed by `29`, 4.3: "may fail, and the result may be absent") |
-| `(A...) => U!` | `U!` — **not** `U!!` (`DESIGN-QUESTION(attempt-fallible-target)`) |
+| `f` | `attempt(f)` | call `attempt(f)(a...)` |
+|---|---|---|
+| `(A...) => T` | `(A...) => T!` | `T!` |
+| `(A...) => U?` | `(A...) => U?!` | `U?!` (allowed by `29`, 4.3: "may fail, and the result may be absent") |
+| `(A...) => U!` | `(A...) => U!` | `U!` — **not** `U!!` (`DESIGN-QUESTION(attempt-fallible-target)`) |
 
-The arguments must have exactly the parameter types of `f` (no conversion, as for every
-call). Not accepted, each a compile-time error at the call (`NoMatchingFunction`):
+Calling the value is typed like the call of any function value: the arguments must have exactly
+the parameter types of `f` (no conversion, as for every call), a wrong one is
+`SemanticDiag::ArgumentsMismatch` at that call.
 
-- a function with `with` parameters (it is called through a closure that binds them);
-- a function with a `var` parameter: an existing rule of the front end refuses to hand such a
-  function to any operator ("an operator calls a function argument with values"). The closure
-  form captures the variable instead, by reference (3.5).
+Not accepted, each a compile-time error at the `attempt` call (`NoMatchingFunction`):
+
+- a function with `with` parameters (the marked call passes no `with` argument);
+- a function with a `var` parameter (the marked call is given values), and a function with a
+  rest parameter: an existing rule of the front end refuses to hand such a function to any
+  operator ("an operator calls a function argument with values"). The closure form captures the
+  variable instead, by reference (3.5).
+
+Differing from `f`, the value publishes **no resource signature**: it is built at the call site
+out of a callee the type does not name, and a call through it is read as reaching what the
+callee of that call reaches (design effects plan 2.2). The graph it holds has an open signature,
+so the resource pass settles it like any other closure's.
 
 When `f` itself returns `U!`, the result is `U!`: an error value `f` returned is handed on
 unchanged, and a fault inside `f` becomes an error value of the same type. `T!!` is rejected
@@ -61,18 +76,32 @@ once, with one `!!`. The kind name tells the two apart when needed.
 
 ### 1.3 On the graph
 
-One `OPER` node whose URI is `:mark/isolate`. Its first input is the function value, the
-others are the arguments — the inputs of a `CALL` node, on a node of another kind. From
-`camel x.cml std::rgir` for `let b = attempt(risky, 0) !! -1` (attributes shortened):
+`attempt(f)` gives the function value of **one small graph of its own** (built once per
+evaluation of the call site). That graph's body is one `OPER` node whose URI is `:mark/isolate`;
+its first input is the captured `f` (a closure port) and its other inputs are the graph's
+parameters — the inputs of a `CALL` node, on a node of another kind. The graph's result is that
+node's result. The value is the `FUNC` node of that graph together with a `FILL` node (a
+closure) whose `WITH` input is the callee it captured.
+
+From `camel x.cml std::rgir` for `let b = attempt(risky)(0) !! -1` (attributes shortened; the
+synthesized graph has no name of its own):
 
 ```
 subgraph main {
-    subgraph risky { PORT x; DATA 100; OPER :op/div_l; EXIT }
-    N1 [label="Function(graph=risky, tupleSlots=0)", type="DATA"];
-    N2 [label="0", type="DATA"];
-    N3 [label=":mark/isolate", type="OPER"];      // : int!
-    N1 -> N3 [label="0|0", type="NORM"];
-    N2 -> N3 [label="0|1", type="NORM"];
+    subgraph risky { PORT d; DATA 100; OPER :op/div_l; EXIT }
+    subgraph __g_4__ {                            // (d: int) => int!
+        PORT d;
+        CLOSURE_PORT $tagged0;                    // (d: int) => int
+        OPER :mark/isolate;                       // : int!
+        $tagged0 -> :mark/isolate [0|0];
+        d -> :mark/isolate [0|1];
+        :mark/isolate -> EXIT;
+    }
+    DATA "Function(graph=risky, tupleSlots=0)";   // the callee
+    DATA "Function(graph=__g_4__, tupleSlots=1)"; // the value's own graph
+    FILL (d: int) => int!;                        // the closure: the graph with the callee
+    DATA 0;
+    CALL : int!;                                  // calls the closure, which calls the marked node
     ...                                           // BRCH/JOIN of `!! -1` (29, section 3.1)
 }
 ```
@@ -86,7 +115,9 @@ call is a fault boundary. The structure does not depend on what the callee conta
 the criterion of section 1. `:mark/...` is the existing family of operators that the
 schedulers run themselves because they call back into graphs (`:mark/map_arr`, ...); a new
 node kind was not added (it would have to be taught to every pass, back end and exporter for
-no gain: no pass has to look inside).
+no gain: no pass has to look inside). The transform itself is not a node: the builder reads the
+`attempt(f)` call and builds the value (`Builder::attemptFunctionValue`), so no scheduler ever
+sees the transform's URI (`:mark/attempt`).
 
 ### 1.4 The boundary
 
@@ -96,10 +127,10 @@ with everything it calls, directly or indirectly, on whatever thread.
 - A fault inside the boundary ends the evaluation of everything inside it and nothing else.
   The node produces the failed form of its `T!`; the nodes of the enclosing graph run as if
   the callee had returned.
-- A fault raised by evaluating the *arguments* of `attempt`, or the function value, is outside
-  (those are nodes of the enclosing graph). So is the recursion-limit check made *for* the
-  call: it is the caller that has no room. The enclosing `attempt`, if there is one, isolates
-  those.
+- A fault raised by evaluating the *arguments* of the marked call, or the function value, is
+  outside (those are nodes of the enclosing graph). So is the recursion-limit check made *for*
+  the call: it is the caller that has no room. The enclosing `attempt`, if there is one,
+  isolates those.
 - **Effects that happened inside the boundary before the fault stay.** Lines already printed
   are printed, files written are written, and a `var` written inside the boundary keeps the
   value written: a `var` is a shared cell (design principles 3.5), and nothing is rolled back.
@@ -357,15 +388,23 @@ fault, would make an isolated fault cost a full collection).
   `std::opt` specialises a callee on a constant argument and then warns
   (`ConstantExpressionFaults`) that the division in the specialised copy always faults; it
   does not fold it, and the behaviour is unchanged.
-- **`std::macro`.** The macro evaluator runs none of the operators the schedulers run
-  themselves (`map`, `filter`, ..., `attempt`): a macro call with constant arguments whose
-  body uses one fails to evaluate, which is a compile-time error (8), reported at the call
-  with the operator named. Without `std::macro` the function is an ordinary one.
-- **Autodiff, ONNX export, `std::cpp`.** Each refuses with a located diagnostic, with no
-  change to them: `grad` at the `grad` call ("no derivative rule for operator
-  ':mark/isolate'"); `onnx::export` at the `attempt` ("impure operator ':mark/isolate'
-  cannot be exported"); `std::cpp` at the `attempt` (it names the `T!` type of the value, the
-  first thing it cannot express, not the operator).
+- **`std::macro`.** A macro call with constant arguments whose body calls the value `attempt(f)`
+  fails to evaluate — the evaluator cannot call a non-macro function at compile time — which is
+  a compile-time error (8), reported at the call. Without `std::macro` the function is an
+  ordinary one. Where the callee *is* a macro function the evaluation succeeds instead: the
+  closure is a value, and calling it reaches the marked node through a graph value rather than
+  meeting it in the macro's own body. That last case is not covered by the 2026-10-26 ruling and
+  is reported to the author as a question; the case as the plan writes it (a lambda callee) is
+  the compile-time error above.
+- **Autodiff and ONNX export.** Each refuses with a located diagnostic, with no change to them:
+  `grad` at the `grad` call ("no derivative rule for operator ':mark/isolate'");
+  `onnx::export` at the `attempt` ("impure operator ':mark/isolate' cannot be exported",
+  reported at the name the program wrote).
+- **`std::cpp`.** It translates the value as it translates any closure: the closure becomes an
+  `rt::Fn` whose lambda calls the generated function of the synthesized graph, and that
+  function's body is the one marked call, `rt::attempt<T>(depth, site, captured, args...)` (a
+  C++ try around the call, `include/camel/standalone/hof.h`). That the translated program
+  prints what `std::fvm` prints is checked by `trans.cpp.agree_with_fvm`.
 - **Safepoint.** The node is one: both entering the callee and leaving it (normally or
   through a fault) are graph boundaries, where every live value is in a frame.
 
@@ -440,7 +479,7 @@ Each is implemented as recommended.
 - **`attempt-fallible-target`.** `attempt(f)` with `f: () => U!`.
   ```camel
   func checked(x: int): int! { ... throw error('Negative', ...) ... return 100 / x }
-  attempt(checked, 0)      // int!: error DivisionByZero;  attempt(checked, -4): error Negative
+  attempt(checked)(0)      // int!: error DivisionByZero;  attempt(checked)(-4): error Negative
   ```
   Implemented: the type is `U!`; errors of `f` pass unchanged. Alternatives: reject such an
   `f` (the program writes `attempt(() => checked(x) !! d)`); a nested `U!!` (the type system
@@ -449,7 +488,7 @@ Each is implemented as recommended.
   of the faults of the program's computation, recursion depth included; compiler defects,
   memory exhaustion and `exit` are not. Alternatives: a deny-list (new faults isolated by
   default); excluding recursion depth; excluding the generic `RuntimeError` of modules.
-- **`attempt-memory-exhausted`.** `attempt(() => build_huge()) !! [-1]` when the heap is full.
+- **`attempt-memory-exhausted`.** `attempt(() => build_huge())() !! [-1]` when the heap is full.
   Implemented: not isolated, the program ends with the `MemoryExhausted` diagnostic.
   Alternative: isolate it after a collection at the boundary, when that frees enough.
 - *Ruled (design principles 3.9; were `attempt-parallel-siblings` and
@@ -465,13 +504,13 @@ Each is implemented as recommended.
 - **`attempt-finalizers`.** A resource acquired inside a boundary that faults.
   ```camel
   func hold(d: int): int sync { let r = open_resource('b'); return 100 / d }
-  attempt(hold, 0) !! -1       // when is 'b' released?
+  attempt(hold)(0) !! -1       // when is 'b' released?
   ```
   Implemented: by the next collection that finds it, at the latest when the run ends.
   Alternative: a collection at the boundary whenever a fault is isolated.
 - **Arguments and the call itself** (not marked in code; it follows from "the boundary is
-  the subgraph"). `attempt(f, 10 / z)` with `z == 0`, and an `attempt` made when the
+  the subgraph"). `attempt(f)(10 / z)` with `z == 0`, and an `attempt` made when the
   recursion limit is already reached, fault outside the boundary. Alternative: treat the
   whole call expression as the boundary.
 - **A function with a `var` parameter** cannot be given to `attempt` (existing rule for all
-  operators); the closure form is used. Should `attempt(f, v)` hand a variable on?
+  operators); the closure form is used. Should `attempt(f)(v)` hand a variable on?

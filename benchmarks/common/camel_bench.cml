@@ -49,7 +49,7 @@ func timed(forward: (x: f32[..]) => f32[..], x: f32[..], remaining: int): int {
 func export_onnx(forward: (x: f32[..]) => f32[..], path: string): int sync {
     let x = load_npy::<f32>(get_env('CAMEL_BENCH_INPUT') ?? '')
     let start = now()
-    export_model(forward, x, path)
+    let _ = export_model<out: path>(forward, x)
     'CAMEL_BENCH export_ms={}'->format<(now() - start) * 1000.0>->println
     return 0
 }

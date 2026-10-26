@@ -1,0 +1,6 @@
+func main(): int sync {
+    var p: int = 0
+    var q: int? = 5
+    p = q
+    return 0
+}

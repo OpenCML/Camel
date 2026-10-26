@@ -40,12 +40,13 @@ struct WrittenParam {
     /// a user typed (design principles 9.3: the value is read by the declared type, a string as
     /// written), so `out=model.onnx` is the word the pass is given.
     std::string raw;
-    /// The value read as a Camel constant expression, when it is one. A bool, int or float
-    /// parameter takes this and nothing else.
+    /// The value read as a Camel constant expression, when it is one. A bool, int, float or
+    /// `int[]` parameter takes this and nothing else; `null` is a constant too, and a nullable
+    /// parameter is the only one it fits.
     PassParamValue value;
     bool isConstant = false;
-    /// Why the value is not a constant. It is the refusal a bool, int or float parameter gets; a
-    /// string parameter takes `raw` instead, so it never sees this message.
+    /// Why the value is not a constant. It is the refusal a bool, int, float or `int[]`
+    /// parameter gets; a string parameter takes `raw` instead, so it never sees this message.
     std::string constantProblem;
     size_t column = 0; // 0-based column of the key in the specification
     size_t length = 0; // the whole `key=value` word, for a refusal the declared type decides
@@ -57,9 +58,9 @@ struct ParsedSpec {
 };
 
 /// Reads the parameters a pass declaration writes in its `with <...>` list: their names, the
-/// types the declaration gives them, and the constants their defaults evaluate to. The
-/// declaration is an ordinary Camel function declaration, so this reads the same nodes the
-/// language's own signature does.
+/// types the declaration gives them (a scalar, `int[]`, and the `?` of a nullable one), and the
+/// constants their defaults evaluate to. The declaration is an ordinary Camel function
+/// declaration, so this reads the same nodes the language's own signature does.
 std::vector<PassParam> readPassParams(
     const camel::parse::ast::node_ptr_t &withParams, std::string_view passName);
 

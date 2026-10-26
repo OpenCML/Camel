@@ -395,14 +395,16 @@ Invalid number format: '{0}'.
 A number is decimal digits without a leading zero in its whole part (an integer or a real: '0.5' is a number, '007' and '007.5' are not), or '0x', '0b' or '0o' followed by digits of that base: octal 63 is '0o77', not '077'; '09' and '077' are not number tokens. An entry argument is read by the same rule; a conversion text is data, and reads '077' as 77.
 ```
 
-**Example** (`test/cases/compile/precedence/leading_zero_real.cml`, run as `camel test/cases/compile/precedence/leading_zero_real.cml`)
+**Example** (`test/cases/compile/literals/real_leading_zero.cml`, run as `camel test/cases/compile/literals/real_leading_zero.cml`)
 
 ```camel
-// A real has no leading zero in its whole part, as an integer has none: `007.5` is refused like
-// `007`; `0.5` is a number.
+// A real has no leading zero in its whole part, as an integer has none: `077.5` is refused like
+// `007.5` (compile.precedence.leading_zero_real) and like `077`. The point does not make the
+// leading zero unambiguous, and the token is not read as an octal number either: octal is `0o77`.
+// `0.5` is a number.
 func main(): int sync {
     let a = 0.5
-    let b = 007.5
+    let b = 077.5
     println(a + b)
     return 0
 }
@@ -6547,23 +6549,14 @@ The 'with' argument '{0}' is given by name, and the signature of '{1}' is not kn
 Name the one function the binding is for, or give the 'with' arguments positionally.
 ```
 
-**Example** (`test/cases/compile/with_defaults/overload_default_hole.cml`, run as `camel test/cases/compile/with_defaults/overload_default_hole.cml`)
+**Example** (`test/cases/compile/with_defaults/callee_unknown.cml`, run as `camel test/cases/compile/with_defaults/callee_unknown.cml`)
 
 ```camel
-module with_overload_default_hole
-
-with <rounds: int = 8, label: string = 'x'>
-func show(a: int): int {
-    return a * rounds
-}
-
-with <rounds: int = 8, label: string = 'x'>
-func show(a: string): int {
-    return rounds
-}
+module with_defaults_callee_unknown
 
 func main(): int sync {
-    return show<label: 'p'>(3)
+    'a{}'->format<x: 1>->println
+    return 0
 }
 ```
 
@@ -9245,8 +9238,8 @@ module fault_outside
 func risky(d: int): int { return 100 / d }
 
 func main(): int sync {
-    println(attempt(risky, 0) !! -1)
-    println(attempt(risky, 4) !! -1)
+    println(attempt(risky)(0) !! -1)
+    println(attempt(risky)(4) !! -1)
     println(risky(0))
     println('not reached')
     return 0
@@ -10088,7 +10081,7 @@ Invalid pass specification '{0}': {1}.
 **Help**
 
 ```text
-A pass is written on the pipeline as its name followed by its parameters as key=value words, never in parentheses: `std::opt safe_fp=true growth_budget=8192`. The values are constant expressions (bool, int, float or string). The message names the parameter, the type it has and the parameters the pass declares.
+A pass is written on the pipeline as its name followed by its parameters as key=value words, never in parentheses: `std::opt safe_fp=true growth_budget=8192`. A value is the constant the parameter's declared type reads: a `bool`, `int`, `float`, `string` or `int[]` constant, or `null` where the declaration writes `T?`. The message names the parameter, the type it has and the parameters the pass declares.
 ```
 
 **Example** (`test/cases/modules/graph_pass/tiny.cml`, run as `camel test/cases/modules/graph_pass/tiny.cml unparsable_pass::run std::nvm`)

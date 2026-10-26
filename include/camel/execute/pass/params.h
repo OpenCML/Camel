@@ -10,11 +10,14 @@
  *
  *     camel m.cml std::opt safe_fp=true growth_budget=8192 std::fvm
  *
- * The values are Camel constant expressions (bool, int, float and string literals, and the unary
- * and binary operators over them), read by the language's own parser. The pipeline checks the
- * written ones against the declaration (unknown name, wrong type, missing value are diagnostics)
- * and hands the factory a PassArgs with every parameter set: the written value or the default
- * the declaration evaluates once, where it is.
+ * The values are Camel constant expressions (the literals of the declaration's type, `null`, and
+ * the unary and binary operators over them), read by the language's own parser. Which constants a
+ * word may be is the *declared* type's business and not the word's (design principles 9.3): a
+ * `bool`, `int` or `float` parameter takes a constant of its type, a `string` one the word as
+ * written, an `int[]` one an array constant, and a nullable `T?` one also takes `null`. The
+ * pipeline checks the written ones against the declaration (unknown name, wrong type, missing
+ * value are diagnostics) and hands the factory a PassArgs with every parameter set: the written
+ * value or the default the declaration evaluates once, where it is.
  */
 
 #pragma once
@@ -28,11 +31,20 @@
 #include <variant>
 #include <vector>
 
-enum class PassParamType { Bool, Int, Float, String };
+enum class PassParamType { Bool, Int, Float, String, IntArray };
 
-const char *passParamTypeName(PassParamType type);
+/// The type as a declaration writes it, with the `?` a nullable parameter carries: `bool`, `int`,
+/// `float`, `string`, `int[]`, `int[]?`, `string?`.
+std::string passParamTypeName(PassParamType type, bool nullable = false);
 
-using PassParamValue = std::variant<bool, int64_t, double, std::string>;
+/// `std::monostate` is `null`: the value of a parameter declared `T?` that no word gave and that
+/// the declaration's default does not fill either.
+using PassParamValue =
+    std::variant<bool, int64_t, double, std::string, std::vector<int64_t>, std::monostate>;
+
+/// A value as the declaration's type writes it: `true`, `5`, `1.5`, `"x"`, `[0, 1]`, and `null`
+/// for the value a nullable parameter has when it is not there.
+std::string passParamValueText(const PassParamValue &value);
 
 struct PassParam {
     std::string name;
@@ -41,6 +53,9 @@ struct PassParam {
     std::string doc;
     /// A parameter without a default: the pipeline must write it.
     bool required = false;
+    /// The declaration wrote `T?`: `null` is a value of this parameter, so leaving it out is not
+    /// the same as a parameter that has no value at all.
+    bool nullable = false;
 };
 
 /// The parameters of one pass invocation, defaults filled in. Asking for a name the pass did
@@ -51,6 +66,16 @@ class PassArgs {
     int64_t getInt(const std::string &name) const;
     double getFloat(const std::string &name) const;
     const std::string &getString(const std::string &name) const;
+    const std::vector<int64_t> &getIntArray(const std::string &name) const;
+    /// Whether the value is `null`: the parameter is declared `T?` and no word gave it, or the
+    /// word `null` did. Every getter above refuses a `null` value, so a parameter that may be
+    /// null is asked this first.
+    bool isNull(const std::string &name) const;
+    /// The names this invocation carries, in name order: every parameter of the declaration, the
+    /// written ones and the ones that fell back to their default.
+    std::vector<std::string> names() const;
+    /// The value as the declaration's type writes it (`[0, 1]`, `null`, `"x"`, `5`).
+    std::string text(const std::string &name) const;
     /// Whether the pipeline wrote the parameter (as against the default being used).
     bool given(const std::string &name) const;
 

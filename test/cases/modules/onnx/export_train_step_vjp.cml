@@ -43,7 +43,7 @@ func main(): int sync {
     println(r.0)
     println(r.1.w)
     println(r.1.b)
-    export_model(step, (m, x), get_env('ONNX_OUT') ?? '')
+    let _ = export_model<out: get_env('ONNX_OUT') ?? ''>(step, (m, x))
     println('exported')
     return 0
 }

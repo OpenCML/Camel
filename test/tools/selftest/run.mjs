@@ -621,6 +621,10 @@ const RULELESS_ALLOWED = [
         why: 'the showcase programs are the manual perf layer',
     },
     {
+        match: /^promo\//,
+        why: 'the promo film, the logo and the motion-graphics sources are the manual marketing material; no test plan reads them',
+    },
+    {
         match: /^pypi\//,
         why: 'the Python packaging sources; no test plan reads them',
     },

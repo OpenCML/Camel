@@ -70,11 +70,11 @@ void foreach(Depth depth, const Site &site, const Array<T> &xs, const F &f) {
     }
 }
 
-/// `attempt(f, args...)` (:mark/isolate, design principles 3.9): the call of `f` in which a
-/// fault becomes the failed value of the result, with the fault's kind, message and location
-/// (src/execute/fault_isolation.cpp). The call counts like any other, checked outside the
-/// boundary: a recursion limit reached by the call itself is not isolated. `exit` passes
-/// through. Output written before the fault stays written.
+/// The marked call the value of `attempt(f)` holds (:mark/isolate, design principles 3.9): the
+/// call of `f` in which a fault becomes the failed value of the result, with the fault's kind,
+/// message and location (src/execute/fault_isolation.cpp). The call counts like any other,
+/// checked outside the boundary: a recursion limit reached by the call itself is not isolated.
+/// `exit` passes through. Output written before the fault stays written.
 template <typename R, typename F, typename... A>
 Fallible<R> attempt(Depth depth, const Site &site, const F &f, A &&...args) {
     const Depth inner = call(depth, site);

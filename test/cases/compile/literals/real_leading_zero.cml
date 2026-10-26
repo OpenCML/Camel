@@ -1,0 +1,10 @@
+// A real has no leading zero in its whole part, as an integer has none: `077.5` is refused like
+// `007.5` (compile.precedence.leading_zero_real) and like `077`. The point does not make the
+// leading zero unambiguous, and the token is not read as an octal number either: octal is `0o77`.
+// `0.5` is a number.
+func main(): int sync {
+    let a = 0.5
+    let b = 077.5
+    println(a + b)
+    return 0
+}

@@ -53,6 +53,25 @@ expect_stdout = "0\n[0, 1, 4, 9]\n[0.5, 1.0, 1.5]\n[0, 1, 4, 9]\n0\n[[]]\n0\n0\n
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
+# A comprehension is not the empty literal. `[e for x in s]` writes no element list either, so a
+# position that stated an array type used to build it as `[]` and drop every round without a word:
+# the name held an empty array and the rounds were never counted (design principles 4.2, 5.1).
+# A comprehension is a value of its own, and the position's type reaches it the way it reaches the
+# same comprehension returned from a function with that declared type.
+
+[[tests]]
+name = "context.comprehension_position"
+desc = "A comprehension written where a `T[]` is stated keeps its rounds: a declaration's annotation, a `var` declaration, an `as` cast, an element of a tuple, and the declared return type of a function (the position that always worked). It used to be built as the empty array literal, silently."
+kind = "behavior"
+case = "../../../cases/compile/literals/comprehension_in_position.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout = "[0.0, 1.0, 2.0, 3.0] 4\n[1, 2, 3, 4] 4\n4 7\n[0.0, 0.5, 1.0, 1.5] 4\n[0, 1, 4, 9] 4\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
 # The rule is a compile-time rule: a value that does not fit the type it is given is an error at
 # the position that gave it the type, not a fault at run time (and not a wrap-around).
 

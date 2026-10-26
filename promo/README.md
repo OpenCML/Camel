@@ -48,7 +48,7 @@ cd promo/poc
 npm install
 npm run serve &                           # http://localhost:9100/?play plays it in real time
 npm run cues                              # ../renders/poc/cues.json: the beat grid the score follows
-npm run render                            # ../renders/poc/frames/000000.png ... (60 fps, 6 pages at once)
+npm run render                            # ../renders/poc/frames/000000.png ... (60 fps, one page)
 python3 score.py ../renders/poc/cues.json ../renders/poc/score.wav
 ffmpeg -framerate 60 -i ../renders/poc/frames/%06d.png -i ../renders/poc/score.wav \
   -c:v libx264 -preset slow -crf 16 -pix_fmt yuv420p -c:a aac -b:a 256k -shortest \
@@ -56,3 +56,7 @@ ffmpeg -framerate 60 -i ../renders/poc/frames/%06d.png -i ../renders/poc/score.w
 ```
 
 To render single frames, use `node render.cjs --out DIR --times 5.6,10.0,24.4`.
+
+`npm run render` uses one page. Rendering several pages at once (`--workers N`) needs a machine
+with a GPU. Without one, WebGL runs in software and parallel pages run out of memory: they
+crashed the Docker VM. Render full films on your own machine, not in the build container.

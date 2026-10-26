@@ -1793,7 +1793,8 @@ bool FunctionEmitter::lowerHigherOrder(
     const auto with = g->withInputsOf(ref);
     std::string expr;
     if (it->second == "attempt") {
-        // attempt(f, args...): the result's payload type is the C++ type of the `T!`'s T.
+        // The marked call of the value `attempt(f)` (f, args...): the result's payload type is the
+        // C++ type of the `T!`'s T.
         const Type *result            = g->node(ref)->dataType();
         const auto *tagged            = static_cast<const camel::core::type::TupleType *>(result);
         const Type *payload           = tagged->payloadType();

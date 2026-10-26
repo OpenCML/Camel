@@ -120,7 +120,7 @@ filter: <f: (item: T) => bool> (xs: T[]) => T[]
 reduce: <f: (acc: U, item: T) => U, initial: U> (xs: T[]) => U
 foreach: <f: (item: T) => void> (xs: T[]) => void
 apply: <f: (item: T) => T> (xs: T[]) => T[]
-attempt: (f: (...args: A) => T, ...args: A) => T!
+attempt: (f: (...args: A) => T) => (...args: A) => T!
 len: (x: Map<K, V>) => int
 len: (x: Set<T>) => int
 get: <key: K> (m: Map<K, V>) => V?
@@ -853,10 +853,12 @@ pi_hits: (samples: int, seed: int) => int
 asian_call_price: (paths: int, steps: int, seed: int) => float
 ```
 
-**`onnx`** — import { ... } from onnx — 2 name(s)
+**`onnx`** — import { ... } from onnx — 4 name(s)
 
 ```text
-export_model: (fn: (x: f32[..]) => void, example: f32[..], path: string) => void
+export_model: <out: string> (fn: (x: f32[..]) => void, example: f32[..]) => void!
+export_model: <out: string, dynamic_axes: int[]> (fn: (x: f32[..]) => void, example: f32[..]) => void!
+export_model: <out: string, dynamic_axes: int[], target: string> (fn: (x: f32[..]) => void, example: f32[..]) => void!
 supported_operators: () => string[]
 ```
 <!-- camel-for-ai end: stdlib-signatures -->

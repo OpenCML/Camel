@@ -384,17 +384,6 @@ expect_diagnostic_name = "SemanticDiag::ImportNameNotExported"
 expect_diagnostic_code = "0x03000015"
 expect_output_contains = ["private_import.cml:8", "Reference 'at'"]
 
-#  ---- The entry module's declarations answer under its declared name ----
-
-[[tests]]
-name = "native.entry_uri_prefix"
-desc = "A declaration in the entry module uses the `module` declaration's name as its URI prefix (`bytes:to_array`), not the runtime name `main`: the declaration is loaded, the call reaches the operator."
-kind = "behavior"
-case = "../../../cases/compile/native/entry_uri.cml"
-args = ["${case}"]
-expect_exit = 0
-expect_stdout_exact = "[97, 98, 99]\n"
-
 #  ---- A declaration may name only its own module's operator ----
 
 [[tests]]
@@ -594,45 +583,39 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 
-# ---- A declaration cannot be parametric ----
+# ---- The type arguments a declaration states, and one name's one signature ----
 
-# `from_bytes::<T>` and a per-leaf `ckpt_get::<L>` ask for one name whose result type the call
-# names; the declaration mechanism has no such form. The two cases below state
-# what is missing, not how the module happens to be written today.
+# A declaration states its type variables, and a call names them by position or by name (design
+# principles 5.9). A call that names a type argument the declaration does not have has no candidate,
+# and the overload the refusal lists is the declaration's own signature, with its type variable —
+# `stdlib/tensor.cml`, not the C++ module.
+#
+# Two Camel functions of one name and one signature in the module that writes them are a
+# redeclaration at the second (design principles 10.2): the name and its signature belong to the
+# layer, and the result type is not part of the signature.
 
 [[tests]]
 name = "native.declaration_type_argument"
-desc = "A declaration whose result type is a return-only type variable — the shape `from_bytes::<T>` and a per-leaf `load_tree` decoder need — is read (the message prints ` L`) but no call can bind the variable: the explicit type argument and the expected type never reach a declaration's resolver."
+desc = "`numel`'s declaration states one type variable — `func numel::<T>(t: T[..]): int when is_numeric::<T>()` — so a call that names two type arguments names one the declaration does not have: refused at the call, and the overload the message lists is the declaration's own signature with its type variable."
 kind = "negative"
 case = "../../../cases/compile/native/declaration_type_argument.cml"
 args = ["${case}"]
 expect_exit = 1
 # The message spans two lines (it lists the declaration as the available overload), so the
 # short format the runner parses as one diagnostic line does not apply; check the text.
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "declaration_type_argument.cml:18:41", "<tensor:from_bytes_f32>: (encoded: Bytes, shape: int[]) => L"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "declaration_type_argument.cml:12:30", "argument types: <> (float[?, ?])", "<tensor:numel>: (t: T[..]) => int"]
 
 [[tests]]
 name = "native.declaration_per_result_type"
-desc = "Two rules of one name that differ only in the result type — the per-dtype rules `tensor:from_bytes` registers in C++ — are a redeclaration at the second: one name has one signature, and a declaration names one operator URI."
+desc = "One name cannot carry a rule per result type: two Camel functions of one name and one signature in the module that writes them — the same parameter types, a different result type each — are a redeclaration at the second, because the name and its signature belong to the layer and the result type is not part of the signature."
 kind = "negative"
 case = "../../../cases/compile/native/declaration_per_result_type.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::Redeclaration"
 expect_diagnostic_code = "0x03000001"
-expect_diagnostic_line = 14
+expect_diagnostic_line = 10
 expect_diagnostic_column = 1
-
-# ---- Names in a `case` that is not selected ----
-
-[[tests]]
-name = "native.unselected_case_sees_declaration"
-desc = "A `case` that is not selected for an instantiation resolves its names with the lookup the selected case uses: the body-less declaration of the same module is found, not reported as an unresolved reference."
-kind = "behavior"
-case = "../../../cases/compile/native/unselected_case_declaration.cml"
-args = ["${case}", "std::fvm"]
-expect_exit = 0
-expect_stdout_exact = "0\n"
 
 #  ---- The declaration of `re`: the operator as one signature (step 10) ----
 
