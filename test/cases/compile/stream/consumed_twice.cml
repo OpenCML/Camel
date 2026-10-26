@@ -1,0 +1,30 @@
+/**
+ * A stream is read once on each execution path (design principles 5.4): a `for` over `s` and a
+ * pull of `s` are two consumers of one stream, and the second is refused with the two places named.
+ * To read one stream from two places, write `tee(s, n)` and consume each of the two streams once.
+ */
+module stream_consumed_twice
+
+func count(n: int): int.. {
+    return step(n)
+}
+
+func step(n: int): () => (int, int..)? {
+    return () => if n > 0 then (n, step(n - 1)) else null
+}
+
+func firstOf(p: (int, int..)?): int {
+    return match p {
+        case null => 0
+        case v => v.0
+    }
+}
+
+func twice(s: int..): int {
+    let first = loop acc = 0 for x in s do acc + x
+    return first + firstOf(s())
+}
+
+func main(): int sync {
+    return twice(count(3))
+}
