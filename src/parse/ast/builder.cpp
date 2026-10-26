@@ -1411,9 +1411,11 @@ The head parameters are the parts of a value the query is written on
 function: the head's types say what a `const` case's constant is. A declaration with none is the
 one-value form (`depth(n)`).
 
-A fact whose value type is one of its own type parameters (`fact depth::<T>(v: T): int`) is
-parsed but not compiled: the functions the engine is given are values, and a generic function is
-not one.
+A fact may declare type parameters (`fact range::<T>(v: T): Interval`, rewrite design 7.5): every
+function the declaration becomes is generic over them, so an instance of the query is an instance
+of all of them at once. The query names them, in the order the declaration writes them, as the
+argument after the fact's name; the type arguments of the instance replace that text, and they are
+part of which fact this is: two queries at two types are two instances, computed and kept apart.
 */
 Value Builder::visitFactDecl(cst::FactDecl context) {
     ENTER("FactDecl");
@@ -1442,12 +1444,18 @@ Value Builder::visitFactDecl(cst::FactDecl context) {
     if (context->has(TK::KwExport)) {
         export_->addRef(ref);
     }
-    if (context->get<cst::TypeParams>()) {
-        LEAVE("FactDecl");
-        return giveUp(
-            "a fact whose value is one of its own type parameters is not compiled: the engine is "
-            "given the functions the fact is made of, and a function with type parameters is not "
-            "a value it can hold");
+    // The type parameters, as the declaration writes them (`fact range::<T>(v: T)`): every
+    // function the declaration becomes is generic over them, and the query names them to the
+    // engine so that the instance it is asked for says which types its functions were made at.
+    std::vector<std::string> typeParams;
+    if (const auto declared = context->get<cst::TypeParams>()) {
+        for (const auto ident : declared->all<cst::IdentDef>()) {
+            typeParams.emplace_back(ident->text());
+        }
+    }
+    std::string typeParamNames;
+    for (const std::string &one : typeParams) {
+        typeParamNames += (typeParamNames.empty() ? "" : ",") + one;
     }
     const auto typeExprs = context->types();
     if (typeExprs.size() != 1) {
@@ -1596,6 +1604,7 @@ Value Builder::visitFactDecl(cst::FactDecl context) {
         const Reference fnRef = qualifyRef(Reference(fname));
         node_ptr_t funcType   = createNodeAs<FuncTypeLoad>();
         setNodeTokenRangeByContext(funcType, context);
+        unwrapNodeAs<FuncTypeLoad>(funcType)->setTypeParams(typeParams);
         node_ptr_t withList = createNodeAs<RepeatedLoad>("NamedPair");
         setNodeTokenRangeByContext(withList, context);
         for (const auto &each : withParams) {
@@ -1675,8 +1684,13 @@ Value Builder::visitFactDecl(cst::FactDecl context) {
     if (queryArgs.empty()) {
         queryArgs.push_back("n");
     }
+    // The query's parameters take nodes: what a query is asked about is a value of the program
+    // being rewritten, which is the node it is the node of, and every caller of a fact holds one
+    // (a rule's condition, another fact's body, a pass that walked to a node). A node determines
+    // no type parameter, so the type arguments of a fact whose head declares them are written at
+    // the query (`range::<int>(n)`); the diagnostic of a query that writes none asks for them.
     std::vector<std::pair<std::string, node_ptr_t>> queryParams;
-    for (const auto &arg : queryArgs) {
+    for (const std::string &arg : queryArgs) {
         queryParams.emplace_back(arg, refType("Node"));
     }
 
@@ -1785,6 +1799,10 @@ Value Builder::visitFactDecl(cst::FactDecl context) {
     node_ptr_t args = createNodeAs<RepeatedLoad>("Data");
     setNodeTokenRangeByContext(args, context);
     *args << literal(LiteralType::String, name);
+    // The type parameters, named so that the maker knows which types its functions were made at;
+    // the type arguments of the instance replace this text (the fact's type arguments are part of
+    // what the fact is).
+    *args << literal(LiteralType::String, typeParamNames);
     *args << reference(name + "__initial");
     *args << reference(name + "__join");
     *args << reference(meetClause ? name + "__meet" : name + "__join");

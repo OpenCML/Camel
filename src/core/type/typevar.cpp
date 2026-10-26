@@ -561,7 +561,11 @@ bool bindTypeVars(Type *pattern, Type *actual, type_bindings_t &bindings) {
         return true;
     }
     if (const TypeVarType *var = asVar(pattern)) {
-        if (var->binder() && findTypeBinding(bindings, var->name()) == nullptr) {
+        // A handle into a program or a draft determines no type parameter: it stands for a value
+        // and is not one (design principles 5.9, `Type::determinesTypeParameters`). The variable
+        // stays unbound, and the call reports the type arguments it needs written out.
+        if (var->binder() && actual->determinesTypeParameters() &&
+            findTypeBinding(bindings, var->name()) == nullptr) {
             bindings.emplace_back(var->name(), actual);
         }
         return true;

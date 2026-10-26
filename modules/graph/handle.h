@@ -44,6 +44,10 @@ class HandleType final : public type::OtherType {
 
     HandleKind kind() const { return kind_; }
 
+    /// A handle is not the value it stands for: it determines no type parameter of a generic
+    /// function (design principles 5.9).
+    bool determinesTypeParameters() const override { return false; }
+
     std::string toString() const override;
     std::string mangle() const override;
     type::Type *clone(bool deep = false) const override;

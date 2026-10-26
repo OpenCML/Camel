@@ -3969,11 +3969,11 @@ class RewriteModule final : public BuiltinModule {
                           return RuleType::get();
                       })}}));
         // `__fact` (rewrite design 7.5): the compiled form of a `fact` declaration. Its arity is
-        // 7 + w + k + 3n: the name, the five functions the fact is made of (initial, join, meet,
-        // widen, narrow), the number w of `with` arguments the query was written with, those
-        // arguments, the k nodes the query was written on (one, `n`, in the one-value form), then
-        // for each case its pattern function, its fact function and the mask of its `const`
-        // parameters.
+        // 8 + w + k + 3n: the name, the fact's type arguments (empty for a fact whose head declares
+        // none), the five functions the fact is made of (initial, join, meet, widen, narrow), the
+        // number w of `with` arguments the query was written with, those arguments, the k nodes the
+        // query was written on (one, `n`, in the one-value form), then for each case its pattern
+        // function, its fact function and the mask of its `const` parameters.
         exportEntity(
             "__fact",
             OperatorGroup::create(
@@ -3981,25 +3981,26 @@ class RewriteModule final : public BuiltinModule {
                 {{"rewrite:fact",
                   DynamicFuncTypeResolver::create(
                       {{0, {}}, {-1, {}}},
-                      "(name: string, initial: F, join: F, meet: F, widen: F, narrow: F, "
-                      "withCount: int, ...) => T",
+                      "(name: string, types: string, initial: F, join: F, meet: F, widen: F, "
+                      "narrow: F, withCount: int, ...) => T",
                       [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
                           -> std::optional<Type *> {
-                          if (norm.size() < 8 || norm[0]->code() != TypeCode::String) {
+                          if (norm.size() < 9 || norm[0]->code() != TypeCode::String ||
+                              norm[1]->code() != TypeCode::String) {
                               return std::nullopt;
                           }
-                          for (size_t i = 1; i < 6; ++i) {
+                          for (size_t i = 2; i < 7; ++i) {
                               if (norm[i]->code() != TypeCode::Function) {
                                   return std::nullopt;
                               }
                           }
-                          if (norm[6]->code() != TypeCode::Int64) {
+                          if (norm[7]->code() != TypeCode::Int64) {
                               return std::nullopt;
                           }
                           // The cases follow the queried nodes as triples that begin with a
                           // function. A `with` argument is a compile-time value and a queried
                           // node is a node, so neither begins one.
-                          size_t at = 7;
+                          size_t at = 8;
                           while (at < norm.size() && norm[at]->code() != TypeCode::Function) {
                               ++at;
                           }
@@ -4014,7 +4015,7 @@ class RewriteModule final : public BuiltinModule {
                               }
                           }
                           const auto *initial =
-                              static_cast<const FunctionType *>(norm[1]);
+                              static_cast<const FunctionType *>(norm[2]);
                           if (initial->exitType() == nullptr) {
                               return std::nullopt;
                           }

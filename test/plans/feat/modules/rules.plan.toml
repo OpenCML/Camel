@@ -579,6 +579,17 @@ expect_stdout_contains = ["one 1 two 1\none 0 two 1\n7 14\n"]
 timeout_ms = 20000
 
 [[tests]]
+name = "rules.fact_refuses_a_query_that_leaves_its_type_arguments_open"
+desc = "A query of a fact whose head declares type parameters without them (`literal_of(n)` where `n` is a `Node`) fixes none of the fact's type arguments: the instance the query asked for cannot be built, and the call is reported where it is written as the same `GenericArgumentsMismatch` any generic call gives when its arguments determine no type, asking for the type arguments to be written out (`literal_of::<...>`) -- a node stands for the value it is the node of and gives no type (design principles 5.9)."
+kind = "negative"
+case = "../../../cases/modules/rules/fact_generic_no_type_arguments.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 1
+expect_output_contains = ["GenericArgumentsMismatch", "cannot be determined from the arguments or expected result", "literal_of::<...>"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
 name = "rules.node_of_reaches_a_const_parameter"
 desc = "A condition reaches the node of a `const` parameter with `node_of(c)` (rule-language design v2, section 1: `const c` is the constant's value in a condition and `node_of(c)` is its node; the name takes one of the rule's own `const` parameters, and nothing else). `drop_int_coefficient` guards on a shape of the coefficient's node (`typeText(node_of(c)) == 'int' && is_constant(node_of(c))`), which no value of the coefficient can be given: it fires on `x * 2` (an `int` constant) and drops the product, while `negative_coefficient` (`x * -2.0`) keeps its product because its node says `float`. `drop_positive` is the value channel (`positive(c)`), which drops the product of `positive_coefficient` and is false for the negative one; the three functions are what tells the two channels apart. The counts are one product in each function before the pass, none in `positive_coefficient` and `int_coefficient` after it and one in `negative_coefficient`, and the values are `5.0 5 -10.0` (each rewrite replaces the product by its factor)."
 kind = "behavior"

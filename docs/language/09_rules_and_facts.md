@@ -317,7 +317,7 @@ rule reads_constant(x: int, y: int) when capped<y>(x) > 0 { x * y => x }
 error[SemanticDiag::FactArgumentNotConstant]: The argument 'cap' of a fact is not a compile-time constant of type 'int'.
 ```
 
-**`with` 参数的可见范围与实例化通道。** `with` 参数对事实的**所有**片段可见：子句（`case`、`join`/`meet`/`widen`/`narrow`）与别处读到的都是同一组实参——生成出来的这些函数各自声明同样的 `with` 参数，与函数的 `with` 参数是同一个机制。查询写出别的实参就是另一项事实：引擎按"事实 + 实参"分开计算与缓存。事实与规则**共用同一条实例化通道**：实例的键 = 类型实参 + `with` 实参。带类型参数的事实头（`fact range::<T>(v: T): Interval`）语法读得下，编译还没有（[9.8](#98-尚未实现的形态)）。
+**`with` 参数的可见范围与实例化通道。** `with` 参数对事实的**所有**片段可见：子句（`case`、`join`/`meet`/`widen`/`narrow`）与别处读到的都是同一组实参——生成出来的这些函数各自声明同样的 `with` 参数，与函数的 `with` 参数是同一个机制。查询写出别的实参就是另一项事实：引擎按"事实 + 实参"分开计算与缓存。事实与规则**共用同一条实例化通道**：实例的键 = 类型实参 + `with` 实参。带类型参数的事实头（`fact range::<T>(v: T): Interval`）因此就是一项声明、每个类型实参一项事实：构成它的那些函数按实参实例化，键写成 `range<int>`（今天这些函数的实例还建不起来，[9.8](#98-尚未实现的形态)）。查询的实参是节点，节点不决定类型形参，所以类型实参写在查询处（`range::<int>(n)`，与任何泛型调用一样）；一处也不写就得到一条要求写出类型实参的诊断（`SemanticDiag::GenericArgumentsMismatch`）。
 
 ## 9.7 检查、解释与"哪个规则开火了"
 
@@ -407,7 +407,7 @@ camel fired.cml fired::simplify std::gir
 
 | 形态 | 今天 |
 |---|---|
-| 带类型参数的事实头（`fact range::<T>(v: T): Interval`） | `SemanticDiag::ConstructNotSupported`：引擎拿到的是构成这项事实的那些函数，带类型参数的函数不是一个值它拿得住 |
+| 带类型参数的事实：构成它的那些函数 | `SemanticDiag::GenericFunctionAsValue`：查询的实例里建不起这些函数的实例（`__fact` 拿到的是还没定型的泛型函数），所以 `fact range::<T>(v: T)` 的声明报错。型参、查询的类型实参与"类型实参进键"都已经就位；`range(n)` 这种不写类型实参的查询则报 `SemanticDiag::GenericArgumentsMismatch`，要写出 `range::<...>` |
 | 命令行 `std::opt rules=[law::negate]`，源码 `f->std::opt<rules: [negate]>` | `SemanticDiag::ParamArgumentUnknown`；源码里的 `std::opt` 这个名字今天还解析不到 |
 
 ## 相关文档

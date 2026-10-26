@@ -317,7 +317,7 @@ rule reads_constant(x: int, y: int) when capped<y>(x) > 0 { x * y => x }
 error[SemanticDiag::FactArgumentNotConstant]: The argument 'cap' of a fact is not a compile-time constant of type 'int'.
 ```
 
-**Where a `with` parameter is visible, and the instantiation channel.** A `with` parameter is visible to **every** part of the fact: the clauses (`case`, `join`/`meet`/`widen`/`narrow`) read the same arguments as everything else — the functions generated for them declare the same `with` parameters, which is the mechanism a function's `with` parameters use. A query written with other arguments is another fact: the engine computes and caches one fact per argument. Facts and rules **share one instantiation channel**: the key of an instance is the type arguments plus the `with` arguments. A fact head with type parameters (`fact range::<T>(v: T): Interval`) is read by the grammar and not compiled yet ([9.8](#98-forms-that-are-not-implemented)).
+**Where a `with` parameter is visible, and the instantiation channel.** A `with` parameter is visible to **every** part of the fact: the clauses (`case`, `join`/`meet`/`widen`/`narrow`) read the same arguments as everything else — the functions generated for them declare the same `with` parameters, which is the mechanism a function's `with` parameters use. A query written with other arguments is another fact: the engine computes and caches one fact per argument. Facts and rules **share one instantiation channel**: the key of an instance is the type arguments plus the `with` arguments. A fact head with type parameters (`fact range::<T>(v: T): Interval`) is therefore one declaration and one fact per type argument: the functions it is made of are instantiated at the arguments, and the key is written `range<int>` (their instances cannot be built yet, [9.8](#98-forms-that-are-not-implemented)). A query's argument is a node, and a node determines no type parameter, so the type arguments are written at the query (`range::<int>(n)`, as at any generic call); writing none of them is reported by `SemanticDiag::GenericArgumentsMismatch`, which asks for them.
 
 ## 9.7 Checking, explaining, and "which rule fired"
 
@@ -410,7 +410,7 @@ These forms are all ruled ([rules language v2](../../design/rewrite/v2.cn.md), s
 
 | Form | Today |
 |---|---|
-| a fact head with type parameters (`fact range::<T>(v: T): Interval`) | `SemanticDiag::ConstructNotSupported`: the engine is given the functions the fact is made of, and a function with type parameters is not a value it can hold |
+| a fact with type parameters: the functions it is made of | `SemanticDiag::GenericFunctionAsValue`: the instances of those functions cannot be built inside the instance of the query (`__fact` is handed generic functions that are not yet fixed), so declaring `fact range::<T>(v: T)` is reported. The head parameters, the query's type arguments and "the type arguments enter the key" are all in place; a query that writes none of them (`range(n)`) is reported by `SemanticDiag::GenericArgumentsMismatch`, which asks for `range::<...>` |
 | `std::opt rules=[law::negate]` on the command line, `f->std::opt<rules: [negate]>` in source | `SemanticDiag::ParamArgumentUnknown`; the name `std::opt` does not resolve in source today either |
 
 ## Related documents

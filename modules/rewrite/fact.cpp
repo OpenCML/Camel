@@ -606,12 +606,12 @@ std::shared_ptr<Definition> buildDefinition(
         auto *handle  = new mm::RootHandle(mm::autoSpace(), fn, nullptr, "rewrite.fact");
         return std::shared_ptr<mm::RootHandle>(handle);
     };
-    definition->roots.push_back(root(1)); // initial
-    definition->roots.push_back(root(2)); // join
-    definition->roots.push_back(root(3)); // meet
-    definition->roots.push_back(root(4)); // widen
-    definition->roots.push_back(root(5)); // narrow
-    ::Function *initial = norm.get<::Function *>(1);
+    definition->roots.push_back(root(2)); // initial
+    definition->roots.push_back(root(3)); // join
+    definition->roots.push_back(root(4)); // meet
+    definition->roots.push_back(root(5)); // widen
+    definition->roots.push_back(root(6)); // narrow
+    ::Function *initial = norm.get<::Function *>(2);
     definition->factType = initial->graph()->funcType()->exitType();
     if (definition->factType == nullptr) {
         err::throwRuntimeFault(
@@ -628,12 +628,12 @@ std::shared_ptr<Definition> buildDefinition(
             "fact",
             "the fact type of a fact must be a scalar (int, float or bool)");
     }
-    // What the query wrote out (`range<3>`): the arguments sit between the name and the node
-    // parameters, in the order the declaration declares them, and every function of the
-    // declaration is called with them.
-    const size_t withCount = nodeBegin > 7 ? nodeBegin - 7 : 0;
+    // What the query wrote out (the fact's type arguments and its `with` arguments): they sit
+    // between the functions and the node parameters, and every function of the declaration is
+    // called with them.
+    const size_t withCount = nodeBegin > 8 ? nodeBegin - 8 : 0;
     for (size_t i = 0; i < withCount; ++i) {
-        const size_t index = 7 + i;
+        const size_t index = 8 + i;
         type::Type *argType = norm.type(index);
         WithValue value;
         if (argType != nullptr && type::isGCTraced(argType->code())) {
@@ -718,28 +718,35 @@ std::string withArgText(const ArgsView &norm, size_t index) {
 
 slot_t factKernel(ArgsView &, ArgsView &norm, camel::core::context::Context &ctx) {
     const std::string name(norm.get<String *>(0)->view());
-    // What the query was written with: the number of `with` arguments, then the arguments
-    // themselves. They are part of what the fact is, so they go into the key the description,
-    // the fact kind and the stored value are all keyed by (rewrite design 7.5).
+    // The fact's type arguments, as the compiler fixed them for this instance: empty for a fact
+    // whose head declares none. Together with the `with` arguments they are what the query was
+    // written with, and they are part of what the fact is, so they go into the key the
+    // description, the fact kind and the stored value are all keyed by (rewrite design 7.5).
+    const std::string types(norm.get<String *>(1)->view());
     const size_t count     = norm.size();
-    const size_t withCount = static_cast<size_t>(norm.get<rtdata::Int64>(6));
-    const size_t nodeBegin = 7 + withCount;
+    const size_t withCount = static_cast<size_t>(norm.get<rtdata::Int64>(7));
+    const size_t nodeBegin = 8 + withCount;
     std::string key        = name;
-    if (withCount > 0) {
-        key += "<";
-        for (size_t i = 0; i < withCount; ++i) {
-            key += (i == 0 ? "" : ", ");
-            key += withArgText(norm, 7 + i);
-        }
-        key += ">";
+    std::string written;
+    if (!types.empty()) {
+        written = types;
     }
-    // The query's pattern variables: the `Node` handles right after the `with` arguments, one
-    // in the one-value form and one per parameter in a multi-parameter declaration. The case
-    // descriptions follow as triples.
+    for (size_t i = 0; i < withCount; ++i) {
+        if (!written.empty()) {
+            written += ", ";
+        }
+        written += withArgText(norm, 8 + i);
+    }
+    if (!written.empty()) {
+        key += "<" + written + ">";
+    }
+    // The query's pattern variables: the node handles right after the `with` arguments, one
+    // in the one-value form and one per parameter in a multi-parameter declaration. They are the
+    // arguments that are not functions, as they are for the resolver above. The case descriptions
+    // follow as triples.
     size_t nodeCount = 0;
     while (nodeBegin + nodeCount < count &&
-           camel::graphmod::HandleType::is(
-               norm.type(nodeBegin + nodeCount), camel::graphmod::HandleKind::Node)) {
+           norm.type(nodeBegin + nodeCount)->code() != type::TypeCode::Function) {
         ++nodeCount;
     }
     if (nodeCount == 0 || nodeBegin + nodeCount >= count ||
