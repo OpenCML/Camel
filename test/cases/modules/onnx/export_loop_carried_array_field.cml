@@ -17,10 +17,8 @@ func walk(x: float[..], s: State): float[..] {
         else walk(x, { xs: s.xs->append<s.k>, k: s.k + 1 })
 }
 
-func main(): int sync {
+func main(): void! sync {
     let x = reshape([1.0, 2.0, 3.0, 4.0], [2, 2])
     println(len([0]))
     export_model((x: float[..]): float[..] => walk(x, { xs: [0], k: 0 }), (x), get_env('ONNX_OUT'))
-    println('exported')
-    return 0
 }

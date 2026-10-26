@@ -829,7 +829,7 @@ asian_call_price: (paths: int, steps: int, seed: int) => float
 **`onnx`** — import { ... } from onnx — 2 name(s)
 
 ```text
-export_model: (fn: (x: f32[..]) => void, example: f32[..], path: string) => void
+export_model: (fn: (x: f32[..]) => void, example: f32[..], path: string) => void!
 supported_operators: () => string[]
 ```
 <!-- camel-for-ai end: stdlib-signatures -->

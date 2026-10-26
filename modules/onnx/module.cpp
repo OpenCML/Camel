@@ -25,6 +25,7 @@
 #include "camel/core/error/runtime.h"
 #include "camel/core/mm/gen.h"
 #include "camel/core/rtdata/func.h"
+#include "camel/core/rtdata/tagged.h"
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/core/rtdata/string.h"
@@ -38,13 +39,28 @@
 using namespace camel::core::context;
 using namespace camel::core::module;
 using namespace camel::core::type;
-using camel::core::error::RuntimeDiag;
-using camel::core::error::throwRuntimeFault;
+using camel::core::rtdata::makeError;
+using camel::core::rtdata::makeOk;
 
 namespace {
 
-// export_model(fn, example, path[, dynamic_axes: int[][, target: string]]) => void
+/// The name an error value carries when the operator itself made it: an operator does not know
+/// its call site, so a report of such a value names the operator instead of a position
+/// (docs/technical/29_nullable_and_fallible_values.md 8).
+constexpr std::string_view kExportOperator = "<onnx::export_model>";
+
+/// The result type of the call form: writing the model can fail, so the call gives `void!`
+/// (a refusal to translate the function, or a file that cannot be written).
+TupleType *fallibleVoid() {
+    static TupleType *type = TupleType::fallible(Type::Void());
+    return type;
+}
+
+// export_model(fn, example, path[, dynamic_axes: int[][, target: string]]) => void!
 // `example` is the argument of a one-parameter `fn`, or a tuple with one example per parameter.
+// A refusal to translate the function and a file that cannot be written are error values
+// (`ExportUnsupported`, `IOError`): exporting is a tool, and the caller decides how to report
+// what it could not do.
 slot_t exportKernel(ArgsView &, ArgsView &norm, Context &ctx) {
     auto *fn   = norm.get<::Function *>(0);
     auto *path = norm.get<::String *>(2);
@@ -76,27 +92,19 @@ slot_t exportKernel(ArgsView &, ArgsView &norm, Context &ctx) {
         const camel::onnx::Model model = camel::onnx::exportFunction(ctx, fn, examples, options);
         camel::onnx::writeModelFile(model, camel::utils::pathFromUtf8(path->toString()));
     } catch (const camel::onnx::ExportError &e) {
-        // A refusal about the shape of a recursion names the recursive call it is about, so the
-        // fault is reported there and the call that asked for the export is kept beside it: the
-        // call says which export, the recursive call says what stopped it. Every other refusal
-        // keeps the position it had, the place the export was asked for.
-        const bool aboutRecursion = e.kind() == camel::onnx::ExportError::Kind::CallRemains &&
-                                    e.origin() != 0;
-        const auto origin = aboutRecursion
-                                ? static_cast<camel::source::origin_id_t>(e.origin())
-                                : camel::source::kInvalidOriginId;
-        throw camel::core::error::RuntimeFault(
-            RuntimeDiag::RuntimeError,
-            {std::string("onnx.export_model: ") + e.what() +
-             (e.location().empty() ? "" : " (at " + e.location() + ")")},
-            "",
-            nullptr,
-            camel::core::error::ExecutionSiteHint{
-                .cachedOrigin = origin, .keepRaiseSite = aboutRecursion});
+        // The refusal names the construct it is about, and that position travels in the error
+        // value: a value nobody handles is reported where the export stopped (design
+        // principles 3.9; entry_args.cpp#reportUnhandledError). The message stays what the
+        // exporter said -- the kind says it was the export, so it is not repeated.
+        return makeError(
+            "ExportUnsupported",
+            e.what(),
+            e.location().empty() ? kExportOperator : e.location());
     } catch (const std::runtime_error &e) {
-        throwRuntimeFault(RuntimeDiag::RuntimeError, std::string("onnx.export_model: ") + e.what());
+        // The file could not be written: everything else about the request was accepted.
+        return makeError("IOError", e.what(), kExportOperator);
     }
-    return NullSlot;
+    return makeOk(NullSlot, fallibleVoid());
 }
 
 slot_t supportedOperatorsKernel(ArgsView &, ArgsView &, Context &) {
@@ -139,7 +147,7 @@ OnnxModule::OnnxModule(context_ptr_t ctx) : BuiltinModule("onnx", ctx) {
               DynamicFuncTypeResolver::create(
                   {{0, {}}, {-1, {}}},
                   "(fn: (...) => R, example: Tensor | tuple | struct, path: string, "
-                  "dynamic_axes?: int[], target?: string) => void",
+                  "dynamic_axes?: int[], target?: string) => void!",
                   [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
                       -> std::optional<Type *> {
                       if (norm.size() < 3 || norm.size() > 5 ||
@@ -156,7 +164,7 @@ OnnxModule::OnnxModule(context_ptr_t ctx) : BuiltinModule("onnx", ctx) {
                       if (norm.size() == 5 && norm[4]->code() != TypeCode::String) {
                           return std::nullopt;
                       }
-                      return Type::Void();
+                      return fallibleVoid();
                   })}}));
 }
 
@@ -170,10 +178,11 @@ bool OnnxModule::load() {
         return std::make_shared<OnnxExecutor>(ctx);
     });
     // The purity of every operator (design principles 3.3). export_model writes a file;
-    // supported_operators is declared with effects until someone has checked that it is not.
+    // supported_operators only reads the lowering table compiled into the module, which is why
+    // stdlib/onnx.cml declares it pure.
     camel::core::OperatorTable::instance().declare(
         "onnx",
-        {{"export_model", false}, {"supported_operators", false}});
+        {{"export_model", false}, {"supported_operators", true}});
     // export_model translates the graph of the function value it receives: it is handed the
     // program's own graph, also on a back end that lowered loops in a private copy
     // (OperatorTraits::readsGraphs; op-semantics 11.4).

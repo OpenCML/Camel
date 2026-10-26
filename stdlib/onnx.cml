@@ -20,15 +20,16 @@
 // declaration, and a declaration that wrote one instance of it would accept calls the resolver
 // refuses.
 //
-// `supported_operators` is registered with effects until someone has checked that it is not
-// effectful; the declaration keeps that purity (a declaration carries types, not effects).
+// `supported_operators` only reads the lowering table compiled into the module: it is registered
+// pure, and the declaration carries that (a declaration carries types, not effects), so a call
+// may be folded, merged or run concurrently and its result may not be dropped.
 
 module onnx
 
 /// Lists the operator URIs the ONNX backend can lower at its default opset, in the order the
 /// lowering table reports them. A capability report only: it reads the table compiled into the
 /// module and never touches the file system or the ONNX runtime.
-/// @effect reports the lowering table of the backend
+/// @pure
 /// @example let uris = supported_operators()
 export func supported_operators(): string[]
 

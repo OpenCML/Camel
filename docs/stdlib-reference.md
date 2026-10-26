@@ -6063,7 +6063,7 @@ needs neither the ONNX runtime nor a GPU; only a run of `export_model` writes a 
 #### `export_model`
 
 ```camel
-export_model: (fn: (x: f32[..]) => void, example: f32[..], path: string) => void
+export_model: (fn: (x: f32[..]) => void, example: f32[..], path: string) => void!
 ```
 
 Writes the ONNX model of `fn` applied to arguments like `example` to the file `path`, at the
@@ -6074,7 +6074,7 @@ tensor inputs unknown, and `target` names the runtime whose capability data the 
 checked against.
 
 - With effects: writes a file and reads the function's graph.
-- Failure: fault `RuntimeError` when the graph cannot be translated (a call that remains, an operator without an ONNX lowering, a dtype or shape the exporter cannot name), or when the target runtime rejects a node.
+- Failure: error value `ExportUnsupported` when the graph cannot be translated (a call that remains, an operator without an ONNX lowering, a dtype or shape the exporter cannot name), or when the target runtime rejects a node; error value `IOError` when the model cannot be written.
 - Example: `export_model(fn, example, "/tmp/model.onnx")`
 
 #### `supported_operators`
@@ -6087,5 +6087,5 @@ Lists the operator URIs the ONNX backend can lower at its default opset, in the 
 lowering table reports them. A capability report only: it reads the table compiled into the
 module and never touches the file system or the ONNX runtime.
 
-- With effects: reports the lowering table of the backend.
+- Pure.
 - Example: `let uris = supported_operators()`
