@@ -1,0 +1,19 @@
+/**
+ * A predicate that recurses over a field's own type is folded: `is_plain::<T>()` walks
+ * `fields T` and asks `is_plain::<F>()` about each field, so a struct of plain fields is plain
+ * and the declaration guarded by it applies (design principles 5.5, 5.13).
+ */
+module when_plain_struct
+
+import { is_plain } from types
+
+type P = { x: int, y: f32 }
+
+func take::<T>(v: T): string when is_plain::<T>() {
+    return 'plain'
+}
+
+func main(): int sync {
+    println(take({ x: 1, y: 2.0 }))
+    return 0
+}

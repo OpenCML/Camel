@@ -35,7 +35,7 @@ func cross_entropy_loss(probs: f32[?, ?], y_onehot: f32[?, ?]): float {
     let eps = 0.0000001
     let log_probs = log(probs + eps)
     let masked = y_onehot * log_probs
-    return -sum(masked) / float(shape(probs)[0])
+    return -float(sum(masked)) / float(shape(probs)[0])
 }
 
 with <X: f32[?, ?], y_onehot: f32[?, ?], lr: float>
@@ -101,7 +101,7 @@ func main(): int sync {
 
     let pred = argmax(X_bias @ W, 1)
     let labels = argmax(y_onehot, 1)
-    let correct = sum(pred === labels)
+    let correct = float(sum(pred === labels))
     let acc = correct / float(n)
     'Accuracy: {} / {} = {}'->format<correct, n, acc>->println
     return 0

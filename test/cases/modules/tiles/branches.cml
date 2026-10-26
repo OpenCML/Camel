@@ -4,18 +4,18 @@ import { run_preferred_resident, download } from tiles
 func forbidden(x: f32[..]): f32[..] sync { println('unselected effect'); return x }
 func check(flag: bool, x: f32[..]): float {
     let choose = (a: f32[..]): f32[..] => if flag then a + 2.0 else a * 3.0
-    return sum(abs(download(run_preferred_resident<choose>(x)) - choose(x)))
+    return float(sum(abs(download(run_preferred_resident<choose>(x)) - choose(x))))
 }
 func prune(flag: bool, x: f32[..]): float {
     let choose = (a: f32[..]): f32[..] => if flag then a + 2.0 else forbidden(a)
-    return sum(abs(download(run_preferred_resident<choose>(x)) - (x + 2.0)))
+    return float(sum(abs(download(run_preferred_resident<choose>(x)) - (x + 2.0))))
 }
 func nested(flag: bool, x: f32[..]): float {
     let choose = (a: f32[..]): (f32[..], f32[..]) =>
         if flag then (a + 1.0, a * 2.0) else (a - 1.0, a * 3.0)
     let actual = download(run_preferred_resident<choose>(x))
     let expected = choose(x)
-    return sum(abs(actual.0 - expected.0)) + sum(abs(actual.1 - expected.1))
+    return float(sum(abs(actual.0 - expected.0))) + float(sum(abs(actual.1 - expected.1)))
 }
 func main(): int sync {
     let x = reshape([1.0, 2.0, 3.0] as f32[], [3])

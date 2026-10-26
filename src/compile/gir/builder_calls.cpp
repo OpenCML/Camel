@@ -417,23 +417,14 @@ node_handle_t Builder::partialApplicationOf(
     if (calleeType == nullptr) {
         return nullptr;
     }
-    for (size_t i = 0; i < calleeType->withTypesCount(); ++i) {
-        if (calleeType->withIsVarAt(i)) {
-            // DESIGN-QUESTION(partial-application-var): a `with` parameter declared `var`
-            // is a variable the function writes. Binding one ahead of the call would make
-            // the function value a writer of a captured variable; whether that is meant has
-            // not been decided, so it is refused rather than guessed.
-            diags_->of(SemanticDiag::ConstructNotSupported)
-                .atOrigin(at)
-                .commit(
-                    "f<w> as a value",
-                    "a partial application is implemented for functions without 'var' "
-                    "context parameters; this one has '" +
-                        calleeType->toString() + "'. Call it with its arguments in place");
-            throw BuildAbortException();
-        }
-    }
-
+    // A `with` parameter declared `var` is a variable the function writes, and binding one here
+    // is ordinary: the value the partial application captures is the cell, the body the new graph
+    // makes writes it through the call, and the graph's own signature says so -- the captured cell
+    // is one of its captures (graph model Q9, `partial-application-var`: "a `Forwarder` graph that
+    // captured the cell of `t`, its effect summary has the captured-variable bit set, its function
+    // type carries `sync`"). Design principles 3.5 writes the format of a right-hand side, not a
+    // restriction on what a context argument may be.
+    //
     // A literal bound as a context argument takes the type of its `with` parameter here, now
     // that the callee is known, exactly as a literal argument does at a call (design principles
     // 5.1): the captured value is of the parameter's type, so the call the partial application
@@ -452,9 +443,14 @@ node_handle_t Builder::partialApplicationOf(
     // The bound values and, unless it is named, the callee: bound to names no program can
     // write, in the scope the expression stands in, so that the new graph captures them the
     // way any closure captures a name. Nothing refers to a node of another graph.
+    //
+    // What is bound is the argument as the call would take it, not its value: a variable bound
+    // to a `var` context parameter is the cell, and the call the new graph makes takes the cell
+    // (elsewhere the binding would hand it a read, and a read is immutable). Every other
+    // position reads the variable at the call, which is the same value as before.
     std::vector<std::string> boundNames;
     for (const Argument &arg : bound) {
-        boundNames.push_back(bindTemporary(valueOf(arg.node)));
+        boundNames.push_back(bindTemporary(arg.node != nullptr ? arg.node : valueOf(arg.node)));
     }
     const auto make = [&](GCT::node_ptr_t node) {
         node->setOrigin(at);

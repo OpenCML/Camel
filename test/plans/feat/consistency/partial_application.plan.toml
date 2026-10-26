@@ -105,16 +105,42 @@ expect_output_not_contains = ["Segmentation fault", "dumped core", "internal err
 expect_output_contains = ["name=SemanticDiag::PartialApplicationRefused", "err_configured_twice.cml:5:"]
 
 [[tests]]
-name = "partial_application.err_var_parameter"
-desc = "A function with a `var` context parameter: refused, not guessed (DESIGN-QUESTION(partial-application-var))."
-kind = "negative"
-case = "../../../cases/consistency/partial_application/err_var_parameter.cml"
-args = ["-E", "short", "${case}"]
-backends = ["nvm"]
-backends_agree = []
-expect_exit = 1
-expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error"]
-expect_output_contains = ["name=SemanticDiag::ConstructNotSupported", "err_var_parameter.cml:5:13:"]
+name = "partial_application.var_parameter"
+desc = "A function with a `var` context parameter can be partially applied (graph model Q9, `partial-application-var`): `add<t>` is a function value that captured the cell of `t`, and each call writes it through the capture, so the calls accumulate. The write lands on the variable the value was bound to, which the reads after the calls show."
+kind = "behavior"
+case = "../../../cases/consistency/partial_application/var_parameter.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_output_not_contains = ["[Error]", "error[", "Segmentation fault", "dumped core"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === "1 3 6 6\n16 16", `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "partial_application.var_parameter_effect"
+desc = "The value `add<t>` makes writes the cell it captured: `g(1)` is recorded as a write of `t`, so inside a sync block the call runs and a read of `t` written after it sees the write (design principles 3.5, F3); outside one the call is taken by nothing and does not run, so the read still sees the value `t` had."
+kind = "behavior"
+case = "../../../cases/consistency/partial_application/var_parameter_effect.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_output_not_contains = ["[Error]", "error[", "Segmentation fault", "dumped core"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === "1 0", `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 30000
 
 [[tests]]
 name = "partial_application.err_ambiguous"

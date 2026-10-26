@@ -36,7 +36,7 @@ func main(): int sync {
     let x = reshape([1.0, 2.0, 0.5, -1.0] as f32[], [2, 2])
     export_model(
         (x: f32[..], w: f32[..]): (f32[..], f32[..], f32[..]) =>
-            (pile(x), fold(0, int(sum(x * x) * 0.5), x, w), fold2(x, w)),
+            (pile(x), fold(0, int(float(sum(x * x)) * 0.5), x, w), fold2(x, w)),
         (x, w),
         get_env('ONNX_OUT')
     )

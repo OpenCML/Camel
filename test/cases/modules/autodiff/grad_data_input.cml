@@ -14,7 +14,7 @@ with <w: f64[..]>
 func weighted(labels: i64[..]): float {
     let ids  = cast(labels, 'int64')
     let data = cast(ids, 'float64')
-    return sum(data * w)
+    return float(sum(data * w))
 }
 
 func main(): int sync {

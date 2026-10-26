@@ -11,7 +11,7 @@ import { get_env } from env
 // A loop over the time axis that stops early: the number of steps depends on the data, so the
 // slice of step t has a start and an end that depend on the model input.
 func scan(t: int, steps: int, x: float[..], h: float[..]): float[..] {
-    return if t >= steps then h else if sum(h) > 2.5 then h else scan(t + 1, steps, x, tanh(h + reshape(slice(x, 1, t, t + 1), [shape(x)[0], shape(x)[2]])))
+    return if t >= steps then h else if float(sum(h)) > 2.5 then h else scan(t + 1, steps, x, tanh(h + reshape(slice(x, 1, t, t + 1), [shape(x)[0], shape(x)[2]])))
 }
 
 func forward(x: float[..]): float[..] {

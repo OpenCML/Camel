@@ -2,10 +2,10 @@ module shape_inference_shape_operator
 import { reshape, shape, zeros, ones, dim, sum } from tensor
 // The shape of a tensor whose type carries it is a constant for the operator it is passed to.
 func six(a: f32[2, 3]): float {
-    return sum(a)
+    return float(sum(a))
 }
 func three(a: f32[3]): float {
-    return sum(a)
+    return float(sum(a))
 }
 func f(x: f32[2, 3], y: f32[6]): float {
     let a = reshape(y, shape(x))

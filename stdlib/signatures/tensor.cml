@@ -233,11 +233,18 @@ export func one_hot(labels: int64[..] | number[], classes: int): int64[..]
 
 // ---- reduction ----
 
-/// Every element converted to `f64` and summed in row-major order from +0; `int64` and `bool`
-/// elements are summed exactly in `int64` and converted once.
+/// The sum of every element, in the operand's element type: the canonical form of the element
+/// type `T` is `sum::<T>(x: T[..]): T = T(sum(float(x)))`, so the elements are widened into an
+/// `f64` accumulator (`float(x)`), the additions happen in `f64` in row-major order from +0, and
+/// their sum is rounded into `T` once, at the end — the same element type and the same one
+/// rounding as the axis form below, so the full form and the axis form agree bit for bit
+/// (design principles 7.3). An `int64`, `int32` or `bool` tensor has no float accumulator: it is
+/// summed exactly in `int64`, wrapping on overflow as integer arithmetic does (design principles
+/// 5.1, 7.7), and that exact value is the answer — `int64` as it stands, `int32` truncated into
+/// its element type, `bool` as `int64`.
 /// @pure
 /// @example sum(new([[1.0, 2.0], [3.0, 4.0]]))    // 10.0
-export func sum(t: float[..]): float
+export func sum::<T>(t: T[..]): T
 
 /// The same sum over one axis, in an `f64` accumulator; keepdims keeps the axis with extent 1.
 /// @pure
@@ -246,11 +253,16 @@ export func sum(t: float[..]): float
 #op('tensor:sum_axis')
 export func sum(t: float[..], axis: int, keepdims?: bool): float[..]
 
-/// The sum of `sum` divided by the element count in `f64`; an empty tensor is a fault.
+/// The mean of every element, in the operand's element type, with one rounding: the canonical
+/// form of the element type `T` is `mean::<T>(x: T[..]): T = T(sum(float(x)) / float(numel(x)))`.
+/// The sum and the division by the element count both happen in `f64`, and their result is
+/// rounded into `T` once — never a sum rounded to the element type and divided again, which
+/// would round twice. A mean of an integer or bool tensor is `f32`, as by axis; an empty tensor
+/// is a fault.
 /// @pure
 /// @fails fault `DivisionByZero` when the tensor has no element
 /// @example mean(new([[1.0, 2.0], [3.0, 4.0]]))    // 2.5
-export func mean(t: float[..]): float
+export func mean::<T>(t: T[..]): T
 
 /// The same mean over one axis; keepdims keeps the axis with extent 1.
 /// @pure

@@ -779,7 +779,10 @@ kind = "negative"
 case = "../../../cases/compile/static_expansion/indices_struct_comprehension.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ConstructNotSupported"
+expect_diagnostic_name = "SemanticDiag::StructComprehensionWithoutFields"
+expect_diagnostic_code = "0x030001F4"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 14
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 

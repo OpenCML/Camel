@@ -7,7 +7,7 @@ func scaled(
     b: f32[m],
     c: f32[n * m]
 ): float {
-    return sum(a) + sum(b) + sum(c)
+    return float(sum(a)) + float(sum(b)) + float(sum(c))
 }
 func main(): int sync {
     println(scaled(ones([2]), ones([3]), ones([99])))

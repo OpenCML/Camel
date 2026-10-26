@@ -1515,6 +1515,61 @@ expect_stdout_contains = ["left 1 0\nright 2 0\nfolded 0 1\nleft 1 0\nright 2 0\
 timeout_ms = 20000
 
 [[tests]]
+name = "rules.side_reads_the_with_parameter"
+desc = "The right side of a rule is a function of the rule's `with` parameters as its condition is: `add_shift` matches `x + 0` and writes `x + shift` on the right, so `left(3)` is `3 + 1` with the default and `3 + 7` when the rule is bound to 7. The two bindings are the two runs of one case, and the program as written prints 3."
+kind = "behavior"
+case = "../../../cases/modules/rules/rule_side_reads_param.cml"
+args = ["${case}", "rule_side_reads_param::apply_default", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["4\n"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.side_reads_the_bound_with_parameter"
+desc = "The value the right side reads is the one the use of the rule binds: the same rule as above under `add_shift<7>`, whose right side writes `x + 7`, so the run prints 10 and not 4."
+kind = "behavior"
+case = "../../../cases/modules/rules/rule_side_reads_param.cml"
+args = ["${case}", "rule_side_reads_param::apply_seven", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["10\n"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.type_and_with_parameters_are_one_channel"
+desc = "A rule may declare type parameters and `with` parameters together: the same declaration is generic in `::<T>` (instantiated at the type of the matched constant) and a function of `tile` (bound by `scaled_zero<7>`), and the two are one instance whose key is the pair. The rule fires at `7`, which the printed value shows."
+kind = "behavior"
+case = "../../../cases/modules/rules/rule_both_heads.cml"
+args = ["${case}", "rule_both_heads::apply", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["10\n"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.fact_fragment_reads_the_with_parameter"
+desc = "The `with` parameters of a fact are handed to every function the fact is made of, so a `case` reads one: `at_cap` answers `cap` for a constant, `at_cap<9>` answers 9, and the argument is part of which fact this is -- the rule that asks for 5 fires and rewrites the product to a sum, and the one that asks for 9 does too, each under its own binding."
+kind = "behavior"
+case = "../../../cases/modules/rules/fact_with_case.cml"
+args = ["${case}", "fact_with_case::apply_default", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["103\n"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.fact_with_parameter_bound"
+desc = "The same fact at `cap = 9` is another fact: `at_cap<9>` is computed and cached apart from `at_cap`, its `case` reads the bound 9, and the rule whose condition asks for 9 fires where the one that asks for 5 would not."
+kind = "behavior"
+case = "../../../cases/modules/rules/fact_with_case.cml"
+args = ["${case}", "fact_with_case::apply_nine", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["203\n"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
 name = "rules.with_parameter_unbound"
 desc = "A rule with a `with` parameter that has no default is no `Rule` until it is bound: writing the name alone in a rule set is a compile error that says so (RuleWithParameterUnbound), and the program does not run."
 kind = "negative"

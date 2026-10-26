@@ -1,9 +1,9 @@
-none steps=3 w=92.44481658935547 value=16.0
+none steps=3 w=92.44482 value=16.0
 PROFILE camel
  backend std::nvm
  device cpu
  run <time>
- operator calls 55 (time inside them: <time>, <pct> of the run)
+ operator calls 61 (time inside them: <time>, <pct> of the run)
  measurement overhead <time> per operator call or allocation (one timestamp pair)
  allocations 54 calls (0 block payloads), <bytes> requested, <time> inside the allocators
  inside operator calls: 40 calls (0 block payloads, <bytes>), <time>; the rows below
@@ -12,7 +12,7 @@ PROFILE camel
  synchronisations 0
 
 steps - the loop at test/cases/modules/tensor/fusion_group_none.cml:30:26: 3 rounds (2 measured)
- operators per step 15 (min 15, max 15)
+ operators per step 17 (min 17, max 17)
  kernels per step 0.00 (max 0)
  transfers per step 0.00 (0 host->device, 0 device->host, max 0 bytes)
  syncs per step 0.00 (max 0)
@@ -23,6 +23,8 @@ operators (device, calls, total, first call, mean after the first, share of oper
  allocation: time (share of the row), allocator calls, block payloads, payload bytes)
  cpu :io/println 1 <time> <time> - <pct> <time> (<pct>) 0 0 <bytes>
  cpu :op/add_l 3 <time> <time> <time> <pct> <time> (<pct>) 0 0 <bytes>
+ cpu :op/dtof 3 <time> <time> <time> <pct> <time> (<pct>) 0 0 <bytes>
+ cpu :op/ftod 3 <time> <time> <time> <pct> <time> (<pct>) 0 0 <bytes>
  cpu :op/lt_l 4 <time> <time> <time> <pct> <time> (<pct>) 0 0 <bytes>
  cpu :str/format 1 <time> <time> - <pct> <time> (<pct>) 1 0 <bytes>
  cpu autodiff:with_grad 1 <time> <time> - <pct> <time> (<pct>) 7 0 <bytes>

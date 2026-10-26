@@ -3,6 +3,7 @@
 
 #include "camel/core/type/composite/func.h"
 #include "camel/core/mm.h"
+#include "camel/core/type/composite/stream.h"
 #include "camel/core/type/intern.h"
 #include "camel/core/type/text.h"
 #include "camel/core/type/storage.h"
@@ -366,15 +367,23 @@ bool FunctionType::equals(Type *other) const { return typeEquals(this, other); }
 CastSafety FunctionType::castSafetyFrom(Type *sourceType) const {
     if (sourceType == nullptr)
         return CastSafety::Forbidden;
-    if (this == sourceType)
-        return CastSafety::Safe;
-    return CastSafety::Forbidden;
+    return assignableFrom(sourceType) ? CastSafety::Safe : CastSafety::Forbidden;
 }
 
 bool FunctionType::assignableFrom(Type *other) const {
     if (this == other)
         return true;
-    if (!other || other->code() != TypeCode::Function)
+    if (!other)
+        return false;
+    if (other->code() == TypeCode::Stream) {
+        // A stream's value is its step function (StreamType::stepType), which is this signature,
+        // and a stream is read only through it: `s()` is the next element with the rest of the
+        // stream. So a stream enters a signature exactly when that signature is its own step
+        // signature, and nothing else about it is converted.
+        return static_cast<StreamType *>(other)->stepType()->equals(
+            const_cast<FunctionType *>(this));
+    }
+    if (other->code() != TypeCode::Function)
         return false;
 
     const FunctionType &otherFunc = static_cast<const FunctionType &>(*other);

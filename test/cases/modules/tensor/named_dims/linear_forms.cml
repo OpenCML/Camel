@@ -9,7 +9,7 @@ func affine(
     d: f32[n + m],
     e: f32[m]
 ): float {
-    return sum(a) + sum(b) + sum(c) + sum(d) + sum(e)
+    return float(sum(a)) + float(sum(b)) + float(sum(c)) + float(sum(d)) + float(sum(e))
 }
 func main(): int sync {
     // n = 2, m = 3: n + 1 = 3, 2 * n = 4, n + m = 5.

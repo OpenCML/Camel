@@ -96,8 +96,9 @@ func main(): int sync {
   - When only the first context parameters are given, the rest remain context parameters of the result: after `let above = clamp<0>`, write `above<5>(9)`. A function that has all of them cannot be given more (`g<2>` is an error).
   - `f` must be one function that these arguments determine. Among several functions of one name, the only one that takes these context arguments is meant; if several do, the function type of the position (a parameter) decides, and when nothing does it is `SemanticDiag::PartialApplicationRefused`.
   - On the graph it is a function value that carries the captured arguments, the shape a closure has: a subgraph of its own which the bound arguments enter through ports. No node kind is added.
-  - Functions with a `var` context parameter (`SemanticDiag::ConstructNotSupported`) and built-in operators whose type rule depends on their arguments (such as `len`; `SemanticDiag::FunctionNameAsValue`). Write the call in a lambda there.
-- Keyword arguments `f(a: 1)` are `SemanticDiag::FeatureNotSupported`.
+  - A function whose `with` parameter is declared `var` can be partially applied too: `f<w>` captures the variable itself and not its value, so a call of it makes the write the function makes to that variable land on the variable it was bound to ([3.5](03_data_model.md)); such a call is a call with an effect, and runs only in a `sync` block.
+  - A name that stands for more than one function has no function value: an overloaded built-in operator (such as `len`, which has three signatures) is one, and the refusal is `SemanticDiag::FunctionNameAsValue`. Write the call in a lambda there.
+- Arguments may be given by name (`f(x: 1)`): positional arguments first, named ones after; a name the callee does not declare as a parameter is `SemanticDiag::ParamArgumentUnknown`.
 - Two calls with angle brackets in one argument list (`f<a>(x), g<b>(y)`) are read as comparisons; a call with angle brackets followed by a pipe with angle brackets (`f<a>(x)->g<b>`) may be too. Write them as two statements.
 - A lambda written in parentheses can be called directly: `((x: int): int => x + 1)(3)`; it can also be written on the right of `->` and `?->`: `3->(x: int): int => x + 1`, `parse_int(s) ?-> (x: int): int => x * 2`.
 
@@ -383,7 +384,7 @@ A missing case, an extra case or a literal case mixed in is `SemanticDiag::Tagge
 
 **A `match` must have a default case.** A `match` without `case _` is the compile-time error `SemanticDiag::MatchWithoutDefault`, located at the `match`. Three shapes need none: a `match` on a `bool` that writes out both `case true` and `case false`, a `match` on a `T?` or `T!` with the fixed patterns above, and a `match` on an enum that names every variant. The compiler adds no arm the program does not write, so the arms on the graph correspond one to one to the `case`s in the source.
 
-Tuple patterns and struct patterns are not in the language: `case (...)` and `case {...}` are ordinary syntax errors. An identifier pattern on a value of an ordinary type (`case n => ...`) is `SemanticDiag::ConstructNotSupported`; use an `if` chain, or take the members first and then match. Tuple and struct patterns of enum variants are implemented, but a field position takes only a name or `_`.
+Tuple patterns and struct patterns are not in the language: `case (...)` and `case {...}` are ordinary syntax errors. An identifier pattern on a value of an ordinary type (`case n => ...`), and `error e` over an ordinary type, report `SemanticDiag::IdentifierPatternNeedsNullableOrErrorType`: only the two marks `T?` and `T!` can be taken apart (3.8), so to read the value or to catch the error write `??`, `!!`, or a `match` with a literal pattern and `_`. Tuple and struct patterns of enum variants are implemented, but a field position takes only a name or `_`.
 
 `try`/`catch`/`finally` is not part of Camel (it has no stable mapping onto the graph), and none of the three is a keyword: they are ordinary names, so a `try { ... }` written with them is an ordinary syntax error. An operation that may fail returns `T!`, handled with `!!`, `?->` and `case error e`.
 
@@ -454,7 +455,7 @@ func first(t: (int, float)) {
 - **The operand only supplies its type.** When the operand is a compile-time tuple (a rest parameter's `ts`, or a tuple comprehension), no container node is built: `indices ts` builds no `FILL`, and `ts.[j]` in the body is the element node itself, with no `ACCS`. A runtime tuple variable or parameter already has its own node; `indices` does not build another.
 - `j` may be used as a value (`print(j)`, or in arithmetic) and as the key of `t.[j]`: it is a compile-time constant in every round. A local of the same name still shadows it, and using that as a key reports `SemanticDiag::StaticAccessNotConstant` (the same rule as `n` of `fields`).
 - `indices` binds one name only (there is no `F`); the element types come from `ts`'s type and are not given a name yet. `static for j, F in indices ts` is a syntax error.
-- `indices` walks tuples only: a struct has field names, so use `fields T`. `{ static for j in indices ts => e }` has no field names to give and reports `SemanticDiag::ConstructNotSupported`; where a value is needed, write `( static for j in indices ts => e )`.
+- `indices` walks tuples only: a struct has field names, so use `fields T`. `{ static for j in indices ts => e }` has no field names to give and reports `SemanticDiag::StructComprehensionWithoutFields`; where a value is needed, write `( static for j in indices ts => e )`.
 - The graph is the hand-written expansion: the generator leaves no node of its own. `ts.[j]` over a compile-time tuple is the element node itself, the same field selection `ts.[0]`, `ts.[1]` make; over a runtime tuple value it still builds one `ACCS`.
 
 ```cml

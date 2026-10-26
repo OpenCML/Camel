@@ -14,8 +14,10 @@
  * a tuple may be a stream (the rule's `tee` hands out a tuple and destructuring consumes it),
  * while an array, a map or a set refuses one (test/cases/compile/stream/type_in_container.cml).
  *
- * Producing a value of a stream type is another slice: this program states the types only, and
- * the forms the compiler prints for them are locked by `std::jgir` in the plan.
+ * Producing a value of a stream type: a function value of the step signature `() => (T, T..)?`
+ * is a stream (test/cases/compile/stream/step_value.cml writes one by hand, and a `yield` body
+ * produces one). This program states the types only, and the forms the compiler prints for them
+ * are locked by `std::jgir` in the plan.
  */
 module stream_type_signature
 

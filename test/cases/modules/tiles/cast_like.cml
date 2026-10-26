@@ -11,9 +11,9 @@ import { reshape, sum, cast, abs } from tensor
 import { grad } from autodiff
 import { inspect } from tiles
 with <x: f32[..]>
-func with_cast(): float { return sum(cast(x, "float32")) }
+func with_cast(): float { return float(sum(cast(x, "float32"))) }
 with <x: f32[..]>
-func without_cast(): float { return sum(x) }
+func without_cast(): float { return float(sum(x)) }
 func main(): int sync {
     let x = reshape([1.0, 2.0, 3.0] as f32[], [3])
     let cast_grad = (v: f32[..]): f32[..] => grad(with_cast)<v>()

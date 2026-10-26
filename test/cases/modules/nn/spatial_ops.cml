@@ -16,7 +16,7 @@ func fixture(name: string): f32[..] {
 }
 
 func err(actual: f32[..], name: string): float {
-    return sum(abs(actual - fixture('ref_' + name)))
+    return float(sum(abs(actual - fixture('ref_' + name))))
 }
 
 func main(): int sync {

@@ -23,7 +23,7 @@ type Model = {
 
 with <m: Model>
 func gather_loss(): float {
-    return sum(m.weights[m.labels])
+    return float(sum(m.weights[m.labels]))
 }
 
 func main(): int sync {

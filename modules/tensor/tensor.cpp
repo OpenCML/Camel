@@ -35,7 +35,7 @@ Array *
 createTensor(TypeCode dtype, std::span<const int64_t> shape, mm::IAllocator &allocator,
              bool zeroInit) {
     if (!isSupportedTensorScalar(dtype)) {
-        throw std::invalid_argument("Unsupported Tensor element type");
+        throw std::invalid_argument("Unsupported array element type");
     }
     const type::ArrayType *arrType = type::ArrayType::create(type::Type::create(dtype));
     return Array::create(allocator, arrType, shape, zeroInit);

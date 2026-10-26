@@ -600,8 +600,8 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             SemanticDiag::LoopSequenceNotIterable,
             {
                 "LoopSequenceNotIterable",
-                "'for' takes the elements of an array, a string, a map or a tensor; '{0}' has type '{1}'.",
-                "A loop's 'for x in xs' visits the elements of xs in order (design principles 3.10): the elements of an array; the code points of a string, each a one-character string; the (key, value) pairs of a map, in key order (11.3); and the sub-tensors of a tensor along its first dimension. 'a..b' is the array of the integers from 'a' to 'b - 1', left closed and right open, and a 'for' over it takes them in order without building the array (4.2).",
+                "'for' takes the elements of an array, a string, a map, a tensor or a stream; '{0}' has type '{1}'.",
+                "A loop's 'for x in xs' visits the elements of xs in order (design principles 3.10): the elements of an array; the code points of a string, each a one-character string; the (key, value) pairs of a map, in key order (11.3); the sub-tensors of a tensor along its first dimension; and the elements of a stream, one pull of its step function per round (5.4). 'a..b' is the array of the integers from 'a' to 'b - 1', left closed and right open, and a 'for' over it takes them in order without building the array (4.2).",
             },
         },
         {
@@ -1618,6 +1618,38 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "UsesPromiseViolated",
                 "'{0}' does not keep its resource promise: {1}.",
                 "A signature is a promise the compiler checks against the resources the function uses. 'uses' is an upper bound, so every resource the body uses must be named there, and 'pure' promises the empty set; a 'var' parameter is a resource by itself, and so is a capture. Change the body so that it no longer reaches for it, or change the signature to name it.",
+            },
+        },
+        {
+            SemanticDiag::TypeAliasRecursionUnrepresented,
+            {
+                "TypeAliasRecursionUnrepresented",
+                "The type '{0}' mentions itself through a collection: recursion through an array, a map, a set or an enum is admitted by the language, and this compiler does not have that representation.",
+                "A type may reach itself indirectly, through an array, a map, a set or an enum (design principles 5.2), and the shape that needs is not built here: write the type without mentioning itself. Containing itself directly, as a struct field of its own type, is a different error: `ModuleTypeCycle`.",
+            },
+        },
+        {
+            SemanticDiag::EnumWrittenWhereATypeIsExpected,
+            {
+                "EnumWrittenWhereATypeIsExpected",
+                "An enum is declared in a type declaration ('type Shape = enum ...') and its type is the name that declaration gives it: the variants are written there and nowhere else.",
+                "An enum is a named type (design principles 5.3): `type Shape = enum {{ Circle(float), Dot }}` declares it, and `Shape` is what is written where a value of it is expected. The variants are written in the `type` declaration and nowhere else.",
+            },
+        },
+        {
+            SemanticDiag::StructComprehensionWithoutFields,
+            {
+                "StructComprehensionWithoutFields",
+                "A struct comprehension takes its field names from 'fields T', and 'indices' walks positions, which have no names: write a tuple comprehension '( static for ... in indices ... )', or walk 'fields T'.",
+                "A struct value is written as one value per field name, and `indices` walks the positions of a tuple, so a struct comprehension over it would have nothing to name its fields with (design principles 5.2). A tuple comprehension has one element per position, which is what `indices` gives.",
+            },
+        },
+        {
+            SemanticDiag::IdentifierPatternNeedsNullableOrErrorType,
+            {
+                "IdentifierPatternNeedsNullableOrErrorType",
+                "The pattern '{0}' takes a value of type 'T?' or 'T!' apart, and this value has type '{1}': write '?\?' or '!!', or a 'match' pattern that is a literal or '_'.",
+                "The patterns that bind are the fixed forms of the two marks (design principles 3.8): `error e` reads the error out of a `T!`, and a plain name reads the value out of a `T?` or a `T!`. Over any other type there is no mark to take apart, so the value is read with a literal pattern or '_'.",
             },
         },
         {

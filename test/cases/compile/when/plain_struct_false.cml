@@ -1,0 +1,18 @@
+/**
+ * The recursion's false side: a field whose type is not plain makes the whole struct not plain,
+ * so the same guarded declaration is inapplicable and the call site says which condition failed.
+ */
+module when_plain_struct_false
+
+import { is_plain } from types
+
+type Named = { name: string, n: int }
+
+func take::<T>(v: T): string when is_plain::<T>() {
+    return 'plain'
+}
+
+func main(): int sync {
+    println(take({ name: 'x', n: 1 }))
+    return 0
+}

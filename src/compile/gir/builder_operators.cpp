@@ -15,6 +15,7 @@
 #include "camel/core/numeric_convert.h"
 #include "camel/core/operator_names.h"
 #include "camel/core/rtdata/string.h"
+#include "camel/core/type/composite/stream.h"
 #include "camel/execute/entry_args.h"
 #include "camel/runtime/control.h"
 #include "camel/runtime/graph.h"
@@ -3204,6 +3205,13 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         }
     } else {
         Type *dataType = nodeTypeOf(targetNode);
+        // A stream's value is its step function (StreamType::stepType), so a call of a stream is
+        // one pull: the element with the rest of the stream, or `null` at the end. The call reads
+        // the signature the stream type gives it, and nothing is converted -- the value already
+        // is that function value -- so no arguments are taken and `s()` is the form.
+        if (dataType != nullptr && dataType->code() == TypeCode::Stream) {
+            dataType = tt::as_ptr<StreamType>(dataType)->stepType();
+        }
         ASSERT(
             dataType->code() == TypeCode::Function,
             "Target node of LINK must be a function or operator node.");

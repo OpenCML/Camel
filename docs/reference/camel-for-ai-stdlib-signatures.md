@@ -234,9 +234,9 @@ shape: (t: T[..]) => int[] when is_numeric::<T>()
 numel: (t: T[..]) => int when is_numeric::<T>()
 dim: (t: T[..], axis: int) => int when is_numeric::<T>()
 dim: (t: T[..], axis: i32) => int when is_numeric::<T>()
-sum: (t: float[..]) => float
+sum: (t: T[..]) => T
 sum: (t: float[..], axis: int, keepdims?: bool) => float[..]
-mean: (t: float[..]) => float
+mean: (t: T[..]) => T
 mean: (t: float[..], axis: int, keepdims?: bool) => float[..]
 max: (t: float[..], axis: int, keepdims?: bool) => float[..]
 min: (t: float[..], axis: int, keepdims?: bool) => float[..]
@@ -327,6 +327,12 @@ max: (xs: T[]) => T? when is_ordered::<T>()
 flat_map: <f: (x: T) => U[]> (xs: T[]) => U[]
 sort_by: <key: (x: T) => K> (xs: T[]) => T[]
 zip_with: <f: (a: T, b: U) => V> (xs: T[], ys: U[]) => V[]
+```
+
+**`stream`** — import { ... } from stream — 1 name(s)
+
+```text
+unfold: (state: S, step: (state: S) => (T, S)?) => T..
 ```
 
 **`math`** — import { ... } from math — 48 name(s)

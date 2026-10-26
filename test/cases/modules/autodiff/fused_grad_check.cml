@@ -12,7 +12,7 @@ import { new, sum, relu } from tensor
 
 func check(name: string, f: <x: f32[..]> () => float, df: <x: f32[..]> () => f32[..], x: f32[..], v: f32[..]): int sync {
     let h = 0.001
-    let analytic = sum(df<x>() * v)
+    let analytic = float(sum(df<x>() * v))
     let numeric = (f<x + v * h>() - f<x - v * h>()) / (2.0 * h)
     let err = analytic - numeric
     let scale = if numeric > 1.0 then numeric else if numeric < -1.0 then 0.0 - numeric else 1.0
@@ -29,18 +29,18 @@ func out24(): f32[..] { return new([[1.0, -2.0, 0.5, 0.3], [0.4, 1.2, -0.6, 0.9]
 
 // matmul + bias (one fused group), in each operand
 with <x: f32[..]>
-func lin_x(): float { return sum((x @ w34() + b4()) * out24()) }
+func lin_x(): float { return float(sum((x @ w34() + b4()) * out24())) }
 with <w: f32[..]>
-func lin_w(): float { return sum((x23() @ w + b4()) * out24()) }
+func lin_w(): float { return float(sum((x23() @ w + b4()) * out24())) }
 with <b: f32[..]>
-func lin_b(): float { return sum((x23() @ w34() + b) * out24()) }
+func lin_b(): float { return float(sum((x23() @ w34() + b) * out24())) }
 // matmul + bias + relu (one fused group)
 with <x: f32[..]>
-func mlp_x(): float { return sum(relu(x @ w34() + b4()) * out24()) }
+func mlp_x(): float { return float(sum(relu(x @ w34() + b4()) * out24())) }
 with <w: f32[..]>
-func mlp_w(): float { return sum(relu(x23() @ w + b4()) * out24()) }
+func mlp_w(): float { return float(sum(relu(x23() @ w + b4()) * out24())) }
 with <b: f32[..]>
-func mlp_b(): float { return sum(relu(x23() @ w34() + b) * out24()) }
+func mlp_b(): float { return float(sum(relu(x23() @ w34() + b) * out24())) }
 
 func main(): int sync {
     let vx = new([[0.2, -0.4, 0.9], [-0.3, 0.8, 0.1]] as f32[][])

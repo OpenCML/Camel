@@ -30,7 +30,7 @@ func constants(x: f32[..]): f32[..] {
 /// The axis extent is int(sum(x)), known only when the program runs; 12 divides by construction
 /// on the inputs the checker gives, and the slice has constant bounds [1 : 3] on that axis.
 func dynamic(x: f32[..]): f32[..] {
-    return slice(reshape(x, [int(12.0 / sum(x)), int(sum(x))]), 1, 1, 3)
+    return slice(reshape(x, [int(12.0 / float(sum(x))), int(sum(x))]), 1, 1, 3)
 }
 
 func main(): int sync {
