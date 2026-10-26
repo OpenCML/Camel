@@ -242,7 +242,7 @@ case = "../../../cases/consistency/operator_overloads/mods/conflict_import.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::OperatorOverloadConflict"
-expect_diagnostic_line = 5
+expect_diagnostic_line = 4
 expect_diagnostic_column = 1
 expect_output_contains = ["by module 'plus_a'"]
 

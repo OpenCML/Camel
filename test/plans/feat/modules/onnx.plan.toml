@@ -2550,7 +2550,7 @@ const d = diags[0]
 assert(d.data.name === 'RuntimeDiag::TranslationRefused' && d.data.stage === 'pass:onnx::export', `unexpected diagnostic ${d.data.name} at stage ${d.data.stage}`)
 assert(d.message.includes('growth budget was exhausted: the budget is 0 nodes (set by the growth_budget parameter of std::opt)'), `unexpected message: ${d.message}`)
 assert(d.message.includes('raise the budget by writing a larger growth_budget on std::opt (for example std::opt growth_budget=8192)'), `the way to raise it is missing: ${d.message}`)
-assert(d.range.start.line === 15 && d.range.start.character === 0, `unexpected range ${JSON.stringify(d.range)}`)
+assert(d.range.start.line === 14 && d.range.start.character === 0, `unexpected range ${JSON.stringify(d.range)}`)
 assert(!fs.existsSync(path.join(input.test_tmp, 'refusal_growth_budget.onnx')), 'a refused export must not write a model')
 }
 """
@@ -2680,7 +2680,7 @@ assert(diags.length === 1, `expected one diagnostic, got ${diags.length}`)
 const d = diags[0]
 assert(d.data.name === 'RuntimeDiag::TranslationRefused' && d.data.stage === 'pass:onnx::export', `unexpected diagnostic ${d.data.name} at stage ${d.data.stage}`)
 assert(d.message.includes('is made in an arm of this branch') && d.message.includes('is not known at compile time'), `unexpected message: ${d.message}`)
-assert(d.range.start.line === 18 && d.range.start.character === 11 && d.range.end.line === 22, `unexpected range ${JSON.stringify(d.range)}`)
+assert(d.range.start.line === 17 && d.range.start.character === 11 && d.range.end.line === 21, `unexpected range ${JSON.stringify(d.range)}`)
 assert(!fs.existsSync(path.join(input.test_tmp, 'refusal_request_in_arm.onnx')), 'a refused export must not write a model')
 }
 """
