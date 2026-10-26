@@ -744,8 +744,6 @@ bool bindTypeVars(Type *pattern, Type *actual, type_bindings_t &bindings) {
         break;
     }
     if (OtherType *want = asTypeApplication(pattern)) {
-        // The same type code was checked above; an argument list of another length is the
-        // prototype of the name (`Map` written without arguments).
         auto *have = static_cast<OtherType *>(actual);
         if (have->paramCount() == 0 && want->paramCount() > 0) {
             // The bare name states no argument, so it fixes no type variable, and it is not of the
@@ -757,6 +755,8 @@ bool bindTypeVars(Type *pattern, Type *actual, type_bindings_t &bindings) {
             return true;
         }
         if (have->paramCount() != want->paramCount()) {
+            // The same type code was checked above; an argument list of another length is the
+            // prototype of the name (`Map` written without arguments).
             return false;
         }
         for (size_t i = 0; i < want->paramCount(); ++i) {
