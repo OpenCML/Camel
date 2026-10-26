@@ -41,18 +41,21 @@ bool ProcessModule::load() {
             {"cpu_count", false},
             {"thread_count", false},
         });
-    // What each touches (docs/design/op-semantics 8): the process and the machine.
+    // What each touches (docs/design/op-semantics 8): the process and the machine. The process
+    // resource is the one the declaration module exports (`export resource process` in
+    // `stdlib/process.cml`), so it is named the way a resource of a module is
+    // (`<module>:<name>`, as `tiles:driver`): a module that reads it imports it from there.
     {
         using camel::core::sem::AccessMode;
         using camel::core::sem::externalAmbient;
         camel::core::OperatorTable::instance().declareResources(
             "process",
             {
-                {"exit", externalAmbient("process", AccessMode::ReadModifyWrite)},
+                {"exit", externalAmbient("process:process", AccessMode::ReadModifyWrite)},
                 {"sleep", externalAmbient("clock", AccessMode::Read)},
                 {"whoami", externalAmbient("env", AccessMode::Read)},
                 {"cpu_count", externalAmbient("env", AccessMode::Read)},
-                {"thread_count", externalAmbient("process", AccessMode::Read)},
+                {"thread_count", externalAmbient("process:process", AccessMode::Read)},
             });
     }
     loaded_ = true;
