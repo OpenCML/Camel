@@ -532,14 +532,8 @@ func max_kernel::<T>(xs: T[]): T? when is_string::<T>()
 /// from +0 in ascending order and rounded once, an integer one wraps around.
 /// @fails fault `InvalidArgument` when the axis is outside the rank
 /// @example ([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])->sum<0>    // [4.0, 6.0]
-with <axis: int>
-export func sum::<T>(xs: T[..]): T[..] when is_integer::<T>() || is_float::<T>() {
-    return sum_axis(xs, axis, false)
-}
-
-/// sum along an axis, keeping the axis with extent 1.
-/// @example ([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])->sum<1, true>
-with <axis: int, keepdims: bool>
+/// @example ([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])->sum<1, true>    // [[3.0], [7.0]]
+with <axis: int, keepdims: bool = false>
 export func sum::<T>(xs: T[..]): T[..] when is_integer::<T>() || is_float::<T>() {
     return sum_axis(xs, axis, keepdims)
 }
@@ -548,14 +542,7 @@ export func sum::<T>(xs: T[..]): T[..] when is_integer::<T>() || is_float::<T>()
 /// type.
 /// @fails fault `InvalidArgument` when the axis is outside the rank or its extent is 0
 /// @example ([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])->mean<1>    // [1.5, 3.5]
-with <axis: int>
-export func mean::<T>(xs: T[..]): T[..] when is_float::<T>() {
-    return mean_axis(xs, axis, false)
-}
-
-/// mean along an axis, keeping the axis with extent 1.
-/// @example ([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])->mean<1, true>
-with <axis: int, keepdims: bool>
+with <axis: int, keepdims: bool = false>
 export func mean::<T>(xs: T[..]): T[..] when is_float::<T>() {
     return mean_axis(xs, axis, keepdims)
 }
@@ -563,14 +550,7 @@ export func mean::<T>(xs: T[..]): T[..] when is_float::<T>() {
 /// The smallest element along an axis, compared as `min` of the whole array compares.
 /// @fails fault `InvalidArgument` when the axis is outside the rank or its extent is 0
 /// @example ([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])->min<1>    // [1.0, 3.0]
-with <axis: int>
-export func min::<T>(xs: T[..]): T[..] when is_integer::<T>() || is_float::<T>() {
-    return min_axis(xs, axis, false)
-}
-
-/// min along an axis, keeping the axis with extent 1.
-/// @example ([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])->min<1, true>
-with <axis: int, keepdims: bool>
+with <axis: int, keepdims: bool = false>
 export func min::<T>(xs: T[..]): T[..] when is_integer::<T>() || is_float::<T>() {
     return min_axis(xs, axis, keepdims)
 }
@@ -578,14 +558,7 @@ export func min::<T>(xs: T[..]): T[..] when is_integer::<T>() || is_float::<T>()
 /// The largest element along an axis, compared as `max` of the whole array compares.
 /// @fails fault `InvalidArgument` when the axis is outside the rank or its extent is 0
 /// @example ([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])->max<0>    // [3.0, 4.0]
-with <axis: int>
-export func max::<T>(xs: T[..]): T[..] when is_integer::<T>() || is_float::<T>() {
-    return max_axis(xs, axis, false)
-}
-
-/// max along an axis, keeping the axis with extent 1.
-/// @example ([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])->max<1, true>
-with <axis: int, keepdims: bool>
+with <axis: int, keepdims: bool = false>
 export func max::<T>(xs: T[..]): T[..] when is_integer::<T>() || is_float::<T>() {
     return max_axis(xs, axis, keepdims)
 }
@@ -594,14 +567,7 @@ export func max::<T>(xs: T[..]): T[..] when is_integer::<T>() || is_float::<T>()
 /// array orders.
 /// @fails fault `InvalidArgument` when the axis is outside the rank or its extent is 0
 /// @example ([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])->argmax<1>    // [1, 1]
-with <axis: int>
-export func argmax::<T>(xs: T[..]): int[..] when is_integer::<T>() || is_float::<T>() {
-    return argmax_axis(xs, axis, false)
-}
-
-/// argmax along an axis, keeping the axis with extent 1.
-/// @example ([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])->argmax<1, true>
-with <axis: int, keepdims: bool>
+with <axis: int, keepdims: bool = false>
 export func argmax::<T>(xs: T[..]): int[..] when is_integer::<T>() || is_float::<T>() {
     return argmax_axis(xs, axis, keepdims)
 }
@@ -610,14 +576,7 @@ export func argmax::<T>(xs: T[..]): int[..] when is_integer::<T>() || is_float::
 /// array orders.
 /// @fails fault `InvalidArgument` when the axis is outside the rank or its extent is 0
 /// @example ([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])->argmin<0>    // [0, 0]
-with <axis: int>
-export func argmin::<T>(xs: T[..]): int[..] when is_integer::<T>() || is_float::<T>() {
-    return argmin_axis(xs, axis, false)
-}
-
-/// argmin along an axis, keeping the axis with extent 1.
-/// @example ([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])->argmin<1, true>
-with <axis: int, keepdims: bool>
+with <axis: int, keepdims: bool = false>
 export func argmin::<T>(xs: T[..]): int[..] when is_integer::<T>() || is_float::<T>() {
     return argmin_axis(xs, axis, keepdims)
 }

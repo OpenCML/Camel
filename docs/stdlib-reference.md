@@ -2822,7 +2822,7 @@ f(xs[i], ys[i]) for every i.
 #### `sum`
 
 ```camel
-sum: <axis: int> (xs: T[..]) => T[..] when is_integer::<T>() || is_float::<T>()
+sum: <axis: int, keepdims: bool = false> (xs: T[..]) => T[..] when is_integer::<T>() || is_float::<T>()
 ```
 
 The sum along an axis (0 along an axis of extent 0), with the rule of the whole sum: a float element type is added in f64
@@ -2831,22 +2831,12 @@ from +0 in ascending order and rounded once, an integer one wraps around.
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Failure: fault `InvalidArgument` when the axis is outside the rank.
 - Example: `([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])->sum<0>` gives `[4.0, 6.0]`
-
-#### `sum`
-
-```camel
-sum: <axis: int, keepdims: bool> (xs: T[..]) => T[..] when is_integer::<T>() || is_float::<T>()
-```
-
-sum along an axis, keeping the axis with extent 1.
-
-- Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example: `([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])->sum<1, true>`
+- Example: `([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])->sum<1, true>` gives `[[3.0], [7.0]]`
 
 #### `mean`
 
 ```camel
-mean: <axis: int> (xs: T[..]) => T[..] when is_float::<T>()
+mean: <axis: int, keepdims: bool = false> (xs: T[..]) => T[..] when is_float::<T>()
 ```
 
 The mean along an axis: the sum and the division both in f64, rounded once into the element
@@ -2856,21 +2846,10 @@ type.
 - Failure: fault `InvalidArgument` when the axis is outside the rank or its extent is 0.
 - Example: `([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])->mean<1>` gives `[1.5, 3.5]`
 
-#### `mean`
-
-```camel
-mean: <axis: int, keepdims: bool> (xs: T[..]) => T[..] when is_float::<T>()
-```
-
-mean along an axis, keeping the axis with extent 1.
-
-- Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example: `([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])->mean<1, true>`
-
 #### `min`
 
 ```camel
-min: <axis: int> (xs: T[..]) => T[..] when is_integer::<T>() || is_float::<T>()
+min: <axis: int, keepdims: bool = false> (xs: T[..]) => T[..] when is_integer::<T>() || is_float::<T>()
 ```
 
 The smallest element along an axis, compared as `min` of the whole array compares.
@@ -2879,21 +2858,10 @@ The smallest element along an axis, compared as `min` of the whole array compare
 - Failure: fault `InvalidArgument` when the axis is outside the rank or its extent is 0.
 - Example: `([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])->min<1>` gives `[1.0, 3.0]`
 
-#### `min`
-
-```camel
-min: <axis: int, keepdims: bool> (xs: T[..]) => T[..] when is_integer::<T>() || is_float::<T>()
-```
-
-min along an axis, keeping the axis with extent 1.
-
-- Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example: `([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])->min<1, true>`
-
 #### `max`
 
 ```camel
-max: <axis: int> (xs: T[..]) => T[..] when is_integer::<T>() || is_float::<T>()
+max: <axis: int, keepdims: bool = false> (xs: T[..]) => T[..] when is_integer::<T>() || is_float::<T>()
 ```
 
 The largest element along an axis, compared as `max` of the whole array compares.
@@ -2902,21 +2870,10 @@ The largest element along an axis, compared as `max` of the whole array compares
 - Failure: fault `InvalidArgument` when the axis is outside the rank or its extent is 0.
 - Example: `([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])->max<0>` gives `[3.0, 4.0]`
 
-#### `max`
-
-```camel
-max: <axis: int, keepdims: bool> (xs: T[..]) => T[..] when is_integer::<T>() || is_float::<T>()
-```
-
-max along an axis, keeping the axis with extent 1.
-
-- Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example: `([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])->max<1, true>`
-
 #### `argmax`
 
 ```camel
-argmax: <axis: int> (xs: T[..]) => int[..] when is_integer::<T>() || is_float::<T>()
+argmax: <axis: int, keepdims: bool = false> (xs: T[..]) => int[..] when is_integer::<T>() || is_float::<T>()
 ```
 
 The position along an axis of the first largest element, ordered as `argmax` of the whole
@@ -2926,21 +2883,10 @@ array orders.
 - Failure: fault `InvalidArgument` when the axis is outside the rank or its extent is 0.
 - Example: `([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])->argmax<1>` gives `[1, 1]`
 
-#### `argmax`
-
-```camel
-argmax: <axis: int, keepdims: bool> (xs: T[..]) => int[..] when is_integer::<T>() || is_float::<T>()
-```
-
-argmax along an axis, keeping the axis with extent 1.
-
-- Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example: `([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])->argmax<1, true>`
-
 #### `argmin`
 
 ```camel
-argmin: <axis: int> (xs: T[..]) => int[..] when is_integer::<T>() || is_float::<T>()
+argmin: <axis: int, keepdims: bool = false> (xs: T[..]) => int[..] when is_integer::<T>() || is_float::<T>()
 ```
 
 The position along an axis of the first smallest element, ordered as `argmin` of the whole
@@ -2949,17 +2895,6 @@ array orders.
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Failure: fault `InvalidArgument` when the axis is outside the rank or its extent is 0.
 - Example: `([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])->argmin<0>` gives `[0, 0]`
-
-#### `argmin`
-
-```camel
-argmin: <axis: int, keepdims: bool> (xs: T[..]) => int[..] when is_integer::<T>() || is_float::<T>()
-```
-
-argmin along an axis, keeping the axis with extent 1.
-
-- Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example: `([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])->argmin<1, true>`
 
 ### Shape
 
