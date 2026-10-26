@@ -1,0 +1,100 @@
+id = "linear.var_in_sync"
+order = 346
+tier = "fast"
+tags = ["feat", "linear", "sync", "var"]
+
+[[tests]]
+name = "var_between_statements.default"
+desc = "A var declared and read in a sync body is not a statement of the chain: the println statements around it all run, in written order (one before, after and between reads and writes, three in a row, a nested sync block). Pipeline: default."
+kind = "behavior"
+case = "../../../cases/linear/runtime/var_between_statements.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '1 | 2 | 1 | 2 | 1 | 1 | 2 | 6 | 1 | 2 | 3 | 1 | 2 | 3', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_between_statements.nvm"
+desc = "A var declared and read in a sync body is not a statement of the chain: the println statements around it all run, in written order (one before, after and between reads and writes, three in a row, a nested sync block). Pipeline: nvm."
+kind = "behavior"
+case = "../../../cases/linear/runtime/var_between_statements.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '1 | 2 | 1 | 2 | 1 | 1 | 2 | 6 | 1 | 2 | 3 | 1 | 2 | 3', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_between_statements.fvm"
+desc = "A var declared and read in a sync body is not a statement of the chain: the println statements around it all run, in written order (one before, after and between reads and writes, three in a row, a nested sync block). Pipeline: fvm."
+kind = "behavior"
+case = "../../../cases/linear/runtime/var_between_statements.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '1 | 2 | 1 | 2 | 1 | 1 | 2 | 6 | 1 | 2 | 3 | 1 | 2 | 3', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_between_statements.jit"
+desc = "A var declared and read in a sync body is not a statement of the chain: the println statements around it all run, in written order (one before, after and between reads and writes, three in a row, a nested sync block). Pipeline: jit."
+kind = "behavior"
+case = "../../../cases/linear/runtime/var_between_statements.cml"
+args = ["${case}", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '1 | 2 | 1 | 2 | 1 | 1 | 2 | 6 | 1 | 2 | 3 | 1 | 2 | 3', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_between_statements.opt"
+desc = "A var declared and read in a sync body is not a statement of the chain: the println statements around it all run, in written order (one before, after and between reads and writes, three in a row, a nested sync block). Pipeline: opt."
+kind = "behavior"
+case = "../../../cases/linear/runtime/var_between_statements.cml"
+args = ["${case}", "std::opt"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '1 | 2 | 1 | 2 | 1 | 1 | 2 | 6 | 1 | 2 | 3 | 1 | 2 | 3', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_between_statements.opt_jit"
+desc = "A var declared and read in a sync body is not a statement of the chain: the println statements around it all run, in written order (one before, after and between reads and writes, three in a row, a nested sync block). Pipeline: opt_jit."
+kind = "behavior"
+case = "../../../cases/linear/runtime/var_between_statements.cml"
+args = ["${case}", "std::opt", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '1 | 2 | 1 | 2 | 1 | 1 | 2 | 6 | 1 | 2 | 3 | 1 | 2 | 3', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
