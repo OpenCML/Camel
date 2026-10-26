@@ -1,0 +1,16 @@
+/**
+ * A fact declaration writes the type of the fact after its parameters (`fact depth(n): int`,
+ * rewrite design 7.5): the cases and the `join` all give a value of it. This declaration writes
+ * none, and nothing here is compiled.
+ */
+module fact_no_type
+import { max } from math
+
+fact depth(n) match n {
+    case const c: int => c
+    case _            => 0
+} join max
+
+func main(): int sync {
+    return 0
+}

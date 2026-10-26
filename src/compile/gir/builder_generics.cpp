@@ -622,6 +622,103 @@ void Builder::settleGenericRuleMaker(
     }
 }
 
+// ---- A generic fact, asked for by its own query (rewrite design 7.5) ----
+
+void Builder::settleGenericFactMaker(
+    std::vector<Argument> &normInputs, type_vec_t &normTypes, const GCT::node_ptr_t &call) {
+    // `__fact(name, <the fact's type parameters>, <its functions>, withCount, <with arguments>,
+    // <queried nodes>, <case triples>)`, what the front end writes for a `fact` declaration. A
+    // fact whose head declares type parameters is one fact per type argument (design principles
+    // 5.5): the functions it is made of are templates and have no value of their own, so the
+    // instances of the fact this call stands for are built here, from the instance of the fact's
+    // query -- the type arguments are the ones that instance was resolved with, the ones written
+    // at the query (`range::<int>(n)`), which is the channel rules and facts share (design
+    // principles 5.9) and the only channel a caller that holds a node has. A query whose arguments
+    // fix none of them is reported here and asks for them. They are part of what the fact is: two
+    // instances at two types are two facts, and the written arguments name it (`range<int>`).
+    constexpr size_t kTypes   = 1;
+    constexpr size_t kInitial = 2;
+    if (normInputs.size() <= kInitial) {
+        return;
+    }
+    // The fact's functions, as the front end named them: every argument of the call that is one is
+    // generic, and each is instantiated at the types the query was resolved with. They are not all
+    // of them leading -- the `with` count, the `with` values and the queried nodes sit between the
+    // fact's clauses and its cases (`__fact('range', 'int', initial, join, ..., 0, n, case0,
+    // case0_fact, ...)`, modules/rewrite/fact.h), and a generic function left uninstantiated in an
+    // argument position is a function value the operator cannot take.
+    std::vector<size_t> at;
+    std::vector<generic_template_ptr_t> made;
+    for (size_t i = kInitial; i < normInputs.size(); ++i) {
+        const auto found = genericDrefs_.find(normInputs[i].node);
+        if (found == genericDrefs_.end()) {
+            continue;
+        }
+        at.push_back(i);
+        made.push_back(found->second.one());
+    }
+    if (made.empty()) {
+        // A fact whose head declares no type parameters is the value its functions already are.
+        return;
+    }
+    const std::vector<std::string> names = typeParameterNames(made.front());
+    if (names.empty()) {
+        return;
+    }
+    // The fact's name, as a reader writes it: the functions the declaration becomes are its name
+    // with a suffix (`range__initial`, `range__case0_fact`).
+    std::string factName = made.front()->name;
+    if (const size_t scope = factName.rfind("::"); scope != std::string::npos) {
+        factName = factName.substr(scope + 2);
+    }
+    if (const size_t side = factName.rfind("__"); side != std::string::npos) {
+        factName.resize(side);
+    }
+    type_bindings_t bindings;
+    std::string arguments;
+    std::string declared;
+    for (const std::string &one : names) {
+        declared += (declared.empty() ? "" : ", ") + one;
+        Type *bound = findTypeBinding(typeBindings_, one);
+        if (bound == nullptr || containsTypeVar(bound)) {
+            // A type the query does not fix is no instance of the fact: the type arguments of a
+            // fact whose head declares type parameters are the ones its query was resolved with,
+            // and a query whose arguments fix none of them has to write them
+            // (`range::<int>(n)`) -- the same answer any generic call gives, and this is where
+            // the instance the query asked for is built.
+            diags_->of(SemanticDiag::GenericArgumentsMismatch)
+                .atOrigin(call->origin())
+                .commit(
+                    factName,
+                    declared,
+                    "the type variable(s) " + one +
+                        " cannot be determined from the arguments or expected result; give an "
+                        "expected type or explicit " +
+                        factName + "::<...> type arguments",
+                    factName + "::<" + declared + ">");
+            throw BuildAbortException();
+        }
+        bindings.emplace_back(one, bound);
+        arguments += (arguments.empty() ? "" : ", ") + bound->toString();
+    }
+    for (size_t i = 0; i < made.size(); ++i) {
+        const compile_graph_ptr_t instance = instantiateGeneric(made[i], bindings, {}, {}, call);
+        if (instance == nullptr) {
+            return; // the instance reported its own reason, at the declaration
+        }
+        normInputs[at[i]] = Argument{createFuncDataNode(instance, true, false), call, std::nullopt};
+        normTypes[at[i]]  = valueTypeOf(nodeTypeOf(normInputs[at[i]].node));
+    }
+    // What the type arguments are: the fact's key reads them, and the engine makes one fact per
+    // key (`buildDefinition`), so the instances of two types never share a value or a kind.
+    const data_ptr_t written = tt::as_shared<Data>(std::make_shared<StringData>(arguments));
+    const node_handle_t typesNode = currGraph_->addStaticDataNode(written);
+    rememberConstant(typesNode, written);
+    registerNodeOrigin(context_, typesNode, call, "gir.fact.types");
+    normInputs[kTypes] = Argument{typesNode, call, std::nullopt};
+    normTypes[kTypes]  = Type::String();
+}
+
 bool Builder::instantiateRuleTemplates(
     const GenericRuleEntry &entry, const std::vector<Type *> &types, const RuleWithArguments &with,
     compile_graph_ptr_t &lhs, compile_graph_ptr_t &rhs, compile_graph_ptr_t &when,
