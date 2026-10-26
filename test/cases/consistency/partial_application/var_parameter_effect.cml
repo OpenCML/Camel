@@ -1,0 +1,39 @@
+/**
+ * The function value a `var` context parameter makes writes the cell it captured: `g(1)` is
+ * recorded as a write of `t`, so a read of `t` written after the call sees the write (design
+ * principles 3.5 and F3), and the call runs where a sync block orders it.
+ *
+ * Outside a sync block the call of the value is not needed and does not run, so the read still
+ * sees the value `t` had. The value is an effect either way; what a sync block adds is that the
+ * effects written in it happen.
+ */
+module partial_application_var_parameter_effect
+
+with <var total: int>
+func add(x: int): int sync {
+    total = total + x
+    return total
+}
+
+/// 1: `t` is 0 before the call and 1 after it.
+func guarded(): int sync {
+    var t = 0
+    let g = add<t>
+    let before = t
+    g(1)
+    let after = t
+    return before * 10 + after
+}
+
+/// 0: the call is outside a sync block and its result is taken by nothing.
+func ignored(): int {
+    var t = 0
+    let g = add<t>
+    g(1)
+    return t
+}
+
+func main(): int sync {
+    println(guarded(), ignored())
+    return 0
+}

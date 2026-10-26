@@ -443,9 +443,14 @@ node_handle_t Builder::partialApplicationOf(
     // The bound values and, unless it is named, the callee: bound to names no program can
     // write, in the scope the expression stands in, so that the new graph captures them the
     // way any closure captures a name. Nothing refers to a node of another graph.
+    //
+    // What is bound is the argument as the call would take it, not its value: a variable bound
+    // to a `var` context parameter is the cell, and the call the new graph makes takes the cell
+    // (elsewhere the binding would hand it a read, and a read is immutable). Every other
+    // position reads the variable at the call, which is the same value as before.
     std::vector<std::string> boundNames;
     for (const Argument &arg : bound) {
-        boundNames.push_back(bindTemporary(valueOf(arg.node)));
+        boundNames.push_back(bindTemporary(arg.node != nullptr ? arg.node : valueOf(arg.node)));
     }
     const auto make = [&](GCT::node_ptr_t node) {
         node->setOrigin(at);
