@@ -3,7 +3,7 @@
 
 /*
  * The process and the machine it runs on: how long to wait (in seconds), when to end, who the user is, how many hardware
- * threads there are, and how many threads the process itself has. The terminal is `io`'s.
+ * threads there are. The terminal is `io`'s.
  *
  * The signatures are written once, in the declaration module `stdlib/process.cml` (design
  * principles 6.4). What is left here is what only C++ knows: the
@@ -37,7 +37,6 @@ bool ProcessModule::load() {
             {"sleep", false},
             {"user_name", false},
             {"cpu_count", false},
-            {"thread_count", false},
         });
     // What each touches (docs/design/op-semantics 8): the process and the machine.
     {
@@ -46,11 +45,10 @@ bool ProcessModule::load() {
         camel::core::OperatorTable::instance().declareResources(
             "process",
             {
-                {"exit", externalAmbient("process", AccessMode::ReadModifyWrite)},
+                {"exit", externalAmbient("process::process", AccessMode::ReadModifyWrite)},
                 {"sleep", externalAmbient("clock", AccessMode::Read)},
                 {"user_name", externalAmbient("env", AccessMode::Read)},
                 {"cpu_count", externalAmbient("env", AccessMode::Read)},
-                {"thread_count", externalAmbient("process", AccessMode::Read)},
             });
     }
     loaded_ = true;

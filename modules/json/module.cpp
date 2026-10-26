@@ -61,11 +61,7 @@ class DecodeAsResolver final : public FuncTypeResolver {
         if (target == nullptr || !jsonTypeHasForm(target)) {
             return std::nullopt;
         }
-        return FunctionType::create(
-            {},
-            {{norm[0], false}},
-            TupleType::fallible(target),
-            modifiers);
+        return FunctionType::create({}, {{norm[0], false}}, TupleType::fallible(target));
     }
 
     std::string signature() const override { return "::<T>(source: string | Json) => T!"; }
