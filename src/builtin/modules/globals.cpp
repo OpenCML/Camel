@@ -15,6 +15,7 @@
 #include "camel/core/context/context.h"
 #include "camel/core/type/composite/array.h"
 #include "camel/core/type/composite/struct.h"
+#include "camel/core/type/composite/tuple.h"
 #include "camel/core/type/enum.h"
 #include "camel/core/type/resolver.h"
 #include "camel/core/type/text.h"
@@ -47,6 +48,17 @@ bool isConcreteValueType(Type *type) {
 
 /// A type parameter of a signature: `binder` at its first occurrence, a use at every later one.
 Type *typeParameter(const char *name, bool binder) { return TypeVarType::create(name, binder); }
+
+/// Whether the value of type `source` is put into the form of the tagged target `target`: a `T`
+/// into a `T?` / `T!` and `null` into a `T?`, at a position whose target type is known. Design
+/// principles 3.8 makes that entrance automatic wherever the target is known, so an assignment to
+/// a `var` of the form takes it as a declaration does; the reverse never enters, and a value of
+/// another payload does not enter either (a `T?` is not a `T`, and no number becomes a float by
+/// itself). Only an assignment asks this: the resolver below is the one whose parameter names the
+/// place a value is written to.
+bool entersFormOf(Type *target, Type *source) {
+    return asTagged(target) != nullptr && entersImplicitly(target, source);
+}
 
 /// The signature of `map`'s rule as a type: `<f: (item: T) => U> (collect: T[]) => U[]`. The
 /// rule reports that declaration as spelling for reports; this is the same declaration with its
@@ -1146,7 +1158,8 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         [](const type_vec_t &with, const type_vec_t &norm)
                             -> optional<Type *> {
                             // The target keeps its declared type; the value only has to fit it.
-                            if (!norm[0]->assignableFrom(norm[1])) {
+                            if (!norm[0]->assignableFrom(norm[1]) &&
+                                !entersFormOf(norm[0], norm[1])) {
                                 return nullopt;
                             }
                             return TupleType::cell(norm[0]);
