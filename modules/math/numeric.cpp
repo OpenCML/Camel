@@ -294,6 +294,42 @@ CAMEL_MATH_INTEGER(
 
 #undef CAMEL_MATH_INTEGER
 
+// The shifts of the declarations that give the count in angle brackets (`x->shl<count>`): the
+// count is the one `with` argument, and the same fault as above refuses one outside 0..width-1.
+template <typename T> slot_t shiftByWith(bool left, const char *name, ArgsView &with, ArgsView &norm) {
+    using U           = std::make_unsigned_t<T>;
+    constexpr int bits = static_cast<int>(sizeof(T) * 8);
+    const Int64 count = with.get<Int64>(0);
+    if (count < 0 || count >= bits) {
+        invalid(
+            name,
+            std::format("the shift count {} is not in 0..{} for a {}-bit integer", count, bits - 1, bits));
+    }
+    const T x = norm.get<T>(0);
+    return toSlot(
+        left ? static_cast<T>(static_cast<U>(x) << count) : static_cast<T>(x >> count));
+}
+
+slot_t __math_shl_i__(ArgsView &with, ArgsView &norm, Context &) {
+    return shiftByWith<Int32>(true, "shl", with, norm);
+}
+slot_t __math_shl_l__(ArgsView &with, ArgsView &norm, Context &) {
+    return shiftByWith<Int64>(true, "shl", with, norm);
+}
+slot_t __math_shr_i__(ArgsView &with, ArgsView &norm, Context &) {
+    return shiftByWith<Int32>(false, "shr", with, norm);
+}
+slot_t __math_shr_l__(ArgsView &with, ArgsView &norm, Context &) {
+    return shiftByWith<Int64>(false, "shr", with, norm);
+}
+
+// The square root in f64, the kernel every float type goes through: the operand widens to f64
+// exactly and the result is rounded once into the type asked for. sqrt(-0) is -0 and sqrt of a
+// negative number is NaN (the C library's, which is IEEE 754's).
+slot_t __math_sqrt_d__(ArgsView &, ArgsView &norm, Context &) {
+    return toSlot(std::sqrt(norm.get<Float64>(0)));
+}
+
 } // namespace
 
 std::unordered_map<std::string, operator_t> getMathNumericOpsMap() {
@@ -354,5 +390,10 @@ std::unordered_map<std::string, operator_t> getMathNumericOpsMap() {
     integers("bit_not", __math_bit_not__);
     ops["shl"] = __math_shl__;
     ops["shr"] = __math_shr__;
+    ops["shl_i"]   = __math_shl_i__;
+    ops["shl_l"]   = __math_shl_l__;
+    ops["shr_i"]   = __math_shr_i__;
+    ops["shr_l"]   = __math_shr_l__;
+    ops["sqrt_d"]  = __math_sqrt_d__;
     return ops;
 }
