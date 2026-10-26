@@ -60,7 +60,7 @@ func time_fast(round: int, label: string, a: f32[..], b: f32[..], reps: int): vo
     let started = now()
     let measured = loop i = 0, s = 0.0 while i < reps do {
         let product = fast(a, b)
-        return (i + 1, s + sum(product))
+        return (i + 1, s + float(sum(product)))
     }
     let elapsed = now() - started
     'gemm_threads_curve round={} t={} shape={} path=library ms={} checksum={}'->format<
@@ -72,7 +72,7 @@ func time_exact(round: int, label: string, a: f32[..], b: f32[..], reps: int): v
     let started = now()
     let measured = loop i = 0, s = 0.0 while i < reps do {
         let product = exact(a, b)
-        return (i + 1, s + sum(product))
+        return (i + 1, s + float(sum(product)))
     }
     let elapsed = now() - started
     'gemm_threads_curve round={} t={} shape={} path=canonical ms={} checksum={}'->format<
