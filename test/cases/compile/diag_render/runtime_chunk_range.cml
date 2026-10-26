@@ -1,4 +1,3 @@
-module runtime_chunk_range
 
 import { read_chunk } from fs
 

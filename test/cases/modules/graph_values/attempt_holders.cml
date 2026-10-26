@@ -2,7 +2,6 @@
  * `attempt(f, x)` isolates a fault of `f` at the call; `f` itself still faults when called
  * directly afterwards, and its graph is the same (design principles 3.9, 9.1).
  */
-module attempt_holders
 import { Graph, Node, constant, graph_of, inputs, nodes, op, op_name } from graph
 
 func target(x: int): int {

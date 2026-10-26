@@ -3,7 +3,6 @@
  * points and null for a group that took no part; `find_all`, `replace`, `replace_with`, `split`
  * and `validate` are written on it.
  */
-module main
 
 import { Match, find, find_all, has_match, replace, replace_with, split, validate } from re
 

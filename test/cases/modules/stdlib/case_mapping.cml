@@ -2,7 +2,6 @@
  * Upper and lower case follow the Unicode case mapping that does not depend on a language or on
  * the context (design principles 11.1): a letter may become several, and what has no case is kept.
  */
-module case_mapping
 
 import { to_upper, to_lower, codepoints } from str
 

@@ -3,7 +3,6 @@
  * differ in length are an array of unknown length, and so are the same arrays inside a tuple, a
  * struct, a nullable and the result of a function.
  */
-module branch_unify
 
 func pair(c: bool): (int[], int) {
     return if c then ([1, 2], 0) else ([1, 2, 3], 0)

@@ -2,7 +2,6 @@
 // round adds what its callees have added. `count_down` reaches itself, so the first round that
 // measured it saw `println` and the second saw nothing new; `pure` is a promise the body breaks
 // (design effects plan, step 5), and a recursion is no excuse for not checking it.
-module err_recursive_pure
 
 /// The clause promises the empty set; the body writes `stdout` and calls itself.
 func count_down(n: int): int pure sync {
