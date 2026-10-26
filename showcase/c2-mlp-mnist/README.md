@@ -160,7 +160,7 @@ stand-in) differs at the `2.4e-4` level.
 - **Labels are the native form.** The data carries one `int64` class label per row, the form
   `F.cross_entropy` takes, and Camel's `softmax_cross_entropy` takes the same form. A tensor
   read by `load_npy` has no static element type, so the Camel code says
-  `cast(labels, 'int64')` to select the integer-label overload (see "Problems").
+  `int(labels)` to select the integer-label overload (see "Problems").
 - **Where Camel is shorter**: the checkpoint (`save_tree` on a tree vs `torch.save` on a
   `state_dict`), evaluation (one `argmax`/`sum` vs `no_grad` + `.item()`), and initialization
   (four `load_npy` calls vs a layer-by-layer `copy_`). PyTorch is shorter in `model` and
@@ -190,7 +190,7 @@ The genuinely awkward parts of writing this example, with the question each rais
    selected.** `nn.softmax_cross_entropy` is overloaded on the target's type: a floating
    tensor means one-hot rows, an integer tensor means class indices. `load_npy` returns a bare
    `Tensor`, so the integer overload is not selected and the call fails at run time with
-   "expects rank-2 target". The example writes `cast(labels, 'int64')` at every use. The
+   "expects rank-2 target". The example writes `int(labels)` at every use. The
    technical note (`docs/technical/43_rows_labels_and_keys.md`, section 5) records this as an
    open question; the cast is a language-level workaround, not a property of the task.
    **Question**: should `load_npy` (or a loader variant) return a tensor whose element type is

@@ -420,7 +420,7 @@ export func saturate_all_strict(p: Program): Program! {
 // ---- scheduling rule sets (rewrite design 2 (second version) 8.5) ----
 //
 // A stage is a `Rule[]`: `run` applies it one way to a fixpoint. The combinators are ordinary
-// Camel functions over stages, written with `loop` and `?->`: no helper carries an index or an
+// Camel functions over stages, written with `loop` and `->`: no helper carries an index or an
 // accumulator. Each answers a `Run`: the program, the rewrites applied, the rounds made, the nodes
 // visited, the nodes erased, whether the last application reached a fixpoint, and the wall time.
 // No combinator reorders a stage's rules or drops a match: a stage that applies nothing
@@ -445,7 +445,7 @@ func start(f: Program): Run<Program> {
     }
 }
 
-// The same value as a run that has not failed, so a loop can start from it and go on with `?->`.
+// The same value as a run that has not failed, so a loop can start from it and go on with `->`.
 func started(f: Program): Run<Program>! {
     return start(f)
 }
@@ -468,24 +468,24 @@ func plus(r: Run<Program>, next: Run<Program>): Run<Program> {
 
 /// One application of `rules` on the result of `r`, at most `rounds` rounds, its cost added.
 func stage(r: Run<Program>, rules: Rule[], rounds: int, strict: bool): Run<Program>! {
-    return r.result->run<rules, rounds: rounds, strict: strict> ?->
+    return r.result->run<rules, rounds: rounds, strict: strict> ->
                (next: Run<Program>) => plus(r, next)
 }
 
 /// Whether the last application reached a fixpoint. An error stops the loop that asks, and the
 /// loop's value is then that error.
 func settled(r: Run<Program>!): bool {
-    return (r ?-> (x: Run<Program>) => x.fixpoint) !! false
+    return (r -> (x: Run<Program>) => x.fixpoint) !! false
 }
 
 /// Whether `r` has not rewritten anything yet; an error stops the loop and is handed on.
 func untouched(r: Run<Program>!): bool {
-    return (r ?-> (x: Run<Program>) => x.rewrites == 0) !! false
+    return (r -> (x: Run<Program>) => x.rewrites == 0) !! false
 }
 
 /// Whether `done` holds for the program `r` holds; an error stops the loop and is handed on.
 func finished(r: Run<Program>!, done: (q: Program) => bool): bool {
-    return (r ?-> (x: Run<Program>) => done(x.result)) !! true
+    return (r -> (x: Run<Program>) => done(x.result)) !! true
 }
 
 /// `seq`: the stages once each, in the written order, each to a fixpoint; a stage that fails fails
@@ -496,7 +496,7 @@ func finished(r: Run<Program>!, done: (q: Program) => bool): bool {
 with <stages: Rule[][], strict: bool>
 export func seq(f: Program): Run<Program>! {
     return loop r = started(f) for s in stages do
-        r ?-> (x: Run<Program>) => stage(x, s, 16, strict)
+        r -> (x: Run<Program>) => stage(x, s, 16, strict)
 }
 
 /// `first`: the stages tried in the written order, and the first one that rewrites something is
@@ -508,7 +508,7 @@ export func seq(f: Program): Run<Program>! {
 with <stages: Rule[][], strict: bool>
 export func first(f: Program): Run<Program>! {
     return loop r = started(f) for s in stages while untouched(r) do
-        r ?-> (x: Run<Program>) => stage(x, s, 16, strict)
+        r -> (x: Run<Program>) => stage(x, s, 16, strict)
 }
 
 /// `repeat`: one round of the rule set at a time, until a round applies nothing or `rounds`
@@ -520,7 +520,7 @@ export func first(f: Program): Run<Program>! {
 with <rules: Rule[], rounds: int, strict: bool>
 export func repeat(f: Program): Run<Program>! {
     return loop r = started(f) for i in 0..rounds while !settled(r) do
-        r ?-> (x: Run<Program>) => stage(x, rules, 1, strict)
+        r -> (x: Run<Program>) => stage(x, rules, 1, strict)
 }
 
 /// `until`: a round at a time, while `done` is false for the program; stops at a fixpoint, at
@@ -532,7 +532,7 @@ export func repeat(f: Program): Run<Program>! {
 with <rules: Rule[], done: (q: Program) => bool, rounds: int, strict: bool>
 export func until(f: Program): Run<Program>! {
     return loop r = started(f) for i in 0..rounds while !finished(r, done) do
-        r ?-> (x: Run<Program>) => stage(x, rules, 1, strict)
+        r -> (x: Run<Program>) => stage(x, rules, 1, strict)
 }
 
 /// `alternate`: one round of `left`, then one round of `right`, until a full pair applies nothing
@@ -543,14 +543,14 @@ export func until(f: Program): Run<Program>! {
 with <left: Rule[], right: Rule[], rounds: int, strict: bool>
 export func alternate(f: Program): Run<Program>! {
     return loop r = started(f) for i in 0..rounds while !settled(r) do
-        r ?-> (x: Run<Program>) => pair(x, left, right, strict)
+        r -> (x: Run<Program>) => pair(x, left, right, strict)
 }
 
 /// One round of `left` and one round of `right`, in that order; `fixpoint` says whether the pair
 /// changed anything, which ends `alternate`.
 func pair(r: Run<Program>, left: Rule[], right: Rule[], strict: bool): Run<Program>! {
-    return stage(r, left, 1, strict) ?-> (a: Run<Program>) => {
-        return stage(a, right, 1, strict) ?-> (b: Run<Program>) => {
+    return stage(r, left, 1, strict) -> (a: Run<Program>) => {
+        return stage(a, right, 1, strict) -> (b: Run<Program>) => {
             let out: Run<Program> = {
                 result: b.result,
                 rewrites: b.rewrites,

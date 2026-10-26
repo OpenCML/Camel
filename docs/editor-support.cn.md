@@ -101,7 +101,7 @@ code --install-extension camel-lang-0.1.0.vsix
 | `readonly` | 是 | 不可变绑定（`let`）。 |
 | `defaultLibrary` | 是 | 标准库中的名字或内建名字。 |
 | `mutable` | 否 | 用 `var` 声明的变量或参数。 |
-| `sync` | 否 | 同步块：函数体写成 `: T sync { ... }` 的函数，以及 `sync (x: int) => ...` 这样的 lambda。 |
+| `sync` | 否 | 同步块：函数体写成 `: T sync { ... }` 的函数，以及 `(x: int) => sync { ... }` 这样的 lambda。 |
 
 `mutable` 是阅读 Camel 代码时最要紧的区分：一个名字能否被重新赋值。VS Code 扩展声明了 `mutable` 与 `sync` 两个修饰符并给出默认样式（`mutable` 加下划线，`sync` 用斜体）；`sync` 标出同步块（[4.3.3](language/04_execution_model.md#433-函数体的-sync函数修饰符)），现在只有函数体位置的 `: T sync` 与 `sync` lambda 两种写法带它。在其他编辑器中，请把它们映射到你选定的高亮；不认识某个修饰符的编辑器会忽略它。
 

@@ -11,12 +11,12 @@
  */
 module tensor_dtype_bf16_cast_under_strict
 
-import { new, cast, to_bytes } from tensor
+import { new, to_bytes } from tensor
 import { to_array } from bytes
 
 #[strict, change_precision]
 func shrink(x: f32[..]): bf16[..] {
-    return cast(x, 'bf16')
+    return bf16(x)
 }
 
 func main(): int sync {

@@ -6,7 +6,7 @@
  *
  * A combinator answers a `Run`: `rewrites`, `rounds`, `visited` are read as fields, and the
  * program is `.result`. The pass hands the run to `reported`, which prints the three counts and
- * answers the program; `?->` carries an error on unchanged.
+ * answers the program; `->` carries an error on unchanged.
  */
 module schedulers
 
@@ -61,52 +61,52 @@ export func values(p: Program): Program! sync {
 
 export func seq_order(p: Program): Program! sync {
     return p->seq<[[bump_one], [bump_ten]], false>
-        ?-> sync (r: Run<Program>) => reported('seq_order', r)
+        -> (r: Run<Program>) => sync { reported('seq_order', r) }
 }
 
 export func seq_reverse(p: Program): Program! sync {
     return p->seq<[[bump_ten], [bump_one]], false>
-        ?-> sync (r: Run<Program>) => reported('seq_reverse', r)
+        -> (r: Run<Program>) => sync { reported('seq_reverse', r) }
 }
 
 export func first_zero(p: Program): Program! sync {
     return p->first<[[int_add_zero], [bump_one]], false>
-        ?-> sync (r: Run<Program>) => reported('first_zero', r)
+        -> (r: Run<Program>) => sync { reported('first_zero', r) }
 }
 
 export func first_bump(p: Program): Program! sync {
     return p->first<[[bump_one], [int_add_zero]], false>
-        ?-> sync (r: Run<Program>) => reported('first_bump', r)
+        -> (r: Run<Program>) => sync { reported('first_bump', r) }
 }
 
 export func repeat_five(p: Program): Program! sync {
     return p->repeat<[step], 5, false>
-        ?-> sync (r: Run<Program>) => reported('repeat_five', r)
+        -> (r: Run<Program>) => sync { reported('repeat_five', r) }
 }
 
 export func repeat_two(p: Program): Program! sync {
     return p->repeat<[step], 2, false>
-        ?-> sync (r: Run<Program>) => reported('repeat_two', r)
+        -> (r: Run<Program>) => sync { reported('repeat_two', r) }
 }
 
 export func alternate_three(p: Program): Program! sync {
     return p->alternate<[step], [step_ten], 3, false>
-        ?-> sync (r: Run<Program>) => reported('alternate_three', r)
+        -> (r: Run<Program>) => sync { reported('alternate_three', r) }
 }
 
 export func until_now(p: Program): Program! sync {
     return p->until<[step], always, 10, false>
-        ?-> sync (r: Run<Program>) => reported('until_now', r)
+        -> (r: Run<Program>) => sync { reported('until_now', r) }
 }
 
 export func until_budget(p: Program): Program! sync {
     return p->until<[step], never, 2, false>
-        ?-> sync (r: Run<Program>) => reported('until_budget', r)
+        -> (r: Run<Program>) => sync { reported('until_budget', r) }
 }
 
 export func nothing(p: Program): Program! sync {
     return p->seq<[[int_mul_zero]], false>
-        ?-> sync (r: Run<Program>) => reported('nothing', r)
+        -> (r: Run<Program>) => sync { reported('nothing', r) }
 }
 
 export func refuse(p: Program): Program! {

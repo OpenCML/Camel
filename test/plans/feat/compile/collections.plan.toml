@@ -1126,6 +1126,17 @@ expect_output_contains = ["err_get_or_ordinary.cml:4:18: [Error]: No matching fu
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 
 [[tests]]
+name = "callform_err_index_of"
+desc = "A function with an `#impl` kernel called with every argument in the parentheses: the hint and the list of overloads both name the declaration (`index_of`), never the private kernel (`index_of_kernel`)."
+kind = "negative"
+case = "../../../cases/compile/callform/err_index_of_ordinary.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["write index_of<'l'>('hello') or 'hello'->index_of<'l'>", "index_of: <sub: string> (s: string) => int?"]
+expect_output_not_contains = ["index_of_kernel"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+
+[[tests]]
 name = "callform_err_split"
 desc = "A module operator called the same way, split('a,b', ','): the same hint."
 kind = "negative"

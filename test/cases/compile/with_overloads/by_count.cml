@@ -1,0 +1,28 @@
+/**
+ * `with` parameters take part in overload selection like ordinary parameters: functions of one
+ * name whose with-parameter lists differ in count (or in types) are one overload set, and a call
+ * picks by the arguments it writes, named or not. `total(xs)` and `xs->total<0>` are two
+ * overloads of the same name.
+ */
+module with_overloads_by_count
+
+with <axis: int>
+func total(xs: int[]): int { return axis }
+
+func total(xs: int[]): int { return len(xs) }
+
+with <axis: int, keep: bool>
+func total(xs: int[]): int { return axis + 10 }
+
+with <n: int>
+func fill(): int[] { return [n] }
+
+func fill(): int[] { return [0] }
+
+func main(): int sync {
+    println(total([1, 2]))
+    println([1, 2]->total<axis: 3>)
+    println([1, 2]->total<1, true>)
+    println(fill(), fill<3>())
+    return 0
+}

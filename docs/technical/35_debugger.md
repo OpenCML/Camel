@@ -296,7 +296,7 @@ See 4.3: `main [inlined code of g]`, located in `g` (the full name of `g`, 5.5).
 
 ### 5.4 Arms and lambdas: frames of functions, or of subgraphs
 
-`if c then a else b` (and `match`, `??`, `!!`, `?->`, `&&`, `||` and narrowing, which are the
+`if c then a else b` (and `match`, `??`, `!!`, `->`, `&&`, `||` and narrowing, which are the
 same structure) is a branch node and one *arm region* per arm of the graph that holds the
 branch (`GCRegion`, kind `Arm`). The program the debugger shows has its arms lowered like every
 other program, so there is no frame of an arm: an arm is code of the function it is written

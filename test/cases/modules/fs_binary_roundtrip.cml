@@ -10,8 +10,8 @@ func main(): int sync {
     let path = dir + '/camel-fs-binary-roundtrip.bin'
     let payload = from_array([0, 65, 0, 255, 13, 10, 128, 0])
     let _ = payload->write_bytes<path>
-    let whole = (path->read_bytes ?-> to_array !! [])
-    let middle = (path->read_chunk<1, 6> ?-> to_array !! [])
+    let whole = (path->read_bytes -> to_array !! [])
+    let middle = (path->read_chunk<1, 6> -> to_array !! [])
     println('binary size={} whole={} middle={}'->format<(path->file_size !! 0), whole, middle>)
     return if (path->file_size !! 0) == 8 && len(whole) == 8 && len(middle) == 6 then 0 else 1
 }

@@ -73,6 +73,11 @@ constexpr std::string_view kDeclaredOperators[] = {
     "to_bytes",
 };
 
+bool isScalarConversion(std::string_view name) {
+    constexpr std::string_view names[] = {"i32", "i64", "int", "f32", "f64", "float", "bf16", "f16"};
+    return std::find(std::begin(names), std::end(names), name) != std::end(names);
+}
+
 bool isDeclaredOperator(std::string_view name) {
     return std::find(std::begin(kDeclaredOperators), std::end(kDeclaredOperators), name) !=
            std::end(kDeclaredOperators);
@@ -99,7 +104,9 @@ TensorModule::TensorModule(context_ptr_t ctx) : BuiltinModule("tensor", ctx) {
         if (!isDeclaredOperator(group->name())) {
             exportEntity(group->name(), group);
         }
-        if (group->name().starts_with("__")) {
+        // The operators of the core and the conversions of the scalar types (`f32(xs)`) are read
+        // together with this module's entries as soon as the module is imported.
+        if (group->name().starts_with("__") || isScalarConversion(group->name())) {
             exportDefaultImportRef(group->name());
         }
     }

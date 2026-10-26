@@ -23,7 +23,7 @@
 module optim
 
 import math
-import { cast, sqrt, zeros_like } from tensor
+import { sqrt, zeros_like } from tensor
 import { is_float } from types
 import { tree_unzip } from tree
 
@@ -192,8 +192,8 @@ func zero_leaf::<L>(x: L) {
     return match type L {
         case float => 0.0
         case f32 => f32(0.0)
-        case f32[?] => cast(zeros_like(x), 'float32')
-        case f64[?] => cast(zeros_like(x), 'float64')
+        case f32[?] => f32(zeros_like(x))
+        case f64[?] => float(zeros_like(x))
         case _ => zeros_like(x)
     }
 }
@@ -340,10 +340,10 @@ func adam_number(p: float, g: float, m: float, v: float, c: Rates): (float, floa
 // double result exactly, so the three double divisions and the square root of the fused kernel
 // come out the same numbers.
 func adam_wide::<P, G, M, V>(p: P, g: G, m: M, v: V, c: Rates) {
-    let p64 = cast(p, 'float64')
-    let g64 = cast(g, 'float64')
-    let m64 = cast(m, 'float64')
-    let v64 = cast(v, 'float64')
+    let p64 = float(p)
+    let g64 = float(g)
+    let m64 = float(m)
+    let v64 = float(v)
     let nm = c.beta1 * m64 + (1.0 - c.beta1) * g64
     let nv = c.beta2 * v64 + (1.0 - c.beta2) * g64 * g64
     let np = p64 - c.rate * (nm / c.correct1) / (sqrt(nv / c.correct2) + c.eps)
@@ -357,5 +357,5 @@ func narrow_numbers(t: (float, float, float)): (f32, f32, f32) {
 
 // The three tensors of one leaf stored once each into f32, with the shape they have.
 func narrow_tensors::<A, B, C>(t: (A, B, C)) {
-    return (cast(t.0, 'float32'), cast(t.1, 'float32'), cast(t.2, 'float32'))
+    return (f32(t.0), f32(t.1), f32(t.2))
 }

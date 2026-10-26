@@ -410,12 +410,15 @@ class GctConstantEvaluator {
             shape = GCT::typeCaseBit(GCT::TypeCaseKind::Leaf);
         }
         const bool isFunc       = subject->code() == TypeCode::Function;
+        const bool isArray      = subject->code() == TypeCode::Array;
         const uint16_t wildcard = GCT::typeCaseBit(GCT::TypeCaseKind::Wildcard);
         for (size_t i = 1; i < node->size(); ++i) {
             const GCT::node_ptr_t &arm = node->at(i);
             bool selected              = (arm->typeCasePatterns() & (shape | wildcard)) != 0 ||
                             (isFunc && (arm->typeCasePatterns() &
-                                        GCT::typeCaseBit(GCT::TypeCaseKind::Func)) != 0);
+                                        GCT::typeCaseBit(GCT::TypeCaseKind::Func)) != 0) ||
+                            (isArray && (arm->typeCasePatterns() &
+                                         GCT::typeCaseBit(GCT::TypeCaseKind::Array)) != 0);
             for (size_t k = 0; !selected && k < arm->typeCaseTypeCount(); ++k) {
                 Type *pattern = bound(arm->typeCaseTypeAt(k));
                 selected      = pattern != nullptr && !containsTypeVar(pattern) &&

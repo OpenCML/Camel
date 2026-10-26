@@ -219,7 +219,7 @@ the rewrite sequence it was found with and under `std::opt::inline`, `std::opt`,
   mutual imports, namespaces, decorators. (Module-level `let`s and imports by name of user
   modules: feature `modules`.)
 - Faults and their diagnostics (division by zero, index out of range, recursion limits, macro
-  evaluation failure by depth), `!!`, `?->`, `throw`, `T!`, `match` on a `T?`, arrays of `T?`.
+  evaluation failure by depth), `!!`, `->`, `throw`, `T!`, `match` on a `T?`, arrays of `T?`.
 - Generic functions (as callees or as values), partial application of a function value that
   still has context parameters (`g<w>` with `g` a parameter), `var` context parameters, `==` on
   arrays, tuples and structs, a `match` case with several patterns.

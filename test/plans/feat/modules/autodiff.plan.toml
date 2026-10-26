@@ -3004,7 +3004,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "adjoint_cast_array.runtime.nvm"
-desc = "`cast` accepts a numeric array as well as a tensor, and an array's tangent is the array of its elements' tangents (design principles 9.9), so the adjoint of `cast(xs, 'float32')` is the tensor's gradient cast back to the array's element type. The case asserts the gradient itself: `g` is printed element by element against [1.0, 1.0, 1.0] -- the array the rule used to drop and materialize as zeros -- and `gw` against [2.0, 3.0, 4.0]. This case replaced `refuse_cast_array`, which expected the refusal. (grad built at run time)"
+desc = "`cast` accepts a numeric array as well as a tensor, and an array's tangent is the array of its elements' tangents (design principles 9.9), so the adjoint of `f32(xs)` is the tensor's gradient cast back to the array's element type. The case asserts the gradient itself: `g` is printed element by element against [1.0, 1.0, 1.0] -- the array the rule used to drop and materialize as zeros -- and `gw` against [2.0, 3.0, 4.0]. This case replaced `refuse_cast_array`, which expected the refusal. (grad built at run time)"
 kind = "behavior"
 case = "../../../cases/modules/autodiff/adjoint_cast_array.cml"
 args = ["${case}", "${run_nvm}"]

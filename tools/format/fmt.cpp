@@ -1612,7 +1612,7 @@ any Formatter::visitUnaryExpr(syn::Node context) {
 
 /*
 linkExpr
-    : compExpr (('->' | '?->') compExpr)*
+    : compExpr ('->' compExpr)*
     ;
 */
 any Formatter::visitLinkExpr(cst::LinkExpr context) { return formatBiOpsList(context, false); }

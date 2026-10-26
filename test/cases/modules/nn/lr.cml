@@ -40,7 +40,7 @@ func train(var weights: f32[?, ?]): void {
     let ones_col = ones([m, 1])
     let X_bias = concat(X, ones_col, 1)  // axis=1
 
-    return 0..its->foreach<sync (i: int) => sync {
+    return 0..its->foreach<(i: int) => sync {
         let nw = update<X_bias, y, lr>(weights)
         if i % 100 == 0 then {
             let pred = X_bias @ nw

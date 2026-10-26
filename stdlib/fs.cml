@@ -24,7 +24,7 @@ import { encode, decode } from bytes
 /// @fails error value `NotFound` when nothing exists at the path; error value `PermissionDenied` when the file system refuses the read; error value `IOError` when the path is a directory or the read fails for another reason; error value `EncodingError` when the content is not valid UTF-8
 /// @example 'notes.txt'->read_text !! ''    // the text of the file, or '' when it cannot be read
 export func read_text(path: string): string! {
-    return path->read_bytes ?-> decode
+    return path->read_bytes -> decode
 }
 
 /// The whole content of a file, every byte preserved.

@@ -226,7 +226,7 @@ float64 中计算、存回 float32），与 `nn.adam` 一致；优化器不是�
   只写常量形状，由别名与顶部注释说明含义。
 - **没有写成类型的 dtype 转换。** `f32(oh)` 没有张量重载，`oh as f32[...]` 是
   `DynamicCastForbidden`；one-hot 乘积用数值提升（f32 * int64 得 f32）代替旧的
-  `cast(oh, 'float32')` 字符串。带类型的张量转换仍是缺口。
+  `f32(oh)` 字符串。带类型的张量转换仍是缺口。
 - **没有融合 QKV/注意力算子，也没有 `rules::accuracy`/`rules::fusion` 流水线**，所以专家
   写法不是从朴素源码自动得到的。`softmax`、`log_softmax` 与融合交叉熵作为普通算子已经存在，
   PyTorch 专家实现与精度探针会用到它们。

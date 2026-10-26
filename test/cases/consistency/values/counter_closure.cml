@@ -6,7 +6,7 @@ module counter_closure
 
 func counter(start: int): () => int sync {
     var n = start
-    return sync (): int => sync {
+    return (): int => sync {
         n = n + 1
         return n
     }

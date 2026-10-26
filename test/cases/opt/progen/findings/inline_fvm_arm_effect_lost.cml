@@ -14,7 +14,7 @@ func f1(a2: (float, bool)[]): bool {
 }
 
 func k17(a18: int): (a0: int) => int sync {
-    return sync (p20: int): int => sync {
+    return (p20: int): int => sync {
         return 0;
     };
 }

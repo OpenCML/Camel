@@ -4,13 +4,13 @@
  */
 module export_impure
 
-import { cast, reshape, randn } from tensor
+import { reshape, randn } from tensor
 import { export_model } from onnx
 import { get_env } from env
 
 func main(): int sync {
     let x = reshape([1.0, 2.0, 3.0, 4.0], [2, 2])
-    export_model((t: float[..]): float[..] => t + cast(randn([2, 2]), "f64"), x, get_env('ONNX_OUT') ?? '')
+    export_model((t: float[..]): float[..] => t + f64(randn([2, 2])), x, get_env('ONNX_OUT') ?? '')
     println('unreachable')
     return 0
 }

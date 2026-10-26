@@ -13,7 +13,7 @@
 | 3 | [数据模型](03_data_model.md) | 类型、数值与转换、数组、元组、结构体、字符串、`T?` 与 `T!`、`Map` 与 `Set`、`let`/`var` |
 | 4 | [执行模型](04_execution_model.md) | 入口、按依赖求值、`sync`、`var`、`#macro`、故障与 `exit`、递归上限、遍 |
 | 5 | [模块](05_modules.md) | `module`、`import`、`export`、`namespace`、随附的模块 |
-| 6 | [表达式](06_expressions.md) | 访问、调用、管道、运算符、`??`/`!!`/`?->`、`if`、`match`、lambda、高阶算子、优先级 |
+| 6 | [表达式](06_expressions.md) | 访问、调用、管道、运算符、`??`/`!!`/`->`、`if`、`match`、lambda、高阶算子、优先级 |
 | 7 | [语句与声明](07_statements.md) | `let`/`var`、`return`/`throw`、函数、`with` 形参、重载、泛型、标注、类型声明 |
 | 8 | [程序与文法](08_top_level_and_grammar.md) | 顶层结构、文法概要 |
 | 9 | [规则与事实](09_rules_and_facts.md) | `rule`、`when` 与许可、类型参数与 `with` 参数、规则集与遍、`fact` 与子句、检查与解释 |

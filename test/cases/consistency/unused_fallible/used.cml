@@ -1,4 +1,4 @@
-// Every use of a `T!` counts: `!!`, `?->`, `match`, an argument, a return. No warning.
+// Every use of a `T!` counts: `!!`, `->`, `match`, an argument, a return. No warning.
 func parse(s: string): int! {
     return parse_int(s)
 }
@@ -21,7 +21,7 @@ func forward(s: string): int! sync {
 
 func main(): int sync {
     println(parse('1') !! 0)
-    println(parse('2') ?-> double !! 0)
+    println(parse('2') -> double !! 0)
     println(show(parse('3')), show(parse('x')))
     println(forward('4') !! 0)
     return 0

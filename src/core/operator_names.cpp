@@ -118,7 +118,6 @@ std::optional<std::string_view> whyNotOverloadable(std::string_view symbol) {
          "evaluated only when needed"},
         {"??", "it is a branch on whether the value on its left is null"},
         {"!!", "it is a branch on whether the value on its left is an error"},
-        {"?->", "it is a branch on whether the value on its left is an error"},
         {"->", "it passes the value on its left to the function on its right"},
         {"..", "it composes two functions"},
         {"=", "assignment binds a variable to a value"},

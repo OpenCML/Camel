@@ -31,7 +31,7 @@ camel examples/text/word_frequency.cml
 |------|------|------|
 | [`records.cml`](data/records.cml) | 结构体记录数组：筛选、派生新记录、`sort_by` 与 `sum`、用 `Map` 分组求和 | `camel examples/data/records.cml` |
 | [`json_roundtrip.cml`](data/json_roundtrip.cml) | JSON 编码，以及解码为带类型的值；格式不符的文本得到错误值 | `camel examples/data/json_roundtrip.cml` |
-| [`validate_input.cml`](data/validate_input.cml) | 可能失败的函数返回 `T!`；`?->`、`!!` 与 `match ... case error e` | `camel examples/data/validate_input.cml` |
+| [`validate_input.cml`](data/validate_input.cml) | 可能失败的函数返回 `T!`；`->`、`!!` 与 `match ... case error e` | `camel examples/data/validate_input.cml` |
 | [`nullable_lookup.cml`](data/nullable_lookup.cml) | 可能查不到的查找返回 `T?`（`array` 的 `find` 与 `index_of`、`Map` 查找）；`??` 与 `match ... case null` | `camel examples/data/nullable_lookup.cml` |
 | [`dedup_sets.cml`](data/dedup_sets.cml) | 用 `unique` 或 `Set<T>` 去重；并集、交集、差集 | `camel examples/data/dedup_sets.cml` |
 

@@ -45,7 +45,7 @@ export func py_run(file_path: string): PyObject!
 /// run a property or a descriptor, so the read is an effect.
 /// @effect reads interpreter state and may run Python code
 /// @fails error `PythonError` when the attribute does not exist; the message starts with the exception class
-/// @example py_import("math") ?-> (m: PyObject): PyObject! => py_attr(m, "sqrt")
+/// @example py_import("math") -> (m: PyObject): PyObject! => py_attr(m, "sqrt")
 export func py_attr(obj: PyObject, attr: string): PyObject!
 
 /// Imports the Python module `module_name` and returns it. Importing runs the module body and
@@ -57,5 +57,5 @@ export func py_import(module_name: string): PyObject!
 
 /// Drops this program's reference to the Python object `obj`.
 /// @effect advances the interpreter's reference counts
-/// @example py_import("math") ?-> py_dispose
+/// @example py_import("math") -> py_dispose
 export func py_dispose(obj: PyObject): void

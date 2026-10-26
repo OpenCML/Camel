@@ -1,0 +1,68 @@
+id = "compile.precedence"
+order = 926
+tier = "fast"
+tags = ["feat", "compile", "parse", "lexer"]
+desc = "The front end follows the language reference: a prefix operator binds looser than `->` and `^`, a lambda has no modifier, a string no quote closes is an error on its own line, and a number has no leading zero."
+
+[defaults]
+kind = "behavior"
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "precedence.unary_link"
+desc = "`-b->abs` is `-(b->abs)`, `~b->abs` is `~(b->abs)`, `!t->always` is `!(t->always)` and `-2->abs` is `-(2->abs)`: the prefix operators bind looser than `->` and `^`, tighter than `*`; a name and a literal read alike."
+case = "../../../cases/compile/precedence/unary_link.cml"
+args = ["${case}"]
+expect_stdout_exact = "-5 -6 false -2 -25 -10\n5 2\n"
+
+[[tests]]
+name = "precedence.lambda_sync_prefix"
+desc = "`sync (x) => ...` is a syntax error: `sync` is written before a block, `(x) => sync { ... }`."
+kind = "negative"
+case = "../../../cases/compile/precedence/lambda_sync_prefix.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SyntaxDiag::UnexpectedToken"
+expect_output_contains = ["lambda_sync_prefix.cml:4:15", "Unexpected 'sync'"]
+
+[[tests]]
+name = "precedence.unterminated_string"
+desc = "A string no quote closes is reported on the line it opened on, not run on to the last escaped quote of the file."
+kind = "negative"
+case = "../../../cases/compile/precedence/unterminated_string.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "LexicalDiag::UnclosedStringLiteral"
+expect_output_contains = ["unterminated_string.cml:4:13"]
+
+[[tests]]
+name = "precedence.unterminated_fstring"
+desc = "A formatted string no backtick closes is reported on the line it opened on."
+kind = "negative"
+case = "../../../cases/compile/precedence/unterminated_fstring.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "LexicalDiag::UnclosedStringLiteral"
+expect_output_contains = ["unterminated_fstring.cml:4:13"]
+
+[[tests]]
+name = "precedence.leading_zero_real"
+desc = "`007.5` is refused as `007` is: a number has no leading zero in its whole part."
+kind = "negative"
+case = "../../../cases/compile/precedence/leading_zero_real.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "LexicalDiag::InvalidNumberFormat"
+expect_output_contains = ["leading_zero_real.cml:5:13", "'007.5'"]
+
+[[tests]]
+name = "precedence.leading_zero_integer"
+desc = "`007` is refused (the same rule as the real)."
+kind = "negative"
+case = "../../../cases/compile/precedence/leading_zero_integer.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "LexicalDiag::InvalidNumberFormat"
+expect_output_contains = ["leading_zero_integer.cml:2:13"]

@@ -129,7 +129,7 @@ func save_at::<T>(h: Ckpt, here: string, t: T): Ckpt {
 }
 
 export func load_tree::<T>(dir: string): T! {
-    return ckpt_open(dir, type_spec::<T>()) ?-> (h => load_at::<T>(h, ""))
+    return ckpt_open(dir, type_spec::<T>()) -> (h => load_at::<T>(h, ""))
 }
 func load_at::<T>(h: Ckpt, here: string): T {
     return match type T {

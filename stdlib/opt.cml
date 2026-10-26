@@ -11,7 +11,7 @@
  * `commit`, and read the next round from the new snapshot.
  *
  *     func shrink(p: Program): Program! sync {
- *         return fold(p) ?-> cse
+ *         return fold(p) -> cse
  *     }
  *
  * The arithmetic is `eval`'s and follows the C++ pass: an integer operation is exact and a float
@@ -171,7 +171,7 @@ func mergeHits(p: Program): Program! sync {
 
 /// Equal values written twice are one node, until none is left.
 export func cse(p: Program): Program! {
-    return if hasHit(p) then mergeHits(p) ?-> cse else p
+    return if hasHit(p) then mergeHits(p) -> cse else p
 }
 
 // ---- dead values ----
@@ -198,7 +198,7 @@ func eraseHits(p: Program, hits: Node[]): Program! sync {
 
 func deadValues(p: Program): Program! sync {
     let hits = allNodes(p)->filter<deadValue>
-    return if len(hits) == 0 then p else eraseHits(p, hits) ?-> deadValues
+    return if len(hits) == 0 then p else eraseHits(p, hits) -> deadValues
 }
 
 /// Values nobody reads are erased, until none is left: the value half of `std::opt::dce`.
@@ -299,7 +299,7 @@ func abandoned(t: Txn, p: Program): Program! sync {
 func foldRounds(p: Program): Program! sync {
     let t = open(p)
     let changed = foldRound(t, foldHits(p))
-    return if changed then committed(t) ?-> foldRounds else abandoned(t, p)
+    return if changed then committed(t) -> foldRounds else abandoned(t, p)
 }
 
 /// A pure operation whose operands are all constants is the value they compute, until none is

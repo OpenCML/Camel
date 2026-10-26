@@ -1,5 +1,5 @@
-// The unary minus is an operator of its own level: looser than `^`, tighter than `->` and the
-// other binary operators, the same before a literal and before a name.
+// The unary minus is an operator of its own level: looser than `^` and `->`, tighter than the
+// other binary operators, the same before a literal and before a name. `-x->inc` is `-(x->inc)`.
 func inc(x: int): int {
     return x + 1
 }

@@ -14,7 +14,7 @@ func decode(text: string): Config! {
 }
 
 func load(path: string, defaults: Config): Config {
-    return path->read_text ?-> decode !! defaults
+    return path->read_text -> decode !! defaults
 }
 
 func show(c: Config): string {

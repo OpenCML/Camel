@@ -13,5 +13,5 @@ func check(a: Json): int sync {
 }
 
 func main(): int sync {
-    return decode('"ab"') ?-> check !! 1
+    return decode('"ab"') -> check !! 1
 }

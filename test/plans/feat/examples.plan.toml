@@ -86,7 +86,7 @@ golden = "golden/examples/data_records.txt"
 
 [[tests]]
 name = "examples.data.validate_input"
-desc = "T! results chained with `?->`, `!!` and match on error."
+desc = "T! results chained with `->`, `!!` and match on error."
 case = "../../../examples/data/validate_input.cml"
 golden = "golden/examples/data_validate_input.txt"
 

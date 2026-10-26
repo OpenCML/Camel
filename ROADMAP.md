@@ -57,7 +57,7 @@ Camel 是图原生的通用编程语言，AI 是它首要的应用领域。
 
 ### 4.3 语言特性
 
-- `[定]` `??`、`!!`、`?->` 实现为图上的分支；`throw` 实现为返回错误值；`try`/`catch` 从语法中移除并给出指引性的诊断。（状态：部分完成——三个运算符、`throw` 与对 `try` 的指引性诊断 `TryCatchNotInLanguage` 已实现并有测试（`test/plans/feat/compile/tagged.plan.toml`）；`throw` 接受什么、`?->` 能否用于 `T?`、`??`/`!!` 右侧的类型按建议实现，标为 `DESIGN-QUESTION(nullable-error)`，待裁定）
+- `[定]` `??`、`!!`、`->` 实现为图上的分支；`throw` 实现为返回错误值；`try`/`catch` 从语法中移除并给出指引性的诊断。（状态：部分完成——三个运算符、`throw` 与对 `try` 的指引性诊断 `TryCatchNotInLanguage` 已实现并有测试（`test/plans/feat/compile/tagged.plan.toml`）；`throw` 接受什么、`->` 能否用于 `T?`、`??`/`!!` 右侧的类型按建议实现，标为 `DESIGN-QUESTION(nullable-error)`，待裁定）
 - `[定]` 故障隔离算子（名称暂定 `attempt`）与终止前的清理。（状态：部分完成——终止前的清理已做（刷新输出、释放外部资源，`test/plans/feat/consistency/cleanup.plan.toml`）；隔离算子 `attempt` 未实现）
 - `[定]` 循环：`for`/`while` 语法与图上的循环节点。（状态：已完成——设计原则 3.10；实现见 `docs/technical/39_loops.md`）
 - `[定]` 映射与集合作为内建类型，用数组字面量加 `as` 构造。（状态：部分完成——`Map<K, V>` 与 `Set<T>` 已实现并有测试（`docs/technical/31_map_and_set.md`、`test/plans/feat/compile/collections.plan.toml`）；键的类型、顺序、重复键、相等与打印、下标、可空的值、调用形式、持久化结构按建议实现，标为 `DESIGN-QUESTION(map-*)`，待裁定）

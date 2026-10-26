@@ -53,6 +53,7 @@ type Shape = enum { Circle(float), Rect { w: float, h: float } }
 type Kind<T> = match type T {
     case struct => 'struct'
     case tuple => 'tuple'
+    case array => 'array'
     case #leaf => 'leaf'
 }
 

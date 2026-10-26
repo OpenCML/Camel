@@ -5,7 +5,7 @@
  */
 module take_ops
 
-import { reshape, range, take, one_hot, shape, sum, abs, cast } from tensor
+import { reshape, range, take, one_hot, shape, sum, abs } from tensor
 import { softmax_cross_entropy, softmax_cross_entropy_grad } from nn
 import { grad } from autodiff
 
@@ -17,14 +17,14 @@ func row_sum(): float {
 func main(): int sync {
     let t = reshape(0..12, [4, 3])
     let rows = take(t, [2, 0, 2])
-    'take rows={} shape={} sum={}'->format<rows, shape(rows), sum(cast(rows, 'float32'))>->println
+    'take rows={} shape={} sum={}'->format<rows, shape(rows), sum(f32(rows))>->println
 
-    let index_tensor = cast([3, 1], 'int64')
+    let index_tensor = int([3, 1])
     let picked = take(t, index_tensor)
-    'take tensor shape={} sum={}'->format<shape(picked), sum(cast(picked, 'float32'))>->println
+    'take tensor shape={} sum={}'->format<shape(picked), sum(f32(picked))>->println
 
-    let picked32 = take(t, cast([3, 1], 'int32'))
-    'take int32 sum={}'->format<sum(cast(picked32, 'float32'))>->println
+    let picked32 = take(t, i32([3, 1]))
+    'take int32 sum={}'->format<sum(f32(picked32))>->println
 
     let none = take(t, [])
     'take empty shape={}'->format<shape(none)>->println
@@ -41,7 +41,7 @@ func main(): int sync {
     let labels_grad = softmax_cross_entropy_grad(logits, labels, 1.0)
     'sce onehot={} labels={} diff={} grad_diff={}'->format<onehot_loss, labels_loss, onehot_loss - labels_loss, sum(abs(onehot_grad - labels_grad))>->println
 
-    let weights = cast(reshape(0..6, [2, 3]), 'float32')
+    let weights = f32(reshape(0..6, [2, 3]))
     let repeated = grad(row_sum)<weights>()
     'take grad={}'->format<repeated>->println
     return 0

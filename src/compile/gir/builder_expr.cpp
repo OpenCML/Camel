@@ -1524,7 +1524,7 @@ node_handle_t Builder::visitAccsNode(const GCT::node_ptr_t &gct) {
     Type *elemType     = nullptr;
     if (asTagged(tgtType) != nullptr) {
         // A `T?` / `T!` has the layout of a tuple and is not one: its parts are reached by
-        // `??`, `!!`, `?->` and `match` only (design principles 3.9).
+        // `??`, `!!`, `->` and `match` only (design principles 3.9).
         diags_->of(SemanticDiag::TaggedValueNotOpened)
             .atOrigin(gct->origin())
             .commit(tgtType->toString(), "a member cannot be read from it");

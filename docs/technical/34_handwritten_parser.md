@@ -64,7 +64,7 @@ What needed care, all of it kept as ANTLR read it (checked token for token, sect
   file. `'''…'''` and `"""…"""` run to the first closing triple, without escapes; without one,
   the first two quotes are an empty string.
 - **Identifiers** are ASCII: `[A-Za-z_][A-Za-z_0-9]*`. A lone `_` is the wildcard token.
-- **Operators** are matched longest first (`===`, `!==`, `?->`, `?..`, `...`, then two
+- **Operators** are matched longest first (`===`, `!==`, `->`, `?..`, `...`, then two
   characters, then one). `>=` is always one token; there is no `>>`.
 
 Lexical errors are recorded in the buffer and their text kept as `Error` tokens, which the
@@ -131,7 +131,7 @@ Tokens at the start of a line, in full:
 
 | Continue the expression | Start a statement |
 |---|---|
-| `->` `?->` `.` `..` `?..` `??` `!!` | `-` `+` (sign of a number, negation) |
+| `->` `.` `..` `?..` `??` `!!` | `-` `+` (sign of a number, negation) |
 | `*` `/` `%` `^` | `@` (annotation of a function declaration) |
 | `&&` `\|\|` `==` `!=` `===` `!==` `<` `>` `<=` `>=` | `!` `~` |
 | `=` `+=` `-=` `*=` `/=` `%=` `^=` `@=` `&=` `\|=` | `(` `[` `{` |

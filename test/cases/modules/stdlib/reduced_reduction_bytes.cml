@@ -12,12 +12,12 @@
  */
 module stdlib_reduced_reduction_bytes
 
-import { new, cast, reshape, sum, to_bytes } from tensor
+import { new, reshape, sum, to_bytes } from tensor
 import { to_array } from bytes
 
 #[change_precision]
 func narrow(x: f32[..]): bf16[..] {
-    return cast(x, 'bf16')
+    return bf16(x)
 }
 
 func main(): int sync {

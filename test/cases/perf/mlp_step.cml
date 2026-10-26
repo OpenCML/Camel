@@ -10,7 +10,7 @@
 
 module perf_mlp_step
 
-import { cast, numel, relu, sum, zeros } from tensor
+import { numel, relu, sum, zeros } from tensor
 import { with_grad } from autodiff
 import { adam, adam_state, softmax_cross_entropy } from nn
 import { now } from time
@@ -30,7 +30,7 @@ func logits(x: f32[..]): f32[..] {
 
 with <m: Mlp>
 func loss(x: f32[..], labels: f32[..]): float {
-    return softmax_cross_entropy(logits<m>(x), cast(labels, 'int64'))
+    return softmax_cross_entropy(logits<m>(x), int(labels))
 }
 
 func main(steps: int, batch: int, lr: float): int sync {

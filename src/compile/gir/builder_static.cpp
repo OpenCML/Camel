@@ -24,6 +24,7 @@
 #include "camel/core/type/composite/tuple.h"
 #include "camel/core/type/text.h"
 #include "camel/core/type/tree.h"
+#include "camel/parse/ast/type_case_words.h"
 #include "camel/utils/scope.h"
 
 #include <charconv>
@@ -64,20 +65,17 @@ std::string sequenceElementName(const data_ptr_t &data) {
 std::string typePatternText(const GCT::node_ptr_t &caseNode) {
     const uint16_t patterns = caseNode->typeCasePatterns();
     std::string text;
-    const auto add = [&](GCT::TypeCaseKind kind, const char *name) {
+    // The shape words are the table the syntax tree builder reads (type_case_words.h).
+    for (const camel::parse::ast::TypeCaseWord &entry : camel::parse::ast::kTypeCaseWords) {
+        const auto kind = static_cast<GCT::TypeCaseKind>(entry.kind);
         if ((patterns & GCT::typeCaseBit(kind)) == 0) {
-            return;
+            continue;
         }
         if (!text.empty()) {
             text += " | ";
         }
-        text += name;
-    };
-    add(GCT::TypeCaseKind::Struct, "struct");
-    add(GCT::TypeCaseKind::Tuple, "tuple");
-    add(GCT::TypeCaseKind::Func, "func");
-    add(GCT::TypeCaseKind::Leaf, "#leaf");
-    add(GCT::TypeCaseKind::Wildcard, "_");
+        text += entry.word;
+    }
     for (size_t i = 0; i < caseNode->typeCaseTypeCount(); ++i) {
         if (!text.empty()) {
             text += " | ";
@@ -394,7 +392,11 @@ bool Builder::typeCaseMatches(Type *subject, const GCT::node_ptr_t &caseNode) co
     const bool isStruct     = subject->code() == TypeCode::Struct;
     const bool isTuple = subject->code() == TypeCode::Tuple && tree::isInternal(subject);
     const bool isFunc  = subject->code() == TypeCode::Function;
+    const bool isArray = subject->code() == TypeCode::Array;
     if ((patterns & typeCaseBit(GCT::TypeCaseKind::Wildcard)) != 0) {
+        return true;
+    }
+    if (isArray && (patterns & typeCaseBit(GCT::TypeCaseKind::Array)) != 0) {
         return true;
     }
     if (isStruct && (patterns & typeCaseBit(GCT::TypeCaseKind::Struct)) != 0) {
@@ -494,8 +496,10 @@ node_handle_t Builder::visitTypeMatchNode(const GCT::node_ptr_t &gct) {
                 const bool isStruct = pattern->code() == TypeCode::Struct;
                 const bool isTuple =
                     pattern->code() == TypeCode::Tuple && tree::isInternal(pattern);
-                const bool isFunc = pattern->code() == TypeCode::Function;
+                const bool isFunc  = pattern->code() == TypeCode::Function;
+                const bool isArray = pattern->code() == TypeCode::Array;
                 const bool coveredByShape =
+                    (isArray && (earlierShapes & typeCaseBit(GCT::TypeCaseKind::Array)) != 0) ||
                     (isStruct &&
                      (earlierShapes & typeCaseBit(GCT::TypeCaseKind::Struct)) != 0) ||
                     (isTuple && (earlierShapes & typeCaseBit(GCT::TypeCaseKind::Tuple)) != 0) ||

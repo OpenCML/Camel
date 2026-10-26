@@ -140,14 +140,21 @@ export const CONTEXT_KEYWORDS = [
         group: 'type',
         zh: '`match type` 的 `case` 模式里，命名结构体这种形状',
         en: 'in a `match type` case pattern: names the shape of a struct',
-        evidence: ['if (word == "struct" || word == "tuple") {'],
+        evidence: ['if (word == "struct" || word == "tuple" || word == "array") {'],
     },
     {
         word: 'tuple',
         group: 'type',
         zh: '`match type` 的 `case` 模式里，命名元组这种形状',
         en: 'in a `match type` case pattern: names the shape of a tuple',
-        evidence: ['if (word == "struct" || word == "tuple") {'],
+        evidence: ['if (word == "struct" || word == "tuple" || word == "array") {'],
+    },
+    {
+        word: 'array',
+        group: 'type',
+        zh: '`match type` 的 `case` 模式里，命名数组这种形状',
+        en: 'in a `match type` case pattern: names the shape of an array',
+        evidence: ['if (word == "struct" || word == "tuple" || word == "array") {'],
     },
     {
         word: 'leaf',

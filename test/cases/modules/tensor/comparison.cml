@@ -13,7 +13,7 @@
  */
 module comparison
 
-import { new, cast, log, sum } from tensor
+import { new, log, sum } from tensor
 
 func bareEq::<T>(a: T[..], b: T[..]): bool { return a == b }
 func writtenEq(a: f32[..], b: f32[..]): bool { return a == b }
@@ -37,12 +37,12 @@ func main(): int sync {
     println('a == c', a == c)
 
     // The element type written or not: one answer either way.
-    let w = cast([1.0, 2.0], 'float32')
-    println('written', writtenEq(w, w), writtenEq(w, cast([1.0, 3.0], 'float32')))
+    let w = f32([1.0, 2.0])
+    println('written', writtenEq(w, w), writtenEq(w, f32([1.0, 3.0])))
     println('bare', bareEq(a, a), bareEq(a, e))
 
     // NaN and the two zeros, in both comparisons.
-    let s = log(cast([-1.0, 2.0], 'float32'))
+    let s = log(f32([-1.0, 2.0]))
     println('nan', s == s, float(sum(s !== s)))
     let z1: f32[] = [f32(0.0)]
     let z2: f32[] = [f32(-0.0)]

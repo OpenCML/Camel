@@ -1,0 +1,19 @@
+/**
+ * An unnamed struct value is held to a named struct type by the same relation everywhere: it enters
+ * the named type. `concat` of an array of unnamed structs and an array of `Point` is an array of
+ * `Point`, as `append` and `contains` are, and `==` between an unnamed struct and a `Point` compares
+ * the fields (design principles 5.2).
+ */
+module struct_join_concat_and_equality
+
+type Point = { x: int, y: int }
+
+func main(): int sync {
+    let p: Point = { x: 1, y: 2 }
+    let pts: Point[] = [p]
+    let joined = concat([{ x: 3, y: 4 }], pts)
+    println(len(joined), joined[0].x, joined[1].y)
+    println({ x: 1, y: 2 } == p, p == { x: 1, y: 2 }, { x: 9, y: 2 } == p)
+    println(pts->contains<{ x: 1, y: 2 }>)
+    return 0
+}

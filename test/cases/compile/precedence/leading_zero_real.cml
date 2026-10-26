@@ -1,0 +1,8 @@
+// A real has no leading zero in its whole part, as an integer has none: `007.5` is refused like
+// `007`; `0.5` is a number.
+func main(): int sync {
+    let a = 0.5
+    let b = 007.5
+    println(a + b)
+    return 0
+}

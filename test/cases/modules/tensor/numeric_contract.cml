@@ -5,13 +5,13 @@
  */
 module numeric_contract
 
-import { cast, reshape, relu, maximum, minimum, max, min, sum, softmax, exp, ones, full, concat, abs } from tensor
+import { reshape, relu, maximum, minimum, max, min, sum, softmax, exp, ones, full, concat, abs } from tensor
 
 /// vals where mask is 1 and NaN where mask is 0 (0 / 0 is NaN for tensors).
 /// The arrays are float[]; cast is the explicit conversion to the f32 the tensor math runs in.
 func pick(mask: float[], vals: float[]): f32[..] {
-    let m = cast(mask, 'float32')
-    return (m / m) * cast(vals, 'float32')
+    let m = f32(mask)
+    return (m / m) * f32(vals)
 }
 
 func main(): int sync {
@@ -28,15 +28,15 @@ func main(): int sync {
     println(max(pick([0.0, 1.0, 1.0], [1.0, 1.0, 3.0]), 0))
     println(min(pick([1.0, 0.0, 1.0], [1.0, 1.0, 3.0]), 0))
     println(min(pick([0.0, 1.0, 1.0], [1.0, 1.0, 3.0]), 0))
-    println(max(cast([0.0, nz], 'float32'), 0))
-    println(max(cast([nz, 0.0], 'float32'), 0))
-    println(min(cast([0.0, nz], 'float32'), 0))
-    println(min(cast([nz, 0.0], 'float32'), 0))
+    println(max(f32([0.0, nz]), 0))
+    println(max(f32([nz, 0.0]), 0))
+    println(min(f32([0.0, nz]), 0))
+    println(min(f32([nz, 0.0]), 0))
 
     // matmul: one fused multiply-add per step. (1 + 2^-12)^2 - 1 is 2^-11 + 2^-24 exactly;
     // rounding the product first loses the 2^-24.
-    let u = cast([-1.0, 1.000244140625], 'float32')
-    let v = reshape(cast([1.0, 1.000244140625], 'float32'), [2, 1])
+    let u = f32([-1.0, 1.000244140625])
+    let v = reshape(f32([1.0, 1.000244140625]), [2, 1])
     'matmul fma_step={}'->format<sum(u @ v)>->println
     // matmul: one chain over the whole of k. 2^24 followed by 511 ones stays 2^24 when every
     // one is added to the running sum; summing the ones in blocks first gives more.
@@ -44,7 +44,7 @@ func main(): int sync {
     'matmul chain={}'->format<sum(ones([1, 512]) @ col)>->println
 
     // softmax agrees with exp(x - max) / sum(exp(x - max)).
-    let x = reshape(cast([0.5, -1.25, 3.0, 2.0, 0.125, -7.0, 1.0, 9.5], 'float32'), [2, 4])
+    let x = reshape(f32([0.5, -1.25, 3.0, 2.0, 0.125, -7.0, 1.0, 9.5]), [2, 4])
     let m = max(x, 1, true)
     let e = exp(x - m)
     let defined = e / sum(e, 1, true)

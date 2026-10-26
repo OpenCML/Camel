@@ -75,7 +75,7 @@ for (const l of [
 // body reaches and not what its result aliases, so the conservative answer is the one written
 // down, never the `Fresh` a default would claim. The `CALL` node of `main` records no access of
 // its own.
-// The closure `let inc = sync () => { c += 1 }` is an anonymous graph, and its name is the number
+// The closure `let inc = () => sync { c += 1 }` is an anonymous graph, and its name is the number
 // the compilation had reached when it was built -- how many graphs were created before it, the
 // imported modules' and the speculative instantiations' included -- not a fact about the program
 // (it was `__g_5__` while the `array` module was smaller and is `__g_125__` with one declaration

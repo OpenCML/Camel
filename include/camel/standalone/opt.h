@@ -7,7 +7,7 @@
  * message and the position where it was made).
  *
  * They are C++ values, not objects: a value of `T?` is the tag and a T, of `T!` the tag, a T and
- * an Error. What `??`, `!!`, `?->` and the fixed patterns of `match` do with them is a branch
+ * an Error. What `??`, `!!`, `->` and the fixed patterns of `match` do with them is a branch
  * on the tag in the generated code; here are only the forms and their text.
  */
 
@@ -84,7 +84,7 @@ template <typename T> class Fallible {
     Error error_;
 };
 
-/// A failed value of one `T!` as a failed value of another (`x ?-> f` passes the error on,
+/// A failed value of one `T!` as a failed value of another (`x -> f` passes the error on,
 /// design principles 3.9). Only applied to a failed value.
 template <typename To, typename From> To retag(const From &from) {
     return To::failure(from.error());

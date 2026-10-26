@@ -220,8 +220,8 @@ void refuseMixedElementTypes(std::optional<TypeCode> lhs, std::optional<TypeCode
         "the two tensor operands have different element types ('" + typeCodeToString(*lhs) +
         "' and '" + typeCodeToString(*rhs) +
         "'): a tensor operator computes in one element type, and there is no implicit conversion "
-        "between numeric types (write the conversion, cast(value, \"" + typeCodeToString(*lhs) +
-        "\") or cast(value, \"" + typeCodeToString(*rhs) + "\"))");
+        "between numeric types (write the conversion, " + typeCodeToString(*lhs) +
+        "(value) or " + typeCodeToString(*rhs) + "(value))");
 }
 
 std::optional<StaticShape>

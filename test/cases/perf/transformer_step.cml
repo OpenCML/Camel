@@ -11,7 +11,7 @@
 
 module perf_transformer_step
 
-import { cast, mean, relu, softmax, sqrt, sum, transpose, zeros } from tensor
+import { mean, relu, softmax, sqrt, sum, transpose, zeros } from tensor
 import { with_grad } from autodiff
 import { adam, adam_state, softmax_cross_entropy } from nn
 import { now } from time
@@ -60,7 +60,7 @@ func logits(x: f32[..]): f32[..] { return feed_forward<block>(attention<block>(x
 
 with <block: Block>
 func loss(x: f32[..], labels: f32[..]): float {
-    return softmax_cross_entropy(logits<block>(x), cast(labels, 'int64'))
+    return softmax_cross_entropy(logits<block>(x), int(labels))
 }
 
 func main(steps: int, lr: float): int sync {

@@ -1,4 +1,4 @@
-/// `T?`, `T!` and error values: `??`, `!!`, `?->`, `match` on them, `throw`, `parse_int`, and
+/// `T?`, `T!` and error values: `??`, `!!`, `->`, `match` on them, `throw`, `parse_int`, and
 /// `attempt`, which makes a fault inside a call an error value (design principles 3.9).
 module tagged
 

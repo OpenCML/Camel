@@ -38,7 +38,7 @@ func main(): int sync {
     println("  size =", (path->file_size !! 0))
 
     println("[10] read_chunk(path, 0, 5)")
-    println("  chunk =", path->read_chunk<0, 5> ?-> decode !! '')
+    println("  chunk =", path->read_chunk<0, 5> -> decode !! '')
 
     println("\n=== FS tests completed ===")
     return 0

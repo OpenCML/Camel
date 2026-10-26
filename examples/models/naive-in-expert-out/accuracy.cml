@@ -8,7 +8,7 @@
 // type the language has today, so the two agree on where the naive form breaks.
 module naive_accuracy
 
-import { cast, exp, log, log_softmax, new, one_hot, reshape, softmax, sum, transpose, zeros } from tensor
+import { exp, log, log_softmax, new, one_hot, reshape, softmax, sum, transpose, zeros } from tensor
 import { is_inf, is_nan } from math
 import { softmax_cross_entropy } from nn
 
@@ -23,7 +23,7 @@ func naive_log_softmax(x: f32[..]): f32[..] {
 
 func naive_cross_entropy(logits: f32[..], labels: int): float {
     let p = naive_softmax(logits)
-    let picked = float(sum(log(p) * cast(one_hot(new([labels]), 8), 'float32')))
+    let picked = float(sum(log(p) * f32(one_hot(new([labels]), 8))))
     return -picked
 }
 
@@ -70,7 +70,7 @@ func main(): int sync {
     }
 
     let _ = loop n = 0 for m in underflow_values do sync {
-        let logits = zeros([1, 8]) - cast(one_hot(new([0]), 8), 'float32') * m
+        let logits = zeros([1, 8]) - f32(one_hot(new([0]), 8)) * m
         let bad = !finite(naive_cross_entropy(logits, 0))
         let ok = finite(softmax_cross_entropy(logits, new([0])))
         'accuracy camel cross_entropy_true_class m={} naive_bad={} expert_finite={}'->format<m, bad, ok>->println

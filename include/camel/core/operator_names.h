@@ -14,8 +14,9 @@
  * resolution of a call recognises an operator by its group name, and the diagnostics and the
  * language server show the symbol instead of the reserved name.
  *
- * Not in the table as overloadable: `&&` and `||` are branches (4.2); `??`, `!!` and `?->` are
- * branches on the mark of a `T?` / `T!`; `->` passes a value to a function; `..` composes two
+ * Not in the table as overloadable: `&&` and `||` are branches (4.2); `??` and `!!` are
+ * branches on the mark of a `T?` / `T!`; `->` passes a value to a function (and carries a null
+ * or an error along); `..` composes two
  * functions; `=` and the compound assignments write a variable (`a += b` is `a = a + b`, so it
  * follows `+`); `===` and `!==` are not part of the language.
  */

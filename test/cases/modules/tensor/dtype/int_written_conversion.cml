@@ -1,14 +1,14 @@
 /**
- * The integer operand with its conversion written: `x * cast(k, "f32")` is the same multiplication
+ * The integer operand with its conversion written: `x * f32(k)` is the same multiplication
  * the promotion used to do silently, and the values are the ones the program asked for
  * (design principles 5.1).
  */
 module int_written_conversion
 
-import { reshape, cast, sum } from tensor
+import { reshape, sum } from tensor
 
 func scaled(x: f32[3], k: int[3]): float {
-    return float(sum(x * cast(k, "f32")))
+    return float(sum(x * f32(k)))
 }
 
 func main(): int sync {

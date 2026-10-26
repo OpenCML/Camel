@@ -149,14 +149,14 @@ timeout_ms = 8000
 
 [[tests]]
 name = "rulings.minus_by_precedence"
-desc = "The minus is always an operator (design principles 4.2): looser than `^`, tighter than `->` and the other binary operators, the same before a literal and a name. `-2 ^ 2` and `-x ^ 2` are -4, `-2->inc` and `-x->inc` are -1; the smallest int and i32 can still be written; `2.0 ^ -1.0 ^ 2.0` has a signed exponent."
+desc = "The minus is always an operator (design principles 4.2): looser than `^` and `->`, tighter than the other binary operators, the same before a literal and a name. `-2 ^ 2` and `-x ^ 2` are -4, `-2->inc` and `-x->inc` are -3; the smallest int and i32 can still be written; `2.0 ^ -1.0 ^ 2.0` has a signed exponent."
 kind = "behavior"
 case = "../../../cases/parse/rulings/minus.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
-expect_stdout_contains = ["-4 -4 4 0.5", "-1 -1 -6 7 4 1", "-9223372036854775808 -2.5 [-1, 2] -3", "-2147483648"]
+expect_stdout_contains = ["-4 -4 4 0.5", "-3 -3 -6 7 4 1", "-9223372036854775808 -2.5 [-1, 2] -3", "-2147483648"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
@@ -208,14 +208,14 @@ timeout_ms = 8000
 
 [[tests]]
 name = "rulings.not_by_precedence"
-desc = "`!` and `~` are at the level of the unary minus (design principles 4.2): looser than `^`, tighter than `->` and the other binary operators. `!t->show` is `(!t)->show`, `~n->inc` is `(~n)->inc`, `~n * 3` is `(~n) * 3`."
+desc = "`!` and `~` are at the level of the unary minus (design principles 4.2): looser than `^` and `->`, tighter than the other binary operators. `!t->always` is `!(t->always)`, `~n->inc` is `~(n->inc)`, `~n * 3` is `(~n) * 3`."
 kind = "behavior"
 case = "../../../cases/parse/rulings/not_by_precedence.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
-expect_stdout_contains = ["no no false\n-2 -4 -9 3\ntrue true true"]
+expect_stdout_contains = ["false true false\n-4 -4 -9 3\ntrue true true"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 

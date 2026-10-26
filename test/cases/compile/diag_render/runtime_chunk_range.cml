@@ -3,6 +3,6 @@ module runtime_chunk_range
 import { read_chunk } from fs
 
 func main(): int sync {
-    println('some/file.bin'->read_chunk<-1, 4> ?-> len !! 0)
+    println('some/file.bin'->read_chunk<-1, 4> -> len !! 0)
     return 0
 }

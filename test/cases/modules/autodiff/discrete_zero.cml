@@ -23,7 +23,7 @@
  */
 module discrete_zero
 
-import { argmax, cast, one_hot, reshape, sum, where } from tensor
+import { argmax, one_hot, reshape, sum, where } from tensor
 import { with_grad } from autodiff
 
 type Model = {
@@ -48,13 +48,13 @@ func one_hot_loss(): float {
 with <m: Model>
 func argmax_loss(): float {
     let picked = argmax(m.weights, -1)
-    return float(sum(cast(picked, 'float32')))
+    return float(sum(f32(picked)))
 }
 
 with <m: Model>
 func mask_loss(): float {
     let mask = m.weights > 0.0
-    return float(sum(cast(mask, 'float32')))
+    return float(sum(f32(mask)))
 }
 
 with <m: Model>
@@ -71,20 +71,20 @@ func gather_loss(): float {
 func main(): int sync {
     let model = {
         weights: reshape([1.0, 2.0, 3.0, -4.0, 5.0, -6.0] as f32[], [2, 3]),
-        labels: cast([1, 0], 'int64'),
+        labels: int([1, 0]),
     }
     let (v1, g1) = with_grad(one_hot_loss)<model>()
     let (v2, g2) = with_grad(argmax_loss)<model>()
     let (v3, g3) = with_grad(mask_loss)<model>()
     let (v4, g4) = with_grad(where_loss)<model>()
     let (v5, g5) = with_grad(gather_loss)<model>()
-    let label_grad = sum(cast(g1.labels, 'float32'))
+    let label_grad = sum(f32(g1.labels))
     let weights_grad = sum(g1.weights)
     let argmax_grad = sum(g2.weights)
     let mask_grad = sum(g3.weights)
     let where_grad = sum(g4.weights)
     let gather_grad = sum(g5.weights)
-    let index_grad = sum(cast(g5.labels, 'float32'))
+    let index_grad = sum(f32(g5.labels))
     let zero =
         if label_grad == 0.0 && argmax_grad == 0.0 && mask_grad == 0.0 && index_grad == 0.0
         then 1.0

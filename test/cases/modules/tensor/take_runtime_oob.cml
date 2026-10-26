@@ -4,10 +4,10 @@
  */
 module take_runtime_oob
 
-import { reshape, range, cast, take } from tensor
+import { reshape, range, take } from tensor
 
 func pick(t: i64[..], i: int): i64[..] {
-    return take(t, cast([i], 'int64'))
+    return take(t, int([i]))
 }
 
 func main(): int sync {

@@ -1,0 +1,28 @@
+/**
+ * A branch whose arms are a named struct and an unnamed struct with the same fields has the named
+ * type, whichever arm comes first (design principles 5.2: the unnamed value enters the named type).
+ * The result is a `Point`, so it stands in an array of `Point` and in a call that asks for one.
+ */
+module struct_join_arms
+
+type Point = { x: int, y: int }
+
+func sum(ps: Point[]): int {
+    return loop acc = 0 for p in ps do acc + p.x + p.y
+}
+
+func main(): int sync {
+    let p: Point = { x: 10, y: 20 }
+    let anonymous_first = if p.x > 0 then { x: 1, y: 2 } else p
+    let named_first = if p.x > 0 then p else { x: 1, y: 2 }
+    let matched = match p.x {
+        case 10 => { x: 3, y: 4 }
+        case _ => p
+    }
+    println(sum([anonymous_first, named_first, matched]))
+    // The joined value is a `Point`: an array of it joins an array of `Point` as one type.
+    let pts: Point[] = [p]
+    println(len(concat([anonymous_first], pts)), len(concat([named_first], pts)))
+    println(len(concat([matched], pts)))
+    return 0
+}

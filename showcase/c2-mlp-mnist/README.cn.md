@@ -130,7 +130,7 @@ python showcase\c2-mlp-mnist\baseline\train_torch.py `
   step 在两边看到同一批行。
 - **标签就是原生形式**：数据里每行一个 `int64` 类别下标，`F.cross_entropy` 直接吃，
   Camel 的 `softmax_cross_entropy` 也直接吃。`load_npy` 读出的张量没有静态元素类型，所以
-  Camel 端写 `cast(labels, 'int64')` 来选中整数标签那条重载（见“遇到的问题”）。
+  Camel 端写 `int(labels)` 来选中整数标签那条重载（见“遇到的问题”）。
 - **短的地方**：检查点（`save_tree` 一棵树 vs `torch.save` 一个 `state_dict`）、评估（一次
   `argmax`/`sum` vs `no_grad` + `.item()`）、初始化（四个 `load_npy` vs 逐层 `copy_`）Camel
   都更短；`loss` 和 `model` 两段 PyTorch 更短，因为 `nn.Linear` 把偏置和形状藏起来了。总行数
@@ -156,7 +156,7 @@ python showcase\c2-mlp-mnist\baseline\train_torch.py `
 2. **从文件读出的张量没有静态元素类型，选不中按标签分派的那条重载。**
    `nn.softmax_cross_entropy` 按目标的类型重载：浮点张量表示 one-hot 行，整数张量表示类别
    下标。`load_npy` 返回的是裸 `Tensor`，整数重载不会被选中，运行期报 “expects rank-2
-   target”。示例在每次使用处写 `cast(labels, 'int64')`。技术说明
+   target”。示例在每次使用处写 `int(labels)`。技术说明
    （`docs/technical/43_rows_labels_and_keys.md` 第 5 节）把它列为未决问题；这是语言层的
    绕行，不是任务本身的性质。
    **问**：应当让 `load_npy`（或一个加载变体）返回元素类型已知的张量，还是让这一对重载在

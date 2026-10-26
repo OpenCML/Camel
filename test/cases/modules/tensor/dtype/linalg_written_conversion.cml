@@ -1,15 +1,15 @@
 /**
- * The product and the linear layer with the conversion written: `cast(x, "f64") @ w` computes in
+ * The product and the linear layer with the conversion written: `f64(x) @ w` computes in
  * f64 because that is what the program wrote, and a bias is passed at the tensor's own element type
  * rather than beside it (design principles 5.1). Both answer the numbers the same call answered when
  * the widths were silently widened, and the result type is the one the operands state.
  */
 module linalg_written_conversion
 
-import { reshape, cast, matmul, linear, sum } from tensor
+import { reshape, matmul, linear, sum } from tensor
 
 func widened(x: f32[2, 2], w: f64[2, 2]): float {
-    return float(sum(matmul(cast(x, "f64"), w)))
+    return float(sum(matmul(f64(x), w)))
 }
 
 func with_bias(x: f32[2, 2], w: f32[2, 2], bias: f32[2]): float {

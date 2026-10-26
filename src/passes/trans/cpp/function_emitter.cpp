@@ -1467,7 +1467,7 @@ void FunctionEmitter::lowerCallValue(Frame &frame, gc_node_ref_t ref, Block &out
 
 void FunctionEmitter::lowerCast(Frame &frame, gc_node_ref_t ref) {
     // A value entering `T?` or `T!` (design principles 3.8), `null` entering `T?`, a failed
-    // value passed on with another payload (`?->`), a conversion between numbers.
+    // value passed on with another payload (`->`), a conversion between numbers.
     const GCGraph *g          = frame.graph;
     const gc_node_ref_t input = g->normInputsOf(ref).front();
     const Type *toType        = g->node(ref)->dataType();

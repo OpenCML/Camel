@@ -15,7 +15,7 @@ func sha256_rounds(s: string, rounds: int): string {
 
 func digest_chunk(path: string, offset: int, size: int): string sync {
     let block = path->read_chunk<offset, size>
-    return sha256_rounds(block ?-> sha256 !! '', 2047)
+    return sha256_rounds(block -> sha256 !! '', 2047)
 }
 
 func main(): int sync {

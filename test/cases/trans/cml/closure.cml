@@ -6,7 +6,7 @@ func make_adder(base: int): (x: int) => int {
 
 func counter(start: int): () => int sync {
     var n = start
-    return sync (): int => sync {
+    return (): int => sync {
         n = n + 1
         return n
     }

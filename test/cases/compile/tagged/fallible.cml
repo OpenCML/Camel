@@ -1,6 +1,6 @@
 /**
  * `T!` (design principles 3.9): a value that may have failed. `throw e` returns the error
- * form, `a !! b` gives a fallback, `x ?-> f` hands an error on and calls `f` otherwise, and
+ * form, `a !! b` gives a fallback, `x -> f` hands an error on and calls `f` otherwise, and
  * `match` with `case error e` reads the error.
  */
 module fallible
@@ -40,10 +40,10 @@ func main(): int sync {
     println(b !! -1)
     println(show(a))
     println(show(b))
-    println(show(a ?-> double))
-    println(show(b ?-> double))
-    println(show(a ?-> half ?-> double))
-    println(show(safe_div(0, 1) ?-> tenth_of ?-> double))
+    println(show(a -> double))
+    println(show(b -> double))
+    println(show(a -> half -> double))
+    println(show(safe_div(0, 1) -> tenth_of -> double))
     println(show(rethrow(a)))
     println(show(rethrow(b)))
     return 0
