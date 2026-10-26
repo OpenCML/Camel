@@ -1,0 +1,26 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+/**
+ * Digests. A digest is computed over bytes: the digest of a text is the digest of its UTF-8
+ * bytes (`bytes::encode`), so a text and its encoding have the same digest on every platform.
+ * Every function here is pure; the digest is written as lower-case hexadecimal text.
+ */
+
+import { encode } from bytes
+
+// The one kernel. The two public overloads below share it, so the text form is not a second
+// operator but the first one applied to the encoded text.
+func sha256_bytes(data: Bytes): string pure
+
+/// The SHA-256 digest of a `Bytes` value, as 64 lower-case hexadecimal digits.
+/// @example sha256(encode('abc'))    // 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad'
+export func sha256(data: Bytes): string {
+    return sha256_bytes(data)
+}
+
+/// The SHA-256 digest of the UTF-8 bytes of a text, as 64 lower-case hexadecimal digits.
+/// @example sha256('abc')    // 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad'
+export func sha256(text: string): string {
+    return sha256_bytes(encode(text))
+}
