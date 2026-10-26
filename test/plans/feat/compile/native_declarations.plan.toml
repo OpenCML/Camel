@@ -406,7 +406,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::NativeDeclarationForeignOperator"
 expect_diagnostic_code = "0x03000181"
-expect_output_contains = ["bytes_tag.cml:11", "'to_array'", "bytes:to_array"]
+expect_output_contains = ["bytes_tag.cml:10", "'to_array'", "bytes:to_array"]
 
 [[tests]]
 name = "native.declaration_qualified"
@@ -454,7 +454,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::NativeDeclarationOverlap"
 expect_diagnostic_code = "0x03000180"
-expect_output_contains = ["overlap.cml:14", "Two declarations of 'pick'", "(xs: T[], i: int) => T", "(xs: U[], i: int) => U"]
+expect_output_contains = ["overlap.cml:13", "Two declarations of 'pick'", "(xs: T[], i: int) => T", "(xs: U[], i: int) => U"]
 
 
 # ---- Two same-named declarations whose conditions exclude each other are overloads ----
@@ -474,7 +474,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::WhenDeclarationOverlap"
 expect_diagnostic_code = "0x030001E0"
-expect_output_contains = ["when_arms_overlap.cml:33", "Two declarations of 'arms_kernel' both apply to the type 'i32'", "(a: T, b: T) => T — when is_small_int::<T>()", "(a: T, b: T) => T — when is_number::<T>()"]
+expect_output_contains = ["when_arms_overlap.cml:32", "Two declarations of 'arms_kernel' both apply to the type 'i32'", "(a: T, b: T) => T — when is_small_int::<T>()", "(a: T, b: T) => T — when is_number::<T>()"]
 
 [[tests]]
 name = "native.when_declaration_overlap.shape"
@@ -485,7 +485,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::WhenDeclarationOverlap"
 expect_diagnostic_code = "0x030001E0"
-expect_output_contains = ["when_shape_overlap.cml:33", "Two declarations of 'arms_kernel' both apply to the type '(x: int) => int'", "(a: T, b: T) => T — when always::<T>()", "(a: T, b: T) => T — when is_callable::<T>()"]
+expect_output_contains = ["when_shape_overlap.cml:32", "Two declarations of 'arms_kernel' both apply to the type '(x: int) => int'", "(a: T, b: T) => T — when always::<T>()", "(a: T, b: T) => T — when is_callable::<T>()"]
 
 
 # ---- A call reaches the rule its own `when` admits, not the one written first ----

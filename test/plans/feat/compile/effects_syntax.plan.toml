@@ -315,7 +315,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
 expect_diagnostic_code = "0x030001F1"
-expect_output_contains = ["err_callee_clause_reaches.cml:16:", "uses db", "cache"]
+expect_output_contains = ["err_callee_clause_reaches.cml:15:", "uses db", "cache"]
 
 [[tests]]
 name = "err.promise_note"
@@ -326,7 +326,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
 expect_diagnostic_code = "0x030001F1"
-expect_output_contains = ["err_promise_note.cml:8:", "stdout", "at 10:5]"]
+expect_output_contains = ["err_promise_note.cml:7:", "stdout", "at 9:5]"]
 
 [[tests]]
 name = "err.pure_recursive"
@@ -348,7 +348,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
 expect_diagnostic_code = "0x030001F1"
-expect_output_contains = ["err_wide_parameters.cml:11:", "does not keep its resource promise"]
+expect_output_contains = ["err_wide_parameters.cml:10:", "does not keep its resource promise"]
 
 # ---- The measurement is a fixed point, and a use it cannot place is never dropped ----
 
@@ -361,7 +361,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
 expect_diagnostic_code = "0x030001F1"
-expect_output_contains = ["err_recursive_pure.cml:8:", "pure", "stdout"]
+expect_output_contains = ["err_recursive_pure.cml:7:", "pure", "stdout"]
 
 [[tests]]
 name = "err.mutual_recursive_pure"
@@ -372,7 +372,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
 expect_diagnostic_code = "0x030001F1"
-expect_output_contains = ["err_mutual_recursive_pure.cml:6:", "pure", "stdout"]
+expect_output_contains = ["err_mutual_recursive_pure.cml:5:", "pure", "stdout"]
 
 [[tests]]
 name = "err.closure_capture_pure"
@@ -383,7 +383,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
 expect_diagnostic_code = "0x030001F1"
-expect_output_contains = ["err_closure_capture_pure.cml:9:", "pure"]
+expect_output_contains = ["err_closure_capture_pure.cml:8:", "pure"]
 
 [[tests]]
 name = "err.many_parameters_pure"
@@ -394,7 +394,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
 expect_diagnostic_code = "0x030001F1"
-expect_output_contains = ["err_many_parameters_pure.cml:15:", "pure"]
+expect_output_contains = ["err_many_parameters_pure.cml:14:", "pure"]
 
 [[tests]]
 name = "ok.recursive_pure"
