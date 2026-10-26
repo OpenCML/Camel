@@ -54,7 +54,7 @@ tool = "node"
 case = "../../../scripts/camel-for-ai.mjs"
 args = ["${case}", "--check", "--root", "test/plans/feat/docs_ai_reference/fixture", "--budget", "1000"]
 expect_exit = 1
-expect_stdout_contains = ["the document is 3925 characters; its budget is 1000", "1 problem(s) in the AI reference"]
+expect_stdout_contains = ["the document is 3905 characters; its budget is 1000", "1 problem(s) in the AI reference"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 60000
 
