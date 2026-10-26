@@ -5,7 +5,7 @@
 /// is the spelling a generic body over an open element type has.
 module element_literal_not_representable_generic
 
-import { reshape, cast, sum } from tensor
+import { reshape, sum } from tensor
 
 type Tens<T> = T
 
@@ -14,7 +14,7 @@ func half::<T>(x: Tens<T>): Tens<T> {
 }
 
 func main(): int sync {
-    let x = cast(reshape([1.0, 2.0, 3.0, 4.0] as f32[], [4]), "int64")
+    let x = int(reshape([1.0, 2.0, 3.0, 4.0] as f32[], [4]))
     println(sum(half(x)))
     return 0
 }

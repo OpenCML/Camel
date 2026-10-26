@@ -101,7 +101,7 @@ struct NodeInfo {
 enum class GraphRole {
     Function, // a function of the source (or the entry graph)
     Lambda,   // a function value written in another function: a frame of its own
-    /// The arm of a branch (`if`, `match`, `&&`, `||`, `??`, `!!`, `?->`, narrowing): code of
+    /// The arm of a branch (`if`, `match`, `&&`, `||`, `??`, `!!`, `->`, narrowing): code of
     /// the function that branches, which a call makes a frame of its own. Folded into the
     /// function's frame unless the user asks for the subgraphs.
     Arm,

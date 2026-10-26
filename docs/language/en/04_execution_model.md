@@ -12,7 +12,7 @@ A Camel program is a graph. This chapter explains how this graph is evaluated: e
 | Function | A subgraph of its own; a call site is a node in the enclosing graph that points to that subgraph |
 | `sync { ... }` block | Control edges between the adjacent statements it writes directly |
 | `var` parameter | The callee subgraph and the caller point to the same object |
-| `if`, `match`, `??`, `!!`, `?->` | A branch node; each arm is a subgraph |
+| `if`, `match`, `??`, `!!`, `->` over a `T?` / `T!` | A branch node; each arm is a subgraph |
 | `#macro` function | An ordinary subgraph; the `std::macro` pass can evaluate it ahead of time and materialise the result as a constant in the graph |
 
 ---

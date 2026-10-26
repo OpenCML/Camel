@@ -58,7 +58,7 @@ nullable   : unary (('??' | '!!') dataExpr)?
 unary      : neg (as type)?
 neg        : ('-' | '!' | '~') negPower | link
 negPower   : ('-' | '!' | '~') negPower | link ('^' negPower)?
-link       : comp (('->' | '?->') comp)*
+link       : comp (('->' | '->') comp)*
 comp       : anno ('..' anno)*
 anno       : primary ( '.'field | '[' subscript ']' | '(' arguments ')' | '<' with arguments '>' )*
 primary    : name | literal | '[' element, ... ']' | '{' key: value, ... '}' | '(' expression, ... ')' | lambda
@@ -167,7 +167,7 @@ multiplicativeExpr : powerExpr (('*' | '/' | '@' | '%') powerExpr)*
 powerExpr          : nullableExpr ('^' powerExpr)?
 nullableExpr       : unaryExpr (('??' | '!!') dataExpr)?
 unaryExpr          : negExpr ('as' typeExpr)?
-linkExpr           : compExpr (('->' | '?->') compExpr)*
+linkExpr           : compExpr ('->' compExpr)*
 negExpr            : ('-' | '!' | '~') negPower | linkExpr
 negPower           : ('-' | '!' | '~') negPower | linkExpr ('^' negPower)?
 compExpr           : annoExpr ('..' annoExpr)*

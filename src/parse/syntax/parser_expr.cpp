@@ -22,7 +22,7 @@
  *   negExpr         prefix -  !  ~   looser than `->` and than `^`, tighter than the other binary
  *                                    operators: `-x->f` is `-(x->f)`, `!xs->is_empty()` is
  *                                    `!(xs->is_empty())`, `-x ^ 2` is `-(x ^ 2)`, `-a * b` is `(-a) * b`
- *   linkExpr        ->  ?->                                     left
+ *   linkExpr        ->                                          left
  *   compExpr        ..                                          left
  *   annoExpr        [index]  (arguments)  <arguments>  .member   postfix, touching
  *   accessExpr      .member
@@ -327,12 +327,12 @@ void ParserImpl::parseUnary() {
     }
 }
 
-/// linkExpr : compExpr (('->' | '?->') compExpr)*
+/// linkExpr : compExpr ('->' compExpr)*
 void ParserImpl::parseLink() {
     const size_t m = mark();
     parseComp();
     bool any = false;
-    while ((cur_ == TK::Arrow || cur_ == TK::QuestionArrow) && !panic_) {
+    while (cur_ == TK::Arrow && !panic_) {
         bump();
         parseComp();
         any = true;
@@ -390,7 +390,7 @@ void ParserImpl::parseComp() {
 /// lexer has decided already (LAngle). `Shape::Rect { w: 2 }` is a struct variant construction:
 /// a struct literal follows a variant path, never a name that could be a value.
 /// The postfix `!` is not in the language: the mark `!` of a `T!` belongs to the type, and a
-/// value of that type is taken hold of with `!!`, `?->` or `case error e`. A `!` after a value
+/// value of that type is taken hold of with `!!`, `->` or `case error e`. A `!` after a value
 /// therefore fits nothing and is an ordinary syntax error.
 void ParserImpl::parseAnno() {
     const size_t m = mark();
@@ -1339,7 +1339,7 @@ void ParserImpl::parseTypeCasePattern() {
     switch (cur_) {
     case TK::Identifier: {
         const std::string_view word = tree_.tokens().text(pos_);
-        if (word == "struct" || word == "tuple") {
+        if (word == "struct" || word == "tuple" || word == "array") {
             bump();
             break;
         }

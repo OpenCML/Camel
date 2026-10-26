@@ -27,11 +27,11 @@ export func decode(text: string): Json!
 
 /// The kind of a Json: 'null', 'bool', 'int', 'float', 'string', 'array' or 'object'.
 /// @pure
-/// @example decode('[1]') ?-> kind !! ''    // 'array'
+/// @example decode('[1]') -> kind !! ''    // 'array'
 export func kind(j: Json): string
 
 /// Whether a Json is the JSON null.
-/// @example decode('null') ?-> is_null !! false    // true
+/// @example decode('null') -> is_null !! false    // true
 export func is_null(j: Json): bool {
     return kind(j) == 'null'
 }

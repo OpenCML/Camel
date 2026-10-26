@@ -150,7 +150,7 @@ golden = "golden/sync_order.txt"
 
 [[tests]]
 name = "value.tagged_values"
-desc = "Nullable and fallible values: ??, !!, ?-> and match; an error value is a value, not a fault."
+desc = "Nullable and fallible values: ??, !!, -> and match; an error value is a value, not a fault."
 case = "../../../cases/consistency/values/tagged_values.cml"
 golden = "golden/tagged_values.txt"
 

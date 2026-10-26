@@ -23,12 +23,12 @@
  */
 module tensor_dtype_reduced_scalar_operand
 
-import { cast, reshape, sum, where } from tensor
+import { reshape, sum, where } from tensor
 
 func main(): int sync {
     let x = reshape([1.0, 2.0, 3.0, 4.0] as f32[], [4])
-    let b = cast(x, 'bf16')
-    let h = cast(x, 'f16')
+    let b = bf16(x)
+    let h = f16(x)
     let a: f32 = 2.0
     
     println(sum(b * 2.0), sum(b * 0.5), sum(b + 2.0), sum(b - 1.0), sum(b / 2.0))

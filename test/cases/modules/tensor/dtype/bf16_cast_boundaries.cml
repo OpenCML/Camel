@@ -29,12 +29,12 @@
  */
 module tensor_dtype_bf16_cast_boundaries
 
-import { new, cast, to_bytes } from tensor
+import { new, to_bytes } from tensor
 import { to_array } from bytes
 
-func narrowed(x: f32[..]): bf16[..] { return cast(x, 'bf16') }
+func narrowed(x: f32[..]): bf16[..] { return bf16(x) }
 
-func halved(x: f32[..]): f16[..] { return cast(x, 'f16') }
+func halved(x: f32[..]): f16[..] { return f16(x) }
 
 func main(): int sync {
     let tenth: f32[] = [0.1]
@@ -43,7 +43,7 @@ func main(): int sync {
     let bf16Tie: f32[] = [1.00390625]
     let tiedBf16 = narrowed(new(bf16Tie))
     println(to_array(to_bytes(tiedBf16)))
-    println(to_array(to_bytes(cast(tiedBf16, 'f32'))))
+    println(to_array(to_bytes(f32(tiedBf16))))
 
     let bf16Max: f32[] = [3.3895314e38]
     println(to_array(to_bytes(narrowed(new(bf16Max)))))
@@ -51,7 +51,7 @@ func main(): int sync {
     let bf16Over: f32[] = [3.4e38]
     let overBf16 = narrowed(new(bf16Over))
     println(to_array(to_bytes(overBf16)))
-    println(to_array(to_bytes(cast(overBf16, 'f32'))))
+    println(to_array(to_bytes(f32(overBf16))))
 
     let halfTenth: f32[] = [0.1]
     println(to_array(to_bytes(halved(new(halfTenth)))))
@@ -59,7 +59,7 @@ func main(): int sync {
     let f16Tie: f32[] = [1.00048828125]
     let tiedF16 = halved(new(f16Tie))
     println(to_array(to_bytes(tiedF16)))
-    println(to_array(to_bytes(cast(tiedF16, 'f32'))))
+    println(to_array(to_bytes(f32(tiedF16))))
 
     let f16Max: f32[] = [65504.0]
     println(to_array(to_bytes(halved(new(f16Max)))))
@@ -67,6 +67,6 @@ func main(): int sync {
     let f16Over: f32[] = [65520.0]
     let overF16 = halved(new(f16Over))
     println(to_array(to_bytes(overF16)))
-    println(to_array(to_bytes(cast(overF16, 'f32'))))
+    println(to_array(to_bytes(f32(overF16))))
     return 0
 }

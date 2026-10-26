@@ -2568,8 +2568,37 @@ class Builder {
     // ---- The tagged forms `T?` and `T!` (design principles 3.8;
     // docs/technical/29_nullable_and_fallible_values.md). Each construct below is a branch on
     // the one-bit tag of a value; nothing here adds a node kind. ----
-    /// `a ?? b`, `a !! b`, `x ?-> f`.
+    /// `a ?? b`, `a !! b`.
     node_handle_t visitTaggedBrchNode(const GCT::node_ptr_t &gct);
+    /// The pipe `x -> f` (design principles 3.9). The call is built with `x` as it is, and the
+    /// overloads of `f` (their `when` conditions included) are asked first; when none takes it and
+    /// `x` is a `T?` or a `T!`, the call takes the value out of `x` (peelPipeReceiver).
+    ///
+    /// Three builds of one call, told apart by `PipeState::mode`. `Detect` builds it as written and
+    /// stops (PipeTagged) the moment its receiver turns out to be tagged, before any other argument
+    /// is built. `Scratch` asks the overloads: the call is built in an arm that is dropped, so
+    /// whatever the other arguments do is not done twice, and a refusal for want of an overload
+    /// (PipeNoMatch) is the answer "no". `Direct` is the call built for real with the receiver as
+    /// it is.
+    class PipeNoMatch {};
+    class PipeTagged {};
+    enum class PipeMode : uint8_t { Detect, Scratch, Direct };
+    struct PipeState {
+        /// The call being built, the node standing for its receiver when the receiver has been
+        /// taken apart (null before), and the receiver's node once it is built.
+        GCT::node_ptr_t call        = nullptr;
+        GCT::node_ptr_t replacement = nullptr;
+        node_handle_t receiver      = nullptr;
+        PipeMode mode               = PipeMode::Detect;
+        PipeState *previous         = nullptr;
+    };
+    PipeState *pipe_ = nullptr;
+    node_handle_t visitPipeLink(const GCT::node_ptr_t &call, const GCT::node_ptr_t &replacement);
+    node_handle_t peelPipeReceiver(const GCT::node_ptr_t &call, node_handle_t receiver);
+    /// Called where a call is refused for want of an overload (or of a `when` condition that
+    /// holds): the pipe's call whose receiver is a tagged value does not report, it takes the
+    /// receiver apart instead.
+    void yieldToPipe(const GCT::node_ptr_t &call);
     /// `match x { case null => ..  case v => .. }` and `case error e` over a tagged `x`.
     node_handle_t visitTaggedMatch(
         const GCT::node_ptr_t &gct, node_handle_t scrutinee, camel::core::type::TupleType *type);

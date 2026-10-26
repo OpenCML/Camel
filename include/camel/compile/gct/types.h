@@ -56,15 +56,13 @@ std::string to_string(NodeKind kind);
 ///    `T?` / `T!` with the fixed patterns). Children: condition, CASE...
 ///  - NullThen: `a ?? b`. Children: a, CASE(True)[EXEC b].
 ///  - ErrorThen: `a !! b`. Children: a, CASE(True)[EXEC b].
-///  - ErrorPass: `x ?-> f`. Children: x, CASE(Else)[EXEC call], where the call takes
-///    DREF kPassedValueName as its argument.
 ///  - LogicalAnd: `a && b`, which is `if a then b else false` (design principles 4.2).
 ///    Children: a, CASE(True)[EXEC b], CASE(Else)[EXEC false].
 ///  - LogicalOr: `a || b`, which is `if a then true else b`.
 ///    Children: a, CASE(True)[EXEC true], CASE(Else)[EXEC b].
 ///    Both have exactly the children of that `if`; the kind only records what was written,
 ///    so that the operands are required to be `bool` and reported as operands.
-enum class BranchKind : uint8_t { Cond, NullThen, ErrorThen, ErrorPass, LogicalAnd, LogicalOr };
+enum class BranchKind : uint8_t { Cond, NullThen, ErrorThen, LogicalAnd, LogicalOr };
 
 /// The pattern of a CASE node.
 ///  - Value: a value the scrutinee is compared with. Children: the value, the body.
@@ -88,13 +86,14 @@ enum class TypeCaseKind : uint8_t {
     Leaf     = 2,
     Wildcard = 3,
     Func     = 4,
-    Identity = 5
+    Identity = 5,
+    Array    = 6
 };
 inline constexpr uint16_t typeCaseBit(TypeCaseKind kind) {
     return static_cast<uint16_t>(1u << static_cast<uint8_t>(kind));
 }
 
-/// The reserved name under which the arm of `x ?-> f` finds the value taken out of `x`. It
+/// The reserved name under which the arm of a pipe `x -> f` finds the value taken out of `x`. It
 /// is not an identifier, so no program can write it.
 inline constexpr const char *kPassedValueName = "$passed";
 /// The name of `let _ = e`: the value of `e` is dropped on purpose and no name is bound

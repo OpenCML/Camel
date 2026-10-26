@@ -6,7 +6,7 @@
  */
 module export_train_step_conv
 
-import { cast, relu, mean, reshape, flatten, new } from tensor
+import { relu, mean, reshape, flatten, new } from tensor
 import { with_grad } from autodiff
 import { conv2d, max_pool2d, sgd } from nn
 import { export_model } from onnx
@@ -25,7 +25,7 @@ func loss(x: float[..]): float {
     // conv2d, max_pool2d and relu answer in f32 while this model works in f64, so the value is
     // converted where it meets the model's weights (design principles 5.1: the element type is
     // exact, and a conversion is written).
-    let y = cast(flatten(c2), 'float64') @ m.fc_w + m.fc_b
+    let y = float(flatten(c2)) @ m.fc_w + m.fc_b
     return float(mean(y * y))
 }
 

@@ -17,7 +17,7 @@ func reported(label: string, r: Run<Program>): Program sync {
 }
 
 func one(label: string, p: Program, rules: Rule[]): Program! sync {
-    return p->run<rules, rounds: 16, strict: false> ?-> (r: Run<Program>) => sync { reported(label, r) }
+    return p->run<rules, rounds: 16, strict: false> -> (r: Run<Program>) => sync { reported(label, r) }
 }
 
 export func only_log_of_softmax(p: Program): Program! sync {

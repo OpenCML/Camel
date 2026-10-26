@@ -11,7 +11,7 @@ This chapter describes the lexical structure of source code. The token table is 
 - Spaces and tabs are only separators. **A line break ends a statement**, unless the line is visibly unfinished:
   - a round bracket, a square bracket, an angle-bracket argument list or the braces of a struct literal are still open;
   - the line ends with a binary operator, `,`, `=`, `=>`, `->`, `:`, `then`, `else`, `return` or another token that must be followed by something;
-  - the next line starts with an operator that **can only be binary**: `->` `?->` `.` `..` `?..` `??` `!!` `*` `/` `%` `^` `&` `|` `&&` `||` `==` `!=` `===` `!==` `<` `>` `<=` `>=` `as` `is` and the assignment operators; in a type also `\`. **A symbol of two roles (`+`, `-`, `@`) that starts a line has the role that starts something new**: `-x` is a new statement, `@name` an annotation. To continue a line, leave it at the end of the line before (a matrix product: `a @`, line break, `b`);
+  - the next line starts with an operator that **can only be binary**: `->` `.` `..` `?..` `??` `!!` `*` `/` `%` `^` `&` `|` `&&` `||` `==` `!=` `===` `!==` `<` `>` `<=` `>=` `as` `is` and the assignment operators; in a type also `\`. **A symbol of two roles (`+`, `-`, `@`) that starts a line has the role that starts something new**: `-x` is a new statement, `@name` an annotation. To continue a line, leave it at the end of the line before (a matrix product: `a @`, line break, `b`);
   - the next line is the next part of the same construct: `else`, `then`, `catch`, `finally`, `=>`, `from`.
 
   A next line that starts with `-`, `+`, `!`, `~`, `@`, `(`, `[`, `{`, a name, a literal or a statement keyword is a **new statement**. To write an addition or a subtraction on two lines, leave the operator at the end of the first (`a +`, then `b`); a line that starts with `+` is not a statement and gives `SyntaxDiag::LineStartsWithOperator`.
@@ -81,6 +81,7 @@ The other way round, `func` and `type` among the position names are reserved wor
 | Clauses of a declaration | `operator` | directly after `func` when an operator follows (`func operator +(a: V, b: V): V`) |
 | Type and pattern positions | `struct` | in a `match type` case pattern: names the shape of a struct |
 | Type and pattern positions | `tuple` | in a `match type` case pattern: names the shape of a tuple |
+| Type and pattern positions | `array` | in a `match type` case pattern: names the shape of an array |
 | Type and pattern positions | `leaf` | in a `match type` case pattern: the `leaf` after a `#` (`case #leaf =>`) |
 | Type and pattern positions | `error` | in a `case` pattern of a `match`: the error taken out of a failed `T!`, written as the two words `error e` |
 | Type and pattern positions | `fields` | in the head of a `static for` or a `static loop`: the `fields` after `in` (a type follows, and it walks names, types and tags) |
@@ -224,8 +225,8 @@ The long form of the same call is still written `'{} + {} = {}'->format<1, 2, 1 
 | `&` `\|` | And, or with both sides evaluated; ordinary operators, which can be overloaded |
 | `~` | Bitwise not |
 | `=` `+=` `-=` `*=` `/=` `%=` `^=` `@=` `&=` `\|=` | Assignment and compound assignment |
-| `??` `!!` `?->` | Unwrap a nullable value, unwrap a fallible value, pass the error on if there is one |
-| `->` | Pipe: the value on the left becomes an argument of the function on the right |
+| `??` `!!` | Unwrap a nullable value, unwrap a fallible value |
+| `->` | Pipe: the value on the left becomes an argument of the function on the right; a `T?` or `T!` on the left that the function does not accept carries its null or error along |
 | `..` `?..` | Function composition (see [6.5](06_expressions.md#65-pipes)) |
 | `.` | Field and tuple member access |
 | `::` | Qualified name |
