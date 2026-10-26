@@ -768,7 +768,7 @@ expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F",
 
 [[tests]]
 name = "native.para_declaration_import"
-desc = "`para`'s declarations are the module's signature: the fixed signature of `rendezvous` and the two operators whose type comes from the element type of their array, `unordered_foreach` with a callback whose result type is free and `unordered_reduce` with one from the element to itself; every call reaches the operator the module runs."
+desc = "`para`'s declarations are the module's signature: the two operators whose type comes from the element type of their array, `unordered_foreach` with a callback whose result is dropped and `unordered_reduce` with one from the element to itself — and `test_support`'s `rendezvous` is read from its own declaration; every call reaches the operator the module runs."
 kind = "behavior"
 case = "../../../cases/compile/native/para_declaration_import.cml"
 args = ["${case}"]
@@ -777,21 +777,21 @@ expect_stdout_exact = "1\n10\ndone\n"
 
 [[tests]]
 name = "native.para_wrong_arity"
-desc = "`para:rendezvous` is declared with two ordinary arguments: a single one is refused at the call, and the overload the message lists is the declaration's."
+desc = "`test_support:rendezvous` is declared with two ordinary arguments: a single one is refused at the call, and the overload the message lists is the declaration's."
 kind = "negative"
 case = "../../../cases/compile/native/para_arity.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "para_arity.cml:10:23", "(int)", "<para:rendezvous>: (parties: int, timeout_ms: int) => int"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "para_arity.cml:10:23", "(int)", "<test_support:rendezvous>: (parties: int, timeout: float) => int"]
 
 [[tests]]
 name = "native.para_wrong_type"
-desc = "A `string` where the declaration says `int`: refused at the call, and the message carries the declaration's own parameter names (`parties`, `timeout_ms`) — `stdlib/para.cml`, not the C++, is the source."
+desc = "A `string` where the declaration says `int`: refused at the call, and the message carries the declaration's own parameter names (`parties`, `timeout`) — `stdlib/test_support.cml`, not the C++, is the source."
 kind = "negative"
 case = "../../../cases/compile/native/para_type.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "para_type.cml:11:23", "argument types: <> (string, int)", "<para:rendezvous>: (parties: int, timeout_ms: int) => int"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "para_type.cml:11:23", "argument types: <> (string, float)", "<test_support:rendezvous>: (parties: int, timeout: float) => int"]
 
 [[tests]]
 name = "native.para_unordered_wrong_arity"
@@ -800,7 +800,7 @@ kind = "negative"
 case = "../../../cases/compile/native/para_unordered_arity.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "para_unordered_arity.cml:10:5", "argument types: <(item: int) => int pure> (int[], int)", "<:mark/unordered_foreach_arr>: <f: (item: T) => R> (xs: T[]) => void"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "para_unordered_arity.cml:10:5", "argument types: <(item: int) => int pure> (int[], int)", "<:mark/unordered_foreach_arr>: <f: (item: T) => void> (xs: T[]) => void"]
 
 [[tests]]
 name = "native.para_unordered_wrong_type"
@@ -809,7 +809,18 @@ kind = "negative"
 case = "../../../cases/compile/native/para_unordered_type.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "para_unordered_type.cml:11:5", "argument types: <(item: int) => int pure> (int)", "<:mark/unordered_foreach_arr>: <f: (item: T) => R> (xs: T[]) => void"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "para_unordered_type.cml:11:5", "argument types: <(item: int) => int pure> (int)", "<:mark/unordered_foreach_arr>: <f: (item: T) => void> (xs: T[]) => void"]
+
+[[tests]]
+name = "native.para_unordered_pure_result"
+desc = "`unordered_foreach` is declared `with <f: (item: T) => void>`: its element function is written for its effects, so a call that runs for nothing is refused as UnusedPureResult, as the element function of `foreach` is."
+kind = "negative"
+case = "../../../cases/compile/native/para_unordered_pure_result.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::UnusedPureResult"
+expect_diagnostic_line = 13
+expect_diagnostic_column = 38
 
 [[tests]]
 name = "native.para_unordered_reduce_callback_arity"
@@ -858,13 +869,13 @@ expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F",
 
 [[tests]]
 name = "native.tiles_declaration_import"
-desc = "`tiles:available` and `tiles:device` are declared with no parameters, a `bool` and a `string` result; the importer reads both from `stdlib/tiles.cml`, `available` reaches the C++ operator, and `device` type-checks as `() => string` without being called."
+desc = "`tiles:available` and `tiles:device` are declared with no parameters, a `bool` and a `string!` result; the importer reads both from `stdlib/tiles.cml`, and both reach the C++ operator: `available` answers `false` and `device` type-checks as `() => string!`, whose error value of kind `DeviceUnavailable` a run without a device carries and `!!` stands for."
 kind = "behavior"
 case = "../../../cases/compile/native/tiles_declaration_import.cml"
 args = ["${case}"]
 envs = ["CUDA_VISIBLE_DEVICES=-1"]
 expect_exit = 0
-expect_stdout_exact = "false\n"
+expect_stdout_exact = "false\nno device\n"
 
 [[tests]]
 name = "native.tiles_wrong_arity"

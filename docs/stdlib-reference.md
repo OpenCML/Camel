@@ -67,6 +67,7 @@ Not in this reference: the profiler (`perf`).
 | [hash](#hash) | `import { ... } from hash` | C++ |
 | [re](#re) | `import { ... } from re` | C++ |
 | [para](#para) | `import { ... } from para` | C++ |
+| [test_support](#test_support) | `import { ... } from test_support` | C++ |
 | [this](#this) | `import { ... } from this` | C++ |
 | [graph](#graph) | `import { ... } from graph` | C++ |
 | [rewrite](#rewrite) | `import { ... } from rewrite` | C++ |
@@ -99,6 +100,7 @@ Not in this reference: the profiler (`perf`).
 | [hash](#hash) | `import { ... } from hash` |  |
 | [re](#re) | `import { ... } from re` |  |
 | [para](#para) | `import { ... } from para` |  |
+| [test_support](#test_support) | `import { ... } from test_support` |  |
 | [this](#this) | `import { ... } from this` |  |
 | [graph](#graph) | `import { ... } from graph` |  |
 | [rewrite](#rewrite) | `import { ... } from rewrite` |  |
@@ -1269,10 +1271,9 @@ of nested structs and tuples, and everything else is a leaf.
 `tree_paths`, `tree_map`, `tree_reduce` and `tree_unzip` are written here, with `match type`,
 `static for`/`static loop`, `fields`, `indices`, `typeof` and rest parameters: the walk is
 expanded at each call into ordinary access and fill nodes, with no function of its own per
-leaf type. Each exported function recurses itself. `paths_at` and `unzip_at` stay because
-they carry a value the exported signature does not have (the path built so far, the component
-of the leaf tuple): a default argument would fold the first one into `tree_paths` (the
-language has none yet), and the second is not a hand-off but the walk of one component.
+leaf type. Each exported function recurses itself. `unzip_at` stays: it is not a hand-off but
+the walk of one component of the leaf tuple. Nothing here inspects a type when the program
+runs: the fields of a type are walked while the call is compiled.
 
 `tree_leaves` is not here yet. The leaves are one flat tuple whose length is the sum of the
 leaves of every field, and Camel cannot splice a tuple value's elements into a tuple being
@@ -1287,10 +1288,11 @@ the same tree with a `string` at every leaf.
 #### `tree_paths`
 
 ```camel
-tree_paths: (t: T) => ?
+tree_paths: (t: T, here: string = '') => ?
 ```
 
-The path of every leaf, as a tree of the same shape.
+The path of every leaf, as a tree of the same shape. `here` is the path of `t` itself; the
+caller leaves it out.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `tree_paths({ a: 1, b: (2, 3) })` gives `{ a: 'a', b: ('b.0', 'b.1') }`
@@ -2231,21 +2233,33 @@ Reseeds the module's random generator, which `random` and `randn` draw from.
 
 The properties of types that an applicability condition asks about. These are ordinary Camel
 functions: each one matches the type it is given with `match type` and returns a constant, so
-`func f::<T>(x: T) when is_numeric::<T>()` is applicable exactly where `T` is a number.
+`func f::<T>(x: T) when is_float::<T>()` is applicable exactly where `T` is a float. There is
+no run-time inspection of a type: a predicate is settled when the call is compiled.
+
+One family, one spelling: `is_<property>::<T>()` asks one type, and `is_same::<T, U>()` asks two.
+The identity predicates (`is_integer`, `is_float`, `is_complex`, `is_string`, `is_bool`,
+`is_function`) carry the `match type` cases; the others ask them (`is_numeric`, `is_ordered`,
+`is_plain`), so a type is named in one place and a new integer width is added to `is_integer`
+alone. A single type (`i32`, `f32`, `int`) is asked with `is_same`.
 
 `match type` compares a type's identity as well as its shape (design principles 5.5): the
 cases below name the types the language spells (`int`, `i32`, `float`, `f32`, `bf16`, `f16`,
 `c64`, `c128`, `string`, `bool`), and `case func` is the shape of every function type.
-
-A type is named once: the family predicates (`is_integer`, `is_float`, `is_complex`,
-`is_string`, `is_bool`) carry the identity cases, and `is_numeric` and `is_ordered` ask them
-instead of listing the types again, so a new integer width is added in one place.
-
-`bf16` and `f16` are floating-point types (design principles 7.3): a tensor
-stores an element in one of them, every kernel computes in f32 and rounds once, and the
-language itself gives them what it gives `f32`: literals, a written conversion (`bf16(x)`,
-`f16(x)`, `x as bf16`), scalar arithmetic and comparison, and arrays of them. They belong to
+`bf16` and `f16` are floating-point types (design principles 7.3), so they belong to
 `is_float` and inherit `is_numeric` and `is_ordered` from it.
+
+#### `is_same`
+
+```camel
+is_same: () => bool
+```
+
+True when `T` and `U` are the same type. Identity, not shape: two named types with the same
+fields are different, `i32` and `int` are different.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `is_same::<int, int>()` gives `true`
+- Example: `is_same::<i32, int>()` gives `false`
 
 #### `is_integer`
 
@@ -2301,6 +2315,18 @@ branch is `is_complex`, which is why `c64` is numeric.
 - Example: `is_numeric::<int>()` gives `true`
 - Example: `is_numeric::<string>()` gives `false`
 - Example: `is_numeric::<c64>()` gives `true`
+
+#### `is_real`
+
+```camel
+is_real: () => bool
+```
+
+True when `T` is a real number: an integer or a float. A complex number is not.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `is_real::<float>()` gives `true`
+- Example: `is_real::<c64>()` gives `false`
 
 #### `is_ordered`
 
@@ -4281,31 +4307,18 @@ Whether the regular expression (ECMAScript syntax) matches somewhere in text.
 ## `para`: unordered iteration
 
 The unordered counterparts of the built-in `foreach` and `reduce`: the scheduler may run the
-calls of the function in any order and at the same time.
-
-#### `rendezvous`
-
-```camel
-rendezvous: (parties: int, timeout_ms: int) => int
-```
-
-Blocks until `parties` calls are waiting at the one meeting point of the process, or until
-timeout_ms milliseconds have passed; returns how many calls met (after a timeout, how many
-were waiting). A tool for showing that calls really run at the same time.
-
-- With effects: waits for other calls.
-- Failure: fault `RuntimeError` when parties is below 1 or timeout_ms is negative.
-- Example: `rendezvous(2, 1000)` gives `2 when another call arrived in time`
+calls of the function in any order and at the same time. The effects the function has are those
+of the callback, and the order they happen in is not fixed; that is the promise `unordered_` makes
+and the reason to use these only for work whose calls do not depend on one another.
 
 #### `unordered_foreach`
 
 ```camel
-unordered_foreach: <f: (item: T) => R> (xs: T[]) => void
+unordered_foreach: <f: (item: T) => void> (xs: T[]) => void
 ```
 
-Calls f for every element; the calls have no order among them.
+Calls f for every element, for its effects; the calls have no order among them.
 
-- With effects: what f does.
 - Example: `[1, 2]->unordered_foreach<(x: int) => println(x)>`
 
 #### `unordered_reduce`
@@ -4314,15 +4327,50 @@ Calls f for every element; the calls have no order among them.
 unordered_reduce: <f: (acc: T, item: T) => T, initial: T> (xs: T[]) => T
 ```
 
-Combines the elements with f starting from initial; the order in which elements are
-combined is not fixed, so f should be associative and commutative.
+Combines the elements with f starting from initial; the order in which elements are combined is
+not fixed, so f should be associative and commutative.
 
-- With effects: what f does.
-- Example: `[1, 2, 3]->unordered_reduce<(acc: int, x: int): int => acc + x, 0>`
+- Example: `[1, 2, 3]->unordered_reduce<(acc: int, x: int): int => acc + x, 0>` gives `6`
+
+<a id="test_support"></a>
+
+## `test_support`: the facilities of a test
+
+Facilities for tests of the runtime, not for programs: things that make a property of the
+scheduler visible.
+
+#### `rendezvous`
+
+```camel
+rendezvous: (parties: int, timeout: float) => int uses rendezvous_point
+```
+
+Blocks until `parties` calls are waiting at the meeting point, or until `timeout` seconds have
+passed, and gives how many calls met (after a timeout, how many were waiting). A tool for
+showing that calls really run at the same time.
+
+- Failure: fault `InvalidArgument` when parties is below 1 or timeout is negative.
+- Example (a fragment, not compiled): `rendezvous(2, 1.0)` gives `2 when another call arrived in time`
+- Why it is not compiled: waits for another call, which a page cannot supply
+
+#### `thread_count`
+
+```camel
+thread_count: () => int uses process
+```
+
+The number of threads this process has, the caller included: the count the operating system
+reports for the process, not the number of processors. A test reads it to pin how many worker
+threads a run creates.
+
+- Example: `thread_count()` gives `1 at -t 1`
 
 <a id="this"></a>
 
 ## `this`
+
+The text of the Zen of Camel. The file `ZEN` of the repository is built into the module, so the
+text has one source and a program that asks for it reads no file.
 
 #### `zen`
 
@@ -4332,7 +4380,6 @@ zen: () => string
 
 The Zen of Camel, the text of the file ZEN.
 
-- Pure.
 - Example: `println(zen())`
 
 <a id="graph"></a>
@@ -5174,125 +5221,130 @@ How many constants the rule `r` adds to the program.
 
 ## `tiles`: programs on a CUDA device
 
-Programs on a CUDA device: a function value is compiled to device code, its inputs are uploaded,
-the device computes, and the results come back to the host. `tiles::compile` outlines the regions
-the device can run, `source`/`inspect`/`benchmark` show what would run, and `upload`/`download`
-move a value by hand. Placement is asked for in the source with the `#gpu` label (design
-principles 13.4), which `tiles::compile` reads; the card is chosen at run time with `--devices`.
-The device holds a foreign resource (`tiles:device`) and the driver is ambient state
-(`tiles:driver`), so every operator of this module has effects and none is folded or dropped.
+Programs on a CUDA device. Where a computation runs is asked for in the source with the tag
+`#gpu`, written on a function, a block or a namespace block (design principles 13.4), and the
+card is chosen when the program runs, with `--devices`. The pass `tiles::compile` reads
+the tags, outlines the regions the device can run, compiles them and runs the program: an
+operator the device cannot run inside a `#gpu` scope is a compile error that names the operator
+and the scope, never a quiet fall back to the host. An array on the device is an ordinary array
+value whose data block lives there; the host reading it (printing, writing a file, turning it
+into a host number) downloads it, and the reports of a run list every such transfer.
+
+What a program does by hand is small: ask whether a device is there (`available`, `device`), move
+a value (`upload`, `download`), and look at what would run (`source`, `inspect`, `benchmark`,
+`regions`). The device and the driver are one resource, `driver`, so every call here keeps its
+written order against the others and is never folded, merged or dropped. The functions to look
+at are the `with` argument and the data is the example input, as for `map`:
+`inputs->inspect<fn>`.
+
+The functions that compute their type from an argument (`upload`, `download`, `source`,
+`inspect`, `benchmark`, `regions`, and `run_preferred_resident`, the entry `tiles::compile` and
+the tests use) are in `stdlib/signatures/tiles.cml`.
 
 #### `upload`
 
 ```camel
-upload: (value: f32[..]) => Device<f32[..]>
+upload: (value: f32[..]) => Device<f32[..]> uses driver
 ```
 
-Uploads every leaf of the value — a tensor, or a scalar of the element type it is written with,
-alone or inside a tuple or a struct — and returns the same tree with each leaf wrapped in
+Uploads every leaf of the value -- an array, or a scalar of the element type it is written
+with, alone or inside a tuple or a struct -- and gives the same tree with each leaf wrapped in
 `Device<...>`. A leaf of any other type is refused when the call is compiled.
 
-- With effects: transfers to the device.
-- Example: `upload(host)` gives `a Device<f32[..]>`
+- Example (a fragment, not compiled): `host->upload` gives `a Device<f32[..]>`
+- Why it is not compiled: the value comes from the caller
 
 #### `download`
 
 ```camel
-download: (value: Device<f32[..]>) => f32[..]
+download: (value: Device<f32[..]>) => f32[..] uses driver
 ```
 
-Downloads every device leaf of the value and returns the host value it came from. A tree with a
+Downloads every device leaf of the value and gives the host value it came from. A tree with a
 leaf that is not a device value is refused when the call is compiled.
 
-- With effects: transfers from the device.
-- Example: `download(resident)` gives `the tensor resident holds`
+- Example (a fragment, not compiled): `resident->download` gives `the array resident holds`
+- Why it is not compiled: the value comes from the caller
 
 #### `run_preferred_resident`
 
 ```camel
-run_preferred_resident: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => Device<f32>
+run_preferred_resident: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => Device<f32> uses driver
 ```
 
-Runs the function through the device path the pipeline prepared for it — the device when a
-program can be made for it, the host otherwise — and answers the resident form of its result.
-This is the operator `tiles::compile` inserts for an outlined region; a `#gpu` scope asks for
-the device explicitly, and an operator the device cannot run is a compile error there.
+Runs the function through the device path the pipeline prepared for it -- the device when a
+program can be made for it, the host otherwise -- and gives the resident form of its result.
+This is the operator `tiles::compile` inserts for an outlined region and the tests use; a
+program asks for the device with `#gpu`, not with this.
 
-- With effects: transfers to the device and runs device code.
-- Example: `run_preferred_resident<(a: f32, b: f32): f32 => a + b>((f32(2.0), f32(3.0)))` gives `a Device<f32>`
+- Example: `(f32(2.0), f32(3.0))->run_preferred_resident<(a: f32, b: f32): f32 => a + b>` gives `a Device<f32>`
 
 #### `source`
 
 ```camel
-source: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => string
+source: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => string uses driver
 ```
 
 The CUDA source the function compiles to, without running it.
 
-- With effects: compiles device code.
-- Example: `println(source<(a: f32, b: f32): f32 => a + b>((f32(2.0), f32(3.0))))`
+- Example: `(f32(2.0), f32(3.0))->source<(a: f32, b: f32): f32 => a + b>`
 
 #### `inspect`
 
 ```camel
-inspect: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => string
+inspect: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => string uses driver
 ```
 
 A report on the function's device plan, without running it: the kernel, its launch shape and
 the values it would keep on the device.
 
-- With effects: compiles device code.
-- Example: `println(inspect<(a: f32, b: f32): f32 => a + b>((f32(2.0), f32(3.0))))`
+- Example: `(f32(2.0), f32(3.0))->inspect<(a: f32, b: f32): f32 => a + b>`
 
 #### `benchmark`
 
 ```camel
-benchmark: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => string
+benchmark: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => string uses driver
 ```
 
-Times the function on the device, and on the host for comparison, and returns the report as
-JSON text.
+Times the function on the device, and on the host for comparison, and gives the report as JSON
+text.
 
-- With effects: transfers both ways and runs device code.
-- Example: `println(benchmark<(a: f32, b: f32): f32 => a + b>((f32(2.0), f32(3.0))))`
+- Example: `(f32(2.0), f32(3.0))->benchmark<(a: f32, b: f32): f32 => a + b>`
 
 #### `regions`
 
 ```camel
-regions: <fn: (a: f32, b: f32) => f32> () => string
+regions: <fn: (a: f32, b: f32) => f32> () => string uses driver
 ```
 
 The regions the compiler would take for the whole program, as text: which nodes would run on
 the device and why the others would not.
 
-- With effects: compiles device code.
-- Example: `println(regions<(a: f32, b: f32): f32 => a + b>())`
+- Example: `regions<(a: f32, b: f32): f32 => a + b>()`
 
 #### `available`
 
 ```camel
-available: () => bool
+available: () => bool uses driver
 ```
 
 Whether this machine can run a program on a CUDA device: false when the driver, the toolkit or
-a visible device is missing. A capability question only — a device the run names with
-`--devices` and that is not there is a fault, never `false`.
+a visible device is missing. A capability question only -- a device the run names with
+`--devices` and that is not there is a fault at start-up, never `false`.
 
-- With effects: probes the driver.
 - Example: `available()`
 
 #### `device`
 
 ```camel
-device: () => string
+device: () => string! uses driver
 ```
 
 A description of the CUDA device the run selects: its ordinal, name, compute capability and
-memory. Asking is a requirement, not a preference: with no device the call is a fault.
+memory.
 
-- With effects: probes the driver.
-- Failure: fault `RuntimeError` when this build or this machine has no CUDA device; fault `DeviceUnavailable` when `--devices` names a device that is not there.
-- Example: `println(device())`
+- Failure: error value `DeviceUnavailable` when this build or this machine has no CUDA device.
+- Example: `device() !! 'no device'`
 
 <a id="pyplot"></a>
 
@@ -5375,7 +5427,6 @@ py_call: (fn: string | PyObject, args?: (...PyObject) | PyObject[], kwargs?: Str
 Calls `fn` with a tuple (or an array) of positional arguments and a struct of keyword
 arguments. Both collections are optional; every element is a `PyObject`.
 
-- With effects: not pure.
 - Example: `py_call(fn, (py_wrap(2.0),), {x: py_wrap(1)})`
 
 #### `py_print`

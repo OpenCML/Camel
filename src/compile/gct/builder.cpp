@@ -1271,7 +1271,10 @@ bool Builder::resolveAmbientResource(
                 if (decl->members.empty()) {
                     // A resource of a module is named with the module, as an operator of one is
                     // (design principles 10.2): `fs::handle` is one thing, wherever it is used.
-                    // A resource of this module keeps the name it was declared with.
+                    // A name shown for a resource of this module leaves the module out, since
+                    // there is nothing to tell it apart from; the module the resource is declared
+                    // in is half of its identity, and that is what the operator's own declaration
+                    // and this clause are compared as (see resourceIdentities).
                     out.push_back(
                         in.get() == module_.get() ? written : in->name() + "::" + written);
                     return true;
