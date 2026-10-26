@@ -184,7 +184,7 @@ import {{ grad }} from autodiff
 import {{ now }} from time
 
 with <{probe["with"]}>
-func body({probe["args"]}): float {{
+func body({probe["args"]}): f32 {{
     return {probe["body"]}
 }}
 
