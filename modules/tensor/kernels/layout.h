@@ -51,17 +51,10 @@ struct SliceRange {
 };
 /// One bound of a slice along an axis of `extent` elements, normalized: a negative bound counts
 /// from the end. nullopt when the bound is outside [-extent, extent] (the operator faults with
-/// SliceOutOfRange). The single source of the bound rule: normalizeSliceBounds and the index
-/// semantics declaration (ops/indexing.cpp) both go through it.
+/// SliceOutOfRange). The rule `slice_grad`'s bounds follow (`kernels/gradient.cpp`); the core's
+/// own slice refuses a negative bound instead (design principles 5.4), so nothing else reads it.
 std::optional<int64_t> normalizeSliceBound(int64_t extent, int64_t bound);
 std::optional<SliceRange> normalizeSliceBounds(int64_t extent, int64_t start, int64_t end);
-
-/// Slice [start, end) with `step` along one axis. A bound out of range throws
-/// std::out_of_range (normalizeSliceBounds); the operator checks first and faults with
-/// SliceOutOfRange.
-Array *slice(
-    const Array *input, int64_t axis, int64_t start, int64_t end, int64_t step,
-    mm::IAllocator &allocator);
 
 /// The elements `t[a:b:s]` takes along the first axis of a tensor, by the rule an array's
 /// subscript slice follows (design principles 5.4, 3.9): a bound is a position from 0 to

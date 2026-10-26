@@ -1,5 +1,5 @@
 module tiles_outputs
-import { reshape, sum, abs, transpose, slice } from tensor
+import { reshape, sum, abs, transpose } from tensor
 import { inspect, benchmark, run_preferred_resident, download } from tiles
 
 type Results = { first: f32[..], rest: (f32[..], f32[..]) }

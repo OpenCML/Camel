@@ -1,5 +1,5 @@
 module shape_inference_branch_join
-import { concat, slice, sum, ones } from tensor
+import { concat, sum, ones } from tensor
 // Arms of different extents join to an unknown extent.
 func f(x: f32[3], c: bool): f32[3] {
     return if c then x else slice(concat(x, x, 0), 0, 0, 3) * 2.0

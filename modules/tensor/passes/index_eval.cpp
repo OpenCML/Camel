@@ -477,7 +477,7 @@ std::optional<Num> pointwise(std::string_view op, const std::vector<Num> &v) {
 
 /// The operators whose Unique write copies the one value it reads.
 bool isMove(std::string_view op) {
-    for (std::string_view m : {"transpose", "permute", "slice", "reshape", "flatten", "unsqueeze",
+    for (std::string_view m : {"transpose", "permute", "reshape", "flatten", "unsqueeze",
                                "broadcast_like", "expand_axis", "sum_to"}) {
         if (op == m) {
             return true;
@@ -839,21 +839,6 @@ Generator permuteCases() {
             }
         }
         return Case{Arg::tensor(randomData(rng, pickDtype(rng), randomShape(rng, rank))), Arg::intsArg(perm)};
-    };
-}
-
-Generator sliceCases() {
-    return [](Rng &rng) {
-        const size_t rank   = static_cast<size_t>(rng.range(1, 3));
-        const StaticShape s = randomShape(rng, rank, 9);
-        const int64_t axis  = rng.range(-static_cast<int64_t>(rank), static_cast<int64_t>(rank) - 1);
-        const int64_t n     = *s[static_cast<size_t>(axis < 0 ? axis + static_cast<int64_t>(rank) : axis)];
-        Case c{Arg::tensor(randomData(rng, pickDtype(rng), s)), Arg::integerArg(axis),
-               Arg::integerArg(rng.range(-n - 2, n + 2)), Arg::integerArg(rng.range(-n - 2, n + 2))};
-        if (rng.chance(60)) {
-            c.push_back(Arg::integerArg(rng.range(1, 3)));
-        }
-        return c;
     };
 }
 
@@ -1256,16 +1241,27 @@ void queries(std::ostream &os) {
     query(os, "show_sum_axis_unknown_extents", "tensor:sum_axis", {T(StaticShape{std::nullopt, std::nullopt, 4}), integer},
           {std::nullopt, Arg::integerArg(-2)});
     query(os, "permute_not_constant", "tensor:permute", {T(StaticShape{2, 3}), ints}, {});
-    query(os, "slice_unknown_extent", "tensor:slice", {T(StaticShape{std::nullopt, 3}), integer, integer, integer},
+    // The core's own slice node, `:op/slice_sub`, is the one node `t[a:b:s]` and
+    // `slice(t, axis, a, b, s)` both build, and the tensor module publishes its declaration
+    // (ops/indexing.cpp). A bound is a position from 0 to the axis' length, so a negative one is
+    // a fault whatever the extent is, and it is the declaration that has to say so.
+    query(os, "slice_unknown_extent", ":op/slice_sub", {T(StaticShape{std::nullopt, 3}), integer, integer, integer},
           {std::nullopt, Arg::integerArg(0), Arg::integerArg(0), Arg::integerArg(2)});
-    query(os, "slice_unknown_extent_negative", "tensor:slice",
+    query(os, "slice_unknown_extent_negative", ":op/slice_sub",
           {T(StaticShape{std::nullopt, 3}), integer, integer, integer},
           {std::nullopt, Arg::integerArg(0), Arg::integerArg(-1), Arg::integerArg(2)});
-    query(os, "show_slice", "tensor:slice", {T(StaticShape{std::nullopt, 7}), integer, integer, integer, integer},
+    query(os, "show_slice", ":op/slice_sub",
+          {T(StaticShape{std::nullopt, 7}), integer, integer, integer, integer},
           {std::nullopt, Arg::integerArg(1), Arg::integerArg(1), Arg::integerArg(-1), Arg::integerArg(2)});
-    query(os, "slice_out_of_range", "tensor:slice", {T(StaticShape{5}), integer, integer, integer},
+    query(os, "show_slice_written", ":op/slice_sub",
+          {T(StaticShape{std::nullopt, 7}), integer, integer, integer, integer},
+          {std::nullopt, Arg::integerArg(1), Arg::integerArg(1), Arg::integerArg(5), Arg::integerArg(2)});
+    query(os, "slice_out_of_range", ":op/slice_sub", {T(StaticShape{5}), integer, integer, integer},
           {std::nullopt, Arg::integerArg(0), Arg::integerArg(2), Arg::integerArg(6)});
-    query(os, "slice_step_zero", "tensor:slice", {T(StaticShape{5}), integer, integer, integer, integer},
+    query(os, "slice_backward", ":op/slice_sub",
+          {T(StaticShape{5}), integer, integer, integer, integer},
+          {std::nullopt, Arg::integerArg(0), Arg::integerArg(4), Arg::integerArg(0), Arg::integerArg(-2)});
+    query(os, "slice_step_zero", ":op/slice_sub", {T(StaticShape{5}), integer, integer, integer, integer},
           {std::nullopt, Arg::integerArg(0), Arg::integerArg(0), Arg::integerArg(5), Arg::integerArg(0)});
     query(os, "reshape_unknown_input", "tensor:reshape", {T(StaticShape{std::nullopt, 4}), ints},
           {std::nullopt, Arg::intsArg({4, -1})});
@@ -1298,6 +1294,10 @@ IndexEvalTestPass::apply(const camel::runtime::Program *program, std::ostream &o
         Generator gen;
         size_t count;
     };
+    // No slice entry: the module's slice kernel is gone with its operator, and the core's own
+    // slice node (the one `t[a:b:s]` and `slice(t, axis, a, b, s)` both build) has no module
+    // definition to compare a declaration with. The queries below and the core's own cases cover
+    // that declaration instead.
     const std::vector<Entry> entries = {
         {"tensor:add", binaryCases(), 120},
         {"tensor:subtract", binaryCases(), 80},
@@ -1314,7 +1314,6 @@ IndexEvalTestPass::apply(const camel::runtime::Program *program, std::ostream &o
         {"tensor:log", unaryCases(false), 40},
         {"tensor:transpose", transposeCases(), 60},
         {"tensor:permute", permuteCases(), 80},
-        {"tensor:slice", sliceCases(), 150},
         {"tensor:reshape", reshapeCases(), 100},
         {"tensor:flatten", flattenCases(), 60},
         {"tensor:unsqueeze", unsqueezeCases(), 60},

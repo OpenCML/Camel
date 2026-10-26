@@ -1,5 +1,5 @@
 module tiles_index_maps
-import { random, seed, sum, abs, transpose, permute, slice, dim, reshape, zeros } from tensor
+import { random, seed, sum, abs, transpose, permute, dim, reshape, zeros } from tensor
 import { run_preferred_resident, download } from tiles
 
 func trans(x: f32[..]): f32[..] { return transpose(x) }
