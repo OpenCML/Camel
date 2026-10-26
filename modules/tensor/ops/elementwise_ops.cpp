@@ -88,24 +88,38 @@ TypeCode computedElementType(TypeCode element, TypeCode scalar) {
     return isFloatingTensorType(scalar) ? TypeCode::Float32 : element;
 }
 
-/// The element type a binary operator's two operands are computed in: a scalar operand has the
-/// tensor's element type, and two tensors promote only by widening (design principles 5.1). A
-/// scalar of another type is refused, not converted: a value whose type is its own (`a: float`)
-/// is an error, the same rule as `f32 * f64` between two scalars, and the report names the
-/// conversion to write. A literal takes the element type before the operator is resolved -
-/// `x * 2.0` and `add(x, 2.0)` alike - so what is left at a call the program wrote is a value. A
-/// constant that still arrives with a type of its own is one the literal rule could not reach:
-/// a literal the element type holds no form of (a `bool` tensor's arithmetic is f32) or one
-/// written inside a generic function, whose element type is open where the literal is typed and
-/// fixed only at instantiation. The operator then keeps the answer it always gave, and the
-/// kernel reads the constant in the element type - the narrowing is a defect the literal rule
-/// does not yet cover, not a value to report. A pass that reads the graph again infers without
-/// `sourceLevel` and keeps that tolerance for every operand alike, because the program was
-/// compiled under it (a generic body is inferred with open element types).
+/// The element type a binary operator's two operands are computed in: one element type, because a
+/// tensor operator computes in its element type and there is no implicit conversion between
+/// numeric types (design principles 5.1). A scalar operand has the tensor's element type, and a
+/// scalar of another type is refused, not converted: a value whose type is its own (`a: float`) is
+/// an error, the same rule as `f32 * f64` between two scalars, and the report names the conversion
+/// to write. A literal takes the element type before the operator is resolved - `x * 2.0` and
+/// `add(x, 2.0)` alike - so what is left at a call the program wrote is a value. A constant that
+/// still arrives with a type of its own is one the literal rule could not reach: a literal the
+/// element type holds no form of (a `bool` tensor's arithmetic is f32) or one written inside a
+/// generic function, whose element type is open where the literal is typed and fixed only at
+/// instantiation. The operator then keeps the answer it always gave, and the kernel reads the
+/// constant in the element type - the narrowing is a defect the literal rule does not yet cover,
+/// not a value to report. A pass that reads the graph again infers without `sourceLevel` and keeps
+/// that tolerance for every operand alike, because the program was compiled under it (a generic
+/// body is inferred with open element types).
+/// Two tensor operands are the same rule without an allowance: the element type of each is the one
+/// its type carries, whatever the facts pin down about its shape, so two of them that differ are
+/// the mixed call this refuses rather than a pair to widen. `f32[..] * f64[..]` matches no arm
+/// whether the extents are known or open, and the report names the conversion to write.
 /// Unknown when an operand's element type is unknown.
 std::optional<TypeCode>
 operandType(const InferContext &ctx, const TensorFacts &lhs, const TensorFacts &rhs) {
     if (isTensorArg(ctx, 0) == isTensorArg(ctx, 1)) {
+        if (lhs.dtype && rhs.dtype && *lhs.dtype != *rhs.dtype) {
+            throw std::invalid_argument(
+                "the two tensor operands have different element types ('" +
+                typeCodeToString(*lhs.dtype) + "' and '" + typeCodeToString(*rhs.dtype) +
+                "'): a tensor operator computes in one element type, and there is no implicit "
+                "conversion between numeric types (write the conversion, cast(value, \"" +
+                typeCodeToString(*lhs.dtype) + "\") or cast(value, \"" +
+                typeCodeToString(*rhs.dtype) + "\"))");
+        }
         return promote(lhs.dtype, rhs.dtype);
     }
     const bool tensorFirst = isTensorArg(ctx, 0);

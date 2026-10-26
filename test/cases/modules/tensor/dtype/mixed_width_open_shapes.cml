@@ -1,0 +1,20 @@
+/**
+ * The same mixed call with open shapes: `f64[..] * f32[..]` is refused for its element types
+ * whether or not the extents are known. A shape the facts do not pin down is not a number and not
+ * an open element type - the element type is written in the type - so an operand whose shape is
+ * open meets another width exactly as a known-shaped one does.
+ */
+module mixed_width_open_shapes
+
+import { load_npy, sum } from tensor
+
+func both(x: f64[..], y: f32[..]): float {
+    return float(sum(x * y))
+}
+
+func main(): int sync {
+    let x = load_npy::<f64>('test/cases/compile/entry_args/b.npy') as f64[?]
+    let y = load_npy::<f32>('test/cases/compile/entry_args/b.npy') as f32[?]
+    println(both(x, y))
+    return 0
+}
