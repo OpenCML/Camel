@@ -444,6 +444,32 @@ inline bool hasDirectDataDependency(node_handle_t lhs, node_handle_t rhs) {
            std::ranges::find(withInputsOf(lhs), rhsId) != withInputsOf(lhs).end();
 }
 
+/// Whether the model lets an order edge sit on this node (docs/design/effects/edges.cn.md 4.6):
+/// an order edge only orders, and its two ends are effects or nodes that may fault, so a node the
+/// model lets a pass arrange freely -- pure and unable to fault (design principles 3.4) -- carries
+/// none. The seal check asks the same question through the same classification
+/// (src/runtime/graph_edges.cpp), so an edge written through this one cannot be refused, and a node
+/// whose operator is not known is left out rather than ordered: a missing order only leaves the
+/// two writes in the order they were written.
+inline bool nodeTakesAnOrder(node_handle_t node) {
+    if (node == nullptr) {
+        return false;
+    }
+    const runtime::GCNodeKind kind = nodeKindOf(node);
+    camel::core::OperId oper      = camel::core::kNoOper;
+    if (kind == runtime::GCNodeKind::Oper) {
+        const auto &op = nodeGraphOf(node)->operTarget(node);
+        const auto id  = op == nullptr
+                             ? std::optional<camel::core::OperId>{}
+                             : camel::core::OperatorTable::instance().lookup(op->uri());
+        if (!id.has_value()) {
+            return false;
+        }
+        oper = *id;
+    }
+    return !camel::runtime::nodeIsFreelySchedulable(kind, oper);
+}
+
 inline bool shouldAddSyncCtrlLink(node_handle_t from, node_handle_t to) {
     // Only the exact, local skip: the predecessor is already a direct data input of the target,
     // so the edge would say nothing new. This is not a count of control users and cannot be one.

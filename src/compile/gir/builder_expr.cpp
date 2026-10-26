@@ -434,6 +434,19 @@ void Builder::recordWrite(node_handle_t variable, node_handle_t exit, bool throu
     // A store is one of the cell's known users (collapseNonEscapingVariableReads): a user the builder
     // did not record -- a:var/take, a call handed the `var` -- makes the cell escape.
     knownCellUsers_.insert(exit);
+    // The write before this one is ordered before it, and it is not this write's value: every
+    // write of a variable takes the cell :var/new made as its position, never the write before it
+    // (docs/design/effects/edges.cn.md 5.6; docs/design-principles.cn.md 3.1). An order edge only
+    // orders, so a write nothing reads still does not run (design principles 3.5, F3). Both ends
+    // have to be nodes an order can sit on, which is what 4.6 asks: a branch's writes meet at its
+    // JOIN, and the arm's own write carries the order from the write before the branch.
+    if (auto previous = modifierOf(variable); previous.has_value()) {
+        if (sameGraph(*previous, currGraph_) && linkCheek(*previous, exit) &&
+            nodeTakesAnOrder(*previous) && nodeTakesAnOrder(exit) &&
+            !hasDirectDataDependency(*previous, exit)) {
+            linkNodes(LinkType::Order, *previous, exit);
+        }
+    }
     setModifier(variable, exit);
     if (!throughCallee) {
         if (ArmBuild *arm = activeArm()) {
