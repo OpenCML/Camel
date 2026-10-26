@@ -88,7 +88,8 @@ enum class TypeCaseKind : uint8_t {
     Leaf     = 2,
     Wildcard = 3,
     Func     = 4,
-    Identity = 5
+    Identity = 5,
+    Array    = 6
 };
 inline constexpr uint16_t typeCaseBit(TypeCaseKind kind) {
     return static_cast<uint16_t>(1u << static_cast<uint8_t>(kind));

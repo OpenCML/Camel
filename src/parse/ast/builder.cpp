@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "camel/parse/ast/builder.h"
+#include "camel/parse/ast/type_case_words.h"
 #include "camel/core/operator_names.h"
 #include "camel/core/operator_semantics.h"
 #include "camel/core/tags.h"
@@ -3169,19 +3170,13 @@ Value Builder::visitStaticLoopExpr(cst::StaticLoopExpr context) {
 
 TypeCaseKind Builder::typeCaseKindOf(cst::TypeCasePattern pattern) {
     const std::string text = pattern.text();
-    if (text == "struct") {
-        return TypeCaseKind::Struct;
+    if (const auto kind = typeCaseKindOfWord(text)) {
+        return *kind;
     }
-    if (text == "tuple") {
-        return TypeCaseKind::Tuple;
-    }
-    if (text == "func") {
-        return TypeCaseKind::Func;
-    }
-    if (text == "#leaf") {
-        return TypeCaseKind::Leaf;
-    }
-    ASSERT(text == "_", "Unknown match type pattern");
+    // A word that names no shape is told, where it is written, instead of being read as `_`.
+    diags_->of(SemanticDiag::StaticMatchPatternCannotMatch)
+        .at(rangeOf(pattern->firstToken(), pattern->lastToken()))
+        .commit(text, "it is not a shape word (struct, tuple, array, func, #leaf, _)");
     return TypeCaseKind::Wildcard;
 }
 

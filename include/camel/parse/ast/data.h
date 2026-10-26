@@ -50,7 +50,8 @@ enum class TypeCaseKind : uint8_t {
     Leaf     = 2,
     Wildcard = 3,
     Func     = 4,
-    Identity = 5
+    Identity = 5,
+    Array    = 6
 };
 
 std::string to_string(TypeCaseKind kind);

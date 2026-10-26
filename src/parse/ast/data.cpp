@@ -74,6 +74,8 @@ std::string to_string(TypeCaseKind kind) {
         return "_";
     case TypeCaseKind::Func:
         return "func";
+    case TypeCaseKind::Array:
+        return "array";
     case TypeCaseKind::Identity:
         return "type";
     default:

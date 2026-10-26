@@ -1340,7 +1340,7 @@ void ParserImpl::parseTypeCasePattern() {
     switch (cur_) {
     case TK::Identifier: {
         const std::string_view word = tree_.tokens().text(pos_);
-        if (word == "struct" || word == "tuple") {
+        if (word == "struct" || word == "tuple" || word == "array") {
             bump();
             break;
         }
