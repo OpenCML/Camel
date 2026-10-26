@@ -1,7 +1,7 @@
 # Nullable and Fallible Values
 
 This note describes how the two built-in forms `T?` ("may be null") and `T!` ("may have
-failed"), the operators `??`, `!!`, `?->`, the fixed `match` patterns and `throw` are
+failed"), the operators `??`, `!!`, `->`, the fixed `match` patterns and `throw` are
 compiled. The normative text is `docs/design-principles.cn.md` sections 3.8, "可空", 3.9, "错误与故障",
 and 3.7, "分支与 `match`";
 the user-facing description is in `docs/language/` (3.4, 6.6, 6.8.2, 7.3).
@@ -15,7 +15,7 @@ language author. Each is implemented the way section 10 recommends and marked in
 | Construct | On the graph |
 |---|---|
 | `a ?? b`, `a !! b` | `BRCH` on the tag of `a`; arm 0 is `b`, arm 1 is the value taken out of `a`; `JOIN` |
-| `x ?-> f` | `BRCH` on the tag of `x`; arm 0 hands the error on, arm 1 calls `f` with the value |
+| `x -> f`, `x: T?` or `T!` that no overload of `f` takes whole | `BRCH` on the tag of `x`; arm 0 hands the null or the error on, arm 1 calls `f` with the value |
 | `match x { case null => A  case v => B }` | the same `BRCH`; arm 0 is `A`, arm 1 binds `v` and is `B` |
 | `match r { case error e => A  case v => B }` | the same `BRCH`; arm 0 binds `e` and is `A`, arm 1 binds `v` and is `B` |
 | `throw e` | the exit of the graph, exactly where `return` puts it; the value is the failed form of the declared `T!` (`OPER`, `CAST`) |
@@ -106,7 +106,7 @@ does not change behaviour as long as the result is used only inside the arm.
 
 **Putting a value into the form: `CAST`.** `TupleType::castSlotFrom` allocates the box.
 Allowed conversions (`castSafetyFrom`): `T -> T?`, `T -> T!`, `U! -> T!` for the failed case (compiler-made only, the error arm
-of `?->`), and `null -> T?` (the null slot; nothing is allocated).
+of `->`), and `null -> T?` (the null slot; nothing is allocated).
 
 **Choosing: `BRCH`/`JOIN`.**
 
@@ -128,11 +128,20 @@ When `b` is itself a `T?` (a `T!` for `!!`) the result is that type (design prin
 3.8): arm 1 then hands `a` on as it is instead of taking the value out. It is still one
 branch, so `a ?? b ?? 9` is two branches in sequence whichever way it is grouped.
 
-### 3.2 `x ?-> f`
+### 3.2 `x -> f`
 
-`x: T!`. Arm 1 is the call `f(__error_value__(x))`; if `f` returns a plain `U` the arm ends
-in a `CAST` to `U!`. Arm 0 is a `CAST` of `x` to `U!` (the same object: an error box has no
-payload), or `x` itself when `U` is `T`. The result is `U!`. A chain `x ?-> f ?-> g` is two
+`x: T?` or `T!`, and no overload of `f` (its `when` conditions included) takes `x` whole:
+a pipe whose receiver is not tagged, or one that an overload takes as it is, builds the call
+and nothing else (design principles 3.9). Which of the two it is, is decided by building the
+call with `x` first, in an arm that is dropped afterwards (`Builder::visitPipeLink`), so that
+the other arguments of the call are built, and run, once.
+
+Otherwise (`Builder::peelPipeReceiver`) the branch is on the tag of `x`. Arm 1 is the call
+`f(value-of(x))`; if `f` returns a plain `U` the arm ends in a `CAST` to `U?` (`U!`), and a
+`U` that already has that form is kept. Arm 0 hands the null on (a null cast to the result
+type) or the error (`x` cast to `U!`: an error box has no payload). The result is `U?` or
+`U!`. A value tagged twice (`T?!`) is taken apart one tag at a time: the call in arm 1 sees
+the value inside as its receiver and may be taken apart again. A chain `x -> f -> g` is two
 such branches in sequence. Arm 1 is built first, because it is what determines `U`; on the
 graph it is still arm 1.
 
@@ -174,9 +183,9 @@ Diagnostics:
 - `ThrowOutsideFallible` (0x60): `throw` in a function whose declared return type is not
   `T!` (or is not declared), or at module level.
 - `ThrowNotAnError` (0x61): the operand of `throw` is not an `Error`.
-- `TaggedOperandMismatch` (0x65): the left side of `??`/`!!`/`?->` is not of the form the
+- `TaggedOperandMismatch` (0x65): the left side of `??`/`!!` is not of the form the
   operator opens, or the right side of `??`/`!!` does not have the payload type. Located at
-  the operator (`??`, `!!`) or at the start of the expression (`?->`).
+  the operator.
 - `TaggedMatchCases` (0x66): a `match` on a tagged value without exactly the two cases.
 
 ## 4. The type system
@@ -236,7 +245,7 @@ not checked again.
 
 ### 4.4 What a tagged value can be used for
 
-Only `??`, `!!`, `?->` and the `match` patterns look inside. Member access, indexing and
+Only `??`, `!!`, `->` and the `match` patterns look inside. Member access, indexing and
 destructuring of a tagged value are errors (`TaggedValueNotOpened`, 0x63), and no operator
 overload accepts one where it expects a `T`. A tagged value may be stored, passed, returned,
 captured and printed (`println` prints `null`, the value, or `error <kind>: <message>`) (Q5).
@@ -348,9 +357,8 @@ Each is implemented as recommended; none changes the behaviour of an existing pr
   (what it would bind there is undecided).
 - **Q5. Printing and comparing.** Implemented: a tagged value can be printed; `==` is not
   defined for it. Alternative: forbid printing as well.
-- **Q6. `?->` on a `T?`.** Implemented: an error; the principles define `?->` for errors
-  only. The AST name of the construct (`NotNullThen`) suggests null propagation was once
-  meant.
+- **Q6. `->` on a `T?`.** Ruled on (3.9): `->` carries a null along as it carries an error,
+  and `?->` is gone. Section 3.2.
 - **Q7. The right-hand side of `??`/`!!`.** Ruled on (3.8): a `T` gives a `T`, a `T?`
   (`T!`) gives that type. Section 3.1.
 - **Q8. `let x: int! = v` written without a space** lexes `!=` as one token and is a syntax

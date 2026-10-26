@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "camel/parse/ast/builder.h"
+#include "camel/parse/ast/type_case_words.h"
 #include "camel/core/operator_names.h"
 #include "camel/core/operator_semantics.h"
 #include "camel/core/tags.h"
@@ -3169,19 +3170,13 @@ Value Builder::visitStaticLoopExpr(cst::StaticLoopExpr context) {
 
 TypeCaseKind Builder::typeCaseKindOf(cst::TypeCasePattern pattern) {
     const std::string text = pattern.text();
-    if (text == "struct") {
-        return TypeCaseKind::Struct;
+    if (const auto kind = typeCaseKindOfWord(text)) {
+        return *kind;
     }
-    if (text == "tuple") {
-        return TypeCaseKind::Tuple;
-    }
-    if (text == "func") {
-        return TypeCaseKind::Func;
-    }
-    if (text == "#leaf") {
-        return TypeCaseKind::Leaf;
-    }
-    ASSERT(text == "_", "Unknown match type pattern");
+    // A word that names no shape is told, where it is written, instead of being read as `_`.
+    diags_->of(SemanticDiag::StaticMatchPatternCannotMatch)
+        .at(rangeOf(pattern->firstToken(), pattern->lastToken()))
+        .commit(text, "it is not a shape word (struct, tuple, array, func, #leaf, _)");
     return TypeCaseKind::Wildcard;
 }
 
@@ -3942,7 +3937,7 @@ Value Builder::visitUnaryExpr(syn::Node context) {
 
 /*
 linkExpr
-    : compExpr (('->' | '?->') compExpr)*
+    : compExpr ('->' compExpr)*
     ;
 */
 Value Builder::visitLinkExpr(cst::LinkExpr context) {
@@ -3951,21 +3946,9 @@ Value Builder::visitLinkExpr(cst::LinkExpr context) {
     for (size_t i = 1; i < context->exprs().size(); i++) {
         string strOp       = context->child(i * 2 - 1)->text();
         node_ptr_t rhsNode = any2node(visitExpr(context->expr(i)));
-        if (strOp == "?->") {
-            // `x ?-> f`: a branch on the tag of `x`; the call is the arm taken when `x` has
-            // not failed (design principles 3.9). The marked receiver tells the GCT builder.
-            node_ptr_t notNullNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::NotNullThen);
-            syn::TokenRef opToken  = tokenOf(context->child(i * 2 - 1));
-            setNodeTokenRange(notNullNode, opToken->index(), opToken->index() + 1);
-            setNodeOriginByOffsets(
-                notNullNode,
-                static_cast<size_t>(opToken->begin()),
-                static_cast<size_t>(opToken->end()));
-            *notNullNode << lhsNode;
-            lhsNode = notNullNode;
-        }
         node_ptr_t linkNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::Call);
         setNodeTokenRangeByContext(linkNode, context);
+        linkNode->loadAs<ReservedExprLoad>()->setPipe(true);
         // What the arrow hands on is the receiver of the call, wherever the call is written.
         node_ptr_t dataList      = nullptr;
         node_ptr_t calleeNode    = rhsNode;

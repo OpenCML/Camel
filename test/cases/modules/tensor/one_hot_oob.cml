@@ -4,10 +4,10 @@
  */
 module one_hot_oob
 
-import { one_hot, cast } from tensor
+import { one_hot } from tensor
 
 func main(): int sync {
-    let labels = cast([0, 3], 'int64')
+    let labels = int([0, 3])
     let bad = one_hot(labels, 3)
     return 0
 }

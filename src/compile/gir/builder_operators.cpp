@@ -1638,7 +1638,89 @@ node_handle_t Builder::intervalValue(
     return value;
 }
 
+node_handle_t Builder::visitPipeLink(
+    const GCT::node_ptr_t &call, const GCT::node_ptr_t &replacement) {
+    const auto unused = unusedStatement_;
+    PipeState detect;
+    detect.call        = call;
+    detect.replacement = replacement;
+    detect.previous    = pipe_;
+    pipe_              = &detect;
+    try {
+        node_handle_t built = visitLinkNode(call);
+        pipe_               = detect.previous;
+        return built;
+    } catch (const PipeTagged &) {
+        pipe_ = detect.previous;
+    } catch (...) {
+        pipe_ = detect.previous;
+        throw;
+    }
+    // The receiver is a `T?` or a `T!`. Does an overload take it as it is?
+    node_handle_t receiver = detect.receiver;
+    bool direct            = true;
+    {
+        PipeState scratch;
+        scratch.call     = call;
+        scratch.receiver = receiver;
+        scratch.mode     = PipeMode::Scratch;
+        scratch.previous = pipe_;
+        unusedStatement_                 = nullptr;
+        runtime::GraphDraft &draft       = currGraph_->draft();
+        const draft_node_ref_t firstNode = static_cast<draft_node_ref_t>(draft.nodeSlotCount());
+        // Nothing the dropped arm built stays in the graph: a node of it that had an effect would
+        // be reported as one that never runs, and one that did would run.
+        const auto dropScratch = [&] {
+            for (draft_node_ref_t id = static_cast<draft_node_ref_t>(draft.nodeSlotCount());
+                 id > firstNode;) {
+                --id;
+                if (draft.alive(id)) {
+                    draft.eraseNode(id);
+                }
+            }
+        };
+        try {
+            pipe_ = &scratch;
+            buildArm(call, [&] { return visitLinkNode(call); });
+        } catch (const PipeNoMatch &) {
+            direct = false;
+        } catch (...) {
+            pipe_ = scratch.previous;
+            throw;
+        }
+        pipe_ = scratch.previous;
+        dropScratch();
+    }
+    unusedStatement_ = unused;
+    if (!direct) {
+        return peelPipeReceiver(call, receiver);
+    }
+    PipeState real;
+    real.call     = call;
+    real.receiver = receiver;
+    real.mode     = PipeMode::Direct;
+    real.previous = pipe_;
+    pipe_         = &real;
+    try {
+        node_handle_t built = visitLinkNode(call);
+        pipe_               = real.previous;
+        return built;
+    } catch (...) {
+        pipe_ = real.previous;
+        throw;
+    }
+}
+
+void Builder::yieldToPipe(const GCT::node_ptr_t &call) {
+    if (pipe_ != nullptr && pipe_->call == call && pipe_->mode == PipeMode::Scratch) {
+        throw PipeNoMatch();
+    }
+}
+
 node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
+    if (GCT::Tree::of(gct)->isPipe(gct) && (pipe_ == nullptr || pipe_->call != gct)) {
+        return visitPipeLink(gct, nullptr);
+    }
     ENTER("LINK");
     Type *expectedResult = expectedValueType_;
     ExpectedValueScope callScope(expectedValueType_, nullptr);
@@ -1703,7 +1785,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     withArgsOfCall_                = outerWithArgsOfCall;
     genericCalleeAllowed_          = false;
     // The callee may be a lambda written in place (`((x: int): int => x + 1)(3)`,
-    // `v ?-> (x: int): int => x * 2`): visiting it gives its graph, and what is called is the
+    // `v -> (x: int): int => x * 2`): visiting it gives its graph, and what is called is the
     // function value of that graph. (The graph was cast to a node: `bad any_cast`, bare.)
     node_handle_t targetNode = valueNodeOf(targetNodeRes);
 
@@ -1864,11 +1946,26 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             }
             continue;
         }
-        node_handle_t inputNode = visitOperand(gct->at(i), gct);
+        // The receiver of a pipe whose value was taken apart is the value taken out.
+        const bool pipeReceiver = i == 1 && pipe_ != nullptr && pipe_->call == gct;
+        const GCT::node_ptr_t &argumentExpr =
+            pipeReceiver && pipe_->replacement != nullptr ? pipe_->replacement : gct->at(i);
+        node_handle_t inputNode = nullptr;
+        if (pipeReceiver && pipe_->receiver != nullptr) {
+            inputNode = pipe_->receiver; // built once, before the overloads were asked
+        } else {
+            inputNode = visitOperand(argumentExpr, gct);
+        }
+        if (pipeReceiver && pipe_->receiver == nullptr) {
+            pipe_->receiver = inputNode;
+            if (asTagged(valueTypeOf(nodeTypeOf(inputNode))) != nullptr) {
+                throw PipeTagged();
+            }
+        }
         const std::optional<std::string> name =
             argumentNames != nullptr && i - 1 < argumentNames->size() ? (*argumentNames)[i - 1]
                                                                       : std::nullopt;
-        normInputs.push_back({inputNode, gct->at(i), name});
+        normInputs.push_back({inputNode, argumentExpr, name});
         if (isAssignment && i == 1) {
             Type *place = valueTypeOf(nodeTypeOf(inputNode));
             if (place != nullptr && place->code() == TypeCode::Function) {
@@ -2359,6 +2456,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         node_handle_t decoratorInvoke = lowerDecoratedGraphValue(decoratedGraph, gct);
         FunctionType *factoryType     = tt::as_ptr<FunctionType>(nodeTypeOf(decoratorInvoke));
         if (!accepts(factoryType, false) && !accepts(factoryType, true)) {
+            yieldToPipe(gct);
             reportConversionGaps(
                 {{std::string(), factoryType}},
                 withInputs,
@@ -2604,6 +2702,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 targetGraph = g;
             }
             if (!targetGraph && !chosenDecorated) {
+                yieldToPipe(gct);
                 if (!unmetConditions.empty()) {
                     // Every candidate that took the arguments was made inapplicable by its
                     // condition. The report names each candidate and the condition it wrote
@@ -2851,6 +2950,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 }
             }
             if (!res.has_value()) {
+                yieldToPipe(gct);
                 if (!unmetConditions.empty()) {
                     // Every candidate whose parameters took the arguments was made inapplicable
                     // by its own `when` (design principles 4.4: a rule that does not apply is
@@ -2992,11 +3092,7 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
                         ops->resolvers(),
                         "\n    ",
                         [this](const std::pair<std::string, resolver_ptr_t> &p) {
-                            const auto declared = implDeclaredNames_.find(p.first);
-                            return (declared != implDeclaredNames_.end()
-                                        ? declared->second
-                                        : "<" + p.first + ">") +
-                                   ": " + p.second->signature();
+                            return calleeNameForMessage(p.first) + ": " + p.second->signature();
                         }) +
                     "\n";
                 // The overloads of the program are part of the set (design principles 10.2).
@@ -3300,6 +3396,7 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
             "Target node of LINK must be a function or operator node.");
         auto *funcType = tt::as_ptr<FunctionType>(dataType);
         if (!accepts(funcType, false) && !accepts(funcType, true)) {
+            yieldToPipe(gct);
             reportConversionGaps(
                 {{std::string(), funcType}},
                 withInputs,

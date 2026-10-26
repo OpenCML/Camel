@@ -277,7 +277,7 @@ Value lowerWhere(const LowerContext &ctx) {
 
 Value lowerCast(const LowerContext &ctx) {
     if (!ctx.result().dtype) {
-        throw ExportError("'tensor:cast': the target dtype must be an export-time constant");
+        throw ExportError("'tensor:to_*': the target dtype must be an export-time constant");
     }
     return ctx.emit(
         "Cast",
@@ -1226,7 +1226,10 @@ LoweringRegistry::LoweringRegistry() {
     add("tensor:gelu", lowerGelu);
     add("tensor:erf", sameTypeOp("Erf", 1));
     add("tensor:where", lowerWhere);
-    add("tensor:cast", lowerCast);
+    for (const char *uri : {"tensor:to_i32", "tensor:to_i64", "tensor:to_f32", "tensor:to_f64",
+                            "tensor:to_bf16", "tensor:to_f16"}) {
+        add(uri, lowerCast);
+    }
 
     // Linear algebra and layout.
     add("tensor:matmul", sameTypeOp("MatMul", 2));

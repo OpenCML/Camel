@@ -361,7 +361,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "TaggedValueNotOpened",
                 "A value of type '{0}' cannot be used here: {1}.",
-                "A value that may be null ('T?') or may have failed ('T!') is opened only by '?\?', '!!', '?->' and by 'match' with 'case null' / 'case error e'.",
+                "A value that may be null ('T?') or may have failed ('T!') is opened only by '?\?', '!!', '->' (which passes a null or an error on) and by 'match' with 'case null' / 'case error e'.",
             },
         },
         {
@@ -369,7 +369,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "TaggedOperandMismatch",
                 "'{0}' cannot be applied here: {1}.",
-                "'a ?? b' needs 'a' of type 'T?' and 'b' of type 'T' (the result is a 'T') or 'T?' (the result is a 'T?', so that 'a ?? b ?? c' tries each in turn). 'a !! b' needs 'a' of type 'T!' and 'b' of type 'T' or 'T!'. 'x ?-> f' needs 'x' of type 'T!' and a function 'f' that takes a 'T'.",
+                "'a ?? b' needs 'a' of type 'T?' and 'b' of type 'T' (the result is a 'T') or 'T?' (the result is a 'T?', so that 'a ?? b ?? c' tries each in turn). 'a !! b' needs 'a' of type 'T!' and 'b' of type 'T' or 'T!'.",
             },
         },
         {
@@ -513,7 +513,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "OperatorNotOverloadable",
                 "'{0}' cannot be overloaded: {1}.",
-                "The operators that can be overloaded are the binary '+', '-', '*', '/', '%', '^', '@', '==', '<', '<=', '>', '>=', '&', '|', indexing '[]', and the unary '-', '!', '~'; '!=' follows '=='. '&&', '||', '?\?', '!!', '->', '?->', '..', 'as', assignment and compound assignment are constructs of the language.",
+                "The operators that can be overloaded are the binary '+', '-', '*', '/', '%', '^', '@', '==', '<', '<=', '>', '>=', '&', '|', indexing '[]', and the unary '-', '!', '~'; '!=' follows '=='. '&&', '||', '?\?', '!!', '->', '..', 'as', assignment and compound assignment are constructs of the language.",
             },
         },
         {
@@ -1745,7 +1745,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "UnusedFallibleValue",
                 "This value has type '{0}' and nothing uses it: an error it holds is lost{1}.",
-                "A function that returns a 'T!' reports its failure through that value. Take the value apart with '!!', '?->' or 'match', return it from a function that declares a 'T!', or drop it on purpose with 'let _ = ...'.",
+                "A function that returns a 'T!' reports its failure through that value. Take the value apart with '!!', '->' or 'match', return it from a function that declares a 'T!', or drop it on purpose with 'let _ = ...'.",
             },
         },
         {

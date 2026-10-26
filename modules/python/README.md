@@ -47,7 +47,7 @@
 | `py_wrap` | `(x: T) => PyObject<T>` | Camel → Python：将 Camel 值转为 Python 对象。支持 Int/Float/Bool/String/Array/Tuple/Struct 及嵌套。 |
 | `py_unwrap` | `(obj: PyObject<T>) => T!` | Python → Camel：将 Python 对象按目标类型转回 Camel。**必须**通过 `as PyObject<T>` 指定目标类型；对象不是 `T` 所要的那种就是 `PythonTypeError`（`bool` 只收 bool，不收 `5`；`int` 不收 bool 与 float；`string` 不收 bytes；`f32` 放不下 `1e300`），消息给出路径与所见的类型。 |
 
-**Python 一侧的失败是错误值，不是故障**：调用、求值、导入、取属性的结果是 `PyObject!`，Python 抛出的异常是种类 `PythonError` 的错误值，消息以异常类名开头（`KeyError: ...`），后接回溯；用 `!!`、`?->` 或 `match` 拆开。参数个数、类型不对仍是故障。
+**Python 一侧的失败是错误值，不是故障**：调用、求值、导入、取属性的结果是 `PyObject!`，Python 抛出的异常是种类 `PythonError` 的错误值，消息以异常类名开头（`KeyError: ...`），后接回溯；用 `!!`、`->` 或 `match` 拆开。参数个数、类型不对仍是故障。
 
 **`py_unwrap` 必须配合 `as` 使用**：`py_eval` / `py_call` 返回的是裸 `PyObject`（无类型参数），而 `py_unwrap` 需根据 `PyObject<T>` 的 `T` 决定返回类型并完成转换。因此必须先将结果用 `as PyObject<T>` 转为带泛型参数的 `PyObject<T>` 再传给 `py_unwrap`，例如：
 

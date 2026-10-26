@@ -4,7 +4,7 @@
  */
 module softmax_labels
 
-import { reshape, one_hot, cast, sum, abs } from tensor
+import { reshape, one_hot, sum, abs } from tensor
 import { softmax_cross_entropy, softmax_cross_entropy_grad } from nn
 
 func main(): int sync {
@@ -14,11 +14,11 @@ func main(): int sync {
 
     let onehot_loss = softmax_cross_entropy(logits, hot)
     let array_loss = softmax_cross_entropy(logits, labels)
-    let tensor_loss = softmax_cross_entropy(logits, cast(labels, 'int64'))
-    let int32_loss = softmax_cross_entropy(logits, cast(labels, 'int32'))
+    let tensor_loss = softmax_cross_entropy(logits, int(labels))
+    let int32_loss = softmax_cross_entropy(logits, i32(labels))
     let onehot_grad = softmax_cross_entropy_grad(logits, hot, 0.5)
     let array_grad = softmax_cross_entropy_grad(logits, labels, 0.5)
-    let tensor_grad = softmax_cross_entropy_grad(logits, cast(labels, 'int64'), 0.5)
+    let tensor_grad = softmax_cross_entropy_grad(logits, int(labels), 0.5)
 
     'softmax_labels loss={} {} {} {} grad_diff={}'->format<onehot_loss, array_loss, tensor_loss, int32_loss, sum(abs(array_grad - onehot_grad)) + sum(abs(tensor_grad - onehot_grad))>->println
     return 0

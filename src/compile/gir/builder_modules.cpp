@@ -750,13 +750,18 @@ std::optional<Builder::ImplKernel> Builder::implKernelOfGraph(
 // The kernel group of an `#impl` function holds exactly the one rule a direct call of the
 // function resolves in, and its key is the kernel operator's URI: the declared name is what the
 // group says about the call, and the kernel's own name stays where it is written.
+std::string Builder::calleeNameForMessage(const std::string &uri) const {
+    const auto found = implDeclaredNames_.find(uri);
+    return found != implDeclaredNames_.end() ? found->second : "<" + uri + ">";
+}
+
 std::string Builder::declaredNameOfKernelGroup(const oper_group_ptr_t &ops) const {
     if (ops == nullptr) {
         return {};
     }
     for (const auto &[uri, resolver] : ops->resolvers()) {
-        if (const auto found = implDeclaredNames_.find(uri); found != implDeclaredNames_.end()) {
-            return found->second;
+        if (implDeclaredNames_.contains(uri)) {
+            return calleeNameForMessage(uri);
         }
     }
     return {};

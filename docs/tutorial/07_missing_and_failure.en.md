@@ -89,8 +89,8 @@ func describe(r: int!): string {
 func main(): int sync {
     println(safe_div(9, 3) !! -1)            // 3
     println(safe_div(9, 0) !! -1)            // -1: the substitute
-    println(describe(safe_div(8, 2) ?-> inc))
-    println(describe(safe_div(8, 0) ?-> inc))
+    println(describe(safe_div(8, 2) -> inc))
+    println(describe(safe_div(8, 0) -> inc))
     println(parse_int('12') !! 0, parse_int('twelve') !! 0)
     println(safe_div(1, 0))
     return 0
@@ -112,7 +112,7 @@ error DivByZero: the divisor is zero
 
 - **`throw e` returns an error value** and is the same structure as `return`: it does not unwind the stack, and the
   caller receives an `int!`. The error has three fields: `e.kind`, `e.message` and `e.location`.
-- The three ways to open one: `a !! b` (take `b` on failure), `x ?-> f` (pass the error on unchanged, otherwise call
+- The three ways to open one: `a !! b` (take `b` on failure), `x -> f` (pass the error on unchanged, otherwise call
   `f`; the operators chain), and `match` with `case error e` and `case v`.
 - The last line, `println(safe_div(1, 0))`, prints the error itself. It also makes the compiler give a warning —
   **when an `int!` is dropped, the error inside it is lost**:
@@ -166,7 +166,7 @@ it.
 
 - On the graph `int`, `int?` and `int!` are **the same kind of value**: the "may be `null`, may carry an error" is one
   bit of a mark carried on the value.
-- Opening it with `??`, `!!`, `?->` or `match` is a **branch node**: the condition is that bit, one arm takes the
+- Opening it with `??`, `!!`, `->` or `match` is a **branch node**: the condition is that bit, one arm takes the
   value and the other takes the nothing-or-error. Handling failure is not control-flow magic, it is an ordinary
   branch.
 - When an `int!` is dropped — nothing reads it — that path on the graph ends in nothing, and that is how the compiler

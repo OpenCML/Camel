@@ -1,0 +1,8 @@
+// A string no quote closes is an error on the line it opened on; it does not run on to the last
+// escaped quote of the file.
+func main(): int sync {
+    let s = 'abc
+    println(s)
+    let t = "it\'s"
+    return 0
+}
