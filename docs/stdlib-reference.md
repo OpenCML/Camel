@@ -2728,7 +2728,7 @@ The stream of what `step` answers from `state` on: one element with the state af
 and every later round is a pull of the rest, so the states are threaded rather than repeated.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example: `loop acc = 0 for x in stream::unfold(3, down) do acc + x` gives `3 + 2 + 1 = 6`
+- Example: `loop acc = 0 for x in unfold(3, (n: int) => if n > 0 then (n, n - 1) else null) do acc + x` gives `6`
 
 <a id="math"></a>
 
