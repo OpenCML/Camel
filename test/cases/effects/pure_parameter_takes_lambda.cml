@@ -1,0 +1,17 @@
+/**
+ * The same rule at a lambda: an anonymous function writes no clause, so its type carries the
+ * resources its body was measured to reach, and a lambda that touches nothing measures the empty
+ * set -- it stands where `pure` is asked for (design principles 3.3, effects plan 5). A lambda
+ * needs no syntax of its own for this: its resources are inferred like any other body's.
+ */
+module pure_parameter_takes_lambda
+
+func usePure(f: (x: int) => int pure): int {
+    f(1)
+    return 0
+}
+
+func main(): int sync {
+    println(usePure((x: int): int => x * 2))
+    return 0
+}

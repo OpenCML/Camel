@@ -112,6 +112,16 @@ expect_exit = 0
 expect_stdout_exact = "0\n"
 expect_output_not_contains = ["SemanticDiag::EffectNotExecuted"]
 
+[[tests]]
+name = "inferred.lambda_is_empty"
+desc = "A lambda is the same rule without a written clause: its type carries what its body measures, so a lambda that touches nothing measures the empty set and stands where `pure` is asked for. No syntax of its own: the resources of a lambda are inferred."
+kind = "behavior"
+case = "../../../cases/effects/pure_parameter_takes_lambda.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "0\n"
+expect_output_not_contains = ["SemanticDiag::EffectNotExecuted"]
+
 # ---- Refusals ----
 
 [[tests]]
