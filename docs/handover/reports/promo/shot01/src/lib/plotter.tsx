@@ -29,6 +29,7 @@ export const VIOLET = '#C3A6FF';
 export const MINT = '#7BE8B0';
 export const THREAD = '#F7E3B5';
 export const CORAL = '#FF7A70';
+export const ROSE = '#FF9CC2';
 
 // Without ligatures: the code shows the characters a viewer types (`->` is two characters).
 export const MONO = 'JetBrains Mono NL, JetBrains Mono, Cascadia Mono, Consolas, monospace';

@@ -283,11 +283,11 @@ camel model.cml std::macro std::opt std::cpp
 **Code (supporting size):**
 
 ```camel
-func epochs(xs: f32[?, 784], n: int): f32[784].. {
-    for _ in 0..n do for x in xs do yield x
+func rows(xs: f32[?, 784]): f32[784].. {
+    for x in xs do yield x
 }
 
-let data = xs->epochs(10)->batch(64)
+let data = xs->rows->batch(64)
 let trained = loop p = p0 for b in data do p->sgd(b)
 ```
 
