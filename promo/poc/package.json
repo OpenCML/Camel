@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "serve": "vite",
-    "render": "node render.cjs --out ../renders/poc/frames --fps 60 --workers 6",
+    "render": "node render.cjs --out ../renders/poc/frames --fps 60 --workers 1",
     "cues": "node render.cjs --cues ../renders/poc/cues.json"
   },
   "dependencies": {
