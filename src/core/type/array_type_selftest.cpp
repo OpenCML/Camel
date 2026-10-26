@@ -3,15 +3,11 @@
 
 #include "camel/core/type/array_type_selftest.h"
 
-#include "camel/core/data/composite/array.h"
-#include "camel/core/data/primary.h"
 #include "camel/core/error/runtime.h"
 #include "camel/core/mm.h"
 #include "camel/core/rtdata/array.h"
 #include "camel/core/type/composite/array.h"
 #include "camel/core/type/intern.h"
-#include "camel/core/type/other.h"
-#include "camel/core/type/typevar.h"
 
 #include <stdexcept>
 #include <string>
@@ -63,7 +59,6 @@ std::string debugRunArrayTypeSelfTest() {
 
     Type *i64 = Type::Int64();
     Type *f32 = Type::Float32();
-    Type *str = Type::String();
 
     // ---- One interned object per shape, and the two spellings of one shape ----------------
     ArrayType *empty   = ArrayType::create(i64);
@@ -81,14 +76,6 @@ std::string debugRunArrayTypeSelfTest() {
         ArrayType::create(f32, std::vector<int64_t>{}) == ArrayType::create(f32),
         "f32[] from an empty list is not f32[]");
     require(fromInts->rank() == 2 && !fromInts->anyRank(), "rank of f32[3, 4]");
-    // The name that awaits its element type is one interned object, and it is not an array that
-    // states a shape: `Tensor` alone and `f32[3]` are different objects.
-    require(
-        ArrayType::elementTypeOpen() == ArrayType::elementTypeOpen(),
-        "the name awaiting an element type is not interned");
-    require(
-        ArrayType::elementTypeOpen() != ArrayType::create(f32, shapeOf({3})),
-        "the name awaiting an element type equals f32[3]");
     // A shape that cannot be normalized is refused, not silently kept.
     bool refused = false;
     try {
@@ -110,21 +97,6 @@ std::string debugRunArrayTypeSelfTest() {
         "an open rank prints its pack");
     require(
         ArrayType::openRank(f32)->toString() == "f32[..]", "a bare open rank prints as f32[..]");
-    require(
-        ArrayType::elementTypeOpen()->toString() == "number[..]",
-        "the name awaiting its element type prints as '" + ArrayType::elementTypeOpen()->toString() +
-            "'");
-    require(
-        ArrayType::elementTypeOpen()->mangle() == "Array_open_any",
-        "the mangle of the name awaiting its element type changed: " +
-            ArrayType::elementTypeOpen()->mangle());
-    // The element type nobody stated is `Void`, and it is not the type of an array literal: the
-    // literal states one unknown dimension, this name states an open rank.
-    require(
-        isUntypedArrayType(ArrayType::elementTypeOpen()) &&
-            isElementTypeOpenArray(ArrayType::elementTypeOpen()) &&
-            !isElementTypeOpenArray(ArrayType::create(nullptr)),
-        "the name awaiting an element type is not told from the empty literal's type");
     require(empty->mangle() == "Array_i_1_?", "the int[] mangle changed: " + empty->mangle());
     require(
         fromInts->mangle() == "Array_f32_2_3,4",
@@ -163,15 +135,17 @@ std::string debugRunArrayTypeSelfTest() {
     require(open3->assignableFrom(fromInts), "f32[3, ..] does not accept f32[3, 4]");
     require(!open3->assignableFrom(ArrayType::create(f32, shapeOf({4, 5}))), "f32[3, ..] accepts f32[4, 5]");
     require(!open3->assignableFrom(anyF32), "f32[3, ..] accepts an argument of unknown extents");
-    // The name that awaits its element type takes no value: it is not a type of anything, and the
-    // array whose element type nobody stated does not flow into it either.
+    // An open rank whose element type nobody stated: a type variable bound to `Void` leaves one
+    // behind (`func f::<T>(x: T[..])` at a call whose argument is the empty literal), and no value
+    // has it, so nothing is assignable to it.
+    ArrayType *openVoid = ArrayType::openRank(ArrayType::create(nullptr)->elemType());
     require(
-        !ArrayType::elementTypeOpen()->assignableFrom(ArrayType::create(f32, shapeOf({3}))),
-        "the name awaiting an element type accepts f32[3]");
+        isElementTypeUnstatedOpenArray(openVoid) && !isElementTypeUnstatedOpenArray(anyF32) &&
+            !isElementTypeUnstatedOpenArray(openF32),
+        "the open array whose element type nobody stated is not told from the others");
     require(
-        ArrayType::elementTypeOpen()->castSafetyFrom(ArrayType::create(f32, shapeOf({3}))) ==
-            CastSafety::Forbidden,
-        "the name awaiting an element type is not Forbidden as a conversion target");
+        !openVoid->assignableFrom(fromInts),
+        "the open array whose element type nobody stated accepts f32[3, 4]");
 
     // ---- The conversion: Safe, Unsafe (checked at run time), Forbidden --------------------
     require(anyF32->castSafetyFrom(fixed4) == CastSafety::Safe, "f32[] from f32[4] is not Safe");
@@ -248,9 +222,6 @@ std::string debugRunArrayTypeSelfTest() {
         "int[3] + int[3, 4] does not unify to an open rank: " +
             (rankJoin ? rankJoin->toString() : std::string("<null>")));
     require(ArrayType::create(i64)->unify(i64) == nullptr, "int[] unified with int");
-    require(
-        ArrayType::elementTypeOpen()->unify(ArrayType::create(i64, shapeOf({3}))) == nullptr,
-        "the name awaiting an element type unified with int[3]");
 
     Type *widened23 = ArrayType::create(f32, shapeOf({3, 4}))->widened();
     require(
@@ -360,148 +331,7 @@ std::string debugRunArrayTypeSelfTest() {
             std::string::npos,
         "the check of a dimension from another argument says: " + laterCheck);
 
-    // ---- The array that awaits its element type: what a name that requires one denotes --------
-    // That array is the open-rank array whose element type nobody stated, and its arguments are the
-    // array type's own: one element type, then one shape. Every spelling it accepts denotes the
-    // interned array object the equivalent array spelling gives, and the element type is required
-    // (docs/design/arrays-memory/plan.cn.md section 5.1a).
-    ArrayType *alias = ArrayType::elementTypeOpen();
-    std::string argumentError;
-    const auto applyOne = [&](const TypeArgument &argument) {
-        return alias->applyArguments(std::span<const TypeArgument>(&argument, 1), argumentError);
-    };
-    const auto element = [&](Type *type) {
-        return applyOne(TypeArgument{.type = type, .data = nullptr, .extents = nullptr});
-    };
-    const auto both = [&](Type *type, std::initializer_list<int64_t> values) {
-        std::vector<TypeArgument> arguments{
-            TypeArgument{.type = type, .data = nullptr, .extents = nullptr},
-            TypeArgument{
-                .type = nullptr,
-                .data = nullptr,
-                .extents = std::make_shared<const std::vector<ExtentForm>>(constants(values))}};
-        return alias->applyArguments(std::span<const TypeArgument>(arguments), argumentError);
-    };
-    require(element(f32) == ArrayType::openRank(f32), "f32[..] is not f32[..]");
-    require(
-        element(f32)->toString() == "f32[..]",
-        "f32[..] prints as '" + element(f32)->toString() + "'");
-    require(element(i64) == ArrayType::openRank(i64), "int[..] is not int[..]");
-    // A type variable is the element type a generic signature writes: `func f::<T>(x: T[..])`
-    // is `T[..]`, and the call's argument fixes `T` (design principles 5.5).
-    require(element(TypeVarType::create("T", false)) == ArrayType::openRank(TypeVarType::create("T", false)),
-            "T[..] is not T[..]");
-    require(
-        both(f32, {2, 3}) == ArrayType::create(f32, shapeOf({2, 3})),
-        "f32[2, 3] is not f32[2, 3]");
-    require(
-        static_cast<const ArrayType *>(both(f32, {2, 3}))->rank() == 2,
-        "f32[2, 3] did not keep its rank");
-    // Every dimension removed: the type is its element type (the rank-zero rule in
-    // docs/handover/reviews/questions-2026-10-23.md, section rank-zero-tensor): `f32`
-    // is `f32`, and not a rank-zero array.
-    require(both(f32, {}) == f32, "f32 is not f32");
-    require(!element(f32)->equals(f32), "f32[..] with no shape is the scalar");
-    // A shape written over dimension names keeps them, and they do not take part in equality.
-    std::vector<TypeArgument> namedArguments{
-        TypeArgument{.type = f32, .data = nullptr, .extents = nullptr},
-        TypeArgument{
-            .type = nullptr,
-            .data = nullptr,
-            .extents = std::make_shared<const std::vector<ExtentForm>>(
-                std::vector<ExtentForm>{named("n"), ExtentForm::constant(784)})}};
-    const ArrayType *namedTensor = static_cast<const ArrayType *>(
-        alias->applyArguments(std::span<const TypeArgument>(namedArguments), argumentError));
-    std::vector<ExtentForm> keptForms;
-    require(
-        namedTensor->rank() == 2 && namedTensor->extentForms(keptForms) &&
-            keptForms.size() == 2 && keptForms[0].hasNames() &&
-            keptForms[0].terms().front().first == "n" && keptForms[1].constant() == 784,
-        "f32[n, 784] did not keep the dimension name");
-    require(
-        namedTensor->equals(ArrayType::create(
-            f32, std::vector<ExtentForm>{ExtentForm::unknown(), ExtentForm::constant(784)})),
-        "a dimension name takes part in the equality of an array");
-    // A constant shape, the spelling the tensor shape had before the array type took shapes
-    // over: an integer list, where a negative extent is the unknown dimension it always was.
-    const std::shared_ptr<camel::core::data::ArrayData> constShapeData =
-        camel::core::data::ArrayData::create(
-            Type::Int32(),
-            {std::make_shared<camel::core::data::IntData>(3),
-             std::make_shared<camel::core::data::IntData>(-1)});
-    std::vector<TypeArgument> constShape{
-        TypeArgument{.type = f32, .data = nullptr, .extents = nullptr},
-        TypeArgument{.type = nullptr, .data = constShapeData, .extents = nullptr}};
-    require(
-        alias->applyArguments(std::span<const TypeArgument>(constShape), argumentError) ==
-            ArrayType::create(
-                f32,
-                std::vector<ExtentForm>{ExtentForm::constant(3), ExtentForm::unknown()}),
-        "the constant shape [3, -1] is not f32[3, ?]");
-
-    // What the name refuses: a spelling with no element type at all, an element type that is not
-    // a numeric scalar, a second element type, a second shape, and an element after the shape.
-    const auto refuses = [&](std::span<const TypeArgument> arguments, const std::string &what) {
-        argumentError.clear();
-        const Type *result = alias->applyArguments(arguments, argumentError);
-        require(result == nullptr, what + " was accepted");
-        require(!argumentError.empty(), what + " was refused without a reason");
-    };
-    std::vector<TypeArgument> notNumeric{
-        TypeArgument{.type = str, .data = nullptr, .extents = nullptr}};
-    refuses(notNumeric, "string[..]");
-    require(
-        argumentError.find("numeric scalar") != std::string::npos,
-        "the refusal of string[..] says: " + argumentError);
-    std::vector<TypeArgument> twoElements{
-        TypeArgument{.type = f32, .data = nullptr, .extents = nullptr},
-        TypeArgument{.type = f32, .data = nullptr, .extents = nullptr}};
-    refuses(twoElements, "two element types");
-    std::vector<TypeArgument> elementAfterShape{
-        TypeArgument{
-            .type = nullptr,
-            .data = nullptr,
-            .extents = std::make_shared<const std::vector<ExtentForm>>(constants({3}))},
-        TypeArgument{.type = f32, .data = nullptr, .extents = nullptr}};
-    refuses(elementAfterShape, "an element type after the shape");
-    std::vector<TypeArgument> twoShapes{
-        TypeArgument{
-            .type = nullptr,
-            .data = nullptr,
-            .extents = std::make_shared<const std::vector<ExtentForm>>(constants({3}))},
-        TypeArgument{
-            .type = nullptr,
-            .data = nullptr,
-            .extents = std::make_shared<const std::vector<ExtentForm>>(constants({4}))}};
-    refuses(twoShapes, "two shapes");
-    // A shape with no element type: the question the name exists to answer is left open, and the
-    // reason says which spellings answer it.
-    std::vector<TypeArgument> shapeOnly{
-        TypeArgument{
-            .type = nullptr,
-            .data = nullptr,
-            .extents = std::make_shared<const std::vector<ExtentForm>>(constants({3}))}};
-    refuses(shapeOnly, "a shape with no element type");
-    require(
-        argumentError.find("needs its element type") != std::string::npos,
-        "the refusal of f32[3] says: " + argumentError);
-    std::vector<TypeArgument> noElement;
-    refuses(noElement, "no argument at all");
-    require(
-        argumentError.find("needs its element type") != std::string::npos,
-        "the refusal of no argument at all says: " + argumentError);
-    // An array that states its element type reads no type arguments of its own: the arguments of
-    // the name belong to the name, not to every array.
-    argumentError.clear();
-    require(
-        ArrayType::create(f32, shapeOf({3}))->applyArguments(
-            std::span<const TypeArgument>(notNumeric), argumentError) == nullptr &&
-            argumentError.find("states its element type") != std::string::npos,
-        "f32[3] accepted a type argument: " + argumentError);
-
-    return "shapes interned, relations checked, binding checked, alias arguments checked, moved "
-           "check says: " +
-           movedCheck;
+    return "shapes interned, relations checked, binding checked, moved check says: " + movedCheck;
 }
 
 } // namespace camel::core::type
