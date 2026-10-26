@@ -1,0 +1,30 @@
+/**
+ * The forms a pipe's callee is written in, with a tagged receiver (design principles 3.9): a
+ * function with an argument written beside the receiver, with a `with` argument, an operator of a
+ * module, a lambda in place. The other arguments belong to the call that is taken: `bump()` runs
+ * once when the value is there and not at all when it is null.
+ */
+module pipe_propagation_call_forms
+import { abs } from math
+import { split } from str
+func bump(): int sync {
+    println('bump')
+    return 1
+}
+func add(x: int, y: int): int { return x + y }
+with <k: int>
+func scale(x: int): int { return x * k }
+func main(): int sync {
+    let a: int? = 1
+    let b: int? = null
+    println(a->add(bump()) ?? -1)
+    println(b->add(bump()) ?? -1)
+    println(a->scale<3> ?? -1)
+    let f: float? = -2.5
+    println(f->abs ?? 0.0)
+    let s: string? = 'a,b'
+    println(s->split<','> ?? ['none'])
+    let q = a->(x: int): int => x + 10
+    println(q ?? -1)
+    return 0
+}

@@ -2780,7 +2780,10 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
             const AST::node_ptr_t literal = spreadLiteral(argNode);
             argCount += literal != nullptr ? literal->atAs<AST::RepeatedLoad>(0)->size() : 1;
         }
-        res                   = tree_->makeLink(argCount);
+        res = tree_->makeLink(argCount);
+        if (reservedExpr->pipe()) {
+            tree_->markPipe(res);
+        }
         node_ptr_t calleeNode = visitData(lhsASTNode);
         *res << calleeNode;
         std::vector<camel::source::SemanticPart> parts = {

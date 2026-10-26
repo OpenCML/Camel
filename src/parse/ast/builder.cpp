@@ -3961,6 +3961,7 @@ Value Builder::visitLinkExpr(cst::LinkExpr context) {
         }
         node_ptr_t linkNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::Call);
         setNodeTokenRangeByContext(linkNode, context);
+        linkNode->loadAs<ReservedExprLoad>()->setPipe(strOp == "->");
         // What the arrow hands on is the receiver of the call, wherever the call is written.
         node_ptr_t dataList      = nullptr;
         node_ptr_t calleeNode    = rhsNode;

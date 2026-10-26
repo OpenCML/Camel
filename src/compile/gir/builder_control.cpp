@@ -1490,6 +1490,59 @@ node_handle_t Builder::visitTaggedBrchNode(const GCT::node_ptr_t &gct) {
     return buildBranch(gct, tagNode, &arms);
 }
 
+// `x -> f` where `x` is a `T?` or a `T!` and no overload of `f` takes it as it is (design
+// principles 3.9): a branch on the tag of `x`. The arm taken when `x` is null (has failed) hands it
+// on as the result; the other arm calls `f` with the value taken out, and gives a `U?` (`U!`; a
+// `U` that is already of that form is kept). The value taken out may itself be tagged (`T?!`), in
+// which case the call there takes it apart again.
+node_handle_t Builder::peelPipeReceiver(const GCT::node_ptr_t &call, node_handle_t receiver) {
+    Type *subjectType = valueTypeOf(nodeTypeOf(receiver));
+    TupleType *tagged = asTagged(subjectType);
+    ASSERT(tagged != nullptr, "A pipe takes a receiver apart only when it is tagged.");
+    const bool onNull      = tagged->isNullable();
+    const std::string name = bindTemporary(receiver);
+    node_handle_t tagNode  = applyTagOperator(
+        onNull ? camel::core::oper::TagIsNull : camel::core::oper::TagIsError,
+        name,
+        call);
+    const camel::core::OperId valueOp =
+        onNull ? camel::core::oper::TagNullValue : camel::core::oper::TagErrorValue;
+    GCT::node_ptr_t passed = tree_->makeDRef(GCT::kPassedValueName);
+    passed->setOrigin(call->at(1)->origin());
+
+    std::vector<arm_ptr_t> arms(2);
+    Type *resultType = nullptr;
+    arms[1]          = buildArm(call, [&] {
+        insertNode(GCT::kPassedValueName, applyTagOperator(valueOp, name, call));
+        ExpectedValueScope noPosition(expectedValueType_, nullptr);
+        node_handle_t result = visitPipeLink(call, passed);
+        if (nodeIsKind(result, runtime::GCNodeKind::Gate) && !normInputsOf(result).empty()) {
+            result = nodeDraftOf(result)->ref(normInputsOf(result).front());
+        }
+        Type *type = valueTypeOf(nodeTypeOf(result));
+        if (onNull) {
+            resultType = type->code() == TypeCode::Void || asNullable(type) != nullptr
+                             ? type
+                             : TupleType::nullable(type);
+        } else {
+            resultType = asFallible(type) != nullptr ? type : TupleType::fallible(type);
+        }
+        return resultType == type ? result : castNodeTo(result, resultType, call);
+    });
+    arms[0]          = buildArm(call, [&] {
+        if (onNull) {
+            node_handle_t none = currGraph_->addStaticDataNode(Data::null());
+            registerNodeOrigin(context_, none, call, "gir.data");
+            return resultType->code() == TypeCode::Void ? none : castNodeTo(none, resultType, call);
+        }
+        const GCT::node_ptr_t dref = tree_->makeDRef(name);
+        dref->setOrigin(call->origin());
+        node_handle_t failed = valueNodeOf(visitDRefNode(dref));
+        return resultType->equals(subjectType) ? failed : castNodeTo(failed, resultType, call);
+    });
+    return buildBranch(call, tagNode, &arms);
+}
+
 node_handle_t
 Builder::visitTaggedMatch(const GCT::node_ptr_t &gct, node_handle_t scrutinee, TupleType *type) {
     using CaseType       = GCT::CaseType;

@@ -1216,6 +1216,7 @@ generic_template_ptr_t Builder::chooseGenericOverload(
         }
         rejectAmbiguousCall(candidates.front()->name, argTypes, also, call);
     }
+    yieldToPipe(call);
     diags_->of(SemanticDiag::NoMatchingFunction)
         .atOrigin(call->origin())
         .commit(argTypes, strutil::join(listed, "; ", [](const std::string &s) { return s; }));
@@ -1626,6 +1627,7 @@ compile_graph_ptr_t Builder::instantiateForCall(
         const WhenResult verdict =
             evaluateWhenCondition(when->condition, signature, bindings, withValues, tmpl);
         if (verdict.fails()) {
+            yieldToPipe(call);
             std::vector<Type *> all(withTypes);
             all.insert(all.end(), normTypes.begin(), normTypes.end());
             diags_->of(SemanticDiag::WhenConditionUnmet)
