@@ -71,8 +71,9 @@ GenerationalAllocatorWithGC::RuntimeStats GenerationalAllocatorWithGC::stats() c
 std::vector<std::string> GenerationalAllocatorWithGC::rootSourceDescriptions() const {
     std::lock_guard<std::mutex> lock(mutex_);
     std::vector<std::string> sources;
-    if (rootObjectSet_) {
-        sources.push_back(std::format("runtimeGraphRoots({})", rootObjectSet_->size()));
+    for (const ObjectRootSetEntry &entry : objectRootSets_) {
+        const size_t held = entry.set == nullptr ? 0 : entry.set->size();
+        sources.push_back(std::format("{}({})", entry.name, held));
     }
     for (const auto &entry : externalRootTracers_) {
         sources.push_back(entry.name);
@@ -81,6 +82,16 @@ std::vector<std::string> GenerationalAllocatorWithGC::rootSourceDescriptions() c
         sources.push_back(handle->name());
     }
     return sources;
+}
+
+std::vector<std::string> GenerationalAllocatorWithGC::graphSweeperDescriptions() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    std::vector<std::string> sweepers;
+    sweepers.reserve(graphSweepers_.size());
+    for (const GraphSweeperEntry &entry : graphSweepers_) {
+        sweepers.push_back(entry.name);
+    }
+    return sweepers;
 }
 
 std::vector<GenerationalAllocatorWithGC::HeapVerificationIssue>
@@ -95,7 +106,7 @@ void GenerationalAllocatorWithGC::verifyHeapOrThrow(std::string_view where) {
 }
 
 size_t GenerationalAllocatorWithGC::rootSourceCountUnlocked() const {
-    return (rootObjectSet_ ? 1 : 0) + externalRootTracers_.size() + rootHandleCount_;
+    return objectRootSets_.size() + externalRootTracers_.size() + rootHandleCount_;
 }
 
 std::string
@@ -484,13 +495,16 @@ GenerationalAllocatorWithGC::verifyHeapUnlocked() {
         return ref;
     };
 
-    if (rootObjectSet_) {
-        for (size_t i = 0; i < rootObjectSet_->size(); ++i) {
-            rtdata::Object *root = (*rootObjectSet_)[i];
+    for (const ObjectRootSetEntry &entry : objectRootSets_) {
+        if (entry.set == nullptr) {
+            continue;
+        }
+        for (size_t i = 0; i < entry.set->size(); ++i) {
+            rtdata::Object *root = (*entry.set)[i];
             if (!root) {
                 continue;
             }
-            std::string path = std::format("runtimeGraphRoots[{}]", i);
+            std::string path = std::format("{}[{}]", entry.name, i);
             if (!knownObjectPointer(root, issues, path)) {
                 issues.push_back(makeIssue(
                     "Root object points outside managed object regions",
