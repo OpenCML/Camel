@@ -1,7 +1,7 @@
 digraph GraphIR {
         subgraph cluster_F06 {
             label="doubled";
-            tooltip="(x: int) => int";
+            tooltip="(x: int) => int pure";
             writings_cost="weighted";
             F06 [label="ARGS", type="ARGS", style=dashed, shape=circle];
             O06 [label="EXIT", type="EXIT", style=dashed, shape=circle];

@@ -4,7 +4,7 @@ digraph GraphIR {
     edge [minlen=2];
     subgraph cluster_F01 {
         label="main";
-        tooltip="() => int";
+        tooltip="() => int uses stdout";
         O01 [label="EXIT", type="EXIT", style=dashed, shape=circle];
         N00 [label="Hello,\nCamel!", type="DATA", shape=circle, style=solid, value_type="string", tooltip="Hello, Camel!"];
         N01 [label=":io/p\nrintln", type="OPER", shape=diamond, style=solid, value_type="string", tooltip=":io/println"];
@@ -16,7 +16,7 @@ digraph GraphIR {
         N01 -> N03 [label="0|0", type="CTRL", style=dashed, arrowhead=empty];
     }
     O00 [label="EXIT", type="EXIT", style=dashed, shape=circle];
-    N04 [label="Functio\nn(gr...", type="DATA", shape=circle, style=solid, value_type="() => int", tooltip="Function(graph=main, tupleSlots=0)"];
+    N04 [label="Functio\nn(gr...", type="DATA", shape=circle, style=solid, value_type="() => int uses stdout", tooltip="Function(graph=main, tupleSlots=0)"];
     N05 [label="CALL", type="CALL", shape=diamond, style=solid, value_type="int", tooltip="CALL"];
     N05 -> O00 [label="0", type="EXIT", style=solid];
     N04 -> N05 [label="0|0", type="WITH", style=dashed];

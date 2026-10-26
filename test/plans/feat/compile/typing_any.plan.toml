@@ -97,7 +97,7 @@ kind = "negative"
 case = "../../../cases/compile/any_typing/encode_function.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["encode_function.cml:10:19", "No matching function found for argument types: <> ((x: int) => int)", "<json:encode>: (value: T) => string", "name=SemanticDiag::NoMatchingFunction"]
+expect_output_contains = ["encode_function.cml:10:19", "No matching function found for argument types: <> ((x: int) => int pure)", "<json:encode>: (value: T) => string", "name=SemanticDiag::NoMatchingFunction"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
