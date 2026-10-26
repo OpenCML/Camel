@@ -757,14 +757,14 @@ verify_script = """
 const out = input.normalized.stdout
 const graphs = [...out.matchAll(/label="([^"]+)";\s*tooltip="([^"]+)";/g)].map((m) => `${m[1]} :: ${m[2]}`)
 const want = [
-  'first<int> :: (xs: int[]) => int',
-  'first<string> :: (xs: string[]) => string',
-  'first<float> :: (xs: float[]) => float',
-  'pick<int> :: (c: bool, a: int, b: int) => int',
-  'pick<string> :: (c: bool, a: string, b: string) => string',
-  'pair_of<int, string> :: (a: int, b: string) => (int, string)',
-  'swap<int, string> :: (p: (int, string)) => (string, int)',
-  'swap<float, bool> :: (p: (float, bool)) => (bool, float)',
+  'first<int> :: (xs: int[]) => int pure',
+  'first<string> :: (xs: string[]) => string pure',
+  'first<float> :: (xs: float[]) => float pure',
+  'pick<int> :: (c: bool, a: int, b: int) => int pure',
+  'pick<string> :: (c: bool, a: string, b: string) => string pure',
+  'pair_of<int, string> :: (a: int, b: string) => (int, string) pure',
+  'swap<int, string> :: (p: (int, string)) => (string, int) pure',
+  'swap<float, bool> :: (p: (float, bool)) => (bool, float) pure',
 ]
 for (const graph of want) {
   assert(graphs.filter((g) => g === graph).length === 1, `expected exactly one graph '${graph}' in: ${graphs.join(' | ')}`)

@@ -26,7 +26,7 @@
           "kind": "DATA",
           "label": "Function(graph=main, tupleSlots=0)",
           "origin": "<ORIGIN>",
-          "outputType": "() => int",
+          "outputType": "() => int uses stdout",
           "roles": [],
           "source": {
             "end": {
@@ -250,7 +250,7 @@
         }
       ],
       "normalPorts": [],
-      "signature": "() => int"
+      "signature": "() => int uses stdout"
     }
   ],
   "root": "g0",
