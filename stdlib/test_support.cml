@@ -7,11 +7,13 @@
  */
 
 /// The one meeting point of the process: calls on it are ordered with one another and with nothing
-/// else.
-resource rendezvous_point
+/// else. A module that runs at the meeting point imports it and writes it by name.
+export resource rendezvous_point
 
-/// The process itself: the threads `thread_count` reads are its. It is not one of the resources
-/// every program has, so a module that reads the process declares it.
+/// The threads `thread_count` reads are the process's: it is an ambient resource of its own, not
+/// one of the resources every program has, so the module that declares it is where it is named.
+/// The process module exports that resource, and a module that reads it imports it from there;
+/// until then this module names it itself.
 resource process
 
 /// Blocks until `parties` calls are waiting at the meeting point, or until `timeout` seconds have

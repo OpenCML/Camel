@@ -353,18 +353,41 @@ std::optional<std::string> Builder::nativeOperatorUri(const GCT::node_ptr_t &gct
 }
 
 namespace {
+/// The identity of a resource in one spelling: the module that declares it together with its
+/// name (design principles 10.2). A module names its own resource bare (`r`), a module that
+/// imports it through the module (`m::r`), and the C++ module declares it with one colon
+/// (`m:r`); the three spellings name one resource, so the module of the declaration is dropped
+/// where it is written and the separator is made the same on both sides before two identities
+/// are compared.
+std::string resourceIdentity(std::string_view name, std::string_view declaring) {
+    std::string identity(name);
+    for (const std::string_view separator : {"::", ":"}) {
+        const std::string prefix = std::string(declaring) + std::string(separator);
+        if (identity.size() > prefix.size() && identity.starts_with(prefix)) {
+            identity.erase(0, prefix.size());
+            break;
+        }
+    }
+    if (const size_t sep = identity.find(':');
+        sep != std::string::npos && identity.compare(sep, 2, "::") != 0) {
+        identity.insert(sep, 1, ':');
+    }
+    return identity;
+}
+
 /// The accesses a clause writes, as the identity of the resource: the operand an access is
 /// bound to (`#i`), or the name of an ambient resource. The clause says which resources a call
 /// touches, not how (its modes are the upper bound a call uses), so the modes and the class of
 /// a parameter are not compared: a handle a declaration names and the `Foreign` resource the
 /// operator's module wraps are the same operand.
-std::set<std::string> resourceIdentities(const camel::core::sem::ResourceSignature &signature) {
+std::set<std::string> resourceIdentities(
+    const camel::core::sem::ResourceSignature &signature, std::string_view declaring) {
     std::set<std::string> identities;
     for (const auto &use : signature.params) {
         identities.insert(std::format("#{}", use.index));
     }
     for (const auto &use : signature.ambient) {
-        identities.insert(use.name);
+        identities.insert(resourceIdentity(use.name, declaring));
     }
     return identities;
 }
@@ -462,7 +485,8 @@ void Builder::declareNativeOperator(const GCT::node_ptr_t &gct) {
                 *declaredFacts->resources, funcType->withTypesCount());
         }
         const bool same = declared.has_value() &&
-                          resourceIdentities(written) == resourceIdentities(*declared) &&
+                          resourceIdentities(written, module_->name()) ==
+                              resourceIdentities(*declared, module_->name()) &&
                           (written.pure() ==
                            (declared->params.empty() && declared->ambient.empty() &&
                             declared->anyOf.empty()));
@@ -1256,6 +1280,14 @@ void Builder::exportDeclarations(const GCT::node_ptr_t &gct, bool decorated) {
                 ref,
                 camel::core::module::detail::EntityAccess::makeGenericTemplates(
                     genericTemplatePayloadOf(optTemplate.value())));
+            continue;
+        }
+        if (module_->resource(ref) != nullptr) {
+            // A resource the module declares is exported like a name of another kind (design
+            // principles 10.2): a module that imports it writes it bare in a clause after
+            // `import { r } from m`, or through the module (`m::r`). The clause resolution reads
+            // the resource and its export flag, which the declaration of the module already set,
+            // so nothing of it is written into the program's table.
             continue;
         }
         if (isPoisonedName(name)) {

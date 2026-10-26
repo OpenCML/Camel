@@ -43,7 +43,7 @@ const cells = nodes(/^RESOURCES node \S+ (\d+) FUNC bump: rmw variable \(node (\
 pair('bump', cells)
 assert(cells[0][2] === cells[1][2], `bump: the two calls name different cells: ${cells[0][0]} | ${cells[1][0]}`)
 
-const ambient = nodes(/^RESOURCES node \S+ (\d+) FUNC tick: rmw ambient db; rmw ambient stdout$/)
+const ambient = nodes(/^RESOURCES node \S+ (\d+) FUNC tick: rmw ambient main::db; rmw ambient stdout$/)
 assert(ambient.length === 2, `tick: expected two calls of the group, got ${ambient.map((m) => m[0]).join(' | ')}; all nodes: ${allNodes}`)
 pair('tick', ambient)
 
@@ -51,6 +51,31 @@ assert(lines.includes('7'), `the handle value was not printed: ${lines.filter((l
 assert(lines.includes('0'), `the untouched cell was not printed: ${lines.filter((l) => !l.startsWith('RESOURCES')).join(' | ')}`)
 }
 """
+
+# ---- A resource is an exported name of the module that declares it ----
+#
+# A resource is identified by the module that declares it together with its name (design principles
+# 10.2), so another module reaches it the way it reaches any other exported name: through the
+# module (`m::r`), or by importing it by name and writing it bare. A name that is neither declared
+# here, nor standard, nor imported stays unknown (the case below).
+
+[[tests]]
+name = "resource.through_module"
+desc = "A clause writes `test_support::rendezvous_point`, the exported resource of an imported module: accepted, and the program runs."
+kind = "behavior"
+case = "../../../cases/effects/exported_resource_qualified.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "0\n"
+
+[[tests]]
+name = "resource.imported_by_name"
+desc = "A clause writes `rendezvous_point` after `import { rendezvous_point } from test_support`: the imported resource, named bare."
+kind = "behavior"
+case = "../../../cases/effects/exported_resource_imported.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "0\n"
 
 # ---- A body-less native declaration carries the operator's signature ----
 
@@ -156,6 +181,17 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::UnknownResource"
 expect_diagnostic_code = "0x030001A0"
 expect_output_contains = ["err_unknown_resource.cml:", "'nowhere'"]
+
+[[tests]]
+name = "err.resource_not_imported"
+desc = "`uses rendezvous_point` without importing it: importing the module `test_support` does not put the resource it exports into this module's own namespace, and the name is no standard resource."
+kind = "negative"
+case = "../../../cases/effects/err_resource_not_imported.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::UnknownResource"
+expect_diagnostic_code = "0x030001A0"
+expect_output_contains = ["err_resource_not_imported.cml:", "'rendezvous_point'"]
 
 [[tests]]
 name = "err.pure_and_uses"

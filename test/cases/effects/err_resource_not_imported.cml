@@ -1,0 +1,17 @@
+// A clause resolves a name the way any other name is resolved (design principles 10.2): the
+// resource `test_support` exports is `test_support::rendezvous_point` here, and importing the
+// module alone does not put that name in this module's own namespace. `rendezvous_point` is
+// therefore no resource of this module, no standard resource and no imported name
+// (UnknownResource).
+module names_a_resource_without_importing_it
+
+import test_support
+
+func meet(): int uses rendezvous_point {
+    return 0
+}
+
+func main(): int sync {
+    println(meet())
+    return 0
+}
