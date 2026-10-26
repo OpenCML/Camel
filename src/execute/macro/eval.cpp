@@ -317,20 +317,36 @@ MacroEvaluator::tryEvaluate(const MacroCandidate &candidate, std::ostream &os) {
     } catch (const RuntimeFault &fault) {
         (void)os;
         // A fault of an operator the evaluation ran: its diagnostic name and message, as the
-        // run would report it, at the place the fault names when it names one.
-        const DiagInfo info = getDiagInfo(fault.diag());
-        std::string message = info.message;
-        for (size_t i = 0; i < fault.formatArgs().size(); ++i) {
-            const std::string slot = std::format("{{{}}}", i);
-            for (size_t at = message.find(slot); at != std::string::npos;
-                 at        = message.find(slot, at + fault.formatArgs()[i].size())) {
-                message.replace(at, slot.size(), fault.formatArgs()[i]);
+        // run would report it, at the place the fault names when it names one. A fault that
+        // refused several places carries one report per place (see CarriedReport), and each of
+        // them is a failure of its own: an expansion happens at compile time, where the ruling of
+        // 2026-10-24 collects every refusal in one round instead of stopping at the first.
+        const DiagInfo info  = getDiagInfo(fault.diag());
+        const auto rendered = [&](const std::vector<std::string> &args) {
+            std::string message = info.message;
+            for (size_t i = 0; i < args.size(); ++i) {
+                const std::string slot = std::format("{{{}}}", i);
+                for (size_t at = message.find(slot); at != std::string::npos;
+                     at        = message.find(slot, at + args[i].size())) {
+                    message.replace(at, slot.size(), args[i]);
+                }
+            }
+            return message;
+        };
+        if (fault.carried().empty()) {
+            noteFailure(
+                candidate,
+                std::format("{}: {}", info.name, rendered(fault.formatArgs())),
+                fault.hint().cachedOrigin);
+        } else {
+            for (const camel::core::error::CarriedReport &report : fault.carried()) {
+                noteFailure(
+                    candidate,
+                    std::format("{}: {}", info.name, rendered(report.formatArgs)),
+                    report.origin,
+                    report.related);
             }
         }
-        noteFailure(
-            candidate,
-            std::format("{}: {}", info.name, message),
-            fault.hint().cachedOrigin);
         return std::nullopt;
     } catch (const std::exception &e) {
         (void)os;
@@ -388,7 +404,8 @@ bool firstReport(uint64_t origin, const std::string &text) {
 } // namespace
 
 void MacroEvaluator::noteFailure(
-    const MacroCandidate &candidate, std::string reason, camel::source::origin_id_t origin) {
+    const MacroCandidate &candidate, std::string reason, camel::source::origin_id_t origin,
+    std::vector<camel::core::error::DiagLabel> related) {
     while (!reason.empty() && (reason.back() == '.' || reason.back() == '\n')) {
         reason.pop_back(); // the diagnostic's message ends the sentence itself
     }
@@ -406,9 +423,10 @@ void MacroEvaluator::noteFailure(
             range.start.character + 1);
     }
     failures_.push_back(Failure{
-        .origin = elsewhere ? origin : callOrigin,
-        .callee = calleeNameOf(*program_, candidate.runtimeGraph, candidate.nodeRef),
-        .reason = std::move(reason),
+        .origin  = elsewhere ? origin : callOrigin,
+        .callee  = calleeNameOf(*program_, candidate.runtimeGraph, candidate.nodeRef),
+        .reason  = std::move(reason),
+        .related = std::move(related),
     });
 }
 
@@ -426,7 +444,12 @@ void MacroEvaluator::reportFailures() {
             {failure.callee, failure.reason},
             "",
             nullptr,
-            ExecutionSiteHint{.cachedOrigin = origin});
+            ExecutionSiteHint{.cachedOrigin = origin},
+            RuntimeFaultPolicy::AbortCurrentExecution,
+            // The places this failure is about beside its own: the reporter attaches them to the
+            // diagnostic (`RuntimeErrorReporter::describe`).
+            {camel::core::error::CarriedReport{
+                .origin = origin, .formatArgs = {failure.reason}, .related = failure.related}});
         ExecutionSite site;
         site.cachedOrigin = origin;
         Diagnostic diagnostic =

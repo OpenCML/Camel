@@ -120,6 +120,23 @@ std::optional<size_t> tangentPositionFor(Type *aggregate, size_t index, TangentA
             .cachedOrigin = static_cast<camel::source::origin_id_t>(origin)});
 }
 
+/// The same, for a pass that refused more than one place: the fault names the first in source
+/// order and carries a report for each of them (see CarriedReport), so that a reader who reports
+/// them all -- the macro evaluator -- reports each at its own call.
+[[noreturn]] void failAtCarrying(
+    uint64_t origin, const std::string &message,
+    std::vector<camel::core::error::CarriedReport> carried) {
+    throw camel::core::error::RuntimeFault(
+        RuntimeDiag::RuntimeError,
+        {"autodiff: " + message},
+        "",
+        nullptr,
+        camel::core::error::ExecutionSiteHint{
+            .cachedOrigin = static_cast<camel::source::origin_id_t>(origin)},
+        camel::core::error::RuntimeFaultPolicy::AbortCurrentExecution,
+        std::move(carried));
+}
+
 /// A gradient whose element type is not the differentiated value's (design principles 9.9). The
 /// accumulator stores the node at the value's width, so a float64 gradient in an f32 parameter is
 /// read as 0.0 and a float32 one in a float parameter as a denormal: both are numbers that are not
@@ -174,21 +191,11 @@ Type *tangentElementType(Type *type) {
     return tangent;
 }
 
-/// " (at file:line:column)" for a node origin, or nothing when it is unknown.
-std::string whereIs(uint64_t origin) {
-    if (!currentSource || origin == camel::source::kInvalidOriginId) {
-        return {};
-    }
-    const auto *file = currentSource->fileForOrigin(origin);
-    if (!file) {
-        return {};
-    }
-    const auto range = currentSource->resolveOrigin(origin);
-    return std::format(
-        " (at {}:{}:{})",
-        file->path,
-        range.start.line + 1,
-        range.start.character + 1);
+/// The place a refusal is about is carried by the diagnostic's own position and by its related
+/// locations, never by the message: a reader's tool reads the fields, and the same place written
+/// twice in one line is what this helper used to add.
+std::string whereIs(uint64_t) {
+    return {};
 }
 
 /// A variable (`var`) is a cell; the graph passes the cell, not its content.
@@ -891,6 +898,13 @@ struct Tangent {
 /// A call of a function value that the gradient has to pass and cannot.
 struct Refusal {
     uint64_t origin = 0;
+    /// Where the function value the call calls was chosen: the branch that chose it, the
+    /// parameter or captured value it came from, the container it was read out of, the value it
+    /// was computed from. The report attaches it as related information, because the call alone
+    /// does not say how the value got there -- the reason says which of those it is, and this
+    /// says where it stands. 0 when the call names the function itself, which is evident where
+    /// it is called.
+    uint64_t chosen = 0;
     std::string reason;
 };
 
@@ -1041,6 +1055,9 @@ class Backward final : public VjpBuilder {
     /// An input of `call` (for a closure call, a captured value as well) that is a function
     /// value carrying an active value, or kInvalidNodeRef.
     gc_node_ref_t activeFunctionInput(gc_node_ref_t call) const;
+    /// The node the function a refused `call` calls was chosen at, or kInvalidNodeRef when the
+    /// call names it: the same choice refusalReason's words describe, as a place.
+    gc_node_ref_t chosenFunction(gc_node_ref_t call) const;
     void reportRefusals(const std::vector<gc_node_ref_t> &order);
 
     Engine &engine_; // the `#impl` bodies this pass must not confuse with their kernels
@@ -3437,8 +3454,11 @@ void Backward::reportRefusals(const std::vector<gc_node_ref_t> &order) {
                                !sites_.contains(node) &&
                                machineryTangentTypeOf(typeOf(forward_, node)) != nullptr;
         if (met.contains(node) || unreached) {
-            refusals_.push_back(
-                Refusal{.origin = forward_.nodeOrigin(node), .reason = refusalReason(node)});
+            const gc_node_ref_t chosen = chosenFunction(node);
+            refusals_.push_back(Refusal{
+                .origin = forward_.nodeOrigin(node),
+                .chosen = chosen == kInvalidNodeRef ? 0 : forward_.nodeOrigin(chosen),
+                .reason = refusalReason(node)});
         }
     }
 }
@@ -3467,6 +3487,20 @@ gc_node_ref_t Backward::activeFunctionInput(gc_node_ref_t call) const {
         }
     }
     return kInvalidNodeRef;
+}
+
+gc_node_ref_t Backward::chosenFunction(gc_node_ref_t call) const {
+    // The words of refusalReason, as the place they are about: the input that carries the
+    // function value when one does (the reason then explains why it is not evident), and the
+    // callee the call names otherwise, which the reason names too.
+    if (const gc_node_ref_t input = activeFunctionInput(call); input != kInvalidNodeRef) {
+        return input;
+    }
+    const auto withInputs = forward_.withInputsOf(call);
+    if (withInputs.empty()) {
+        return kInvalidNodeRef;
+    }
+    return ungated(forward_, withInputs.front());
 }
 
 std::string Backward::refusalReason(gc_node_ref_t call) const {
@@ -4090,8 +4124,13 @@ PullbackPlan Engine::planForDraft(
     return plan;
 }
 
-// Reports the first, in source order, of the calls of function values the gradient has to
-// pass and cannot. The diagnostic is located at that call.
+// Reports the calls of function values the gradient has to pass and cannot. Every one of them is
+// a report of its own (the ruling of 2026-10-24, `gradient-refusal-named-call`): the one at the
+// first call in source order is the fault's own and the rest are carried beside it, and each
+// names where the function value was chosen as related information. Which of them a reader sees
+// is the reader's business: a run-time fault stops at the first (the ruling
+// `refusal-run-time-or-compile-time`), and the macro evaluator reports every one of them, because
+// a compile-time expansion collects all the mistakes in one round.
 void Engine::refuse() {
     struct Place {
         std::string path;
@@ -4119,21 +4158,42 @@ void Engine::refuse() {
             firstPlace = place;
         }
     }
-    failAt(
-        first->origin,
-        std::format(
-            "{}{}{}. A call of a function value is differentiated when the function is named, "
-            "or built by a lambda, in the function being differentiated or in a function it "
-            "calls, and gets from there to the call by being bound, captured, passed as an "
-            "argument or returned",
-            first->reason,
-            followingExhausted()
-                ? std::format(
-                      " (function values were followed through {} calls, the limit, as "
-                      "happens when a recursive function passes function values on)",
-                      kMaxFollowedCalls)
-                : std::string(),
-            whereIs(first->origin)));
+    const std::string remedy =
+        ". A call of a function value is differentiated when the function is named, "
+        "or built by a lambda, in the function being differentiated or in a function it "
+        "calls, and gets from there to the call by being bound, captured, passed as an "
+        "argument or returned";
+    const std::string exhausted =
+        followingExhausted()
+            ? std::format(
+                  " (function values were followed through {} calls, the limit, as "
+                  "happens when a recursive function passes function values on)",
+                  kMaxFollowedCalls)
+            : std::string();
+    const auto reportOf = [&](const Refusal &refusal) {
+        camel::core::error::CarriedReport report;
+        report.origin     = static_cast<camel::source::origin_id_t>(refusal.origin);
+        report.formatArgs = {"autodiff: " + refusal.reason + exhausted + remedy};
+        if (refusal.chosen != 0 && currentSource) {
+            if (const auto *file = currentSource->fileForOrigin(refusal.chosen)) {
+                report.related.push_back(camel::core::error::DiagLabel{
+                    static_cast<camel::source::origin_id_t>(refusal.chosen),
+                    "the function value is chosen here",
+                    file->path});
+            }
+        }
+        return report;
+    };
+    // The report the diagnostic itself is comes first, so that the related position the reporter
+    // attaches belongs to the call the diagnostic is located at; the rest follow in the order the
+    // pass met them.
+    std::vector<camel::core::error::CarriedReport> carried{reportOf(*first)};
+    for (const Refusal &refusal : refusals_) {
+        if (&refusal != first) {
+            carried.push_back(reportOf(refusal));
+        }
+    }
+    failAtCarrying(first->origin, first->reason + exhausted + remedy, std::move(carried));
 }
 
 void Engine::build(Pending &pending) {
