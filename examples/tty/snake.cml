@@ -30,7 +30,7 @@ func render(snake: Point[]): void sync {
 
 func move_snake(snake: Point[], dir: string): Point[] {
     let now_head = head(snake)
-    let new_head = match dir {
+    let new_head: Point = match dir {
         case 'w' => { x: now_head.x, y: now_head.y - 1 }  // Up
         case 'a' => { x: now_head.x - 1, y: now_head.y }  // Left
         case 's' => { x: now_head.x, y: now_head.y + 1 }  // Down
