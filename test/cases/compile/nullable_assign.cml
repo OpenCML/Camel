@@ -1,0 +1,31 @@
+/**
+ * A `T` enters a `T?` on assignment exactly as it does on binding and argument passing (design
+ * principles 3.8; one relation, entersImplicitly): the variable itself, a field of a struct
+ * variable, an element of an array variable, and a variable written from a function that captures
+ * it. Assigning `acc.best = hi` used to store the bare float into the `float?` slot.
+ */
+module nullable_assign
+
+type Acc = { best: float?, count: int }
+
+func main(): int sync {
+    var best: float? = null
+    let hi = 2.5
+    best = hi
+    var acc: Acc = { best: null, count: 0 }
+    acc.best = hi
+    var xs: (float?)[] = [null, null]
+    xs[0] = hi
+    var count: int? = null
+    let step = 3
+    count = step
+    println(best, acc.best, xs, count)
+
+    var seen: float? = null
+    let note = (v: float): void => sync { seen = v }
+    note(4.5)
+    println(seen)
+    [1.0, 2.0]->foreach<(x: float): void => sync { seen = x }>
+    println(seen)
+    return 0
+}
